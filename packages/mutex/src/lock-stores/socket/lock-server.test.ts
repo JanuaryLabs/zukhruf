@@ -9,6 +9,7 @@ import type { FileLock } from '@zukhruf/fs';
 import { LeaseLostError } from '@zukhruf/lease';
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 
+import { factTimeout } from '../../testing/fact-timeout.ts';
 import { onUnixSockets } from '../../testing/on-unix-sockets.ts';
 import { LockServer } from './lock-server.ts';
 import { type SocketRole, SocketStore } from './socket-store.ts';
@@ -125,7 +126,7 @@ describe('Lock server', () => {
               roles.includes('leader'),
               'The follower must lead once the server of the lost term closes',
             ),
-          { interval: 5, timeout: 2000 },
+          { interval: 5, timeout: factTimeout },
         );
         assert.deepEqual(roles, ['follower', 'leader']);
         const lease = await store.acquire('product:42');

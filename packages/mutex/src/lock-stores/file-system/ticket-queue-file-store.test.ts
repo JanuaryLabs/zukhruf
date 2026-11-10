@@ -6,14 +6,12 @@ import fsPromises, { readFile, writeFile } from 'node:fs/promises';
 import { syncBuiltinESMExports } from 'node:module';
 import { join } from 'node:path';
 import { describe } from 'node:test';
-import { setTimeout as delay } from 'node:timers/promises';
 
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 import { test } from '@zukhruf/testing/node';
 
-import type { LockHandle } from '../../mutex/lease.ts';
 import { Mutex } from '../../mutex/mutex.ts';
-import { newProcessTimeout } from '../../testing/new-process-timeout.ts';
+import { factTimeout } from '../../testing/fact-timeout.ts';
 import { startWorker } from '../../testing/worker-process.ts';
 import { TicketQueueFileStore } from './ticket-queue-file-store.ts';
 
@@ -43,40 +41,34 @@ describe('TicketQueueFileStore', () => {
       return rename(from, to);
     });
     syncBuiltinESMExports();
-    const deadline = delay(2000, 'still waiting' as const, { ref: false });
-    let waiter: Promise<LockHandle> | undefined;
 
     try {
       // Act: the holder has read the queue and paused before it replaces the file.
       const released = holder[Symbol.asyncDispose]();
       await renaming.promise;
       // A waiter appends its ticket to the file that the rename is about to replace.
-      waiter = store.acquire('product:42');
+      const waiter = store.acquire('product:42', {
+        signal: AbortSignal.timeout(factTimeout),
+      });
       await t.waitFor(
         () =>
           assert.ok(
             ticketsIn(queue) === 2,
             'The waiter must append its ticket',
           ),
-        { interval: 5, timeout: 2000 },
+        { interval: 5, timeout: factTimeout },
       );
       // The rename replaces the queue with a copy that has no ticket for the waiter.
       proceed.resolve();
       await released;
 
       // Assert: the waiter notices its lost ticket, appends it again, and gets the key.
-      const outcome = await Promise.race([waiter, deadline]);
-      assert.notEqual(
-        outcome,
-        'still waiting',
-        'A waiter whose ticket was lost must append it again and get the key',
-      );
+      const lease = await waiter;
+      await lease[Symbol.asyncDispose]();
     } finally {
       proceed.resolve();
       t.mock.restoreAll();
       syncBuiltinESMExports();
-      const lease = await Promise.race([waiter, deadline]);
-      if (typeof lease === 'object') await lease[Symbol.asyncDispose]();
     }
   });
 });
@@ -100,7 +92,7 @@ describe('TicketQueueFileStore holder check', () => {
           holder.has('entered'),
           `The holder must enter.\n${holder.stderr}`,
         ),
-      { interval: 5, timeout: newProcessTimeout },
+      { interval: 5, timeout: factTimeout },
     );
     await using waiter = startWorker(caller(60_000), 'waiter');
     // No operation says that a waiter is in line, so the wait reads the queue.
@@ -110,7 +102,7 @@ describe('TicketQueueFileStore holder check', () => {
           ticketsIn(queue) === 2,
           `The waiter must join the line.\n${waiter.stderr}`,
         ),
-      { interval: 5, timeout: newProcessTimeout },
+      { interval: 5, timeout: factTimeout },
     );
     const mutex = new Mutex(
       new TicketQueueFileStore(directory.path, { clock: globalThis }),
@@ -159,7 +151,9 @@ describe('TicketQueueFileStore damaged queue', () => {
 
       // Act
       const calls = await Promise.allSettled([
-        store.acquire('report-daily', { signal: AbortSignal.timeout(2000) }),
+        store.acquire('report-daily', {
+          signal: AbortSignal.timeout(factTimeout),
+        }),
         store.tryAcquire('report-daily'),
         store.isHeld('report-daily'),
       ]);

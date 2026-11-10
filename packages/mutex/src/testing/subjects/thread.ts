@@ -28,7 +28,6 @@ export const subject: Subject<ThreadHost> = {
   }),
   process: { module: { url, export: 'openInProcess' }, admit() {} },
   grantLatency: 1,
-  releaseLatency: 10,
 };
 
 export const threadSharing = sharesWithThreads<ThreadHost>({

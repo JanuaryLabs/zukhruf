@@ -95,7 +95,7 @@ export const sqlServerStore = (location: string) =>
   new SqlServerStore({
     connect: () => sqlServerSession(serverAt(location)),
     sequence: 'dbo.mutex_tokens',
-    heartbeatInterval: 200,
+    heartbeatInterval: 5_000,
     clock: globalThis,
   });
 
@@ -116,7 +116,6 @@ export const subject: Subject<Host> = {
   }),
   process: { module, admit() {} },
   grantLatency: 20,
-  releaseLatency: 20,
 };
 
 export const sharing = sharesWithProcesses(subject.process);

@@ -110,7 +110,7 @@ The test helper `listening` is byte-identical in the two files. It connects to a
 
 The tests start real processes, so this package also copies two helpers from `packages/mutex/src/testing`. They are not part of the package: the build leaves `src/testing` out.
 
-**`testing/new-process-timeout.ts` → `testing/new-process-timeout.ts`.**
+**`testing/fact-timeout.ts` → `testing/fact-timeout.ts`.**
 Copied without a change.
 
 **`testing/worker-process.ts` → `testing/worker-process.ts`.**

@@ -11,6 +11,7 @@ import { TemporaryFiles } from '@zukhruf/testing/fs';
 import { test } from '@zukhruf/testing/node';
 
 import { isRecord } from '../../shared/is-record.ts';
+import { factTimeout } from '../../testing/fact-timeout.ts';
 import { grantedWithin } from '../../testing/granted-within.ts';
 import { settle } from '../../testing/timing.ts';
 import { SocketStore } from './index.ts';
@@ -98,7 +99,7 @@ async function rawPeer(t: TestContext, directory: string) {
   socket.write(`${JSON.stringify({ op: 'hello', version: 2 })}\n`);
   await t.waitFor(
     () => assert.ok(received.length > 0, 'The leader must answer the hello'),
-    { interval: 5, timeout: 2000 },
+    { interval: 5, timeout: factTimeout },
   );
   assert.equal(received.shift()?.op, 'welcome');
   const lines = (requests: unknown[]) =>
@@ -146,7 +147,7 @@ describe('A leader after a failover', () => {
           waiter.received.some((response) => response.op === 'granted'),
           'The acquire must be granted once the grace window ends',
         ),
-      { interval: 5, timeout: 2000 },
+      { interval: 5, timeout: factTimeout },
     );
   });
 
@@ -166,7 +167,7 @@ describe('A leader after a failover', () => {
           holder.received.length > 0,
           'The leader must answer the reassert',
         ),
-      { interval: 5, timeout: 2000 },
+      { interval: 5, timeout: factTimeout },
     );
     assert.deepEqual(holder.received, [{ op: 'rejected', id: 'h' }]);
   });
@@ -202,7 +203,7 @@ describe('A leader after a failover', () => {
           waiter.received[0]?.op === 'granted',
           'The waiter must get the key after the release',
         ),
-      { interval: 5, timeout: 2000 },
+      { interval: 5, timeout: factTimeout },
     );
   });
 
@@ -222,7 +223,7 @@ describe('A leader after a failover', () => {
           older.received.length > 0,
           'The older claim must be answered',
         ),
-      { interval: 5, timeout: 2000 },
+      { interval: 5, timeout: factTimeout },
     );
     const olderAnswers = [...older.received];
     older.drop();
@@ -239,7 +240,7 @@ describe('A leader after a failover', () => {
     );
     newer.send({ op: 'release', id: 'n' });
     assert.equal(
-      await grantedWithin(next, 1000),
+      await grantedWithin(next, factTimeout),
       'granted',
       'The key must be free after the newer holder releases it',
     );
@@ -259,7 +260,7 @@ describe('A leader after a failover', () => {
           first.received.length > 0,
           'The first waiter must be granted when the grace window ends',
         ),
-      { interval: 5, timeout: 2000 },
+      { interval: 5, timeout: factTimeout },
     );
     await delay(settle);
     const secondBeforeRelease = [...second.received];
@@ -280,7 +281,7 @@ describe('A leader after a failover', () => {
           second.received.some((response) => response.op === 'granted'),
           'The second waiter must be granted after the first releases',
         ),
-      { interval: 5, timeout: 2000 },
+      { interval: 5, timeout: factTimeout },
     );
   });
 
@@ -296,7 +297,7 @@ describe('A leader after a failover', () => {
     await t.waitFor(
       () =>
         assert.ok(peer.received.length > 0, 'The leader must answer the try'),
-      { interval: 5, timeout: 2000 },
+      { interval: 5, timeout: factTimeout },
     );
     assert.deepEqual(peer.received, [{ op: 'busy', id: 't' }]);
   });
@@ -314,7 +315,7 @@ describe('A leader after a failover', () => {
     await t.waitFor(
       () =>
         assert.ok(peer.received.length > 0, 'The leader must answer the try'),
-      { interval: 5, timeout: 2000 },
+      { interval: 5, timeout: factTimeout },
     );
     assert.equal(peer.received[0]?.op, 'granted');
   });
@@ -371,7 +372,7 @@ describe('A leader after a failover', () => {
         );
         newer.send({ op: 'release', id: 'newer' });
         assert.equal(
-          await grantedWithin(waiter, 1000),
+          await grantedWithin(waiter, factTimeout),
           'granted',
           'The key must be free after the newer holder releases it',
         );
@@ -396,7 +397,7 @@ describe('A leader after a failover', () => {
           stale.received.length > 0,
           'The stale claim must be answered',
         ),
-      { interval: 5, timeout: 2000 },
+      { interval: 5, timeout: factTimeout },
     );
 
     // Assert: the highest token seen still decides, so the stale holder cannot take the key.
@@ -426,7 +427,7 @@ describe('Requests that a leader reads in one turn', () => {
     );
     holder.send({ op: 'release', id: 'h' });
     assert.equal(
-      await grantedWithin(waiter, 1000),
+      await grantedWithin(waiter, factTimeout),
       'granted',
       'The key must be free after the holder releases it',
     );
@@ -453,7 +454,7 @@ describe('Requests that a leader reads in one turn', () => {
     );
     peer.send({ op: 'release', id: 'n' });
     assert.equal(
-      await grantedWithin(waiter, 1000),
+      await grantedWithin(waiter, factTimeout),
       'granted',
       'An outranked claim must not keep the key after the newer claim releases it',
     );
@@ -494,7 +495,7 @@ describe('Requests that a leader reads in one turn', () => {
 
     // Assert: once the grace window ends, the key is free.
     assert.equal(
-      await grantedWithin(scene.leader.acquire('product:42'), 1000),
+      await grantedWithin(scene.leader.acquire('product:42'), factTimeout),
       'granted',
       'A peer that left must not keep the key it reasserted',
     );
@@ -516,7 +517,7 @@ describe('Requests that a leader reads in one turn', () => {
           peer.received.length > 0,
           'The first acquire must be granted',
         ),
-      { interval: 5, timeout: 2000 },
+      { interval: 5, timeout: factTimeout },
     );
     peer.send({ op: 'release', id: 'a' });
     await delay(settle);
@@ -528,7 +529,7 @@ describe('Requests that a leader reads in one turn', () => {
       'The same request id must be granted only once',
     );
     assert.equal(
-      await grantedWithin(scene.leader.acquire('product:42'), 1000),
+      await grantedWithin(scene.leader.acquire('product:42'), factTimeout),
       'granted',
       'Releasing the request must free the key for the next caller',
     );
@@ -547,7 +548,7 @@ describe('Requests that a leader reads in one turn', () => {
     await t.waitFor(
       () =>
         assert.ok(peer.received.length > 0, 'The first try must be granted'),
-      { interval: 5, timeout: 2000 },
+      { interval: 5, timeout: factTimeout },
     );
     peer.send({ op: 'release', id: 't' });
     await delay(settle);
@@ -559,7 +560,7 @@ describe('Requests that a leader reads in one turn', () => {
       'The same request id must be answered only once, with its grant',
     );
     assert.equal(
-      await grantedWithin(scene.leader.acquire('product:42'), 1000),
+      await grantedWithin(scene.leader.acquire('product:42'), factTimeout),
       'granted',
       'Releasing the request must free the key for the next caller',
     );
@@ -582,7 +583,7 @@ describe('A peer that gives up or leaves', () => {
 
     // Assert: the key does not go to the peer that left.
     assert.equal(
-      await grantedWithin(scene.leader.acquire('product:42'), 1000),
+      await grantedWithin(scene.leader.acquire('product:42'), factTimeout),
       'granted',
       'A peer that left must not keep the key it waited for',
     );
@@ -598,7 +599,7 @@ describe('A peer that gives up or leaves', () => {
     holder.send({ op: 'acquire', id: 'h', key: 'product:42' });
     await t.waitFor(
       () => assert.ok(holder.received.length > 0, 'The holder must be granted'),
-      { interval: 5, timeout: 2000 },
+      { interval: 5, timeout: factTimeout },
     );
     quitter.send(
       { op: 'acquire', id: 'q', key: 'product:42' },
@@ -611,7 +612,7 @@ describe('A peer that gives up or leaves', () => {
 
     // Assert: the next caller gets the key, and the waiter that cancelled was never granted.
     assert.equal(
-      await grantedWithin(scene.leader.acquire('product:42'), 1000),
+      await grantedWithin(scene.leader.acquire('product:42'), factTimeout),
       'granted',
     );
     assert.deepEqual(
@@ -634,7 +635,7 @@ describe('Requests a leader does not know, and looks', () => {
           peer.received.some((response) => response.op === 'granted'),
           'The peer must be granted the key',
         ),
-      { interval: 5, timeout: 2000 },
+      { interval: 5, timeout: factTimeout },
     );
 
     // Act: JSON lines that are not requests (no record, no id, no op, neither, an op it does not know), then a look.
@@ -652,7 +653,7 @@ describe('Requests a leader does not know, and looks', () => {
           peer.received.some((response) => response.id === 'look'),
           'The leader must answer the look after the lines it cannot read',
         ),
-      { interval: 5, timeout: 2000 },
+      { interval: 5, timeout: factTimeout },
     );
     // Asked after the look was answered, so an answer to any earlier line is in by now.
     peer.send({ op: 'isHeld', id: 'after', key: 'product:7' });
@@ -662,7 +663,7 @@ describe('Requests a leader does not know, and looks', () => {
           peer.received.some((response) => response.id === 'after'),
           'The leader must answer the second look',
         ),
-      { interval: 5, timeout: 2000 },
+      { interval: 5, timeout: factTimeout },
     );
     const stillHeld = await scene.leader.isHeld('product:42');
 
@@ -695,7 +696,7 @@ describe('Requests a leader does not know, and looks', () => {
           looker.received.length === 2,
           'The looks must be answered once the grace window ends',
         ),
-      { interval: 5, timeout: 2000 },
+      { interval: 5, timeout: factTimeout },
     );
 
     // Assert

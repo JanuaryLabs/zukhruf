@@ -2,12 +2,16 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 
+import { createClock } from '@sinonjs/fake-timers';
+
+import type { Clock } from '@zukhruf/async';
 import {
   CounterTokenSource,
   EpochExhaustedError,
   type TokenSource,
 } from '@zukhruf/fencing';
 
+import { factTimeout } from '../../testing/fact-timeout.ts';
 import { grantedWithin } from '../../testing/granted-within.ts';
 import {
   scriptedConnector,
@@ -39,10 +43,10 @@ function grantingPeer() {
 }
 
 /** A coordinator that started after a failover, and a way to connect scripted peers to it. */
-function coordinatorAfterFailover(graceWindow: number) {
+function coordinatorAfterFailover(graceWindow: number, clock: Clock) {
   const coordinator = new LockCoordinator({
     tokens: new CounterTokenSource(),
-    grace: { window: graceWindow, clock: globalThis },
+    grace: { window: graceWindow, clock },
   });
   const connect = () => {
     const peer = scriptedPeer<LockResponse, LockRequest>();
@@ -57,7 +61,11 @@ describe('Claims that a coordinator registers in the same turn as another event'
   test('a claim outranked while it is being registered gives the key to the newer claim', async () => {
     // Arrange
     const graceWindow = 150;
-    const { coordinator, connect } = coordinatorAfterFailover(graceWindow);
+    const clock = createClock();
+    const { coordinator, connect } = coordinatorAfterFailover(
+      graceWindow,
+      clock,
+    );
     const older = connect();
     const newer = connect();
 
@@ -67,14 +75,15 @@ describe('Claims that a coordinator registers in the same turn as another event'
     const waiter = coordinator.acquire('product:42');
 
     // Assert: the older holder stays connected, yet the key passes to the newer holder and then to the waiter.
+    await clock.tickAsync(graceWindow);
     assert.equal(
-      await grantedWithin(waiter, graceWindow + 2 * settle),
+      await grantedWithin(waiter, settle),
       'waiting',
       'The newer holder must have the key after the grace window',
     );
     newer.deliver({ op: 'release', id: 'n' });
     assert.equal(
-      await grantedWithin(waiter, 1000),
+      await grantedWithin(waiter, factTimeout),
       'granted',
       'An outranked claim must not keep the key after the newer holder releases it',
     );
@@ -84,7 +93,8 @@ describe('Claims that a coordinator registers in the same turn as another event'
   // Kept as a double: over a real socket the close arrives after the claim resolves, so only a double makes a claim resolve after its peer left.
   test('a peer that disconnects right after it reasserts does not keep the key', async () => {
     // Arrange
-    const { coordinator, connect } = coordinatorAfterFailover(100);
+    const clock = createClock();
+    const { coordinator, connect } = coordinatorAfterFailover(100, clock);
     const holder = connect();
 
     // Act: the peer reasserts and disconnects in the same turn.
@@ -92,8 +102,9 @@ describe('Claims that a coordinator registers in the same turn as another event'
     holder.drop();
 
     // Assert: once the grace window ends, the key is free.
+    await clock.tickAsync(100);
     assert.equal(
-      await grantedWithin(coordinator.acquire('product:42'), 1000),
+      await grantedWithin(coordinator.acquire('product:42'), factTimeout),
       'granted',
       'A peer that left must not keep the key it reasserted',
     );
@@ -113,7 +124,7 @@ describe('Remote lock client connection lifecycle', () => {
     const acquiring = client.acquire('product:42');
     await t.waitFor(
       () => assert.ok(calls.length === 1, 'The client must connect'),
-      { interval: 5, timeout: 2000 },
+      { interval: 5, timeout: factTimeout },
     );
 
     try {
@@ -121,7 +132,7 @@ describe('Remote lock client connection lifecycle', () => {
       calls[0]!.resolve(first.connection);
       await t.waitFor(
         () => assert.ok(calls.length === 2, 'The client must reconnect'),
-        { interval: 5, timeout: 2000 },
+        { interval: 5, timeout: factTimeout },
       );
       calls[1]!.resolve(second.connection);
       const lease = await acquiring;
@@ -159,7 +170,7 @@ describe('A request whose token cannot be minted', () => {
           peer.sent.length === 1,
           'The coordinator must answer the acquire',
         ),
-      { interval: 5, timeout: 2000 },
+      { interval: 5, timeout: factTimeout },
     );
     peer.deliver({ op: 'acquire', id: 'a', key: 'product:42' });
     await t.waitFor(
@@ -168,7 +179,7 @@ describe('A request whose token cannot be minted', () => {
           peer.sent.length === 2,
           'The coordinator must answer the acquire that is sent again',
         ),
-      { interval: 5, timeout: 2000 },
+      { interval: 5, timeout: factTimeout },
     );
 
     // Assert: the peer learns why, keeps its connection, and gets the free key on the next try.
@@ -186,11 +197,12 @@ describe('A request whose token cannot be minted', () => {
   test('a reassertion is rejected, and a later claim of the same key is accepted', async (t) => {
     // Arrange
     const graceWindow = 150;
+    const clock = createClock();
     const coordinator = new LockCoordinator({
       tokens: tokensThatFailOnce(
         new Error('The token file could not be written.'),
       ),
-      grace: { window: graceWindow, clock: globalThis },
+      grace: { window: graceWindow, clock },
     });
     const connect = () => {
       const peer = scriptedPeer<LockResponse, LockRequest>();
@@ -208,7 +220,7 @@ describe('A request whose token cannot be minted', () => {
           failed.sent.length === 1,
           'The coordinator must answer the failed reassertion',
         ),
-      { interval: 5, timeout: 2000 },
+      { interval: 5, timeout: factTimeout },
     );
     later.deliver({ op: 'reassert', id: 'l', key: 'product:42', token: '5' });
     const waiter = coordinator.acquire('product:42');
@@ -220,15 +232,16 @@ describe('A request whose token cannot be minted', () => {
       0,
       'A failed mint must not close the connection',
     );
+    await clock.tickAsync(graceWindow);
     assert.equal(
-      await grantedWithin(waiter, graceWindow + 2 * settle),
+      await grantedWithin(waiter, settle),
       'waiting',
       'The later claim must hold the key after the grace window',
     );
     assert.deepEqual(later.sent, [], 'The later claim must not be refused');
     later.deliver({ op: 'release', id: 'l' });
     assert.equal(
-      await grantedWithin(waiter, 1000),
+      await grantedWithin(waiter, factTimeout),
       'granted',
       'The key must pass on once the later claim releases it',
     );
@@ -260,7 +273,7 @@ describe('A request whose epoch has no tokens left', () => {
           reports === 1,
           'The coordinator must report the exhausted epoch',
         ),
-      { interval: 5, timeout: 2000 },
+      { interval: 5, timeout: factTimeout },
     );
 
     // Assert: the leader steps down instead, so the request is answered as on a lost connection.

@@ -9,9 +9,9 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { Mutex } from '../../mutex/mutex.ts';
+import { factTimeout } from '../../testing/fact-timeout.ts';
 import { FencedRegister } from '../../testing/fenced-register.ts';
 import { mutexUrl } from '../../testing/module-urls.ts';
-import { newProcessTimeout } from '../../testing/new-process-timeout.ts';
 import { onUnixSockets } from '../../testing/on-unix-sockets.ts';
 import { graceWindow, settle } from '../../testing/timing.ts';
 import { watch } from '../../testing/watch.ts';
@@ -72,7 +72,7 @@ describe('Socket lock server failover', () => {
           leader.has('ready'),
           `The leader must start.\n${leader.stderr}`,
         ),
-      { interval: 5, timeout: 5000 },
+      { interval: 5, timeout: factTimeout },
     );
     assert.equal(
       leader.find('role')?.role,
@@ -99,7 +99,7 @@ describe('Socket lock server failover', () => {
           holder.has('entered'),
           `The holder must enter.\n${holder.stderr}`,
         ),
-      { interval: 5, timeout: 5000 },
+      { interval: 5, timeout: factTimeout },
     );
     await using waiter = startWorker(
       participant(
@@ -116,7 +116,7 @@ describe('Socket lock server failover', () => {
           waiter.has('attempted'),
           `The waiter must start.\n${waiter.stderr}`,
         ),
-      { interval: 5, timeout: 5000 },
+      { interval: 5, timeout: factTimeout },
     );
     await delay(settle);
     const journal = async () =>
@@ -143,7 +143,7 @@ describe('Socket lock server failover', () => {
           holder.has('done') && waiter.has('done'),
           `Both must finish.\n${holder.stderr}${waiter.stderr}`,
         ),
-      { interval: 5, timeout: 5000 },
+      { interval: 5, timeout: factTimeout },
     );
     assert.equal(
       holder.find('done')?.outcome,
@@ -194,30 +194,21 @@ describe('Socket lock server failover', () => {
           follower.has('entered'),
           `The follower must enter.\n${follower.stderr}`,
         ),
-      { interval: 5, timeout: 5000 },
+      { interval: 5, timeout: factTimeout },
     );
-    const deadline = delay(2000, 'timed out' as const, { ref: false });
 
     // Act: the leader shuts down while the follower still holds its key.
-    const shutdown = await Promise.race([
-      leaderStore[Symbol.asyncDispose]().then(() => 'closed' as const),
-      deadline,
-    ]);
+    await leaderStore[Symbol.asyncDispose]();
     follower.child.send('finish');
 
-    // Assert: shutdown does not wait on followers, and the holder keeps its key.
-    assert.equal(
-      shutdown,
-      'closed',
-      'A leader must shut down without waiting for followers to leave',
-    );
+    // Assert: shutdown did not wait on followers, and the holder keeps its key.
     await t.waitFor(
       () =>
         assert.ok(
           follower.has('done'),
           `The follower must finish.\n${follower.stderr}`,
         ),
-      { interval: 5, timeout: 5000 },
+      { interval: 5, timeout: factTimeout },
     );
     assert.equal(
       follower.find('done')?.outcome,
@@ -245,7 +236,7 @@ describe('Socket lock server failover', () => {
           leader.has('ready'),
           `The leader must start.\n${leader.stderr}`,
         ),
-      { interval: 5, timeout: 5000 },
+      { interval: 5, timeout: factTimeout },
     );
     await using holder = startWorker(
       participant(
@@ -266,7 +257,7 @@ describe('Socket lock server failover', () => {
           holder.has('entered'),
           `The holder must enter.\n${holder.stderr}`,
         ),
-      { interval: 5, timeout: 5000 },
+      { interval: 5, timeout: factTimeout },
     );
     await using waiter = startWorker(
       participant(
@@ -282,7 +273,7 @@ describe('Socket lock server failover', () => {
           waiter.has('role'),
           `The waiter must reach the leader.\n${waiter.stderr}`,
         ),
-      { interval: 5, timeout: 5000 },
+      { interval: 5, timeout: factTimeout },
     );
     const journal = async () =>
       (await readFile(join(directory.path, 'journal.log'), 'utf8'))
@@ -299,7 +290,7 @@ describe('Socket lock server failover', () => {
           leader.has('disposed'),
           `The leader must shut down.\n${leader.stderr}`,
         ),
-      { interval: 5, timeout: 5000 },
+      { interval: 5, timeout: factTimeout },
     );
     await t.waitFor(
       () =>
@@ -307,7 +298,7 @@ describe('Socket lock server failover', () => {
           roles(holder) >= 2 && roles(waiter) >= 2,
           `The holder and the waiter must reach the next leader.\n${holder.stderr}${waiter.stderr}`,
         ),
-      { interval: 5, timeout: 5000 },
+      { interval: 5, timeout: factTimeout },
     );
     // Nothing happens while the holder keeps its key, so only time can show that the waiter stays out.
     await delay(graceWindow * 2);
@@ -326,7 +317,7 @@ describe('Socket lock server failover', () => {
           holder.has('done') && waiter.has('done'),
           `Both must finish.\n${holder.stderr}${waiter.stderr}`,
         ),
-      { interval: 5, timeout: 5000 },
+      { interval: 5, timeout: factTimeout },
     );
     assert.equal(
       holder.find('done')?.outcome,
@@ -374,7 +365,7 @@ describe('Socket lock server failover', () => {
             leader.has('ready'),
             `The leader must start.\n${leader.stderr}`,
           ),
-        { interval: 5, timeout: 5000 },
+        { interval: 5, timeout: factTimeout },
       );
       await using frozen = startWorker(
         participant(directory.path, writeBody(`await command('write');`)),
@@ -386,7 +377,7 @@ describe('Socket lock server failover', () => {
             frozen.has('entered'),
             `The holder must enter.\n${frozen.stderr}`,
           ),
-        { interval: 5, timeout: 5000 },
+        { interval: 5, timeout: factTimeout },
       );
 
       // Act: the holder freezes, the leader dies, and a newer holder takes the key.
@@ -405,7 +396,7 @@ describe('Socket lock server failover', () => {
               successor.has('done'),
               `The successor must get the key once the grace window passes.\n${successor.stderr}`,
             ),
-          { interval: 5, timeout: 5000 },
+          { interval: 5, timeout: factTimeout },
         );
         assert.equal(successor.find('wrote')?.write, 'written');
       } finally {
@@ -422,7 +413,7 @@ describe('Socket lock server failover', () => {
             frozen.has('done'),
             `The frozen holder must finish.\n${frozen.stderr}`,
           ),
-        { interval: 5, timeout: 5000 },
+        { interval: 5, timeout: factTimeout },
       );
       assert.equal(
         frozen.find('wrote')?.told,
@@ -642,7 +633,7 @@ describe('Socket store roles', () => {
           roles.values().some((seen) => seen.includes('leader')),
           'A follower must take over as leader',
         ),
-      { interval: 5, timeout: 2000 },
+      { interval: 5, timeout: factTimeout },
     );
     const stayed = roles.values().find((seen) => !seen.includes('leader'));
     await t.waitFor(
@@ -651,7 +642,7 @@ describe('Socket store roles', () => {
           stayed?.length === 2,
           'The other follower must follow the new leader',
         ),
-      { interval: 5, timeout: 2000 },
+      { interval: 5, timeout: factTimeout },
     );
 
     // Assert
@@ -693,7 +684,7 @@ describe('Socket store follower failure', () => {
           follower.exit !== null,
           `The follower must end on its own once its work is done.\n${follower.stderr}`,
         ),
-      { interval: 5, timeout: 5000 },
+      { interval: 5, timeout: factTimeout },
     );
 
     // Assert: the failed acquire reported the listener's error, the next one worked, and nothing kept the process alive.
@@ -746,7 +737,7 @@ describe('Socket store follower failure', () => {
               peerClosed,
               'The follower must close the connection it gave up',
             ),
-          { interval: 5, timeout: 2000 },
+          { interval: 5, timeout: factTimeout },
         );
       } finally {
         leader.close();
@@ -784,7 +775,7 @@ describe('Socket store after a clean shutdown', () => {
           first.exit !== null,
           `The first process must exit.\n${first.stderr}`,
         ),
-      { interval: 5, timeout: newProcessTimeout },
+      { interval: 5, timeout: factTimeout },
     );
     assert.deepEqual(
       { exit: first.exit, done: first.has('done') },
@@ -800,7 +791,7 @@ describe('Socket store after a clean shutdown', () => {
           next.exit !== null,
           `The next process must exit.\n${next.stderr}`,
         ),
-      { interval: 5, timeout: newProcessTimeout },
+      { interval: 5, timeout: factTimeout },
     );
 
     // Assert

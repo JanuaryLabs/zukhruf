@@ -184,7 +184,7 @@ export const { subject, sharing, threadSharing, disk } = sharedByDirectory(
   'DirectoryLockStore',
   openInProcess,
   { url: new URL(import.meta.url), export: 'openInProcess' },
-  { grantLatency: 20, releaseLatency: 10 },
+  { grantLatency: 20 },
 );
 ```
 

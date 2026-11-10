@@ -13,7 +13,7 @@ import { test } from '@zukhruf/testing/node';
 
 import { LeaseLostError, type LockHandle, Mutex } from '../../index.ts';
 import { isRecord } from '../../shared/is-record.ts';
-import { newProcessTimeout } from '../../testing/new-process-timeout.ts';
+import { factTimeout } from '../../testing/fact-timeout.ts';
 import { standInServer } from '../../testing/stand-in-server.ts';
 import { settle } from '../../testing/timing.ts';
 import { watch } from '../../testing/watch.ts';
@@ -110,7 +110,6 @@ async function connection(
   t: TestContext,
   leader: StandInLeader,
   index: number,
-  timeout = 2000,
 ) {
   await t.waitFor(
     () =>
@@ -118,7 +117,7 @@ async function connection(
         leader.connections[index]?.hello !== undefined,
         `The store must open connection ${index + 1} and say hello`,
       ),
-    { interval: 5, timeout: timeout },
+    { interval: 5, timeout: factTimeout },
   );
   return leader.connections[index]!;
 }
@@ -131,7 +130,7 @@ async function request(t: TestContext, side: LeaderSide, index: number) {
         side.requests.length > index,
         `The leader must read request ${index + 1}; it read ${JSON.stringify(side.requests)}`,
       ),
-    { interval: 5, timeout: 2000 },
+    { interval: 5, timeout: factTimeout },
   );
   return side.requests[index]!;
 }
@@ -166,7 +165,7 @@ describe('A socket store that loses its leader', () => {
       (await connection(t, leader, 1)).refuse();
       await t.waitFor(
         () => assert.ok(lease.signal.aborted, 'The key must be lost'),
-        { interval: 5, timeout: 2000 },
+        { interval: 5, timeout: factTimeout },
       );
       await delay(settle);
 
@@ -231,7 +230,7 @@ describe('A socket store that loses its leader', () => {
       (await connection(t, leader, 1)).refuse();
       await t.waitFor(
         () => assert.ok(lease.signal.aborted, 'The key must be lost'),
-        { interval: 5, timeout: 2000 },
+        { interval: 5, timeout: factTimeout },
       );
       finish.resolve();
       await running;
@@ -299,7 +298,7 @@ describe('A socket store that loses its leader', () => {
           (await connection(t, leader, 1)).refuse();
           await t.waitFor(
             () => assert.ok(lease.signal.aborted, 'The key must be lost'),
-            { interval: 5, timeout: 2000 },
+            { interval: 5, timeout: factTimeout },
           );
           finish.resolve();
 
@@ -317,7 +316,7 @@ describe('A socket store that loses its leader', () => {
           await t.waitFor(
             () =>
               assert.ok(ended.now.status !== 'pending', 'The call must end'),
-            { interval: 5, timeout: 2000 },
+            { interval: 5, timeout: factTimeout },
           );
         }
       }),
@@ -356,14 +355,11 @@ describe('A socket store that loses its leader', () => {
       second.welcome();
       const reassert = await request(t, second, 0);
       second.answer({ op: 'rejected', id: reassert.id });
-      const reason = await Promise.race([
-        told.promise,
-        delay(2000, 'never told', { ref: false }),
-      ]);
+      const reason = await told.promise;
       finish.resolve();
       await t.waitFor(
         () => assert.ok(running.now.status !== 'pending', 'The call must end'),
-        { interval: 5, timeout: 2000 },
+        { interval: 5, timeout: factTimeout },
       );
       await delay(settle);
 
@@ -446,7 +442,7 @@ describe('A socket store whose caller gives up or disposes it', () => {
     first.welcome();
     await t.waitFor(
       () => assert.ok(first.closed, 'The store must close the connection'),
-      { interval: 5, timeout: 2000 },
+      { interval: 5, timeout: factTimeout },
     );
     await delay(settle);
 
@@ -489,11 +485,11 @@ describe('A socket store whose caller gives up or disposes it', () => {
           acquiring.now.status === 'rejected',
           'A waiting acquire must be rejected when its store is disposed',
         ),
-      { interval: 5, timeout: 2000 },
+      { interval: 5, timeout: factTimeout },
     );
     await t.waitFor(
       () => assert.ok(first.closed, 'The store must close its connection'),
-      { interval: 5, timeout: 2000 },
+      { interval: 5, timeout: factTimeout },
     );
     const later = await Promise.race([
       store.acquire('product:42').then(
@@ -622,10 +618,7 @@ describe('A socket store that reconnects', () => {
 
     // Assert: a try is one attempt, and the leader that would have answered it is gone.
     assert.equal(
-      await Promise.race([
-        trying,
-        delay(2000, 'still waiting', { ref: false }),
-      ]),
+      await trying,
       undefined,
       'A try in flight when its connection drops must be answered busy',
     );
@@ -767,7 +760,7 @@ describe('A follower process through a reconnect', () => {
 				`,
       'waiter',
     );
-    const first = await connection(t, leader, 0, newProcessTimeout);
+    const first = await connection(t, leader, 0);
     first.welcome();
     await request(t, first, 0);
     await delay(settle);
@@ -797,7 +790,7 @@ describe('A follower process through a reconnect', () => {
           waiter.exit !== null,
           `A follower with nothing left to wait for must exit.\n${waiter.stderr}`,
         ),
-      { interval: 5, timeout: 5000 },
+      { interval: 5, timeout: factTimeout },
     );
     assert.deepEqual(waiter.exit, { code: 0, signal: null }, waiter.stderr);
     assert.ok(waiter.has('granted'));
@@ -826,7 +819,7 @@ describe('A follower process through a reconnect', () => {
 				`,
       'holder',
     );
-    const first = await connection(t, leader, 0, newProcessTimeout);
+    const first = await connection(t, leader, 0);
     first.welcome();
     first.answer({
       op: 'granted',
@@ -839,7 +832,7 @@ describe('A follower process through a reconnect', () => {
           holder.has('holding'),
           `The follower must hold the key.\n${holder.stderr}`,
         ),
-      { interval: 5, timeout: 2000 },
+      { interval: 5, timeout: factTimeout },
     );
 
     // Act: the connection drops, the next leader reads the reassert, and the process has nothing else to do.
@@ -857,7 +850,7 @@ describe('A follower process through a reconnect', () => {
           holder.exit !== null,
           `A follower that only holds keys must let its process exit.\n${holder.stderr}`,
         ),
-      { interval: 5, timeout: 5000 },
+      { interval: 5, timeout: factTimeout },
     );
     assert.deepEqual(holder.exit, { code: 0, signal: null }, holder.stderr);
   });

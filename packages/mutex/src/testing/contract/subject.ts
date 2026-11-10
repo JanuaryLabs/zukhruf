@@ -37,10 +37,8 @@ export interface Subject<H extends Host = Host> {
   /** Opens a store over `location`. */
   open(location: string): H;
   readonly process: ProcessSide<H>;
-  /** Milliseconds: the upper bound of one grant and its release with no contention, on the local server or engine. */
+  /** Milliseconds: the usual time of one grant. It sizes a window in which a wrong grant would show; it is never a time limit. */
   readonly grantLatency: number;
-  /** Milliseconds: the upper bound from the close of a holder process until a look sees no holder. */
-  readonly releaseLatency: number;
 }
 
 const shares = Symbol('shares');

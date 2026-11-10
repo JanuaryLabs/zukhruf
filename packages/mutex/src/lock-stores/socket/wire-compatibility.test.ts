@@ -12,7 +12,7 @@ import { TemporaryFiles } from '@zukhruf/testing/fs';
 import { test } from '@zukhruf/testing/node';
 
 import { Mutex } from '../../index.ts';
-import { newProcessTimeout } from '../../testing/new-process-timeout.ts';
+import { factTimeout } from '../../testing/fact-timeout.ts';
 import { onUnixSockets } from '../../testing/on-unix-sockets.ts';
 import { taskOutcome } from '../../testing/outcome.ts';
 import { standInServer } from '../../testing/stand-in-server.ts';
@@ -260,7 +260,7 @@ describe('What a socket store shares with other versions in its directory', () =
             requests.some(({ op }) => op === 'release'),
             `Requests: ${JSON.stringify(requests)}`,
           ),
-        { interval: 5, timeout: 2000 },
+        { interval: 5, timeout: factTimeout },
       );
 
       // Assert
@@ -302,7 +302,7 @@ describe('What a socket store shares with other versions in its directory', () =
             follower.received.includes('\n'),
             `Got ${JSON.stringify(follower.received)}`,
           ),
-        { interval: 5, timeout: 2000 },
+        { interval: 5, timeout: factTimeout },
       );
       assert.equal(follower.received, '{"op":"welcome"}\n');
     },
@@ -331,7 +331,7 @@ describe('What a socket store shares with other versions in its directory', () =
             other.closed,
             `The leader must hang up; got ${JSON.stringify(other.received)}`,
           ),
-        { interval: 5, timeout: 2000 },
+        { interval: 5, timeout: factTimeout },
       );
       assert.equal(other.received, '{"op":"refused","version":2}\n');
     },
@@ -360,7 +360,7 @@ describe('What a socket store shares with other versions in its directory', () =
             lines(follower.received) === 2,
             `Got ${JSON.stringify(follower.received)}`,
           ),
-        { interval: 5, timeout: 2000 },
+        { interval: 5, timeout: factTimeout },
       );
       follower.socket.write(
         '{"op":"release","id":"a"}\n{"op":"acquire","id":"b","key":"product:42"}\n',
@@ -371,7 +371,7 @@ describe('What a socket store shares with other versions in its directory', () =
             lines(follower.received) === 3,
             `Got ${JSON.stringify(follower.received)}`,
           ),
-        { interval: 5, timeout: 2000 },
+        { interval: 5, timeout: factTimeout },
       );
 
       // Assert
@@ -438,7 +438,7 @@ describe('What a socket store shares with other versions in its directory', () =
             longest.received.includes('\n'),
             `Got ${JSON.stringify(longest.received)}`,
           ),
-        { interval: 5, timeout: 2000 },
+        { interval: 5, timeout: factTimeout },
       );
       await t.waitFor(
         () =>
@@ -446,7 +446,7 @@ describe('What a socket store shares with other versions in its directory', () =
             tooLong.closed,
             `The leader must hang up; got ${JSON.stringify(tooLong.received)}`,
           ),
-        { interval: 5, timeout: 2000 },
+        { interval: 5, timeout: factTimeout },
       );
 
       // Assert
@@ -556,7 +556,7 @@ describe('What a socket store shares with other versions on Windows', () => {
             follower.exit !== null,
           `No hello on ${pipe}. ${follower.stderr}`,
         ),
-      { interval: 5, timeout: newProcessTimeout },
+      { interval: 5, timeout: factTimeout },
     );
 
     // Assert
@@ -601,7 +601,7 @@ describe('What a socket store shares with other versions on Windows', () => {
           leader.has('answer') || leader.has('failed') || leader.exit !== null,
           `No answer on ${pipe}. ${leader.stderr}`,
         ),
-      { interval: 5, timeout: newProcessTimeout },
+      { interval: 5, timeout: factTimeout },
     );
 
     // Assert

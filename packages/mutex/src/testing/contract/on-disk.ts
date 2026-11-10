@@ -7,8 +7,8 @@ import { describe, test } from '@zukhruf/testing/node';
 
 import { NetworkDirectoryError } from '../../lock-stores/file-system/index.ts';
 import { Mutex } from '../../mutex/mutex.ts';
+import { factTimeout } from '../fact-timeout.ts';
 import { mountAs, networkFileSystems, onLinux } from '../network-mount.ts';
-import { newProcessTimeout } from '../new-process-timeout.ts';
 import { outcome } from '../outcome.ts';
 import { startWorker } from '../worker-process.ts';
 import { holderSource } from './peers.ts';
@@ -215,7 +215,7 @@ export function passiveLooks<H extends Host>(
             holder.has('entered'),
             `The holder process must enter its task.\n${holder.stderr}`,
           ),
-        { interval: 5, timeout: newProcessTimeout },
+        { interval: 5, timeout: factTimeout },
       );
       holder.child.kill('SIGKILL');
       await holder.closed;

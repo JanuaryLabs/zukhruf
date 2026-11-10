@@ -14,7 +14,7 @@ import {
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { NetworkDirectoryError, SqliteElection } from '../index.ts';
-import { newProcessTimeout } from '../testing/new-process-timeout.ts';
+import { factTimeout } from '../testing/fact-timeout.ts';
 import { startWorker } from '../testing/worker-process.ts';
 
 const indexUrl = new URL('../index.ts', import.meta.url);
@@ -78,217 +78,190 @@ const onLinux = {
 };
 
 describe('A SQLite election across processes', () => {
-  test(
-    'only one of several processes campaigning at the same time becomes leader',
-    { timeout: 15_000 },
-    async (t) => {
-      // Arrange
-      await using directory = await new TemporaryFiles().directory(
-        'election-test-',
-      );
+  test('only one of several processes campaigning at the same time becomes leader', async (t) => {
+    // Arrange
+    await using directory = await new TemporaryFiles().directory(
+      'election-test-',
+    );
 
-      // Act: four processes campaign at the same time and keep whatever they win.
-      await using candidates = new AsyncDisposableStack();
-      const workers = ['a', 'b', 'c', 'd'].map((name) =>
-        candidates.use(startWorker(candidateSource(directory.path, 300), name)),
-      );
-      await t.waitFor(
-        () =>
-          assert.ok(
-            workers.every(
-              (worker) => worker.has('leader') || worker.has('follower'),
-            ),
-            `Every candidate must report its outcome.\n${workers.map((worker) => worker.stderr).join('')}`,
-          ),
-        { interval: 5, timeout: newProcessTimeout },
-      );
-
-      // Assert
-      assert.equal(
-        workers.filter((worker) => worker.has('leader')).length,
-        1,
-        'Exactly one candidate of the same time may win the election',
-      );
-    },
-  );
-
-  test(
-    'when the leader dies, another candidate takes over with a higher epoch',
-    { timeout: 15_000 },
-    async (t) => {
-      // Arrange: a leader in another process.
-      await using directory = await new TemporaryFiles().directory(
-        'election-test-',
-      );
-      const election = electionIn(directory.path);
-      await using leader = startWorker(
-        candidateSource(directory.path, 1000),
-        'leader',
-      );
-      await t.waitFor(
-        () =>
-          assert.ok(
-            leader.has('leader'),
-            `The first candidate must lead.\n${leader.stderr}`,
-          ),
-        { interval: 5, timeout: newProcessTimeout },
-      );
-      const epoch = leader.find('leader')?.epoch;
-      assert.ok(typeof epoch === 'string', 'The leader must report its epoch');
-      assert.equal(
-        await election.campaign({ timeout: 100 }),
-        undefined,
-        'Nobody else may lead while the leader lives',
-      );
-
-      // Act: the leader dies without resigning.
-      leader.child.kill('SIGKILL');
-      await leader.closed;
-      await using successor = await election.campaign({ timeout: 2000 });
-
-      // Assert
-      assert.ok(
-        successor,
-        'A candidate must take over once the leader is gone',
-      );
-      assert.ok(
-        successor.epoch > BigInt(epoch),
-        `The successor's epoch (${successor.epoch}) must be higher than the dead leader's (${epoch})`,
-      );
-    },
-  );
-
-  test(
-    'a leader that resigns hands leadership to the next campaign',
-    { timeout: 10_000 },
-    async () => {
-      // Arrange
-      await using directory = await new TemporaryFiles().directory(
-        'election-test-',
-      );
-      const election = electionIn(directory.path);
-      const first = await election.campaign();
-      assert.ok(first, 'The first campaign in an empty directory must win');
-      assert.equal(
-        await election.campaign(),
-        undefined,
-        'A second leader must not win while the first leads',
-      );
-
-      // Act
-      await first.resign();
-      await using second = await election.campaign();
-
-      // Assert
-      assert.ok(second, 'The next campaign must win after the leader resigns');
-      assert.ok(
-        second.epoch > first.epoch,
-        'Each term must carry a higher epoch than the last',
-      );
-    },
-  );
-
-  test(
-    'a campaign that is losing keeps its process responsive',
-    { timeout: 10_000 },
-    async () => {
-      // Arrange: someone else leads for the whole campaign.
-      await using directory = await new TemporaryFiles().directory(
-        'election-test-',
-      );
-      const election = electionIn(directory.path);
-      await using _leader = await election.campaign();
-      let ticks = 0;
-      const timer = setInterval(() => ticks++, 5);
-
-      try {
-        // Act: campaign for 300 ms against the sitting leader.
-        const outcome = await election.campaign({ timeout: 300 });
-
-        // Assert: timers kept firing, so waiting never blocked the event loop.
-        assert.equal(outcome, undefined);
-        // A blocked event loop gives 0 or 1 ticks; Windows timers fire about every 15.6 ms, so expect few.
+    // Act: four processes campaign at the same time and keep whatever they win.
+    await using candidates = new AsyncDisposableStack();
+    const workers = ['a', 'b', 'c', 'd'].map((name) =>
+      candidates.use(startWorker(candidateSource(directory.path, 300), name)),
+    );
+    await t.waitFor(
+      () =>
         assert.ok(
-          ticks >= 5,
-          `Only ${ticks} timer ticks ran during a 300 ms campaign`,
-        );
-      } finally {
-        clearInterval(timer);
-      }
-    },
-  );
+          workers.every(
+            (worker) => worker.has('leader') || worker.has('follower'),
+          ),
+          `Every candidate must report its outcome.\n${workers.map((worker) => worker.stderr).join('')}`,
+        ),
+      { interval: 5, timeout: factTimeout },
+    );
+
+    // Assert
+    assert.equal(
+      workers.filter((worker) => worker.has('leader')).length,
+      1,
+      'Exactly one candidate of the same time may win the election',
+    );
+  });
+
+  test('when the leader dies, another candidate takes over with a higher epoch', async (t) => {
+    // Arrange: a leader in another process.
+    await using directory = await new TemporaryFiles().directory(
+      'election-test-',
+    );
+    const election = electionIn(directory.path);
+    await using leader = startWorker(
+      candidateSource(directory.path, 1000),
+      'leader',
+    );
+    await t.waitFor(
+      () =>
+        assert.ok(
+          leader.has('leader'),
+          `The first candidate must lead.\n${leader.stderr}`,
+        ),
+      { interval: 5, timeout: factTimeout },
+    );
+    const epoch = leader.find('leader')?.epoch;
+    assert.ok(typeof epoch === 'string', 'The leader must report its epoch');
+    assert.equal(
+      await election.campaign({ timeout: 100 }),
+      undefined,
+      'Nobody else may lead while the leader lives',
+    );
+
+    // Act: the leader dies without resigning.
+    leader.child.kill('SIGKILL');
+    await leader.closed;
+    await using successor = await election.campaign({ timeout: factTimeout });
+
+    // Assert
+    assert.ok(successor, 'A candidate must take over once the leader is gone');
+    assert.ok(
+      successor.epoch > BigInt(epoch),
+      `The successor's epoch (${successor.epoch}) must be higher than the dead leader's (${epoch})`,
+    );
+  });
+
+  test('a leader that resigns hands leadership to the next campaign', async () => {
+    // Arrange
+    await using directory = await new TemporaryFiles().directory(
+      'election-test-',
+    );
+    const election = electionIn(directory.path);
+    const first = await election.campaign();
+    assert.ok(first, 'The first campaign in an empty directory must win');
+    assert.equal(
+      await election.campaign(),
+      undefined,
+      'A second leader must not win while the first leads',
+    );
+
+    // Act
+    await first.resign();
+    await using second = await election.campaign();
+
+    // Assert
+    assert.ok(second, 'The next campaign must win after the leader resigns');
+    assert.ok(
+      second.epoch > first.epoch,
+      'Each term must carry a higher epoch than the last',
+    );
+  });
+
+  test('a campaign that is losing keeps its process responsive', async () => {
+    // Arrange: someone else leads for the whole campaign.
+    await using directory = await new TemporaryFiles().directory(
+      'election-test-',
+    );
+    const election = electionIn(directory.path);
+    await using _leader = await election.campaign();
+    let ticks = 0;
+    const timer = setInterval(() => ticks++, 5);
+
+    try {
+      // Act: campaign for 300 ms against the sitting leader.
+      const outcome = await election.campaign({ timeout: 300 });
+
+      // Assert: timers kept firing, so waiting never blocked the event loop.
+      assert.equal(outcome, undefined);
+      // A blocked event loop gives 0 or 1 ticks; Windows timers fire about every 15.6 ms, so expect few.
+      assert.ok(
+        ticks >= 5,
+        `Only ${ticks} timer ticks ran during a 300 ms campaign`,
+      );
+    } finally {
+      clearInterval(timer);
+    }
+  });
 });
 
 describe('The files of a SQLite election', () => {
-  test(
-    'an election claims the file it is given, and records each epoch as decimal text in the file it is given',
-    { timeout: 10_000 },
-    async () => {
-      // Arrange: a leader holds one claim file. The names are ones no backend would hard-code.
-      await using directory = await new TemporaryFiles().directory(
-        'election-test-',
-      );
-      const electionOn = (claimFile: string, epochFile: string) =>
-        new SqliteElection({
-          clock: globalThis,
-          directory: directory.path,
-          claimFile,
-          epochFile,
-        });
-      await using _leader = await electionOn('seat-a.db', 'count-a').campaign();
+  test('an election claims the file it is given, and records each epoch as decimal text in the file it is given', async () => {
+    // Arrange: a leader holds one claim file. The names are ones no backend would hard-code.
+    await using directory = await new TemporaryFiles().directory(
+      'election-test-',
+    );
+    const electionOn = (claimFile: string, epochFile: string) =>
+      new SqliteElection({
+        clock: globalThis,
+        directory: directory.path,
+        claimFile,
+        epochFile,
+      });
+    await using _leader = await electionOn('seat-a.db', 'count-a').campaign();
 
-      // Act
-      const onHeldFile = await electionOn('seat-a.db', 'count-a').campaign();
-      await using onOtherFile = await electionOn(
-        'seat-b.db',
-        'count-b',
-      ).campaign();
-      // Eleven terms, so the epoch has two digits and decimal differs from hex.
-      const counted = electionOn('seat-c.db', 'count-c');
-      for (let terms = 0; terms < 11; terms++) {
-        await using term = await counted.campaign();
-        assert.ok(term, 'Each campaign on a free claim must win');
-      }
+    // Act
+    const onHeldFile = await electionOn('seat-a.db', 'count-a').campaign();
+    await using onOtherFile = await electionOn(
+      'seat-b.db',
+      'count-b',
+    ).campaign();
+    // Eleven terms, so the epoch has two digits and decimal differs from hex.
+    const counted = electionOn('seat-c.db', 'count-c');
+    for (let terms = 0; terms < 11; terms++) {
+      await using term = await counted.campaign();
+      assert.ok(term, 'Each campaign on a free claim must win');
+    }
 
-      // Assert
-      assert.equal(onHeldFile, undefined, 'The election ignored a held claim');
-      assert.ok(onOtherFile, 'Another claim file must be a claim of its own');
-      assert.equal(
-        await fsPromises.readFile(join(directory.path, 'count-c'), 'utf8'),
-        '11',
-      );
-    },
-  );
+    // Assert
+    assert.equal(onHeldFile, undefined, 'The election ignored a held claim');
+    assert.ok(onOtherFile, 'Another claim file must be a claim of its own');
+    assert.equal(
+      await fsPromises.readFile(join(directory.path, 'count-c'), 'utf8'),
+      '11',
+    );
+  });
 
-  test(
-    'a clean resign writes its epoch beside the claim file, and leaves the epoch file as decimal text, so each published version still reads it',
-    { timeout: 10_000 },
-    async () => {
-      // Arrange
-      await using directory = await new TemporaryFiles().directory(
-        'election-test-',
-      );
-      const election = electionIn(directory.path);
-      const epochFile = join(directory.path, 'term.epoch');
-      const first = await election.campaign();
-      assert.ok(first, 'The first campaign in an empty directory must win');
+  test('a clean resign writes its epoch beside the claim file, and leaves the epoch file as decimal text, so each published version still reads it', async () => {
+    // Arrange
+    await using directory = await new TemporaryFiles().directory(
+      'election-test-',
+    );
+    const election = electionIn(directory.path);
+    const epochFile = join(directory.path, 'term.epoch');
+    const first = await election.campaign();
+    assert.ok(first, 'The first campaign in an empty directory must win');
 
-      // Act
-      await first.resign({ clean: true });
-      const afterResign = await fsPromises.readFile(epochFile, 'utf8');
-      const note = await fsPromises.readFile(
-        join(directory.path, 'term.lock.clean'),
-        'utf8',
-      );
-      await using next = await election.campaign();
+    // Act
+    await first.resign({ clean: true });
+    const afterResign = await fsPromises.readFile(epochFile, 'utf8');
+    const note = await fsPromises.readFile(
+      join(directory.path, 'term.lock.clean'),
+      'utf8',
+    );
+    await using next = await election.campaign();
 
-      // Assert
-      assert.equal(afterResign, '1');
-      assert.equal(note, '1', 'The note must hold the epoch of the clean term');
-      assert.ok(next, 'The next campaign must win after the leader resigns');
-      assert.equal(await fsPromises.readFile(epochFile, 'utf8'), '2');
-    },
-  );
+    // Assert
+    assert.equal(afterResign, '1');
+    assert.equal(note, '1', 'The note must hold the epoch of the clean term');
+    assert.ok(next, 'The next campaign must win after the leader resigns');
+    assert.equal(await fsPromises.readFile(epochFile, 'utf8'), '2');
+  });
 
   test(
     'a won term is on disk before the campaign resolves, so a power loss cannot repeat its epoch',
@@ -297,7 +270,6 @@ describe('The files of a SQLite election', () => {
         process.platform === 'win32'
           ? 'Windows never syncs a directory'
           : false,
-      timeout: 10_000,
     },
     async (t) => {
       // Arrange
@@ -335,42 +307,38 @@ describe('The files of a SQLite election', () => {
     { kind: 'an empty', text: '' },
     { kind: 'a padded', text: '   41 ' },
   ]) {
-    test(
-      `${kind} epoch file fails the campaign with a SyntaxError that names the file, stays as it was, and lets the claim go`,
-      { timeout: 10_000 },
-      async () => {
-        // Arrange
-        await using directory = await new TemporaryFiles().directory(
-          'election-test-',
-        );
-        const epochFile = join(directory.path, 'term.epoch');
-        await fsPromises.writeFile(epochFile, text);
-        const failsOnTheEpochFile = (error: unknown) =>
-          error instanceof SyntaxError && error.message.includes(epochFile);
+    test(`${kind} epoch file fails the campaign with a SyntaxError that names the file, stays as it was, and lets the claim go`, async () => {
+      // Arrange
+      await using directory = await new TemporaryFiles().directory(
+        'election-test-',
+      );
+      const epochFile = join(directory.path, 'term.epoch');
+      await fsPromises.writeFile(epochFile, text);
+      const failsOnTheEpochFile = (error: unknown) =>
+        error instanceof SyntaxError && error.message.includes(epochFile);
 
-        // Act
-        const campaigning = electionIn(directory.path).campaign();
-        await assert.rejects(
-          campaigning,
-          failsOnTheEpochFile,
-          'The campaign must fail with a SyntaxError that names the epoch file',
-        );
-        // A claim that is still held makes this campaign wait out its timeout and resolve undefined.
-        const next = electionIn(directory.path).campaign({ timeout: 1_000 });
+      // Act
+      const campaigning = electionIn(directory.path).campaign();
+      await assert.rejects(
+        campaigning,
+        failsOnTheEpochFile,
+        'The campaign must fail with a SyntaxError that names the epoch file',
+      );
+      // A claim that is still held makes this campaign wait out its timeout and resolve undefined.
+      const next = electionIn(directory.path).campaign({ timeout: 1_000 });
 
-        // Assert
-        await assert.rejects(
-          next,
-          failsOnTheEpochFile,
-          'The next campaign must take the claim that the failed campaign let go, and fail on the same epoch file',
-        );
-        assert.equal(
-          await fsPromises.readFile(epochFile, 'utf8'),
-          text,
-          'The epoch file must stay as it was',
-        );
-      },
-    );
+      // Assert
+      await assert.rejects(
+        next,
+        failsOnTheEpochFile,
+        'The next campaign must take the claim that the failed campaign let go, and fail on the same epoch file',
+      );
+      assert.equal(
+        await fsPromises.readFile(epochFile, 'utf8'),
+        text,
+        'The epoch file must stay as it was',
+      );
+    });
   }
 });
 
@@ -380,342 +348,294 @@ describe('The last epoch of a SQLite election', () => {
     { kind: 'an empty', text: '' },
     { kind: 'a padded', text: '   41 ' },
   ]) {
-    test(
-      `${kind} epoch file fails the read with a SyntaxError that names the file, and stays as it was`,
-      { timeout: 10_000 },
-      async () => {
-        // Arrange
-        await using directory = await new TemporaryFiles().directory(
-          'election-test-',
-        );
-        const epochFile = join(directory.path, 'term.epoch');
-        await fsPromises.writeFile(epochFile, text);
+    test(`${kind} epoch file fails the read with a SyntaxError that names the file, and stays as it was`, async () => {
+      // Arrange
+      await using directory = await new TemporaryFiles().directory(
+        'election-test-',
+      );
+      const epochFile = join(directory.path, 'term.epoch');
+      await fsPromises.writeFile(epochFile, text);
 
-        // Act
-        const reading = electionIn(directory.path).lastEpoch();
+      // Act
+      const reading = electionIn(directory.path).lastEpoch();
 
-        // Assert
-        await assert.rejects(
-          reading,
-          (error) =>
-            error instanceof SyntaxError && error.message.includes(epochFile),
-          'The read must fail with a SyntaxError that names the epoch file',
-        );
-        assert.equal(
-          await fsPromises.readFile(epochFile, 'utf8'),
-          text,
-          'The epoch file must stay as it was',
-        );
-      },
-    );
+      // Assert
+      await assert.rejects(
+        reading,
+        (error) =>
+          error instanceof SyntaxError && error.message.includes(epochFile),
+        'The read must fail with a SyntaxError that names the epoch file',
+      );
+      assert.equal(
+        await fsPromises.readFile(epochFile, 'utf8'),
+        text,
+        'The epoch file must stay as it was',
+      );
+    });
   }
 
   for (const { kind, at } of [
     { kind: 'an empty directory', at: [] },
     { kind: 'a directory not yet created', at: ['not', 'yet'] },
   ]) {
-    test(
-      `in ${kind}, where no term was won, the read answers 0 and creates nothing`,
-      { timeout: 10_000 },
-      async () => {
-        // Arrange
-        await using directory = await new TemporaryFiles().directory(
-          'election-test-',
-        );
-
-        // Act
-        const epoch = await electionIn(join(directory.path, ...at)).lastEpoch();
-
-        // Assert
-        assert.equal(epoch, 0n);
-        assert.deepEqual(await fsPromises.readdir(directory.path), []);
-      },
-    );
-  }
-
-  test(
-    'a read that fails for another reason than a missing file fails the read: it never answers 0',
-    { timeout: 10_000 },
-    async () => {
-      // Arrange: a directory at the path of the epoch file. This is platform
-      // setup that no operation exposes: it stands for any read error.
-      await using directory = await new TemporaryFiles().directory(
-        'election-test-',
-      );
-      await fsPromises.mkdir(join(directory.path, 'term.epoch'));
-
-      // Act
-      const reading = electionIn(directory.path).lastEpoch();
-
-      // Assert
-      await assert.rejects(reading);
-    },
-  );
-
-  test(
-    'another election on the directory reads the epoch of the last term without campaigning, while the term lasts and after it ends',
-    { timeout: 10_000 },
-    async () => {
+    test(`in ${kind}, where no term was won, the read answers 0 and creates nothing`, async () => {
       // Arrange
       await using directory = await new TemporaryFiles().directory(
         'election-test-',
       );
-      const epochFile = join(directory.path, 'term.epoch');
-      /** The identity and last change of the epoch file: a write changes one of them. */
-      const versionOfEpochFile = async () => {
-        const { ino, mtimeNs } = await fsPromises.stat(epochFile, {
-          bigint: true,
-        });
-        return { ino, mtimeNs };
-      };
-      const reader = electionIn(directory.path);
-      await using first = await electionIn(directory.path).campaign();
-      assert.ok(first, 'The first campaign in an empty directory must win');
 
       // Act
-      const beforeFirstRead = await versionOfEpochFile();
-      const duringFirst = await reader.lastEpoch();
-      const afterFirstRead = await versionOfEpochFile();
-      await using rivalOfFirst = await electionIn(directory.path).campaign();
-      await first.resign();
-      await using second = await electionIn(directory.path).campaign();
-      assert.ok(second, 'The next campaign must win after the leader resigns');
-      await second.resign();
-      const beforeSecondRead = await versionOfEpochFile();
-      const afterSecond = await reader.lastEpoch();
-      const afterSecondRead = await versionOfEpochFile();
-      await using third = await electionIn(directory.path).campaign();
+      const epoch = await electionIn(join(directory.path, ...at)).lastEpoch();
 
       // Assert
-      assert.equal(duringFirst, 1n);
-      assert.equal(
-        rivalOfFirst,
-        undefined,
-        'The first leader must still hold its claim after the read',
-      );
-      assert.equal(afterSecond, 2n);
-      assert.deepEqual(
-        [afterFirstRead, afterSecondRead],
-        [beforeFirstRead, beforeSecondRead],
-        'The read must not write the epoch file',
-      );
-      assert.equal(
-        third?.epoch,
-        3n,
-        'The read must leave the claim free and the epoch as it was',
-      );
-    },
-  );
+      assert.equal(epoch, 0n);
+      assert.deepEqual(await fsPromises.readdir(directory.path), []);
+    });
+  }
+
+  test('a read that fails for another reason than a missing file fails the read: it never answers 0', async () => {
+    // Arrange: a directory at the path of the epoch file. This is platform
+    // setup that no operation exposes: it stands for any read error.
+    await using directory = await new TemporaryFiles().directory(
+      'election-test-',
+    );
+    await fsPromises.mkdir(join(directory.path, 'term.epoch'));
+
+    // Act
+    const reading = electionIn(directory.path).lastEpoch();
+
+    // Assert
+    await assert.rejects(reading);
+  });
+
+  test('another election on the directory reads the epoch of the last term without campaigning, while the term lasts and after it ends', async () => {
+    // Arrange
+    await using directory = await new TemporaryFiles().directory(
+      'election-test-',
+    );
+    const epochFile = join(directory.path, 'term.epoch');
+    /** The identity and last change of the epoch file: a write changes one of them. */
+    const versionOfEpochFile = async () => {
+      const { ino, mtimeNs } = await fsPromises.stat(epochFile, {
+        bigint: true,
+      });
+      return { ino, mtimeNs };
+    };
+    const reader = electionIn(directory.path);
+    await using first = await electionIn(directory.path).campaign();
+    assert.ok(first, 'The first campaign in an empty directory must win');
+
+    // Act
+    const beforeFirstRead = await versionOfEpochFile();
+    const duringFirst = await reader.lastEpoch();
+    const afterFirstRead = await versionOfEpochFile();
+    await using rivalOfFirst = await electionIn(directory.path).campaign();
+    await first.resign();
+    await using second = await electionIn(directory.path).campaign();
+    assert.ok(second, 'The next campaign must win after the leader resigns');
+    await second.resign();
+    const beforeSecondRead = await versionOfEpochFile();
+    const afterSecond = await reader.lastEpoch();
+    const afterSecondRead = await versionOfEpochFile();
+    await using third = await electionIn(directory.path).campaign();
+
+    // Assert
+    assert.equal(duringFirst, 1n);
+    assert.equal(
+      rivalOfFirst,
+      undefined,
+      'The first leader must still hold its claim after the read',
+    );
+    assert.equal(afterSecond, 2n);
+    assert.deepEqual(
+      [afterFirstRead, afterSecondRead],
+      [beforeFirstRead, beforeSecondRead],
+      'The read must not write the epoch file',
+    );
+    assert.equal(
+      third?.epoch,
+      3n,
+      'The read must leave the claim free and the epoch as it was',
+    );
+  });
 });
 
 describe('A clean shutdown in a SQLite election', () => {
-  test(
-    'a term that resigns without saying it is clean leaves its successor nothing: the next term is not after a clean shutdown',
-    { timeout: 10_000 },
-    async () => {
-      // Arrange
-      await using directory = await new TemporaryFiles().directory(
-        'election-test-',
-      );
-      const election = electionIn(directory.path);
-      const first = await election.campaign();
-      assert.ok(first, 'The first campaign in an empty directory must win');
+  test('a term that resigns without saying it is clean leaves its successor nothing: the next term is not after a clean shutdown', async () => {
+    // Arrange
+    await using directory = await new TemporaryFiles().directory(
+      'election-test-',
+    );
+    const election = electionIn(directory.path);
+    const first = await election.campaign();
+    assert.ok(first, 'The first campaign in an empty directory must win');
 
-      // Act
-      await first.resign();
-      await using next = await election.campaign();
+    // Act
+    await first.resign();
+    await using next = await election.campaign();
 
-      // Assert
-      assert.ok(next, 'The next campaign must win after the leader resigns');
-      assert.equal(next.afterCleanShutdown, false);
-    },
-  );
+    // Assert
+    assert.ok(next, 'The next campaign must win after the leader resigns');
+    assert.equal(next.afterCleanShutdown, false);
+  });
 
-  test(
-    'a term that resigns clean tells its successor: the next term is after a clean shutdown',
-    { timeout: 10_000 },
-    async () => {
-      // Arrange
-      await using directory = await new TemporaryFiles().directory(
-        'election-test-',
-      );
-      const election = electionIn(directory.path);
-      const first = await election.campaign();
-      assert.ok(first, 'The first campaign in an empty directory must win');
+  test('a term that resigns clean tells its successor: the next term is after a clean shutdown', async () => {
+    // Arrange
+    await using directory = await new TemporaryFiles().directory(
+      'election-test-',
+    );
+    const election = electionIn(directory.path);
+    const first = await election.campaign();
+    assert.ok(first, 'The first campaign in an empty directory must win');
 
-      // Act
-      await first.resign({ clean: true });
-      await using next = await election.campaign();
+    // Act
+    await first.resign({ clean: true });
+    await using next = await election.campaign();
 
-      // Assert
-      assert.ok(next, 'The next campaign must win after the leader resigns');
-      assert.equal(next.afterCleanShutdown, true);
-    },
-  );
+    // Assert
+    assert.ok(next, 'The next campaign must win after the leader resigns');
+    assert.equal(next.afterCleanShutdown, true);
+  });
 
-  test(
-    'a lost term records nothing, also when its leader resigns it clean: the next term is not after a clean shutdown',
-    { timeout: 10_000 },
-    async () => {
-      // Arrange: the backend takes the claim away from a living leader.
-      await using directory = await new TemporaryFiles().directory(
-        'election-test-',
-      );
-      const loss = new AbortController();
-      const lost = await new LosableElection(
-        directory.path,
-        loss.signal,
-      ).campaign();
-      assert.ok(lost, 'The first campaign in an empty directory must win');
-      loss.abort();
+  test('a lost term records nothing, also when its leader resigns it clean: the next term is not after a clean shutdown', async () => {
+    // Arrange: the backend takes the claim away from a living leader.
+    await using directory = await new TemporaryFiles().directory(
+      'election-test-',
+    );
+    const loss = new AbortController();
+    const lost = await new LosableElection(
+      directory.path,
+      loss.signal,
+    ).campaign();
+    assert.ok(lost, 'The first campaign in an empty directory must win');
+    loss.abort();
 
-      // Act
-      await lost.resign({ clean: true });
-      await using next = await electionIn(directory.path).campaign();
+    // Act
+    await lost.resign({ clean: true });
+    await using next = await electionIn(directory.path).campaign();
 
-      // Assert
-      assert.ok(next, 'The next campaign must win after the loss');
-      assert.equal(next.afterCleanShutdown, false);
-    },
-  );
+    // Assert
+    assert.ok(next, 'The next campaign must win after the loss');
+    assert.equal(next.afterCleanShutdown, false);
+  });
 
-  test(
-    'a term that dies after a clean one is not clean itself: the term after it is not after a clean shutdown',
-    { timeout: 15_000 },
-    async (t) => {
-      // Arrange: a clean term, then a term in another process.
-      await using directory = await new TemporaryFiles().directory(
-        'election-test-',
-      );
-      const election = electionIn(directory.path);
-      const clean = await election.campaign();
-      assert.ok(clean, 'The first campaign in an empty directory must win');
-      await clean.resign({ clean: true });
-      await using leader = startWorker(
-        candidateSource(directory.path, 1000),
-        'leader',
-      );
-      await t.waitFor(
-        () =>
-          assert.ok(
-            leader.has('leader'),
-            `The second candidate must lead.\n${leader.stderr}`,
-          ),
-        { interval: 5, timeout: newProcessTimeout },
-      );
+  test('a term that dies after a clean one is not clean itself: the term after it is not after a clean shutdown', async (t) => {
+    // Arrange: a clean term, then a term in another process.
+    await using directory = await new TemporaryFiles().directory(
+      'election-test-',
+    );
+    const election = electionIn(directory.path);
+    const clean = await election.campaign();
+    assert.ok(clean, 'The first campaign in an empty directory must win');
+    await clean.resign({ clean: true });
+    await using leader = startWorker(
+      candidateSource(directory.path, 1000),
+      'leader',
+    );
+    await t.waitFor(
+      () =>
+        assert.ok(
+          leader.has('leader'),
+          `The second candidate must lead.\n${leader.stderr}`,
+        ),
+      { interval: 5, timeout: factTimeout },
+    );
 
-      // Act: the second leader dies without resigning.
-      leader.child.kill('SIGKILL');
-      await leader.closed;
-      await using next = await election.campaign({ timeout: 2000 });
+    // Act: the second leader dies without resigning.
+    leader.child.kill('SIGKILL');
+    await leader.closed;
+    await using next = await election.campaign({ timeout: factTimeout });
 
-      // Assert
-      assert.ok(next, 'A candidate must take over once the leader is gone');
-      assert.equal(next.epoch, 3n);
-      assert.equal(next.afterCleanShutdown, false);
-    },
-  );
+    // Assert
+    assert.ok(next, 'A candidate must take over once the leader is gone');
+    assert.equal(next.epoch, 3n);
+    assert.equal(next.afterCleanShutdown, false);
+  });
 
-  test(
-    'a note that names an older term is not about the term just before: the next term is not after a clean shutdown',
-    { timeout: 10_000 },
-    async () => {
-      // Arrange: two terms that resign without a note. Then a note for the
-      // first term, written by hand: a published version never removes a
-      // note, so a note can stay behind from a term before its terms. No
-      // operation of this version leaves one.
-      await using directory = await new TemporaryFiles().directory(
-        'election-test-',
-      );
-      const election = electionIn(directory.path);
-      for (let terms = 0; terms < 2; terms++) {
-        const term = await election.campaign();
-        assert.ok(term, 'Each campaign on a free claim must win');
-        await term.resign();
-      }
-      await fsPromises.writeFile(join(directory.path, 'term.lock.clean'), '1');
+  test('a note that names an older term is not about the term just before: the next term is not after a clean shutdown', async () => {
+    // Arrange: two terms that resign without a note. Then a note for the
+    // first term, written by hand: a published version never removes a
+    // note, so a note can stay behind from a term before its terms. No
+    // operation of this version leaves one.
+    await using directory = await new TemporaryFiles().directory(
+      'election-test-',
+    );
+    const election = electionIn(directory.path);
+    for (let terms = 0; terms < 2; terms++) {
+      const term = await election.campaign();
+      assert.ok(term, 'Each campaign on a free claim must win');
+      await term.resign();
+    }
+    await fsPromises.writeFile(join(directory.path, 'term.lock.clean'), '1');
 
-      // Act
-      await using next = await election.campaign();
+    // Act
+    await using next = await election.campaign();
 
-      // Assert
-      assert.ok(next, 'The next campaign must win');
-      assert.equal(next.epoch, 3n);
-      assert.equal(next.afterCleanShutdown, false);
-    },
-  );
+    // Assert
+    assert.ok(next, 'The next campaign must win');
+    assert.equal(next.epoch, 3n);
+    assert.equal(next.afterCleanShutdown, false);
+  });
 
-  test(
-    'a note is read only once: when the epochs start again, an old note does not match a new term',
-    { timeout: 10_000 },
-    async () => {
-      // Arrange: a clean term, and a term after it that reads the note.
-      await using directory = await new TemporaryFiles().directory(
-        'election-test-',
-      );
-      const election = electionIn(directory.path);
-      const clean = await election.campaign();
-      assert.ok(clean, 'The first campaign in an empty directory must win');
-      await clean.resign({ clean: true });
-      const reader = await election.campaign();
-      assert.ok(reader, 'The second campaign must win');
-      assert.equal(reader.afterCleanShutdown, true);
-      await reader.resign();
-      // Someone deletes the epoch file by hand, so the epochs start again at
-      // 1. No operation of the election does this.
-      await fsPromises.rm(join(directory.path, 'term.epoch'));
-      const restarted = await election.campaign();
-      assert.ok(restarted, 'The campaign after the reset must win');
-      assert.equal(restarted.epoch, 1n);
+  test('a note is read only once: when the epochs start again, an old note does not match a new term', async () => {
+    // Arrange: a clean term, and a term after it that reads the note.
+    await using directory = await new TemporaryFiles().directory(
+      'election-test-',
+    );
+    const election = electionIn(directory.path);
+    const clean = await election.campaign();
+    assert.ok(clean, 'The first campaign in an empty directory must win');
+    await clean.resign({ clean: true });
+    const reader = await election.campaign();
+    assert.ok(reader, 'The second campaign must win');
+    assert.equal(reader.afterCleanShutdown, true);
+    await reader.resign();
+    // Someone deletes the epoch file by hand, so the epochs start again at
+    // 1. No operation of the election does this.
+    await fsPromises.rm(join(directory.path, 'term.epoch'));
+    const restarted = await election.campaign();
+    assert.ok(restarted, 'The campaign after the reset must win');
+    assert.equal(restarted.epoch, 1n);
 
-      // Act: the new term 1 resigns without a note.
-      await restarted.resign();
-      await using next = await election.campaign();
+    // Act: the new term 1 resigns without a note.
+    await restarted.resign();
+    await using next = await election.campaign();
 
-      // Assert
-      assert.ok(next, 'The next campaign must win');
-      assert.equal(next.afterCleanShutdown, false);
-    },
-  );
+    // Assert
+    assert.ok(next, 'The next campaign must win');
+    assert.equal(next.afterCleanShutdown, false);
+  });
 
-  test(
-    'the first term of a directory has no term before it, so it is not after a clean shutdown',
-    { timeout: 10_000 },
-    async () => {
-      // Arrange
-      await using directory = await new TemporaryFiles().directory(
-        'election-test-',
-      );
+  test('the first term of a directory has no term before it, so it is not after a clean shutdown', async () => {
+    // Arrange
+    await using directory = await new TemporaryFiles().directory(
+      'election-test-',
+    );
 
-      // Act
-      await using first = await electionIn(directory.path).campaign();
+    // Act
+    await using first = await electionIn(directory.path).campaign();
 
-      // Assert
-      assert.ok(first, 'The first campaign in an empty directory must win');
-      assert.equal(first.afterCleanShutdown, false);
-    },
-  );
+    // Assert
+    assert.ok(first, 'The first campaign in an empty directory must win');
+    assert.equal(first.afterCleanShutdown, false);
+  });
 
-  test(
-    'an empty note, as a power loss can leave, is not a clean shutdown, also in a directory with no term yet',
-    { timeout: 10_000 },
-    async () => {
-      // Arrange: an empty note and no epoch file. The note is not synced to
-      // the disk, and after a power loss some file systems keep its name but
-      // not its text. This is platform setup that no operation exposes.
-      await using directory = await new TemporaryFiles().directory(
-        'election-test-',
-      );
-      await fsPromises.writeFile(join(directory.path, 'term.lock.clean'), '');
+  test('an empty note, as a power loss can leave, is not a clean shutdown, also in a directory with no term yet', async () => {
+    // Arrange: an empty note and no epoch file. The note is not synced to
+    // the disk, and after a power loss some file systems keep its name but
+    // not its text. This is platform setup that no operation exposes.
+    await using directory = await new TemporaryFiles().directory(
+      'election-test-',
+    );
+    await fsPromises.writeFile(join(directory.path, 'term.lock.clean'), '');
 
-      // Act
-      await using first = await electionIn(directory.path).campaign();
+    // Act
+    await using first = await electionIn(directory.path).campaign();
 
-      // Assert
-      assert.ok(first, 'The first campaign must win');
-      assert.equal(first.afterCleanShutdown, false);
-    },
-  );
+    // Assert
+    assert.ok(first, 'The first campaign must win');
+    assert.equal(first.afterCleanShutdown, false);
+  });
 });
 
 describe('A SQLite election in a directory on a network file system', () => {

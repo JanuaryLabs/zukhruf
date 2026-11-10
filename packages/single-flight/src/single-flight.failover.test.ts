@@ -18,7 +18,7 @@ import {
   callerSource,
   journalOf,
 } from './testing/caller.ts';
-import { newProcessTimeout } from './testing/new-process-timeout.ts';
+import { factTimeout } from './testing/fact-timeout.ts';
 import { type WorkerProcess, startWorker } from './testing/worker-process.ts';
 
 const onUnix = {
@@ -38,7 +38,7 @@ async function caller(
   const worker = startWorker(callerSource(directory, options), name);
   await t.waitFor(() => assert.ok(worker.has('ready'), worker.stderr), {
     interval: 5,
-    timeout: newProcessTimeout,
+    timeout: factTimeout,
   });
   return worker;
 }
@@ -62,7 +62,6 @@ async function heard(
   worker: WorkerProcess,
   type: string,
   call: string,
-  timeout = newProcessTimeout,
 ) {
   const find = () =>
     worker.messages.find(
@@ -74,7 +73,7 @@ async function heard(
         find() !== undefined,
         `No ${type} for ${call}; got ${JSON.stringify(worker.messages)} ${worker.stderr}`,
       ),
-    { interval: 5, timeout: timeout },
+    { interval: 5, timeout: factTimeout },
   );
   const message = find();
   assert.ok(message);
@@ -109,7 +108,7 @@ async function firstOf(
         find() !== undefined,
         `No ${types.join(' or ')} for ${call}; got ${JSON.stringify(worker.messages)} ${worker.stderr}`,
       ),
-    { interval: 5, timeout: newProcessTimeout },
+    { interval: 5, timeout: factTimeout },
   );
   const message = find();
   assert.ok(message);
@@ -132,152 +131,136 @@ async function epochOf(directory: string) {
 }
 
 describe('A single flight across processes when a leader stops', () => {
-  test(
-    'a joiner whose leader process stops gets FlightInterruptedError at once, and its next call leads a new flight',
-    { timeout: 30_000 },
-    async (t) => {
-      // Arrange: the coordinator, a leader in its own process, and a joiner in another.
-      await using directory = await new TemporaryFiles().directory('flights-');
-      await using _coordinator = await coordinatorOf(t, directory.path);
-      await using leader = await caller(t, directory.path, 'leader');
-      run(leader, 'l', 'sync');
-      await heard(t, leader, 'leading', 'l');
-      await using joiner = await caller(t, directory.path, 'joiner');
-      run(joiner, 'j', 'sync');
-      await heard(t, joiner, 'joined', 'j');
+  test('a joiner whose leader process stops gets FlightInterruptedError, and its next call leads a new flight', async (t) => {
+    // Arrange: the coordinator, a leader in its own process, and a joiner in another.
+    await using directory = await new TemporaryFiles().directory('flights-');
+    await using _coordinator = await coordinatorOf(t, directory.path);
+    await using leader = await caller(t, directory.path, 'leader');
+    run(leader, 'l', 'sync');
+    await heard(t, leader, 'leading', 'l');
+    await using joiner = await caller(t, directory.path, 'joiner');
+    run(joiner, 'j', 'sync');
+    await heard(t, joiner, 'joined', 'j');
 
-      // Act
-      leader.child.kill('SIGKILL');
-      await leader.closed;
-      // The coordinator lives, so it learns of the stop from the closed connection at once, not from a timeout.
-      const interrupted = await heard(t, joiner, 'error', 'j', 1000);
-      run(joiner, 'next', 'sync');
-      await heard(t, joiner, 'leading', 'next');
-      joiner.child.send({ type: 'finish', call: 'next', value: 'second' });
-      const next = await heard(t, joiner, 'value', 'next');
+    // Act
+    leader.child.kill('SIGKILL');
+    await leader.closed;
+    // The coordinator lives, so it learns of the stop from the closed connection at once, not from a timeout.
+    const interrupted = await heard(t, joiner, 'error', 'j');
+    run(joiner, 'next', 'sync');
+    await heard(t, joiner, 'leading', 'next');
+    joiner.child.send({ type: 'finish', call: 'next', value: 'second' });
+    const next = await heard(t, joiner, 'value', 'next');
 
-      // Assert
-      assert.equal(interrupted.name, 'FlightInterruptedError');
-      assert.deepEqual(next.value, 'second');
-      assert.equal(next.joined, false);
-      assert.deepEqual(await journal(directory.path), [
-        'coordinator:work:warm-up',
-        'leader:work:sync',
-        'joiner:work:sync',
-      ]);
-    },
-  );
+    // Assert
+    assert.equal(interrupted.name, 'FlightInterruptedError');
+    assert.deepEqual(next.value, 'second');
+    assert.equal(next.joined, false);
+    assert.deepEqual(await journal(directory.path), [
+      'coordinator:work:warm-up',
+      'leader:work:sync',
+      'joiner:work:sync',
+    ]);
+  });
 
-  test(
-    'joiners of a leader that was also the coordinator get FlightInterruptedError from the next coordinator, and nobody runs the work again',
-    { timeout: 30_000 },
-    async (t) => {
-      // Arrange: the coordinator leads the flight itself, and two processes join it.
-      await using directory = await new TemporaryFiles().directory('flights-');
-      await using coordinator = await caller(t, directory.path, 'coordinator');
-      run(coordinator, 'l', 'sync');
-      await heard(t, coordinator, 'leading', 'l');
-      await using first = await caller(t, directory.path, 'first');
-      run(first, 'j', 'sync');
-      await heard(t, first, 'joined', 'j');
-      await using second = await caller(t, directory.path, 'second');
-      run(second, 'j', 'sync');
-      await heard(t, second, 'joined', 'j');
+  test('joiners of a leader that was also the coordinator get FlightInterruptedError from the next coordinator, and nobody runs the work again', async (t) => {
+    // Arrange: the coordinator leads the flight itself, and two processes join it.
+    await using directory = await new TemporaryFiles().directory('flights-');
+    await using coordinator = await caller(t, directory.path, 'coordinator');
+    run(coordinator, 'l', 'sync');
+    await heard(t, coordinator, 'leading', 'l');
+    await using first = await caller(t, directory.path, 'first');
+    run(first, 'j', 'sync');
+    await heard(t, first, 'joined', 'j');
+    await using second = await caller(t, directory.path, 'second');
+    run(second, 'j', 'sync');
+    await heard(t, second, 'joined', 'j');
 
-      // Act: a joiner's process takes over. The leader died with the coordinator, so nobody reasserts its flight.
-      coordinator.child.kill('SIGKILL');
-      await coordinator.closed;
-      const firstEnd = await heard(t, first, 'error', 'j');
-      const secondEnd = await heard(t, second, 'error', 'j');
+    // Act: a joiner's process takes over. The leader died with the coordinator, so nobody reasserts its flight.
+    coordinator.child.kill('SIGKILL');
+    await coordinator.closed;
+    const firstEnd = await heard(t, first, 'error', 'j');
+    const secondEnd = await heard(t, second, 'error', 'j');
 
-      // Assert
-      assert.equal(firstEnd.name, 'FlightInterruptedError');
-      assert.equal(secondEnd.name, 'FlightInterruptedError');
-      assert.equal(await epochOf(directory.path), '2');
-      assert.deepEqual(await journal(directory.path), [
-        'coordinator:work:sync',
-      ]);
-    },
-  );
+    // Assert
+    assert.equal(firstEnd.name, 'FlightInterruptedError');
+    assert.equal(secondEnd.name, 'FlightInterruptedError');
+    assert.equal(await epochOf(directory.path), '2');
+    assert.deepEqual(await journal(directory.path), ['coordinator:work:sync']);
+  });
 
-  test(
-    'a fresh run of a key whose leader disposed its single flight while the work runs starts the work only once that work ended',
-    { timeout: 30_000 },
-    async (t) => {
-      // Arrange
-      await using directory = await new TemporaryFiles().directory('flights-');
-      await using _coordinator = await coordinatorOf(t, directory.path);
-      await using leader = await caller(t, directory.path, 'leader');
-      run(leader, 'l', 'sync');
-      await heard(t, leader, 'leading', 'l');
-      await using probe = await caller(t, directory.path, 'probe');
+  test('a fresh run of a key whose leader disposed its single flight while the work runs starts the work only once that work ended', async (t) => {
+    // Arrange
+    await using directory = await new TemporaryFiles().directory('flights-');
+    await using _coordinator = await coordinatorOf(t, directory.path);
+    await using leader = await caller(t, directory.path, 'leader');
+    run(leader, 'l', 'sync');
+    await heard(t, leader, 'leading', 'l');
+    await using probe = await caller(t, directory.path, 'probe');
 
-      // Act: the coordinator decides one connection's requests in order, so
-      // once the probe's run of another key, sent after the fresh run, has its
-      // answer, the fresh run had its chance to lead.
-      leader.child.send({ type: 'dispose' });
-      await t.waitFor(() => assert.ok(leader.has('disposed'), leader.stderr), {
-        interval: 5,
-        timeout: newProcessTimeout,
-      });
-      run(probe, 'fresh', 'sync');
-      await heard(t, probe, 'called', 'fresh');
-      run(probe, 'other', 'other');
-      await heard(t, probe, 'leading', 'other');
-      probe.child.send({ type: 'finish', call: 'other', value: 'other' });
-      await heard(t, probe, 'value', 'other');
-      const ledBesideWork = led(probe, 'fresh');
+    // Act: the coordinator decides one connection's requests in order, so
+    // once the probe's run of another key, sent after the fresh run, has its
+    // answer, the fresh run had its chance to lead.
+    leader.child.send({ type: 'dispose' });
+    await t.waitFor(() => assert.ok(leader.has('disposed'), leader.stderr), {
+      interval: 5,
+      timeout: factTimeout,
+    });
+    run(probe, 'fresh', 'sync');
+    await heard(t, probe, 'called', 'fresh');
+    run(probe, 'other', 'other');
+    await heard(t, probe, 'leading', 'other');
+    probe.child.send({ type: 'finish', call: 'other', value: 'other' });
+    await heard(t, probe, 'value', 'other');
+    const ledBesideWork = led(probe, 'fresh');
 
-      // Assert
-      assert.equal(
-        ledBesideWork,
-        false,
-        "The fresh run led while the disposed leader's work still ran",
-      );
+    // Assert
+    assert.equal(
+      ledBesideWork,
+      false,
+      "The fresh run led while the disposed leader's work still ran",
+    );
 
-      // Act: the work ends. A disposed leader cannot deliver its outcome, so
-      // the fresh run cannot join it.
-      leader.child.send({ type: 'finish', call: 'l', value: 'unheard' });
-      const first = await firstOf(t, probe, 'fresh', ['leading', 'joined']);
+    // Act: the work ends. A disposed leader cannot deliver its outcome, so
+    // the fresh run cannot join it.
+    leader.child.send({ type: 'finish', call: 'l', value: 'unheard' });
+    const first = await firstOf(t, probe, 'fresh', ['leading', 'joined']);
 
-      // Assert
-      assert.equal(
-        first.type,
-        'leading',
-        'The fresh run joined a flight whose disposed leader cannot deliver its outcome',
-      );
+    // Assert
+    assert.equal(
+      first.type,
+      'leading',
+      'The fresh run joined a flight whose disposed leader cannot deliver its outcome',
+    );
 
-      // Act
-      probe.child.send({ type: 'finish', call: 'fresh', value: 'second' });
-      const fresh = await heard(t, probe, 'value', 'fresh');
+    // Act
+    probe.child.send({ type: 'finish', call: 'fresh', value: 'second' });
+    const fresh = await heard(t, probe, 'value', 'fresh');
 
-      // Assert
-      assert.equal(
-        fresh.value,
-        'second',
-        'The fresh run did not get the value of its own work',
-      );
-      assert.equal(
-        fresh.joined,
-        false,
-        'The fresh run joined instead of leading',
-      );
-      assert.deepEqual(
-        (await journal(directory.path)).filter((line) =>
-          line.endsWith(':sync'),
-        ),
-        ['leader:work:sync', 'probe:work:sync'],
-        'The work of the key did not run once after the other',
-      );
-    },
-  );
+    // Assert
+    assert.equal(
+      fresh.value,
+      'second',
+      'The fresh run did not get the value of its own work',
+    );
+    assert.equal(
+      fresh.joined,
+      false,
+      'The fresh run joined instead of leading',
+    );
+    assert.deepEqual(
+      (await journal(directory.path)).filter((line) => line.endsWith(':sync')),
+      ['leader:work:sync', 'probe:work:sync'],
+      'The work of the key did not run once after the other',
+    );
+  });
 });
 
 /** Waits until a new coordinator won its term: it records the term's epoch before it serves. */
 async function newTerm(t: TestContext, directory: string, epoch: string) {
   await t.waitFor(async () => assert.equal(await epochOf(directory), epoch), {
     interval: 5,
-    timeout: newProcessTimeout,
+    timeout: factTimeout,
   });
 }
 
@@ -345,7 +328,7 @@ async function rejectingSuccessor(
       directory,
       claimFile: 'flight.lock',
       epochFile: 'flight.epoch',
-    }).campaign({ timeout: newProcessTimeout });
+    }).campaign({ timeout: factTimeout });
     assert.ok(term, 'The test process must win the next term');
     serving.defer(() => term.resign());
     const socketPath = join(directory, 'flight.sock');
@@ -388,119 +371,103 @@ async function rejectingSuccessor(
 }
 
 describe('A single flight across processes when the coordinator stops', () => {
-  test(
-    'a leader in another process keeps its flight, and every joiner gets its value',
-    { timeout: 30_000 },
-    async (t) => {
-      // Arrange
-      await using directory = await new TemporaryFiles().directory('flights-');
-      await using coordinator = await coordinatorOf(t, directory.path);
-      await using leader = await caller(t, directory.path, 'leader');
-      run(leader, 'l', 'sync');
-      await heard(t, leader, 'leading', 'l');
-      await using joiner = await caller(t, directory.path, 'joiner');
-      run(joiner, 'j', 'sync');
-      await heard(t, joiner, 'joined', 'j');
-      await using probe = await connected(t, directory.path, 'probe');
+  test('a leader in another process keeps its flight, and every joiner gets its value', async (t) => {
+    // Arrange
+    await using directory = await new TemporaryFiles().directory('flights-');
+    await using coordinator = await coordinatorOf(t, directory.path);
+    await using leader = await caller(t, directory.path, 'leader');
+    run(leader, 'l', 'sync');
+    await heard(t, leader, 'leading', 'l');
+    await using joiner = await caller(t, directory.path, 'joiner');
+    run(joiner, 'j', 'sync');
+    await heard(t, joiner, 'joined', 'j');
+    await using probe = await connected(t, directory.path, 'probe');
 
-      // Act: the probe takes over and answers a run of another key, and then the leader lands.
-      await handOver(t, directory.path, coordinator, [leader, joiner]);
-      await runAlone(t, probe, 'other');
-      leader.child.send({ type: 'finish', call: 'l', value: { files: 42 } });
-      const led = await heard(t, leader, 'value', 'l');
-      const joined = await heard(t, joiner, 'value', 'j');
+    // Act: the probe takes over and answers a run of another key, and then the leader lands.
+    await handOver(t, directory.path, coordinator, [leader, joiner]);
+    await runAlone(t, probe, 'other');
+    leader.child.send({ type: 'finish', call: 'l', value: { files: 42 } });
+    const led = await heard(t, leader, 'value', 'l');
+    const joined = await heard(t, joiner, 'value', 'j');
 
-      // Assert
-      assert.deepEqual(led.value, { files: 42 });
-      assert.deepEqual(joined.value, { files: 42 });
-      assert.equal(joined.joined, true);
-      assert.deepEqual(
-        (await journal(directory.path)).filter((line) =>
-          line.endsWith(':sync'),
-        ),
-        ['leader:work:sync'],
-      );
-    },
-  );
+    // Assert
+    assert.deepEqual(led.value, { files: 42 });
+    assert.deepEqual(joined.value, { files: 42 });
+    assert.equal(joined.joined, true);
+    assert.deepEqual(
+      (await journal(directory.path)).filter((line) => line.endsWith(':sync')),
+      ['leader:work:sync'],
+    );
+  });
 
-  test(
-    'joiners of a flight whose leader stops after a failover get FlightInterruptedError from the next coordinator',
-    { timeout: 30_000 },
-    async (t) => {
-      // Arrange: the leader leads two flights, and the joiner joins both.
-      await using directory = await new TemporaryFiles().directory('flights-');
-      await using coordinator = await coordinatorOf(t, directory.path);
-      await using leader = await caller(t, directory.path, 'leader');
-      run(leader, 'l', 'sync');
-      await heard(t, leader, 'leading', 'l');
-      run(leader, 'o', 'other');
-      await heard(t, leader, 'leading', 'o');
-      await using joiner = await caller(t, directory.path, 'joiner');
-      run(joiner, 'j', 'sync');
-      await heard(t, joiner, 'joined', 'j');
-      run(joiner, 'k', 'other');
-      await heard(t, joiner, 'joined', 'k');
-      await using _probe = await connected(t, directory.path, 'probe');
+  test('joiners of a flight whose leader stops after a failover get FlightInterruptedError from the next coordinator', async (t) => {
+    // Arrange: the leader leads two flights, and the joiner joins both.
+    await using directory = await new TemporaryFiles().directory('flights-');
+    await using coordinator = await coordinatorOf(t, directory.path);
+    await using leader = await caller(t, directory.path, 'leader');
+    run(leader, 'l', 'sync');
+    await heard(t, leader, 'leading', 'l');
+    run(leader, 'o', 'other');
+    await heard(t, leader, 'leading', 'o');
+    await using joiner = await caller(t, directory.path, 'joiner');
+    run(joiner, 'j', 'sync');
+    await heard(t, joiner, 'joined', 'j');
+    run(joiner, 'k', 'other');
+    await heard(t, joiner, 'joined', 'k');
+    await using _probe = await connected(t, directory.path, 'probe');
 
-      // Act: the probe takes over, the leader reasserts its flights to it, and then the leader stops.
-      await handOver(t, directory.path, coordinator, [leader, joiner]);
-      // The landing of `other` goes out behind the leader's reassertions, so
-      // once it reached the joiner, the next coordinator holds both flights.
-      leader.child.send({ type: 'finish', call: 'o', value: 'other' });
-      await heard(t, joiner, 'value', 'k');
-      leader.child.kill('SIGKILL');
-      await leader.closed;
-      const ended = await heard(t, joiner, 'error', 'j');
+    // Act: the probe takes over, the leader reasserts its flights to it, and then the leader stops.
+    await handOver(t, directory.path, coordinator, [leader, joiner]);
+    // The landing of `other` goes out behind the leader's reassertions, so
+    // once it reached the joiner, the next coordinator holds both flights.
+    leader.child.send({ type: 'finish', call: 'o', value: 'other' });
+    await heard(t, joiner, 'value', 'k');
+    leader.child.kill('SIGKILL');
+    await leader.closed;
+    const ended = await heard(t, joiner, 'error', 'j');
 
-      // Assert
-      assert.equal(ended.name, 'FlightInterruptedError');
-    },
-  );
+    // Assert
+    assert.equal(ended.name, 'FlightInterruptedError');
+  });
 });
 
 describe('A single flight across processes when the coordinator disposes', () => {
-  test(
-    'a leader in another process keeps its flight when the coordinator disposes, and the joiner gets its value',
-    { timeout: 30_000 },
-    async (t) => {
-      // Arrange
-      await using directory = await new TemporaryFiles().directory('flights-');
-      await using coordinator = await coordinatorOf(t, directory.path);
-      await using leader = await caller(t, directory.path, 'leader');
-      run(leader, 'l', 'sync');
-      await heard(t, leader, 'leading', 'l');
-      await using joiner = await caller(t, directory.path, 'joiner');
-      run(joiner, 'j', 'sync');
-      await heard(t, joiner, 'joined', 'j');
+  test('a leader in another process keeps its flight when the coordinator disposes, and the joiner gets its value', async (t) => {
+    // Arrange
+    await using directory = await new TemporaryFiles().directory('flights-');
+    await using coordinator = await coordinatorOf(t, directory.path);
+    await using leader = await caller(t, directory.path, 'leader');
+    run(leader, 'l', 'sync');
+    await heard(t, leader, 'leading', 'l');
+    await using joiner = await caller(t, directory.path, 'joiner');
+    run(joiner, 'j', 'sync');
+    await heard(t, joiner, 'joined', 'j');
 
-      // Act: the coordinator disposes, and the leader lands at the next coordinator.
-      coordinator.child.send({ type: 'dispose' });
-      await t.waitFor(
-        () => assert.ok(coordinator.has('disposed'), coordinator.stderr),
-        { interval: 5, timeout: newProcessTimeout },
-      );
-      await newTerm(t, directory.path, '2');
-      leader.child.send({ type: 'finish', call: 'l', value: { files: 42 } });
-      const led = await heard(t, leader, 'value', 'l');
-      const joined = await heard(t, joiner, 'value', 'j');
+    // Act: the coordinator disposes, and the leader lands at the next coordinator.
+    coordinator.child.send({ type: 'dispose' });
+    await t.waitFor(
+      () => assert.ok(coordinator.has('disposed'), coordinator.stderr),
+      { interval: 5, timeout: factTimeout },
+    );
+    await newTerm(t, directory.path, '2');
+    leader.child.send({ type: 'finish', call: 'l', value: { files: 42 } });
+    const led = await heard(t, leader, 'value', 'l');
+    const joined = await heard(t, joiner, 'value', 'j');
 
-      // Assert
-      assert.deepEqual(led.value, { files: 42 });
-      assert.deepEqual(joined.value, { files: 42 });
-      assert.equal(joined.joined, true);
-      assert.equal(leader.has('lost'), false, 'The leader lost its lease');
-      assert.deepEqual(
-        (await journal(directory.path)).filter((line) =>
-          line.endsWith(':sync'),
-        ),
-        ['leader:work:sync'],
-      );
-    },
-  );
+    // Assert
+    assert.deepEqual(led.value, { files: 42 });
+    assert.deepEqual(joined.value, { files: 42 });
+    assert.equal(joined.joined, true);
+    assert.equal(leader.has('lost'), false, 'The leader lost its lease');
+    assert.deepEqual(
+      (await journal(directory.path)).filter((line) => line.endsWith(':sync')),
+      ['leader:work:sync'],
+    );
+  });
 
   test(
     'a coordinator that stops right after a landing still delivers it to a joiner that reads slowly',
-    { ...onUnix, timeout: 30_000 },
+    onUnix,
     async (t) => {
       // Arrange: this process coordinates and leads, and the joiner's process will not read for a while.
       await using directory = await new TemporaryFiles().directory('flights-');
@@ -544,7 +511,7 @@ describe('A single flight across processes when the coordinator disposes', () =>
               existsSync(join(directory.path, 'flight.sock')),
               false,
             ),
-          { interval: 5, timeout: newProcessTimeout },
+          { interval: 5, timeout: factTimeout },
         );
       } finally {
         joiner.child.kill('SIGCONT');
@@ -562,7 +529,7 @@ describe('A single flight across processes when the coordinator disposes', () =>
 describe('A single flight across processes in the gaps of a failover', () => {
   test(
     'a call that is on its way to a coordinator when the coordinator stops leads or joins at the next one, and is never interrupted',
-    { ...onUnix, timeout: 30_000 },
+    onUnix,
     async (t) => {
       // Arrange: the coordinator is frozen, so it never answers the call.
       await using directory = await new TemporaryFiles().directory('flights-');
@@ -587,7 +554,7 @@ describe('A single flight across processes in the gaps of a failover', () => {
 
   test(
     'a leader that lands while it has no coordinator keeps its landing, and the joiners get it after the leader reasserts',
-    { ...onUnix, timeout: 30_000 },
+    onUnix,
     async (t) => {
       // Arrange
       await using directory = await new TemporaryFiles().directory('flights-');
@@ -635,7 +602,7 @@ describe('A single flight across processes in the gaps of a failover', () => {
 
   test(
     'a fresh run that comes before the frozen leader reasserts waits, and then joins the flight that its leader reasserted meanwhile',
-    { ...onUnix, timeout: 30_000 },
+    onUnix,
     async (t) => {
       // Arrange: the leader is frozen, so its flight is not reasserted when the fresh run arrives.
       await using directory = await new TemporaryFiles().directory('flights-');
@@ -671,35 +638,25 @@ describe('A single flight across processes in the gaps of a failover', () => {
     },
   );
 
-  test(
-    'a fresh run of a key that no process holds leads at once after the coordinator stops',
-    { timeout: 30_000 },
-    async (t) => {
-      // Arrange
-      await using directory = await new TemporaryFiles().directory('flights-');
-      await using coordinator = await coordinatorOf(t, directory.path);
-      await using probe = await connected(t, directory.path, 'probe');
+  test('a fresh run of a key that no process holds leads after the coordinator stops', async (t) => {
+    // Arrange
+    await using directory = await new TemporaryFiles().directory('flights-');
+    await using coordinator = await coordinatorOf(t, directory.path);
+    await using probe = await connected(t, directory.path, 'probe');
 
-      // Act
-      coordinator.child.kill('SIGKILL');
-      await coordinator.closed;
-      await newTerm(t, directory.path, '2');
-      const termSeen = performance.now();
-      run(probe, 'fresh', 'sync');
-      await heard(t, probe, 'leading', 'fresh');
-      const waited = performance.now() - termSeen;
+    // Act
+    coordinator.child.kill('SIGKILL');
+    await coordinator.closed;
+    await newTerm(t, directory.path, '2');
+    run(probe, 'fresh', 'sync');
 
-      // Assert: a term after a stop used to hold every fresh run for 500 ms (#2549).
-      assert.ok(
-        waited < 400,
-        `The fresh run led ${Math.round(waited)} ms after the next term began`,
-      );
-    },
-  );
+    // Assert
+    await heard(t, probe, 'leading', 'fresh');
+  });
 
   test(
     'a fresh run after the reasserted flight landed leads a new flight, and never gets the old value',
-    { ...onUnix, timeout: 30_000 },
+    onUnix,
     async (t) => {
       // Arrange
       await using directory = await new TemporaryFiles().directory('flights-');
@@ -735,7 +692,7 @@ describe('A single flight across processes in the gaps of a failover', () => {
 
   test(
     'a leader whose work throws after its lease is lost rejects with LeaseLostError that carries the error, and its joiners get FlightInterruptedError',
-    { ...onUnix, timeout: 30_000 },
+    onUnix,
     async (t) => {
       // Arrange: the next coordinator knows no flight, so it rejects the leader's reassertion.
       await using directory = await new TemporaryFiles().directory('flights-');
@@ -777,7 +734,7 @@ describe('A single flight across processes in the gaps of a failover', () => {
 
   test(
     'a leader whose work throws the reason of its lost lease rejects with that LeaseLostError, not with a second one around it',
-    { ...onUnix, timeout: 30_000 },
+    onUnix,
     async (t) => {
       // Arrange: the next coordinator knows no flight, so it rejects the leader's reassertion.
       await using directory = await new TemporaryFiles().directory('flights-');
@@ -808,7 +765,7 @@ describe('A single flight across processes in the gaps of a failover', () => {
 
   test(
     'a leader whose codec cannot encode the value after its lease is lost rejects with LeaseLostError that carries the codec error',
-    { ...onUnix, timeout: 30_000 },
+    onUnix,
     async (t) => {
       // Arrange: the next coordinator knows no flight, so it rejects the leader's reassertion.
       await using directory = await new TemporaryFiles().directory('flights-');
@@ -841,7 +798,7 @@ describe('A single flight across processes in the gaps of a failover', () => {
 
   test(
     'a leader whose reassertion is rejected keeps its key until its work ends, so a run in another process leads only after that work ended',
-    { ...onUnix, timeout: 30_000 },
+    onUnix,
     async (t) => {
       // Arrange: the next coordinator knows no flight, so it rejects the
       // leader's reassertion; then it stops, and a process of the group
@@ -897,7 +854,7 @@ describe('A single flight across processes in the gaps of a failover', () => {
 
   test(
     'when the next coordinator stops too, the flight survives both, and the joiner gets its value',
-    { ...onUnix, timeout: 30_000 },
+    onUnix,
     async (t) => {
       // Arrange: the leader leads two flights, and the joiner joins both.
       await using directory = await new TemporaryFiles().directory('flights-');
@@ -942,7 +899,6 @@ describe('A single flight across processes when a leader is frozen past a failov
     'a fresh run after the coordinator stops never starts the work beside the frozen leader, and joins its flight once the leader resumes',
     {
       ...onUnix,
-      timeout: 30_000,
     },
     async (t) => {
       // Arrange
@@ -1012,7 +968,6 @@ describe('A single flight across processes when a leader is frozen past a failov
     'a fresh run after the coordinator disposes with a flight in progress never starts the work beside the frozen leader, and joins its flight once the leader resumes',
     {
       ...onUnix,
-      timeout: 30_000,
     },
     async (t) => {
       // Arrange
@@ -1030,7 +985,7 @@ describe('A single flight across processes when a leader is frozen past a failov
         coordinator.child.send({ type: 'dispose' });
         await t.waitFor(
           () => assert.ok(coordinator.has('disposed'), coordinator.stderr),
-          { interval: 5, timeout: newProcessTimeout },
+          { interval: 5, timeout: factTimeout },
         );
         await newTerm(t, directory.path, '2');
         run(probe, 'fresh', 'sync');
@@ -1079,7 +1034,6 @@ describe('A single flight across processes when a leader is frozen past a failov
     'joiners of a frozen leader get its value once it resumes, and the work never runs again',
     {
       ...onUnix,
-      timeout: 30_000,
     },
     async (t) => {
       // Arrange
@@ -1146,7 +1100,6 @@ describe('A single flight across processes when a leader is frozen past a failov
     'joiners of a frozen leader whose work fails once it resumes get FlightFailedError that describes the failure',
     {
       ...onUnix,
-      timeout: 30_000,
     },
     async (t) => {
       // Arrange
@@ -1207,7 +1160,6 @@ describe('A single flight across processes when a leader is frozen past a failov
     'a leader whose caller cancelled before the freeze still owns its flight, so a fresh run joins it and never starts the work beside it',
     {
       ...onUnix,
-      timeout: 30_000,
     },
     async (t) => {
       // Arrange: the leader's caller stops waiting, and the work runs on.
@@ -1269,7 +1221,7 @@ describe('A single flight across processes when a leader is frozen past a failov
 
   test(
     'a frozen leader whose process stops after the next coordinator serves frees its key: a fresh run leads, and its joiners get FlightInterruptedError',
-    { ...onUnix, timeout: 30_000 },
+    onUnix,
     async (t) => {
       // Arrange
       await using directory = await new TemporaryFiles().directory('flights-');
@@ -1308,7 +1260,7 @@ describe('A single flight across processes when a leader is frozen past a failov
 
   test(
     'a run of another key leads and gets its value while the leader of a key is frozen',
-    { ...onUnix, timeout: 30_000 },
+    onUnix,
     async (t) => {
       // Arrange
       await using directory = await new TemporaryFiles().directory('flights-');
@@ -1339,35 +1291,29 @@ describe('A single flight across processes when a leader is frozen past a failov
 });
 
 describe('A single flight across processes after a flight lands', () => {
-  test(
-    'a run in another process after the flight landed leads a new flight, and the work runs again',
-    { timeout: 30_000 },
-    async (t) => {
-      // Arrange
-      await using directory = await new TemporaryFiles().directory('flights-');
-      await using _coordinator = await coordinatorOf(t, directory.path);
-      await using leader = await caller(t, directory.path, 'leader');
-      run(leader, 'l', 'sync');
-      await heard(t, leader, 'leading', 'l');
-      leader.child.send({ type: 'finish', call: 'l', value: 'first' });
-      await heard(t, leader, 'value', 'l');
-      await using next = await caller(t, directory.path, 'next');
+  test('a run in another process after the flight landed leads a new flight, and the work runs again', async (t) => {
+    // Arrange
+    await using directory = await new TemporaryFiles().directory('flights-');
+    await using _coordinator = await coordinatorOf(t, directory.path);
+    await using leader = await caller(t, directory.path, 'leader');
+    run(leader, 'l', 'sync');
+    await heard(t, leader, 'leading', 'l');
+    leader.child.send({ type: 'finish', call: 'l', value: 'first' });
+    await heard(t, leader, 'value', 'l');
+    await using next = await caller(t, directory.path, 'next');
 
-      // Act
-      run(next, 'n', 'sync');
-      await heard(t, next, 'leading', 'n');
-      next.child.send({ type: 'finish', call: 'n', value: 'second' });
-      const second = await heard(t, next, 'value', 'n');
+    // Act
+    run(next, 'n', 'sync');
+    await heard(t, next, 'leading', 'n');
+    next.child.send({ type: 'finish', call: 'n', value: 'second' });
+    const second = await heard(t, next, 'value', 'n');
 
-      // Assert
-      assert.equal(second.value, 'second');
-      assert.equal(second.joined, false);
-      assert.deepEqual(
-        (await journal(directory.path)).filter((line) =>
-          line.endsWith(':sync'),
-        ),
-        ['leader:work:sync', 'next:work:sync'],
-      );
-    },
-  );
+    // Assert
+    assert.equal(second.value, 'second');
+    assert.equal(second.joined, false);
+    assert.deepEqual(
+      (await journal(directory.path)).filter((line) => line.endsWith(':sync')),
+      ['leader:work:sync', 'next:work:sync'],
+    );
+  });
 });

@@ -58,7 +58,7 @@ export function postgresStore(pool: Pick<pg.Pool, 'connect'>) {
   return new PostgresStore({
     connect: () => pool.connect(),
     sequence: 'mutex_tokens',
-    heartbeatInterval: 200,
+    heartbeatInterval: 5_000,
     clock: globalThis,
   });
 }
@@ -122,7 +122,6 @@ export const subject: Subject<Host> = {
   },
   process: { module, admit() {} },
   grantLatency: 10,
-  releaseLatency: 10,
 };
 
 export const sharing = sharesWithProcesses(subject.process);

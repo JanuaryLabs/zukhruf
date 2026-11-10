@@ -15,6 +15,7 @@ import { TemporaryFiles } from '@zukhruf/testing/fs';
 import { test } from '@zukhruf/testing/node';
 
 import { ProtocolVersionError, SingleFlight } from './index.ts';
+import { factTimeout } from './testing/fact-timeout.ts';
 
 // Processes of different versions of this package meet on the wire, so these
 // tests speak it byte by byte, as such a process would.
@@ -98,7 +99,7 @@ function linesOf(
         peer.received.split('\n').length - 1 >= count,
         `Got ${JSON.stringify(peer.received)}`,
       ),
-    { interval: 5, timeout: 2000 },
+    { interval: 5, timeout: factTimeout },
   );
 }
 
@@ -131,7 +132,7 @@ async function answerOf(
         find() !== undefined,
         `No ${pattern} for ${id}; got ${JSON.stringify(peer.received)}`,
       ),
-    { interval: 5, timeout: 2000 },
+    { interval: 5, timeout: factTimeout },
   );
   const answer = find();
   assert.ok(answer);
@@ -162,7 +163,7 @@ function holdKey(directory: string, key: string) {
 describe('The wire of a single flight', () => {
   test(
     'a call whose coordinator speaks another protocol version fails with ProtocolVersionError, after a hello that names the protocol',
-    { ...onUnixSockets, timeout: 10_000 },
+    { ...onUnixSockets },
     async () => {
       // Arrange: a coordinator of version 2 holds the term and refuses every hello.
       await using directory = await new TemporaryFiles().directory('flights-');
@@ -221,7 +222,7 @@ describe('The wire of a single flight', () => {
 
   test(
     'a single flight does not coordinate while another process holds the claim on flight.lock, and coordinates once it is released',
-    { ...onUnixSockets, timeout: 10_000 },
+    { ...onUnixSockets },
     async () => {
       // Arrange: a coordinator of a published version holds the term and serves nothing yet.
       await using directory = await new TemporaryFiles().directory('flights-');
@@ -267,7 +268,7 @@ describe('The wire of a single flight', () => {
 
   test(
     'a coordinator holds the claim on flight.lock, so a candidate of a published version cannot take it',
-    { ...onUnixSockets, timeout: 10_000 },
+    { ...onUnixSockets },
     async () => {
       // Arrange
       await using directory = await new TemporaryFiles().directory('flights-');
@@ -305,7 +306,7 @@ describe('The wire of a single flight', () => {
 
   test(
     'a coordinator after the term in flight.epoch takes the next epoch, records it as decimal text, and leads with tokens of it',
-    { ...onUnixSockets, timeout: 10_000 },
+    { ...onUnixSockets },
     async () => {
       // Arrange: the last coordinator in this directory, of a published version, recorded term 41, which reads differently in hex.
       await using directory = await new TemporaryFiles().directory('flights-');
@@ -337,7 +338,7 @@ describe('The wire of a single flight', () => {
 
   test(
     'a coordinator refuses a hello that does not name this protocol, as a socket lock store sends it, and hangs up',
-    { ...onUnixSockets, timeout: 10_000 },
+    { ...onUnixSockets },
     async (t) => {
       // Arrange
       await using directory = await new TemporaryFiles().directory('flights-');
@@ -350,7 +351,7 @@ describe('The wire of a single flight', () => {
       // Assert
       await t.waitFor(
         () => assert.ok(peer.closed, 'The coordinator must hang up'),
-        { interval: 5, timeout: 2000 },
+        { interval: 5, timeout: factTimeout },
       );
       assert.equal(
         peer.received,
@@ -367,7 +368,7 @@ describe('The wire of a single flight', () => {
     ([what, line]) =>
       test(
         `a coordinator refuses a process that opens with ${what}, and hangs up`,
-        { ...onUnixSockets, timeout: 10_000 },
+        { ...onUnixSockets },
         async (t) => {
           // Arrange
           await using directory = await new TemporaryFiles().directory(
@@ -382,7 +383,7 @@ describe('The wire of a single flight', () => {
           // Assert
           await t.waitFor(
             () => assert.ok(peer.closed, 'The coordinator must hang up'),
-            { interval: 5, timeout: 2000 },
+            { interval: 5, timeout: factTimeout },
           );
           assert.equal(
             peer.received,
@@ -394,7 +395,7 @@ describe('The wire of a single flight', () => {
 
   test(
     'a rejoin joins only the flight whose token it names: another flight of the key, or none, answers interrupted',
-    { ...onUnixSockets, timeout: 10_000 },
+    { ...onUnixSockets },
     async (t) => {
       // Arrange: a flight of `sync` is in progress, and `free` has none.
       await using directory = await new TemporaryFiles().directory('flights-');
@@ -434,7 +435,7 @@ describe('The wire of a single flight', () => {
 
   test(
     'a rejoin after a reasserted flight ended gets the outcome only of its own ended flight: a rejoin that names another flight of the key is told interrupted',
-    { ...onUnixSockets, timeout: 10_000 },
+    { ...onUnixSockets },
     async (t) => {
       // Arrange: the last coordinator, of a published version, recorded term 41.
       await using directory = await new TemporaryFiles().directory('flights-');
@@ -452,7 +453,7 @@ describe('The wire of a single flight', () => {
             existsSync(join(directory.path, 'flight.sock')),
             'The coordinator must listen',
           ),
-        { interval: 5, timeout: 2000 },
+        { interval: 5, timeout: factTimeout },
       );
       using peer = await peerOf(directory.path);
       peer.send('{"op":"hello","protocol":"single-flight","version":1}');
@@ -480,7 +481,7 @@ describe('The wire of a single flight', () => {
 
   test(
     'a run that is withdrawn while the coordinator mints its token never leads, and the next run of the key leads',
-    { ...onUnixSockets, timeout: 10_000 },
+    { ...onUnixSockets },
     async (t) => {
       // Arrange
       await using directory = await new TemporaryFiles().directory('flights-');
@@ -506,7 +507,7 @@ describe('The wire of a single flight', () => {
 
   test(
     'a coordinator answers a run and a rejoin once each, also when each reaches it twice with one id',
-    { ...onUnixSockets, timeout: 10_000 },
+    { ...onUnixSockets },
     async (t) => {
       // Arrange: a flight of `sync` is in progress, and a process is welcomed.
       await using directory = await new TemporaryFiles().directory('flights-');
@@ -535,7 +536,7 @@ describe('The wire of a single flight', () => {
               /"id":"c".*\n/.test(peer.received),
               `Got ${JSON.stringify(peer.received)}`,
             ),
-          { interval: 5, timeout: 2000 },
+          { interval: 5, timeout: factTimeout },
         );
 
         // Assert
@@ -555,7 +556,7 @@ describe('The wire of a single flight', () => {
 
   test(
     'a peer that sends a JSON line that is not a request keeps its flight',
-    { ...onUnixSockets, timeout: 10_000 },
+    { ...onUnixSockets },
     async (t) => {
       // Arrange: a welcomed process leads the flight of `sync`, and the coordinator's own call joins it.
       await using directory = await new TemporaryFiles().directory('flights-');
@@ -600,7 +601,7 @@ describe('The wire of a single flight', () => {
 
   test(
     'a coordinator hangs up on a welcomed process that sends a line that is not JSON',
-    { ...onUnixSockets, timeout: 10_000 },
+    { ...onUnixSockets },
     async (t) => {
       // Arrange
       await using directory = await new TemporaryFiles().directory('flights-');
@@ -615,7 +616,7 @@ describe('The wire of a single flight', () => {
       // Assert
       await t.waitFor(
         () => assert.ok(peer.closed, 'The coordinator must hang up'),
-        { interval: 5, timeout: 2000 },
+        { interval: 5, timeout: factTimeout },
       );
       assert.equal(peer.received, '{"op":"welcome"}\n');
     },
@@ -625,7 +626,7 @@ describe('The wire of a single flight', () => {
 describe('The wire of a single flight while a process holds a key', () => {
   test(
     'a reassertion and its landing in one write reach a run that waits for the key: it joins, gets the landing, and nobody leads again',
-    { ...onUnixSockets, timeout: 10_000 },
+    { ...onUnixSockets },
     async (t) => {
       // Arrange: a process leads `sync` and holds its key; its connection is
       // lost, so the coordinator ends the flight, and the joiner learns it.
@@ -668,7 +669,7 @@ describe('The wire of a single flight while a process holds a key', () => {
 
   test(
     'a run of a key whose lock cannot be checked leads, a rejoin of it is told interrupted, and the connection stays open',
-    { ...onUnixSockets, timeout: 10_000 },
+    { ...onUnixSockets },
     async (t) => {
       // Arrange: platform setup that no operation exposes. A folder where the
       // key's lock file belongs makes every check of that lock fail.
@@ -699,7 +700,7 @@ describe('The wire of a single flight while a process holds a key', () => {
 
   test(
     'a run that waits for a held key leads once the lock can no longer be checked',
-    { ...onUnixSockets, timeout: 10_000 },
+    { ...onUnixSockets },
     async (t) => {
       // Arrange: a process holds `sync`, and a run waits for it.
       await using directory = await new TemporaryFiles().directory('flights-');
@@ -728,7 +729,7 @@ describe('The wire of a single flight while a process holds a key', () => {
 
   test(
     'for two reassertions of one key the newer token wins: the older leader is rejected, its joiner is told interrupted, and an older reassertion after it is rejected',
-    { ...onUnixSockets, timeout: 10_000 },
+    { ...onUnixSockets },
     async (t) => {
       // Arrange: a leader of an earlier term reasserts its flight of `sync`, and a joiner rejoins it.
       await using directory = await new TemporaryFiles().directory('flights-');
@@ -765,7 +766,7 @@ describe('The wire of a single flight while a process holds a key', () => {
 
   test(
     'a rejoin of a flight that was led here and has ended is told interrupted',
-    { ...onUnixSockets, timeout: 10_000 },
+    { ...onUnixSockets },
     async (t) => {
       // Arrange: a flight of `sync` led on this coordinator lands.
       await using directory = await new TemporaryFiles().directory('flights-');
@@ -790,7 +791,7 @@ describe('The wire of a single flight while a process holds a key', () => {
 
   test(
     'a run withdrawn while it waits for a held key is never answered, also when a flight of the key starts after the withdrawal',
-    { ...onUnixSockets, timeout: 10_000 },
+    { ...onUnixSockets },
     async (t) => {
       // Arrange: a process leads `sync` and holds its key; its connection is
       // lost, so the coordinator ends the flight, and the joiner learns it.
@@ -833,7 +834,7 @@ describe('The wire of a single flight while a process holds a key', () => {
 
   test(
     'a run withdrawn while it waits for a held key is never answered, and a run that waits with it leads once the key is free',
-    { ...onUnixSockets, timeout: 10_000 },
+    { ...onUnixSockets },
     async (t) => {
       // Arrange: a process holds `sync`, and two runs wait for it. A run of
       // another key, sent after them, is answered after both were decided.
@@ -872,7 +873,7 @@ describe('The wire of a single flight while a process holds a key', () => {
 
   test(
     'a leader that reasserts its own token on a new connection keeps its flight: the close of its first connection interrupts nothing, and the joiner gets the landing',
-    { ...onUnixSockets, timeout: 10_000 },
+    { ...onUnixSockets },
     async (t) => {
       // Arrange: a process leads `sync` and `other` on its first connection, and the joiner joins both.
       await using directory = await new TemporaryFiles().directory('flights-');
@@ -909,7 +910,7 @@ describe('The wire of a single flight while a process holds a key', () => {
 
   test(
     'a run that waits for a held key and a run that comes once the key is free share one flight, whose token is newer than the flight before it',
-    { ...onUnixSockets, timeout: 10_000 },
+    { ...onUnixSockets },
     async (t) => {
       // Arrange
       await using directory = await new TemporaryFiles().directory('flights-');
@@ -953,7 +954,7 @@ describe('The wire of a single flight while a process holds a key', () => {
                 answersTo(late, x).some(isLead),
               `Nobody leads: ${JSON.stringify(waiter.received)} ${JSON.stringify(late.received)}`,
             ),
-          { interval: 5, timeout: 2000 },
+          { interval: 5, timeout: factTimeout },
         );
         const [leader, id, joiner, joinerId] = answersTo(waiter, p).some(isLead)
           ? [waiter, p, late, x]

@@ -8,6 +8,7 @@ import { describe } from 'node:test';
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 import { test } from '@zukhruf/testing/node';
 
+import { factTimeout } from '../testing/fact-timeout.ts';
 import { mountAs, onLinux } from '../testing/network-mount.ts';
 import { outcome } from '../testing/outcome.ts';
 import { LockFileStore, NetworkDirectoryError } from './file-system/index.ts';
@@ -70,7 +71,7 @@ describe('A lock directory on a network file system', () => {
               roles.includes('leader'),
               'The follower must take over as leader',
             ),
-          { interval: 5, timeout: 2000 },
+          { interval: 5, timeout: factTimeout },
         );
 
         // Assert: the mount is live, yet the takeover did not judge the directory again, so the holder never lost its key.

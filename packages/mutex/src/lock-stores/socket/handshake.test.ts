@@ -9,6 +9,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 import { test } from '@zukhruf/testing/node';
 
+import { factTimeout } from '../../testing/fact-timeout.ts';
 import { onUnixSockets } from '../../testing/on-unix-sockets.ts';
 import { outcome } from '../../testing/outcome.ts';
 import { standInServer } from '../../testing/stand-in-server.ts';
@@ -126,7 +127,9 @@ describe('Socket store protocol handshake', () => {
       try {
         // Act
         const result = await outcome(
-          store.acquire('product:42', { signal: AbortSignal.timeout(5000) }),
+          store.acquire('product:42', {
+            signal: AbortSignal.timeout(factTimeout),
+          }),
         );
 
         // Assert
@@ -158,7 +161,9 @@ describe('Socket store protocol handshake', () => {
 
       // Act
       const result = await outcome(
-        store.acquire('product:42', { signal: AbortSignal.timeout(5000) }),
+        store.acquire('product:42', {
+          signal: AbortSignal.timeout(factTimeout),
+        }),
       );
 
       // Assert
@@ -385,7 +390,7 @@ describe('Socket store protocol handshake', () => {
         // Assert: the leader welcomes the peer and still sees the request behind the hello.
         await t.waitFor(
           () => assert.ok(answers.length >= 2, `Got ${answers.join(' | ')}`),
-          { interval: 5, timeout: 2000 },
+          { interval: 5, timeout: factTimeout },
         );
         assert.deepEqual(
           answers.map((line) => JSON.parse(line).op),
@@ -423,7 +428,7 @@ describe('Socket store protocol handshake', () => {
       const acquiring = outcome(store.acquire('product:42'));
       await t.waitFor(() => assert.ok(greeted, 'The store must say hello'), {
         interval: 5,
-        timeout: 2000,
+        timeout: factTimeout,
       });
 
       // Act
@@ -433,7 +438,7 @@ describe('Socket store protocol handshake', () => {
       assert.ok(Error.isError(await acquiring));
       await t.waitFor(
         () => assert.ok(peerClosed, 'The store must close the connection'),
-        { interval: 5, timeout: 2000 },
+        { interval: 5, timeout: factTimeout },
       );
     },
   );
@@ -476,7 +481,7 @@ describe('Socket store protocol handshake', () => {
               released,
               'The leader must close its side of a peer it refused',
             ),
-          { interval: 5, timeout: 2000 },
+          { interval: 5, timeout: factTimeout },
         );
       } finally {
         clearInterval(writing);

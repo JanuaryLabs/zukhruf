@@ -11,6 +11,7 @@ import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { LeaseLostError, SingleFlight } from '../index.ts';
 import { KeyLocks } from '../key-lock/key-locks.ts';
+import { factTimeout } from '../testing/fact-timeout.ts';
 import { FlightServer } from './flight-server.ts';
 
 /**
@@ -79,7 +80,7 @@ const onUnixSockets = {
 describe('Flight server', () => {
   test(
     'a flight server started for a term that is already lost rejects with LeaseLostError and leaves nothing listening',
-    { ...onUnixSockets, timeout: 10_000 },
+    { ...onUnixSockets },
     async () => {
       // Arrange
       await using directory = await new TemporaryFiles().directory('flights-');
@@ -109,7 +110,7 @@ describe('Flight server', () => {
 
   test(
     'a flight server whose term is lost closes without close(), and a follower then coordinates at a higher epoch',
-    { ...onUnixSockets, timeout: 10_000 },
+    { ...onUnixSockets },
     async (t) => {
       // Arrange: a server for a term its backend can take away, and a single flight that follows it.
       await using directory = await new TemporaryFiles().directory('flights-');
@@ -142,7 +143,7 @@ describe('Flight server', () => {
               epochOf(directory.path) === String(term.epoch + 1n),
               `The follower must coordinate once the server of the lost term closes; flight.epoch is ${JSON.stringify(epochOf(directory.path))}`,
             ),
-          { interval: 5, timeout: 2000 },
+          { interval: 5, timeout: factTimeout },
         );
         let token = 0n;
         await flights.run('product:42', async (lease) => {

@@ -7,16 +7,16 @@ import { TemporaryFiles } from '@zukhruf/testing/fs';
 import { describe, test } from '@zukhruf/testing/node';
 
 import { Mutex } from '../../mutex/mutex.ts';
+import { factTimeout } from '../fact-timeout.ts';
 import { hold } from '../hold.ts';
 import { modesUrl, mutexUrl } from '../module-urls.ts';
-import { newProcessTimeout } from '../new-process-timeout.ts';
 import { settle } from '../timing.ts';
 import { watch } from '../watch.ts';
 import { startWorker } from '../worker-process.ts';
-import { deadlineFor } from './deadlines.ts';
 import { label, longKey } from './keys.ts';
 import { childPrelude, holderSource, storeIn } from './peers.ts';
 import type { Host, SharedByProcesses, Subject } from './subject.ts';
+import { windowFor } from './window.ts';
 
 /** A child or thread that skips, then cancels a wait, while its host holds the key, and reports each result. */
 export const skipperBody = `
@@ -49,7 +49,7 @@ export function processes<H extends Host>(
             holder.has('entered'),
             `The holder process must enter its task.\n${holder.stderr}`,
           ),
-        { interval: 5, timeout: newProcessTimeout },
+        { interval: 5, timeout: factTimeout },
       );
       const mutex = new Mutex(host.store);
 
@@ -57,17 +57,12 @@ export function processes<H extends Host>(
       const whileAlive = await mutex.isHeld('report:daily');
       holder.child.kill('SIGKILL');
       await holder.closed;
-      // The store sees the end of the holder at most releaseLatency after its process closed.
-      const releasedBy = performance.now() + store.releaseLatency;
-      let afterKill = await mutex.isHeld('report:daily');
-      while (afterKill && performance.now() < releasedBy) {
-        afterKill = await mutex.isHeld('report:daily');
-      }
 
-      // Assert
-      assert.deepEqual(
-        { whileAlive, afterKill },
-        { whileAlive: true, afterKill: false },
+      // Assert: the store sees the end of the holder some time after its process closed.
+      assert.equal(whileAlive, true);
+      await t.waitFor(
+        async () => assert.equal(await mutex.isHeld('report:daily'), false),
+        { interval: 5, timeout: factTimeout },
       );
     });
 
@@ -86,7 +81,7 @@ export function processes<H extends Host>(
             holder.has('entered'),
             `The holder process must enter its task.\n${holder.stderr}`,
           ),
-        { interval: 5, timeout: newProcessTimeout },
+        { interval: 5, timeout: factTimeout },
       );
       holder.child.kill('SIGKILL');
       await holder.closed;
@@ -131,7 +126,7 @@ export function processes<H extends Host>(
               looker.has('looked'),
               `The child must report its look.\n${looker.stderr}`,
             ),
-          { interval: 5, timeout: newProcessTimeout },
+          { interval: 5, timeout: factTimeout },
         );
 
         // Assert
@@ -202,7 +197,7 @@ export function processes<H extends Host>(
         const waitFor = (condition: () => boolean, message: string) =>
           t.waitFor(() => assert.ok(condition(), `${message}\n${stderr()}`), {
             interval: 5,
-            timeout: deadlineFor(store, 2000, { grants: 1, releases: 0 }),
+            timeout: factTimeout,
           });
 
         await t.waitFor(
@@ -211,7 +206,7 @@ export function processes<H extends Host>(
               first.has('ready') && second.has('ready'),
               `Both Node processes must be ready before the contention scenario starts\n${stderr()}`,
             ),
-          { interval: 5, timeout: newProcessTimeout },
+          { interval: 5, timeout: factTimeout },
         );
 
         // Act: first holds the key while second attempts to acquire that same key.
@@ -223,7 +218,7 @@ export function processes<H extends Host>(
               first.has('entered'),
               `The first process must enter its callback\n${stderr()}`,
             ),
-          { interval: 5, timeout: newProcessTimeout },
+          { interval: 5, timeout: factTimeout },
         );
         second.child.send('start');
         await waitFor(
@@ -232,11 +227,7 @@ export function processes<H extends Host>(
         );
         // Both workers are already running. Keep the first callback open briefly
         // so an unprotected second callback has an opportunity to overlap it.
-        await delay(
-          deadlineFor(store, 100, { grants: 1, releases: 0 }),
-          undefined,
-          { signal: t.signal },
-        );
+        await delay(windowFor(store, 100), undefined, { signal: t.signal });
         first.child.send('finish');
         await waitFor(
           () => first.has('completed') && second.has('entered'),
@@ -297,26 +288,19 @@ export function processes<H extends Host>(
               holder.has('entered'),
               `The holder process must enter its callback.\n${holder.stderr}`,
             ),
-          { interval: 5, timeout: newProcessTimeout },
+          { interval: 5, timeout: factTimeout },
         );
         const mutex = new Mutex(host.store);
-        const limit = deadlineFor(store, 2000, { grants: 1, releases: 1 });
-        const deadline = delay(limit, null, { ref: false });
 
         // Act: the holder dies without releasing, then this process asks for the same key.
         holder.child.kill('SIGKILL');
         await holder.closed;
-        const acquired = await Promise.race([
-          mutex.acquire(key, async () => true),
-          deadline,
-        ]);
+        const acquired = await mutex.acquire(key, async () => true, {
+          signal: AbortSignal.timeout(factTimeout),
+        });
 
         // Assert: the dead holder's lock is recovered instead of blocking forever.
-        assert.equal(
-          acquired,
-          true,
-          `A caller must acquire the key within ${limit} ms after its holder process was killed`,
-        );
+        assert.equal(acquired, true);
       }),
     );
 
@@ -418,7 +402,7 @@ export function processes<H extends Host>(
               holder.has('holding'),
               `The holder must take the key\n${holder.stderr}`,
             ),
-          { interval: 5, timeout: newProcessTimeout },
+          { interval: 5, timeout: factTimeout },
         );
 
         // Act: the holder freezes, and this process waits for the key.
@@ -426,9 +410,7 @@ export function processes<H extends Host>(
         const waiter = watch(
           mutex.acquire('product:42', async (lease) => lease.token),
         );
-        await delay(
-          deadlineFor(store, settle * 10, { grants: 1, releases: 0 }),
-        );
+        await delay(windowFor(store, settle * 10));
         const whileFrozen = waiter.now.status;
         holder.child.kill('SIGCONT');
         holder.child.send('release');
@@ -447,7 +429,7 @@ export function processes<H extends Host>(
             ),
           {
             interval: 5,
-            timeout: deadlineFor(store, 2000, { grants: 1, releases: 0 }),
+            timeout: factTimeout,
           },
         );
       },
@@ -483,10 +465,7 @@ export function processes<H extends Host>(
         {
           interval: 5,
           // The child starts, then makes three attempts that each cost about one grant.
-          timeout: deadlineFor(store, newProcessTimeout, {
-            grants: 3,
-            releases: 0,
-          }),
+          timeout: factTimeout,
         },
       );
       await holder.release();

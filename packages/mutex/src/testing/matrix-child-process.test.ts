@@ -6,8 +6,8 @@ import { test } from 'node:test';
 
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 
+import { factTimeout } from './fact-timeout.ts';
 import { mutexUrl } from './module-urls.ts';
-import { newProcessTimeout } from './new-process-timeout.ts';
 import { subject as dockerSubject } from './subjects/docker-engine.ts';
 import { startWorker } from './worker-process.ts';
 
@@ -62,7 +62,7 @@ test('a matrix child exits when its test process is killed', async (t) => {
         testProcess.has('granting'),
         `The matrix child must grant.\n${testProcess.stderr}`,
       ),
-    { interval: 5, timeout: newProcessTimeout },
+    { interval: 5, timeout: factTimeout },
   );
   const pid = Number(testProcess.find('granting')?.pid);
   try {
@@ -77,7 +77,7 @@ test('a matrix child exits when its test process is killed', async (t) => {
           !isRunning(pid),
           'The matrix child must exit when its test process is killed',
         ),
-      { interval: 5, timeout: 2000 },
+      { interval: 5, timeout: factTimeout },
     );
   } finally {
     if (isRunning(pid)) process.kill(pid, 'SIGKILL');
@@ -122,7 +122,7 @@ test('a matrix child that opens the DockerEngineStore records itself in the run 
         child.has('started'),
         `The matrix child must start.\n${child.stderr}`,
       ),
-    { interval: 5, timeout: newProcessTimeout },
+    { interval: 5, timeout: factTimeout },
   );
 
   // Assert

@@ -15,6 +15,7 @@ import { test } from '@zukhruf/testing/node';
 
 import { Modes } from '../../mutex/acquire-modes/modes.ts';
 import { Mutex } from '../../mutex/mutex.ts';
+import { factTimeout } from '../../testing/fact-timeout.ts';
 import { modesUrl, mutexUrl } from '../../testing/module-urls.ts';
 import { startWorker } from '../../testing/worker-process.ts';
 import { LockFileStore } from './lock-file-store.ts';
@@ -83,7 +84,7 @@ const skipOnce = (store: Store, directory: string) =>
   new Mutex(store.create(directory)).acquire(
     'product-42',
     async () => 'got it',
-    { mode: Modes.skipIfBusy({ waitAtMost: 2000, clock: globalThis }) },
+    { mode: Modes.skipIfBusy({ waitAtMost: factTimeout, clock: globalThis }) },
   );
 
 const presenceFilesIn = async (directory: string) =>
@@ -92,7 +93,7 @@ const presenceFilesIn = async (directory: string) =>
 /** Takes the key once and gives it back, which also evicts any gone caller ahead of it. */
 const takeAndRelease = (store: Store, directory: string) =>
   new Mutex(store.create(directory)).acquire('product-42', async () => {}, {
-    signal: AbortSignal.timeout(5000),
+    signal: AbortSignal.timeout(factTimeout),
   });
 
 const ticketsIn = (queue: string) => {
@@ -138,7 +139,7 @@ void test.each(stores, (store) => {
           await t.waitFor(
             () =>
               assert.ok(holder !== undefined, 'The holder must take the key'),
-            { interval: 5, timeout: 5000 },
+            { interval: 5, timeout: factTimeout },
           );
           process.kill(holder!.pid, 'SIGKILL');
           await t.waitFor(
@@ -149,7 +150,7 @@ void test.each(stores, (store) => {
                 }).startsWith('Z'),
                 'The killed holder must stay a zombie',
               ),
-            { interval: 5, timeout: 2000 },
+            { interval: 5, timeout: factTimeout },
           );
 
           // Act
@@ -179,7 +180,7 @@ void test.each(stores, (store) => {
         );
         await t.waitFor(() => assert.ok(holder.has('holding'), holder.stderr), {
           interval: 5,
-          timeout: 5000,
+          timeout: factTimeout,
         });
         await chmod(directory.path, 0o555);
         try {
@@ -191,7 +192,7 @@ void test.each(stores, (store) => {
                 holder.has('release failed') || holder.has('released'),
                 holder.stderr,
               ),
-            { interval: 5, timeout: 5000 },
+            { interval: 5, timeout: factTimeout },
           );
           assert.ok(
             holder.has('release failed'),
@@ -225,7 +226,7 @@ void test.each(stores, (store) => {
       const acquiring = new Mutex(store.create(directory.path)).acquire(
         'product-42',
         async () => {},
-        { signal: AbortSignal.timeout(3000) },
+        { signal: AbortSignal.timeout(factTimeout) },
       );
 
       // Assert: the waiter names what is in the way instead of guessing,
@@ -277,7 +278,7 @@ void test.each(stores, (store) => {
       );
       await t.waitFor(() => assert.ok(holder.has('holding'), holder.stderr), {
         interval: 5,
-        timeout: 5000,
+        timeout: factTimeout,
       });
       assert.equal((await presenceFilesIn(directory.path)).length, 1);
       holder.child.kill('SIGKILL');
@@ -328,7 +329,7 @@ void test.each(stores, (store) => {
         );
         await t.waitFor(() => assert.ok(holder.has('holding'), holder.stderr), {
           interval: 5,
-          timeout: 5000,
+          timeout: factTimeout,
         });
         const [presence] = await presenceFilesIn(directory.path);
         assert.ok(presence, 'The holder must keep a presence file');
@@ -440,7 +441,7 @@ describe('TicketQueueFileStore: presence files of waiters', () => {
     );
     await t.waitFor(() => assert.ok(holder.has('holding'), holder.stderr), {
       interval: 5,
-      timeout: 5000,
+      timeout: factTimeout,
     });
     await using waiter = startWorker(
       callerSource(ticketQueue, directory.path),
@@ -452,7 +453,7 @@ describe('TicketQueueFileStore: presence files of waiters', () => {
           ticketsIn(queueIn(directory.path)) === 2,
           'The waiter must be in line',
         ),
-      { interval: 5, timeout: 5000 },
+      { interval: 5, timeout: factTimeout },
     );
     assert.equal((await presenceFilesIn(directory.path)).length, 2);
     waiter.child.kill('SIGKILL');
@@ -460,7 +461,7 @@ describe('TicketQueueFileStore: presence files of waiters', () => {
     holder.child.send('release');
     await t.waitFor(() => assert.ok(holder.has('released'), holder.stderr), {
       interval: 5,
-      timeout: 5000,
+      timeout: factTimeout,
     });
 
     // Act
@@ -506,7 +507,7 @@ describe('TicketQueueFileStore: presence files of waiters', () => {
         );
         await t.waitFor(() => assert.ok(holder.has('holding'), holder.stderr), {
           interval: 5,
-          timeout: 5000,
+          timeout: factTimeout,
         });
         await endWait(new Mutex(ticketQueue.create(directory.path)), () =>
           t.waitFor(
@@ -515,7 +516,7 @@ describe('TicketQueueFileStore: presence files of waiters', () => {
                 ticketsIn(queueIn(directory.path)) === 2,
                 `The waiter must line up behind the holder.\n${holder.stderr}`,
               ),
-            { interval: 5, timeout: 5000 },
+            { interval: 5, timeout: factTimeout },
           ),
         );
         assert.equal(ticketsIn(queueIn(directory.path)), 2);
@@ -523,7 +524,7 @@ describe('TicketQueueFileStore: presence files of waiters', () => {
         holder.child.send('release');
         await t.waitFor(
           () => assert.ok(holder.has('released'), holder.stderr),
-          { interval: 5, timeout: 5000 },
+          { interval: 5, timeout: factTimeout },
         );
 
         // Act
@@ -545,7 +546,7 @@ test('TicketQueueFileStore: a skip gets a key whose queue holds only callers tha
   );
   await t.waitFor(() => assert.ok(holder.has('holding'), holder.stderr), {
     interval: 5,
-    timeout: 5000,
+    timeout: factTimeout,
   });
   await using first = startWorker(
     callerSource(ticketQueue, directory.path),
@@ -557,7 +558,7 @@ test('TicketQueueFileStore: a skip gets a key whose queue holds only callers tha
   );
   await t.waitFor(
     () => assert.ok(ticketsIn(queue) === 3, 'Both waiters must be in line'),
-    { interval: 5, timeout: 5000 },
+    { interval: 5, timeout: factTimeout },
   );
   for (const caller of [holder, first, second]) {
     caller.child.kill('SIGKILL');

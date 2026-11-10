@@ -33,7 +33,7 @@ export function sharedByDirectory(
   name: string,
   create: (directory: string) => LockStore,
   module: StoreModule,
-  latency: { grantLatency: number; releaseLatency: number },
+  latency: { grantLatency: number },
 ) {
   const open = (directory: string): Host => {
     const store = create(directory);

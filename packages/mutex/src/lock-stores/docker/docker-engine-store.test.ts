@@ -13,8 +13,8 @@ import { DockerTestbed } from '@zukhruf/testing/docker';
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { Mutex } from '../../index.ts';
+import { factTimeout } from '../../testing/fact-timeout.ts';
 import { hold } from '../../testing/hold.ts';
-import { newProcessTimeout } from '../../testing/new-process-timeout.ts';
 import { engineProxy } from '../../testing/subjects/docker-engine.ts';
 import { startWorker } from '../../testing/worker-process.ts';
 import { DockerEngineStore } from './index.ts';
@@ -118,7 +118,7 @@ test("a killed holder's key goes to the next waiter", async (t) => {
         holder.has('holding'),
         `The holder did not take the key: ${holder.stderr}`,
       ),
-    { interval: 5, timeout: newProcessTimeout },
+    { interval: 5, timeout: factTimeout },
   );
   const waiting = new Mutex(fixture.store()).acquire(
     'report:daily',

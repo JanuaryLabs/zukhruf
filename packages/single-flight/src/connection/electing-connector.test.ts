@@ -13,6 +13,7 @@ import type { CampaignOptions, Term } from '@zukhruf/election';
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { isRecord } from '../shared/is-record.ts';
+import { factTimeout } from '../testing/fact-timeout.ts';
 import { ElectingConnector } from './electing-connector.ts';
 import { flightElection } from './flight-election.ts';
 
@@ -80,28 +81,78 @@ describe('Electing connector', () => {
 
   // A wait that ignores the abort lasts the 60 s poll interval, and it must
   // fail the test, not hang it.
-  test(
-    'a connect aborted while it waits for its next try rejects with the reason of the signal',
-    { timeout: 5000 },
-    async () => {
-      // Arrange: nobody serves the socket, and no campaign wins. The abort lands
-      // after the lost campaign returned, so the connect waits for its next try.
-      await using directory = await new TemporaryFiles().directory('flights-');
-      const abort = new AbortController();
-      const reason = new Error('The single flight closed');
-      const connector = new ElectingConnector({
-        clock: globalThis,
-        socketPath: join(directory.path, 'flight.sock'),
-        election: {
-          campaign: async () => {
-            setImmediate(() => abort.abort(reason));
-            return undefined;
-          },
+  test('a connect aborted while it waits for its next try rejects with the reason of the signal', async () => {
+    // Arrange: nobody serves the socket, and no campaign wins. The abort lands
+    // after the lost campaign returned, so the connect waits for its next try.
+    await using directory = await new TemporaryFiles().directory('flights-');
+    const abort = new AbortController();
+    const reason = new Error('The single flight closed');
+    const connector = new ElectingConnector({
+      clock: globalThis,
+      socketPath: join(directory.path, 'flight.sock'),
+      election: {
+        campaign: async () => {
+          setImmediate(() => abort.abort(reason));
+          return undefined;
         },
-        pollInterval: 60_000,
-        serve: async () => {},
-      });
+      },
+      pollInterval: 60_000,
+      serve: async () => {},
+    });
 
+    // Act
+    const error = await connector.connect(abort.signal).then(
+      () => assert.fail('An aborted connect must reject'),
+      (error: unknown) => error,
+    );
+
+    // Assert
+    assert.equal(error, reason);
+  });
+
+  // A connector that opens another number of sockets before it waits never
+  // gets the abort, and its 60 s wait must fail the test, not hang it.
+  test('a connect aborted while it outlasts a coordinator that hangs up rejects with the reason of the signal', async () => {
+    // Arrange: a coordinator hangs up on each hello, and no campaign wins.
+    await using directory = await new TemporaryFiles().directory('flights-');
+    const socketPath =
+      process.platform === 'win32'
+        ? `\\\\.\\pipe\\single-flight-test-${randomUUID()}`
+        : join(directory.path, 'flight.sock');
+    const peers = new Set<Socket>();
+    const coordinator = createServer((peer) => {
+      peers.add(peer);
+      peer.on('error', () => {});
+      // readline emits the socket's errors again, e.g. a reset on Linux when the client closes with unread data.
+      createInterface({ input: peer })
+        .on('error', () => {})
+        .once('line', () => peer.destroy());
+    });
+    coordinator.listen(socketPath);
+    await once(coordinator, 'listening');
+    const abort = new AbortController();
+    const reason = new Error('The single flight closed');
+    // The first hang-up sends the connect to outlast the coordinator. After
+    // the second hang-up, it waits for its next try: the abort lands in that
+    // wait, one turn after the socket closes.
+    let reached = 0;
+    const onSocket = (message: unknown) => {
+      if (!isRecord(message) || !(message.socket instanceof Socket)) return;
+      if (++reached !== 2) return;
+      message.socket.once('close', () =>
+        setImmediate(() => abort.abort(reason)),
+      );
+    };
+    subscribe('net.client.socket', onSocket);
+    const connector = new ElectingConnector({
+      clock: globalThis,
+      socketPath,
+      election: { campaign: async () => undefined },
+      pollInterval: 60_000,
+      serve: async () => {},
+    });
+
+    try {
       // Act
       const error = await connector.connect(abort.signal).then(
         () => assert.fail('An aborted connect must reject'),
@@ -110,128 +161,64 @@ describe('Electing connector', () => {
 
       // Assert
       assert.equal(error, reason);
-    },
-  );
+      assert.equal(
+        reached,
+        2,
+        'The connect must reach the coordinator two times',
+      );
+    } finally {
+      unsubscribe('net.client.socket', onSocket);
+      for (const peer of peers) peer.destroy();
+      await new Promise<void>((resolve) => coordinator.close(() => resolve()));
+    }
+  });
 
-  // A connector that opens another number of sockets before it waits never
-  // gets the abort, and its 60 s wait must fail the test, not hang it.
-  test(
-    'a connect aborted while it outlasts a coordinator that hangs up rejects with the reason of the signal',
-    { timeout: 5000 },
-    async () => {
-      // Arrange: a coordinator hangs up on each hello, and no campaign wins.
-      await using directory = await new TemporaryFiles().directory('flights-');
-      const socketPath =
-        process.platform === 'win32'
-          ? `\\\\.\\pipe\\single-flight-test-${randomUUID()}`
-          : join(directory.path, 'flight.sock');
-      const peers = new Set<Socket>();
-      const coordinator = createServer((peer) => {
-        peers.add(peer);
-        peer.on('error', () => {});
-        // readline emits the socket's errors again, e.g. a reset on Linux when the client closes with unread data.
-        createInterface({ input: peer })
-          .on('error', () => {})
-          .once('line', () => peer.destroy());
-      });
-      coordinator.listen(socketPath);
-      await once(coordinator, 'listening');
-      const abort = new AbortController();
-      const reason = new Error('The single flight closed');
-      // The first hang-up sends the connect to outlast the coordinator. After
-      // the second hang-up, it waits for its next try: the abort lands in that
-      // wait, one turn after the socket closes.
-      let reached = 0;
-      const onSocket = (message: unknown) => {
-        if (!isRecord(message) || !(message.socket instanceof Socket)) return;
-        if (++reached !== 2) return;
-        message.socket.once('close', () =>
-          setImmediate(() => abort.abort(reason)),
-        );
-      };
-      subscribe('net.client.socket', onSocket);
-      const connector = new ElectingConnector({
-        clock: globalThis,
-        socketPath,
-        election: { campaign: async () => undefined },
-        pollInterval: 60_000,
-        serve: async () => {},
-      });
+  test('a connect outlasts a coordinator that keeps its term and hangs up on each hello, for as long as that lasts', async () => {
+    // Arrange: for five seconds on the clock, a coordinator hangs up on each hello and no campaign wins. After them, it welcomes.
+    await using directory = await new TemporaryFiles().directory('flights-');
+    const socketPath =
+      process.platform === 'win32'
+        ? `\\\\.\\pipe\\single-flight-test-${randomUUID()}`
+        : join(directory.path, 'flight.sock');
+    const clock = createClock();
+    const peers = new Set<Socket>();
+    let hangUps = 0;
+    const coordinator = createServer((peer) => {
+      peers.add(peer);
+      peer.on('error', () => {});
+      // readline emits the socket's errors again, e.g. a reset on Linux when the client closes with unread data.
+      createInterface({ input: peer })
+        .on('error', () => {})
+        .once('line', () => {
+          if (clock.now >= 5000) return peer.write('{"op":"welcome"}\n');
+          hangUps++;
+          peer.destroy();
+        });
+    });
+    coordinator.listen(socketPath);
+    await once(coordinator, 'listening');
+    const connector = new ElectingConnector({
+      clock,
+      socketPath,
+      election: { campaign: async () => undefined },
+      pollInterval: 10,
+      serve: async () => {},
+    });
+    const ticking = setInterval(() => clock.tick(10), 1);
 
-      try {
-        // Act
-        const error = await connector.connect(abort.signal).then(
-          () => assert.fail('An aborted connect must reject'),
-          (error: unknown) => error,
-        );
+    try {
+      // Act
+      const connection = await connector.connect(
+        AbortSignal.timeout(factTimeout),
+      );
+      connection.close();
 
-        // Assert
-        assert.equal(error, reason);
-        assert.equal(
-          reached,
-          2,
-          'The connect must reach the coordinator two times',
-        );
-      } finally {
-        unsubscribe('net.client.socket', onSocket);
-        for (const peer of peers) peer.destroy();
-        await new Promise<void>((resolve) =>
-          coordinator.close(() => resolve()),
-        );
-      }
-    },
-  );
-
-  test(
-    'a connect outlasts a coordinator that keeps its term and hangs up on each hello, for as long as that lasts',
-    { timeout: 5000 },
-    async () => {
-      // Arrange: for five seconds on the clock, a coordinator hangs up on each hello and no campaign wins. After them, it welcomes.
-      await using directory = await new TemporaryFiles().directory('flights-');
-      const socketPath =
-        process.platform === 'win32'
-          ? `\\\\.\\pipe\\single-flight-test-${randomUUID()}`
-          : join(directory.path, 'flight.sock');
-      const clock = createClock();
-      const peers = new Set<Socket>();
-      let hangUps = 0;
-      const coordinator = createServer((peer) => {
-        peers.add(peer);
-        peer.on('error', () => {});
-        // readline emits the socket's errors again, e.g. a reset on Linux when the client closes with unread data.
-        createInterface({ input: peer })
-          .on('error', () => {})
-          .once('line', () => {
-            if (clock.now >= 5000) return peer.write('{"op":"welcome"}\n');
-            hangUps++;
-            peer.destroy();
-          });
-      });
-      coordinator.listen(socketPath);
-      await once(coordinator, 'listening');
-      const connector = new ElectingConnector({
-        clock,
-        socketPath,
-        election: { campaign: async () => undefined },
-        pollInterval: 10,
-        serve: async () => {},
-      });
-      const ticking = setInterval(() => clock.tick(10), 1);
-
-      try {
-        // Act
-        const connection = await connector.connect(AbortSignal.timeout(4000));
-        connection.close();
-
-        // Assert
-        assert.ok(hangUps > 1, `The coordinator hung up ${hangUps} times`);
-      } finally {
-        clearInterval(ticking);
-        for (const peer of peers) peer.destroy();
-        await new Promise<void>((resolve) =>
-          coordinator.close(() => resolve()),
-        );
-      }
-    },
-  );
+      // Assert
+      assert.ok(hangUps > 1, `The coordinator hung up ${hangUps} times`);
+    } finally {
+      clearInterval(ticking);
+      for (const peer of peers) peer.destroy();
+      await new Promise<void>((resolve) => coordinator.close(() => resolve()));
+    }
+  });
 });

@@ -12,8 +12,8 @@ import { describe, test } from '@zukhruf/testing/node';
 import { LeaseLostError } from '../../index.ts';
 import type { LockStore } from '../../mutex/lock-store.ts';
 import { Mutex } from '../../mutex/mutex.ts';
+import { factTimeout } from '../fact-timeout.ts';
 import { hold } from '../hold.ts';
-import { newProcessTimeout } from '../new-process-timeout.ts';
 import { uniqueKey } from './keys.ts';
 import type { Host, Subject } from './subject.ts';
 
@@ -102,14 +102,14 @@ export function leaseLoss<H extends Host>(
       const lease = await holding.promise;
       // The next heartbeat waits one interval on the clock.
       await t.waitFor(() => assert.equal(clock.countTimers(), 1), {
-        timeout: newProcessTimeout,
+        timeout: factTimeout,
       });
 
       // Act: the heartbeat asks, and the partition holds the answer.
       await clock.tickAsync(partitionable.heartbeatInterval);
       // The time limit of the heartbeat waits on the clock.
       await t.waitFor(() => assert.equal(clock.countTimers(), 1), {
-        timeout: newProcessTimeout,
+        timeout: factTimeout,
       });
       const heldAfterOne = !lease.aborted;
       await clock.tickAsync(partitionable.heartbeatInterval);
@@ -158,7 +158,7 @@ export function sessions<H extends Host>(
       const signal = await settleWithin(
         lost.promise,
         'the lease of a killed session to abort',
-        newProcessTimeout,
+        factTimeout,
       );
       assert.ok(
         signal.reason instanceof LeaseLostError,
@@ -174,7 +174,7 @@ export function sessions<H extends Host>(
       await using fixture = await store.fixture(process.env);
       await using reconnecting = await control.silentlyReconnecting(
         fixture.location,
-        1000,
+        3000,
       );
       await using other = store.open(fixture.location);
       const key = uniqueKey();
@@ -199,7 +199,7 @@ export function sessions<H extends Host>(
         await settleWithin(
           lost,
           'the lease of a session that no longer holds the lock to abort',
-          newProcessTimeout,
+          factTimeout,
         );
         const reason: unknown = handle.signal.reason;
         assert.ok(reason instanceof LeaseLostError);
@@ -237,11 +237,7 @@ export function sessions<H extends Host>(
 
       // Assert
       assert.equal(
-        await settleWithin(
-          next,
-          'the next waiter to get the key',
-          newProcessTimeout,
-        ),
+        await settleWithin(next, 'the next waiter to get the key', factTimeout),
         'granted',
         'A grant to a cancelled waiter must be released, so the next waiter gets the key',
       );
@@ -277,7 +273,7 @@ export function sessions<H extends Host>(
           await settleWithin(
             outcome,
             'the cancelled acquire to settle',
-            newProcessTimeout,
+            factTimeout,
           ),
           reason,
         );
@@ -345,7 +341,7 @@ export function pools<H extends Host>(
         await settleWithin(
           next,
           'the next acquire on the only session',
-          newProcessTimeout,
+          factTimeout,
         ),
         'ran',
         'A cancel must give back its turn and its session',

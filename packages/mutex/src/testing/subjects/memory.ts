@@ -16,5 +16,4 @@ export const subject: Subject<Host> = {
     admit() {},
   },
   grantLatency: 1,
-  releaseLatency: 1,
 };

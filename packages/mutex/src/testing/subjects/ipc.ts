@@ -26,7 +26,6 @@ export const subject: Subject<IpcHost> = {
     admit: (host, child) => host.store.adopt(child),
   },
   grantLatency: 1,
-  releaseLatency: 10,
 };
 
 export const sharing = sharesWithProcesses(subject.process);

@@ -13,6 +13,7 @@ import { test } from '@zukhruf/testing/node';
 
 import type { LockStore } from '../../mutex/lock-store.ts';
 import { Mutex } from '../../mutex/mutex.ts';
+import { factTimeout } from '../../testing/fact-timeout.ts';
 import { tokensThatFailOnce } from '../../testing/tokens-that-fail-once.ts';
 import { SqliteStore } from '../sqlite/sqlite-store.ts';
 import { LockFileStore } from './lock-file-store.ts';
@@ -329,7 +330,9 @@ describe('LockFileStore damaged lock file', () => {
 
       // Act
       const calls = await Promise.allSettled([
-        store.acquire('report-daily', { signal: AbortSignal.timeout(2000) }),
+        store.acquire('report-daily', {
+          signal: AbortSignal.timeout(factTimeout),
+        }),
         store.tryAcquire('report-daily'),
         store.isHeld('report-daily'),
       ]);

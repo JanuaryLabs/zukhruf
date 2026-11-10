@@ -8,8 +8,8 @@ import { describe, test } from '@zukhruf/testing/node';
 
 import { Modes } from '../../mutex/acquire-modes/modes.ts';
 import { Mutex } from '../../mutex/mutex.ts';
+import { factTimeout } from '../../testing/fact-timeout.ts';
 import { mutexUrl } from '../../testing/module-urls.ts';
-import { newProcessTimeout } from '../../testing/new-process-timeout.ts';
 import { settle } from '../../testing/timing.ts';
 import { tokensThatFailOnce } from '../../testing/tokens-that-fail-once.ts';
 import { startWorker } from '../../testing/worker-process.ts';
@@ -45,7 +45,7 @@ describe('Process-tree mutex with IpcStore', () => {
           child.has('released'),
           `The child must take and release the key after its other messages.\n${child.stderr}`,
         ),
-      { interval: 5, timeout: newProcessTimeout },
+      { interval: 5, timeout: factTimeout },
     );
     // A key that is never handed over keeps this await open until the test times out.
     const next = await mutex.acquire(
@@ -123,7 +123,7 @@ describe('Process-tree mutex with IpcStore', () => {
             log = await childLog();
             assert.ok(log.includes(line), `${message}\n${parent.stderr}`);
           },
-          { interval: 10, timeout: 3000 },
+          { interval: 10, timeout: factTimeout },
         );
 
       await waitForLog(
@@ -142,7 +142,7 @@ describe('Process-tree mutex with IpcStore', () => {
           log = await childLog();
           assert.ok(log.some((line) => line.startsWith('rejected:')));
         },
-        { interval: 10, timeout: 3000 },
+        { interval: 10, timeout: factTimeout },
       );
       assert.deepEqual(
         log,
@@ -216,7 +216,7 @@ describe('Process-tree mutex with IpcStore', () => {
               `${message}\n${log.join('\n')}\n${parent.stderr}`,
             );
           },
-          { interval: 10, timeout: newProcessTimeout },
+          { interval: 10, timeout: factTimeout },
         );
       await waitForLog(
         (lines) => lines.includes('waiting'),
@@ -294,14 +294,16 @@ describe('A worker or child whose token cannot be minted', () => {
           child.has('holding'),
           `The child must report while it holds a key.\n${child.stderr}`,
         ),
-      { interval: 5, timeout: newProcessTimeout },
+      { interval: 5, timeout: factTimeout },
     );
     child.child.kill('SIGKILL');
     await child.closed;
     const next = await mutex.acquire(
       'product:43',
       async () => 'granted' as const,
-      { mode: Modes.skipIfBusy({ waitAtMost: 2000, clock: globalThis }) },
+      {
+        mode: Modes.skipIfBusy({ waitAtMost: factTimeout, clock: globalThis }),
+      },
     );
 
     // Assert

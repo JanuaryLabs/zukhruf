@@ -8,16 +8,16 @@ import { describe, test } from '@zukhruf/testing/node';
 import { Modes } from '../../mutex/acquire-modes/modes.ts';
 import { Mutex } from '../../mutex/mutex.ts';
 import { isRecord } from '../../shared/is-record.ts';
-import { deadlineFor } from '../../testing/contract/deadlines.ts';
 import {
   startThread,
   storeIn,
   threadSource,
 } from '../../testing/contract/peers.ts';
 import { skipperBody } from '../../testing/contract/processes.ts';
+import { windowFor } from '../../testing/contract/window.ts';
+import { factTimeout } from '../../testing/fact-timeout.ts';
 import { hold } from '../../testing/hold.ts';
 import { modesUrl, mutexUrl } from '../../testing/module-urls.ts';
-import { newProcessTimeout } from '../../testing/new-process-timeout.ts';
 import {
   type ThreadHost,
   threadSharing as sharing,
@@ -63,9 +63,9 @@ describe(`Cross-thread mutex with ${store.name}`, () => {
       // Act: the thread asks for the same key while the main thread holds it.
       await t.waitFor(
         () => assert.ok(events.includes('requested'), 'The thread must start'),
-        { interval: 5, timeout: newProcessTimeout },
+        { interval: 5, timeout: factTimeout },
       );
-      await delay(deadlineFor(store, settle, { grants: 1, releases: 0 }));
+      await delay(windowFor(store, settle));
       const enteredWhileHeld = events.includes('entered');
       finishMain.resolve();
       await held;
@@ -84,7 +84,7 @@ describe(`Cross-thread mutex with ${store.name}`, () => {
           ),
         {
           interval: 5,
-          timeout: deadlineFor(store, 2000, { grants: 1, releases: 0 }),
+          timeout: factTimeout,
         },
       );
     } finally {
@@ -166,7 +166,7 @@ describe(`Cross-thread mutex with ${store.name}`, () => {
             events.includes('released'),
             'The thread must take and release the key after its other messages',
           ),
-        { interval: 5, timeout: newProcessTimeout },
+        { interval: 5, timeout: factTimeout },
       );
       // A key that is never handed over keeps this await open until the test times out.
       const next = await mutex.acquire(
@@ -214,14 +214,14 @@ describe(`Cross-thread mutex with ${store.name}`, () => {
       await t.waitFor(
         () =>
           assert.ok(request !== undefined, 'The thread must ask for the key'),
-        { interval: 5, timeout: newProcessTimeout },
+        { interval: 5, timeout: factTimeout },
       );
 
       // Act: a grant for the thread's request, with a token that no coordinator issues.
       thread.postMessage({
         '@lock': { op: 'granted', id: request, token: 'not-a-token' },
       });
-      await delay(deadlineFor(store, settle, { grants: 1, releases: 0 }));
+      await delay(windowFor(store, settle));
       const enteredBeforeRelease = events.includes('entered');
       finishMain.resolve();
       await held;
@@ -240,7 +240,7 @@ describe(`Cross-thread mutex with ${store.name}`, () => {
           ),
         {
           interval: 5,
-          timeout: deadlineFor(store, 2000, { grants: 1, releases: 0 }),
+          timeout: factTimeout,
         },
       );
     } finally {
@@ -389,17 +389,17 @@ describe('A worker or child whose token cannot be minted', () => {
             resolve(message.failure);
         });
       });
-      const failure = await Promise.race([
-        report,
-        delay(newProcessTimeout, 'the thread never reported', {
-          ref: false,
-        }),
-      ]);
+      const failure = await report;
       await thread.terminate();
       const next = await mutex.acquire(
         'product:43',
         async () => 'granted' as const,
-        { mode: Modes.skipIfBusy({ waitAtMost: 2000, clock: globalThis }) },
+        {
+          mode: Modes.skipIfBusy({
+            waitAtMost: factTimeout,
+            clock: globalThis,
+          }),
+        },
       );
 
       // Assert

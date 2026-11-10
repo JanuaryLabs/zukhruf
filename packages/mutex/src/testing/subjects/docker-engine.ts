@@ -146,7 +146,6 @@ export const subject: Subject<Host> = {
   },
   process: { module, admit() {} },
   grantLatency: 300,
-  releaseLatency: 150,
 };
 
 export const sharing = sharesWithProcesses(subject.process);

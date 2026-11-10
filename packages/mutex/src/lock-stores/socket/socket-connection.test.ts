@@ -7,6 +7,7 @@ import { describe, test } from 'node:test';
 
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 
+import { factTimeout } from '../../testing/fact-timeout.ts';
 import { SocketConnection } from './socket-connection.ts';
 
 describe('Socket connection', () => {
@@ -43,7 +44,7 @@ describe('Socket connection', () => {
             closed,
             'The connection must report the dead peer as closed',
           ),
-        { interval: 5, timeout: 2000 },
+        { interval: 5, timeout: factTimeout },
       );
       assert.equal(closed, true);
     } finally {

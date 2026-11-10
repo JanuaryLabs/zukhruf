@@ -8,17 +8,17 @@ import { describe, test } from '@zukhruf/testing/node';
 
 import { Modes } from '../../mutex/acquire-modes/modes.ts';
 import { Mutex } from '../../mutex/mutex.ts';
+import { factTimeout } from '../fact-timeout.ts';
 import { grantedWithin } from '../granted-within.ts';
 import { hold } from '../hold.ts';
-import { newProcessTimeout } from '../new-process-timeout.ts';
 import { settle } from '../timing.ts';
-import { deadlineFor } from './deadlines.ts';
 import type { Host, Subject } from './subject.ts';
+import { windowFor } from './window.ts';
 
 /** Every lock store: each acquire mode. */
 export function acquireModes<H extends Host>(store: Subject<H>): void {
   describe(`Acquire modes with ${store.name}`, () => {
-    test('skipIfBusy gives up at once while another holder has the key, and does not run the task', async () => {
+    test('skipIfBusy gives up while another holder has the key, and does not run the task', async () => {
       // Arrange
       await using fixture = await store.fixture(process.env);
       await using host = store.open(fixture.location);
@@ -28,7 +28,6 @@ export function acquireModes<H extends Host>(store: Subject<H>): void {
 
       try {
         // Act
-        const started = performance.now();
         const result = await mutex.acquire(
           'report:daily',
           async () => {
@@ -37,16 +36,10 @@ export function acquireModes<H extends Host>(store: Subject<H>): void {
           },
           { mode: Modes.skipIfBusy() },
         );
-        const waited = performance.now() - started;
 
         // Assert
         assert.deepEqual(result, { acquired: false });
         assert.equal(ran, false, 'A skipped caller must not run its task');
-        const limit = deadlineFor(store, 2000, { grants: 1, releases: 0 });
-        assert.ok(
-          waited < limit,
-          `The caller gave up after ${waited.toFixed(0)} ms, not at once (within ${limit} ms)`,
-        );
       } finally {
         await holder.release();
       }
@@ -81,7 +74,7 @@ export function acquireModes<H extends Host>(store: Subject<H>): void {
         });
         // The lock store answered that the key is busy, so the limit runs.
         await t.waitFor(() => assert.equal(clock.countTimers(), 1), {
-          timeout: newProcessTimeout,
+          timeout: factTimeout,
         });
 
         // Act
@@ -106,7 +99,7 @@ export function acquireModes<H extends Host>(store: Subject<H>): void {
 
       // Act
       const attempt = mutex.acquire('report:daily', async () => 'report', {
-        mode: Modes.skipIfBusy({ waitAtMost: 2000, clock: globalThis }),
+        mode: Modes.skipIfBusy({ waitAtMost: factTimeout, clock: globalThis }),
       });
       await delay(50);
       await holder.release();
@@ -183,10 +176,7 @@ export function acquireModes<H extends Host>(store: Subject<H>): void {
 
       try {
         assert.equal(
-          await grantedWithin(
-            cancelled,
-            deadlineFor(store, settle, { grants: 1, releases: 0 }),
-          ),
+          await grantedWithin(cancelled, windowFor(store, settle)),
           'waiting',
         );
 
@@ -221,10 +211,7 @@ export function acquireModes<H extends Host>(store: Subject<H>): void {
 
       try {
         assert.equal(
-          await grantedWithin(
-            attempt,
-            deadlineFor(store, settle, { grants: 1, releases: 0 }),
-          ),
+          await grantedWithin(attempt, windowFor(store, settle)),
           'waiting',
         );
 

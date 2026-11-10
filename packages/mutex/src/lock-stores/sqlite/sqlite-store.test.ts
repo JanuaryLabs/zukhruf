@@ -11,9 +11,9 @@ import { test } from '@zukhruf/testing/node';
 import { Modes } from '../../mutex/acquire-modes/modes.ts';
 import { Mutex } from '../../mutex/mutex.ts';
 import { isRecord } from '../../shared/is-record.ts';
+import { factTimeout } from '../../testing/fact-timeout.ts';
 import { hold } from '../../testing/hold.ts';
 import { mutexUrl } from '../../testing/module-urls.ts';
-import { newProcessTimeout } from '../../testing/new-process-timeout.ts';
 import { startWorker } from '../../testing/worker-process.ts';
 import { SqliteStore } from './sqlite-store.ts';
 
@@ -151,7 +151,7 @@ describe('SqliteStore holder record', () => {
           holder.has('entered'),
           `The holder must enter its task.\n${holder.stderr}`,
         ),
-      { interval: 5, timeout: newProcessTimeout },
+      { interval: 5, timeout: factTimeout },
     );
     holder.child.kill('SIGKILL');
     await holder.closed;

@@ -3,6 +3,7 @@ import { describe, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 
 import { isRecord } from '../../shared/is-record.ts';
+import { factTimeout } from '../../testing/fact-timeout.ts';
 import {
   scriptedConnector,
   scriptedPeer,
@@ -68,7 +69,7 @@ describe('Connection supervisor', () => {
           closing.now.status === 'fulfilled',
           'Close must finish once the connect settles',
         ),
-      { interval: 5, timeout: 2000 },
+      { interval: 5, timeout: factTimeout },
     );
   });
 
@@ -90,7 +91,7 @@ describe('Connection supervisor', () => {
       // Assert
       await t.waitFor(
         () => assert.ok(events.length > 0, 'The failure must be reported'),
-        { interval: 5, timeout: 2000 },
+        { interval: 5, timeout: factTimeout },
       );
       assert.deepEqual(events, ['Error: EACCES']);
     } finally {
@@ -113,7 +114,7 @@ describe('Connection supervisor', () => {
           events.includes('connected'),
           'The connection must be reported',
         ),
-      { interval: 5, timeout: 2000 },
+      { interval: 5, timeout: factTimeout },
     );
 
     try {
@@ -145,7 +146,7 @@ describe('Connection supervisor', () => {
           events.includes('connected'),
           'The connection must be reported',
         ),
-      { interval: 5, timeout: 2000 },
+      { interval: 5, timeout: factTimeout },
     );
     first.drop();
     calls[1]!.resolve(second.connection);
@@ -155,7 +156,7 @@ describe('Connection supervisor', () => {
           events.filter((event) => event === 'connected').length === 2,
           'The replacement must be reported',
         ),
-      { interval: 5, timeout: 2000 },
+      { interval: 5, timeout: factTimeout },
     );
 
     try {
@@ -194,7 +195,7 @@ describe('Connection supervisor', () => {
             events.includes('connected'),
             'The connection must be reported',
           ),
-        { interval: 5, timeout: 2000 },
+        { interval: 5, timeout: factTimeout },
       );
       const whileDropping = supervisor.send({ n: 2 });
 
@@ -242,7 +243,7 @@ describe('Connection supervisor', () => {
       assert.deepEqual(first.sent, []);
       await t.waitFor(
         () => assert.ok(calls.length === 2, 'The supervisor must reconnect'),
-        { interval: 5, timeout: 2000 },
+        { interval: 5, timeout: factTimeout },
       );
     } finally {
       await supervisor.close();

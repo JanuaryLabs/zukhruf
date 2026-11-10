@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 
+import { factTimeout } from '../../testing/fact-timeout.ts';
 import { settle } from '../../testing/timing.ts';
 import { tokensThatFailOnce } from '../../testing/tokens-that-fail-once.ts';
 import { watch } from '../../testing/watch.ts';
@@ -65,7 +66,7 @@ describe('MemoryStore', () => {
           last.now.status === 'fulfilled',
           'The last waiter must get the key once the first releases',
         ),
-      { interval: 5, timeout: 2000 },
+      { interval: 5, timeout: factTimeout },
     );
   });
 

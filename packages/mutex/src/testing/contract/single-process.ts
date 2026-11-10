@@ -11,14 +11,14 @@ import { describe, test } from '@zukhruf/testing/node';
 
 import { Modes } from '../../mutex/acquire-modes/modes.ts';
 import { Mutex } from '../../mutex/mutex.ts';
+import { factTimeout } from '../fact-timeout.ts';
 import { mutexUrl } from '../module-urls.ts';
-import { newProcessTimeout } from '../new-process-timeout.ts';
 import { settle } from '../timing.ts';
 import { startWorker } from '../worker-process.ts';
-import { deadlineFor } from './deadlines.ts';
 import { label, longKey } from './keys.ts';
 import { storeIn } from './peers.ts';
 import type { Host, Subject } from './subject.ts';
+import { windowFor } from './window.ts';
 
 /** Every lock store: one process, one Mutex. */
 export function singleProcess<H extends Host>(store: Subject<H>): void {
@@ -52,7 +52,7 @@ export function singleProcess<H extends Host>(store: Subject<H>): void {
             ),
           {
             interval: 5,
-            timeout: deadlineFor(store, 2000, { grants: 1, releases: 0 }),
+            timeout: factTimeout,
           },
         );
         operations.push(
@@ -61,7 +61,7 @@ export function singleProcess<H extends Host>(store: Subject<H>): void {
             return true;
           }),
         );
-        await delay(deadlineFor(store, settle, { grants: 1, releases: 0 }));
+        await delay(windowFor(store, settle));
         failFirst.resolve();
 
         // Assert: the error reaches its caller, and the waiter runs after failure.
@@ -129,7 +129,7 @@ export function singleProcess<H extends Host>(store: Subject<H>): void {
             application.exit !== null,
             `The application must finish.\n${application.stderr}`,
           ),
-        { interval: 5, timeout: newProcessTimeout },
+        { interval: 5, timeout: factTimeout },
       );
 
       // Assert: catching a callback error must be enough to keep the app running.
@@ -167,7 +167,7 @@ export function singleProcess<H extends Host>(store: Subject<H>): void {
             ),
           {
             interval: 5,
-            timeout: deadlineFor(store, 2000, { grants: 1, releases: 0 }),
+            timeout: factTimeout,
           },
         );
         operations.push(
@@ -176,7 +176,7 @@ export function singleProcess<H extends Host>(store: Subject<H>): void {
             return false;
           }),
         );
-        await delay(deadlineFor(store, settle, { grants: 1, releases: 0 }));
+        await delay(windowFor(store, settle));
 
         // Assert: the second callback has not entered while the first is open.
         assert.equal(
@@ -244,10 +244,10 @@ export function singleProcess<H extends Host>(store: Subject<H>): void {
             ),
           {
             interval: 5,
-            timeout: deadlineFor(store, 2000, { grants: 1, releases: 0 }),
+            timeout: factTimeout,
           },
         );
-        await delay(deadlineFor(store, settle, { grants: 1, releases: 0 }));
+        await delay(windowFor(store, settle));
         finishFirst.resolve();
         // A request that is never granted keeps this await open until the test times out.
         const results = await outcomes;
@@ -304,7 +304,7 @@ export function singleProcess<H extends Host>(store: Subject<H>): void {
             ),
           {
             interval: 5,
-            timeout: deadlineFor(store, 2000, { grants: 1, releases: 0 }),
+            timeout: factTimeout,
           },
         );
 
@@ -321,7 +321,7 @@ export function singleProcess<H extends Host>(store: Subject<H>): void {
           () => assert.ok(secondFinished, 'An unrelated product was blocked'),
           {
             interval: 5,
-            timeout: deadlineFor(store, 2000, { grants: 1, releases: 0 }),
+            timeout: factTimeout,
           },
         );
         finishFirst.resolve();
@@ -411,7 +411,7 @@ export function singleProcess<H extends Host>(store: Subject<H>): void {
                 ),
               {
                 interval: 5,
-                timeout: deadlineFor(store, 2000, { grants: 1, releases: 0 }),
+                timeout: factTimeout,
               },
             );
             operations.push(
@@ -420,7 +420,7 @@ export function singleProcess<H extends Host>(store: Subject<H>): void {
                 return false;
               }),
             );
-            await delay(deadlineFor(store, settle, { grants: 1, releases: 0 }));
+            await delay(windowFor(store, settle));
             assert.equal(
               secondStarted,
               false,
@@ -470,7 +470,7 @@ export function singleProcess<H extends Host>(store: Subject<H>): void {
                 assert.ok(holding, `The holder of ${label(held)} must start`),
               {
                 interval: 5,
-                timeout: deadlineFor(store, 2000, { grants: 1, releases: 0 }),
+                timeout: factTimeout,
               },
             );
 
@@ -511,7 +511,7 @@ export function singleProcess<H extends Host>(store: Subject<H>): void {
           () => assert.ok(holding, "The holder of 'Sync' must start"),
           {
             interval: 5,
-            timeout: deadlineFor(store, 2000, { grants: 1, releases: 0 }),
+            timeout: factTimeout,
           },
         );
 
