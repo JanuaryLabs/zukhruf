@@ -11,28 +11,15 @@ import {
   NetworkNotFoundError,
   OwnedNetwork,
 } from './index.ts';
-
-const TEST_LABEL = 'dev.zukhruf.docker.test';
-const IMAGE = 'alpine:3';
-
-/** The engine that the environment of the test run selects, with alpine:3 on it. */
-async function connect(): Promise<Docker> {
-  const docker = await Docker.connect({
-    clock: globalThis,
-    environment: process.env,
-    signal: AbortSignal.timeout(15_000),
-  });
-  if (!(await docker.images.inspect(IMAGE))) await docker.images.pull(IMAGE);
-  return docker;
-}
+import { IMAGE, TEST_LABEL, connect, removeLabeled } from './testing/engine.ts';
 
 /** Removes each container, then each network, with the label of this test run. */
-async function removeLabeled(docker: Docker, run: string): Promise<void> {
+async function removeLabeledAndNetworks(
+  docker: Docker,
+  run: string,
+): Promise<void> {
+  await removeLabeled(docker, run);
   const filters = { label: [`${TEST_LABEL}=${run}`] };
-  for (const summary of await docker.containers.list({ all: true, filters })) {
-    const container = await docker.containers.find(summary.Id);
-    await container?.remove({ force: true, v: true });
-  }
   for (const { Id } of await docker.networks.list({ filters })) {
     await (await docker.networks.find(Id))?.remove();
   }
@@ -41,7 +28,7 @@ async function removeLabeled(docker: Docker, run: string): Promise<void> {
 describe('docker.networks', () => {
   test('create() with a taken name rejects with NameConflictError, createOrGet() gives the existing network, and find() and list() give the same ID', async () => {
     // Arrange
-    await using docker = await connect();
+    await using docker = await connect(IMAGE);
     const run = randomUUID();
     const name = `zukhruf-test-${run}`;
     const filters = { label: [`${TEST_LABEL}=${run}`] };
@@ -81,13 +68,13 @@ describe('docker.networks', () => {
         [{ Id: first.id, Name: name }],
       );
     } finally {
-      await removeLabeled(docker, run);
+      await removeLabeledAndNetworks(docker, run);
     }
   });
 
   test('createOrGet() with a free name creates the network and gives an OwnedNetwork whose disposal removes it, and a remove() of the removed network resolves', async () => {
     // Arrange
-    await using docker = await connect();
+    await using docker = await connect(IMAGE);
     const run = randomUUID();
     const name = `zukhruf-test-${run}`;
     try {
@@ -106,13 +93,13 @@ describe('docker.networks', () => {
       assert.equal(await docker.networks.find(name), undefined);
       await removedAgain;
     } finally {
-      await removeLabeled(docker, run);
+      await removeLabeledAndNetworks(docker, run);
     }
   });
 
   test('connect() with an alias makes the alias resolvable from another container on the network, and disconnect() takes it away', async () => {
     // Arrange
-    await using docker = await connect();
+    await using docker = await connect(IMAGE);
     const run = randomUUID();
     const alias = `db-${run.slice(0, 8)}`;
     try {
@@ -149,13 +136,13 @@ describe('docker.networks', () => {
       assert.equal(server.id in endpoints, false);
       assert.equal(client.id in endpoints, true);
     } finally {
-      await removeLabeled(docker, run);
+      await removeLabeledAndNetworks(docker, run);
     }
   });
 
   test('remove() of a network with a running connected container rejects with NetworkInUseError that names the container; without it, the disposal removes the network', async () => {
     // Arrange
-    await using docker = await connect();
+    await using docker = await connect(IMAGE);
     const run = randomUUID();
     try {
       const network = await docker.networks.create({
@@ -186,13 +173,13 @@ describe('docker.networks', () => {
       });
       assert.equal(await docker.networks.find(network.id), undefined);
     } finally {
-      await removeLabeled(docker, run);
+      await removeLabeledAndNetworks(docker, run);
     }
   });
 
   test("remove() of the pre-defined network 'bridge' rejects with a DockerEngineError with 403, not NetworkInUseError", async () => {
     // Arrange
-    await using docker = await connect();
+    await using docker = await connect(IMAGE);
     const run = randomUUID();
     const bridge = await docker.networks.find('bridge');
     assert.ok(bridge);
@@ -221,13 +208,13 @@ describe('docker.networks', () => {
       });
       assert.equal((await bridge.inspect()).Name, 'bridge');
     } finally {
-      await removeLabeled(docker, run);
+      await removeLabeledAndNetworks(docker, run);
     }
   });
 
   test('inspect() of a removed network, and connect() of a running container to it, reject with NetworkNotFoundError, connect() of a created container to it resolves, and connect() of a removed container rejects with ContainerNotFoundError', async () => {
     // Arrange
-    await using docker = await connect();
+    await using docker = await connect(IMAGE);
     const run = randomUUID();
     try {
       const removed = await docker.networks.create({
@@ -281,7 +268,7 @@ describe('docker.networks', () => {
         return true;
       });
     } finally {
-      await removeLabeled(docker, run);
+      await removeLabeledAndNetworks(docker, run);
     }
   });
 });

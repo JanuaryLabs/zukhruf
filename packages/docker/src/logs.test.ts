@@ -3,32 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { describe, test } from 'node:test';
 
 import { Docker } from './index.ts';
-
-const TEST_LABEL = 'dev.zukhruf.docker.test';
-const IMAGE = 'alpine:3';
-
-/** The engine that the environment of the test run selects, with alpine:3 on it. */
-async function connect(): Promise<Docker> {
-  const docker = await Docker.connect({
-    clock: globalThis,
-    environment: process.env,
-    signal: AbortSignal.timeout(15_000),
-  });
-  if (!(await docker.images.inspect(IMAGE))) await docker.images.pull(IMAGE);
-  return docker;
-}
-
-/** Removes each container with the label of this test run. */
-async function removeLabeled(docker: Docker, run: string): Promise<void> {
-  const left = await docker.containers.list({
-    all: true,
-    filters: { label: [`${TEST_LABEL}=${run}`] },
-  });
-  for (const summary of left) {
-    const container = await docker.containers.find(summary.Id);
-    await container?.remove({ force: true, v: true });
-  }
-}
+import { IMAGE, TEST_LABEL, connect, removeLabeled } from './testing/engine.ts';
 
 /** A container of alpine:3 with the label of this test run that runs `script` and exits. */
 async function startScript(
@@ -50,7 +25,7 @@ async function startScript(
 describe('container.logs()', () => {
   test('logs() gives stdout, stderr and output in the order of the engine, and takes tail, since and timestamps', async () => {
     // Arrange
-    await using docker = await connect();
+    await using docker = await connect(IMAGE);
     const run = randomUUID();
     try {
       const container = await startScript(
@@ -87,7 +62,7 @@ describe('container.logs()', () => {
 
   test('the logs of a container with a TTY are all stdout', async () => {
     // Arrange
-    await using docker = await connect();
+    await using docker = await connect(IMAGE);
     const run = randomUUID();
     try {
       const container = await startScript(docker, run, 'echo err >&2', true);
@@ -108,7 +83,7 @@ describe('container.logs()', () => {
 describe('container.followLogs()', () => {
   test('the iteration gives the chunks as the container writes them and ends when the container stops', async () => {
     // Arrange
-    await using docker = await connect();
+    await using docker = await connect(IMAGE);
     const run = randomUUID();
     try {
       const container = await startScript(
@@ -139,7 +114,7 @@ describe('container.followLogs()', () => {
 
   test('an abort of the signal rejects the iteration with its reason', async () => {
     // Arrange
-    await using docker = await connect();
+    await using docker = await connect(IMAGE);
     const run = randomUUID();
     try {
       const container = await startScript(docker, run, 'echo first; sleep 300');
@@ -164,7 +139,7 @@ describe('container.followLogs()', () => {
 describe('docker.events()', () => {
   test('the events give the start of a container that a filter selects, and an abort rejects the iteration with its reason', async () => {
     // Arrange
-    await using docker = await connect();
+    await using docker = await connect(IMAGE);
     const run = randomUUID();
     const controller = new AbortController();
     const reason = new Error('the caller stopped reading');

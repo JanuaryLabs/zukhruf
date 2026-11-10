@@ -8,22 +8,9 @@ import {
   ContainerNotRunningError,
   Docker,
 } from './index.ts';
+import { IMAGE, TEST_LABEL, connect, removeLabeled } from './testing/engine.ts';
 import { fakeEngine } from './testing/fake-engine.ts';
 import { scratchDirectory } from './testing/scratch-directory.ts';
-
-const TEST_LABEL = 'dev.zukhruf.docker.test';
-const IMAGE = 'alpine:3';
-
-/** The engine that the environment of the test run selects, with alpine:3 on it. */
-async function connect(): Promise<Docker> {
-  const docker = await Docker.connect({
-    clock: globalThis,
-    environment: process.env,
-    signal: AbortSignal.timeout(15_000),
-  });
-  if (!(await docker.images.inspect(IMAGE))) await docker.images.pull(IMAGE);
-  return docker;
-}
 
 /** A started container of alpine:3 with the label of this test run, that sleeps. */
 async function startSleeper(docker: Docker, run: string) {
@@ -36,22 +23,10 @@ async function startSleeper(docker: Docker, run: string) {
   return container;
 }
 
-/** Removes each container with the label of this test run. */
-async function removeLabeled(docker: Docker, run: string): Promise<void> {
-  const left = await docker.containers.list({
-    all: true,
-    filters: { label: [`${TEST_LABEL}=${run}`] },
-  });
-  for (const summary of left) {
-    const container = await docker.containers.find(summary.Id);
-    await container?.remove({ force: true, v: true });
-  }
-}
-
 describe('container.exec()', () => {
   test('stdin reaches the command, and the end of the input ends it: cat gives the input back', async () => {
     // Arrange
-    await using docker = await connect();
+    await using docker = await connect(IMAGE);
     const run = randomUUID();
     try {
       const container = await startSleeper(docker, run);
@@ -76,7 +51,7 @@ describe('container.exec()', () => {
 
   test('a command that does not read all of its input still gives its result: true and head -c1 with 10 MB of stdin', async () => {
     // Arrange
-    await using docker = await connect();
+    await using docker = await connect(IMAGE);
     const run = randomUUID();
     try {
       const container = await startSleeper(docker, run);
@@ -105,7 +80,7 @@ describe('container.exec()', () => {
 
   test('stdout and stderr come apart and in the order of the engine in output, and a non-zero exit code is data', async () => {
     // Arrange
-    await using docker = await connect();
+    await using docker = await connect(IMAGE);
     const run = randomUUID();
     try {
       const container = await startSleeper(docker, run);
@@ -133,7 +108,7 @@ describe('container.exec()', () => {
 
   test('a character whose bytes come in two writes, with stderr between them, is one character in stdout and output', async () => {
     // Arrange
-    await using docker = await connect();
+    await using docker = await connect(IMAGE);
     const run = randomUUID();
     try {
       const container = await startSleeper(docker, run);
@@ -158,7 +133,7 @@ describe('container.exec()', () => {
 
   test('1 MB of output arrives byte for byte', async () => {
     // Arrange
-    await using docker = await connect();
+    await using docker = await connect(IMAGE);
     const run = randomUUID();
     try {
       const container = await startSleeper(docker, run);
@@ -190,7 +165,7 @@ describe('container.exec()', () => {
 
   test('with a TTY, each chunk is stdout', async () => {
     // Arrange
-    await using docker = await connect();
+    await using docker = await connect(IMAGE);
     const run = randomUUID();
     try {
       const container = await startSleeper(docker, run);
@@ -219,7 +194,7 @@ describe('container.exec()', () => {
 
   test('a signal cancels the wait of exec() with its reason, and the command still runs to its end', async () => {
     // Arrange
-    await using docker = await connect();
+    await using docker = await connect(IMAGE);
     const run = randomUUID();
     try {
       const container = await startSleeper(docker, run);
@@ -246,7 +221,7 @@ describe('container.exec()', () => {
 
   test('exec() of a stopped container is a ContainerNotRunningError with the state exited, and of a paused one with the state paused', async () => {
     // Arrange
-    await using docker = await connect();
+    await using docker = await connect(IMAGE);
     const run = randomUUID();
     try {
       const stopped = await startSleeper(docker, run);
@@ -342,7 +317,7 @@ describe('container.exec()', () => {
 
   test('exec() of a removed container is a ContainerNotFoundError with its ID', async () => {
     // Arrange
-    await using docker = await connect();
+    await using docker = await connect(IMAGE);
     const run = randomUUID();
     try {
       const container = await startSleeper(docker, run);
@@ -366,7 +341,7 @@ describe('container.exec()', () => {
 describe('container.spawn()', () => {
   test('an empty write does not end the input, and close() ends it', async () => {
     // Arrange
-    await using docker = await connect();
+    await using docker = await connect(IMAGE);
     const run = randomUUID();
     try {
       const container = await startSleeper(docker, run);
@@ -401,7 +376,7 @@ describe('container.spawn()', () => {
 
   test('a command that writes faster than the caller reads waits for the caller', async () => {
     // Arrange: the command writes 1000 blocks of 64 KB and records each block in a file.
-    await using docker = await connect();
+    await using docker = await connect(IMAGE);
     const run = randomUUID();
     try {
       const container = await startSleeper(docker, run);
@@ -431,7 +406,7 @@ describe('container.spawn()', () => {
 
   test('a second iteration of a container process rejects', async () => {
     // Arrange
-    await using docker = await connect();
+    await using docker = await connect(IMAGE);
     const run = randomUUID();
     try {
       const container = await startSleeper(docker, run);
@@ -455,7 +430,7 @@ describe('container.spawn()', () => {
 
   test('an iteration that ends early and an exit code that no one reads cause no unhandled rejection', async () => {
     // Arrange
-    await using docker = await connect();
+    await using docker = await connect(IMAGE);
     const run = randomUUID();
     const unhandled: unknown[] = [];
     const record = (reason: unknown) => unhandled.push(reason);
@@ -481,7 +456,7 @@ describe('container.spawn()', () => {
 
   test('an abort of the signal rejects the iteration with its reason', async () => {
     // Arrange
-    await using docker = await connect();
+    await using docker = await connect(IMAGE);
     const run = randomUUID();
     try {
       const container = await startSleeper(docker, run);

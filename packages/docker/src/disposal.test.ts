@@ -5,6 +5,7 @@ import { delimiter, join } from 'node:path';
 import { describe, test } from 'node:test';
 
 import { ConnectionFailedError, Docker, DockerError } from './index.ts';
+import { IMAGE, TEST_LABEL, removeLabeled } from './testing/engine.ts';
 import { fakeEngine } from './testing/fake-engine.ts';
 import { ENTRY, lastJson, runScenario } from './testing/scenario.ts';
 import { scratchDirectory } from './testing/scratch-directory.ts';
@@ -14,8 +15,6 @@ import {
   sshStandIn,
 } from './testing/ssh-stand-in.ts';
 
-const TEST_LABEL = 'dev.zukhruf.docker.test';
-const IMAGE = 'alpine:3';
 const DISPOSED = /client was disposed/;
 
 const posixOnly =
@@ -28,18 +27,6 @@ const needsLocalEngine =
   (engineSocket === undefined
     ? 'the current context of config.json is not a local unix:// engine'
     : false);
-
-/** Removes each container with the label of this test run. */
-async function removeLabeled(docker: Docker, run: string): Promise<void> {
-  const left = await docker.containers.list({
-    all: true,
-    filters: { label: [`${TEST_LABEL}=${run}`] },
-  });
-  for (const summary of left) {
-    const container = await docker.containers.find(summary.Id);
-    await container?.remove({ force: true, v: true });
-  }
-}
 
 /**
  * A scenario that connects with `connect`, starts a labeled container that

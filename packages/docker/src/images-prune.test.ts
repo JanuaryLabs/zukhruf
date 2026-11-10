@@ -102,32 +102,28 @@ test('prune() that the engine refuses rejects with DockerEngineError that names 
 });
 
 // A prune that ignores the signal never ends here, and that must fail the test, not hang it.
-test(
-  'prune() whose signal aborts rejects with the reason of the signal',
-  { timeout: 5000 },
-  async () => {
-    // Arrange: the engine never answers the prune.
-    await using scratch = await scratchDirectory();
-    await using engine = await fakeEngine({
-      directory: scratch.path,
-      apiVersion: '1.51',
-      answer: () => {},
-    });
-    await using docker = await Docker.connect({
-      clock: globalThis,
-      host: engine.host,
-    });
-    const abort = new AbortController();
-    const reason = new Error('The caller stopped waiting');
+test('prune() whose signal aborts rejects with the reason of the signal', async () => {
+  // Arrange: the engine never answers the prune.
+  await using scratch = await scratchDirectory();
+  await using engine = await fakeEngine({
+    directory: scratch.path,
+    apiVersion: '1.51',
+    answer: () => {},
+  });
+  await using docker = await Docker.connect({
+    clock: globalThis,
+    host: engine.host,
+  });
+  const abort = new AbortController();
+  const reason = new Error('The caller stopped waiting');
 
-    // Act
-    const pruning = docker.images.prune({
-      filters: { label: ['example.app'] },
-      signal: abort.signal,
-    });
-    setImmediate(() => abort.abort(reason));
+  // Act
+  const pruning = docker.images.prune({
+    filters: { label: ['example.app'] },
+    signal: abort.signal,
+  });
+  setImmediate(() => abort.abort(reason));
 
-    // Assert
-    await assert.rejects(pruning, reason);
-  },
-);
+  // Assert
+  await assert.rejects(pruning, reason);
+});

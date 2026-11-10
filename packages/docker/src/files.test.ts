@@ -7,38 +7,12 @@ import { describe, test } from 'node:test';
 import {
   type Container,
   ContainerNotFoundError,
-  Docker,
   DockerEngineError,
   NotAFileError,
   PathNotFoundError,
   ReadOnlyPathError,
 } from './index.ts';
-
-const TEST_LABEL = 'dev.zukhruf.docker.test';
-const IMAGE = 'alpine:3';
-
-/** The engine that the environment of the test run selects, with alpine:3 on it. */
-async function connect(): Promise<Docker> {
-  const docker = await Docker.connect({
-    clock: globalThis,
-    environment: process.env,
-    signal: AbortSignal.timeout(15_000),
-  });
-  if (!(await docker.images.inspect(IMAGE))) await docker.images.pull(IMAGE);
-  return docker;
-}
-
-/** Removes each container with the label of this test run, with its anonymous volumes. */
-async function removeLabeled(docker: Docker, run: string): Promise<void> {
-  const left = await docker.containers.list({
-    all: true,
-    filters: { label: [`${TEST_LABEL}=${run}`] },
-  });
-  for (const summary of left) {
-    const container = await docker.containers.find(summary.Id);
-    await container?.remove({ force: true, v: true });
-  }
-}
+import { IMAGE, TEST_LABEL, connect, removeLabeled } from './testing/engine.ts';
 
 /** The output of a command in the container; it fails the test on a non-zero exit code. */
 async function shell(container: Container, script: string): Promise<string> {
@@ -72,7 +46,7 @@ async function tarNames(
 describe('the files of a container', () => {
   test('binary data with a trailing newline comes back byte for byte through writeFiles() and readFile()', async () => {
     // Arrange
-    await using docker = await connect();
+    await using docker = await connect(IMAGE);
     const run = randomUUID();
     try {
       const container = await docker.containers.create({
@@ -98,7 +72,7 @@ describe('the files of a container', () => {
 
   test('files written into a created container that never started are there after start(), with the parent directories that they imply', async () => {
     // Arrange
-    await using docker = await connect();
+    await using docker = await connect(IMAGE);
     const run = randomUUID();
     try {
       const container = await docker.containers.create({
@@ -135,7 +109,7 @@ describe('the files of a container', () => {
 
   test('a path longer than 100 characters and one longer than 255 go in through writeFiles() and come back through readFile() and getArchive()', async () => {
     // Arrange
-    await using docker = await connect();
+    await using docker = await connect(IMAGE);
     const run = randomUUID();
     try {
       const container = await docker.containers.create({
@@ -169,7 +143,7 @@ describe('the files of a container', () => {
 
   test('a written entry has its mode, and belongs to its uid and gid, or to root when it has none', async () => {
     // Arrange
-    await using docker = await connect();
+    await using docker = await connect(IMAGE);
     const run = randomUUID();
     try {
       const container = await docker.containers.create({
@@ -213,7 +187,7 @@ describe('the files of a container', () => {
 
   test('stat() gives the path stat of a file, undefined for a missing path, and ContainerNotFoundError for a missing container', async () => {
     // Arrange
-    await using docker = await connect();
+    await using docker = await connect(IMAGE);
     const run = randomUUID();
     try {
       const container = await docker.containers.create({
@@ -255,7 +229,7 @@ describe('the files of a container', () => {
 
   test('readFile() of a missing path is a PathNotFoundError, of a directory or a symlink a NotAFileError of that kind, and of a missing container a ContainerNotFoundError', async () => {
     // Arrange
-    await using docker = await connect();
+    await using docker = await connect(IMAGE);
     const run = randomUUID();
     try {
       const container = await docker.containers.create({
@@ -304,7 +278,7 @@ describe('the files of a container', () => {
 
   test('with a read-only root filesystem, writeFiles() into a writable volume at /data works, and into /etc is a ReadOnlyPathError', async () => {
     // Arrange
-    await using docker = await connect();
+    await using docker = await connect(IMAGE);
     const run = randomUUID();
     await using data = await docker.volumes.create({
       Labels: { [TEST_LABEL]: run },
@@ -352,7 +326,7 @@ describe('the files of a container', () => {
 
   test('writeFiles() into a read-only mount of a container with a writable root filesystem is a ReadOnlyPathError', async () => {
     // Arrange
-    await using docker = await connect();
+    await using docker = await connect(IMAGE);
     const run = randomUUID();
     try {
       const container = await docker.containers.create({
@@ -385,7 +359,7 @@ describe('the files of a container', () => {
 
   test('putArchive() with copyUIDGID gives the entry to the user of the container; without it, and in writeFiles(), the owner in the archive stays', async () => {
     // Arrange
-    await using docker = await connect();
+    await using docker = await connect(IMAGE);
     const run = randomUUID();
     try {
       const container = await docker.containers.create({
@@ -430,7 +404,7 @@ describe('the files of a container', () => {
 
   test('writeFiles() of a file onto a directory rejects, and the tree of the directory stays', async () => {
     // Arrange
-    await using docker = await connect();
+    await using docker = await connect(IMAGE);
     const run = randomUUID();
     try {
       const container = await docker.containers.create({
@@ -466,7 +440,7 @@ describe('the files of a container', () => {
 
   test('writeFiles() of a directory onto a file rejects, and the file stays', async () => {
     // Arrange
-    await using docker = await connect();
+    await using docker = await connect(IMAGE);
     const run = randomUUID();
     try {
       const container = await docker.containers.create({
@@ -502,7 +476,7 @@ describe('the files of a container', () => {
 
   test('getArchive() of a directory is a tar stream of its entries', async () => {
     // Arrange
-    await using docker = await connect();
+    await using docker = await connect(IMAGE);
     const run = randomUUID();
     try {
       const container = await docker.containers.create({

@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { once } from 'node:events';
 import { delimiter } from 'node:path';
 import { describe, test } from 'node:test';
+import { setTimeout as delay } from 'node:timers/promises';
 
 import {
   ContainerNotFoundError,
@@ -9,6 +12,7 @@ import {
   Docker,
   NetworkNotFoundError,
 } from './index.ts';
+import { IMAGE, TEST_LABEL, connect, removeLabeled } from './testing/engine.ts';
 import { ENTRY, lastJson, runScenario } from './testing/scenario.ts';
 import { scratchDirectory } from './testing/scratch-directory.ts';
 import {
@@ -16,32 +20,6 @@ import {
   localEngineSocket,
   sshStandIn,
 } from './testing/ssh-stand-in.ts';
-
-const TEST_LABEL = 'dev.zukhruf.docker.test';
-const IMAGE = 'alpine:3';
-
-/** The engine that the environment of the test run selects, with alpine:3 on it. */
-async function connect(): Promise<Docker> {
-  const docker = await Docker.connect({
-    clock: globalThis,
-    environment: process.env,
-    signal: AbortSignal.timeout(15_000),
-  });
-  if (!(await docker.images.inspect(IMAGE))) await docker.images.pull(IMAGE);
-  return docker;
-}
-
-/** Removes each container with the label of this test run. */
-async function removeLabeled(docker: Docker, run: string): Promise<void> {
-  const left = await docker.containers.list({
-    all: true,
-    filters: { label: [`${TEST_LABEL}=${run}`] },
-  });
-  for (const summary of left) {
-    const container = await docker.containers.find(summary.Id);
-    await container?.remove({ force: true, v: true });
-  }
-}
 
 /** The IDs of the containers with the label of this test run. */
 async function labeledIds(docker: Docker, run: string): Promise<string[]> {
@@ -55,7 +33,7 @@ async function labeledIds(docker: Docker, run: string): Promise<string[]> {
 describe('container.attach()', () => {
   test('an attach before start() gets all output and the exit code', async () => {
     // Arrange
-    await using docker = await connect();
+    await using docker = await connect(IMAGE);
     const run = randomUUID();
     try {
       const container = await docker.containers.create({
@@ -83,7 +61,7 @@ describe('container.attach()', () => {
 
   test('an attach to a running container gets the output from then on and the exit code when it stops', async () => {
     // Arrange
-    await using docker = await connect();
+    await using docker = await connect(IMAGE);
     const run = randomUUID();
     try {
       const container = await docker.containers.create({
@@ -116,7 +94,7 @@ describe('container.attach()', () => {
 
   test('stdin of an attach reaches the main process, and close() ends its input', async () => {
     // Arrange
-    await using docker = await connect();
+    await using docker = await connect(IMAGE);
     const run = randomUUID();
     try {
       const container = await docker.containers.create({
@@ -150,7 +128,7 @@ describe('container.attach()', () => {
 
   test('an attach to an exited container is a ContainerNotRunningError with the state exited, and to a paused one with the state paused', async () => {
     // Arrange
-    await using docker = await connect();
+    await using docker = await connect(IMAGE);
     const run = randomUUID();
     try {
       const exited = await docker.containers.create({
@@ -283,7 +261,7 @@ describe('container.attach({ ref: false })', () => {
   test(
     'without ref: false, the attach keeps the process running',
     { skip: needsLocalEngine },
-    async () => {
+    async (t) => {
       // Arrange
       await using home = await scratchDirectory();
       const host = `unix://${String(engineSocket)}`;
@@ -291,18 +269,38 @@ describe('container.attach({ ref: false })', () => {
       if (!(await cleaner.images.inspect(IMAGE)))
         await cleaner.images.pull(IMAGE);
       const run = randomUUID();
-      try {
-        // Act: the scenario with ref: false exits in about 1 s.
-        const result = await runScenario(
+      const scenario = spawn(
+        process.execPath,
+        [
+          '--input-type=module',
+          '--eval',
           holdAttach(JSON.stringify({ host }), run, '{ stdin: true }'),
-          { HOME: home.path },
-          AbortSignal.timeout(10_000),
+        ],
+        { env: { HOME: home.path }, stdio: ['ignore', 'pipe', 'pipe'] },
+      );
+      const closed = once(scenario, 'close');
+      let stdout = '';
+      let stderr = '';
+      scenario.stdout.setEncoding('utf8');
+      scenario.stdout.on('data', (chunk: string) => (stdout += chunk));
+      scenario.stderr.setEncoding('utf8');
+      scenario.stderr.on('data', (chunk: string) => (stderr += chunk));
+      try {
+        // Act: the scenario reaches its hold. With ref: false it exits about 1 s
+        // later, and load only makes this window longer.
+        await t.waitFor(
+          () => assert.match(stdout, /"id"/, `No hold line. stderr: ${stderr}`),
+          { interval: 5, timeout: 30_000 },
         );
+        await delay(3000);
+        const exitWhileHeld = scenario.exitCode;
 
         // Assert
-        assert.ok(lastJson(result), 'the scenario reached the hold');
-        assert.equal(result.exitCode, null, 'the timeout killed the process');
+        assert.equal(exitWhileHeld, null, 'The attach must keep it running');
+        scenario.kill('SIGKILL');
+        assert.deepEqual(await closed, [null, 'SIGKILL']);
       } finally {
+        scenario.kill('SIGKILL');
         await removeLabeled(cleaner, run);
       }
     },
@@ -366,7 +364,7 @@ describe('container.attach({ ref: false })', () => {
 describe('containers.run()', () => {
   test('run() gives the output and a non-zero exit code, keeps the labels and removes its container', async () => {
     // Arrange
-    await using docker = await connect();
+    await using docker = await connect(IMAGE);
     const run = randomUUID();
     const since = Math.floor(Date.now() / 1000) - 1;
     try {
@@ -404,7 +402,7 @@ describe('containers.run()', () => {
 
   test('with a TTY, run() gives standard error in stdout', async () => {
     // Arrange
-    await using docker = await connect();
+    await using docker = await connect(IMAGE);
     const run = randomUUID();
     try {
       // Act
@@ -426,7 +424,7 @@ describe('containers.run()', () => {
 
   test('a cancel while the container runs rejects with the reason and removes the container', async () => {
     // Arrange
-    await using docker = await connect();
+    await using docker = await connect(IMAGE);
     const run = randomUUID();
     const controller = new AbortController();
     const reason = new Error('the caller stopped waiting');
@@ -462,7 +460,7 @@ describe('containers.run()', () => {
 
   test('a start that fails rejects with its error and removes the container', async () => {
     // Arrange
-    await using docker = await connect();
+    await using docker = await connect(IMAGE);
     const run = randomUUID();
     const network = `zukhruf-missing-${run}`;
     try {

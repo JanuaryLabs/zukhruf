@@ -11,22 +11,11 @@ import {
   UnsupportedEngineError,
 } from './index.ts';
 import { tarEntries } from './tar-reader.ts';
+import { TEST_LABEL, connect, removeLabeled } from './testing/engine.ts';
 import { fakeEngine } from './testing/fake-engine.ts';
 import { scratchDirectory } from './testing/scratch-directory.ts';
 
-const TEST_LABEL = 'dev.zukhruf.docker.test';
 const HELLO = 'hello-world';
-
-/** The engine that the environment of the test run selects, with hello-world on it. */
-async function connectWithHello(): Promise<Docker> {
-  const docker = await Docker.connect({
-    clock: globalThis,
-    environment: process.env,
-    signal: AbortSignal.timeout(15_000),
-  });
-  if (!(await docker.images.inspect(HELLO))) await docker.images.pull(HELLO);
-  return docker;
-}
 
 /** Removes each container with the label of this test run, then the dedicated names of hello-world. */
 async function removeOwn(
@@ -34,11 +23,7 @@ async function removeOwn(
   run: string,
   ...names: string[]
 ): Promise<void> {
-  const filters = { label: [`${TEST_LABEL}=${run}`] };
-  for (const summary of await docker.containers.list({ all: true, filters })) {
-    const container = await docker.containers.find(summary.Id);
-    await container?.remove({ force: true, v: true });
-  }
+  await removeLabeled(docker, run);
   for (const name of names) await docker.images.remove(name);
 }
 
@@ -281,7 +266,7 @@ describe('docker.images', () => {
 
   test('tag() gives the image a second name that inspect() and list() find, tag() of a missing image is an ImageNotFoundError, and remove() of the name resolves twice', async () => {
     // Arrange
-    await using docker = await connectWithHello();
+    await using docker = await connect(HELLO);
     const run = randomUUID();
     const name = `zukhruf-test-${run}:x`;
     const missing = `zukhruf-missing-${run}:1`;
@@ -328,7 +313,7 @@ describe('docker.images', () => {
 
   test('save() and load() carry images: two removed names come back with the same ID', async () => {
     // Arrange
-    await using docker = await connectWithHello();
+    await using docker = await connect(HELLO);
     const run = randomUUID();
     const first = `zukhruf-test-${run}:x`;
     const second = `zukhruf-test-${run}:y`;
@@ -509,7 +494,7 @@ describe('docker.images', () => {
 
   test('remove() of an image that a container uses rejects with ImageInUseError', async () => {
     // Arrange
-    await using docker = await connectWithHello();
+    await using docker = await connect(HELLO);
     const run = randomUUID();
     const name = `zukhruf-test-${run}:x`;
     try {

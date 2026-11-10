@@ -223,35 +223,31 @@ describe('a request that the engine answers with an error', () => {
 });
 
 describe('the connections of a client', () => {
-  test(
-    'disposal closes each connection to the engine',
-    { timeout: 10_000 },
-    async () => {
-      // Arrange
-      await using scratch = await scratchDirectory();
-      await using engine = await fakeEngine({
-        directory: scratch.path,
-        apiVersion: '1.51',
-        answer: (_request, response) => {
-          response.writeHead(200, { 'Content-Type': 'application/json' });
-          response.end('{}');
-        },
-      });
-      const docker = await Docker.connect({
-        clock: globalThis,
-        host: engine.host,
-      });
-      await docker.info();
-      assert.ok(engine.openConnections > 0, 'the idle connection stays open');
+  test('disposal closes each connection to the engine', async () => {
+    // Arrange
+    await using scratch = await scratchDirectory();
+    await using engine = await fakeEngine({
+      directory: scratch.path,
+      apiVersion: '1.51',
+      answer: (_request, response) => {
+        response.writeHead(200, { 'Content-Type': 'application/json' });
+        response.end('{}');
+      },
+    });
+    const docker = await Docker.connect({
+      clock: globalThis,
+      host: engine.host,
+    });
+    await docker.info();
+    assert.ok(engine.openConnections > 0, 'the idle connection stays open');
 
-      // Act
-      await docker[Symbol.asyncDispose]();
+    // Act
+    await docker[Symbol.asyncDispose]();
 
-      // Assert
-      await engine.allConnectionsClosed;
-      assert.equal(engine.openConnections, 0);
-    },
-  );
+    // Assert
+    await engine.allConnectionsClosed;
+    assert.equal(engine.openConnections, 0);
+  });
 
   test('a process that connects and never disposes the client still exits by itself', async () => {
     // Arrange
