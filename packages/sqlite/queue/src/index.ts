@@ -28,7 +28,7 @@ import {
 } from 'pg-boss';
 
 import { Latch } from '@zukhruf/async';
-import { open } from '@zukhruf/sqlite-open';
+import { WriteAheadLog, open } from '@zukhruf/sqlite-open';
 import { transaction } from '@zukhruf/sqlite-transaction';
 
 import { Activity } from './activity.ts';
@@ -273,7 +273,11 @@ export class SqliteJobQueue
     if (this.#connection.kind === 'closed') {
       this.#connection = {
         kind: 'open',
-        database: open(this.#path),
+        // pg-boss on Postgres keeps each acknowledged job at a power loss, so
+        // the queue file syncs each commit (ADR 0005).
+        database: open(this.#path, {
+          journal: new WriteAheadLog({ synchronous: 'full' }),
+        }),
       };
     }
     this.applySchema();

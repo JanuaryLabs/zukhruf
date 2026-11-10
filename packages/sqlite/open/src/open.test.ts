@@ -471,6 +471,7 @@ test('RollbackJournal changes a write-ahead log to the rollback journal, and lea
       staging.prepare('PRAGMA journal_mode').get()?.journal_mode,
       'delete',
     );
+    assert.equal(staging.prepare('PRAGMA synchronous').get()?.synchronous, 2);
     staging.exec('CREATE TABLE notes (title TEXT)');
   }
 
@@ -491,6 +492,7 @@ test('the default journal is a write-ahead log with a size limit, and leaves no 
       owner.prepare('PRAGMA journal_size_limit').get()?.journal_size_limit,
       67108864,
     );
+    assert.equal(owner.prepare('PRAGMA synchronous').get()?.synchronous, 1);
     owner.exec('CREATE TABLE notes (title TEXT)');
   }
 
@@ -598,6 +600,36 @@ for (const [name, journal] of [
       owner.prepare('PRAGMA journal_mode').get()?.journal_mode,
       'wal',
     );
+  });
+}
+
+for (const [name, journal] of [
+  [
+    'WriteAheadLog',
+    (options?: { readonly synchronous: 'full' }) => new WriteAheadLog(options),
+  ],
+  [
+    'PersistentWriteAheadLog',
+    (options?: { readonly synchronous: 'full' }) =>
+      new PersistentWriteAheadLog(options),
+  ],
+] as const) {
+  test(`${name} syncs at checkpoints by default, so a commit does not wait for the disk`, async () => {
+    await using dir = await new TemporaryFiles().directory('open-');
+
+    using owner = open(join(dir.path, 'notes.sqlite'), { journal: journal() });
+
+    assert.equal(owner.prepare('PRAGMA synchronous').get()?.synchronous, 1);
+  });
+
+  test(`${name} with synchronous 'full' syncs at each commit, so a commit survives a power loss`, async () => {
+    await using dir = await new TemporaryFiles().directory('open-');
+
+    using owner = open(join(dir.path, 'jobs.sqlite'), {
+      journal: journal({ synchronous: 'full' }),
+    });
+
+    assert.equal(owner.prepare('PRAGMA synchronous').get()?.synchronous, 2);
   });
 }
 

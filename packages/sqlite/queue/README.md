@@ -55,8 +55,8 @@ const queue: JobQueue = new PgBoss(process.env.DATABASE_URL);
 
 ## The rules
 
-- `new SqliteJobQueue({ path })` owns the database file. `start()` opens it and makes the tables, and `stop()` closes it.
-- `new SqliteJobQueue({ database })` uses a `DatabaseSync` that the caller opened. The caller closes it. The queue does not set the busy timeout of that connection. Open it with `open(path)` of `@zukhruf/sqlite-open`, which sets a busy timeout of 5000 ms.
+- `new SqliteJobQueue({ path })` owns the database file. `start()` opens it and makes the tables, and `stop()` closes it. Its write-ahead log syncs each commit to the disk, so a job that `send` acknowledged survives a power loss.
+- `new SqliteJobQueue({ database })` uses a `DatabaseSync` that the caller opened. The caller closes it. The queue does not set the busy timeout of that connection. Open it with `open(path, { journal: new WriteAheadLog({ synchronous: 'full' }) })` of `@zukhruf/sqlite-open`. It sets a busy timeout of 5000 ms, and syncs each commit to the disk, as Postgres does for pg-boss ([ADR 0005](./docs/adr/0005-the-queue-keeps-the-durability-of-pg-boss.md)).
 - With no `path` and no `database`, the queue keeps its jobs in memory.
 - The other options are the options of pg-boss with the same names: `clock`, `supervise`, `superviseIntervalSeconds`, `monitorIntervalSeconds`, `maintenanceIntervalSeconds`, `queueCacheIntervalSeconds`, `warningQueueSize`, `useListenNotify`, `schedule`, `cronMonitorIntervalSeconds`, `cronWorkerIntervalSeconds` and `clockMonitorIntervalSeconds`. The defaults are the defaults of pg-boss.
 - The types of the options, the jobs and the results come from pg-boss. Import them from `pg-boss`, for example `import type { Job, SendOptions } from 'pg-boss'`.
@@ -128,6 +128,7 @@ Code that runs on both engines examines `code`, not the class. On Postgres, the 
 - [0002 The parity suite is the contract](./docs/adr/0002-the-parity-suite-is-the-contract.md)
 - [0003 The timekeeper is ported literally](./docs/adr/0003-the-timekeeper-is-ported-literally.md)
 - [0004 The schema is a declaration and keeps the jobs](./docs/adr/0004-the-schema-is-a-declaration-and-keeps-the-jobs.md)
+- [0005 The queue keeps the durability of pg-boss](./docs/adr/0005-the-queue-keeps-the-durability-of-pg-boss.md)
 
 ## Development
 

@@ -80,16 +80,18 @@ true
 
 Each journal is a strategy object: the caller gives an instance, for example `open(path, { journal: new RollbackJournal() })`. A new journal is a class that implements `Journal`, with one method: `apply(database)`.
 
-| Journal                   | What it does                                                                                                                         | Use it for                                                                                                    |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------- |
-| `WriteAheadLog` (default) | `PRAGMA journal_mode = WAL` and `PRAGMA journal_size_limit = 67108864` (64 MiB). SQLite deletes `-wal` and `-shm` at the last close. | An owner whose readers can write the folder.                                                                  |
-| `PersistentWriteAheadLog` | The same steps, after the native library turns on persistent WAL. `-wal` and `-shm` stay after the last close.                       | An owner whose readers cannot write the folder, for example agents that run `sqlite3 -readonly` in a sandbox. |
-| `RollbackJournal`         | `PRAGMA journal_mode = DELETE`. The first access rolls back a hot journal.                                                           | A file that the owner builds and then renames or deletes. A copy that must lose a hot journal.                |
-| `UnchangedJournal`        | Nothing.                                                                                                                             | An owner that sets its own journal, for example a lock file whose `PRAGMA` must wait for the lock.            |
+| Journal                   | What it does                                                                                                                                                        | Use it for                                                                                                    |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `WriteAheadLog` (default) | `PRAGMA journal_mode = WAL`, `PRAGMA journal_size_limit = 67108864` (64 MiB) and `PRAGMA synchronous = NORMAL`. SQLite deletes `-wal` and `-shm` at the last close. | An owner whose readers can write the folder.                                                                  |
+| `PersistentWriteAheadLog` | The same steps, after the native library turns on persistent WAL. `-wal` and `-shm` stay after the last close.                                                      | An owner whose readers cannot write the folder, for example agents that run `sqlite3 -readonly` in a sandbox. |
+| `RollbackJournal`         | `PRAGMA journal_mode = DELETE`. The first access rolls back a hot journal.                                                                                          | A file that the owner builds and then renames or deletes. A copy that must lose a hot journal.                |
+| `UnchangedJournal`        | Nothing.                                                                                                                                                            | An owner that sets its own journal, for example a lock file whose `PRAGMA` must wait for the lock.            |
 
 The size limit keeps a write-ahead log small after a large commit. Without it, the `-wal` file of a 20 MB commit stays 20 MB.
 
 `WriteAheadLog` and `PersistentWriteAheadLog` take an optional page size, for example `new WriteAheadLog({ pageSize: 32768 })`. SQLite sets the page size of a file only before its first write, and never in a write-ahead log. The write-ahead log step is that first write, so the journal sets the page size just before it. An existing file keeps its own page size.
+
+A write-ahead log syncs the `-wal` file to the disk before each checkpoint, not at each commit (ADR 0007). A crash of the program loses no commit. A power loss or a crash of the operating system can roll back the commits after the last checkpoint. The database file stays consistent. An owner whose commits must survive a power loss gives `synchronous: 'full'`, for example `new WriteAheadLog({ synchronous: 'full' })`. SQLite then syncs at each commit. On Linux, a commit of one row is about 12 times slower with `'full'`.
 
 ## Errors
 
@@ -124,7 +126,7 @@ A bundler that bundles this package does not copy the `lib` folder. A bundle tha
 | Apple's system SQLite | It keeps persistent WAL by default. Its `sqlite3` leaves `-wal` and `-shm` after it closes.                                             |
 | `better-sqlite3`      | Its busy timeout is 5000 milliseconds by default.                                                                                       |
 | Python `sqlite3`      | `sqlite3.connect(path, timeout=5.0)`: its busy timeout is 5 seconds by default.                                                         |
-| Rails 8               | A SQLite database gets a write-ahead log and `journal_size_limit = 67108864` by default.                                                |
+| Rails 8               | A SQLite database gets a write-ahead log, `journal_size_limit = 67108864` and `synchronous = NORMAL` by default.                        |
 | `sqlite3 -readonly`   | It opens a reader. A missing file fails with "unable to open database file", the text of CANTOPEN.                                      |
 
 ## Documentation
@@ -135,6 +137,7 @@ A bundler that bundles this package does not copy the `lib` folder. A bundle tha
 - [0004 The journal is a strategy](./docs/adr/0004-the-journal-is-a-strategy.md)
 - [0005 One map of failures and a busy timeout of 5 seconds](./docs/adr/0005-one-map-of-failures-and-a-busy-timeout-of-5-seconds.md)
 - [0006 Zig builds every native library in one Linux job](./docs/adr/0006-zig-builds-every-native-library-in-one-linux-job.md)
+- [0007 A write-ahead log syncs at checkpoints](./docs/adr/0007-a-write-ahead-log-syncs-at-checkpoints.md)
 
 ## Development
 

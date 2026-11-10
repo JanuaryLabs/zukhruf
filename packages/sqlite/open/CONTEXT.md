@@ -20,6 +20,10 @@ _Avoid_: Journal mode (SQLite's name for the setting, not for the strategy), mod
 A journal where SQLite adds each commit to the `-wal` file, and keeps an index of that file in the `-shm` file. Readers do not wait for the owner, and the owner does not wait for readers. SQLite deletes the two files when the last connection closes. `WriteAheadLog` is the default journal of an owner.
 _Avoid_: WAL mode, log
 
+**Synchronous**:
+When SQLite syncs the `-wal` file of a write-ahead log to the disk. `'normal'`, the default, syncs before each checkpoint: a power loss can roll back the commits after the last checkpoint. `'full'` syncs at each commit: a commit survives a power loss. The `synchronous` option of `WriteAheadLog` and `PersistentWriteAheadLog` sets it. SQLite uses the same word ("PRAGMA synchronous").
+_Avoid_: Durability mode, fsync mode, sync level
+
 **Persistent WAL**:
 A write-ahead log whose `-wal` and `-shm` files stay after the last connection closes. A reader that cannot write the folder of the database cannot make these files, so it needs them to stay. `PersistentWriteAheadLog` selects it.
 _Avoid_: Shared WAL, kept WAL
