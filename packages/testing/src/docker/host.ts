@@ -20,6 +20,13 @@ export const quote = (value: string): string =>
 /** How long one command in the SSH engine's remote shell may take. */
 export const SHELL_TIMEOUT = 30_000;
 
+/** The part of the standard error of `ssh` that an error message keeps: the last 4 KB. */
+const STDERR_LIMIT = 4096;
+
+/** OpenSSH logs a line for each client connection that fails, so the reason it ended is at the end. */
+const endOfStderr = (stderr: string): string =>
+  stderr.slice(-STDERR_LIMIT).trim();
+
 /** Local Unix sockets, Docker Desktop's named pipe on Windows, and SSH engines. A `tcp://` engine may be on another machine. */
 const supportedEndpoints = ['unix://', 'npipe://', 'ssh://'];
 
@@ -170,6 +177,12 @@ export class DockerHost {
         if (server.listening) server.close();
       });
       const child = await ssh.nodeChildProcess;
+      // nano-spawn gives what ssh printed only after ssh ended. The readiness
+      // error is made while ssh still runs. nano-spawn set the encoding.
+      let printed = '';
+      child.stderr!.on('data', (chunk: string) => {
+        printed = (printed + chunk).slice(-STDERR_LIMIT);
+      });
       // Disposed after ssh has stopped.
       if (run && child.pid !== undefined)
         resources.use(await run.records.recordProcess(child.pid));
@@ -212,10 +225,22 @@ export class DockerHost {
               shouldRetry: ({ error }) =>
                 'code' in error && error.code === 'ENOENT',
             },
-          ),
+          ).catch((error: unknown) => {
+            if (
+              !Error.isError(error) ||
+              !('code' in error) ||
+              error.code !== 'ENOENT'
+            )
+              throw error;
+            const said = endOfStderr(printed);
+            throw new Error(
+              `Docker SSH forwarding did not open its socket within 15 s${said ? `: ${said}` : '.'}`,
+              { cause: error },
+            );
+          }),
           exit.then((outcome) => {
             throw new Error(
-              `Docker SSH forwarding exited: ${outcome.stderr.trim()}`,
+              `Docker SSH forwarding exited: ${endOfStderr(outcome.stderr)}`,
               { cause: outcome },
             );
           }),
@@ -229,7 +254,7 @@ export class DockerHost {
         if (child.exitCode === null && child.signalCode === null) return;
         const outcome = await exit;
         throw new Error(
-          `Docker SSH forwarding was lost: ${outcome.stderr.trim()}`,
+          `Docker SSH forwarding was lost: ${endOfStderr(outcome.stderr)}`,
           { cause: outcome },
         );
       });

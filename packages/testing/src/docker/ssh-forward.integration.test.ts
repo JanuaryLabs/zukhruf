@@ -17,6 +17,28 @@ const skip =
 /** The container that the engine stand-in creates. */
 const CONTAINER = 'standin-container';
 
+/** More than 4 KB of standard error: each line is about 60 characters. */
+const NOISE_LINES = 200;
+const FIRST_NOISE_LINE =
+  'channel 0: open failed: connect failed: Connection refused';
+const LAST_NOISE_LINE = `channel ${NOISE_LINES - 1}: open failed: connect failed: Connection refused`;
+
+/**
+ * The part of `message` after `prefix` is the end of what a noisy ssh
+ * printed: its last line, without its first, trimmed, in at most 4 KB.
+ */
+function assertEndOfStderr(message: string, prefix: string, lastLine: string) {
+  assert.ok(message.startsWith(prefix), message);
+  const stderr = message.slice(prefix.length);
+  assert.equal(stderr, stderr.trim());
+  assert.ok(stderr.endsWith(lastLine), stderr.slice(-200));
+  assert.ok(!stderr.includes(FIRST_NOISE_LINE), stderr.slice(0, 200));
+  assert.ok(
+    stderr.length <= 4096 && stderr.length > 4000,
+    `${stderr.length} characters`,
+  );
+}
+
 /**
  * Stands in for OpenSSH. `ssh … docker system dial-stdio` pipes its stdin and
  * stdout to the engine stand-in's socket, named in `engine-socket`, as the
@@ -26,11 +48,13 @@ const CONTAINER = 'standin-container';
  * opens the socket, `refused` fails to connect, `silent` never opens the
  * socket, `stubborn` stays up after its stdin ends. A `lose` file ends the
  * forward the way a dead connection does, and a `stdin-ended` file records
- * that its stdin ended. Messages are OpenSSH's.
+ * that its stdin ended. With a `noisy` file, the forward first prints
+ * NOISE_LINES lines of the kind that OpenSSH logs for each client connection
+ * that the far end refused. Messages are OpenSSH's.
  */
 const sshStandIn = `#!${process.execPath}
 const { connect, createServer } = require('node:net');
-const { existsSync, readFileSync, writeFileSync } = require('node:fs');
+const { existsSync, readFileSync, writeFileSync, writeSync } = require('node:fs');
 const { join } = require('node:path');
 if (process.argv.includes('dial-stdio')) {
   const socket = connect(readFileSync(join(__dirname, 'engine-socket'), 'utf8'));
@@ -41,6 +65,11 @@ if (process.argv.includes('dial-stdio')) {
 } else {
   writeFileSync(join(__dirname, 'ssh.pid'), String(process.pid));
   const mode = readFileSync(join(__dirname, 'ssh-mode'), 'utf8').trim();
+  if (existsSync(join(__dirname, 'noisy'))) {
+    // A blocking write: all of it is in the pipe before a mode exits.
+    for (let channel = 0; channel < ${NOISE_LINES}; channel++)
+      writeSync(2, 'channel ' + channel + ': open failed: connect failed: Connection refused\\n');
+  }
   if (mode === 'refused') {
     process.stderr.write('ssh: connect to host sshhost port 22: Connection refused\\n');
     process.exit(255);
@@ -102,12 +131,13 @@ const engineAnswer =
 
 /**
  * A directory holding the ssh stand-in, with its forward in `mode`, and an
- * engine stand-in that the stand-in's dial-stdio reaches. Disposal stops the
+ * engine stand-in that the stand-in's dial-stdio reaches. With `noisy`, the
+ * forward prints its noise lines when it starts. Disposal stops the
  * engine, then removes the directory.
  */
 async function standIns(
   mode: string,
-  { withSsh = true, removalFails = false } = {},
+  { withSsh = true, removalFails = false, noisy = false } = {},
 ) {
   const resources = new AsyncDisposableStack();
   try {
@@ -127,6 +157,7 @@ async function standIns(
         mode: 0o755,
       });
     await writeFile(join(directory.path, 'ssh-mode'), mode);
+    if (noisy) await writeFile(join(directory.path, 'noisy'), '');
     await writeFile(join(directory.path, 'engine-socket'), engine.socketPath);
     const stack = resources.move();
     return {
@@ -214,6 +245,34 @@ test(
 );
 
 test(
+  'a forward lost after ssh printed more than 4 KB makes disconnect reject with the end of it, where the reason is',
+  { skip },
+  async () => {
+    // Arrange: the forward is up, and ssh has logged many refused channels.
+    await using directory = await standIns('serve', { noisy: true });
+
+    // Act: the connection dies, and ssh says why last.
+    const { result } = await scenario(
+      directory.path,
+      `
+      const server = await testbed.serve({ Image: 'standin' }, { internalPort: 5432 });
+      writeFileSync(directory + '/lose', '');
+      while (!(await refuses(server.port))) await delay(20);
+      console.log(JSON.stringify({ disconnect: await settled(server.disconnect()) }));
+      `,
+    );
+
+    // Assert
+    assertEndOfStderr(
+      result.disconnect.message,
+      'Docker SSH forwarding was lost: ',
+      'Timeout, server sshhost not responding.',
+    );
+    assert.equal(result.disconnect.cause?.exitCode, 255);
+  },
+);
+
+test(
   'cleanup keeps both errors when the container removal fails and the forward was lost',
   { skip },
   async () => {
@@ -276,6 +335,31 @@ test(
 );
 
 test(
+  'an ssh that fails to start after it printed more than 4 KB rejects serve with the end of it, where the reason is',
+  { skip },
+  async () => {
+    // Arrange: ssh logs many lines, then cannot reach the engine's host.
+    await using directory = await standIns('refused', { noisy: true });
+
+    // Act
+    const { result } = await scenario(
+      directory.path,
+      `console.log(JSON.stringify({
+        serve: await settled(testbed.serve({ Image: 'standin' }, { internalPort: 5432 })),
+      }));`,
+    );
+
+    // Assert
+    assertEndOfStderr(
+      result.serve.message,
+      'Docker SSH forwarding exited: ',
+      'ssh: connect to host sshhost port 22: Connection refused',
+    );
+    assert.equal(result.serve.cause.exitCode, 255);
+  },
+);
+
+test(
   'a machine without ssh fails the first acquisition at once: Docker is required, and the connection failure as cause',
   { skip },
   async () => {
@@ -316,15 +400,44 @@ test(
       console.log(JSON.stringify({ serve, ms: performance.now() - started, sshAlive: sshAlive() }));`,
     );
 
-    // Assert: serve waits out the socket's limit, then gives up on the
-    // missing socket, and leaves no ssh behind.
-    assert.match(
-      result.serve.message ?? '',
-      /ENOENT: no such file or directory, stat '.*zukhruf-testing-forward-.*\/s'/,
+    // Assert: serve waits out the socket's limit, then says that the socket
+    // never opened, with the missing socket as cause, and leaves no ssh behind.
+    assert.equal(
+      result.serve.message,
+      'Docker SSH forwarding did not open its socket within 15 s.',
       JSON.stringify(result.serve),
+    );
+    assert.equal(result.serve.cause?.code, 'ENOENT');
+    assert.match(
+      result.serve.cause?.message ?? '',
+      /ENOENT: no such file or directory, stat '.*zukhruf-testing-forward-.*\/s'/,
     );
     assert.ok(result.ms >= 14_000, `serve gave up after ${result.ms} ms`);
     assert.equal(result.sshAlive, false);
+  },
+);
+
+test(
+  'an ssh that never opens its socket fails serve with the end of what it printed while it ran',
+  { skip },
+  async () => {
+    // Arrange: ssh prints more than 4 KB, stays up and never binds the forward.
+    await using directory = await standIns('silent', { noisy: true });
+
+    // Act
+    const { result } = await scenario(
+      directory.path,
+      `const serve = await settled(testbed.serve({ Image: 'standin' }, { internalPort: 5432 }));
+      console.log(JSON.stringify({ serve }));`,
+    );
+
+    // Assert
+    assertEndOfStderr(
+      result.serve.message,
+      'Docker SSH forwarding did not open its socket within 15 s: ',
+      LAST_NOISE_LINE,
+    );
+    assert.equal(result.serve.cause?.code, 'ENOENT');
   },
 );
 
