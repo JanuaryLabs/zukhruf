@@ -579,7 +579,10 @@ export class Container {
     });
   }
 
-  /** The path stat of a path in the container: HEAD of the archive. undefined for 404 when the container exists. */
+  /**
+   * The path stat of a path in the container: HEAD of the archive. undefined
+   * for 404, for a missing path and for a missing container alike (ADR 0013).
+   */
   async stat(
     path: string,
     options: CancelOptions = {},
@@ -590,24 +593,17 @@ export class Container {
       query: { path },
       signal: options.signal,
     });
-    const answer = {
-      status: response.status,
-      request: { method, path: requestPath },
-    };
-    // An answer to HEAD has no body, so the message is written here.
-    const message = `The engine answered ${response.status} to the stat of ${path} in the container ${this.id}.`;
-    if (response.status === 404) {
-      const error = await this.#fileNotFound(
-        new DockerEngineError(message, answer),
-        path,
-        options,
-      );
-      if (error instanceof PathNotFoundError) return undefined;
-      throw error;
-    }
+    if (response.status === 404) return undefined;
     const stat = isSuccess(response) ? pathStat(response.headers) : undefined;
-    if (stat === undefined) throw new DockerEngineError(message, answer);
-    return stat;
+    if (stat !== undefined) return stat;
+    // An answer to HEAD has no body, so the message is written here.
+    throw new DockerEngineError(
+      `The engine answered ${response.status} to the stat of ${path} in the container ${this.id}.`,
+      {
+        status: response.status,
+        request: { method, path: requestPath },
+      },
+    );
   }
 
   /** The bytes of one regular file. A directory, a link and each other kind of entry reject with NotAFileError. */

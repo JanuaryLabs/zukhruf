@@ -7,12 +7,15 @@ import { describe, test } from 'node:test';
 import {
   type Container,
   ContainerNotFoundError,
+  Docker,
   DockerEngineError,
   NotAFileError,
   PathNotFoundError,
   ReadOnlyPathError,
 } from './index.ts';
 import { IMAGE, TEST_LABEL, connect, removeLabeled } from './testing/engine.ts';
+import { fakeEngine } from './testing/fake-engine.ts';
+import { scratchDirectory } from './testing/scratch-directory.ts';
 
 /** The output of a command in the container; it fails the test on a non-zero exit code. */
 async function shell(container: Container, script: string): Promise<string> {
@@ -185,7 +188,7 @@ describe('the files of a container', () => {
     }
   });
 
-  test('stat() gives the path stat of a file, undefined for a missing path, and ContainerNotFoundError for a missing container', async () => {
+  test('stat() gives the path stat of a file, and undefined for a missing path and for a missing container', async () => {
     // Arrange
     await using docker = await connect(IMAGE);
     const run = randomUUID();
@@ -203,7 +206,7 @@ describe('the files of a container', () => {
       const stat = await container.stat('/srv/run.sh');
       const missing = await container.stat('/srv/missing.txt');
       await container.remove({ force: true });
-      const gone = container.stat('/srv/run.sh');
+      const gone = await container.stat('/srv/run.sh');
 
       // Assert
       assert.deepEqual(
@@ -217,14 +220,96 @@ describe('the files of a container', () => {
         },
       );
       assert.equal(missing, undefined);
-      await assert.rejects(gone, (error) => {
-        assert.ok(error instanceof ContainerNotFoundError);
-        assert.equal(error.container, container.id);
-        return true;
-      });
+      assert.equal(gone, undefined);
     } finally {
       await removeLabeled(docker, run);
     }
+  });
+
+  test('a stat() miss sends one request, for a missing path and for a missing container', async () => {
+    // Arrange: the engine answers HEAD of the archive with 404 in both cases.
+    // The inspect of c1 finds it, so its miss is a missing path; c2 is
+    // removed after find(), so its miss is a missing container.
+    await using scratch = await scratchDirectory();
+    const inspects = new Map<string, number>();
+    await using engine = await fakeEngine({
+      directory: scratch.path,
+      apiVersion: '1.51',
+      answer: (request, response) => {
+        const inspected = /^\/v1\.51\/containers\/(c[12])\/json$/.exec(
+          request.url ?? '',
+        )?.[1];
+        const seen =
+          inspected === undefined ? 0 : (inspects.get(inspected) ?? 0);
+        if (inspected !== undefined) inspects.set(inspected, seen + 1);
+        if (inspected === 'c1' || (inspected === 'c2' && seen === 0)) {
+          response.writeHead(200, { 'Content-Type': 'application/json' });
+          response.end(JSON.stringify({ Id: inspected }));
+          return;
+        }
+        response.writeHead(404);
+        response.end();
+      },
+    });
+    await using docker = await Docker.connect({
+      clock: globalThis,
+      host: engine.host,
+    });
+    const present = await docker.containers.find('c1');
+    const removed = await docker.containers.find('c2');
+    assert.ok(present && removed);
+    const found = engine.paths.length;
+
+    // Act
+    const missingPath = await present.stat('/srv/missing.txt');
+    const missingContainer = await removed.stat('/srv/run.sh');
+
+    // Assert
+    assert.equal(missingPath, undefined);
+    assert.equal(missingContainer, undefined);
+    assert.deepEqual(engine.paths.slice(found), [
+      '/v1.51/containers/c1/archive?path=%2Fsrv%2Fmissing.txt',
+      '/v1.51/containers/c2/archive?path=%2Fsrv%2Frun.sh',
+    ]);
+  });
+
+  test('stat() of a 500 rejects with a DockerEngineError of that status', async () => {
+    // Arrange
+    await using scratch = await scratchDirectory();
+    await using engine = await fakeEngine({
+      directory: scratch.path,
+      apiVersion: '1.51',
+      answer: (request, response) => {
+        if (request.url === '/v1.51/containers/c1/json') {
+          response.writeHead(200, { 'Content-Type': 'application/json' });
+          response.end(JSON.stringify({ Id: 'c1' }));
+          return;
+        }
+        response.writeHead(500);
+        response.end();
+      },
+    });
+    await using docker = await Docker.connect({
+      clock: globalThis,
+      host: engine.host,
+    });
+    const container = await docker.containers.find('c1');
+    assert.ok(container);
+
+    // Act
+    const statting = container.stat('/srv/run.sh');
+
+    // Assert
+    await assert.rejects(statting, (error: unknown) => {
+      assert.ok(error instanceof DockerEngineError, String(error));
+      assert.ok(!(error instanceof ContainerNotFoundError));
+      assert.equal(error.status, 500);
+      assert.deepEqual(error.request, {
+        method: 'HEAD',
+        path: '/containers/c1/archive',
+      });
+      return true;
+    });
   });
 
   test('readFile() of a missing path is a PathNotFoundError, of a directory or a symlink a NotAFileError of that kind, and of a missing container a ContainerNotFoundError', async () => {

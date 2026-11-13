@@ -136,7 +136,7 @@ Some answers of the engine are not errors here:
 | Call                                                                                                 | Engine answer | Result      |
 | ---------------------------------------------------------------------------------------------------- | ------------- | ----------- |
 | `containers.find()`, `containers.inspect()`, `volumes.find()`, `networks.find()`, `images.inspect()` | 404           | `undefined` |
-| `container.stat()` of a missing path, when the container exists                                      | 404           | `undefined` |
+| `container.stat()` of a missing path or a missing container                                          | 404           | `undefined` |
 | `container.start()` of a running container, `container.stop()` of a stopped one                      | 304           | resolves    |
 | `remove()` of a missing container, volume, network or image                                          | 404           | resolves    |
 
@@ -356,11 +356,12 @@ const stat = await postgres.stat('/srv/run.sh');
 
 - `writeFiles()` sends one archive. It extracts the archive in the deepest directory that holds each entry and that already exists, which it finds with `stat()`. The engine creates each parent directory that an entry implies below that directory. Thus a container with a read-only root filesystem can still get files in a writable volume: the engine checks only the directory of the extraction.
 - A written entry belongs to its `uid` and `gid`, or to root (0:0) when it has none. The package puts them in the archive, and the engine keeps the owner of each entry in the archive.
+- A parent directory that an entry implies is not in the archive. The engine creates it with mode 0755 and the owner of the root of the container, not with the `uid` and `gid` of the entry, and `copyUIDGID` does not change that (`createImpliedDirectories` and `ImpliedDirectoryMode` in [moby/go-archive](https://github.com/moby/go-archive/blob/6a97244bc508500258d8e984a043d61b138c53da/archive.go#L28-L38)). For another owner or mode, list the directory as an entry: `{ path, directory: true, uid, gid }`. The source of the engine gives the same advice.
 - `putArchive(directory, archive, { copyUIDGID: true })` gives each extracted entry to the user of the container (`Config.User`) in place of the owner in the archive.
 - `writeFiles()` does not replace a directory with a file, or a file with a directory. It rejects with `DockerEngineError`, the directory or file stays, and `message` is the message of the engine. A directory entry onto a symlink to a directory also rejects. The engine extracts entries in order and stops at the conflict, so the entries before it stay written.
 - `putArchive(directory, archive, { noOverwriteDirNonDir: true })` applies the same refusal to an archive. Without this option, the engine replaces the existing entry: a file over a directory deletes the directory tree.
 - `readFile()` gives the bytes of one regular file. A missing path makes it reject with `PathNotFoundError`, and a directory, a link or another kind of entry with `NotAFileError`.
-- `stat()` gives `undefined` for a missing path. A missing container makes each file request reject with `ContainerNotFoundError`.
+- `stat()` gives `undefined` for a missing path and for a missing container, in one request. The engine answers both with 404, and an answer to `HEAD` has no body that tells them apart; no leading client sends a second request ([ADR 0013](./docs/adr/0013-a-stat-of-a-missing-path-or-container-is-undefined-in-one-request.md)). A missing container makes `readFile()`, `getArchive()`, `writeFiles()` and `putArchive()` reject with `ContainerNotFoundError`.
 - `getArchive(path)` and `putArchive(directory, archive)` give the tar streams themselves, for a directory or a large tree.
 - The engine cannot reach `/proc`, `/sys`, `/dev`, a tmpfs mount, or a mount made inside the container. For such a path, use `exec()`.
 - When the directory of the extraction is on a read-only root filesystem or in a read-only mount, `writeFiles()` and `putArchive()` reject with `ReadOnlyPathError`.
@@ -712,14 +713,14 @@ export class Container {
     options?: CancelOptions & { stdin?: boolean; ref?: boolean },
   ): Promise<ContainerProcess>;
 
-  /** undefined for 404. */
+  /** undefined for 404: a missing path or a missing container. */
   stat(
     path: string,
     options?: CancelOptions,
   ): Promise<EngineApi.ContainerPathStat | undefined>;
   /** The bytes of one regular file. */
   readFile(path: string, options?: CancelOptions): Promise<Uint8Array>;
-  /** One archive, extracted at '/'. */
+  /** One archive, extracted in the deepest directory that exists. */
   writeFiles(files: ContainerFile[], options?: CancelOptions): Promise<void>;
   getArchive(
     path: string,
