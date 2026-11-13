@@ -23,6 +23,10 @@ The primary database, opened read-only for the lifetime of the handle. Give its 
 `sql` for tagged statements, and `query(sql)` for one SQL string. Both discover additional databases from the statement through `locate`.
 _Avoid_: Connection (the handle has one connection, but the connection is not the handle), client, session
 
+**Connection-local SQL**:
+Temporary views that `exec(sql)` loads and functions that `function(name, options?, fn)` registers. They stay on the connection of the handle until it closes, and statements can read or call them.
+_Avoid_: Extension (SQLite loads an extension from a file)
+
 **Statement**:
 One call of `sql.all`, `sql.get` or `query`.
 _Avoid_: Query (a query can have many statements), evaluation

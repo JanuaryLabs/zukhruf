@@ -38,6 +38,10 @@ export type FederationOptions = Pick<
 // open; each statement attaches and detaches the additional databases it names.
 export class Federation implements Disposable {
   readonly sql: Query;
+  // Registers a function of SQL on the connection, as the function method of
+  // node:sqlite does. It is connection-local SQL, as a temporary view is, and
+  // stays until the handle closes. An error it throws fails the statement.
+  readonly function: DatabaseSync['function'];
   readonly #connection: DatabaseSync;
   readonly #locate: Locate;
 
@@ -53,6 +57,7 @@ export class Federation implements Disposable {
       ...options,
       readOnly: true,
     });
+    this.function = this.#connection.function.bind(this.#connection);
     const store = this.#connection.createTagStore();
     this.sql = {
       all: (strings, ...values) =>

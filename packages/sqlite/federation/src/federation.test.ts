@@ -463,6 +463,56 @@ test('a SQL file defines temporary views read by raw and tagged queries across d
   });
 });
 
+test('a function registered on the handle is called by tagged and raw statements and by a temporary view over an attached database', async () => {
+  await using scratch = await new TemporaryFiles().directory('federation-');
+  const path = join(scratch.path, 'd.sqlite');
+  writeDatabase(path, [1, 2]);
+  using federation = new Federation({
+    main: ':memory:',
+    locate: (name) => (name === 'd' ? path : undefined),
+  });
+  federation.function('twice', (x) => Number(x) * 2);
+  federation.function('total', { varargs: true }, (...values) =>
+    values.reduce<number>((sum, value) => sum + Number(value), 0),
+  );
+  federation.exec(
+    'CREATE TEMP VIEW doubled AS SELECT twice(x) AS x FROM d.t ORDER BY x',
+  );
+
+  assert.equal(federation.sql.get`SELECT twice(${21}) AS n`?.n, 42);
+  assert.deepEqual(federation.query('SELECT total(1, 2, 3)').rows, [[6]]);
+  assert.deepEqual(federation.query('SELECT x FROM doubled').rows, [[2], [4]]);
+  assert.deepEqual(
+    federation.sql.all`SELECT x FROM doubled`.map(({ x }) => x),
+    [2, 4],
+  );
+  assert.deepEqual(attachedNames(federation), ['main', 'temp']);
+});
+
+test('a function that throws fails the statement with its message and leaves none attached', async () => {
+  await using scratch = await new TemporaryFiles().directory('federation-');
+  const path = join(scratch.path, 'd.sqlite');
+  writeDatabase(path, [1]);
+  using federation = new Federation({
+    main: ':memory:',
+    locate: (name) => (name === 'd' ? path : undefined),
+  });
+  federation.function('expired', () => {
+    throw new Error('position 7 expired');
+  });
+  federation.exec(
+    'CREATE TEMP VIEW guarded AS SELECT x FROM d.t WHERE expired() IS NULL',
+  );
+
+  assert.throws(() => federation.query('SELECT x FROM guarded'), {
+    message: 'position 7 expired',
+  });
+  assert.throws(() => federation.sql.all`SELECT expired(), x FROM d.t`, {
+    message: 'position 7 expired',
+  });
+  assert.deepEqual(attachedNames(federation), ['main', 'temp']);
+});
+
 test('raw SQL preserves column positions, empty headers and qualified table resolution', async () => {
   await using scratch = await new TemporaryFiles().directory('federation-');
   const first = join(scratch.path, 'first.sqlite');
