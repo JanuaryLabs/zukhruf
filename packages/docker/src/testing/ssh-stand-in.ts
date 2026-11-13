@@ -14,6 +14,12 @@ export type SshStandInMode =
       ignoreInputEnd?: boolean;
       /** Closes the socket and exits with 0 after the first answer, as `docker system dial-stdio` does when the engine restarts. */
       exitAfterFirstAnswer?: boolean;
+      /**
+       * Writes NOT_RESPONDING and exits with 255 after a chunk with this text
+       * passed through it, in either direction, as `ssh` does when its
+       * keepalive (`ServerAliveInterval`) gets no answer from the machine.
+       */
+      notRespondingAfter?: string;
     }
   /** Exits with 255 and the message of OpenSSH for a key that the machine refuses. */
   | { kind: 'permission-denied' };
@@ -21,6 +27,9 @@ export type SshStandInMode =
 /** The message of OpenSSH when the machine refuses each key, as the permission-denied mode writes it. */
 export const PERMISSION_DENIED =
   'tester@machine: Permission denied (publickey).';
+
+/** The message of OpenSSH when its keepalive gets no answer, as notRespondingAfter writes it. */
+export const NOT_RESPONDING = 'Timeout, server machine not responding.';
 
 /** One start of the stand-in. */
 export interface SshRun {
@@ -35,7 +44,9 @@ export interface SshRun {
  * standard input to the engine socket and the socket to its standard output.
  * When its standard input ends, it ends the write side of the socket. When
  * the socket closes, it exits. With ignoreInputEnd, it does neither. With
- * exitAfterFirstAnswer, it closes the socket after the first answer.
+ * exitAfterFirstAnswer, it closes the socket after the first answer. With
+ * notRespondingAfter, it passes the chunk that has the text, and then it
+ * writes NOT_RESPONDING and exits with 255.
  */
 const script = `#!${process.execPath}
 const { connect } = require('node:net');
@@ -61,6 +72,17 @@ socket.pipe(process.stdout);
 socket.on('close', () => process.stdin.destroy());
 if (mode.exitAfterFirstAnswer) {
   socket.once('data', () => setImmediate(() => socket.destroy()));
+}
+if (mode.notRespondingAfter) {
+  // The empty write ends after the chunk that the pipe wrote before it.
+  const stopAfter = (passed) => (chunk) => {
+    if (!chunk.includes(mode.notRespondingAfter)) return;
+    passed.write('', () => {
+      process.stderr.write(${JSON.stringify(`${NOT_RESPONDING}\r\n`)}, () => process.exit(255));
+    });
+  };
+  process.stdin.on('data', stopAfter(socket));
+  socket.on('data', stopAfter(process.stdout));
 }
 `;
 

@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
-import { delimiter } from 'node:path';
+import { delimiter, join } from 'node:path';
 import { describe, test } from 'node:test';
 
+import { writeContextStore } from './testing/context-store-files.ts';
 import { fakeEngine } from './testing/fake-engine.ts';
 import { ENTRY, lastJson, runScenario } from './testing/scenario.ts';
 import { scratchDirectory } from './testing/scratch-directory.ts';
 import {
+  NOT_RESPONDING,
   PERMISSION_DENIED,
   isAlive,
   localEngineSocket,
@@ -80,7 +82,137 @@ try {
   );
 
   test(
-    'starts ssh -T -o BatchMode=yes -l <user> -p <port> -- <machine> docker system dial-stdio',
+    'a call that waits for its answer when ssh exits with 255, as its keepalive does when the machine stops answering, rejects with a ConnectionFailedError with the exit code and the stderr of ssh',
+    {
+      skip: posixOnly,
+    },
+    async () => {
+      // Arrange
+      await using home = await scratchDirectory();
+      await using engine = await fakeEngine({
+        directory: home.path,
+        apiVersion: '1.51',
+        // The machine is silent: /info never gets an answer.
+        answer: () => undefined,
+      });
+      await using standIn = await sshStandIn({
+        kind: 'engine',
+        socketPath: engine.socketPath,
+        notRespondingAfter: '/info',
+      });
+      const scenario = withClient(`
+import { ConnectionFailedError } from ${JSON.stringify(ENTRY)};
+try {
+  await docker.info();
+  console.log(JSON.stringify({ answered: true }));
+} catch (error) {
+  console.log(JSON.stringify({
+    failed: error instanceof ConnectionFailedError,
+    host: error.host,
+    cause: error.cause?.name,
+    exitCode: error.cause?.exitCode,
+    stderr: error.cause?.stderr,
+  }));
+}
+await docker[Symbol.asyncDispose]();
+`);
+
+      try {
+        // Act
+        const result = await runScenario(
+          scenario,
+          scenarioEnvironment(standIn.path, home.path),
+        );
+
+        // Assert
+        assert.deepEqual(
+          lastJson(result),
+          {
+            failed: true,
+            host: HOST,
+            cause: 'SshExitError',
+            exitCode: 255,
+            stderr: `${NOT_RESPONDING}\r\n`,
+          },
+          result.stderr,
+        );
+        assert.deepEqual(engine.paths, ['/_ping', '/v1.51/info']);
+      } finally {
+        for (const { pid } of await standIn.runs()) {
+          if (isAlive(pid)) process.kill(pid, 'SIGKILL');
+        }
+      }
+    },
+  );
+
+  test(
+    'an open stream of events, when ssh exits with 255 as its keepalive does when the machine stops answering, gives the events that came and then rejects with an error whose cause has the exit code and the stderr of ssh',
+    {
+      skip: posixOnly,
+    },
+    async () => {
+      // Arrange
+      await using home = await scratchDirectory();
+      await using engine = await fakeEngine({
+        directory: home.path,
+        apiVersion: '1.51',
+        // One event, and then the machine is silent: the answer stays open.
+        answer: (_request, response) => {
+          response.writeHead(200, { 'Content-Type': 'application/json' });
+          response.write(
+            `${JSON.stringify({ Type: 'container', Action: 'start' })}\n`,
+          );
+        },
+      });
+      await using standIn = await sshStandIn({
+        kind: 'engine',
+        socketPath: engine.socketPath,
+        notRespondingAfter: '"Action":"start"',
+      });
+      const scenario = withClient(`
+const events = [];
+try {
+  for await (const event of docker.events()) events.push(event.Action);
+  console.log(JSON.stringify({ events, ended: true }));
+} catch (error) {
+  console.log(JSON.stringify({
+    events,
+    cause: error.cause?.name,
+    exitCode: error.cause?.exitCode,
+    stderr: error.cause?.stderr,
+  }));
+}
+await docker[Symbol.asyncDispose]();
+`);
+
+      try {
+        // Act
+        const result = await runScenario(
+          scenario,
+          scenarioEnvironment(standIn.path, home.path),
+        );
+
+        // Assert
+        assert.deepEqual(
+          lastJson(result),
+          {
+            events: ['start'],
+            cause: 'SshExitError',
+            exitCode: 255,
+            stderr: `${NOT_RESPONDING}\r\n`,
+          },
+          result.stderr,
+        );
+      } finally {
+        for (const { pid } of await standIn.runs()) {
+          if (isAlive(pid)) process.kill(pid, 'SIGKILL');
+        }
+      }
+    },
+  );
+
+  test(
+    'starts ssh -T -o BatchMode=yes -o ConnectTimeout=30 -l <user> -p <port> -- <machine> docker system dial-stdio',
     {
       skip: posixOnly,
     },
@@ -108,7 +240,7 @@ console.log('{}');
 
       // Assert
       const dial = ['docker', 'system', 'dial-stdio'];
-      const fixed = ['-T', '-o', 'BatchMode=yes'];
+      const fixed = ['-T', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=30'];
       assert.deepEqual(full, [
         [...fixed, '-l', 'tester', '-p', '2222', '--', 'machine', ...dial],
       ]);
@@ -145,6 +277,8 @@ console.log('{}');
             '-T',
             '-o',
             'BatchMode=yes',
+            '-o',
+            'ConnectTimeout=30',
             '-l',
             'tester',
             '-p',
@@ -157,6 +291,187 @@ console.log('{}');
           ],
         ],
       );
+    },
+  );
+
+  test(
+    'the sshFlags of the caller come first, before -T, in the order of the caller',
+    {
+      skip: posixOnly,
+    },
+    async () => {
+      // Arrange
+      await using home = await scratchDirectory();
+      await using standIn = await sshStandIn({ kind: 'permission-denied' });
+      const sshFlags = [
+        '-o',
+        'ServerAliveInterval=10',
+        '-o',
+        'ServerAliveCountMax=2',
+      ];
+      const scenario = `
+import { Docker } from ${JSON.stringify(ENTRY)};
+await Docker.connect({ clock: globalThis, host: ${JSON.stringify(HOST)}, sshFlags: ${JSON.stringify(sshFlags)} }).catch(() => undefined);
+console.log('{}');
+`;
+
+      // Act
+      await runScenario(scenario, scenarioEnvironment(standIn.path, home.path));
+
+      // Assert
+      assert.deepEqual(
+        (await standIn.runs()).map(({ argv }) => argv),
+        [
+          [
+            ...sshFlags,
+            '-T',
+            '-o',
+            'BatchMode=yes',
+            '-o',
+            'ConnectTimeout=30',
+            '-l',
+            'tester',
+            '-p',
+            '2222',
+            '--',
+            'machine',
+            'docker',
+            'system',
+            'dial-stdio',
+          ],
+        ],
+      );
+    },
+  );
+
+  test(
+    'sshFlags that name ConnectTimeout, as -o ConnectTimeout=5 or as -oConnectTimeout=5, go to ssh with no -o ConnectTimeout=30',
+    {
+      skip: posixOnly,
+    },
+    async () => {
+      // Arrange
+      await using home = await scratchDirectory();
+      const argvOf = async (sshFlags: string[]) => {
+        await using standIn = await sshStandIn({ kind: 'permission-denied' });
+        const scenario = `
+import { Docker } from ${JSON.stringify(ENTRY)};
+await Docker.connect({ clock: globalThis, host: 'ssh://machine', sshFlags: ${JSON.stringify(sshFlags)} }).catch(() => undefined);
+console.log('{}');
+`;
+        await runScenario(
+          scenario,
+          scenarioEnvironment(standIn.path, home.path),
+        );
+        return (await standIn.runs()).map(({ argv }) => argv);
+      };
+
+      // Act
+      const twoArguments = await argvOf(['-o', 'ConnectTimeout=5']);
+      const oneArgument = await argvOf(['-oConnectTimeout=5']);
+
+      // Assert
+      const rest = [
+        '-T',
+        '-o',
+        'BatchMode=yes',
+        '--',
+        'machine',
+        'docker',
+        'system',
+        'dial-stdio',
+      ];
+      assert.deepEqual(twoArguments, [['-o', 'ConnectTimeout=5', ...rest]]);
+      assert.deepEqual(oneArgument, [['-oConnectTimeout=5', ...rest]]);
+    },
+  );
+
+  test(
+    'the sshFlags go to ssh when DOCKER_HOST or a context selected the ssh:// host',
+    {
+      skip: posixOnly,
+    },
+    async () => {
+      // Arrange
+      await using home = await scratchDirectory();
+      const config = join(home.path, 'docker-config');
+      await writeContextStore(config, { contexts: { remote: HOST } });
+      const argvOf = async (selection: object) => {
+        await using standIn = await sshStandIn({ kind: 'permission-denied' });
+        const scenario = `
+import { Docker } from ${JSON.stringify(ENTRY)};
+await Docker.connect({ clock: globalThis, sshFlags: ['-o', 'ServerAliveInterval=10'], ...${JSON.stringify(selection)} }).catch(() => undefined);
+console.log('{}');
+`;
+        await runScenario(
+          scenario,
+          scenarioEnvironment(standIn.path, home.path),
+        );
+        return (await standIn.runs()).map(({ argv }) => argv);
+      };
+
+      // Act
+      const fromVariable = await argvOf({ environment: { DOCKER_HOST: HOST } });
+      const fromContext = await argvOf({
+        environment: { DOCKER_CONFIG: config },
+        context: 'remote',
+      });
+
+      // Assert
+      const expected = [
+        [
+          '-o',
+          'ServerAliveInterval=10',
+          '-T',
+          '-o',
+          'BatchMode=yes',
+          '-o',
+          'ConnectTimeout=30',
+          '-l',
+          'tester',
+          '-p',
+          '2222',
+          '--',
+          'machine',
+          'docker',
+          'system',
+          'dial-stdio',
+        ],
+      ];
+      assert.deepEqual(fromVariable, expected);
+      assert.deepEqual(fromContext, expected);
+    },
+  );
+
+  test(
+    'a unix:// engine ignores the sshFlags: the client connects and starts no ssh',
+    {
+      skip: posixOnly,
+    },
+    async () => {
+      // Arrange
+      await using home = await scratchDirectory();
+      await using engine = await fakeEngine({
+        directory: home.path,
+        apiVersion: '1.51',
+      });
+      await using standIn = await sshStandIn({ kind: 'permission-denied' });
+      const scenario = `
+import { Docker } from ${JSON.stringify(ENTRY)};
+const docker = await Docker.connect({ clock: globalThis, host: ${JSON.stringify(engine.host)}, sshFlags: ['-o', 'ServerAliveInterval=10'] });
+console.log(JSON.stringify({ host: docker.host }));
+await docker[Symbol.asyncDispose]();
+`;
+
+      // Act
+      const result = await runScenario(
+        scenario,
+        scenarioEnvironment(standIn.path, home.path),
+      );
+
+      // Assert
+      assert.deepEqual(lastJson(result), { host: engine.host }, result.stderr);
+      assert.deepEqual(await standIn.runs(), []);
     },
   );
 

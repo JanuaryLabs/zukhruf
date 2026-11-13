@@ -36,12 +36,22 @@ export class SshExitError extends Error {
   }
 }
 
-/** The arguments of the connection helper, as the connhelper of docker/cli gives them. */
-export function sshArguments(url: URL): string[] {
+/**
+ * The arguments of the connection helper. `-T`, `-l`, `-p` and the connect
+ * timeout are as the connhelper of docker/cli gives them; `BatchMode=yes` is
+ * an option of this package. The flags of the caller come first, because
+ * `ssh` uses the first value that it gets for an option.
+ */
+export function sshArguments(url: URL, sshFlags: readonly string[]): string[] {
   return [
+    ...sshFlags,
     '-T',
     '-o',
     'BatchMode=yes',
+    // The rule of addSSHTimeout of docker/cli: the flags, joined, name the option.
+    ...(sshFlags.join('').includes('ConnectTimeout')
+      ? []
+      : ['-o', 'ConnectTimeout=30']),
     ...(url.username ? ['-l', decodeURIComponent(url.username)] : []),
     ...(url.port ? ['-p', url.port] : []),
     '--',
@@ -68,9 +78,9 @@ class SshConnection extends Duplex {
   /** Resolves when `ssh` exited and its pipes are closed. */
   readonly exited: () => Promise<void>;
 
-  constructor(url: URL) {
+  constructor(url: URL, sshFlags: readonly string[]) {
     super({ allowHalfOpen: true });
-    const child = spawn('ssh', sshArguments(url), {
+    const child = spawn('ssh', sshArguments(url, sshFlags), {
       stdio: ['pipe', 'pipe', 'pipe'],
     });
     this.#child = child;
@@ -191,15 +201,17 @@ class SshConnection extends Duplex {
  */
 class SshAgent extends Agent {
   readonly #url: URL;
+  readonly #sshFlags: readonly string[];
   readonly #connections = new Set<SshConnection>();
 
-  constructor(url: URL) {
+  constructor(url: URL, sshFlags: readonly string[]) {
     super({ keepAlive: true });
     this.#url = url;
+    this.#sshFlags = sshFlags;
   }
 
   override createConnection(): Duplex {
-    const connection = new SshConnection(this.#url);
+    const connection = new SshConnection(this.#url, this.#sshFlags);
     this.#connections.add(connection);
     void connection.exited().then(() => {
       this.#connections.delete(connection);
@@ -243,8 +255,8 @@ class SshAgent extends Agent {
 export class SshTransport implements Transport {
   readonly #agent: SshAgent;
 
-  constructor(url: URL) {
-    this.#agent = new SshAgent(url);
+  constructor(url: URL, sshFlags: readonly string[]) {
+    this.#agent = new SshAgent(url, sshFlags);
   }
 
   request(options: RequestOptions): ClientRequest {

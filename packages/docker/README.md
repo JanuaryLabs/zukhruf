@@ -484,9 +484,51 @@ await spawn(
 
 ## SSH engines
 
-For an `ssh://` host, the connection helper is `ssh -T -o BatchMode=yes <machine> docker system dial-stdio`, as the Docker CLI uses it. `ssh` reads `~/.ssh/config`, so jump hosts, keys, agents and connection sharing work as they work for the CLI. The remote machine must have `docker` on the `PATH` of its SSH shell.
+For an `ssh://` host, the connection helper is this command ([ADR 0010](./docs/adr/0010-ssh-gets-the-options-of-the-docker-cli-and-the-flags-of-the-caller.md)):
+
+```sh
+ssh <sshFlags> -T -o BatchMode=yes -o ConnectTimeout=30 -l <user> -p <port> -- <machine> docker system dial-stdio
+```
+
+`-l` and `-p` are there only when the host has a user and a port. `-T`, `-l`, `-p` and `-o ConnectTimeout=30` are the options that the Docker CLI sends. `-o BatchMode=yes` is an option of the package: the Docker CLI does not send it. The package sends no keepalive.
+
+`ssh` reads `~/.ssh/config`, so jump hosts, keys, agents and connection sharing work as they work for the CLI. The remote machine must have `docker` on the `PATH` of its SSH shell.
 
 Each connection of the client is one `ssh` process. The client keeps idle connections for the next request. An attach, an exec, followed logs and events each use their own connection. Disposal of the client ends the `ssh` processes.
+
+### Give flags to ssh
+
+`sshFlags` are raw flags for `ssh`. Only an engine at an `ssh://` host uses them, also when a context or `DOCKER_HOST` selected that host. An engine at a `unix://` or `npipe://` host ignores them.
+
+```ts
+await using remote = await Docker.connect({
+  clock: globalThis,
+  host: 'ssh://root@box',
+  sshFlags: ['-o', 'ServerAliveInterval=10', '-o', 'ServerAliveCountMax=2'],
+});
+```
+
+The flags come first on the command line. OpenSSH uses the first value that it gets for each option, so a flag of the caller wins over an option of the package, and over `~/.ssh/config`. When the flags name `ConnectTimeout`, the package does not send `-o ConnectTimeout=30`. This is the rule of the Docker CLI: `['-o', 'ConnectTimeout=5']` and `['-oConnectTimeout=5']` both name it.
+
+### End a dead connection
+
+`ConnectTimeout` is a limit for the start of a connection only: the connect, the SSH handshake and the key exchange. No call has a time limit after that.
+
+Without a keepalive, a connection to a machine that stops answering hangs the call, as it hangs the Docker CLI. The call ends only when its signal aborts.
+
+With a keepalive, `ssh` exits with 255 when the machine stops answering. A call that waits for its answer rejects with `ConnectionFailedError`, and its `cause` has the exit code and the standard error of `ssh`. An open stream, such as followed logs or events, rejects with an error whose `cause` has the same exit code and standard error.
+
+Set the keepalive in `~/.ssh/config`:
+
+```
+Host box
+  ServerAliveInterval 10
+  ServerAliveCountMax 2
+```
+
+Or give the same options in `sshFlags`, as in the example above.
+
+With connection sharing (`ControlMaster`), the settings of the master connection apply. The flags of a later `ssh` do not.
 
 ## The API version
 
@@ -561,6 +603,8 @@ export type ConnectOptions = CancelOptions & {
   environment?: Environment;
   /** The clock of the waits of the client, and of the time of the files that it writes: a `WallClock` of `@zukhruf/async`. Production gives `globalThis`. */
   clock: WallClock;
+  /** Raw flags for `ssh`. Only an engine at an `ssh://` host uses them. */
+  sshFlags?: readonly string[];
 } & ({ context?: string; host?: never } | { host?: string; context?: never });
 
 export interface DockerContext {

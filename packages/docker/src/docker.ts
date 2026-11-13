@@ -25,11 +25,13 @@ function isEventMessage(value: unknown): value is EngineApi.EventMessage {
 
 /**
  * A context or a host, never both. `clock` is the clock of the waits of the
- * client: `globalThis` in production, a fake clock in a test.
+ * client: `globalThis` in production, a fake clock in a test. `sshFlags` are
+ * raw flags for `ssh`: only an engine at an ssh:// host uses them.
  */
 export type ConnectOptions = CancelOptions & {
   environment?: Environment;
   clock: WallClock;
+  sshFlags?: readonly string[];
 } & ({ context?: string; host?: never } | { host?: string; context?: never });
 
 /** A client of one engine. Dispose it to close its connections. */
@@ -74,7 +76,7 @@ export class Docker implements AsyncDisposable {
     const parsed = parseHost(engine.host);
     const transport =
       parsed.kind === 'ssh'
-        ? new SshTransport(parsed.url)
+        ? new SshTransport(parsed.url, options.sshFlags ?? [])
         : new SocketTransport(parsed.kind, parsed.socketPath);
     try {
       const unversioned = new EngineClient(engine.host, transport);
