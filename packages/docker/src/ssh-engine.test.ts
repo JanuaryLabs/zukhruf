@@ -704,6 +704,77 @@ await docker[Symbol.asyncDispose]();
   );
 
   test(
+    'a connection whose ssh exited with 0 before the caller read its answer to the end is not kept: the call right after the answer starts a new ssh and succeeds',
+    {
+      skip: posixOnly,
+    },
+    async () => {
+      // Arrange
+      await using home = await scratchDirectory();
+      const event = `${JSON.stringify({
+        Type: 'container',
+        Action: 'start',
+        Actor: { ID: 'c'.repeat(64), Attributes: { name: 'n'.repeat(900) } },
+      })}\n`;
+      // 128 KB: more than the 64 KB of the answer that Node reads ahead of the
+      // caller, so the end of the answer waits for the caller, and less than
+      // what the client and the pipe of ssh hold together, so ssh can exit.
+      const EVENTS = Math.ceil((128 * 1024) / event.length);
+      await using engine = await fakeEngine({
+        directory: home.path,
+        apiVersion: '1.51',
+        answer: (request, response) => {
+          response.writeHead(200, { 'Content-Type': 'application/json' });
+          if (request.url?.startsWith('/v1.51/events')) {
+            // An engine that stops ends its events and closes the connection.
+            response.end(event.repeat(EVENTS), () => request.socket.end());
+            return;
+          }
+          response.end(JSON.stringify({ ID: 'engine' }));
+        },
+      });
+      await using standIn = await sshStandIn({
+        kind: 'engine',
+        socketPath: engine.socketPath,
+      });
+      const scenario = withClient(`
+const { readdirSync } = await import('node:fs');
+const runs = ${JSON.stringify(`${standIn.path}/runs`)};
+const [first] = readdirSync(runs).map((name) => Number.parseInt(name, 10));
+const alive = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
+const events = docker.events()[Symbol.asyncIterator]();
+await events.next();
+let read = 1;
+// The client holds the ssh child and does not expose it, and no event reports the end of another process's child.
+while (alive(first)) await new Promise((resolve) => setTimeout(resolve, 20));
+while (!(await events.next()).done) read++;
+const info = await docker.info().then((answer) => answer.ID, (error) => error.name + ': ' + error.message);
+console.log(JSON.stringify({ read, info, started: readdirSync(runs).length }));
+await docker[Symbol.asyncDispose]();
+`);
+
+      try {
+        // Act
+        const result = await runScenario(
+          scenario,
+          scenarioEnvironment(standIn.path, home.path),
+        );
+
+        // Assert
+        assert.deepEqual(
+          lastJson(result),
+          { read: EVENTS, info: 'engine', started: 2 },
+          result.stderr,
+        );
+      } finally {
+        for (const { pid } of await standIn.runs()) {
+          if (isAlive(pid)) process.kill(pid, 'SIGKILL');
+        }
+      }
+    },
+  );
+
+  test(
     'disposal ends each ssh process and waits until it exited',
     {
       skip: needsLocalEngine,
