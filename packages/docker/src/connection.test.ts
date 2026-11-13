@@ -249,22 +249,16 @@ describe('the connections of a client', () => {
     assert.equal(engine.openConnections, 0);
   });
 
-  // A destroyed net.Socket has `closed` true before its 'close' event, so SocketTransport.close() does not wait.
-  test(
-    'when disposal resolves, the connection of a request in flight is closed: the process has no open connection',
-    {
-      todo: '#2807',
-    },
-    async () => {
-      // Arrange: the engine never answers /info.
-      await using scratch = await scratchDirectory();
-      await using engine = await fakeEngine({
-        directory: scratch.path,
-        apiVersion: '1.51',
-        answer: () => undefined,
-      });
-      // A connection in use is a PipeWrap of the process until its close. An idle one is not: the agent unrefs it.
-      const scenario = `
+  test('when disposal resolves, the connection of a request in flight is closed: the process has no open connection', async () => {
+    // Arrange: the engine never answers /info.
+    await using scratch = await scratchDirectory();
+    await using engine = await fakeEngine({
+      directory: scratch.path,
+      apiVersion: '1.51',
+      answer: () => undefined,
+    });
+    // A connection in use is a PipeWrap of the process until its close. An idle one is not: the agent unrefs it.
+    const scenario = `
 import { Docker } from ${JSON.stringify(ENTRY)};
 const connections = () => process.getActiveResourcesInfo().filter((name) => name === 'PipeWrap').length;
 const before = connections();
@@ -276,22 +270,21 @@ const afterDisposal = connections() - before;
 console.log(JSON.stringify({ inUse, afterDisposal, inFlight: await inFlight }));
 `;
 
-      // Act
-      const result = await runScenario(scenario, { HOME: scratch.path });
+    // Act
+    const result = await runScenario(scenario, { HOME: scratch.path });
 
-      // Assert
-      assert.deepEqual(
-        lastJson(result),
-        {
-          inUse: 1,
-          afterDisposal: 0,
-          inFlight:
-            'The client was disposed, so it closed this connection to the engine.',
-        },
-        result.stderr,
-      );
-    },
-  );
+    // Assert
+    assert.deepEqual(
+      lastJson(result),
+      {
+        inUse: 1,
+        afterDisposal: 0,
+        inFlight:
+          'The client was disposed, so it closed this connection to the engine.',
+      },
+      result.stderr,
+    );
+  });
 
   test('a process that connects and never disposes the client still exits by itself', async () => {
     // Arrange

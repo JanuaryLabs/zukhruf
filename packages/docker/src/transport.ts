@@ -1,4 +1,3 @@
-import { once } from 'node:events';
 import {
   Agent,
   type ClientRequest,
@@ -71,12 +70,17 @@ export class SocketTransport implements Transport {
   async close(): Promise<void> {
     const sockets = [...this.#sockets];
     this.#agent.destroy();
+    // A socket in the set has not emitted 'close', also when it is destroyed:
+    // `closed` of a destroyed net.Socket is true before the event. The wait
+    // is not once() of node:events, which rejects on the 'error' of a socket
+    // that the client destroyed with the error of the disposal.
     await Promise.all(
-      sockets.map(async (socket) => {
-        if (socket.closed) return;
-        const closed = once(socket, 'close');
+      sockets.map((socket) => {
+        const closed = new Promise<void>((resolve) =>
+          socket.once('close', () => resolve()),
+        );
         socket.destroy();
-        await closed;
+        return closed;
       }),
     );
   }
