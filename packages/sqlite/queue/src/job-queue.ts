@@ -1,5 +1,6 @@
 import type {
   CommandResponse,
+  CompleteOptions,
   FetchOptions,
   FindJobsOptions,
   Job,
@@ -75,6 +76,14 @@ export interface JobQueue {
   cancel(
     name: string,
     id: string | string[] | JobAttempt | JobAttempt[],
+  ): Promise<CommandResponse>;
+  // The `db` option is a Postgres connection, which SqliteJobQueue does not
+  // read.
+  complete(
+    name: string,
+    id: string | string[] | JobAttempt | JobAttempt[],
+    data?: object | null,
+    options?: CompleteOptions,
   ): Promise<CommandResponse>;
   fail(
     name: string,

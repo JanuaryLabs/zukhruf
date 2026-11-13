@@ -7,6 +7,7 @@ import { setImmediate } from 'node:timers/promises';
 import {
   type Clock,
   type ClockTimer,
+  type CompleteOptions,
   type FetchOptions,
   type FindJobsOptions,
   type Job,
@@ -1161,6 +1162,31 @@ export class SqliteJobQueue
     );
   }
 
+  // node_modules/pg-boss/dist/manager.js:1636-1656
+  async complete(
+    name: string,
+    id: string | string[] | JobAttempt | JobAttempt[],
+    data?: object | null,
+    options: CompleteOptions = {},
+  ) {
+    Attorney.assertQueueName(name);
+    const { ids, attempts } = Attorney.mapAttemptArg(id, 'complete');
+    this.getQueueOrThrow(name);
+
+    return JobSettler.response(
+      ids,
+      JobSettler.complete(
+        this.db,
+        name,
+        ids,
+        attempts,
+        data,
+        Boolean(options.includeQueued),
+        this.#now(),
+      ),
+    );
+  }
+
   async fail(
     name: string,
     id: string | string[] | JobAttempt | JobAttempt[],
@@ -1437,6 +1463,7 @@ export class SqliteJobQueue
             ids,
             attempts,
             ids.length === 1 ? result : undefined,
+            false,
             this.#now(),
           ),
         );

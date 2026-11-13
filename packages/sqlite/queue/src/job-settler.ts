@@ -43,19 +43,25 @@ export class JobSettler {
     };
   }
 
+  // complete() past its argument checks. Plain ids carry no attempts, and the
+  // settle is then not fenced (node_modules/pg-boss/dist/manager.js:1636-1656).
   static complete(
     db: DatabaseSync,
     name: string,
     ids: string[],
-    attempts: number[],
+    attempts: number[] | undefined,
     data: unknown,
+    includeQueued: boolean,
     now: Date,
-  ): void {
+  ): string[] {
+    // Postgres reads the bound ids before the output (manager.js:1651).
+    const uuids = ids.map((jobId) => Uuid.canonical(jobId));
     const output = CompletionData.serialize(data);
-    JobSettler.#completeEach(
+    return JobSettler.#completeEach(
       db,
       name,
-      ids.map((id, index) => ({ id, attempt: attempts[index], output })),
+      uuids.map((id, index) => ({ id, attempt: attempts?.[index], output })),
+      includeQueued,
       now,
     );
   }
@@ -72,32 +78,48 @@ export class JobSettler {
       db,
       name,
       JobSettler.#serializeOutputs(outcomes),
+      false,
       now,
     );
   }
 
+  // completeJobsUpdate (node_modules/pg-boss/dist/plans.js:2082-2095): an
+  // active job, or with includeQueued a job that is not yet completed, and
+  // with an attempt only while that attempt holds the job. pg-boss also clears
+  // `blocked` and `pending_dependencies` there with includeQueued. Only its
+  // flow() sets them, and this backend has no job dependencies (see
+  // JobRows.toFound in job-rows.ts), so no row here has them to clear.
   static #completeEach(
     db: DatabaseSync,
     name: string,
     settles: Settle[],
+    includeQueued: boolean,
     now: Date,
-  ): void {
+  ): string[] {
     const isoNow = SqlValues.asIso(now);
+    const fenced = settles.some(({ attempt }) => attempt !== undefined);
     const statement = db.prepare(
       `UPDATE pgboss_job
       SET state = 'completed', completed_on = ?, output = ?
-      WHERE queue_name = ? AND id = ? ${ATTEMPT_FENCE}`,
+      WHERE queue_name = ?
+        AND id = ?
+        AND state IN (${includeQueued ? "'created', 'retry', 'active'" : "'active'"})
+        ${fenced ? ATTEMPT_FENCE : ''}`,
     );
 
-    transaction(
+    const settled = JobSettler.#settleEach(
       db,
-      () => {
-        for (const { id, attempt, output } of settles) {
-          statement.run(isoNow, output, name, id, attempt ?? null);
-        }
-      },
-      { mode: 'immediate' },
+      settles,
+      ({ id, attempt, output }) =>
+        statement.run(
+          isoNow,
+          output,
+          name,
+          id,
+          ...(fenced ? [attempt ?? null] : []),
+        ).changes > 0,
     );
+    return [...settled];
   }
 
   // fail() past its argument checks, for any value: a handler's throw or
