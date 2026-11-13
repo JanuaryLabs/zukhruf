@@ -75,8 +75,10 @@ export function sshArguments(url: URL, sshFlags: readonly string[]): string[] {
 class SshConnection extends Duplex {
   readonly #child: ChildProcessWithoutNullStreams;
   #stderr = '';
-  /** Resolves when `ssh` exited and its pipes are closed. */
+  /** Resolves when `ssh` exited, which can be long before its pipes are closed. */
   readonly exited: () => Promise<void>;
+  /** Resolves when `ssh` exited and its pipes are closed. */
+  readonly pipesClosed: () => Promise<void>;
 
   constructor(url: URL, sshFlags: readonly string[]) {
     super({ allowHalfOpen: true });
@@ -84,10 +86,14 @@ class SshConnection extends Duplex {
       stdio: ['pipe', 'pipe', 'pipe'],
     });
     this.#child = child;
+    const exited = new Promise<void>((resolve) => {
+      child.once('exit', () => resolve());
+    });
+    this.exited = () => exited;
     const closed = new Promise<void>((resolve) => {
       child.once('close', () => resolve());
     });
-    this.exited = () => closed;
+    this.pipesClosed = () => closed;
     child.on('error', (error) => this.destroy(error));
     child.stderr.setEncoding('utf8');
     child.stderr.on('data', (chunk: string) => {
@@ -129,7 +135,7 @@ class SshConnection extends Duplex {
    * does not read all of its input still gives its output.
    */
   #fail(error: Error, callback: (error: Error) => void): void {
-    void this.exited().then(async () => {
+    void this.pipesClosed().then(async () => {
       const exit = this.#exitError();
       if (exit === undefined) {
         await finished(this, { writable: false }).catch(() => undefined);
@@ -213,13 +219,17 @@ class SshAgent extends Agent {
   override createConnection(): Duplex {
     const connection = new SshConnection(this.#url, this.#sshFlags);
     this.#connections.add(connection);
+    // An idle connection whose `ssh` exited, such as after a restart of the
+    // engine, cannot take the next request. The exit takes it out of the free
+    // connections of the agent, not the close of its pipes, which a child of
+    // `ssh` can hold open: the Transport of Go's net/http also drops an idle
+    // connection as soon as it sees the end, before a request can pick it.
     void connection.exited().then(() => {
-      this.#connections.delete(connection);
-      // An idle connection whose `ssh` exited, such as after a restart of the
-      // engine, cannot take the next request. Its close removes it from the
-      // free connections of the agent.
       if (this.#isIdle(connection)) connection.destroy();
     });
+    void connection
+      .pipesClosed()
+      .then(() => this.#connections.delete(connection));
     return connection;
   }
 
@@ -247,7 +257,9 @@ class SshAgent extends Agent {
     const connections = [...this.#connections];
     this.destroy();
     for (const connection of connections) connection.destroy();
-    await Promise.all(connections.map((connection) => connection.exited()));
+    await Promise.all(
+      connections.map((connection) => connection.pipesClosed()),
+    );
   }
 }
 

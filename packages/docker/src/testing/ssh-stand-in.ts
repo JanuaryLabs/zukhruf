@@ -12,8 +12,14 @@ export type SshStandInMode =
       socketPath: string;
       /** Keeps the socket open and keeps running when its standard input ends, as a hung `ssh` does. */
       ignoreInputEnd?: boolean;
-      /** Closes the socket and exits with 0 after the first answer, as `docker system dial-stdio` does when the engine restarts. */
-      exitAfterFirstAnswer?: boolean;
+      /**
+       * Closes the socket and exits with 0 after the first answer, as `docker system dial-stdio` does when the engine restarts.
+       * With 'pipes-open-until-next-write', a child of the stand-in keeps its
+       * standard input and output open after the exit, until the next write
+       * to them or the end of the input: the exit of `ssh` then comes long
+       * before the close of its pipes.
+       */
+      exitAfterFirstAnswer?: boolean | 'pipes-open-until-next-write';
       /**
        * Writes NOT_RESPONDING and exits with 255 after a chunk with this text
        * passed through it, in either direction, as `ssh` does when its
@@ -44,11 +50,14 @@ export interface SshRun {
  * standard input to the engine socket and the socket to its standard output.
  * When its standard input ends, it ends the write side of the socket. When
  * the socket closes, it exits. With ignoreInputEnd, it does neither. With
- * exitAfterFirstAnswer, it closes the socket after the first answer. With
+ * exitAfterFirstAnswer, it closes the socket after the first answer; with
+ * 'pipes-open-until-next-write', a child that it starts then keeps its
+ * pipes open until the next write to them or the end of the input. With
  * notRespondingAfter, it passes the chunk that has the text, and then it
  * writes NOT_RESPONDING and exits with 255.
  */
 const script = `#!${process.execPath}
+const { spawn } = require('node:child_process');
 const { connect } = require('node:net');
 const { mkdirSync, readFileSync, writeFileSync } = require('node:fs');
 const { join } = require('node:path');
@@ -71,7 +80,17 @@ process.stdin.pipe(socket, { end: !mode.ignoreInputEnd });
 socket.pipe(process.stdout);
 socket.on('close', () => process.stdin.destroy());
 if (mode.exitAfterFirstAnswer) {
-  socket.once('data', () => setImmediate(() => socket.destroy()));
+  socket.once('data', () => setImmediate(() => {
+    if (mode.exitAfterFirstAnswer === 'pipes-open-until-next-write') {
+      const holder = spawn(
+        process.execPath,
+        ['-e', "process.stdin.once('data', () => process.exit(0)).once('end', () => process.exit(0));"],
+        { stdio: ['inherit', 'inherit', 'ignore'] },
+      );
+      holder.unref();
+    }
+    socket.destroy();
+  }));
 }
 if (mode.notRespondingAfter) {
   // The empty write ends after the chunk that the pipe wrote before it.

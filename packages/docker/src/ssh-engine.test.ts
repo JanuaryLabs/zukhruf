@@ -714,6 +714,63 @@ await docker[Symbol.asyncDispose]();
   );
 
   test(
+    'an idle connection whose ssh exited is not used again while its pipes are still open: the next request starts a new ssh',
+    {
+      skip: posixOnly,
+    },
+    async () => {
+      // Arrange
+      await using home = await scratchDirectory();
+      await using engine = await fakeEngine({
+        directory: home.path,
+        apiVersion: '1.51',
+        answer: (_request, response) => {
+          response.writeHead(200, { 'Content-Type': 'application/json' });
+          response.end(JSON.stringify({ ID: 'engine' }));
+        },
+      });
+      // A child of the stand-in holds the pipes of the first ssh after its
+      // exit, until the next write to them: a request that the dead
+      // connection takes is certain to reach them.
+      await using standIn = await sshStandIn({
+        kind: 'engine',
+        socketPath: engine.socketPath,
+        exitAfterFirstAnswer: 'pipes-open-until-next-write',
+      });
+      const scenario = withClient(`
+const { readdirSync } = await import('node:fs');
+const runs = ${JSON.stringify(`${standIn.path}/runs`)};
+const [first] = readdirSync(runs).map((name) => Number.parseInt(name, 10));
+const alive = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
+// The client holds the ssh child and does not expose it, and no event reports the end of another process's child.
+while (alive(first)) await new Promise((resolve) => setTimeout(resolve, 20));
+const info = await docker.info().then((answer) => answer.ID, (error) => error.name + ': ' + error.message);
+console.log(JSON.stringify({ info, started: readdirSync(runs).length }));
+await docker[Symbol.asyncDispose]();
+`);
+
+      try {
+        // Act
+        const result = await runScenario(
+          scenario,
+          scenarioEnvironment(standIn.path, home.path),
+        );
+
+        // Assert
+        assert.deepEqual(
+          lastJson(result),
+          { info: 'engine', started: 2 },
+          result.stderr,
+        );
+      } finally {
+        for (const { pid } of await standIn.runs()) {
+          if (isAlive(pid)) process.kill(pid, 'SIGKILL');
+        }
+      }
+    },
+  );
+
+  test(
     'a connection whose ssh exited with 0 before the caller read its answer to the end is not kept: the call right after the answer starts a new ssh and succeeds',
     {
       skip: posixOnly,
