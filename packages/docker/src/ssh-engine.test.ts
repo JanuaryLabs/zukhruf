@@ -59,6 +59,7 @@ try {
   console.log(JSON.stringify({
     failed: error instanceof ConnectionFailedError,
     host: error.host,
+    message: error.message,
     exitCode: error.cause?.exitCode,
     stderr: error.cause?.stderr,
   }));
@@ -75,6 +76,7 @@ try {
       assert.deepEqual(lastJson(result), {
         failed: true,
         host: HOST,
+        message: `Error during the connection to the engine at ${HOST}.`,
         exitCode: 255,
         stderr: `${PERMISSION_DENIED}\r\n`,
       });
@@ -109,6 +111,7 @@ try {
   console.log(JSON.stringify({
     failed: error instanceof ConnectionFailedError,
     host: error.host,
+    message: error.message,
     cause: error.cause?.name,
     exitCode: error.cause?.exitCode,
     stderr: error.cause?.stderr,
@@ -130,6 +133,7 @@ await docker[Symbol.asyncDispose]();
           {
             failed: true,
             host: HOST,
+            message: `Error during the connection to the engine at ${HOST}.`,
             cause: 'SshExitError',
             exitCode: 255,
             stderr: `${NOT_RESPONDING}\r\n`,
@@ -492,6 +496,7 @@ try {
   console.log(JSON.stringify({
     failed: error instanceof ConnectionFailedError,
     host: error.host,
+    message: error.message,
     code: error.cause?.code,
   }));
 }
@@ -506,7 +511,12 @@ try {
       // Assert
       assert.deepEqual(
         lastJson(result),
-        { failed: true, host: HOST, code: 'ENOENT' },
+        {
+          failed: true,
+          host: HOST,
+          message: `Cannot connect to the engine at ${HOST}.`,
+          code: 'ENOENT',
+        },
         result.stderr,
       );
     },

@@ -56,10 +56,11 @@ type Opened =
   | { response: IncomingMessage; upgrade?: never }
   | { response: IncomingMessage; upgrade: { socket: Duplex; head: Buffer } };
 
-/** The socket errors that mean the engine did not accept the connection. ENOENT is also an absent `ssh`. */
+/** The socket errors that are a ConnectionFailedError when they come before the answer. ENOENT is also an absent `ssh`; ECONNRESET is also the "socket hang up" of Node. */
 const CONNECTION_FAILURES = new Set([
   'ENOENT',
   'ECONNREFUSED',
+  'EACCES',
   'EPIPE',
   'ECONNRESET',
 ]);

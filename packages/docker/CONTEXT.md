@@ -33,7 +33,7 @@ _Avoid_: Tunnel, port forward (`@zukhruf/testing` forwards a container's port, w
 The version of the Engine API in the path of each request, as in `/v1.51/containers/json`. The client negotiates it once, when it connects: it uses the lower of its own highest version and the engine's `ApiVersion`.
 
 **Connection failure**:
-The engine did not accept the connection: its socket does not exist, it refuses the connection, or `ssh` cannot log in. A stopped Docker Desktop leaves its socket file behind and refuses each connection. Docker's Go client uses the same term (`IsErrConnectionFailed`).
+The connection failed before the engine answered. Either it did not open: the socket does not exist, the engine refuses the connection, or the system denies the socket. Or it opened and then died before the answer, which includes an `ssh` that exits or cannot log in. A stopped Docker Desktop leaves its socket file behind and refuses each connection. A connection that is lost after the answer started is not a connection failure. Docker's Go client uses the same term (`IsErrConnectionFailed`) with the same limits.
 _Avoid_: Engine down, offline, unavailable
 
 **Handle**:

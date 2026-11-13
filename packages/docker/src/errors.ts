@@ -6,12 +6,28 @@ export class DockerError extends Error {
   }
 }
 
-/** The engine did not accept the connection: its socket does not exist, or it refuses the connection. */
+/** The codes of a connection that did not open: no socket or no `ssh` on the PATH, a refusal, a denial of the socket. */
+const DIAL_FAILURES = new Set(['ENOENT', 'ECONNREFUSED', 'EACCES']);
+
+/**
+ * The connection failed before the engine answered. The message tells the two
+ * cases apart, as the Go client of Moby does: "Cannot connect" when the
+ * connection did not open, and "Error during the connection" when it opened
+ * and then failed, also when `ssh` exited. The `cause` is the error of Node,
+ * or the exit error of `ssh`.
+ */
 export class ConnectionFailedError extends DockerError {
   readonly host: string;
 
   constructor(host: string, options?: ErrorOptions) {
-    super(`Cannot connect to the engine at ${host}.`, options);
+    // The message comes from the cause, so no caller can pair a cause with the message of the other case.
+    const code: unknown = Reflect.get(Object(options?.cause), 'code');
+    super(
+      typeof code === 'string' && DIAL_FAILURES.has(code)
+        ? `Cannot connect to the engine at ${host}.`
+        : `Error during the connection to the engine at ${host}.`,
+      options,
+    );
     this.name = 'ConnectionFailedError';
     this.host = host;
   }

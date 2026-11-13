@@ -71,7 +71,7 @@ An error has its own class when a caller does something different after it: star
 
 | Class                      | When                                                                                                                                          | What the caller does next                          |
 | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
-| `ConnectionFailedError`    | The socket does not exist, the engine refuses the connection, or `ssh` cannot log in                                                          | Treat the engine as absent, or ask to start Docker |
+| `ConnectionFailedError`    | The connection does not open (no socket, a refusal, an `EACCES` denial, no `ssh`), or it dies before the answer (also when `ssh` exits)       | Treat the engine as absent, or ask to start Docker |
 | `UnsupportedEngineError`   | The engine's highest API version is lower than the lowest one that the package supports, or than the one that a call needs                    | Ask to update Docker                               |
 | `UnsupportedHostError`     | The host is not `unix://`, `npipe://` or `ssh://`, for example `tcp://`                                                                       | Skip that context, or give another host            |
 | `ContextNotFoundError`     | `Docker.connect({ context })` names a context that the context store does not have                                                            | Pick another context from `Docker.contexts()`      |
@@ -91,6 +91,10 @@ An error has its own class when a caller does something different after it: star
 | `ReadOnlyPathError`        | The engine refuses an extraction, and an inspect shows that the directory is on a read-only root filesystem or in a read-only mount           | Write under a writable mount, or use `exec()`      |
 
 Each class extends a base class, so a broad catch still works. `DockerError` is the base of every error of the package. `DockerEngineError` is the base of every answer of the engine that is an error. It has `status` and `request` (the `method` and `path` of the request), and its `message` is the message of the engine. The base keeps the request apart in `request`, so `path` on `PathNotFoundError`, `NotAFileError` and `ReadOnlyPathError` is the path in the container. An error with no class of its own, such as an error in the progress of a pull, is a `DockerEngineError`.
+
+`ConnectionFailedError` has two messages, and its `cause` is the error of Node or the exit error of `ssh`. `Cannot connect to the engine at <host>.` means that the connection did not open. `Error during the connection to the engine at <host>.` means that the connection opened, or `ssh` started, and then it failed before the answer.
+
+A connection that is lost after the answer started is not a `ConnectionFailedError`, and it is not a `DockerError`. The call or the iteration rejects with the error of Node: the message `aborted` and the code `ECONNRESET` for a JSON answer and for a stream such as events, followed logs or the progress of a pull, and the error of the socket for an attach or an exec. The stream does not start again by itself: call the method again. The Go client of Moby has the same rule ([ADR 0011](./docs/adr/0011-only-a-failure-before-the-answer-is-a-connection-failure.md)).
 
 ```ts
 import {
@@ -456,7 +460,7 @@ A save with a platform writes only the content of that platform. A load with a p
 
 ## Events
 
-`docker.events()` gives the events of the engine as they happen. The iteration ends only when the signal aborts, and then it rejects with the reason of the signal. It takes the `since` and `filters` of the Engine API.
+`docker.events()` gives the events of the engine as they happen. The iteration ends when the signal aborts, and then it rejects with the reason of the signal. When the connection is lost, the iteration rejects with the error of Node: call `events()` again. It takes the `since` and `filters` of the Engine API.
 
 ```ts
 for await (const event of docker.events({
@@ -516,7 +520,7 @@ The flags come first on the command line. OpenSSH uses the first value that it g
 
 Without a keepalive, a connection to a machine that stops answering hangs the call, as it hangs the Docker CLI. The call ends only when its signal aborts.
 
-With a keepalive, `ssh` exits with 255 when the machine stops answering. A call that waits for its answer rejects with `ConnectionFailedError`, and its `cause` has the exit code and the standard error of `ssh`. An open stream, such as followed logs or events, rejects with an error whose `cause` has the same exit code and standard error.
+With a keepalive, `ssh` exits with 255 when the machine stops answering. A call that waits for its answer rejects with `ConnectionFailedError`. Its message is `Error during the connection to the engine at <host>.`, and its `cause` has the exit code and the standard error of `ssh`. An open stream, such as followed logs or events, rejects with the error of Node (`aborted`, `ECONNRESET`), which is not a `DockerError`. The `cause` of that error has the same exit code and standard error.
 
 Set the keepalive in `~/.ssh/config`:
 
@@ -588,7 +592,7 @@ export class Docker implements AsyncDisposable {
   readonly images: Images;
 
   info(options?: CancelOptions): Promise<EngineApi.SystemInfo>;
-  /** The events of the engine as they happen. An abort of the signal rejects the iteration with its reason. */
+  /** The events of the engine as they happen. An abort of the signal rejects the iteration with its reason. A lost connection rejects it with the error of Node. */
   events(
     options?: CancelOptions & { since?: number; filters?: Filters },
   ): AsyncIterable<EngineApi.EventMessage>;

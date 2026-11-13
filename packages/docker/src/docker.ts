@@ -112,8 +112,9 @@ export class Docker implements AsyncDisposable {
 
   /**
    * The events of the engine as they happen, on a connection of their own.
-   * The iteration ends only when the signal aborts, and then it rejects with
-   * the reason of the signal.
+   * The iteration ends when the signal aborts, and then it rejects with the
+   * reason of the signal. When the connection is lost, it rejects with the
+   * error of Node, not with a DockerError: call events() again.
    */
   async *events(
     options: CancelOptions & { since?: number; filters?: Filters } = {},

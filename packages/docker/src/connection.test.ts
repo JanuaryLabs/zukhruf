@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdir } from 'node:fs/promises';
+import { chmod, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, test } from 'node:test';
 
@@ -14,6 +14,13 @@ import {
 import { fakeEngine } from './testing/fake-engine.ts';
 import { ENTRY, lastJson, runScenario } from './testing/scenario.ts';
 import { scratchDirectory } from './testing/scratch-directory.ts';
+
+const cannotDenyTheSocket =
+  process.platform === 'win32'
+    ? 'the mode of a file does not deny a connection on Windows'
+    : process.getuid?.() === 0
+      ? 'root ignores the mode of the socket'
+      : false;
 
 describe('Docker.connect() refuses an engine it cannot use', () => {
   test('a socket that does not exist is a ConnectionFailedError', async () => {
@@ -29,6 +36,7 @@ describe('Docker.connect() refuses an engine it cannot use', () => {
       assert.ok(error instanceof ConnectionFailedError);
       assert.ok(error instanceof DockerError);
       assert.equal(error.host, host);
+      assert.equal(error.message, `Cannot connect to the engine at ${host}.`);
       assert.equal(Reflect.get(Object(error.cause), 'code'), 'ENOENT');
       return true;
     });
@@ -66,6 +74,10 @@ createServer().listen(${JSON.stringify(socketPath)}, () => console.log('listenin
       await assert.rejects(connecting, (error: unknown) => {
         assert.ok(error instanceof ConnectionFailedError);
         assert.equal(error.host, `unix://${socketPath}`);
+        assert.equal(
+          error.message,
+          `Cannot connect to the engine at unix://${socketPath}.`,
+        );
         assert.equal(Reflect.get(Object(error.cause), 'code'), 'ECONNREFUSED');
         return true;
       });
@@ -73,6 +85,39 @@ createServer().listen(${JSON.stringify(socketPath)}, () => console.log('listenin
       listener.kill('SIGKILL');
     }
   });
+
+  test(
+    'a socket that the system denies is a ConnectionFailedError',
+    { skip: cannotDenyTheSocket },
+    async () => {
+      // Arrange
+      await using scratch = await scratchDirectory();
+      await using engine = await fakeEngine({
+        directory: scratch.path,
+        apiVersion: '1.51',
+      });
+      await chmod(engine.socketPath, 0o000);
+
+      // Act
+      const connecting = Docker.connect({
+        clock: globalThis,
+        host: engine.host,
+      });
+
+      // Assert
+      await assert.rejects(connecting, (error: unknown) => {
+        assert.ok(error instanceof ConnectionFailedError);
+        assert.equal(error.host, engine.host);
+        assert.equal(
+          error.message,
+          `Cannot connect to the engine at ${engine.host}.`,
+        );
+        assert.equal(Reflect.get(Object(error.cause), 'code'), 'EACCES');
+        return true;
+      });
+      assert.deepEqual(engine.paths, []);
+    },
+  );
 
   test('an engine with an API version below 1.44 is an UnsupportedEngineError', async () => {
     // Arrange
@@ -217,6 +262,77 @@ describe('a request that the engine answers with an error', () => {
       assert.equal(error.status, 500);
       assert.deepEqual(error.request, { method: 'GET', path: '/info' });
       assert.equal(error.message, 'the daemon is shutting down');
+      return true;
+    });
+  });
+});
+
+describe('a connection that the engine closes before its answer', () => {
+  test('is a ConnectionFailedError that says the connection failed after it opened', async () => {
+    // Arrange
+    await using scratch = await scratchDirectory();
+    await using engine = await fakeEngine({
+      directory: scratch.path,
+      apiVersion: '1.51',
+      answer: (request) => {
+        request.socket.destroy();
+      },
+    });
+    await using docker = await Docker.connect({
+      clock: globalThis,
+      host: engine.host,
+    });
+
+    // Act
+    const info = docker.info();
+
+    // Assert
+    await assert.rejects(info, (error: unknown) => {
+      assert.ok(error instanceof ConnectionFailedError);
+      assert.equal(error.host, engine.host);
+      assert.equal(
+        error.message,
+        `Error during the connection to the engine at ${engine.host}.`,
+      );
+      assert.equal(Reflect.get(Object(error.cause), 'code'), 'ECONNRESET');
+      return true;
+    });
+    assert.deepEqual(engine.paths, ['/_ping', '/v1.51/info']);
+  });
+});
+
+describe('a connection that the engine closes after its answer started', () => {
+  test('rejects the iteration of events() with the error of Node, not with a DockerError, after the events that came', async () => {
+    // Arrange
+    await using scratch = await scratchDirectory();
+    await using engine = await fakeEngine({
+      directory: scratch.path,
+      apiVersion: '1.51',
+      answer: (request, response) => {
+        response.writeHead(200, { 'Content-Type': 'application/json' });
+        response.write(
+          `${JSON.stringify({ Type: 'container', Action: 'start' })}\n`,
+          () => request.socket.destroy(),
+        );
+      },
+    });
+    await using docker = await Docker.connect({
+      clock: globalThis,
+      host: engine.host,
+    });
+    const events = docker.events()[Symbol.asyncIterator]();
+
+    // Act
+    const first = await events.next();
+    const second = events.next();
+
+    // Assert
+    assert.equal(first.value?.Action, 'start');
+    await assert.rejects(second, (error: unknown) => {
+      assert.ok(Error.isError(error));
+      assert.equal(error instanceof DockerError, false);
+      assert.equal(error.message, 'aborted');
+      assert.equal(Reflect.get(error, 'code'), 'ECONNRESET');
       return true;
     });
   });
