@@ -14,4 +14,8 @@ export { ReadEveryRow } from './read-every-row.ts';
 export type { Start } from './start.ts';
 export type { TableChanges } from './table-changes.ts';
 export type { KeyedRow, Table } from './tables.ts';
-export { UnavailableError } from '@zukhruf/sqlite-open';
+export {
+  DeniedError,
+  MissingError,
+  UnavailableError,
+} from '@zukhruf/sqlite-open';

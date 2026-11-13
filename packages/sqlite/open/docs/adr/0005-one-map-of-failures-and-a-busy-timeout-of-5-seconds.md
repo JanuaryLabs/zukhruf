@@ -1,5 +1,7 @@
 # One map of failures and a busy timeout of 5 seconds
 
+> Superseded in part on 2026-11-13 by [ADR 0008](./0008-a-missing-file-and-a-denied-file-are-two-classes.md): `UnavailableError.from` gives a `MissingError` or a `DeniedError`, two subclasses of `UnavailableError`, when the error says which. The codes of the map and the busy timeout do not change.
+
 The callers of SQLite handled the failures of an open in different ways:
 
 - "The file is missing, or the system denies access" had four encodings in zukhruf: error 14 with an exact match, error 14 with a mask, and two sets of file system codes, one with `EPERM` and one without it.

@@ -4,9 +4,11 @@ import { once } from 'node:events';
 import {
   chownSync,
   existsSync,
+  mkdirSync,
   readFileSync,
   readdirSync,
   statSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { chmod } from 'node:fs/promises';
@@ -18,7 +20,9 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import {
+  DeniedError,
   type Journal,
+  MissingError,
   PersistentWriteAheadLog,
   RollbackJournal,
   UnavailableError,
@@ -285,6 +289,198 @@ test(
       assert.equal(unavailable.cause, error);
     }
     assert.equal(UnavailableError.from(file, new Error('other')), undefined);
+  },
+);
+
+// The class says which of the two the caller must fix: a MissingError is a
+// wrong path, a DeniedError is a grant that the process does not have.
+function unavailableAs(
+  kind: typeof MissingError | typeof DeniedError,
+  path: string,
+  errcode: 14 | 1544 = 14,
+) {
+  return (error: unknown) => {
+    assert.ok(error instanceof kind, String(error));
+    assert.equal(error.name, kind.name);
+    assert.equal(error.path, path);
+    assert.ok(Error.isError(error.cause) && 'errcode' in error.cause);
+    assert.equal(error.cause.errcode, errcode);
+    return true;
+  };
+}
+
+test('a path with no file is a MissingError', async () => {
+  // Arrange
+  await using dir = await new TemporaryFiles().directory('open-');
+  const path = join(dir.path, 'missing.sqlite');
+
+  // Act
+  const opening = () => open(path, { readOnly: true });
+
+  // Assert
+  assert.throws(opening, unavailableAs(MissingError, path));
+});
+
+test('a file in a folder that is not there, or below a file, is a MissingError, for a reader and for an owner', async () => {
+  // Arrange
+  await using dir = await new TemporaryFiles().directory('open-');
+  const inMissingFolder = join(dir.path, 'missing', 'notes.sqlite');
+  const file = join(dir.path, 'notes.sqlite');
+  writeFileSync(file, '');
+  const belowFile = join(file, 'child.sqlite');
+
+  // Act
+  const attempts = [inMissingFolder, belowFile].flatMap((path) => [
+    [path, () => open(path, { readOnly: true })] as const,
+    [path, () => open(path)] as const,
+  ]);
+
+  // Assert
+  for (const [path, opening] of attempts)
+    assert.throws(opening, unavailableAs(MissingError, path));
+});
+
+test(
+  'a file with mode 000 is a DeniedError, for a reader and for an owner',
+  { skip: noChmod },
+  async () => {
+    // Arrange
+    await using dir = await new TemporaryFiles().directory('open-');
+    const path = join(dir.path, 'notes.sqlite');
+    open(path).close();
+    await chmod(path, 0o000);
+
+    // Act
+    const reading = () => open(path, { readOnly: true });
+    const owning = () => open(path);
+
+    // Assert
+    assert.throws(reading, unavailableAs(DeniedError, path));
+    assert.throws(owning, unavailableAs(DeniedError, path));
+  },
+);
+
+test(
+  'a path in a folder with mode 000 is a DeniedError, with or without a file there',
+  // The system does not say whether a file is in a folder that it denies.
+  { skip: noChmod },
+  async () => {
+    // Arrange
+    await using dir = await new TemporaryFiles().directory('open-');
+    const folder = join(dir.path, 'denied');
+    const present = join(folder, 'notes.sqlite');
+    const absent = join(folder, 'missing.sqlite');
+    mkdirSync(folder);
+    open(present).close();
+    await chmod(folder, 0o000);
+    try {
+      // Act
+      const attempts = [present, absent].flatMap((path) => [
+        [path, () => open(path, { readOnly: true })] as const,
+        [path, () => open(path)] as const,
+      ]);
+
+      // Assert
+      for (const [path, opening] of attempts)
+        assert.throws(opening, unavailableAs(DeniedError, path));
+    } finally {
+      await chmod(folder, 0o755);
+    }
+  },
+);
+
+test(
+  'an owner in a folder that it cannot write is a DeniedError',
+  { skip: noChmod },
+  async () => {
+    // Arrange
+    await using dir = await new TemporaryFiles().directory('open-');
+    const path = join(dir.path, 'notes.sqlite');
+    new DatabaseSync(path).close();
+    await chmod(dir.path, 0o555);
+    try {
+      // Act
+      const owning = () => open(path);
+
+      // Assert
+      assert.throws(owning, unavailableAs(DeniedError, path, 1544));
+    } finally {
+      await chmod(dir.path, 0o755);
+    }
+  },
+);
+
+test(
+  'a failure that the second look cannot decide is a plain UnavailableError',
+  { skip: noChmod },
+  async () => {
+    // Arrange: a symbolic link to itself is not missing and not denied, and
+    // the file system cannot open the text of a file: URL as a path.
+    await using dir = await new TemporaryFiles().directory('open-');
+    const loop = join(dir.path, 'loop.sqlite');
+    symlinkSync(loop, loop);
+    const denied = join(dir.path, 'notes.sqlite');
+    open(denied).close();
+    await chmod(denied, 0o000);
+    const url = pathToFileURL(denied);
+
+    // Act
+    const attempts = [
+      [loop, () => open(loop, { readOnly: true })] as const,
+      [String(url), () => open(url, { readOnly: true })] as const,
+    ];
+
+    // Assert
+    for (const [path, opening] of attempts)
+      assert.throws(opening, (error: unknown) => {
+        assert.ok(unavailable(path)(error));
+        assert.ok(!(error instanceof MissingError), String(error));
+        assert.ok(!(error instanceof DeniedError), String(error));
+        return true;
+      });
+  },
+);
+
+test(
+  'UnavailableError.from gives a MissingError for ENOENT and ENOTDIR, and a DeniedError for EACCES and EPERM',
+  { skip: noChmod },
+  async () => {
+    // Arrange
+    await using dir = await new TemporaryFiles().directory('open-');
+    const file = join(dir.path, 'notes.sqlite');
+    writeFileSync(file, '');
+    const denied = join(dir.path, 'denied.sqlite');
+    writeFileSync(denied, '');
+    await chmod(denied, 0o000);
+    const failures = [
+      [
+        MissingError,
+        'ENOENT',
+        () => statSync(join(dir.path, 'missing.sqlite')),
+      ],
+      [MissingError, 'ENOTDIR', () => statSync(join(file, 'child.sqlite'))],
+      [DeniedError, 'EACCES', () => readFileSync(denied)],
+      // Only root can give a file to another user.
+      [DeniedError, 'EPERM', () => chownSync(file, 0, 0)],
+    ] as const;
+
+    for (const [kind, code, fail] of failures) {
+      const error = thrown(fail);
+      assert.ok(
+        Error.isError(error) && 'code' in error && error.code === code,
+        code,
+      );
+
+      // Act
+      const unavailable = UnavailableError.from(file, error);
+
+      // Assert
+      assert.ok(unavailable instanceof kind, code);
+      assert.equal(unavailable.name, kind.name, code);
+      assert.equal(unavailable.path, file);
+      assert.equal(unavailable.cause, error);
+      assert.match(unavailable.message, /cannot be opened/);
+    }
   },
 );
 

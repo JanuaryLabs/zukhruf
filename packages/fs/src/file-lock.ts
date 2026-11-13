@@ -1,7 +1,6 @@
-import { existsSync } from 'node:fs';
 import type { DatabaseSync } from 'node:sqlite';
 
-import { UnavailableError, UnchangedJournal, open } from '@zukhruf/sqlite-open';
+import { MissingError, UnchangedJournal, open } from '@zukhruf/sqlite-open';
 
 const SQLITE_BUSY = 5;
 
@@ -50,8 +49,7 @@ export class FileLock implements Disposable {
     try {
       database = open(path, { readOnly: true, timeout: 0 });
     } catch (error) {
-      if (!(error instanceof UnavailableError)) throw error;
-      if (!existsSync(path)) return 'missing';
+      if (error instanceof MissingError) return 'missing';
       // A file that exists but cannot be opened is a fault, not a missing
       // file: it surfaces as the UnavailableError of the open.
       throw error;

@@ -47,3 +47,11 @@ _Avoid_: Lock timeout, wait
 **Unavailable**:
 The file of the database is missing, or the system denies access to it. SQLite then gives `SQLITE_CANTOPEN` (14), or `SQLITE_READONLY_DIRECTORY` (1544) when the folder denies the write of a journal, and the file system gives `ENOENT`, `ENOTDIR`, `EACCES` or `EPERM`. The package then throws `UnavailableError`. The caller can fix it, for example with a grant of access. Other failures are not unavailable.
 _Avoid_: Not found, permission error
+
+**Missing**:
+An unavailable file that is not there, or that has a folder on its path that is not there. The file system gives `ENOENT` or `ENOTDIR`. The package then throws `MissingError`, a subclass of `UnavailableError`. The caller can check the path, or make the database.
+_Avoid_: Not found, absent
+
+**Denied**:
+An unavailable file that the system keeps from this process: a file mode, a sandbox or a privacy rule. The file system gives `EACCES` or `EPERM`. The package then throws `DeniedError`, a subclass of `UnavailableError`. A path in a folder that the system denies is denied too, with a file there or not. The caller can give the process access.
+_Avoid_: Permission error, forbidden

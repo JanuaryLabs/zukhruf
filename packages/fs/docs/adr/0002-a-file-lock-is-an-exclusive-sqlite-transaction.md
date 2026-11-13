@@ -27,7 +27,7 @@ These rules come from the copies:
 - A file with other content makes `tryLock()` throw (`SQLITE_NOTADB`). A refusal would make a caller wait for a holder that never comes.
 - A connection that holds the lock is kept in a module-level set until it lets the lock go. Garbage collection closes a connection that nothing refers to, and SQLite then lets the lock go. A test shows this on Node.js 26: without the set, a lock of a handle that nothing refers to stops at the next garbage collection.
 - `FileLock.open` does not set the journal at the open (`UnchangedJournal` of `@zukhruf/sqlite-open`). The statement that sets the journal waits for the lock of the file. Thus each `tryLock()` sets the journal.
-- `check` opens the file read-only. When the open throws `UnavailableError` of `@zukhruf/sqlite-open` and no file is at the path, the result is `'missing'`. A file that is present but cannot be opened is a fault, and `check` throws that `UnavailableError`. Its `cause` is the error of SQLite.
+- `check` opens the file read-only. When the open throws `MissingError` of `@zukhruf/sqlite-open`, the file or a folder on its path is not there, and the result is `'missing'`. A file that is present but cannot be opened is a fault, and `check` throws the `UnavailableError` of the open, for a file that the system denies a `DeniedError`. Its `cause` is the error of SQLite.
 
 ## Considered Options
 
