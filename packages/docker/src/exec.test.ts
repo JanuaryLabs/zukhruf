@@ -7,6 +7,8 @@ import {
   ContainerNotFoundError,
   ContainerNotRunningError,
   Docker,
+  type ExecResult,
+  IncompleteOutputError,
 } from './index.ts';
 import { IMAGE, TEST_LABEL, connect, removeLabeled } from './testing/engine.ts';
 import { fakeEngine } from './testing/fake-engine.ts';
@@ -21,6 +23,25 @@ async function startSleeper(docker: Docker, run: string) {
   });
   await container.start();
   return container;
+}
+
+/**
+ * The result, or an IncompleteOutputError with its exit code: the engine can
+ * close the connection while the input is still being written (ADR 0012).
+ * Each other rejection fails.
+ */
+function assertResultOrIncomplete(
+  settled: PromiseSettledResult<ExecResult>,
+  expected: ExecResult,
+): void {
+  if (
+    settled.status === 'rejected' &&
+    settled.reason instanceof IncompleteOutputError
+  ) {
+    assert.equal(settled.reason.exitCode, expected.exitCode);
+    return;
+  }
+  assert.deepEqual(settled, { status: 'fulfilled', value: expected });
 }
 
 describe('container.exec()', () => {
@@ -49,7 +70,7 @@ describe('container.exec()', () => {
     }
   });
 
-  test('a command that does not read all of its input still gives its result: true and head -c1 with 10 MB of stdin', async () => {
+  test('a command that does not read all of its input gives its result, or an IncompleteOutputError with its exit code, and never an error of the socket: true and head -c1 with 10 MB of stdin', async () => {
     // Arrange
     await using docker = await connect(IMAGE);
     const run = randomUUID();
@@ -65,13 +86,17 @@ describe('container.exec()', () => {
       ]);
 
       // Assert
-      assert.deepEqual(ignored, {
-        status: 'fulfilled',
-        value: { exitCode: 0, stdout: '', stderr: '', output: '' },
+      assertResultOrIncomplete(ignored, {
+        exitCode: 0,
+        stdout: '',
+        stderr: '',
+        output: '',
       });
-      assert.deepEqual(first, {
-        status: 'fulfilled',
-        value: { exitCode: 0, stdout: 'a', stderr: '', output: 'a' },
+      assertResultOrIncomplete(first, {
+        exitCode: 0,
+        stdout: 'a',
+        stderr: '',
+        output: 'a',
       });
     } finally {
       await removeLabeled(docker, run);

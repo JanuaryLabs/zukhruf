@@ -20,6 +20,7 @@ export {
   DockerError,
   ImageInUseError,
   ImageNotFoundError,
+  IncompleteOutputError,
   NameConflictError,
   NetworkInUseError,
   NetworkNotFoundError,

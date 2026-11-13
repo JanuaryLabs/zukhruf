@@ -98,6 +98,28 @@ export interface EngineAnswer {
   readonly request: EngineRequest;
 }
 
+/**
+ * The command of an exec or an attach ended, but its output can be
+ * incomplete: a write to its standard input failed before the output ended,
+ * when no output had come or the caller had not taken the output. Node then
+ * destroys the connection, and output that was still on the way is gone
+ * (ADR 0012). The `cause` is the error of the write. The package does not run
+ * the command again.
+ */
+export class IncompleteOutputError extends DockerError {
+  /** The exit code of the command. */
+  readonly exitCode: number;
+
+  constructor(exitCode: number, options: { cause: unknown }) {
+    super(
+      `The command ended with exit code ${exitCode}, but its output can be incomplete: the engine closed the connection while the input was still being written.`,
+      options,
+    );
+    this.name = 'IncompleteOutputError';
+    this.exitCode = exitCode;
+  }
+}
+
 /** The base of every answer of the engine that is an error. Its message is the message of the engine. */
 export class DockerEngineError extends DockerError {
   /** The HTTP status; undefined for an error in the progress of a pull, a push or a load. */

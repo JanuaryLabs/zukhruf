@@ -1,7 +1,8 @@
-import type { Duplex } from 'node:stream';
+import { EventEmitter, once } from 'node:events';
+import { type Duplex, getDefaultHighWaterMark } from 'node:stream';
 
 import type { HijackedConnection } from './engine-client.ts';
-import { DockerError } from './errors.ts';
+import { DockerError, IncompleteOutputError } from './errors.ts';
 import { type OutputChunk, outputChunks } from './multiplexed-stream.ts';
 import { type ExecResult, readOutput } from './output.ts';
 
@@ -17,21 +18,126 @@ export interface ContainerProcessOptions {
   exitCode: (outputEnded: Promise<void>) => Promise<number>;
 }
 
-async function* withHead(
-  head: Buffer,
-  socket: Duplex,
-): AsyncGenerator<Uint8Array> {
-  if (head.byteLength > 0) yield head;
-  for await (const chunk of socket) {
-    if (chunk instanceof Uint8Array) yield chunk;
-  }
-}
+/** The codes of a write to a connection that the engine closed. */
+const WRITE_FAILURES = new Set(['EPIPE', 'ECONNRESET']);
 
-/** Writes to the socket and resolves when the socket took the bytes. */
-async function write(socket: Duplex, chunk: Uint8Array): Promise<void> {
-  const { promise, resolve, reject } = Promise.withResolvers<void>();
-  socket.write(chunk, (error) => (error ? reject(error) : resolve()));
-  return promise;
+/** What ends the output when the connection ends. */
+type Ending =
+  | { readonly kind: 'end' }
+  | { readonly kind: 'read error'; readonly error: Error }
+  | {
+      readonly kind: 'failed write';
+      readonly error: Error;
+      /** No output had come, or the connection was paused. */
+      readonly incomplete: boolean;
+    };
+
+/**
+ * The output bytes of a hijacked connection: the head, then each chunk in
+ * order, and how the output ended (ADR 0012). It reads with 'data' events,
+ * because the iterator of a destroyed stream drops the chunks that Node
+ * already read. It pauses the connection while the caller has not taken the
+ * high-water mark of Node, so it reads as fast as the caller iterates.
+ */
+class HijackedOutput {
+  readonly #socket: Duplex;
+  readonly #highWaterMark = getDefaultHighWaterMark(false);
+  readonly #chunks: Uint8Array[] = [];
+  /** Emits 'change' when a chunk comes or the output ends, for the iteration that waits. */
+  readonly #arrivals = new EventEmitter();
+  #queuedBytes = 0;
+  #outputBytes: number;
+  #state: { readonly phase: 'reading' | 'ended'; readonly ending: Ending } = {
+    phase: 'reading',
+    ending: { kind: 'end' },
+  };
+
+  constructor(socket: Duplex, head: Buffer) {
+    this.#socket = socket;
+    this.#outputBytes = head.byteLength;
+    if (head.byteLength > 0) this.#push(head);
+    socket.on('data', this.#onData);
+    socket.on('error', (error) => this.#onError(error));
+    socket.once('end', () => this.#end());
+    socket.once('close', () => this.#end());
+  }
+
+  readonly #onData = (chunk: Buffer) => {
+    this.#outputBytes += chunk.byteLength;
+    this.#push(chunk);
+  };
+
+  #push(chunk: Uint8Array): void {
+    this.#chunks.push(chunk);
+    this.#queuedBytes += chunk.byteLength;
+    if (this.#queuedBytes >= this.#highWaterMark) this.#socket.pause();
+    this.#arrivals.emit('change');
+  }
+
+  /**
+   * A reset ends the output. The error that follows a failed write is the
+   * error of that write, which writeFailed() already has.
+   */
+  #onError(error: NodeJS.ErrnoException): void {
+    const { phase, ending } = this.#state;
+    if (phase === 'ended' || ending.kind !== 'end') return;
+    if (error.code === 'ECONNRESET') return;
+    this.#state = { phase, ending: { kind: 'read error', error } };
+  }
+
+  /** A destroyed connection still holds the chunks that Node read while it was paused. */
+  #end(): void {
+    if (this.#state.phase === 'ended') return;
+    this.#socket.off('data', this.#onData);
+    for (let rest: unknown = this.#socket.read(); rest !== null;) {
+      if (rest instanceof Uint8Array) this.#push(rest);
+      rest = this.#socket.read();
+    }
+    this.#state = { phase: 'ended', ending: this.#state.ending };
+    this.#arrivals.emit('change');
+  }
+
+  /**
+   * Takes a failed write of the input. Node then destroys the connection with
+   * the output that is still in the kernel, so the output can be incomplete
+   * when no output had come or the connection was paused.
+   */
+  writeFailed(error: NodeJS.ErrnoException): void {
+    const { phase, ending } = this.#state;
+    if (phase === 'ended' || ending.kind !== 'end') return;
+    if (!WRITE_FAILURES.has(error.code ?? '')) return;
+    const incomplete = this.#outputBytes === 0 || this.#socket.isPaused();
+    this.#state = {
+      phase,
+      ending: { kind: 'failed write', error, incomplete },
+    };
+  }
+
+  /** The error of the failed write, when the output can be incomplete. */
+  get incompleteBecause(): { cause: Error } | undefined {
+    const { ending } = this.#state;
+    return ending.kind === 'failed write' && ending.incomplete
+      ? { cause: ending.error }
+      : undefined;
+  }
+
+  async *chunks(): AsyncGenerator<Uint8Array> {
+    for (;;) {
+      const chunk = this.#chunks.shift();
+      if (chunk !== undefined) {
+        this.#queuedBytes -= chunk.byteLength;
+        if (this.#queuedBytes < this.#highWaterMark) this.#socket.resume();
+        yield chunk;
+        continue;
+      }
+      const { phase, ending } = this.#state;
+      if (phase === 'ended') {
+        if (ending.kind === 'read error') throw ending.error;
+        return;
+      }
+      await once(this.#arrivals, 'change');
+    }
+  }
 }
 
 /**
@@ -52,19 +158,26 @@ export class ContainerProcess implements AsyncIterable<OutputChunk> {
   ) {
     const { socket, head, contentType } = connection;
     const { signal } = options;
-    // An error before the first read waits for the iteration, which rejects with it.
-    socket.on('error', () => undefined);
+    const output = new HijackedOutput(socket, head);
     const abort = () => socket.destroy(signal?.reason);
     signal?.addEventListener('abort', abort, { once: true });
     socket.once('close', () => signal?.removeEventListener('abort', abort));
 
     const outputEnded = Promise.withResolvers<void>();
     outputEnded.promise.catch(() => undefined);
+    const exitCode = options.exitCode(outputEnded.promise);
+    // A caller that never reads the exit code gets no unhandled rejection.
+    exitCode.catch(() => undefined);
+    this.#exitCode = () => exitCode;
+
     async function* read(): AsyncGenerator<OutputChunk> {
       try {
         signal?.throwIfAborted();
-        yield* outputChunks(withHead(head, socket), contentType);
+        yield* outputChunks(output.chunks(), contentType);
         outputEnded.resolve();
+        const incomplete = output.incompleteBecause;
+        if (incomplete)
+          throw new IncompleteOutputError(await exitCode, incomplete);
       } catch (error) {
         outputEnded.reject(error);
         throw error;
@@ -77,15 +190,17 @@ export class ContainerProcess implements AsyncIterable<OutputChunk> {
     }
     this.#unread = [read()];
 
-    const exitCode = options.exitCode(outputEnded.promise);
-    // A caller that never reads the exit code gets no unhandled rejection.
-    exitCode.catch(() => undefined);
-    this.#exitCode = () => exitCode;
-
     this.stdin = options.stdin
       ? new WritableStream<Uint8Array>({
           write: async (chunk) => {
-            if (chunk.byteLength > 0) await write(socket, chunk);
+            if (chunk.byteLength === 0) return;
+            const { promise, resolve, reject } = Promise.withResolvers<void>();
+            socket.write(chunk, (error) => {
+              if (!error) return resolve();
+              output.writeFailed(error);
+              reject(error);
+            });
+            await promise;
           },
           close: () => connection.endInput(),
           abort: () => connection.endInput(),

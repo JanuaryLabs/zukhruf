@@ -430,7 +430,7 @@ export class Container {
     body: EngineApi.ExecConfig,
     options: CancelOptions & { stdin?: string | Uint8Array } = {},
   ): Promise<ExecResult> {
-    const { stdin, signal } = options;
+    const { stdin } = options;
     const process = await this.spawn(body, {
       ...options,
       stdin: stdin !== undefined,
@@ -445,8 +445,9 @@ export class Container {
       await writer.close();
     })();
     // A command can end before it reads all of its input, such as `true` or
-    // `head -c1`. The write then fails, but the output and the exit code are
-    // complete: the result stands.
+    // `head -c1`. The write then fails, and that is not an error of the call:
+    // the result stands, unless the output can be incomplete, and then
+    // collect() rejects with IncompleteOutputError (ADR 0012).
     const [result] = await Promise.allSettled([process.collect(), writing]);
     if (result.status === 'rejected') throw result.reason;
     return result.value;

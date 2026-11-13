@@ -89,12 +89,15 @@ An error has its own class when a caller does something different after it: star
 | `PathNotFoundError`        | A file request gets 404 and the container exists                                                                                              | Use a default, or create the file                  |
 | `NotAFileError`            | `readFile()` finds a directory, a link or another kind of entry. `kind` names it                                                              | Use `getArchive()` for the tree                    |
 | `ReadOnlyPathError`        | The engine refuses an extraction, and an inspect shows that the directory is on a read-only root filesystem or in a read-only mount           | Write under a writable mount, or use `exec()`      |
+| `IncompleteOutputError`    | A stdin write of an exec or an attach fails before the output ends, and no output came or the caller did not take it                          | Go on, or run it again if that is safe             |
 
 Each class extends a base class, so a broad catch still works. `DockerError` is the base of every error of the package. `DockerEngineError` is the base of every answer of the engine that is an error. It has `status` and `request` (the `method` and `path` of the request), and its `message` is the message of the engine. The base keeps the request apart in `request`, so `path` on `PathNotFoundError`, `NotAFileError` and `ReadOnlyPathError` is the path in the container. An error with no class of its own, such as an error in the progress of a pull, is a `DockerEngineError`.
 
 `ConnectionFailedError` has two messages, and its `cause` is the error of Node or the exit error of `ssh`. `Cannot connect to the engine at <host>.` means that the connection did not open. `Error during the connection to the engine at <host>.` means that the connection opened, or `ssh` started, and then it failed before the answer.
 
 A connection that is lost after the answer started is not a `ConnectionFailedError`, and it is not a `DockerError`. The call or the iteration rejects with the error of Node: the message `aborted` and the code `ECONNRESET` for a JSON answer and for a stream such as events, followed logs or the progress of a pull, and the error of the socket for an attach or an exec. The stream does not start again by itself: call the method again. The Go client of Moby has the same rule ([ADR 0011](./docs/adr/0011-only-a-failure-before-the-answer-is-a-connection-failure.md)).
+
+For an exec or an attach on a Unix socket or a named pipe, a reset of the connection (`ECONNRESET`) is the end of the output, as in the Podman runtime. The iteration first gives the output that came before the reset. The exit code comes from the engine, as at each end of the output. Thus, when the connection drops in the middle of a run and the engine stays up, the call gives the real exit code with only the output that came before the drop. The call then waits until the command ends, as the Podman runtime waits for the exit. Give a signal to limit that wait. Another error of the socket rejects the iteration after the output that came before it ([ADR 0012](./docs/adr/0012-a-reset-ends-the-output-and-a-failed-write-is-an-error-only-when-output-can-be-lost.md)).
 
 ```ts
 import {
@@ -291,7 +294,14 @@ await postgres.exec(
 );
 ```
 
-A command can end before it reads all of its input, such as `head -c1`. The result of the command then stands: the input that the command did not read is not an error.
+A command can end before it reads all of its input, such as `head -c1`. The engine then closes the connection, and the write of the input fails. That failure is not an error of the call: the input that the command did not read is not an error, and the result of the command stands.
+
+But after a failed write, Node closes the connection, and output that is still on the way is lost. Thus the call rejects with `IncompleteOutputError` when the write fails before the output ends, in two cases:
+
+- No output came. The package cannot know if the command printed output: `true` prints nothing and loses nothing.
+- The caller did not take the output, and the package stopped the reads. `exec()` and `collect()` take each chunk at once, so they get only the first case.
+
+The error has the exit code of the command, and its `cause` is the error of the write. The output can be incomplete, not certainly incomplete. The caller goes on, or runs the command again when that is safe. The package does not run the command again: the command did run, and some commands are not safe to run two times ([ADR 0012](./docs/adr/0012-a-reset-ends-the-output-and-a-failed-write-is-an-error-only-when-output-can-be-lost.md)).
 
 `container.spawn()` gives the container process while the command runs. With `stdin: true`, the container process has a writable `stdin`. Only `stdin.close()` ends the input. The package drops an empty write, so an empty write never ends the input.
 
@@ -925,6 +935,12 @@ export class UnsupportedEngineError extends DockerError {
   readonly engineVersion: string;
   /** The lowest API version that the package, or the call, needs. */
   readonly minimumVersion: string;
+}
+
+/** A write to the standard input failed before the output ended, and output can be lost. */
+export class IncompleteOutputError extends DockerError {
+  /** The exit code of the command. */
+  readonly exitCode: number;
 }
 
 /** The base of every answer of the engine that is an error. */

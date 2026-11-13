@@ -85,11 +85,11 @@ What closes the engine's end of the connection is not known. The handlers of Mob
 - `IncompleteOutputError` is a new exported class. [ADR 0007](./0007-an-error-has-its-own-class-when-the-caller-handles-it-differently.md) gives the rule: a class of its own when the next step of the caller is different. The name says what the caller must deal with. A command that prints nothing lost nothing, so a name with "lost" would be wrong. It is not an answer of the engine, so it extends `DockerError` and not `DockerEngineError`.
 - The exit code comes from the requests that the package already sends. For an exec, it is the inspect of the exec, every 10 ms while the engine reports the exec as running. For an attach, it is the open `POST /containers/{id}/wait`. The package sends no extra "still running" check, and it has no time limit. When the engine is gone, that request fails, and the call rejects.
 - The package does not run the command again.
-- An accepted limit: when a connection drops in the middle of a run and the engine stays up, the call gives the real exit code with only the output that came before the drop.
+- An accepted limit: when a connection drops in the middle of a run and the engine stays up, the call gives the real exit code with only the output that came before the drop. The call waits until the command ends, as the Podman runtime waits for the exit file of conmon. Without a signal, a command that never ends makes the call wait without end. Before this decision the call rejected at once with the reset. The signal of the caller limits the wait, as [ADR 0001](./0001-the-client-speaks-the-engine-api-not-the-docker-cli.md) gives each limit to the caller.
 - These parts are not covered:
   - The SSH transport. There the failure is a non-zero exit of `ssh`, not `ECONNRESET` or `EPIPE`. It needs its own measurement on a real sshd (backlog #4346).
   - A Windows named pipe was not run (backlog #2753).
   - A native Linux host and the rate on the CI runner were not measured. The probe ran on the virtual machine of Docker Desktop.
   - An output that Node reads in part before a write fails. It was not seen in 15,000 execs with 1 MB of output, but it is not excluded.
   - What closes the engine's end of the connection. That is an inference only.
-- The code follows in a later commit.
+- The code is in place: `src/container-process.ts` reads the hijacked connection, and `IncompleteOutputError` is in `src/errors.ts`.

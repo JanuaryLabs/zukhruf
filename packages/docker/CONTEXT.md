@@ -69,6 +69,14 @@ _Avoid_: Subprocess, child process (both run on this machine)
 One piece of output of a container process: its stream (`stdout` or `stderr`) and its bytes. The chunks come in the order of the engine, and each chunk comes once.
 _Avoid_: Event (an event is a message of `GET /events`), frame (the unit of the multiplexed stream on the connection)
 
+**End of output**:
+The end of the output chunks of a container process: the engine closes its side of the hijacked connection, or, on a Unix socket or a named pipe, resets it (`ECONNRESET`). The exit code comes from the engine, not from the connection.
+_Avoid_: EOF (one way to make the end)
+
+**Incomplete output**:
+Output of a container process that can be lost: a write to the standard input failed before the end of output, when no output had come or the caller had not taken the output. Node then closes the connection with the output that is still on the way. The call rejects with `IncompleteOutputError`.
+_Avoid_: Lost output (a command that prints nothing lost nothing)
+
 **End of input**:
 The close of the standard input of a container process. The command then reads the end of its input. Only a close ends the input: the client drops an empty write.
 _Avoid_: EOF write, half-close (one way to make the end on one kind of host)
