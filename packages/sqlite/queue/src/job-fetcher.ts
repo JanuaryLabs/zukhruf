@@ -17,14 +17,13 @@ type Fragment = [sql: string, ...values: SQLInputValue[]];
 type Candidate = { row: JobRow; activeCount: number; groupLimit: number };
 
 export class JobFetcher {
-  // pg-boss's fetchNextJob as work() calls it (node_modules/pg-boss/dist/
-  // plans.js:1839-2032): work() never forwards ignoreStartAfter
-  // (manager.js:951-956), so due jobs only.
+  // pg-boss's fetchNextJob (node_modules/pg-boss/dist/plans.js:1839-2032).
   static claim(
     db: DatabaseSync,
     queue: QueueRow,
     fetchOptions: {
       batchSize: number;
+      ignoreStartAfter: boolean;
       minPriority: number | undefined;
       maxPriority: number | undefined;
       groupConcurrency: number | GroupConcurrencyConfig | undefined;
@@ -36,6 +35,7 @@ export class JobFetcher {
     const { name, policy } = queue;
     const {
       batchSize,
+      ignoreStartAfter,
       minPriority,
       maxPriority,
       groupConcurrency,
@@ -56,10 +56,14 @@ export class JobFetcher {
     const conditions: Fragment[] = [
       ['j.queue_name = ?', name],
       ["j.state IN ('created', 'retry')"],
-      ['j.start_after <= ?', isoNow],
     ];
+    // plans.js:1928
+    const dueBy = ignoreStartAfter ? null : isoNow;
+    if (dueBy !== null) {
+      conditions.push(['j.start_after <= ?', dueBy]);
+    }
     if (policy === policies.key_strict_fifo) {
-      conditions.push(...JobFetcher.#keyStrictFifoConditions(isoNow));
+      conditions.push(...JobFetcher.#keyStrictFifoConditions(dueBy));
     }
     // plans.js:1941, with a null key read as '' on both sides (1794)
     if (ignoreSingletons && ignoreSingletons.length > 0) {
@@ -207,8 +211,9 @@ export class JobFetcher {
   // (plans.js:1907-1917, 1929-1939). pg-boss breaks created_on ties by id,
   // which only decides under a frozen clock: Postgres's microsecond now()
   // keeps sends apart. Millisecond created_on ties here, so insertion order
-  // (rowid) breaks ties, as Postgres's timestamps would.
-  static #keyStrictFifoConditions(isoNow: string): Fragment[] {
+  // (rowid) breaks ties, as Postgres's timestamps would. With
+  // ignoreStartAfter, a deferred job can be the head (plans.js:1915).
+  static #keyStrictFifoConditions(dueBy: string | null): Fragment[] {
     return [
       [
         `j.id = (
@@ -217,11 +222,11 @@ export class JobFetcher {
             AND h.singleton_key = j.singleton_key
             AND h.state IN ('created', 'retry')
             AND h.policy = '${policies.key_strict_fifo}'
-            AND h.start_after <= ?
+            ${dueBy === null ? '' : 'AND h.start_after <= ?'}
           ORDER BY h.state DESC, h.created_on, h.rowid
           LIMIT 1
         )`,
-        isoNow,
+        ...(dueBy === null ? [] : [dueBy]),
       ],
       [
         `NOT EXISTS (

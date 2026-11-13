@@ -1,6 +1,8 @@
 import type {
   CommandResponse,
+  FetchOptions,
   FindJobsOptions,
+  Job,
   JobAttempt,
   JobWithMetadata,
   OffWorkOptions,
@@ -58,6 +60,14 @@ export interface JobQueue {
     options: WorkOptions,
     handler: WorkHandler<unknown>,
   ): Promise<string>;
+  // A fetched job has no signal at run time, on both engines: only a worker
+  // adds one (node_modules/pg-boss/dist/manager.js:530). The `db` option is a
+  // Postgres connection, which SqliteJobQueue does not read.
+  fetch(
+    name: string,
+    options: FetchOptions & { includeMetadata: true },
+  ): Promise<JobWithMetadata<unknown>[]>;
+  fetch(name: string, options?: FetchOptions): Promise<Job<unknown>[]>;
   findJobs(
     name: string,
     options?: FindJobsOptions,

@@ -17,7 +17,7 @@ What keeps the jobs: Postgres for pg-boss, SQLite for this package. The API does
 _Avoid_: Backend (the parity suite says backend only for the two engines that it runs), driver, adapter
 
 **Subset**:
-The 13 methods of `PgBoss` that this package gives, which `JobQueue` declares. A method outside the subset does not exist here.
+The 14 methods of `PgBoss` that this package gives, which `JobQueue` declares. A method outside the subset does not exist here.
 _Avoid_: Port, facade, compatible API
 
 **Divergence**:

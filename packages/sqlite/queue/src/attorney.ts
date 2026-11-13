@@ -250,6 +250,33 @@ export class Attorney {
     return intervals;
   }
 
+  // attorney.js:399-406. pg-boss does not check groupConcurrency or
+  // ignoreGroups here.
+  static checkFetchArgs(name: unknown, options: object): void {
+    assert(name, 'missing queue name');
+    const read = (key: string) => Attorney.#read(options, key);
+    assert(
+      !('batchSize' in options) ||
+        (Number.isInteger(read('batchSize')) && Number(read('batchSize')) >= 1),
+      'batchSize must be an integer > 0',
+    );
+    assert(
+      !('includeMetadata' in options) ||
+        typeof read('includeMetadata') === 'boolean',
+      'includeMetadata must be a boolean',
+    );
+    assert(
+      !('priority' in options) || typeof read('priority') === 'boolean',
+      'priority must be a boolean',
+    );
+    assert(
+      !('ignoreStartAfter' in options) ||
+        typeof read('ignoreStartAfter') === 'boolean',
+      'ignoreStartAfter must be a boolean',
+    );
+    Attorney.#validatePriorityRangeConfig(options);
+  }
+
   // pg-boss reads options as plain properties, inherited ones included.
   static #read(config: object, key: string): unknown {
     return key in config ? Reflect.get(config, key) : undefined;

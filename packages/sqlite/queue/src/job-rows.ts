@@ -160,6 +160,11 @@ export class JobRows {
     row: JobRow,
     signal: AbortSignal = new AbortController().signal,
   ): FoundJob<unknown> {
+    return { ...JobRows.#allColumns(row), signal };
+  }
+
+  // JOB_COLUMNS_ALL (node_modules/pg-boss/dist/plans.js:592-620).
+  static #allColumns(row: JobRow): Omit<FoundJob<unknown>, 'signal'> {
     const data: unknown = JSON.parse(row.data);
 
     return {
@@ -168,7 +173,6 @@ export class JobRows {
       data,
       expireInSeconds: row.expire_seconds,
       heartbeatSeconds: row.heartbeat_seconds,
-      signal,
       groupId: row.group_id,
       groupTier: row.group_tier,
       priority: row.priority,
@@ -209,15 +213,24 @@ export class JobRows {
     };
   }
 
-  // A worker's job: pg-boss's minimal columns unless includeMetadata asks for
-  // all of them (node_modules/pg-boss/dist/plans.js:591-620, 2028).
+  // A worker's job: what fetch gives, plus the signal that the worker adds
+  // (node_modules/pg-boss/dist/manager.js:530).
   static toJob(
     row: JobRow,
     includeMetadata: boolean,
     signal: AbortSignal,
   ): Job<unknown> {
+    return { ...JobRows.toFetched(row, includeMetadata), signal };
+  }
+
+  // A fetched job: pg-boss's minimal columns unless includeMetadata asks for
+  // all of them (plans.js:591-620, 2028).
+  static toFetched(
+    row: JobRow,
+    includeMetadata: boolean,
+  ): Omit<Job<unknown>, 'signal'> {
     if (includeMetadata) {
-      return JobRows.toFound(row, signal);
+      return JobRows.#allColumns(row);
     }
     const data: unknown = JSON.parse(row.data);
     return {
@@ -229,7 +242,6 @@ export class JobRows {
       heartbeatSeconds: row.heartbeat_seconds,
       groupId: row.group_id,
       groupTier: row.group_tier,
-      signal,
     };
   }
 }

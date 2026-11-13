@@ -7,8 +7,11 @@ import { setImmediate } from 'node:timers/promises';
 import {
   type Clock,
   type ClockTimer,
+  type FetchOptions,
   type FindJobsOptions,
+  type Job,
   type JobAttempt,
+  type JobWithMetadata,
   type MaintenanceOptions,
   type OffWorkOptions,
   type PgBossEventMap,
@@ -988,6 +991,8 @@ export class SqliteJobQueue
               queue,
               {
                 batchSize,
+                // work() never forwards it (manager.js:951-956).
+                ignoreStartAfter: false,
                 minPriority,
                 maxPriority,
                 groupConcurrency,
@@ -1058,6 +1063,45 @@ export class SqliteJobQueue
       worker.start();
     }
     return firstWorkerId;
+  }
+
+  fetch(
+    name: string,
+    options: FetchOptions & { includeMetadata: true },
+  ): Promise<JobWithMetadata<unknown>[]>;
+  fetch(name: string, options?: FetchOptions): Promise<Job<unknown>[]>;
+  // node_modules/pg-boss/dist/manager.js:1560-1592, without options.db, which
+  // is a Postgres connection.
+  async fetch(name: string, options: FetchOptions = {}) {
+    Attorney.checkFetchArgs(name, options);
+    this.#warnDeprecatedFetchOptions(options);
+    const {
+      batchSize,
+      includeMetadata,
+      ignoreStartAfter = false,
+      minPriority,
+      maxPriority,
+      groupConcurrency,
+      ignoreGroups,
+    } = options;
+    const rows = await this.#activity.query(() => {
+      const queue = this.getQueueOrThrow(name);
+      return JobFetcher.claim(
+        this.db,
+        queue,
+        {
+          batchSize: batchSize || 1,
+          ignoreStartAfter,
+          minPriority,
+          maxPriority,
+          groupConcurrency,
+          ignoreGroups: ignoreGroups ?? undefined,
+          ignoreSingletons: this.#queueCache.fill(queue).singletons_active,
+        },
+        this.#now(),
+      );
+    });
+    return rows.map((row) => JobRows.toFetched(row, includeMetadata ?? false));
   }
 
   async findJobs(
@@ -1298,8 +1342,8 @@ export class SqliteJobQueue
   // only when the option is set to false (node_modules/pg-boss/dist/
   // manager.js:133-139, 1552-1559).
   #warnDeprecatedFetchOptions(options: {
-    priority: boolean | undefined;
-    orderByCreatedOn: boolean | undefined;
+    priority?: boolean | undefined;
+    orderByCreatedOn?: boolean | undefined;
   }): void {
     for (const option of ['priority', 'orderByCreatedOn'] as const) {
       if (options[option] === false && !this.#warnedFetchOptions.has(option)) {
