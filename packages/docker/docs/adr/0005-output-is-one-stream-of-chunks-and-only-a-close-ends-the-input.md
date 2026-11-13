@@ -15,10 +15,11 @@ The end of the input has a trap. On a Unix socket and over SSH the package ends 
 
 ## Consequences
 
-- A container process is an `AsyncIterable` of `{ stream: 'stdout' | 'stderr', data: Uint8Array }`, in the order of the engine. A caller that wants only standard output skips the other chunks. The package reads the connection as fast as the caller iterates, and it keeps no unread chunk.
+- A container process is an `AsyncIterable` of `{ stream: 'stdout' | 'stderr', data: Uint8Array }`, in the order of the engine. A caller that wants only standard output skips the other chunks. The package reads the connection as fast as the caller iterates. It reads ahead at most the default high-water mark of Node ([ADR 0012](./0012-a-reset-ends-the-output-and-a-failed-write-is-an-error-only-when-output-can-be-lost.md)).
 - `collect()` reads all chunks and gives `{ exitCode, stdout, stderr, output }`. `exec()` and `containers.run()` give the same result.
 - `exitCode` is a promise. For an exec, the package reads it with `GET /exec/{id}/json` after the output ends. For an attach, it reads it with `POST /containers/{id}/wait`.
 - The output of a container with a TTY is a raw stream. Each of its chunks is `stdout`.
 - `followLogs()` gives the same chunks for the logs of a running container, until the container stops or the signal aborts.
 - `stdin` is a `WritableStream`. Only its `close()` ends the input. The package drops an empty write, so an empty write never ends the input on any host.
+- For a command that ends before it reads all of its input, see [ADR 0012](./0012-a-reset-ends-the-output-and-a-failed-write-is-an-error-only-when-output-can-be-lost.md).
 - The package gives each chunk once. A second iteration of the same container process is an error.
