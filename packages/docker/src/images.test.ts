@@ -30,6 +30,43 @@ async function removeOwn(
 
 /** A multi-platform image that no other test uses, so a pull of one platform changes no other test. */
 const MULTI_PLATFORM = 'hello-world:linux';
+/**
+ * A pull names the image by its registry reference, so a test that pulls a
+ * platform of MULTI_PLATFORM cannot pull it under a name of its own run. At
+ * disposal this removes the name, and each digest reference that a pull of
+ * the test added, when the name was not on the engine before the test: on the
+ * classic image store the amd64 platform has the ID of hello-world:latest, and
+ * a name left behind is a second name of that ID for every later run (#4358).
+ * The classic image store keeps the digest reference of a pull, also after a
+ * pull of another platform moves the tag, and after a removal of the tag while
+ * another tag of the repository names that image. Two runs at once on one
+ * engine share the name: the first to finish removes it under the other.
+ */
+async function multiPlatformPulls(docker: Docker): Promise<
+  AsyncDisposable & {
+    pull(platform: string): Promise<void>;
+  }
+> {
+  const existed = (await docker.images.inspect(MULTI_PLATFORM)) !== undefined;
+  const added = new Set<string>();
+  return {
+    async pull(platform) {
+      const before = new Set(
+        (await docker.images.list()).flatMap((image) => image.RepoDigests),
+      );
+      await docker.images.pull(MULTI_PLATFORM, { platform });
+      const pulled = await docker.images.inspect(MULTI_PLATFORM);
+      for (const digest of new Set(pulled?.RepoDigests).difference(before)) {
+        added.add(digest);
+      }
+    },
+    async [Symbol.asyncDispose]() {
+      if (existed) return;
+      for (const digest of added) await docker.images.remove(digest);
+      await docker.images.remove(MULTI_PLATFORM);
+    },
+  };
+}
 const AMD64 = { os: 'linux', architecture: 'amd64' };
 const ARM64 = { os: 'linux', architecture: 'arm64' };
 
@@ -707,11 +744,10 @@ describe('docker.images', () => {
     });
     const run = randomUUID();
     const tags = [`zukhruf-test-${run}:amd64`, `zukhruf-test-${run}:arm64`];
+    await using multiPlatform = await multiPlatformPulls(docker);
     try {
       for (const [index, platform] of [AMD64, ARM64].entries()) {
-        await docker.images.pull(MULTI_PLATFORM, {
-          platform: `linux/${platform.architecture}`,
-        });
+        await multiPlatform.pull(`linux/${platform.architecture}`);
         await docker.images.tag(MULTI_PLATFORM, tags[index] ?? '');
       }
 
@@ -739,11 +775,10 @@ describe('docker.images', () => {
     });
     const run = randomUUID();
     const tags = [`zukhruf-test-${run}:amd64`, `zukhruf-test-${run}:arm64`];
+    await using multiPlatform = await multiPlatformPulls(docker);
     try {
       for (const [index, platform] of [AMD64, ARM64].entries()) {
-        await docker.images.pull(MULTI_PLATFORM, {
-          platform: `linux/${platform.architecture}`,
-        });
+        await multiPlatform.pull(`linux/${platform.architecture}`);
         await docker.images.tag(MULTI_PLATFORM, tags[index] ?? '');
       }
 
@@ -785,8 +820,9 @@ describe('docker.images', () => {
     });
     const run = randomUUID();
     const name = `zukhruf-test-${run}:amd64`;
+    await using multiPlatform = await multiPlatformPulls(docker);
     try {
-      await docker.images.pull(MULTI_PLATFORM, { platform: 'linux/amd64' });
+      await multiPlatform.pull('linux/amd64');
       await docker.images.tag(MULTI_PLATFORM, name);
       const archive = await bytesOf(
         await docker.images.save([name], { platform: AMD64 }),
