@@ -133,12 +133,12 @@ await postgres.exec({ Cmd: ['pg_isready'] }).catch(async (error) => {
 
 Some answers of the engine are not errors here:
 
-| Call                                                                            | Engine answer | Result      |
-| ------------------------------------------------------------------------------- | ------------- | ----------- |
-| `containers.find()`, `volumes.find()`, `networks.find()`, `images.inspect()`    | 404           | `undefined` |
-| `container.stat()` of a missing path, when the container exists                 | 404           | `undefined` |
-| `container.start()` of a running container, `container.stop()` of a stopped one | 304           | resolves    |
-| `remove()` of a missing container, volume, network or image                     | 404           | resolves    |
+| Call                                                                                                 | Engine answer | Result      |
+| ---------------------------------------------------------------------------------------------------- | ------------- | ----------- |
+| `containers.find()`, `containers.inspect()`, `volumes.find()`, `networks.find()`, `images.inspect()` | 404           | `undefined` |
+| `container.stat()` of a missing path, when the container exists                                      | 404           | `undefined` |
+| `container.start()` of a running container, `container.stop()` of a stopped one                      | 304           | resolves    |
+| `remove()` of a missing container, volume, network or image                                          | 404           | resolves    |
 
 A removal of a container whose removal is already in progress (409) inspects the container until it is gone, and then resolves. When the other removal fails and the container stays, it sends a forced removal again. The signal stops the wait.
 
@@ -188,7 +188,12 @@ The engine keeps a `DeviceRequests` entry at the create. On a host with no GPU, 
 
 `containers.find()` sends one inspect. It gives a `Container` with the ID of the engine, or `undefined`. A `Container` names its container by that ID, never by a name: when another container takes the name later, the handle still acts on the first one. A `Container` has no disposal, so `await using` on it is a type error. A found container belongs to whoever created it.
 
+`containers.inspect()` sends the same request. It gives the inspect answer of the engine, or `undefined` when the engine has no such container. Use it to read a container: its state, its configuration or its network settings. Use `containers.find()` to act on a container: a `Container` can start it, stop it, remove it or run a command in it.
+
 ```ts
+const info = await docker.containers.inspect('shared-db');
+console.log(info?.State?.Status, info?.Config?.Env);
+
 const db = await docker.containers.find('shared-db');
 if (db && !(await db.inspect()).State?.Running) await db.start();
 
@@ -651,6 +656,11 @@ export interface Containers {
     nameOrId: string,
     options?: CancelOptions,
   ): Promise<Container | undefined>;
+  /** One inspect: the answer of the engine, or undefined for 404. */
+  inspect(
+    nameOrId: string,
+    options?: CancelOptions,
+  ): Promise<EngineApi.ContainerInspectResponse | undefined>;
   list(
     options?: CancelOptions & { all?: boolean; filters?: Filters },
   ): Promise<EngineApi.ContainerSummary[]>;
@@ -987,24 +997,24 @@ export type * as EngineApi from './engine-api.ts';
 
 Each call sends these requests of the Engine API:
 
-| Call                                                                         | Request                                                                                                                                                                                                            |
-| ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `Docker.connect()`                                                           | `GET /_ping`                                                                                                                                                                                                       |
-| `docker.info()`, `docker.events()`                                           | `GET /info`, `GET /events`                                                                                                                                                                                         |
-| `containers.create()`, `createOrGet()`                                       | `POST /containers/create`, and `GET /containers/{id}/json` after a 409                                                                                                                                             |
-| `containers.run()`                                                           | `create`, `attach`, `start`, `wait`, `DELETE /containers/{id}`                                                                                                                                                     |
-| `containers.find()`, `container.inspect()`, `container.port()`               | `GET /containers/{id}/json`                                                                                                                                                                                        |
-| `containers.list()`                                                          | `GET /containers/json`                                                                                                                                                                                             |
-| `start()`, `stop()`, `restart()`, `kill()`, `pause()`, `unpause()`, `wait()` | `POST /containers/{id}/start`, `/stop`, `/restart`, `/kill`, `/pause`, `/unpause`, `/wait`                                                                                                                         |
-| `container.remove()`                                                         | `DELETE /containers/{id}`                                                                                                                                                                                          |
-| `container.logs()`, `followLogs()`                                           | `GET /containers/{id}/logs`                                                                                                                                                                                        |
-| `container.attach()`                                                         | `POST /containers/{id}/attach` (hijacked)                                                                                                                                                                          |
-| `container.exec()`, `spawn()`                                                | `POST /containers/{id}/exec`, `POST /exec/{id}/start` (hijacked), `GET /exec/{id}/json`                                                                                                                            |
-| `container.stat()`, `readFile()`, `getArchive()`                             | `HEAD`, `GET /containers/{id}/archive`                                                                                                                                                                             |
-| `container.writeFiles()`, `putArchive()`                                     | `PUT /containers/{id}/archive`                                                                                                                                                                                     |
-| `volumes.*`, `volume.*`                                                      | `POST /volumes/create`, `GET /volumes/{name}`, `GET /volumes`, `DELETE /volumes/{name}`                                                                                                                            |
-| `networks.*`, `network.*`                                                    | `POST /networks/create`, `GET /networks/{id}`, `GET /networks`, `POST /networks/{id}/connect`, `/disconnect`, `DELETE /networks/{id}`                                                                              |
-| `images.*`                                                                   | `GET /images/{name}/json`, `GET /images/json`, `POST /images/create`, `POST /images/{name}/tag`, `POST /images/{name}/push`, `GET /images/get`, `POST /images/load`, `DELETE /images/{name}`, `POST /images/prune` |
+| Call                                                                                   | Request                                                                                                                                                                                                            |
+| -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `Docker.connect()`                                                                     | `GET /_ping`                                                                                                                                                                                                       |
+| `docker.info()`, `docker.events()`                                                     | `GET /info`, `GET /events`                                                                                                                                                                                         |
+| `containers.create()`, `createOrGet()`                                                 | `POST /containers/create`, and `GET /containers/{id}/json` after a 409                                                                                                                                             |
+| `containers.run()`                                                                     | `create`, `attach`, `start`, `wait`, `DELETE /containers/{id}`                                                                                                                                                     |
+| `containers.find()`, `containers.inspect()`, `container.inspect()`, `container.port()` | `GET /containers/{id}/json`                                                                                                                                                                                        |
+| `containers.list()`                                                                    | `GET /containers/json`                                                                                                                                                                                             |
+| `start()`, `stop()`, `restart()`, `kill()`, `pause()`, `unpause()`, `wait()`           | `POST /containers/{id}/start`, `/stop`, `/restart`, `/kill`, `/pause`, `/unpause`, `/wait`                                                                                                                         |
+| `container.remove()`                                                                   | `DELETE /containers/{id}`                                                                                                                                                                                          |
+| `container.logs()`, `followLogs()`                                                     | `GET /containers/{id}/logs`                                                                                                                                                                                        |
+| `container.attach()`                                                                   | `POST /containers/{id}/attach` (hijacked)                                                                                                                                                                          |
+| `container.exec()`, `spawn()`                                                          | `POST /containers/{id}/exec`, `POST /exec/{id}/start` (hijacked), `GET /exec/{id}/json`                                                                                                                            |
+| `container.stat()`, `readFile()`, `getArchive()`                                       | `HEAD`, `GET /containers/{id}/archive`                                                                                                                                                                             |
+| `container.writeFiles()`, `putArchive()`                                               | `PUT /containers/{id}/archive`                                                                                                                                                                                     |
+| `volumes.*`, `volume.*`                                                                | `POST /volumes/create`, `GET /volumes/{name}`, `GET /volumes`, `DELETE /volumes/{name}`                                                                                                                            |
+| `networks.*`, `network.*`                                                              | `POST /networks/create`, `GET /networks/{id}`, `GET /networks`, `POST /networks/{id}/connect`, `/disconnect`, `DELETE /networks/{id}`                                                                              |
+| `images.*`                                                                             | `GET /images/{name}/json`, `GET /images/json`, `POST /images/create`, `POST /images/{name}/tag`, `POST /images/{name}/push`, `GET /images/get`, `POST /images/load`, `DELETE /images/{name}`, `POST /images/prune` |
 
 ## What each repository changes
 

@@ -690,6 +690,160 @@ describe('container.port()', () => {
   });
 });
 
+describe('containers.inspect()', () => {
+  test('an answer of the engine that is an error and not a 404 rejects with DockerEngineError', async () => {
+    // Arrange
+    await using scratch = await scratchDirectory();
+    await using engine = await fakeEngine({
+      directory: scratch.path,
+      apiVersion: '1.51',
+      answer: (request, response) => {
+        const status = request.url?.includes('/denied/') ? 403 : 500;
+        response.writeHead(status, { 'Content-Type': 'application/json' });
+        response.end(JSON.stringify({ message: `the engine says ${status}` }));
+      },
+    });
+    await using docker = await Docker.connect({
+      clock: globalThis,
+      host: engine.host,
+    });
+    const connected = engine.paths.length;
+
+    // Act
+    const broken = await docker.containers.inspect('broken').then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    const denied = await docker.containers.inspect('denied').then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+
+    // Assert
+    assert.ok(broken instanceof DockerEngineError);
+    assert.equal(broken.status, 500);
+    assert.equal(broken.message, 'the engine says 500');
+    assert.deepEqual(broken.request, {
+      method: 'GET',
+      path: '/containers/broken/json',
+    });
+    assert.ok(denied instanceof DockerEngineError);
+    assert.equal(denied.status, 403);
+    assert.deepEqual(engine.paths.slice(connected), [
+      '/v1.51/containers/broken/json',
+      '/v1.51/containers/denied/json',
+    ]);
+  });
+
+  test('an abort of the signal rejects with its reason', async () => {
+    // Arrange: the engine never answers the inspect.
+    await using scratch = await scratchDirectory();
+    const controller = new AbortController();
+    const reason = new Error('the caller stopped waiting');
+    await using engine = await fakeEngine({
+      directory: scratch.path,
+      apiVersion: '1.51',
+      answer: () => controller.abort(reason),
+    });
+    await using docker = await Docker.connect({
+      clock: globalThis,
+      host: engine.host,
+    });
+
+    // Act
+    const inspecting = docker.containers.inspect('c1', {
+      signal: controller.signal,
+    });
+
+    // Assert
+    await assert.rejects(inspecting, (error: unknown) => error === reason);
+  });
+
+  test('a name and an ID that no container has give undefined', async () => {
+    // Arrange
+    await using docker = await connect(IMAGE);
+    const run = randomUUID();
+
+    // Act
+    const byName = await docker.containers.inspect(`zukhruf-test-${run}`);
+    const byId = await docker.containers.inspect(
+      `${run}${run}`.replaceAll('-', ''),
+    );
+
+    // Assert
+    assert.equal(byName, undefined);
+    assert.equal(byId, undefined);
+  });
+
+  test('the ID and the name of a container each give the inspect answer of that container', async () => {
+    // Arrange: a second container shows that the answer is of the one asked for.
+    await using docker = await connect(IMAGE);
+    const run = randomUUID();
+    const name = `zukhruf-test-${run}`;
+    try {
+      const container = await docker.containers.create(
+        { ...sleeper(run), Env: [`SCAN_TOKEN=${run}`] },
+        { name },
+      );
+      await docker.containers.create(sleeper(run));
+      await container.start();
+
+      // Act
+      const byId = await docker.containers.inspect(container.id);
+      const byName = await docker.containers.inspect(name);
+
+      // Assert
+      for (const answer of [byId, byName]) {
+        assert.equal(answer?.Id, container.id);
+        assert.equal(answer.Name, `/${name}`);
+        assert.equal(answer.State?.Running, true);
+        assert.ok(answer.Config?.Env?.includes(`SCAN_TOKEN=${run}`));
+        assert.equal(answer.Config?.Labels?.[TEST_LABEL], run);
+        assert.ok(answer.NetworkSettings?.Networks?.['bridge']?.IPAddress);
+      }
+    } finally {
+      await removeLabeled(docker, run);
+    }
+  });
+
+  test('one call sends one request, for a container that exists and for one that is missing', async () => {
+    // Arrange
+    await using scratch = await scratchDirectory();
+    await using engine = await fakeEngine({
+      directory: scratch.path,
+      apiVersion: '1.51',
+      answer: (request, response) => {
+        if (request.url !== '/v1.51/containers/c1/json') {
+          response.writeHead(404, { 'Content-Type': 'application/json' });
+          response.end(JSON.stringify({ message: 'No such container' }));
+          return;
+        }
+        response.writeHead(200, { 'Content-Type': 'application/json' });
+        response.end(
+          JSON.stringify({ Id: 'c1', Config: { Env: ['PGPORT=5432'] } }),
+        );
+      },
+    });
+    await using docker = await Docker.connect({
+      clock: globalThis,
+      host: engine.host,
+    });
+    const connected = engine.paths.length;
+
+    // Act
+    const found = await docker.containers.inspect('c1');
+    const missing = await docker.containers.inspect('c2');
+
+    // Assert
+    assert.deepEqual(found, { Id: 'c1', Config: { Env: ['PGPORT=5432'] } });
+    assert.equal(missing, undefined);
+    assert.deepEqual(engine.paths.slice(connected), [
+      '/v1.51/containers/c1/json',
+      '/v1.51/containers/c2/json',
+    ]);
+  });
+});
+
 describe('containers.list()', () => {
   test('a label filter gives only the containers with that label', async () => {
     // Arrange

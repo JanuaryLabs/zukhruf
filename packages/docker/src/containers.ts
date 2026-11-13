@@ -975,6 +975,19 @@ export class Containers {
     return new Container(this.#client, Id, this.#clock);
   }
 
+  /** One inspect: the answer of the engine, or undefined for 404. */
+  async inspect(
+    nameOrId: string,
+    options: CancelOptions = {},
+  ): Promise<EngineApi.ContainerInspectResponse | undefined> {
+    const method = 'GET';
+    const path = `/containers/${encodeURIComponent(nameOrId)}/json`;
+    const response = await this.#client.exchange(method, path, options);
+    if (response.status === 404) return undefined;
+    if (!isSuccess(response)) throw this.#client.error(response, method, path);
+    return parseBody<EngineApi.ContainerInspectResponse>(response);
+  }
+
   async list(
     options: CancelOptions & { all?: boolean; filters?: Filters } = {},
   ): Promise<EngineApi.ContainerSummary[]> {
