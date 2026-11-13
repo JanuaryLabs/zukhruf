@@ -1,6 +1,6 @@
 {
   "name": "@zukhruf/sqlite-queue",
-  "version": "0.8.16",
+  "version": "0.8.17",
   "description": "pg-boss's job queue API on node:sqlite: a declared subset of 13 PgBoss methods (queues, send, work, findJobs, cancel, fail, schedules). A parity suite requires the same result from real pg-boss and from SQLite, so a caller can change engines.",
   "license": "MIT",
   "repository": {
@@ -41,10 +41,10 @@
     "access": "public"
   },
   "dependencies": {
-    "@zukhruf/async": "^0.8.16",
-    "@zukhruf/sqlite-drift": "^0.8.16",
-    "@zukhruf/sqlite-open": "^0.8.16",
-    "@zukhruf/sqlite-transaction": "^0.8.16",
+    "@zukhruf/async": "^0.8.17",
+    "@zukhruf/sqlite-drift": "^0.8.17",
+    "@zukhruf/sqlite-open": "^0.8.17",
+    "@zukhruf/sqlite-transaction": "^0.8.17",
     "cron-parser": "^5.10.1",
     "pg-boss": "12.35.1",
     "rrule-temporal": "^2.2.7",
@@ -52,6 +52,6 @@
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.8",
-    "@zukhruf/testing": "^0.8.16"
+    "@zukhruf/testing": "^0.8.17"
   }
 }
