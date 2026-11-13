@@ -111,40 +111,41 @@ export class JobFetcher {
       ],
       '\n',
     );
-    const candidates: Candidate[] = db
-      .prepare(sql)
-      .all(...values)
-      .map((value) => {
-        const row = Row.parse(value, 'job');
-        return {
-          row: JobRows.decode(row),
-          activeCount: groups ? Row.readNumber(row, 'active_cnt') : 0,
-          groupLimit: groups ? Row.readNumber(row, 'group_limit') : 0,
-        };
-      });
-    // A batch on a singleton or stately queue claims one job per
-    // singleton_key, keyless jobs sharing one (plans.js:1842, 1971-1975, 2026).
-    const claimedKeys = new Set<string | null>();
-    const firstOfKeys = singletonFetch
-      ? candidates.filter(({ row }) => {
-          const isFirstOfKey = !claimedKeys.has(row.singleton_key);
-          claimedKeys.add(row.singleton_key);
-          return isFirstOfKey;
-        })
-      : candidates;
-    const rows = (
-      groups ? JobFetcher.#withinGroupLimits(firstOfKeys) : firstOfKeys
-    ).map(({ row }) => row);
-
-    if (rows.length === 0) {
-      return [];
-    }
-
-    const ids = rows.map((row) => row.id);
+    // On Postgres, FOR UPDATE OF j SKIP LOCKED gives each job to one claim
+    // (plans.js:1885), and one statement reads the candidates and the group
+    // counts and claims the jobs (2012-2028). SQLite has no row locks. Thus
+    // the transaction takes the write lock before the read: no other
+    // connection of the file claims between the read and the UPDATE.
     try {
-      transaction(
+      return transaction(
         db,
         () => {
+          const candidates: Candidate[] = db
+            .prepare(sql)
+            .all(...values)
+            .map((value) => {
+              const row = Row.parse(value, 'job');
+              return {
+                row: JobRows.decode(row),
+                activeCount: groups ? Row.readNumber(row, 'active_cnt') : 0,
+                groupLimit: groups ? Row.readNumber(row, 'group_limit') : 0,
+              };
+            });
+          // A batch on a singleton or stately queue claims one job per
+          // singleton_key, keyless jobs sharing one (plans.js:1842,
+          // 1971-1975, 2026).
+          const claimedKeys = new Set<string | null>();
+          const firstOfKeys = singletonFetch
+            ? candidates.filter(({ row }) => {
+                const isFirstOfKey = !claimedKeys.has(row.singleton_key);
+                claimedKeys.add(row.singleton_key);
+                return isFirstOfKey;
+              })
+            : candidates;
+          // pg-boss's RETURNING carries no ORDER BY (plans.js:2019-2028); on
+          // an analyzed Postgres a batch comes back in claim order, which is
+          // the order of the candidates. The claim gives only the rows that
+          // its UPDATE changed, as RETURNING does.
           const statement = db.prepare(
             `UPDATE pgboss_job
           SET state = 'active',
@@ -155,17 +156,27 @@ export class JobFetcher {
               WHEN started_on IS NOT NULL THEN retry_count + 1
               ELSE retry_count
             END
-          WHERE queue_name = ? AND id = ? AND state IN ('created', 'retry')`,
+          WHERE queue_name = ? AND id = ? AND state IN ('created', 'retry')
+          RETURNING *`,
           );
-          for (const row of rows) {
+          return (
+            groups ? JobFetcher.#withinGroupLimits(firstOfKeys) : firstOfKeys
+          ).flatMap(({ row }) => {
             const leaseExpiresOn =
               row.heartbeat_seconds === null
                 ? null
                 : SqlValues.asIso(
                     SqlValues.addSeconds(now, row.heartbeat_seconds),
                   );
-            statement.run(isoNow, isoNow, leaseExpiresOn, name, row.id);
-          }
+            const claimed = statement.get(
+              isoNow,
+              isoNow,
+              leaseExpiresOn,
+              name,
+              row.id,
+            );
+            return claimed === undefined ? [] : [JobRows.decode(claimed)];
+          });
         },
         { mode: 'immediate' },
       );
@@ -177,18 +188,6 @@ export class JobFetcher {
       }
       throw error;
     }
-
-    return db
-      .prepare(
-        // pg-boss's RETURNING carries no ORDER BY (plans.js:2019-2028); on an
-        // analyzed Postgres a batch comes back in claim order, which this
-        // keeps.
-        `SELECT * FROM pgboss_job
-        WHERE queue_name = ? AND id IN (${ids.map(() => '?').join(', ')})
-        ORDER BY priority DESC, created_on, rowid`,
-      )
-      .all(name, ...ids)
-      .map(JobRows.decode);
   }
 
   static #join(
