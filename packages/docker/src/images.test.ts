@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
+import { hash, randomUUID } from 'node:crypto';
 import { describe, test } from 'node:test';
 import { setTimeout } from 'node:timers/promises';
 
@@ -11,13 +11,14 @@ import {
   UnsupportedEngineError,
 } from './index.ts';
 import { tarEntries } from './tar-reader.ts';
+import { tarArchive } from './tar-writer.ts';
 import { TEST_LABEL, connect, removeLabeled } from './testing/engine.ts';
 import { fakeEngine } from './testing/fake-engine.ts';
 import { scratchDirectory } from './testing/scratch-directory.ts';
 
 const HELLO = 'hello-world';
 
-/** Removes each container with the label of this test run, then the dedicated names of hello-world. */
+/** Removes each container with the label of this test run, then the names of this run. */
 async function removeOwn(
   docker: Docker,
   run: string,
@@ -493,22 +494,53 @@ describe('docker.images', () => {
   });
 
   test('remove() of an image that a container uses rejects with ImageInUseError', async () => {
-    // Arrange
-    await using docker = await connect(HELLO);
+    // Arrange: an image whose content holds the ID of this run, so no other
+    // test or run can give its ID a second name. On the classic image store, a
+    // removal by ID of an image with a second name meets that name before the
+    // container: "image is referenced in multiple repositories" (#3732).
+    await using docker = await Docker.connect({
+      clock: globalThis,
+      environment: process.env,
+    });
     const run = randomUUID();
     const name = `zukhruf-test-${run}:x`;
+    const file = (path: string, data: Uint8Array) => ({
+      path,
+      type: 'file' as const,
+      data,
+      mode: 0o644,
+      uid: 0,
+      gid: 0,
+      mtime: 0,
+    });
+    const layer = tarArchive([file('run', new TextEncoder().encode(run))]);
+    const diffId = hash('sha256', layer, 'hex');
+    // No architecture, so the engine of any platform creates the container; a
+    // create needs a command, which the container never runs.
+    const config = JSON.stringify({
+      os: 'linux',
+      config: { Cmd: ['/run'] },
+      rootfs: { type: 'layers', diff_ids: [`sha256:${diffId}`] },
+    });
+    const manifest = JSON.stringify([
+      { Config: 'config.json', RepoTags: [name], Layers: ['layer.tar'] },
+    ]);
     try {
-      await docker.images.tag(HELLO, name);
+      await docker.images.load(
+        tarArchive([
+          file('manifest.json', new TextEncoder().encode(manifest)),
+          file('config.json', new TextEncoder().encode(config)),
+          file('layer.tar', layer),
+        ]),
+      );
+      const image = await docker.images.inspect(name);
+      assert.ok(image);
       await docker.containers.create({
         Image: name,
         Labels: { [TEST_LABEL]: run },
       });
-      const image = await docker.images.inspect(name);
-      assert.ok(image);
-      // A name that another name shares only loses its tag, so the removal by ID meets the container.
-      await docker.images.remove(name);
 
-      // Act: without force, the engine refuses this removal, so the shared hello-world stays.
+      // Act
       const removing = docker.images.remove(image.Id);
 
       // Assert
@@ -519,7 +551,7 @@ describe('docker.images', () => {
         assert.match(error.message, /container/);
         return true;
       });
-      assert.equal((await docker.images.inspect(HELLO))?.Id, image.Id);
+      assert.equal((await docker.images.inspect(name))?.Id, image.Id);
     } finally {
       await removeOwn(docker, run, name);
     }
