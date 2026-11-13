@@ -41,7 +41,7 @@ A wait of a fixed number of milliseconds on a clock. A cancel stops its timer. A
 _Avoid_: Sleep, pause
 
 **Timeout**:
-A signal that aborts after a number of milliseconds on a clock. The caller gives the signal to a wait, and the wait stops when the signal aborts. A timeout is a duration that starts when the caller makes it. A disposal of the timeout stops its timer.
+A signal that aborts after a number of milliseconds on a clock. The caller gives the signal to a wait, and the wait stops when the signal aborts. A timeout is a duration that starts when the caller makes it. It counts its time in parts, and a part that ends late, as after a system sleep, uses up only its own length. A disposal of the timeout stops its timer.
 _Avoid_: Deadline (a deadline is a time), `AbortSignal.timeout` (it runs only on the real clock), time limit
 
 **Deadline**:

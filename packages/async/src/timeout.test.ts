@@ -85,4 +85,52 @@ describe('timeout', () => {
       'The signal must abort at 30 days',
     );
   });
+
+  test('a time that its parts do not divide aborts after exactly that time: the last part is the remainder', async () => {
+    // Arrange: 95 ms counts in parts of 10 ms, and 5 ms are left for the last.
+    const clock = createClock();
+    using limit = timeout(95, { clock });
+
+    // Act
+    await clock.tickAsync(94);
+    const abortedEarly = limit.signal.aborted;
+    await clock.tickAsync(1);
+
+    // Assert
+    assert.equal(abortedEarly, false, 'The signal must not abort before 95 ms');
+    assert.equal(limit.signal.aborted, true, 'The signal must abort at 95 ms');
+  });
+
+  test('a timer that fires late, as after the computer slept, uses up only its own part of the timeout: the signal aborts after the rest of the time, not at the wake', async () => {
+    // Arrange: jump() moves the clock at once and fires each due timer one
+    // time, as a process that the system stopped for that time.
+    const clock = createClock();
+    using limit = timeout(1_000, { clock });
+    await clock.tickAsync(50);
+
+    // Act
+    clock.jump(600_000);
+    await clock.tickAsync(0);
+    const abortedAtWake = limit.signal.aborted;
+    await clock.tickAsync(899);
+    const abortedBeforeTheRest = limit.signal.aborted;
+    await clock.tickAsync(1);
+
+    // Assert
+    assert.equal(
+      abortedAtWake,
+      false,
+      'The time of the sleep must not use up the timeout',
+    );
+    assert.equal(
+      abortedBeforeTheRest,
+      false,
+      'The signal must not abort before the rest of the time',
+    );
+    assert.equal(
+      limit.signal.aborted,
+      true,
+      'The signal must abort when the rest of the time ends',
+    );
+  });
 });

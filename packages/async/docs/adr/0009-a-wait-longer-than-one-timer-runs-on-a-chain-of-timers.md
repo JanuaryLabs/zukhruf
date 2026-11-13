@@ -1,5 +1,7 @@
 # A wait longer than one timer runs on a chain of timers
 
+Superseded in part on 2026-11-13 for `timeout`: it no longer runs on `delay`. It counts its time in parts of at most 2^31-1 ms each, so it still lasts longer than one timer can hold ([ADR 0010](./0010-a-timeout-counts-its-time-in-parts.md)).
+
 A timer of Node.js holds a delay of at most 2^31-1 ms, about 24.8 days. With a longer delay, Node.js fires the timer after 1 ms and writes a `TimeoutOverflowWarning`. `createClock()` of `@sinonjs/fake-timers` does the same. `delay` gave its `ms` to one `clock.setTimeout`, and `milliseconds()` accepts each positive, finite number. Thus a `ChangeWatcher` with an interval of 30 days did its checks in a tight loop, and a `timeout` of 30 days aborted at once (#3922). elt's Search Console source cut its poll interval to 2^31-1 ms to prevent this.
 
 ## Decision

@@ -225,9 +225,10 @@ const state = await readState(container, { signal: limit.signal });
 - A disposal stops the timer, and the signal then does not abort. `using` disposes the timeout at the end of the block.
 - The timer keeps the process alive until it fires or until the disposal. The timer of `AbortSignal.timeout` does not keep the process alive, but no call can stop it.
 - To stop a wait at the timeout or at the signal of the caller, give `AbortSignal.any([signal, limit.signal])`.
-- The time runs on `delay`, so a timeout can be longer than one timer can hold.
+- The time runs in ten parts, each on one timer of at most 2^31-1 ms, so a timeout can be longer than one timer can hold.
+- A part that ends late uses up only its own length. On macOS, a timer of Node.js counts the time of a system sleep, so a timer that was running when the computer slept fires at the wake. The timeout then still gives the wait the rest of its time: a timeout of 5 seconds that slept in its first half second aborts 4.5 seconds after the wake, not at the wake. A process that the system stopped gets the same.
 
-See [ADR 0006](./docs/adr/0006-a-timeout-is-a-signal-on-the-clock-that-the-caller-gives.md).
+See [ADR 0006](./docs/adr/0006-a-timeout-is-a-signal-on-the-clock-that-the-caller-gives.md) and [ADR 0010](./docs/adr/0010-a-timeout-counts-its-time-in-parts.md).
 
 ## Run a wait on a clock
 
@@ -279,6 +280,6 @@ function stamp(result: string, clock: WallClock) {
 stamp('passed', globalThis);
 ```
 
-The wall time can jump, for example when the computer sleeps. `performance.now()` does not jump. Thus a deadline uses `performance.now()`, and never the wall time.
+The wall time can jump, for example when a time server sets it. `performance.now()` does not jump. Thus a deadline uses `performance.now()`, and never the wall time. On macOS, `performance.now()` and the timers of Node.js count the time of a system sleep; a `timeout` does not, see [Stop a wait after a time](#stop-a-wait-after-a-time).
 
 See [ADR 0005](./docs/adr/0005-a-wait-runs-on-the-clock-that-the-caller-gives.md).

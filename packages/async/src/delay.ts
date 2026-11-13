@@ -18,7 +18,7 @@ export interface DelayOptions {
 
 // The longest delay that one timer holds, about 24.8 days. Node.js fires a
 // timer with a longer delay after 1 ms, and so does createClock().
-const TIMER_MAX = 2 ** 31 - 1;
+export const TIMER_MAX = 2 ** 31 - 1;
 
 /**
  * Waits `ms` milliseconds on the clock. When the signal aborts, also before
