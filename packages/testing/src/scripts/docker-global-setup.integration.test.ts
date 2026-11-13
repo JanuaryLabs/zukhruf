@@ -1804,6 +1804,37 @@ async function killedSweep(
   }
 }
 
+/**
+ * Records whether the subject that runs through `proxy` removes the sweep
+ * lease `id`. A process or sweep of another tree on the engine can remove that
+ * lease first (#3221), and only a removal through this proxy, of a lease that
+ * was still there, proves the subject removed it. A skip needs positive
+ * evidence of the other removal (the subject sent no request about the lease,
+ * and the lease is gone), so a subject that leaves the lease fails instead of
+ * passing as inconclusive.
+ */
+function leaseRemoval(proxy: EngineProxy, id: string) {
+  let removed = false;
+  proxy.intercept('DELETE', `/containers/${id}`, async () => {
+    if (await exists(id)) removed = true;
+  });
+  return {
+    /** Skips `t` as inconclusive with `foreign`, or asserts the removal; resolves to whether `t` goes on. */
+    async asserted(t: TestContext, foreign: string): Promise<boolean> {
+      const reached = proxy.requests.some(
+        ({ path }) =>
+          path === `/containers/${id}` || path.startsWith(`/containers/${id}/`),
+      );
+      if (!reached && !(await exists(id))) {
+        t.skip(`inconclusive: ${foreign}`);
+        return false;
+      }
+      assert.equal(removed, true);
+      return true;
+    },
+  };
+}
+
 test(
   'a sweep lease that a killed sweep left created does not stop a test process of its server',
   { skip: proxyless || signals },
@@ -1825,16 +1856,25 @@ test(
       );
       const stale = await docker.containers.find(sweepLease(fingerprint));
       assert.ok(stale);
+      await using proxy = await EngineProxy.start(engine);
+      const removal = leaseRemoval(proxy, stale.id);
 
       const reused = await reusedAndExited(
         t,
         directory.path,
         JSON.parse(library),
         probe,
-        env,
+        proxiedEnvironment(join(directory.path, 'state'), proxy),
       );
       ids.push(reused);
 
+      if (
+        !(await removal.asserted(
+          t,
+          'another process removed the stale sweep lease',
+        ))
+      )
+        return;
       assert.notEqual(reused, server);
       assert.equal(await running(reused), true);
       assert.equal(await exists(stale.id), false);
@@ -1868,11 +1908,28 @@ test(
     const fingerprint = await fingerprintOf(server);
     try {
       await killedSweep(directory.path, fingerprint);
-      assert.ok(await docker.containers.find(sweepLease(fingerprint)));
+      const stale = await docker.containers.find(sweepLease(fingerprint));
+      assert.ok(stale);
       await ended(t, other, fingerprint);
+      await using proxy = await EngineProxy.start(engine);
+      const removal = leaseRemoval(proxy, stale.id);
 
-      await sweep(directory.path, engine);
+      await sweep(directory.path, proxy.host);
 
+      if (
+        !(await removal.asserted(
+          t,
+          'another sweep removed the stale sweep lease',
+        ))
+      )
+        return;
+      // Another sweep can remove the server too: only this one's removal counts.
+      assert.ok(
+        proxy.requests.some(
+          ({ method, path }) =>
+            method === 'DELETE' && path === `/containers/${server}`,
+        ),
+      );
       assert.equal(await exists(server), false);
       assert.equal(
         await docker.containers.find(sweepLease(fingerprint)),
@@ -2002,6 +2059,195 @@ test(
       release();
       other.child.kill('SIGKILL');
       await first.catch(() => {});
+      await removeContainer(server).catch(() => {});
+    }
+  },
+);
+
+test(
+  'a sweep that finds the sweep lease of a server taken on each of its tries keeps that server and ends cleanly',
+  { skip: proxyless },
+  async (t) => {
+    await using directory = await runsDirectory('zukhruf-testing-taken-sweep-');
+    const other = await holder(
+      t,
+      directory.path,
+      randomUUID(),
+      runEnvironment(join(directory.path, 'state')),
+    );
+    const server = other.id;
+    const fingerprint = await fingerprintOf(server);
+    const name = sweepLease(fingerprint);
+    await using proxy = await EngineProxy.start(engine);
+    // Another holder of the sweep lease, such as a sweep of another tree,
+    // takes it again each time the sweep under test finds it gone.
+    let tries = 0;
+    proxy.intercept('POST', '/containers/create', async () => {
+      tries += 1;
+      if ((await docker.containers.find(name)) !== undefined) return;
+      const taken = await docker.containers.create(
+        {
+          Image: 'busybox:1.37.0',
+          Entrypoint: ['cat'],
+          Cmd: [],
+          OpenStdin: true,
+          Labels: { 'dev.zukhruf.testing.probe': fingerprint },
+        },
+        { name },
+      );
+      await taken.start();
+    });
+    // The other holder ends as soon as the sweep looks at its lease.
+    proxy.intercept('GET', `/containers/${name}/json`, () =>
+      removeContainer(name),
+    );
+    try {
+      await ended(t, other, fingerprint);
+
+      // A sweep that fails rejects with its output.
+      await sweep(directory.path, proxy.host);
+
+      assert.equal(tries, 3);
+      assert.equal(await running(server), true);
+    } finally {
+      other.child.kill('SIGKILL');
+      await removeContainer(name).catch(() => {});
+      await removeContainer(server).catch(() => {});
+    }
+  },
+);
+
+test(
+  'a sweep lease that ended and was not removed does not stop the next sweep from removing its server',
+  { skip: proxyless },
+  async (t) => {
+    await using directory = await runsDirectory('zukhruf-testing-ended-sweep-');
+    const other = await holder(
+      t,
+      directory.path,
+      randomUUID(),
+      runEnvironment(join(directory.path, 'state')),
+    );
+    const server = other.id;
+    const fingerprint = await fingerprintOf(server);
+    try {
+      await ended(t, other, fingerprint);
+      // A lease whose removal the engine did not finish, such as one it left
+      // dead: no operation of the package leaves one, so the test makes it.
+      const stale = await docker.containers.create(
+        {
+          Image: 'busybox:1.37.0',
+          Cmd: ['true'],
+          Labels: { 'dev.zukhruf.testing.probe': fingerprint },
+        },
+        { name: sweepLease(fingerprint) },
+      );
+      await stale.start();
+      await t.waitFor(
+        async () =>
+          assert.equal((await stale.inspect()).State?.Status, 'exited'),
+        { timeout: 20_000, interval: 100 },
+      );
+      await using proxy = await EngineProxy.start(engine);
+      const removal = leaseRemoval(proxy, stale.id);
+
+      await sweep(directory.path, proxy.host);
+
+      if (
+        !(await removal.asserted(
+          t,
+          'another sweep removed the ended sweep lease',
+        ))
+      )
+        return;
+      // Another sweep can remove the server too: only this one's removal counts.
+      assert.ok(
+        proxy.requests.some(
+          ({ method, path }) =>
+            method === 'DELETE' && path === `/containers/${server}`,
+        ),
+      );
+      assert.equal(await exists(server), false);
+      assert.equal(await exists(stale.id), false);
+    } finally {
+      other.child.kill('SIGKILL');
+      await removeContainer(sweepLease(fingerprint)).catch(() => {});
+      await removeContainer(server).catch(() => {});
+    }
+  },
+);
+
+test(
+  'a sweep waits for a sweep lease that another sweep created and is starting, and leaves it to that sweep',
+  { skip: proxyless },
+  async (t) => {
+    await using directory = await runsDirectory(
+      'zukhruf-testing-starting-sweep-',
+    );
+    const other = await holder(
+      t,
+      directory.path,
+      randomUUID(),
+      runEnvironment(join(directory.path, 'state')),
+    );
+    const server = other.id;
+    const fingerprint = await fingerprintOf(server);
+    const name = sweepLease(fingerprint);
+    await using starting = await EngineProxy.start(engine);
+    await using waiting = await EngineProxy.start(engine);
+    // The second sweep found the sweep lease taken and looks at it.
+    const looked = Promise.withResolvers<void>();
+    waiting.intercept('GET', `/containers/${name}/json`, () => {
+      looked.resolve();
+    });
+    // The first sweep starts its lease a moment after that look, well within
+    // the 5 s that a waiter gives a created lease.
+    const leases: string[] = [];
+    starting.intercept(
+      'POST',
+      /^\/containers\/[^/]+\/start$/,
+      async ({ path }) => {
+        const id = path.split('/')[2] ?? '';
+        const found = (await (await docker.containers.find(id))?.inspect())
+          ?.Name;
+        if (found !== `/${name}`) return;
+        leases.push(id);
+        await looked.promise;
+        await setTimeout(1_000);
+      },
+    );
+    let first: Promise<void> | undefined;
+    let second: Promise<void> | undefined;
+    try {
+      await ended(t, other, fingerprint);
+      first = sweep(directory.path, starting.host);
+      first.catch(() => {});
+      await t.waitFor(() => assert.equal(leases.length, 1), {
+        timeout: 60_000,
+        interval: 100,
+      });
+      second = sweep(directory.path, waiting.host);
+      second.catch(() => {});
+
+      // A sweep that fails rejects with its output.
+      await first;
+      await second;
+
+      assert.equal(leases.length, 1);
+      assert.equal(
+        waiting.requests.some(
+          ({ method, path }) =>
+            method === 'DELETE' && path === `/containers/${leases[0]}`,
+        ),
+        false,
+      );
+      assert.equal(await exists(server), false);
+    } finally {
+      looked.resolve();
+      other.child.kill('SIGKILL');
+      await first?.catch(() => {});
+      await second?.catch(() => {});
+      await removeContainer(name).catch(() => {});
       await removeContainer(server).catch(() => {});
     }
   },
