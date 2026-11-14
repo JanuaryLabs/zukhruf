@@ -1,0 +1,87 @@
+{
+  "headerLength": 424,
+  "metadata": {
+    "format": "np",
+    "source": "generate.py"
+  },
+  "tensors": {
+    "blank": {
+      "shape": [
+        0,
+        3
+      ],
+      "bits": []
+    },
+    "cube": {
+      "shape": [
+        2,
+        3,
+        2
+      ],
+      "bits": [
+        "3fb659c7",
+        "bff206ae",
+        "bcc36051",
+        "3ea46d01",
+        "c038f46e",
+        "3f6ce0d4",
+        "bf79d6ad",
+        "3fea4d15",
+        "bf797f45",
+        "bf33de8b",
+        "3f0e656b",
+        "bff3fe2d"
+      ]
+    },
+    "edges": {
+      "shape": [
+        5
+      ],
+      "bits": [
+        "7fc00000",
+        "00000001",
+        "7f7fffff",
+        "ff7fffff",
+        "3eaaaaab"
+      ]
+    },
+    "matrix": {
+      "shape": [
+        3,
+        4
+      ],
+      "bits": [
+        "bf56c8af",
+        "3f1306e8",
+        "be6fa3fb",
+        "3f617904",
+        "bff4cea4",
+        "bf57038b",
+        "bf050588",
+        "3d9bdb52",
+        "be0323d1",
+        "bed90bc4",
+        "be78159d",
+        "bc115fcc"
+      ]
+    },
+    "signs": {
+      "shape": [
+        5
+      ],
+      "bits": [
+        "00000000",
+        "80000000",
+        "3f800000",
+        "7f800000",
+        "ff800000"
+      ]
+    },
+    "temperature": {
+      "shape": [],
+      "bits": [
+        "3d8941fb"
+      ]
+    }
+  }
+}

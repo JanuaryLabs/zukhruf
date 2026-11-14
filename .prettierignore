@@ -26,5 +26,6 @@ package-lock.json
 /packages/python/src/**/fixtures
 /packages/statistics/src/**/fixtures
 /packages/random/src/**/fixtures
+/packages/vector-decisions/src/**/fixtures
 # The native libraries of @zukhruf/sqlite-open (binary build output).
 /packages/sqlite/open/lib

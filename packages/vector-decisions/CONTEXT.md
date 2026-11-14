@@ -29,3 +29,11 @@ _Avoid_: label (for the option of a generic question), class
 **Head**:
 The small model that turns the vector of a state and the vectors of the options into one logit for each option and one for "none". Venn's head is `venn-1`.
 _Avoid_: classifier, judge
+
+**Tensor**:
+A block of float32 numbers with a shape, in row-major order. A shape `[]` is one number.
+_Avoid_: array, matrix (for a tensor of any shape)
+
+**Weights**:
+The tensors of a head, by name, as its safetensors file holds them.
+_Avoid_: checkpoint, state dict, parameters (Venn's 787,457 parameters are the weights without `temperature` and `none_intercept`)
