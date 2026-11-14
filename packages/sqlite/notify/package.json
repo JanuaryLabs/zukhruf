@@ -1,0 +1,54 @@
+{
+  "name": "@zukhruf/sqlite-notify",
+  "version": "0.8.18",
+  "description": "Postgres's LISTEN and NOTIFY for one SQLite file: a notification is a row written in the sender's transaction, and each listening program of the computer gets it after the commit, woken over its own Unix socket or named pipe.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JanuaryLabs/zukhruf",
+    "directory": "packages/sqlite/notify"
+  },
+  "bugs": {
+    "url": "https://github.com/JanuaryLabs/zukhruf/issues"
+  },
+  "homepage": "https://github.com/JanuaryLabs/zukhruf/tree/main/packages/sqlite/notify#readme",
+  "keywords": [
+    "sqlite",
+    "node-sqlite",
+    "listen",
+    "notify",
+    "pubsub",
+    "ipc",
+    "unix-socket"
+  ],
+  "type": "module",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "@zukhruf/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "!dist/spec/**",
+    "!**/*.tsbuildinfo",
+    "!**/*.test.*"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@zukhruf/async": "^0.8.18",
+    "@zukhruf/pipes": "^0.8.18",
+    "@zukhruf/sqlite-drift": "^0.8.18",
+    "@zukhruf/sqlite-open": "^0.8.18",
+    "@zukhruf/sqlite-transaction": "^0.8.18"
+  },
+  "devDependencies": {
+    "@sinonjs/fake-timers": "15.4.0",
+    "@zukhruf/testing": "^0.8.18"
+  }
+}

@@ -13,7 +13,7 @@ The notifications are rows of `zukhruf_notify_queue`, in the same file, written 
 - A listener registers in one `BEGIN IMMEDIATE` transaction that inserts its address and reads the highest id. This is Postgres's rule for the start (C13): commit the `LISTEN`, then rely on notifications.
 - A wake that finds no row is a normal case. A rollback, a checkpoint and a `VACUUM` give one (research 20b T3).
 - The backstop: every second, each listener reads `PRAGMA data_version` on its own connection, and reads the queue when it changed. It changes for each commit of another connection and never for a rollback (research 20b T3). On its own connection, the listener's own position writes do not change it. It finds a row whose wake was lost: a sender that died between its commit and its wake (research 20c M6). Its cost with a 1 s interval is 0.01 to 0.05 % of a core for each idle listener (research 20c M3). pg-boss keeps a poll beside its own `NOTIFY` for the same reason (`sqlite/queue/src/attorney.ts:166`).
-- The backstop runs as a `ChangeWatcher` of `@zukhruf/async` on the given clock, over a gauge of that pragma.
+- The backstop is a loop of `delay` of `@zukhruf/async` on the given clock: it waits one second, then reads the pragma. It is not a `ChangeWatcher`: a `ChangeWatcher` needs a `WallClock`, and the API takes a `Clock` (README, The API).
 - The tables are a `Declaration` of `@zukhruf/sqlite-drift` with `rows: 'keep'`, as in `@zukhruf/sqlite-queue` ADR 0004.
 
 ## Considered Options

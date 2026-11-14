@@ -1,0 +1,7 @@
+{
+  "name": "sqlite-notify",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/sqlite/notify/src",
+  "projectType": "library",
+  "tags": ["layer:island", "std:base"]
+}

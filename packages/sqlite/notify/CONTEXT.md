@@ -73,5 +73,5 @@ A queue with `maxQueuedNotifications` rows above the lowest position. `notify` t
 _Avoid_: Overflow, backpressure, limit reached
 
 **Dead listener**:
-A listener whose address refused a connect or closed the sender's connection. The sender removes its rows and its socket file in its next transaction.
+A listener whose address gave `ECONNREFUSED` or `ENOENT` to a connect, or closed the sender's connection. The sender removes its rows in its next transaction, and its socket file after that transaction.
 _Avoid_: Stale listener, zombie, orphan
