@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import { delimiter, join } from 'node:path';
 import { describe, test } from 'node:test';
 
 import { writeContextStore } from './testing/context-store-files.ts';
+import { IMAGE, TEST_LABEL, connect, removeLabeled } from './testing/engine.ts';
 import { fakeEngine } from './testing/fake-engine.ts';
 import { ENTRY, lastJson, runScenario } from './testing/scenario.ts';
 import { scratchDirectory } from './testing/scratch-directory.ts';
@@ -921,6 +923,185 @@ console.log('connected');
         });
       } finally {
         for (const pid of pids.filter(isAlive)) process.kill(pid, 'SIGKILL');
+      }
+    },
+  );
+});
+
+describe('an exec over an ssh:// host', () => {
+  /** Prints "axb" and keeps its output open for a second: the text "axb" is not in the command. */
+  const PRINTS_THEN_EXITS_3 = [
+    'sh',
+    '-c',
+    'printf "a%sb\\n" x; sleep 1; exit 3',
+  ];
+
+  test(
+    'ssh that exits non-zero after some output, before the output ended, rejects exec() with an IncompleteOutputError with the exit code of the command and the SshExitError as cause',
+    {
+      skip: needsLocalEngine,
+    },
+    async () => {
+      // Arrange
+      await using local = await connect(IMAGE);
+      const run = randomUUID();
+      await using home = await scratchDirectory();
+      await using standIn = await sshStandIn({
+        kind: 'engine',
+        socketPath: String(engineSocket),
+        notRespondingAfter: 'axb',
+      });
+      try {
+        const sleeper = await local.containers.create({
+          Image: IMAGE,
+          Cmd: ['sleep', '300'],
+          Labels: { [TEST_LABEL]: run },
+        });
+        await sleeper.start();
+        const scenario = withClient(`
+const container = await docker.containers.find(${JSON.stringify(sleeper.id)});
+try {
+  const result = await container.exec({ Cmd: ${JSON.stringify(PRINTS_THEN_EXITS_3)} });
+  console.log(JSON.stringify({ result }));
+} catch (error) {
+  console.log(JSON.stringify({
+    error: error.name,
+    exitCode: error.exitCode,
+    cause: error.cause?.name,
+    sshExitCode: error.cause?.exitCode,
+  }));
+}
+await docker[Symbol.asyncDispose]();
+`);
+
+        // Act
+        const result = await runScenario(
+          scenario,
+          scenarioEnvironment(standIn.path, home.path),
+        );
+
+        // Assert
+        assert.deepEqual(
+          lastJson(result),
+          {
+            error: 'IncompleteOutputError',
+            exitCode: 3,
+            cause: 'SshExitError',
+            sshExitCode: 255,
+          },
+          result.stderr,
+        );
+      } finally {
+        await removeLabeled(local, run);
+      }
+    },
+  );
+
+  test(
+    'ssh that exits non-zero before the output ended gives the output that came before it, then the iteration rejects with an IncompleteOutputError, and exitCode resolves with the exit code of the command',
+    {
+      skip: needsLocalEngine,
+    },
+    async () => {
+      // Arrange
+      await using local = await connect(IMAGE);
+      const run = randomUUID();
+      await using home = await scratchDirectory();
+      await using standIn = await sshStandIn({
+        kind: 'engine',
+        socketPath: String(engineSocket),
+        notRespondingAfter: 'axb',
+      });
+      try {
+        const sleeper = await local.containers.create({
+          Image: IMAGE,
+          Cmd: ['sleep', '300'],
+          Labels: { [TEST_LABEL]: run },
+        });
+        await sleeper.start();
+        const scenario = withClient(`
+const container = await docker.containers.find(${JSON.stringify(sleeper.id)});
+const command = await container.spawn({ Cmd: ${JSON.stringify(PRINTS_THEN_EXITS_3)} });
+const decoder = new TextDecoder();
+let output = '';
+let error;
+try {
+  for await (const chunk of command) output += decoder.decode(chunk.data, { stream: true });
+} catch (rejection) {
+  error = rejection.name;
+}
+const exitCode = await command.exitCode.catch((rejection) => rejection.name);
+console.log(JSON.stringify({ output, error, exitCode }));
+await docker[Symbol.asyncDispose]();
+`);
+
+        // Act
+        const result = await runScenario(
+          scenario,
+          scenarioEnvironment(standIn.path, home.path),
+        );
+
+        // Assert
+        assert.deepEqual(
+          lastJson(result),
+          { output: 'axb\n', error: 'IncompleteOutputError', exitCode: 3 },
+          result.stderr,
+        );
+      } finally {
+        await removeLabeled(local, run);
+      }
+    },
+  );
+
+  test(
+    'an exec whose ssh exits with 0 after the output ended gives its result',
+    {
+      skip: needsLocalEngine,
+    },
+    async () => {
+      // Arrange
+      await using local = await connect(IMAGE);
+      const run = randomUUID();
+      await using home = await scratchDirectory();
+      await using standIn = await sshStandIn({
+        kind: 'engine',
+        socketPath: String(engineSocket),
+      });
+      try {
+        const sleeper = await local.containers.create({
+          Image: IMAGE,
+          Cmd: ['sleep', '300'],
+          Labels: { [TEST_LABEL]: run },
+        });
+        await sleeper.start();
+        const scenario = withClient(`
+const container = await docker.containers.find(${JSON.stringify(sleeper.id)});
+const result = await container.exec({ Cmd: ${JSON.stringify(PRINTS_THEN_EXITS_3)} }).catch((error) => error.name + ': ' + error.message);
+console.log(JSON.stringify({ result }));
+await docker[Symbol.asyncDispose]();
+`);
+
+        // Act
+        const result = await runScenario(
+          scenario,
+          scenarioEnvironment(standIn.path, home.path),
+        );
+
+        // Assert
+        assert.deepEqual(
+          lastJson(result),
+          {
+            result: {
+              exitCode: 3,
+              stdout: 'axb\n',
+              stderr: '',
+              output: 'axb\n',
+            },
+          },
+          result.stderr,
+        );
+      } finally {
+        await removeLabeled(local, run);
       }
     },
   );

@@ -5,6 +5,7 @@ import type { HijackedConnection } from './engine-client.ts';
 import { DockerError, IncompleteOutputError } from './errors.ts';
 import { type OutputChunk, outputChunks } from './multiplexed-stream.ts';
 import { type ExecResult, readOutput } from './output.ts';
+import { SshExitError } from './ssh-connection.ts';
 
 export interface ContainerProcessOptions {
   /** Gives the process a writable `stdin`. */
@@ -25,6 +26,8 @@ const WRITE_FAILURES = new Set(['EPIPE', 'ECONNRESET']);
 type Ending =
   | { readonly kind: 'end' }
   | { readonly kind: 'read error'; readonly error: Error }
+  /** `ssh` exited non-zero: `docker system dial-stdio` drops the output that it had not copied. */
+  | { readonly kind: 'ssh exit'; readonly error: SshExitError }
   | {
       readonly kind: 'failed write';
       readonly error: Error;
@@ -75,14 +78,21 @@ class HijackedOutput {
   }
 
   /**
-   * A reset ends the output. The error that follows a failed write is the
-   * error of that write, which writeFailed() already has.
+   * A reset ends the output, and so does a non-zero exit of `ssh`, after
+   * which the output can be incomplete. The error that follows a failed write
+   * is the error of that write, which writeFailed() already has.
    */
   #onError(error: NodeJS.ErrnoException): void {
     const { phase, ending } = this.#state;
     if (phase === 'ended' || ending.kind !== 'end') return;
     if (error.code === 'ECONNRESET') return;
-    this.#state = { phase, ending: { kind: 'read error', error } };
+    this.#state = {
+      phase,
+      ending:
+        error instanceof SshExitError
+          ? { kind: 'ssh exit', error }
+          : { kind: 'read error', error },
+    };
   }
 
   /** A destroyed connection still holds the chunks that Node read while it was paused. */
@@ -113,10 +123,11 @@ class HijackedOutput {
     };
   }
 
-  /** The error of the failed write, when the output can be incomplete. */
+  /** The error of the failed write or the exit of `ssh`, when the output can be incomplete. */
   get incompleteBecause(): { cause: Error } | undefined {
     const { ending } = this.#state;
-    return ending.kind === 'failed write' && ending.incomplete
+    return ending.kind === 'ssh exit' ||
+      (ending.kind === 'failed write' && ending.incomplete)
       ? { cause: ending.error }
       : undefined;
   }

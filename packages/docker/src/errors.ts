@@ -100,11 +100,12 @@ export interface EngineAnswer {
 
 /**
  * The command of an exec or an attach ended, but its output can be
- * incomplete: a write to its standard input failed before the output ended,
- * when no output had come or the caller had not taken the output. Node then
- * destroys the connection, and output that was still on the way is gone
- * (ADR 0012). The `cause` is the error of the write. The package does not run
- * the command again.
+ * incomplete (ADR 0012). On a Unix socket or a named pipe, a write to its
+ * standard input failed before the output ended, when no output had come or
+ * the caller had not taken the output: Node then destroys the connection, and
+ * output that was still on the way is gone. Over SSH, `ssh` exited non-zero
+ * before the output ended. The `cause` is the error of the write, or the exit
+ * error of `ssh`. The package does not run the command again.
  */
 export class IncompleteOutputError extends DockerError {
   /** The exit code of the command. */
@@ -112,7 +113,7 @@ export class IncompleteOutputError extends DockerError {
 
   constructor(exitCode: number, options: { cause: unknown }) {
     super(
-      `The command ended with exit code ${exitCode}, but its output can be incomplete: the engine closed the connection while the input was still being written.`,
+      `The command ended with exit code ${exitCode}, but its output can be incomplete: the connection to the engine ended before the output ended.`,
       options,
     );
     this.name = 'IncompleteOutputError';

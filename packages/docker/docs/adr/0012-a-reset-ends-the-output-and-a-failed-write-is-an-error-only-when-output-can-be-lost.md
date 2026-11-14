@@ -87,9 +87,24 @@ What closes the engine's end of the connection is not known. The handlers of Mob
 - The package does not run the command again.
 - An accepted limit: when a connection drops in the middle of a run and the engine stays up, the call gives the real exit code with only the output that came before the drop. The call waits until the command ends, as the Podman runtime waits for the exit file of conmon. Without a signal, a command that never ends makes the call wait without end. Before this decision the call rejected at once with the reset. The signal of the caller limits the wait, as [ADR 0001](./0001-the-client-speaks-the-engine-api-not-the-docker-cli.md) gives each limit to the caller.
 - These parts are not covered:
-  - The SSH transport. There the failure is a non-zero exit of `ssh`, not `ECONNRESET` or `EPIPE`. It needs its own measurement on a real sshd (backlog #4346).
+  - Over SSH, whether the output was complete when `ssh` exited non-zero. Those calls rejected, so the probe could not compare their output (see "Over SSH").
   - A Windows named pipe was not run (backlog #2753).
   - A native Linux host and the rate on the CI runner were not measured. The probe ran on the virtual machine of Docker Desktop.
   - An output that Node reads in part before a write fails. It was not seen in 15,000 execs with 1 MB of output, but it is not excluded.
   - What closes the engine's end of the connection. That is an inference only.
 - The code is in place: `src/container-process.ts` reads the hijacked connection, and `IncompleteOutputError` is in `src/errors.ts`.
+
+### Over SSH
+
+Over SSH, the race has a different form. `docker system dial-stdio` copies between the engine and the pipes of `ssh` ([`dial_stdio.go`](https://github.com/docker/cli/blob/eaae503a22566c7760c0b28df92cfdef36428379/cli/command/system/dial_stdio.go)). When one of its two copies fails, it returns at once, and `ssh` exits non-zero. Output that it did not copy yet is lost on the remote host. The package then destroys the connection with an `SshExitError`, before the output ended.
+
+A probe on 2026-11-14 used an sshd container (`alpine:3` with `docker-cli` on the engine's own socket) and the starved client of the first probe, with the package from source (backlog #4346):
+
+- `true` and `head -c1` with 10 MB of standard input, 2,000 execs: 1,985 gave the correct result. 15 (0.75%) rejected with an `SshExitError` with exit code 1, not with an error of the package. No exec gave wrong output.
+- In the standard error of `dial-stdio` of the 15, the stdin copy failed first in 9 (`broken pipe`), and the read got a reset in 6 (`connection reset by peer`).
+- 1 MB of output, 500 execs: each one gave all of its output.
+- In 2,485 execs where the write failed and `ssh` exited with 0, no output was lost.
+
+The rule: for an exec and an attach over SSH, a non-zero exit of `ssh` before the output ended is an `IncompleteOutputError`. The iteration first gives the output that came before the exit. The exit code comes from the engine, as for a Unix socket: the inspect of the exec, or the wait of the attach. The `cause` is the `SshExitError`. When the engine is gone, the request for the exit code fails, and the call rejects with that error. The maintainer gave this rule on 2026-11-14.
+
+The package does not read the standard error of `ssh` to make this decision. That text is not an API: it changes with the versions of `ssh` and of the Docker CLI. [ADR 0007](./0007-an-error-has-its-own-class-when-the-caller-handles-it-differently.md) gives a class from what the caller does next, and the caller does the same thing in each case. A request that is not an exec or an attach keeps its errors: an `SshExitError` before the answer is the cause of a `ConnectionFailedError` ([ADR 0011](./0011-only-a-failure-before-the-answer-is-a-connection-failure.md)).
