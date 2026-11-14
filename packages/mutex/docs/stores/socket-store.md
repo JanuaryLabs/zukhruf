@@ -36,12 +36,12 @@ The leader is a normal app process. You do not start or watch a separate server.
 ## When not
 
 - One process does all the writes. Use [MemoryStore](./memory-store.md).
-- On macOS and Linux, the directory path is long. The socket path `<directory>/lock.sock` must be 103 bytes or less. (Windows has no such limit.)
+- On macOS and Linux, the directory path is long. The absolute socket path `<directory>/lock.sock` must be 103 bytes or less on macOS, and 107 bytes or less on Linux. (Windows has no such limit.) [`@zukhruf/pipes`](../../../pipes/README.md) checks it when the store is made.
 - Your processes start and stop very often while other processes hold keys. Each stop of the leader causes a failover, and the new leader waits a grace window when the old leader did not shut down cleanly.
 
 ## How it works
 
-1. A process needs a key and connects to the socket of the directory. On Windows, the socket is the named pipe `\\.\pipe\mutex-<hash of the directory>`. Windows removes a named pipe when its process stops, so a new leader has no stale socket file to remove.
+1. A process needs a key and connects to the socket of the directory. On Windows, the socket is the named pipe `\\.\pipe\zukhruf-mutex-<hash of the socket path>` ([`@zukhruf/pipes` ADR 0005](../../../pipes/docs/adr/0005-a-rooted-name-on-windows-is-a-pipe-named-by-a-hash-of-its-path.md)). Versions up to 0.8.18 used `\\.\pipe\mutex-<hash of the directory>`, so they do not meet later versions on Windows. Windows removes a named pipe when its process stops, so a new leader has no stale socket file to remove.
 2. If no process listens, the process starts a campaign. The election is `SqliteElection` of [`@zukhruf/election`](../../../election/docs/concepts/leader-election.md), with the claim file `<directory>/leader.lock` and the epoch file `<directory>/leader.epoch`. If the process wins, it starts the server and connects to itself.
 3. The leader grants keys in the order of the requests. Each fencing token contains the epoch of the leader, so a new leader's tokens are higher than all tokens of earlier leaders.
 4. The leader does not stay alive only to serve others. When its own work ends, it stops, and a failover occurs.

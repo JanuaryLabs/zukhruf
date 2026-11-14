@@ -1,8 +1,8 @@
-import { once } from 'node:events';
-import { type Socket, connect } from 'node:net';
+import type { Socket } from 'node:net';
 
 import { type Clock, delay, untilAborted } from '@zukhruf/async';
 import type { LeaderElection, Term } from '@zukhruf/election';
+import type { PipeAddress } from '@zukhruf/pipes';
 
 import type { ClientConnection, ClientConnector } from '../remote/connector.ts';
 import type { LockRequest } from '../remote/protocol.ts';
@@ -12,7 +12,8 @@ import { ProtocolVersionError } from './protocol-version-error.ts';
 import { SocketConnection } from './socket-connection.ts';
 
 export interface ElectingConnectorOptions {
-  socketPath: string;
+  /** Where the leader listens. */
+  address: PipeAddress;
   /** Only `campaign`: the connector never runs a backend's own steps, so an election of any backend fits. */
   election: Pick<LeaderElection<unknown>, 'campaign'>;
   pollInterval: number;
@@ -37,9 +38,9 @@ export class ElectingConnector implements ClientConnector {
   }
 
   async connect(signal: AbortSignal): Promise<ClientConnection> {
-    const { socketPath, pollInterval, clock } = this.#options;
+    const { address, pollInterval, clock } = this.#options;
     for (;;) {
-      const leader = await reachUnlessAborted(socketPath, signal);
+      const leader = await reachUnlessAborted(address, signal);
       if (leader) {
         const connection =
           (await this.#follow(leader, signal)) ??
@@ -66,11 +67,11 @@ export class ElectingConnector implements ClientConnector {
   async #outlastHangUp(
     signal: AbortSignal,
   ): Promise<ClientConnection | undefined> {
-    const { socketPath, pollInterval, clock } = this.#options;
+    const { address, pollInterval, clock } = this.#options;
     for (;;) {
       const term = await this.#campaign(0, signal);
       if (term) return this.#lead(term, signal);
-      const again = await reachUnlessAborted(socketPath, signal);
+      const again = await reachUnlessAborted(address, signal);
       if (!again) return undefined;
       const connection = await this.#follow(again, signal);
       if (connection) return connection;
@@ -103,7 +104,7 @@ export class ElectingConnector implements ClientConnector {
     serving.defer(() => term.resign());
     await this.#options.serve(term);
     serving.move();
-    const own = await reachUnlessAborted(this.#options.socketPath, signal);
+    const own = await reachUnlessAborted(this.#options.address, signal);
     if (!own) return undefined;
     const greeting = await greetUnlessAborted(own, signal);
     if (greeting.kind === 'welcome') {
@@ -137,26 +138,19 @@ export class ElectingConnector implements ClientConnector {
 
 /** Like `reach`, but a socket reached after `signal` aborted is destroyed, not returned. */
 async function reachUnlessAborted(
-  socketPath: string,
+  address: PipeAddress,
   signal: AbortSignal,
 ): Promise<Socket | undefined> {
   signal.throwIfAborted();
-  const socket = await reach(socketPath);
+  const socket = await reach(address);
   if (signal.aborted) socket?.destroy();
   signal.throwIfAborted();
   return socket;
 }
 
 /** Resolves `undefined` when nothing listens yet (no file, or a dead leader's file). */
-async function reach(socketPath: string): Promise<Socket | undefined> {
-  const socket = connect(socketPath);
-  try {
-    await once(socket, 'connect');
-    return socket;
-  } catch {
-    socket.destroy();
-    return undefined;
-  }
+async function reach(address: PipeAddress): Promise<Socket | undefined> {
+  return address.connect().catch(() => undefined);
 }
 
 /** Greets the leader on `socket`; a store that closes meanwhile gives the socket up. */

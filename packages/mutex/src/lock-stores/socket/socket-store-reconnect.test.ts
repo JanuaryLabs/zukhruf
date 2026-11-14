@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { hash } from 'node:crypto';
 import { once } from 'node:events';
 import { type Socket, createServer } from 'node:net';
-import { join, resolve } from 'node:path';
+import { resolve } from 'node:path';
 import { createInterface } from 'node:readline';
 import { type TestContext, describe } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -24,14 +24,15 @@ import { socketElection } from './socket-election.ts';
 const socketUrl = new URL('./index.ts', import.meta.url);
 
 /**
- * Where every published version of a store meets its leader: `lock.sock` in
- * the directory, or on Windows the pipe named for the directory
+ * Where a store meets its leader: `lock.sock` in the directory, or on Windows
+ * the pipe named for that socket path
  * (wire-compatibility.test.ts pins both).
  */
 function publishedSocketPath(directory: string) {
-  if (process.platform !== 'win32') return join(directory, 'lock.sock');
-  const id = hash('sha256', resolve(directory).toLowerCase()).slice(0, 32);
-  return `\\\\.\\pipe\\mutex-${id}`;
+  const socketPath = resolve(directory, 'lock.sock');
+  if (process.platform !== 'win32') return socketPath;
+  const id = hash('sha256', socketPath.toLowerCase()).slice(0, 32);
+  return `\\\\.\\pipe\\zukhruf-mutex-${id}`;
 }
 
 /** One connection a store opened to the stand-in leader, as the leader sees it. */

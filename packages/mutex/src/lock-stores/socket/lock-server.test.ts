@@ -7,6 +7,7 @@ import { describe, test } from 'node:test';
 import { SqliteElection } from '@zukhruf/election';
 import type { FileLock } from '@zukhruf/fs';
 import { LeaseLostError } from '@zukhruf/lease';
+import { PipeEndpoint } from '@zukhruf/pipes';
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { factTimeout } from '../../testing/fact-timeout.ts';
@@ -75,7 +76,11 @@ describe('Lock server', () => {
       loss.abort();
 
       // Act
-      const starting = LockServer.start(socketPath, term, { grace: undefined });
+      const starting = LockServer.start(
+        new PipeEndpoint(socketPath, { prefix: 'zukhruf-mutex' }),
+        term,
+        { grace: undefined },
+      );
 
       // Assert
       await assert.rejects(starting, LeaseLostError);
@@ -102,7 +107,9 @@ describe('Lock server', () => {
       ).campaign();
       assert.ok(term, 'The first campaign in an empty directory must win');
       const server = await LockServer.start(
-        join(directory.path, 'lock.sock'),
+        new PipeEndpoint(join(directory.path, 'lock.sock'), {
+          prefix: 'zukhruf-mutex',
+        }),
         term,
         { grace: undefined },
       );

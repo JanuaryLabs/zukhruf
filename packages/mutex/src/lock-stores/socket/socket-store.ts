@@ -1,8 +1,8 @@
-import { hash } from 'node:crypto';
 import { EventEmitter } from 'node:events';
-import { join, resolve } from 'node:path';
+import { resolve } from 'node:path';
 
 import type { Clock } from '@zukhruf/async';
+import { PipeEndpoint } from '@zukhruf/pipes';
 
 import type { LockHandle } from '../../mutex/lease.ts';
 import type { AcquireOptions, LockStore } from '../../mutex/lock-store.ts';
@@ -12,9 +12,6 @@ import { ElectingConnector } from './electing-connector.ts';
 import { LocalDirectoryConnector } from './local-directory-connector.ts';
 import { LockServer } from './lock-server.ts';
 import { socketElection } from './socket-election.ts';
-
-/** macOS allows 104 bytes including the terminating NUL; Linux allows 108. */
-const SOCKET_PATH_LIMIT = 103;
 
 export type SocketRole = 'leader' | 'follower';
 
@@ -53,13 +50,16 @@ export class SocketStore
     { pollInterval = 10, graceWindow = 500, clock }: SocketStoreOptions,
   ) {
     super();
-    const socketPath = socketPathFor(directory);
+    // A Unix socket file in the directory on macOS and Linux; on Windows, a named pipe named by a hash of that path.
+    const endpoint = new PipeEndpoint(resolve(directory, 'lock.sock'), {
+      prefix: 'zukhruf-mutex',
+    });
     this.#client = new RemoteLockClient(
       new ConnectionSupervisor(
         new LocalDirectoryConnector(
           directory,
           new ElectingConnector({
-            socketPath,
+            address: endpoint.address,
             election: socketElection(directory, pollInterval, clock),
             pollInterval,
             clock,
@@ -67,7 +67,7 @@ export class SocketStore
               // Until serving has fully started, a failure closes the new server, so no server outlives its term.
               await using starting = new AsyncDisposableStack();
               starting.adopt(
-                await LockServer.start(socketPath, term, {
+                await LockServer.start(endpoint, term, {
                   // The first term of a directory has no predecessor to wait for,
                   // and a term after a clean shutdown has no holder to wait for.
                   grace:
@@ -104,23 +104,4 @@ export class SocketStore
     await this.#client.close();
     await this.#servers.disposeAsync();
   }
-}
-
-/**
- * A Unix socket file in the directory on macOS and Linux. On Windows, a named
- * pipe: pipe names are global, so the name comes from the directory, and
- * Windows paths ignore case, so the path is lowercased first.
- */
-function socketPathFor(directory: string): string {
-  if (process.platform === 'win32') {
-    const id = hash('sha256', resolve(directory).toLowerCase()).slice(0, 32);
-    return `\\\\.\\pipe\\mutex-${id}`;
-  }
-  const socketPath = join(directory, 'lock.sock');
-  if (Buffer.byteLength(socketPath) > SOCKET_PATH_LIMIT) {
-    throw new RangeError(
-      `The socket path ${socketPath} exceeds ${SOCKET_PATH_LIMIT} bytes; choose a shorter directory.`,
-    );
-  }
-  return socketPath;
 }

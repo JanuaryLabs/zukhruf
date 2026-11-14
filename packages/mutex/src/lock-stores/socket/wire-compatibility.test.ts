@@ -3,7 +3,7 @@ import { hash } from 'node:crypto';
 import { once } from 'node:events';
 import { readFile, writeFile } from 'node:fs/promises';
 import { type Socket, connect, createServer } from 'node:net';
-import { join, resolve } from 'node:path';
+import { join, resolve, win32 } from 'node:path';
 import { createInterface } from 'node:readline';
 import { describe } from 'node:test';
 
@@ -456,7 +456,7 @@ describe('What a socket store shares with other versions in its directory', () =
   );
 
   test(
-    'a store takes a directory whose socket path has 103 bytes, and refuses one of 104 bytes, counting bytes and not characters',
+    'a store takes a directory whose socket path has 103 bytes on macOS and 107 on Linux, and refuses one byte more, counting bytes and not characters',
     { ...onUnixSockets },
     async () => {
       // Arrange: directory names in Arabic letters, which take two bytes each, so each path has fewer characters than bytes.
@@ -473,10 +473,12 @@ describe('What a socket store shares with other versions in its directory', () =
           `${'ح'.repeat(Math.floor(nameBytes / 2))}${'x'.repeat(nameBytes % 2)}`,
         );
       };
-      const longest = withSocketPathOf(103);
-      const tooLong = withSocketPathOf(104);
-      assert.equal(Buffer.byteLength(join(longest, 'lock.sock')), 103);
-      assert.equal(Buffer.byteLength(join(tooLong, 'lock.sock')), 104);
+      // One byte less than sun_path, for its ending zero byte.
+      const limit = process.platform === 'linux' ? 107 : 103;
+      const longest = withSocketPathOf(limit);
+      const tooLong = withSocketPathOf(limit + 1);
+      assert.equal(Buffer.byteLength(join(longest, 'lock.sock')), limit);
+      assert.equal(Buffer.byteLength(join(tooLong, 'lock.sock')), limit + 1);
 
       // Act
       await using store = new SocketStore(longest, {
@@ -516,16 +518,21 @@ describe('What a socket store shares with other versions on Windows', () => {
       "Object.defineProperty(process, 'platform', { value: 'win32' });",
     )}`,
   ];
-  // Relative and in mixed case, as Windows paths may be. Its socket path would exceed 103 bytes, which only matters outside Windows.
+  // Relative and in mixed case, as Windows paths may be. Its socket path would exceed the limit of macOS and Linux, which only matters outside Windows.
   const directory = `Shared-Locks-${'X'.repeat(100)}`;
-  /** The pipe of every published version: `mutex-` and the first 32 hex digits of the SHA-256 of the lowercased absolute directory. */
-  const pipeFor = (absolute: string) =>
-    `\\\\.\\pipe\\mutex-${hash('sha256', absolute.toLowerCase()).slice(0, 32)}`;
+  /**
+   * The pipe of every version after 0.8.18: `zukhruf-mutex-` and the first 32
+   * hex digits of the SHA-256 of the lowercased absolute socket path
+   * `<directory>\lock.sock`. Versions up to 0.8.18 named it `mutex-` and the
+   * hash of the directory, so they do not meet these versions on Windows.
+   */
+  const pipeFor = (socketPath: string) =>
+    `\\\\.\\pipe\\zukhruf-mutex-${hash('sha256', win32.resolve(socketPath).toLowerCase()).slice(0, 32)}`;
 
   test('a store says the published hello on the pipe named for its directory', async (t) => {
     // Arrange: a leader of a published version listens on the pipe of the directory.
     await using scratch = await new TemporaryFiles().directory('mutex-test-');
-    const pipe = pipeFor(resolve(scratch.path, directory));
+    const pipe = pipeFor(resolve(scratch.path, directory, 'lock.sock'));
 
     // Act
     await using follower = startWorker(
@@ -570,7 +577,7 @@ describe('What a socket store shares with other versions on Windows', () => {
   test('a store that leads listens on the pipe named for its directory', async (t) => {
     // Arrange
     await using scratch = await new TemporaryFiles().directory('mutex-test-');
-    const pipe = pipeFor(resolve(scratch.path, directory));
+    const pipe = pipeFor(resolve(scratch.path, directory, 'lock.sock'));
 
     // Act: the store leads, and a follower of a published version says hello on the pipe.
     await using leader = startWorker(

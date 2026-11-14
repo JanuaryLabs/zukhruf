@@ -93,7 +93,7 @@ Backlog #2899 is about this code. A third dialect with a pool is the time to mov
 
 - Places: `publishedSocketPath` in `socket/socket-store-coordinator.test.ts` and in `socket/socket-store-reconnect.test.ts`.
 - Same: nothing differs.
-- Not counted: `socketPathFor` in `socket/socket-store.ts` is the code under test. `pipeFor` in `socket/wire-compatibility.test.ts` spells out the published name, because that test pins it.
+- Not counted: `PipeEndpoint` of `@zukhruf/pipes` makes the path that the store uses, and it is the code under test. `pipeFor` in `socket/wire-compatibility.test.ts` spells out the published name, because that test pins it.
 
 **The file stores of a test (test helper).**
 

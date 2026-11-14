@@ -1,10 +1,10 @@
-import { addAbortListener, once } from 'node:events';
-import { rm } from 'node:fs/promises';
-import { type Server, type Socket, createServer } from 'node:net';
+import { addAbortListener } from 'node:events';
+import type { Socket } from 'node:net';
 
 import type { Clock } from '@zukhruf/async';
 import type { Term } from '@zukhruf/election';
 import { EpochTokenSource } from '@zukhruf/fencing';
+import type { PipeEndpoint, PipeServer } from '@zukhruf/pipes';
 
 import { LockCoordinator } from '../remote/lock-coordinator.ts';
 import type { LockResponse } from '../remote/protocol.ts';
@@ -27,14 +27,14 @@ export interface LockServerOptions {
  * itself when the term's signal aborts.
  */
 export class LockServer {
-  readonly #server: Server;
+  readonly #server: PipeServer;
   readonly #connections: Set<Socket>;
   readonly #coordinator: LockCoordinator;
   readonly #term: Term;
   readonly #closeOnLoss: Disposable;
 
   private constructor(
-    server: Server,
+    server: PipeServer,
     connections: Set<Socket>,
     coordinator: LockCoordinator,
     term: Term,
@@ -47,15 +47,10 @@ export class LockServer {
   }
 
   static async start(
-    socketPath: string,
+    endpoint: PipeEndpoint,
     term: Term,
     { grace }: LockServerOptions,
   ): Promise<LockServer> {
-    // Only the leader gets here, so removing a dead leader's socket file cannot race another server.
-    // Windows removes a named pipe when its process stops, so there is no file to remove.
-    if (process.platform !== 'win32') {
-      await rm(socketPath, { force: true });
-    }
     const coordinator = new LockCoordinator({
       tokens: new EpochTokenSource(term.epoch),
       grace,
@@ -65,8 +60,9 @@ export class LockServer {
       onTokensExhausted: () => void started.close(),
     });
     const connections = new Set<Socket>();
+    // Only the leader gets here, so the listen that removes a dead leader's socket file cannot race another server.
     // Serving others never keeps the leader alive: when its own work ends, it exits and another process takes over.
-    const server = createServer((socket) => {
+    const server = await endpoint.listen((socket) => {
       socket.unref();
       connections.add(socket);
       socket.once('close', () => connections.delete(socket));
@@ -76,8 +72,6 @@ export class LockServer {
         coordinator.serve(new SocketConnection<LockResponse>(socket));
       });
     });
-    server.listen(socketPath);
-    await once(server, 'listening');
     server.unref();
     const started = new LockServer(server, connections, coordinator, term);
     // The term may have been lost while the server started.
@@ -101,7 +95,7 @@ export class LockServer {
    */
   async close() {
     this.#closeOnLoss[Symbol.dispose]();
-    const closed = this.#server[Symbol.asyncDispose]();
+    const closed = this.#server.close();
     // Read in the step that drops the connections: each session that ends
     // releases its keys, so later no key is ever held. A grant written after
     // this step never reaches its process, which asks the successor again.
