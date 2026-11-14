@@ -1,4 +1,6 @@
-# Connect tries once and takes a path
+# Connect tries once
+
+> Changed in part on 2026-11-14 by [ADR 0007](./0007-the-endpoint-listens-the-address-connects-and-the-server-owns-its-file.md): connect is a method of the address, not a function that takes a path. A client that has only a path makes its address with `new PipeAddress(path)`. Connect still tries once and takes no clock.
 
 A client connects to a server. The precedent (research 21 §1, §2):
 
@@ -14,16 +16,16 @@ The consumers:
 
 ## Decision
 
-- `connectPipe(path, { signal })` calls `net.connect` once. It resolves with the socket at `connect`. At `error` it destroys the socket and rejects with Node's error.
-- It takes a path. `endpoint.path` is the path of an endpoint.
+- `address.connect({ signal })` calls `net.connect` once, on `address.path`. It resolves with the socket at `connect`. At `error` it destroys the socket and rejects with Node's error.
+- A client that read a path from another place makes its address with `new PipeAddress(path)`, which checks nothing and makes nothing.
 - `signal` is Node's: an abort destroys the socket, also after the connect.
 - The package waits on no timer, so it takes no clock.
 
 ## Considered Options
 
 - **Try again until a timeout, as .NET.** It needs a clock, and it makes the dead-listener rule of sqlite-notify wait out the timeout.
-- **Take a `PipeEndpoint`, as .NET's client takes a name.** sqlite-notify's sender has only the path that it read, and programs need not agree on the default folder.
-- **Connect once, on a path.** This option was selected.
+- **Take a `PipeEndpoint` made only from a name, as .NET's client takes a name.** sqlite-notify's sender has only the path that it read, and programs need not agree on the default folder. `new PipeAddress(path)` answers this.
+- **Connect once.** This option was selected.
 
 ## Consequences
 

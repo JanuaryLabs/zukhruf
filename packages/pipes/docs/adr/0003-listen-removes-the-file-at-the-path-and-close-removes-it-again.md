@@ -16,9 +16,9 @@ The three consumers each prove that one server runs on a path. mutex and single-
 
 ## Decision
 
-- On macOS and Linux, `listenPipe` removes the file at the socket path before it listens, without a check, as .NET does. A missing file is no error. A folder at the path is an error.
+- On macOS and Linux, `endpoint.listen` removes the file at the socket path before it listens, without a check, as .NET does. A missing file is no error. A folder at the path is an error.
 - On Windows it removes nothing. Windows removes a pipe when its program exits.
-- `listenPipe` adds nothing to the close: `server.close()` removes the file, as Node does.
+- The package adds nothing to Node's close: `server.close()` removes the file, as Node does. The `PipeServer` owns the file, and its close or its dispose is the one way to release it ([ADR 0007](./0007-the-endpoint-listens-the-address-connects-and-the-server-owns-its-file.md)).
 - The README states the rule for the caller: one server listens on a path at a time, and a server that lost its right to the path closes before the next server listens.
 
 ## Considered Options

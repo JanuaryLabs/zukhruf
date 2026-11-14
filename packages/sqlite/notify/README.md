@@ -223,7 +223,7 @@ CREATE TABLE zukhruf_notify_channel (
 
 What stays in this package:
 
-- The listener id, and the address in the listener row: `endpoint.path`. A sender connects to the address that it read, with `connectPipe`.
+- The listener id, and the address in the listener row: `endpoint.address.path`. A sender connects to the address that it read, with `new PipeAddress(address).connect()`.
 - Another user cannot connect to a socket that Node makes with the default mode (research 20a P5). Pools are per user, so this is the rule, not a limit.
 - A listener's socket file stays after a crash. The sender that finds the address dead removes the file with the row.
 

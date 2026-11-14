@@ -25,8 +25,12 @@ The caller's text that names the default folder and starts each pipe name on Win
 _Avoid_: Scope, namespace, app name
 
 **Endpoint**:
-A `PipeEndpoint`: a name mapped to its path on this system. .NET's word (`UnixDomainSocketEndPoint`).
+A `PipeEndpoint`: an endpoint that this program owns and may listen on. It is made from a name, and holds its address. .NET's word (`UnixDomainSocketEndPoint`).
 _Avoid_: Address, location
+
+**Address**:
+A `PipeAddress`: where to connect, the path that a program published. It connects and does not listen. Two addresses with one path are one pipe. Go's word (`net.UnixAddr`).
+_Avoid_: Endpoint, location
 
 **Path**:
 What `node:net` listens on and connects to: a socket path on macOS and Linux, a pipe path under `\\.\pipe\` on Windows. Node's word for both ("Identifying paths for IPC connections").
@@ -41,17 +45,17 @@ The folder of the plain names of one prefix and one user: `/tmp/<prefix>-<uid>`,
 _Avoid_: Socket folder (sqlite-notify's word for its own folder), runtime directory (`XDG_RUNTIME_DIR` is another folder), temp folder
 
 **Unsafe folder**:
-A default folder that is not a folder, is a link, belongs to another user, or gives access to its group or others. `listenPipe` refuses it with `UnsafeFolderError`. tmux's word ("has unsafe permissions").
+A default folder that is not a folder, is a link, belongs to another user, or gives access to its group or others. `endpoint.listen` refuses it with `UnsafeFolderError`. tmux's word ("has unsafe permissions").
 _Avoid_: Bad folder, insecure folder, foreign folder
 
 **Server**:
-The `net.Server` that `listenPipe` gives, listening on one path. .NET's `NamedPipeServerStream`; Node's `net.Server`.
-_Avoid_: Listener (sqlite-notify's word for its own object), host
+A `PipeServer`, which `endpoint.listen` gives: the owner of the socket file while it listens on the path of one endpoint. Its close, or its dispose, stops listening and removes the file. .NET's `NamedPipeServerStream`, an `IDisposable`.
+_Avoid_: Listener (sqlite-notify's word for its own object), host, `net.Server` (the object of `node:net` inside it)
 
 **Client**:
-A `net.Socket` that `connectPipe` connected to a path. .NET's `NamedPipeClientStream`.
+A `net.Socket` that `address.connect` connected. .NET's `NamedPipeClientStream`.
 _Avoid_: Peer, connection
 
 **Leftover file**:
-A socket file whose server crashed. A connect to it gives `ECONNREFUSED`. `listenPipe` removes it. .NET's word ("anything left over").
+A socket file whose server crashed. A connect to it gives `ECONNREFUSED`. `endpoint.listen` removes it. .NET's word ("anything left over").
 _Avoid_: Stale socket, dead file, orphan

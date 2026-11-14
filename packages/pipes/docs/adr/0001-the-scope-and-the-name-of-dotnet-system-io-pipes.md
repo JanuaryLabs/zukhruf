@@ -16,7 +16,7 @@ Ezz chose the name and the scope on 2026-11-14.
 - Its scope is .NET's: a name to an endpoint, the byte-length check, the leftover file removed at listen, the removal at close, the per-user rule, listen and connect. Each gives the objects of `node:net`.
 - The name rule is .NET's: a rooted name is the full path of the socket, and any other name goes into the default folder (`PipeStream.Unix.cs:203-209`).
 - One difference from .NET: the per-user rule. On Unix, .NET reads the peer's user id after each connect and each accept (`GetPeerID`, `NamedPipeServerStream.Unix.cs:107-119`). `node:net` has no call for the peer's credentials: on Node 26.13.0 a socket has only `_getpeername`. So here the rule comes from a folder of this user with mode `0700`, checked as tmux checks `/tmp/tmux-<uid>` ([ADR 0002](./0002-the-default-folder-belongs-to-one-user.md)).
-- The names of the calls: `PipeEndpoint` after .NET's `UnixDomainSocketEndPoint`, which owns the length check. `listenPipe` and `connectPipe` after go-winio's `ListenPipe` and `DialPipe`, with Node's verb `connect`.
+- The names of the calls: `PipeEndpoint` after .NET's `UnixDomainSocketEndPoint`, which owns the length check. Its methods `listen` and `connect` have Node's verbs, and `listen` gives a `PipeServer` ([ADR 0007](./0007-the-endpoint-listens-the-address-connects-and-the-server-owns-its-file.md)).
 
 ## Considered Options
 

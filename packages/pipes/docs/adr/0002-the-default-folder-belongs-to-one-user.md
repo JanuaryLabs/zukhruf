@@ -10,10 +10,10 @@ A plain name goes into the default folder. .NET's default folder is `Path.GetTem
 ## Decision
 
 - On macOS and Linux, the default folder is `/tmp/<prefix>-<uid>`. `<prefix>` is the caller's, and `<uid>` is `process.getuid()`. The file of a plain name is `<name>` in it, with no suffix, as .NET's and tmux's files have none.
-- `listenPipe` makes the folder with mode `0700` when it is missing, and then reads it with `lstat`, also after it made it, as tmux does. It throws `UnsafeFolderError` when the folder is not a folder, when its owner is another user, or when its group or others have any access. tmux checks only the others. The group is checked too, because the package makes the folder with no group access, so a group bit means that someone changed it.
+- `endpoint.listen` makes the folder with mode `0700` when it is missing, and then reads it with `lstat`, also after it made it, as tmux does. It throws `UnsafeFolderError` when the folder is not a folder, when its owner is another user, or when its group or others have any access. tmux checks only the others. The group is checked too, because the package makes the folder with no group access, so a group bit means that someone changed it.
 - This folder is the per-user rule of the package: .NET's `CurrentUserOnly` for each plain name. There is no option for it. A plain name is always for this user. A rooted name is in the caller's folder, and its access is the caller's.
 - The caller gives a prefix in place of .NET's fixed `CoreFxPipe_`. Two consumers with two prefixes never share a folder.
-- `connectPipe` does not check the folder. It takes a path, which the client may read from another place ([ADR 0006](./0006-connect-tries-once-and-takes-a-path.md)).
+- `address.connect` does not check the folder. Its address may come from a path that the client read from another place, with `new PipeAddress(path)` ([ADR 0006](./0006-connect-tries-once.md)).
 
 ## Considered Options
 
