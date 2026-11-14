@@ -4,4 +4,7 @@
 export interface BitGenerator {
   // The next 32 bits of the stream, from 0 to 2^32 - 1.
   nextUint32(): number;
+  // The next float of 53 bits in [0, 1), by the next_double rule of the bit
+  // generator.
+  nextDouble(): number;
 }

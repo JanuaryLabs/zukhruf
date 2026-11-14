@@ -40,6 +40,12 @@ export class PCG64 implements BitGenerator {
     return Number(next & MASK32);
   }
 
+  // pcg64_double: uint64_to_double of a new 64-bit output. It does not take
+  // the buffered half, so the next 32-bit call still takes it.
+  nextDouble(): number {
+    return Number(this.#next64() >> 11n) * 2 ** -53;
+  }
+
   #next64(): bigint {
     this.#step();
     const high = this.#state >> 64n;

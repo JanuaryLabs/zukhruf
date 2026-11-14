@@ -13,8 +13,10 @@
 #   same array with p and with replace=False, permutation and shuffle of a
 #   list range(n);
 # - default_rng(seed), and Generator(MT19937) of a legacy seed: shuffle of a
-#   list, integers(low, high, size), permutation(n), permutation of the list
-#   3 * range(n) + 1, and choice(arange(n), size, replace=False);
+#   list, integers(low, high, size), random(size), permutation(n),
+#   permutation of the list 3 * range(n) + 1, choice(n, size) and choice(a,
+#   size) with replacement, choice(n, size, replace=False), and
+#   choice(arange(n), size, replace=False);
 # - refusals: the calls for which NumPy raises, with the class and the
 #   message of the error; a NaN weight is the string "NaN".
 # A seed of 2^53 or more is a decimal string, which JSON.parse keeps exact.
@@ -112,6 +114,8 @@ def generator_case(case, bits, seed, calls):
             results.append([int(value) for value in values])
         elif name == "integers":
             results.append(generator.integers(call[1], call[2], call[3]).tolist())
+        elif name == "random":
+            results.append(generator.random(call[1]).tolist())
         elif name == "permutation":
             results.append(generator.permutation(call[1]).tolist())
         elif name == "permutation_list":
@@ -121,6 +125,12 @@ def generator_case(case, bits, seed, calls):
             # The stratified split of datasets chooses among the indices of an
             # ndarray.
             results.append(generator.choice(np.arange(call[1]), size=call[2], replace=False).tolist())
+        elif name == "choice":
+            results.append(generator.choice(call[1], call[2]).tolist())
+        elif name == "choice_array":
+            results.append(generator.choice(array(call[1]), call[2]).tolist())
+        elif name == "choice_n_no_replace":
+            results.append(generator.choice(call[1], call[2], replace=False).tolist())
         else:
             raise ValueError(name)
     return {"case": case, "bits": bits, "seed": seed_json(seed), "calls": calls, "results": results}
@@ -252,6 +262,35 @@ generator_cases = [
     generator_case("a Generator over the legacy MT19937 draws from its 32-bit words", "mt19937_legacy", 42, [
         ["integers", 0, 10, 5], ["shuffle", 10], ["permutation", 6], ["choice_no_replace", 10, 3],
     ]),
+    generator_case("random floats of 53 bits, with sizes 0 and 1", "pcg64", 0, [["random", 5], ["random", 0], ["random", 1]]),
+    generator_case("seed 42: the random tie-breaks of Venn's cv_folds", "pcg64", 42, [["random", 12]]),
+    generator_case("seed 2^70 + 3: random floats from a bigint seed", "pcg64", 2**70 + 3, [["random", 4]]),
+    generator_case("random takes a new 64-bit output and leaves the buffered half to the next 32-bit draw", "pcg64", 7, [
+        ["integers", 0, 10, 1], ["random", 1], ["integers", 0, 10, 1], ["random", 2], ["integers", 0, 1000, 3],
+        ["shuffle", 5], ["random", 1], ["shuffle", 4], ["random", 3], ["integers", 0, 2**32, 1],
+    ]),
+    generator_case("a Generator over the legacy MT19937 draws a random float from two 32-bit words", "mt19937_legacy", 42, [
+        ["random", 3], ["integers", 0, 10, 3], ["random", 2], ["shuffle", 5], ["random", 1], ["choice", 10, 3],
+    ]),
+    generator_case("choices of n with replacement draw integers(0, n, size): n of 1 draws nothing", "pcg64", 11, [
+        ["choice", 1, 5], ["choice", 2, 10], ["choice", 10, 6], ["choice", 1_000_003, 4], ["choice", 3 * 2**30 + 1, 20],
+        ["choice", 2**32, 4], ["choice", 5, 0], ["integers", 0, 10, 2],
+    ]),
+    generator_case("choices of the items of an array with replacement, as Venn breaks ties among the best options", "pcg64", 2026, [
+        ["choice_array", 1, 1], ["choice_array", 3, 1], ["choice_array", 5, 8], ["choice_array", 2, 0],
+    ]),
+    generator_case("Venn's exploration: random, then integers or a choice, on one generator", "pcg64", 99, [
+        ["random", 1], ["integers", 0, 4, 1], ["random", 1], ["choice_array", 2, 1], ["random", 1], ["choice", 4, 1],
+        ["choice_array", 7, 3], ["random", 2],
+    ]),
+    generator_case("no items of no population, and integers of size 0 for any bounds, draw nothing", "pcg64", 13, [
+        ["choice", 0, 0], ["choice_array", 0, 0], ["choice_n_no_replace", 0, 0], ["integers", 5, 5, 0],
+        ["integers", 5, 4, 0], ["integers", 0, 2**33, 0], ["integers", 0, 10, 3],
+    ]),
+    generator_case("choices of n without replacement draw as choices of arange(n)", "pcg64", 3, [
+        ["choice_n_no_replace", 10, 10], ["choice_n_no_replace", 10, 3], ["choice_n_no_replace", 1, 1],
+        ["choice_n_no_replace", 7, 0], ["choice", 6, 2],
+    ]),
 ]
 
 refusals = [
@@ -266,7 +305,13 @@ refusals = [
     refusal("MT19937 legacy seeding of a float seed", "MT19937", 1.5),
     refusal("integers with low = high", "default_rng", 0, ["integers", 5, 5, 1]),
     refusal("integers with low > high", "default_rng", 0, ["integers", 5, 4, 1]),
+    refusal("integers with low 0 = high", "default_rng", 0, ["integers", 0, 0, 1]),
+    refusal("integers with low 0 > high", "default_rng", 0, ["integers", 0, -3, 1]),
     refusal("Generator.choice of more items than the population", "default_rng", 0, ["choice_no_replace", 3, 4]),
+    refusal("Generator.choice of 0 items", "default_rng", 0, ["choice_n", 0, 1]),
+    refusal("Generator.choice of -1 items", "default_rng", 0, ["choice_n", -1, 1]),
+    refusal("Generator.choice from an empty array", "default_rng", 0, ["choice", 0, 1]),
+    refusal("Generator.choice without replacement from an empty array", "default_rng", 0, ["choice_no_replace", 0, 1]),
     refusal("RandomState of a negative seed", "RandomState", -1),
     refusal("RandomState of a seed above 2^32 - 1", "RandomState", 2**32),
     refusal("RandomState of a float seed", "RandomState", 1.5),

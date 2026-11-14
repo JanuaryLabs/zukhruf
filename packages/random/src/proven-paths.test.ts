@@ -6,12 +6,21 @@ import { RandomState, defaultRng } from './index.ts';
 // NumPy gives numbers for these calls, by paths that the golden fixture does
 // not prove. The port throws a RangeError, so it never gives numbers that
 // NumPy does not give. The golden fixture proves the range 2^32, the choice
-// of a 50th of 20,000, and the choice of 250 of 10,000.
+// with replacement of 2^32 items, the choice of a 50th of 20,000, and the
+// choice of 250 of 10,000.
 
 test('Generator.integers with a range of 2^32 + 1 throws a RangeError, where NumPy draws 64 bits', () => {
   const generator = defaultRng(0);
 
   assert.throws(() => generator.integers(0, 2 ** 32 + 1, 1), {
+    name: 'RangeError',
+  });
+});
+
+test('Generator.choice with replacement of 2^32 + 1 items throws a RangeError, where NumPy draws 64 bits', () => {
+  const generator = defaultRng(0);
+
+  assert.throws(() => generator.choice(2 ** 32 + 1, 1), {
     name: 'RangeError',
   });
 });

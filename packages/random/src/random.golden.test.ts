@@ -117,6 +117,7 @@ for (const generatorCase of fixture.generator_cases)
     const results = generatorCase.calls.map((call) => {
       const [name, [a = 0, b = 0, c = 0]] = parse(call);
       if (name === 'integers') return generator.integers(a, b, c);
+      if (name === 'random') return generator.random(a);
       if (name === 'shuffle') {
         const values = range(a);
         generator.shuffle(values);
@@ -126,6 +127,10 @@ for (const generatorCase of fixture.generator_cases)
       if (name === 'permutation_list') return generator.permutation(array(a));
       if (name === 'choice_no_replace')
         return generator.choice(range(a), b, { replace: false });
+      if (name === 'choice') return generator.choice(a, b);
+      if (name === 'choice_array') return generator.choice(array(a), b);
+      if (name === 'choice_n_no_replace')
+        return generator.choice(a, b, { replace: false });
       throw new Error(`No call ${name}`);
     });
 
@@ -169,6 +174,8 @@ for (const refusal of fixture.refusals)
           if (name === 'integers') return generator.integers(a, b, c);
           if (name === 'choice_no_replace')
             return generator.choice(range(a), b, { replace: false });
+          if (name === 'choice') return generator.choice(array(a), b);
+          if (name === 'choice_n') return generator.choice(a, b);
         }
         if (generator instanceof RandomState) {
           if (name === 'randint') return generator.randint(a, b, c);
