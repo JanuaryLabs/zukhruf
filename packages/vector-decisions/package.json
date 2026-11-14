@@ -41,6 +41,7 @@
     "@zukhruf/testing": "*"
   },
   "dependencies": {
-    "@huggingface/hub": "^2.17.11"
+    "@huggingface/hub": "^2.17.11",
+    "cephes": "^3.3.4"
   }
 }

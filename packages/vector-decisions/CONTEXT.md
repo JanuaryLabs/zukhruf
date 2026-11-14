@@ -49,3 +49,19 @@ _Avoid_: bundle, assets folder, checkpoint
 **Manifest**:
 The `manifest.json` of a model directory: the SHA-256 of each of its files, by name.
 _Avoid_: checksum file, index
+
+**Logit**:
+The score of one option, or of "none", before softmax turns the scores into probabilities. A larger logit is a more probable option.
+_Avoid_: score (for a logit), weight
+
+**Temperature**:
+The number that divides the cosines to give the option logits. A small temperature makes small differences of cosine into clear differences of probability.
+_Avoid_: scale, sharpness
+
+**Centering**:
+The step that subtracts the centroid of the options from each option and from the question, before the cosines. Venn calls it prewarm.
+_Avoid_: normalisation (for the whole step), whitening
+
+**Prepared question**:
+A question whose options are centered and whose part of the "none" network is computed one time, so that each state costs only its own part.
+_Avoid_: compiled question, cached question

@@ -1,6 +1,6 @@
 # @zukhruf/vector-decisions
 
-> **Status: in progress.** Units 0 to 2 of 16 are done: the package downloads the venn-1 head, checks it and reads its weights. The decisions are in [ADR 0001](docs/adr/0001-port-the-library-core-of-venn-at-one-commit-one-unit-at-a-time.md).
+> **Status: in progress.** Units 0 to 3 of 16 are done: the package downloads the venn-1 head, checks it, reads its weights, and gives the logits of a question for state vectors. The decisions are in [ADR 0001](docs/adr/0001-port-the-library-core-of-venn-at-one-commit-one-unit-at-a-time.md).
 
 A program often needs a decision about a text, not new text: which team owns a ticket, how urgent it is, or if it is a defect. A decision model such as Jev reads the text again for each question. This package answers the same typed questions from vectors. A reader embeds each text one time. Then a small head compares the vector of the text with the vectors of the options. This package is a TypeScript port of the library core of [Venn](https://github.com/markrussinovich/venn-vdm) (commit `7b2042e`).
 
@@ -15,7 +15,7 @@ Each unit works and has tests alone, and it composes with the units before it.
 | U0   | The package                                                                                  | -                                     | done    |
 | U1   | Reads the tensors of a `.safetensors` file                                                   | `runtime.load_weights`                | done    |
 | U2   | Downloads the files of a model at one revision and checks their SHA-256                      | `runtime.model_directory`             | done    |
-| U3   | The head: the option logits and the "none" logit of a state                                  | `heads/abstention.py`, `index/*.py`   | planned |
+| U3   | The head: the option logits and the "none" logit of a state                                  | `heads/abstention.py`, `index/*.py`   | done    |
 | U4   | The reader: the Classification prefix and the vector cache, around an AI SDK embedding model | `reader.py`, `server.py`              | planned |
 | U5   | `DecisionService.decide`: Choice, Score, Noul, IndexApply and prepared questions             | `server.py`                           | planned |
 | U6   | An AI SDK decision model over a `DecisionService` (addition: Venn has an HTTP route)         | `decisions.py`                        | planned |
@@ -77,3 +77,32 @@ const weights = await loadWeights(join(directory, 'universal.safetensors'));
 A directory with no `manifest.json`, or without a file that the manifest lists, gives the `ENOENT` error of Node.
 
 The package does not read `VENN_MODEL_DIR`, as Venn does when no path is given: the host gives the path.
+
+## Ask the head
+
+```ts
+import { CosineAbstention, PreparedQuestion } from '@zukhruf/vector-decisions';
+
+const head = CosineAbstention.fromWeights(weights);
+const question = new PreparedQuestion(head, questionVector, [
+  billingVector,
+  loginVector,
+]);
+question.logits([stateVector]); // [[logit of billing, logit of login, logit of none]]
+```
+
+`CosineAbstention.fromWeights(weights)` makes the head of Venn (`venn/heads/abstention.py`) from the weights that `loadWeights` reads. It throws an `InvalidHeadWeightsError` when a tensor of the head is missing, or when the shapes of the tensors do not fit together.
+
+`new PreparedQuestion(head, question, options)` prepares a question, as Venn's `venn.index.apply.PreparedQuestion` does:
+
+1. It subtracts the centroid of the options from each option and from the question, and makes each a unit vector (`venn.index.prewarm`). What the options share goes away, and only what makes them different stays. A vector that this makes zero stays zero, as `F.normalize` of PyTorch keeps it.
+2. It applies the question half of the first layer of the "none" network one time.
+
+`logits(states)` gives one row for each unit state vector:
+
+- the logit of each option: the cosine of the state with the centered option, divided by `temperature` (0.067 for venn-1);
+- then the logit of "none": the second layer over the GELU of the first layer (the state half, plus the question half), plus `none_intercept`.
+
+A question, an option or a state that has another number of values than the head reads throws a `DimensionMismatchError`. `logits` computes in float64. The tests compare it with Venn's logits in float64, from the same float32 weights and vectors, to 1e-12. Venn computes in float32, which differs from float64 by about 1e-6 on venn-1.
+
+The package does not port Venn's `ContextAbstention`, an older head that Venn reads only for families that it saved before, and its context terms of the "none" network.
