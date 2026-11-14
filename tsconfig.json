@@ -105,6 +105,9 @@
       "path": "./packages/vector-decisions"
     },
     {
+      "path": "./packages/pipes"
+    },
+    {
       "path": "./packages/sqlite/changefeed"
     },
     {
