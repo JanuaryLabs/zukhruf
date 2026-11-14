@@ -16,7 +16,12 @@ import { describe, test } from 'node:test';
 import { settleWithin } from '@zukhruf/testing/async';
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 
-import { PipeAddress, PipeEndpoint, UnsafeFolderError } from './index.ts';
+import {
+  PipeAddress,
+  PipeEndpoint,
+  type PipeServer,
+  UnsafeFolderError,
+} from './index.ts';
 import { defaultFolder } from './testing/default-folder.ts';
 import { factTimeout, packageIndex, startProgram } from './testing/program.ts';
 
@@ -370,6 +375,60 @@ describe('the server', { skip: posixOnly }, () => {
       await using _server = await endpoint.listen(() => {});
       assert.ok((await lstat(endpoint.address.path)).isSocket());
     }
+
+    // Assert
+    assert.equal(await codeOf(lstat(endpoint.address.path)), 'ENOENT');
+  });
+
+  test('a close while the first close waits for an open connection waits too, and both resolve when it ends', async () => {
+    // Arrange
+    await using folder = defaultFolder();
+    const endpoint = new PipeEndpoint('echo', { prefix: folder.prefix });
+    const server = await endpoint.listen((socket) => socket.pipe(socket));
+    const client = await endpoint.address.connect();
+    const settled: string[] = [];
+
+    // Act
+    const first = server.close().then(() => settled.push('first'));
+    const second = server.close().then(() => settled.push('second'));
+    client.write('round trip');
+    await once(client, 'data');
+    const beforeEnd = [...settled];
+    client.end();
+    await Promise.all([first, second]);
+
+    // Assert
+    assert.deepEqual(beforeEnd, []);
+    assert.deepEqual(settled, ['first', 'second']);
+    assert.equal(await codeOf(lstat(endpoint.address.path)), 'ENOENT');
+  });
+
+  test('a close after the server closed resolves', async () => {
+    // Arrange
+    await using folder = defaultFolder();
+    const endpoint = new PipeEndpoint('greeter', { prefix: folder.prefix });
+    const server = await endpoint.listen(() => {});
+    await server.close();
+
+    // Act
+    await server.close();
+
+    // Assert
+    assert.equal(await codeOf(lstat(endpoint.address.path)), 'ENOENT');
+  });
+
+  test('a close after await using closed the server resolves', async () => {
+    // Arrange
+    await using folder = defaultFolder();
+    const endpoint = new PipeEndpoint('greeter', { prefix: folder.prefix });
+    let disposed: PipeServer | undefined;
+    {
+      await using server = await endpoint.listen(() => {});
+      disposed = server;
+    }
+
+    // Act
+    await disposed.close();
 
     // Assert
     assert.equal(await codeOf(lstat(endpoint.address.path)), 'ENOENT');

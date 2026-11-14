@@ -26,10 +26,22 @@ export class PipeServer implements AsyncDisposable {
     return this;
   }
 
-  /** Stops listening; Node removes the socket file at the path. Resolves when closed. Connections that are open stay open (Node's rule); the caller ends them. */
+  /**
+   * Stops listening; Node removes the socket file at the path. Resolves when
+   * closed. Connections that are open stay open (Node's rule); the caller ends
+   * them. A call after the first closes nothing more, as .NET's Dispose
+   * ignores the calls after the first: it waits for the same close and
+   * resolves. Node calls back at the `close` event, with
+   * `ERR_SERVER_NOT_RUNNING` only when an earlier call already closed the
+   * server.
+   */
   close(): Promise<void> {
     return new Promise((resolve, reject) => {
-      this.#server.close((error) => (error ? reject(error) : resolve()));
+      this.#server.close((error) =>
+        error && Reflect.get(error, 'code') !== 'ERR_SERVER_NOT_RUNNING'
+          ? reject(error)
+          : resolve(),
+      );
     });
   }
 

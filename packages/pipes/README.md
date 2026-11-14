@@ -80,7 +80,7 @@ export class PipeServer implements AsyncDisposable {
   readonly endpoint: PipeEndpoint;
   /** Lets the program exit while the server listens, as net.Server#unref. */
   unref(): this;
-  /** Stops listening; Node removes the socket file at the path. Resolves when closed. Connections that are open stay open (Node's rule); the caller ends them. */
+  /** Stops listening; Node removes the socket file at the path. Resolves when closed. Connections that are open stay open (Node's rule); the caller ends them. A call after the first closes nothing more, as .NET's Dispose ignores the calls after the first: it waits for the same close and resolves. */
   close(): Promise<void>;
   [Symbol.asyncDispose](): Promise<void>;
 }
@@ -104,6 +104,7 @@ export class UnsafeFolderError extends Error {
 - `endpoint.listen` with a rooted name does not make the folder. The caller's folder must exist.
 - On macOS and Linux, `endpoint.listen` removes the file at the socket path before it listens, without a check, as .NET's pipe server, Docker and containerd do. So give a path that only one server listens on at a time: an election proves it for `@zukhruf/mutex` and `@zukhruf/single-flight`, and a random name for `@zukhruf/sqlite-notify` ([ADR 0003](./docs/adr/0003-listen-removes-the-file-at-the-path-and-close-removes-it-again.md)).
 - The server owns the socket file while it listens. `server.close()` stops listening at once, and Node removes the socket file. Node removes the file at the path, also when another server's file is there now (probe, 2026-11-14). So a server that lost its right to the path closes before the next server listens. `await using` closes it too: `[Symbol.asyncDispose]` is `close`.
+- Only the first `server.close()` or `[Symbol.asyncDispose]()` closes. A later call, also one made while the first waits for open connections, waits until the server has closed and resolves. Node calls the callback of `close` at the `close` event, and passes `ERR_SERVER_NOT_RUNNING` only "if the server was not open when it was closed" (Node's docs), so the package takes that code as the close that came first. Node never fails the close of a server that listens. This is .NET's rule for `IDisposable.Dispose`: "If an object's Dispose method is called more than once, the object must ignore all calls after the first one" ([learn.microsoft.com](https://learn.microsoft.com/en-us/dotnet/api/system.idisposable.dispose)). Node's `net.Server[Symbol.asyncDispose]` resolves on a second call too, but its `close` rejects with `ERR_SERVER_NOT_RUNNING`. Mutex closes its lock server twice: a lost term closes it, and the store's dispose closes it again.
 - `server.close()` does not end the connections that are open. This is Node's rule. The caller keeps them and ends them: mutex destroys them, and single-flight ends each one after what it wrote is sent. Close first, and end them in the same step, so no new connection comes in between.
 - A crash leaves the socket file. A connect to it gives `ECONNREFUSED` (research 20a P1). The next `endpoint.listen` on the path removes it. Windows removes a pipe when its program exits.
 - A socket that Node makes has mode `0755`. Another user cannot connect to it, because a connect needs the write bit (research 20a P5, Linux).
@@ -147,6 +148,29 @@ Check a code with `isErrno` of [`@zukhruf/fs`](../fs/README.md#check-the-error-c
 Backlog #2496 holds the transport code that mutex and single-flight copy. This package is its socket-address part: the third consumer, `@zukhruf/sqlite-notify`, needs only that part. JSON lines, the handshake, the connection supervisor and the server shell keep their two copies.
 
 ### Mutex's code before and after
+
+The socket store names the pipe. Before (`socketPathFor` in `socket-store.ts`):
+
+```ts
+if (process.platform === 'win32') {
+  const id = hash('sha256', resolve(directory).toLowerCase()).slice(0, 32);
+  return `\\\\.\\pipe\\mutex-${id}`;
+}
+const socketPath = join(directory, 'lock.sock');
+if (Buffer.byteLength(socketPath) > SOCKET_PATH_LIMIT)
+  throw new RangeError(/* ... */);
+return socketPath;
+```
+
+After:
+
+```ts
+const endpoint = new PipeEndpoint(resolve(directory, 'lock.sock'), {
+  prefix: 'zukhruf-mutex',
+});
+```
+
+The pipe on Windows becomes `\\.\pipe\zukhruf-mutex-<id>`, with `<id>` from the path of `lock.sock`: pipe names are one namespace for the computer, so the prefix names the package.
 
 The lock server starts. Before (`lock-server.ts`):
 
