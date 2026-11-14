@@ -2081,9 +2081,10 @@ test(
     await using proxy = await EngineProxy.start(engine);
     // Another holder of the sweep lease, such as a sweep of another tree,
     // takes it again each time the sweep under test finds it gone.
-    let tries = 0;
+    const events: ('try' | 'gone')[] = [];
+    let holding: string | undefined;
     proxy.intercept('POST', '/containers/create', async () => {
-      tries += 1;
+      events.push('try');
       if ((await docker.containers.find(name)) !== undefined) return;
       const taken = await docker.containers.create(
         {
@@ -2096,18 +2097,22 @@ test(
         { name },
       );
       await taken.start();
+      holding = taken.id;
     });
-    // The other holder ends as soon as the sweep looks at its lease.
-    proxy.intercept('GET', `/containers/${name}/json`, () =>
-      removeContainer(name),
-    );
+    // The other holder keeps its lease running until the sweep waits for its
+    // removal, so a sweep that only looks at the lease finds it taken again.
+    proxy.intercept('POST', /^\/containers\/[^/]+\/wait$/, async ({ path }) => {
+      if (path !== `/containers/${holding}/wait`) return;
+      await removeContainer(name);
+      events.push('gone');
+    });
     try {
       await ended(t, other, fingerprint);
 
       // A sweep that fails rejects with its output.
       await sweep(directory.path, proxy.host);
 
-      assert.equal(tries, 3);
+      assert.deepEqual(events, ['try', 'gone', 'try', 'gone', 'try', 'gone']);
       assert.equal(await running(server), true);
     } finally {
       other.child.kill('SIGKILL');
