@@ -73,3 +73,19 @@ _Avoid_: instruction (for a prompt), template
 **Vector cache**:
 The table that keeps the vector of each text that the reader embedded, by the model and the text, so that the model embeds each text one time.
 _Avoid_: store, index (for the cache)
+
+**Answer**:
+The label that a question gives for a state, or "none". A Noul question answers "none" or "in_scope". Each answer also gives the probability of each option and of "none".
+_Avoid_: prediction, result, verdict
+
+**Confidence**:
+The largest probability of an answer, before the threshold applies.
+_Avoid_: certainty, score
+
+**Threshold**:
+The smallest confidence that a question accepts: with less, the answer is "none". For a Noul question, the probability of "none" from which the answer is "none".
+_Avoid_: cutoff, minimum
+
+**Expected score**:
+The scores of the options of a Score question, each times its probability, added up and divided by the sum of the probabilities of the options. The probability of "none" does not count.
+_Avoid_: average, mean score, expected value

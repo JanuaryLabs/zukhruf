@@ -13,3 +13,22 @@ export { InvalidEmbeddingError } from './reader/invalid-embedding-error.ts';
 export { vectorCache } from './reader/vector-cache.ts';
 export { type Tensor, loadWeights } from './safetensors/load-weights.ts';
 export { SafetensorError } from './safetensors/safetensor-error.ts';
+export {
+  type ContractErrorCode,
+  ContractError,
+} from './service/contract-error.ts';
+export type {
+  Answer,
+  ChoiceAnswer,
+  ChoiceQuestion,
+  Decision,
+  DecisionRequest,
+  NoulAnswer,
+  NoulQuestion,
+  Option,
+  Question,
+  ScoreAnswer,
+  ScoreQuestion,
+  State,
+} from './service/decision.ts';
+export { DecisionService } from './service/decision-service.ts';
