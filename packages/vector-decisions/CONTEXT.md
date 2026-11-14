@@ -37,3 +37,15 @@ _Avoid_: array, matrix (for a tensor of any shape)
 **Weights**:
 The tensors of a head, by name, as its safetensors file holds them.
 _Avoid_: checkpoint, state dict, parameters (Venn's 787,457 parameters are the weights without `temperature` and `none_intercept`)
+
+**Revision**:
+One commit of a repository on the Hugging Face Hub. A branch such as `main` can move, but a commit does not.
+_Avoid_: version (for a revision), tag
+
+**Model directory**:
+The folder that holds the files of a head: `config.json`, `universal.safetensors` and `manifest.json`.
+_Avoid_: bundle, assets folder, checkpoint
+
+**Manifest**:
+The `manifest.json` of a model directory: the SHA-256 of each of its files, by name.
+_Avoid_: checksum file, index

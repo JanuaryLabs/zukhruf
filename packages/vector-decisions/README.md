@@ -1,6 +1,6 @@
 # @zukhruf/vector-decisions
 
-> **Status: in progress.** Units 0 and 1 of 16 are done: the package reads the weights of a head. The decisions are in [ADR 0001](docs/adr/0001-port-the-library-core-of-venn-at-one-commit-one-unit-at-a-time.md).
+> **Status: in progress.** Units 0 to 2 of 16 are done: the package downloads the venn-1 head, checks it and reads its weights. The decisions are in [ADR 0001](docs/adr/0001-port-the-library-core-of-venn-at-one-commit-one-unit-at-a-time.md).
 
 A program often needs a decision about a text, not new text: which team owns a ticket, how urgent it is, or if it is a defect. A decision model such as Jev reads the text again for each question. This package answers the same typed questions from vectors. A reader embeds each text one time. Then a small head compares the vector of the text with the vectors of the options. This package is a TypeScript port of the library core of [Venn](https://github.com/markrussinovich/venn-vdm) (commit `7b2042e`).
 
@@ -14,7 +14,7 @@ Each unit works and has tests alone, and it composes with the units before it.
 | ---- | -------------------------------------------------------------------------------------------- | ------------------------------------- | ------- |
 | U0   | The package                                                                                  | -                                     | done    |
 | U1   | Reads the tensors of a `.safetensors` file                                                   | `runtime.load_weights`                | done    |
-| U2   | Downloads the files of a model at one revision and checks their SHA-256                      | `runtime.model_directory`             | planned |
+| U2   | Downloads the files of a model at one revision and checks their SHA-256                      | `runtime.model_directory`             | done    |
 | U3   | The head: the option logits and the "none" logit of a state                                  | `heads/abstention.py`, `index/*.py`   | planned |
 | U4   | The reader: the Classification prefix and the vector cache, around an AI SDK embedding model | `reader.py`, `server.py`              | planned |
 | U5   | `DecisionService.decide`: Choice, Score, Noul, IndexApply and prepared questions             | `server.py`                           | planned |
@@ -50,3 +50,30 @@ A safetensors file has three parts: 8 bytes with the length of the header, a JSO
 - the byte ranges leave a gap, overlap, or do not end where the data ends.
 
 The tests compare `loadWeights` with safetensors 0.8.0, bit for bit, on files that its Python library writes (`src/safetensors/fixtures/generate.py`).
+
+## Get the head
+
+```ts
+import { join } from 'node:path';
+
+import {
+  downloadHead,
+  loadWeights,
+  modelDirectory,
+} from '@zukhruf/vector-decisions';
+
+const directory = await modelDirectory(await downloadHead());
+const weights = await loadWeights(join(directory, 'universal.safetensors'));
+```
+
+`downloadHead({ cacheDir? })` downloads the files of the venn-1 head (`markrussinovich/venn-1`) at the commit `e618a6919e5a15c6ced46c9874424363c2955283`, as Venn's `cli.download_head` does (`venn/cli.py:50`). It downloads `manifest.json` first, then each file that the manifest lists, and gives their directory. The download goes through `@huggingface/hub`, into the cache of Hugging Face: `cacheDir`, else `HF_HUB_CACHE`, else `HF_HOME/hub`, else `~/.cache/huggingface/hub`. Python's `huggingface_hub` uses the same folder in the same order, so Python and this package share one copy. The revision is a commit, so a file that the cache already holds needs no network.
+
+`modelDirectory(path)` reads `manifest.json` in the directory and compares the SHA-256 of each file that it lists with its digest, as Venn's `runtime.model_directory` does (`venn/runtime.py:11`). Then it gives the directory back. It throws an `InvalidModelArtifactError` with the name of the file when:
+
+- the bytes of a file do not match its digest;
+- a name is not a file of the directory itself, for example `../x`, `sub/x` or an absolute path. A link into the `blobs` folder of the Hub cache is a file of the directory;
+- `manifest.json` is not JSON, or is not `{ "sha256": { <file>: <digest> } }`.
+
+A directory with no `manifest.json`, or without a file that the manifest lists, gives the `ENOENT` error of Node.
+
+The package does not read `VENN_MODEL_DIR`, as Venn does when no path is given: the host gives the path.
