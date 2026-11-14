@@ -12,20 +12,6 @@ import { InvalidEmbeddingError } from './invalid-embedding-error.ts';
 const NORM_EPSILON = 1e-12;
 const FLOAT16_BYTES = 2;
 
-// Each row derives from a text and the model, so a stale table is replaced
-// with its rows: the next call embeds the texts again.
-const schema = new Declaration(
-  [
-    `CREATE TABLE vector_cache (
-  -- sha256 of the provider and id of the model and the text that it embeds.
-  key TEXT PRIMARY KEY,
-  -- The unit vector as float16 values, little-endian, as Venn stores it.
-  vector BLOB NOT NULL
-) STRICT`,
-  ],
-  { rows: 'replace' },
-);
-
 type Embed = NonNullable<EmbeddingModelMiddleware['wrapEmbed']>;
 type Call = Parameters<Embed>[0];
 
@@ -43,12 +29,17 @@ export function vectorCache(options: {
 }
 
 class VectorCache {
+  // A Declaration opens a SQLite database when it is made, so the first
+  // cache makes it, not the import of the package: a process whose
+  // permissions forbid SQLite extensions can then import the package.
+  static #schema: Declaration | undefined;
+
   readonly #database: DatabaseSync;
   readonly #read: StatementSync;
   readonly #write: StatementSync;
 
   constructor(database: DatabaseSync) {
-    schema.apply(database);
+    VectorCache.#declaration().apply(database);
     this.#database = database;
     this.#read = database.prepare(
       'SELECT vector FROM vector_cache WHERE key = ?',
@@ -111,6 +102,23 @@ class VectorCache {
       { mode: 'immediate' },
     );
     return result;
+  }
+
+  // Each row derives from a text and the model, so a stale table is replaced
+  // with its rows: the next call embeds the texts again.
+  static #declaration(): Declaration {
+    VectorCache.#schema ??= new Declaration(
+      [
+        `CREATE TABLE vector_cache (
+  -- sha256 of the provider and id of the model and the text that it embeds.
+  key TEXT PRIMARY KEY,
+  -- The unit vector as float16 values, little-endian, as Venn stores it.
+  vector BLOB NOT NULL
+) STRICT`,
+      ],
+      { rows: 'replace' },
+    );
+    return VectorCache.#schema;
   }
 
   static #check(embeddings: readonly (readonly number[])[], count: number) {
