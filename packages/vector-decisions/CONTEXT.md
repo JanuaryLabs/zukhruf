@@ -65,3 +65,11 @@ _Avoid_: normalisation (for the whole step), whitening
 **Prepared question**:
 A question whose options are centered and whose part of the "none" network is computed one time, so that each state costs only its own part.
 _Avoid_: compiled question, cached question
+
+**Prompt**:
+The task of the reader for a text, which the reader puts before it as a prefix: Classification, SentenceSimilarity or Clustering. Each prompt gives other vectors for the same text.
+_Avoid_: instruction (for a prompt), template
+
+**Vector cache**:
+The table that keeps the vector of each text that the reader embedded, by the model and the text, so that the model embeds each text one time.
+_Avoid_: store, index (for the cache)

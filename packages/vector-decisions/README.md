@@ -1,6 +1,6 @@
 # @zukhruf/vector-decisions
 
-> **Status: in progress.** Units 0 to 3 of 16 are done: the package downloads the venn-1 head, checks it, reads its weights, and gives the logits of a question for state vectors. The decisions are in [ADR 0001](docs/adr/0001-port-the-library-core-of-venn-at-one-commit-one-unit-at-a-time.md).
+> **Status: in progress.** Units 0 to 4 of 16 are done: the package downloads the venn-1 head, checks it, reads its weights, gives the logits of a question for state vectors, and makes those vectors from text through a reader with Venn's prompt and cache. The decisions are in [ADR 0001](docs/adr/0001-port-the-library-core-of-venn-at-one-commit-one-unit-at-a-time.md).
 
 A program often needs a decision about a text, not new text: which team owns a ticket, how urgent it is, or if it is a defect. A decision model such as Jev reads the text again for each question. This package answers the same typed questions from vectors. A reader embeds each text one time. Then a small head compares the vector of the text with the vectors of the options. This package is a TypeScript port of the library core of [Venn](https://github.com/markrussinovich/venn-vdm) (commit `7b2042e`).
 
@@ -16,7 +16,7 @@ Each unit works and has tests alone, and it composes with the units before it.
 | U1   | Reads the tensors of a `.safetensors` file                                                   | `runtime.load_weights`                | done    |
 | U2   | Downloads the files of a model at one revision and checks their SHA-256                      | `runtime.model_directory`             | done    |
 | U3   | The head: the option logits and the "none" logit of a state                                  | `heads/abstention.py`, `index/*.py`   | done    |
-| U4   | The reader: the Classification prefix and the vector cache, around an AI SDK embedding model | `reader.py`, `server.py`              | planned |
+| U4   | The reader: the Classification prefix and the vector cache, around an AI SDK embedding model | `reader.py`, `server.py`              | done    |
 | U5   | `DecisionService.decide`: Choice, Score, Noul, IndexApply and prepared questions             | `server.py`                           | planned |
 | U6   | An AI SDK decision model over a `DecisionService` (addition: Venn has an HTTP route)         | `decisions.py`                        | planned |
 | U7   | Calibration: the temperature fit, on an optimizer that moves out of mteb                     | `heads/calibration.py`                | planned |
@@ -106,3 +106,34 @@ question.logits([stateVector]); // [[logit of billing, logit of login, logit of 
 A question, an option or a state that has another number of values than the head reads throws a `DimensionMismatchError`. `logits` computes in float64. The tests compare it with Venn's logits in float64, from the same float32 weights and vectors, to 1e-12. Venn computes in float32, which differs from float64 by about 1e-6 on venn-1.
 
 The package does not port Venn's `ContextAbstention`, an older head that Venn reads only for families that it saved before, and its context terms of the "none" network.
+
+## Make the reader
+
+```ts
+import { embedMany, wrapEmbeddingModel } from 'ai';
+
+import { open } from '@zukhruf/sqlite-open';
+import { embeddingGemmaPrompt, vectorCache } from '@zukhruf/vector-decisions';
+
+using database = open('vectors.sqlite');
+const reader = wrapEmbeddingModel({
+  model, // any AI SDK embedding model of EmbeddingGemma 2, for example a llama.cpp server
+  middleware: [
+    embeddingGemmaPrompt('Classification'),
+    vectorCache({ database }),
+  ],
+});
+const { embeddings } = await embedMany({
+  model: reader,
+  values: ['The checkout page is broken'],
+});
+```
+
+The reader is an AI SDK embedding model, so any code of the AI SDK can use it. Its two middlewares port the embed path of Venn's `DecisionService.embed` (`venn/server.py:135`):
+
+- `embeddingGemmaPrompt(prompt)` puts the prefix of the prompt before each text, as EmbeddingGemma 2 defines it: `Classification` (`task: classification | query: `), `SentenceSimilarity` or `Clustering`. The venn-1 head reads vectors of the `Classification` prompt.
+- `vectorCache({ database })` keeps the vector of each text in the table `vector_cache` of a SQLite database that the caller opens and closes. It asks the model only for the texts that the table lacks, each one time. It normalizes each new vector in float64 and stores it as float16, as Venn does, and it gives float32 unit vectors. A vector that is not finite, or a result that does not give one vector of the same length for each text, throws an `InvalidEmbeddingError` and stores nothing.
+
+The prompt middleware comes first, so the cache keeps the text with its prefix, and each prompt has its own vectors. The key is the SHA-256 of the provider and the id of the model and the text. Venn's key names its one pinned reader instead. Here the model is the caller's, so the key names the model that makes the vector.
+
+The tests compare the vectors with the vectors of Venn's own `DecisionService.embed` for the same raw vectors (`src/reader/fixtures/generate.py`). They differ by at most 2 units in the last place of float32, because Venn adds up the norm in float32.

@@ -38,10 +38,14 @@
     "!**/*.test.*"
   ],
   "devDependencies": {
+    "@zukhruf/sqlite-open": "*",
     "@zukhruf/testing": "*"
   },
   "dependencies": {
     "@huggingface/hub": "^2.17.11",
+    "@zukhruf/sqlite-drift": "*",
+    "@zukhruf/sqlite-transaction": "*",
+    "ai": "^7.0.154",
     "cephes": "^3.3.4"
   }
 }
