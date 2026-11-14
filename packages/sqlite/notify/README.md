@@ -6,7 +6,6 @@ Open:
 
 - A socket file with no row. A listener that is killed after it served its socket and before its registration committed leaves a file that no row names. Nobody removes it. A sweep of the socket folder at the start of a listener could remove it, but a sweep can meet a socket that is bound and not yet listening.
 - One interface for this package and for Postgres. Ticket 11 says the pool uses one interface for the notify on one computer and for `LISTEN` / `NOTIFY` across computers. That interface can live here, in the pool, or in a package of its own.
-- The home of the shared socket address, which the extraction of backlog #2496 makes before this package ([ADR 0008](./docs/adr/0008-the-socket-address-is-the-third-place-so-its-extraction-comes-first.md)).
 
 Postgres has `LISTEN` and `NOTIFY`. A session listens on a channel. Another session sends a notification with a payload, in a transaction. When that transaction commits, each listening session gets the notification. SQLite has nothing like it: a commit in one program does not tell another program. This package gives `LISTEN` and `NOTIFY` for one SQLite file, among the programs of one computer.
 
@@ -16,7 +15,7 @@ The words in these documents have one meaning each. See the glossary in [CONTEXT
 
 ## Use it
 
-This project is an experiment. It uses only `node:sqlite` and `node:net`.
+This project is an experiment. It uses `node:sqlite`, and [`@zukhruf/pipes`](../../pipes/README.md) on `node:net`.
 
 ```sh
 npm install @zukhruf/sqlite-notify
@@ -115,15 +114,12 @@ export class QueueFullError extends Error {
   readonly code: '54000';
 }
 
-export class SocketFolderError extends Error {
-  readonly path: string;
-}
-
 export {
   DeniedError,
   MissingError,
   UnavailableError,
 } from '@zukhruf/sqlite-open';
+export { UnsafeFolderError } from '@zukhruf/pipes';
 ```
 
 ## The rules
@@ -146,7 +142,7 @@ export {
 - Dispose with `await using`, or call `[Symbol.asyncDispose]()`. It writes the wakes that are due, ends the connections to other listeners, removes this listener's rows, closes its socket and closes the connections that it opened.
 - A notification is durable. It survives the crash of its sender and of any other program, because it is a row of the file. Postgres loses its queue in a crash of the server.
 - A program never opens, reads, copies or watches the database file with `fs`. On POSIX, the close of any descriptor of a file drops every SQLite lock that the program holds on it ([`@zukhruf/fs`](../../fs/README.md)).
-- Windows is not proven. The named pipe follows the code of `@zukhruf/mutex` and `@zukhruf/single-flight`. Its proof is backlog #4340, and nothing waits for it.
+- Windows is not proven. The named pipe is the one of `@zukhruf/pipes`. Its proof is backlog #4340, and nothing waits for it.
 
 ## The contract
 
@@ -218,10 +214,16 @@ CREATE TABLE zukhruf_notify_channel (
 
 ## The socket folder
 
-- On macOS and Linux, a listener serves `/tmp/zukhruf-sqlite-notify-<uid>/<listener id>.sock`. `<uid>` is `process.getuid()`. The listener id is 16 random bytes in hex.
-- The folder is made with mode `0700`. When it exists, it must be a folder, not a link, owned by this user, with no access for its group or others. Otherwise `listen` throws `SocketFolderError`. tmux has the same rule for `/tmp/tmux-<uid>` ([ADR 0007](./docs/adr/0007-the-socket-folder-is-short-and-belongs-to-one-user.md)).
-- The path is about 75 bytes, under zukhruf's limit of 103. macOS takes 104 bytes and Linux 108 (research 20a P3).
-- On Windows, a listener serves the named pipe `\\.\pipe\zukhruf-sqlite-notify-<listener id>`. Windows removes a pipe when its program exits.
+[`@zukhruf/pipes`](../../pipes/README.md) gives the socket address. Each listener gets `new PipeEndpoint(<listener id>, { prefix: 'zukhruf-sqlite-notify' })`, and the listener id is 16 random bytes in hex. The package gives:
+
+- On macOS and Linux, the socket `/tmp/zukhruf-sqlite-notify-<uid>/<listener id>`. `<uid>` is `process.getuid()`. The path is at most 70 bytes, under the limit of 103 bytes on macOS and 107 on Linux.
+- The folder, made with mode `0700`. When it exists, it must be a folder, not a link, owned by this user, with no access for its group or others. Otherwise `listen` throws the `UnsafeFolderError` of `@zukhruf/pipes`. tmux has the same rule for `/tmp/tmux-<uid>` ([ADR 0007](./docs/adr/0007-the-socket-folder-is-short-and-belongs-to-one-user.md)).
+- On Windows, the named pipe `\\.\pipe\zukhruf-sqlite-notify-<listener id>`. Windows removes a pipe when its program exits.
+- The listen, and the removal of the socket file when the socket closes.
+
+What stays in this package:
+
+- The listener id, and the address in the listener row: `endpoint.path`. A sender connects to the address that it read, with `connectPipe`.
 - Another user cannot connect to a socket that Node makes with the default mode (research 20a P5). Pools are per user, so this is the rule, not a limit.
 - A listener's socket file stays after a crash. The sender that finds the address dead removes the file with the row.
 
@@ -231,7 +233,7 @@ CREATE TABLE zukhruf_notify_channel (
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `UnavailableError`  | The file is missing, or the system denies access to it. It is the class of `@zukhruf/sqlite-open`, which opens the connections: a `MissingError` or a `DeniedError` when the system says which. `cause` is the error of SQLite. |
 | `QueueFullError`    | `notify` finds `maxQueuedNotifications` rows that a listener has not read. Its message and `code` are Postgres's: `too many notifications in the NOTIFY queue`, `54000`. The transaction of the call does not commit.           |
-| `SocketFolderError` | `listen` finds a socket folder that is not a folder, is a link, belongs to another user, or gives access to its group or others. `path` is the folder.                                                                          |
+| `UnsafeFolderError` | `listen` finds a socket folder that is not a folder, is a link, belongs to another user, or gives access to its group or others. `path` is the folder. It is the class of `@zukhruf/pipes`, which makes the folder.             |
 | `RangeError`        | A channel or a payload that Postgres refuses, with Postgres's message: `channel name cannot be empty`, `channel name too long` (64 bytes or more), `payload string too long` (8000 bytes or more).                              |
 | `TypeError`         | `database` is a database in memory.                                                                                                                                                                                             |
 | The error of SQLite | All other failures, for example `database is locked` when the busy timeout ends.                                                                                                                                                |

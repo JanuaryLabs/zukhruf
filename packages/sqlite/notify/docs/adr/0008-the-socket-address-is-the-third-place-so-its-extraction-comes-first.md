@@ -32,6 +32,6 @@ The socket address is the third place. Its extraction comes first, as the socket
 ## Consequences
 
 - This package's code waits for that extraction.
-- The home of the extracted code is not decided: the coordinator package that #2496 names, or another. It is in the README's "Open" list.
+- The home of the extracted code is [`@zukhruf/pipes`](../../../../pipes/README.md), after .NET's `System.IO.Pipes` (Ezz, 2026-11-14). It also takes the socket folder of one user, with tmux's checks, as its default folder.
 - A fix to the socket address goes into one place.
 - JSON lines, the handshake, the supervisor and the server shell keep their two copies, and #2496 keeps waiting for their third place.

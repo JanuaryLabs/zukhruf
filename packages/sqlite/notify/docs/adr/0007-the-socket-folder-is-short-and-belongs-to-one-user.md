@@ -1,5 +1,7 @@
 # The socket folder is short and belongs to one user
 
+> Superseded in part on 2026-11-14 by [`@zukhruf/pipes`](../../../../pipes/README.md) and its [ADR 0002](../../../../pipes/docs/adr/0002-the-default-folder-belongs-to-one-user.md): that package makes and checks the folder, as its default folder for the prefix `zukhruf-sqlite-notify`, and refuses it with its `UnsafeFolderError`, not `SocketFolderError`. The socket file is `<listener id>`, with no `.sock`, so the path is at most 70 bytes. The folder, its checks and the pipe name do not change.
+
 Each listener serves its own socket ([ADR 0003](./0003-no-hub-each-listener-serves-its-own-socket.md)), so each needs an address that no other listener has. Four facts bound the choice:
 
 - A Unix socket path takes at most 104 bytes on macOS and 108 on Linux; one more byte fails with `EINVAL` (research 20a P3). zukhruf keeps 103 (`packages/single-flight/src/connection/socket-path.ts`).
