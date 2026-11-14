@@ -1,6 +1,6 @@
 {
   "name": "@zukhruf/fencing",
-  "version": "0.8.17",
+  "version": "0.8.18",
   "description": "Fencing tokens: a number that grows with each grant, so a protected resource refuses the writes of a stale holder. Token sources that count in memory, in files, or by epoch, and the fenced lease that carries a token.",
   "license": "MIT",
   "repository": {
@@ -40,11 +40,11 @@
     "access": "public"
   },
   "dependencies": {
-    "@zukhruf/async": "^0.8.17",
-    "@zukhruf/fs": "^0.8.17",
-    "@zukhruf/lease": "^0.8.17"
+    "@zukhruf/async": "^0.8.18",
+    "@zukhruf/fs": "^0.8.18",
+    "@zukhruf/lease": "^0.8.18"
   },
   "devDependencies": {
-    "@zukhruf/testing": "^0.8.17"
+    "@zukhruf/testing": "^0.8.18"
   }
 }
