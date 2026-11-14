@@ -1,0 +1,16 @@
+@zukhruf/vector-decisions
+Copyright 2026 ezzabuzaid
+
+This package ports the library core of Venn (venn-vdm 0.1.0, commit
+7b2042e84608fbdd143ac21dea7c83d5ae2ec723) to TypeScript: its decision heads,
+its question types, its families and its comparisons of stored vectors. The
+package does not include Venn's Python code.
+
+- Venn: Copyright (c) 2026 Venn contributors, MIT License,
+  https://github.com/markrussinovich/venn-vdm.
+
+The package does not ship model weights. At run time it downloads the venn-1
+decision head (https://huggingface.co/markrussinovich/venn-1, revision
+e618a6919e5a15c6ced46c9874424363c2955283), whose model card permits
+redistribution, and it reads vectors of the EmbeddingGemma 2 reader
+(https://huggingface.co/google/embeddinggemma-2, Apache License 2.0).

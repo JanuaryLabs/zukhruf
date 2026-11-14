@@ -1,0 +1,40 @@
+{
+  "name": "@zukhruf/vector-decisions",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Typed decisions over embedding vectors, ported from Venn: Choice, Score and yes/no questions answered by a small head over a frozen reader, families fitted on labelled vectors, and comparisons with stored vectors.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JanuaryLabs/zukhruf",
+    "directory": "packages/vector-decisions"
+  },
+  "bugs": {
+    "url": "https://github.com/JanuaryLabs/zukhruf/issues"
+  },
+  "homepage": "https://github.com/JanuaryLabs/zukhruf/tree/main/packages/vector-decisions#readme",
+  "keywords": [
+    "embeddings",
+    "decisions",
+    "classification",
+    "abstention",
+    "venn"
+  ],
+  "type": "module",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "@zukhruf/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "NOTICE",
+    "!dist/spec/**",
+    "!**/*.tsbuildinfo",
+    "!**/*.test.*"
+  ]
+}

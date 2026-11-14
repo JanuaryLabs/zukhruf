@@ -102,6 +102,9 @@
       "path": "./packages/random"
     },
     {
+      "path": "./packages/vector-decisions"
+    },
+    {
       "path": "./packages/sqlite/changefeed"
     },
     {
