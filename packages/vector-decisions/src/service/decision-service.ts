@@ -20,6 +20,8 @@ import type {
   DecisionRequest,
   Question,
 } from './decision.ts';
+import { QuestionHandles } from './question-handles.ts';
+import { QuestionSources } from './question-sources.ts';
 import { type StateVectors, Vectors } from './vectors.ts';
 
 // An AI SDK embedding model, as wrapEmbeddingModel takes it.
@@ -33,13 +35,20 @@ const READER = {
 };
 
 const MAX_QUESTIONS = 32;
-// The smallest norm that F.normalize of PyTorch divides by.
-const NORM_EPSILON = 1e-12;
+// The types that registerQuestion prepares (venn/server.py:860).
+const REGISTERED = new Set<Question['type']>([
+  undefined,
+  'Choice',
+  'Score',
+  'Noul',
+  'IndexApply',
+]);
 
 export class DecisionService {
   readonly #head: CosineAbstention;
   readonly #vectors: Vectors;
   readonly #temperature: number;
+  readonly #handles = new QuestionHandles();
 
   private constructor(
     head: CosineAbstention,
@@ -108,36 +117,59 @@ export class DecisionService {
     const state = await this.#vectors.state(request.state);
     const answers: Record<string, Answer> = {};
     for (const [name, question] of questions)
-      answers[name] = await this.#answer(question, state);
-    return {
-      answers,
-      vector: state.from === 'text' ? Array.from(state.vector) : null,
-    };
+      answers[name] = await this.#answer(
+        question.questionRef === undefined
+          ? question
+          : this.#handles.question(question),
+        state,
+      );
+    return { answers, vector: DecisionService.#embedded(state) };
+  }
+
+  // Prepares a question for many decisions, as Venn's register_question does
+  // (venn/server.py:854-867): it checks the question, the reader embeds its
+  // texts into the vector cache, and a questionRef names the question by
+  // the handle. Each decision gives the threshold.
+  async registerQuestion(
+    question: Question & { readonly threshold?: never },
+  ): Promise<string> {
+    if (!REGISTERED.has(question.type))
+      throw new ContractError(
+        'prewarm_type',
+        'This type has no option prewarm handle',
+      );
+    const sources = new QuestionSources(question, this.#vectors);
+    await this.#vectors.resolve([sources.instructions, ...sources.options]);
+    return this.#handles.register(question);
   }
 
   // The answer to one question about the state, as Venn's decide gives it
   // (venn/server.py:960-1115).
   async #answer(question: Question, state: StateVectors): Promise<Answer> {
-    const checked = new CheckedQuestion(
+    const { sources, kind } = new CheckedQuestion(
       question,
       state,
       this.#vectors,
       this.#temperature,
     );
     const [instructions = new Float32Array(), ...options] =
-      await this.#vectors.resolve([checked.instructions, ...checked.options]);
-    const [logits = new Float64Array()] = new PreparedQuestion(
-      this.#head,
-      instructions,
-      options,
-    ).logits([DecisionService.#unit(checked.state)]);
-    return checked.kind.answer(logits, checked.labels);
+      await this.#vectors.resolve([sources.instructions, ...sources.options]);
+    return kind.answer(
+      new PreparedQuestion(this.#head, instructions, options),
+      sources.labels,
+    );
   }
 
-  // The vector divided by its norm in float32, as F.normalize of PyTorch
-  // makes the state a unit vector before the logits (venn/server.py:1095).
-  static #unit(vector: Float32Array): Float32Array {
-    const norm = Math.max(Math.fround(Math.hypot(...vector)), NORM_EPSILON);
-    return vector.map((value) => value / norm);
+  // The vectors of a state that the reader embedded, as Venn's decide gives
+  // them (venn/server.py:1116, 1124).
+  static #embedded(state: StateVectors): Decision['vector'] {
+    switch (state.from) {
+      case 'text':
+        return Array.from(state.vector);
+      case 'texts':
+        return state.rows.map((row) => Array.from(row));
+      default:
+        return null;
+    }
   }
 }

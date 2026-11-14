@@ -1,6 +1,6 @@
 # @zukhruf/vector-decisions
 
-> **Status: in progress.** Units 0 to 4 and 5a of 17 are done: the package downloads the venn-1 head, checks it, reads its weights, gives the logits of a question for state vectors, makes those vectors from text through a reader with Venn's prompt and cache, and answers Choice, Score and Noul questions about one state with `DecisionService`. The decisions are in [ADR 0001](docs/adr/0001-port-the-library-core-of-venn-at-one-commit-one-unit-at-a-time.md).
+> **Status: in progress.** Units 0 to 4, 5a and 5b of 17 are done: the package downloads the venn-1 head, checks it, reads its weights, gives the logits of a question for state vectors, makes those vectors from text through a reader with Venn's prompt and cache, and answers Choice, Score and Noul questions about one state, and IndexApply questions about each row of a plural state, with `DecisionService`, which also prepares a question for many decisions. The decisions are in [ADR 0001](docs/adr/0001-port-the-library-core-of-venn-at-one-commit-one-unit-at-a-time.md).
 
 A program often needs a decision about a text, not new text: which team owns a ticket, how urgent it is, or if it is a defect. A decision model such as Jev reads the text again for each question. This package answers the same typed questions from vectors. A reader embeds each text one time. Then a small head compares the vector of the text with the vectors of the options. This package is a TypeScript port of the library core of [Venn](https://github.com/markrussinovich/venn-vdm) (commit `7b2042e`).
 
@@ -18,7 +18,7 @@ Each unit works and has tests alone, and it composes with the units before it.
 | U3   | The head: the option logits and the "none" logit of a state                                  | `heads/abstention.py`, `index/*.py`                | done    |
 | U4   | The reader: the Classification prefix and the vector cache, around an AI SDK embedding model | `reader.py`, `server.py`                           | done    |
 | U5a  | `DecisionService.decide` for one state: Choice, Score and Noul                               | `server.py`                                        | done    |
-| U5b  | IndexApply and prepared questions (`registerQuestion`, `question_ref`)                       | `server.py`                                        | planned |
+| U5b  | IndexApply and prepared questions (`registerQuestion`, `question_ref`)                       | `server.py`                                        | done    |
 | U6   | An AI SDK decision model over a `DecisionService` (addition: Venn has an HTTP route)         | `decisions.py`                                     | planned |
 | U7   | Calibration: the temperature fit, on an optimizer that moves out of mteb                     | `heads/calibration.py`                             | planned |
 | U8   | Registered indexes and `streamIndex`, NearestReference, SetMembership and PopulationShift    | `server.py`, `index/decision.py`, `index/shift.py` | planned |
@@ -180,44 +180,85 @@ answers.team; // { answer, probabilities: { 'Login problems', 'Checkout and paym
 3. It reads the head from `universal.safetensors`.
 4. It puts the two middlewares of the reader around `model`: the `Classification` prompt, then the vector cache in `database`. The caller opens and closes the database.
 
-`decide({ state, questions })` answers each named question about one state, as Venn's `decide` does (`venn/server.py:912`). The state is a text, `{ text }` or `{ vector }`. A question has these fields:
+`decide({ state, questions })` answers each named question about the state, as Venn's `decide` does (`venn/server.py:912`). The state is a text, `{ text }` or `{ vector }`, or a plural state: `{ texts }` with 1 to 512 texts, or `{ vectors }` with 1 to 512 vectors. Each text or vector of a plural state is a row. A question has these fields:
 
-- `type`: `Choice` (the default), `Score` or `Noul`.
+- `type`: `Choice` (the default), `Score`, `Noul` or `IndexApply`.
 - `instructions`, a text (the default is "What is the topic?"), or `instructionsVec`, a vector.
 - `options`: 1 to 256 options. An option is a text, or `{ label, vector }`. An option without a vector is the text of its label.
 - `threshold`: a number from 0 to 1.
 - `scores` (Score only): one number for each option. The default is 0, 1, 2 and so on.
+- `rowCap` (IndexApply only): the count of rows to answer, from the first, 0 to 512. The default is all the rows.
+- `batchSize` (IndexApply only): the count of rows in a batch, 1 to 65,536 (the default).
 
 The reader embeds the texts. The head gives the logits of the options and of "none" for the unit vector of the state. Each answer has the `probabilities` of the labels and of "none", the `confidence` (the largest probability), and `calibrated`, which is `false`, because the package has no calibration yet (U7):
 
 - **Choice**: the probabilities are the softmax of the logits divided by `choice_temperature`. The answer is the first label with the largest probability. If the confidence is less than the threshold, the answer is "none".
 - **Score**: the answer of a Choice, and `expectedScore`: the sum of the probability times the score of each option, divided by the sum of the probabilities of the options. The probability of "none" does not count, so `scoreConditionedOnNotNone` is `true`.
 - **Noul**: the probability of "none" comes first: the sigmoid of the "none" logit minus the logsumexp of the option logits, divided by `choice_temperature`. The options share the rest by softmax. The answer is "none" if the probability of "none" is equal to or more than the threshold (0.5 without one). Else the answer is "in_scope".
+- **IndexApply**: `{ rows, batches }`. `rows` holds the answer of a Choice for each of the first `rowCap` rows, with the index of the row as its `id`. `batches` is the count of batches of `batchSize` rows. Choice, Score and Noul answer one state only, and IndexApply a plural state only.
 
-The `vector` of the decision is the vector of the state when the reader embedded the state, else `null`.
+```ts
+const { answers } = await service.decide({
+  state: { texts: ['I cannot sign in', 'Where is my parcel?'] },
+  questions: {
+    team: {
+      type: 'IndexApply',
+      instructions: 'Who owns this ticket?',
+      options: ['Login problems', 'Shipping and delivery'],
+    },
+  },
+});
+answers.team; // { rows: [{ answer, probabilities, confidence, calibrated: false, id: 0 }, { …, id: 1 }], batches: 1 }
+```
 
-`decide` throws a `ContractError` with a `code` and the `status` 422 for a request that breaks a rule of Venn. It checks in Venn's order: the questions, the state, then each question in turn.
+The `vector` of the decision is the vector of the state when the reader embedded the state, the vectors of a state of texts, else `null`.
 
-| Code                | The request has                                                                                           |
-| ------------------- | --------------------------------------------------------------------------------------------------------- |
-| `question_limit`    | no question, or more than 32                                                                              |
-| `invalid_text`      | an empty text, or a text of more than 32,768 characters. A character is a code point, as Python counts it |
-| `invalid_vector`    | a vector with another number of values than the head reads, or with a value that is not finite in float32 |
-| `zero_vector`       | a vector of norm 1e-12 or less                                                                            |
-| `threshold`         | a threshold that is not from 0 to 1                                                                       |
-| `question_type`     | a type that is not `Choice`, `Score` or `Noul`                                                            |
-| `option_limit`      | no option, or more than 256                                                                               |
-| `option_labels`     | two options with the same label, or an option with the label "none"                                       |
-| `unsupported_input` | a state of several texts, `{ texts }`, which only IndexApply answers (U5b)                                |
-| `rubric`            | scores that are not one finite number for each option                                                     |
+`registerQuestion(question)` prepares a question for many decisions, as Venn's `register_question` does (`venn/server.py:854`). It checks the instructions and the options as `decide` does, and the reader embeds their texts into the vector cache. It gives a handle: the SHA-256 of the question in the canonical JSON of RFC 8785, without the threshold, so the same question gets the same handle. In a request, `{ questionRef: handle }` asks the registered question, and can also give a `threshold`, a `rowCap` and a `batchSize`:
+
+```ts
+const team = await service.registerQuestion({
+  instructions: 'Who owns this ticket?',
+  options: ['Login problems', 'Checkout and payments'],
+});
+await service.decide({
+  state: 'I cannot sign in',
+  questions: { team: { questionRef: team, threshold: 0.5 } },
+});
+```
+
+`decide` and `registerQuestion` throw a `ContractError` with a `code` and a `status` (422 if the table gives none) for a request that breaks a rule of Venn. `decide` checks in Venn's order: the questions, the state, then each question in turn.
+
+| Code                | The request has                                                                                                                 |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `question_limit`    | no question, or more than 32                                                                                                    |
+| `state_texts`       | a state of no texts, or of more than 512                                                                                        |
+| `state_shape`       | a state of texts that also has a text, a vector or vectors                                                                      |
+| `invalid_text`      | an empty text, or a text of more than 32,768 characters. A character is a code point, as Python counts it                       |
+| `invalid_vector`    | a vector with another number of values than the head reads, or with a value that is not finite in float32, or `{ vectors: [] }` |
+| `state_limit`       | a state of more than 512 vectors                                                                                                |
+| `zero_vector`       | a vector of norm 1e-12 or less                                                                                                  |
+| `question_handle`   | a `questionRef` that `registerQuestion` did not give (status 404)                                                               |
+| `prewarm_override`  | a `questionRef` with another field than `threshold`, `rowCap` and `batchSize`                                                   |
+| `threshold`         | a threshold that is not from 0 to 1                                                                                             |
+| `question_type`     | a type that is not `Choice`, `Score`, `Noul` or `IndexApply`                                                                    |
+| `option_limit`      | no option, or more than 256                                                                                                     |
+| `option_labels`     | two options with the same label, or an option with the label "none"                                                             |
+| `index_input`       | an IndexApply question about one state                                                                                          |
+| `stream_limit`      | a `rowCap` that is not a whole number from 0 to 1,000,000, or a `batchSize` that is not a whole number from 1 to 65,536         |
+| `stream_required`   | a `rowCap` of more than 512 (status 413): `decide` answers at most 512 rows                                                     |
+| `unsupported_input` | a plural state for a Choice, Score or Noul question                                                                             |
+| `rubric`            | scores that are not one finite number for each option                                                                           |
+| `prewarm_type`      | for `registerQuestion`, a type that is not `Choice`, `Score`, `Noul` or `IndexApply`                                            |
 
 The differences from Venn, and the rules of Venn that the package keeps, are in [ADR 0003](docs/adr/0003-decide-leaves-out-the-fields-of-venns-own-reader-and-keeps-venns-rules-of-an-answer.md):
 
 - The request has no `model`, and the decision has no `vector_tag` and no `model`: the reader is the caller's. So no request gives the code `embedder_revision`.
 - An option is a text or `{ label, vector }`. Venn also takes a bare vector, and an object without a label, whose label is its index.
 - The types refuse what Venn refuses with the codes `request_shape`, `question_shape` and `instructions` (a matrix as `instructionsVec`), and thresholds, scores and vectors that are not numbers.
-- The names are in camelCase: `instructionsVec`, `expectedScore`, `scoreConditionedOnNotNone`.
+- The names are in camelCase: `instructionsVec`, `expectedScore`, `scoreConditionedOnNotNone`, `questionRef`, `rowCap`, `batchSize`.
 - The reader embeds the state in one call and the texts of each question in one call. Venn embeds each text alone.
-- The package computes in float64, and Venn in float32. On the fixture, the probabilities differ by at most 6e-8.
+- The package computes in float64, and Venn in float32. On the fixture, the probabilities differ by at most 1.5e-7.
 
-The tests compare `decide` with Venn's own `DecisionService.decide` and the real venn-1 head, for the same raw vectors (`src/service/fixtures/generate.py`). The head is not in the repository, so these tests run in the `test-network` target.
+The differences of `registerQuestion` are in [ADR 0004](docs/adr/0004-register-question-takes-no-name-and-its-handle-is-the-sha-256-of-the-rfc-8785-json-of-the-question.md): it takes no name, its handle is not Venn's, and the types refuse a threshold, which no decision reads.
+
+The tests compare `decide` and `registerQuestion` with Venn's own `DecisionService.decide` and `register_question` and the real venn-1 head, for the same raw vectors (`src/service/fixtures/generate.py`). The head is not in the repository, so these tests run in the `test-network` target.

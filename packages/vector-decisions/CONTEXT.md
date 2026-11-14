@@ -15,12 +15,20 @@ The 768 numbers that the reader gives for one text: its place on the map.
 _Avoid_: embedding (for the value; use it only for the act), point
 
 **State**:
-The thing that a question is about: a text, or its vector.
+The thing that a question is about: a text, or its vector. A plural state is several texts or several vectors.
 _Avoid_: input, item, document
 
+**Row**:
+One text or one vector of a plural state. IndexApply answers each row, and the index of the row is its id.
+_Avoid_: record, entry, item
+
 **Question**:
-A typed request about a state: Choice (which option), Score (which level of a scale) or Noul (yes or no).
+A typed request about a state: Choice (which option), Score (which level of a scale), Noul (yes or no) or IndexApply (which option, for each row of a plural state).
 _Avoid_: query, prompt
+
+**Question handle**:
+The name that `registerQuestion` gives to a question, so that a decision can ask it again with `questionRef`. It is the SHA-256 of the question without its threshold.
+_Avoid_: question id, token, prewarm key
 
 **Option**:
 One answer that a question offers. Its description is a criterion.

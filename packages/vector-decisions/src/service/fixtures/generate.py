@@ -15,10 +15,13 @@
 # supplied embedder of the service), the requests that Venn answers, by a
 # name, with its "answers" and "vector" (the state's vector when the service
 # embedded it, else null), and the requests that Venn refuses, with the code
-# and the status of its ContractError. The requests and the answers have the
-# names of the package: Venn's instructions_vec, expected_score and
-# score_conditioned_on_not_none are in camelCase. JSON has no NaN, so a NaN
-# of a request is the string "NaN".
+# and the status of its ContractError. "registered" holds the questions that
+# register_question prepares, by a name: a questionRef of a request names
+# one of them, and each side replaces the name with its own handle. "handles"
+# says if two questions get the same handle, and "refused registrations" holds
+# the questions that register_question refuses. The requests and the answers
+# have the names of the package: Venn's snake_case names are in camelCase.
+# JSON has no NaN, so a NaN of a request is the string "NaN".
 # Never edit expected.json by hand: run this script again.
 import importlib.metadata
 import json
@@ -89,6 +92,49 @@ answered = {
     ]}}},
     "labels": {"state": ticket, "questions": {"team": {**team, "options": [{"label": option} for option in team["options"]]}}},
 }
+indexed = {"type": "IndexApply", "instructions": team["instructions"], "options": team["options"]}
+rows = [ticket, sign_in, "Login problems", "Shipping and delivery"]
+plural = [given, login, shipping, (rng.standard_normal(768) * 0.05).tolist(), raw["Checkout and payments"]]
+answered |= {
+    "index texts": {"state": {"texts": rows}, "questions": {"rows": indexed}},
+    "index row cap": {"state": {"vectors": plural}, "questions": {
+        "first": {**indexed, "row_cap": 3, "batch_size": 2}, "none": {**indexed, "row_cap": 0},
+    }},
+    "index threshold": {"state": {"vectors": plural}, "questions": {"rows": {**indexed, "threshold": 0.9}}},
+    # The threshold that "team" was registered with is not part of the question.
+    "reference": {"state": {"text": sign_in}, "questions": {"team": {"question_ref": "team"}}},
+    "reference rows": {"state": {"texts": rows}, "questions": {"rows": {"question_ref": "rows"}}},
+    "reference overrides": {"state": {"text": sign_in}, "questions": {"team": {"question_ref": "team", "threshold": 0.9}}},
+    "reference rows overrides": {"state": {"texts": rows}, "questions": {
+        "rows": {"question_ref": "rows", "threshold": 0.9, "row_cap": 3, "batch_size": 2},
+    }},
+    "reference kinds": {"state": ticket, "questions": {
+        "urgency": {"question_ref": "urgency"}, "defect": {"question_ref": "defect", "threshold": 0.2},
+    }},
+    # Given vectors that are not unit vectors.
+    "reference rows vectors": {"state": {"vectors": plural}, "questions": {"rows": {"question_ref": "rows", "row_cap": 5}}},
+}
+registered = {
+    "team": {**team, "threshold": 0.9}, "rows": {**indexed, "row_cap": 1},
+    "urgency": {**urgency, "scores": [0, 5, 10]}, "defect": defect,
+}
+pairs = {
+    "the same question": (team, json.loads(json.dumps(team)), True),
+    "the keys in another order": (team, dict(reversed(team.items())), True),
+    "another threshold": ({**team, "threshold": 0.2}, {**team, "threshold": 0.9}, True),
+    "another option": (team, {**team, "options": team["options"][:2]}, False),
+    "another type": (team, {**team, "type": "IndexApply"}, False),
+    "another row cap": (indexed, {**indexed, "row_cap": 1}, False),
+}
+unregistrable = [
+    {**team, "type": "Ranking"},
+    {**team, "options": []},
+    {**team, "options": ["Login problems", "Login problems"]},
+    {**team, "instructions": ""},
+    {"instructions_vec": given[:100], "options": team["options"]},
+]
+# The smallest 768 numbers in JSON.
+one_hot = [1] + [0] * 767
 refused = [
     {"state": ticket, "questions": {}},
     {"state": ticket, "questions": {f"q{i}": team for i in range(33)}},
@@ -108,11 +154,41 @@ refused = [
     {"state": {"vector": [0.0] * 768}, "questions": {"team": team}},
     {"state": {"texts": [ticket, sign_in]}, "questions": {"team": team}},
     {"state": ticket, "questions": {"team": {**team, "type": "Ranking"}}},
+    {"state": {"vectors": [given, login]}, "questions": {"team": team}},
+    {"state": {"vectors": []}, "questions": {"rows": indexed}},
+    {"state": {"vectors": [given, given[:100]]}, "questions": {"rows": indexed}},
+    {"state": {"vectors": [given, [float("nan")] + given[1:]]}, "questions": {"rows": indexed}},
+    {"state": {"vectors": [given, [0.0] * 768]}, "questions": {"rows": indexed}},
+    {"state": {"texts": [ticket, ""]}, "questions": {"rows": indexed}},
+    {"state": {"texts": []}, "questions": {"rows": indexed}},
+    {"state": {"texts": [ticket] * 513}, "questions": {"rows": indexed}},
+    # Venn counts the texts before it checks the kinds of the state.
+    {"state": {"texts": [], "vector": given}, "questions": {"rows": indexed}},
+    {"state": {"vectors": [one_hot] * 513}, "questions": {"rows": indexed}},
+    {"state": {"texts": [ticket], "vector": given}, "questions": {"rows": indexed}},
+    {"state": {"texts": [ticket], "vectors": [given]}, "questions": {"rows": indexed}},
+    {"state": {"texts": [ticket], "text": sign_in}, "questions": {"rows": indexed}},
+    # With a text, Venn does not count the texts.
+    {"state": {"texts": [], "text": sign_in}, "questions": {"rows": indexed}},
+    {"state": ticket, "questions": {"rows": indexed}},
+    {"state": {"vector": given}, "questions": {"rows": indexed}},
+    *({"state": {"vectors": [one_hot, one_hot]}, "questions": {"rows": {**indexed, **limit}}} for limit in [
+        {"row_cap": -1}, {"row_cap": 1_000_001}, {"row_cap": 1.5},
+        {"batch_size": 0}, {"batch_size": 65_537}, {"batch_size": 2.5},
+        {"row_cap": 513}, {"row_cap": 1_000_000},
+    ]),
+    {"state": ticket, "questions": {"team": {"question_ref": "unregistered"}}},
+    *({"state": ticket, "questions": {"team": {"question_ref": "team", **override}}} for override in [
+        {"options": team["options"][:2]}, {"instructions": "How urgent is it?"}, {"type": "Score"},
+    ]),
 ]
 RENAMES = {
     "instructions_vec": "instructionsVec",
     "expected_score": "expectedScore",
     "score_conditioned_on_not_none": "scoreConditionedOnNotNone",
+    "question_ref": "questionRef",
+    "row_cap": "rowCap",
+    "batch_size": "batchSize",
 }
 
 
@@ -142,19 +218,50 @@ for _ in range(10_000):
             answered[name] = request
 assert all(name in answered for name in bounds), answered.keys()
 
-cases = {"answered": {}, "refused": []}
+handles = {name: service.register_question(name, question) for name, question in registered.items()}
+
+
+def referenced(request):
+    """The request with each question_ref that names a registered question replaced by Venn's handle."""
+    return {**request, "questions": {
+        name: {**question, "question_ref": handles.get(question["question_ref"], question["question_ref"])}
+        if "question_ref" in question else question
+        for name, question in request["questions"].items()
+    }}
+
+
+cases = {"answered": {}, "refused": [], "registered": registered, "handles": [], "refused registrations": []}
 for name, request in answered.items():
-    response = service.decide(request)
+    response = service.decide(referenced(request))
     cases["answered"][name] = {"request": request, "answers": response["answers"], "vector": response["vector"]}
-tie = cases["answered"]["tie"]["answers"]["team"]
+got = {name: case["answers"] for name, case in cases["answered"].items()}
+tie = got["tie"]["team"]
 assert tie["answer"] == "login" and tie["probabilities"]["login"] == tie["probabilities"]["sign-in"] == tie["confidence"], tie
-assert cases["answered"]["labels"]["answers"]["team"] == cases["answered"]["kinds"]["answers"]["team"]
-assert cases["answered"]["noul in scope"]["answers"]["defect"]["answer"] == "in_scope"
-assert cases["answered"]["noul none"]["answers"]["defect"]["answer"] == "none"
+assert got["labels"]["team"] == got["kinds"]["team"]
+assert got["noul in scope"]["defect"]["answer"] == "in_scope"
+assert got["noul none"]["defect"]["answer"] == "none"
+assert [row["id"] for row in got["index texts"]["rows"]["rows"]] == list(range(len(rows)))
+assert (len(got["index row cap"]["first"]["rows"]), got["index row cap"]["first"]["batches"]) == (3, 2)
+assert got["index row cap"]["none"] == {"rows": [], "batches": 0}
+thresholded = [row["answer"] for row in got["index threshold"]["rows"]["rows"]]
+assert "none" in thresholded and any(answer != "none" for answer in thresholded), thresholded
+assert got["reference"]["team"]["answer"] != "none" and got["reference overrides"]["team"]["answer"] == "none"
+assert len(got["reference rows"]["rows"]["rows"]) == 1
+assert got["reference kinds"]["urgency"] == got["scores"]["urgency"]
+assert len(got["reference rows vectors"]["rows"]["rows"]) == len(plural)
 for request in refused:
     try:
-        service.decide(request)
+        service.decide(referenced(request))
         raise AssertionError(f"Venn answered {request}")
     except ContractError as error:
         cases["refused"].append({"request": request, "code": error.code, "status": error.status})
-(HERE / "expected.json").write_text(json.dumps(port({"raw": raw, **cases}), allow_nan=False) + "\n")
+for name, (first, second, same) in pairs.items():
+    assert (service.register_question(name, first) == service.register_question(name, second)) == same, name
+    cases["handles"].append({"name": name, "questions": [first, second], "same": same})
+for question in unregistrable:
+    try:
+        service.register_question("refused", question)
+        raise AssertionError(f"Venn registered {question}")
+    except ContractError as error:
+        cases["refused registrations"].append({"question": question, "code": error.code, "status": error.status})
+(HERE / "expected.json").write_text(json.dumps(port({"raw": raw, **cases}), allow_nan=False, separators=(",", ":")) + "\n")

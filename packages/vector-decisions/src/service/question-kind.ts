@@ -1,60 +1,9 @@
-import type { Answer, ChoiceAnswer } from './decision.ts';
+import type { PreparedQuestion } from '../head/prepared-question.ts';
+import type { Answer } from './decision.ts';
 
-// The steps that turn the logits of a question into its answer. A kind gives
-// the probabilities and completes the answer. The steps between are Venn's
-// DecisionService.answer (venn/server.py:1129): the first label of the
-// largest probability, or "none" when the confidence is below the threshold.
-export abstract class QuestionKind {
-  protected readonly threshold: number | undefined;
-  protected readonly temperature: number;
-
-  constructor(threshold: number | undefined, temperature: number) {
-    this.threshold = threshold;
-    this.temperature = temperature;
-  }
-
-  // `logits` holds the logit of each label, then of "none".
-  answer(logits: Float64Array, labels: readonly string[]): Answer {
-    const probabilities = this.probabilities(logits);
-    const names = [...labels, 'none'];
-    let best = 0;
-    for (const [index, probability] of probabilities.entries())
-      if (probability > (probabilities[best] ?? 0)) best = index;
-    const confidence = probabilities[best] ?? Number.NaN;
-    const belowThreshold =
-      this.threshold !== undefined && confidence < this.threshold;
-    return this.complete(
-      {
-        answer: belowThreshold ? 'none' : (names[best] ?? 'none'),
-        probabilities: Object.fromEntries(
-          names.map((name, index) => [
-            name,
-            probabilities[index] ?? Number.NaN,
-          ]),
-        ),
-        confidence,
-        calibrated: false,
-      },
-      probabilities,
-    );
-  }
-
-  protected abstract probabilities(logits: Float64Array): Float64Array;
-
-  protected abstract complete(
-    answer: ChoiceAnswer,
-    probabilities: Float64Array,
-  ): Answer;
-
-  // The softmax of the values divided by the temperature.
-  protected static softmax(
-    values: Float64Array,
-    temperature: number,
-  ): Float64Array {
-    const scaled = values.map((value) => value / temperature);
-    const largest = Math.max(...scaled);
-    const exponentials = scaled.map((value) => Math.exp(value - largest));
-    const sum = exponentials.reduce((total, value) => total + value, 0);
-    return exponentials.map((value) => value / sum);
-  }
+// The way a type of question answers from its prepared question: Choice,
+// Score and Noul about one state, IndexApply about each row of a plural
+// state.
+export interface QuestionKind {
+  answer(prepared: PreparedQuestion, labels: readonly string[]): Answer;
 }

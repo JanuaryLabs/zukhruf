@@ -1,12 +1,26 @@
 // The request and the answers of DecisionService.decide, with Venn's names
 // in camelCase (venn/server.py:912).
 
-// A text that the reader embeds, a vector, or several texts.
+type Kinds = {
+  readonly text: string;
+  readonly vector: readonly number[];
+  readonly texts: readonly string[];
+  readonly vectors: readonly (readonly number[])[];
+};
+
+// A state of one kind, without the fields of the other kinds.
+type OfKind<K extends keyof Kinds> = Pick<Kinds, K> & {
+  readonly [Other in Exclude<keyof Kinds, K>]?: never;
+};
+
+// A text that the reader embeds, or a vector, or a plural state: several
+// texts or vectors, each one a row that IndexApply answers.
 export type State =
   | string
-  | { readonly text: string }
-  | { readonly vector: readonly number[] }
-  | { readonly texts: readonly string[] };
+  | OfKind<'text'>
+  | OfKind<'vector'>
+  | OfKind<'texts'>
+  | OfKind<'vectors'>;
 
 // A text that the reader embeds, or a label with its vector. An option
 // without a vector is the text of its label.
@@ -23,6 +37,7 @@ type Instructions =
 type Asked = Instructions & {
   readonly options: readonly Option[];
   readonly threshold?: number;
+  readonly questionRef?: never;
 };
 
 export type ChoiceQuestion = Asked & { readonly type?: 'Choice' };
@@ -35,11 +50,31 @@ export type ScoreQuestion = Asked & {
 
 export type NoulQuestion = Asked & { readonly type: 'Noul' };
 
-export type Question = ChoiceQuestion | ScoreQuestion | NoulQuestion;
+// A Choice question about each row of a plural state.
+export type IndexApplyQuestion = Asked & {
+  readonly type: 'IndexApply';
+  // The count of rows to answer, from the first: 0 to 512. The default is
+  // all the rows.
+  readonly rowCap?: number;
+  // The count of rows in a batch: 1 to 65,536 (the default).
+  readonly batchSize?: number;
+};
+
+export type Question =
+  ChoiceQuestion | ScoreQuestion | NoulQuestion | IndexApplyQuestion;
+
+// A question that registerQuestion prepared, by its handle. The registered
+// question gives the rest.
+export type QuestionRef = {
+  readonly questionRef: string;
+  readonly threshold?: number;
+  readonly rowCap?: number;
+  readonly batchSize?: number;
+};
 
 export type DecisionRequest = {
   readonly state: State;
-  readonly questions: Readonly<Record<string, Question>>;
+  readonly questions: Readonly<Record<string, Question | QuestionRef>>;
 };
 
 export type ChoiceAnswer = {
@@ -60,10 +95,20 @@ export type NoulAnswer = Omit<ChoiceAnswer, 'answer'> & {
   readonly answer: 'none' | 'in_scope';
 };
 
-export type Answer = ChoiceAnswer | ScoreAnswer | NoulAnswer;
+// The answer of a Choice about one row, and the index of the row.
+export type RowAnswer = ChoiceAnswer & { readonly id: number };
+
+export type IndexApplyAnswer = {
+  readonly rows: readonly RowAnswer[];
+  // The count of batches of batchSize rows.
+  readonly batches: number;
+};
+
+export type Answer = ChoiceAnswer | ScoreAnswer | NoulAnswer | IndexApplyAnswer;
 
 export type Decision = {
   readonly answers: Readonly<Record<string, Answer>>;
-  // The vector of a state that the reader embedded, else null.
-  readonly vector: readonly number[] | null;
+  // The vector of a state that the reader embedded, the rows of a state of
+  // texts, else null.
+  readonly vector: readonly number[] | readonly (readonly number[])[] | null;
 };

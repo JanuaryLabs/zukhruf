@@ -26,8 +26,9 @@ import {
 const PREFIX = 'task: classification | query: ';
 
 // Venn computes the logits and the probabilities in float32, and the package
-// in float64: the probabilities of the fixture differ by at most 5.8e-8, and
-// the expected scores by 9.3e-8 of their size (measured 2026-11-14).
+// in float64: the probabilities of the fixture differ by at most 1.5e-7 (a
+// row of IndexApply), and the expected scores by 9.3e-8 of their size
+// (measured 2026-11-14).
 const TOLERANCE = 3e-7;
 // The vector of a text state is the vector of the reader, which src/reader
 // compares with Venn's to 2 units in the last place of float32.
@@ -36,13 +37,18 @@ const FLOAT32_TOLERANCE = 2 ** -21;
 type Answered = {
   readonly request: DecisionRequest;
   readonly answers: Readonly<Record<string, Answer>>;
-  readonly vector: readonly number[] | null;
+  readonly vector: Decision['vector'];
 };
 
-// The raw vectors of a reader, and the requests that Venn's own
-// DecisionService.decide answers or refuses with them (fixtures/generate.py).
-// JSON has no NaN, so the fixture writes it as "NaN". One request has the
-// type Ranking, which the types refuse but a caller from JavaScript can send.
+type Registrable = Parameters<DecisionService['registerQuestion']>[0];
+
+// The raw vectors of a reader, the requests that Venn's own
+// DecisionService.decide answers or refuses with them, and the questions that
+// its register_question prepares or refuses (fixtures/generate.py). A
+// questionRef names a question of "registered". JSON has no NaN, so the
+// fixture writes it as "NaN". The types refuse some requests and questions
+// that a caller from JavaScript can send: the type Ranking, a state of
+// several kinds, and a registered question with a threshold.
 const golden: {
   readonly raw: Readonly<Record<string, readonly number[]>>;
   readonly answered: Readonly<
@@ -56,12 +62,32 @@ const golden: {
       | 'tie'
       | 'labels'
       | 'noul in scope'
-      | 'noul none',
+      | 'noul none'
+      | 'index texts'
+      | 'index row cap'
+      | 'index threshold'
+      | 'reference'
+      | 'reference rows'
+      | 'reference overrides'
+      | 'reference rows overrides'
+      | 'reference kinds'
+      | 'reference rows vectors',
       Answered
     >
   >;
   readonly refused: readonly {
     readonly request: DecisionRequest;
+    readonly code: ContractErrorCode;
+    readonly status: number;
+  }[];
+  readonly registered: Readonly<Record<string, Registrable>>;
+  readonly handles: readonly {
+    readonly name: string;
+    readonly questions: readonly [Registrable, Registrable];
+    readonly same: boolean;
+  }[];
+  readonly 'refused registrations': readonly {
+    readonly question: Registrable;
     readonly code: ContractErrorCode;
     readonly status: number;
   }[];
@@ -112,6 +138,40 @@ function refused(code: ContractErrorCode) {
   const requests = golden.refused.filter((request) => request.code === code);
   assert.ok(requests.length > 0, `The fixture has no request for ${code}`);
   return requests;
+}
+
+// The handle that registerQuestion of the service gives for each registered
+// question of the fixture, by its name.
+async function register(
+  decisions: DecisionService,
+): Promise<ReadonlyMap<string, string>> {
+  const handles = new Map<string, string>();
+  for (const [name, question] of Object.entries(golden.registered))
+    handles.set(name, await decisions.registerQuestion(question));
+  return handles;
+}
+
+// The request with the handle of each questionRef that names a registered
+// question, as generate.py gives Venn its own handles.
+function referenced(
+  request: DecisionRequest,
+  handles: ReadonlyMap<string, string>,
+): DecisionRequest {
+  return {
+    ...request,
+    questions: Object.fromEntries(
+      Object.entries(request.questions).map(([name, question]) => [
+        name,
+        question.questionRef === undefined
+          ? question
+          : {
+              ...question,
+              questionRef:
+                handles.get(question.questionRef) ?? question.questionRef,
+            },
+      ]),
+    ),
+  };
 }
 
 // Compares each number to TOLERANCE of max(1, |Venn's|), and each other
@@ -269,7 +329,7 @@ test('rubric: a Score question whose scores are not one finite number for each o
     });
 });
 
-test('invalid_text: an empty text, or a text of more than 32,768 characters, is refused, and a character is a code point, as Python counts it', async () => {
+test('invalid_text: an empty text, or a text of more than 32,768 characters, is refused, also as a row of a plural state, and a character is a code point, as Python counts it', async () => {
   await using directory = await new TemporaryFiles().directory(
     'vector-decisions-',
   );
@@ -298,7 +358,7 @@ test('invalid_text: an empty text, or a text of more than 32,768 characters, is 
   );
 });
 
-test('invalid_vector: a vector of another width than the head reads, or with a value that is not finite, is refused', async () => {
+test('invalid_vector: a vector of another width than the head reads, or with a value that is not finite, is refused, also as a row of a plural state, and a plural state of no vectors', async () => {
   await using directory = await new TemporaryFiles().directory(
     'vector-decisions-',
   );
@@ -313,7 +373,7 @@ test('invalid_vector: a vector of another width than the head reads, or with a v
     });
 });
 
-test('zero_vector: a vector of norm 0 is refused', async () => {
+test('zero_vector: a vector of norm 0 is refused, also as a row of a plural state', async () => {
   await using directory = await new TemporaryFiles().directory(
     'vector-decisions-',
   );
@@ -328,7 +388,7 @@ test('zero_vector: a vector of norm 0 is refused', async () => {
     });
 });
 
-test('unsupported_input: a state of several texts is refused, as Choice, Score and Noul answer one state', async () => {
+test('unsupported_input: a plural state, of texts or of vectors, is refused for Choice, Score and Noul, which answer one state', async () => {
   await using directory = await new TemporaryFiles().directory(
     'vector-decisions-',
   );
@@ -352,6 +412,174 @@ test('question_type: a question of another type than Choice, Score or Noul is re
 
   for (const { request, code, status } of refused('question_type'))
     await assert.rejects(decisions.decide(request), {
+      name: 'ContractError',
+      code,
+      status,
+    });
+});
+
+test('state_texts: a state of no texts, or of more than 512, is refused, and the texts are counted before the kinds of the state', async () => {
+  await using directory = await new TemporaryFiles().directory(
+    'vector-decisions-',
+  );
+  using database = open(join(directory.path, 'cache.sqlite'));
+  const decisions = await service(database);
+
+  for (const { request, code, status } of refused('state_texts'))
+    await assert.rejects(decisions.decide(request), {
+      name: 'ContractError',
+      code,
+      status,
+    });
+});
+
+test('state_limit: a state of more than 512 vectors is refused', async () => {
+  await using directory = await new TemporaryFiles().directory(
+    'vector-decisions-',
+  );
+  using database = open(join(directory.path, 'cache.sqlite'));
+  const decisions = await service(database);
+
+  for (const { request, code, status } of refused('state_limit'))
+    await assert.rejects(decisions.decide(request), {
+      name: 'ContractError',
+      code,
+      status,
+    });
+});
+
+test('state_shape: a state of texts that also has a text, a vector or vectors is refused', async () => {
+  await using directory = await new TemporaryFiles().directory(
+    'vector-decisions-',
+  );
+  using database = open(join(directory.path, 'cache.sqlite'));
+  const decisions = await service(database);
+
+  for (const { request, code, status } of refused('state_shape'))
+    await assert.rejects(decisions.decide(request), {
+      name: 'ContractError',
+      code,
+      status,
+    });
+});
+
+test('index_input: an IndexApply question about one state, a text or a vector, is refused', async () => {
+  await using directory = await new TemporaryFiles().directory(
+    'vector-decisions-',
+  );
+  using database = open(join(directory.path, 'cache.sqlite'));
+  const decisions = await service(database);
+
+  for (const { request, code, status } of refused('index_input'))
+    await assert.rejects(decisions.decide(request), {
+      name: 'ContractError',
+      code,
+      status,
+    });
+});
+
+test('stream_limit: a rowCap that is not a whole number from 0 to 1,000,000, or a batchSize that is not a whole number from 1 to 65,536, is refused', async () => {
+  await using directory = await new TemporaryFiles().directory(
+    'vector-decisions-',
+  );
+  using database = open(join(directory.path, 'cache.sqlite'));
+  const decisions = await service(database);
+
+  for (const { request, code, status } of refused('stream_limit'))
+    await assert.rejects(decisions.decide(request), {
+      name: 'ContractError',
+      code,
+      status,
+    });
+});
+
+test('stream_required: a rowCap of more than 512 is refused with the status 413, as decide answers at most 512 rows', async () => {
+  await using directory = await new TemporaryFiles().directory(
+    'vector-decisions-',
+  );
+  using database = open(join(directory.path, 'cache.sqlite'));
+  const decisions = await service(database);
+
+  for (const { request, code, status } of refused('stream_required'))
+    await assert.rejects(decisions.decide(request), {
+      name: 'ContractError',
+      code,
+      status,
+    });
+});
+
+test('question_handle: a questionRef that registerQuestion did not give is refused with the status 404', async () => {
+  await using directory = await new TemporaryFiles().directory(
+    'vector-decisions-',
+  );
+  using database = open(join(directory.path, 'cache.sqlite'));
+  const decisions = await service(database);
+  const handles = await register(decisions);
+
+  for (const { request, code, status } of refused('question_handle'))
+    await assert.rejects(decisions.decide(referenced(request, handles)), {
+      name: 'ContractError',
+      code,
+      status,
+    });
+});
+
+test('prewarm_override: a questionRef that also gives options, instructions or a type is refused', async () => {
+  await using directory = await new TemporaryFiles().directory(
+    'vector-decisions-',
+  );
+  using database = open(join(directory.path, 'cache.sqlite'));
+  const decisions = await service(database);
+  const handles = await register(decisions);
+
+  for (const { request, code, status } of refused('prewarm_override'))
+    await assert.rejects(decisions.decide(referenced(request, handles)), {
+      name: 'ContractError',
+      code,
+      status,
+    });
+});
+
+test('prewarm_type: registerQuestion refuses a question of another type than Choice, Score, Noul or IndexApply', async () => {
+  await using directory = await new TemporaryFiles().directory(
+    'vector-decisions-',
+  );
+  using database = open(join(directory.path, 'cache.sqlite'));
+  const decisions = await service(database);
+  const refusals = golden['refused registrations'].filter(
+    ({ code }) => code === 'prewarm_type',
+  );
+
+  assert.ok(refusals.length > 0);
+  for (const { question, code, status } of refusals)
+    await assert.rejects(decisions.registerQuestion(question), {
+      name: 'ContractError',
+      code,
+      status,
+    });
+});
+
+test('registerQuestion refuses instructions and options as decide refuses them', async () => {
+  await using directory = await new TemporaryFiles().directory(
+    'vector-decisions-',
+  );
+  using database = open(join(directory.path, 'cache.sqlite'));
+  const decisions = await service(database);
+  const refusals = golden['refused registrations'].filter(
+    ({ code }) => code !== 'prewarm_type',
+  );
+
+  assert.deepEqual(
+    new Set(refusals.map(({ code }) => code)),
+    new Set([
+      'option_limit',
+      'option_labels',
+      'invalid_text',
+      'invalid_vector',
+    ]),
+  );
+  for (const { question, code, status } of refusals)
+    await assert.rejects(decisions.registerQuestion(question), {
       name: 'ContractError',
       code,
       status,
@@ -437,28 +665,35 @@ test('a request can give the vectors: a state vector that is not a unit vector, 
   assertAnswer(await decisions.decide(given.request), given, 'team');
 });
 
-test('the decision gives the vector of a state that the reader embedded, and null for a given vector', async () => {
+test('the decision gives the vector of a state that the reader embedded, the vectors of a state of texts, and null for given vectors', async () => {
   await using directory = await new TemporaryFiles().directory(
     'vector-decisions-',
   );
   using database = open(join(directory.path, 'cache.sqlite'));
   const decisions = await service(database);
   const { kinds, thresholds, given } = golden.answered;
+  const texts = golden.answered['index texts'];
+  const vectors = golden.answered['index threshold'];
 
-  for (const answered of [kinds, thresholds]) {
+  for (const answered of [kinds, thresholds, texts]) {
     const { vector } = await decisions.decide(answered.request);
     assert.ok(vector !== null && answered.vector !== null);
-    assert.equal(vector.length, answered.vector.length);
-    for (const [index, value] of answered.vector.entries()) {
-      const got: number = vector[index] ?? Number.NaN;
+    const values = answered.vector.flat();
+    const got = vector.flat();
+    assert.equal(got.length, values.length);
+    for (const [index, value] of values.entries()) {
+      const number = got[index] ?? Number.NaN;
       assert.ok(
-        Math.abs(got - value) <= FLOAT32_TOLERANCE * Math.abs(value),
-        `value ${index}: ${got} against Venn's ${value}`,
+        Math.abs(number - value) <= FLOAT32_TOLERANCE * Math.abs(value),
+        `value ${index}: ${number} against Venn's ${value}`,
       );
     }
   }
-  assert.equal((await decisions.decide(given.request)).vector, null);
-  assert.equal(given.vector, null);
+  assert.ok(Array.isArray(texts.vector?.[0]));
+  for (const answered of [given, vectors]) {
+    assert.equal((await decisions.decide(answered.request)).vector, null);
+    assert.equal(answered.vector, null);
+  }
 });
 
 test('a request of several named questions of each type answers each by its name about the one state', async () => {
@@ -494,6 +729,160 @@ test('an option that is only a label is the text of its label', async () => {
   const { labels } = golden.answered;
 
   assertAnswer(await decisions.decide(labels.request), labels, 'team');
+});
+
+test('an IndexApply question answers each row of a plural state as a Choice question answers one state, with the index of the row as its id, in one batch', async () => {
+  await using directory = await new TemporaryFiles().directory(
+    'vector-decisions-',
+  );
+  using database = open(join(directory.path, 'cache.sqlite'));
+  const decisions = await service(database);
+  const indexTexts = golden.answered['index texts'];
+
+  assertAnswer(await decisions.decide(indexTexts.request), indexTexts, 'rows');
+});
+
+test('an IndexApply question answers the first rowCap rows, no row for a rowCap of 0, and counts the batches of batchSize rows', async () => {
+  await using directory = await new TemporaryFiles().directory(
+    'vector-decisions-',
+  );
+  using database = open(join(directory.path, 'cache.sqlite'));
+  const decisions = await service(database);
+  const rowCap = golden.answered['index row cap'];
+
+  const decision = await decisions.decide(rowCap.request);
+
+  assertAnswer(decision, rowCap, 'first');
+  assertAnswer(decision, rowCap, 'none');
+});
+
+test('an IndexApply question answers "none" for each row whose confidence is below its threshold', async () => {
+  await using directory = await new TemporaryFiles().directory(
+    'vector-decisions-',
+  );
+  using database = open(join(directory.path, 'cache.sqlite'));
+  const decisions = await service(database);
+  const threshold = golden.answered['index threshold'];
+
+  assertAnswer(await decisions.decide(threshold.request), threshold, 'rows');
+});
+
+test('a questionRef answers as the question that registerQuestion registered, of each type, without the threshold of the registration', async () => {
+  await using directory = await new TemporaryFiles().directory(
+    'vector-decisions-',
+  );
+  using database = open(join(directory.path, 'cache.sqlite'));
+  const decisions = await service(database);
+  const handles = await register(decisions);
+  const reference = golden.answered['reference'];
+  const rows = golden.answered['reference rows'];
+  const kinds = golden.answered['reference kinds'];
+
+  assertAnswer(
+    await decisions.decide(referenced(reference.request, handles)),
+    reference,
+    'team',
+  );
+  assertAnswer(
+    await decisions.decide(referenced(rows.request, handles)),
+    rows,
+    'rows',
+  );
+  const decision = await decisions.decide(referenced(kinds.request, handles));
+  assertAnswer(decision, kinds, 'urgency');
+  assertAnswer(decision, kinds, 'defect');
+});
+
+test('a questionRef gives its threshold, and for IndexApply its rowCap and batchSize, to the registered question', async () => {
+  await using directory = await new TemporaryFiles().directory(
+    'vector-decisions-',
+  );
+  using database = open(join(directory.path, 'cache.sqlite'));
+  const decisions = await service(database);
+  const handles = await register(decisions);
+  const overrides = golden.answered['reference overrides'];
+  const rows = golden.answered['reference rows overrides'];
+  // Rows of given vectors that are not unit vectors.
+  const vectors = golden.answered['reference rows vectors'];
+
+  assertAnswer(
+    await decisions.decide(referenced(overrides.request, handles)),
+    overrides,
+    'team',
+  );
+  assertAnswer(
+    await decisions.decide(referenced(rows.request, handles)),
+    rows,
+    'rows',
+  );
+  assertAnswer(
+    await decisions.decide(referenced(vectors.request, handles)),
+    vectors,
+    'rows',
+  );
+});
+
+test('the handle of registerQuestion names the question without its threshold: the same question, with its keys in another order or another threshold, gets the same handle, and another question another handle', async () => {
+  await using directory = await new TemporaryFiles().directory(
+    'vector-decisions-',
+  );
+  using database = open(join(directory.path, 'cache.sqlite'));
+  const decisions = await service(database);
+
+  for (const {
+    name,
+    questions: [first, second],
+    same,
+  } of golden.handles)
+    assert.equal(
+      (await decisions.registerQuestion(first)) ===
+        (await decisions.registerQuestion(second)),
+      same,
+      name,
+    );
+});
+
+test('the type of registerQuestion refuses a threshold, which no decision reads, and registerQuestion drops one that JavaScript gives', async () => {
+  await using directory = await new TemporaryFiles().directory(
+    'vector-decisions-',
+  );
+  using database = open(join(directory.path, 'cache.sqlite'));
+  const decisions = await service(database);
+  const team = {
+    instructions: 'Who owns this ticket?',
+    options: ['Login problems', 'Checkout and payments'],
+  };
+
+  const handle = await decisions.registerQuestion(team);
+  const thresholded = await decisions.registerQuestion({
+    ...team,
+    // @ts-expect-error Each decision gives the threshold (ADR 0004).
+    threshold: 0.9,
+  });
+
+  assert.equal(thresholded, handle);
+});
+
+test('registerQuestion embeds the texts of the question, so a decision with its handle about a given vector makes no model call', async () => {
+  await using directory = await new TemporaryFiles().directory(
+    'vector-decisions-',
+  );
+  using database = open(join(directory.path, 'cache.sqlite'));
+  const model = venn();
+  const decisions = await service(database, model);
+  const handle = await decisions.registerQuestion({
+    instructions: 'Who owns this ticket?',
+    options: ['Login problems', 'Checkout and payments'],
+  });
+  const calls = model.doEmbedCalls.length;
+
+  await decisions.decide({
+    state: { vector: golden.raw['Login problems'] ?? [] },
+    questions: { team: { questionRef: handle } },
+  });
+
+  assert.ok(calls > 0);
+  assert.equal(model.doEmbedCalls.length, calls);
 });
 
 test('a second decision of the same request gives the same answers, and the vector cache makes no model call', async () => {

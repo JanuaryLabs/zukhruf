@@ -10,9 +10,10 @@ export class Score extends Choice {
   constructor(
     threshold: number | undefined,
     temperature: number,
+    state: Float32Array,
     scores: readonly number[],
   ) {
-    super(threshold, temperature);
+    super(threshold, temperature, state);
     this.#scores = scores;
   }
 

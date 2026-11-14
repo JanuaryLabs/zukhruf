@@ -8,7 +8,16 @@ export type ContractErrorCode =
   | 'invalid_vector'
   | 'zero_vector'
   | 'unsupported_input'
-  | 'question_type';
+  | 'question_type'
+  | 'state_texts'
+  | 'state_limit'
+  | 'state_shape'
+  | 'index_input'
+  | 'stream_limit'
+  | 'stream_required'
+  | 'question_handle'
+  | 'prewarm_override'
+  | 'prewarm_type';
 
 // A request that breaks a rule of Venn's contract (venn/errors.py): `code`
 // names the rule for a program, the message is for people, and `status` is
