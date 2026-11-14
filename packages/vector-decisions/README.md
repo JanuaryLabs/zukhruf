@@ -1,6 +1,6 @@
 # @zukhruf/vector-decisions
 
-> **Status: in progress.** Units 0 to 4, 5a and 5b of 17 are done: the package downloads the venn-1 head, checks it, reads its weights, gives the logits of a question for state vectors, makes those vectors from text through a reader with Venn's prompt and cache, and answers Choice, Score and Noul questions about one state, and IndexApply questions about each row of a plural state, with `DecisionService`, which also prepares a question for many decisions. The decisions are in [ADR 0001](docs/adr/0001-port-the-library-core-of-venn-at-one-commit-one-unit-at-a-time.md).
+> **Status: in progress.** Units 0 to 4, 5a, 5b and 6 of 17 are done: the package downloads the venn-1 head, checks it, reads its weights, gives the logits of a question for state vectors, makes those vectors from text through a reader with Venn's prompt and cache, and answers Choice, Score and Noul questions about one state, and IndexApply questions about each row of a plural state, with `DecisionService`, which also prepares a question for many decisions. `DecisionServiceModel` answers the questions of the AI SDK's `experimental_decide` with the service. The decisions are in [ADR 0001](docs/adr/0001-port-the-library-core-of-venn-at-one-commit-one-unit-at-a-time.md).
 
 A program often needs a decision about a text, not new text: which team owns a ticket, how urgent it is, or if it is a defect. A decision model such as Jev reads the text again for each question. This package answers the same typed questions from vectors. A reader embeds each text one time. Then a small head compares the vector of the text with the vectors of the options. This package is a TypeScript port of the library core of [Venn](https://github.com/markrussinovich/venn-vdm) (commit `7b2042e`).
 
@@ -19,7 +19,7 @@ Each unit works and has tests alone, and it composes with the units before it.
 | U4   | The reader: the Classification prefix and the vector cache, around an AI SDK embedding model | `reader.py`, `server.py`                           | done    |
 | U5a  | `DecisionService.decide` for one state: Choice, Score and Noul                               | `server.py`                                        | done    |
 | U5b  | IndexApply and prepared questions (`registerQuestion`, `question_ref`)                       | `server.py`                                        | done    |
-| U6   | An AI SDK decision model over a `DecisionService` (addition: Venn has an HTTP route)         | `decisions.py`                                     | planned |
+| U6   | An AI SDK decision model over a `DecisionService` (addition: Venn has an HTTP route)         | `decisions.py`                                     | done    |
 | U7   | Calibration: the temperature fit, on an optimizer that moves out of mteb                     | `heads/calibration.py`                             | planned |
 | U8   | Registered indexes and `streamIndex`, NearestReference, SetMembership and PopulationShift    | `server.py`, `index/decision.py`, `index/shift.py` | planned |
 | U9   | The draws of NumPy that the folds need, in `@zukhruf/random`                                 | -                                                  | planned |
@@ -262,3 +262,54 @@ The differences from Venn, and the rules of Venn that the package keeps, are in 
 The differences of `registerQuestion` are in [ADR 0004](docs/adr/0004-register-question-takes-no-name-and-its-handle-is-the-sha-256-of-the-rfc-8785-json-of-the-question.md): it takes no name, its handle is not Venn's, and the types refuse a threshold, which no decision reads.
 
 The tests compare `decide` and `registerQuestion` with Venn's own `DecisionService.decide` and `register_question` and the real venn-1 head, for the same raw vectors (`src/service/fixtures/generate.py`). The head is not in the repository, so these tests run in the `test-network` target.
+
+## Decide with the AI SDK
+
+```ts
+import { experimental_decide } from 'ai';
+
+import { DecisionServiceModel } from '@zukhruf/vector-decisions';
+
+const { answers, providerMetadata } = await experimental_decide({
+  model: new DecisionServiceModel(service), // the DecisionService of "Decide"
+  state: { message: 'I was charged twice. Please refund the extra charge.' },
+  questions: {
+    department: {
+      type: 'choice',
+      instructions: 'Which team should handle this?',
+      criteria: { billing: 'Payments and refunds', support: null },
+    },
+    severity: {
+      type: 'score',
+      instructions: 'How severe is the issue?',
+      criteria: ['Cosmetic', 'Workaround exists', 'Blocking'],
+    },
+    refund: {
+      type: 'boolean',
+      instructions: 'Is it a request for money back?',
+    },
+  },
+});
+answers.department; // { type: 'choice', choice: 'billing', probabilities: { billing, support } }, where support is the abstention
+providerMetadata?.vectorDecisions?.noneProbability; // { department, severity, refund }
+```
+
+`new DecisionServiceModel(service)` is an `Experimental_DecisionModelV4` of the AI SDK over a `DecisionService`. It is an addition: Venn gives its Decisions API, `venn.decisions.decide` (`venn/decisions.py:131`), as an HTTP route. The model does what that API does. It asks each question as a Choice of the service, with an option for each criterion, and it asks all the questions of a call in one `decide`:
+
+- **choice**: an option for each criterion with a description. One criterion can be `null`: the abstention, whose probability is the probability of "none", as in Venn. The choice is the first criterion with the largest probability.
+- **score**: an option for each level, in order. The `score` is the sum of each probability times its level from zero, and `probabilities` are by level: `"0"`, `"1"` and so on.
+- **boolean**: Venn's noul. The options are the descriptions of `false` and `true`. Without criteria, they are "No. " and "Yes. " before the instructions. The answer is the `probability` of true.
+- **box**: not supported. The AI SDK throws `Experimental_DecisionUnsupportedQuestionTypeError` before a model call.
+
+The probabilities of each answer are the probabilities of its options, and of the abstention of a choice, divided by their sum. Without an abstention, "none" has no part in them. The probability of "none" of each question is in `providerMetadata.vectorDecisions.noneProbability`.
+
+The reader embeds the text of the state, of the instructions and of each criterion. A text part is its text, and a JSON part, JSON instructions or a JSON criterion are the text that Venn writes for JSON: Python's `json.dumps` with sorted keys. A state of several parts is the text of each part, with `"\n"` between them. A string state is one text part, and an object state is one JSON part.
+
+The model refuses what Venn refuses. A question without instructions, a choice with two null criteria or with only null criteria, a boolean question whose criteria do not describe both `true` and `false`, and a score with a null level throw the AI SDK's `InvalidArgumentError` for the field. A file part of the state throws `UnsupportedFunctionalityError`. The checks of the service throw its `ContractError`, for example `question_limit` for more than 32 questions. `maxOutputTokens` and `reasoning` give an `unsupported` warning.
+
+The differences from Venn are in [ADR 0005](docs/adr/0005-a-criterion-without-a-description-is-the-abstention-and-json-is-the-text-that-venn-writes.md):
+
+- A state can have several parts. A JSON part is data, also when it has the key `text` or `vector`.
+- Until the service has a port of Venn's `DecisionService.vector` (#4389), the label of each option is the text of its description. So a criterion whose description is "none", or two criteria with one description, throw the AI SDK's `InvalidArgumentError`. Venn asks its own labels and answers.
+
+The tests compare the answers of `experimental_decide` with the answers of Venn's own `venn.decisions.decide` and the real venn-1 head, for the same raw vectors (`src/decision-model/fixtures/generate.py`). They differ by at most 5.2e-8. These tests run in the `test-network` target.

@@ -97,3 +97,23 @@ _Avoid_: cutoff, minimum
 **Expected score**:
 The scores of the options of a Score question, each times its probability, added up and divided by the sum of the probabilities of the options. The probability of "none" does not count.
 _Avoid_: average, mean score, expected value
+
+**Decision model**:
+The AI SDK model that answers the questions of `experimental_decide`. `DecisionServiceModel` asks each question of a call as a Choice of one `DecisionService`.
+_Avoid_: provider, adapter, decider
+
+**Criterion**:
+The description of one option of an AI SDK question, by the name of the option. A choice can have one criterion without a description: the abstention.
+_Avoid_: rubric item, label (for the description)
+
+**Abstention**:
+The criterion of a choice without a description. It is not an option: its probability is the probability of "none".
+_Avoid_: null option, fallback, other
+
+**Level**:
+One criterion of a score question, by its place from zero. The score is the sum of each probability times its level.
+_Avoid_: grade, step, bucket
+
+**Probability of none**:
+The probability that the head gives to "none" for a question. It is the probability of the abstention of a choice. The decision model gives it in `providerMetadata.vectorDecisions.noneProbability`.
+_Avoid_: abstention score, none score
