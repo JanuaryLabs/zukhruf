@@ -10,6 +10,7 @@ import { describe, test } from 'node:test';
 import { createClock } from '@sinonjs/fake-timers';
 
 import type { CampaignOptions, Term } from '@zukhruf/election';
+import { PipeAddress } from '@zukhruf/pipes';
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { isRecord } from '../shared/is-record.ts';
@@ -26,7 +27,7 @@ describe('Electing connector', () => {
     const served: Term[] = [];
     const connector = new ElectingConnector({
       clock: globalThis,
-      socketPath: join(directory.path, 'flight.sock'),
+      address: new PipeAddress(join(directory.path, 'flight.sock')),
       election: {
         campaign: async (options?: CampaignOptions) => {
           const won = await election.campaign(options);
@@ -60,7 +61,7 @@ describe('Electing connector', () => {
     let campaigns = 0;
     const connector = new ElectingConnector({
       clock: globalThis,
-      socketPath: join(directory.path, 'flight.sock'),
+      address: new PipeAddress(join(directory.path, 'flight.sock')),
       election: {
         campaign: async () => {
           campaigns++;
@@ -89,7 +90,7 @@ describe('Electing connector', () => {
     const reason = new Error('The single flight closed');
     const connector = new ElectingConnector({
       clock: globalThis,
-      socketPath: join(directory.path, 'flight.sock'),
+      address: new PipeAddress(join(directory.path, 'flight.sock')),
       election: {
         campaign: async () => {
           setImmediate(() => abort.abort(reason));
@@ -146,7 +147,7 @@ describe('Electing connector', () => {
     subscribe('net.client.socket', onSocket);
     const connector = new ElectingConnector({
       clock: globalThis,
-      socketPath,
+      address: new PipeAddress(socketPath),
       election: { campaign: async () => undefined },
       pollInterval: 60_000,
       serve: async () => {},
@@ -199,7 +200,7 @@ describe('Electing connector', () => {
     await once(coordinator, 'listening');
     const connector = new ElectingConnector({
       clock,
-      socketPath,
+      address: new PipeAddress(socketPath),
       election: { campaign: async () => undefined },
       pollInterval: 10,
       serve: async () => {},

@@ -77,7 +77,7 @@ Each `SingleFlight` also takes a `clock`: the clock of the waits of the group, f
 There is no default directory. One default would put each application on the host into one group, and unrelated applications that use the same key would join each other's flights. Give each group its own directory, for example a folder of your application's data.
 
 - The directory must be on a local file system. On a network file system, a call rejects with `NetworkDirectoryError`.
-- On macOS and Linux, the path of `flight.sock` must have 103 bytes or fewer. A longer path throws a `RangeError` when you create the `SingleFlight`. On Windows, the socket is a named pipe, and the length of the directory does not matter.
+- The absolute path of `flight.sock` must have 103 bytes or fewer on macOS, and 107 bytes or fewer on Linux. [`@zukhruf/pipes`](../pipes/README.md) checks it: a longer path throws a `RangeError` when you create the `SingleFlight`. On Windows, the socket is the named pipe `\\.\pipe\zukhruf-single-flight-<hash of the socket path>`, and the length of the directory does not matter.
 - A single flight and a socket lock store of `@zukhruf/mutex` can use one directory. They use different files, and they never meet.
 
 ## Run a flight

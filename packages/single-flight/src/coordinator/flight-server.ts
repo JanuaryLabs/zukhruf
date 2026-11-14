@@ -1,9 +1,9 @@
-import { addAbortListener, once } from 'node:events';
-import { rm } from 'node:fs/promises';
-import { type Server, type Socket, createServer } from 'node:net';
+import { addAbortListener } from 'node:events';
+import type { Socket } from 'node:net';
 
 import type { Term } from '@zukhruf/election';
 import { EpochTokenSource } from '@zukhruf/fencing';
+import type { PipeEndpoint, PipeServer } from '@zukhruf/pipes';
 
 import { welcome } from '../connection/handshake.ts';
 import { SocketConnection } from '../connection/socket-connection.ts';
@@ -23,14 +23,14 @@ export interface FlightServerOptions {
  * itself when the term's signal aborts.
  */
 export class FlightServer {
-  readonly #server: Server;
+  readonly #server: PipeServer;
   readonly #connections: Set<Socket>;
   readonly #coordinator: FlightCoordinator;
   readonly #term: Term;
   readonly #closeOnLoss: Disposable;
 
   private constructor(
-    server: Server,
+    server: PipeServer,
     connections: Set<Socket>,
     coordinator: FlightCoordinator,
     term: Term,
@@ -43,15 +43,10 @@ export class FlightServer {
   }
 
   static async start(
-    socketPath: string,
+    endpoint: PipeEndpoint,
     term: Term,
     { locks }: FlightServerOptions,
   ): Promise<FlightServer> {
-    // Only the coordinator gets here, so removing a dead coordinator's socket file cannot race another server.
-    // Windows removes a named pipe when its process stops, so there is no file to remove.
-    if (process.platform !== 'win32') {
-      await rm(socketPath, { force: true });
-    }
     const coordinator = new FlightCoordinator({
       tokens: new EpochTokenSource(term.epoch),
       locks,
@@ -62,8 +57,9 @@ export class FlightServer {
       onTokensExhausted: () => void started.close(),
     });
     const connections = new Set<Socket>();
+    // Only the coordinator gets here, so the listen that removes a dead coordinator's socket file cannot race another server.
     // Serving others never keeps the coordinator alive: when its own work ends, it exits and another process takes over.
-    const server = createServer((socket) => {
+    const server = await endpoint.listen((socket) => {
       socket.unref();
       connections.add(socket);
       socket.once('close', () => connections.delete(socket));
@@ -73,8 +69,6 @@ export class FlightServer {
         coordinator.serve(new SocketConnection<FlightResponse>(socket));
       });
     });
-    server.listen(socketPath);
-    await once(server, 'listening');
     server.unref();
     const started = new FlightServer(server, connections, coordinator, term);
     // The term may have been lost while the server started.
@@ -99,7 +93,7 @@ export class FlightServer {
   async close() {
     this.#closeOnLoss[Symbol.dispose]();
     this.#coordinator.close();
-    const closed = this.#server[Symbol.asyncDispose]();
+    const closed = this.#server.close();
     for (const socket of this.#connections) socket.destroySoon();
     await closed;
     await this.#term.resign();

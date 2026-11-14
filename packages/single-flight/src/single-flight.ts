@@ -1,6 +1,9 @@
+import { resolve } from 'node:path';
+
 import { type Clock, untilAborted } from '@zukhruf/async';
 import type { FencedLease } from '@zukhruf/fencing';
 import { LeaseLostError } from '@zukhruf/lease';
+import { PipeEndpoint } from '@zukhruf/pipes';
 
 import { FlightClient, type Lead } from './client/flight-client.ts';
 import type { Codec } from './codec.ts';
@@ -8,7 +11,6 @@ import { ConnectionSupervisor } from './connection/connection-supervisor.ts';
 import { ElectingConnector } from './connection/electing-connector.ts';
 import { flightElection } from './connection/flight-election.ts';
 import { LocalDirectoryConnector } from './connection/local-directory-connector.ts';
-import { socketPathFor } from './connection/socket-path.ts';
 import { FlightServer } from './coordinator/flight-server.ts';
 import {
   FlightFailedError,
@@ -72,7 +74,10 @@ export class SingleFlight<T> implements AsyncDisposable {
 
   constructor({ directory, codec, clock }: SingleFlightOptions<T>) {
     this.#codec = codec;
-    const socketPath = socketPathFor(directory);
+    // A Unix socket file in the directory on macOS and Linux; on Windows, a named pipe named by a hash of that path.
+    const endpoint = new PipeEndpoint(resolve(directory, 'flight.sock'), {
+      prefix: 'zukhruf-single-flight',
+    });
     const election = flightElection(directory, POLL_INTERVAL, clock);
     const locks = new KeyLocks(directory, POLL_INTERVAL, clock);
     this.#client = new FlightClient(
@@ -80,7 +85,7 @@ export class SingleFlight<T> implements AsyncDisposable {
         new LocalDirectoryConnector(
           directory,
           new ElectingConnector({
-            socketPath,
+            address: endpoint.address,
             election,
             pollInterval: POLL_INTERVAL,
             clock,
@@ -88,7 +93,7 @@ export class SingleFlight<T> implements AsyncDisposable {
               // Until serving has fully started, a failure closes the new server, so no server outlives its term.
               await using starting = new AsyncDisposableStack();
               starting.adopt(
-                await FlightServer.start(socketPath, term, { locks }),
+                await FlightServer.start(endpoint, term, { locks }),
                 (started) => started.close(),
               );
               this.#servers.use(starting.move());

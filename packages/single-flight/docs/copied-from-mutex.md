@@ -75,8 +75,8 @@ The message names the single flight's coordinator, not the socket store's leader
 - In the mutex, `#lead` wraps its own socket in `OwnServerConnection`, so its close waits until the own lock server read the last release ([mutex ADR 0018](../../mutex/docs/adr/0018-the-next-leader-skips-the-grace-window-after-a-clean-shutdown.md)). `#coordinate` uses a plain `SocketConnection`.
 
 **`lock-stores/socket/socket-store.ts` (`socketPathFor`, `SOCKET_PATH_LIMIT`) → `connection/socket-path.ts`.**
-The socket file is `flight.sock`. The Windows pipe is `\\.\pipe\single-flight-<hash>`. The 103-byte limit stays.
-Note: on macOS 27 with Node.js 26, a probe listened and connected on socket paths of 104 to 111 bytes. The mutex's comment says that macOS stops at 104 bytes. The extraction must check that premise before it keeps the limit.
+Both copies are gone. `@zukhruf/sqlite-notify` needed the same code, a third place, so it moved to `@zukhruf/pipes` (`88c36cd`). The mutex uses it since `4be9834`, and this package since the commit that removed `connection/socket-path.ts`. `single-flight.ts` makes `new PipeEndpoint(resolve(directory, 'flight.sock'), { prefix: 'zukhruf-single-flight' })`. The Windows pipe is `\\.\pipe\zukhruf-single-flight-<hash of the socket path>`. The limit is 103 bytes on macOS and 107 bytes on Linux.
+Note: on 2026-10-09, on macOS 27 with Node.js 26.10.0, a probe listened and connected on socket paths of 104 to 111 bytes. That is not true on Node.js 26.13.0 or 24.22.2: the same probe on the same computer takes 104 bytes and refuses 105 bytes with `EINVAL` (pool map research 20h, section 2). The limit of 103 bytes keeps one byte less, for the ending zero byte of `sun_path`, as `@zukhruf/pipes` does.
 
 **`lock-stores/socket/lock-server.ts` → `coordinator/flight-server.ts`.**
 
@@ -244,7 +244,7 @@ A third place is the time to move it into `src/testing` (backlog #4087).
 - **As is:** the connection, the connection supervisor, and the socket connection.
 - **With parameters:**
   - the election: done in `@zukhruf/election`, where the names of its two files are options. The mutex and this package use it;
-  - the socket path: the file name and the pipe prefix;
+  - the socket path: done in `@zukhruf/pipes`, where the file name and the pipe prefix are what `PipeEndpoint` takes. The mutex and this package use it;
   - the handshake: the protocol name and the version;
   - the electing connector: the `connected` callback, and what wraps the connection. It checks no message: the class that reads the protocol checks it;
   - the server: what serves each connection, and how `close` ends each connection;

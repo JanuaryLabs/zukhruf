@@ -16,14 +16,15 @@ import { factTimeout } from './testing/fact-timeout.ts';
 import { type WorkerProcess, startWorker } from './testing/worker-process.ts';
 
 /**
- * Where the processes on `directory` meet their coordinator: a socket file in
- * the directory, or on Windows a named pipe whose name comes from the
- * directory, as this protocol names it.
+ * Where the processes on `directory` meet their coordinator: `flight.sock` in
+ * the directory, or on Windows a named pipe whose name comes from that socket
+ * path, as this protocol names it.
  */
 function socketPathOf(directory: string) {
-  if (process.platform !== 'win32') return join(directory, 'flight.sock');
-  const id = hash('sha256', resolve(directory).toLowerCase()).slice(0, 32);
-  return `\\\\.\\pipe\\single-flight-${id}`;
+  const socketPath = resolve(directory, 'flight.sock');
+  if (process.platform !== 'win32') return socketPath;
+  const id = hash('sha256', socketPath.toLowerCase()).slice(0, 32);
+  return `\\\\.\\pipe\\zukhruf-single-flight-${id}`;
 }
 
 /** A caller process on `directory`, ready for orders. */

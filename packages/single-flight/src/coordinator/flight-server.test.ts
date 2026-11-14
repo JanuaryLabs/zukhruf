@@ -7,6 +7,7 @@ import { describe, test } from 'node:test';
 
 import { SqliteElection } from '@zukhruf/election';
 import type { FileLock } from '@zukhruf/fs';
+import { PipeEndpoint } from '@zukhruf/pipes';
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { LeaseLostError, SingleFlight } from '../index.ts';
@@ -94,9 +95,11 @@ describe('Flight server', () => {
       loss.abort();
 
       // Act
-      const starting = FlightServer.start(socketPath, term, {
-        locks: new KeyLocks(directory.path, 10, globalThis),
-      });
+      const starting = FlightServer.start(
+        new PipeEndpoint(socketPath, { prefix: 'zukhruf-single-flight' }),
+        term,
+        { locks: new KeyLocks(directory.path, 10, globalThis) },
+      );
 
       // Assert
       await assert.rejects(starting, LeaseLostError);
@@ -121,7 +124,9 @@ describe('Flight server', () => {
       ).campaign();
       assert.ok(term, 'The first campaign in an empty directory must win');
       const server = await FlightServer.start(
-        join(directory.path, 'flight.sock'),
+        new PipeEndpoint(join(directory.path, 'flight.sock'), {
+          prefix: 'zukhruf-single-flight',
+        }),
         term,
         { locks: new KeyLocks(directory.path, 10, globalThis) },
       );
