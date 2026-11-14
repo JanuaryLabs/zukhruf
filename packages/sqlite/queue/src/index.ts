@@ -37,6 +37,7 @@ import { transaction } from '@zukhruf/sqlite-transaction';
 
 import { Activity } from './activity.ts';
 import { Attorney } from './attorney.ts';
+import { Contractor } from './contractor.ts';
 import { DatabaseError } from './database-error.ts';
 import { Database } from './database.ts';
 import { CurrentOperation } from './in-flight.ts';
@@ -53,7 +54,6 @@ import { QueueRows } from './queue-rows.ts';
 import type { QueueRow } from './queue-rows.ts';
 import { Recurrence } from './recurrence.ts';
 import { Row } from './rows.ts';
-import { queueSchema } from './schema.ts';
 import { SqlValues } from './sql-values.ts';
 import { StartAfter } from './start-after.ts';
 import { Supervisor } from './supervisor.ts';
@@ -284,7 +284,7 @@ export class SqliteJobQueue
         }),
       };
     }
-    this.applySchema();
+    Contractor.start(this.db);
     if (Activity.isAttachable(this.#clock)) {
       this.#attachment = {
         kind: 'attached',
@@ -1281,12 +1281,6 @@ export class SqliteJobQueue
         WHERE queue_name = ? AND key = ?`,
       )
       .run(SqlValues.text(name), SqlValues.text(key));
-  }
-
-  private applySchema(): void {
-    queueSchema.apply(this.db);
-    // The cron claim's one row (plans.js:288-298).
-    this.db.exec('INSERT OR IGNORE INTO pgboss_version (singleton) VALUES (1)');
   }
 
   private mapQueueUpdateOptions(options: UpdateQueueOptions) {

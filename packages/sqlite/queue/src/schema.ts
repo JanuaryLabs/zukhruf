@@ -93,10 +93,12 @@ export const queueSchema = new Declaration(
     updated_on TEXT NOT NULL,
     PRIMARY KEY (queue_name, key)
   )`,
-    // The instance-wide cron claim, one row (node_modules/pg-boss/dist/
-    // plans.js:288-298, 1078-1086): when a pass last ran.
+    // One row (node_modules/pg-boss/dist/plans.js:288-298): the release that
+    // made the schema (docs/adr/0006), and the instance-wide cron claim, when
+    // a pass last ran (plans.js:1078-1086).
     `CREATE TABLE pgboss_version (
     singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+    version TEXT,
     cron_on TEXT
   )`,
     `CREATE INDEX pgboss_job_fetch_i

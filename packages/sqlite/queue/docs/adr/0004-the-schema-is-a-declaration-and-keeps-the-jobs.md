@@ -1,5 +1,7 @@
 # The schema is a declaration and keeps the jobs
 
+Changed in part on 2026-11-14 (#4369) by [ADR 0006](./0006-the-file-records-the-release-that-made-its-schema-and-an-older-release-leaves-it-alone.md): `pgboss_version` also records the release that last applied the declaration, and `start()` applies it only when the file records no later release. The rest of the decision below stays true.
+
 The queue file keeps the jobs and the schedules after the program stops. A new release of this package can change a table or an index, for example to add a column for the supervisor. Then `start()` opens a file that an earlier release made, and the tables in the file are not the tables that the new code reads.
 
 Before this change, `start()` ran `CREATE TABLE IF NOT EXISTS` and `CREATE INDEX IF NOT EXISTS`. SQLite skips such a statement when the file has an object with that name, also when the object is different. The rule was: delete the queue file of an earlier release. A program that kept such a file saw these failures:

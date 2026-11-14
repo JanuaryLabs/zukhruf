@@ -196,6 +196,50 @@ describe('a queue file an earlier release made', () => {
     }
   });
 
+  it('runs the job and fires the schedule of a file whose pgboss_version a release before the version column made', async () => {
+    await using scratch = await new TemporaryFiles().directory('queue-');
+    const path = join(scratch.path, 'queue.sqlite');
+    const clock = new TestClock('2026-01-01T00:00:30.000Z');
+    const earlier = new SqliteJobQueue({ path, clock, schedule: false });
+    await earlier.start();
+    await earlier.createQueue('jobs');
+    await earlier.send('jobs', { n: 1 }, { id: id(1) });
+    await earlier.stop({ graceful: false, close: true });
+    {
+      // pgboss_version as the releases before #4369 made it. No public
+      // operation makes an older shape, so it is written in that release's
+      // SQL.
+      using database = open(path);
+      database.exec(`DROP TABLE pgboss_version;
+        CREATE TABLE pgboss_version (
+          singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+          cron_on TEXT
+        );
+        INSERT INTO pgboss_version (singleton) VALUES (1)`);
+    }
+    const queue = new SqliteJobQueue({ path, clock, supervise: false });
+    const errors: string[] = [];
+    queue.on('error', (error) => errors.push(error.message));
+    try {
+      await queue.start();
+      await queue.createQueue('ticks');
+      await queue.schedule('ticks', '* * * * *', { from: 'today' });
+      const ran: string[] = [];
+      await queue.work('jobs', async (jobs) => {
+        ran.push(...jobs.map((job) => job.id));
+      });
+      await clock.tick(30_000);
+      await clock.tick(2000);
+
+      assert.deepEqual(ran, [id(1)]);
+      const [fired] = await jobData(queue, 'ticks');
+      assert.deepEqual(fired, { from: 'today' });
+      assert.deepEqual(errors, []);
+    } finally {
+      await queue.stop({ graceful: false, close: true });
+    }
+  });
+
   it('keeps a job queued while its key runs on a singleton queue whose index an earlier release made without UNIQUE', async () => {
     await using scratch = await new TemporaryFiles().directory('queue-');
     const path = join(scratch.path, 'queue.sqlite');

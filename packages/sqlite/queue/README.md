@@ -70,7 +70,8 @@ A new release can change the tables. A file that an earlier release made keeps i
 
 - The schema is a declaration of [`@zukhruf/sqlite-drift`](../drift) with `rows: 'keep'`. `start()` compares the tables and the indexes in the file with the declaration.
 - `start()` makes each missing object. It rebuilds each stale table and keeps its rows, and it replaces each stale index.
-- No release writes a migration, and no file keeps a version number.
+- No release writes a migration. The file records the version of the release that last applied the schema, and the version comes from the package itself: no person keeps a number ([ADR 0006](./docs/adr/0006-the-file-records-the-release-that-made-its-schema-and-an-older-release-leaves-it-alone.md)).
+- A release that starts on a file of a later release changes nothing and goes on, as pg-boss does on a newer schema.
 - When a kept row does not fit the declared table, `start()` fails with the error of SQLite, and the file stays as it was.
 - When `pgboss_queue` is stale, the rebuild turns foreign keys off around its own transaction. Do not call `start()` in a transaction of your own.
 
