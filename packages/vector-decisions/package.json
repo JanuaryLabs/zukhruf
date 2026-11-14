@@ -36,5 +36,8 @@
     "!dist/spec/**",
     "!**/*.tsbuildinfo",
     "!**/*.test.*"
-  ]
+  ],
+  "devDependencies": {
+    "@zukhruf/testing": "*"
+  }
 }
