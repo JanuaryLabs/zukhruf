@@ -28,21 +28,11 @@ jobs:
       - name: Set up the workspace
         uses: ./.github/actions/setup-workspace
 
-      # sqlite-open's native target builds the library of each platform with
-      # zig cc, here and in the release (packages/sqlite/open/docs/adr/0006).
-      - name: Setup Zig
-        uses: mlugg/setup-zig@v2
-        with:
-          version: 0.16.0
+      - name: Set up Zig
+        uses: ./.github/actions/setup-zig
 
-      # The release commit changes every package.json and gets no CI run, so a
-      # compare with the last green commit always sees every project changed.
       - name: Find what changed since the last release
-        run: |
-          base=$(git describe --tags --abbrev=0 --match 'release/*')
-          head=$(git rev-parse HEAD)
-          echo "NX_BASE=$base" >> "$GITHUB_ENV"
-          echo "NX_HEAD=$head" >> "$GITHUB_ENV"
+        uses: ./.github/actions/affected-range
 
       - parallel:
           - name: Check Nx workspace sync
@@ -58,8 +48,9 @@ jobs:
           - name: Check that a copy ledger records each copy in the test files
             run: npx nx run copy-check:check
 
+      # The projects tagged platform:darwin run in the darwin job.
       - name: Lint, type check, test and build what changed
-        run: npx nx affected -t lint typecheck test test-network build
+        run: npx nx affected -t lint typecheck test test-network build --exclude='tag:platform:darwin'
         env:
           NX_PROFILE: nx-profile.json
 
@@ -73,3 +64,37 @@ jobs:
             nx-profile.json
             packages/**/test-results.xml
             apps/**/test-results.xml
+
+  # A project that drives a facility of macOS, such as launchd, runs all its
+  # targets on a macOS runner (docs/adr/0005). The pattern selects every project
+  # and then takes the platform:darwin ones back out of the exclusion.
+  darwin:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up the workspace
+        uses: ./.github/actions/setup-workspace
+
+      - name: Set up Zig
+        uses: ./.github/actions/setup-zig
+
+      - name: Find what changed since the last release
+        uses: ./.github/actions/affected-range
+
+      - name: Lint, type check, test and build what changed
+        run: npx nx affected -t lint typecheck test test-network build --exclude='*,!tag:platform:darwin'
+        env:
+          NX_PROFILE: nx-profile.json
+
+      - name: Keep the task profile and test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: darwin
+          path: |
+            nx-profile.json
+            packages/**/test-results.xml

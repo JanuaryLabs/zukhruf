@@ -4,6 +4,8 @@
 
 Two exit codes tell the state (decoded with `launchctl error` on macOS 27.2): 36 is "Operation now in progress", and 3 is "No such process". A bootout of a label that launchd does not have answers 3.
 
+A probe on macOS 27.2 (2026-11-15) never saw 36. A job that ignores `SIGTERM`, with `ExitTimeOut` 3, answered 0 to each `bootout` every 250 ms for 3 seconds, while `print` showed `state = SIGTERMed`, and then 3. Eight bootouts at once all answered 0. A `bootstrap` of the label in those 3 seconds exited 5 (Input/output error). A `/bin/sleep` job answered 0, and 3 to the next bootout 60 ms later.
+
 The leading tools and context-compiler (research record, 2026-11-15):
 
 - Homebrew runs `bootout` again every second while it answers 36 or the service is still found, up to 60 seconds by default (`cli.rb:291-329`, `stop.rb:37`). It stops on 3 and on 125 (`system.rb:14`).

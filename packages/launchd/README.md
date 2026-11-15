@@ -1,6 +1,6 @@
 # @zukhruf/launchd
 
-> Status: design for review. The package has no code yet; this README is its API on paper.
+> Status: design for review.
 
 launchd starts and stops the daemons and agents of macOS. A program that must run with no terminal, at login, on a schedule, or again after a crash, gives launchd a job: a property list file in the format of launchd.plist(5). `launchctl` loads the job into a domain, and launchd runs it as a service. Each program that does this must answer the same questions. Which domain is right? Which subcommands of `launchctl` are right, now that Apple calls `load` and `unload` legacy? How does a changed job replace the service that runs? When has launchd let go of the old service? What does each exit code of `launchctl` mean? This package answers them once.
 
@@ -39,7 +39,7 @@ The package sorts the keys of each dictionary before it renders them, so the ord
 
 A bootstrap starts the process only when the job asks for it: with `RunAtLoad`, or with `KeepAlive`, which "implicitly implies RunAtLoad" (launchd.plist(5), lines 196-197). Else launchd waits for the launch conditions of the job, or for `kickstart()`.
 
-A signal cancels the wait for the old service. The install then rejects with the reason of the signal. The new job file is in place, and launchd goes on with the bootout. Install again when launchd has forgotten the old service.
+A signal cancels the wait for the old service. The install then rejects with the reason of the signal. The old job file stays, and launchd goes on with the bootout. The next install finds other bytes, and does the work again.
 
 ## Run the service now, and restart it
 
@@ -62,6 +62,8 @@ When launchd has no such service in the domain, `kickstart()` rejects with `Serv
 await service.kill('SIGHUP');
 await service.kill(15);
 ```
+
+When the service is loaded and has no process, launchctl exits 3 (No process to signal), and `kill()` rejects with `LaunchctlError`. When launchd has no such service in the domain, `kill()` rejects with `ServiceNotFoundError`.
 
 A job with `KeepAlive: true` starts again after its process ends. By default, launchd starts a job at most once every 10 seconds (`ThrottleInterval`, launchd.plist(5), lines 325-328).
 
@@ -89,11 +91,11 @@ switch (state.state) {
 
 `pid` and `lastExitStatus` come from two lines of the output: `pid =` and `last exit code =`. Apple says that the output of `print` "is NOT API in any sense at all" (launchctl(1), lines 222-224). [ADR 0006](./docs/adr/0006-the-state-of-one-service-comes-from-print-and-only-two-of-its-lines.md) says why the package reads it, and how it stays safe.
 
-`lastExitStatus` is `undefined` when launchd shows no number: `(never exited)`, or no `last exit code` line. A service that the system ended for memory (a jetsam exit) shows `last exit reason` and no `last exit code` on macOS 27.2.
+`lastExitStatus` is `undefined` when launchd shows no number: `(never exited)`, or no `last exit code` line. On macOS 27.2, a process that a process signal ended shows `last terminating signal = Terminated: 15` and no `last exit code`, and a service that the system ended for memory (a jetsam exit) shows `last exit reason` and no `last exit code`.
 
 ## Enable and disable
 
-`disable()` sets the disabled override of the label. launchd then refuses to load the service in the domain until `enable()`, also after a restart of the computer (launchctl(1), lines 90-95). launchd keeps the override itself, apart from the job file. A disable changes only the next loads: boot out a loaded service too.
+`disable()` sets the disabled override of the label. launchd then refuses to load the service in the domain until `enable()`, also after a restart of the computer (launchctl(1), lines 90-95): `bootstrap()` rejects with `LaunchctlError`, exit code 5 (Input/output error). launchd keeps the override itself, apart from the job file. A disable changes only the next loads: boot out a loaded service too.
 
 ```ts
 await service.bootout();
@@ -109,7 +111,7 @@ Both take a label that is not loaded: `install()` enables the service before it 
 
 `bootout()` removes the service from the domain. launchd stops the process and forgets the service. The job file stays in the folder, and "Some domains will implicitly bootstrap pre-defined paths as part of their creation" (launchctl(1), lines 85-88). Thus an enabled agent loads again at the next login.
 
-launchd answers a bootout before the process is gone, and refuses a bootstrap of the label until then. Thus `bootout()` runs `launchctl bootout` again every second. While the bootout is in progress, launchd answers 36 (Operation now in progress). When launchd has forgotten the service, it answers 3 (No such process), and `bootout()` resolves ([ADR 0004](./docs/adr/0004-a-bootout-is-repeated-until-launchd-forgets-the-service.md)). launchd sends `SIGTERM` to the process, and `SIGKILL` after the `ExitTimeOut` of the job (launchd.plist(5), lines 319-323). A signal cancels the wait.
+launchd answers a bootout before the process is gone, and refuses a bootstrap of the label until then. Thus `bootout()` runs `launchctl bootout` again every second. While the process still ends, launchd answers 0 again on macOS 27.2. Homebrew and context-compiler also wait on 36 (Operation now in progress), and so does the package. When launchd has forgotten the service, it answers 3 (No such process), and `bootout()` resolves ([ADR 0004](./docs/adr/0004-a-bootout-is-repeated-until-launchd-forgets-the-service.md)). launchd sends `SIGTERM` to the process, and `SIGKILL` after the `ExitTimeOut` of the job (launchd.plist(5), lines 319-323). A signal cancels the wait.
 
 `bootstrap()` loads the job file into the domain again.
 
@@ -132,7 +134,7 @@ launchd keeps the override of the label after an uninstall. A later install of t
 
 ## List the installed jobs
 
-`installed()` lists the files `*.plist` in the folder of the domain, sorted by name. It gives a `Service` for each file, with the label from the file name. launchd.plist(5) asks that a job file is named `<Label>.plist` (lines 59-62). `installed()` does not read the files. When the folder does not exist, the list is empty.
+`installed()` lists the files `*.plist` in the folder of the domain, sorted by name. It gives a `Service` for each file, with the label from the file name. launchd.plist(5) asks that a job file is named `<Label>.plist` (lines 59-62). A name that gives no label, such as `.plist`, is not listed. `installed()` does not read the files. When the folder does not exist, the list is empty.
 
 ```ts
 for (const service of await launchd.installed()) {
@@ -142,7 +144,7 @@ for (const service of await launchd.installed()) {
 
 The folder of agents holds the job files of other programs too, and `installed()` lists them.
 
-`service(label)` gives the handle of one label in the domain. It reads nothing and runs nothing.
+`service(label)` gives the handle of one label in the domain. It reads nothing and runs nothing. A label that is not one file name throws the `RangeError` of `install()`, so `uninstall()` never removes a file outside the folder.
 
 ```ts
 const sync = launchd.service('com.example.sync');
@@ -151,7 +153,7 @@ if ((await sync.state()).state === 'not loaded') await sync.bootstrap();
 
 ## Daemons
 
-`Launchd.daemons()` gives the daemons of the `system` domain. Their job files are in `/Library/LaunchDaemons`. For the system domain, "root privileges are required to make modifications" (launchctl(1), lines 30-32). The package does not ask for root. A process that is not root gets `PermissionDeniedError`: from the write of the job file (`EACCES` or `EPERM`), or from `launchctl` (exit code 1).
+`Launchd.daemons()` gives the daemons of the `system` domain. Their job files are in `/Library/LaunchDaemons`. For the system domain, "root privileges are required to make modifications" (launchctl(1), lines 30-32). The package does not ask for root. A process that is not root gets `PermissionDeniedError`: from `launchctl` (exit code 1), or from the write of the job file (`EACCES` or `EPERM`). `install()` and `uninstall()` get it from their first bootout, before they write or remove anything.
 
 ```ts
 import { Launchd, PermissionDeniedError } from '@zukhruf/launchd';
@@ -282,19 +284,18 @@ An error has its own class when a caller does something different after it ([ADR
 | `ServiceNotFoundError`    | `kickstart()` or `kill()`, and launchctl exits 113 (Could not find specified service): the domain has no service with the label             | Install the job, or bootstrap its job file |
 | `PermissionDeniedError`   | The write or the removal of the job file fails with `EACCES` or `EPERM`, or launchctl exits 1 (Operation not permitted). Daemons need root. | Run as root, or install an agent           |
 | `LaunchdUnavailableError` | `/bin/launchctl` does not start (`ENOENT`): this system is not macOS                                                                        | Skip the work for launchd on this system   |
-| `ServiceDisabledError`    | Only if bootstrap of a disabled service gives its own exit code; the build probes it                                                        | `enable()`, then `bootstrap()`             |
 
-Each class extends a base class, so a broad catch still works. `LaunchdError` is the base of every error of the package. `LaunchctlError` is the base of every answer of launchctl that is an error: it has `args`, `exitCode` and `stderr`. An exit code with no class of its own is a `LaunchctlError`. For example, a bootstrap that launchd refuses often exits 5 (Input/output error) with no reason, and stderr says "Try re-running the command as root for richer errors." `launchctl error <code>` decodes each code.
+Each class extends a base class, so a broad catch still works. `LaunchdError` is the base of every error of the package. `LaunchctlError` is the base of every answer of launchctl that is an error: it has `args`, `exitCode` and `stderr`. An exit code with no class of its own is a `LaunchctlError`. For example, a bootstrap that launchd refuses often exits 5 (Input/output error) with no reason, and stderr says "Try re-running the command as root for richer errors." A bootstrap of a disabled service exits 5 too, not 119 (Service is disabled), so a disabled service has no class of its own. `launchctl error <code>` decodes each code.
 
 `PermissionDeniedError` comes from the file or from launchctl, so it extends `LaunchdError`. Its `cause` is the error of Node.js or the `LaunchctlError`. Another error of the file system, such as `ENOSPC`, stays the error of Node.js. A cancel rejects with the reason of the signal, as each cancel does ([the async glossary](../async/CONTEXT.md)).
 
 Some answers of launchctl are not errors here:
 
-| Call                                    | Answer of launchctl            | Result                    |
-| --------------------------------------- | ------------------------------ | ------------------------- |
-| `state()`                               | 113                            | `{ state: 'not loaded' }` |
-| `bootout()`, `uninstall()`, `install()` | 36 (Operation now in progress) | the wait goes on          |
-| `bootout()`, `uninstall()`, `install()` | 3 (No such process)            | the wait ends             |
+| Call                                    | Answer of launchctl                  | Result                    |
+| --------------------------------------- | ------------------------------------ | ------------------------- |
+| `state()`                               | 113                                  | `{ state: 'not loaded' }` |
+| `bootout()`, `uninstall()`, `install()` | 0, or 36 (Operation now in progress) | the wait goes on          |
+| `bootout()`, `uninstall()`, `install()` | 3 (No such process)                  | the wait ends             |
 
 ```ts
 import {
@@ -622,11 +623,6 @@ export class ServiceNotFoundError extends LaunchctlError {
   readonly target: string;
 }
 
-/** Only if bootstrap of a disabled service gives its own exit code; the build probes it. */
-export class ServiceDisabledError extends LaunchctlError {
-  readonly target: string;
-}
-
 /** EACCES or EPERM on the job file, or launchctl exit code 1. `cause` is the error of Node.js or the LaunchctlError. */
 export class PermissionDeniedError extends LaunchdError {}
 
@@ -658,8 +654,8 @@ Each `launchctl` below is `/bin/launchctl`, started with `execFile` and no shell
 
 The package leads. Each repository below changes to fit it, with no adapter. Each change is a backlog item in that repository.
 
-| Repository                                          | Change                                                                                                                                                                                                                                                                                                                                                  | Backlog              |
-| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------- |
-| context-compiler `apps/cli/src/background-watch.ts` | `BackgroundWatch` moves onto the package: `Launchd.agents()`, `install()` in place of `plutil` and its own bootout loop, and `uninstall()`. The job file becomes mode `0644`, so the Google client secret leaves it first (#4280). The end-to-end test (`apps/cli/src/cli.e2e.test.ts:4211-4330`) reads `state()` in place of its own parse of `print`. | backlog item to come |
-| mac-cleanup `src/tasks/macos/launch-agents.ts`      | `assertNotLoaded` reads `launchd.service(label).state()` in place of `launchctl print` and its check of 113, and its advice names `service.target`. It still reads the job files of other programs itself. Its tests (`test/learned.test.ts:476-532, 847-872`) change with it.                                                                          | backlog item to come |
-| agent-plugin                                        | The nightly job of backlog #3821, with `StartCalendarInterval`, uses `install()` when it is built.                                                                                                                                                                                                                                                      | backlog item to come |
+| Repository                                          | Change                                                                                                                                                                                                                                                                                                                                                  | Backlog                             |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
+| context-compiler `apps/cli/src/background-watch.ts` | `BackgroundWatch` moves onto the package: `Launchd.agents()`, `install()` in place of `plutil` and its own bootout loop, and `uninstall()`. The job file becomes mode `0644`, so the Google client secret leaves it first (#4280). The end-to-end test (`apps/cli/src/cli.e2e.test.ts:4211-4330`) reads `state()` in place of its own parse of `print`. | context-compiler #4441, after #4280 |
+| mac-cleanup `src/tasks/macos/launch-agents.ts`      | `assertNotLoaded` reads `launchd.service(label).state()` in place of `launchctl print` and its check of 113, and its advice names `service.target`. It still reads the job files of other programs itself. Its tests (`test/learned.test.ts:476-532, 847-872`) change with it.                                                                          | mac-cleanup #4442                   |
+| agent-plugin                                        | The nightly job of backlog #3821, with `StartCalendarInterval`, uses `install()` when it is built.                                                                                                                                                                                                                                                      | agent-plugin #3821                  |

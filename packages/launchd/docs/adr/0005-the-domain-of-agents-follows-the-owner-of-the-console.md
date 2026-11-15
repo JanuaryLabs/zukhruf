@@ -20,6 +20,6 @@ The owner of `/dev/console` is the user at the GUI. When this process's user own
 ## Consequences
 
 - `Launchd.agents()` reads the owner of `/dev/console` one time, when it makes the handle, and the handle keeps its domain. When the owner of the console changes, for example after a switch of users, make a new handle.
-- `<uid>` is `process.getuid()`. The folder of agents is `Library/LaunchAgents` in the home folder of the same uid, from the user database (`os.userInfo().homedir`), not from `$HOME`. The domain and the folder then name the same user.
+- `<uid>` and the home folder come from one record of the user database, `os.userInfo()`, not from `$HOME`. The folder of agents is `Library/LaunchAgents` in that home folder. The domain and the folder then name the same user.
 - `Launchd.daemons()` uses the `system` domain and the folder `/Library/LaunchDaemons`. It reads nothing.
 - Over SSH, an agent loads into `user/<uid>`. `state()` reads the domain of its handle, so it finds that service, and a handle for `gui/<uid>` does not.

@@ -1,0 +1,13 @@
+name: Find what changed since the last release
+description: Sets NX_BASE to the last release tag and NX_HEAD to HEAD for nx affected. The release commit changes every package.json and gets no CI run, so a compare with the last green commit always sees every project changed.
+
+runs:
+  using: composite
+  steps:
+    - name: Find what changed since the last release
+      shell: bash
+      run: |
+        base=$(git describe --tags --abbrev=0 --match 'release/*')
+        head=$(git rev-parse HEAD)
+        echo "NX_BASE=$base" >> "$GITHUB_ENV"
+        echo "NX_HEAD=$head" >> "$GITHUB_ENV"

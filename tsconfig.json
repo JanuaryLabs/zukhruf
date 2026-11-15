@@ -124,6 +124,9 @@
     },
     {
       "path": "./tools/copy-check"
+    },
+    {
+      "path": "./packages/launchd"
     }
   ]
 }

@@ -17,6 +17,10 @@ A probe on macOS 27.2 showed the lines:
 - `print gui/501/com.apple.Finder` shows `state = running`, `pid = 832` and `last exit code = (never exited)`.
 - A service that ran and ended shows `state = not running` and `last exit code = 0`, with no `pid` line.
 - A service that the system ended for memory (a jetsam exit) shows `last exit reason = JETSAM_REASON_MEMORY_IDLE_EXIT`, and no `last exit code` line. `list` shows `"LastExitStatus" = 9` for it.
+- A job of `/usr/bin/false` shows `last exit code = 1`, and a job of `/bin/sh -c 'exit 3'` shows `last exit code = 3`. A loaded job that never ran shows `state = not running` and `last exit code = (never exited)`.
+- A process that `launchctl kill SIGTERM` or `kickstart -k` ended shows `last terminating signal = Terminated: 15`, and `kill 9` shows `last terminating signal = Killed: 9`. Neither shows a `last exit code` line.
+- Right after a bootstrap, a service shows `state = xpcproxy` and its `pid` line.
+- The two lines are at the top level of the output, indented with one tab. Nested sections, such as `resource coalition`, indent their lines with two tabs, and some have a `state =` line of their own.
 
 ## Considered Options
 
@@ -27,8 +31,8 @@ A probe on macOS 27.2 showed the lines:
 ## Consequences
 
 - `state()` gives `{ state: 'not loaded' }` for exit code 113. With a `pid` line, it gives `running` and the PID. With no `pid` line, it gives `not running`.
-- `lastExitStatus` is the number of the `last exit code` line. It is `undefined` when the line has no number, as `(never exited)`, and when there is no such line, as after a jetsam exit.
-- The build probes the line for a job that a process signal ended, and the parser follows what it shows. With no label, `list` shows "the negative of the signal which stopped the job" in its second column (launchctl(1), lines 462-468): `-9` for the jetsam exit above, which `list <label>` shows as `9`.
+- `lastExitStatus` is the number of the `last exit code` line. It is `undefined` when the line has no number, as `(never exited)`, and when there is no such line, as after a jetsam exit or a process signal.
+- The package reads only the two lines at the top level: the line starts with one tab. A process signal shows in `last terminating signal`, which the package does not read, so a process that a signal ended has no `lastExitStatus`. With no label, `list` shows "the negative of the signal which stopped the job" in its second column (launchctl(1), lines 462-468): `-9` for the jetsam exit above, which `list <label>` shows as `9`.
 - The package stays safe on output that is not API in three ways. "Not loaded" comes from the exit code, and launchctl(1) documents the exit code as the error (lines 585-588). The package reads two lines, and no other part of the output can break it. The macOS CI job runs the real `print` on each runner image, so a change of the two lines fails a test there ([root ADR 0005](../../../../docs/adr/0005-a-project-that-needs-macos-runs-its-targets-on-a-macos-runner.md)).
 - A change of Apple that drops or renames `pid =` makes a running service look `not running`. The tests on the macOS runner find it, and the parser follows the new line.
 - `state()` of a daemon needs no root: "Anyone may read or query the system domain" (launchctl(1), lines 30-31).

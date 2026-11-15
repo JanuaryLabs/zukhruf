@@ -26,7 +26,7 @@ The maintainer chose on 2026-11-15: "macOS job for darwin projects".
 
 ## Considered Options
 
-- **A fake `launchctl`, as Homebrew.** The tests then prove the fake. They do not prove the answers of launchd: 36 and 3 of a bootout, 113 of `print`, the job files that launchd accepts, and the lines of `print` that change with macOS.
+- **A fake `launchctl`, as Homebrew.** The tests then prove the fake. They do not prove the answers of launchd: 0 and 3 of a repeated bootout, 113 of `print`, the job files that launchd accepts, and the lines of `print` that change with macOS.
 - **The real tests only on the Mac of a developer.** CI never runs them, and a green CI says nothing about the project. That is a split by the operating system under another name.
 - **A macOS job for the projects that need macOS.** This option was selected.
 
