@@ -30,6 +30,13 @@ export interface FakeEngineOptions {
    * close with unread input.
    */
   hijack?: (request: IncomingMessage, socket: Duplex) => void;
+  /**
+   * The high-water mark of the sockets of an engine with `hijack`, one byte
+   * when absent. With one byte, the body of an exec start fills it, and Node
+   * (26.13.0) does not read the upgraded socket again: neither the input nor
+   * its end comes. A handler that reads the input of an exec needs more.
+   */
+  highWaterMark?: number;
 }
 
 /**
@@ -44,7 +51,7 @@ export async function fakeEngine(options: FakeEngineOptions) {
   const allClosed = Promise.withResolvers<void>();
   const { hijack } = options;
   const server = createServer(
-    hijack ? { highWaterMark: 1 } : {},
+    hijack ? { highWaterMark: options.highWaterMark ?? 1 } : {},
     (request, response) => {
       paths.push(request.url ?? '');
       if (request.method === 'GET' && request.url === '/_ping') {

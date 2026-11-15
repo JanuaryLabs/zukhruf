@@ -201,6 +201,8 @@ export class ContainerProcess implements AsyncIterable<OutputChunk> {
     }
     this.#unread = [read()];
 
+    // With no stdin, the input ends at once, as the Docker CLI ends it (ADR 0005).
+    if (!options.stdin) connection.endInput();
     this.stdin = options.stdin
       ? new WritableStream<Uint8Array>({
           write: async (chunk) => {
