@@ -131,4 +131,98 @@ describe('two releases on one queue file', () => {
     assert.deepEqual(found, [id(1)]);
     assert.ok(jobColumns(path).includes('newer_note'));
   });
+
+  it('records this release on a file that fits and records an earlier release', async () => {
+    await using scratch = await new TemporaryFiles().directory('queue-');
+    const path = join(scratch.path, 'queue.sqlite');
+    const first = new SqliteJobQueue({
+      path,
+      schedule: false,
+      supervise: false,
+    });
+    try {
+      await first.start();
+    } finally {
+      await first.stop({ graceful: false, close: true });
+    }
+    {
+      // An earlier release with the schema of this one records its own
+      // version. No public operation records an earlier version, so it is
+      // written in SQL.
+      using database = open(path);
+      database.exec(`UPDATE pgboss_version SET version = '0.0.0'`);
+    }
+    const queue = new SqliteJobQueue({
+      path,
+      schedule: false,
+      supervise: false,
+    });
+    try {
+      await queue.start();
+    } finally {
+      await queue.stop({ graceful: false, close: true });
+    }
+
+    // Only pgboss_version shows the release: the file fits both releases.
+    using database = open(path);
+    const manifest = JSON.parse(
+      await readFile(join(packageRoot, 'package.json'), 'utf8'),
+    );
+    assert.equal(
+      database.prepare('SELECT version FROM pgboss_version').get()?.version,
+      manifest.version,
+    );
+  });
+});
+
+describe('a start next to the write of another program', () => {
+  it('starts on a file that this release made while another connection holds the write lock', async () => {
+    await using scratch = await new TemporaryFiles().directory('queue-');
+    const path = join(scratch.path, 'queue.sqlite');
+    const first = new SqliteJobQueue({
+      path,
+      schedule: false,
+      supervise: false,
+    });
+    try {
+      await first.start();
+    } finally {
+      await first.stop({ graceful: false, close: true });
+    }
+    using writer = open(path);
+    writer.exec('BEGIN IMMEDIATE');
+    using database = open(path, { timeout: 0 });
+    const queue = new SqliteJobQueue({
+      database,
+      schedule: false,
+      supervise: false,
+    });
+    try {
+      await queue.start();
+    } finally {
+      await queue.stop({ graceful: false });
+    }
+  });
+
+  it('starts on a file that a newer release made while another connection holds the write lock, and keeps its column', async () => {
+    await using scratch = await new TemporaryFiles().directory('queue-');
+    const path = join(scratch.path, 'queue.sqlite');
+    const newer = await newerRelease(join(scratch.path, 'newer'));
+    await newer(path);
+    using writer = open(path);
+    writer.exec('BEGIN IMMEDIATE');
+    using database = open(path, { timeout: 0 });
+    const queue = new SqliteJobQueue({
+      database,
+      schedule: false,
+      supervise: false,
+    });
+    try {
+      await queue.start();
+    } finally {
+      await queue.stop({ graceful: false });
+    }
+    writer.exec('ROLLBACK');
+    assert.ok(jobColumns(path).includes('newer_note'));
+  });
 });

@@ -10,6 +10,11 @@ import { queueSchema } from './schema.ts';
 // gets this release's schema with its rows kept (docs/adr/0004, 0006).
 export class Contractor {
   static start(database: DatabaseSync): void {
+    // pg-boss reads isInstalled() and schemaVersion() with no lock
+    // (contractor.js:79-91), and locks only in create() and migrate()
+    // (plans.js:134, :166). A WAL reader does not wait for a writer, so a
+    // file that needs no change starts next to the write of another program.
+    if (Contractor.#settled(database)) return;
     // The rebuild of pgboss_queue needs foreign keys off, which SQLite cannot
     // change inside a transaction, and the read of the release must share the
     // write lock with the apply. In a transaction of the caller, the keys stay
@@ -39,9 +44,29 @@ export class Contractor {
     }
   }
 
+  // The file records a later release, or this release and fits the
+  // declaration. The two reads share one snapshot. The locked transaction
+  // reads both again, so a program that changes the file after this read
+  // cannot make start() act on it.
+  static #settled(database: DatabaseSync): boolean {
+    return transaction(
+      database,
+      () => {
+        const installed = Contractor.#installed(database);
+        if (installed === undefined) return false;
+        if (installed.isAfter(Release.current)) return true;
+        return (
+          installed.version === Release.current.version &&
+          queueSchema.drift(database) === 'fits'
+        );
+      },
+      { mode: 'deferred' },
+    );
+  }
+
   // The release that the file records. A file that a release before the
-  // version column made records none. The schema read runs under the write
-  // lock, so the table cannot change before the apply.
+  // version column made records none. Under the write lock, the table cannot
+  // change before the apply.
   static #installed(database: DatabaseSync): Release | undefined {
     const recorded = database
       .prepare(
