@@ -356,6 +356,24 @@ describe('A replacement in one step', () => {
     );
 
     test(
+      `${writer} with a mode gives the file that mode whatever the process umask takes away`,
+      { ...posixModesOnly },
+      async () => {
+        // Arrange: write bits for the group and others, which the usual umask 022 takes from a new file.
+        await using directory = await new TemporaryFiles().directory(
+          'zukhruf-fs-',
+        );
+        const path = join(directory.path, 'shared');
+
+        // Act
+        await write(path, 'new', { clock: globalThis, mode: 0o666 });
+
+        // Assert
+        assert.equal(await modeOf(path), 0o666);
+      },
+    );
+
+    test(
       `${writer} without a mode gives the file the mode that writeFile gives a new file`,
       { ...posixModesOnly },
       async () => {

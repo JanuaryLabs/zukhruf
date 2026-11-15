@@ -19,7 +19,7 @@ export async function durableWrite(
 ) {
   const draft = draftOf(path);
   try {
-    // The rename keeps the draft's mode, so `mode` is set when the draft is created.
+    // The rename keeps the draft's mode, so the draft gets `mode` before it.
     await writeSynced(draft, content, mode);
     await replaceFile(draft, path, clock);
   } catch (error) {
@@ -36,6 +36,8 @@ async function writeSynced(
   mode: number | undefined,
 ) {
   await using handle = await open(path, 'wx', mode);
+  // The umask masks the mode of a new file; a chmod does not, as in write-file-atomic 5.0.1 (lib/index.js:134).
+  if (mode !== undefined) await handle.chmod(mode);
   await handle.writeFile(content);
   await handle.sync();
 }
