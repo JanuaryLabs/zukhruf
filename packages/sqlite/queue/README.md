@@ -8,7 +8,7 @@ The words in these documents have one meaning each. See the glossary in [CONTEXT
 
 ## Use it
 
-This project is an experiment. It uses `node:sqlite`, and it uses pg-boss for its types and some of its values.
+This project is an experiment. It uses `node:sqlite`, pg-boss for its types and some of its values, and [`@zukhruf/sqlite-notify`](../notify/README.md) for the notify queues.
 
 ```sh
 npm install @zukhruf/sqlite-queue
@@ -62,7 +62,19 @@ const queue: JobQueue = new PgBoss(process.env.DATABASE_URL);
 - The types of the options, the jobs and the results come from pg-boss. Import them from `pg-boss`, for example `import type { Job, SendOptions } from 'pg-boss'`.
 - Job data is `unknown`. `work()` gives each handler `Job<unknown>`, and `findJobs()` gives `FoundJob<unknown>`. Validate the data that you read.
 - A listener for `error` is necessary. A failure in work that no caller awaits, for example a worker poll, goes to the `error` event. With no listener, `EventEmitter` throws.
-- `useListenNotify` wakes the workers of this `SqliteJobQueue` only. In pg-boss, each listener on the schema hears a `NOTIFY`. Here, another instance on the same file does not hear it.
+
+## Notify queues
+
+A queue with `notify: true` wakes its workers when a job comes, so they do not wait for their poll. pg-boss does this with `LISTEN` and `NOTIFY`. On a queue file, this package does it with [`@zukhruf/sqlite-notify`](../notify/README.md) ([ADR 0007](./docs/adr/0007-a-notify-queue-notifies-each-listener-on-the-file-through-sqlite-notify.md)).
+
+- A send to a notify queue notifies when the stored job is due now. The notification is in the transaction of the insert. The sender notifies also when it does not listen, as in pg-boss.
+- The channel is the channel of pg-boss, `pgboss_454650302e472074f72063fd`, and the payload is the queue name.
+- With `useListenNotify`, `start()` listens on the channel. Each `SqliteJobQueue` that listens on the same file wakes the workers of the queue that the payload names, also in another program. The instance that sent the job also hears it.
+- The poll of pg-boss stays. A worker of a notify queue fetches at least every `notifyPollingIntervalSeconds`, 30 by default.
+- When the listen fails, the queue emits the warning of pg-boss, `listen_notify_unavailable`, and the workers poll.
+- On a queue file, `start()` makes the tables of `sqlite-notify`, which start with `zukhruf_notify_`, if they are missing. `stop()` stops the listen.
+- A database in memory has no file that another program can open. A send there wakes only the workers of the same `SqliteJobQueue`, when it listens.
+- A send before `start()`, on a `database` of the caller, does not notify. pg-boss notifies there. The other instances find the job at their poll.
 
 ## Upgrades
 
@@ -133,6 +145,7 @@ Code that runs on both engines examines `code`, not the class. On Postgres, the 
 - [0003 The timekeeper is ported literally](./docs/adr/0003-the-timekeeper-is-ported-literally.md)
 - [0004 The schema is a declaration and keeps the jobs](./docs/adr/0004-the-schema-is-a-declaration-and-keeps-the-jobs.md)
 - [0005 The queue keeps the durability of pg-boss](./docs/adr/0005-the-queue-keeps-the-durability-of-pg-boss.md)
+- [0007 A notify queue notifies each listener on the file through sqlite-notify](./docs/adr/0007-a-notify-queue-notifies-each-listener-on-the-file-through-sqlite-notify.md)
 
 ## Development
 

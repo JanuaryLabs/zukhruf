@@ -1,10 +1,14 @@
 import assert from 'node:assert/strict';
+import { join } from 'node:path';
 import { describe, it } from 'node:test';
 import { setImmediate } from 'node:timers/promises';
 
 import { type Job, TestClock } from 'pg-boss';
 
+import { type Notification, Notifications } from '@zukhruf/sqlite-notify';
 import { open } from '@zukhruf/sqlite-open';
+import { settleWithin } from '@zukhruf/testing/async';
+import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { SqliteJobQueue } from './index.ts';
 import { id } from './testing/job-id.ts';
@@ -301,8 +305,8 @@ describe('SqliteJobQueue', () => {
   // SQLite-only: the harness starts every queue before its workers. A worker
   // registered before start() is woken by it on a notify queue, as pg-boss
   // wakes them once its listener connects (adapters/pglite.js:144-152,
-  // manager.js:1144-1152); another instance's send never reaches it, since
-  // SQLite's wake stays in its own process.
+  // manager.js:1144-1152); in memory, another instance's send never reaches
+  // it, since only a file has the notifications of @zukhruf/sqlite-notify.
   it('wakes workers registered before start once it starts listening', async () => {
     const clock = new TestClock('2026-01-01T00:00:00.000Z');
     const database = open(':memory:');
@@ -333,6 +337,79 @@ describe('SqliteJobQueue', () => {
       await consumer.stop({ graceful: false, close: false });
       await producer.stop({ graceful: false, close: false });
       database.close();
+    }
+  });
+
+  // A pg-boss listener hears the NOTIFY of its own instance
+  // (notifier.js:57). On a file the notification goes through
+  // @zukhruf/sqlite-notify, and the instance that sent it hears it too,
+  // before its poll. The poll here is 60 seconds, also when the queue does
+  // not listen (attorney.js:587, 601).
+  it('wakes its own waiting worker when it sends to a notify queue on a file', async () => {
+    await using dir = await new TemporaryFiles().directory('sqlite-queue-');
+    const queue = new SqliteJobQueue({
+      path: join(dir.path, 'queue.db'),
+      useListenNotify: true,
+    });
+    await queue.start();
+    try {
+      await queue.createQueue('jobs', { notify: true });
+      // The first job ends the first fetch, so the worker then waits.
+      await queue.send('jobs', null, { id: id(1) });
+      const first = Promise.withResolvers<void>();
+      const second = Promise.withResolvers<void>();
+      await queue.work('jobs', { pollingIntervalSeconds: 60 }, async (jobs) => {
+        for (const job of jobs) {
+          if (job.id === id(1)) first.resolve();
+          if (job.id === id(2)) second.resolve();
+        }
+      });
+      await settleWithin(first.promise, 'the first job runs', 10_000);
+
+      await queue.send('jobs', null, { id: id(2) });
+
+      await settleWithin(
+        second.promise,
+        'the second job runs before the poll of 60 seconds',
+        10_000,
+      );
+    } finally {
+      await queue.stop();
+    }
+  });
+
+  // node_modules/pg-boss/dist/plans.js:859-861, 2343-2347: the channel is
+  // 'pgboss_' and 24 hex digits of the SHA-224 of the schema 'pgboss', and the
+  // payload is the name of the queue. Another program on the file, which
+  // listens on that channel, hears the send.
+  it("notifies pg-boss's channel with the queue name when it sends to a notify queue on a file", async () => {
+    await using dir = await new TemporaryFiles().directory('sqlite-queue-');
+    const path = join(dir.path, 'queue.db');
+    const queue = new SqliteJobQueue(path);
+    await queue.start();
+    try {
+      await queue.createQueue('jobs', { notify: true });
+      await using listener = new Notifications({ path, clock: globalThis });
+      const errors: unknown[] = [];
+      listener.on('error', (error) => errors.push(error));
+      const heard = Promise.withResolvers<Notification>();
+      listener.on('notification', heard.resolve);
+      await listener.listen('pgboss_454650302e472074f72063fd');
+
+      await queue.send('jobs', null, { id: id(1) });
+
+      const notification = await settleWithin(
+        heard.promise,
+        'the listener hears the send',
+        10_000,
+      );
+      assert.deepEqual(
+        { channel: notification.channel, payload: notification.payload },
+        { channel: 'pgboss_454650302e472074f72063fd', payload: 'jobs' },
+      );
+      assert.deepEqual(errors, []);
+    } finally {
+      await queue.stop();
     }
   });
 

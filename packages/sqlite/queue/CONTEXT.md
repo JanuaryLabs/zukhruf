@@ -36,6 +36,14 @@ _Avoid_: Reference implementation, baseline, mock
 What a scenario returns on one engine: plain values, with each date as milliseconds after the start of the test clock.
 _Avoid_: Snapshot, output, result
 
+**Notify queue**:
+A queue with `notify: true`. A send of a job that is due now notifies on the channel of pg-boss, in the transaction of the insert. Each instance that listens on the queue file then wakes the workers of the queue. pg-boss's word is the `notify` option of a queue.
+_Avoid_: Push queue, realtime queue, instant queue
+
+**Listener**:
+A `SqliteJobQueue` with `useListenNotify`, from `start()` to `stop()`. It hears the notifications on the channel of pg-boss, also those of other programs on the same queue file. pg-boss's word (`notifier.js`).
+_Avoid_: Subscriber, watcher, notifier (the notifier is the part of pg-boss that owns the listener)
+
 **Worker**:
 One polling loop that `work()` starts. It fetches a batch of jobs, gives it to the handler, and waits for the polling interval. `localConcurrency` starts more than one.
 _Avoid_: Consumer, processor, thread

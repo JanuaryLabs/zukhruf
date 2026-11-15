@@ -18,6 +18,9 @@
       "path": "../drift/tsconfig.lib.json"
     },
     {
+      "path": "../notify/tsconfig.lib.json"
+    },
+    {
       "path": "../../async/tsconfig.lib.json"
     },
     {

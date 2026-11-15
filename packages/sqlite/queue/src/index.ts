@@ -1,5 +1,5 @@
 import assert from 'node:assert';
-import { randomUUID } from 'node:crypto';
+import { hash, randomUUID } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 import { setImmediate } from 'node:timers/promises';
@@ -32,6 +32,7 @@ import {
 } from 'pg-boss';
 
 import { Latch } from '@zukhruf/async';
+import { Notifications } from '@zukhruf/sqlite-notify';
 import { WriteAheadLog, open } from '@zukhruf/sqlite-open';
 import { transaction } from '@zukhruf/sqlite-transaction';
 
@@ -129,6 +130,20 @@ type ManagerPhase =
 
 type NotifierPhase = { kind: 'available' } | { kind: 'unavailable' };
 
+// Where a pg_notify of this instance goes, from start() to stop(). A queue
+// file: to each instance that listens on the file, through
+// @zukhruf/sqlite-notify. A database in memory: no other program can open it,
+// and sqlite-notify refuses it, so the wake stays in this instance (ADR 0007).
+type NotifyRoute =
+  | { kind: 'stopped' }
+  | { kind: 'file'; notifications: Notifications }
+  | { kind: 'memory' };
+
+// pg-boss's channel: 'pgboss_' and the first 24 hex digits of the SHA-224 of
+// the schema name (node_modules/pg-boss/dist/plans.js:859-861). The schema is
+// pg-boss's default, 'pgboss' (plans.js:8); this package has no schema option.
+const notifyChannel = `pgboss_${hash('sha224', 'pgboss', 'hex').slice(0, 24)}`;
+
 type LifecyclePhase =
   { kind: 'stopped' } | { kind: 'armed' } | { kind: 'running' };
 // The clock attached to this instance's activity, from start() to stop().
@@ -166,11 +181,9 @@ export class SqliteJobQueue
   readonly #useListenNotify: boolean;
   readonly #warnedFetchOptions = new Set<string>();
   // pg-boss's notifier.available (node_modules/pg-boss/dist/notifier.js:28):
-  // this process is its own LISTEN/NOTIFY listener from start() to stop() when
-  // useListenNotify is on. Its wakes stay in this instance: another instance on
-  // the same file never hears them, where every pg-boss listener on a schema
-  // hears a NOTIFY.
+  // this instance listens from start() to stop() when useListenNotify is on.
   #notifier: NotifierPhase = { kind: 'unavailable' };
+  #notifyRoute: NotifyRoute = { kind: 'stopped' };
   // PgBoss's own #stopped and #started (node_modules/pg-boss/dist/
   // index.js:64, 124, 256): armed before a start runs, so stop() can shut
   // down what a start that threw partway left armed.
@@ -302,9 +315,9 @@ export class SqliteJobQueue
       2000,
     );
     await this.#onCacheQueues(false);
+    this.#notifyRoute = this.#openNotifyRoute();
     if (this.#useListenNotify) {
-      this.#notifier = { kind: 'available' };
-      await this.#activity.deliver(() => this.wakeNotifyQueueWorkers());
+      await this.#listen(this.#notifyRoute);
     }
     // index.js:159-164
     this.#supervisor.start(this.db);
@@ -313,6 +326,62 @@ export class SqliteJobQueue
     }
     this.#lifecycle = { kind: 'running' };
     return this;
+  }
+
+  #openNotifyRoute(): NotifyRoute {
+    if (this.db.location() === null) {
+      return { kind: 'memory' };
+    }
+    const clock = this.#clock;
+    const notifications = new Notifications({
+      database: this.db,
+      clock: {
+        setTimeout: (callback, ms) => clock.setTimeout(callback, ms),
+        clearTimeout: (timer) => clock.clearTimeout(timer),
+        performance: { now: () => clock.now() },
+      },
+    });
+    // The notifier's errors are the instance's (index.js:92).
+    notifications.on('error', (error) => this.emit('error', toError(error)));
+    return { kind: 'file', notifications };
+  }
+
+  // notifier.js:51-64: a listener that cannot start leaves the workers on
+  // their poll. Once it listens, each worker of a notify queue fetches, for
+  // what was sent before (adapters/pglite.js:144-152, manager.js:1144-1152).
+  async #listen(route: NotifyRoute): Promise<void> {
+    if (route.kind === 'file') {
+      route.notifications.on('notification', ({ payload }) =>
+        this.notifyQueue(payload),
+      );
+      try {
+        await route.notifications.listen(notifyChannel);
+      } catch (error) {
+        this.emit('warning', {
+          message:
+            'Failed to start LISTEN/NOTIFY listener. Continuing with polling only.',
+          data: {
+            type: 'listen_notify_unavailable',
+            error: toError(error).message,
+          },
+        });
+        return;
+      }
+    }
+    this.#notifier = { kind: 'available' };
+    await this.#activity.deliver(() => this.wakeNotifyQueueWorkers());
+  }
+
+  // The pg_notify(channel, queue name) of pg-boss's insert, in the insert's
+  // transaction (plans.js:2335-2350).
+  #notify(name: string): void {
+    const route = this.#notifyRoute;
+    if (route.kind === 'file') {
+      route.notifications.notify(notifyChannel, name);
+    } else if (route.kind === 'memory' && this.#notifier.kind === 'available') {
+      // PGlite gives the NOTIFY as the insert runs (src/pglite.ts:980-992).
+      this.notifyQueue(name);
+    }
   }
 
   // node_modules/pg-boss/dist/index.js:192-275.
@@ -348,7 +417,7 @@ export class SqliteJobQueue
     // fetch in flight lands before the workers stop and their group tracking
     // is cleared.
     if (this.#notifier.kind === 'available') {
-      await setImmediate();
+      await this.#unlisten(this.#notifyRoute);
     }
     this.#notifier = { kind: 'unavailable' };
     // manager.js:866-880: refuse new work and let every worker wind down.
@@ -375,6 +444,7 @@ export class SqliteJobQueue
     await setImmediate();
     const shutdown = async () => {
       await this.#failWip();
+      await this.#closeNotifyRoute();
       const attachment = this.#attachment;
       this.#attachment = { kind: 'detached' };
       if (attachment.kind === 'attached') {
@@ -403,6 +473,27 @@ export class SqliteJobQueue
       systemClock.clearTimeout(deadlineTimer);
     }
     await shutdown();
+  }
+
+  // notifier.js:70-77: a close that fails goes to the error event.
+  async #unlisten(route: NotifyRoute): Promise<void> {
+    if (route.kind !== 'file') {
+      await setImmediate();
+      return;
+    }
+    try {
+      await route.notifications.unlisten(notifyChannel);
+    } catch (error) {
+      this.emit('error', toError(error));
+    }
+  }
+
+  async #closeNotifyRoute(): Promise<void> {
+    const route = this.#notifyRoute;
+    this.#notifyRoute = { kind: 'stopped' };
+    if (route.kind === 'file') {
+      await route.notifications[Symbol.asyncDispose]();
+    }
   }
 
   #closeOwnDatabase(): void {
@@ -721,41 +812,42 @@ export class SqliteJobQueue
       // hold refuses the send, whichever field holds it.
       Jsonb.assertEscapes(JobRows.payload(queue.name, data, options));
       const now = this.#now();
-      const stored =
-        this.#insertJob(queue.name, data, options, queue, now, {
-          startAfter: options.startAfter,
-          singletonOn: Throttle.slot(options.singletonSeconds, 0, now),
-        }) ??
-        // manager.js:1253-1256: a send a unique index refused retries once into
-        // the next throttle slot, starting when that slot does.
-        (options.singletonNextSlot
-          ? this.#insertJob(queue.name, data, options, queue, now, {
-              startAfter: Throttle.debounceStartAfter(
-                options.singletonSeconds,
-                now,
-              ),
-              singletonOn: Throttle.slot(
-                options.singletonSeconds,
-                options.singletonSeconds,
-                now,
-              ),
-            })
-          : null);
-      if (stored === null) {
-        return null;
-      }
-      // A notify queue's insert wakes the queue's workers when the stored job
-      // is due now (node_modules/pg-boss/dist/plans.js:2335-2350), heard as
-      // the insert runs (PGlite's src/pglite.ts:980-992 queues the NOTIFY
-      // then) and only while this process listens (notifier.js:57).
-      if (
-        queue.notify &&
-        this.#notifier.kind === 'available' &&
-        stored.startAfter <= SqlValues.asIso(now)
-      ) {
-        this.notifyQueue(queue.name);
-      }
-      return stored.id;
+      return transaction(
+        this.db,
+        () => {
+          const stored =
+            this.#insertJob(queue.name, data, options, queue, now, {
+              startAfter: options.startAfter,
+              singletonOn: Throttle.slot(options.singletonSeconds, 0, now),
+            }) ??
+            // manager.js:1253-1256: a send a unique index refused retries once
+            // into the next throttle slot, starting when that slot does.
+            (options.singletonNextSlot
+              ? this.#insertJob(queue.name, data, options, queue, now, {
+                  startAfter: Throttle.debounceStartAfter(
+                    options.singletonSeconds,
+                    now,
+                  ),
+                  singletonOn: Throttle.slot(
+                    options.singletonSeconds,
+                    options.singletonSeconds,
+                    now,
+                  ),
+                })
+              : null);
+          if (stored === null) {
+            return null;
+          }
+          // A notify queue's insert notifies when the stored job is due now,
+          // whether or not this instance listens (node_modules/pg-boss/dist/
+          // plans.js:2335-2350, manager.js:1132-1134, 1241).
+          if (queue.notify && stored.startAfter <= SqlValues.asIso(now)) {
+            this.#notify(queue.name);
+          }
+          return stored.id;
+        },
+        { mode: 'immediate' },
+      );
     });
   }
 
@@ -769,7 +861,7 @@ export class SqliteJobQueue
       transaction(
         this.db,
         () => {
-          for (const job of jobs) {
+          const stored = jobs.map((job) =>
             this.#insertJob(
               queue.name,
               job.data,
@@ -777,7 +869,16 @@ export class SqliteJobQueue
               queue,
               now,
               { startAfter: undefined, singletonOn: job.singletonOn },
-            );
+            ),
+          );
+          // One pg_notify when an inserted job is due now (plans.js:2343-2347).
+          if (
+            queue.notify &&
+            stored.some(
+              (job) => job !== null && job.startAfter <= SqlValues.asIso(now),
+            )
+          ) {
+            this.#notify(queue.name);
           }
         },
         { mode: 'immediate' },
