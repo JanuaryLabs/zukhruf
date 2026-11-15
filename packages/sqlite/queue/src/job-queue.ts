@@ -85,6 +85,12 @@ export interface JobQueue {
     data?: object | null,
     options?: CompleteOptions,
   ): Promise<CommandResponse>;
+  // A caller of fetch() calls it to keep the heartbeat of its jobs, as work()
+  // does for its own.
+  touch(
+    name: string,
+    id: string | string[] | JobAttempt | JobAttempt[],
+  ): Promise<CommandResponse>;
   fail(
     name: string,
     id: string | string[] | JobAttempt | JobAttempt[],

@@ -1187,6 +1187,18 @@ export class SqliteJobQueue
     );
   }
 
+  // node_modules/pg-boss/dist/manager.js:1994-2002
+  async touch(name: string, id: string | string[] | JobAttempt | JobAttempt[]) {
+    Attorney.assertQueueName(name);
+    const { ids, attempts } = Attorney.mapAttemptArg(id, 'touch');
+    this.getQueueOrThrow(name);
+
+    return JobSettler.response(
+      ids,
+      JobSettler.touch(this.db, name, ids, attempts, this.#now()),
+    );
+  }
+
   async fail(
     name: string,
     id: string | string[] | JobAttempt | JobAttempt[],
@@ -1593,11 +1605,14 @@ export class SqliteJobQueue
       let refreshed: Set<string>;
       try {
         this.getQueueOrThrow(name);
-        refreshed = JobSettler.touch(
-          this.db,
-          name,
-          held.map(({ row }) => row),
-          this.#now(),
+        refreshed = new Set(
+          JobSettler.touch(
+            this.db,
+            name,
+            held.map(({ row }) => row.id),
+            held.map(({ row }) => row.retry_count),
+            this.#now(),
+          ),
         );
       } catch (error) {
         // A heartbeat that could not run says nothing about the claim.

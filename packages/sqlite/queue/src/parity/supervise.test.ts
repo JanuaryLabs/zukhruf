@@ -16,6 +16,7 @@ import type { JobQueue } from '../index.ts';
 import { SqliteJobQueue } from '../index.ts';
 import { flush } from '../testing/flush.ts';
 import { id } from '../testing/job-id.ts';
+import { supervised } from '../testing/supervised.ts';
 import { ParityRun, type RunOptions } from './backends.ts';
 import { Observe } from './observe.ts';
 import { Parity } from './parity.ts';
@@ -28,16 +29,6 @@ const keyed = (options: SendOptions, singletonKey: string | undefined) => {
 };
 
 const origin = Date.parse(ParityRun.start);
-
-// Every supervisor timer at its 1 s minimum, so each second's tick runs a
-// cache refresh and a supervise pass that monitors and maintains every queue.
-const supervised = {
-  supervise: true,
-  superviseIntervalSeconds: 1,
-  monitorIntervalSeconds: 1,
-  maintenanceIntervalSeconds: 1,
-  queueCacheIntervalSeconds: 1,
-} satisfies RunOptions;
 
 const fields = [
   'state',

@@ -446,22 +446,32 @@ export class JobSettler {
     ).run(name, ...ids);
   }
 
-  // pg-boss's touch() with the attempts the heartbeat holds (manager.js:
-  // 1994-2002, plans.js:2387-2400): the ids whose heartbeat it refreshed.
+  // touch() past its argument checks (node_modules/pg-boss/dist/manager.js:
+  // 1994-2002, plans.js:2387-2400): an active job, and with an attempt only
+  // while that attempt holds the job. Plain ids carry no attempts, and the
+  // touch is then not fenced. It gives the ids whose heartbeat it refreshed.
   static touch(
     db: DatabaseSync,
     name: string,
-    held: JobRow[],
+    ids: string[],
+    attempts: number[] | undefined,
     now: Date,
-  ): Set<string> {
+  ): string[] {
+    const uuids = ids.map((jobId) => Uuid.canonical(jobId));
     const isoNow = SqlValues.asIso(now);
     const statement = db.prepare(
       `UPDATE pgboss_job SET heartbeat_on = ?
-      WHERE queue_name = ? AND id = ? ${ATTEMPT_FENCE}`,
+      WHERE queue_name = ? AND id = ?
+        AND state = 'active'
+        ${attempts ? ATTEMPT_FENCE : ''}`,
     );
-    return JobSettler.#settleEach(db, held, ({ id, retry_count }) => {
-      const { changes } = statement.run(isoNow, name, id, retry_count);
-      return Number(changes) > 0;
-    });
+    const touched = JobSettler.#settleEach(
+      db,
+      uuids.map((id, index) => ({ id, attempt: attempts?.[index] })),
+      ({ id, attempt }) =>
+        statement.run(isoNow, name, id, ...(attempts ? [attempt ?? null] : []))
+          .changes > 0,
+    );
+    return [...touched];
   }
 }

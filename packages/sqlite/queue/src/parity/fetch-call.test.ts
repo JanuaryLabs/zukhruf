@@ -6,21 +6,13 @@ import { type SendOptions, policies } from 'pg-boss';
 import type { JobQueue } from '../index.ts';
 import { id } from '../testing/job-id.ts';
 import { outcome } from '../testing/outcome.ts';
-import { ParityRun, type RunOptions } from './backends.ts';
+import { sortSettled } from '../testing/sort-settled.ts';
+import { supervised } from '../testing/supervised.ts';
+import { ParityRun } from './backends.ts';
 import { Observe } from './observe.ts';
 import { Parity } from './parity.ts';
 
 const origin = Date.parse(ParityRun.start);
-
-// Every supervisor timer at its 1 s minimum, so each second's tick runs a
-// cache refresh and a supervise pass that monitors and maintains every queue.
-const supervised = {
-  supervise: true,
-  superviseIntervalSeconds: 1,
-  monitorIntervalSeconds: 1,
-  maintenanceIntervalSeconds: 1,
-  queueCacheIntervalSeconds: 1,
-} satisfies RunOptions;
 
 // { ...options, singletonKey }: pg-boss reads an undefined key as no key,
 // which its types cannot hold under exactOptionalPropertyTypes.
@@ -41,13 +33,6 @@ async function attempt(queue: JobQueue, name: string, n: number) {
   const { state, retryCount, startedOn, heartbeatOn } = Observe.job(job);
   return { state, retryCount, startedOn, heartbeatOn };
 }
-
-// A settle's result with `settled` sorted: pg-boss aggregates the ids it
-// touched in no specified order (plans.js:2413-2415).
-const sortSettled = <T extends { settled?: string[] }>(response: T) => ({
-  ...response,
-  settled: response.settled?.toSorted(),
-});
 
 // What a fetch with options that the types refuse did.
 const refused = (queue: JobQueue, name: unknown, options?: unknown) =>
