@@ -235,12 +235,12 @@ for (let retries = 0; !(await connect()); retries++) {
 
 Many callers that failed at the same time retry at the same time, and they can fail again together. A jitter makes each wait random, so the retries spread. `random` gives a number in [0, 1), `Math.random` by default. Give a function that returns known numbers to get known waits in a test. `d` is the wait without jitter.
 
-| `jitter`                      | Wait                                                                                                             | From                    |
-| ----------------------------- | ---------------------------------------------------------------------------------------------------------------- | ----------------------- |
-| `{ kind: 'none' }`            | `d`                                                                                                              |                         |
-| `{ kind: 'ratio', ratio: r }` | `d` ± `r · d`; the wait before the first retry is `initial`, with no jitter. A wait can be up to `(1 + r) · max` | gRPC connection backoff |
-| `{ kind: 'full' }`            | from 0 to `d`                                                                                                    | AWS, full jitter        |
-| `{ kind: 'equal' }`           | from `d / 2` to `d`                                                                                              | AWS, equal jitter       |
+| `jitter`                      | Wait                                                                                  | From                                      |
+| ----------------------------- | ------------------------------------------------------------------------------------- | ----------------------------------------- |
+| `{ kind: 'none' }`            | `d`                                                                                   |                                           |
+| `{ kind: 'ratio', ratio: r }` | `d` ± `r · d`, for every wait, the first one too. A wait can be up to `(1 + r) · max` | cenkalti/backoff, gRPC connection backoff |
+| `{ kind: 'full' }`            | from 0 to `d`                                                                         | AWS, full jitter                          |
+| `{ kind: 'equal' }`           | from `d / 2` to `d`                                                                   | AWS, equal jitter                         |
 
 The constructor throws a `RangeError` for an `initial` that is not a positive, finite number, a `multiplier` below 1, a `max` below `initial` or not finite, and a `ratio` that is not above 0 and at most 1. `duration` throws a `RangeError` for a count that is not an integer of 0 or more.
 

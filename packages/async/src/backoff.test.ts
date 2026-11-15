@@ -103,7 +103,7 @@ describe('Backoff', () => {
     assert.deepEqual(halfAgainWaits, [1_000, 1_500, 2_250, 3_375]);
   });
 
-  test('a ratio jitter gives the wait plus or minus the ratio of it, also above max, and no jitter before the first retry', () => {
+  test('a ratio jitter gives each wait plus or minus the ratio of it, the first wait too, and also above max', () => {
     // Arrange: with no jitter the waits are 1000, 2000, 4000, and max is 4000.
     const withRandom = (value: number) =>
       new Backoff({
@@ -122,7 +122,7 @@ describe('Backoff', () => {
     const capped = [0, 0.875].map((value) => withRandom(value).duration(5));
 
     // Assert
-    assert.deepEqual(first, [1_000, 1_000], 'The first wait has no jitter');
+    assert.deepEqual(first, [750, 1_187.5], 'The first wait has jitter too');
     assert.deepEqual(second, [1_500, 2_000, 2_375]);
     assert.deepEqual(capped, [3_000, 4_750], 'The jitter applies after max');
   });

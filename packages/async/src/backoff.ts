@@ -3,8 +3,8 @@
  * `d` is the wait without jitter: `min(max, initial · multiplier^retries)`.
  *
  * - `none`: `d`.
- * - `ratio`: `d` ± `ratio · d`, after the cap, as gRPC's connection backoff
- *   does. The wait before the first retry is `initial`, with no jitter.
+ * - `ratio`: `d` ± `ratio · d`, after the cap, for every wait, the first one
+ *   too, as cenkalti/backoff's RandomizationFactor and Kubernetes' Jitter do.
  * - `full`: from 0 to `d` (AWS, full jitter).
  * - `equal`: from `d / 2` to `d` (AWS, equal jitter).
  */
@@ -77,7 +77,6 @@ export class Backoff {
       case 'none':
         return d;
       case 'ratio':
-        if (retries === 0) return this.#initial;
         return d + d * this.#jitter.ratio * (2 * this.#random() - 1);
       case 'full':
         return this.#random() * d;
