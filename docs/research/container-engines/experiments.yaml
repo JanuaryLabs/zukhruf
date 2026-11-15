@@ -1,0 +1,149 @@
+# Experiments for docs/research/container-engines/README.md.
+# Order: test-relevant first. Runs append to `attempts` and set `status` and `verdict`.
+
+- id: startup-alpine-true
+  name: start-to-exit on run --rm alpine true
+  combination:
+    engine: [docker-desktop, apple-container-1.7.1-via-socktainer-1.6.1]
+    client: docker CLI against each engine socket; Apple's own `container` CLI as a third arm
+    workload: run --rm <alpine digest> true, warm
+  hypothesis: Apple boots one VM per container, so each start costs more than a process start in Docker's shared VM.
+  measure: >-
+    hyperfine 2.0.0 --warmup 3 --runs 30 --export-json
+    'docker -H unix://<socket> run --rm <alpine digest> true'
+    'container run --rm <alpine digest> true'
+  expected: Apple about 3x slower.
+  risks: Cold runs (init image download, socktainer's first create) must stay out of the warm runs.
+  source: zot24/macos-container-benchmarks; Jmeg8r/apple-container-vs-docker
+  status: proposed
+  attempts: []
+  verdict: null
+
+- id: postgres-time-to-ready
+  name: time to ready on postgres:18-alpine
+  combination:
+    engine: [docker-desktop, apple-container-1.7.1-via-socktainer-1.6.1]
+    client: '@zukhruf/docker (a script under docs/research/container-engines/scripts/, written in a later step)'
+    workload: postgres:18-alpine with the Env and limits of packages/testing/src/databases/postgres.ts (tmpfs data dir, 1 GiB memory, 1 CPU)
+  hypothesis: Time to ready is the container start plus Postgres's own start; Apple adds the VM boot.
+  measure: >-
+    From create until pg_isready answers. On Apple, measured twice: on the published 127.0.0.1 port and on the container IP.
+  expected: Apple slower by the VM boot.
+  risks: Apple's published-port forwarder drops a connection on a client half-close; pg clients do not half-close, so expect it to work.
+  source: packages/testing/src/databases/postgres.ts
+  status: proposed
+  attempts: []
+  verdict: null
+
+- id: socktainer-overhead
+  name: latency on create/start/inspect/remove through socktainer and the raw CLI
+  combination:
+    engine: [docker-desktop, apple-container-1.7.1-via-socktainer-1.6.1]
+    client: docker CLI against socktainer; Apple's raw `container` CLI
+    workload: create, start, inspect, remove of one alpine container
+  hypothesis: socktainer adds latency to each call. This separates the engine's cost from the shim's.
+  measure: >-
+    hyperfine 2.0.0 --warmup 3 --runs 30 --export-json
+    on the same sequence through `docker -H unix://<socktainer socket>` and through `container`.
+  expected: A small, constant cost per call from socktainer.
+  risks: The two CLIs may not do the same work per step (for example, inspect detail).
+  source: none; our question
+  status: proposed
+  attempts: []
+  verdict: null
+
+- id: suites-wall-time
+  name: wall time on the Docker-backed test suites
+  combination:
+    engine: [docker-desktop, apple-container-1.7.1-via-socktainer-1.6.1]
+    client: '@zukhruf/docker through nx'
+    workload: nx run docker:test, nx run mutex:test, and testing's database suites after #4205
+  hypothesis: The main criterion. Per-container VM boots may slow suites that start many containers.
+  measure: >-
+    Wall time of each nx target, A,B,A,B, at least 3 runs per engine, under caffeinate -dimsu.
+  expected: Unknown; this row decides the verdict.
+  risks: Depends on backlog #4430's client fixes, and on #4205 for testing. A red suite counts against criterion 2.
+  source: none; our suites
+  status: proposed
+  attempts: []
+  verdict: null
+
+- id: fio-storage
+  name: throughput on fio 4k and 1m random reads and writes
+  combination:
+    engine: [docker-desktop, apple-container-1.7.1-via-socktainer-1.6.1]
+    client: docker CLI against each engine socket
+    workload: a bind mount, a named volume and the root filesystem
+  hypothesis: Apple's bind mounts are slow at small blocks.
+  measure: >-
+    fio --rw=randwrite|randread --bs=4k|1m --size=256M --direct=1 --output-format=json
+  expected: Apple loses at 4k on bind mounts.
+  risks: The host page cache.
+  source: apple/container #882; Jmeg8r/apple-container-vs-docker
+  status: proposed
+  attempts: []
+  verdict: null
+
+- id: idle-memory
+  name: host memory on 0, 1, 10 and 30 idle containers
+  combination:
+    engine: [docker-desktop, apple-container-1.7.1-via-socktainer-1.6.1]
+    client: docker CLI against each engine socket
+    workload: sleep infinity containers
+  hypothesis: Apple has a small base and a cost per container; Docker has a large base and a small cost per container.
+  measure: >-
+    Summed RSS of each engine's host processes (ps -o rss of the VM and helper processes), plus footprint.
+  expected: Apple wins at 0 and loses per container.
+  risks: Finding every host process of each engine.
+  source: Jmeg8r/apple-container-vs-docker
+  status: proposed
+  attempts: []
+  verdict: null
+
+- id: attach-round-trip
+  name: round trip on a cat lease attached before start
+  combination:
+    engine: [docker-desktop, apple-container-1.7.1-via-socktainer-1.6.1]
+    client: '@zukhruf/docker'
+    workload: "a cat lease attached before start, Cmd: ['-'] (the lease shape of packages/testing and the mutex store)"
+  hypothesis: socktainer's attach path adds latency to each write and to the close.
+  measure: >-
+    Time from a stdin write to the echoed stdout, and from close to exit.
+  expected: Apple slower.
+  risks: The half-close on stdin may behave differently through socktainer.
+  source: packages/testing; the mutex store
+  status: proposed
+  attempts: []
+  verdict: null
+
+- id: iperf3-network
+  name: throughput on iperf3
+  combination:
+    engine: [docker-desktop, apple-container-1.7.1-via-socktainer-1.6.1]
+    client: docker CLI against each engine socket
+    workload: container to container, and host to container
+  hypothesis: Traffic between Apple's VMs crosses the host's virtual network.
+  measure: >-
+    iperf3 -c <ip> -t 10 -J
+  expected: Apple 5-10x lower.
+  risks: network connect is a no-op on socktainer; containers must share the default network.
+  source: zot24/macos-container-benchmarks
+  status: proposed
+  attempts: []
+  verdict: null
+
+- id: sysbench-cpu
+  name: events per second on sysbench cpu
+  combination:
+    engine: [docker-desktop, apple-container-1.7.1-via-socktainer-1.6.1]
+    client: docker CLI against each engine socket
+    workload: sysbench cpu with 4 threads and 4 CPUs on both engines
+  hypothesis: Both engines run on Apple's Virtualization framework, so CPU work costs the same.
+  measure: >-
+    sysbench cpu --threads=4 --time=30 run
+  expected: A tie.
+  risks: Apple takes whole vCPUs only; limits must match.
+  source: RepoFlow blog; Jmeg8r/apple-container-vs-docker
+  status: proposed
+  attempts: []
+  verdict: null
