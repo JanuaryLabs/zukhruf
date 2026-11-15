@@ -1,5 +1,7 @@
 # Port the library core of Venn at one commit, in one private package, one unit at a time
 
+> Superseded in part by [ADR 0006](0006-a-calibration-fits-the-temperature-with-pytorchs-lbfgs-and-keeps-it-in-venns-calibrations-json.md): the optimizer of mteb does not move; the fit is a port of `torch.optim.LBFGS`.
+
 Status: Accepted (Ezz, 2026-11-10, 2026-11-11 and 2026-11-14).
 
 ## Context

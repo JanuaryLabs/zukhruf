@@ -21,11 +21,16 @@ export class CheckedQuestion {
     state: StateVectors,
     vectors: Vectors,
     temperature: number,
+    choiceTemperature: number,
   ) {
     const { threshold } = question;
     if (threshold !== undefined && !(threshold >= 0 && threshold <= 1))
       throw new ContractError('threshold', 'Threshold must be in [0,1]');
-    const kind = CheckedQuestion.#kind(question, temperature);
+    const kind = CheckedQuestion.#kind(
+      question,
+      temperature,
+      choiceTemperature,
+    );
     this.sources = new QuestionSources(question, vectors);
     this.kind = kind(this.sources.labels, state);
   }
@@ -36,6 +41,7 @@ export class CheckedQuestion {
   static #kind(
     question: Question,
     temperature: number,
+    choiceTemperature: number,
   ): (labels: readonly string[], state: StateVectors) => QuestionKind {
     const { type, threshold } = question;
     switch (type) {
@@ -61,7 +67,12 @@ export class CheckedQuestion {
       }
       case 'Noul':
         return (_, state) =>
-          new Noul(threshold, temperature, CheckedQuestion.#one(state, type));
+          new Noul(
+            threshold,
+            temperature,
+            choiceTemperature,
+            CheckedQuestion.#one(state, type),
+          );
       case 'IndexApply': {
         const { rowCap, batchSize } = question;
         return (_, state) =>

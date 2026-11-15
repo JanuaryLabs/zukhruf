@@ -5,6 +5,12 @@ import { isDeepStrictEqual } from 'node:util';
 
 import { wrapEmbeddingModel } from 'ai';
 
+import {
+  type CalibrationKind,
+  Calibrations,
+} from '../calibration/calibrations.ts';
+import { TemperatureScaling } from '../calibration/temperature-scaling.ts';
+import { Matrix } from '../gradients/matrix.ts';
 import { CosineAbstention } from '../head/cosine-abstention.ts';
 import { PreparedQuestion } from '../head/prepared-question.ts';
 import { InvalidModelArtifactError } from '../model-bundle/invalid-model-artifact-error.ts';
@@ -35,6 +41,9 @@ const READER = {
 };
 
 const MAX_QUESTIONS = 32;
+// The fewest and the most rows that a calibration fits (venn/server.py:471).
+const MIN_CALIBRATION_ROWS = 200;
+const MAX_CALIBRATION_ROWS = 10_000;
 // The types that registerQuestion prepares (venn/server.py:860).
 const REGISTERED = new Set<Question['type']>([
   undefined,
@@ -48,22 +57,28 @@ export class DecisionService {
   readonly #head: CosineAbstention;
   readonly #vectors: Vectors;
   readonly #temperature: number;
+  readonly #calibrations: Calibrations;
   readonly #handles = new QuestionHandles();
 
   private constructor(
     head: CosineAbstention,
     vectors: Vectors,
     temperature: number,
+    calibrations: Calibrations,
   ) {
     this.#head = head;
     this.#vectors = vectors;
     this.#temperature = temperature;
+    this.#calibrations = calibrations;
   }
 
+  // `registryPath` is the file of the temperatures that registerCalibration
+  // fits, Venn's registry_path (venn/server.py:91).
   static async load(options: {
     readonly model: Model;
     readonly database: DatabaseSync;
     readonly directory: string;
+    readonly registryPath: string;
   }): Promise<DecisionService> {
     const directory = await modelDirectory(options.directory);
     const temperature = await DecisionService.#choiceTemperature(directory);
@@ -81,6 +96,7 @@ export class DecisionService {
       head,
       new Vectors(reader, head.width),
       temperature,
+      await Calibrations.open(options.registryPath),
     );
   }
 
@@ -116,13 +132,18 @@ export class DecisionService {
       );
     const state = await this.#vectors.state(request.state);
     const answers: Record<string, Answer> = {};
-    for (const [name, question] of questions)
-      answers[name] = await this.#answer(
+    for (const [name, question] of questions) {
+      const asked =
         question.questionRef === undefined
           ? question
-          : this.#handles.question(question),
+          : this.#handles.question(question);
+      // venn/server.py:958
+      answers[name] = await this.#answer(
+        asked,
         state,
+        asked.family ?? request.family ?? '',
       );
+    }
     return { answers, vector: DecisionService.#embedded(state) };
   }
 
@@ -143,13 +164,75 @@ export class DecisionService {
     return this.#handles.register(question);
   }
 
+  // Fits the temperature of the questions of a family and type to 200 to
+  // 10,000 labelled rows of logits, as Venn's register_calibration does
+  // (venn/server.py:465-478): the logits are float32 numbers, and each target
+  // is the column of its row's answer. The temperature goes into
+  // calibrations.json, and decide divides the logits of those questions by
+  // it.
+  registerCalibration(
+    family: string,
+    logits: readonly (readonly number[])[],
+    targets: readonly number[],
+    kind: CalibrationKind = 'Choice',
+  ): number {
+    const columns = logits[0]?.length ?? 0;
+    if (
+      logits.length < MIN_CALIBRATION_ROWS ||
+      logits.length > MAX_CALIBRATION_ROWS ||
+      targets.length !== logits.length ||
+      logits.some((row) => row.length !== columns)
+    )
+      throw new ContractError(
+        'calibration_size',
+        'Register 200..10000 labeled logits',
+      );
+    const values = Matrix.fromRows(logits.map((row) => Float32Array.from(row)));
+    if (
+      !values.values.every(Number.isFinite) ||
+      !targets.every(
+        (target) => Number.isInteger(target) && target >= 0 && target < columns,
+      )
+    )
+      throw new ContractError(
+        'calibration_labels',
+        'Invalid calibration labels or logits',
+      );
+    const temperature = TemperatureScaling.fit(values, targets);
+    this.#calibrations.set(family, kind, temperature);
+    return temperature;
+  }
+
+  // Removes the temperature of a family and type, if there is one, as Venn's
+  // delete_calibration does (venn/server.py:480-483).
+  deleteCalibration(family: string, kind: CalibrationKind = 'Choice'): void {
+    this.#calibrations.delete(family, kind);
+  }
+
+  // IndexApply reads the temperature of Choice (venn/server.py:804).
+  static #calibrationKind(question: Question): CalibrationKind {
+    if (question.type === undefined || question.type === 'IndexApply')
+      return 'Choice';
+    return question.type;
+  }
+
   // The answer to one question about the state, as Venn's decide gives it
-  // (venn/server.py:960-1115).
-  async #answer(question: Question, state: StateVectors): Promise<Answer> {
+  // (venn/server.py:960-1115). The logits divide by the temperature of the
+  // family and the type of the question, else by choice_temperature
+  // (venn/server.py:803-805).
+  async #answer(
+    question: Question,
+    state: StateVectors,
+    family: string,
+  ): Promise<Answer> {
     const { sources, kind } = new CheckedQuestion(
       question,
       state,
       this.#vectors,
+      this.#calibrations.temperature(
+        family,
+        DecisionService.#calibrationKind(question),
+      ) ?? this.#temperature,
       this.#temperature,
     );
     const [instructions = new Float32Array(), ...options] =

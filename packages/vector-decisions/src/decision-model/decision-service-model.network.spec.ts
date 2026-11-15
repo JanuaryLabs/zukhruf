@@ -94,7 +94,10 @@ function fixtureReader(): MockEmbeddingModelV4 {
   });
 }
 
+// A service whose calibrations file is in `registryDirectory`: with no file there,
+// each question divides by choice_temperature.
 async function service(
+  registryDirectory: string,
   database: DatabaseSync,
   reader = fixtureReader(),
 ): Promise<DecisionService> {
@@ -102,6 +105,7 @@ async function service(
     model: reader,
     database,
     directory: await downloadHead(),
+    registryPath: join(registryDirectory, 'calibrations.json'),
   });
 }
 
@@ -152,7 +156,9 @@ test('experimental_decide refuses a box question before the reader embeds a text
   );
   using database = open(join(directory.path, 'cache.sqlite'));
   const reader = fixtureReader();
-  const model = new DecisionServiceModel(await service(database, reader));
+  const model = new DecisionServiceModel(
+    await service(directory.path, database, reader),
+  );
 
   await assert.rejects(
     experimental_decide({
@@ -184,7 +190,9 @@ test('doDecide refuses a box question with the error of the AI SDK, also when ex
     'vector-decisions-',
   );
   using database = open(join(directory.path, 'cache.sqlite'));
-  const model = new DecisionServiceModel(await service(database));
+  const model = new DecisionServiceModel(
+    await service(directory.path, database),
+  );
 
   await assert.rejects(
     Promise.resolve(
@@ -211,7 +219,9 @@ test('a file part of the state is refused, as Venn refuses media parts, before t
   );
   using database = open(join(directory.path, 'cache.sqlite'));
   const reader = fixtureReader();
-  const model = new DecisionServiceModel(await service(database, reader));
+  const model = new DecisionServiceModel(
+    await service(directory.path, database, reader),
+  );
 
   await assert.rejects(
     experimental_decide({
@@ -251,7 +261,9 @@ test('a question that Venn refuses, for its instructions or its criteria, is ref
     'vector-decisions-',
   );
   using database = open(join(directory.path, 'cache.sqlite'));
-  const model = new DecisionServiceModel(await service(database));
+  const model = new DecisionServiceModel(
+    await service(directory.path, database),
+  );
   // The field that each code of Venn refuses. Venn's text of null
   // instructions gives decision_text.
   const fields = new Map([
@@ -279,7 +291,9 @@ test('a criterion whose description is "none" is refused with the InvalidArgumen
     'vector-decisions-',
   );
   using database = open(join(directory.path, 'cache.sqlite'));
-  const model = new DecisionServiceModel(await service(database));
+  const model = new DecisionServiceModel(
+    await service(directory.path, database),
+  );
 
   await assert.rejects(
     experimental_decide({ model, ...golden.answered['none text'].call }),
@@ -292,7 +306,9 @@ test('two criteria with one description are refused with the InvalidArgumentErro
     'vector-decisions-',
   );
   using database = open(join(directory.path, 'cache.sqlite'));
-  const model = new DecisionServiceModel(await service(database));
+  const model = new DecisionServiceModel(
+    await service(directory.path, database),
+  );
 
   await assert.rejects(
     experimental_decide({ model, ...golden.answered['one text'].call }),
@@ -305,7 +321,9 @@ test('a call of more than 32 questions is refused, as Venn refuses one request o
     'vector-decisions-',
   );
   using database = open(join(directory.path, 'cache.sqlite'));
-  const model = new DecisionServiceModel(await service(database));
+  const model = new DecisionServiceModel(
+    await service(directory.path, database),
+  );
   const refusals = golden.refused.filter(
     ({ code }) => code === 'question_limit',
   );
@@ -324,7 +342,9 @@ test('a choice gives the criterion with the largest probability, and the probabi
     'vector-decisions-',
   );
   using database = open(join(directory.path, 'cache.sqlite'));
-  const model = new DecisionServiceModel(await service(database));
+  const model = new DecisionServiceModel(
+    await service(directory.path, database),
+  );
 
   await assertGolden(model, golden.answered.kinds, 'team');
 });
@@ -334,7 +354,9 @@ test('a score gives the sum of each probability times its level from zero, and t
     'vector-decisions-',
   );
   using database = open(join(directory.path, 'cache.sqlite'));
-  const model = new DecisionServiceModel(await service(database));
+  const model = new DecisionServiceModel(
+    await service(directory.path, database),
+  );
 
   await assertGolden(model, golden.answered.kinds, 'urgency');
 });
@@ -344,7 +366,9 @@ test('a boolean question without criteria asks "No. " and "Yes. " before its ins
     'vector-decisions-',
   );
   using database = open(join(directory.path, 'cache.sqlite'));
-  const model = new DecisionServiceModel(await service(database));
+  const model = new DecisionServiceModel(
+    await service(directory.path, database),
+  );
 
   await assertGolden(model, golden.answered.kinds, 'defect');
 });
@@ -354,7 +378,9 @@ test('a boolean question with descriptions of true and false asks them, as Venn 
     'vector-decisions-',
   );
   using database = open(join(directory.path, 'cache.sqlite'));
-  const model = new DecisionServiceModel(await service(database));
+  const model = new DecisionServiceModel(
+    await service(directory.path, database),
+  );
 
   await assertGolden(model, golden.answered['boolean criteria'], 'defect');
 });
@@ -364,7 +390,9 @@ test('a criterion of a choice without a description is the abstention: the proba
     'vector-decisions-',
   );
   using database = open(join(directory.path, 'cache.sqlite'));
-  const model = new DecisionServiceModel(await service(database));
+  const model = new DecisionServiceModel(
+    await service(directory.path, database),
+  );
 
   await assertGolden(model, golden.answered['null criterion'], 'team');
   await assertGolden(model, golden.answered['abstention named none'], 'team');
@@ -375,7 +403,9 @@ test('of two criteria with the same probability, the first one is the choice, as
     'vector-decisions-',
   );
   using database = open(join(directory.path, 'cache.sqlite'));
-  const model = new DecisionServiceModel(await service(database));
+  const model = new DecisionServiceModel(
+    await service(directory.path, database),
+  );
 
   await assertGolden(model, golden.answered.tie, 'team');
 });
@@ -385,7 +415,9 @@ test('JSON instructions, criteria and state are the text that Venn writes for th
     'vector-decisions-',
   );
   using database = open(join(directory.path, 'cache.sqlite'));
-  const model = new DecisionServiceModel(await service(database));
+  const model = new DecisionServiceModel(
+    await service(directory.path, database),
+  );
 
   await assertGolden(model, golden.answered.json, 'team');
   await assertGolden(model, golden.answered.json, 'urgency');
@@ -396,7 +428,9 @@ test('a state of parts is the text of each part, a JSON part as Venn writes its 
     'vector-decisions-',
   );
   using database = open(join(directory.path, 'cache.sqlite'));
-  const model = new DecisionServiceModel(await service(database));
+  const model = new DecisionServiceModel(
+    await service(directory.path, database),
+  );
 
   await assertGolden(model, golden.answered['text parts'], 'team');
   await assertGolden(model, golden.answered.parts, 'team');
@@ -407,7 +441,9 @@ test('maxOutputTokens and reasoning give warnings of settings that the model doe
     'vector-decisions-',
   );
   using database = open(join(directory.path, 'cache.sqlite'));
-  const model = new DecisionServiceModel(await service(database));
+  const model = new DecisionServiceModel(
+    await service(directory.path, database),
+  );
 
   const { warnings } = await experimental_decide({
     model,
@@ -435,7 +471,9 @@ test(
       'vector-decisions-',
     );
     using database = open(join(directory.path, 'cache.sqlite'));
-    const model = new DecisionServiceModel(await service(database));
+    const model = new DecisionServiceModel(
+      await service(directory.path, database),
+    );
 
     await assertGolden(model, golden.answered['none text'], 'team');
     await assertGolden(model, golden.answered['one text'], 'team');

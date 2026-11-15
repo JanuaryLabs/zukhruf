@@ -121,7 +121,10 @@ function venn(
   });
 }
 
+// A service whose calibrations file is in `registryDirectory`: with no file there,
+// each question divides by choice_temperature.
 async function service(
+  registryDirectory: string,
   database: DatabaseSync,
   model = venn(),
 ): Promise<DecisionService> {
@@ -129,6 +132,7 @@ async function service(
     model,
     database,
     directory: await downloadHead(),
+    registryPath: join(registryDirectory, 'calibrations.json'),
   });
 }
 
@@ -236,7 +240,12 @@ test('load refuses the config.json of a head that reads another reader', async (
   );
   using database = open(join(directory.path, 'cache.sqlite'));
   const load = () =>
-    DecisionService.load({ model: venn(), database, directory: copy.path });
+    DecisionService.load({
+      model: venn(),
+      database,
+      directory: copy.path,
+      registryPath: join(directory.path, 'calibrations.json'),
+    });
   // The config of venn-1, published again, loads.
   await publish(JSON.stringify(config));
   await load();
@@ -259,7 +268,7 @@ test('question_limit: a request with no question, or with more than 32, is refus
     'vector-decisions-',
   );
   using database = open(join(directory.path, 'cache.sqlite'));
-  const decisions = await service(database);
+  const decisions = await service(directory.path, database);
 
   for (const { request, code, status } of refused('question_limit'))
     await assert.rejects(decisions.decide(request), {
@@ -274,7 +283,7 @@ test('option_limit: a question with no option, or with more than 256, is refused
     'vector-decisions-',
   );
   using database = open(join(directory.path, 'cache.sqlite'));
-  const decisions = await service(database);
+  const decisions = await service(directory.path, database);
 
   for (const { request, code, status } of refused('option_limit'))
     await assert.rejects(decisions.decide(request), {
@@ -289,7 +298,7 @@ test('option_labels: two options with one label, or an option with the label "no
     'vector-decisions-',
   );
   using database = open(join(directory.path, 'cache.sqlite'));
-  const decisions = await service(database);
+  const decisions = await service(directory.path, database);
 
   for (const { request, code, status } of refused('option_labels'))
     await assert.rejects(decisions.decide(request), {
@@ -304,7 +313,7 @@ test('threshold: a threshold outside 0..1 is refused', async () => {
     'vector-decisions-',
   );
   using database = open(join(directory.path, 'cache.sqlite'));
-  const decisions = await service(database);
+  const decisions = await service(directory.path, database);
 
   for (const { request, code, status } of refused('threshold'))
     await assert.rejects(decisions.decide(request), {
@@ -319,7 +328,7 @@ test('rubric: a Score question whose scores are not one finite number for each o
     'vector-decisions-',
   );
   using database = open(join(directory.path, 'cache.sqlite'));
-  const decisions = await service(database);
+  const decisions = await service(directory.path, database);
 
   for (const { request, code, status } of refused('rubric'))
     await assert.rejects(decisions.decide(request), {
@@ -337,6 +346,7 @@ test('invalid_text: an empty text, or a text of more than 32,768 characters, is 
   // 32,768 code points, which are 65,536 code units of JavaScript.
   const longest = '😀'.repeat(32_768);
   const decisions = await service(
+    directory.path,
     database,
     venn({ [longest]: Array.from({ length: 768 }, () => 1) }),
   );
@@ -363,7 +373,7 @@ test('invalid_vector: a vector of another width than the head reads, or with a v
     'vector-decisions-',
   );
   using database = open(join(directory.path, 'cache.sqlite'));
-  const decisions = await service(database);
+  const decisions = await service(directory.path, database);
 
   for (const { request, code, status } of refused('invalid_vector'))
     await assert.rejects(decisions.decide(request), {
@@ -378,7 +388,7 @@ test('zero_vector: a vector of norm 0 is refused, also as a row of a plural stat
     'vector-decisions-',
   );
   using database = open(join(directory.path, 'cache.sqlite'));
-  const decisions = await service(database);
+  const decisions = await service(directory.path, database);
 
   for (const { request, code, status } of refused('zero_vector'))
     await assert.rejects(decisions.decide(request), {
@@ -393,7 +403,7 @@ test('unsupported_input: a plural state, of texts or of vectors, is refused for 
     'vector-decisions-',
   );
   using database = open(join(directory.path, 'cache.sqlite'));
-  const decisions = await service(database);
+  const decisions = await service(directory.path, database);
 
   for (const { request, code, status } of refused('unsupported_input'))
     await assert.rejects(decisions.decide(request), {
@@ -408,7 +418,7 @@ test('question_type: a question of another type than Choice, Score or Noul is re
     'vector-decisions-',
   );
   using database = open(join(directory.path, 'cache.sqlite'));
-  const decisions = await service(database);
+  const decisions = await service(directory.path, database);
 
   for (const { request, code, status } of refused('question_type'))
     await assert.rejects(decisions.decide(request), {
@@ -423,7 +433,7 @@ test('state_texts: a state of no texts, or of more than 512, is refused, and the
     'vector-decisions-',
   );
   using database = open(join(directory.path, 'cache.sqlite'));
-  const decisions = await service(database);
+  const decisions = await service(directory.path, database);
 
   for (const { request, code, status } of refused('state_texts'))
     await assert.rejects(decisions.decide(request), {
@@ -438,7 +448,7 @@ test('state_limit: a state of more than 512 vectors is refused', async () => {
     'vector-decisions-',
   );
   using database = open(join(directory.path, 'cache.sqlite'));
-  const decisions = await service(database);
+  const decisions = await service(directory.path, database);
 
   for (const { request, code, status } of refused('state_limit'))
     await assert.rejects(decisions.decide(request), {
@@ -453,7 +463,7 @@ test('state_shape: a state of texts that also has a text, a vector or vectors is
     'vector-decisions-',
   );
   using database = open(join(directory.path, 'cache.sqlite'));
-  const decisions = await service(database);
+  const decisions = await service(directory.path, database);
 
   for (const { request, code, status } of refused('state_shape'))
     await assert.rejects(decisions.decide(request), {
@@ -468,7 +478,7 @@ test('index_input: an IndexApply question about one state, a text or a vector, i
     'vector-decisions-',
   );
   using database = open(join(directory.path, 'cache.sqlite'));
-  const decisions = await service(database);
+  const decisions = await service(directory.path, database);
 
   for (const { request, code, status } of refused('index_input'))
     await assert.rejects(decisions.decide(request), {
@@ -483,7 +493,7 @@ test('stream_limit: a rowCap that is not a whole number from 0 to 1,000,000, or 
     'vector-decisions-',
   );
   using database = open(join(directory.path, 'cache.sqlite'));
-  const decisions = await service(database);
+  const decisions = await service(directory.path, database);
 
   for (const { request, code, status } of refused('stream_limit'))
     await assert.rejects(decisions.decide(request), {
@@ -498,7 +508,7 @@ test('stream_required: a rowCap of more than 512 is refused with the status 413,
     'vector-decisions-',
   );
   using database = open(join(directory.path, 'cache.sqlite'));
-  const decisions = await service(database);
+  const decisions = await service(directory.path, database);
 
   for (const { request, code, status } of refused('stream_required'))
     await assert.rejects(decisions.decide(request), {
@@ -513,7 +523,7 @@ test('question_handle: a questionRef that registerQuestion did not give is refus
     'vector-decisions-',
   );
   using database = open(join(directory.path, 'cache.sqlite'));
-  const decisions = await service(database);
+  const decisions = await service(directory.path, database);
   const handles = await register(decisions);
 
   for (const { request, code, status } of refused('question_handle'))
@@ -529,7 +539,7 @@ test('prewarm_override: a questionRef that also gives options, instructions or a
     'vector-decisions-',
   );
   using database = open(join(directory.path, 'cache.sqlite'));
-  const decisions = await service(database);
+  const decisions = await service(directory.path, database);
   const handles = await register(decisions);
 
   for (const { request, code, status } of refused('prewarm_override'))
@@ -545,7 +555,7 @@ test('prewarm_type: registerQuestion refuses a question of another type than Cho
     'vector-decisions-',
   );
   using database = open(join(directory.path, 'cache.sqlite'));
-  const decisions = await service(database);
+  const decisions = await service(directory.path, database);
   const refusals = golden['refused registrations'].filter(
     ({ code }) => code === 'prewarm_type',
   );
@@ -564,7 +574,7 @@ test('registerQuestion refuses instructions and options as decide refuses them',
     'vector-decisions-',
   );
   using database = open(join(directory.path, 'cache.sqlite'));
-  const decisions = await service(database);
+  const decisions = await service(directory.path, database);
   const refusals = golden['refused registrations'].filter(
     ({ code }) => code !== 'prewarm_type',
   );
@@ -591,7 +601,7 @@ test('a Choice question gives the probability of each option and of "none", and 
     'vector-decisions-',
   );
   using database = open(join(directory.path, 'cache.sqlite'));
-  const decisions = await service(database);
+  const decisions = await service(directory.path, database);
   const { kinds } = golden.answered;
 
   const decision = await decisions.decide(kinds.request);
@@ -604,7 +614,7 @@ test('a Score question also gives the expected score of the options, with the le
     'vector-decisions-',
   );
   using database = open(join(directory.path, 'cache.sqlite'));
-  const decisions = await service(database);
+  const decisions = await service(directory.path, database);
   const { kinds, scores } = golden.answered;
 
   for (const answered of [kinds, scores])
@@ -616,7 +626,7 @@ test('a Noul question gives the probability of "none" first, shares the rest amo
     'vector-decisions-',
   );
   using database = open(join(directory.path, 'cache.sqlite'));
-  const decisions = await service(database);
+  const decisions = await service(directory.path, database);
   const { kinds, thresholds } = golden.answered;
   // Without a threshold, a probability of "none" of 0.221 and of 0.509.
   const inScope = golden.answered['noul in scope'];
@@ -631,7 +641,7 @@ test('a Choice or Score question answers "none" when its confidence is below its
     'vector-decisions-',
   );
   using database = open(join(directory.path, 'cache.sqlite'));
-  const decisions = await service(database);
+  const decisions = await service(directory.path, database);
   const { thresholds } = golden.answered;
   const scoreThreshold = golden.answered['score threshold'];
 
@@ -648,7 +658,7 @@ test('a question without a type is a Choice, and without instructions asks "What
     'vector-decisions-',
   );
   using database = open(join(directory.path, 'cache.sqlite'));
-  const decisions = await service(database);
+  const decisions = await service(directory.path, database);
   const { defaults } = golden.answered;
 
   assertAnswer(await decisions.decide(defaults.request), defaults, 'topic');
@@ -659,7 +669,7 @@ test('a request can give the vectors: a state vector that is not a unit vector, 
     'vector-decisions-',
   );
   using database = open(join(directory.path, 'cache.sqlite'));
-  const decisions = await service(database);
+  const decisions = await service(directory.path, database);
   const { given } = golden.answered;
 
   assertAnswer(await decisions.decide(given.request), given, 'team');
@@ -670,7 +680,7 @@ test('the decision gives the vector of a state that the reader embedded, the vec
     'vector-decisions-',
   );
   using database = open(join(directory.path, 'cache.sqlite'));
-  const decisions = await service(database);
+  const decisions = await service(directory.path, database);
   const { kinds, thresholds, given } = golden.answered;
   const texts = golden.answered['index texts'];
   const vectors = golden.answered['index threshold'];
@@ -701,7 +711,7 @@ test('a request of several named questions of each type answers each by its name
     'vector-decisions-',
   );
   using database = open(join(directory.path, 'cache.sqlite'));
-  const decisions = await service(database);
+  const decisions = await service(directory.path, database);
   const { kinds } = golden.answered;
 
   const { answers } = await decisions.decide(kinds.request);
@@ -714,7 +724,7 @@ test('of two options with the same probability, the first one is the answer', as
     'vector-decisions-',
   );
   using database = open(join(directory.path, 'cache.sqlite'));
-  const decisions = await service(database);
+  const decisions = await service(directory.path, database);
   const { tie } = golden.answered;
 
   assertAnswer(await decisions.decide(tie.request), tie, 'team');
@@ -725,7 +735,7 @@ test('an option that is only a label is the text of its label', async () => {
     'vector-decisions-',
   );
   using database = open(join(directory.path, 'cache.sqlite'));
-  const decisions = await service(database);
+  const decisions = await service(directory.path, database);
   const { labels } = golden.answered;
 
   assertAnswer(await decisions.decide(labels.request), labels, 'team');
@@ -736,7 +746,7 @@ test('an IndexApply question answers each row of a plural state as a Choice ques
     'vector-decisions-',
   );
   using database = open(join(directory.path, 'cache.sqlite'));
-  const decisions = await service(database);
+  const decisions = await service(directory.path, database);
   const indexTexts = golden.answered['index texts'];
 
   assertAnswer(await decisions.decide(indexTexts.request), indexTexts, 'rows');
@@ -747,7 +757,7 @@ test('an IndexApply question answers the first rowCap rows, no row for a rowCap 
     'vector-decisions-',
   );
   using database = open(join(directory.path, 'cache.sqlite'));
-  const decisions = await service(database);
+  const decisions = await service(directory.path, database);
   const rowCap = golden.answered['index row cap'];
 
   const decision = await decisions.decide(rowCap.request);
@@ -761,7 +771,7 @@ test('an IndexApply question answers "none" for each row whose confidence is bel
     'vector-decisions-',
   );
   using database = open(join(directory.path, 'cache.sqlite'));
-  const decisions = await service(database);
+  const decisions = await service(directory.path, database);
   const threshold = golden.answered['index threshold'];
 
   assertAnswer(await decisions.decide(threshold.request), threshold, 'rows');
@@ -772,7 +782,7 @@ test('a questionRef answers as the question that registerQuestion registered, of
     'vector-decisions-',
   );
   using database = open(join(directory.path, 'cache.sqlite'));
-  const decisions = await service(database);
+  const decisions = await service(directory.path, database);
   const handles = await register(decisions);
   const reference = golden.answered['reference'];
   const rows = golden.answered['reference rows'];
@@ -798,7 +808,7 @@ test('a questionRef gives its threshold, and for IndexApply its rowCap and batch
     'vector-decisions-',
   );
   using database = open(join(directory.path, 'cache.sqlite'));
-  const decisions = await service(database);
+  const decisions = await service(directory.path, database);
   const handles = await register(decisions);
   const overrides = golden.answered['reference overrides'];
   const rows = golden.answered['reference rows overrides'];
@@ -827,7 +837,7 @@ test('the handle of registerQuestion names the question without its threshold: t
     'vector-decisions-',
   );
   using database = open(join(directory.path, 'cache.sqlite'));
-  const decisions = await service(database);
+  const decisions = await service(directory.path, database);
 
   for (const {
     name,
@@ -847,7 +857,7 @@ test('the type of registerQuestion refuses a threshold, which no decision reads,
     'vector-decisions-',
   );
   using database = open(join(directory.path, 'cache.sqlite'));
-  const decisions = await service(database);
+  const decisions = await service(directory.path, database);
   const team = {
     instructions: 'Who owns this ticket?',
     options: ['Login problems', 'Checkout and payments'],
@@ -869,7 +879,7 @@ test('registerQuestion embeds the texts of the question, so a decision with its 
   );
   using database = open(join(directory.path, 'cache.sqlite'));
   const model = venn();
-  const decisions = await service(database, model);
+  const decisions = await service(directory.path, database, model);
   const handle = await decisions.registerQuestion({
     instructions: 'Who owns this ticket?',
     options: ['Login problems', 'Checkout and payments'],
@@ -891,7 +901,7 @@ test('a second decision of the same request gives the same answers, and the vect
   );
   using database = open(join(directory.path, 'cache.sqlite'));
   const model = venn();
-  const decisions = await service(database, model);
+  const decisions = await service(directory.path, database, model);
   const { kinds } = golden.answered;
   const first = await decisions.decide(kinds.request);
   const calls = model.doEmbedCalls.length;

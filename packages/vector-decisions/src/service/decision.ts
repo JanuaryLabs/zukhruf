@@ -37,6 +37,10 @@ type Instructions =
 type Asked = Instructions & {
   readonly options: readonly Option[];
   readonly threshold?: number;
+  // The family whose temperature divides the logits of the question, when
+  // registerCalibration fitted one for its type. The default is the family
+  // of the request, else "".
+  readonly family?: string;
   readonly questionRef?: never;
 };
 
@@ -74,6 +78,8 @@ export type QuestionRef = {
 
 export type DecisionRequest = {
   readonly state: State;
+  // The family of each question that names none.
+  readonly family?: string;
   readonly questions: Readonly<Record<string, Question | QuestionRef>>;
 };
 

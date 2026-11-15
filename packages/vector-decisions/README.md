@@ -1,6 +1,6 @@
 # @zukhruf/vector-decisions
 
-> **Status: in progress.** Units 0 to 4, 5a, 5b and 6 of 17 are done: the package downloads the venn-1 head, checks it, reads its weights, gives the logits of a question for state vectors, makes those vectors from text through a reader with Venn's prompt and cache, and answers Choice, Score and Noul questions about one state, and IndexApply questions about each row of a plural state, with `DecisionService`, which also prepares a question for many decisions. `DecisionServiceModel` answers the questions of the AI SDK's `experimental_decide` with the service. The decisions are in [ADR 0001](docs/adr/0001-port-the-library-core-of-venn-at-one-commit-one-unit-at-a-time.md).
+> **Status: in progress.** Units 0 to 4, 5a, 5b, 6 and 7 of 17 are done: the package downloads the venn-1 head, checks it, reads its weights, gives the logits of a question for state vectors, makes those vectors from text through a reader with Venn's prompt and cache, and answers Choice, Score and Noul questions about one state, and IndexApply questions about each row of a plural state, with `DecisionService`, which also prepares a question for many decisions and fits the temperature of the questions of a family to labelled logits. `DecisionServiceModel` answers the questions of the AI SDK's `experimental_decide` with the service. The decisions are in [ADR 0001](docs/adr/0001-port-the-library-core-of-venn-at-one-commit-one-unit-at-a-time.md).
 
 A program often needs a decision about a text, not new text: which team owns a ticket, how urgent it is, or if it is a defect. A decision model such as Jev reads the text again for each question. This package answers the same typed questions from vectors. A reader embeds each text one time. Then a small head compares the vector of the text with the vectors of the options. This package is a TypeScript port of the library core of [Venn](https://github.com/markrussinovich/venn-vdm) (commit `7b2042e`).
 
@@ -20,7 +20,7 @@ Each unit works and has tests alone, and it composes with the units before it.
 | U5a  | `DecisionService.decide` for one state: Choice, Score and Noul                               | `server.py`                                        | done    |
 | U5b  | IndexApply and prepared questions (`registerQuestion`, `question_ref`)                       | `server.py`                                        | done    |
 | U6   | An AI SDK decision model over a `DecisionService` (addition: Venn has an HTTP route)         | `decisions.py`                                     | done    |
-| U7   | Calibration: the temperature fit, on an optimizer that moves out of mteb                     | `heads/calibration.py`                             | planned |
+| U7   | Calibration: the temperature of a family, fitted with a port of `torch.optim.LBFGS`          | `heads/calibration.py`, `server.py`                | done    |
 | U8   | Registered indexes and `streamIndex`, NearestReference, SetMembership and PopulationShift    | `server.py`, `index/decision.py`, `index/shift.py` | planned |
 | U9   | The draws of NumPy that the folds need, in `@zukhruf/random`                                 | -                                                  | planned |
 | U10  | The linear Choice family                                                                     | `heads/linear_choice.py`                           | planned |
@@ -150,6 +150,7 @@ const service = await DecisionService.load({
   model, // any AI SDK embedding model of EmbeddingGemma 2
   database,
   directory: await downloadHead(),
+  registryPath: 'calibrations.json', // the temperatures of registerCalibration
 });
 const { answers, vector } = await service.decide({
   state: 'The checkout page is broken and my card was charged twice',
@@ -173,12 +174,13 @@ const { answers, vector } = await service.decide({
 answers.team; // { answer, probabilities: { 'Login problems', 'Checkout and payments', none }, confidence, calibrated: false }
 ```
 
-`DecisionService.load({ model, database, directory })` makes the service, as the constructor of Venn's `DecisionService` does (`venn/server.py:57`):
+`DecisionService.load({ model, database, directory, registryPath })` makes the service, as the constructor of Venn's `DecisionService` does (`venn/server.py:57`):
 
 1. It checks the model directory with `modelDirectory`.
 2. It reads `config.json`. The config must name the reader `google/embeddinggemma-2` at the revision `f9972ac22e696a105c482202646979e33e4b5a1e`, with 768 numbers, and give a `choice_temperature`. Another config throws an `InvalidModelArtifactError` for `config.json`.
 3. It reads the head from `universal.safetensors`.
 4. It puts the two middlewares of the reader around `model`: the `Classification` prompt, then the vector cache in `database`. The caller opens and closes the database.
+5. It makes the directory of `registryPath` if it is not there, as Venn makes its store, and reads the temperatures of the file at `registryPath`, Venn's `registry_path`, if the file is there (see "Calibrate"). A file that is not JSON, not an object, or holds a temperature that is not a positive finite number throws a `TypeError` that names the file.
 
 `decide({ state, questions })` answers each named question about the state, as Venn's `decide` does (`venn/server.py:912`). The state is a text, `{ text }` or `{ vector }`, or a plural state: `{ texts }` with 1 to 512 texts, or `{ vectors }` with 1 to 512 vectors. Each text or vector of a plural state is a row. A question has these fields:
 
@@ -186,15 +188,16 @@ answers.team; // { answer, probabilities: { 'Login problems', 'Checkout and paym
 - `instructions`, a text (the default is "What is the topic?"), or `instructionsVec`, a vector.
 - `options`: 1 to 256 options. An option is a text, or `{ label, vector }`. An option without a vector is the text of its label.
 - `threshold`: a number from 0 to 1.
+- `family`: the family whose temperature divides the logits (see "Calibrate"). The default is the `family` of the request, else `""`.
 - `scores` (Score only): one number for each option. The default is 0, 1, 2 and so on.
 - `rowCap` (IndexApply only): the count of rows to answer, from the first, 0 to 512. The default is all the rows.
 - `batchSize` (IndexApply only): the count of rows in a batch, 1 to 65,536 (the default).
 
-The reader embeds the texts. The head gives the logits of the options and of "none" for the unit vector of the state. Each answer has the `probabilities` of the labels and of "none", the `confidence` (the largest probability), and `calibrated`, which is `false`, because the package has no calibration yet (U7):
+The reader embeds the texts. The head gives the logits of the options and of "none" for the unit vector of the state. Each answer has the `probabilities` of the labels and of "none", the `confidence` (the largest probability), and `calibrated`, which is `false`: Venn sets it only for the head of a family (U10, U13). The temperature of a question is the temperature that `registerCalibration` fitted for its family and its type (Choice for IndexApply), else `choice_temperature`:
 
-- **Choice**: the probabilities are the softmax of the logits divided by `choice_temperature`. The answer is the first label with the largest probability. If the confidence is less than the threshold, the answer is "none".
+- **Choice**: the probabilities are the softmax of the logits divided by the temperature of the question. The answer is the first label with the largest probability. If the confidence is less than the threshold, the answer is "none".
 - **Score**: the answer of a Choice, and `expectedScore`: the sum of the probability times the score of each option, divided by the sum of the probabilities of the options. The probability of "none" does not count, so `scoreConditionedOnNotNone` is `true`.
-- **Noul**: the probability of "none" comes first: the sigmoid of the "none" logit minus the logsumexp of the option logits, divided by `choice_temperature`. The options share the rest by softmax. The answer is "none" if the probability of "none" is equal to or more than the threshold (0.5 without one). Else the answer is "in_scope".
+- **Noul**: the probability of "none" comes first: the sigmoid of the "none" logit minus the logsumexp of the option logits, divided by the temperature of the question. The options share the rest by the softmax of their logits divided by `choice_temperature`, as in Venn (ADR 0003). The answer is "none" if the probability of "none" is equal to or more than the threshold (0.5 without one). Else the answer is "in_scope".
 - **IndexApply**: `{ rows, batches }`. `rows` holds the answer of a Choice for each of the first `rowCap` rows, with the index of the row as its `id`. `batches` is the count of batches of `batchSize` rows. Choice, Score and Noul answer one state only, and IndexApply a plural state only.
 
 ```ts
@@ -226,29 +229,31 @@ await service.decide({
 });
 ```
 
-`decide` and `registerQuestion` throw a `ContractError` with a `code` and a `status` (422 if the table gives none) for a request that breaks a rule of Venn. `decide` checks in Venn's order: the questions, the state, then each question in turn.
+`decide`, `registerQuestion` and `registerCalibration` throw a `ContractError` with a `code` and a `status` (422 if the table gives none) for a request that breaks a rule of Venn. `decide` checks in Venn's order: the questions, the state, then each question in turn.
 
-| Code                | The request has                                                                                                                 |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `question_limit`    | no question, or more than 32                                                                                                    |
-| `state_texts`       | a state of no texts, or of more than 512                                                                                        |
-| `state_shape`       | a state of texts that also has a text, a vector or vectors                                                                      |
-| `invalid_text`      | an empty text, or a text of more than 32,768 characters. A character is a code point, as Python counts it                       |
-| `invalid_vector`    | a vector with another number of values than the head reads, or with a value that is not finite in float32, or `{ vectors: [] }` |
-| `state_limit`       | a state of more than 512 vectors                                                                                                |
-| `zero_vector`       | a vector of norm 1e-12 or less                                                                                                  |
-| `question_handle`   | a `questionRef` that `registerQuestion` did not give (status 404)                                                               |
-| `prewarm_override`  | a `questionRef` with another field than `threshold`, `rowCap` and `batchSize`                                                   |
-| `threshold`         | a threshold that is not from 0 to 1                                                                                             |
-| `question_type`     | a type that is not `Choice`, `Score`, `Noul` or `IndexApply`                                                                    |
-| `option_limit`      | no option, or more than 256                                                                                                     |
-| `option_labels`     | two options with the same label, or an option with the label "none"                                                             |
-| `index_input`       | an IndexApply question about one state                                                                                          |
-| `stream_limit`      | a `rowCap` that is not a whole number from 0 to 1,000,000, or a `batchSize` that is not a whole number from 1 to 65,536         |
-| `stream_required`   | a `rowCap` of more than 512 (status 413): `decide` answers at most 512 rows                                                     |
-| `unsupported_input` | a plural state for a Choice, Score or Noul question                                                                             |
-| `rubric`            | scores that are not one finite number for each option                                                                           |
-| `prewarm_type`      | for `registerQuestion`, a type that is not `Choice`, `Score`, `Noul` or `IndexApply`                                            |
+| Code                 | The request has                                                                                                                         |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `question_limit`     | no question, or more than 32                                                                                                            |
+| `state_texts`        | a state of no texts, or of more than 512                                                                                                |
+| `state_shape`        | a state of texts that also has a text, a vector or vectors                                                                              |
+| `invalid_text`       | an empty text, or a text of more than 32,768 characters. A character is a code point, as Python counts it                               |
+| `invalid_vector`     | a vector with another number of values than the head reads, or with a value that is not finite in float32, or `{ vectors: [] }`         |
+| `state_limit`        | a state of more than 512 vectors                                                                                                        |
+| `zero_vector`        | a vector of norm 1e-12 or less                                                                                                          |
+| `question_handle`    | a `questionRef` that `registerQuestion` did not give (status 404)                                                                       |
+| `prewarm_override`   | a `questionRef` with another field than `threshold`, `rowCap` and `batchSize`                                                           |
+| `threshold`          | a threshold that is not from 0 to 1                                                                                                     |
+| `question_type`      | a type that is not `Choice`, `Score`, `Noul` or `IndexApply`                                                                            |
+| `option_limit`       | no option, or more than 256                                                                                                             |
+| `option_labels`      | two options with the same label, or an option with the label "none"                                                                     |
+| `index_input`        | an IndexApply question about one state                                                                                                  |
+| `stream_limit`       | a `rowCap` that is not a whole number from 0 to 1,000,000, or a `batchSize` that is not a whole number from 1 to 65,536                 |
+| `stream_required`    | a `rowCap` of more than 512 (status 413): `decide` answers at most 512 rows                                                             |
+| `unsupported_input`  | a plural state for a Choice, Score or Noul question                                                                                     |
+| `rubric`             | scores that are not one finite number for each option                                                                                   |
+| `prewarm_type`       | for `registerQuestion`, a type that is not `Choice`, `Score`, `Noul` or `IndexApply`                                                    |
+| `calibration_size`   | for `registerCalibration`, fewer than 200 rows or more than 10,000, another count of targets than of rows, or rows of different lengths |
+| `calibration_labels` | for `registerCalibration`, a logit that is not finite in float32, or a target that is not a whole number from 0 to the count of columns |
 
 The differences from Venn, and the rules of Venn that the package keeps, are in [ADR 0003](docs/adr/0003-decide-leaves-out-the-fields-of-venns-own-reader-and-keeps-venns-rules-of-an-answer.md):
 
@@ -262,6 +267,33 @@ The differences from Venn, and the rules of Venn that the package keeps, are in 
 The differences of `registerQuestion` are in [ADR 0004](docs/adr/0004-register-question-takes-no-name-and-its-handle-is-the-sha-256-of-the-rfc-8785-json-of-the-question.md): it takes no name, its handle is not Venn's, and the types refuse a threshold, which no decision reads.
 
 The tests compare `decide` and `registerQuestion` with Venn's own `DecisionService.decide` and `register_question` and the real venn-1 head, for the same raw vectors (`src/service/fixtures/generate.py`). The head is not in the repository, so these tests run in the `test-network` target.
+
+## Calibrate
+
+`choice_temperature` is one temperature for all questions. A family of questions, such as the questions about tickets, can need another one: its probabilities are too sure or not sure enough. `registerCalibration(family, logits, targets, kind)` fits a temperature to labelled logits, as Venn's `register_calibration` does (`venn/server.py:465`). `decide` then divides the logits of each question of that family and type by it.
+
+```ts
+const temperature = service.registerCalibration(
+  'tickets',
+  logits, // 200 to 10,000 rows: the logits of the options of a question, then of "none"
+  targets, // for each row, the column of its right answer
+  'Choice', // the default; also 'Score' or 'Noul'
+);
+await service.decide({
+  state: 'I cannot sign in',
+  family: 'tickets',
+  questions: { team }, // divided by the temperature of tickets/Choice
+});
+service.deleteCalibration('tickets'); // tickets/Choice gets choice_temperature again
+```
+
+- The logits are rounded to float32, as Venn rounds them. The temperature is Venn's `fit_temperature` (`venn/heads/calibration.py`): the T for which the softmax of logits / T has the least mean cross-entropy with the targets, from e^-5 to e^5. The fit is a port of `torch.optim.LBFGS` of PyTorch 2.15.0: one step with the strong Wolfe line search, from T = 1, as Venn fits it, with one change: the clamp of log T to [−5, 5] passes its gradient. In Venn's fit it passes 0 outside [−5, 5], so a step past −5 stops the fit at e^-5, far from the best temperature, for some logits that are small. The change gives Venn's temperature wherever Venn's fit finds the best one. PyTorch stops before the minimum of the loss, so another optimizer, such as SciPy's L-BFGS-B, does not give Venn's temperature ([ADR 0006](docs/adr/0006-a-calibration-fits-the-temperature-with-pytorchs-lbfgs-and-keeps-it-in-venns-calibrations-json.md)).
+- A question takes the temperature of its `family` and its type: `"<family>/<type>"`. An IndexApply question takes the temperature of Choice. A question without a family takes the `family` of the request, else `""`. A `questionRef` takes the family of the question that `registerQuestion` registered.
+- The file at `registryPath` holds the temperatures, as Venn writes it: `json.dumps(calibrations, indent=2)` and a new line, with the keys in the order of their first registration. Each registration and deletion writes the file before `decide` uses the change, so a write that fails throws its error and changes no temperature. So a registry that Venn wrote works here, and a service that loads the registry later has the same temperatures.
+- `registerCalibration` and `deleteCalibration` are synchronous, as Venn's are. A deletion of a temperature that is not there writes the file and changes nothing.
+- An answer stays `calibrated: false`.
+
+The tests compare the temperatures, `calibrations.json` and the answers of `decide` with Venn's own `register_calibration`, `delete_calibration` and `decide` and the real venn-1 head (`src/calibration/fixtures/generate.py`). The temperatures differ by at most 9.1e-11 of their size. On a flat loss, two losses can differ by less than their rounding, and then PyTorch's line search can take another branch: in 1 of 92 measured sets, the temperature differed by 1.8e-5. One set of logits, for which Venn's fit stops at e^-5, is compared with Venn's `fit_temperature` with a clamp that passes the gradient. These tests run in the `test-network` target.
 
 ## Decide with the AI SDK
 

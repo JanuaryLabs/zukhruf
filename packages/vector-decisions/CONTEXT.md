@@ -98,6 +98,22 @@ _Avoid_: cutoff, minimum
 The scores of the options of a Score question, each times its probability, added up and divided by the sum of the probabilities of the options. The probability of "none" does not count.
 _Avoid_: average, mean score, expected value
 
+**Choice temperature**:
+The number that divides the logits of a question before the softmax, when no calibration gives the question another one. It is the `choice_temperature` of the config of the head.
+_Avoid_: temperature (the temperature of the head divides the cosines)
+
+**Family**:
+The name of a group of questions that share a calibration, such as "tickets". A question names its family, or takes the family of the request.
+_Avoid_: group, domain, namespace
+
+**Calibration**:
+A temperature for the questions of one family and one type, fitted to labelled logits with a port of PyTorch's `torch.optim.LBFGS`, as Venn fits it, but with a clamp of log T that passes its gradient. It divides their logits in place of the choice temperature.
+_Avoid_: temperature scaling (the method), calibrated (Venn's word for an answer of the head of a family)
+
+**Registry**:
+The file where a service keeps its calibrations: `registryPath`, Venn's `registry_path`.
+_Avoid_: store, cache
+
 **Decision model**:
 The AI SDK model that answers the questions of `experimental_decide`. `DecisionServiceModel` asks each question of a call as a Choice of one `DecisionService`.
 _Avoid_: provider, adapter, decider

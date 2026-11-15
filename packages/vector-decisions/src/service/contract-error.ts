@@ -17,7 +17,9 @@ export type ContractErrorCode =
   | 'stream_required'
   | 'question_handle'
   | 'prewarm_override'
-  | 'prewarm_type';
+  | 'prewarm_type'
+  | 'calibration_size'
+  | 'calibration_labels';
 
 // A request that breaks a rule of Venn's contract (venn/errors.py): `code`
 // names the rule for a program, the message is for people, and `status` is

@@ -1,3 +1,4 @@
+export type { CalibrationKind } from './calibration/calibrations.ts';
 export { DecisionServiceModel } from './decision-model/decision-service-model.ts';
 export { CosineAbstention } from './head/cosine-abstention.ts';
 export { DimensionMismatchError } from './head/dimension-mismatch-error.ts';
