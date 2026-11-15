@@ -35,15 +35,15 @@ A container whose port answers on 127.0.0.1 of this machine.
 _Avoid_: Server container
 
 **Shared server**:
-A service container that `reuse()` shares between processes, runs and versions of this package, one for each request. Its name and its label `dev.zukhruf.testing.server` hold the fingerprint of the request. A global teardown removes a shared server that is older than its time to live (TTL) of 7 days, when no process lease holds it.
+A service container that `reuse()` shares between processes, runs and versions of this package, one for each request. Its name and its label `dev.zukhruf.testing.server` hold the fingerprint of the request. The reaper of a run removes a shared server that is older than its time to live (TTL) of 7 days, when no process lease holds it.
 _Avoid_: Global container, singleton
 
 **Lease**:
-A container that runs `cat` on the standard input of the attach of its holder process. When the holder exits for any reason, the attach closes and the engine removes the lease. A process lease tells a global teardown that a test process uses one shared server now. `reuse()` takes one for each process and shared server.
+A container that runs `cat` on the standard input of the attach of its holder process. When the holder exits for any reason, the attach closes and the engine removes the lease. A process lease tells a reaper that a test process uses one shared server now. `reuse()` takes one for each process and shared server.
 _Avoid_: Heartbeat, lock, Ryuk session
 
 **Sweep lease**:
-The lease that a global teardown holds while it looks for the process leases of one shared server and removes that server. Its name comes from the fingerprint of the server, so one teardown at a time sweeps a server. A test process of that server waits until the sweep lease is gone.
+The lease that a reaper holds while it looks for the process leases of one shared server and removes that server. Its name comes from the fingerprint of the server, so one reaper at a time sweeps a server. A test process of that server waits until the sweep lease is gone.
 _Avoid_: Sweep lock
 
 **Run**:
@@ -55,21 +55,22 @@ Node's hook that starts a run before the test processes start. It does recovery 
 _Avoid_: Wrapper
 
 **Global teardown**:
-Node's hook that removes what the run created after its test processes end. It is synchronous: it starts a worker thread that sends the requests to the engine, and it waits for that worker.
+Node's hook that runs after the test processes of a run end. It is synchronous and makes no engine call: it removes the recorded paths and their records. It keeps the run's other records when the run has a process record, for the recovery of a later run.
 _Avoid_: Cleanup hook
+
+**Reaper**:
+A container of one run on one engine, with the engine's socket mounted (ADR 0020). Each test process of the run holds it with one `cat` exec, and takes the hold again at once when it ends while the process lives. About 2 s after the last holder ended, it closes, so a later holder holds the next reaper of the run, and it removes the run's containers and volumes, drops the run's databases in the shared servers, checks again a few times, removes the expired shared servers, and exits.
+_Avoid_: Ryuk, janitor
 
 **Runner**:
 The `node --test` process that runs the global setup, starts the test processes and runs the global teardown.
 
 **Process record**:
-A record in the run's directory that names a process that can create something for the run: a test process, another process that reads `defaults`, or an SSH command that a test process started. A test process records itself on the first acquisition of a `DockerTestbed`, which every database fixture makes. A process also records itself when it reads `defaults`, because another Docker client in that process can create with those labels, for example a sandbox launcher. While a recorded process lives, the run's records stay.
+A record in the run's directory that names a process that can create something for the run: a test process, another process that calls `defaults()`, or an SSH command that a test process started. A test process records itself on the first acquisition of a `DockerTestbed`, which every database fixture makes. A process also records itself when it calls `defaults()`, because another Docker client in that process can create with those labels, for example a sandbox launcher. In a run, that call also holds the run's reaper. While a recorded process lives, the run's records stay.
 _Avoid_: Worker record, PID file
 
-**Creating record**:
-A record in the run's directory that a test process writes while it asks the engine to create a container. The engine can finish the create after the process died. While a creating record remains, the global teardown keeps the run's records, and the recovery of a later run sweeps the run again.
-
 **Recovery**:
-A later run removing what an earlier run left, because the earlier run's global teardown did not run, failed, or kept the records for a process that still lived. Recovery waits until that run's runner and recorded processes have ended.
+A later run removing what an earlier run left: the recorded paths, and, through the earlier run's reaper, its engine objects. It deletes the earlier run's records only when the engine has no reaper of that run and nothing that one would remove. Otherwise it starts that run's reaper, or leaves a running one alone, and keeps the records. Recovery waits until that run's runner and recorded processes have ended.
 _Avoid_: Garbage collection, prune
 
 **Area**:

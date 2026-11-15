@@ -6,7 +6,7 @@ import { promisify } from 'node:util';
 
 import { DockerTestbed } from '../docker/index.ts';
 import { Postgres } from './postgres.ts';
-import { SQL_SERVER_FULL_IMAGE, SqlServer } from './sqlserver.ts';
+import { SqlServer } from './sqlserver.ts';
 
 const execute = promisify(execFile);
 const docker = new DockerTestbed({ environment: process.env });
@@ -165,7 +165,6 @@ for (const [engine, helper, config] of [
   ['mysql', 'Mysql', {}],
   ['mariadb', 'Mariadb', {}],
   ['sqlserver', 'SqlServer', {}],
-  ['sqlserver-full', 'SqlServer', { image: SQL_SERVER_FULL_IMAGE }],
 ] as const) {
   test(
     `${engine} shares across processes and restarts until explicit cleanup`,

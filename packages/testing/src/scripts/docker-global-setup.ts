@@ -7,36 +7,26 @@
  * engine, from any project of this user.
  */
 import { randomUUID } from 'node:crypto';
-import {
-  existsSync,
-  readFileSync,
-  readdirSync,
-  rmSync,
-  statSync,
-} from 'node:fs';
+import { readFileSync, readdirSync, rmSync } from 'node:fs';
 import { mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { extname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import {
-  MessageChannel,
-  Worker,
-  receiveMessageOnPort,
-} from 'node:worker_threads';
+import { join } from 'node:path';
 
 import { Docker } from '@zukhruf/docker';
 
 import { DockerHost } from '../docker/host.ts';
 import {
+  REAPER_DEFAULTS,
+  reaped,
+  sharedDatabases,
+  startReaper,
+} from '../docker/reaper.ts';
+import {
   TEST_RUN_DIRECTORY,
   TEST_RUN_ID,
   readRun,
 } from '../docker/run-records.ts';
-import type { CleanupOutcome, CleanupWork } from './docker-cleanup-worker.ts';
-import { ENGINE_CALL_TIMEOUT, type Run, cleanup } from './run-cleanup.ts';
-
-/** How long the global teardown waits for its cleanup worker. */
-const CLEANUP_TIMEOUT = 250_000;
+import { type Run, removeRecordedPaths } from './run-cleanup.ts';
 
 const codeOf = (error: unknown): unknown =>
   Error.isError(error) && 'code' in error ? error.code : undefined;
@@ -50,86 +40,12 @@ function alive(pid: number): boolean {
   }
 }
 
-/** The records in a run's directory that make its cleanup necessary. */
-function records(directory: string): {
-  /** The pids in the run's process records. */
-  processes: number[];
-  /** The number of creates that the engine can still finish. */
-  creating: number;
-} {
-  const files = readdirSync(directory);
-  return {
-    processes: files.flatMap((file) => {
-      const pid = /^process-(\d+)-[\da-f-]{36}\.json$/.exec(file)?.[1];
-      return pid === undefined ? [] : [Number(pid)];
-    }),
-    creating: files.filter((file) => file.startsWith('creating-')).length,
-  };
-}
-
-/**
- * Whether the engine can still finish a create of the run's directory: one
- * of its creating records is younger than one engine call may take. The
- * process that wrote the record can be dead, as the engine finishes a create
- * that it received.
- */
-function createInFlight(directory: string): boolean {
-  const since = Date.now() - ENGINE_CALL_TIMEOUT;
-  return readdirSync(directory).some(
-    (file) =>
-      file.startsWith('creating-') &&
-      statSync(join(directory, file)).mtimeMs > since,
-  );
-}
-
-/**
- * The cleanup worker, next to this module: `.ts` when Node runs the source,
- * `.js` when it runs the build.
- */
-function cleanupWorker(): URL {
-  const extension = extname(import.meta.filename);
-  const url = new URL(`./docker-cleanup-worker${extension}`, import.meta.url);
-  if (!existsSync(url))
-    throw new Error(
-      `The Docker cleanup worker is missing: ${fileURLToPath(url)}`,
-    );
-  return url;
-}
-
-/**
- * Runs the cleanup in a worker and blocks until it ends. Under
- * `--test-force-exit`, Node does not await the global teardown before it
- * exits (internal/test_runner/test, `harness.teardown()` and then
- * `process.exit()`), so the teardown cannot return to the event loop.
- */
-function cleanupInWorker(run: Run, directory: string): void {
-  const url = cleanupWorker();
-  const signal = new SharedArrayBuffer(4);
-  const { port1, port2 } = new MessageChannel();
-  const work: CleanupWork = { run, directory, port: port2, signal };
-  const worker = new Worker(url, {
-    execArgv: [],
-    workerData: work,
-    transferList: [port2],
+/** The pids in the process records of a run's directory. */
+const processes = (directory: string): number[] =>
+  readdirSync(directory).flatMap((file) => {
+    const pid = /^process-(\d+)-[\da-f-]{36}\.json$/.exec(file)?.[1];
+    return pid === undefined ? [] : [Number(pid)];
   });
-  worker.unref();
-  const waited = Atomics.wait(new Int32Array(signal), 0, 0, CLEANUP_TIMEOUT);
-  const received = receiveMessageOnPort(port1);
-  port1.close();
-  if (waited === 'timed-out' || received === undefined) {
-    void worker.terminate();
-    throw new Error(
-      `The Docker cleanup did not finish within ${CLEANUP_TIMEOUT / 1000} s`,
-    );
-  }
-  const outcome: CleanupOutcome = received.message;
-  if ('error' in outcome) {
-    const error = new Error(outcome.error.message);
-    error.name = outcome.error.name;
-    error.stack = outcome.error.detail;
-    throw error;
-  }
-}
 
 async function readRunFile(directory: string): Promise<Run | undefined> {
   try {
@@ -140,18 +56,27 @@ async function readRunFile(directory: string): Promise<Run | undefined> {
   }
 }
 
-/** Removes what dead runs on this engine left behind. */
+/**
+ * Removes what dead runs on this engine left behind: the recorded paths, and,
+ * through the reaper of the run, its engine objects. The records of a run go
+ * once the engine has no reaper of it and nothing that one would remove
+ * (ADR 0020, item 9).
+ */
 async function recover(root: string, endpoint: string): Promise<void> {
-  // Connected only when a dead run has something to sweep.
+  // Connected only when a dead run used Docker.
   await using resources = new AsyncDisposableStack();
   let engine: Docker | undefined;
   const connection = async (): Promise<Docker> =>
     (engine ??= resources.use(
-      await Docker.connect({
-        clock: globalThis,
-        host: endpoint,
-        signal: AbortSignal.timeout(ENGINE_CALL_TIMEOUT),
-      }),
+      await Docker.connect({ clock: globalThis, host: endpoint }),
+    ));
+  // Listed once, for all dead runs, and only when one needs it.
+  let databases: Promise<string[]> | undefined;
+  const listed = async (): Promise<string[]> =>
+    (databases ??= sharedDatabases(
+      await connection(),
+      REAPER_DEFAULTS,
+      globalThis,
     ));
   for (const name of await readdir(root)) {
     // A claim names its runner: while it lives, the run is being recovered.
@@ -163,15 +88,15 @@ async function recover(root: string, endpoint: string): Promise<void> {
       continue;
     // A killed runner leaves its test processes running. Each one can still
     // create something.
-    let found: ReturnType<typeof records>;
+    let pids: number[];
     try {
-      found = records(directory);
+      pids = processes(directory);
     } catch (error) {
       // Another runner claimed the run between the listing and this read.
       if (codeOf(error) === 'ENOENT') continue;
       throw error;
     }
-    if (found.processes.some(alive)) continue;
+    if (pids.some(alive)) continue;
     // Runners start in parallel; the rename lets exactly one recover a run.
     const claimed = join(root, `recovering-${process.pid}-${randomUUID()}`);
     try {
@@ -181,12 +106,16 @@ async function recover(root: string, endpoint: string): Promise<void> {
       throw error;
     }
     try {
-      if (found.processes.length > 0 || found.creating > 0)
-        await cleanup(await connection(), previous, claimed);
-      // A create that the engine finishes after this sweep is swept by a
-      // later recovery, which finds the run again under its own name.
-      if (createInFlight(claimed)) await rename(claimed, directory);
-      else rmSync(claimed, { recursive: true, force: true });
+      removeRecordedPaths(previous, claimed);
+      // A run with no process record never reached the engine.
+      if (
+        pids.length === 0 ||
+        (await reaped(await connection(), previous.id, listed))
+      )
+        rmSync(claimed, { recursive: true, force: true });
+      // Its reaper still exists, or one was killed before it removed all:
+      // the records stay for a later recovery, under this claim.
+      else await startReaper(await connection(), previous.id);
     } catch (error) {
       throw new Error(
         `Could not recover Docker test resources. Retained ownership record: ${claimed}`,
@@ -227,7 +156,12 @@ export async function globalSetup(): Promise<void> {
   delete process.env.DOCKER_CONTEXT;
 }
 
-/** Synchronous: see cleanupInWorker. */
+/**
+ * Synchronous: under `--test-force-exit`, Node does not await the global
+ * teardown before it exits (internal/test_runner/test, `harness.teardown()`
+ * and then `process.exit()`). It makes no engine call: the reaper of the run
+ * removes the run's engine objects after its last test process (ADR 0020).
+ */
 export function globalTeardown(): void {
   const owner = readRun(process.env);
   if (!owner)
@@ -239,12 +173,11 @@ export function globalTeardown(): void {
     const run: Run = JSON.parse(
       readFileSync(join(directory, 'run.json'), 'utf8'),
     );
-    const { processes, creating } = records(directory);
-    // No test process recorded itself, so the run created nothing.
-    if (processes.length > 0 || creating > 0) cleanupInWorker(run, directory);
-    // A process that still lives, or a create that the engine can still
-    // finish, can still add something: the next run's recovery sweeps again.
-    if (!processes.some(alive) && creating === 0)
+    removeRecordedPaths(run, directory);
+    // A run whose process reached the engine keeps its records: the
+    // teardown cannot see whether its reaper acted, and a later recovery
+    // asks the engine (ADR 0020, items 6 and 9).
+    if (processes(directory).length === 0)
       rmSync(directory, { recursive: true, force: true });
   } catch (error) {
     // Node sets exit code 1 for a teardown that throws, but prints nothing.

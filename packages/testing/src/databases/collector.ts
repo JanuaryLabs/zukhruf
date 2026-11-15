@@ -1,8 +1,8 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 
-import type { CancelOptions, Container } from '@zukhruf/docker';
+import type { Container } from '@zukhruf/docker';
 
-import type { DockerHost } from '../docker/host.ts';
+import { succeeded } from './succeeded.ts';
 
 /** The kind of a database fixture's shared server: it names the collector of the server. */
 export const KIND_LABEL = 'dev.zukhruf.testing.kind';
@@ -21,36 +21,38 @@ export const databaseName = (id: string | undefined): string =>
     : `test_${hex(randomUUID())}`;
 
 /**
- * The databases of one server kind: `list` gives the names of the server's
- * test databases, and `drop` drops one. Disposal and the run's cleanup both
- * drop with `drop`.
+ * The extended regular expression of the names of the databases of the run
+ * whose id without hyphens is `runHex`. `_` is a wildcard of SQL's LIKE, so
+ * only this exact pattern proves a run's database.
  */
-export interface Collector<Server> {
-  readonly kind: Kind;
-  /**
-   * The running shared server `container`, with the credentials of
-   * `environment`, its `Config.Env`. Disposal closes what it opened.
-   */
-  open(
-    container: Container,
-    environment: Record<string, string>,
-    host: DockerHost,
-  ): Promise<Server & AsyncDisposable>;
-  /** Each database whose name starts with `test`, a superset of a run's. */
-  list(server: Server, cancel: CancelOptions): Promise<string[]>;
-  /** Drops the database `name` if it exists. */
-  drop(server: Server, name: string, cancel: CancelOptions): Promise<void>;
-}
+export const ownedNames = (runHex: string): string =>
+  `^test_${runHex}_[0-9a-f]{16}$`;
 
 /**
- * Whether `name` is a database of the run `runId`. `_` is a wildcard of
- * SQL's LIKE, so only the exact name pattern proves a run's database.
+ * The databases of one server kind, through the client in the server's
+ * image. Disposal and the reaper (ADR 0020) both run its command and SQL.
  */
-export const ownedBy =
-  (runId: string) =>
-  (name: string): boolean => {
-    const prefix = `test_${hex(runId)}_`;
-    return (
-      name.startsWith(prefix) && /^[\da-f]{16}$/.test(name.slice(prefix.length))
-    );
-  };
+export interface Collector {
+  readonly kind: Kind;
+  /** The variable of the server's `Config.Env` that holds the client's credential, and the credential without it. */
+  readonly credential: { variable: string; fallback?: string };
+  /** The command in the server's container that runs `sql` with `credential`, and prints one value of each row a line. */
+  command(credential: string, sql: string): string[];
+  /** The SQL that lists each database whose name starts with `test`, a superset of a run's. */
+  readonly list: string;
+  /** The SQL that drops the database `name` if it exists. */
+  drop(name: string): string;
+}
+
+/** Drops the database `name` in the server `container` with the client of `collector`. */
+export async function dropDatabase(
+  collector: Collector,
+  container: Container,
+  credential: string,
+  name: string,
+): Promise<void> {
+  await succeeded(
+    container,
+    collector.command(credential, collector.drop(name)),
+  );
+}

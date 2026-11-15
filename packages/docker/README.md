@@ -318,6 +318,12 @@ await input.close();
 const { stdout } = await psql.collect();
 ```
 
+A command keeps the process running until it ends, as each request in flight does. With `ref: false`, as for `attach()`, it does not. When the process exits, its hijacked connection closes, and the engine ends the input of the command. A holder uses this: one `cat` for each holder process, run in a container whose main process waits until no `cat` is left. Ryuk of Testcontainers counts its connections in the same way.
+
+```ts
+await reaper.spawn({ Cmd: ['cat'] }, { stdin: true, ref: false });
+```
+
 The end of the input depends on the host. On a Unix socket, the package shuts down the write side of the socket. Over SSH, it closes the standard input of `ssh`, and `docker system dial-stdio` then closes the write side to the engine. On a Windows named pipe, it writes a message of zero bytes, because a pipe has no shutdown of one side: the engine listens on its pipe in message mode and reads that message as the end. `CloseWrite` of go-winio, which the Docker CLI uses, sends the same message.
 
 A signal cancels the wait. It does not stop the command: the Engine API has no request that stops an exec. To stop a command, kill the container, or run the command under `timeout` in the container. A signal also cancels an iteration of a container process: the iteration rejects with the reason of the signal, as each cancel does ([the async glossary](../async/CONTEXT.md)).
@@ -716,9 +722,10 @@ export class Container {
     body: EngineApi.ExecConfig,
     options?: CancelOptions & { stdin?: string | Uint8Array },
   ): Promise<ExecResult>;
+  /** `ref: false`: the command does not keep the process running. */
   spawn(
     body: EngineApi.ExecConfig,
-    options?: CancelOptions & { stdin?: boolean },
+    options?: CancelOptions & { stdin?: boolean; ref?: boolean },
   ): Promise<ContainerProcess>;
   /** Attach before start() to get all output. `ref: false`: the attach does not keep the process running. */
   attach(

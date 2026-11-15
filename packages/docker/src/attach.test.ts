@@ -212,6 +212,30 @@ await container.start();
 console.log(JSON.stringify({ id: container.id }));
 `;
 
+/**
+ * A scenario that connects with `connect`, starts a labeled container that the
+ * engine removes when it stops, whose main process waits until an exec marked
+ * itself and then until no `cat` is left, spawns that exec's `cat` on its
+ * standard input with `ref: false`, prints the container's ID and the `cat`s
+ * that run 1 s later, and then has nothing left to do.
+ */
+const holdSpawn = (connect: string, run: string) => `
+import { Docker } from ${JSON.stringify(ENTRY)};
+const docker = await Docker.connect({ ...${connect}, clock: globalThis });
+const container = await docker.containers.create({
+  Image: ${JSON.stringify(IMAGE)},
+  Entrypoint: ['sh', '-c', 'until [ -e /tmp/held ]; do sleep 0.05; done; while pgrep -x cat; do sleep 0.05; done'],
+  Cmd: [],
+  Labels: { ${JSON.stringify(TEST_LABEL)}: ${JSON.stringify(run)} },
+  HostConfig: { AutoRemove: true },
+});
+await container.start();
+await container.spawn({ Cmd: ['sh', '-c', 'touch /tmp/held && exec cat'] }, { stdin: true, ref: false });
+await new Promise((resolve) => setTimeout(resolve, 1000));
+const { stdout } = await container.exec({ Cmd: ['pgrep', '-x', 'cat'] });
+console.log(JSON.stringify({ id: container.id, held: stdout.trim() !== '' }));
+`;
+
 /** Resolves when the container is gone, and rejects when it is still there after 20 s. */
 async function removed(docker: Docker, id: string): Promise<void> {
   try {
@@ -341,6 +365,90 @@ describe('container.attach({ ref: false })', () => {
         // Assert
         assert.equal(result.exitCode, 0, result.stderr);
         const { id } = Object(lastJson(result));
+        await removed(cleaner, String(id));
+        assert.equal(await cleaner.containers.find(String(id)), undefined);
+        await t.waitFor(
+          async () =>
+            assert.deepEqual(
+              (await standIn.runs()).map(({ pid }) => pid).filter(isAlive),
+              [],
+            ),
+          { interval: 50, timeout: 20_000 },
+        );
+      } finally {
+        for (const { pid } of await standIn.runs()) {
+          if (isAlive(pid)) process.kill(pid, 'SIGKILL');
+        }
+        await removeLabeled(cleaner, run);
+      }
+    },
+  );
+});
+
+describe('container.spawn({ ref: false })', () => {
+  test(
+    'through a Unix socket, a process that holds an exec with ref: false exits by itself, and its cat then ends',
+    { skip: needsLocalEngine },
+    async () => {
+      // Arrange
+      await using home = await scratchDirectory();
+      const host = `unix://${String(engineSocket)}`;
+      await using cleaner = await Docker.connect({ clock: globalThis, host });
+      if (!(await cleaner.images.inspect(IMAGE)))
+        await cleaner.images.pull(IMAGE);
+      const run = randomUUID();
+      try {
+        // Act
+        const result = await runScenario(
+          holdSpawn(JSON.stringify({ host }), run),
+          { HOME: home.path },
+          AbortSignal.timeout(30_000),
+        );
+
+        // Assert: the main process ends when no cat is left.
+        assert.equal(result.exitCode, 0, result.stderr);
+        const { id, held } = Object(lastJson(result));
+        assert.equal(held, true, 'The cat runs while its holder lives');
+        await removed(cleaner, String(id));
+        assert.equal(await cleaner.containers.find(String(id)), undefined);
+      } finally {
+        await removeLabeled(cleaner, run);
+      }
+    },
+  );
+
+  test(
+    'through ssh, a process that holds an exec with ref: false exits by itself, each ssh process ends, and its cat then ends',
+    { skip: needsLocalEngine },
+    async (t) => {
+      // Arrange
+      await using home = await scratchDirectory();
+      await using standIn = await sshStandIn({
+        kind: 'engine',
+        socketPath: String(engineSocket),
+      });
+      await using cleaner = await Docker.connect({
+        clock: globalThis,
+        host: `unix://${String(engineSocket)}`,
+      });
+      if (!(await cleaner.images.inspect(IMAGE)))
+        await cleaner.images.pull(IMAGE);
+      const run = randomUUID();
+      try {
+        // Act
+        const result = await runScenario(
+          holdSpawn(JSON.stringify({ host: 'ssh://tester@machine' }), run),
+          {
+            PATH: `${standIn.path}${delimiter}${process.env.PATH}`,
+            HOME: home.path,
+          },
+          AbortSignal.timeout(30_000),
+        );
+
+        // Assert
+        assert.equal(result.exitCode, 0, result.stderr);
+        const { id, held } = Object(lastJson(result));
+        assert.equal(held, true, 'The cat runs while its holder lives');
         await removed(cleaner, String(id));
         assert.equal(await cleaner.containers.find(String(id)), undefined);
         await t.waitFor(

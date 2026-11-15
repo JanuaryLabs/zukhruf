@@ -27,15 +27,16 @@ new DockerEngineStore({
   image,
   namespace,
   heartbeatInterval,
-  labels: new DockerTestbed({ environment: process.env }).defaults.Labels,
+  labels: (await new DockerTestbed({ environment: process.env }).defaults())
+    .Labels,
 });
 ```
 
-The README of `@zukhruf/testing` gives `defaults` as the seam for other container APIs. A read of `defaults` also records the test process. Thus the teardown of the run waits while that process runs. In the code step, the test fixtures of the mutex give these labels: `src/testing/store-cases.ts`, the fixture in `docker-engine-store.test.ts`, and its child script `holderSource`. [ADR 0030](./0030-each-lock-store-runs-the-lock-store-contract-from-its-own-tests-and-a-capability-is-a-typed-parameter.md) deletes `src/testing/store-cases.ts`. The test fixture of `DockerEngineStore` is now in `src/testing/subjects/docker-engine.ts`, and it gives these labels.
+The README of `@zukhruf/testing` gives `defaults()` as the seam for other container APIs. A call of `defaults()` also records the test process and, in a run, holds the run's reaper ([`@zukhruf/testing` ADR 0020](../../../testing/docs/adr/0020-a-reaper-container-removes-a-runs-engine-objects-when-the-attach-that-holds-it-closes-and-recovery-keeps-the-local-records.md), item 11). Thus the reaper removes what that process left after the run's last test process ends. In the code step, the test fixtures of the mutex give these labels: `src/testing/store-cases.ts`, the fixture in `docker-engine-store.test.ts`, and its child script `holderSource`. [ADR 0030](./0030-each-lock-store-runs-the-lock-store-contract-from-its-own-tests-and-a-capability-is-a-typed-parameter.md) deletes `src/testing/store-cases.ts`. The test fixture of `DockerEngineStore` is now in `src/testing/subjects/docker-engine.ts`, and it gives these labels.
 
 **A removal of rungs by these labels is safe.** A cleanup by the labels of the caller can remove the ladder of a key. Since [ADR 0028](./0028-a-docker-engine-token-is-the-higher-of-the-engine-time-and-the-ladder.md), the tokens after a removed ladder start at the engine time, which is higher than each earlier token. Thus no rule about who may remove the rungs is necessary.
 
-**A gap that stays.** A create that is in progress when its process stops can finish after the teardown. `DockerTestbed` covers this with a `creating` record. The store does not know test runs, and it must not know them. Backlog item #2843 (a lease, a mark and a collector for each kind of resource) is responsible for this gap.
+**A gap that is closed.** A create that is in progress when its process stops can finish after the run ended. Since `@zukhruf/testing` ADR 0020, the re-check passes of the run's reaper remove what such a create left. The store does not know test runs, and it must not know them.
 
 ## Considered Options
 
@@ -46,7 +47,7 @@ The README of `@zukhruf/testing` gives `defaults` as the seam for other containe
 ## Consequences
 
 - Each claim and each rung has the labels of the caller and the labels of the store.
-- The run cleanup of `@zukhruf/testing` removes the claims and the rungs that a killed test process left.
+- The run's reaper of `@zukhruf/testing` removes the claims and the rungs that a killed test process left, a few seconds after the run's last test process ended. The global teardown does not wait for it (`@zukhruf/testing` ADR 0020, item 5).
 - The code step adds two tests:
   - "Every claim and rung carries the labels of the caller."
-  - "A rung left by a killed test process is removed when the run ends." It runs `node --test` with the global setup of `@zukhruf/testing`, through the `DockerEngineStore` subject of the lock-store contract. Its shape is a copy of `packages/testing/src/scripts/docker-global-setup.integration.test.ts`.
+  - "A rung left by a killed test process is removed by the run's reaper after the run ends." It waits for the destroy events of the engine, from a time before the run, for each object it listed after the run. It runs `node --test` with the global setup of `@zukhruf/testing`, through the `DockerEngineStore` subject of the lock-store contract. Its shape is a copy of `packages/testing/src/scripts/docker-global-setup.integration.test.ts`.

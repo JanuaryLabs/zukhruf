@@ -23,3 +23,4 @@ The end of the input has a trap. On a Unix socket and over SSH the package ends 
 - `stdin` is a `WritableStream`. Only its `close()` ends the input. The package drops an empty write, so an empty write never ends the input on any host.
 - For a command that ends before it reads all of its input, see [ADR 0012](./0012-a-reset-ends-the-output-and-a-failed-write-is-an-error-only-when-output-can-be-lost.md).
 - The package gives each chunk once. A second iteration of the same container process is an error.
+- The input also ends when the process that holds the connection exits. `attach()` and `spawn()` take `ref: false`, so a held connection does not keep its process running. Then a `cat` on that input is a holder: it ends with its holder process, for any reason, also `SIGKILL`. Added on 2026-11-14 for one reaper of a run with one `cat` exec for each holder process (`@zukhruf/testing` ADR 0020, after Ryuk of Testcontainers, which counts its connections).

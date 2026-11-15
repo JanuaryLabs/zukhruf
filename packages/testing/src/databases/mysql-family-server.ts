@@ -2,7 +2,7 @@ import { timebox } from '../async/timebox.ts';
 import { readRun } from '../docker/run-records.ts';
 import type { ServiceContainer } from '../docker/service-container.ts';
 import { DockerTestbed } from '../docker/testbed.ts';
-import { KIND_LABEL, databaseName } from './collector.ts';
+import { KIND_LABEL, databaseName, dropDatabase } from './collector.ts';
 import type { Database, DatabaseOptions } from './database.ts';
 import { type MysqlFamilyCollector, user } from './mysql-family-collector.ts';
 import { succeeded } from './succeeded.ts';
@@ -46,10 +46,6 @@ export abstract class MysqlFamilyServer {
   async database(): Promise<MysqlFamilyDatabase> {
     const container = await this.#acquire('app', 'reuse');
     const database = databaseName(this.#runId);
-    const server = {
-      container: container.container,
-      password: this.#options.password,
-    };
     try {
       await this.#sql(container, `CREATE DATABASE \`${database}\``);
     } catch (error) {
@@ -57,7 +53,12 @@ export abstract class MysqlFamilyServer {
       throw error;
     }
     return this.#handle(container, database, async () => {
-      await this.collector.drop(server, database, {}).catch(() => {
+      await dropDatabase(
+        this.collector,
+        container.container,
+        this.#options.password,
+        database,
+      ).catch(() => {
         /* Best-effort: the run's cleanup drops a database that disposal left. */
       });
       await container.disconnect();

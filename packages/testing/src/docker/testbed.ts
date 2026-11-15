@@ -22,11 +22,9 @@ import {
   sweepLeaseName,
 } from './engine-lease.ts';
 import { DockerHost } from './host.ts';
+import { REAPER_DEFAULTS, ReaperHold, SERVER_LABEL } from './reaper.ts';
 import { type ProcessRun, TEST_RUN_LABEL, readRun } from './run-records.ts';
 import { ServiceContainer } from './service-container.ts';
-
-/** Marks a server that `reuse()` shares across processes and runs. Its value is the fingerprint of the server's request (ADR 0019). */
-export const SERVER_LABEL = 'dev.zukhruf.testing.server';
 
 export interface ServiceOptions {
   /** The container's port that answers on 127.0.0.1 of this machine. */
@@ -51,6 +49,12 @@ interface Engine {
 /** The default resources: they protect a shared engine, such as an SSH engine that runs real applications. */
 const RESOURCES = { Memory: 1024 ** 3, NanoCpus: 1e9 };
 
+/** The run's labels and the default resources, in the shape of a body. */
+interface Defaults {
+  Labels: Record<string, string>;
+  HostConfig: { Memory: number; NanoCpus: number };
+}
+
 /**
  * The process lease of this process for each shared server, by the engine's
  * host and the server's fingerprint. One process builds many testbeds, so the
@@ -58,6 +62,14 @@ const RESOURCES = { Memory: 1024 ** 3, NanoCpus: 1e9 };
  * the next reuse() of that server.
  */
 const processLeases = new Map<string, Promise<EngineLease>>();
+
+/**
+ * The hold of this process on the reaper of its run, by the engine's host
+ * (ADR 0020). A hold that ends while this process lives takes itself again at
+ * once, and each create waits for it. A first hold that failed is taken again
+ * by the next create.
+ */
+const reapers = new Map<string, Promise<ReaperHold>>();
 
 const byKey = ([a]: [string, unknown], [b]: [string, unknown]): number => {
   if (a < b) return -1;
@@ -116,18 +128,16 @@ export class DockerTestbed {
 
   /**
    * Defaults for disposable test containers, including external launchers.
-   * A launcher creates with these labels and no acquisition of this class:
-   * the read records this process, so the global teardown sweeps the run.
+   * In a run, this process holds the run's reaper on the testbed's engine
+   * before the labels exist, as a create does (ADR 0020, item 11). A
+   * launcher that creates with these labels thus leaves nothing behind.
    */
-  get defaults(): {
+  async defaults(): Promise<{
     Labels: Record<string, string>;
     HostConfig: { Memory: number; NanoCpus: number };
-  } {
-    this.#run?.records.recordThisProcess();
-    return {
-      Labels: this.#run ? { [TEST_RUN_LABEL]: this.#run.id } : {},
-      HostConfig: { ...RESOURCES },
-    };
+  }> {
+    if (this.#run !== undefined) await this.#reaper(await this.#engine());
+    return this.#defaults();
   }
 
   /** The client of the engine that this instance's handles are on. */
@@ -140,13 +150,15 @@ export class DockerTestbed {
     return DockerDirectory.create((await this.#engine()).host, this.#run);
   }
 
-  /** Creates a named volume. Its run's cleanup removes it if this process dies first. */
+  /** Creates a named volume. The reaper of its run removes it if this process dies first. */
   async volume(): Promise<OwnedVolume> {
-    const { client } = await this.#engine();
-    return client.volumes.create({
-      Name: `zukhruf-testing-${randomUUID()}`,
-      Labels: this.defaults.Labels,
-    });
+    const engine = await this.#engine();
+    return this.#creating(engine, () =>
+      engine.client.volumes.create({
+        Name: `zukhruf-testing-${randomUUID()}`,
+        Labels: this.#defaults().Labels,
+      }),
+    );
   }
 
   /** Starts a container this process owns. It stays after it stops, until disposal removes it. */
@@ -262,7 +274,7 @@ export class DockerTestbed {
     if (taken !== undefined) return taken;
     const taking = this.#creating(engine, async () => {
       const lease = await EngineLease.take(engine.client, {
-        ...this.defaults.Labels,
+        ...this.#defaults().Labels,
         [LEASE_LABEL]: 'process',
         [LEASED_SERVER_LABEL]: fingerprint,
       });
@@ -281,11 +293,11 @@ export class DockerTestbed {
   }
 
   /**
-   * Runs `create` under a creating record, and pulls a missing image before
-   * a second try, as `docker run` does.
+   * Runs `create` after this process holds the reaper of its run, and pulls
+   * a missing image before a second try, as `docker run` does.
    */
   async #creating<T>(engine: Engine, create: () => Promise<T>): Promise<T> {
-    await using _creating = await this.#run?.records.recordCreating();
+    await this.#reaper(engine);
     try {
       return await create();
     } catch (error) {
@@ -293,6 +305,29 @@ export class DockerTestbed {
       await engine.client.images.pull(error.image);
       return await create();
     }
+  }
+
+  /** Holds the reaper of this process's run on the engine, before this process creates anything there. */
+  async #reaper(engine: Engine): Promise<void> {
+    const run = this.#run;
+    if (run === undefined) return;
+    const key = `${engine.client.host} ${run.id}`;
+    const taken = reapers.get(key);
+    if (taken !== undefined) {
+      await (await taken).held();
+      return;
+    }
+    const taking = ReaperHold.take(
+      engine.client,
+      run.id,
+      REAPER_DEFAULTS,
+      globalThis,
+    );
+    reapers.set(key, taking);
+    taking.catch(() => {
+      if (reapers.get(key) === taking) reapers.delete(key);
+    });
+    await taking;
   }
 
   async #startOrRemove(container: OwnedContainer): Promise<void> {
@@ -331,11 +366,20 @@ export class DockerTestbed {
     }
   }
 
+  /** The run's labels and the default resources. The read records this process in the run. */
+  #defaults(): Defaults {
+    this.#run?.records.recordThisProcess();
+    return {
+      Labels: this.#run ? { [TEST_RUN_LABEL]: this.#run.id } : {},
+      HostConfig: { ...RESOURCES },
+    };
+  }
+
   /** The body of a container this process owns: the run's labels win, and the body's resources win over the defaults. */
   #owned(
     body: EngineApi.ContainerCreateRequest,
   ): EngineApi.ContainerCreateRequest {
-    const { Labels, HostConfig } = this.defaults;
+    const { Labels, HostConfig } = this.#defaults();
     return {
       ...body,
       Labels: { ...body.Labels, ...Labels },

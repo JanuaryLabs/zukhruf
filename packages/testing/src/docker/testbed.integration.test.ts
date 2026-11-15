@@ -397,53 +397,6 @@ test('two processes that reuse one configuration get one server, which disposal 
 });
 
 test(
-  'a create in flight has a creating record in the run, and the record is gone once the engine answered',
-  { skip: proxyless },
-  async () => {
-    // Arrange: an engine that holds the create until the test lets it go.
-    await using directory = await new TemporaryFiles().directory(
-      'zukhruf-testing-creating-',
-    );
-    await using proxy = await EngineProxy.start(engine);
-    const arrived = Promise.withResolvers<void>();
-    const gate = Promise.withResolvers<void>();
-    proxy.intercept('POST', '/containers/create', () => {
-      arrived.resolve();
-      return gate.promise;
-    });
-    const testbed = new DockerTestbed({
-      environment: {
-        DOCKER_HOST: proxy.host,
-        DOCKER_CONFIG: process.env.DOCKER_CONFIG,
-        ZUKHRUF_TESTING_RUN_ID: randomUUID(),
-        ZUKHRUF_TESTING_RUN_DIR: directory.path,
-      },
-    });
-    // The run directory is the seam the global teardown reads: it keeps a
-    // run while a creating record remains (covered by its own tests).
-    const creating = async () =>
-      (await readdir(directory.path)).filter((file) =>
-        file.startsWith('creating-'),
-      );
-    const started = testbed.start({ Image: image, Cmd: ['sleep', '60'] });
-    try {
-      // Act
-      await arrived.promise;
-
-      // Assert
-      assert.equal((await creating()).length, 1);
-      gate.resolve();
-      await started;
-      assert.deepEqual(await creating(), []);
-    } finally {
-      // The container carries this test's own run label: no teardown sweeps it.
-      gate.resolve();
-      await (await started.catch(() => undefined))?.[Symbol.asyncDispose]();
-    }
-  },
-);
-
-test(
   'the ssh connections of a process that is killed with idle connections, one after an exec, exit within 15 s',
   {
     skip: engine.startsWith('ssh://')

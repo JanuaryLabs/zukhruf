@@ -1,17 +1,9 @@
-import type { CancelOptions, Container } from '@zukhruf/docker';
-
 import type { Collector, Kind } from './collector.ts';
-import { succeeded } from './succeeded.ts';
-
-export interface MysqlFamilyServer {
-  container: Container;
-  password: string;
-}
 
 /** The image creates only root, from the root password in its environment. */
 export const user = 'root';
 
-export interface MysqlFamilyCollector extends Collector<MysqlFamilyServer> {
+export interface MysqlFamilyCollector extends Collector {
   /** The client in the image. */
   readonly client: string;
 }
@@ -22,47 +14,21 @@ function mysqlFamily(
   client: string,
   passwordVariable: string,
 ): MysqlFamilyCollector {
-  const execute = (
-    { container, password }: MysqlFamilyServer,
-    args: string[],
-    cancel: CancelOptions,
-  ) =>
-    succeeded(
-      container,
-      [client, `-u${user}`, `-p${password}`, ...args],
-      cancel,
-    );
   return {
     kind,
     client,
-    async open(container, environment) {
-      const password = environment[passwordVariable];
-      if (password === undefined)
-        throw new Error(
-          `The ${kind} server ${container.id} has no ${passwordVariable}`,
-        );
-      return { container, password, [Symbol.asyncDispose]: async () => {} };
-    },
-    async list(server, cancel) {
-      const stdout = await execute(
-        server,
-        [
-          '--batch',
-          '--skip-column-names',
-          '--execute',
-          "SHOW DATABASES LIKE 'test%'",
-        ],
-        cancel,
-      );
-      return stdout.split('\n').filter(Boolean);
-    },
-    async drop(server, name, cancel) {
-      await execute(
-        server,
-        ['--execute', `DROP DATABASE IF EXISTS \`${name}\``],
-        cancel,
-      );
-    },
+    credential: { variable: passwordVariable },
+    command: (password, sql) => [
+      client,
+      `-u${user}`,
+      `-p${password}`,
+      '--batch',
+      '--skip-column-names',
+      '--execute',
+      sql,
+    ],
+    list: "SHOW DATABASES LIKE 'test%'",
+    drop: (name) => `DROP DATABASE IF EXISTS \`${name}\``,
   };
 }
 

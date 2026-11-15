@@ -453,12 +453,16 @@ export class Container {
     return result.value;
   }
 
-  /** Runs a command in the container and gives its container process while it runs. */
+  /**
+   * Runs a command in the container and gives its container process while it
+   * runs. With `ref: false`, the process of the command does not keep this
+   * process running, as `attach()` does not.
+   */
   async spawn(
     body: EngineApi.ExecConfig,
-    options: CancelOptions & { stdin?: boolean } = {},
+    options: CancelOptions & { stdin?: boolean; ref?: boolean } = {},
   ): Promise<ContainerProcess> {
-    const { signal } = options;
+    const { signal, ref } = options;
     const stdin = options.stdin === true;
     const method = 'POST';
     const path = `${this.#path}/exec`;
@@ -485,6 +489,7 @@ export class Container {
       .hijack('POST', `${exec}/start`, {
         body: { Detach: false, Tty: body.Tty ?? false },
         signal,
+        ref,
       })
       .catch(async (error: unknown) => {
         if (error instanceof DockerEngineError && error.status === 409) {

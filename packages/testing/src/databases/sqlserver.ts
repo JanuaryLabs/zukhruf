@@ -1,11 +1,10 @@
 import sql from 'mssql';
-import pMemoize from 'p-memoize';
 
 import { timebox } from '../async/timebox.ts';
 import { readRun } from '../docker/run-records.ts';
 import type { ServiceContainer } from '../docker/service-container.ts';
 import { DockerTestbed } from '../docker/testbed.ts';
-import { KIND_LABEL, databaseName } from './collector.ts';
+import { KIND_LABEL, databaseName, dropDatabase } from './collector.ts';
 import type { Database, DatabaseOptions } from './database.ts';
 import {
   type SqlServerServer,
@@ -17,24 +16,20 @@ export type { Database, DatabaseOptions } from './database.ts';
 
 export const SQL_SERVER_FULL_IMAGE =
   'mcr.microsoft.com/mssql/server:2022-latest';
-export const SQL_SERVER_EDGE_IMAGE = 'mcr.microsoft.com/azure-sql-edge:latest';
 
-/** SQL Server test configuration. Without an image, the engine's architecture picks one. */
+/**
+ * SQL Server test configuration. The full image is the default on every
+ * engine, emulated on arm64: Microsoft builds it only for amd64, and it holds
+ * the `sqlcmd` that an exec needs.
+ */
 export class SqlServer {
   readonly #docker: DockerTestbed;
   readonly #runId: string | undefined;
   readonly #options;
-  readonly #image = pMemoize(async (): Promise<string> => {
-    if (this.#options.image) return this.#options.image;
-    const { Architecture } = await (await this.#docker.client()).info();
-    return ['arm64', 'aarch64'].includes(Architecture ?? '')
-      ? SQL_SERVER_EDGE_IMAGE
-      : SQL_SERVER_FULL_IMAGE;
-  });
 
   constructor({
     environment,
-    image,
+    image = SQL_SERVER_FULL_IMAGE,
     password = 'StrongP@ssw0rd123!',
     database = 'testdb',
     labels,
@@ -46,14 +41,19 @@ export class SqlServer {
 
   /** Create an isolated database on the persistent shared server. */
   async database(): Promise<Database> {
-    const image = await this.#image();
+    const { image } = this.#options;
     const container = await this.#acquire(image, 'reuse');
     const database = databaseName(this.#runId);
     try {
       await this.#createDatabase(container, database);
       return this.#handle(container, image, database, async () => {
         try {
-          await sqlserver.drop(this.#server(container), database, {});
+          await dropDatabase(
+            sqlserver,
+            container.container,
+            this.#options.password,
+            database,
+          );
         } catch {
           // Best-effort: the run's cleanup drops a database that disposal left.
         } finally {
@@ -68,9 +68,8 @@ export class SqlServer {
 
   /** Start a dedicated server; the returned handle owns its container. */
   async start(): Promise<Database> {
-    const image = await this.#image();
+    const { image, database } = this.#options;
     const container = await this.#acquire(image, 'serve');
-    const { database } = this.#options;
     try {
       await this.#createDatabase(container, database);
       return this.#handle(container, image, database, () =>
@@ -131,7 +130,7 @@ export class SqlServer {
           'ACCEPT_EULA=Y',
           `MSSQL_SA_PASSWORD=${password}`,
           'MSSQL_MEMORY_LIMIT_MB=2048',
-          ...(image.includes('azure-sql-edge') ? [] : ['MSSQL_PID=Express']),
+          'MSSQL_PID=Express',
         ],
         HostConfig: {
           Tmpfs: { '/var/opt/mssql': 'rw,size=2g,mode=1777' },

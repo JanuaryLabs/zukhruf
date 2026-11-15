@@ -109,8 +109,11 @@ test('a matrix child that opens the DockerEngineStore records itself in the run 
     `
 				import { openInProcess } from ${JSON.stringify(dockerUrl.href)};
 
-				openInProcess(${JSON.stringify(fixture.location)});
+				const store = openInProcess(${JSON.stringify(fixture.location)});
 				process.send({ type: 'started' });
+				// A call waits for the store, which holds the run's reaper first.
+				await store.isHeld('report:daily');
+				process.send({ type: 'held' });
 				setInterval(() => {}, 1000);
 			`,
     'child',
@@ -126,8 +129,22 @@ test('a matrix child that opens the DockerEngineStore records itself in the run 
   );
 
   // Assert
-  assert.ok(
-    recordedPids(records.path).includes(child.child.pid!),
-    'The run must have a process record of the matrix child once it opened the store',
+  await t.waitFor(
+    () =>
+      assert.ok(
+        recordedPids(records.path).includes(child.child.pid!),
+        'The run must have a process record of the matrix child once it opened the store',
+      ),
+    { interval: 5, timeout: factTimeout },
+  );
+  // The disposal kills the child: a kill during its take of the hold would
+  // leave the run's reaper created.
+  await t.waitFor(
+    () =>
+      assert.ok(
+        child.has('held'),
+        `The matrix child must hold the run's reaper.\n${child.stderr}`,
+      ),
+    { interval: 5, timeout: factTimeout },
   );
 });

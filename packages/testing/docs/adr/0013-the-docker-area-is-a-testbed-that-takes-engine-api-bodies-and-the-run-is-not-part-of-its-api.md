@@ -17,7 +17,7 @@ No consumer used the area yet (text2sql, deepagents and elt were on older versio
    - `run(body, { name? })` gives an `ExecResult`. It removes the container. A non-zero exit code does not throw.
    - `serve(body, { internalPort, name?, healthy? })` and `reuse(body, { internalPort, name?, healthy? })` give a `ServiceContainer`.
    - `volume()`, `directory()` and `client()` do not change.
-   - `defaults` is `{ Labels, HostConfig: { Memory, NanoCpus } }`: the run's labels and the default resources, in the shape of a body. Reading it writes a process record for this process, because another Docker client can create with those labels.
+   - `defaults()` gives `{ Labels, HostConfig: { Memory, NanoCpus } }`: the run's labels and the default resources, in the shape of a body. It writes a process record for this process, because another Docker client can create with those labels. Since [ADR 0020](./0020-a-reaper-container-removes-a-runs-engine-objects-when-the-attach-that-holds-it-closes-and-recovery-keeps-the-local-records.md) item 11, it is asynchronous and holds the run's reaper first.
 4. The testbed adds these values to each body before it creates the container:
    - The run's labels, in `Labels`. A run label replaces a label of the body with the same name. `reuse` adds no run labels, because a shared server outlives runs.
    - `HostConfig.Memory` of 1 GiB and `HostConfig.NanoCpus` of 1 CPU, when the body does not set them. These limits protect a shared engine from a test container, for example an SSH engine that also runs real applications.
@@ -28,7 +28,7 @@ No consumer used the area yet (text2sql, deepagents and elt were on older versio
 5. Without `name`, the engine gives the container a name. The generated name `test-<image>-<uuid>` is deleted. `reuse` without `name` still uses `zukhruf-testing-<fingerprint>`, because that name reserves the shared server atomically.
 6. The configuration of a shared server, thus its fingerprint, is the body after the testbed adds its defaults, the `internalPort` and the package version. The order of the keys and the order of the `Env` entries do not select a different server.
 7. `serve` does not set `AutoRemove` on a dedicated server (backlog #2832). A dedicated server is not ready when `healthy` throws, or when its container exits first. Then `serve` reads the output of the container, removes the container, and rejects. The message of the error has that output. Its `cause` is the readiness error. Before, `AutoRemove` removed an exited container before anyone read its output. `reuse` keeps `AutoRemove`, because stopping a shared server removes it. A shared server that is not ready stays running for diagnosis, as before.
-8. Another client that creates with the run's labels reads them from `defaults`, for example a sandbox launcher, or a child process of the lock-store matrix of the mutex that opens a `DockerEngineStore`. That read records its process, so the global teardown keeps the run's records while the process lives.
+8. Another client that creates with the run's labels gets them from `defaults()`, for example a sandbox launcher, or a child process of the lock-store matrix of the mutex that opens a `DockerEngineStore`. That call records its process, so the global teardown keeps the run's records while the process lives, and holds the run's reaper.
 
 ## Considered Options
 

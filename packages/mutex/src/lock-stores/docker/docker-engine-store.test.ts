@@ -49,6 +49,9 @@ async function engine() {
   if (!(await docker.images.inspect(image))) await docker.images.pull(image);
   const namespace = `zukhruf-mutex-test-${randomUUID()}`;
   const label = { label: [`${namespaceLabel}=${namespace}`] };
+  const { Labels: labels } = await new DockerTestbed({
+    environment: process.env,
+  }).defaults();
   return {
     docker,
     namespace,
@@ -58,7 +61,7 @@ async function engine() {
         image,
         namespace,
         heartbeatInterval,
-        labels: new DockerTestbed({ environment: process.env }).defaults.Labels,
+        labels,
         clock: globalThis,
       }),
     [Symbol.asyncDispose]: async () => {
@@ -88,7 +91,7 @@ const holderSource = (namespace: string, key: string) => `
 	import { DockerEngineStore } from ${JSON.stringify(new URL('./index.ts', import.meta.url).href)};
 	setInterval(() => {}, 1000);
 	const docker = await Docker.connect({ clock: globalThis, environment: process.env });
-	const labels = new DockerTestbed({ environment: process.env }).defaults.Labels;
+	const { Labels: labels } = await new DockerTestbed({ environment: process.env }).defaults();
 	const store = new DockerEngineStore({ docker, image: ${JSON.stringify(image)}, namespace: ${JSON.stringify(namespace)}, heartbeatInterval: ${heartbeatInterval}, labels, clock: globalThis });
 	await new Mutex(store).acquire(${JSON.stringify(key)}, async (lease) => {
 		process.send({ type: 'holding', token: String(lease.token.value) });
@@ -819,7 +822,39 @@ const killedHolderSource = (statePath: string) => `
 	});
 `;
 
-test('a rung left by a killed test process is removed when the run ends', async (t) => {
+/**
+ * How long the test waits for the run's reaper to remove what a killed test
+ * process left. The reaper acts after its grace (2 s) and its 5 re-check
+ * passes 1 s apart, each with requests of up to 10 s
+ * (@zukhruf/testing ADR 0020). The limit is far above that and only catches
+ * a reaper that never acts: it claims no speed.
+ */
+const REAPED_WITHIN = 120_000;
+
+/**
+ * Resolves when each of `containers` and `volumes` has its destroy event
+ * since `since`, in seconds. `since` replays the events that came before the
+ * call, so an object that went first is not missed.
+ */
+async function destroyed(
+  docker: Docker,
+  since: number,
+  containers: string[],
+  volumes: string[],
+): Promise<void> {
+  const left = new Set([...containers, ...volumes]);
+  if (left.size === 0) return;
+  for await (const { Actor } of docker.events({
+    since,
+    filters: { type: ['container', 'volume'], event: ['destroy'] },
+    signal: AbortSignal.timeout(REAPED_WITHIN),
+  })) {
+    if (Actor?.ID !== undefined) left.delete(Actor.ID);
+    if (left.size === 0) return;
+  }
+}
+
+test('a rung left by a killed test process is removed by the run’s reaper after the run ends', async (t) => {
   await using docker = await Docker.connect({
     clock: globalThis,
     environment: process.env,
@@ -838,6 +873,7 @@ test('a rung left by a killed test process is removed when the run ends', async 
   let namespace: string | undefined;
   try {
     // Act: the test process dies while it holds the key, and the run ends.
+    const since = Math.floor(Date.now() / 1000) - 1;
     const run = await promisify(execFile)(
       process.execPath,
       [
@@ -868,12 +904,20 @@ test('a rung left by a killed test process is removed when the run ends', async 
 
     // Assert
     const filters = { label: [`${namespaceLabel}=${namespace}`] };
+    await destroyed(
+      docker,
+      since,
+      (await docker.containers.list({ all: true, filters })).map(
+        ({ Id }) => Id,
+      ),
+      (await docker.volumes.list({ filters })).map(({ Name }) => Name),
+    );
     const containers = await docker.containers.list({ all: true, filters });
     const volumes = await docker.volumes.list({ filters });
     assert.deepEqual(
       [containers.length, volumes.length],
       [0, 0],
-      'The teardown of the run must remove the claims and rungs of a killed test process',
+      'The reaper of the run must remove the claims and rungs of a killed test process after the run ends',
     );
   } finally {
     if (namespace !== undefined) {

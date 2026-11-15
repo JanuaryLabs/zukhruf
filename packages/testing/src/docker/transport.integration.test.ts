@@ -6,11 +6,7 @@ import pg from 'pg';
 
 import { Mysql } from '../databases/mysql.ts';
 import { Postgres } from '../databases/postgres.ts';
-import {
-  SQL_SERVER_EDGE_IMAGE,
-  SQL_SERVER_FULL_IMAGE,
-  SqlServer,
-} from '../databases/sqlserver.ts';
+import { SQL_SERVER_FULL_IMAGE, SqlServer } from '../databases/sqlserver.ts';
 import { DockerTestbed } from './index.ts';
 
 const docker = new DockerTestbed({ environment: process.env });
@@ -134,20 +130,14 @@ test('MySQL exposes its protocol on the Node host', async () => {
 });
 
 test(
-  'SQL Server chooses an image for the engine and accepts host connections',
+  'SQL Server runs the full image on every engine and accepts host connections',
   { timeout: 240_000 },
   async () => {
     const { default: sql } = await import('mssql');
-    const { Architecture } = await (await docker.client()).info();
     await using database = await new SqlServer({
       environment: process.env,
     }).start();
-    assert.equal(
-      database.image,
-      ['aarch64', 'arm64'].includes(Architecture ?? '')
-        ? SQL_SERVER_EDGE_IMAGE
-        : SQL_SERVER_FULL_IMAGE,
-    );
+    assert.equal(database.image, SQL_SERVER_FULL_IMAGE);
     const pool = new sql.ConnectionPool(database.connectionString);
     try {
       await pool.connect();

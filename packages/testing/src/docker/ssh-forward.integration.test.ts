@@ -211,6 +211,10 @@ async function scenario(directory: string, body: string, path?: string) {
         PATH: path ?? `${directory}:${process.env.PATH}`,
         DOCKER_HOST: 'ssh://tester@sshhost',
         DOCKER_CONTEXT: undefined,
+        // Undefined, not deleted: nano-spawn adds process.env back. The
+        // stand-in engine runs no reaper, so the scenario is in no run.
+        ZUKHRUF_TESTING_RUN_ID: undefined,
+        ZUKHRUF_TESTING_RUN_DIR: undefined,
       },
     },
   );

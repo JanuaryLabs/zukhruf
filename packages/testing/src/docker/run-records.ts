@@ -15,9 +15,9 @@ const recordedRuns = new Set<string>();
 
 /**
  * The records of one `node --test` invocation with the Docker global setup,
- * in the run's directory. While a recorded process lives, or a record of a
- * path remains, the global teardown, or the recovery of a later run, keeps
- * the run and removes what a killed process left.
+ * in the run's directory. While a recorded process lives, the global
+ * teardown keeps the run, and the recovery of a later run removes the
+ * recorded paths that a killed process left.
  */
 export class RunRecords {
   readonly directory: string;
@@ -50,18 +50,6 @@ export class RunRecords {
       JSON.stringify({ pid: process.pid }),
     );
     recordedRuns.add(this.directory);
-  }
-
-  /**
-   * Writes a creating record while this process asks the engine to create a
-   * container. The engine can finish a create after the process that sent it
-   * died. While a creating record remains, the global teardown keeps the
-   * run's records, and the recovery of a later run sweeps the run again.
-   */
-  async recordCreating(): Promise<AsyncDisposable> {
-    const file = join(this.directory, `creating-${randomUUID()}.json`);
-    await writeFile(file, JSON.stringify({ pid: process.pid }));
-    return { [Symbol.asyncDispose]: () => rm(file, { force: true }) };
   }
 
   /**

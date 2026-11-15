@@ -2,7 +2,7 @@ import { timebox } from '../async/timebox.ts';
 import { readRun } from '../docker/run-records.ts';
 import type { ServiceContainer } from '../docker/service-container.ts';
 import { DockerTestbed } from '../docker/testbed.ts';
-import { KIND_LABEL, databaseName } from './collector.ts';
+import { KIND_LABEL, databaseName, dropDatabase } from './collector.ts';
 import type { Database, DatabaseOptions } from './database.ts';
 import { postgres } from './postgres-collector.ts';
 import { succeeded } from './succeeded.ts';
@@ -36,7 +36,6 @@ export class Postgres {
   async database(): Promise<Database> {
     const container = await this.#acquire('postgres', 'reuse');
     const database = databaseName(this.#runId);
-    const server = { container: container.container, user: this.#options.user };
     try {
       await this.#sql(container, `CREATE DATABASE ${database}`);
     } catch (error) {
@@ -44,7 +43,12 @@ export class Postgres {
       throw error;
     }
     return this.#handle(container, database, async () => {
-      await postgres.drop(server, database, {}).catch(() => {
+      await dropDatabase(
+        postgres,
+        container.container,
+        this.#options.user,
+        database,
+      ).catch(() => {
         /* Best-effort: the run's cleanup drops a database that disposal left. */
       });
       await container.disconnect();

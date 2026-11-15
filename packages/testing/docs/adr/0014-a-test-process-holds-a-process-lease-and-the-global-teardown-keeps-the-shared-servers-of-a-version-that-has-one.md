@@ -1,5 +1,7 @@
 # A test process holds a process lease, and the global teardown keeps the shared servers of a version that has one
 
+Amended on 2026-11-14 by [ADR 0020](./0020-a-reaper-container-removes-a-runs-engine-objects-when-the-attach-that-holds-it-closes-and-recovery-keeps-the-local-records.md), item 9: the reaper of a run takes the sweep lease and removes the expired shared servers, not the global teardown. The sweep lease is a `cat` container that a `docker run -i` of the reaper holds. Its 30 s wait, 3 tries and 5 s patience are inputs of the reaper.
+
 Superseded in part on 2026-11-10 by [ADR 0019](./0019-a-shared-servers-name-comes-from-its-request-and-the-global-teardown-removes-it-after-a-ttl.md). A process lease and a sweep lease are for one shared server, by its fingerprint, not for a version. The global teardown sweeps only the shared servers that are older than a time to live (TTL) of 7 days. The order of the leases and the reasons below stay true. Item 6 is removed: this version does not see a server with no version label.
 
 ADR 0012 made the global teardown remove the shared servers of each other version. Its premise was a version skew of zero: each consumer moves to the latest release, so no run of an older version uses an engine at the same time.

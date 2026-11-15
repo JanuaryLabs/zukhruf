@@ -99,22 +99,23 @@ export async function dockerEngineFixture(
  */
 export function dockerEngineStore(location: string) {
   const { host, namespace, run }: DockerEngineLocation = JSON.parse(location);
-  // Before the first claim: the read records this process in the run, so the
-  // run's teardown waits for it and sweeps what it created
-  // (@zukhruf/testing ADR 0006 and ADR 0013).
-  const labels = new DockerTestbed({ environment: run }).defaults.Labels;
   const docker = Docker.connect({ clock: globalThis, host });
-  const store = docker.then(
-    (client) =>
-      new DockerEngineStore({
-        docker: client,
-        image: dockerImage,
-        namespace,
-        heartbeatInterval: 500,
-        labels,
-        clock: globalThis,
-      }),
-  );
+  const store = docker.then(async (client) => {
+    // Before the first claim: the read records this process in the run and
+    // holds the run's reaper, which removes what it created after the run
+    // (@zukhruf/testing ADR 0013 and ADR 0020).
+    const { Labels: labels } = await new DockerTestbed({
+      environment: run,
+    }).defaults();
+    return new DockerEngineStore({
+      docker: client,
+      image: dockerImage,
+      namespace,
+      heartbeatInterval: 500,
+      labels,
+      clock: globalThis,
+    });
+  });
   const lockStore: LockStore = {
     acquire: async (key, options) => (await store).acquire(key, options),
     tryAcquire: async (key) => (await store).tryAcquire(key),
@@ -261,7 +262,8 @@ export const partitionable: Partitionable = {
         image: dockerImage,
         namespace,
         heartbeatInterval: this.heartbeatInterval,
-        labels: new DockerTestbed({ environment: run }).defaults.Labels,
+        labels: (await new DockerTestbed({ environment: run }).defaults())
+          .Labels,
         clock,
       }),
       partition: () => proxy.partition(),
