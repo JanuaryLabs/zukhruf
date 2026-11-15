@@ -68,8 +68,9 @@ async function standIn(directory: string) {
 
 /**
  * Leaves input unread in the kernel of the stand-in, whose socket reads at
- * most one chunk of 64 KB after the upgrade. The write resolves when the
- * kernel took all of it, which a Linux socket buffer can hold.
+ * most one chunk of 64 KB after the upgrade of an attach, and none after the
+ * start of an exec. The write resolves when the kernel took all of it, which
+ * a Linux socket buffer can hold.
  */
 async function leaveInputUnread(
   stdin: WritableStreamDefaultWriter<Uint8Array>,

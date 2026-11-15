@@ -10,6 +10,8 @@ import { SshExitError } from './ssh-connection.ts';
 export interface ContainerProcessOptions {
   /** Gives the process a writable `stdin`. */
   stdin: boolean;
+  /** The process has a TTY: its output is a raw stream, not a multiplexed one. */
+  tty: boolean;
   /** An abort rejects the iteration with the reason of the signal. It does not stop the command. */
   signal?: AbortSignal | undefined;
   /**
@@ -167,7 +169,7 @@ export class ContainerProcess implements AsyncIterable<OutputChunk> {
     connection: HijackedConnection,
     options: ContainerProcessOptions,
   ) {
-    const { socket, head, contentType } = connection;
+    const { socket, head } = connection;
     const { signal } = options;
     const output = new HijackedOutput(socket, head);
     const abort = () => socket.destroy(signal?.reason);
@@ -184,7 +186,7 @@ export class ContainerProcess implements AsyncIterable<OutputChunk> {
     async function* read(): AsyncGenerator<OutputChunk> {
       try {
         signal?.throwIfAborted();
-        yield* outputChunks(output.chunks(), contentType);
+        yield* outputChunks(output.chunks(), options.tty);
         outputEnded.resolve();
         const incomplete = output.incompleteBecause;
         if (incomplete)

@@ -6,9 +6,6 @@ export interface OutputChunk {
   data: Uint8Array;
 }
 
-/** The media type of the output of a container that has no TTY. */
-const MULTIPLEXED_STREAM = 'application/vnd.docker.multiplexed-stream';
-
 /** The length of the header of a frame: the stream, three zero bytes, and the length, big-endian. */
 const HEADER_LENGTH = 8;
 
@@ -82,13 +79,13 @@ async function* raw(
 }
 
 /**
- * The output chunks of a multiplexed stream or of a raw stream, as the
- * Content-Type of the answer names it.
+ * The output chunks of a raw stream for a process with a TTY, and of a
+ * multiplexed stream otherwise. The TTY setting chooses, as the Docker CLI
+ * chooses, and not the Content-Type, which an engine can leave out (ADR 0014).
  */
 export function outputChunks(
   bytes: AsyncIterable<Uint8Array>,
-  contentType: string,
+  tty: boolean,
 ): AsyncGenerator<OutputChunk> {
-  const mediaType = contentType.split(';')[0]?.trim();
-  return mediaType === MULTIPLEXED_STREAM ? frames(bytes) : raw(bytes);
+  return tty ? raw(bytes) : frames(bytes);
 }

@@ -45,8 +45,6 @@ export interface HijackedConnection {
   readonly socket: Duplex;
   /** The bytes of the output that came with the answer, before the first read of the socket. */
   readonly head: Buffer;
-  /** The Content-Type of the answer: application/vnd.docker.multiplexed-stream or application/vnd.docker.raw-stream. */
-  readonly contentType: string;
   /** Ends the input through the end of input of the transport. The output stays open. */
   endInput(): void;
 }
@@ -288,7 +286,6 @@ export class EngineClient {
     return {
       socket,
       head,
-      contentType: response.headers['content-type'] ?? '',
       endInput: () => transport.endInput(socket),
     };
   }

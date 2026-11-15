@@ -22,14 +22,20 @@ export interface FakeEngineOptions {
   /** GET /_ping never gets an answer. */
   silentPing?: boolean;
   /**
-   * Answers each upgrade request, an attach or the start of an exec, with 101
-   * and a multiplexed stream, and gives the socket. The sockets of such an
-   * engine have a high-water mark of one byte: after the upgrade, a socket
+   * Answers each upgrade request, an attach or the start of an exec, with
+   * `upgradeHead`, and gives the socket. The sockets of such an engine have a
+   * high-water mark of one byte: after the upgrade of an attach, a socket
    * reads at most one chunk of 64 KB of the input that the handler does not
-   * read, and the rest stays in the kernel, so a close of the socket is a
-   * close with unread input.
+   * read; after the start of an exec it reads none (see `highWaterMark`). The
+   * rest stays in the kernel, so a close of the socket is a close with unread
+   * input.
    */
   hijack?: (request: IncomingMessage, socket: Duplex) => void;
+  /**
+   * The head of the answer to an upgrade request. Moby's when absent, with
+   * the multiplexed Content-Type; socktainer's has no Content-Type.
+   */
+  upgradeHead?: string;
   /**
    * The high-water mark of the sockets of an engine with `hijack`, one byte
    * when absent. With one byte, the body of an exec start fills it, and Node
@@ -76,7 +82,7 @@ export async function fakeEngine(options: FakeEngineOptions) {
       paths.push(request.url ?? '');
       // The client resets the connection when it stops reading.
       socket.on('error', () => undefined);
-      socket.write(UPGRADED);
+      socket.write(options.upgradeHead ?? UPGRADED);
       hijack(request, socket);
     });
   }

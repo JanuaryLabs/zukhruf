@@ -328,7 +328,7 @@ The end of the input depends on the host. On a Unix socket, the package shuts do
 
 A signal cancels the wait. It does not stop the command: the Engine API has no request that stops an exec. To stop a command, kill the container, or run the command under `timeout` in the container. A signal also cancels an iteration of a container process: the iteration rejects with the reason of the signal, as each cancel does ([the async glossary](../async/CONTEXT.md)).
 
-A container or an exec with a TTY (`Tty: true`) gives a raw stream. Then each chunk is `stdout`.
+A container or an exec with a TTY (`Tty: true`) gives a raw stream. Then each chunk is `stdout`. The TTY setting decides, as in the Docker CLI, and not the Content-Type of the answer, which some engines leave out ([ADR 0014](./docs/adr/0014-output-framing-follows-the-tty-setting-as-the-docker-cli-chooses-it.md)).
 
 ## Read the logs
 

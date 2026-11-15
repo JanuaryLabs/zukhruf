@@ -404,7 +404,9 @@ export class Container {
     follow: boolean,
     options: CancelOptions & LogQuery,
   ): AsyncGenerator<OutputChunk> {
-    const { signal, tail, since, timestamps } = options;
+    const { tail, since, timestamps, ...cancel } = options;
+    const { signal } = cancel;
+    const tty = (await this.inspect(cancel)).Config?.Tty ?? false;
     const method = 'GET';
     const path = `${this.#path}/logs`;
     const response = await this.#client
@@ -422,7 +424,7 @@ export class Container {
       .catch((error: unknown) => {
         throw this.#notFoundOr(error, method, path);
       });
-    yield* outputChunks(response, response.headers['content-type'] ?? '');
+    yield* outputChunks(response, tty);
   }
 
   /** Runs a command in the container and reads its output to the end. stdin is sent, and then the input ends. */
@@ -484,10 +486,11 @@ export class Container {
     this.#throwUnless(created, method, path);
     const { Id } = parseBody<{ Id: string }>(created);
     const exec = `/exec/${encodeURIComponent(Id)}`;
+    const tty = body.Tty ?? false;
     // The container can stop between the create and the start of the exec: the start then gets 409.
     const connection = await this.#client
       .hijack('POST', `${exec}/start`, {
-        body: { Detach: false, Tty: body.Tty ?? false },
+        body: { Detach: false, Tty: tty },
         signal,
         ref,
       })
@@ -499,6 +502,7 @@ export class Container {
       });
     return new ContainerProcess(connection, {
       stdin,
+      tty,
       signal,
       exitCode: async (outputEnded) => {
         await outputEnded;
@@ -536,7 +540,8 @@ export class Container {
     const stdin = options.stdin === true;
     const method = 'POST';
     const path = `${this.#path}/attach`;
-    const state = (await this.inspect(cancel)).State?.Status ?? '';
+    const { State, Config } = await this.inspect(cancel);
+    const state = State?.Status ?? '';
     if (state !== 'created' && state !== 'running') {
       throw new ContainerNotRunningError(
         `The container ${this.id} is ${state}.`,
@@ -571,6 +576,7 @@ export class Container {
       });
     return new ContainerProcess(connection, {
       stdin,
+      tty: Config?.Tty ?? false,
       signal,
       exitCode: async (outputEnded) => {
         outputEnded.catch(() => waiting.destroy());
