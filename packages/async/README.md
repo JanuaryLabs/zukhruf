@@ -1,6 +1,6 @@
 # @zukhruf/async
 
-Helpers for code that waits for promises: `untilAborted` cancels a wait, `Latch` holds callers until something happened, `delay` waits a fixed time on a clock, `timeout` stops a wait after a time on a clock, `poll` calls an attempt again until it gives a value, and `ChangeWatcher` reads gauges again and again and tells which values changed. `@zukhruf/mutex`, `@zukhruf/single-flight` and `@zukhruf/election` use them.
+Helpers for code that waits for promises: `untilAborted` cancels a wait, `Latch` holds callers until something happened, `delay` waits a fixed time on a clock, `timeout` stops a wait after a time on a clock, `poll` calls an attempt again until it gives a value, `Backoff` gives a longer wait before each retry, and `ChangeWatcher` reads gauges again and again and tells which values changed. `@zukhruf/mutex`, `@zukhruf/single-flight` and `@zukhruf/election` use them.
 
 The words in these documents have one meaning each. See the glossary in [CONTEXT.md](./CONTEXT.md).
 
@@ -208,6 +208,43 @@ await delay(100, { clock: globalThis, signal });
 - A wait can be longer than one timer can hold. A timer of Node.js holds at most 2^31-1 ms, about 24.8 days, and fires a longer delay after 1 ms. `delay` then waits on a chain of timers of at most 2^31-1 ms, so a wait of 30 days lasts 30 days. Thus `poll`, `timeout` and the `interval` and `timeout` of `ChangeWatcher` can also be that long.
 
 See [ADR 0009](./docs/adr/0009-a-wait-longer-than-one-timer-runs-on-a-chain-of-timers.md).
+
+## Wait longer before each retry
+
+A caller tries an operation again after it failed: a retry. To give the other side time to recover, the caller waits longer before each retry, up to a limit. `Backoff` gives that wait. Configure it once, and give it the number of retries before this wait: 0 before the first retry. Then wait with `delay`.
+
+```ts
+import { Backoff, delay } from '@zukhruf/async';
+
+const backoff = new Backoff({
+  initial: 25,
+  multiplier: 1.6,
+  max: 1_000,
+  jitter: { kind: 'ratio', ratio: 0.2 },
+});
+for (let retries = 0; !(await connect()); retries++) {
+  await delay(backoff.duration(retries), { clock: globalThis, signal });
+}
+```
+
+- Without jitter, the wait is `min(max, initial · multiplier^retries)`: here 25, 40, 64, 102.4… ms, and 1,000 ms from the ninth wait.
+- `Backoff` keeps no state. You keep the count of retries, and you decide when to stop, when to start again from 0, and which failures to try again.
+- The wait is a number of milliseconds, so you can also store it, for example as the next start time of a job.
+
+### Spread the retries of many callers
+
+Many callers that failed at the same time retry at the same time, and they can fail again together. A jitter makes each wait random, so the retries spread. `random` gives a number in [0, 1), `Math.random` by default. Give a function that returns known numbers to get known waits in a test. `d` is the wait without jitter.
+
+| `jitter`                      | Wait                                                                                                             | From                    |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------- | ----------------------- |
+| `{ kind: 'none' }`            | `d`                                                                                                              |                         |
+| `{ kind: 'ratio', ratio: r }` | `d` ± `r · d`; the wait before the first retry is `initial`, with no jitter. A wait can be up to `(1 + r) · max` | gRPC connection backoff |
+| `{ kind: 'full' }`            | from 0 to `d`                                                                                                    | AWS, full jitter        |
+| `{ kind: 'equal' }`           | from `d / 2` to `d`                                                                                              | AWS, equal jitter       |
+
+The constructor throws a `RangeError` for an `initial` that is not a positive, finite number, a `multiplier` below 1, a `max` below `initial` or not finite, and a `ratio` that is not above 0 and at most 1. `duration` throws a `RangeError` for a count that is not an integer of 0 or more.
+
+See [ADR 0011](./docs/adr/0011-a-back-off-gives-the-wait-before-a-retry-and-keeps-no-state.md).
 
 ## Stop a wait after a time
 

@@ -40,6 +40,18 @@ _Avoid_: System clock (`globalThis` is the system clock), real-time clock (a har
 A wait of a fixed number of milliseconds on a clock. A cancel stops its timer. A delay longer than one timer can hold (2^31-1 ms) runs on a chain of timers, so it lasts the full time.
 _Avoid_: Sleep, pause
 
+**Retry**:
+A new try of an operation after it failed. The count of retries before a wait is 0 before the first retry.
+_Avoid_: Attempt (an attempt is one call of a poll), repeat
+
+**Back-off**:
+`Backoff`. It gives the wait before a retry from the count of retries: a wait that grows by `multiplier` from `initial` up to `max`, with a jitter. It keeps no state and does not wait: the caller waits with a delay.
+_Avoid_: Retry policy (the policy also decides when to stop), retrier, exponential delay
+
+**Jitter**:
+A random change to the wait of a back-off, so that the retries of many callers spread. Its kind is none, ratio, full or equal.
+_Avoid_: Noise (the name in Got), randomization factor (the name in cenkalti/backoff)
+
 **Timeout**:
 A signal that aborts after a number of milliseconds on a clock. The caller gives the signal to a wait, and the wait stops when the signal aborts. A timeout is a duration that starts when the caller makes it. It counts its time in parts, and a part that ends late, as after a system sleep, uses up only its own length. A disposal of the timeout stops its timer.
 _Avoid_: Deadline (a deadline is a time), `AbortSignal.timeout` (it runs only on the real clock), time limit

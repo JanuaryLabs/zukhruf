@@ -1,3 +1,4 @@
+export { Backoff, type BackoffOptions, type Jitter } from './backoff.ts';
 export { type Clock, type WallClock } from './clock.ts';
 export { delay, type DelayOptions } from './delay.ts';
 export { Latch } from './latch.ts';
