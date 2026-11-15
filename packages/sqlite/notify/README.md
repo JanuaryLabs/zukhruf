@@ -129,7 +129,7 @@ export { UnsafeFolderError } from '@zukhruf/pipes';
 
 - `new Notifications({ path })` owns its connection to the file. It opens it with `open(path, { journal: new WriteAheadLog({ synchronous: 'full' }) })` of `@zukhruf/sqlite-open`, as `@zukhruf/sqlite-queue` does, and closes it at dispose.
 - `new Notifications({ database })` sends on a `DatabaseSync` that the caller opened. The caller closes it. A database in memory has no file that another program can open, so the constructor throws a `TypeError`.
-- The constructor makes the tables, if they are missing, on the sending connection. See [The tables](#the-tables).
+- The constructor makes the tables, if they are missing, on the sending connection. On a file that a later release made, it changes nothing. See [The tables](#the-tables).
 - `clock` is required. The backstop waits on it. Give `globalThis` in production, and a fake clock in a test ([`@zukhruf/async`](../../async/README.md#run-a-wait-on-a-clock)).
 - `notify(channel, payload)` is synchronous. When the sending connection is in a transaction, it inserts the row in that transaction. When it is not, it inserts the row in a `BEGIN IMMEDIATE` transaction of its own. `payload` is `''` when you give none, as in Postgres.
 - The wakes go out on the next microtask. A transaction of the family is synchronous ("`work` must be synchronous", [`@zukhruf/sqlite-transaction`](../transaction/README.md)), so by then the transaction has committed or rolled back. After a rollback, the wake finds no row, and the listener gives nothing to its caller. [ADR 0004](./docs/adr/0004-the-wake-goes-out-after-the-synchronous-transaction.md) tells why.
@@ -172,7 +172,7 @@ The 13 lines of Postgres's contract (research 19 §1), and how this package keep
 
 | Call or event                   | Rows                                                                                                                                                                                                                                              | Socket                                                                                | Wakes                                                                                                                     |
 | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `new Notifications(options)`    | Makes the missing tables on the sending connection.                                                                                                                                                                                               | None.                                                                                 | None.                                                                                                                     |
+| `new Notifications(options)`    | Reads the recorded release with no lock. Makes the missing tables on the sending connection, and records this release, unless the file records a later release, or this release and fits.                                                         | None.                                                                                 | None.                                                                                                                     |
 | The first `listen(channel)`     | Opens the listener's own connection. One `BEGIN IMMEDIATE` transaction inserts the listener row with its address, reads the highest id as its position, and inserts the channel row.                                                              | Makes the socket folder if it is missing, and serves a new socket in it.              | None. The backstop starts.                                                                                                |
 | A later `listen(channel)`       | One `BEGIN IMMEDIATE` transaction inserts the channel row and reads the highest id.                                                                                                                                                               | None.                                                                                 | None.                                                                                                                     |
 | `notify(channel, payload)`      | In the current transaction, or in its own: removes the rows of the listeners that this sender found dead, fails when the queue is full, inserts the row, reads the addresses on the channel, and trims at most 10,000 rows at most once a second. | None.                                                                                 | On the next microtask: one wake to each address read. It connects to an address the first time, and keeps the connection. |
@@ -186,6 +186,10 @@ The 13 lines of Postgres's contract (research 19 §1), and how this package keep
 ## The tables
 
 The tables are a `Declaration` of [`@zukhruf/sqlite-drift`](../drift) with `rows: 'keep'`, as in `@zukhruf/sqlite-queue`. A new release changes a `CREATE` statement, and the constructor rebuilds the table and keeps its rows. No release writes a migration.
+
+- The file records the version of the release that last applied the tables, in `zukhruf_notify_version`. The version comes from the `package.json` of the package: no person keeps a number ([ADR 0009](./docs/adr/0009-the-file-records-the-release-that-made-its-tables-and-an-older-release-leaves-them-alone.md)).
+- A release that constructs on a file of a later release changes nothing. A column that a release adds must be nullable or have a default, so that an older release can write the row.
+- A file that records a later release, or records this release and fits, takes no write lock at construction.
 
 ```sql
 CREATE TABLE zukhruf_notify_queue (
@@ -209,6 +213,11 @@ CREATE TABLE zukhruf_notify_channel (
   listener TEXT NOT NULL,
   PRIMARY KEY (channel, listener)
 ) STRICT, WITHOUT ROWID;
+
+CREATE TABLE zukhruf_notify_version (
+  singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+  version TEXT NOT NULL
+) STRICT;
 ```
 
 - `AUTOINCREMENT` is required. A plain `INTEGER PRIMARY KEY` gives the ids of trimmed rows again, and a listener whose last id is higher never reads the new rows (research 20b T2).

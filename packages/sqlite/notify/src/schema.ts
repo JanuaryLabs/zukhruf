@@ -28,6 +28,13 @@ export const notifySchema = new Declaration(
     listener TEXT NOT NULL,
     PRIMARY KEY (channel, listener)
   ) STRICT, WITHOUT ROWID`,
+    // One row: the release of this package that last applied the declaration
+    // (docs/adr/0009). Not PRAGMA user_version: a file has one, and the tables
+    // of another package can share the file.
+    `CREATE TABLE zukhruf_notify_version (
+    singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+    version TEXT NOT NULL
+  ) STRICT`,
   ],
   { rows: 'keep' },
 );

@@ -10,8 +10,9 @@ import { DisposedError } from './disposed-error.ts';
 import { checkChannel, checkPayload } from './limits.ts';
 import { Listening, type QueuedNotification } from './listening.ts';
 import { QueueFullError } from './queue-full-error.ts';
-import { HIGHEST_ID, notifySchema } from './schema.ts';
+import { HIGHEST_ID } from './schema.ts';
 import { Steps } from './steps.ts';
+import { Tables } from './tables.ts';
 import { Wakes } from './wakes.ts';
 
 export type NotificationsOptions = FileOptions | ConnectionOptions;
@@ -93,7 +94,7 @@ export class Notifications
     }
     this.#path = path;
     try {
-      notifySchema.apply(this.#database);
+      Tables.install(this.#database);
     } catch (error) {
       if (this.#owned) this.#database.close();
       throw error;

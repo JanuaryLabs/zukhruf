@@ -75,3 +75,7 @@ _Avoid_: Overflow, backpressure, limit reached
 **Dead listener**:
 A listener whose address gave `ECONNREFUSED` or `ENOENT` to a connect, or closed the sender's connection. The sender removes its rows in its next transaction, and its socket file after that transaction.
 _Avoid_: Stale listener, zombie, orphan
+
+**Release**:
+A published version of this package, by the `version` of its `package.json`. The file records the release that last applied the tables, in `zukhruf_notify_version`. A release leaves a file of a later release as it is (ADR 0009).
+_Avoid_: Schema version (no person keeps a schema number), migration, user_version
