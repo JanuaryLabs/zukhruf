@@ -55,8 +55,41 @@ next term: 2n
 - `lastEpoch()` resolves with the epoch of the last term in `epochFile`, or with `0n` when no term was won yet. It only reads the file. It does not campaign, it does not take the claim, and it does not create a file or the directory. Use it to find out if a value from an earlier term is stale, for example a fencing token that an old leader made with `EpochTokenSource`. A new term can start immediately after the read, so the answer can be old when you get it. When `epochFile` holds text that is not decimal digits, `lastEpoch()` rejects with the same `SyntaxError` as `campaign`. When it cannot read the file for another reason, it rejects with that error. It never answers `0n` for a file that it cannot read.
 - A term that resigns clean writes a third file, `<claimFile>.clean`, beside `claimFile`. It holds the epoch of that term. The next term reads it and removes it.
 - The directory must be on a local file system. On a network file system, `campaign` rejects with `NetworkDirectoryError`.
-- `pollInterval` is the time between two tries, in milliseconds. It defaults to 10. A try never blocks the process.
+- `pollInterval` is the time between two tries, in milliseconds. It defaults to 10. A try never blocks the process. The design in [A leader that hangs](#a-leader-that-hangs) removes it: a candidate waits on pushes from the leader.
 - `clock` is the clock that the campaign waits on, and that measures its `timeout`. It is required. Give `globalThis` in production. A test gives a fake clock, for example `createClock()` of `@sinonjs/fake-timers`, and moves the time of the campaign without a real wait ([`@zukhruf/async`](../async/README.md#run-a-wait-on-a-clock)).
+
+## A leader that hangs
+
+Design for review: not built yet (backlog #4371). The text above tells what the package does today.
+
+A hung leader keeps the claim of `SqliteElection` today: a leader that `SIGSTOP` stopped, or a leader whose event loop is blocked. The kernel frees the claim only when the process ends, so no candidate can win, and the group waits forever. In the design, the leader pushes a heartbeat on a pipe, a candidate waits on that pipe, and a candidate ends a leader that is silent for too long. A candidate waits as etcd's `Campaign` and ZooKeeper's leader election recipe wait: on a push, not on a period ([ADR 0007](./docs/adr/0007-a-candidate-waits-on-pushes-from-the-leaders-pipe-not-on-a-period.md)).
+
+```ts
+const election = new SqliteElection({
+  clock: globalThis,
+  directory,
+  claimFile: 'jobs.lock',
+  epochFile: 'jobs.epoch',
+  leaseDuration: 15_000, // the default
+  heartbeatInterval: 5_000, // the default: a third of leaseDuration
+});
+
+await using term = await election.campaign({ timeout: Infinity, signal });
+```
+
+- **The pipe.** The winner of a claim serves a pipe of [`@zukhruf/pipes`](../pipes/README.md) for its term. It sends a heartbeat on each connection when it accepts it, and then every `heartbeatInterval` ([ADR 0004](./docs/adr/0004-a-leader-renews-its-term-with-a-heartbeat-on-a-pipe-that-it-serves.md)).
+- **The leader record.** The winner writes `<claimFile>.leader` beside `claimFile`, before its term begins. It holds the epoch of the term, the process id of the leader, the address of its pipe, and its `leaseDuration` ([ADR 0005](./docs/adr/0005-the-leader-record-names-the-process-and-the-pipe-of-a-term.md)).
+- **The wait.** A candidate tries the claim. When another candidate holds it, the candidate reads the record, connects to the pipe, and waits. The close of the pipe tells it that the leader left, and it tries at once. A candidate under a healthy leader makes no try ([ADR 0007](./docs/adr/0007-a-candidate-waits-on-pushes-from-the-leaders-pipe-not-on-a-period.md)).
+- **A hung leader.** A candidate that hears no heartbeat for the `leaseDuration` of the record sends `SIGKILL` to the process of the record, but only while it holds that process's pipe open. The kernel frees the claim and closes the pipe, and the candidate tries. The kernel refuses the kill for a process of another user: then the candidate ends nothing, and it waits for the close until its `timeout` ([ADR 0006](./docs/adr/0006-a-candidate-ends-a-leader-that-is-silent-past-the-lease-duration.md)).
+- **A new leader that does not serve its pipe yet.** A connect that gives `ENOENT` or `ECONNREFUSED` comes while a new leader starts, or under a published leader. The candidate waits a back-off and tries again: 25 ms first, then 1.6 times longer each time, with a jitter of ±20 %, at most 1000 ms.
+- **An observer.** `election.observe()` returns a `LeaderObserver` for a process that does not campaign. It holds a connection to the leader's pipe and ends a silent leader as a candidate does. `observer.left` resolves `'closed'` when the leader left, `'ended'` when the observer ended it, and `'absent'` when no leader served a pipe. Dispose it to close the connection. The followers of `@zukhruf/mutex` and `@zukhruf/single-flight` use it ([ADR 0009](./docs/adr/0009-a-process-that-does-not-campaign-observes-the-leader.md)).
+- `leaseDuration` is the longest silence, in milliseconds, that a candidate or an observer accepts from the leader. It defaults to 15000, as the `LeaseDuration` of Kubernetes. A reader uses the value in the record, so the leader decides it.
+- `heartbeatInterval` is the time between two heartbeats, in milliseconds. It defaults to a third of `leaseDuration`, as etcd's client sends a keepalive every TTL / 3. The name is etcd's `heartbeat-interval`.
+- `pollInterval` goes, with no alias. The constructor throws a `RangeError` unless `0 < heartbeatInterval < leaseDuration`.
+- `campaign({ timeout: Infinity })` waits until it wins or its signal aborts. Without a `timeout`, it still tries once.
+- Run the candidates of one group as one user, in one PID namespace, with one `/tmp`. A candidate that runs as root can end a leader of any user.
+- With `SqliteElection`, a hung leader never runs again after a takeover: a new term starts only after the old process ended. A leader that runs again before its deadline still leads, and its `term.signal` does not abort.
+- A backend gets a seventh step, `waitForChange(claim, signal)`. It resolves when a try can win, and it settles when `signal` aborts. The base keeps the deadline and the abort of the campaign, and it no longer polls. The constructor of `LeaderElection` takes only the clock ([ADR 0008](./docs/adr/0008-the-backend-owns-the-wait-between-two-tries-and-poll-leaves-the-campaign.md)).
 
 ## The term
 
@@ -184,6 +217,12 @@ The socket lock store of `@zukhruf/mutex` uses `SqliteElection`, with the claim 
 - [ADR 0001: Leader election is a package, and each backend is a subclass of one campaign](./docs/adr/0001-leader-election-is-a-package-and-each-backend-is-a-subclass.md)
 - [ADR 0002: A term is a lease on leadership, with no fencing](./docs/adr/0002-a-term-is-a-lease-on-leadership-with-no-fencing.md)
 - [ADR 0003: A term that shuts down cleanly tells its successor](./docs/adr/0003-a-term-that-shuts-down-cleanly-tells-its-successor.md)
+- [ADR 0004: A leader renews its term with a heartbeat on a pipe that it serves](./docs/adr/0004-a-leader-renews-its-term-with-a-heartbeat-on-a-pipe-that-it-serves.md) (proposed)
+- [ADR 0005: The leader record names the process and the pipe of a term](./docs/adr/0005-the-leader-record-names-the-process-and-the-pipe-of-a-term.md) (proposed)
+- [ADR 0006: A candidate ends a leader that is silent past the lease duration](./docs/adr/0006-a-candidate-ends-a-leader-that-is-silent-past-the-lease-duration.md) (proposed)
+- [ADR 0007: A candidate waits on pushes from the leader's pipe, not on a period](./docs/adr/0007-a-candidate-waits-on-pushes-from-the-leaders-pipe-not-on-a-period.md) (proposed)
+- [ADR 0008: The backend owns the wait between two tries, and poll leaves the campaign](./docs/adr/0008-the-backend-owns-the-wait-between-two-tries-and-poll-leaves-the-campaign.md) (proposed)
+- [ADR 0009: A process that does not campaign observes the leader](./docs/adr/0009-a-process-that-does-not-campaign-observes-the-leader.md) (proposed)
 - [Code copied into this package](./docs/copied-code.md)
 
 ## Development

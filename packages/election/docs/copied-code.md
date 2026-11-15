@@ -45,3 +45,11 @@ Three test helpers are in the tests of this package and in the tests of two othe
 - Places: `packages/election/src/sqlite/sqlite-election.test.ts`, `packages/mutex/src/lock-stores/socket/lock-server.test.ts` and `packages/single-flight/src/coordinator/flight-server.test.ts`.
 - Same: a subclass of `SqliteElection` that takes a `loss` signal. Its `watch` calls `lose` when `loss` aborts. SQLite never takes the claim from a leader that lives, so only this backend shows what a lost term does.
 - Differs: the claim file and the epoch file. This package uses `term.lock` and `term.epoch`, the mutex uses `leader.lock` and `leader.epoch`, and the single flight uses `flight.lock` and `flight.epoch`. The mutex and the single flight also set `pollInterval: 10`. The comment names the tests of each package.
+
+## Code that the design moves
+
+Not built yet ([ADR 0008](./adr/0008-the-backend-owns-the-wait-between-two-tries-and-poll-leaves-the-campaign.md), [ADR 0009](./adr/0009-a-process-that-does-not-campaign-observes-the-leader.md), backlog #4371).
+
+- **The back-off.** The design has three places that wait a capped back-off after a failed connect: the wait of `SqliteElection`, the `ElectingConnector` of `@zukhruf/mutex`, and its copy in `@zukhruf/single-flight`. The Rule of Three counts places, so the back-off goes to `@zukhruf/async` before the design is built, and no package keeps a copy. Its API goes on paper there first.
+- **`LosableElection`.** The mutex and the single flight drop `pollInterval: 10` from their copies. The three copies then differ only in their file names.
+- **No copy of `notify()`.** The first version of this paper made the campaign a second copy of pg-boss's `notify()`, after the port in `packages/sqlite/queue/src/timers.ts` and `src/worker.ts:157-165`. The campaign no longer waits on a period, so that copy does not come.

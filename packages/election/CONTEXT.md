@@ -43,3 +43,55 @@ _Avoid_: Expired, revoked
 **Backend**:
 A subclass of `LeaderElection` that implements one kind of claim. `SqliteElection` is the backend of this package.
 _Avoid_: Driver, adapter, provider
+
+## Language of the design for review
+
+Not built yet (backlog #4371, ADRs 0004 to 0009). These words tell how a candidate waits on the leader, and how a hung leader is found and ended.
+
+**Hung leader**:
+A leader whose process lives but does not run: `SIGSTOP` stopped it, or its event loop is blocked. It keeps the claim, it sends no heartbeat, and the kernel keeps its pipe open. A process that waits for a slow helper while its event loop runs is not a hung leader.
+_Avoid_: Frozen, stuck, dead (a dead leader frees the claim)
+
+**Pipe**:
+The local endpoint of `@zukhruf/pipes` that a leader of `SqliteElection` serves for its term. Each reader holds a connection to it. Its close is the push that tells a reader that the leader left. See the glossary of [@zukhruf/pipes](../pipes/CONTEXT.md).
+_Avoid_: Socket, channel
+
+**Reader**:
+A process that holds a connection to the leader's pipe: a candidate that waits for the claim, or an observer. A reader keeps the deadline of the heartbeat, and it ends a hung leader.
+_Avoid_: Watcher (`watch` is the step that watches a won claim), client, listener
+
+**Push**:
+An event that the leader's side sends to a reader: a heartbeat, or the close of the pipe. A reader waits on pushes, not on a period. etcd's watch and ZooKeeper's watch are pushes.
+_Avoid_: Notify, wake, signal (a signal is an `AbortSignal`)
+
+**Heartbeat**:
+One byte that the leader sends on each connection to its pipe: when it accepts the connection, and then every heartbeat interval. A reader finds no meaning in its value.
+_Avoid_: Ping, keepalive, tick
+
+**Renew**:
+The leader renews its term when it sends its heartbeats. Kubernetes's word for the holder of a Lease.
+_Avoid_: Refresh, extend
+
+**Heartbeat interval**:
+The time between two heartbeats of the leader. It defaults to a third of the lease duration. etcd's `heartbeat-interval`.
+_Avoid_: Retry period (nothing tries again on a period), poll interval, tick
+
+**Lease duration**:
+The longest silence that a reader accepts from the leader before it treats the leader as hung. The leader chooses it, and the leader record holds it. Kubernetes's `LeaseDuration`.
+_Avoid_: TTL, timeout (the timeout is the time of one campaign), election timeout
+
+**Deadline of the heartbeat**:
+The time at which a reader treats the leader as hung: the lease duration after its connect, and again after each heartbeat. etcd's client keeps such a deadline for each lease.
+_Avoid_: Expiry, timeout
+
+**Leader record**:
+The file `<claimFile>.leader` that the winner of a claim writes before its term begins: the epoch of the term, the process id of the leader, the address of its pipe, and its lease duration. client-go's leader election record.
+_Avoid_: Lease (the term is the lease), lock file, pid file
+
+**Back-off**:
+The wait of a reader after a connect that found no pipe, while a new leader starts or under a published leader. It grows from 25 ms by 1.6 times, with a jitter of ±20 %, to at most 1000 ms. gRPC's connection backoff. The only wait of a candidate that no push ends.
+_Avoid_: Retry period, poll interval, delay
+
+**Observer**:
+A `LeaderObserver`: a reader that never tries the claim. `SqliteElection#observe()` makes one for one term. etcd's `Election.Observe`.
+_Avoid_: Follower (a follower is a process of the mutex or the single flight that uses an observer), watcher, standby
