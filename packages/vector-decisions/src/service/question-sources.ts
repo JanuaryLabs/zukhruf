@@ -1,5 +1,5 @@
 import { ContractError } from './contract-error.ts';
-import type { Question } from './decision.ts';
+import type { OptionQuestion } from './decision.ts';
 import type { Source, Vectors } from './vectors.ts';
 
 const MAX_OPTIONS = 256;
@@ -13,7 +13,7 @@ export class QuestionSources {
   readonly options: readonly Source[];
   readonly labels: readonly string[];
 
-  constructor(question: Question, vectors: Vectors) {
+  constructor(question: OptionQuestion, vectors: Vectors) {
     const { options } = question;
     this.instructions = vectors.source(
       question.instructionsVec ?? question.instructions ?? DEFAULT_INSTRUCTIONS,

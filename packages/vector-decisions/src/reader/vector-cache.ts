@@ -6,6 +6,7 @@ import type { EmbeddingModelMiddleware } from 'ai';
 import { Declaration } from '@zukhruf/sqlite-drift';
 import { transaction } from '@zukhruf/sqlite-transaction';
 
+import { float32Norm } from '../unit-vectors/float32-norm.ts';
 import { InvalidEmbeddingError } from './invalid-embedding-error.ts';
 
 // The smallest norm that Venn divides by (venn/reader.py unit).
@@ -156,7 +157,7 @@ class VectorCache {
       { length: bytes.byteLength / FLOAT16_BYTES },
       (_, index) => view.getFloat16(index * FLOAT16_BYTES, true),
     );
-    const norm = Math.max(Math.fround(Math.hypot(...values)), NORM_EPSILON);
+    const norm = Math.max(float32Norm(values), NORM_EPSILON);
     return values.map((value) => Math.fround(value / norm));
   }
 }

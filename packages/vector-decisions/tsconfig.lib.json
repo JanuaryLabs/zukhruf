@@ -6,7 +6,7 @@
     "tsBuildInfoFile": "dist/tsconfig.lib.tsbuildinfo"
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["src/**/*.test.ts", "src/**/*.spec.ts"],
+  "exclude": ["src/**/*.test.ts", "src/**/*.spec.ts", "src/testing/**"],
   "references": [
     {
       "path": "../sqlite/drift/tsconfig.lib.json"

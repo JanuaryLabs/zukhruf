@@ -24,8 +24,16 @@ import type {
   Answer,
   Decision,
   DecisionRequest,
+  IndexApplyQuestion,
+  IndexBatch,
+  IndexValue,
+  OptionQuestion,
   Question,
+  StreamedRef,
 } from './decision.ts';
+import { IndexStream } from './index-stream.ts';
+import { type Index, Indexes, type LabelledIndex } from './indexes.ts';
+import { NearestReference } from './nearest-reference.ts';
 import { QuestionHandles } from './question-handles.ts';
 import { QuestionSources } from './question-sources.ts';
 import { type StateVectors, Vectors } from './vectors.ts';
@@ -41,6 +49,8 @@ const READER = {
 };
 
 const MAX_QUESTIONS = 32;
+// The most rows of an index (venn/server.py:432).
+const MAX_INDEX_ROWS = 1_000_000;
 // The fewest and the most rows that a calibration fits (venn/server.py:471).
 const MIN_CALIBRATION_ROWS = 200;
 const MAX_CALIBRATION_ROWS = 10_000;
@@ -59,6 +69,7 @@ export class DecisionService {
   readonly #temperature: number;
   readonly #calibrations: Calibrations;
   readonly #handles = new QuestionHandles();
+  readonly #indexes = new Indexes();
 
   private constructor(
     head: CosineAbstention,
@@ -130,7 +141,12 @@ export class DecisionService {
         'question_limit',
         `Provide 1..${MAX_QUESTIONS} questions`,
       );
-    const state = await this.#vectors.state(request.state);
+    // Venn reads the index of a state before it reads the other kinds
+    // (venn/server.py:936).
+    const state =
+      typeof request.state === 'object' && request.state.indexRef !== undefined
+        ? this.#indexState(request.state.indexRef)
+        : await this.#vectors.state(request.state);
     const answers: Record<string, Answer> = {};
     for (const [name, question] of questions) {
       const asked =
@@ -152,7 +168,7 @@ export class DecisionService {
   // texts into the vector cache, and a questionRef names the question by
   // the handle. Each decision gives the threshold.
   async registerQuestion(
-    question: Question & { readonly threshold?: never },
+    question: OptionQuestion & { readonly threshold?: never },
   ): Promise<string> {
     if (!REGISTERED.has(question.type))
       throw new ContractError(
@@ -209,8 +225,77 @@ export class DecisionService {
     this.#calibrations.delete(family, kind);
   }
 
+  // Registers 1 to 1,000,000 rows, each with an id, and for NearestReference
+  // an outcome, as Venn's register_index does (venn/server.py:427-443): the
+  // rows are checked as decide checks given vectors, and kept as unit
+  // float32 vectors. The handle names the index in a state { indexRef }, a
+  // NearestReference question and streamIndex.
+  registerIndex(
+    vectors: readonly (readonly number[])[],
+    ids: readonly IndexValue[],
+    outcomes?: readonly IndexValue[],
+  ): string {
+    return this.#indexes.register(
+      this.#vectors.rows(vectors, MAX_INDEX_ROWS),
+      ids,
+      outcomes,
+    );
+  }
+
+  // The index of a handle of registerIndex (venn/server.py:459-463).
+  index(handle: string): Index | LabelledIndex {
+    return this.#indexes.index(handle);
+  }
+
+  // Answers an IndexApply question about each row of an index, in batches,
+  // as Venn's stream_index does (venn/server.py:869-910). The checks run in
+  // Venn's order when it is called, so a refusal rejects the promise before
+  // the caller reads a batch: the index, the questionRef, rowCap and
+  // batchSize (up to 1,000,000 rows), the threshold, then the question. The
+  // generator answers each batch when the caller reads it, as Venn's
+  // generator does.
+  async streamIndex(
+    handle: string,
+    question: IndexApplyQuestion | StreamedRef,
+  ): Promise<Generator<IndexBatch, void, undefined>> {
+    const index = this.#indexes.index(handle);
+    const { question: registered, merged } =
+      question.questionRef === undefined
+        ? { question, merged: question }
+        : this.#handles.streamed(question);
+    const stream = new IndexStream(
+      merged.threshold,
+      this.#calibrations.temperature(merged.family ?? '', 'Choice') ??
+        this.#temperature,
+      index.vectors,
+      index.ids,
+      merged.rowCap,
+      merged.batchSize,
+    );
+    DecisionService.#checkThreshold(merged.threshold);
+    const sources = new QuestionSources(registered, this.#vectors);
+    const [instructions = new Float32Array(), ...options] =
+      await this.#vectors.resolve([sources.instructions, ...sources.options]);
+    return stream.batches(
+      new PreparedQuestion(this.#head, instructions, options),
+      sources.labels,
+    );
+  }
+
+  #indexState(handle: string): StateVectors {
+    const { vectors, ids } = this.#indexes.index(handle);
+    return { from: 'index', rows: vectors, ids };
+  }
+
+  // A threshold from 0 to 1, as Venn checks it for each question of decide
+  // and for stream_index (venn/server.py:886-887, 962-963).
+  static #checkThreshold(threshold: number | undefined): void {
+    if (threshold !== undefined && !(threshold >= 0 && threshold <= 1))
+      throw new ContractError('threshold', 'Threshold must be in [0,1]');
+  }
+
   // IndexApply reads the temperature of Choice (venn/server.py:804).
-  static #calibrationKind(question: Question): CalibrationKind {
+  static #calibrationKind(question: OptionQuestion): CalibrationKind {
     if (question.type === undefined || question.type === 'IndexApply')
       return 'Choice';
     return question.type;
@@ -225,6 +310,15 @@ export class DecisionService {
     state: StateVectors,
     family: string,
   ): Promise<Answer> {
+    DecisionService.#checkThreshold(question.threshold);
+    if (question.type === 'NearestReference')
+      return new NearestReference(
+        question,
+        this.#indexes.index(question.indexRef),
+        state,
+        this.#calibrations.temperature(family, 'NearestReference') ??
+          this.#temperature,
+      ).answer();
     const { sources, kind } = new CheckedQuestion(
       question,
       state,

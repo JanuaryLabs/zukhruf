@@ -10,21 +10,20 @@ import {
   type Experimental_DecisionState,
   experimental_decide,
 } from 'ai';
-import { MockEmbeddingModelV4 } from 'ai/test';
+import type { MockEmbeddingModelV4 } from 'ai/test';
 
 import { open } from '@zukhruf/sqlite-open';
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 
+import { DecisionService, DecisionServiceModel } from '../index.ts';
 import {
-  DecisionService,
-  DecisionServiceModel,
-  downloadHead,
-} from '../index.ts';
+  assertClose,
+  goldenReader,
+  goldenService,
+} from '../testing/venn-golden.ts';
 
 // The tests need the venn-1 head, which the repository does not ship, so
 // they download it into the cache of Hugging Face.
-
-const PREFIX = 'task: classification | query: ';
 
 // Venn computes the probabilities in float32, and the package in float64:
 // the answers of the fixture differ by at most 5.2e-8 of max(1, |Venn's|)
@@ -74,61 +73,23 @@ const golden: {
   readFileSync(join(import.meta.dirname, 'fixtures/expected.json'), 'utf8'),
 );
 
-// The reader that Venn's service had: the raw vector of each text of the
-// fixture after the Classification prefix, and no vector for another text.
+// The reader that Venn's service had.
 function fixtureReader(): MockEmbeddingModelV4 {
-  const rows = new Map(
-    Object.entries(golden.raw).map(([text, row]) => [`${PREFIX}${text}`, row]),
-  );
-  return new MockEmbeddingModelV4({
-    maxEmbeddingsPerCall: null,
-    doEmbed: async ({ values }) => ({
-      embeddings: values.map((value) => {
-        const row = rows.get(value);
-        if (row === undefined)
-          throw new Error(`The fixture has no vector for ${value}`);
-        return [...row];
-      }),
-      warnings: [],
-    }),
-  });
+  return goldenReader(golden.raw);
 }
 
-// A service whose calibrations file is in `registryDirectory`: with no file there,
-// each question divides by choice_temperature.
+// A service whose calibrations file is in `registryDirectory`: with no file
+// there, each question divides by choice_temperature.
 async function service(
   registryDirectory: string,
   database: DatabaseSync,
   reader = fixtureReader(),
 ): Promise<DecisionService> {
-  return DecisionService.load({
-    model: reader,
-    database,
-    directory: await downloadHead(),
+  return goldenService({
     registryPath: join(registryDirectory, 'calibrations.json'),
+    database,
+    model: reader,
   });
-}
-
-// Compares each number to TOLERANCE of max(1, |Venn's|), and each other
-// value exactly.
-function assertClose(actual: unknown, expected: unknown, path: string): void {
-  if (typeof expected === 'number') {
-    assert.ok(typeof actual === 'number', `${path} is not a number`);
-    assert.ok(
-      Math.abs(actual - expected) <=
-        TOLERANCE * Math.max(1, Math.abs(expected)),
-      `${path}: ${actual} against Venn's ${expected}`,
-    );
-    return;
-  }
-  if (typeof expected !== 'object' || expected === null) {
-    assert.equal(actual, expected, path);
-    return;
-  }
-  assert.ok(typeof actual === 'object' && actual !== null, path);
-  assert.deepEqual(Object.keys(actual), Object.keys(expected), path);
-  for (const [key, value] of Object.entries(expected))
-    assertClose(Reflect.get(actual, key), value, `${path}.${key}`);
 }
 
 // Asks the call of a case of the fixture, and compares the answer to the
@@ -142,11 +103,12 @@ async function assertGolden(
     model,
     ...answered.call,
   });
-  assertClose(answers[id], answered.answers[id], `answers.${id}`);
+  assertClose(answers[id], answered.answers[id], `answers.${id}`, TOLERANCE);
   assertClose(
     providerMetadata?.vectorDecisions?.noneProbability,
     answered.noneProbability,
     'providerMetadata.vectorDecisions.noneProbability',
+    TOLERANCE,
   );
 }
 

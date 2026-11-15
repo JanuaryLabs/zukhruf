@@ -1,4 +1,5 @@
 import type { PreparedQuestion } from '../head/prepared-question.ts';
+import { float32Norm } from '../unit-vectors/float32-norm.ts';
 import type { Answer, ChoiceAnswer } from './decision.ts';
 import type { QuestionKind } from './question-kind.ts';
 
@@ -79,7 +80,7 @@ export abstract class OneStateKind<
   // makes the state a unit vector before the logits (venn/server.py:1095,
   // venn/index/apply.py:63).
   static #unit(vector: Float32Array): Float32Array {
-    const norm = Math.max(Math.fround(Math.hypot(...vector)), NORM_EPSILON);
+    const norm = Math.max(float32Norm(vector), NORM_EPSILON);
     return vector.map((value) => value / norm);
   }
 }

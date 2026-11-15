@@ -1,7 +1,7 @@
 import { type EmbeddingModel, embedMany } from 'ai';
 
 import { ContractError } from './contract-error.ts';
-import type { State } from './decision.ts';
+import type { IndexState, IndexValue, State } from './decision.ts';
 
 const MAX_TEXT = 32_768;
 // The most rows of a plural state.
@@ -13,13 +13,18 @@ const NORM_EPSILON = 1e-12;
 export type Source =
   { readonly text: string } | { readonly vector: Float32Array };
 
-// The vectors of a state, by where they come from: one vector, or a row for
-// each item of a plural state.
+// The vectors of a state, by where they come from: one vector, a row for
+// each item of a plural state, or the rows of an index with their ids.
 export type StateVectors =
   | { readonly from: 'text' | 'vector'; readonly vector: Float32Array }
   | {
       readonly from: 'texts' | 'vectors';
       readonly rows: readonly Float32Array[];
+    }
+  | {
+      readonly from: 'index';
+      readonly rows: readonly Float32Array[];
+      readonly ids: readonly IndexValue[];
     };
 
 type Texts = { readonly texts: readonly string[] };
@@ -35,14 +40,14 @@ export class Vectors {
     this.#width = width;
   }
 
-  async state(state: State): Promise<StateVectors> {
+  async state(state: Exclude<State, IndexState>): Promise<StateVectors> {
     if (typeof state === 'string') return this.#text(state);
     if (state.texts !== undefined)
       return { from: 'texts', rows: await this.#texts(state) };
     if (state.text !== undefined) return this.#text(state.text);
     if (state.vector !== undefined)
       return { from: 'vector', vector: this.#given(state.vector) };
-    return { from: 'vectors', rows: this.#rows(state.vectors) };
+    return { from: 'vectors', rows: this.rows(state.vectors, MAX_ROWS) };
   }
 
   async #text(text: string): Promise<StateVectors> {
@@ -100,30 +105,37 @@ export class Vectors {
   }
 
   #given(values: readonly number[]): Float32Array {
-    const [vector = new Float32Array()] = this.#rows([values]);
+    const [vector = new Float32Array()] = this.rows([values], MAX_ROWS);
     return vector;
   }
 
-  // Rows of float32 values, as Venn's vector checks a vector or a matrix
-  // (venn/server.py:318-328): Venn takes an empty matrix for a vector of no
-  // values.
-  #rows(values: readonly (readonly number[])[]): Float32Array[] {
-    const rows = values.map((row) => Float32Array.from(row));
+  // Rows of float32 values, at most `maxRows`, as Venn's vector checks a
+  // vector or a matrix (venn/server.py:318-328): Venn takes an empty matrix
+  // for a vector of no values. The rows are float32 only after the count:
+  // registerIndex takes up to 1,000,000 rows, and a count over it would
+  // otherwise be refused after gigabytes of copies.
+  rows(
+    values: readonly (readonly number[])[],
+    maxRows: number,
+  ): Float32Array[] {
     if (
-      rows.length === 0 ||
-      !rows.every(
-        (row) => row.length === this.#width && row.every(Number.isFinite),
+      values.length === 0 ||
+      !values.every(
+        (row) =>
+          row.length === this.#width &&
+          row.every((value) => Number.isFinite(Math.fround(value))),
       )
     )
       throw new ContractError(
         'invalid_vector',
         `Expected finite ${this.#width}-dimensional vectors`,
       );
-    if (rows.length > MAX_ROWS)
+    if (values.length > maxRows)
       throw new ContractError(
         'state_limit',
-        `At most ${MAX_ROWS} state vectors`,
+        `At most ${maxRows} state vectors`,
       );
+    const rows = values.map((row) => Float32Array.from(row));
     if (rows.some((row) => Math.hypot(...row) <= NORM_EPSILON))
       throw new ContractError(
         'zero_vector',

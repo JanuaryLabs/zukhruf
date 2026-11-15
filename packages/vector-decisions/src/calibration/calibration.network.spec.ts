@@ -5,8 +5,6 @@ import { join } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 
-import { MockEmbeddingModelV4 } from 'ai/test';
-
 import { open } from '@zukhruf/sqlite-open';
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 
@@ -16,13 +14,15 @@ import {
   type ContractErrorCode,
   type DecisionRequest,
   DecisionService,
-  downloadHead,
 } from '../index.ts';
+import {
+  assertClose,
+  goldenReader,
+  goldenService,
+} from '../testing/venn-golden.ts';
 
 // The tests need the venn-1 head, which the repository does not ship, so
 // they download it into the cache of Hugging Face.
-
-const PREFIX = 'task: classification | query: ';
 
 // The fit gives Venn's temperatures within 9.1e-11 of their size (measured
 // 2026-11-14, "separable rows"); without the float32 rounding of the logits,
@@ -109,35 +109,14 @@ const golden: {
   },
 );
 
-// The reader that Venn's service had: the raw vector of each text of the
-// fixture after the Classification prefix.
-function venn(): MockEmbeddingModelV4 {
-  const rows = new Map(
-    Object.entries(golden.raw).map(([text, row]) => [`${PREFIX}${text}`, row]),
-  );
-  return new MockEmbeddingModelV4({
-    maxEmbeddingsPerCall: null,
-    doEmbed: async ({ values }) => ({
-      embeddings: values.map((value) => {
-        const row = rows.get(value);
-        if (row === undefined)
-          throw new Error(`The fixture has no vector for ${value}`);
-        return [...row];
-      }),
-      warnings: [],
-    }),
-  });
-}
-
 async function service(
   registryPath: string,
   database: DatabaseSync,
 ): Promise<DecisionService> {
-  return DecisionService.load({
-    model: venn(),
-    database,
-    directory: await downloadHead(),
+  return goldenService({
     registryPath,
+    database,
+    model: goldenReader(golden.raw),
   });
 }
 
@@ -170,33 +149,6 @@ async function decideAll(
       })
     ).answers;
   return answers;
-}
-
-// Compares each number to `tolerance` of max(1, |Venn's|), and each other
-// value exactly.
-function assertClose(
-  actual: unknown,
-  expected: unknown,
-  path: string,
-  tolerance = TOLERANCE,
-): void {
-  if (typeof expected === 'number') {
-    assert.ok(typeof actual === 'number', `${path} is not a number`);
-    assert.ok(
-      Math.abs(actual - expected) <=
-        tolerance * Math.max(1, Math.abs(expected)),
-      `${path}: ${actual} against Venn's ${expected}`,
-    );
-    return;
-  }
-  if (typeof expected !== 'object' || expected === null) {
-    assert.equal(actual, expected, path);
-    return;
-  }
-  assert.ok(typeof actual === 'object' && actual !== null, path);
-  assert.deepEqual(Object.keys(actual), Object.keys(expected), path);
-  for (const [key, value] of Object.entries(expected))
-    assertClose(Reflect.get(actual, key), value, `${path}.${key}`, tolerance);
 }
 
 // Compares a calibrations.json with Venn's: the same text, but for the
@@ -331,6 +283,7 @@ test('a deletion whose write fails throws the error of the write, and decide kee
     (await decisions.decide(calibrated.request)).answers,
     calibrated.answers,
     'a family',
+    TOLERANCE,
   );
 });
 
@@ -428,7 +381,7 @@ test('load reads a calibrations.json of Venn, and decide divides the logits of a
   const answers = await decideAll(decisions, golden.answered);
 
   for (const [name, { answers: expected }] of Object.entries(golden.answered))
-    assertClose(answers[name], expected, name);
+    assertClose(answers[name], expected, name, TOLERANCE);
 });
 
 test('load throws the error of a read that fails, so a directory at registryPath does not load as an empty registry that the next registration writes over', async () => {
@@ -486,7 +439,7 @@ test("load reads and writes the calibrations at registryPath, a file of any name
   decisions.deleteCalibration('orders');
 
   for (const [name, { answers: expected }] of Object.entries(golden.answered))
-    assertClose(answers[name], expected, name);
+    assertClose(answers[name], expected, name, TOLERANCE);
   assert.deepEqual(
     Object.keys(JSON.parse(await readFile(registryPath, 'utf8'))),
     Object.keys(JSON.parse(golden.registry)).filter(
@@ -512,7 +465,7 @@ test('a Noul question divides the "none" part by the temperature of its family a
 
   const { answers } = await decisions.decide(noul.request);
 
-  assertClose(answers, noul.answers, 'a Noul');
+  assertClose(answers, noul.answers, 'a Noul', TOLERANCE);
 });
 
 test("registerCalibration writes calibrations.json as Venn writes it: the temperatures by family and type in Venn's order, and a registration again keeps its place", async () => {
@@ -564,8 +517,8 @@ test('a registration changes the answers of decide at once, and of a service tha
     golden.answered,
   );
   for (const [name, { answers: expected }] of Object.entries(golden.answered)) {
-    assertClose(now[name], expected, `${name} at once`);
-    assertClose(later[name], expected, `${name} later`);
+    assertClose(now[name], expected, `${name} at once`, TOLERANCE);
+    assertClose(later[name], expected, `${name} later`, TOLERANCE);
   }
 });
 
@@ -594,7 +547,7 @@ test('deleteCalibration removes the temperature of a family and type from calibr
   for (const [name, { answers: expected }] of Object.entries(
     golden['answered after deletions'],
   ))
-    assertClose(answers[name], expected, name);
+    assertClose(answers[name], expected, name, TOLERANCE);
 });
 
 test('the type of registerCalibration and deleteCalibration is Choice when none is given', async () => {

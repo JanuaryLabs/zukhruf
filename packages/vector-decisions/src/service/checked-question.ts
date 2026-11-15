@@ -1,6 +1,6 @@
 import { Choice } from './choice.ts';
 import { ContractError } from './contract-error.ts';
-import type { Question } from './decision.ts';
+import type { IndexValue, OptionQuestion } from './decision.ts';
 import { IndexApply } from './index-apply.ts';
 import { Noul } from './noul.ts';
 import type { QuestionKind } from './question-kind.ts';
@@ -9,7 +9,8 @@ import { Score } from './score.ts';
 import type { StateVectors, Vectors } from './vectors.ts';
 
 // One question about the state, after Venn's checks of it, in Venn's order
-// (venn/server.py:963, 1043, 816-828, 1064-1071, 1092, 1103-1105): the
+// (venn/server.py:1043, 816-828, 1064-1071, 1092, 1103-1105), after the
+// check of its threshold (venn/server.py:963): the
 // sources of its instructions and options, its labels, and the kind that
 // answers it.
 export class CheckedQuestion {
@@ -17,15 +18,12 @@ export class CheckedQuestion {
   readonly kind: QuestionKind;
 
   constructor(
-    question: Question,
+    question: OptionQuestion,
     state: StateVectors,
     vectors: Vectors,
     temperature: number,
     choiceTemperature: number,
   ) {
-    const { threshold } = question;
-    if (threshold !== undefined && !(threshold >= 0 && threshold <= 1))
-      throw new ContractError('threshold', 'Threshold must be in [0,1]');
     const kind = CheckedQuestion.#kind(
       question,
       temperature,
@@ -39,7 +37,7 @@ export class CheckedQuestion {
   // are known: it checks the state first, then a Score checks its scores
   // against the labels.
   static #kind(
-    question: Question,
+    question: OptionQuestion,
     temperature: number,
     choiceTemperature: number,
   ): (labels: readonly string[], state: StateVectors) => QuestionKind {
@@ -75,14 +73,17 @@ export class CheckedQuestion {
           );
       case 'IndexApply': {
         const { rowCap, batchSize } = question;
-        return (_, state) =>
-          new IndexApply(
+        return (_, state) => {
+          const { rows, ids } = CheckedQuestion.#rows(state);
+          return new IndexApply(
             threshold,
             temperature,
-            CheckedQuestion.#rows(state),
+            rows,
+            ids,
             rowCap,
             batchSize,
           );
+        };
       }
       default:
         throw new ContractError(
@@ -101,13 +102,21 @@ export class CheckedQuestion {
     return state.vector;
   }
 
-  static #rows(state: StateVectors): readonly Float32Array[] {
+  // The rows and their ids: the ids of an index, else the index of each row
+  // (venn/server.py:1076).
+  static #rows(state: StateVectors): {
+    readonly rows: readonly Float32Array[];
+    readonly ids: readonly IndexValue[];
+  } {
     if ('vector' in state)
       throw new ContractError(
         'index_input',
         'IndexApply requires multiple rows',
       );
-    return state.rows;
+    return {
+      rows: state.rows,
+      ids: 'ids' in state ? state.ids : state.rows.map((_, id) => id),
+    };
   }
 
   // One finite score for each label; the default is 0, 1, 2 and so on.

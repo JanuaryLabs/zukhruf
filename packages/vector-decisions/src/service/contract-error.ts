@@ -19,7 +19,12 @@ export type ContractErrorCode =
   | 'prewarm_override'
   | 'prewarm_type'
   | 'calibration_size'
-  | 'calibration_labels';
+  | 'calibration_labels'
+  | 'invalid_index'
+  | 'index_handle'
+  | 'nearest_input'
+  | 'nearest_labels'
+  | 'nearest_k';
 
 // A request that breaks a rule of Venn's contract (venn/errors.py): `code`
 // names the rule for a program, the message is for people, and `status` is

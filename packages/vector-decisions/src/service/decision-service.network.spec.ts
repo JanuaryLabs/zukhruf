@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 
-import { MockEmbeddingModelV4 } from 'ai/test';
+import type { MockEmbeddingModelV4 } from 'ai/test';
 
 import { open } from '@zukhruf/sqlite-open';
 import { TemporaryFiles } from '@zukhruf/testing/fs';
@@ -19,11 +19,14 @@ import {
   DecisionService,
   downloadHead,
 } from '../index.ts';
+import {
+  assertClose,
+  goldenReader,
+  goldenService,
+} from '../testing/venn-golden.ts';
 
 // The tests need the venn-1 head, which the repository does not ship, so
 // they download it into the cache of Hugging Face.
-
-const PREFIX = 'task: classification | query: ';
 
 // Venn computes the logits and the probabilities in float32, and the package
 // in float64: the probabilities of the fixture differ by at most 1.5e-7 (a
@@ -96,43 +99,24 @@ const golden: {
   (_key, value: unknown) => (value === 'NaN' ? Number.NaN : value),
 );
 
-// The reader that Venn's service had: the raw vector of each text of the
-// fixture after the Classification prefix, and no vector for another text.
+// The reader that Venn's service had, with the vectors of `extra` too.
 function venn(
   extra: Readonly<Record<string, readonly number[]>> = {},
 ): MockEmbeddingModelV4 {
-  const rows = new Map(
-    Object.entries({ ...golden.raw, ...extra }).map(([text, row]) => [
-      `${PREFIX}${text}`,
-      row,
-    ]),
-  );
-  return new MockEmbeddingModelV4({
-    maxEmbeddingsPerCall: null,
-    doEmbed: async ({ values }) => ({
-      embeddings: values.map((value) => {
-        const row = rows.get(value);
-        if (row === undefined)
-          throw new Error(`The fixture has no vector for ${value}`);
-        return [...row];
-      }),
-      warnings: [],
-    }),
-  });
+  return goldenReader({ ...golden.raw, ...extra });
 }
 
-// A service whose calibrations file is in `registryDirectory`: with no file there,
-// each question divides by choice_temperature.
+// A service whose calibrations file is in `registryDirectory`: with no file
+// there, each question divides by choice_temperature.
 async function service(
   registryDirectory: string,
   database: DatabaseSync,
   model = venn(),
 ): Promise<DecisionService> {
-  return DecisionService.load({
-    model,
-    database,
-    directory: await downloadHead(),
+  return goldenService({
     registryPath: join(registryDirectory, 'calibrations.json'),
+    database,
+    model,
   });
 }
 
@@ -178,28 +162,6 @@ function referenced(
   };
 }
 
-// Compares each number to TOLERANCE of max(1, |Venn's|), and each other
-// value exactly.
-function assertClose(actual: unknown, expected: unknown, path: string): void {
-  if (typeof expected === 'number') {
-    assert.ok(typeof actual === 'number', `${path} is not a number`);
-    assert.ok(
-      Math.abs(actual - expected) <=
-        TOLERANCE * Math.max(1, Math.abs(expected)),
-      `${path}: ${actual} against Venn's ${expected}`,
-    );
-    return;
-  }
-  if (typeof expected !== 'object' || expected === null) {
-    assert.equal(actual, expected, path);
-    return;
-  }
-  assert.ok(typeof actual === 'object' && actual !== null, path);
-  assert.deepEqual(Object.keys(actual), Object.keys(expected), path);
-  for (const [key, value] of Object.entries(expected))
-    assertClose(Reflect.get(actual, key), value, `${path}.${key}`);
-}
-
 // Compares the answer to the question `name` with Venn's answer.
 function assertAnswer(
   decision: Decision,
@@ -208,7 +170,7 @@ function assertAnswer(
 ): void {
   const expected = answered.answers[name];
   assert.ok(expected !== undefined, `Venn has no answer to ${name}`);
-  assertClose(decision.answers[name], expected, `answers.${name}`);
+  assertClose(decision.answers[name], expected, `answers.${name}`, TOLERANCE);
 }
 
 test('load refuses the config.json of a head that reads another reader', async () => {
@@ -716,7 +678,7 @@ test('a request of several named questions of each type answers each by its name
 
   const { answers } = await decisions.decide(kinds.request);
 
-  assertClose(answers, kinds.answers, 'answers');
+  assertClose(answers, kinds.answers, 'answers', TOLERANCE);
 });
 
 test('of two options with the same probability, the first one is the answer', async () => {

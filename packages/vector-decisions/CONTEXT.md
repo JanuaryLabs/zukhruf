@@ -19,8 +19,36 @@ The thing that a question is about: a text, or its vector. A plural state is sev
 _Avoid_: input, item, document
 
 **Row**:
-One text or one vector of a plural state. IndexApply answers each row, and the index of the row is its id.
+One text or one vector of a plural state, or one vector of an index. IndexApply answers each row. The id of a row is its index in a plural state, or the id that `registerIndex` gave it.
 _Avoid_: record, entry, item
+
+**Index**:
+Rows that `registerIndex` keeps as unit vectors, each with an id, and in a labelled index with an outcome. A decision names it with `{ indexRef }`.
+_Avoid_: store (Venn's word in its messages), collection, corpus
+
+**Index handle**:
+The name that `registerIndex` gives to an index: the SHA-256 of its unit vectors and of the JSON of its ids and outcomes, as Venn makes it. The same rows and ids get the same handle.
+_Avoid_: index id, index ref (the field that holds it)
+
+**Outcome**:
+The label of one row of a labelled index, which NearestReference answers.
+_Avoid_: class, target, label (for the value that the caller gives)
+
+**Stream**:
+The answers of an IndexApply question about every row of an index, one batch of rows at a time, that `streamIndex` gives as the caller reads them.
+_Avoid_: page, chunk
+
+**Nearest reference**:
+A question about one state that answers the outcome of the rows of a labelled index nearest to it, with the margin and the evidence.
+_Avoid_: k-NN classifier, lookup
+
+**Margin**:
+The best score of the answered outcome less the best score of another outcome. Its sigmoid, over the temperature, is the probability of the answer.
+_Avoid_: gap, lead
+
+**Evidence**:
+The ids of the k rows of an index nearest to the state, from the nearest, that a NearestReference answer gives.
+_Avoid_: neighbours, hits, sources
 
 **Question**:
 A typed request about a state: Choice (which option), Score (which level of a scale), Noul (yes or no) or IndexApply (which option, for each row of a plural state).

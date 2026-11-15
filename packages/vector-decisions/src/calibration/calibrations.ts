@@ -3,8 +3,9 @@ import { mkdir, readFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
 // The types of question whose temperature decide reads. IndexApply reads the
-// temperature of Choice (venn/server.py:804).
-export type CalibrationKind = 'Choice' | 'Score' | 'Noul';
+// temperature of Choice (venn/server.py:804), and NearestReference divides
+// its margin by its own (venn/server.py:974-975).
+export type CalibrationKind = 'Choice' | 'Score' | 'Noul' | 'NearestReference';
 
 // The temperatures that registerCalibration fits, by family and type of
 // question, in the file at registryPath, as Venn's DecisionService keeps

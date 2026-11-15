@@ -27,14 +27,21 @@ export type {
   DecisionRequest,
   IndexApplyAnswer,
   IndexApplyQuestion,
+  IndexBatch,
+  IndexValue,
+  NearestReferenceAnswer,
+  NearestReferenceQuestion,
   NoulAnswer,
   NoulQuestion,
   Option,
+  OptionQuestion,
   Question,
   QuestionRef,
   RowAnswer,
   ScoreAnswer,
   ScoreQuestion,
   State,
+  StreamedRef,
 } from './service/decision.ts';
 export { DecisionService } from './service/decision-service.ts';
+export type { Index, LabelledIndex } from './service/indexes.ts';
