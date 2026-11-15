@@ -1,6 +1,12 @@
 import PQueue from 'p-queue';
 
-import { type Clock, Latch, delay, untilAborted } from '@zukhruf/async';
+import {
+  Backoff,
+  type Clock,
+  Latch,
+  delay,
+  untilAborted,
+} from '@zukhruf/async';
 
 import type { Eviction } from './eviction.ts';
 import type { PoolStats } from './pool-stats.ts';
@@ -11,9 +17,16 @@ import type { Worker } from './worker.ts';
 // The back-off before an eager pool starts a worker again after an early
 // exit, as Kubernetes restarts a container in CrashLoopBackOff (tuned by
 // KEP-4603): 1 s, doubled for each early exit in a row, up to 60 s. A worker
-// whose warm-up fails exits early too (ADR 0010). A worker that ran 10 minutes
-// ends the back-off.
-const backoff = { first: 1_000, most: 60_000, reset: 600_000 };
+// whose warm-up fails exits early too (ADR 0010).
+const backoff = new Backoff({
+  initial: 1_000,
+  multiplier: 2,
+  max: 60_000,
+  jitter: { kind: 'none' },
+});
+
+// A worker that ran this long ends the back-off.
+const backoffReset = 600_000;
 
 // What a slot holds: nothing, a worker that starts, a worker that is ready
 // since a time, a worker that ended and waits to be closed, or a back-off
@@ -333,7 +346,7 @@ export class Pool<T extends Worker> implements AsyncDisposable {
       this.#stopped.signal.aborted
     )
       return;
-    if (this.#clock.performance.now() - state.since >= backoff.reset)
+    if (this.#clock.performance.now() - state.since >= backoffReset)
       slot.early = 0;
     this.#retire(slot);
   }
@@ -363,9 +376,7 @@ export class Pool<T extends Worker> implements AsyncDisposable {
     this.#enter(slot, { kind: 'empty' });
     void this.#close(worker);
     slot.early =
-      this.#clock.performance.now() - since < backoff.reset
-        ? slot.early + 1
-        : 0;
+      this.#clock.performance.now() - since < backoffReset ? slot.early + 1 : 0;
     this.#restart(slot);
   }
 
@@ -380,7 +391,7 @@ export class Pool<T extends Worker> implements AsyncDisposable {
     }
     const state = { kind: 'backoff', wait: new AbortController() } as const;
     this.#enter(slot, state);
-    delay(Math.min(backoff.first * 2 ** (slot.early - 1), backoff.most), {
+    delay(backoff.duration(slot.early - 1), {
       clock: this.#clock,
       signal: AbortSignal.any([state.wait.signal, this.#stopped.signal]),
     }).then(

@@ -1,3 +1,5 @@
+import { Backoff } from '@zukhruf/async';
+
 import { type CapacityOptions, capacity } from './capacity.ts';
 import type { Sample, Sizing } from './sizing.ts';
 
@@ -10,6 +12,15 @@ const span = 2_000;
 // to this many, as .NET's hill climbing waits up to ten times longer when
 // more threads hurt: each step with one more warms up a worker for nothing.
 const longestPause = 16;
+
+// Each pause is 0.5 to 1.5 times its length, so that processes which run the
+// same climbing take their steps apart.
+const pause = new Backoff({
+  initial: span,
+  multiplier: 2,
+  max: span * longestPause,
+  jitter: { kind: 'ratio', ratio: 0.5 },
+});
 
 // What a window of jobs at one size did.
 export interface Window {
@@ -135,8 +146,7 @@ export abstract class Climbing implements Sizing {
     if (changed) this.#calm = 0;
     else if (this.#unpaid === 0) {
       this.#direction = this.#direction === 'more' ? 'fewer' : 'more';
-      const windows = Math.min(2 ** this.#calm++, longestPause);
-      this.#resume = finished + span * windows * (0.5 + Math.random());
+      this.#resume = finished + pause.duration(this.#calm++);
       this.#step = 'pause';
     }
   }
