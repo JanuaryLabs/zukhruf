@@ -160,7 +160,7 @@ class Claims {
         {
           Image: image,
           Entrypoint: ['cat'],
-          Cmd: [],
+          Cmd: ['-'],
           OpenStdin: true,
           StdinOnce: true,
           AttachStdin: true,
