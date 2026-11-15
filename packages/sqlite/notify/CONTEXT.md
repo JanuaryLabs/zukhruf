@@ -73,8 +73,12 @@ A queue with `maxQueuedNotifications` rows above the lowest position. `notify` t
 _Avoid_: Overflow, backpressure, limit reached
 
 **Dead listener**:
-A listener whose address gave `ECONNREFUSED` or `ENOENT` to a connect, or closed the sender's connection. The sender removes its rows in its next transaction, and its socket file after that transaction.
+A listener whose address gave `ECONNREFUSED` or `ENOENT` to a connect, or closed the sender's connection. The sender removes its rows in its next transaction, and again in each later one until the removal is known to have committed: at once after a transaction of its own, or by a read on the next microtask after the caller's transaction. Then it removes the socket file (ADR 0010).
 _Avoid_: Stale listener, zombie, orphan
+
+**Laggard**:
+A listener at the lowest position, when that position is below the highest id. The trim waits for it. At its trim, a sender wakes each laggard, whatever its channels. Postgres's comment says a listener that is "far behind" (`SignalBackends`, `async.c`).
+_Avoid_: Straggler, slow consumer, blocker
 
 **Release**:
 A published version of this package, by the `version` of its `package.json`. The file records the release that last applied the tables, in `zukhruf_notify_version`. A release leaves a file of a later release as it is (ADR 0009).

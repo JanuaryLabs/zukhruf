@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import type { DatabaseSync, StatementSync } from 'node:sqlite';
+import type { DatabaseSync, SQLOutputValue, StatementSync } from 'node:sqlite';
 
 import { type Clock, Latch } from '@zukhruf/async';
 import { WriteAheadLog, open } from '@zukhruf/sqlite-open';
@@ -10,10 +10,11 @@ import { DisposedError } from './disposed-error.ts';
 import { checkChannel, checkPayload } from './limits.ts';
 import { Listening, type QueuedNotification } from './listening.ts';
 import { QueueFullError } from './queue-full-error.ts';
+import { RemovalCheck } from './removal-check.ts';
 import { HIGHEST_ID } from './schema.ts';
 import { Steps } from './steps.ts';
 import { Tables } from './tables.ts';
-import { Wakes } from './wakes.ts';
+import { type Addressed, Wakes } from './wakes.ts';
 
 export type NotificationsOptions = FileOptions | ConnectionOptions;
 
@@ -57,10 +58,12 @@ export class Notifications
   readonly #clock: Clock;
   readonly #maxQueued: number;
   readonly #wakes: Wakes;
+  readonly #removalCheck: RemovalCheck;
   readonly #ends: StatementSync;
   readonly #insert: StatementSync;
   readonly #addresses: StatementSync;
   readonly #trim: StatementSync;
+  readonly #laggards: StatementSync;
   readonly #removeChannels: StatementSync;
   readonly #removeListener: StatementSync;
   // The channels as the calls asked, at once: unlisten stops a channel before
@@ -112,6 +115,9 @@ export class Notifications
     this.#trim = database.prepare(
       `DELETE FROM zukhruf_notify_queue WHERE id IN (SELECT id FROM zukhruf_notify_queue WHERE id <= coalesce((SELECT min(position) FROM zukhruf_notify_listener), ${HIGHEST_ID}) ORDER BY id LIMIT ${TRIM_LIMIT})`,
     );
+    this.#laggards = database.prepare(
+      `SELECT id, address FROM zukhruf_notify_listener WHERE position = (SELECT min(position) FROM zukhruf_notify_listener) AND position < ${HIGHEST_ID}`,
+    );
     this.#removeChannels = database.prepare(
       'DELETE FROM zukhruf_notify_channel WHERE listener = ?',
     );
@@ -127,6 +133,9 @@ export class Notifications
         return true;
       },
       (error) => this.emit('error', error),
+    );
+    this.#removalCheck = new RemovalCheck(database, this.#wakes, (error) =>
+      this.emit('error', error),
     );
   }
 
@@ -178,6 +187,11 @@ export class Notifications
     checkPayload(payload);
     this.#assertOpen();
     const dead = this.#wakes.dead();
+    // A transaction of the call's own that returns has committed the removal
+    // of the dead listeners' rows. A removal in a savepoint commits or rolls
+    // back with the caller's transaction, whose end node:sqlite does not report
+    // (ADR 0004, ADR 0010).
+    const own = !this.#database.isTransaction;
     const listeners = transaction(
       this.#database,
       () => {
@@ -195,16 +209,16 @@ export class Notifications
         )
           throw new QueueFullError();
         this.#insert.run(channel, payload, process.pid);
-        const read = this.#addresses.all(channel).map((row) => ({
-          id: text(row, 'id'),
-          address: text(row, 'address'),
-        }));
-        this.#trimAtMostOnceASecond();
-        return read;
+        return [
+          ...addressed(this.#addresses.all(channel)),
+          ...this.#trimAtMostOnceASecond(),
+        ];
       },
       { mode: 'immediate' },
     );
-    this.#wakes.sent(dead, listeners);
+    this.#wakes.sent(listeners);
+    if (own) this.#wakes.removed(dead);
+    else this.#removalCheck.removedInCallersTransaction(dead);
   }
 
   /** Writes the wakes that are due, ends the connections to other listeners, removes this listener's rows, closes its socket and the connections that it opened. */
@@ -235,11 +249,16 @@ export class Notifications
     });
   }
 
-  #trimAtMostOnceASecond(): void {
+  // Gives the laggards, which the trim waits for. They are woken whatever
+  // their channels, as Postgres's SignalBackends wakes the listeners that are
+  // far behind (ADR 0010): a live one reads, and a dead one refuses the
+  // connect.
+  #trimAtMostOnceASecond(): Addressed[] {
     const now = this.#clock.performance.now();
-    if (now - this.#lastTrim < TRIM_INTERVAL) return;
+    if (now - this.#lastTrim < TRIM_INTERVAL) return [];
     this.#lastTrim = now;
     this.#trim.run();
+    return addressed(this.#laggards.all());
   }
 
   // A notification listener that throws sends its error to `error`, and the
@@ -260,6 +279,13 @@ export class Notifications
   #assertOpen(): void {
     if (this.#lifetime.kind === 'disposed') throw new DisposedError();
   }
+}
+
+function addressed(rows: Record<string, SQLOutputValue>[]): Addressed[] {
+  return rows.map((row) => ({
+    id: text(row, 'id'),
+    address: text(row, 'address'),
+  }));
 }
 
 type Listener =

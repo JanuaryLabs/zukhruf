@@ -1,14 +1,16 @@
 import assert from 'node:assert/strict';
+import { stat } from 'node:fs/promises';
 import { describe, test } from 'node:test';
 
 import { createClock } from '@sinonjs/fake-timers';
 
+import { PipeAddress } from '@zukhruf/pipes';
 import { WriteAheadLog, open } from '@zukhruf/sqlite-open';
 import { transaction } from '@zukhruf/sqlite-transaction';
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { Notifications } from './index.ts';
-import { hear, startProgram } from './testing/program.ts';
+import { addressesOf, hear, startProgram } from './testing/program.ts';
 
 const numbered = (prefix: string, count: number) =>
   Array.from({ length: count }, (_, i) => `${prefix}${i}`);
@@ -28,6 +30,19 @@ function positionsIn(path: string): number[] {
     .prepare('SELECT position FROM zukhruf_notify_listener')
     .all()
     .map((row) => Number(row['position']));
+}
+
+// The sender connects on the microtask after its notify. A connect that the
+// test starts after that one ends after it too, so by then the sender knows
+// whether the listener is dead.
+async function connectAfterTheSender(address: string): Promise<string> {
+  await null;
+  try {
+    (await new PipeAddress(address).connect()).destroy();
+    return 'connected';
+  } catch (error) {
+    return String(Reflect.get(Object(error), 'code'));
+  }
 }
 
 function jobsIn(path: string): string[] {
@@ -167,5 +182,225 @@ describe('the queue holds a row until each listener read it', () => {
 
     assert.deepEqual(positionsIn(path), [1]);
     assert.deepEqual(heard.errors, []);
+  });
+});
+
+describe('the trim wakes the listener at the lowest position, whatever its channel', () => {
+  test('a listener program killed on a channel that nobody sends on: the sends on another channel never fill the queue, and its rows and its socket file go', async () => {
+    await using folder = await new TemporaryFiles().directory('notify-');
+    const path = `${folder.path}/app.sqlite`;
+    const clock = createClock();
+    await using killed = await startProgram(path);
+    killed.do({ do: 'listen', channel: 'quiet' });
+    await killed.printedOne('listened', (p) => p.event === 'listened');
+    const [address] = addressesOf(path, killed.pid);
+    assert.ok(address);
+    await using busy = new Notifications({ path, clock });
+    const heard = hear(busy);
+    await busy.listen('busy');
+    await using sender = new Notifications({
+      path,
+      clock,
+      maxQueuedNotifications: 3,
+    });
+    const errors = hear(sender).errors;
+    killed.child.kill('SIGKILL');
+    await killed.exited;
+
+    sender.notify('busy', 'n0');
+    assert.equal(await connectAfterTheSender(address), 'ECONNREFUSED');
+    for (const payload of numbered('n', 6).slice(1)) {
+      await clock.tickAsync(1000);
+      sender.notify('busy', payload);
+    }
+
+    assert.deepEqual(addressesOf(path, killed.pid), []);
+    assert.deepEqual(
+      (await heard.count(6)).map((n) => n.payload),
+      numbered('n', 6),
+    );
+    await sender[Symbol.asyncDispose]();
+    await assert.rejects(stat(address), { code: 'ENOENT' });
+    assert.deepEqual(errors, []);
+  });
+
+  test("a dead listener's removal in a caller's transaction that rolls back: the sender still knows it dead, and its next send removes its rows and its socket file", async () => {
+    await using folder = await new TemporaryFiles().directory('notify-');
+    const path = `${folder.path}/app.sqlite`;
+    using database = open(path, {
+      journal: new WriteAheadLog({ synchronous: 'full' }),
+    });
+    // The clock never moves, so no trim after the first wakes the dead one.
+    await using sender = new Notifications({ database, clock: createClock() });
+    const errors = hear(sender).errors;
+    await using killed = await startProgram(path);
+    killed.do({ do: 'listen', channel: 'quiet' });
+    await killed.printedOne('listened', (p) => p.event === 'listened');
+    const [address] = addressesOf(path, killed.pid);
+    assert.ok(address);
+    killed.child.kill('SIGKILL');
+    await killed.exited;
+    sender.notify('quiet', 'a');
+    assert.equal(await connectAfterTheSender(address), 'ECONNREFUSED');
+
+    assert.throws(
+      () =>
+        transaction(
+          database,
+          () => {
+            sender.notify('quiet', 'b');
+            throw new Error('roll back');
+          },
+          { mode: 'immediate' },
+        ),
+      /roll back/,
+    );
+    assert.equal(addressesOf(path, killed.pid).length, 1);
+    sender.notify('busy', 'c');
+
+    assert.deepEqual(addressesOf(path, killed.pid), []);
+    await sender[Symbol.asyncDispose]();
+    await assert.rejects(stat(address), { code: 'ENOENT' });
+    assert.deepEqual(errors, []);
+  });
+
+  test("a sender that notifies only in a caller's transactions that commit removes a killed listener's row, and its socket file before its dispose ends", async () => {
+    await using folder = await new TemporaryFiles().directory('notify-');
+    const path = `${folder.path}/app.sqlite`;
+    using database = open(path, {
+      journal: new WriteAheadLog({ synchronous: 'full' }),
+    });
+    await using sender = new Notifications({ database, clock: createClock() });
+    const errors = hear(sender).errors;
+    await using killed = await startProgram(path);
+    killed.do({ do: 'listen', channel: 'jobs' });
+    await killed.printedOne('listened', (p) => p.event === 'listened');
+    const [address] = addressesOf(path, killed.pid);
+    assert.ok(address);
+    killed.child.kill('SIGKILL');
+    await killed.exited;
+    const insertJob = (payload: string) =>
+      transaction(database, () => sender.notify('jobs', payload), {
+        mode: 'immediate',
+      });
+
+    insertJob('a');
+    assert.equal(await connectAfterTheSender(address), 'ECONNREFUSED');
+    insertJob('b');
+
+    assert.deepEqual(addressesOf(path, killed.pid), []);
+    await sender[Symbol.asyncDispose]();
+    await assert.rejects(stat(address), { code: 'ENOENT' });
+    assert.deepEqual(errors, []);
+  });
+
+  test("a dead listener's removal in a caller's transaction that rolls back: past the microtask the sender still knows it dead, and its next send removes its rows and its socket file", async () => {
+    await using folder = await new TemporaryFiles().directory('notify-');
+    const path = `${folder.path}/app.sqlite`;
+    using database = open(path, {
+      journal: new WriteAheadLog({ synchronous: 'full' }),
+    });
+    await using sender = new Notifications({ database, clock: createClock() });
+    const errors = hear(sender).errors;
+    await using killed = await startProgram(path);
+    killed.do({ do: 'listen', channel: 'jobs' });
+    await killed.printedOne('listened', (p) => p.event === 'listened');
+    const [address] = addressesOf(path, killed.pid);
+    assert.ok(address);
+    killed.child.kill('SIGKILL');
+    await killed.exited;
+    sender.notify('jobs', 'a');
+    assert.equal(await connectAfterTheSender(address), 'ECONNREFUSED');
+
+    assert.throws(
+      () =>
+        transaction(
+          database,
+          () => {
+            sender.notify('jobs', 'b');
+            throw new Error('roll back');
+          },
+          { mode: 'immediate' },
+        ),
+      /roll back/,
+    );
+    // The check of the removal runs on the microtask after the notify.
+    await null;
+    await null;
+    assert.equal(addressesOf(path, killed.pid).length, 1);
+    sender.notify('jobs', 'c');
+
+    assert.deepEqual(addressesOf(path, killed.pid), []);
+    await sender[Symbol.asyncDispose]();
+    await assert.rejects(stat(address), { code: 'ENOENT' });
+    assert.deepEqual(errors, []);
+  });
+
+  test("a dead listener's removal in a caller's transaction that stays open past the microtask and then rolls back: the sender still knows it dead, and its next send removes its rows and its socket file", async () => {
+    await using folder = await new TemporaryFiles().directory('notify-');
+    const path = `${folder.path}/app.sqlite`;
+    using database = open(path, {
+      journal: new WriteAheadLog({ synchronous: 'full' }),
+    });
+    await using sender = new Notifications({ database, clock: createClock() });
+    const errors = hear(sender).errors;
+    await using killed = await startProgram(path);
+    killed.do({ do: 'listen', channel: 'jobs' });
+    await killed.printedOne('listened', (p) => p.event === 'listened');
+    const [address] = addressesOf(path, killed.pid);
+    assert.ok(address);
+    killed.child.kill('SIGKILL');
+    await killed.exited;
+    sender.notify('jobs', 'a');
+    assert.equal(await connectAfterTheSender(address), 'ECONNREFUSED');
+
+    database.exec('BEGIN IMMEDIATE');
+    try {
+      sender.notify('jobs', 'b');
+      // The check of the removal runs on the microtask after the notify.
+      await null;
+      await null;
+    } finally {
+      database.exec('ROLLBACK');
+    }
+    assert.equal(addressesOf(path, killed.pid).length, 1);
+    sender.notify('jobs', 'c');
+
+    assert.deepEqual(addressesOf(path, killed.pid), []);
+    await sender[Symbol.asyncDispose]();
+    await assert.rejects(stat(address), { code: 'ENOENT' });
+    assert.deepEqual(errors, []);
+  });
+
+  test('a stopped listener program on a channel that nobody else sends on keeps its row when the trim wakes it, and after SIGCONT gets every row of its channel once, in order', async () => {
+    await using folder = await new TemporaryFiles().directory('notify-');
+    const path = `${folder.path}/app.sqlite`;
+    const clock = createClock();
+    await using hung = await startProgram(path);
+    hung.do({ do: 'listen', channel: 'quiet' });
+    await hung.printedOne('listened', (p) => p.event === 'listened');
+    const [address] = addressesOf(path, hung.pid);
+    assert.ok(address);
+    hung.child.kill('SIGSTOP');
+    await using sender = new Notifications({ path, clock });
+    const errors = hear(sender).errors;
+
+    const payloads = numbered('q', 3);
+    for (const payload of payloads) sender.notify('quiet', payload);
+    // Its unread rows of 'quiet' stay through each trim that wakes it.
+    for (const payload of numbered('b', 3)) {
+      sender.notify('busy', payload);
+      assert.equal(await connectAfterTheSender(address), 'connected');
+      clock.tick(1000);
+    }
+    sender.notify('busy', 'b3');
+    assert.equal(addressesOf(path, hung.pid).length, 1);
+    hung.child.kill('SIGCONT');
+
+    assert.deepEqual(
+      (await hung.heard(3)).map((n) => n.payload),
+      payloads,
+    );
+    assert.deepEqual(errors, []);
   });
 });

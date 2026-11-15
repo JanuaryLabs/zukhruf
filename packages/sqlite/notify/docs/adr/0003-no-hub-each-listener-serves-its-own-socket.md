@@ -1,5 +1,7 @@
 # No hub: each listener serves its own socket
 
+Changed in part on 2026-11-15 (#4396) by [ADR 0010](./0010-the-trim-wakes-the-laggard-and-a-dead-listener-is-forgotten-once-its-rows-are-gone.md): a sender also wakes the laggards at its trim, so a dead listener on a channel that nobody sends on is found too. After a `notify` in the caller's transaction, the sender reads on the next microtask whether a dead listener's rows are gone, and removes them again in each `notify` until they are. Only then does it remove the socket file. The rest of the decision below stays true.
+
 The wake must reach each listening program. Two shapes fit the contract with the table (research 19 §4). In a hub, an elected program serves one socket, and each program connects to it. With no hub, each listener serves its own socket and writes its address in the file, and a sender connects to each address. `@zukhruf/mutex` and `@zukhruf/single-flight` use a hub.
 
 The measures (research 20c and 20e, macOS and Linux):
@@ -33,5 +35,5 @@ No hub. Ezz approved it on 2026-11-14 (ticket 20, "go ewith recomendation").
 - No election, and no program that all depend on. A listener that hangs hurts only itself.
 - Each listener needs its own address: a socket path within the path limit, or a pipe name ([ADR 0007](./0007-the-socket-folder-is-short-and-belongs-to-one-user.md)).
 - A send costs one read of the listener table and one write for each listener of the channel.
-- A dead listener's row holds back the trim until a sender removes it.
+- A dead listener's row holds back the trim until a sender removes it, at most about one second after the next send on any channel ([ADR 0010](./0010-the-trim-wakes-the-laggard-and-a-dead-listener-is-forgotten-once-its-rows-are-gone.md)).
 - The election's own gap, the push for "the owner ended", is not this package. It is ticket 13.

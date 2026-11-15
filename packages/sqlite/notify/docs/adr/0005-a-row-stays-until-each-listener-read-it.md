@@ -1,5 +1,7 @@
 # A row stays until each listener read it
 
+Changed in part on 2026-11-15 (#4396) by [ADR 0010](./0010-the-trim-wakes-the-laggard-and-a-dead-listener-is-forgotten-once-its-rows-are-gone.md): at its trim, a sender also wakes the laggards, the listeners at the lowest position, whatever their channels. A dead laggard refuses the connect, and the sender removes its rows. The rest of the decision below stays true.
+
 The notification queue grows with each `notify`. Something must delete the rows. The prior art differs (research 19 §2): Solid Cable trims rows older than one day, so a listener that is slower loses rows; honker leaves the trim to the caller. Postgres keeps each entry until every listener has read it, and fails the sender when the queue is full: "transactions calling NOTIFY will fail at commit" (C10).
 
 In Postgres, each listener has a queue position, and the tail is the lowest one. A sender advances the tail after it commits, but only once every `QUEUE_CLEANUP_DELAY` (4) pages, because the work is "relatively expensive" (`async.c:106-110, 225-238, 1015-1027, 2110-2135`). The queue holds `max_notify_queue_pages` pages, 1048576 by default (`async.c:428`). When it is full, the sender fails with `too many notifications in the NOTIFY queue`, `ERRCODE_PROGRAM_LIMIT_EXCEEDED` (54000), before its commit is marked (`async.c:930-950`).
@@ -33,7 +35,7 @@ Measured on macOS and Linux (research 20i, 2026-11-14, host load 29 or below):
 ## Consequences
 
 - No listener loses a row. A listener that stops reading, for example one that hangs, holds back the trim, as in Postgres ("A listener that stays in a transaction blocks the cleanup", C10).
-- A dead listener's row holds back the trim until a sender finds it dead and removes it ([ADR 0003](./0003-no-hub-each-listener-serves-its-own-socket.md)).
+- A dead listener's row holds back the trim until the next trim of a sender, on any channel, wakes it as a laggard. The connect is refused, and the sender's next transaction removes the row ([ADR 0010](./0010-the-trim-wakes-the-laggard-and-a-dead-listener-is-forgotten-once-its-rows-are-gone.md)).
 - A sender's transaction does one more delete of at most 10,000 rows (about 2 ms) at most once a second.
 - A listener writes its row at most once a second, so its position is up to one second behind what it read. The trim keeps those rows one second longer.
 - A full queue fails each sender until the slow listener reads or is removed. The error names the cause in Postgres's words.

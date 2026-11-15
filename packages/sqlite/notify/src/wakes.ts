@@ -41,26 +41,24 @@ export class Wakes {
     this.#fail = fail;
   }
 
-  /** The listeners found dead, whose rows the next transaction removes. */
+  /** The listeners found dead, whose rows each transaction removes until `removed` forgets them. */
   dead(): ReadonlyMap<string, string> {
     return new Map(this.#dead);
   }
 
-  /**
-   * After a transaction that returned: the removed dead listeners lose their
-   * socket files, and each listener read gets one wake on the next microtask.
-   */
-  sent(
-    removed: ReadonlyMap<string, string>,
-    listeners: readonly Addressed[],
-  ): void {
-    for (const [id, address] of removed) {
-      this.#dead.delete(id);
-      this.#removeFile(address);
-    }
+  /** After a transaction that returned: each listener read gets one wake on the next microtask. */
+  sent(listeners: readonly Addressed[]): void {
     if (listeners.length === 0) return;
     if (this.#due.size === 0) queueMicrotask(() => this.#flush());
     for (const { id, address } of listeners) this.#due.set(id, address);
+  }
+
+  /** After a commit that removed their rows: the dead listeners are forgotten and lose their socket files. */
+  removed(dead: ReadonlyMap<string, string>): void {
+    for (const [id, address] of dead) {
+      this.#dead.delete(id);
+      this.#removeFile(address);
+    }
   }
 
   /** Writes the wakes that are due, ends the connections, and waits for the removals of socket files. */
