@@ -1,0 +1,743 @@
+{
+  "experiment": "suites-wall-time",
+  "state": "done",
+  "started_utc": "2026-11-16T07:14:19Z",
+  "ended_utc": "2026-11-16T07:57:10Z",
+  "interrupted": false,
+  "order": ["docker", "colima", "docker", "colima", "docker", "colima"],
+  "limits": {
+    "cpus": "2",
+    "memory": "1g"
+  },
+  "label": "dev.zukhruf.bench=1",
+  "images": {
+    "alpine": "docker.io/library/alpine@sha256:1829893486be257df5049ab3b7fc95afbd0fc09d89803cbc580bda1ba5386b29",
+    "fio": "docker.io/openeuler/fio@sha256:a9be517cbf3c63c500627d68680d2673a98fa8d5c9ed31179da75f0edff8a3ef",
+    "sysbench": "docker.io/openeuler/sysbench@sha256:1950ba366eb34d88e4a4c9b50c90fb55b7467c8da379566b2acdaa597a5bcad7",
+    "iperf3": "docker.io/networkstatic/iperf3@sha256:069fbed1f741659fb04abc283f21ac22e95d9ef307b14e31225ef7a180bfb2ed"
+  },
+  "engines": {
+    "docker": {
+      "socket": "unix:///Users/ezzabuzaid/.docker/run/docker.sock",
+      "context": "desktop-linux",
+      "context_endpoint": "unix:///Users/ezzabuzaid/.docker/run/docker.sock",
+      "arms": ["docker-cli"],
+      "memory_rule": "Docker.app and com.docker.* processes, plus the Virtualization VM process paired by start time with com.docker.virtualization",
+      "container_ip_reachable_from_host": false,
+      "docker_version": {
+        "Client": {
+          "Version": "29.8.0",
+          "ApiVersion": "1.56",
+          "DefaultAPIVersion": "1.56",
+          "GitCommit": "88096ef",
+          "GoVersion": "go1.26.8",
+          "Os": "darwin",
+          "Arch": "arm64",
+          "BuildTime": "Thu Sep  3 21:49:43 2026",
+          "Context": "default"
+        },
+        "Server": {
+          "Platform": {
+            "Name": "Docker Desktop 4.92.0 (240144)"
+          },
+          "Version": "29.8.0",
+          "ApiVersion": "1.56",
+          "MinAPIVersion": "1.40",
+          "Os": "linux",
+          "Arch": "arm64",
+          "Components": [
+            {
+              "Name": "Engine",
+              "Version": "29.8.0",
+              "Details": {
+                "ApiVersion": "1.56",
+                "Arch": "arm64",
+                "BuildTime": "Thu Sep  3 21:49:37 2026",
+                "Experimental": "false",
+                "GitCommit": "3ce5872",
+                "GoVersion": "go1.26.8",
+                "KernelVersion": "7.0.12-linuxkit",
+                "MinAPIVersion": "1.40",
+                "Module": "github.com/moby/moby/v2",
+                "ModuleVersion": "v2.0.0+unknown",
+                "Os": "linux"
+              }
+            },
+            {
+              "Name": "containerd",
+              "Version": "v2.3.5",
+              "Details": {
+                "GitCommit": "1294c24a7da8e5a793ed378161673abe94118892"
+              }
+            },
+            {
+              "Name": "runc",
+              "Version": "1.5.1",
+              "Details": {
+                "GitCommit": "v1.5.1-0-g8f2685a4"
+              }
+            },
+            {
+              "Name": "docker-init",
+              "Version": "0.19.0",
+              "Details": {
+                "GitCommit": "de40ad0"
+              }
+            }
+          ],
+          "GitCommit": "3ce5872",
+          "GoVersion": "go1.26.8",
+          "KernelVersion": "7.0.12-linuxkit",
+          "BuildTime": "2026-09-03T21:49:37.000000000+00:00"
+        }
+      },
+      "docker_info": {
+        "name": "docker-desktop",
+        "operating_system": "Docker Desktop",
+        "kernel_version": "7.0.12-linuxkit",
+        "server_version": "29.8.0",
+        "ncpu": 8,
+        "mem_total": 8319770624
+      }
+    },
+    "colima": {
+      "socket": "unix:///Users/ezzabuzaid/.colima/default/docker.sock",
+      "context": "colima",
+      "context_endpoint": "unix:///Users/ezzabuzaid/.colima/default/docker.sock",
+      "arms": ["docker-cli"],
+      "memory_rule": "limactl processes and the ssh mux of ~/.colima/_lima, plus the Virtualization VM process paired by start time with the limactl hostagent (its pid is in ~/.colima/_lima/colima/vz.pid)",
+      "container_ip_reachable_from_host": false,
+      "docker_version": {
+        "Client": {
+          "Version": "29.8.0",
+          "ApiVersion": "1.54",
+          "DefaultAPIVersion": "1.56",
+          "GitCommit": "88096ef",
+          "GoVersion": "go1.26.8",
+          "Os": "darwin",
+          "Arch": "arm64",
+          "BuildTime": "Thu Sep  3 21:49:43 2026",
+          "Context": "default"
+        },
+        "Server": {
+          "Platform": {
+            "Name": "Docker Engine - Community"
+          },
+          "Version": "29.5.2",
+          "ApiVersion": "1.54",
+          "MinAPIVersion": "1.40",
+          "Os": "linux",
+          "Arch": "arm64",
+          "Components": [
+            {
+              "Name": "Engine",
+              "Version": "29.5.2",
+              "Details": {
+                "ApiVersion": "1.54",
+                "Arch": "arm64",
+                "BuildTime": "Wed May 20 14:39:25 2026",
+                "Experimental": "false",
+                "GitCommit": "568f755",
+                "GoVersion": "go1.26.3",
+                "KernelVersion": "6.8.0-117-generic",
+                "MinAPIVersion": "1.40",
+                "Module": "github.com/moby/moby/v2",
+                "ModuleVersion": "v2.0.0+unknown",
+                "Os": "linux"
+              }
+            },
+            {
+              "Name": "containerd",
+              "Version": "v2.2.4",
+              "Details": {
+                "GitCommit": "193637f7ee8ae5f5aa5248f49e7baa3e6164966e"
+              }
+            },
+            {
+              "Name": "runc",
+              "Version": "1.3.5",
+              "Details": {
+                "GitCommit": "v1.3.5-0-g488fc13e"
+              }
+            },
+            {
+              "Name": "docker-init",
+              "Version": "0.19.0",
+              "Details": {
+                "GitCommit": "de40ad0"
+              }
+            }
+          ],
+          "GitCommit": "568f755",
+          "GoVersion": "go1.26.3",
+          "KernelVersion": "6.8.0-117-generic",
+          "BuildTime": "2026-05-20T14:39:25.000000000+00:00"
+        }
+      },
+      "docker_info": {
+        "name": "colima",
+        "operating_system": "Ubuntu 24.04.4 LTS",
+        "kernel_version": "6.8.0-117-generic",
+        "server_version": "29.5.2",
+        "ncpu": 8,
+        "mem_total": 8307482624
+      }
+    }
+  },
+  "docker_desktop_hypervisor": {
+    "detected": "vz",
+    "process_com_docker_virtualization": true,
+    "process_com_docker_krun": false,
+    "docker_info": {
+      "operating_system": "Docker Desktop",
+      "kernel_version": "7.0.12-linuxkit"
+    }
+  },
+  "versions": {
+    "colima": "colima version 0.10.3",
+    "orbstack": null,
+    "container": null,
+    "socktainer": null,
+    "hyperfine": "hyperfine 2.0.0"
+  },
+  "host": {
+    "macos": "27.2",
+    "macos_build": "26B123",
+    "model": "Mac16,7",
+    "ncpu": 14,
+    "memsize": 51539607552
+  },
+  "loadavg": {
+    "start": [7.5, 14.33, 14.31],
+    "end": [18.75, 35.94, 33.98]
+  },
+  "foreign_running_containers_at_start": {
+    "colima": 0,
+    "docker": 0
+  },
+  "notes": [
+    "projects: docker,mutex,testing; each run: DOCKER_CONTEXT=<engine context>, DOCKER_HOST unset, NX_DAEMON=false, nx run <project>:test --skip-sync --skip-nx-cache --excludeTaskDependencies, under gtimeout -k 30 40m",
+    "measured runs per project in the order docker colima docker colima docker colima",
+    "junit_suspect: a run whose testcase count differs by more than 5% from the project's first count (warm-up, else first measured run) is kept and flagged, since a peer's run of the same project writes the same junit file",
+    "warmup: \"skipped by --no-warmup\"",
+    "gate: \"off\"",
+    "no quiet gate (--no-gate): runs start whatever the load; each run records load and other 'node --test' processes at start and end",
+    "wall_s is $EPOCHREALTIME around the whole nx command (nx start, the test run, teardown); junit counts are grep -a -c of <testcase, <failure and <skipped in the run's copy of packages/<project>/test-results.xml",
+    "other sessions share this checkout: each run records git HEAD and git status --porcelain of its project"
+  ],
+  "commands": [
+    "env NX_DAEMON=false npx nx run-many -t build -p docker,mutex,testing --skip-sync > /Users/ezzabuzaid/Desktop/experiments/mutex/docs/research/container-engines/runs/suites-wall-time/20261116T071419Z/build.log 2>&1",
+    "gtimeout -k 30 2400 env -u DOCKER_HOST DOCKER_CONTEXT=desktop-linux NX_DAEMON=false npx nx run docker:test --skip-sync --skip-nx-cache --excludeTaskDependencies > /Users/ezzabuzaid/Desktop/experiments/mutex/docs/research/container-engines/runs/suites-wall-time/20261116T071419Z/01-docker-docker.log 2>&1",
+    "gtimeout -k 30 2400 env -u DOCKER_HOST DOCKER_CONTEXT=colima NX_DAEMON=false npx nx run docker:test --skip-sync --skip-nx-cache --excludeTaskDependencies > /Users/ezzabuzaid/Desktop/experiments/mutex/docs/research/container-engines/runs/suites-wall-time/20261116T071419Z/02-colima-docker.log 2>&1",
+    "gtimeout -k 30 2400 env -u DOCKER_HOST DOCKER_CONTEXT=desktop-linux NX_DAEMON=false npx nx run docker:test --skip-sync --skip-nx-cache --excludeTaskDependencies > /Users/ezzabuzaid/Desktop/experiments/mutex/docs/research/container-engines/runs/suites-wall-time/20261116T071419Z/03-docker-docker.log 2>&1",
+    "gtimeout -k 30 2400 env -u DOCKER_HOST DOCKER_CONTEXT=colima NX_DAEMON=false npx nx run docker:test --skip-sync --skip-nx-cache --excludeTaskDependencies > /Users/ezzabuzaid/Desktop/experiments/mutex/docs/research/container-engines/runs/suites-wall-time/20261116T071419Z/04-colima-docker.log 2>&1",
+    "gtimeout -k 30 2400 env -u DOCKER_HOST DOCKER_CONTEXT=desktop-linux NX_DAEMON=false npx nx run docker:test --skip-sync --skip-nx-cache --excludeTaskDependencies > /Users/ezzabuzaid/Desktop/experiments/mutex/docs/research/container-engines/runs/suites-wall-time/20261116T071419Z/05-docker-docker.log 2>&1",
+    "gtimeout -k 30 2400 env -u DOCKER_HOST DOCKER_CONTEXT=colima NX_DAEMON=false npx nx run docker:test --skip-sync --skip-nx-cache --excludeTaskDependencies > /Users/ezzabuzaid/Desktop/experiments/mutex/docs/research/container-engines/runs/suites-wall-time/20261116T071419Z/06-colima-docker.log 2>&1",
+    "gtimeout -k 30 2400 env -u DOCKER_HOST DOCKER_CONTEXT=desktop-linux NX_DAEMON=false npx nx run mutex:test --skip-sync --skip-nx-cache --excludeTaskDependencies > /Users/ezzabuzaid/Desktop/experiments/mutex/docs/research/container-engines/runs/suites-wall-time/20261116T071419Z/01-docker-mutex.log 2>&1",
+    "gtimeout -k 30 2400 env -u DOCKER_HOST DOCKER_CONTEXT=colima NX_DAEMON=false npx nx run mutex:test --skip-sync --skip-nx-cache --excludeTaskDependencies > /Users/ezzabuzaid/Desktop/experiments/mutex/docs/research/container-engines/runs/suites-wall-time/20261116T071419Z/02-colima-mutex.log 2>&1",
+    "gtimeout -k 30 2400 env -u DOCKER_HOST DOCKER_CONTEXT=desktop-linux NX_DAEMON=false npx nx run mutex:test --skip-sync --skip-nx-cache --excludeTaskDependencies > /Users/ezzabuzaid/Desktop/experiments/mutex/docs/research/container-engines/runs/suites-wall-time/20261116T071419Z/03-docker-mutex.log 2>&1",
+    "gtimeout -k 30 2400 env -u DOCKER_HOST DOCKER_CONTEXT=colima NX_DAEMON=false npx nx run mutex:test --skip-sync --skip-nx-cache --excludeTaskDependencies > /Users/ezzabuzaid/Desktop/experiments/mutex/docs/research/container-engines/runs/suites-wall-time/20261116T071419Z/04-colima-mutex.log 2>&1",
+    "gtimeout -k 30 2400 env -u DOCKER_HOST DOCKER_CONTEXT=desktop-linux NX_DAEMON=false npx nx run mutex:test --skip-sync --skip-nx-cache --excludeTaskDependencies > /Users/ezzabuzaid/Desktop/experiments/mutex/docs/research/container-engines/runs/suites-wall-time/20261116T071419Z/05-docker-mutex.log 2>&1",
+    "gtimeout -k 30 2400 env -u DOCKER_HOST DOCKER_CONTEXT=colima NX_DAEMON=false npx nx run mutex:test --skip-sync --skip-nx-cache --excludeTaskDependencies > /Users/ezzabuzaid/Desktop/experiments/mutex/docs/research/container-engines/runs/suites-wall-time/20261116T071419Z/06-colima-mutex.log 2>&1",
+    "gtimeout -k 30 2400 env -u DOCKER_HOST DOCKER_CONTEXT=desktop-linux NX_DAEMON=false npx nx run testing:test --skip-sync --skip-nx-cache --excludeTaskDependencies > /Users/ezzabuzaid/Desktop/experiments/mutex/docs/research/container-engines/runs/suites-wall-time/20261116T071419Z/01-docker-testing.log 2>&1",
+    "gtimeout -k 30 2400 env -u DOCKER_HOST DOCKER_CONTEXT=colima NX_DAEMON=false npx nx run testing:test --skip-sync --skip-nx-cache --excludeTaskDependencies > /Users/ezzabuzaid/Desktop/experiments/mutex/docs/research/container-engines/runs/suites-wall-time/20261116T071419Z/02-colima-testing.log 2>&1",
+    "gtimeout -k 30 2400 env -u DOCKER_HOST DOCKER_CONTEXT=desktop-linux NX_DAEMON=false npx nx run testing:test --skip-sync --skip-nx-cache --excludeTaskDependencies > /Users/ezzabuzaid/Desktop/experiments/mutex/docs/research/container-engines/runs/suites-wall-time/20261116T071419Z/03-docker-testing.log 2>&1",
+    "gtimeout -k 30 2400 env -u DOCKER_HOST DOCKER_CONTEXT=colima NX_DAEMON=false npx nx run testing:test --skip-sync --skip-nx-cache --excludeTaskDependencies > /Users/ezzabuzaid/Desktop/experiments/mutex/docs/research/container-engines/runs/suites-wall-time/20261116T071419Z/04-colima-testing.log 2>&1",
+    "gtimeout -k 30 2400 env -u DOCKER_HOST DOCKER_CONTEXT=desktop-linux NX_DAEMON=false npx nx run testing:test --skip-sync --skip-nx-cache --excludeTaskDependencies > /Users/ezzabuzaid/Desktop/experiments/mutex/docs/research/container-engines/runs/suites-wall-time/20261116T071419Z/05-docker-testing.log 2>&1",
+    "gtimeout -k 30 2400 env -u DOCKER_HOST DOCKER_CONTEXT=colima NX_DAEMON=false npx nx run testing:test --skip-sync --skip-nx-cache --excludeTaskDependencies > /Users/ezzabuzaid/Desktop/experiments/mutex/docs/research/container-engines/runs/suites-wall-time/20261116T071419Z/06-colima-testing.log 2>&1"
+  ],
+  "projects": ["docker", "mutex", "testing"],
+  "build": {
+    "exit": 0,
+    "wall_s": 2.041,
+    "log": "build.log"
+  },
+  "runs": [
+    {
+      "label": "01-docker-docker",
+      "kind": "measured",
+      "engine": "docker",
+      "context": "desktop-linux",
+      "project": "docker",
+      "started_utc": "2026-11-16T07:14:22Z",
+      "wall_s": 19.822,
+      "exit": 0,
+      "timed_out": false,
+      "junit": true,
+      "junit_suspect": false,
+      "testcases": 183,
+      "failures": 0,
+      "skipped_tests": 3,
+      "skipped": null,
+      "loadavg": {
+        "start": [7.5, 14.33, 14.31],
+        "end": [12.08, 14.95, 14.54]
+      },
+      "other_tests_start": 0,
+      "other_tests_end": 0,
+      "git": {
+        "head": "961a77337c18d436ffe5868500445789ede4810f",
+        "status_porcelain": []
+      }
+    },
+    {
+      "label": "02-colima-docker",
+      "kind": "measured",
+      "engine": "colima",
+      "context": "colima",
+      "project": "docker",
+      "started_utc": "2026-11-16T07:14:42Z",
+      "wall_s": 25.569,
+      "exit": 0,
+      "timed_out": false,
+      "junit": true,
+      "junit_suspect": false,
+      "testcases": 183,
+      "failures": 0,
+      "skipped_tests": 3,
+      "skipped": null,
+      "loadavg": {
+        "start": [12.08, 14.95, 14.54],
+        "end": [9.31, 14.07, 14.23]
+      },
+      "other_tests_start": 0,
+      "other_tests_end": 0,
+      "git": {
+        "head": "961a77337c18d436ffe5868500445789ede4810f",
+        "status_porcelain": []
+      }
+    },
+    {
+      "label": "03-docker-docker",
+      "kind": "measured",
+      "engine": "docker",
+      "context": "desktop-linux",
+      "project": "docker",
+      "started_utc": "2026-11-16T07:15:08Z",
+      "wall_s": 19.271,
+      "exit": 0,
+      "timed_out": false,
+      "junit": true,
+      "junit_suspect": false,
+      "testcases": 183,
+      "failures": 0,
+      "skipped_tests": 3,
+      "skipped": null,
+      "loadavg": {
+        "start": [9.31, 14.07, 14.23],
+        "end": [10.72, 14.11, 14.24]
+      },
+      "other_tests_start": 0,
+      "other_tests_end": 3,
+      "git": {
+        "head": "961a77337c18d436ffe5868500445789ede4810f",
+        "status_porcelain": []
+      }
+    },
+    {
+      "label": "04-colima-docker",
+      "kind": "measured",
+      "engine": "colima",
+      "context": "colima",
+      "project": "docker",
+      "started_utc": "2026-11-16T07:15:27Z",
+      "wall_s": 28.641,
+      "exit": 0,
+      "timed_out": false,
+      "junit": true,
+      "junit_suspect": false,
+      "testcases": 183,
+      "failures": 0,
+      "skipped_tests": 3,
+      "skipped": null,
+      "loadavg": {
+        "start": [10.72, 14.11, 14.24],
+        "end": [10.61, 13.77, 14.12]
+      },
+      "other_tests_start": 3,
+      "other_tests_end": 2,
+      "git": {
+        "head": "961a77337c18d436ffe5868500445789ede4810f",
+        "status_porcelain": []
+      }
+    },
+    {
+      "label": "05-docker-docker",
+      "kind": "measured",
+      "engine": "docker",
+      "context": "desktop-linux",
+      "project": "docker",
+      "started_utc": "2026-11-16T07:15:56Z",
+      "wall_s": 20.056,
+      "exit": 0,
+      "timed_out": false,
+      "junit": true,
+      "junit_suspect": false,
+      "testcases": 183,
+      "failures": 0,
+      "skipped_tests": 3,
+      "skipped": null,
+      "loadavg": {
+        "start": [10.61, 13.77, 14.12],
+        "end": [11.46, 13.79, 14.12]
+      },
+      "other_tests_start": 2,
+      "other_tests_end": 2,
+      "git": {
+        "head": "961a77337c18d436ffe5868500445789ede4810f",
+        "status_porcelain": []
+      }
+    },
+    {
+      "label": "06-colima-docker",
+      "kind": "measured",
+      "engine": "colima",
+      "context": "colima",
+      "project": "docker",
+      "started_utc": "2026-11-16T07:16:16Z",
+      "wall_s": 19.337,
+      "exit": 0,
+      "timed_out": false,
+      "junit": true,
+      "junit_suspect": false,
+      "testcases": 183,
+      "failures": 0,
+      "skipped_tests": 3,
+      "skipped": null,
+      "loadavg": {
+        "start": [11.46, 13.79, 14.12],
+        "end": [9.93, 13.3, 13.93]
+      },
+      "other_tests_start": 2,
+      "other_tests_end": 0,
+      "git": {
+        "head": "961a77337c18d436ffe5868500445789ede4810f",
+        "status_porcelain": []
+      }
+    },
+    {
+      "label": "01-docker-mutex",
+      "kind": "measured",
+      "engine": "docker",
+      "context": "desktop-linux",
+      "project": "mutex",
+      "started_utc": "2026-11-16T07:16:36Z",
+      "wall_s": 95.076,
+      "exit": 0,
+      "timed_out": false,
+      "junit": true,
+      "junit_suspect": false,
+      "testcases": 866,
+      "failures": 0,
+      "skipped_tests": 78,
+      "skipped": null,
+      "loadavg": {
+        "start": [9.93, 13.3, 13.93],
+        "end": [12.04, 14.02, 14.21]
+      },
+      "other_tests_start": 0,
+      "other_tests_end": 1,
+      "git": {
+        "head": "961a77337c18d436ffe5868500445789ede4810f",
+        "status_porcelain": []
+      }
+    },
+    {
+      "label": "02-colima-mutex",
+      "kind": "measured",
+      "engine": "colima",
+      "context": "colima",
+      "project": "mutex",
+      "started_utc": "2026-11-16T07:18:11Z",
+      "wall_s": 148.49,
+      "exit": 1,
+      "timed_out": false,
+      "junit": true,
+      "junit_suspect": false,
+      "testcases": 866,
+      "failures": 1,
+      "skipped_tests": 78,
+      "skipped": null,
+      "loadavg": {
+        "start": [12.04, 14.02, 14.21],
+        "end": [5.4, 11.23, 13.11]
+      },
+      "other_tests_start": 1,
+      "other_tests_end": 1,
+      "git": {
+        "head": "961a77337c18d436ffe5868500445789ede4810f",
+        "status_porcelain": []
+      }
+    },
+    {
+      "label": "03-docker-mutex",
+      "kind": "measured",
+      "engine": "docker",
+      "context": "desktop-linux",
+      "project": "mutex",
+      "started_utc": "2026-11-16T07:20:40Z",
+      "wall_s": 126.586,
+      "exit": 1,
+      "timed_out": false,
+      "junit": true,
+      "junit_suspect": false,
+      "testcases": 866,
+      "failures": 1,
+      "skipped_tests": 78,
+      "skipped": null,
+      "loadavg": {
+        "start": [5.4, 11.23, 13.11],
+        "end": [11.49, 12.4, 13.39]
+      },
+      "other_tests_start": 1,
+      "other_tests_end": 1,
+      "git": {
+        "head": "961a77337c18d436ffe5868500445789ede4810f",
+        "status_porcelain": []
+      }
+    },
+    {
+      "label": "04-colima-mutex",
+      "kind": "measured",
+      "engine": "colima",
+      "context": "colima",
+      "project": "mutex",
+      "started_utc": "2026-11-16T07:22:46Z",
+      "wall_s": 148.565,
+      "exit": 1,
+      "timed_out": false,
+      "junit": true,
+      "junit_suspect": false,
+      "testcases": 866,
+      "failures": 1,
+      "skipped_tests": 78,
+      "skipped": null,
+      "loadavg": {
+        "start": [11.49, 12.4, 13.39],
+        "end": [8.32, 12.24, 13.29]
+      },
+      "other_tests_start": 1,
+      "other_tests_end": 0,
+      "git": {
+        "head": "961a77337c18d436ffe5868500445789ede4810f",
+        "status_porcelain": []
+      }
+    },
+    {
+      "label": "05-docker-mutex",
+      "kind": "measured",
+      "engine": "docker",
+      "context": "desktop-linux",
+      "project": "mutex",
+      "started_utc": "2026-11-16T07:25:15Z",
+      "wall_s": 98.184,
+      "exit": 0,
+      "timed_out": false,
+      "junit": true,
+      "junit_suspect": false,
+      "testcases": 866,
+      "failures": 0,
+      "skipped_tests": 78,
+      "skipped": null,
+      "loadavg": {
+        "start": [8.32, 12.24, 13.29],
+        "end": [11.66, 12.93, 13.49]
+      },
+      "other_tests_start": 0,
+      "other_tests_end": 0,
+      "git": {
+        "head": "38d82af3182cc7351e4a9e4e172b1bc4f7aefe0b",
+        "status_porcelain": []
+      }
+    },
+    {
+      "label": "06-colima-mutex",
+      "kind": "measured",
+      "engine": "colima",
+      "context": "colima",
+      "project": "mutex",
+      "started_utc": "2026-11-16T07:26:53Z",
+      "wall_s": 148.026,
+      "exit": 1,
+      "timed_out": false,
+      "junit": true,
+      "junit_suspect": false,
+      "testcases": 866,
+      "failures": 1,
+      "skipped_tests": 78,
+      "skipped": null,
+      "loadavg": {
+        "start": [11.66, 12.93, 13.49],
+        "end": [5.86, 11.01, 12.71]
+      },
+      "other_tests_start": 0,
+      "other_tests_end": 0,
+      "git": {
+        "head": "38d82af3182cc7351e4a9e4e172b1bc4f7aefe0b",
+        "status_porcelain": []
+      }
+    },
+    {
+      "label": "01-docker-testing",
+      "kind": "measured",
+      "engine": "docker",
+      "context": "desktop-linux",
+      "project": "testing",
+      "started_utc": "2026-11-16T07:29:22Z",
+      "wall_s": 303.912,
+      "exit": 1,
+      "timed_out": false,
+      "junit": true,
+      "junit_suspect": false,
+      "testcases": 171,
+      "failures": 5,
+      "skipped_tests": 3,
+      "skipped": null,
+      "loadavg": {
+        "start": [5.86, 11.01, 12.71],
+        "end": [12.56, 18.34, 16.5]
+      },
+      "other_tests_start": 0,
+      "other_tests_end": 0,
+      "git": {
+        "head": "38d82af3182cc7351e4a9e4e172b1bc4f7aefe0b",
+        "status_porcelain": []
+      }
+    },
+    {
+      "label": "02-colima-testing",
+      "kind": "measured",
+      "engine": "colima",
+      "context": "colima",
+      "project": "testing",
+      "started_utc": "2026-11-16T07:34:26Z",
+      "wall_s": 265.849,
+      "exit": 0,
+      "timed_out": false,
+      "junit": true,
+      "junit_suspect": false,
+      "testcases": 171,
+      "failures": 0,
+      "skipped_tests": 3,
+      "skipped": null,
+      "loadavg": {
+        "start": [12.56, 18.34, 16.5],
+        "end": [5.07, 11.49, 13.97]
+      },
+      "other_tests_start": 0,
+      "other_tests_end": 0,
+      "git": {
+        "head": "099bcaa088c738af92dd8ff5ab50a048fb77a36c",
+        "status_porcelain": []
+      }
+    },
+    {
+      "label": "03-docker-testing",
+      "kind": "measured",
+      "engine": "docker",
+      "context": "desktop-linux",
+      "project": "testing",
+      "started_utc": "2026-11-16T07:38:52Z",
+      "wall_s": 281.973,
+      "exit": 0,
+      "timed_out": false,
+      "junit": true,
+      "junit_suspect": false,
+      "testcases": 171,
+      "failures": 0,
+      "skipped_tests": 3,
+      "skipped": null,
+      "loadavg": {
+        "start": [5.07, 11.49, 13.97],
+        "end": [58.82, 27.78, 19.91]
+      },
+      "other_tests_start": 0,
+      "other_tests_end": 3,
+      "git": {
+        "head": "099bcaa088c738af92dd8ff5ab50a048fb77a36c",
+        "status_porcelain": []
+      }
+    },
+    {
+      "label": "04-colima-testing",
+      "kind": "measured",
+      "engine": "colima",
+      "context": "colima",
+      "project": "testing",
+      "started_utc": "2026-11-16T07:43:34Z",
+      "wall_s": 265.481,
+      "exit": 0,
+      "timed_out": false,
+      "junit": true,
+      "junit_suspect": false,
+      "testcases": 171,
+      "failures": 0,
+      "skipped_tests": 3,
+      "skipped": null,
+      "loadavg": {
+        "start": [58.82, 27.78, 19.91],
+        "end": [27.38, 29.0, 22.8]
+      },
+      "other_tests_start": 3,
+      "other_tests_end": 1,
+      "git": {
+        "head": "099bcaa088c738af92dd8ff5ab50a048fb77a36c",
+        "status_porcelain": []
+      }
+    },
+    {
+      "label": "05-docker-testing",
+      "kind": "measured",
+      "engine": "docker",
+      "context": "desktop-linux",
+      "project": "testing",
+      "started_utc": "2026-11-16T07:48:00Z",
+      "wall_s": 295.874,
+      "exit": 1,
+      "timed_out": false,
+      "junit": true,
+      "junit_suspect": false,
+      "testcases": 171,
+      "failures": 1,
+      "skipped_tests": 3,
+      "skipped": null,
+      "loadavg": {
+        "start": [33.03, 30.14, 23.24],
+        "end": [43.29, 51.6, 36.92]
+      },
+      "other_tests_start": 1,
+      "other_tests_end": 3,
+      "git": {
+        "head": "099bcaa088c738af92dd8ff5ab50a048fb77a36c",
+        "status_porcelain": []
+      }
+    },
+    {
+      "label": "06-colima-testing",
+      "kind": "measured",
+      "engine": "colima",
+      "context": "colima",
+      "project": "testing",
+      "started_utc": "2026-11-16T07:52:56Z",
+      "wall_s": 253.275,
+      "exit": 0,
+      "timed_out": false,
+      "junit": true,
+      "junit_suspect": false,
+      "testcases": 171,
+      "failures": 0,
+      "skipped_tests": 3,
+      "skipped": null,
+      "loadavg": {
+        "start": [43.29, 51.6, 36.92],
+        "end": [18.75, 35.94, 33.98]
+      },
+      "other_tests_start": 3,
+      "other_tests_end": 0,
+      "git": {
+        "head": "43bcf61b7ee8767ae463e230451286838bbb9b10",
+        "status_porcelain": []
+      }
+    }
+  ]
+}

@@ -1,5 +1,5 @@
 # Experiments for docs/research/container-engines/README.md.
-# Order: test-relevant first. Runs append to `attempts` and set `status` and `verdict`.
+# Order: test-relevant first. Runs append to `attempts` and set `status`, `verdict` and `verdict_reason`.
 # combination.engine names the engines of scripts/README.md's engine table (Ezz, 2026-11-16):
 # docker = Docker Desktop on VZ, docker-vmm = Docker Desktop on Docker VMM, colima, orbstack, and
 # apple = Apple container 1.7.1 through socktainer.
@@ -25,7 +25,7 @@
   expected: Apple about 3x slower.
   risks: Cold runs (init image download, socktainer's first create) must stay out of the warm runs.
   source: zot24/macos-container-benchmarks; Jmeg8r/apple-container-vs-docker
-  status: proposed
+  status: done
   attempts:
     - date: 2026-11-15
       status: invalid
@@ -38,7 +38,28 @@
         docker_docker_cli_ms: [241.3, 195.4]
         apple_container_cli_ms: [918.8, 886.4]
         apple_via_socktainer_ms: [1215.1, 1187.2]
-  verdict: null
+    - date: 2026-11-16
+      status: done
+      engines: [docker, colima]
+      engine_setup:
+        docker: Docker Desktop on VZ, 8 CPUs, 8 GiB, Docker 29.8.0
+        colima: Colima 0.10.3, VZ + virtiofs + Rosetta, 8 CPUs, 8 GiB, Docker 29.5.2, Lima ssh port forwarder (the grpc forwarder loses backpressure)
+      head: 961a7733
+      order: docker, colima interleaved
+      results: docs/research/container-engines/results/2026-11-16-docker-vs-colima.md
+      raw: docs/research/container-engines/runs/startup-alpine-true/20261116T075712Z
+      key_numbers:
+        warm_median_ms: { docker: 153.1, colima: 158.2 }
+        round_medians_ms: { docker: [160.8, 145.3], colima: [158.2, 158.2] }
+        min_max_ms: { docker: [121.2, 233.7], colima: [132.7, 244.6] }
+        first_run_ms: { docker: 1387.4, colima: 191.8 }
+      caveats:
+        - 'no quiet gate (Ezz: "no gate needed"); other sessions used Docker Desktop during the pass and only this pass used Colima, a bias against Docker Desktop'
+        - 'load average 18.7 at the start'
+        - '5 containers left on Colima by the suites ran at the start (meta.json)'
+        - 'first runs are one sample each and not counted'
+  verdict: no-difference
+  verdict_reason: "153.1 against 158.2 ms warm (+5.1 ms on Colima), inside Docker's A-to-A spread of 15.5 ms"
 
 - id: postgres-time-to-ready
   name: time to ready on postgres:18-alpine
@@ -59,9 +80,33 @@
   expected: Apple slower by the VM boot.
   risks: Apple's published-port forwarder drops a connection on a client half-close; pg clients do not half-close, so expect it to work.
   source: packages/testing/src/databases/postgres.ts
-  status: proposed
-  attempts: []
-  verdict: null
+  status: done
+  attempts:
+    - date: 2026-11-16
+      status: done
+      engines: [docker, colima]
+      engine_setup:
+        docker: Docker Desktop on VZ, 8 CPUs, 8 GiB, Docker 29.8.0
+        colima: Colima 0.10.3, VZ + virtiofs + Rosetta, 8 CPUs, 8 GiB, Docker 29.5.2, Lima ssh port forwarder (the grpc forwarder loses backpressure)
+      head: 961a7733
+      order: docker, colima interleaved
+      results: docs/research/container-engines/results/2026-11-16-docker-vs-colima.md
+      raw: docs/research/container-engines/runs/postgres-time-to-ready/20261116T084831Z
+      key_numbers:
+        ready_published_median_ms: { docker: 722.4, colima: 701.4 }
+        ready_round_medians_ms:
+          { docker: [752.3, 692.4], colima: [705.0, 697.8] }
+        ready_min_max_ms: { docker: [683.6, 765.7], colima: [682.7, 813.2] }
+        total_median_ms: { docker: 824.6, colima: 826.2 }
+        start_call_median_ms: { docker: 46.6, colima: 58.6 }
+        remove_call_median_ms: { docker: 103.8, colima: 124.5 }
+        published_tcp_median_ms: { docker: 64.3, colima: 77.5 }
+      caveats:
+        - 'no quiet gate (Ezz: "no gate needed"); other sessions used Docker Desktop during the pass and only this pass used Colima, a bias against Docker Desktop'
+        - 'load average 3.8 at the start'
+        - '10 warm runs per round, 2 rounds per engine; limits --cpus 2 --memory 1g, tmpfs data folder'
+  verdict: no-difference
+  verdict_reason: "ready on the published port 722.4 against 701.4 ms, inside Docker's 59.8 ms spread; Colima's start (+12 ms) and remove (+21 ms) calls are slower beyond the spread but Postgres's own start hides them"
 
 - id: socktainer-overhead
   name: latency on create/start/inspect/remove through socktainer and the raw CLI
@@ -83,7 +128,7 @@
   expected: A small, constant cost per call from socktainer.
   risks: The two CLIs may not do the same work per step (for example, inspect detail).
   source: none; our question
-  status: proposed
+  status: done
   attempts:
     - date: 2026-11-15
       status: invalid
@@ -92,7 +137,30 @@
         - 'the Mac was busy: load average 11.4 at the start, and 4 shared zukhruf-testing database servers of another session ran on Docker Desktop'
         - "script bug: hyperfine 2.0 refused the whole-sequence arm, whose command contains &&, with 'Explicitly choose how to execute it: -S / --shell=default ... -N / --shell=none' (exit 1 after 19 s); fixed: that arm runs with --shell=default"
       raw: ~/.claude/scratch/container-engines/runs-attempt-1-invalid/socktainer-overhead/20261115T194828Z
-  verdict: null
+    - date: 2026-11-16
+      status: done
+      engines: [docker, colima]
+      engine_setup:
+        docker: Docker Desktop on VZ, 8 CPUs, 8 GiB, Docker 29.8.0
+        colima: Colima 0.10.3, VZ + virtiofs + Rosetta, 8 CPUs, 8 GiB, Docker 29.5.2, Lima ssh port forwarder (the grpc forwarder loses backpressure)
+      head: 961a7733
+      order: docker, colima interleaved
+      results: docs/research/container-engines/results/2026-11-16-docker-vs-colima.md
+      raw: docs/research/container-engines/runs/socktainer-overhead/20261116T075738Z
+      key_numbers:
+        arm: docker-cli only (the engines' API baseline)
+        median_ms:
+          create: { docker: 63.7, colima: 81.8, spread: [0.6, 67.7] }
+          start: { docker: 103.8, colima: 116.0, spread: [45.9, 52.4] }
+          inspect: { docker: 30.2, colima: 35.8, spread: [0.6, 0.3] }
+          rm: { docker: 123.4, colima: 120.3, spread: [16.5, 15.8] }
+          sequence: { docker: 287.6, colima: 435.8, spread: [82.3, 150.0] }
+      caveats:
+        - 'no quiet gate (Ezz: "no gate needed"); other sessions used Docker Desktop during the pass and only this pass used Colima, a bias against Docker Desktop'
+        - 'load average 17 at the start and 62 at the end'
+        - 'the max of the sequence reached 1.9 s on Docker and 2.0 s on Colima'
+  verdict: docker-faster
+  verdict_reason: "only inspect differs beyond the spread (+5.6 ms, +18% on Colima); create, start, rm and the whole sequence are within it. No Apple arm, so socktainer's own cost is still unmeasured"
 
 - id: suites-wall-time
   name: wall time on the Docker-backed test suites
@@ -118,9 +186,55 @@
   expected: Unknown; this row decides the verdict.
   risks: Depends on backlog #4430's client fixes, and on #4205 for testing. A red suite counts against criterion 2.
   source: none; our suites
-  status: proposed
-  attempts: []
-  verdict: null
+  status: done
+  attempts:
+    - date: 2026-11-16
+      status: done
+      engines: [docker, colima]
+      engine_setup:
+        docker: Docker Desktop on VZ, 8 CPUs, 8 GiB, Docker 29.8.0
+        colima: Colima 0.10.3, VZ + virtiofs + Rosetta, 8 CPUs, 8 GiB, Docker 29.5.2, Lima ssh port forwarder (the grpc forwarder loses backpressure)
+      head: 961a7733
+      order: docker, colima interleaved
+      results: docs/research/container-engines/results/2026-11-16-docker-vs-colima.md
+      raw: docs/research/container-engines/runs/suites-wall-time/20261116T071419Z
+      key_numbers:
+        runs_per_engine: 3
+        median_s:
+          docker:
+            {
+              docker: 19.8,
+              colima: 25.6,
+              min_max: { docker: [19.3, 20.1], colima: [19.3, 28.6] },
+            }
+          mutex:
+            {
+              docker: 98.2,
+              colima: 148.5,
+              min_max: { docker: [95.1, 126.6], colima: [148.0, 148.6] },
+            }
+          testing:
+            {
+              docker: 295.9,
+              colima: 265.5,
+              min_max: { docker: [282.0, 303.9], colima: [253.3, 265.8] },
+            }
+        failures:
+          02-colima-mutex: "1: docker-engine-store.test.ts 'a rung left by a killed test process is removed by the run's reaper after the run ends', TimeoutError after 120.6 s"
+          04-colima-mutex: '1: the same test, after 120.8 s'
+          06-colima-mutex: '1: the same test, after 120.7 s'
+          03-docker-mutex: "1: socket/handshake.test.ts 'a store hung up on during a failover follows the leader that took over' (assertion leader vs follower; no engine involved)"
+          01-docker-testing: "5: reaper.integration.test.ts, each 'No such image: alpine:latest'"
+          05-docker-testing: "1: reaper.integration.test.ts 'a test process whose reaper was removed holds a new reaper at once, and that reaper removes what it creates after that, once it exits', waitFor() timed out after 33.7 s"
+      caveats:
+        - 'no quiet gate (Ezz: "no gate needed"); other sessions used Docker Desktop during the pass and only this pass used Colima, a bias against Docker Desktop'
+        - 'run with --no-gate and --no-warmup; the warm-ups of pass 1 (runs/suites-wall-time/20261116T063919Z, not measurements) had pulled the images and created the shared servers'
+        - 'load average 5 to 59 at run starts; up to 3 other node --test processes'
+        - "the Colima mutex failure (also in pass 1's warm-up) is a test-fixture defect, not an engine one: packages/mutex/src/testing/subjects/docker-engine.ts:107-109 builds DockerTestbed({ environment: run }) with no DOCKER_HOST or DOCKER_CONTEXT, so the run's reaper is held on Docker Desktop while the store uses Colima and the test waits its full 120 s (REAPED_WITHIN); docker events proved it; came with 06d22ed3 (#4205)"
+        - 'the whole mutex gap is that wait: docker-engine-store.test.ts junit per-file sums Docker 30.5/35.1/32.4 s, Colima 145.5/145.3/145.6 s; without the wait about 24.8 s on Colima against 27.8 s on Docker'
+        - "03-docker-mutex's failure is a socket-store flake unrelated to any engine"
+  verdict: mixed
+  verdict_reason: "Colima is 30 s (10%) faster on testing in every run and ties on docker (within its 9.3 s spread); mutex's +50 s (51%) is a test-fixture defect's 120 s wait, not the engine (without it the store file is 24.8 s on Colima against 27.8 s on Docker), so mutex is re-measured after the fixture fix"
 
 - id: fio-storage
   name: throughput on fio 4k and 1m random reads and writes
@@ -141,7 +255,7 @@
   expected: Apple loses at 4k on bind mounts.
   risks: The host page cache.
   source: apple/container #882; Jmeg8r/apple-container-vs-docker
-  status: proposed
+  status: done
   attempts:
     - date: 2026-11-15
       status: invalid
@@ -150,7 +264,46 @@
         - 'the Mac was busy: load average 15.6 at the start, and 4 shared zukhruf-testing database servers of another session ran on Docker Desktop'
         - "script bug: the Apple slot's docker run -d with a bind mount from under ~/Desktop hung until gtimeout killed it (exit 137); sandboxd logged tcc_server_message_request_authorization(kTCCServiceSystemPolicyDesktopFolder) failed: Apple's helper has no Files & Folders grant for ~/Desktop; fixed: the bind source is under the user's temporary folder"
       raw: ~/.claude/scratch/container-engines/runs-attempt-1-invalid/fio-storage/20261115T194847Z
-  verdict: null
+    - date: 2026-11-16
+      status: done
+      engines: [docker, colima]
+      engine_setup:
+        docker: Docker Desktop on VZ, 8 CPUs, 8 GiB, Docker 29.8.0
+        colima: Colima 0.10.3, VZ + virtiofs + Rosetta, 8 CPUs, 8 GiB, Docker 29.5.2, Lima ssh port forwarder (the grpc forwarder loses backpressure)
+      head: 961a7733
+      order: docker, colima interleaved
+      results: docs/research/container-engines/results/2026-11-16-docker-vs-colima.md
+      raw: docs/research/container-engines/runs/fio-storage/20261116T080108Z
+      key_numbers:
+        unit: 4k in IOPS, 1m in MiB/s; median of the two rounds
+        bind:
+          {
+            randread_4k: [40328, 35010],
+            randread_1m: [3402, 1640],
+            randwrite_4k: [40158, 12677],
+            randwrite_1m: [2917, 1462],
+          }
+        volume:
+          {
+            randread_4k: [133247, 154494],
+            randread_1m: [37196, 19999],
+            randwrite_4k: [143054, 97910],
+            randwrite_1m: [9183, 6594],
+          }
+        rootfs:
+          {
+            randread_4k: [172831, 170115],
+            randread_1m: [38774, 28561],
+            randwrite_4k: [96244, 116004],
+            randwrite_1m: [9171, 9402],
+          }
+        pairs: [docker, colima]
+      caveats:
+        - 'no quiet gate (Ezz: "no gate needed"); other sessions used Docker Desktop during the pass and only this pass used Colima, a bias against Docker Desktop'
+        - 'load average 62.1 at the start, the peak of the pass'
+        - 'one job per cell and round, so each round is one sample; bind randread 1m on Colima gave 545 then 2734 MiB/s'
+  verdict: docker-faster
+  verdict_reason: 'Docker leads on bind mounts (4k randwrite 40158 against 12677 IOPS, -68% on Colima; 1m randwrite -50%; 4k randread -13%) and on named volumes (1m randread -46%, 4k randwrite -32%); no Colima lead beyond the spread; the root filesystem ties'
 
 - id: idle-memory
   name: host memory on 0, 1, 10 and 30 idle containers
@@ -171,7 +324,7 @@
   expected: Apple wins at 0 and loses per container.
   risks: Finding every host process of each engine.
   source: Jmeg8r/apple-container-vs-docker
-  status: proposed
+  status: done
   attempts:
     - date: 2026-11-15
       status: invalid
@@ -180,7 +333,41 @@
         - 'the Mac was busy: load average 3.4 at the start, and 4 shared zukhruf-testing database servers of another session ran on Docker Desktop'
         - 'the script refused to start, as designed, because 4 foreign containers ran on Docker Desktop (exit 2); nothing was measured'
       raw: ~/.claude/scratch/container-engines/runs-attempt-1-invalid/idle-memory/20261115T195848Z
-  verdict: null
+    - date: 2026-11-16
+      status: done
+      engines: [docker, colima]
+      engine_setup:
+        docker: Docker Desktop on VZ, 8 CPUs, 8 GiB, Docker 29.8.0
+        colima: Colima 0.10.3, VZ + virtiofs + Rosetta, 8 CPUs, 8 GiB, Docker 29.5.2, Lima ssh port forwarder (the grpc forwarder loses backpressure)
+      head: 961a7733
+      order: docker, colima interleaved
+      results: docs/research/container-engines/results/2026-11-16-docker-vs-colima.md
+      raw: docs/research/container-engines/runs/idle-memory/20261116T082112Z
+      key_numbers:
+        footprint_mib_median:
+          {
+            level_0: [9122, 8388],
+            level_1: [9123, 8387],
+            level_10: [9112, 8387],
+            level_30: [9109, 8389],
+          }
+        footprint_vm_mib: { docker: 8250, colima: 8211 }
+        footprint_helpers_mib: { docker: [848, 880], colima: [174, 178] }
+        rss_mib_median_secondary:
+          {
+            level_0: [1128, 537],
+            level_1: [1476, 796],
+            level_10: [1822, 670],
+            level_30: [1900, 1103],
+          }
+        pairs: [docker, colima]
+      caveats:
+        - 'no quiet gate (Ezz: "no gate needed"); other sessions used Docker Desktop during the pass and only this pass used Colima, a bias against Docker Desktop'
+        - 'footprint (footprint_bytes_total) is primary: the Mac was under memory pressure, footprint counted 7.4 to 8.9 GB of VM memory as swapped or compressed, and RSS moved with it (Colima 198 then 876 MiB at 0 containers; 1229 to 470 MiB within one level), while footprint stayed within 12 MiB'
+        - 'footprint shows no cost per container: each guest had touched its whole 8 GiB already'
+        - 'load average 17.4 at the start'
+  verdict: colima-faster
+  verdict_reason: "Colima takes 720 to 736 MiB less footprint at every level (8388 against 9122 MiB at 0 containers), all of it Docker Desktop's processes around the VM (about 870 against 176 MiB); the VMs' footprints are equal (8250 against 8211 MiB)"
 
 - id: attach-round-trip
   name: round trip on a cat lease attached before start
@@ -201,9 +388,34 @@
   expected: Apple slower.
   risks: The half-close on stdin may behave differently through socktainer.
   source: packages/testing; the mutex store
-  status: proposed
-  attempts: []
-  verdict: null
+  status: done
+  attempts:
+    - date: 2026-11-16
+      status: done
+      engines: [docker, colima]
+      engine_setup:
+        docker: Docker Desktop on VZ, 8 CPUs, 8 GiB, Docker 29.8.0
+        colima: Colima 0.10.3, VZ + virtiofs + Rosetta, 8 CPUs, 8 GiB, Docker 29.5.2, Lima ssh port forwarder (the grpc forwarder loses backpressure)
+      head: 961a7733
+      order: docker, colima interleaved
+      results: docs/research/container-engines/results/2026-11-16-docker-vs-colima.md
+      raw: docs/research/container-engines/runs/attach-round-trip/20261116T084932Z
+      key_numbers:
+        median_ms:
+          create: [13.4, 12.7]
+          attach: [3.3, 1.4]
+          start: [41.5, 50.9]
+          round_trip: [0.22, 0.26]
+          close_to_exit: [48.1, 68.0]
+          exit_to_removed: [15.2, 13.6]
+          exit_to_removed_wait: [6.2, 5.0]
+        pairs: [docker, colima]
+      caveats:
+        - 'no quiet gate (Ezz: "no gate needed"); other sessions used Docker Desktop during the pass and only this pass used Colima, a bias against Docker Desktop'
+        - 'load average 5.7 at the start'
+        - '10 containers and 200 round trips per round'
+  verdict: docker-faster
+  verdict_reason: 'a lease costs 121.5 ms on Docker and 146.6 ms on Colima, mostly start (+9.4 ms) and close to exit (+19.9 ms); Colima wins attach (-2.0 ms) and removal (-1.7 ms)'
 
 - id: iperf3-network
   name: throughput on iperf3
@@ -224,7 +436,7 @@
   expected: Apple 5-10x lower.
   risks: network connect is a no-op on socktainer; containers must share the default network.
   source: zot24/macos-container-benchmarks
-  status: proposed
+  status: done
   attempts:
     - date: 2026-11-15
       status: invalid
@@ -233,7 +445,28 @@
         - 'the Mac was busy: load average 3.0 at the start, and 4 shared zukhruf-testing database servers of another session ran on Docker Desktop'
         - 'script bug: every captured JSON file is 0 bytes and the experiment exited 0; measure_path declared `local path`, which in zsh is the array tied to PATH, so every client call failed with exit 127 (command not found); fixed: the local is `route`, and every result file must be non-empty JSON'
       raw: ~/.claude/scratch/container-engines/runs-attempt-1-invalid/iperf3-network/20261115T200505Z
-  verdict: null
+    - date: 2026-11-16
+      status: done
+      engines: [docker, colima]
+      engine_setup:
+        docker: Docker Desktop on VZ, 8 CPUs, 8 GiB, Docker 29.8.0
+        colima: Colima 0.10.3, VZ + virtiofs + Rosetta, 8 CPUs, 8 GiB, Docker 29.5.2, Lima ssh port forwarder (the grpc forwarder loses backpressure)
+      head: 961a7733
+      order: docker, colima interleaved
+      results: docs/research/container-engines/results/2026-11-16-docker-vs-colima.md
+      raw: docs/research/container-engines/runs/iperf3-network/20261116T083641Z
+      key_numbers:
+        gbit_s_median:
+          container_to_container:
+            { docker: 85.7, colima: 88.5, spread: [12.3, 1.2] }
+          host_published: { docker: 2.22, colima: 3.03, spread: [0.40, 0.11] }
+        host_to_container_ip: not reachable from the Mac on either engine
+      caveats:
+        - 'no quiet gate (Ezz: "no gate needed"); other sessions used Docker Desktop during the pass and only this pass used Colima, a bias against Docker Desktop'
+        - 'load average 8.5 at the start'
+        - "Colima's published port goes through Lima's ssh forwarder"
+  verdict: colima-faster
+  verdict_reason: "host to published port 3.03 against 2.22 Gbit/s (+36%), beyond Docker's 0.40 Gbit/s spread; container to container ties (88.5 against 85.7 Gbit/s, inside Docker's 12.3 spread)"
 
 - id: sysbench-cpu
   name: events per second on sysbench cpu
@@ -254,7 +487,7 @@
   expected: A tie.
   risks: Apple takes whole vCPUs only; limits must match.
   source: RepoFlow blog; Jmeg8r/apple-container-vs-docker
-  status: proposed
+  status: done
   attempts:
     - date: 2026-11-15
       status: invalid
@@ -262,4 +495,44 @@
         - "socktainer 1.6.1 (Homebrew bottle) is built for apple/container 1.6.1 (Package.swift at tag v1.6.1 pins exactly 1.6.1) but container 1.7.1 ran; socktainer's startup log warns 'Apple Container version mismatch: detected 1.7.1 but this socktainer binary requires 1.6.1'"
         - 'the Mac was busy: load average 17.7 at the start, and 4 shared zukhruf-testing database servers of another session ran on Docker Desktop'
       raw: ~/.claude/scratch/container-engines/runs-attempt-1-invalid/sysbench-cpu/20261115T200715Z
-  verdict: null
+    - date: 2026-11-16
+      status: done
+      engines: [docker, colima]
+      engine_setup:
+        docker: Docker Desktop on VZ, 8 CPUs, 8 GiB, Docker 29.8.0
+        colima: Colima 0.10.3, VZ + virtiofs + Rosetta, 8 CPUs, 8 GiB, Docker 29.5.2, Lima ssh port forwarder (the grpc forwarder loses backpressure)
+      head: 961a7733
+      order: docker, colima interleaved
+      results: docs/research/container-engines/results/2026-11-16-docker-vs-colima.md
+      raw: docs/research/container-engines/runs/sysbench-cpu/20261116T084130Z
+      key_numbers:
+        events_per_s_median: { docker: 21644, colima: 21606 }
+        round_medians: { docker: [21060, 22228], colima: [21258, 21953] }
+        runs_min_max: { docker: [20923, 22983], colima: [20669, 22291] }
+        shape: 2 threads, --cpus 2, 3 runs of 30 s per round
+      caveats:
+        - 'no quiet gate (Ezz: "no gate needed"); other sessions used Docker Desktop during the pass and only this pass used Colima, a bias against Docker Desktop'
+        - 'load average 18.8 at the start'
+  verdict: no-difference
+  verdict_reason: '21644 against 21606 events/s, inside both A-to-A spreads (1168 and 695)'
+
+- id: connection-burst
+  name: more than 1000 concurrent connections to a published port
+  combination:
+    engine:
+      [
+        docker,
+        docker-vmm,
+        colima,
+        orbstack,
+        'apple (paused until a socktainer release for container 1.7.1)',
+      ]
+    client: a host load generator against 127.0.0.1:<published port>
+    workload: more than 1000 concurrent TCP connections to a published 127.0.0.1 port, per engine
+  hypothesis: Colima's Lima ssh port forwarder has a known cap of about 1000 concurrent connections on published ports.
+  measure: open more than 1000 concurrent connections to a container's published 127.0.0.1 port and count those that connect and stay up, per engine.
+  expected: Colima caps near 1000; Docker Desktop does not.
+  risks: The host's own file-descriptor limit must be raised above the burst so it does not cap first.
+  source: Lima's ssh port forwarder; Colima's default
+  status: proposed
+  attempts: []

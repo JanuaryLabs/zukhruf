@@ -1,0 +1,360 @@
+{
+  "experiment": "postgres-time-to-ready",
+  "engine": "colima",
+  "slot": "02-colima",
+  "host": "unix:///Users/ezzabuzaid/.colima/default/docker.sock",
+  "ipPath": false,
+  "apiVersion": "1.54",
+  "startedUtc": "2026-11-16T08:49:03.796Z",
+  "endedUtc": "2026-11-16T08:49:13.308Z",
+  "body": {
+    "Image": "docker.io/library/postgres@sha256:aea692538b8982646f587a0dc0263986ac063c043ab28a43076a07d099a0ef53",
+    "Labels": {
+      "dev.zukhruf.bench": "1"
+    },
+    "Env": [
+      "POSTGRES_PASSWORD=testpassword",
+      "POSTGRES_DB=testdb",
+      "POSTGRES_USER=postgres"
+    ],
+    "ExposedPorts": {
+      "5432/tcp": {}
+    },
+    "HostConfig": {
+      "PortBindings": {
+        "5432/tcp": [
+          {
+            "HostIp": "127.0.0.1",
+            "HostPort": ""
+          }
+        ]
+      },
+      "Mounts": [
+        {
+          "Type": "tmpfs",
+          "Target": "/var/lib/postgresql",
+          "TmpfsOptions": {
+            "SizeBytes": 536870912,
+            "Mode": 1023
+          }
+        }
+      ],
+      "MemorySwappiness": 0,
+      "NanoCpus": 2000000000,
+      "Memory": 1073741824
+    }
+  },
+  "oracle": ["pg_isready", "-h", "127.0.0.1", "-U", "postgres", "-t", "1"],
+  "intervalMs": 50,
+  "capMs": 60000,
+  "first": {
+    "index": 0,
+    "startedUtc": "2026-11-16T08:49:03.803Z",
+    "name": "zukhruf-bench-10548-pg-02-colima-0",
+    "attempts": {
+      "oracle": 11,
+      "published": 15
+    },
+    "lastProbeErrors": {},
+    "metrics": {
+      "create_ms": 30.54025,
+      "start_ms": 95.341375,
+      "oracle_ms": 931.063125,
+      "published_tcp_ms": 129.215375,
+      "published_answer_ms": 853.495416,
+      "ready_published_ms": 931.063125,
+      "ip_tcp_ms": null,
+      "ip_answer_ms": null,
+      "ready_ip_ms": null,
+      "remove_ms": 115.37458300000014,
+      "total_ms": 1046.479291
+    },
+    "id": "fcd48a1cd99bf356da5ba5be44c37278cc9f0c0a32b8dd3d6822d183fa87033b",
+    "published": {
+      "host": "127.0.0.1",
+      "port": 33033
+    }
+  },
+  "runs": [
+    {
+      "index": 1,
+      "startedUtc": "2026-11-16T08:49:04.849Z",
+      "name": "zukhruf-bench-10548-pg-02-colima-1",
+      "attempts": {
+        "oracle": 10,
+        "published": 14
+      },
+      "lastProbeErrors": {},
+      "metrics": {
+        "create_ms": 25.920417000000043,
+        "start_ms": 66.65874999999983,
+        "oracle_ms": 813.2109169999999,
+        "published_tcp_ms": 93.87341700000002,
+        "published_answer_ms": 768.344959,
+        "ready_published_ms": 813.2109169999999,
+        "ip_tcp_ms": null,
+        "ip_answer_ms": null,
+        "ready_ip_ms": null,
+        "remove_ms": 118.69354199999998,
+        "total_ms": 931.9124590000001
+      },
+      "id": "0b39808c483d7367885042d063db2508cf4a18d8326ac095f647246448d85019",
+      "published": {
+        "host": "127.0.0.1",
+        "port": 33034
+      }
+    },
+    {
+      "index": 2,
+      "startedUtc": "2026-11-16T08:49:05.781Z",
+      "name": "zukhruf-bench-10548-pg-02-colima-2",
+      "attempts": {
+        "oracle": 10,
+        "published": 13
+      },
+      "lastProbeErrors": {},
+      "metrics": {
+        "create_ms": 22.14975000000004,
+        "start_ms": 56.96612499999992,
+        "oracle_ms": 762.6894580000003,
+        "published_tcp_ms": 80.2430830000003,
+        "published_answer_ms": 701.3523330000003,
+        "ready_published_ms": 762.6894580000003,
+        "ip_tcp_ms": null,
+        "ip_answer_ms": null,
+        "ready_ip_ms": null,
+        "remove_ms": 121.83795800000007,
+        "total_ms": 884.5326660000001
+      },
+      "id": "d857f2e0a5ad63c360af0fb0ffce6a2ed7999b6c8dec3560ebdd0f9c64e9ac23",
+      "published": {
+        "host": "127.0.0.1",
+        "port": 33035
+      }
+    },
+    {
+      "index": 3,
+      "startedUtc": "2026-11-16T08:49:06.666Z",
+      "name": "zukhruf-bench-10548-pg-02-colima-3",
+      "attempts": {
+        "oracle": 9,
+        "published": 13
+      },
+      "lastProbeErrors": {},
+      "metrics": {
+        "create_ms": 17.05600000000004,
+        "start_ms": 65.60095899999988,
+        "oracle_ms": 707.9129590000002,
+        "published_tcp_ms": 83.82558400000016,
+        "published_answer_ms": 703.6918340000002,
+        "ready_published_ms": 707.9129590000002,
+        "ip_tcp_ms": null,
+        "ip_answer_ms": null,
+        "ready_ip_ms": null,
+        "remove_ms": 134.84916699999985,
+        "total_ms": 842.7689170000003
+      },
+      "id": "f9b0a6c9b9f00f3b5cb7fd1263145ff42384e15bd4322a9fcfbaa3164edaab79",
+      "published": {
+        "host": "127.0.0.1",
+        "port": 33036
+      }
+    },
+    {
+      "index": 4,
+      "startedUtc": "2026-11-16T08:49:07.509Z",
+      "name": "zukhruf-bench-10548-pg-02-colima-4",
+      "attempts": {
+        "oracle": 9,
+        "published": 13
+      },
+      "lastProbeErrors": {},
+      "metrics": {
+        "create_ms": 12.624084000000039,
+        "start_ms": 64.26125000000002,
+        "oracle_ms": 706.7932089999999,
+        "published_tcp_ms": 77.93058400000018,
+        "published_answer_ms": 698.5477089999999,
+        "ready_published_ms": 706.7932089999999,
+        "ip_tcp_ms": null,
+        "ip_answer_ms": null,
+        "ready_ip_ms": null,
+        "remove_ms": 146.45141700000022,
+        "total_ms": 853.2523340000002
+      },
+      "id": "6bf11ec938be32bac2158ac4e169872fc172dec31a791971de8602ed72bd380a",
+      "published": {
+        "host": "127.0.0.1",
+        "port": 33037
+      }
+    },
+    {
+      "index": 5,
+      "startedUtc": "2026-11-16T08:49:08.362Z",
+      "name": "zukhruf-bench-10548-pg-02-colima-5",
+      "attempts": {
+        "oracle": 9,
+        "published": 13
+      },
+      "lastProbeErrors": {},
+      "metrics": {
+        "create_ms": 13.575417000000016,
+        "start_ms": 69.54833299999973,
+        "oracle_ms": 698.9358330000005,
+        "published_tcp_ms": 84.36716700000034,
+        "published_answer_ms": 703.3540419999999,
+        "ready_published_ms": 703.3540419999999,
+        "ip_tcp_ms": null,
+        "ip_answer_ms": null,
+        "ready_ip_ms": null,
+        "remove_ms": 107.69208299999991,
+        "total_ms": 811.0539580000004
+      },
+      "id": "c45fae9cc5ce2461e5cacd1205f5e99fc11f53c4e75daf328bbcb0bfa263b6af",
+      "published": {
+        "host": "127.0.0.1",
+        "port": 33038
+      }
+    },
+    {
+      "index": 6,
+      "startedUtc": "2026-11-16T08:49:09.173Z",
+      "name": "zukhruf-bench-10548-pg-02-colima-6",
+      "attempts": {
+        "oracle": 9,
+        "published": 13
+      },
+      "lastProbeErrors": {},
+      "metrics": {
+        "create_ms": 12.55658399999993,
+        "start_ms": 58.136999999999716,
+        "oracle_ms": 706.664417,
+        "published_tcp_ms": 71.98816699999952,
+        "published_answer_ms": 690.2054589999998,
+        "ready_published_ms": 706.664417,
+        "ip_tcp_ms": null,
+        "ip_answer_ms": null,
+        "ready_ip_ms": null,
+        "remove_ms": 136.0194160000001,
+        "total_ms": 842.6914589999997
+      },
+      "id": "bb7d6ccb31f8fbaf4ce26c569d3b393662e6924bafe27a8ea17b7c29b8c7b75f",
+      "published": {
+        "host": "127.0.0.1",
+        "port": 33039
+      }
+    },
+    {
+      "index": 7,
+      "startedUtc": "2026-11-16T08:49:10.016Z",
+      "name": "zukhruf-bench-10548-pg-02-colima-7",
+      "attempts": {
+        "oracle": 9,
+        "published": 13
+      },
+      "lastProbeErrors": {},
+      "metrics": {
+        "create_ms": 16.837000000000444,
+        "start_ms": 57.78212499999972,
+        "oracle_ms": 685.4347500000003,
+        "published_tcp_ms": 75.84479100000044,
+        "published_answer_ms": 695.6892079999998,
+        "ready_published_ms": 695.6892079999998,
+        "ip_tcp_ms": null,
+        "ip_answer_ms": null,
+        "ready_ip_ms": null,
+        "remove_ms": 136.3192079999999,
+        "total_ms": 832.015625
+      },
+      "id": "d5a5f9d34bec586080cf0eebafc685785d3b8adec58f8bab1bc0113942fa5858",
+      "published": {
+        "host": "127.0.0.1",
+        "port": 33040
+      }
+    },
+    {
+      "index": 8,
+      "startedUtc": "2026-11-16T08:49:10.848Z",
+      "name": "zukhruf-bench-10548-pg-02-colima-8",
+      "attempts": {
+        "oracle": 9,
+        "published": 13
+      },
+      "lastProbeErrors": {},
+      "metrics": {
+        "create_ms": 11.783707999999933,
+        "start_ms": 60.04187499999989,
+        "oracle_ms": 681.5199579999999,
+        "published_tcp_ms": 73.00874999999996,
+        "published_answer_ms": 693.5196659999992,
+        "ready_published_ms": 693.5196659999992,
+        "ip_tcp_ms": null,
+        "ip_answer_ms": null,
+        "ready_ip_ms": null,
+        "remove_ms": 135.96812500000033,
+        "total_ms": 829.4935829999995
+      },
+      "id": "34d1970fa3b4b04c49188a7e5d09b1ae912847bb1ba10fadc901341ad74feaba",
+      "published": {
+        "host": "127.0.0.1",
+        "port": 33041
+      }
+    },
+    {
+      "index": 9,
+      "startedUtc": "2026-11-16T08:49:11.678Z",
+      "name": "zukhruf-bench-10548-pg-02-colima-9",
+      "attempts": {
+        "oracle": 9,
+        "published": 13
+      },
+      "lastProbeErrors": {},
+      "metrics": {
+        "create_ms": 12.773000000000138,
+        "start_ms": 52.725250000000415,
+        "oracle_ms": 682.4081660000011,
+        "published_tcp_ms": 66.77829100000054,
+        "published_answer_ms": 682.7217500000006,
+        "ready_published_ms": 682.7217500000006,
+        "ip_tcp_ms": null,
+        "ip_answer_ms": null,
+        "ready_ip_ms": null,
+        "remove_ms": 125.28354200000103,
+        "total_ms": 808.0161660000012
+      },
+      "id": "3978f61e06cf76b4b28591229fc5e23c7e4e5238d96b3186cf23a9df09d55785",
+      "published": {
+        "host": "127.0.0.1",
+        "port": 33042
+      }
+    },
+    {
+      "index": 10,
+      "startedUtc": "2026-11-16T08:49:12.486Z",
+      "name": "zukhruf-bench-10548-pg-02-colima-10",
+      "attempts": {
+        "oracle": 9,
+        "published": 13
+      },
+      "lastProbeErrors": {},
+      "metrics": {
+        "create_ms": 19.18895899999916,
+        "start_ms": 60.67833299999984,
+        "oracle_ms": 698.6056669999998,
+        "published_tcp_ms": 81.23991699999897,
+        "published_answer_ms": 700.8055000000004,
+        "ready_published_ms": 700.8055000000004,
+        "ip_tcp_ms": null,
+        "ip_answer_ms": null,
+        "ready_ip_ms": null,
+        "remove_ms": 121.64666600000055,
+        "total_ms": 822.4548749999994
+      },
+      "id": "56e738b08f8ee285c4eb67f1cc371b7c1209256b277eb8d2bfb382f3b6eed261",
+      "published": {
+        "host": "127.0.0.1",
+        "port": 33043
+      }
+    }
+  ]
+}

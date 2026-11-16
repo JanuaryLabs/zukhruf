@@ -1,0 +1,13 @@
+slot	run	events_per_second
+01-docker	1	21085.41
+01-docker	2	20922.73
+01-docker	3	21060.36
+02-colima	1	20668.95
+02-colima	2	21258.03
+02-colima	3	22291.31
+03-docker	1	22983.27
+03-docker	2	21562.65
+03-docker	3	22227.98
+04-colima	1	21914.76
+04-colima	2	21953.25
+04-colima	3	22185.16

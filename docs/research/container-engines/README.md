@@ -4,7 +4,7 @@ This record decides one thing: should Apple's container engine replace Docker De
 
 Ezz widened the field on 2026-11-16: Colima, OrbStack and Docker Desktop on its Docker VMM hypervisor are measured too, and the Apple arm waits for a socktainer release built for container 1.7.1. The question becomes which engine beats Docker Desktop on VZ, today's engine, on the criteria below.
 
-The experiments are in `experiments.yaml`. A first batch ran on 2026-11-15 and is invalid (its attempts in `experiments.yaml` say why); no experiment has a result yet.
+The experiments are in `experiments.yaml`. A first batch ran on 2026-11-15 and is invalid (its attempts in `experiments.yaml` say why). Pass 2, on 2026-11-16, measured Docker Desktop on VZ against Colima; its results are in [`results/2026-11-16-docker-vs-colima.md`](results/2026-11-16-docker-vs-colima.md).
 
 ## Criteria, in order
 
@@ -21,13 +21,13 @@ The experiments are in `experiments.yaml`. A first batch ran on 2026-11-15 and i
 
 The scripts address each engine by its Docker Engine API socket; `scripts/README.md` holds the engine table (socket, docker context, memory attribution, arms).
 
-| Engine                     | Script name  | State on 2026-11-16                                                                                                                 |
-| -------------------------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
-| Docker Desktop on VZ       | `docker`     | Today's engine and the baseline: one shared Linux VM (8 CPUs, 8 GiB) on Apple's Virtualization framework.                           |
-| Docker Desktop, Docker VMM | `docker-vmm` | The same socket while Docker Desktop runs on its Docker VMM hypervisor (libkrun); a manual setting switch, checked by each script.  |
-| Colima                     | `colima`     | 0.10.3 running: Docker 29.5.2 in one Lima VM on VZ, virtiofs, Rosetta, 8 CPUs, 8 GiB, `--port-forwarder grpc`.                      |
-| OrbStack                   | `orbstack`   | Not installed yet; its socket and context are in the table, its memory attribution is to verify on install.                         |
-| Apple `container` 1.7.1    | `apple`      | Paused until socktainer ships a release built for container 1.7.1; one small VM per container, each with its own IP (192.168.64.x). |
+| Engine                     | Script name  | State on 2026-11-16                                                                                                                                                                                                                                                                                                                                                                  |
+| -------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Docker Desktop on VZ       | `docker`     | Today's engine and the baseline: one shared Linux VM (8 CPUs, 8 GiB) on Apple's Virtualization framework.                                                                                                                                                                                                                                                                            |
+| Docker Desktop, Docker VMM | `docker-vmm` | The same socket while Docker Desktop runs on its Docker VMM hypervisor (libkrun); a manual setting switch, checked by each script.                                                                                                                                                                                                                                                   |
+| Colima                     | `colima`     | 0.10.3 running: Docker 29.5.2 in one Lima VM on VZ, virtiofs, Rosetta, 8 CPUs, 8 GiB; pass 2 ran on Lima's ssh port forwarder, as the grpc one loses backpressure.                                                                                                                                                                                                                   |
+| OrbStack                   | `orbstack`   | 2.2.x, 8 CPU / 8 GiB like Docker Desktop and Colima; context `orbstack` created by hand, `docker.set_context: false`. Switch facts: published ports are exposed to the LAN by default (`docker.expose_ports_to_lan: true`); it sets the docker context on start unless `docker.set_context` is false (it took the current context once during setup on 2026-11-16 and was restored). |
+| Apple `container` 1.7.1    | `apple`      | Paused until socktainer ships a release built for container 1.7.1; one small VM per container, each with its own IP (192.168.64.x).                                                                                                                                                                                                                                                  |
 
 Considered and not testable: **Kiri**. Its only trace is a flagged Show HN post (news.ycombinator.com item 50353261), and no repository was found. As described it is an OCI runtime, the runc layer inside a Linux VM, not an engine that runs containers on a Mac.
 
@@ -93,18 +93,20 @@ Not a result: uncontrolled. `run --rm alpine true`, warm, 4 to 8 runs each.
 
 ## Status
 
-Apple-side measurements are paused until a socktainer release built for container 1.7.1 (Ezz, 2026-11-16); socktainer 1.6.1 is built for container 1.6.1 and warns of the mismatch at start. Docker Desktop on VZ and Colima are ready to measure; Docker VMM waits for the switch, OrbStack for its install.
+Pass 2 (2026-11-16, HEAD 961a7733) measured Docker Desktop on VZ against Colima, with no quiet gate and with other sessions on Docker Desktop. Results, tables and caveats: [`results/2026-11-16-docker-vs-colima.md`](results/2026-11-16-docker-vs-colima.md). So far Colima wins the testing suite by 10%, ties on docker and uses about 730 MiB less memory; its mutex gap and its one red mutex test are a test-fixture defect (the run's reaper held on Docker Desktop, #4205), not the engine, so mutex is re-measured after the fixture fix.
 
-The runs update this table.
+Apple-side measurements are paused until a socktainer release built for container 1.7.1 (Ezz, 2026-11-16); socktainer 1.6.1 is built for container 1.6.1 and warns of the mismatch at start. Docker VMM waits for the switch.
 
-| #   | Experiment             | Status   | Verdict |
-| --- | ---------------------- | -------- | ------- |
-| 1   | startup-alpine-true    | proposed | -       |
-| 2   | postgres-time-to-ready | proposed | -       |
-| 3   | socktainer-overhead    | proposed | -       |
-| 4   | suites-wall-time       | proposed | -       |
-| 5   | fio-storage            | proposed | -       |
-| 6   | idle-memory            | proposed | -       |
-| 7   | attach-round-trip      | proposed | -       |
-| 8   | iperf3-network         | proposed | -       |
-| 9   | sysbench-cpu           | proposed | -       |
+The runs update this table. A verdict compares Colima with Docker Desktop on VZ; a difference counts only when it is larger than the A-to-A spread.
+
+| #   | Experiment             | Status | Verdict       |
+| --- | ---------------------- | ------ | ------------- |
+| 1   | startup-alpine-true    | done   | no-difference |
+| 2   | postgres-time-to-ready | done   | no-difference |
+| 3   | socktainer-overhead    | done   | docker-faster |
+| 4   | suites-wall-time       | done   | mixed         |
+| 5   | fio-storage            | done   | docker-faster |
+| 6   | idle-memory            | done   | colima-faster |
+| 7   | attach-round-trip      | done   | docker-faster |
+| 8   | iperf3-network         | done   | colima-faster |
+| 9   | sysbench-cpu           | done   | no-difference |

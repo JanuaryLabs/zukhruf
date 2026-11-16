@@ -1,0 +1,112 @@
+{
+  "schema_version": 2,
+  "metadata": {
+    "hyperfine_version": "2.0.0",
+    "start_time": "2026-11-16T07:57:13Z",
+    "platform": {
+      "os": "Darwin",
+      "architecture": "arm64"
+    }
+  },
+  "primary_metric": "time_wall_clock",
+  "results": [
+    {
+      "command": "gtimeout -s KILL 180 docker -H unix:///Users/ezzabuzaid/.docker/run/docker.sock run --rm --label dev.zukhruf.bench=1 --cpus 2 --memory 1g docker.io/library/alpine@sha256:1829893486be257df5049ab3b7fc95afbd0fc09d89803cbc580bda1ba5386b29 true",
+      "name": "docker docker-cli (first)",
+      "measurements": [
+        {
+          "time_wall_clock": {
+            "value": 1.38735025,
+            "unit": "second"
+          },
+          "time_cpu": {
+            "value": 0.060602,
+            "unit": "second"
+          },
+          "time_user": {
+            "value": 0.024731,
+            "unit": "second"
+          },
+          "time_system": {
+            "value": 0.035871,
+            "unit": "second"
+          },
+          "memory_peak_resident": {
+            "value": 30867456.0,
+            "unit": "byte"
+          },
+          "cpu_cycles": {
+            "value": 8391793
+          },
+          "instructions": {
+            "value": 17083629
+          },
+          "exit_code": 0
+        }
+      ],
+      "summary": {
+        "cpu_cycles": {
+          "count": 1,
+          "mean": 8391793.0,
+          "stddev": null,
+          "median": 8391793.0,
+          "min": 8391793.0,
+          "max": 8391793.0
+        },
+        "instructions": {
+          "count": 1,
+          "mean": 17083629.0,
+          "stddev": null,
+          "median": 17083629.0,
+          "min": 17083629.0,
+          "max": 17083629.0
+        },
+        "memory_peak_resident": {
+          "unit": "byte",
+          "count": 1,
+          "mean": 30867456.0,
+          "stddev": null,
+          "median": 30867456.0,
+          "min": 30867456.0,
+          "max": 30867456.0
+        },
+        "time_cpu": {
+          "unit": "second",
+          "count": 1,
+          "mean": 0.060602,
+          "stddev": null,
+          "median": 0.060602,
+          "min": 0.060602,
+          "max": 0.060602
+        },
+        "time_system": {
+          "unit": "second",
+          "count": 1,
+          "mean": 0.035871,
+          "stddev": null,
+          "median": 0.035871,
+          "min": 0.035871,
+          "max": 0.035871
+        },
+        "time_user": {
+          "unit": "second",
+          "count": 1,
+          "mean": 0.024731,
+          "stddev": null,
+          "median": 0.024731,
+          "min": 0.024731,
+          "max": 0.024731
+        },
+        "time_wall_clock": {
+          "unit": "second",
+          "count": 1,
+          "mean": 1.38735025,
+          "stddev": null,
+          "median": 1.38735025,
+          "min": 1.38735025,
+          "max": 1.38735025
+        }
+      }
+    }
+  ]
+}

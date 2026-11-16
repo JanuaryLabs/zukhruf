@@ -1,0 +1,250 @@
+{
+  "engine": "docker",
+  "family": "docker-desktop",
+  "taken_utc": "2026-11-16T08:24:42.527Z",
+  "rss_kib_total": 2086608,
+  "rss_kib_without_ui": 1960752,
+  "rss_kib_by_role": {
+    "vm": 1349792,
+    "helper": 610960,
+    "shim": 0,
+    "ui": 125856
+  },
+  "vm_count": 1,
+  "processes": [
+    {
+      "pid": 62575,
+      "ppid": 1,
+      "rss_kib": 45088,
+      "started": "2026-11-16T05:24:19.000Z",
+      "role": "helper",
+      "comm": "/Applications/Docker.app/Contents/MacOS/com.docker.backend"
+    },
+    {
+      "pid": 62633,
+      "ppid": 62575,
+      "rss_kib": 467680,
+      "started": "2026-11-16T05:24:20.000Z",
+      "role": "helper",
+      "comm": "/Applications/Docker.app/Contents/MacOS/com.docker.backend"
+    },
+    {
+      "pid": 62634,
+      "ppid": 62575,
+      "rss_kib": 38528,
+      "started": "2026-11-16T05:24:20.000Z",
+      "role": "helper",
+      "comm": "/Applications/Docker.app/Contents/MacOS/com.docker.backend"
+    },
+    {
+      "pid": 62638,
+      "ppid": 1,
+      "rss_kib": 4640,
+      "started": "2026-11-16T05:24:20.000Z",
+      "role": "helper",
+      "comm": "/Library/PrivilegedHelperTools/com.docker.vmnetd"
+    },
+    {
+      "pid": 62943,
+      "ppid": 62634,
+      "rss_kib": 17488,
+      "started": "2026-11-16T05:24:22.000Z",
+      "role": "helper",
+      "comm": "/Applications/Docker.app/Contents/MacOS/com.docker.build"
+    },
+    {
+      "pid": 62944,
+      "ppid": 62633,
+      "rss_kib": 18704,
+      "started": "2026-11-16T05:24:22.000Z",
+      "role": "helper",
+      "comm": "/Applications/Docker.app/Contents/MacOS/com.docker.virtualization"
+    },
+    {
+      "pid": 62946,
+      "ppid": 62634,
+      "rss_kib": 86016,
+      "started": "2026-11-16T05:24:22.000Z",
+      "role": "ui",
+      "comm": "/Applications/Docker.app/Contents/MacOS/Docker Desktop.app/Contents/MacOS/Docker Desktop"
+    },
+    {
+      "pid": 63127,
+      "ppid": 62946,
+      "rss_kib": 23152,
+      "started": "2026-11-16T05:24:23.000Z",
+      "role": "ui",
+      "comm": "/Applications/Docker.app/Contents/MacOS/Docker Desktop.app/Contents/Frameworks/Docker Desktop Helper.app/Contents/MacOS/Docker Desktop Helper"
+    },
+    {
+      "pid": 63131,
+      "ppid": 62946,
+      "rss_kib": 16688,
+      "started": "2026-11-16T05:24:23.000Z",
+      "role": "ui",
+      "comm": "/Applications/Docker.app/Contents/MacOS/Docker Desktop.app/Contents/Frameworks/Docker Desktop Helper.app/Contents/MacOS/Docker Desktop Helper"
+    },
+    {
+      "pid": 63207,
+      "ppid": 62634,
+      "rss_kib": 18832,
+      "started": "2026-11-16T05:24:24.000Z",
+      "role": "helper",
+      "comm": "/Applications/Docker.app/Contents/Resources/cli-plugins/docker-agent"
+    },
+    {
+      "pid": 62950,
+      "ppid": 1,
+      "rss_kib": 1349792,
+      "started": "2026-11-16T05:24:22.000Z",
+      "role": "vm",
+      "comm": "/System/Library/Frameworks/Virtualization.framework/Versions/A/XPCServices/com.apple.Virtualization.VirtualMachine.xpc/Contents/MacOS/com.apple.Virtualization.VirtualMachine",
+      "vm_owner_pid": 62944
+    }
+  ],
+  "unattributed_vms": [],
+  "footprint_bytes_total": 9556630784,
+  "footprint": {
+    "unit": "byte",
+    "bytes per unit": 1,
+    "start_time": {
+      "mach_absolute_time_ns": 123636208342666,
+      "mach_continuous_time_ns": 176059713105416,
+      "wall_time_s": 816510282.423511,
+      "date": "2026-11-16T11:24:42.424+03:00"
+    },
+    "processes": [
+      {
+        "name": "com.apple.Virtualization.VirtualMachine",
+        "pid": 62950,
+        "translated": false,
+        "page size": 16384,
+        "footprint": 8650961736,
+        "auxiliary": {
+          "phys_footprint_peak": 8655434568,
+          "phys_footprint": 8650961736
+        }
+      },
+      {
+        "name": "com.docker.backend",
+        "pid": 62633,
+        "translated": false,
+        "page size": 16384,
+        "footprint": 503531320,
+        "auxiliary": {
+          "phys_footprint_peak": 2828947104,
+          "phys_footprint": 503531320
+        }
+      },
+      {
+        "name": "Docker Desktop",
+        "pid": 62946,
+        "translated": false,
+        "page size": 16384,
+        "footprint": 192825480,
+        "auxiliary": {
+          "phys_footprint_peak": 239323272,
+          "phys_footprint": 192825480
+        }
+      },
+      {
+        "name": "com.docker.backend",
+        "pid": 62575,
+        "translated": false,
+        "page size": 16384,
+        "footprint": 43172848,
+        "auxiliary": {
+          "phys_footprint_peak": 47318000,
+          "phys_footprint": 43172848
+        }
+      },
+      {
+        "name": "com.docker.virtualization",
+        "pid": 62944,
+        "translated": false,
+        "page size": 16384,
+        "footprint": 42877960,
+        "auxiliary": {
+          "phys_footprint_peak": 43172872,
+          "phys_footprint": 42877960
+        }
+      },
+      {
+        "name": "docker-agent",
+        "pid": 63207,
+        "translated": false,
+        "page size": 16384,
+        "footprint": 35963720,
+        "auxiliary": {
+          "phys_footprint_peak": 35996488,
+          "phys_footprint": 35963720
+        }
+      },
+      {
+        "name": "com.docker.backend",
+        "pid": 62634,
+        "translated": false,
+        "page size": 16384,
+        "footprint": 30098368,
+        "auxiliary": {
+          "phys_footprint_peak": 31097792,
+          "phys_footprint": 30098368
+        }
+      },
+      {
+        "name": "Docker Desktop Helper",
+        "pid": 63127,
+        "translated": false,
+        "page size": 16384,
+        "footprint": 25937000,
+        "auxiliary": {
+          "phys_footprint_peak": 359072848,
+          "phys_footprint": 25937000
+        }
+      },
+      {
+        "name": "com.docker.build",
+        "pid": 62943,
+        "translated": false,
+        "page size": 16384,
+        "footprint": 25477936,
+        "auxiliary": {
+          "phys_footprint_peak": 25822024,
+          "phys_footprint": 25477936
+        }
+      },
+      {
+        "name": "Docker Desktop Helper",
+        "pid": 63131,
+        "translated": false,
+        "page size": 16384,
+        "footprint": 7062368,
+        "auxiliary": {
+          "phys_footprint_peak": 7373664,
+          "phys_footprint": 7062368
+        }
+      }
+    ],
+    "errors": [],
+    "warnings": [],
+    "summary": {
+      "total": {
+        "dirty": 9556630784,
+        "swapped": 7767113728,
+        "clean": 105725952,
+        "reclaimable": 6619136,
+        "wired": 21257472,
+        "regions": 81957
+      }
+    },
+    "total footprint": 9556630784,
+    "shared": [],
+    "end_time": {
+      "mach_absolute_time_ns": 123636279257166,
+      "mach_continuous_time_ns": 176059784019916,
+      "wall_time_s": 816510282.494426,
+      "date": "2026-11-16T11:24:42.494+03:00"
+    },
+    "page size": 16384
+  }
+}

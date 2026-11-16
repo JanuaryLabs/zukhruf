@@ -1,0 +1,128 @@
+{
+  "engine": "colima",
+  "family": "colima",
+  "taken_utc": "2026-11-16T08:33:40.992Z",
+  "rss_kib_total": 896752,
+  "rss_kib_without_ui": 896752,
+  "rss_kib_by_role": {
+    "vm": 830528,
+    "helper": 66224,
+    "shim": 0,
+    "ui": 0
+  },
+  "vm_count": 1,
+  "processes": [
+    {
+      "pid": 29798,
+      "ppid": 1,
+      "rss_kib": 28464,
+      "started": "2026-11-16T06:35:02.000Z",
+      "role": "helper",
+      "comm": "/opt/homebrew/bin/limactl"
+    },
+    {
+      "pid": 29839,
+      "ppid": 1,
+      "rss_kib": 36784,
+      "started": "2026-11-16T06:35:03.000Z",
+      "role": "helper",
+      "comm": "/opt/homebrew/bin/limactl"
+    },
+    {
+      "pid": 30401,
+      "ppid": 1,
+      "rss_kib": 976,
+      "started": "2026-11-16T06:35:11.000Z",
+      "role": "helper",
+      "comm": "ssh: /Users/ezzabuzaid/.colima/_lima/colima/ssh.sock [mux]"
+    },
+    {
+      "pid": 29849,
+      "ppid": 1,
+      "rss_kib": 830528,
+      "started": "2026-11-16T06:35:03.000Z",
+      "role": "vm",
+      "comm": "/System/Library/Frameworks/Virtualization.framework/Versions/A/XPCServices/com.apple.Virtualization.VirtualMachine.xpc/Contents/MacOS/com.apple.Virtualization.VirtualMachine",
+      "vm_owner_pid": 29839
+    }
+  ],
+  "unattributed_vms": [],
+  "footprint_bytes_total": 8797420544,
+  "footprint": {
+    "unit": "byte",
+    "bytes per unit": 1,
+    "start_time": {
+      "mach_absolute_time_ns": 124174750422791,
+      "mach_continuous_time_ns": 176598255185541,
+      "wall_time_s": 816510820.968322,
+      "date": "2026-11-16T11:33:40.968+03:00"
+    },
+    "processes": [
+      {
+        "name": "com.apple.Virtualization.VirtualMachine",
+        "pid": 29849,
+        "translated": false,
+        "page size": 16384,
+        "footprint": 8610837344,
+        "auxiliary": {
+          "phys_footprint_peak": 8611935072,
+          "phys_footprint": 8611836768
+        }
+      },
+      {
+        "name": "limactl",
+        "pid": 29839,
+        "translated": false,
+        "page size": 16384,
+        "footprint": 125600752,
+        "auxiliary": {
+          "phys_footprint_peak": 135873520,
+          "phys_footprint": 125600752
+        }
+      },
+      {
+        "name": "limactl",
+        "pid": 29798,
+        "translated": false,
+        "page size": 16384,
+        "footprint": 50054008,
+        "auxiliary": {
+          "phys_footprint_peak": 89523040,
+          "phys_footprint": 50054008
+        }
+      },
+      {
+        "name": "ssh",
+        "pid": 30401,
+        "translated": false,
+        "page size": 16384,
+        "footprint": 11059512,
+        "auxiliary": {
+          "phys_footprint_peak": 31342904,
+          "phys_footprint": 11059512
+        }
+      }
+    ],
+    "errors": [],
+    "warnings": [],
+    "summary": {
+      "total": {
+        "dirty": 8797420544,
+        "swapped": 7925432320,
+        "clean": 11255808,
+        "reclaimable": 0,
+        "wired": 12270592,
+        "regions": 14520
+      }
+    },
+    "total footprint": 8797420544,
+    "shared": [],
+    "end_time": {
+      "mach_absolute_time_ns": 124174768828833,
+      "mach_continuous_time_ns": 176598273591583,
+      "wall_time_s": 816510820.986728,
+      "date": "2026-11-16T11:33:40.987+03:00"
+    },
+    "page size": 16384
+  }
+}

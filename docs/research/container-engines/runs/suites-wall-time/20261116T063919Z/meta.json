@@ -1,0 +1,220 @@
+{
+  "experiment": "suites-wall-time",
+  "state": "running",
+  "started_utc": "2026-11-16T06:39:20Z",
+  "ended_utc": null,
+  "interrupted": false,
+  "order": ["docker", "colima", "docker", "colima", "docker", "colima"],
+  "limits": {
+    "cpus": "2",
+    "memory": "1g"
+  },
+  "label": "dev.zukhruf.bench=1",
+  "images": {
+    "alpine": "docker.io/library/alpine@sha256:1829893486be257df5049ab3b7fc95afbd0fc09d89803cbc580bda1ba5386b29",
+    "fio": "docker.io/openeuler/fio@sha256:a9be517cbf3c63c500627d68680d2673a98fa8d5c9ed31179da75f0edff8a3ef",
+    "sysbench": "docker.io/openeuler/sysbench@sha256:1950ba366eb34d88e4a4c9b50c90fb55b7467c8da379566b2acdaa597a5bcad7",
+    "iperf3": "docker.io/networkstatic/iperf3@sha256:069fbed1f741659fb04abc283f21ac22e95d9ef307b14e31225ef7a180bfb2ed"
+  },
+  "engines": {
+    "docker": {
+      "socket": "unix:///Users/ezzabuzaid/.docker/run/docker.sock",
+      "context": "desktop-linux",
+      "context_endpoint": "unix:///Users/ezzabuzaid/.docker/run/docker.sock",
+      "arms": ["docker-cli"],
+      "memory_rule": "Docker.app and com.docker.* processes, plus the Virtualization VM process paired by start time with com.docker.virtualization",
+      "container_ip_reachable_from_host": false,
+      "docker_version": {
+        "Client": {
+          "Version": "29.8.0",
+          "ApiVersion": "1.56",
+          "DefaultAPIVersion": "1.56",
+          "GitCommit": "88096ef",
+          "GoVersion": "go1.26.8",
+          "Os": "darwin",
+          "Arch": "arm64",
+          "BuildTime": "Thu Sep  3 21:49:43 2026",
+          "Context": "default"
+        },
+        "Server": {
+          "Platform": {
+            "Name": "Docker Desktop 4.92.0 (240144)"
+          },
+          "Version": "29.8.0",
+          "ApiVersion": "1.56",
+          "MinAPIVersion": "1.40",
+          "Os": "linux",
+          "Arch": "arm64",
+          "Components": [
+            {
+              "Name": "Engine",
+              "Version": "29.8.0",
+              "Details": {
+                "ApiVersion": "1.56",
+                "Arch": "arm64",
+                "BuildTime": "Thu Sep  3 21:49:37 2026",
+                "Experimental": "false",
+                "GitCommit": "3ce5872",
+                "GoVersion": "go1.26.8",
+                "KernelVersion": "7.0.12-linuxkit",
+                "MinAPIVersion": "1.40",
+                "Module": "github.com/moby/moby/v2",
+                "ModuleVersion": "v2.0.0+unknown",
+                "Os": "linux"
+              }
+            },
+            {
+              "Name": "containerd",
+              "Version": "v2.3.5",
+              "Details": {
+                "GitCommit": "1294c24a7da8e5a793ed378161673abe94118892"
+              }
+            },
+            {
+              "Name": "runc",
+              "Version": "1.5.1",
+              "Details": {
+                "GitCommit": "v1.5.1-0-g8f2685a4"
+              }
+            },
+            {
+              "Name": "docker-init",
+              "Version": "0.19.0",
+              "Details": {
+                "GitCommit": "de40ad0"
+              }
+            }
+          ],
+          "GitCommit": "3ce5872",
+          "GoVersion": "go1.26.8",
+          "KernelVersion": "7.0.12-linuxkit",
+          "BuildTime": "2026-09-03T21:49:37.000000000+00:00"
+        }
+      },
+      "docker_info": {
+        "name": "docker-desktop",
+        "operating_system": "Docker Desktop",
+        "kernel_version": "7.0.12-linuxkit",
+        "server_version": "29.8.0",
+        "ncpu": 8,
+        "mem_total": 8319770624
+      }
+    },
+    "colima": {
+      "socket": "unix:///Users/ezzabuzaid/.colima/default/docker.sock",
+      "context": "colima",
+      "context_endpoint": "unix:///Users/ezzabuzaid/.colima/default/docker.sock",
+      "arms": ["docker-cli"],
+      "memory_rule": "limactl processes and the ssh mux of ~/.colima/_lima, plus the Virtualization VM process paired by start time with the limactl hostagent (its pid is in ~/.colima/_lima/colima/vz.pid)",
+      "container_ip_reachable_from_host": false,
+      "docker_version": {
+        "Client": {
+          "Version": "29.8.0",
+          "ApiVersion": "1.54",
+          "DefaultAPIVersion": "1.56",
+          "GitCommit": "88096ef",
+          "GoVersion": "go1.26.8",
+          "Os": "darwin",
+          "Arch": "arm64",
+          "BuildTime": "Thu Sep  3 21:49:43 2026",
+          "Context": "default"
+        },
+        "Server": {
+          "Platform": {
+            "Name": "Docker Engine - Community"
+          },
+          "Version": "29.5.2",
+          "ApiVersion": "1.54",
+          "MinAPIVersion": "1.40",
+          "Os": "linux",
+          "Arch": "arm64",
+          "Components": [
+            {
+              "Name": "Engine",
+              "Version": "29.5.2",
+              "Details": {
+                "ApiVersion": "1.54",
+                "Arch": "arm64",
+                "BuildTime": "Wed May 20 14:39:25 2026",
+                "Experimental": "false",
+                "GitCommit": "568f755",
+                "GoVersion": "go1.26.3",
+                "KernelVersion": "6.8.0-117-generic",
+                "MinAPIVersion": "1.40",
+                "Module": "github.com/moby/moby/v2",
+                "ModuleVersion": "v2.0.0+unknown",
+                "Os": "linux"
+              }
+            },
+            {
+              "Name": "containerd",
+              "Version": "v2.2.4",
+              "Details": {
+                "GitCommit": "193637f7ee8ae5f5aa5248f49e7baa3e6164966e"
+              }
+            },
+            {
+              "Name": "runc",
+              "Version": "1.3.5",
+              "Details": {
+                "GitCommit": "v1.3.5-0-g488fc13e"
+              }
+            },
+            {
+              "Name": "docker-init",
+              "Version": "0.19.0",
+              "Details": {
+                "GitCommit": "de40ad0"
+              }
+            }
+          ],
+          "GitCommit": "568f755",
+          "GoVersion": "go1.26.3",
+          "KernelVersion": "6.8.0-117-generic",
+          "BuildTime": "2026-05-20T14:39:25.000000000+00:00"
+        }
+      },
+      "docker_info": {
+        "name": "colima",
+        "operating_system": "Ubuntu 24.04.4 LTS",
+        "kernel_version": "6.8.0-117-generic",
+        "server_version": "29.5.2",
+        "ncpu": 8,
+        "mem_total": 8307482624
+      }
+    }
+  },
+  "docker_desktop_hypervisor": {
+    "detected": "vz",
+    "process_com_docker_virtualization": true,
+    "process_com_docker_krun": false,
+    "docker_info": {
+      "operating_system": "Docker Desktop",
+      "kernel_version": "7.0.12-linuxkit"
+    }
+  },
+  "versions": {
+    "colima": "colima version 0.10.3",
+    "orbstack": null,
+    "container": null,
+    "socktainer": null,
+    "hyperfine": "hyperfine 2.0.0"
+  },
+  "host": {
+    "macos": "27.2",
+    "macos_build": "26B123",
+    "model": "Mac16,7",
+    "ncpu": 14,
+    "memsize": 51539607552
+  },
+  "loadavg": {
+    "start": [6.03, 7.22, 8.54],
+    "end": null
+  },
+  "foreign_running_containers_at_start": {
+    "colima": 0,
+    "docker": 4
+  },
+  "notes": [],
+  "commands": []
+}
