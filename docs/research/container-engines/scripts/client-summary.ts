@@ -14,6 +14,8 @@ import { parseArgs } from 'node:util';
 
 import { Linear } from '@zukhruf/statistics';
 
+import { engineId } from './engine-id.ts';
+
 type Metric = number | number[] | null;
 
 interface Run {
@@ -45,7 +47,9 @@ if (values['dry-run']) {
 }
 
 const slotFiles = readdirSync(dir)
-  .filter((name) => /^\d{2}-[a-z][a-z0-9-]*\.json$/.test(name))
+  .filter((name) =>
+    new RegExp(String.raw`^\d{2}-${engineId}\.json$`).test(name),
+  )
   .sort();
 if (slotFiles.length === 0) throw new Error(`no slot files in ${dir}`);
 

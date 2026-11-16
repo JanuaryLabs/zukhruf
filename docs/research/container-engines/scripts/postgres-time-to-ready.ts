@@ -29,6 +29,8 @@ import { parseArgs } from 'node:util';
 
 import { Docker, type EngineApi, type OwnedContainer } from '@zukhruf/docker';
 
+import { engineId } from './engine-id.ts';
+
 const { values } = parseArgs({
   options: {
     engine: { type: 'string' },
@@ -72,7 +74,7 @@ function bytes(text: string): number {
 }
 
 const engine = required('engine');
-if (!/^[a-z][a-z0-9-]*$/.test(engine))
+if (!new RegExp(`^${engineId}$`).test(engine))
   throw new Error('--engine takes an engine name such as docker or colima');
 const ipPath = values['ip-path']!;
 const host = required('host');
