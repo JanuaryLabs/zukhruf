@@ -62,13 +62,16 @@ describe(
       // Arrange
       await using folder = defaultFolder();
       const endpoint = new PipeEndpoint('greeter', { prefix: folder.prefix });
-      await using killed = startProgram(
-        listenerSource('greeter', folder.prefix),
-      );
+      // A connection that the server has not accepted yet is reset by Linux when the server dies, so the client waits for `accepted`.
+      await using killed =
+        startProgram(`import { PipeEndpoint } from ${JSON.stringify(packageIndex)};
+await new PipeEndpoint('greeter', { prefix: ${JSON.stringify(folder.prefix)} }).listen(() => console.log('accepted'));
+console.log('listening');`);
       await killed.printed('listening');
       const before = await lstat(folder.path);
       const client = connect(endpoint.address.path);
       await once(client, 'connect');
+      await killed.printed('accepted');
       const events: string[] = [];
       client.on('data', () => {});
       client.once('end', () => events.push('end'));
