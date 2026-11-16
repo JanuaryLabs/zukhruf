@@ -45,7 +45,9 @@ function start(
 // node_modules, and c's build reads only its own file. A build fails with 30
 // error lines when the file that it reads holds BROKEN, and also when it does
 // not run with the production configuration. c's lint passes only with
-// PROBE_ENV=yes. With PROBE_RECORD, a build writes its folder there; with
+// PROBE_ENV=yes. With PROBE_RECORD, a build writes its folder there. With
+// PROBE_FOLDERS, a build adds a line to that file: its folder, a tab, and the
+// earlier folders of the file that still exist, out of other snapshots. With
 // PROBE_GATE, b's build waits for a write to the file `<gate>.release`, and then
 // writes `<gate>.done`. With PROBE_AFTER, b's build writes `<gate>.second`, and fails
 // unless `<gate>.done` is there: it ran while the gated build had not ended.
@@ -60,7 +62,7 @@ async function workspace(folder: string, hook: string) {
   await repo.write(
     'tools/build.mjs',
     `import { once } from 'node:events';
-import { existsSync, readFileSync, watch, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, readFileSync, watch, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 const [project, configuration] = process.argv.slice(2);
 if (configuration !== 'production') {
@@ -68,6 +70,17 @@ if (configuration !== 'production') {
   process.exit(5);
 }
 if (process.env.PROBE_RECORD) writeFileSync(process.env.PROBE_RECORD, process.cwd());
+const folders = process.env.PROBE_FOLDERS;
+if (folders) {
+  const snapshotOf = (path) => path.slice(0, path.indexOf('/tree'));
+  const earlier = existsSync(folders)
+    ? readFileSync(folders, 'utf8').split('\\n').filter(Boolean).map((line) => line.split('\\t')[0])
+    : [];
+  const alive = earlier.filter(
+    (path) => snapshotOf(path) !== snapshotOf(process.cwd()) && existsSync(path),
+  );
+  appendFileSync(folders, \`\${process.cwd()}\\t\${alive.join(',')}\\n\`);
+}
 const gate = process.env.PROBE_GATE;
 if (gate && project === 'b') {
   // The watch starts before \`.started\` tells the test to write, so the write cannot be missed.
@@ -437,6 +450,43 @@ test('a push of several refs gives one line for each pushed commit, builds a com
     await repo.gitIn(repo.top, '--git-dir', repo.remote, 'rev-parse', 'main'),
     `${old}\n`,
     'The remote must get none of the refs',
+  );
+});
+
+test('a push of two new heads builds one after the other, and the snapshot of the first head is gone before the second head builds', async () => {
+  // Arrange
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
+  const repo = await workspace(folder.path, build);
+  await repo.commit('first');
+  await repo.git('switch', '--quiet', '--create', 'other');
+  await repo.write('packages/b/notes.md', 'notes\n');
+  await repo.commit('second');
+  const folders = join(repo.top, 'snapshot-folders');
+
+  // Act
+  const result = await start(
+    repo,
+    { PROBE_FOLDERS: folders },
+    '--quiet',
+    'origin',
+    'main',
+    'other',
+  ).exited;
+
+  // Assert
+  assert.equal(result.code, 0, result.stderr);
+  const lines = (await readFile(folders, 'utf8'))
+    .split('\n')
+    .filter((line) => line !== '')
+    .map((line) => line.split('\t'));
+  const snapshots = new Set(
+    lines.map(([path = '']) => path.slice(0, path.indexOf('/tree'))),
+  );
+  assert.equal(snapshots.size, 2, 'Each head builds in a snapshot of its own');
+  assert.deepEqual(
+    lines.map(([, alive]) => alive),
+    lines.map(() => ''),
+    'No build may see the snapshot of an earlier head',
   );
 });
 

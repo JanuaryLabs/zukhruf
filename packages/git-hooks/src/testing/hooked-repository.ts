@@ -29,7 +29,7 @@ export function isolatedEnvironment(home: string) {
 // The hook is `.husky/<name>.ts`, reached through the committed link
 // `.husky/<name>`, as a repo installs it.
 export async function installHook(root: string, name: string, hook: string) {
-  await mkdir(join(root, '.husky'));
+  await mkdir(join(root, '.husky'), { recursive: true });
   await writeFile(
     join(root, `.husky/${name}.ts`),
     `#!/usr/bin/env node\n${hook.replaceAll('@zukhruf/git-hooks', packageEntry)}`,

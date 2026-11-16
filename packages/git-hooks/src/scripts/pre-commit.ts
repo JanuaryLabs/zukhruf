@@ -10,6 +10,7 @@ export async function preCommit(steps: readonly Step<Commit>[]): Promise<void> {
   const host = new Host();
   let current = '';
   await using snapshots = new Snapshots({
+    hook: 'pre-commit',
     root: host.root,
     git: gitIn(host.root, host.hookEnvironment),
     toolEnvironment: await host.toolEnvironment(),

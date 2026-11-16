@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -8,6 +8,7 @@ import { promisify } from 'node:util';
 
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 
+import { hookedGit, installHook } from './testing/hooked-repository.ts';
 import { repository } from './testing/pre-push-repository.ts';
 import { probeTarball } from './testing/probe-tarball.ts';
 
@@ -297,6 +298,123 @@ test('a push with a lockfile that was installed before uses that install, and th
     (await readdir(join(repo.root, '.git/git-hooks/installs'))).length,
     2,
   );
+});
+
+// A pre-push step that opens the snapshot of the head with packages, writes
+// `<repo>/../gate.started`, waits for a write to `<repo>/../gate.release`,
+// and then reads the version of probe-dep from the node_modules of the
+// snapshot.
+const gatedInspect = `import { once } from 'node:events';
+import { readFileSync, watch, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { type Push, Step, prePush } from '@zukhruf/git-hooks';
+class Gated extends Step<Push> {
+  readonly name = 'inspect';
+  async run(push: Push) {
+    const [update] = push.updates;
+    if (update === undefined || update.kind === 'delete') return this.fail('no head');
+    const snapshot = await push.snapshot(update.head, { packages: true });
+    const gate = join(process.cwd(), '..', 'gate');
+    writeFileSync(\`\${gate}.release\`, '');
+    const release = watch(\`\${gate}.release\`);
+    writeFileSync(\`\${gate}.started\`, '');
+    await once(release, 'change');
+    release.close();
+    const probe = JSON.parse(readFileSync(join(snapshot.folder, 'node_modules/probe-dep/package.json'), 'utf8')).version;
+    return this.pass(JSON.stringify({ probe }));
+  }
+}
+await prePush([new Gated()]);
+`;
+
+// A pre-commit step that opens the snapshot of the staged tree with packages.
+const packagedCommit = `import { type Commit, Step, preCommit } from '@zukhruf/git-hooks';
+class Packaged extends Step<Commit> {
+  readonly name = 'packaged';
+  async run(commit: Commit) {
+    await commit.snapshot({ packages: true });
+    return this.pass('linked');
+  }
+}
+await preCommit([new Packaged()]);
+`;
+
+test('while a push builds on an install, commits that install two other lockfiles and prune the installs leave that install in place, and the build ends on its own packages', async (t) => {
+  // Arrange
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
+  const repo = await workspace(folder.path, gatedInspect);
+  await installHook(repo.root, 'pre-commit', packagedCommit);
+  const installs = join(repo.root, '.git/git-hooks/installs');
+  const gate = join(repo.top, 'gate');
+  // Each change has drift: no packages are installed.
+  const stage = async (dependencies: Record<string, string>, note: string) => {
+    await repo.install(dependencies);
+    await repo.write('notes.txt', `${note}\n`);
+    await repo.git('add', '--all');
+    await rm(join(repo.root, 'node_modules'), { recursive: true });
+  };
+  const commitWithHook = async (note: string) => {
+    const result = await hookedGit(
+      ['-c', 'core.hooksPath=.husky', 'commit', '--quiet', '-m', note],
+      { cwd: repo.root, env: repo.environment },
+    );
+    assert.equal(result.code, 0, result.stderr);
+  };
+  await stage({ 'probe-dep': repo.tarball.probe1 }, 'one');
+  await repo.git('commit', '--quiet', '--no-verify', '-m', 'one');
+  const push = spawn(
+    'git',
+    ['-c', 'core.hooksPath=.husky', 'push', '--quiet', 'origin', 'main'],
+    {
+      cwd: repo.root,
+      env: repo.environment,
+    },
+  );
+  const stderr: string[] = [];
+  push.stderr.on('data', (chunk: Buffer) => stderr.push(chunk.toString()));
+  const exited = new Promise<number | null>((resolve) =>
+    push.once('close', resolve),
+  );
+  try {
+    await t.waitFor(
+      () => {
+        assert.ok(
+          existsSync(`${gate}.started`),
+          `The push did not reach its gate:\n${stderr.join('')}`,
+        );
+      },
+      { interval: 100, timeout: 120_000 },
+    );
+    const leased = await readdir(installs);
+
+    // Act
+    await stage({ 'probe-dep': repo.tarball.probe2 }, 'two');
+    await commitWithHook('two');
+    await stage(
+      { 'probe-dep': repo.tarball.probe1, 'extra-dep': repo.tarball.extra },
+      'three',
+    );
+    await commitWithHook('three');
+    const duringBuild = await readdir(installs);
+    await writeFile(`${gate}.release`, 'go');
+    const code = await exited;
+
+    // Assert
+    assert.equal(leased.length, 1, 'The push made one install');
+    assert.ok(
+      duringBuild.includes(leased[0] ?? ''),
+      `The install that the build uses must stay while it runs: ${duringBuild.join(', ')}`,
+    );
+    assert.equal(
+      duringBuild.length,
+      3,
+      'The two commits made two more installs',
+    );
+    assert.equal(code, 0, stderr.join(''));
+    assert.match(stderr.join(''), /^inspect\s+\{"probe":"1\.0\.0"\}$/m);
+  } finally {
+    push.kill();
+  }
 });
 
 test('an install that fails stops the push with the reason npm gave, and the next push installs that lockfile again', async () => {

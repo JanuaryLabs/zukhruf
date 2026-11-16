@@ -3,7 +3,6 @@ import { join } from 'node:path';
 import { stripVTControlCharacters } from 'node:util';
 
 import type { Push } from './push.ts';
-import { runNx } from './snapshot/nx.ts';
 import { MissingLockfileError } from './snapshot/snapshots.ts';
 import { type Outcome, Step } from './step.ts';
 
@@ -80,58 +79,57 @@ export class Build extends Step<Push> {
   async #build(push: Push, head: string): Promise<Built> {
     const short = head.slice(0, 7);
     try {
-      return await push.inSnapshot(head, async (folder, environment) => {
-        const cache = environment.NX_CACHE_DIRECTORY ?? '';
-        // A run that ends before its tasks writes no summary, so the summary
-        // of an older run must not stay.
-        await rm(join(cache, 'run.json'), { force: true });
-        const { code, stdout, stderr } = await runNx(
-          folder,
-          { ...environment, ...this.#env },
-          [
-            'run-many',
-            `--targets=${this.#targets.join(',')}`,
-            '--configuration=production',
-            ...(this.#parallel === undefined
-              ? []
-              : [`--parallel=${this.#parallel}`]),
-          ],
+      const snapshot = await push.snapshot(head, { packages: true });
+      const cache = snapshot.nxCacheDirectory;
+      // A run that ends before its tasks writes no summary, so the summary of
+      // an older run must not stay.
+      await rm(join(cache, 'run.json'), { force: true });
+      const { status, stdout, stderr } = await snapshot.bin(
+        'nx',
+        [
+          'run-many',
+          `--targets=${this.#targets.join(',')}`,
+          '--configuration=production',
+          ...(this.#parallel === undefined
+            ? []
+            : [`--parallel=${this.#parallel}`]),
+        ],
+        { env: this.#env },
+      );
+      const tasks = await lastRun(cache);
+      if (status === 0) {
+        const projects = new Set(tasks.map((task) => task.projectName));
+        const cached = tasks.filter(
+          (task) => task.cacheStatus !== 'cache-miss',
         );
-        const tasks = await lastRun(cache);
-        if (code === 0) {
-          const projects = new Set(tasks.map((task) => task.projectName));
-          const cached = tasks.filter(
-            (task) => task.cacheStatus !== 'cache-miss',
-          );
-          return {
-            kind: 'built',
-            line: `${short}: built ${projects.size} projects, ${cached.length} of ${tasks.length} tasks from cache`,
-          };
-        }
-        // nx exits with 130 when a task fails, so each code other than 0 is a
-        // fail.
-        const failed = tasks.filter((task) => task.status !== 0);
-        if (failed.length === 0)
-          return {
-            kind: 'failed',
-            lines: [
-              `${short}: nx exited with ${code}`,
-              ...shown(`${stdout}\n${stderr}`),
-            ],
-          };
-        const lines = [
-          `${short}: ${failed.length} of ${tasks.length} tasks failed: ${failed.map(taskName).join(', ')}`,
-        ];
-        for (const task of failed) {
-          if (failed.length > 1) lines.push(`  ${taskName(task)}`);
-          const output = await readFile(
-            join(cache, 'terminalOutputs', task.hash),
-            'utf8',
-          ).catch(() => '');
-          lines.push(...shown(output, true));
-        }
-        return { kind: 'failed', lines };
-      });
+        return {
+          kind: 'built',
+          line: `${short}: built ${projects.size} projects, ${cached.length} of ${tasks.length} tasks from cache`,
+        };
+      }
+      // nx exits with 130 when a task fails, so each code other than 0 is a
+      // fail.
+      const failed = tasks.filter((task) => task.status !== 0);
+      if (failed.length === 0)
+        return {
+          kind: 'failed',
+          lines: [
+            `${short}: nx exited with ${status}`,
+            ...shown(`${stdout}\n${stderr}`),
+          ],
+        };
+      const lines = [
+        `${short}: ${failed.length} of ${tasks.length} tasks failed: ${failed.map(taskName).join(', ')}`,
+      ];
+      for (const task of failed) {
+        if (failed.length > 1) lines.push(`  ${taskName(task)}`);
+        const output = await readFile(
+          join(cache, 'terminalOutputs', task.hash),
+          'utf8',
+        ).catch(() => '');
+        lines.push(...shown(output, true));
+      }
+      return { kind: 'failed', lines };
     } catch (error) {
       if (error instanceof MissingLockfileError)
         return {

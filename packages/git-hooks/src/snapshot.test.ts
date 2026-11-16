@@ -118,7 +118,7 @@ await preCommit([new Show()]);
   assert.equal(seen.parent, head, 'The parent must be HEAD');
 });
 
-test('a tool in a snapshot gets the hook environment without the git variables of the repo, with NX_DAEMON=false and the nx cache of the state folder, and the env of the call over it; git there reaches only the snapshot', async () => {
+test('a tool in a snapshot gets the hook environment without the git variables of the repo, with NX_DAEMON=false and the pre-commit nx cache of the state folder (not the pre-push one, whose run summary Build reads), and the env of the call over it; git there reaches only the snapshot', async () => {
   // Arrange
   await using folder = await new TemporaryFiles().directory('git-hooks-');
   const repo = await installedRepository(
@@ -165,7 +165,7 @@ await preCommit([new Show()]);
   assert.ok(typeof hook === 'object' && hook !== null);
   for (const name of ['GIT_INDEX_FILE', 'GIT_DIR', 'GIT_WORK_TREE'])
     assert.ok(name in hook, `git must give the hook ${name}`);
-  const cache = join(repo.root, '.git/git-hooks/nx');
+  const cache = join(repo.root, '.git/git-hooks/nx-pre-commit');
   assert.equal(seen.nxCacheDirectory, cache);
   const tool = {
     ...(await withoutLocalEnvVars(

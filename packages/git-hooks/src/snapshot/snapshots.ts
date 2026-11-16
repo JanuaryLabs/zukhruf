@@ -3,11 +3,12 @@ import { mkdir, mkdtempDisposable, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { Latch } from '@zukhruf/async';
+import { Latch, type WallClock, poll } from '@zukhruf/async';
+import { FileLock } from '@zukhruf/fs';
 
 import { type Git, gitIn } from '../git.ts';
 import { hasInstallDrift } from './drift.ts';
-import { installFor } from './installs.ts';
+import { installFor, leaseInstall } from './installs.ts';
 import { linkPackages } from './packages.ts';
 
 export class MissingLockfileError extends Error {
@@ -20,8 +21,7 @@ export class MissingLockfileError extends Error {
 // One clone of the repo, checked out at a commit, in a temporary folder.
 export interface Clone {
   readonly folder: string;
-  // The tool environment, with NX_DAEMON=false and the nx cache of the state
-  // folder.
+  // The tool environment, with NX_DAEMON=false and the nx cache of the hook.
   readonly environment: NodeJS.ProcessEnv;
   readonly nxCacheDirectory: string;
 }
@@ -30,21 +30,39 @@ export interface Clone {
 // rejects only the callers that wait for it.
 type Outcome<T> = Latch<PromiseSettledResult<T>>;
 
+// A clone, and what its disposal frees: the folder, and the lease on the
+// install that its node_modules links to.
+interface Opened {
+  readonly clone: Outcome<Clone>;
+  packages: Outcome<void> | undefined;
+  readonly resources: AsyncDisposableStack;
+}
+
+// How a hook uses snapshots. The pre-push hook builds: one build runs in a
+// repo at a time, a push with many heads keeps one clone at a time, and its
+// nx cache holds the run summary that Build reads. A pre-commit step only
+// reads, so commits run at the same time as a push, with an nx cache of their
+// own.
+export type HookKind = 'pre-commit' | 'pre-push';
+
 interface SnapshotsOptions {
+  readonly hook: HookKind;
   // The top of the working tree: the folder where git runs the hook.
   readonly root: string;
   // git on the repo, with the hook environment.
   readonly git: Git;
   // The hook environment without the git variables of the repo.
   readonly toolEnvironment: NodeJS.ProcessEnv;
-  // Prints a line of progress, such as an install.
+  // Prints a line of progress, such as an install or a wait for a lock.
   readonly notice: (message: string) => void;
-  // The clock of the time of each install: `globalThis` in a hook.
-  readonly clock: { readonly Date: { now(): number } };
+  // The clock of the waits for a lock and of the time of each install:
+  // `globalThis` in a hook.
+  readonly clock: WallClock;
 }
 
 // The folder `git-hooks` in the common git folder of the repo, where both
-// hooks keep the installs and the nx cache. Linked worktrees use the same one.
+// hooks keep the installs, the locks and the nx caches. Linked worktrees use
+// the same one.
 export async function stateFolder(git: Git): Promise<string> {
   const state = join(
     (
@@ -59,20 +77,30 @@ export async function stateFolder(git: Git): Promise<string> {
 // The snapshots of one run of a hook: one clone of the repo for each commit,
 // made at the first ask. The clone shares the objects of the repo
 // (`git clone --shared`), so git copies none, and git commands in it see a
-// clean checkout of the commit. A later ask for packages links a node_modules
-// into the same clone. Disposing deletes each clone.
+// clean checkout of the commit. A later ask for packages links a node_modules into the same clone. Disposing
+// deletes each clone and lets each lock go.
 export class Snapshots implements AsyncDisposable {
   readonly toolEnvironment: NodeJS.ProcessEnv;
+  readonly #hook: HookKind;
   readonly #root: string;
   readonly #git: Git;
   readonly #notice: (message: string) => void;
-  readonly #clock: SnapshotsOptions['clock'];
+  readonly #clock: WallClock;
   readonly #stack = new AsyncDisposableStack();
-  readonly #clones = new Map<string, Outcome<Clone>>();
-  readonly #packages = new Map<string, Outcome<void>>();
+  readonly #opened = new Map<string, Opened>();
+  // The build lock, taken at the first open of a pre-push snapshot.
+  readonly #holdBuildLock = memoized(() => this.#acquireBuildLock());
 
-  constructor({ root, git, toolEnvironment, notice, clock }: SnapshotsOptions) {
+  constructor({
+    hook,
+    root,
+    git,
+    toolEnvironment,
+    notice,
+    clock,
+  }: SnapshotsOptions) {
     this.toolEnvironment = toolEnvironment;
+    this.#hook = hook;
     this.#root = root;
     this.#git = git;
     this.#notice = notice;
@@ -82,23 +110,68 @@ export class Snapshots implements AsyncDisposable {
   // The clone of `commit`, with a node_modules when `packages` is true.
   // `name` names the commit in a notice or an error.
   async open(commit: string, name: string, packages: boolean): Promise<Clone> {
-    const clone = await settled(
-      once(this.#clones, commit, () => this.#clone(commit)),
-    );
-    if (packages)
-      await settled(
-        once(this.#packages, commit, () => this.#link(clone, name)),
+    if (this.#hook === 'pre-push') {
+      await this.#holdBuildLock();
+      await this.#evictOtherThan(commit);
+    }
+    const opened = this.#opened.get(commit) ?? this.#start(commit);
+    const clone = await settled(opened.clone);
+    if (packages) {
+      opened.packages ??= outcomeOf(() =>
+        this.#link(clone, name, opened.resources),
       );
+      await settled(opened.packages);
+    }
     return clone;
   }
 
   async [Symbol.asyncDispose](): Promise<void> {
+    for (const opened of this.#opened.values())
+      await opened.resources.disposeAsync();
+    this.#opened.clear();
     await this.#stack.disposeAsync();
   }
 
-  async #clone(commit: string): Promise<Clone> {
-    const cache = join(await stateFolder(this.#git), 'nx');
-    const temporary = this.#stack.use(
+  #start(commit: string): Opened {
+    const resources = new AsyncDisposableStack();
+    const opened: Opened = {
+      clone: outcomeOf(() => this.#clone(commit, resources)),
+      packages: undefined,
+      resources,
+    };
+    this.#opened.set(commit, opened);
+    return opened;
+  }
+
+  // A push with many heads builds one head after another: the clone of an
+  // earlier head goes before the next one is made, as one build at a time
+  // used one folder at a time.
+  async #evictOtherThan(commit: string): Promise<void> {
+    for (const [other, opened] of this.#opened)
+      if (other !== commit) {
+        this.#opened.delete(other);
+        await opened.resources.disposeAsync();
+      }
+  }
+
+  async #acquireBuildLock(): Promise<void> {
+    const lock = await acquire(
+      join(await stateFolder(this.#git), 'build.lock'),
+      () => this.#notice('waiting for another pre-push build in this repo'),
+      this.#clock,
+    );
+    this.#stack.use(lock);
+  }
+
+  async #clone(
+    commit: string,
+    resources: AsyncDisposableStack,
+  ): Promise<Clone> {
+    const cache = join(
+      await stateFolder(this.#git),
+      this.#hook === 'pre-push' ? 'nx' : 'nx-pre-commit',
+    );
+    const temporary = resources.use(
       await mkdtempDisposable(join(tmpdir(), 'git-hooks-snapshot-')),
     );
     const folder = join(await realpath(temporary.path), 'tree');
@@ -130,39 +203,75 @@ export class Snapshots implements AsyncDisposable {
 
   // Uses the packages that the repo installed when they match the lockfile
   // of the commit, and else an install of that lockfile in the state folder.
-  async #link(clone: Clone, name: string): Promise<void> {
+  // The install, its prune and the lease on it happen under one lock, so a
+  // hook never deletes an install that a snapshot of another hook links to.
+  async #link(
+    clone: Clone,
+    name: string,
+    resources: AsyncDisposableStack,
+  ): Promise<void> {
     const lockfile = join(clone.folder, 'package-lock.json');
     if (!existsSync(lockfile)) throw new MissingLockfileError(name);
-    const installed = (await hasInstallDrift(
-      lockfile,
-      join(this.#root, 'node_modules/.package-lock.json'),
-    ))
-      ? await installFor(
-          await stateFolder(this.#git),
-          clone.folder,
-          this.toolEnvironment,
-          () =>
-            this.#notice(
-              `${name}: the installed packages differ from package-lock.json; installing it with npm ci (first time for this lockfile)`,
-            ),
-          this.#clock,
-        )
-      : this.#root;
+    if (
+      !(await hasInstallDrift(
+        lockfile,
+        join(this.#root, 'node_modules/.package-lock.json'),
+      ))
+    )
+      return linkPackages(this.#root, clone.folder);
+    const state = await stateFolder(this.#git);
+    let installed: string;
+    {
+      using _ = await acquire(
+        join(state, 'installs.lock'),
+        () => this.#notice(`${name}: waiting for an install of another hook`),
+        this.#clock,
+      );
+      installed = await installFor(
+        state,
+        clone.folder,
+        this.toolEnvironment,
+        () =>
+          this.#notice(
+            `${name}: the installed packages differ from package-lock.json; installing it with npm ci (first time for this lockfile)`,
+          ),
+        this.#clock,
+      );
+      resources.use(leaseInstall(installed));
+    }
     await linkPackages(installed, clone.folder);
   }
 }
 
-// The outcome of `work` for `key`: the work starts at the first ask, and each
-// later ask waits for the same outcome.
-function once<T>(
-  outcomes: Map<string, Outcome<T>>,
-  key: string,
-  work: () => Promise<T>,
-): Outcome<T> {
-  const known = outcomes.get(key);
-  if (known !== undefined) return known;
+// Takes the lock on the file at `path`, and waits while another process
+// holds it.
+async function acquire(
+  path: string,
+  waiting: () => void,
+  clock: WallClock,
+): Promise<FileLock> {
+  const lock = FileLock.open(path);
+  if (!lock.tryLock()) {
+    waiting();
+    await poll(async () => (lock.tryLock() ? true : undefined), {
+      interval: 200,
+      clock,
+      signal: undefined,
+    });
+  }
+  return lock;
+}
+
+// `work`, run at the first call; each later call waits for the same outcome.
+function memoized<T>(work: () => Promise<T>): () => Promise<T> {
+  let outcome: Outcome<T> | undefined;
+  return () => settled((outcome ??= outcomeOf(work)));
+}
+
+// The outcome of `work`: it starts now, and each caller waits for the same
+// outcome.
+function outcomeOf<T>(work: () => Promise<T>): Outcome<T> {
   const outcome: Outcome<T> = new Latch();
-  outcomes.set(key, outcome);
   void Promise.allSettled([Promise.try(work)]).then(([result]) =>
     outcome.open(result),
   );

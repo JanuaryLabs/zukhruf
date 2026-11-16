@@ -1,12 +1,8 @@
-import { join } from 'node:path';
-
-import { type WallClock, poll } from '@zukhruf/async';
-import { FileLock } from '@zukhruf/fs';
-
 import { type Git, gitIn } from './git.ts';
 import { type RefUpdate, readRefUpdates } from './ref-update.ts';
 import { runNx } from './snapshot/nx.ts';
-import { Snapshots, stateFolder } from './snapshot/snapshots.ts';
+import { PackagedSnapshot, Snapshot } from './snapshot/snapshot.ts';
+import type { Snapshots } from './snapshot/snapshots.ts';
 import { type DiffEntry, Tree, changesBetween } from './tree.ts';
 
 interface PushOptions {
@@ -14,18 +10,12 @@ interface PushOptions {
   readonly root: string;
   // The hook environment, for the git commands on the repo.
   readonly environment: NodeJS.ProcessEnv;
-  // The hook environment without the git variables of the repo, for each
-  // tool: git in a snapshot, npm and nx.
-  readonly toolEnvironment: NodeJS.ProcessEnv;
+  // The snapshots of the hook, which the runner deletes at the end.
+  readonly snapshots: Snapshots;
   // The name and the URL of the remote: the arguments of the hook.
   readonly remote: { readonly name: string; readonly url: string };
   // The standard input of the hook: one line for each ref update.
   readonly input: string;
-  // Prints a line of progress, such as a wait for the lock or an install.
-  readonly notice: (message: string) => void;
-  // The clock of the wait for the lock, and of the time of each install:
-  // `globalThis` in a hook, a fake clock in a test.
-  readonly clock: WallClock;
 }
 
 // What `git push` is about to send: the remote and the ref updates. A step
@@ -34,24 +24,18 @@ interface PushOptions {
 export class Push {
   readonly remote: { readonly name: string; readonly url: string };
   readonly updates: readonly RefUpdate[];
-  readonly #root: string;
-  readonly #toolEnvironment: NodeJS.ProcessEnv;
   readonly #git: Git;
-  readonly #notice: (message: string) => void;
-  readonly #clock: WallClock;
+  readonly #snapshots: Snapshots;
 
   private constructor(
-    { root, toolEnvironment, remote, notice, clock }: PushOptions,
+    { snapshots, remote }: PushOptions,
     git: Git,
     updates: readonly RefUpdate[],
   ) {
     this.remote = remote;
     this.updates = updates;
-    this.#root = root;
-    this.#toolEnvironment = toolEnvironment;
     this.#git = git;
-    this.#notice = notice;
-    this.#clock = clock;
+    this.#snapshots = snapshots;
   }
 
   static async read(options: PushOptions): Promise<Push> {
@@ -79,40 +63,37 @@ export class Push {
     return changesBetween(this.#git, update.base, update.head);
   }
 
-  // Runs `work` on the snapshot of one commit: a clone of the repo in a
-  // temporary folder with a checkout of the commit, and a node_modules that a
-  // build can use. The clone shares the objects of the repo, so it copies
-  // none, and git commands in it see a clean checkout of the commit. The
-  // environment has none of git's variables of the repo, so a tool that runs
-  // git in another folder never reaches the repo, and it holds the nx cache of
-  // the state folder. One snapshot is open at a time in a repo; the snapshot
-  // is deleted after `work`.
+  // The snapshot of one pushed commit. The first snapshot of a push takes the
+  // build lock of the repo, so one pre-push build runs at a time; a push with
+  // many heads keeps the clone of one head at a time. With packages, it also
+  // has a node_modules from the commit's own lockfile.
+  snapshot(
+    sha: string,
+    options?: { readonly packages?: false },
+  ): Promise<Snapshot>;
+  snapshot(
+    sha: string,
+    options: { readonly packages: true },
+  ): Promise<PackagedSnapshot>;
+  async snapshot(
+    sha: string,
+    { packages = false }: { readonly packages?: boolean } = {},
+  ): Promise<Snapshot> {
+    const clone = await this.#snapshots.open(sha, sha.slice(0, 7), packages);
+    return packages ? new PackagedSnapshot(clone) : new Snapshot(clone);
+  }
+
+  // Runs `work` with the folder and the environment of the packaged snapshot
+  // of one commit.
   async inSnapshot<T>(
     sha: string,
     work: (folder: string, environment: NodeJS.ProcessEnv) => Promise<T>,
   ): Promise<T> {
-    using lock = FileLock.open(join(await stateFolder(this.#git), 'lock'));
-    if (!lock.tryLock()) {
-      this.#notice('waiting for another pre-push build in this repo');
-      await poll(async () => (lock.tryLock() ? true : undefined), {
-        interval: 200,
-        clock: this.#clock,
-        signal: undefined,
-      });
-    }
-    await using snapshots = new Snapshots({
-      root: this.#root,
-      git: this.#git,
-      toolEnvironment: this.#toolEnvironment,
-      notice: this.#notice,
-      clock: this.#clock,
-    });
-    const { folder, environment } = await snapshots.open(
+    const { folder, environment } = await this.#snapshots.open(
       sha,
       sha.slice(0, 7),
       true,
     );
-    // Awaited here, so the snapshot and the lock stay until `work` ends.
     return await work(folder, environment);
   }
 

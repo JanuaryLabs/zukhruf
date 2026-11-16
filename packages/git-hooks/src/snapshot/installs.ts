@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
-import { hash } from 'node:crypto';
-import { existsSync } from 'node:fs';
+import { hash, randomUUID } from 'node:crypto';
+import { existsSync, mkdirSync, rmSync } from 'node:fs';
 import {
   cp,
   mkdir,
@@ -14,6 +14,8 @@ import {
 import { basename, isAbsolute, join, normalize, sep } from 'node:path';
 import { promisify } from 'node:util';
 
+import { FileLock } from '@zukhruf/fs';
+
 import { Lockfile } from '../npm/lockfile.ts';
 import { workspaceFolders } from './workspaces.ts';
 
@@ -23,6 +25,23 @@ const execFileAsync = promisify(execFile);
 const kept = 2;
 // Written last, so a folder without it is an install that did not end.
 const marker = 'installed';
+// One locked file in it for each snapshot that links to the install.
+const leases = 'leases';
+
+// Marks the install at `folder` as in use until the lease is disposed. The
+// kernel holds the lock of the lease file, so a hook that dies lets it go.
+// Take it under the lock of the installs, so no prune runs between the
+// install and the lease.
+export function leaseInstall(folder: string): Disposable {
+  mkdirSync(join(folder, leases), { recursive: true });
+  const path = join(folder, leases, `${randomUUID()}.lock`);
+  const lease = new DisposableStack();
+  const lock = lease.use(FileLock.open(path));
+  if (!lock.tryLock())
+    throw new Error(`another process holds the new lease ${path}`);
+  lease.defer(() => rmSync(path, { force: true }));
+  return lease;
+}
 
 // An install of the lockfile of the snapshot in a folder of the state folder,
 // named by the hash of the lockfile and the .npmrc. A second snapshot with the
@@ -181,6 +200,24 @@ async function prune(installs: string): Promise<void> {
   );
   used.sort((left, right) => right.at - left.at);
   for (const [index, { name, at }] of used.entries())
-    if (index >= kept || at < 0)
+    if ((index >= kept || at < 0) && !(await isLeased(join(installs, name))))
       await rm(join(installs, name), { recursive: true, force: true });
+}
+
+// Whether a live snapshot links to the install. Only an install that the
+// prune would delete is checked: the install that this process uses is the
+// one it used last, which the prune keeps. That matters, because reading a
+// lease file that this process holds would drop its lock (FileLock).
+async function isLeased(folder: string): Promise<boolean> {
+  let names: string[];
+  try {
+    names = await readdir(join(folder, leases));
+  } catch (error) {
+    if (Error.isError(error) && 'code' in error && error.code === 'ENOENT')
+      return false;
+    throw error;
+  }
+  return names.some(
+    (name) => FileLock.check(join(folder, leases, name)) === 'locked',
+  );
 }
