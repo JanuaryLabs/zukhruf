@@ -2,7 +2,6 @@ import { execFile } from 'node:child_process';
 import { hash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import {
-  copyFile,
   cp,
   mkdir,
   readFile,
@@ -26,9 +25,10 @@ const kept = 2;
 const marker = 'installed';
 
 // An install of the lockfile of the snapshot in a folder of the state folder,
-// named by the hash of the lockfile. A second push with the same lockfile
-// uses the same install, with the linked folders of the snapshot. `installing`
-// runs before a new install, because a full install takes some time.
+// named by the hash of the lockfile and the .npmrc. A second snapshot with the
+// same two files uses the same install, with the linked folders of the
+// snapshot. `installing` runs before a new install, because a full install
+// takes some time. npm gets `environment`: the tool environment.
 export async function installFor(
   state: string,
   snapshot: string,
@@ -36,10 +36,8 @@ export async function installFor(
   installing: () => void,
   clock: { readonly Date: { now(): number } },
 ): Promise<string> {
-  const lockfile = await readFile(join(snapshot, 'package-lock.json'));
-  const lockfileHash = hash('sha256', lockfile);
   const installs = join(state, 'installs');
-  const folder = join(installs, lockfileHash.slice(0, 16));
+  const folder = join(installs, (await installKey(snapshot)).slice(0, 16));
   if (existsSync(join(folder, marker))) {
     const now = new Date(clock.Date.now());
     await utimes(join(folder, marker), now, now);
@@ -53,6 +51,22 @@ export async function installFor(
   return folder;
 }
 
+// The sha256 of the lockfile and the .npmrc, with a NUL between them: a
+// lockfile is JSON, which holds no NUL, so no two pairs of files give the
+// same bytes. A snapshot without .npmrc hashes it as empty.
+async function installKey(snapshot: string): Promise<string> {
+  const lockfile = await readFile(join(snapshot, 'package-lock.json'));
+  let npmrc: Buffer;
+  try {
+    npmrc = await readFile(join(snapshot, '.npmrc'));
+  } catch (error) {
+    if (!Error.isError(error) || !('code' in error) || error.code !== 'ENOENT')
+      throw error;
+    npmrc = Buffer.alloc(0);
+  }
+  return hash('sha256', Buffer.concat([lockfile, Buffer.from([0]), npmrc]));
+}
+
 // `npm ci --ignore-scripts`, and then `npm rebuild` with only the
 // third-party packages that have install scripts, such as esbuild. The
 // scripts of the repo and of its workspace packages, such as `prepare`,
@@ -64,18 +78,15 @@ async function install(
   folder: string,
   environment: NodeJS.ProcessEnv,
 ): Promise<void> {
-  await mkdir(folder, { recursive: true });
-  for (const file of ['package.json', 'package-lock.json', '.npmrc'])
-    if (existsSync(join(snapshot, file)))
-      await copyFile(join(snapshot, file), join(folder, file));
-  for (const workspace of await workspaceFolders(snapshot)) {
-    await mkdir(join(folder, workspace), { recursive: true });
-    await copyFile(
-      join(snapshot, workspace, 'package.json'),
-      join(folder, workspace, 'package.json'),
-    );
-  }
-  await copyLinkedFolders(snapshot, folder);
+  // The full tree of the commit, as a clean checkout has it: each file that
+  // npm reads, such as the patch files of `patchedDependencies`, a
+  // `.npm-extension.mjs`, the workspace manifests and the folders of `file:`
+  // dependencies. A link keeps its text, so it points into the install.
+  await cp(snapshot, folder, {
+    recursive: true,
+    verbatimSymlinks: true,
+    filter: (source) => !['.git', 'node_modules'].includes(basename(source)),
+  });
   await npm(
     folder,
     environment,
@@ -92,13 +103,16 @@ async function install(
 }
 
 // Copies each folder of the snapshot that a `file:` dependency links to into
-// the install. A package of the install that depends on it resolves it from
-// its real path in the install, so a link from the snapshot does not reach it.
-// The lockfile, which names the install, does not change when the files of the
-// folder change, so each snapshot copies the folder again. The copy keeps the
-// node_modules that npm installed in the folder. A folder in node_modules is
-// npm's, and a folder outside the repo is not in the snapshot: neither is
-// copied.
+// the install that the snapshot uses again. A package of the install that
+// depends on it resolves it from its real path in the install, so a link from
+// the snapshot does not reach it. The lockfile, which names the install, does
+// not change when the files of the folder change, so each snapshot copies the
+// folder again. The copy keeps the node_modules that npm installed in the
+// folder. A folder in node_modules is npm's, a folder outside the repo is not
+// in the snapshot, and a workspace package links to its folder in the
+// snapshot: none of them is copied. A folder that the lockfile names and the
+// commit does not have, such as a workspace that .gitignore names, is not
+// copied either (#4193).
 async function copyLinkedFolders(
   snapshot: string,
   folder: string,
@@ -116,6 +130,9 @@ async function copyLinkedFolders(
       path.split(sep).includes('node_modules')
     )
       continue;
+    // The copy first empties the folder of the install, so the source is
+    // checked before.
+    if (!existsSync(join(snapshot, path))) continue;
     const destination = join(folder, path);
     await mkdir(destination, { recursive: true });
     for (const name of await readdir(destination))

@@ -9,6 +9,7 @@ import { promisify } from 'node:util';
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { repository } from './testing/pre-push-repository.ts';
+import { probeTarball } from './testing/probe-tarball.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -38,29 +39,27 @@ async function workspace(folder: string, hook: string) {
       cwd,
       env: repo.environment,
     });
-  const tarballs = join(repo.top, 'tarballs');
-  await mkdir(tarballs);
-  const pack = async (name: string, version: string, scripts = {}) => {
-    const source = join(repo.top, 'sources', `${name}-${version}`);
-    await mkdir(source, { recursive: true });
-    await writeFile(
-      join(source, 'package.json'),
-      JSON.stringify({ name, version, main: 'index.js', scripts }),
-    );
-    await writeFile(
-      join(source, 'index.js'),
-      `exports.version = '${version}';\n`,
-    );
-    await npm(source, 'pack', '--pack-destination', tarballs);
-    return `file:${join(tarballs, `${name}-${version}.tgz`)}`;
-  };
+  const { top, environment } = repo;
   const tarball = {
-    probe1: await pack('probe-dep', '1.0.0'),
-    probe2: await pack('probe-dep', '2.0.0'),
-    scripted: await pack('scripted-dep', '1.0.0', {
-      install: `node -e "require('fs').writeFileSync('built.txt', '')"`,
+    probe1: await probeTarball(top, environment, {
+      name: 'probe-dep',
+      version: '1.0.0',
     }),
-    extra: await pack('extra-dep', '1.0.0'),
+    probe2: await probeTarball(top, environment, {
+      name: 'probe-dep',
+      version: '2.0.0',
+    }),
+    scripted: await probeTarball(top, environment, {
+      name: 'scripted-dep',
+      version: '1.0.0',
+      scripts: {
+        install: `node -e "require('fs').writeFileSync('built.txt', '')"`,
+      },
+    }),
+    extra: await probeTarball(top, environment, {
+      name: 'extra-dep',
+      version: '1.0.0',
+    }),
   };
   const mark = (name: string) =>
     `node -e "require('fs').writeFileSync(require('path').join(process.env.PROBE_MARKS, '${name}'), '')"`;
@@ -378,33 +377,26 @@ await prePush([new Inspect()]);
       cwd,
       env: repo.environment,
     });
-  const pack = async (
-    name: string,
-    version: string,
-    dependencies: Record<string, string>,
-    code: string,
-  ) => {
-    const source = join(repo.top, 'sources', `${name}-${version}`);
-    await mkdir(source, { recursive: true });
-    await writeFile(
-      join(source, 'package.json'),
-      JSON.stringify({ name, version, main: 'index.js', dependencies }),
-    );
-    await writeFile(join(source, 'index.js'), code);
-    await npm(source, 'pack', '--pack-destination', repo.top);
-    return `file:${join(repo.top, `${name}-${version}.tgz`)}`;
-  };
-  const leaf = (version: string) =>
-    pack('leaf-dep', version, {}, `exports.version = '${version}';\n`);
+  const { top, environment } = repo;
   const tarball = {
-    carrier: await pack(
-      'carrier-dep',
-      '1.0.0',
-      { 'shim-dep': '^1.0.0' },
+    carrier: await probeTarball(
+      top,
+      environment,
+      {
+        name: 'carrier-dep',
+        version: '1.0.0',
+        dependencies: { 'shim-dep': '^1.0.0' },
+      },
       `exports.value = require('shim-dep').value;\n`,
     ),
-    leaf1: await leaf('1.0.0'),
-    leaf2: await leaf('2.0.0'),
+    leaf1: await probeTarball(top, environment, {
+      name: 'leaf-dep',
+      version: '1.0.0',
+    }),
+    leaf2: await probeTarball(top, environment, {
+      name: 'leaf-dep',
+      version: '2.0.0',
+    }),
   };
   // shim-dep needs leaf-dep 2 and the root has leaf-dep 1, so npm installs
   // leaf-dep 2 in vendor/shim-dep/node_modules.
@@ -479,4 +471,69 @@ test('a push that changes a linked folder outside the workspaces and keeps the l
     'The install of the same lockfile is used again',
   );
   assert.deepEqual(seen(result.stderr), { value: 'second 2.0.0' });
+});
+
+test('a pushed lockfile that names a workspace that .gitignore names, so the commit does not have it, installs, and the next push uses that install again (#4193)', async () => {
+  // Arrange
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
+  const repo = await repository(
+    folder.path,
+    `import { existsSync, realpathSync } from 'node:fs';
+import { join } from 'node:path';
+import { type Push, Step, prePush } from '@zukhruf/git-hooks';
+class Inspect extends Step<Push> {
+  readonly name = 'inspect';
+  async run(push: Push) {
+    const [update] = push.updates;
+    if (update === undefined || update.kind === 'delete') return this.fail('no head');
+    const seen = await push.inSnapshot(update.head, async (folder) => ({
+      workspace: realpathSync(join(folder, 'node_modules/@probe/ws')) === join(folder, 'packages/ws'),
+      ignored: existsSync(join(folder, '.evals')),
+    })).catch((error: Error) => error);
+    if (seen instanceof Error) return this.fail(seen.message.trimEnd());
+    return this.pass(JSON.stringify(seen));
+  }
+}
+await prePush([new Inspect()]);
+`,
+  );
+  await repo.write('.gitignore', 'node_modules\n.evals\n');
+  await repo.write(
+    'package.json',
+    `${JSON.stringify({ name: 'probe', private: true, workspaces: ['packages/*', '.evals'] })}\n`,
+  );
+  await repo.write(
+    'packages/ws/package.json',
+    `${JSON.stringify({ name: '@probe/ws', version: '0.0.0' })}\n`,
+  );
+  // A workspace of this working tree only, which the lockfile records.
+  await repo.write(
+    '.evals/package.json',
+    `${JSON.stringify({ name: '@probe/evals', version: '0.0.0' })}\n`,
+  );
+  await execFileAsync(
+    'npm',
+    ['install', '--ignore-scripts', '--offline', '--no-audit', '--no-fund'],
+    { cwd: repo.root, env: repo.environment },
+  );
+  assert.match(
+    await readFile(join(repo.root, 'package-lock.json'), 'utf8'),
+    /"resolved": "\.evals"/,
+  );
+  const head = await repo.commit('a workspace that .gitignore names');
+  await rm(join(repo.root, 'node_modules'), { recursive: true });
+
+  // Act
+  const installed = await repo.push('--quiet', 'origin', 'main');
+  await repo.write('notes.txt', 'notes\n');
+  await repo.commit('notes');
+  const reused = await repo.push('--quiet', 'origin', 'main');
+
+  // Assert
+  assert.equal(installed.code, 0, installed.stderr);
+  assert.match(installed.stderr, installing(head));
+  assert.deepEqual(seen(installed.stderr), { workspace: true, ignored: false });
+  assert.equal(reused.code, 0, reused.stderr);
+  assert.doesNotMatch(reused.stderr, /installing/, 'The install is used again');
+  assert.deepEqual(seen(reused.stderr), { workspace: true, ignored: false });
 });

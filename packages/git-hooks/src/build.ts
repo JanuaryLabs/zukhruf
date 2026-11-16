@@ -2,8 +2,9 @@ import { readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { stripVTControlCharacters } from 'node:util';
 
-import { MissingLockfileError, type Push } from './push.ts';
+import type { Push } from './push.ts';
 import { runNx } from './snapshot/nx.ts';
+import { MissingLockfileError } from './snapshot/snapshots.ts';
 import { type Outcome, Step } from './step.ts';
 
 interface BuildOptions {

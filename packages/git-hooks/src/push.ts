@@ -1,6 +1,3 @@
-import { existsSync } from 'node:fs';
-import { mkdir, mkdtempDisposable, realpath } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { type WallClock, poll } from '@zukhruf/async';
@@ -8,21 +5,9 @@ import { FileLock } from '@zukhruf/fs';
 
 import { type Git, gitIn } from './git.ts';
 import { type RefUpdate, readRefUpdates } from './ref-update.ts';
-import { hasInstallDrift } from './snapshot/drift.ts';
-import { installFor } from './snapshot/installs.ts';
 import { runNx } from './snapshot/nx.ts';
-import { linkPackages } from './snapshot/packages.ts';
+import { Snapshots, stateFolder } from './snapshot/snapshots.ts';
 import { type DiffEntry, Tree, changesBetween } from './tree.ts';
-
-export class MissingLockfileError extends Error {
-  readonly sha: string;
-
-  constructor(sha: string) {
-    super(`${sha.slice(0, 7)} has no package-lock.json`);
-    this.name = 'MissingLockfileError';
-    this.sha = sha;
-  }
-}
 
 interface PushOptions {
   // The top of the working tree: the folder where git runs the hook.
@@ -50,21 +35,19 @@ export class Push {
   readonly remote: { readonly name: string; readonly url: string };
   readonly updates: readonly RefUpdate[];
   readonly #root: string;
-  readonly #environment: NodeJS.ProcessEnv;
   readonly #toolEnvironment: NodeJS.ProcessEnv;
   readonly #git: Git;
   readonly #notice: (message: string) => void;
-  readonly #clock: PushOptions['clock'];
+  readonly #clock: WallClock;
 
   private constructor(
-    { root, environment, toolEnvironment, remote, notice, clock }: PushOptions,
+    { root, toolEnvironment, remote, notice, clock }: PushOptions,
     git: Git,
     updates: readonly RefUpdate[],
   ) {
     this.remote = remote;
     this.updates = updates;
     this.#root = root;
-    this.#environment = environment;
     this.#toolEnvironment = toolEnvironment;
     this.#git = git;
     this.#notice = notice;
@@ -108,18 +91,7 @@ export class Push {
     sha: string,
     work: (folder: string, environment: NodeJS.ProcessEnv) => Promise<T>,
   ): Promise<T> {
-    const state = join(
-      (
-        await this.#git(
-          'rev-parse',
-          '--path-format=absolute',
-          '--git-common-dir',
-        )
-      ).trim(),
-      'git-hooks',
-    );
-    await mkdir(state, { recursive: true });
-    using lock = FileLock.open(join(state, 'lock'));
+    using lock = FileLock.open(join(await stateFolder(this.#git), 'lock'));
     if (!lock.tryLock()) {
       this.#notice('waiting for another pre-push build in this repo');
       await poll(async () => (lock.tryLock() ? true : undefined), {
@@ -128,49 +100,18 @@ export class Push {
         signal: undefined,
       });
     }
-    await using temporary = await mkdtempDisposable(
-      join(tmpdir(), 'git-hooks-push-'),
-    );
-    const folder = join(await realpath(temporary.path), 'tree');
-    await gitIn(temporary.path, this.#toolEnvironment)(
-      'clone',
-      '--shared',
-      '--no-checkout',
-      '--quiet',
-      this.#root,
-      folder,
-    );
-    await gitIn(folder, this.#toolEnvironment)(
-      'checkout',
-      '--detach',
-      '--quiet',
+    await using snapshots = new Snapshots({
+      root: this.#root,
+      git: this.#git,
+      toolEnvironment: this.#toolEnvironment,
+      notice: this.#notice,
+      clock: this.#clock,
+    });
+    const { folder, environment } = await snapshots.open(
       sha,
+      sha.slice(0, 7),
+      true,
     );
-    if (!existsSync(join(folder, 'package-lock.json')))
-      throw new MissingLockfileError(sha);
-    const installed = (await hasInstallDrift(
-      join(folder, 'package-lock.json'),
-      join(this.#root, 'node_modules/.package-lock.json'),
-    ))
-      ? await installFor(
-          state,
-          folder,
-          this.#environment,
-          () =>
-            this.#notice(
-              `${sha.slice(0, 7)}: the installed packages differ from package-lock.json; installing it with npm ci (first time for this lockfile)`,
-            ),
-          this.#clock,
-        )
-      : this.#root;
-    await linkPackages(installed, folder);
-    const cache = join(state, 'nx');
-    const environment = {
-      ...this.#toolEnvironment,
-      NX_DAEMON: 'false',
-      NX_CACHE_DIRECTORY: cache,
-      NX_WORKSPACE_DATA_DIRECTORY: join(cache, 'workspace-data'),
-    };
     // Awaited here, so the snapshot and the lock stay until `work` ends.
     return await work(folder, environment);
   }

@@ -11,6 +11,11 @@ export type { RefUpdate } from './ref-update.ts';
 export { commitMsg } from './scripts/commit-msg.ts';
 export { preCommit } from './scripts/pre-commit.ts';
 export { prePush } from './scripts/pre-push.ts';
+export type {
+  PackagedSnapshot,
+  ProcessResult,
+  Snapshot,
+} from './snapshot/snapshot.ts';
 export { type Outcome, Step } from './step.ts';
 export { Sync } from './sync.ts';
 export type { DiffEntry, Tree, TreeEntry } from './tree.ts';

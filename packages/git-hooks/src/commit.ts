@@ -1,36 +1,50 @@
 import { execFile } from 'node:child_process';
-import { mkdtempDisposable } from 'node:fs/promises';
+import { copyFile, mkdtempDisposable } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 
 import { type Git, gitIn } from './git.ts';
 import { withoutRepoVariables } from './repo-variables.ts';
+import { PackagedSnapshot, Snapshot } from './snapshot/snapshot.ts';
+import type { Snapshots } from './snapshot/snapshots.ts';
 import { type DiffEntry, Tree, changesBetween, matches } from './tree.ts';
 
 const execFileAsync = promisify(execFile);
+
+// The author and the committer of the commit that the hook writes from the
+// staged tree. They do not change, so one tree and one parent give one commit.
+const stagedCommitter = {
+  GIT_AUTHOR_NAME: 'git-hooks',
+  GIT_AUTHOR_EMAIL: 'git-hooks@localhost',
+  GIT_AUTHOR_DATE: '@0 +0000',
+  GIT_COMMITTER_NAME: 'git-hooks',
+  GIT_COMMITTER_EMAIL: 'git-hooks@localhost',
+  GIT_COMMITTER_DATE: '@0 +0000',
+};
 
 // The staged commit: the index of the repo at `root`. Each read of a staged
 // file goes to its staged copy, never to the working tree, because other
 // sessions can edit the working tree while the hook runs. The git commands get
 // the hook environment, so git keeps the index that `git commit` gave the hook
 // in GIT_INDEX_FILE. Each tool gets the tool environment, which the host
-// computes. A repo's own test that builds a Commit gives one environment, and
-// the tool environment then comes from it.
+// computes, in the snapshots of the hook. A repo's own test that builds a
+// Commit gives one environment and no snapshots; the tool environment then
+// comes from that environment.
 export class Commit {
   readonly root: string;
   readonly #environment: NodeJS.ProcessEnv;
-  readonly #toolEnvironment: NodeJS.ProcessEnv | undefined;
+  readonly #snapshots: Snapshots | undefined;
   readonly #git: Git;
 
   constructor(
     root: string,
     environment: NodeJS.ProcessEnv,
-    toolEnvironment?: NodeJS.ProcessEnv,
+    snapshots?: Snapshots,
   ) {
     this.root = root;
     this.#environment = environment;
-    this.#toolEnvironment = toolEnvironment;
+    this.#snapshots = snapshots;
     this.#git = gitIn(root, environment);
   }
 
@@ -45,7 +59,7 @@ export class Commit {
   async changes(): Promise<readonly DiffEntry[]> {
     return changesBetween(
       this.#git,
-      await this.#headTree(),
+      await this.#revision('HEAD^{tree}'),
       await this.#stagedTree(),
     );
   }
@@ -55,6 +69,27 @@ export class Commit {
   // still starts the step.
   async touches(globs: readonly string[]): Promise<boolean> {
     return (await this.changes()).some(({ path }) => matches(path, globs));
+  }
+
+  // The snapshot of the staged tree: a checkout of a commit that the hook
+  // writes from the staged tree, with HEAD as its parent. The steps of one run
+  // of the hook share one snapshot of one tree. With packages, it also has a
+  // node_modules from the install of the staged lockfile.
+  snapshot(options?: { readonly packages?: false }): Promise<Snapshot>;
+  snapshot(options: { readonly packages: true }): Promise<PackagedSnapshot>;
+  async snapshot({
+    packages = false,
+  }: { readonly packages?: boolean } = {}): Promise<Snapshot> {
+    if (this.#snapshots === undefined)
+      throw new TypeError(
+        'this Commit has no snapshots: preCommit builds the Commit that has them',
+      );
+    const clone = await this.#snapshots.open(
+      await this.#stagedCommit(),
+      'the staged commit',
+      packages,
+    );
+    return packages ? new PackagedSnapshot(clone) : new Snapshot(clone);
   }
 
   // The paths that the commit adds, copies, modifies or renames.
@@ -122,7 +157,7 @@ export class Commit {
       {
         cwd: this.root,
         env: {
-          ...(this.#toolEnvironment ??
+          ...(this.#snapshots?.toolEnvironment ??
             (await withoutRepoVariables(this.#environment))),
           NX_DAEMON: 'false',
         },
@@ -158,15 +193,61 @@ export class Commit {
     return projects;
   }
 
+  // `git write-tree` takes the lock of the index, to keep the trees that it
+  // wrote, and fails while another process holds it: a peer's `git add`, or
+  // the `git status` of an editor. A plain `git commit` does not lock the
+  // index while the hook runs. So the tree is written from a private copy of
+  // the index of the hook. No index file is an empty index.
   async #stagedTree(): Promise<string> {
-    return (await this.#git('write-tree')).trim();
+    await using copy = await mkdtempDisposable(
+      join(tmpdir(), 'git-hooks-index-'),
+    );
+    const index = join(copy.path, 'index');
+    try {
+      await copyFile(
+        resolve(
+          this.root,
+          (await this.#git('rev-parse', '--git-path', 'index')).trim(),
+        ),
+        index,
+      );
+    } catch (error) {
+      if (
+        !Error.isError(error) ||
+        !('code' in error) ||
+        error.code !== 'ENOENT'
+      )
+        throw error;
+    }
+    return (
+      await gitIn(this.root, { ...this.#environment, GIT_INDEX_FILE: index })(
+        'write-tree',
+      )
+    ).trim();
   }
 
-  // The tree of HEAD, or undefined before the first commit.
-  async #headTree(): Promise<string | undefined> {
+  // A commit of the staged tree, with HEAD as its parent, that no ref holds.
+  // `git gc` prunes it.
+  async #stagedCommit(): Promise<string> {
+    const parent = await this.#revision('HEAD');
+    const tree = await this.#stagedTree();
+    return (
+      await gitIn(this.root, { ...this.#environment, ...stagedCommitter })(
+        'commit-tree',
+        '--no-gpg-sign',
+        '-m',
+        'the staged tree',
+        ...(parent === undefined ? [] : ['-p', parent]),
+        tree,
+      )
+    ).trim();
+  }
+
+  // The object that `revision` names, or undefined before the first commit.
+  async #revision(revision: string): Promise<string | undefined> {
     try {
       return (
-        await this.#git('rev-parse', '--verify', '--quiet', 'HEAD^{tree}')
+        await this.#git('rev-parse', '--verify', '--quiet', revision)
       ).trim();
     } catch (error) {
       // With --quiet, rev-parse exits with 1 and says nothing when HEAD names
