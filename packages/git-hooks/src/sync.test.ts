@@ -1,26 +1,27 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { mkdir, readFile, symlink } from 'node:fs/promises';
+import { mkdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { promisify } from 'node:util';
 
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 
+import { nxPackages } from './testing/nx-packages.ts';
 import { repository } from './testing/pre-commit-repository.ts';
 
 const execFileAsync = promisify(execFile);
 
-const zukhrufModules = new URL('../../../node_modules', import.meta.url)
-  .pathname;
-
 // An Nx workspace in the repo: project b depends on project a through its
 // package.json, but b's tsconfig has no reference to a yet, so `nx sync`
-// writes one. node_modules links to zukhruf's install, which has nx, @nx/js
-// and typescript. The base commit is made without the hook.
+// writes one. node_modules links nx, @nx and typescript from zukhruf's
+// install. The base commit is made without the hook.
 async function workspace(folder: string, hook: string) {
   const repo = await repository(folder, hook);
-  await symlink(zukhrufModules, join(repo.root, 'node_modules'));
+  await nxPackages(repo.root, [
+    { folder: 'packages/a', name: '@probe/a' },
+    { folder: 'packages/b', name: '@probe/b' },
+  ]);
   await repo.write('.gitignore', 'node_modules\n.nx\n');
   await repo.write(
     'package.json',
@@ -90,7 +91,7 @@ await preCommit([new Sync()]);
   );
 });
 
-test('the sync step never stages a file that was modified before the hook ran, even when nx sync rewrites it', async () => {
+test("the sync step syncs the staged copy of a file that another session edits: the commit holds the synced staged copy, and the other session's working copy stays as it is", async () => {
   // Arrange
   await using folder = await new TemporaryFiles().directory('git-hooks-');
   const repo = await workspace(
@@ -99,12 +100,10 @@ test('the sync step never stages a file that was modified before the hook ran, e
 await preCommit([new Sync()]);
 `,
   );
-  const base = await repo.git('show', 'HEAD:packages/b/tsconfig.json');
   // Another session edits b's tsconfig and has not staged it.
-  await repo.write(
-    'packages/b/tsconfig.json',
-    '{ "extends": "../../tsconfig.base.json", "compilerOptions": { "rootDir": "src", "outDir": "dist", "strict": true }, "include": ["src/**/*.ts"] }\n',
-  );
+  const edited =
+    '{ "extends": "../../tsconfig.base.json", "compilerOptions": { "rootDir": "src", "outDir": "dist", "strict": true }, "include": ["src/**/*.ts"] }\n';
+  await repo.write('packages/b/tsconfig.json', edited);
   await repo.write('packages/a/src/index.ts', 'export const a = 2;\n');
   await repo.git('add', 'packages/a/src/index.ts');
 
@@ -113,33 +112,29 @@ await preCommit([new Sync()]);
 
   // Assert
   assert.equal(result.code, 0, result.stderr);
-  assert.equal(
-    await repo.git('show', 'HEAD:packages/b/tsconfig.json'),
-    base,
-    "The commit must not take the other session's tsconfig edit",
-  );
-  const working = await readFile(
-    join(repo.root, 'packages/b/tsconfig.json'),
-    'utf8',
-  );
+  const committed = await repo.git('show', 'HEAD:packages/b/tsconfig.json');
   assert.match(
-    working,
+    committed,
     /"path": "\.\.\/a"/,
-    'nx sync must have rewritten the edited tsconfig',
+    'The commit must hold the synced staged copy, with the reference to a',
   );
-  assert.match(
-    working,
-    /"strict": true/,
-    "The other session's edit stays in the working tree",
+  assert.doesNotMatch(
+    committed,
+    /"strict"/,
+    "The commit must not take the other session's edit",
   );
   assert.equal(
-    await repo.git('status', '--porcelain', '--', 'packages/b/tsconfig.json'),
-    ' M packages/b/tsconfig.json\n',
-    'The edited tsconfig stays modified and unstaged',
+    await readFile(join(repo.root, 'packages/b/tsconfig.json'), 'utf8'),
+    edited,
+    "The other session's working copy must stay as it was",
+  );
+  assert.match(
+    result.stderr,
+    /^sync\s+left the working-tree copy of packages\/b\/tsconfig\.json: it has edits that are not staged$/m,
   );
 });
 
-test('the sync step stages only files that match its globs: a file nx sync wrote outside them stays unstaged', async () => {
+test('the sync step stages only files that match its globs: a file nx sync wrote outside them reaches neither the commit nor the working tree', async () => {
   // Arrange
   await using folder = await new TemporaryFiles().directory('git-hooks-');
   const repo = await workspace(
@@ -163,8 +158,8 @@ await preCommit([new Sync({ stage: ['**/styles.css'] })]);
   );
   assert.equal(
     await repo.git('status', '--porcelain', '--', 'packages/b/tsconfig.json'),
-    ' M packages/b/tsconfig.json\n',
-    'nx sync still wrote the tsconfig, and it stays unstaged',
+    '',
+    'nx sync wrote the tsconfig in its snapshot only, so the working tree keeps the committed copy',
   );
 });
 
@@ -177,9 +172,10 @@ test('an nx sync that fails stops the commit with the reason nx gave, and nothin
 await preCommit([new Sync()]);
 `,
   );
+  // The commit itself names a plugin that does not exist.
   await repo.write('nx.json', '{ "plugins": ["./tools/missing-plugin.js"] }\n');
   await repo.write('packages/a/src/index.ts', 'export const a = 2;\n');
-  await repo.git('add', 'packages/a/src/index.ts');
+  await repo.git('add', 'nx.json', 'packages/a/src/index.ts');
 
   // Act
   const result = await repo.commit('change a');

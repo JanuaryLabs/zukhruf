@@ -2,17 +2,15 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { existsSync } from 'node:fs';
-import { mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 
+import { nxPackages } from './testing/nx-packages.ts';
 import { repository } from './testing/pre-push-repository.ts';
-
-const zukhrufModules = new URL('../../../node_modules', import.meta.url)
-  .pathname;
 
 // Starts `git push` with more environment variables for the hook.
 function start(
@@ -134,53 +132,20 @@ console.log(\`built \${project}\`);
       },
     },
   };
-  const nxVersion = '23.2.1';
-  const packages: Record<string, object> = {
-    'node_modules/nx': { version: nxVersion, license: 'MIT' },
-  };
-  await mkdir(join(repo.root, 'node_modules/@probe'), { recursive: true });
+  await nxPackages(
+    repo.root,
+    Object.keys(projects).map((name) => ({
+      folder: `packages/${name}`,
+      name: `@probe/${name}`,
+    })),
+  );
   for (const [name, targets] of Object.entries(projects)) {
     await repo.write(
       `packages/${name}/package.json`,
       `${JSON.stringify({ name: `@probe/${name}`, version: '0.0.0', type: 'module', nx: { targets } })}\n`,
     );
     await repo.write(`packages/${name}/index.js`, 'export const value = 1;\n');
-    packages[`node_modules/@probe/${name}`] = {
-      resolved: `packages/${name}`,
-      link: true,
-    };
-    packages[`packages/${name}`] = { name: `@probe/${name}`, version: '0.0.0' };
-    await symlink(
-      `../../packages/${name}`,
-      join(repo.root, `node_modules/@probe/${name}`),
-    );
   }
-  await symlink(join(zukhrufModules, 'nx'), join(repo.root, 'node_modules/nx'));
-  await mkdir(join(repo.root, 'node_modules/.bin'));
-  await symlink(
-    '../nx/dist/bin/nx.js',
-    join(repo.root, 'node_modules/.bin/nx'),
-  );
-  await repo.write(
-    'node_modules/.package-lock.json',
-    `${JSON.stringify({ name: 'probe', lockfileVersion: 3, requires: true, packages }, null, 2)}\n`,
-  );
-  await repo.write(
-    'package-lock.json',
-    `${JSON.stringify(
-      {
-        name: 'probe',
-        lockfileVersion: 3,
-        requires: true,
-        packages: {
-          '': { name: 'probe', workspaces: ['packages/*'] },
-          ...packages,
-        },
-      },
-      null,
-      2,
-    )}\n`,
-  );
   return repo;
 }
 

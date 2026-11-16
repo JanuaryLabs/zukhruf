@@ -125,6 +125,27 @@ export class Snapshots implements AsyncDisposable {
     return clone;
   }
 
+  // A clone of `commit` with packages that no other caller shares: a step
+  // that writes files writes them there, so the steps that read the shared
+  // snapshot never see them. Disposing it deletes the clone.
+  async openPrivate(
+    commit: string,
+    name: string,
+  ): Promise<Clone & AsyncDisposable> {
+    const resources = new AsyncDisposableStack();
+    try {
+      const clone = await this.#clone(commit, resources);
+      await this.#link(clone, name, resources);
+      return {
+        ...clone,
+        [Symbol.asyncDispose]: () => resources.disposeAsync(),
+      };
+    } catch (error) {
+      await resources.disposeAsync();
+      throw error;
+    }
+  }
+
   async [Symbol.asyncDispose](): Promise<void> {
     for (const opened of this.#opened.values())
       await opened.resources.disposeAsync();

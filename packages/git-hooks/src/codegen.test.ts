@@ -1,19 +1,17 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { mkdir, readFile, symlink } from 'node:fs/promises';
+import { mkdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { promisify } from 'node:util';
 
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 
+import { nxPackages } from './testing/nx-packages.ts';
 import { repository } from './testing/pre-commit-repository.ts';
 
 const execFileAsync = promisify(execFile);
-
-const zukhrufModules = new URL('../../../node_modules', import.meta.url)
-  .pathname;
 
 // An Nx workspace in the repo with four projects: frontend depends on backend,
 // and other and backend-e2e depend on nothing. backend's `openapi` target is a
@@ -24,7 +22,13 @@ const zukhrufModules = new URL('../../../node_modules', import.meta.url)
 // `openapi`. The base commit is made without the hook.
 async function workspace(folder: string, hook: string) {
   const repo = await repository(folder, hook);
-  await symlink(zukhrufModules, join(repo.root, 'node_modules'));
+  await nxPackages(
+    repo.root,
+    ['backend', 'frontend', 'other', 'backend-e2e'].map((name) => ({
+      folder: `packages/${name}`,
+      name: `@probe/${name}`,
+    })),
+  );
   await repo.write('.gitignore', 'node_modules\n.nx\n');
   await repo.write(
     'package.json',
@@ -105,7 +109,7 @@ await preCommit([
   new Codegen({
     when: ['@probe/backend', '@probe/frontend'],
     run: ['@probe/backend:openapi', '@probe/frontend:client'],
-    stage: ['openapi.json', 'client'],
+    stage: ['openapi.json', 'client/**'],
   }),
 ]);
 `;
@@ -132,9 +136,9 @@ test('the codegen step runs each of its targets in order when nx says one of its
     'The commit must hold the spec, the client made from it, and the staged file, and not noise.txt',
   );
   assert.equal(
-    await repo.git('status', '--porcelain', '--', 'noise.txt'),
-    '?? noise.txt\n',
-    'The build wrote noise.txt, and it stays unstaged',
+    existsSync(join(repo.root, 'noise.txt')),
+    false,
+    'The build wrote noise.txt in its snapshot only: it is neither staged nor in the working tree',
   );
 });
 

@@ -170,7 +170,7 @@ test('the pre-commit step skips a commit that stages no package.json and no READ
 
   // Act
   const outcome = await new ReadmeTable().run(
-    new Commit(workspace.path, process.env),
+    new Commit({ root: workspace.path, environment: process.env }),
   );
 
   // Assert
@@ -193,7 +193,7 @@ test('the pre-commit step fails a commit whose staged README has no row for a st
 
   // Act
   const outcome = await new ReadmeTable().run(
-    new Commit(workspace.path, process.env),
+    new Commit({ root: workspace.path, environment: process.env }),
   );
 
   // Assert
@@ -219,7 +219,7 @@ test('the pre-commit step passes a commit whose staged README holds the generate
 
   // Act
   const outcome = await new ReadmeTable().run(
-    new Commit(workspace.path, process.env),
+    new Commit({ root: workspace.path, environment: process.env }),
   );
 
   // Assert

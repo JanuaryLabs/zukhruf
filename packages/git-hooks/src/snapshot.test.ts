@@ -449,3 +449,153 @@ await preCommit([new Show()]);
     (await repo.git('rev-parse', 'HEAD^{tree}')).trim(),
   );
 });
+
+// A step that runs commit.generate with the globs `gen/**`: its work writes a
+// new file, changes a file, deletes a file, makes a link and an executable
+// script under gen/, and writes other.txt outside the globs. It prints what
+// generate gave.
+const generating = `import { chmod, rm, symlink, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { type Commit, Step, preCommit } from '@zukhruf/git-hooks';
+class Generate extends Step<Commit> {
+  readonly name = 'generate';
+  async run(commit: Commit) {
+    const generated = await commit.generate(['gen/**'], async ({ folder }) => {
+      await writeFile(join(folder, 'gen/new.txt'), 'new\\n');
+      await writeFile(join(folder, 'gen/changed.txt'), 'changed\\n');
+      await rm(join(folder, 'gen/old.txt'));
+      await symlink('new.txt', join(folder, 'gen/link'));
+      await writeFile(join(folder, 'gen/run.sh'), '#!/bin/sh\\n');
+      await chmod(join(folder, 'gen/run.sh'), 0o755);
+      await writeFile(join(folder, 'other.txt'), 'outside\\n');
+    });
+    if (generated.kind === 'not-staged') return this.fail(generated.reason);
+    return this.pass(JSON.stringify({ paths: generated.entries.map(({ path }) => path).sort() }));
+  }
+}
+await preCommit([new Generate()]);
+`;
+
+// A repo whose base commit holds gen/changed.txt and gen/old.txt, and whose
+// staged commit has a.txt changed.
+async function generatingRepository(root: string, hook: string) {
+  const repo = await installedRepository(root, hook);
+  await mkdir(join(root, 'gen'));
+  await repo.write('gen/changed.txt', 'base\n');
+  await repo.write('gen/old.txt', 'old\n');
+  await repo.write('a.txt', 'base\n');
+  await repo.git('add', '--all');
+  const base = await repo.commitWith([], 'base', '--no-verify');
+  assert.equal(base.code, 0, base.stderr);
+  await repo.write('a.txt', 'staged\n');
+  await repo.git('add', 'a.txt');
+  return repo;
+}
+
+test('generate stages each file that its work wrote under the globs: a new file, a changed file, a deletion, a link and an executable script; the working-tree copies follow, and a file outside the globs reaches neither the commit nor the working tree', async () => {
+  // Arrange
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
+  const repo = await generatingRepository(folder.path, generating);
+
+  // Act
+  const result = await repo.commit('second');
+
+  // Assert
+  assert.equal(result.code, 0, result.stderr);
+  assert.deepEqual(printed(result.stderr, 'generate').paths, [
+    'gen/changed.txt',
+    'gen/link',
+    'gen/new.txt',
+    'gen/old.txt',
+    'gen/run.sh',
+  ]);
+  const tree = await repo.git(
+    'ls-tree',
+    '-r',
+    'HEAD',
+    '--',
+    'gen',
+    'other.txt',
+  );
+  assert.match(tree, /^100644 blob \S+\tgen\/new\.txt$/m);
+  assert.match(tree, /^100644 blob \S+\tgen\/changed\.txt$/m);
+  assert.match(tree, /^120000 blob \S+\tgen\/link$/m);
+  assert.match(tree, /^100755 blob \S+\tgen\/run\.sh$/m);
+  assert.doesNotMatch(tree, /gen\/old\.txt|other\.txt/);
+  assert.equal(await repo.git('show', 'HEAD:gen/changed.txt'), 'changed\n');
+  assert.equal(await repo.git('show', 'HEAD:gen/link'), 'new.txt');
+  assert.equal(
+    await readFile(join(folder.path, 'gen/changed.txt'), 'utf8'),
+    'changed\n',
+    'An unchanged working-tree copy gets the generated content',
+  );
+  assert.equal(existsSync(join(folder.path, 'gen/old.txt')), false);
+  assert.equal(existsSync(join(folder.path, 'other.txt')), false);
+  assert.equal(
+    await repo.git('status', '--porcelain', '--', 'gen'),
+    '',
+    'The working tree, the index and the commit agree on gen/',
+  );
+});
+
+test('a commit that names its paths (git commit --only) cannot stage what a step generates: it stops, names each generated path and the command that commits them, and commits nothing', async () => {
+  // Arrange
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
+  const repo = await generatingRepository(folder.path, generating);
+  const head = (await repo.git('rev-parse', 'HEAD')).trim();
+
+  // Act
+  const result = await repo.commitWith([], 'second', '--only', '--', 'a.txt');
+
+  // Assert
+  assert.notEqual(result.code, 0, result.stderr);
+  assert.match(result.stderr, /git commit --only <your paths> .*gen\/new\.txt/);
+  for (const path of [
+    'gen/changed.txt',
+    'gen/link',
+    'gen/old.txt',
+    'gen/run.sh',
+  ])
+    assert.match(
+      result.stderr,
+      new RegExp(`^\\s+${path.replace('.', '\\.')}$`, 'm'),
+    );
+  assert.equal((await repo.git('rev-parse', 'HEAD')).trim(), head);
+});
+
+test('another git command that stages a file while the hook runs stops the commit, because the index no longer holds the tree that the steps judged, and nothing is committed', async () => {
+  // Arrange
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
+  const repo = await installedRepository(
+    folder.path,
+    `import { execFileSync } from 'node:child_process';
+import { writeFileSync } from 'node:fs';
+import { type Commit, Step, preCommit } from '@zukhruf/git-hooks';
+// Stands for another session: it stages peer.txt while the hook runs.
+class Peer extends Step<Commit> {
+  readonly name = 'peer';
+  async run() {
+    writeFileSync('peer.txt', 'peer\\n');
+    execFileSync('git', ['add', 'peer.txt']);
+    return this.pass('staged peer.txt');
+  }
+}
+await preCommit([new Peer()]);
+`,
+  );
+  await repo.write('a.txt', 'base\n');
+  await repo.git('add', '--all');
+  const base = await repo.commitWith([], 'base', '--no-verify');
+  assert.equal(base.code, 0, base.stderr);
+  const head = (await repo.git('rev-parse', 'HEAD')).trim();
+  await repo.write('a.txt', 'staged\n');
+  await repo.git('add', 'a.txt');
+
+  // Act
+  const result = await repo.commit('second');
+
+  // Assert
+  assert.notEqual(result.code, 0, result.stderr);
+  assert.match(result.stderr, /the index changed while the hook ran/);
+  assert.equal((await repo.git('rev-parse', 'HEAD')).trim(), head);
+});
