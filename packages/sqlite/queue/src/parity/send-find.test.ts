@@ -135,6 +135,38 @@ describe('send and findJobs', () => {
     });
   });
 
+  it('gives a found job exactly the keys of pg-boss, with no signal, even while a worker holds it', async () => {
+    const observed = await Parity.assertSame(async ({ queue }) => {
+      await queue.start();
+      await queue.createQueue('jobs');
+      await queue.createQueue('running');
+      await queue.send('jobs', { n: 1 });
+      await queue.send('running', { n: 2 });
+      const claimed = Promise.withResolvers<void>();
+      const release = Promise.withResolvers<void>();
+      await queue.work('running', {}, async () => {
+        claimed.resolve();
+        await release.promise;
+      });
+      await claimed.promise;
+      const keys = async (name: string) =>
+        (await queue.findJobs(name)).map((job) => Object.keys(job).sort());
+      try {
+        return { created: await keys('jobs'), active: await keys('running') };
+      } finally {
+        release.resolve();
+      }
+    });
+
+    // pg-boss's findJobs returns the rows as the database gives them
+    // (node_modules/pg-boss/dist/manager.js:2242-2261); only a worker adds a
+    // signal, to its own copy of the job (manager.js:530).
+    assert.strictEqual(observed.created.length, 1);
+    assert.deepStrictEqual(observed.active, observed.created);
+    assert.ok(!observed.created[0]?.includes('signal'));
+    assert.ok(observed.created[0]?.includes('sourceRootId'));
+  });
+
   it('accepts the same job id in two queues', async () => {
     const job = '00000000-0000-4000-8000-000000000001';
 

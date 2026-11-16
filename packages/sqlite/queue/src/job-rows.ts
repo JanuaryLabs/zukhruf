@@ -156,15 +156,10 @@ export class JobRows {
     };
   }
 
-  static toFound(
-    row: JobRow,
-    signal: AbortSignal = new AbortController().signal,
-  ): FoundJob<unknown> {
-    return { ...JobRows.#allColumns(row), signal };
-  }
-
-  // JOB_COLUMNS_ALL (node_modules/pg-boss/dist/plans.js:592-620).
-  static #allColumns(row: JobRow): Omit<FoundJob<unknown>, 'signal'> {
+  // JOB_COLUMNS_ALL (node_modules/pg-boss/dist/plans.js:592-620), with no
+  // signal: pg-boss's findJobs returns the rows as the database gives them
+  // (node_modules/pg-boss/dist/manager.js:2242-2261).
+  static toFound(row: JobRow): FoundJob<unknown> {
     const data: unknown = JSON.parse(row.data);
 
     return {
@@ -230,7 +225,7 @@ export class JobRows {
     includeMetadata: boolean,
   ): Omit<Job<unknown>, 'signal'> {
     if (includeMetadata) {
-      return JobRows.#allColumns(row);
+      return JobRows.toFound(row);
     }
     const data: unknown = JSON.parse(row.data);
     return {

@@ -340,7 +340,7 @@ Each gap that the design found goes to the package that must have it, and is bui
 | A standby that polls, and a hung leader that nobody ends           | `@zukhruf/election`      | Built (#4371)                                       |
 | An older release that rebuilds a newer file                        | `@zukhruf/sqlite-queue`  | Built (#4369)                                       |
 | A count of the jobs of a queue by state, pg-boss's `getQueueStats` | `@zukhruf/sqlite-queue`  | Not built. `pool.stats()` needs it (#2888).         |
-| A job from `findJobs` carries a `signal`, and pg-boss's does not   | `@zukhruf/sqlite-queue`  | Open defect (#4331)                                 |
+| A job from `findJobs` carries a `signal`, and pg-boss's does not   | `@zukhruf/sqlite-queue`  | Fixed (#4331)                                       |
 | A write that waits more than the busy timeout of 5 s fails         | `@zukhruf/sqlite-queue`  | Open risk (#4355)                                   |
 | A synced commit on macOS is a plain `fsync`                        | `@zukhruf/sqlite-queue`  | Open risk (#4351)                                   |
 | Nothing ran on Windows                                             | each package             | Deferred (#4340)                                    |

@@ -25,10 +25,11 @@ import type {
 // (node_modules/pg-boss/dist/plans.js:561, 570, 573, 574) and findJobs returns
 // them as stored (plans.js:599, 601, 609, 613), so a job that has not started
 // has `startedOn: null` in pg-boss too. `retryDelayMax` stays optional so a
-// PgBoss still satisfies the type.
+// PgBoss still satisfies the type. Its declaration also inherits `signal` from
+// Job, which findJobs never sets at run time (manager.js:2242-2261).
 export type FoundJob<T> = Omit<
   JobWithMetadata<T>,
-  'startedOn' | 'deadLetter' | 'retryDelayMax' | 'output' | 'policy'
+  'startedOn' | 'deadLetter' | 'retryDelayMax' | 'output' | 'policy' | 'signal'
 > & {
   // A dead letter copy is inserted without a policy (plans.js:2615-2643).
   policy: QueuePolicy | null;
