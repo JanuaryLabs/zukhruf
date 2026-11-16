@@ -104,6 +104,8 @@ typeset -gA BENCH_FOREIGN=()
 # Docker Desktop's hypervisor as bench_init found it (vz, vmm or unknown), and the evidence.
 typeset -g BENCH_DD_HYPERVISOR=''
 typeset -g BENCH_DD_EVIDENCE=null
+# The hypervisor the caller asserts with --docker-hypervisor (vz or vmm), or empty.
+typeset -g BENCH_DD_ASSERTED=''
 
 # The script's own arguments, kept to re-run it under caffeinate.
 typeset -ga BENCH_ARGV=("$@")
@@ -119,6 +121,9 @@ Common options:
   --engine NAME       Run one engine only, once.
   --out DIR           Output folder (default: docs/research/container-engines/runs/<id>/<UTC timestamp>).
   --dry-run           Print every command instead of running it; writes nothing.
+  --docker-hypervisor vz|vmm
+                      Assert Docker Desktop's hypervisor when its processes cannot tell (the VM
+                      runs inside com.docker.backend); refused when the processes show the other one.
   -h, --help          Show this help.
 
 Engines: ${(j:, :)${(@ok)BENCH_SOCKET}}. docker-vmm is Docker Desktop's socket while Docker Desktop
@@ -167,8 +172,9 @@ bench_require_positive() {
 
 # Parses the common options. Call it after the script removed its own options with zparseopts -D -E.
 bench_parse_args() {
-  local -a help engine engines interleave out dry
-  zparseopts -D -F -- h=help -help=help -engine:=engine -engines:=engines -interleave:=interleave -out:=out -dry-run=dry ||
+  local -a help engine engines interleave out dry hypervisor
+  zparseopts -D -F -- h=help -help=help -engine:=engine -engines:=engines -interleave:=interleave -out:=out -dry-run=dry \
+    -docker-hypervisor:=hypervisor ||
     { print -u2 -- "$BENCH_USAGE"; bench_common_usage >&2; exit 2; }
   if (( $#help )); then
     print -- "$BENCH_USAGE"
@@ -178,6 +184,10 @@ bench_parse_args() {
   fi
   (( $# == 0 )) || bench_die "unexpected arguments: $*"
   (( $#dry )) && BENCH_DRY_RUN=1
+  if (( $#hypervisor )); then
+    BENCH_DD_ASSERTED=${hypervisor[-1]}
+    [[ $BENCH_DD_ASSERTED == (vz|vmm) ]] || bench_die "--docker-hypervisor takes vz or vmm, not '$BENCH_DD_ASSERTED'"
+  fi
   (( $#out )) && BENCH_OUT=${out[-1]:A}
   local -a order
   if (( $#engine )); then
@@ -346,7 +356,10 @@ bench_utc() {
 # Apple's Virtualization framework (vz), com.docker.krun drives Docker VMM, built on libkrun (vmm).
 # docker info has no hypervisor field (on VZ it says OperatingSystem "Docker Desktop", KernelVersion
 # *-linuxkit), so the processes decide; OperatingSystem and KernelVersion are kept beside them in
-# meta.json. Sets BENCH_DD_HYPERVISOR to vz, vmm or unknown (neither or both run) and BENCH_DD_EVIDENCE.
+# meta.json. Since a `docker desktop start` the VM can run inside com.docker.backend, with neither
+# process: then only --docker-hypervisor (BENCH_DD_ASSERTED) names it, an assertion weaker than a
+# detection. The VM-related keys of settings-store.json are kept as evidence in every case.
+# Sets BENCH_DD_HYPERVISOR to vz, vmm or unknown (neither or both run) and BENCH_DD_EVIDENCE.
 bench_docker_desktop_hypervisor() {
   local -a comms=(${(f)"$(ps -axo comm=)"})
   local vz=false vmm=false
@@ -361,15 +374,29 @@ bench_docker_desktop_hypervisor() {
   info=$(gtimeout -s KILL 30 docker -H $BENCH_DOCKER_DESKTOP_SOCKET info \
     --format '{"operating_system":{{json .OperatingSystem}},"kernel_version":{{json .KernelVersion}}}' 2>/dev/null) || info=null
   jq -e . <<<"$info" >/dev/null 2>&1 || info=null
-  BENCH_DD_EVIDENCE=$(jq -nc --arg detected $BENCH_DD_HYPERVISOR --argjson vz $vz --argjson vmm $vmm --argjson info "$info" \
-    '{detected: $detected, process_com_docker_virtualization: $vz, process_com_docker_krun: $vmm, docker_info: $info}')
+  local store=$HOME/Library/'Group Containers'/group.com.docker/settings-store.json settings
+  settings=$(jq -c '[paths(scalars) as $p | ($p | map(tostring) | join(".")) as $key
+    | select($key | test("vm|virtual|krun|hypervisor"; "i")) | {key: $key, value: getpath($p)}]' "$store" 2>/dev/null) || settings=null
+  BENCH_DD_EVIDENCE=$(jq -nc --arg detected $BENCH_DD_HYPERVISOR --arg asserted "$BENCH_DD_ASSERTED" \
+    --argjson vz $vz --argjson vmm $vmm --argjson info "$info" --argjson settings "$settings" \
+    '{detected: $detected, asserted: (if $asserted == "" then null else $asserted end),
+      evidence: {process_com_docker_virtualization: $vz, process_com_docker_krun: $vmm, docker_info: $info,
+        settings_store_vm_keys: $settings}}')
 }
 
-# Refuses a Docker Desktop label (docker, docker-vmm) whose hypervisor the processes do not show.
+# Refuses a Docker Desktop label (docker, docker-vmm) whose hypervisor the processes do not show,
+# and an assertion the processes contradict. On unknown, an assertion stands in for the detection.
 bench_check_docker_desktop_label() {
   local engine=$1 want=$2
   bench_in_run $engine || return 0
+  if [[ -n $BENCH_DD_ASSERTED && $BENCH_DD_HYPERVISOR != unknown && $BENCH_DD_ASSERTED != $BENCH_DD_HYPERVISOR ]]; then
+    bench_die "--docker-hypervisor $BENCH_DD_ASSERTED contradicts Docker Desktop's processes, which show $BENCH_DD_HYPERVISOR; evidence: $BENCH_DD_EVIDENCE"
+  fi
   [[ $BENCH_DD_HYPERVISOR == $want ]] && return 0
+  if [[ $BENCH_DD_HYPERVISOR == unknown && -n $BENCH_DD_ASSERTED ]]; then
+    [[ $BENCH_DD_ASSERTED == $want ]] && return 0
+    bench_die "'$engine' needs Docker Desktop on ${${want:/vz/the Apple Virtualization framework}:/vmm/Docker VMM}, but --docker-hypervisor asserts $BENCH_DD_ASSERTED; evidence: $BENCH_DD_EVIDENCE"
+  fi
   if [[ $BENCH_DD_HYPERVISOR == unknown ]]; then
     bench_die "cannot tell Docker Desktop's hypervisor for '$engine': com.docker.virtualization (VZ) and com.docker.krun (Docker VMM) run both or neither; evidence: $BENCH_DD_EVIDENCE"
   fi
@@ -385,6 +412,13 @@ bench_init() {
   print -- "experiment: $BENCH_ID"
   print -- "order:      ${BENCH_ORDER[*]}"
   print -- "output:     $BENCH_OUT"
+  # Read-only (ps, docker info, settings-store.json), so a dry run checks the hypervisor too.
+  if bench_in_docker_desktop; then
+    bench_docker_desktop_hypervisor
+    bench_check_docker_desktop_label docker vz
+    bench_check_docker_desktop_label docker-vmm vmm
+    print -- "docker desktop hypervisor: $BENCH_DD_HYPERVISOR${BENCH_DD_ASSERTED:+ (asserted $BENCH_DD_ASSERTED)}"
+  fi
   if (( BENCH_DRY_RUN )); then
     return 0
   fi
@@ -393,12 +427,6 @@ bench_init() {
     dk $engine version --format '{{.Server.Version}}' >/dev/null ||
       bench_die "the $engine engine does not answer on $BENCH_SOCKET[$engine]"
   done
-  if bench_in_docker_desktop; then
-    bench_docker_desktop_hypervisor
-    bench_check_docker_desktop_label docker vz
-    bench_check_docker_desktop_label docker-vmm vmm
-    print -- "docker desktop hypervisor: $BENCH_DD_HYPERVISOR"
-  fi
   mkdir -p -- "$BENCH_OUT"
   : >"$BENCH_OUT/commands.log"
   BENCH_STARTED_UTC=$(bench_utc)
