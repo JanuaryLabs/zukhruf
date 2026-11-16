@@ -1,7 +1,7 @@
 {
   "name": "@zukhruf/election",
   "version": "0.8.18",
-  "description": "Elects a leader whose term ends when it resigns or dies, with a higher epoch each term; backends subclass one campaign. SqliteElection, on one host: the leader pushes heartbeats on a pipe; candidates and observers wait on it and end a frozen leader.",
+  "description": "Elects a leader among candidates. Each term has a higher epoch and ends when the leader resigns or dies. Backends subclass one campaign. `SqliteElection` elects among processes of one host; candidates and observers end a leader whose pipe heartbeats stop.",
   "license": "MIT",
   "repository": {
     "type": "git",
