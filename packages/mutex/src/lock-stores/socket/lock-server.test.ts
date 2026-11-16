@@ -114,7 +114,6 @@ describe('Lock server', () => {
       try {
         await using store = new SocketStore(directory.path, {
           clock: globalThis,
-          pollInterval: 10,
           graceWindow: 50,
         });
         const roles: SocketRole[] = [];

@@ -167,7 +167,7 @@ The number of a leader's term. Each new leader has a higher epoch than all earli
 _Avoid_: Generation, term number
 
 **Failover**:
-A new leader replaces a leader that stopped or lost its term.
+A new leader replaces a leader that stopped or lost its term. A follower stops a leader that sent no heartbeat for longer than its lease duration (see `@zukhruf/election`), so a frozen leader is replaced too.
 _Avoid_: Switchover, handover
 
 **Grace window**:

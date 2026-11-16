@@ -13,13 +13,19 @@ import { factTimeout } from '../../testing/fact-timeout.ts';
 import { FencedRegister } from '../../testing/fenced-register.ts';
 import { mutexUrl } from '../../testing/module-urls.ts';
 import { onUnixSockets } from '../../testing/on-unix-sockets.ts';
+import { succeedLastLeader } from '../../testing/succeed-last-leader.ts';
 import { graceWindow, settle } from '../../testing/timing.ts';
 import { watch } from '../../testing/watch.ts';
 import { startWorker } from '../../testing/worker-process.ts';
 import { socketElection } from './socket-election.ts';
-import { type SocketRole, SocketStore } from './socket-store.ts';
+import {
+  type SocketRole,
+  SocketStore,
+  type SocketStoreOptions,
+} from './socket-store.ts';
 
 const socketStoreUrl = new URL('./socket-store.ts', import.meta.url);
+const socketElectionUrl = new URL('./socket-election.ts', import.meta.url);
 const fakeTimersUrl = import.meta.resolve('@sinonjs/fake-timers');
 const fencedRegisterUrl = new URL(
   '../../testing/fenced-register.ts',
@@ -29,8 +35,13 @@ const fencedRegisterUrl = new URL(
 /**
  * A process using the socket store. It reports role changes, stays alive until
  * killed, and waits inside callbacks for `command(name)` messages from the test.
+ * `options` are added to the options of its store.
  */
-const participant = (directory: string, body: string) => `
+const participant = (
+  directory: string,
+  body: string,
+  options: Pick<SocketStoreOptions, 'leaseDuration'> = {},
+) => `
 	import { appendFileSync } from 'node:fs';
 	import { Mutex } from ${JSON.stringify(mutexUrl.href)};
 	import { SocketStore } from ${JSON.stringify(socketStoreUrl.href)};
@@ -38,7 +49,7 @@ const participant = (directory: string, body: string) => `
 
 	const name = process.argv[1];
 	const directory = ${JSON.stringify(directory)};
-	const store = new SocketStore(directory, { clock: globalThis, pollInterval: 10, graceWindow: ${graceWindow} });
+	const store = new SocketStore(directory, { clock: globalThis, graceWindow: ${graceWindow}, ...${JSON.stringify(options)} });
 	store.on('role', (role) => process.send({ type: 'role', role }));
 	const mutex = new Mutex(store);
 	const commands = new Map();
@@ -62,6 +73,7 @@ describe('Socket lock server failover', () => {
   test('a holder keeps its key when the leader dies, and a waiter enters only after it releases', async (t) => {
     // Arrange: a leader, a holder inside its callback, and a waiter behind it.
     await using directory = await new TemporaryFiles().directory('mutex-test-');
+    await using _successor = succeedLastLeader(directory.path);
     await using leader = startWorker(
       participant(directory.path, leaderBody),
       'leader',
@@ -170,7 +182,6 @@ describe('Socket lock server failover', () => {
     await using directory = await new TemporaryFiles().directory('mutex-test-');
     const leaderStore = new SocketStore(directory.path, {
       clock: globalThis,
-      pollInterval: 10,
       graceWindow,
     });
     const leaderRoles: SocketRole[] = [];
@@ -220,6 +231,7 @@ describe('Socket lock server failover', () => {
   test('a leader that shuts down while a follower holds a key still lets a waiter enter only after the holder releases', async (t) => {
     // Arrange: a leader, a holder inside its callback, and a waiter behind it.
     await using directory = await new TemporaryFiles().directory('mutex-test-');
+    await using _successor = succeedLastLeader(directory.path);
     await using leader = startWorker(
       participant(
         directory.path,
@@ -344,6 +356,7 @@ describe('Socket lock server failover', () => {
       await using directory = await new TemporaryFiles().directory(
         'mutex-test-',
       );
+      await using _successor = succeedLastLeader(directory.path);
       const register = new FencedRegister(join(directory.path, 'register.db'));
       const writeBody = (then: string) => `
 				const outcome = await mutex.acquire('product:42', async (lease) => {
@@ -433,6 +446,165 @@ describe('Socket lock server failover', () => {
       assert.equal(register.writes(), 1, 'Only the newer holder may write');
     },
   );
+
+  // The lease, 1500 ms, outlasts the longest step of the back-off, about
+  // 1200 ms, so only a watch that lasts across the steps reaches its end.
+  test(
+    'a process ends a leader that froze before its lock server listened, and leads',
+    {
+      skip:
+        process.platform === 'win32'
+          ? 'Windows cannot freeze a process with SIGSTOP'
+          : false,
+    },
+    async (t) => {
+      // Arrange: a process wins the term with a short lease and freezes
+      // before it serves.
+      await using directory = await new TemporaryFiles().directory(
+        'mutex-test-',
+      );
+      await using leader = startWorker(
+        `import { socketElection } from ${JSON.stringify(socketElectionUrl.href)};
+				const term = await socketElection(${JSON.stringify(directory.path)}, globalThis, 1500).campaign();
+				// A listener keeps the channel to the test, and so this process, alive.
+				process.on('message', () => {});
+				process.send({ type: term ? 'leading' : 'lost' });`,
+        'leader',
+      );
+      await t.waitFor(
+        () =>
+          assert.ok(
+            leader.has('leading'),
+            `The leader must win the term.\n${leader.stderr}`,
+          ),
+        { interval: 5, timeout: factTimeout },
+      );
+      leader.child.kill('SIGSTOP');
+      await using store = new SocketStore(directory.path, {
+        clock: globalThis,
+        graceWindow,
+      });
+      const roles: SocketRole[] = [];
+      store.on('role', (role) => roles.push(role));
+
+      // Act
+      const entered = await new Mutex(store).acquire(
+        'product:42',
+        async () => 'entered',
+        { signal: AbortSignal.timeout(factTimeout) },
+      );
+
+      // Assert
+      assert.equal(entered, 'entered');
+      await t.waitFor(
+        () =>
+          assert.equal(
+            leader.exit?.signal,
+            'SIGKILL',
+            `The process must end the frozen leader.\n${leader.stderr}`,
+          ),
+        { interval: 5, timeout: factTimeout },
+      );
+      assert.deepEqual(roles, ['leader']);
+    },
+  );
+
+  // The default lease duration, 15 s, is longer than factTimeout, so the
+  // leader's short one must reach the followers through its store.
+  test(
+    'a leader frozen past its lease duration is ended by a follower, a survivor leads, and the holder keeps its key',
+    {
+      skip:
+        process.platform === 'win32'
+          ? 'Windows cannot freeze a process with SIGSTOP'
+          : false,
+    },
+    async (t) => {
+      // Arrange: a leader with a short lease, a holder inside its callback,
+      // and this process as a follower.
+      await using directory = await new TemporaryFiles().directory(
+        'mutex-test-',
+      );
+      await using _successor = succeedLastLeader(directory.path);
+      await using leader = startWorker(
+        participant(directory.path, leaderBody, { leaseDuration: 500 }),
+        'leader',
+      );
+      await t.waitFor(
+        () =>
+          assert.ok(
+            leader.has('ready'),
+            `The leader must start.\n${leader.stderr}`,
+          ),
+        { interval: 5, timeout: factTimeout },
+      );
+      await using holder = startWorker(
+        participant(
+          directory.path,
+          `const outcome = await mutex.acquire('product:42', async () => {
+						process.send({ type: 'entered' });
+						await command('finish');
+					}).then(() => 'ok', (error) => error.name);
+					process.send({ type: 'done', outcome });`,
+        ),
+        'holder',
+      );
+      await t.waitFor(
+        () =>
+          assert.ok(
+            holder.has('entered'),
+            `The holder must enter.\n${holder.stderr}`,
+          ),
+        { interval: 5, timeout: factTimeout },
+      );
+      await using store = new SocketStore(directory.path, {
+        clock: globalThis,
+        graceWindow,
+      });
+      const roles: SocketRole[] = [];
+      store.on('role', (role) => roles.push(role));
+      assert.equal(await store.isHeld('product:42'), true);
+      assert.deepEqual(roles, ['follower']);
+
+      // Act: the leader freezes.
+      leader.child.kill('SIGSTOP');
+
+      // Assert: a follower ended it, the holder reasserted its key on the
+      // successor, and the successor grants the key after the release.
+      await t.waitFor(
+        () =>
+          assert.equal(
+            leader.exit?.signal,
+            'SIGKILL',
+            `A follower must end the frozen leader.\n${leader.stderr}`,
+          ),
+        { interval: 5, timeout: factTimeout },
+      );
+      assert.equal(
+        await store.isHeld('product:42'),
+        true,
+        'The holder must reassert its key on the successor',
+      );
+      holder.child.send('finish');
+      await t.waitFor(
+        () =>
+          assert.ok(
+            holder.has('done'),
+            `The holder must finish.\n${holder.stderr}`,
+          ),
+        { interval: 5, timeout: factTimeout },
+      );
+      assert.equal(
+        holder.find('done')?.outcome,
+        'ok',
+        'The holder must keep its lease through the end of the frozen leader',
+      );
+      assert.equal(
+        await new Mutex(store).acquire('product:42', async () => 'entered'),
+        'entered',
+      );
+    },
+  );
 });
 
 describe('Socket store disposal', () => {
@@ -441,7 +613,6 @@ describe('Socket store disposal', () => {
     await using directory = await new TemporaryFiles().directory('mutex-test-');
     const store = new SocketStore(directory.path, {
       clock: globalThis,
-      pollInterval: 10,
     });
     const roles: SocketRole[] = [];
     store.on('role', (role) => roles.push(role));
@@ -484,7 +655,6 @@ describe('Socket store lock server failure', () => {
       await mkdir(socketPath);
       await using store = new SocketStore(directory.path, {
         clock: globalThis,
-        pollInterval: 10,
       });
 
       // Act
@@ -516,7 +686,6 @@ describe('Socket store lock server failure', () => {
     await using directory = await new TemporaryFiles().directory('mutex-test-');
     await using store = new SocketStore(directory.path, {
       clock: globalThis,
-      pollInterval: 10,
     });
     const listenerFailure = new Error('The role listener failed');
     store.once('role', () => {
@@ -533,7 +702,6 @@ describe('Socket store lock server failure', () => {
     assert.equal(failure, listenerFailure);
     const otherLeader = new SocketStore(directory.path, {
       clock: globalThis,
-      pollInterval: 10,
     });
     const roles: SocketRole[] = [];
     otherLeader.on('role', (role) => roles.push(role));
@@ -557,7 +725,6 @@ describe('Socket store roles', () => {
     await using directory = await new TemporaryFiles().directory('mutex-test-');
     await using store = new SocketStore(directory.path, {
       clock: globalThis,
-      pollInterval: 10,
     });
     const roles: SocketRole[] = [];
     store.on('role', (role) => roles.push(role));
@@ -579,12 +746,10 @@ describe('Socket store roles', () => {
     await using directory = await new TemporaryFiles().directory('mutex-test-');
     await using leader = new SocketStore(directory.path, {
       clock: globalThis,
-      pollInterval: 10,
     });
     await (await leader.acquire('warm-up'))[Symbol.asyncDispose]();
     await using follower = new SocketStore(directory.path, {
       clock: globalThis,
-      pollInterval: 10,
     });
     const roles: SocketRole[] = [];
     follower.on('role', (role) => roles.push(role));
@@ -600,7 +765,7 @@ describe('Socket store roles', () => {
   test('a follower reports the follower role again when it reaches a new leader', async (t) => {
     // Arrange: one store leads, and two stores follow it.
     await using directory = await new TemporaryFiles().directory('mutex-test-');
-    const options = { pollInterval: 10, graceWindow: 50 };
+    const options = { graceWindow: 50 };
     const leader = new SocketStore(directory.path, {
       ...options,
       clock: globalThis,
@@ -654,7 +819,6 @@ describe('Socket store follower failure', () => {
     await using directory = await new TemporaryFiles().directory('mutex-test-');
     await using leader = new SocketStore(directory.path, {
       clock: globalThis,
-      pollInterval: 10,
     });
     await (await leader.acquire('warm-up'))[Symbol.asyncDispose]();
 
@@ -664,7 +828,7 @@ describe('Socket store follower failure', () => {
 				import { Mutex } from ${JSON.stringify(mutexUrl.href)};
 				import { SocketStore } from ${JSON.stringify(socketStoreUrl.href)};
 
-				const store = new SocketStore(${JSON.stringify(directory.path)}, { clock: globalThis, pollInterval: 10 });
+				const store = new SocketStore(${JSON.stringify(directory.path)}, { clock: globalThis });
 				const mutex = new Mutex(store);
 				store.once('role', () => {
 					throw new Error('The role listener failed');
@@ -715,7 +879,6 @@ describe('Socket store follower failure', () => {
       await once(leader, 'listening');
       await using store = new SocketStore(directory.path, {
         clock: globalThis,
-        pollInterval: 10,
       });
       store.once('role', () => {
         throw new Error('The role listener failed');

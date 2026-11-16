@@ -10,11 +10,13 @@ import { SqliteElection } from '@zukhruf/election';
 export function socketElection(
   directory: string,
   clock: Clock,
+  leaseDuration?: number,
 ): SqliteElection {
   return new SqliteElection({
     directory,
     claimFile: 'leader.lock',
     epochFile: 'leader.epoch',
+    leaseDuration,
     clock,
   });
 }

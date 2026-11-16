@@ -16,8 +16,13 @@ import { socketElection } from './socket-election.ts';
 export type SocketRole = 'leader' | 'follower';
 
 export interface SocketStoreOptions {
-  /** Milliseconds between connection and campaign attempts. */
-  pollInterval?: number;
+  /**
+   * The longest silence, in milliseconds, that the other processes accept
+   * from this process while it leads. A follower ends a leader that is
+   * silent for longer, for example one stopped with SIGSTOP, and a survivor
+   * takes over. The default is the one of `SqliteElection`.
+   */
+  leaseDuration?: number;
   /**
    * Milliseconds a new leader grants nothing, so holders from the previous
    * term can reassert first. Must exceed how long a holder takes to reconnect.
@@ -47,7 +52,7 @@ export class SocketStore
 
   constructor(
     directory: string,
-    { pollInterval = 10, graceWindow = 500, clock }: SocketStoreOptions,
+    { leaseDuration, graceWindow = 500, clock }: SocketStoreOptions,
   ) {
     super();
     // A Unix socket file in the directory on macOS and Linux; on Windows, a named pipe named by a hash of that path.
@@ -60,8 +65,7 @@ export class SocketStore
           directory,
           new ElectingConnector({
             address: endpoint.address,
-            election: socketElection(directory, clock),
-            pollInterval,
+            election: socketElection(directory, clock, leaseDuration),
             clock,
             serve: async (term) => {
               // Until serving has fully started, a failure closes the new server, so no server outlives its term.

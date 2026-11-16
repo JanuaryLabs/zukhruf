@@ -12,3 +12,5 @@
 - The first call to a lock store with a coordinator can take longer than `waitAtMost`. When the leader is frozen, the call waits until the leader continues or stops.
 - To limit the total time, give `signal: AbortSignal.timeout(ms)` too. When that signal aborts, the call rejects with a `TimeoutError`. It does not give up.
 - A test pins the rule: a lock store whose first answer comes after the limit still grants a free key.
+
+2026-11-16: A frozen leader of `SocketStore` no longer keeps a call waiting until it continues or stops. A follower ends it after its `leaseDuration`, and the call goes to the next leader. See [ADR 0031](./0031-a-follower-observes-the-leader-so-a-frozen-leader-is-ended.md).

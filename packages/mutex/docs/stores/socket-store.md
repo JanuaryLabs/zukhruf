@@ -49,7 +49,7 @@ The leader is a normal app process. You do not start or watch a separate server.
 **Failover.** When the leader stops, or when it loses its term, the kernel or the leader closes all connections to it. Then this occurs:
 
 1. Each follower sees its connection close.
-2. Each follower connects again or starts a campaign. One candidate wins and becomes the new leader with a higher epoch.
+2. Each follower connects again or tries the claim. One candidate wins and becomes the new leader with a higher epoch. A candidate that lost its try waits until the old leader leaves or a step of a back-off ends (25 ms, × 1.6, ± 20 %, at most 1000 ms), and then it connects again.
 3. The new leader starts a **grace window**. During the grace window, it grants no keys.
 4. Each holder **reasserts** its keys: it tells the new leader the keys and tokens that it holds.
 5. Each waiter sends its request again.
@@ -58,6 +58,8 @@ The leader is a normal app process. You do not start or watch a separate server.
 The grace window prevents a waiter from getting a key that a holder still has. For two reasserts of one key, the higher token wins. A reassert after the grace window is refused. Then the signal of that holder's lease aborts with `LeaseLostError`, and the call of that holder rejects with `LeaseLostError`.
 
 The first leader of a directory (epoch 1) has no grace window, because no earlier leader had holders.
+
+**A frozen leader.** A leader that is frozen, for example during `SIGSTOP`, keeps its connections open and answers nothing. Each follower observes the leader through the heartbeat of `SqliteElection`. When the leader sends no heartbeat for longer than its `leaseDuration`, a follower ends the leader's process, and a failover occurs. A process that waits for a leader that froze before its server listened ends it in the same way. See [ADR 0031](../adr/0031-a-follower-observes-the-leader-so-a-frozen-leader-is-ended.md).
 
 **Clean shutdown.** A new leader also has no grace window after a clean shutdown of the leader before it. A leader shuts down cleanly when it disposes its store, no process holds a key, and its own grace window is over. Its lock server then resigns the term with `clean`, and the next term reads `afterCleanShutdown` ([`@zukhruf/election`](../../../election/README.md)). A waiter is not a holder: it sends its request again to the new leader. Thus a process that runs alone after another process disposed its store gets its first key at once. See [ADR 0018](../adr/0018-the-next-leader-skips-the-grace-window-after-a-clean-shutdown.md).
 
@@ -91,6 +93,7 @@ See [ADR 0015](../adr/0015-a-holder-check-never-acquires-the-key.md).
 | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | A holder stops                                   | The leader releases its keys in approximately 2 ms.                                                                                                                                                                                     |
 | The leader stops                                 | A failover occurs. Holders reassert their keys during the grace window. After a clean shutdown, there is no grace window, because no process held a key.                                                                                |
+| The leader freezes                               | After its `leaseDuration`, a follower ends the leader's process, and a failover occurs. Holders reassert their keys during the grace window. A follower cannot end a leader of another user.                                            |
 | The leader loses its term                        | The leader closes its server, and a failover occurs. This needs a backend that can take the claim away; `SqliteElection` never does.                                                                                                    |
 | A holder is frozen during the whole grace window | Its reassert is refused. A newer holder can get the key. When the frozen holder continues, the signal of its lease aborts with `LeaseLostError`, and the call rejects with `LeaseLostError`. A fenced resource refuses its late writes. |
 | The epoch of the leader has no tokens left       | The leader closes its server and ends its term, and a failover occurs. The request that needed the token goes to the new leader.                                                                                                        |
@@ -107,12 +110,12 @@ Before a process sends its first request, it tells the leader its protocol versi
 
 ## Options
 
-| Option                       | Default | Description                                                                                                                                                                                                                                                                                |
-| ---------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `directory` (first argument) | —       | The shared directory. All processes must use the same path. It belongs to the lock store alone: no other program may add, change, or remove files or folders in it.                                                                                                                        |
-| `pollInterval`               | `10`    | Milliseconds between two attempts to connect or to campaign.                                                                                                                                                                                                                               |
-| `clock`                      | —       | The clock of the waits of the store: the attempts to connect or to campaign, and the grace window. Give `globalThis` in production; a test gives a fake clock, for example `createClock()` of `@sinonjs/fake-timers` ([`@zukhruf/async`](../../../async/README.md#run-a-wait-on-a-clock)). |
-| `graceWindow`                | `500`   | Milliseconds after a failover in which the new leader grants no keys. It must be longer than the time that a holder needs to connect again.                                                                                                                                                |
+| Option                       | Default | Description                                                                                                                                                                                                                                                                                                                         |
+| ---------------------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `directory` (first argument) | —       | The shared directory. All processes must use the same path. It belongs to the lock store alone: no other program may add, change, or remove files or folders in it.                                                                                                                                                                 |
+| `leaseDuration`              | `15000` | Milliseconds without a heartbeat after which a follower ends this process while it leads. Set it above the longest pause of your processes. The default is the default of `SqliteElection`.                                                                                                                                         |
+| `clock`                      | —       | The clock of the waits of the store: the back-off between two tries, the heartbeats of the leader and their deadline, and the grace window. Give `globalThis` in production; a test gives a fake clock, for example `createClock()` of `@sinonjs/fake-timers` ([`@zukhruf/async`](../../../async/README.md#run-a-wait-on-a-clock)). |
+| `graceWindow`                | `500`   | Milliseconds after a failover in which the new leader grants no keys. It must be longer than the time that a holder needs to connect again.                                                                                                                                                                                         |
 
 `SocketStore` always uses `EpochTokenSource`. The safety of a failover depends on the epoch, so you cannot change the token source.
 
@@ -131,6 +134,9 @@ The `'role'` event tells you each time this process starts to lead, or starts to
   - A leader that shuts down does not wait for its followers, and a follower keeps its key.
   - A leader that shuts down while a follower holds a key leaves a grace window to the next leader. The holder reasserts its key, and a waiter gets the key only after the release. When the lock server resigns clean on each close, this test fails 3 of 3 runs.
   - A process that runs alone after a process that disposed its store with no key held gets its key in less than 400 ms. The default grace window is 500 ms. Before the clean shutdown, it took about 515 ms.
+  - A leader frozen with `SIGSTOP` for longer than its `leaseDuration` of 500 ms is ended by a follower. A survivor leads, the holder keeps its key, and the survivor grants the key after the release.
+  - A process ends a leader that froze before its server listened, and then it leads.
+- `src/lock-stores/socket/electing-connector.test.ts`: a process whose leader serves no lock server makes one try, and tries again only when the leader leaves. Under a holder that serves no pipe, it tries again after one step of the back-off, not before.
 - A mutation test removed the grace window, the reassert, and the epoch. The tests found each change.
 - `src/lock-stores/socket/handshake.test.ts`:
   - A process whose leader speaks another protocol version fails its acquire, and the error gives both protocol versions.

@@ -94,7 +94,7 @@ async function followerOfStandIn() {
   stack.use(await socketElection(directory.path, globalThis).campaign());
   const leader = stack.use(await standInLeader(directory.path));
   const store = stack.use(
-    new SocketStore(directory.path, { clock: globalThis, pollInterval: 10 }),
+    new SocketStore(directory.path, { clock: globalThis }),
   );
   const owned = stack.move();
   return {
@@ -753,7 +753,7 @@ describe('A follower process through a reconnect', () => {
     await using waiter = startWorker(
       `
 					import { SocketStore } from ${JSON.stringify(socketUrl.href)};
-					const store = new SocketStore(${JSON.stringify(directory.path)}, { clock: globalThis, pollInterval: 10 });
+					const store = new SocketStore(${JSON.stringify(directory.path)}, { clock: globalThis });
 					const lease = await store.acquire('product:42');
 					process.send({ type: 'granted' });
 					await lease[Symbol.asyncDispose]();
@@ -812,7 +812,7 @@ describe('A follower process through a reconnect', () => {
       `
 					import { SocketStore } from ${JSON.stringify(socketUrl.href)};
 					process.once('message', () => {});
-					const store = new SocketStore(${JSON.stringify(directory.path)}, { clock: globalThis, pollInterval: 10 });
+					const store = new SocketStore(${JSON.stringify(directory.path)}, { clock: globalThis });
 					await store.acquire('product:42');
 					process.send({ type: 'holding' });
 				`,

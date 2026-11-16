@@ -90,7 +90,6 @@ async function publishedPeer(directory: string, bytes: string) {
 async function leaderOf(directory: string) {
   const store = new SocketStore(directory, {
     clock: globalThis,
-    pollInterval: 10,
   });
   await new Mutex(store).acquire('warm-up', async () => {});
   return store;
@@ -111,7 +110,6 @@ describe('What a socket store shares with other versions in its directory', () =
       using term = holdTerm(directory.path);
       await using store = new SocketStore(directory.path, {
         clock: globalThis,
-        pollInterval: 10,
       });
       const roles: SocketRole[] = [];
       store.on('role', (role) => roles.push(role));
@@ -188,7 +186,6 @@ describe('What a socket store shares with other versions in its directory', () =
       await writeFile(join(directory.path, 'leader.epoch'), '6');
       await using store = new SocketStore(directory.path, {
         clock: globalThis,
-        pollInterval: 10,
         graceWindow: 50,
       });
 
@@ -239,7 +236,6 @@ describe('What a socket store shares with other versions in its directory', () =
       );
       await using store = new SocketStore(directory.path, {
         clock: globalThis,
-        pollInterval: 10,
       });
       const roles: SocketRole[] = [];
       store.on('role', (role) => roles.push(role));
@@ -401,7 +397,6 @@ describe('What a socket store shares with other versions in its directory', () =
       );
       await using store = new SocketStore(directory.path, {
         clock: globalThis,
-        pollInterval: 10,
       });
 
       // Act
@@ -483,7 +478,6 @@ describe('What a socket store shares with other versions in its directory', () =
       // Act
       await using store = new SocketStore(longest, {
         clock: globalThis,
-        pollInterval: 10,
       });
       const taken = await taskOutcome(
         new Mutex(store).acquire('product:42', async () => {}),
@@ -492,7 +486,6 @@ describe('What a socket store shares with other versions in its directory', () =
         try {
           return new SocketStore(tooLong, {
             clock: globalThis,
-            pollInterval: 10,
           });
         } catch (error) {
           return error;
@@ -547,7 +540,7 @@ describe('What a socket store shares with other versions on Windows', () => {
           createInterface({ input: peer }).once('line', (line) => process.send({ type: 'hello', line }));
         });
         leader.listen(${JSON.stringify(pipe)}, () => {
-          const store = new SocketStore(${JSON.stringify(directory)}, { clock: globalThis, pollInterval: 10 });
+          const store = new SocketStore(${JSON.stringify(directory)}, { clock: globalThis });
           store.on('role', (role) => process.send({ type: 'role', role }));
           void new Mutex(store).acquire('product:42', async () => {});
         });
@@ -586,7 +579,7 @@ describe('What a socket store shares with other versions on Windows', () => {
         import { Mutex } from ${JSON.stringify(mutexUrl.href)};
         import { SocketStore } from ${JSON.stringify(socketUrl.href)};
         process.chdir(${JSON.stringify(scratch.path)});
-        const store = new SocketStore(${JSON.stringify(directory)}, { clock: globalThis, pollInterval: 10 });
+        const store = new SocketStore(${JSON.stringify(directory)}, { clock: globalThis });
         store.on('role', (role) => process.send({ type: 'role', role }));
         await new Mutex(store).acquire('warm-up', async () => {});
         const follower = connect(${JSON.stringify(pipe)});

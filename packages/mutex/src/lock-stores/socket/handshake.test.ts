@@ -83,7 +83,6 @@ describe('Socket store protocol handshake', () => {
       );
       await using store = new SocketStore(directory.path, {
         clock: globalThis,
-        pollInterval: 10,
       });
 
       // Act
@@ -114,7 +113,6 @@ describe('Socket store protocol handshake', () => {
       });
       await using store = new SocketStore(directory.path, {
         clock: globalThis,
-        pollInterval: 10,
       });
       const roles: SocketRole[] = [];
       store.on('role', (role) => roles.push(role));
@@ -149,7 +147,6 @@ describe('Socket store protocol handshake', () => {
       );
       await using store = new SocketStore(directory.path, {
         clock: globalThis,
-        pollInterval: 10,
       });
       const roles: SocketRole[] = [];
       store.on('role', (role) => roles.push(role));
@@ -191,12 +188,10 @@ describe('Socket store protocol handshake', () => {
           );
           await using leader = new SocketStore(directory.path, {
             clock: globalThis,
-            pollInterval: 10,
           });
           await (await leader.acquire('warm-up'))[Symbol.asyncDispose]();
           await using follower = new SocketStore(directory.path, {
             clock: globalThis,
-            pollInterval: 10,
           });
           await (await follower.acquire('warm-up'))[Symbol.asyncDispose]();
 
@@ -237,7 +232,6 @@ describe('Socket store protocol handshake', () => {
       assert.ok(term, 'The stand-in must win the first term');
       await using successor = new SocketStore(directory.path, {
         clock: globalThis,
-        pollInterval: 10,
       });
       let stopping = true;
       await using _leader = await standInLeader(directory.path, (peer) => {
@@ -252,7 +246,6 @@ describe('Socket store protocol handshake', () => {
       });
       await using store = new SocketStore(directory.path, {
         clock: globalThis,
-        pollInterval: 10,
       });
       const roles: SocketRole[] = [];
       store.on('role', (role) => roles.push(role));
@@ -306,11 +299,9 @@ describe('Socket store protocol handshake', () => {
       );
       await using store = new SocketStore(directory.path, {
         clock: globalThis,
-        pollInterval: 10,
       });
       await using successor = new SocketStore(directory.path, {
         clock: globalThis,
-        pollInterval: 10,
       });
       const lease = await store.acquire('product:42');
       const journal: string[] = [];
@@ -358,7 +349,6 @@ describe('Socket store protocol handshake', () => {
       );
       await using leader = new SocketStore(directory.path, {
         clock: globalThis,
-        pollInterval: 10,
       });
       await (await leader.acquire('warm-up'))[Symbol.asyncDispose]();
       const socket = connect(join(directory.path, 'lock.sock'));
@@ -409,7 +399,6 @@ describe('Socket store protocol handshake', () => {
       });
       const store = new SocketStore(directory.path, {
         clock: globalThis,
-        pollInterval: 10,
       });
       const acquiring = outcome(store.acquire('product:42'));
       await t.waitFor(() => assert.ok(greeted, 'The store must say hello'), {
@@ -439,7 +428,6 @@ describe('Socket store protocol handshake', () => {
       );
       await using leader = new SocketStore(directory.path, {
         clock: globalThis,
-        pollInterval: 10,
       });
       await (await leader.acquire('warm-up'))[Symbol.asyncDispose]();
       const socket = connect({
