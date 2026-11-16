@@ -1,6 +1,6 @@
 # Pool and PoolWorkers take one worker kind
 
-Status: Proposed 2026-11-16 for Ezz's review (backlog #3527). Not built.
+Status: Proposed 2026-11-16 for Ezz's review (backlog #3527). Not built in the pool. `WorkerKind` is built (2026-11-16): its name, revision and rules, the check of its channels and its queue name. `Pool` and `PoolWorkers` do not take it yet.
 
 A host that only sends must know four things about the jobs (map ticket 16):
 
@@ -48,4 +48,4 @@ export const vision = new WorkerKind<{ path: string }, { text: string }>({
 ## Consequences
 
 - The pool does not check the input or the output at run time. A sender and an owner of the same revision run the same code, and an owner refuses another revision. BullMQ and Temporal check only types too.
-- The name of a kind is short. Its two channels must be shorter than 64 bytes, and its queue name adds `.r<revision>`, which Postgres and `@zukhruf/sqlite-notify` require ([ADR 0018](./0018-news-travels-by-push-through-the-notify-of-the-store-with-a-backstop.md)). The constructor throws a `RangeError` for a longer name.
+- The name of a kind is short. Its two channels must be shorter than 64 bytes, and its queue name adds `.r<revision>`, which Postgres and `@zukhruf/sqlite-notify` require ([ADR 0018](./0018-news-travels-by-push-through-the-notify-of-the-store-with-a-backstop.md)). The constructor throws a `RangeError` for a longer name. The channels are `<name>.new-job` and `<name>.output`, so a name has at most 55 bytes.

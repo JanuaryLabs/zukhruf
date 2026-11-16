@@ -126,7 +126,7 @@ An eviction of your own gets the clock of the pool as the third argument of `idl
 
 ## One pool for the computer
 
-Design for review: not built yet (backlog #3527). The text above tells what the package does today. [ADR 0011](./docs/adr/0011-every-pool-is-a-pool-for-the-computer-and-one-owner-pulls-its-jobs-from-a-store-that-every-host-writes-to.md) to [ADR 0026](./docs/adr/0026-start-accepts-a-job-now-and-a-job-handle-reads-its-output-later-from-any-host.md) record the design. The tickets and the research named here are in the pool map, `.scratch/one-pool-for-the-computer/` at the workspace root, which git does not track.
+Design for review (backlog #3527). `WorkerKind` and `computerStore` are built. The rest is not built yet. The text above tells what the package does today. [ADR 0011](./docs/adr/0011-every-pool-is-a-pool-for-the-computer-and-one-owner-pulls-its-jobs-from-a-store-that-every-host-writes-to.md) to [ADR 0026](./docs/adr/0026-start-accepts-a-job-now-and-a-job-handle-reads-its-output-later-from-any-host.md) record the design. The tickets and the research named here are in the pool map, `.scratch/one-pool-for-the-computer/` at the workspace root, which git does not track.
 
 Today each host builds its own pool, so several hosts on one computer run several full pools, and they compete for one Neural Engine (#2896, #3868). In the design, every pool is a pool for the computer. On each computer, one host owns the workers of a pool. Every host writes its jobs to one store, and only the owner takes them. A job is data, so it can go from one host to another. The pool for the computer replaces the pool of today: `use((worker) => …)` goes away.
 
@@ -224,6 +224,13 @@ export class WorkerKind<Input, Output> {
     retryLimit: number;
     expireInSeconds: number;
   });
+  readonly name: string;
+  readonly revision: number;
+  readonly policy: 'standard' | 'exclusive';
+  readonly retryLimit: number;
+  readonly expireInSeconds: number;
+  /** The queue of this revision in the store: `<name>.r<revision>`. */
+  readonly queue: string;
 }
 
 /** Sends jobs of one kind to the store, and waits for their outputs. */

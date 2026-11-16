@@ -12,6 +12,8 @@ export { Pool } from './pool.ts';
 export type { PoolStats } from './pool-stats.ts';
 export { Resources } from './resources.ts';
 export type { Computer } from './capacity.ts';
+export { computerStore } from './computer-store.ts';
 export type { Sample, Sizing } from './sizing.ts';
 export type { Startup } from './startup.ts';
 export type { Worker } from './worker.ts';
+export { WorkerKind } from './worker-kind.ts';
