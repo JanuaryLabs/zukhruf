@@ -1,5 +1,5 @@
 import { statSync } from 'node:fs';
-import { userInfo } from 'node:os';
+import { homedir, userInfo } from 'node:os';
 import { join } from 'node:path';
 
 import { type Clock, untilAborted } from '@zukhruf/async';
@@ -32,15 +32,13 @@ export class Launchd<J extends AgentJob | DaemonJob> {
     this.#clock = clock;
   }
 
-  /** This user's agents: gui/<uid> when this uid owns /dev/console, else user/<uid>. The folder is Library/LaunchAgents in the home folder of the uid. */
+  /** This user's agents: gui/<uid> when this uid owns /dev/console, else user/<uid>. The folder is Library/LaunchAgents under $HOME (ADR 0005). */
   static agents({ clock }: LaunchdOptions): Launchd<AgentJob> {
-    // One record of the user database names the user of the domain and of
-    // the folder, not $HOME (ADR 0005).
-    const { uid, homedir } = userInfo();
+    const { uid } = userInfo();
     const atConsole = statSync('/dev/console').uid === uid;
     return new Launchd<AgentJob>(
       atConsole ? `gui/${uid}` : `user/${uid}`,
-      join(homedir, 'Library', 'LaunchAgents'),
+      join(homedir(), 'Library', 'LaunchAgents'),
       clock,
     );
   }

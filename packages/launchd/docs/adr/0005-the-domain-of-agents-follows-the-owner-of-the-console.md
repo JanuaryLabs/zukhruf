@@ -20,6 +20,18 @@ The owner of `/dev/console` is the user at the GUI. When this process's user own
 ## Consequences
 
 - `Launchd.agents()` reads the owner of `/dev/console` one time, when it makes the handle, and the handle keeps its domain. When the owner of the console changes, for example after a switch of users, make a new handle.
-- `<uid>` and the home folder come from one record of the user database, `os.userInfo()`, not from `$HOME`. The folder of agents is `Library/LaunchAgents` in that home folder. The domain and the folder then name the same user.
+- The folder of agents is `Library/LaunchAgents` under `$HOME`, from `os.homedir()`, which reads `$HOME` and falls back to the user database. `<uid>` comes from `os.userInfo()`. See _The folder of agents_ below.
 - `Launchd.daemons()` uses the `system` domain and the folder `/Library/LaunchDaemons`. It reads nothing.
 - Over SSH, an agent loads into `user/<uid>`. `state()` reads the domain of its handle, so it finds that service, and a handle for `gui/<uid>` does not.
+
+## The folder of agents (amended 2026-11-16, #4439)
+
+The folder of agents first came from the home folder in the user database, `os.userInfo().homedir`, so that the domain and the folder named the same user. A program run with another `$HOME` then wrote its job files to the real `~/Library/LaunchAgents`: context-compiler's e2e tests run its CLI with a temporary `$HOME`, and their test jobs would land among the user's own agents.
+
+The leaders split, and the macOS ones read `$HOME`:
+
+- Homebrew: `Pathname.new("#{Dir.home}/Library/LaunchAgents")` in `user_path` (`/opt/homebrew/Library/Homebrew/services/system.rb:78-80`). Ruby's `Dir.home` reads `$HOME`.
+- pm2: `path.join(process.env.HOME, 'Library/LaunchAgents/' + launchd_service_name + '.plist')` (`lib/API/Startup.js:146` and `:283`).
+- kardianos/service reads the user database first: `getHomeDir()` returns `user.Current().HomeDir`, and reads `$HOME` only when that fails (`service_darwin.go:89-100`). Go's `user.Current()` ignores `$HOME`, with cgo or without.
+
+Decision: the folder is `Library/LaunchAgents` under `os.homedir()`, which reads `$HOME` first and falls back to the user database, as Homebrew and pm2 do. The user database lost because `$HOME` is how a caller says where its files go, and a program that sets it, such as a test, expects its files there. The domain is unchanged: `<uid>` names the user to launchd, and a `$HOME` cannot change it. A caller that sets `$HOME` to another user's home folder gets job files there and services in its own domain.

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
-import { userInfo } from 'node:os';
+import { homedir, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { describe, test } from 'node:test';
 import { promisify } from 'node:util';
@@ -82,10 +82,10 @@ describe('Launchd', { concurrency: true }, () => {
       });
 
       // Assert
-      const { uid, homedir } = userInfo();
+      const { uid } = userInfo();
       const atConsole = (await stat('/dev/console')).uid === uid;
       assert.equal(launchd.domain, atConsole ? `gui/${uid}` : `user/${uid}`);
-      assert.equal(launchd.folder, join(homedir, 'Library/LaunchAgents'));
+      assert.equal(launchd.folder, join(homedir(), 'Library/LaunchAgents'));
       assert.equal(installed.label, label);
       assert.equal(installed.target, `${launchd.domain}/${label}`);
       assert.equal(installed.file, join(launchd.folder, `${label}.plist`));
@@ -465,6 +465,61 @@ describe('Launchd', { concurrency: true }, () => {
     await assert.rejects(stat(service.file), { code: 'ENOENT' });
     assert.deepEqual(await service.state(), { state: 'not loaded' });
     await assert.rejects(service.uninstall(), PermissionDeniedError);
+  });
+
+  test('the agents folder is Library/LaunchAgents under HOME, so a program run with another HOME keeps its job files there', async () => {
+    // Arrange
+    await using home = await new TemporaryFiles().directory('launchd-home-');
+
+    // Act
+    const { stdout } = await promisify(execFile)(
+      process.execPath,
+      [
+        '--input-type=module',
+        '--eval',
+        `const { Launchd } = await import(${JSON.stringify(import.meta.resolve('../index.ts'))});
+        process.stdout.write(Launchd.agents({ clock: globalThis }).folder);`,
+      ],
+      { env: { ...process.env, HOME: home.path } },
+    );
+
+    // Assert
+    assert.equal(stdout, join(home.path, 'Library/LaunchAgents'));
+  });
+
+  test('install under another HOME writes the job file under that HOME and loads the service', async () => {
+    // Arrange
+    await using home = await new TemporaryFiles().directory('launchd-home-');
+    const label = `${PREFIX}home`;
+
+    // Act
+    const { stdout } = await promisify(execFile)(
+      process.execPath,
+      [
+        '--input-type=module',
+        '--eval',
+        `const { Launchd } = await import(${JSON.stringify(import.meta.resolve('../index.ts'))});
+        const launchd = Launchd.agents({ clock: globalThis });
+        const service = launchd.service(${JSON.stringify(label)});
+        try {
+          const installed = await launchd.install({
+            Label: service.label,
+            ProgramArguments: ['/bin/sleep', '600'],
+            RunAtLoad: true,
+          });
+          const { state } = await installed.state();
+          process.stdout.write(JSON.stringify({ file: installed.file, state }));
+        } finally {
+          await service.uninstall();
+        }`,
+      ],
+      { env: { ...process.env, HOME: home.path } },
+    );
+
+    // Assert
+    const { file, state } = JSON.parse(stdout);
+    assert.equal(file, join(home.path, `Library/LaunchAgents/${label}.plist`));
+    assert.notEqual(state, 'not loaded');
   });
 });
 
