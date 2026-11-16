@@ -7,9 +7,14 @@ const execFileAsync = promisify(execFile);
 const packageEntry = import.meta.resolve('../index.ts');
 
 // git and the hook see none of the user's git config and no environment of the
-// Nx task that runs this test.
+// Nx task that runs this test, except NODE_OPTIONS.
 export function isolatedEnvironment(home: string) {
   return {
+    // A real hook inherits the user's NODE_OPTIONS, so the hook here gets the
+    // runner's, and a module that the runner preloads loads in the hook too.
+    ...(process.env.NODE_OPTIONS === undefined
+      ? {}
+      : { NODE_OPTIONS: process.env.NODE_OPTIONS }),
     PATH: `${dirname(process.execPath)}:/usr/bin:/bin`,
     HOME: home,
     GIT_CONFIG_GLOBAL: '/dev/null',

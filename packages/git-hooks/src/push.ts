@@ -1,21 +1,18 @@
-import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { mkdir, mkdtempDisposable, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { promisify } from 'node:util';
 
 import { type WallClock, poll } from '@zukhruf/async';
 import { FileLock } from '@zukhruf/fs';
 
+import { type Git, gitIn } from './git.ts';
 import { type RefUpdate, readRefUpdates } from './ref-update.ts';
-import { withoutRepoVariables } from './repo-variables.ts';
 import { hasInstallDrift } from './snapshot/drift.ts';
 import { installFor } from './snapshot/installs.ts';
 import { runNx } from './snapshot/nx.ts';
 import { linkPackages } from './snapshot/packages.ts';
-
-const execFileAsync = promisify(execFile);
+import { type DiffEntry, Tree, changesBetween } from './tree.ts';
 
 export class MissingLockfileError extends Error {
   readonly sha: string;
@@ -30,7 +27,11 @@ export class MissingLockfileError extends Error {
 interface PushOptions {
   // The top of the working tree: the folder where git runs the hook.
   readonly root: string;
+  // The hook environment, for the git commands on the repo.
   readonly environment: NodeJS.ProcessEnv;
+  // The hook environment without the git variables of the repo, for each
+  // tool: git in a snapshot, npm and nx.
+  readonly toolEnvironment: NodeJS.ProcessEnv;
   // The name and the URL of the remote: the arguments of the hook.
   readonly remote: { readonly name: string; readonly url: string };
   // The standard input of the hook: one line for each ref update.
@@ -50,28 +51,49 @@ export class Push {
   readonly updates: readonly RefUpdate[];
   readonly #root: string;
   readonly #environment: NodeJS.ProcessEnv;
+  readonly #toolEnvironment: NodeJS.ProcessEnv;
+  readonly #git: Git;
   readonly #notice: (message: string) => void;
   readonly #clock: PushOptions['clock'];
 
   private constructor(
-    { root, environment, remote, notice, clock }: PushOptions,
+    { root, environment, toolEnvironment, remote, notice, clock }: PushOptions,
+    git: Git,
     updates: readonly RefUpdate[],
   ) {
     this.remote = remote;
     this.updates = updates;
     this.#root = root;
     this.#environment = environment;
+    this.#toolEnvironment = toolEnvironment;
+    this.#git = git;
     this.#notice = notice;
     this.#clock = clock;
   }
 
   static async read(options: PushOptions): Promise<Push> {
-    const git = (...args: string[]) =>
-      gitIn(options.root, options.environment, ...args);
+    const git = gitIn(options.root, options.environment);
     return new Push(
       options,
+      git,
       await readRefUpdates(git, options.remote.name, options.input),
     );
+  }
+
+  // The tree of one commit.
+  async tree(sha: string): Promise<Tree> {
+    return Tree.list(
+      (await this.#git('rev-parse', '--verify', `${sha}^{tree}`)).trim(),
+      this.#git,
+    );
+  }
+
+  // The diff entries of a create or an update: from the tree of its base to
+  // the tree of its head, or from the empty tree when there is no base.
+  changes(
+    update: Extract<RefUpdate, { kind: 'create' | 'update' }>,
+  ): Promise<readonly DiffEntry[]> {
+    return changesBetween(this.#git, update.base, update.head);
   }
 
   // Runs `work` on the snapshot of one commit: a clone of the repo in a
@@ -110,10 +132,7 @@ export class Push {
       join(tmpdir(), 'git-hooks-push-'),
     );
     const folder = join(await realpath(temporary.path), 'tree');
-    const isolated = await withoutRepoVariables(this.#environment);
-    await gitIn(
-      temporary.path,
-      isolated,
+    await gitIn(temporary.path, this.#toolEnvironment)(
       'clone',
       '--shared',
       '--no-checkout',
@@ -121,7 +140,12 @@ export class Push {
       this.#root,
       folder,
     );
-    await gitIn(folder, isolated, 'checkout', '--detach', '--quiet', sha);
+    await gitIn(folder, this.#toolEnvironment)(
+      'checkout',
+      '--detach',
+      '--quiet',
+      sha,
+    );
     if (!existsSync(join(folder, 'package-lock.json')))
       throw new MissingLockfileError(sha);
     const installed = (await hasInstallDrift(
@@ -142,7 +166,7 @@ export class Push {
     await linkPackages(installed, folder);
     const cache = join(state, 'nx');
     const environment = {
-      ...isolated,
+      ...this.#toolEnvironment,
       NX_DAEMON: 'false',
       NX_CACHE_DIRECTORY: cache,
       NX_WORKSPACE_DATA_DIRECTORY: join(cache, 'workspace-data'),
@@ -163,22 +187,4 @@ export class Push {
       return stdout;
     });
   }
-
-  #git(...args: string[]): Promise<string> {
-    return gitIn(this.#root, this.#environment, ...args);
-  }
-}
-
-async function gitIn(
-  cwd: string,
-  environment: NodeJS.ProcessEnv,
-  ...args: string[]
-): Promise<string> {
-  const { stdout } = await execFileAsync('git', args, {
-    cwd,
-    env: environment,
-    encoding: 'utf8',
-    maxBuffer: 2 ** 30,
-  });
-  return stdout;
 }

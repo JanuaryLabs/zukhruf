@@ -1,11 +1,6 @@
 import { readFile } from 'node:fs/promises';
 
-interface LockEntry {
-  readonly version: unknown;
-  readonly link: boolean;
-  readonly optional: boolean;
-  readonly hasInstallScript: boolean;
-}
+import { Lockfile } from '../npm/lockfile.ts';
 
 // Whether the installed packages differ from the lockfile of a commit. npm's
 // hidden lockfile, node_modules/.package-lock.json, lists what is installed.
@@ -16,15 +11,16 @@ export async function hasInstallDrift(
   lockfile: string,
   hiddenLockfile: string,
 ): Promise<boolean> {
-  const wanted = await packagesOf(lockfile);
-  let installed: Map<string, LockEntry>;
+  const wanted = Lockfile.parse(await readFile(lockfile, 'utf8')).thirdParty();
+  let hidden: string;
   try {
-    installed = await packagesOf(hiddenLockfile);
+    hidden = await readFile(hiddenLockfile, 'utf8');
   } catch (error) {
     if (Error.isError(error) && 'code' in error && error.code === 'ENOENT')
       return true;
     throw error;
   }
+  const installed = Lockfile.parse(hidden).thirdParty();
   for (const [path, entry] of wanted) {
     const have = installed.get(path);
     if (have === undefined) {
@@ -34,64 +30,4 @@ export async function hasInstallDrift(
   }
   for (const path of installed.keys()) if (!wanted.has(path)) return true;
   return false;
-}
-
-// The third-party packages of a lockfile: the entries in a node_modules
-// folder that are not links.
-async function packagesOf(path: string): Promise<Map<string, LockEntry>> {
-  const entries = new Map<string, LockEntry>();
-  for (const [key, value] of await lockPackages(path)) {
-    if (!key.includes('node_modules/')) continue;
-    const entry = {
-      version: field(value, 'version'),
-      link: field(value, 'link') === true,
-      optional: field(value, 'optional') === true,
-      hasInstallScript: field(value, 'hasInstallScript') === true,
-    };
-    if (!entry.link) entries.set(key, entry);
-  }
-  return entries;
-}
-
-// The folders that the links of a lockfile point to, relative to the folder
-// of the lockfile: the workspace packages, and each folder that a `file:`
-// dependency names.
-export async function linkTargets(lockfile: string): Promise<string[]> {
-  const targets = new Set<string>();
-  for (const [, value] of await lockPackages(lockfile)) {
-    const resolved = field(value, 'resolved');
-    if (field(value, 'link') === true && typeof resolved === 'string')
-      targets.add(resolved);
-  }
-  return [...targets];
-}
-
-async function lockPackages(path: string): Promise<[string, unknown][]> {
-  const lockfile: unknown = JSON.parse(await readFile(path, 'utf8'));
-  const packages =
-    typeof lockfile === 'object' && lockfile !== null && 'packages' in lockfile
-      ? lockfile.packages
-      : undefined;
-  if (typeof packages !== 'object' || packages === null)
-    throw new TypeError(`${path} has no "packages"; npm 7 or later writes it`);
-  return Object.entries(packages);
-}
-
-function field(value: unknown, name: string): unknown {
-  return typeof value === 'object' && value !== null && name in value
-    ? Reflect.get(value, name)
-    : undefined;
-}
-
-// The third-party packages that the lockfile marks with an install script.
-// The root and the workspace packages have the mark too, but their scripts
-// must not run in the state folder.
-export async function withInstallScripts(lockfile: string): Promise<string[]> {
-  const names = new Set<string>();
-  for (const [key, entry] of await packagesOf(lockfile))
-    if (entry.hasInstallScript)
-      names.add(
-        key.slice(key.lastIndexOf('node_modules/') + 'node_modules/'.length),
-      );
-  return [...names];
 }

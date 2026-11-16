@@ -1,25 +1,60 @@
 import { execFile } from 'node:child_process';
 import { mkdtempDisposable } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, matchesGlob } from 'node:path';
+import { join } from 'node:path';
 import { promisify } from 'node:util';
 
+import { type Git, gitIn } from './git.ts';
 import { withoutRepoVariables } from './repo-variables.ts';
+import { type DiffEntry, Tree, changesBetween, matches } from './tree.ts';
 
 const execFileAsync = promisify(execFile);
 
 // The staged commit: the index of the repo at `root`. Each read of a staged
 // file goes to its staged copy, never to the working tree, because other
-// sessions can edit the working tree while the hook runs. The environment is
-// the hook's own, so git keeps the index that `git commit` gave it in
-// GIT_INDEX_FILE.
+// sessions can edit the working tree while the hook runs. The git commands get
+// the hook environment, so git keeps the index that `git commit` gave the hook
+// in GIT_INDEX_FILE. Each tool gets the tool environment, which the host
+// computes. A repo's own test that builds a Commit gives one environment, and
+// the tool environment then comes from it.
 export class Commit {
   readonly root: string;
   readonly #environment: NodeJS.ProcessEnv;
+  readonly #toolEnvironment: NodeJS.ProcessEnv | undefined;
+  readonly #git: Git;
 
-  constructor(root: string, environment: NodeJS.ProcessEnv) {
+  constructor(
+    root: string,
+    environment: NodeJS.ProcessEnv,
+    toolEnvironment?: NodeJS.ProcessEnv,
+  ) {
     this.root = root;
     this.#environment = environment;
+    this.#toolEnvironment = toolEnvironment;
+    this.#git = gitIn(root, environment);
+  }
+
+  // The staged tree: the tree that `git write-tree` writes from the index of
+  // the hook. Each call writes the tree of the index as it is then.
+  async tree(): Promise<Tree> {
+    return Tree.list(await this.#stagedTree(), this.#git);
+  }
+
+  // The diff entries from the tree of HEAD to the staged tree. A first commit
+  // diffs from the empty tree.
+  async changes(): Promise<readonly DiffEntry[]> {
+    return changesBetween(
+      this.#git,
+      await this.#headTree(),
+      await this.#stagedTree(),
+    );
+  }
+
+  // Whether a diff entry of the commit matches one of the globs. A deleted
+  // path counts, so a commit that only deletes a file that a step watches
+  // still starts the step.
+  async touches(globs: readonly string[]): Promise<boolean> {
+    return (await this.changes()).some(({ path }) => matches(path, globs));
   }
 
   // The paths that the commit adds, copies, modifies or renames.
@@ -51,12 +86,6 @@ export class Commit {
   // The staged copy of one file.
   blob(path: string): Promise<string> {
     return this.#git('cat-file', 'blob', `:${path}`);
-  }
-
-  // Whether the commit stages a path that matches one of the globs.
-  async touches(globs: readonly string[]): Promise<boolean> {
-    const staged = await this.staged();
-    return staged.some((path) => globs.some((glob) => matchesGlob(path, glob)));
   }
 
   // Runs `work` on a copy of the staged tree in a temporary folder, for a
@@ -93,7 +122,8 @@ export class Commit {
       {
         cwd: this.root,
         env: {
-          ...(await withoutRepoVariables(this.#environment)),
+          ...(this.#toolEnvironment ??
+            (await withoutRepoVariables(this.#environment))),
           NX_DAEMON: 'false',
         },
         encoding: 'utf8',
@@ -128,14 +158,22 @@ export class Commit {
     return projects;
   }
 
-  async #git(...args: string[]): Promise<string> {
-    const { stdout } = await execFileAsync('git', args, {
-      cwd: this.root,
-      env: this.#environment,
-      encoding: 'utf8',
-      // A staged file of any size, not Node's default of 1 MiB.
-      maxBuffer: 2 ** 30,
-    });
-    return stdout;
+  async #stagedTree(): Promise<string> {
+    return (await this.#git('write-tree')).trim();
+  }
+
+  // The tree of HEAD, or undefined before the first commit.
+  async #headTree(): Promise<string | undefined> {
+    try {
+      return (
+        await this.#git('rev-parse', '--verify', '--quiet', 'HEAD^{tree}')
+      ).trim();
+    } catch (error) {
+      // With --quiet, rev-parse exits with 1 and says nothing when HEAD names
+      // no commit yet.
+      if (Error.isError(error) && 'code' in error && error.code === 1)
+        return undefined;
+      throw error;
+    }
   }
 }

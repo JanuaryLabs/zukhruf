@@ -15,7 +15,7 @@ import {
 import { basename, isAbsolute, join, normalize, sep } from 'node:path';
 import { promisify } from 'node:util';
 
-import { linkTargets, withInstallScripts } from './drift.ts';
+import { Lockfile } from '../npm/lockfile.ts';
 import { workspaceFolders } from './workspaces.ts';
 
 const execFileAsync = promisify(execFile);
@@ -84,7 +84,9 @@ async function install(
     '--no-audit',
     '--no-fund',
   );
-  const names = await withInstallScripts(join(folder, 'package-lock.json'));
+  const names = Lockfile.parse(
+    await readFile(join(folder, 'package-lock.json'), 'utf8'),
+  ).withInstallScripts();
   if (names.length > 0) await npm(folder, environment, 'rebuild', ...names);
   await writeFile(join(folder, marker), '');
 }
@@ -102,7 +104,10 @@ async function copyLinkedFolders(
   folder: string,
 ): Promise<void> {
   const workspaces = new Set((await workspaceFolders(snapshot)).map(normalize));
-  for (const target of await linkTargets(join(snapshot, 'package-lock.json'))) {
+  const lockfile = Lockfile.parse(
+    await readFile(join(snapshot, 'package-lock.json'), 'utf8'),
+  );
+  for (const target of lockfile.linkTargets()) {
     const path = normalize(target);
     if (
       workspaces.has(path) ||

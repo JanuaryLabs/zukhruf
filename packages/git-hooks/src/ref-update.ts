@@ -1,3 +1,5 @@
+import type { Git } from './git.ts';
+
 // One line that git gives the pre-push hook on its standard input
 // (githooks(5)): `<local ref> SP <local sha> SP <remote ref> SP <remote sha>`.
 interface RefLine {
@@ -17,8 +19,6 @@ export type RefUpdate =
       readonly base: string | undefined;
     })
   | (RefLine & { readonly kind: 'delete' });
-
-type Git = (...args: string[]) => Promise<string>;
 
 const absent = /^0+$/;
 

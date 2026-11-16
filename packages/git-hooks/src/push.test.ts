@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
-import { mkdir, readFile, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
@@ -200,6 +200,105 @@ test('a push that deletes a ref gives a delete with no head and no base', async 
       remoteSha: pushed,
     },
   ]);
+});
+
+// A hook whose one step gives, for each create or update, the tree of its
+// head and its diff entries, by the remote ref, as JSON on its outcome line.
+const showChanges = `import { type Push, Step, prePush } from '@zukhruf/git-hooks';
+const byPath = (left: { path: string }, right: { path: string }) =>
+  left.path < right.path ? -1 : 1;
+class Show extends Step<Push> {
+  readonly name = 'changes';
+  async run(push: Push) {
+    const shown: Record<string, unknown> = {};
+    for (const update of push.updates)
+      if (update.kind !== 'delete')
+        shown[update.remoteRef] = {
+          tree: (await push.tree(update.head)).id,
+          changes: (await push.changes(update)).toSorted(byPath),
+        };
+    return this.pass(JSON.stringify(shown));
+  }
+}
+await prePush([new Show()]);
+`;
+
+function shownChanges(stderr: string): unknown {
+  const line = /^changes\s+(\{.*\})$/m.exec(stderr);
+  assert.ok(line, `The hook must print the changes:\n${stderr}`);
+  return JSON.parse(line[1] ?? '');
+}
+
+test('the first push of a history to an empty remote diffs from the empty tree: each path of the head is added, and the tree is the tree of the head', async () => {
+  // Arrange
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
+  const repo = await repository(folder.path, showChanges);
+  await repo.write('a.txt', 'a\n');
+  const head = await repo.commit('first');
+
+  // Act
+  const result = await repo.push('--quiet', 'origin', 'main');
+
+  // Assert
+  assert.equal(result.code, 0, result.stderr);
+  assert.deepEqual(shownChanges(result.stderr), {
+    'refs/heads/main': {
+      tree: (await repo.git('rev-parse', `${head}^{tree}`)).trim(),
+      changes: [
+        { change: 'added', path: '.husky/pre-push', kind: 'link' },
+        { change: 'added', path: '.husky/pre-push.ts', kind: 'file' },
+        { change: 'added', path: 'a.txt', kind: 'file' },
+        { change: 'added', path: 'package.json', kind: 'file' },
+      ],
+    },
+  });
+});
+
+test('the diff entries of a ref update go from its base to its head: an update from the remote sha, with a deletion; a new branch from the newest commit that the remote has, not from the empty tree; and a commit that the remote has, with none', async () => {
+  // Arrange
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
+  const repo = await repository(folder.path, showChanges);
+  await repo.write('a.txt', 'a1\n');
+  await repo.write('b.txt', 'b\n');
+  const first = await repo.commit('first');
+  await repo.push('--quiet', 'origin', 'main');
+  await repo.write('a.txt', 'a2\n');
+  await rm(join(repo.root, 'b.txt'));
+  const second = await repo.commit('second');
+  await repo.write('c.txt', 'c\n');
+  const third = await repo.commit('third');
+  const treeOf = async (sha: string) =>
+    (await repo.git('rev-parse', `${sha}^{tree}`)).trim();
+
+  // Act
+  const result = await repo.push(
+    '--quiet',
+    'origin',
+    `${second}:refs/heads/main`,
+    `${third}:refs/heads/feature`,
+    `${first}:refs/heads/copy`,
+  );
+
+  // Assert
+  assert.equal(result.code, 0, result.stderr);
+  assert.deepEqual(shownChanges(result.stderr), {
+    'refs/heads/main': {
+      tree: await treeOf(second),
+      changes: [
+        { change: 'modified', path: 'a.txt', kind: 'file' },
+        { change: 'deleted', path: 'b.txt' },
+      ],
+    },
+    'refs/heads/feature': {
+      tree: await treeOf(third),
+      changes: [
+        { change: 'modified', path: 'a.txt', kind: 'file' },
+        { change: 'deleted', path: 'b.txt' },
+        { change: 'added', path: 'c.txt', kind: 'file' },
+      ],
+    },
+    'refs/heads/copy': { tree: await treeOf(first), changes: [] },
+  });
 });
 
 test('a pre-push step that fails stops the push with its reason, and no step runs after it', async () => {

@@ -24,23 +24,33 @@ export async function repository(
   await writeFile(join(root, 'package.json'), '{ "type": "module" }\n');
   await writeFile(join(root, '.prettierrc'), '{ "singleQuote": true }\n');
   await installHook(root, name, hook);
+  // `gitOptions` go before `commit`, such as `--git-dir`. `commitArgs` go
+  // after the message, such as `-a` or `--only -- <paths>`.
+  const commitWith = (
+    gitOptions: readonly string[],
+    message: string,
+    ...commitArgs: string[]
+  ) =>
+    hookedGit(
+      [
+        '-c',
+        'core.hooksPath=.husky',
+        ...gitOptions,
+        'commit',
+        '--quiet',
+        '-m',
+        message,
+        ...commitArgs,
+      ],
+      { cwd: root, env: environment },
+    );
   return {
     root,
     git,
     write: (path: string, content: string) =>
       writeFile(join(root, path), content),
+    commitWith,
     commit: (message: string, ...gitOptions: string[]) =>
-      hookedGit(
-        [
-          '-c',
-          'core.hooksPath=.husky',
-          ...gitOptions,
-          'commit',
-          '--quiet',
-          '-m',
-          message,
-        ],
-        { cwd: root, env: environment },
-      ),
+      commitWith(gitOptions, message),
   };
 }

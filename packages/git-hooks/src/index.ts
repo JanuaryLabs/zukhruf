@@ -13,3 +13,4 @@ export { preCommit } from './scripts/pre-commit.ts';
 export { prePush } from './scripts/pre-push.ts';
 export { type Outcome, Step } from './step.ts';
 export { Sync } from './sync.ts';
+export type { DiffEntry, Tree, TreeEntry } from './tree.ts';
