@@ -9,6 +9,8 @@ import type {
   OffWorkOptions,
   Queue,
   QueuePolicy,
+  QueueStats,
+  QueueStatsOptions,
   Request,
   ScheduleOptions,
   SendOptions,
@@ -49,6 +51,14 @@ export interface JobQueue {
   createQueue(name: string, options?: Omit<Queue, 'name'>): Promise<void>;
   updateQueue(name: string, options?: UpdateQueueOptions): Promise<void>;
   deleteQueue(name: string): Promise<void>;
+  // One snapshot of the queue's counts, read from the cache that the monitor
+  // keeps and counted again when it is too old. The history options need
+  // persistQueueStats, which SqliteJobQueue does not have: only `force` is
+  // read.
+  getQueueStats(
+    name: string,
+    options?: QueueStatsOptions,
+  ): Promise<QueueStats[]>;
   send(request: Request): Promise<string | null>;
   send(
     name: string,

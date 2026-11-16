@@ -3,7 +3,6 @@ import { EventEmitter } from 'node:events';
 import type { DatabaseSync } from 'node:sqlite';
 
 import type { Clock, PgBossEventMap } from 'pg-boss';
-import { policies } from 'pg-boss';
 
 import { transaction } from '@zukhruf/sqlite-transaction';
 
@@ -12,6 +11,7 @@ import type { SuperviseIntervals } from './attorney.ts';
 import { ClaimTimer } from './claim-timer.ts';
 import { CurrentOperation } from './in-flight.ts';
 import { JobSettler } from './job-settler.ts';
+import { QueueStatsCache } from './queue-stats-cache.ts';
 import { Row } from './rows.ts';
 import { SqlValues } from './sql-values.ts';
 
@@ -307,10 +307,8 @@ export class Supervisor extends EventEmitter<
     );
   }
 
-  // cacheQueueStats over getQueueStats (plans.js:3411-3471, 3480-3557): each
-  // claimed queue's counts by state, the keys its singleton and stately jobs
-  // hold active (NULL for none, as array_agg over no rows) and monitor_on,
-  // written and returned in the claim's order.
+  // cacheQueueStats (plans.js:3480-3557): the shared aggregate over the
+  // claimed queues, each row with how long the statement held its snapshot.
   static #cacheQueueStats(
     db: DatabaseSync,
     names: string[],
@@ -318,89 +316,14 @@ export class Supervisor extends EventEmitter<
     clock: Clock,
   ): QueueStatsRow[] {
     const started = clock.now();
-    const isoNow = SqlValues.asIso(now);
-    const queues = JSON.stringify(names);
-    return transaction(
-      db,
-      () => {
-        const counts = new Map(
-          db
-            .prepare(
-              `SELECT queue_name,
-              SUM(state IN ('created', 'retry') AND start_after > ?) AS deferred,
-              SUM(state IN ('created', 'retry')) AS queued,
-              SUM(state = 'active') AS active,
-              SUM(state = 'failed') AS failed,
-              COUNT(*) AS total
-            FROM pgboss_job
-            WHERE queue_name IN (SELECT value FROM json_each(?))
-            GROUP BY queue_name`,
-            )
-            .all(isoNow, queues)
-            .map((row) => [Row.readString(row, 'queue_name'), row]),
-        );
-        const singletons = new Map<string, (string | null)[]>();
-        for (const row of db
-          .prepare(
-            `SELECT queue_name, singleton_key FROM pgboss_job
-          WHERE queue_name IN (SELECT value FROM json_each(?))
-            AND state = 'active'
-            AND policy IN ('${policies.singleton}', '${policies.stately}')
-          ORDER BY rowid`,
-          )
-          .all(queues)) {
-          const name = Row.readString(row, 'queue_name');
-          singletons.set(name, [
-            ...(singletons.get(name) ?? []),
-            Row.readNullableString(row, 'singleton_key'),
-          ]);
-        }
-        const update = db.prepare(
-          `UPDATE pgboss_queue SET
-          deferred_count = ?,
-          queued_count = ?,
-          ready_count = ?,
-          active_count = ?,
-          failed_count = ?,
-          total_count = ?,
-          singletons_active = ?,
-          monitor_on = ?
-        WHERE name = ?
-        RETURNING name, queued_count, warning_queue_size`,
-        );
-        return names.flatMap((name) => {
-          const row = counts.get(name);
-          const count = (column: string) =>
-            row ? Row.readNumber(row, column) : 0;
-          const keys = singletons.get(name);
-          const written = update.get(
-            count('deferred'),
-            count('queued'),
-            Math.max(count('queued') - count('deferred'), 0),
-            count('active'),
-            count('failed'),
-            count('total'),
-            keys ? JSON.stringify(keys) : null,
-            isoNow,
-            name,
-          );
-          return written === undefined
-            ? []
-            : [
-                {
-                  name: Row.readString(written, 'name'),
-                  queuedCount: Row.readNumber(written, 'queued_count'),
-                  warningQueueSize: Row.readNumber(
-                    written,
-                    'warning_queue_size',
-                  ),
-                  pinSeconds: (clock.now() - started) / 1000,
-                },
-              ];
-        });
-      },
-      { mode: 'immediate' },
-    );
+    const refreshed = QueueStatsCache.refresh(db, names, now);
+    const pinSeconds = (clock.now() - started) / 1000;
+    return refreshed.map(({ name, queuedCount, warningQueueSize }) => ({
+      name,
+      queuedCount,
+      warningQueueSize,
+      pinSeconds,
+    }));
   }
 
   // deletion (plans.js:3055-3066): settled jobs deletion_seconds after they

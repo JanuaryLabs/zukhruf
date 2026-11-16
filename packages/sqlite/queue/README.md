@@ -1,6 +1,6 @@
 # @zukhruf/sqlite-queue
 
-A program sends jobs to a queue, and workers do the jobs later, also after the program restarts. [pg-boss](https://github.com/timgit/pg-boss) is a job queue that keeps its jobs in Postgres. A program that has no Postgres server, for example a desktop app or a CLI, cannot use it. This package keeps the jobs in one SQLite file through `node:sqlite`, and gives the API of pg-boss: the same method names, the same options, the same results and the same errors. The API is a declared subset of pg-boss: 17 methods of `PgBoss`.
+A program sends jobs to a queue, and workers do the jobs later, also after the program restarts. [pg-boss](https://github.com/timgit/pg-boss) is a job queue that keeps its jobs in Postgres. A program that has no Postgres server, for example a desktop app or a CLI, cannot use it. This package keeps the jobs in one SQLite file through `node:sqlite`, and gives the API of pg-boss: the same method names, the same options, the same results and the same errors. The API is a declared subset of pg-boss: 18 methods of `PgBoss`.
 
 Zero divergence is the contract. A parity suite runs each scenario on real pg-boss 12.35.1 over PGlite, and on this package. Then it compares what each engine returned, stored and emitted. A test passes only when the two are equal. Thus a program can change from one engine to the other and keep its code.
 
@@ -102,20 +102,21 @@ A schedule sends a job to its queue at each time that its cron or rrule rule giv
 
 ## The subset
 
-| Method                                                                          | What it does                                                                                        |
-| ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| `on('error', listener)`                                                         | Receives the failures that no caller awaits.                                                        |
-| `start()`, `stop(options)`                                                      | Start and stop the queue. A second call while one runs shares it.                                   |
-| `createQueue(name, options)`, `updateQueue(name, options)`, `deleteQueue(name)` | Make, change and remove a queue, with its policy, retries, expiry, retention and dead letter queue. |
-| `send(name, data, options)`, `send({ name, data, options })`                    | Add a job. It gives the id of the job, or `null` when a singleton or throttle refuses the job.      |
-| `work(name, handler)`, `work(name, options, handler)`                           | Start workers that fetch jobs and give them to the handler. It gives the id of the work.            |
-| `offWork(name, options)`                                                        | Stop the workers of a queue.                                                                        |
-| `fetch(name, options)`                                                          | Claim up to `batchSize` jobs with no worker. It gives the jobs, which are then active.              |
-| `findJobs(name, options)`                                                       | Find jobs by id, key, data or queued state.                                                         |
-| `complete(name, id, data, options)`                                             | Complete jobs by id or by attempt. With `includeQueued`, also jobs that are not yet active.         |
-| `touch(name, id)`                                                               | Keep the heartbeat of active jobs by id or by attempt.                                              |
-| `cancel(name, id)`, `fail(name, id, data)`                                      | Cancel or fail jobs by id or by attempt.                                                            |
-| `schedule(name, cron, data, options)`, `unschedule(name, key)`                  | Send a job on a cron or rrule schedule, and remove the schedule.                                    |
+| Method                                                                          | What it does                                                                                                                                                       |
+| ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `on('error', listener)`                                                         | Receives the failures that no caller awaits.                                                                                                                       |
+| `start()`, `stop(options)`                                                      | Start and stop the queue. A second call while one runs shares it.                                                                                                  |
+| `createQueue(name, options)`, `updateQueue(name, options)`, `deleteQueue(name)` | Make, change and remove a queue, with its policy, retries, expiry, retention and dead letter queue.                                                                |
+| `send(name, data, options)`, `send({ name, data, options })`                    | Add a job. It gives the id of the job, or `null` when a singleton or throttle refuses the job.                                                                     |
+| `work(name, handler)`, `work(name, options, handler)`                           | Start workers that fetch jobs and give them to the handler. It gives the id of the work.                                                                           |
+| `offWork(name, options)`                                                        | Stop the workers of a queue.                                                                                                                                       |
+| `fetch(name, options)`                                                          | Claim up to `batchSize` jobs with no worker. It gives the jobs, which are then active.                                                                             |
+| `findJobs(name, options)`                                                       | Find jobs by id, key, data or queued state.                                                                                                                        |
+| `complete(name, id, data, options)`                                             | Complete jobs by id or by attempt. With `includeQueued`, also jobs that are not yet active.                                                                        |
+| `touch(name, id)`                                                               | Keep the heartbeat of active jobs by id or by attempt.                                                                                                             |
+| `getQueueStats(name, options)`                                                  | Give the counts of a queue by state, from the cache that the monitor keeps. A read counts again when the cache is older than one hour, or one minute with `force`. |
+| `cancel(name, id)`, `fail(name, id, data)`                                      | Cancel or fail jobs by id or by attempt.                                                                                                                           |
+| `schedule(name, cron, data, options)`, `unschedule(name, key)`                  | Send a job on a cron or rrule schedule, and remove the schedule.                                                                                                   |
 
 Other methods of `PgBoss` are not in the subset, for example `getQueue`, `getJobById`, `retry`, `resume`, `deleteJob`, `sendAfter`, `insert` and `getDb`. A method or an option that needs Postgres itself, for example `getDb` and its SQL, or the `db` option of `fetch`, `complete`, `touch`, `cancel` and `fail`, will not come.
 

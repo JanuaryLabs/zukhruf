@@ -17,6 +17,8 @@ import {
   type OffWorkOptions,
   type PgBossEventMap,
   type Queue,
+  type QueueStats,
+  type QueueStatsOptions,
   type Request,
   type ScheduleOptions,
   type SchedulingOptions,
@@ -38,6 +40,7 @@ import { transaction } from '@zukhruf/sqlite-transaction';
 
 import { Activity } from './activity.ts';
 import { Attorney } from './attorney.ts';
+import type { SuperviseIntervals } from './attorney.ts';
 import { Contractor } from './contractor.ts';
 import { DatabaseError } from './database-error.ts';
 import { Database } from './database.ts';
@@ -53,6 +56,8 @@ import { LocalGroups } from './local-groups.ts';
 import { QueueCache } from './queue-cache.ts';
 import { QueueRows } from './queue-rows.ts';
 import type { QueueRow } from './queue-rows.ts';
+import { QueueStatsCache } from './queue-stats-cache.ts';
+import type { CachedQueueStats } from './queue-stats-cache.ts';
 import { Recurrence } from './recurrence.ts';
 import { Row } from './rows.ts';
 import { SqlValues } from './sql-values.ts';
@@ -144,6 +149,10 @@ type NotifyRoute =
 // pg-boss's default, 'pgboss' (plans.js:8); this package has no schema option.
 const notifyChannel = `pgboss_${hash('sha224', 'pgboss', 'hex').slice(0, 24)}`;
 
+// node_modules/pg-boss/dist/manager.js:123, 127
+const QUEUE_STATS_CACHE_TTL_SECONDS = 60 * 60;
+const QUEUE_STATS_FORCE_TTL_SECONDS = 60;
+
 type LifecyclePhase =
   { kind: 'stopped' } | { kind: 'armed' } | { kind: 'running' };
 // The clock attached to this instance's activity, from start() to stop().
@@ -198,6 +207,7 @@ export class SqliteJobQueue
   #wipInterval: ClockTimer | undefined;
   readonly #queueCache = new QueueCache();
   readonly #queueCacheIntervalSeconds: number;
+  readonly #intervals: SuperviseIntervals;
   #queueCacheInterval: ClockTimer | undefined;
   // The offWork() cleanups a stop waits for, each opened once it settles.
   readonly #pendingCleanups = new Set<Latch>();
@@ -223,6 +233,7 @@ export class SqliteJobQueue
     const timekeeping = Attorney.applyScheduleConfig(normalized);
     Attorney.validateWarningConfig(normalized);
     this.#queueCacheIntervalSeconds = intervals.queueCacheIntervalSeconds;
+    this.#intervals = intervals;
     this.#supervisor = new Supervisor(this.#clock, this.#activity, {
       ...intervals,
       // attorney.js:413
@@ -782,6 +793,66 @@ export class SqliteJobQueue
           );
     }
     this.#queueCache.evict(name);
+  }
+
+  // node_modules/pg-boss/dist/manager.js:2131-2228 with persistQueueStats off,
+  // the only mode here: SqliteJobQueueOptions has no persistQueueStats, so the
+  // history options are neither read nor checked (2166-2186). pg-boss's
+  // vacuum backoff (2211-2213) has no counterpart (see Supervisor).
+  async getQueueStats(
+    name: string,
+    options: QueueStatsOptions = {},
+  ): Promise<QueueStats[]> {
+    Attorney.assertQueueName(name);
+    const cached = QueueStatsCache.read(this.db, name);
+    if (!cached) {
+      throw new Error(`Queue ${name} does not exist`);
+    }
+    const maxCacheAgeMs =
+      (options.force
+        ? QUEUE_STATS_FORCE_TTL_SECONDS
+        : Math.max(
+            QUEUE_STATS_CACHE_TTL_SECONDS,
+            this.#intervals.monitorIntervalSeconds,
+            this.#intervals.superviseIntervalSeconds,
+          )) * 1000;
+    // A queue never counted has an infinite cache age (manager.js:2201).
+    const { capturedOn } = cached;
+    if (
+      capturedOn !== null &&
+      this.#clock.now() - capturedOn.getTime() <= maxCacheAgeMs
+    ) {
+      return [SqliteJobQueue.#toQueueStats(name, { ...cached, capturedOn })];
+    }
+    // SQLite has one writer, so the refresh cannot lose pg-boss's try-lock to
+    // another instance's scan and fall back to the cache (manager.js:
+    // 2217-2227): it always counts the queue and returns its row.
+    return QueueStatsCache.refresh(this.db, [name], this.#now()).map((row) =>
+      SqliteJobQueue.#toQueueStats(name, row),
+    );
+  }
+
+  // toSnapshot (manager.js:2136-2165) of the cache, which holds gauges only:
+  // the deltas stay null with persistQueueStats off.
+  static #toQueueStats(
+    name: string,
+    cached: CachedQueueStats & { capturedOn: Date },
+  ): QueueStats {
+    return {
+      name,
+      deferredCount: cached.deferredCount,
+      queuedCount: cached.queuedCount,
+      readyCount: cached.readyCount,
+      activeCount: cached.activeCount,
+      failedCount: cached.failedCount,
+      totalCount: cached.totalCount,
+      completedDelta: null,
+      failedDelta: null,
+      createdDelta: null,
+      deltaSeconds: null,
+      deltaOn: null,
+      capturedOn: cached.capturedOn,
+    };
   }
 
   send(request: Request): Promise<string | null>;
