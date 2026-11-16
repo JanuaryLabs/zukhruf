@@ -182,7 +182,9 @@ const posixOnly =
   process.platform === 'win32'
     ? 'the ssh stand-in is a POSIX executable with a shebang'
     : false;
-const engineSocket = posixOnly ? undefined : await localEngineSocket();
+const engineSocket = posixOnly
+  ? undefined
+  : await localEngineSocket(process.env);
 const needsLocalEngine =
   posixOnly ||
   (engineSocket === undefined

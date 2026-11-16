@@ -400,7 +400,7 @@ describe('container.spawn()', () => {
   });
 
   test('a command that writes faster than the caller reads waits for the caller', async () => {
-    // Arrange: the command writes 1000 blocks of 64 KB and records each block in a file.
+    // Arrange: the command writes 1000 blocks of 64 KB and records each block in a file by a rename, so a read never finds it empty.
     await using docker = await connect(IMAGE);
     const run = randomUUID();
     try {
@@ -409,7 +409,7 @@ describe('container.spawn()', () => {
         Cmd: [
           'sh',
           '-c',
-          'i=0; while [ $i -lt 1000 ]; do head -c 65536 /dev/zero; i=$((i+1)); echo $i > /tmp/progress; done',
+          'i=0; while [ $i -lt 1000 ]; do head -c 65536 /dev/zero; i=$((i+1)); echo $i > /tmp/progress.tmp; mv /tmp/progress.tmp /tmp/progress; done',
         ],
       });
       const chunks = writer[Symbol.asyncIterator]();

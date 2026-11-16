@@ -5,7 +5,7 @@ import { Docker } from './index.ts';
 import { ENTRY, lastJson, runScenario } from './testing/scenario.ts';
 import { localEngineSocket } from './testing/ssh-stand-in.ts';
 
-const engineSocket = await localEngineSocket();
+const engineSocket = await localEngineSocket(process.env);
 
 describe('the engine that the environment of the test run selects', () => {
   test('connect() gives its host and a supported API version, and info() answers', async () => {

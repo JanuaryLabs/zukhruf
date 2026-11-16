@@ -2,7 +2,7 @@ import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { Docker } from '../index.ts';
+import { Docker, type DockerContext, type Environment } from '../index.ts';
 
 /** What the stand-in does after it records its run. */
 export type SshStandInMode =
@@ -133,12 +133,25 @@ export async function sshStandIn(mode: SshStandInMode) {
 }
 
 /**
- * The socket of the local engine: the host of the context that config.json
- * makes current, when it is a unix:// host. DOCKER_CONTEXT does not apply, so
- * a run on an SSH engine still finds the engine of this machine.
+ * The socket of the local engine: the host of the context that the
+ * environment selects (DOCKER_HOST, then DOCKER_CONTEXT, then config.json),
+ * when it is a unix:// host, so the stand-in reaches the engine that
+ * `connect()` of the run reaches. When the selected engine is not a unix://
+ * host, as on a run on an SSH engine, it is the host of the context that
+ * config.json makes current, so such a run still finds the engine of this
+ * machine. Undefined when neither is a unix:// host.
  */
-export async function localEngineSocket(): Promise<string | undefined> {
-  const current = (await Docker.contexts()).find((context) => context.current);
+export async function localEngineSocket(
+  environment: Environment,
+): Promise<string | undefined> {
+  return (
+    unixSocketOfCurrent(await Docker.contexts({ environment })) ??
+    unixSocketOfCurrent(await Docker.contexts())
+  );
+}
+
+function unixSocketOfCurrent(contexts: DockerContext[]): string | undefined {
+  const current = contexts.find((context) => context.current);
   return current?.host.startsWith('unix://')
     ? current.host.slice('unix://'.length)
     : undefined;
