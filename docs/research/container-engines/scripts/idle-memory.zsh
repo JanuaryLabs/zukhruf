@@ -4,9 +4,10 @@
 #
 # Per slot the engine climbs 0 -> 1 -> 10 -> 30 containers. At each level the script waits
 # --settle seconds, then takes --samples samples --interval seconds apart with engine-memory.ts,
-# which sums the RSS of the engine's host processes (helpers, socktainer, attributed VM processes)
-# and records footprint. After 30 the slot's containers are removed and the next slot waits
-# --settle seconds before its level 0.
+# which sums the RSS of the engine's host processes (helpers, shims, attributed VM processes; the
+# rule per engine is BENCH_MEMORY_RULE in lib.zsh) and records footprint. An engine whose rule is
+# not verified yet (orbstack until it is installed and its processes are read) is refused. After 30
+# the slot's containers are removed and the next slot waits --settle seconds before its level 0.
 #
 # Other containers on an engine change its memory, so the script refuses to start while any run,
 # unless --allow-foreign.
@@ -27,11 +28,15 @@ samples=${opt_samples[-1]:-3}
 interval=${opt_interval[-1]:-10}
 bench_require_positive "--settle, --samples and --interval take positive whole numbers" $settle $samples $interval
 bench_parse_args "$@"
+for engine in $(bench_engines); do
+  [[ -n $BENCH_MEMORY_RULE[$engine] ]] ||
+    bench_die "no verified memory attribution for $engine: read its host processes (ps -axww -o pid,ppid,rss,lstart,args) after install, then fill in BENCH_MEMORY_RULE in lib.zsh and its rule in engine-memory.ts"
+done
 bench_init idle-memory
 BENCH_NOTES+=(
   "levels 0 1 10 30; settle ${settle}s; $samples samples ${interval}s apart; containers: alpine sleep infinity, --cpus $BENCH_CPUS --memory $BENCH_MEMORY"
-  "VM processes are attributed by start time to com.docker.virtualization or container-runtime-linux (see engine-memory.ts)"
-  "Docker Desktop's VM RSS moves with its balloon and page cache, so compare samples, not one reading"
+  "Virtualization VM processes are attributed by start time to com.docker.virtualization, the Colima limactl hostagent or a container-runtime-linux (see engine-memory.ts); each engine's rule is in meta.json engines.<name>.memory_rule"
+  "a shared VM's RSS moves with its balloon and page cache, so compare samples, not one reading"
   "rss_kib_without_ui leaves out the Docker Desktop window processes"
 )
 

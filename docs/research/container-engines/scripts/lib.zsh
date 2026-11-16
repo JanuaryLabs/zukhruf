@@ -1,8 +1,8 @@
 # Shared parts of the container-engine benchmark scripts. Each experiment script sources this file.
 #
-# It holds the engine sockets, the pinned images, the shared limits, the argument parser, the
+# It holds the engine table, the pinned images, the shared limits, the argument parser, the
 # run folder and meta.json, the command log, and the cleanup of every container and volume
-# labelled dev.zukhruf.bench=1 (at exit, also on Ctrl-C).
+# labelled dev.zukhruf.bench=1 on the engines of the run (at exit, also on Ctrl-C).
 
 setopt errexit nounset pipefail
 zmodload zsh/datetime
@@ -14,13 +14,59 @@ typeset -gr BENCH_LABEL_KEY=dev.zukhruf.bench
 typeset -gr BENCH_LABEL=${BENCH_LABEL_KEY}=1
 typeset -gr BENCH_NAME_PREFIX=zukhruf-bench-$$
 
-# Engine sockets. Override with BENCH_DOCKER_SOCKET and BENCH_APPLE_SOCKET.
+# The engine table. Every engine is reached through its Docker Engine API socket (docker -H); a
+# script never changes the current docker context. Per engine:
+#   BENCH_SOCKET       the socket; override with BENCH_<NAME>_SOCKET (BENCH_DOCKER_SOCKET, ...)
+#   BENCH_CONTEXT      the docker context that names the same socket; recorded in meta.json only
+#   BENCH_MEMORY_RULE  how engine-memory.ts attributes host processes to the engine; empty means
+#                      not verified yet, and idle-memory.zsh refuses the engine
+#   BENCH_ARMS         the clients that drive the engine: docker-cli everywhere, plus Apple's
+#                      container CLI on apple
+#   BENCH_HOST_IP      1 when the Mac reaches a container's IP directly (the ip paths of
+#                      iperf3-network and postgres-time-to-ready), 0 when it does not
+# docker-vmm is not a second engine: it is Docker Desktop's socket, measured while Docker Desktop
+# runs on its Docker VMM hypervisor. bench_init refuses docker-vmm unless the processes show VMM,
+# and docker unless they show the Apple Virtualization framework (see bench_docker_desktop_hypervisor).
+typeset -gr BENCH_DOCKER_DESKTOP_SOCKET=${BENCH_DOCKER_SOCKET:-unix://$HOME/.docker/run/docker.sock}
 typeset -gA BENCH_SOCKET=(
-  docker ${BENCH_DOCKER_SOCKET:-unix://$HOME/.docker/run/docker.sock}
+  docker $BENCH_DOCKER_DESKTOP_SOCKET
+  docker-vmm $BENCH_DOCKER_DESKTOP_SOCKET
+  colima ${BENCH_COLIMA_SOCKET:-unix://$HOME/.colima/default/docker.sock}
+  orbstack ${BENCH_ORBSTACK_SOCKET:-unix://$HOME/.orbstack/run/docker.sock}
   apple ${BENCH_APPLE_SOCKET:-unix://${HOMEBREW_PREFIX:-/opt/homebrew}/var/run/socktainer/.socktainer/container.sock}
 )
+typeset -gA BENCH_CONTEXT=(
+  docker desktop-linux
+  docker-vmm desktop-linux
+  colima colima
+  orbstack orbstack
+  apple ''
+)
+typeset -gA BENCH_MEMORY_RULE=(
+  docker 'Docker.app and com.docker.* processes, plus the Virtualization VM process paired by start time with com.docker.virtualization'
+  docker-vmm 'Docker.app and com.docker.* processes; the VM runs inside com.docker.krun, so no Virtualization VM process is expected'
+  colima 'limactl processes and the ssh mux of ~/.colima/_lima, plus the Virtualization VM process paired by start time with the limactl hostagent (its pid is in ~/.colima/_lima/colima/vz.pid)'
+  orbstack ''
+  apple 'container-* processes and socktainer, plus each Virtualization VM process paired by start time with a container-runtime-linux'
+)
+typeset -gA BENCH_ARMS=(
+  docker docker-cli
+  docker-vmm docker-cli
+  colima docker-cli
+  orbstack docker-cli
+  apple 'docker-cli container-cli'
+)
+# OrbStack documents direct container IPs from the Mac; set 1 once that is verified on install.
+typeset -gA BENCH_HOST_IP=(
+  docker 0
+  docker-vmm 0
+  colima 0
+  orbstack 0
+  apple 1
+)
+typeset -gr BENCH_DEFAULT_ENGINES=docker,colima
 
-# Images, pinned to the linux/arm64 manifest digest so both engines run the same bytes.
+# Images, pinned to the linux/arm64 manifest digest so every engine runs the same bytes.
 # The tag and the multi-platform index digest are recorded beside each pin and in README.md.
 # alpine:3.24.4, index sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf
 typeset -gr IMAGE_ALPINE=docker.io/library/alpine@sha256:1829893486be257df5049ab3b7fc95afbd0fc09d89803cbc580bda1ba5386b29
@@ -31,13 +77,16 @@ typeset -gr IMAGE_SYSBENCH=docker.io/openeuler/sysbench@sha256:1950ba366eb34d88e
 # networkstatic/iperf3:latest as of 2026-11-01 (entrypoint iperf3), index sha256:d8767f2888155902ec72760f9ba8dd6fb16ff73256a8e02572c109aecc23269b
 typeset -gr IMAGE_IPERF3=docker.io/networkstatic/iperf3@sha256:069fbed1f741659fb04abc283f21ac22e95d9ef307b14e31225ef7a180bfb2ed
 
-# Limits of the measured container, the same on both engines. socktainer floors CPUs to whole vCPUs,
+# Limits of the measured container, the same on every engine. socktainer floors CPUs to whole vCPUs,
 # so keep BENCH_CPUS a whole number. Apple adds one vCPU of overhead to each container VM
-# (configuration.resources.cpuOverhead = 1); Docker applies the limit as a cgroup quota in its shared VM.
+# (configuration.resources.cpuOverhead = 1); the shared-VM engines (Docker Desktop, Colima, OrbStack)
+# apply the limit as a cgroup quota inside their one VM.
 typeset -g BENCH_CPUS=2
 typeset -g BENCH_MEMORY=1g
 # The docker run flags for those limits and the label; bench_init sets it after a script may have changed BENCH_CPUS.
 typeset -ga BENCH_LIMITS=()
+
+typeset -gi BENCH_EXIT_STATUS=0
 
 # Seconds before gtimeout kills a docker or container CLI call that hangs.
 typeset -g BENCH_CALL_TIMEOUT=${BENCH_CALL_TIMEOUT:-180}
@@ -52,6 +101,9 @@ typeset -g BENCH_LOAD_START=''
 typeset -ga BENCH_ORDER=()
 typeset -ga BENCH_NOTES=()
 typeset -gA BENCH_FOREIGN=()
+# Docker Desktop's hypervisor as bench_init found it (vz, vmm or unknown), and the evidence.
+typeset -g BENCH_DD_HYPERVISOR=''
+typeset -g BENCH_DD_EVIDENCE=null
 
 # The script's own arguments, kept to re-run it under caffeinate.
 typeset -ga BENCH_ARGV=("$@")
@@ -62,13 +114,18 @@ typeset -g BENCH_USAGE=${BENCH_USAGE:-}
 bench_common_usage() {
   cat <<EOF
 Common options:
-  --engine docker|apple   Run one engine only, once.
-  --interleave N          Run both engines N times each, A,B,A,B (default: 2).
-  --out DIR               Output folder (default: docs/research/container-engines/runs/<id>/<UTC timestamp>).
-  --dry-run               Print every command instead of running it; writes nothing.
-  -h, --help              Show this help.
+  --engines A,B[,C]   The engines and their order (default: $BENCH_DEFAULT_ENGINES).
+  --interleave N      Repeat the whole order N times, A,B,C,A,B,C (default: 2).
+  --engine NAME       Run one engine only, once.
+  --out DIR           Output folder (default: docs/research/container-engines/runs/<id>/<UTC timestamp>).
+  --dry-run           Print every command instead of running it; writes nothing.
+  -h, --help          Show this help.
 
-Environment: BENCH_DOCKER_SOCKET, BENCH_APPLE_SOCKET, BENCH_CALL_TIMEOUT (seconds, default 180).
+Engines: ${(j:, :)${(@ok)BENCH_SOCKET}}. docker-vmm is Docker Desktop's socket while Docker Desktop
+runs on Docker VMM; it never runs in the same order as docker.
+
+Environment: BENCH_DOCKER_SOCKET, BENCH_COLIMA_SOCKET, BENCH_ORBSTACK_SOCKET, BENCH_APPLE_SOCKET,
+BENCH_CALL_TIMEOUT (seconds, default 180).
 EOF
 }
 
@@ -110,8 +167,8 @@ bench_require_positive() {
 
 # Parses the common options. Call it after the script removed its own options with zparseopts -D -E.
 bench_parse_args() {
-  local -a help engine interleave out dry
-  zparseopts -D -F -- h=help -help=help -engine:=engine -interleave:=interleave -out:=out -dry-run=dry ||
+  local -a help engine engines interleave out dry
+  zparseopts -D -F -- h=help -help=help -engine:=engine -engines:=engines -interleave:=interleave -out:=out -dry-run=dry ||
     { print -u2 -- "$BENCH_USAGE"; bench_common_usage >&2; exit 2; }
   if (( $#help )); then
     print -- "$BENCH_USAGE"
@@ -122,18 +179,27 @@ bench_parse_args() {
   (( $# == 0 )) || bench_die "unexpected arguments: $*"
   (( $#dry )) && BENCH_DRY_RUN=1
   (( $#out )) && BENCH_OUT=${out[-1]:A}
-  if (( $#engine && $#interleave )); then
-    bench_die "--engine and --interleave exclude each other"
-  fi
+  local -a order
   if (( $#engine )); then
-    [[ ${engine[-1]} == (docker|apple) ]] || bench_die "--engine must be docker or apple"
-    BENCH_ORDER=(${engine[-1]})
+    (( $#engines || $#interleave )) && bench_die "--engine runs one engine once; it excludes --engines and --interleave"
+    order=(${engine[-1]})
   else
-    local rounds=${interleave[-1]:-2}
-    bench_require_positive "--interleave takes a positive whole number" $rounds
-    BENCH_ORDER=()
-    repeat $rounds BENCH_ORDER+=(docker apple)
+    order=(${(s:,:)${engines[-1]:-$BENCH_DEFAULT_ENGINES}})
   fi
+  local name
+  for name in $order; do
+    (( ${+BENCH_SOCKET[$name]} )) || bench_die "unknown engine '$name'; known: ${(j:, :)${(@ok)BENCH_SOCKET}}"
+  done
+  local -a distinct=(${(u)order})
+  (( $#order == $#distinct )) || bench_die "--engines names an engine twice: ${(j:,:)order}"
+  if (( ${order[(Ie)docker]} && ${order[(Ie)docker-vmm]} )); then
+    bench_die "docker and docker-vmm are one socket under two hypervisors; run them in separate runs"
+  fi
+  local rounds=${interleave[-1]:-2}
+  (( $#engine )) && rounds=1
+  bench_require_positive "--interleave takes a positive whole number" $rounds
+  BENCH_ORDER=()
+  repeat $rounds BENCH_ORDER+=($order)
   # Long runs keep the Mac awake. Re-run this script under caffeinate once.
   if (( ! BENCH_DRY_RUN )) && [[ -z ${BENCH_CAFFEINATED:-} ]]; then
     BENCH_CAFFEINATED=1 exec caffeinate -dimsu zsh "$ZSH_ARGZERO" "${BENCH_ARGV[@]}"
@@ -145,7 +211,7 @@ bench_engines() {
   print -l -- ${(u)BENCH_ORDER}
 }
 
-# Slot label of the i-th run in BENCH_ORDER: 01-docker, 02-apple, ...
+# Slot label of the i-th run in BENCH_ORDER: 01-docker, 02-colima, ...
 bench_slot() {
   printf '%02d-%s' $1 ${BENCH_ORDER[$1]}
 }
@@ -158,6 +224,28 @@ bench_each_slot() {
     print -- "== $slot"
     $callback $BENCH_ORDER[$i] $slot $i
   done
+}
+
+# True when the engine is in this run.
+bench_in_run() {
+  (( ${BENCH_ORDER[(Ie)$1]} ))
+}
+
+# True when the run uses Docker Desktop's socket, as docker or as docker-vmm.
+bench_in_docker_desktop() {
+  bench_in_run docker || bench_in_run docker-vmm
+}
+
+# The command line of one arm (a client of the engine) for hyperfine (--shell=none), quoted:
+# docker-cli is the docker CLI on the engine's socket, container-cli is Apple's container CLI.
+bench_arm_line() {
+  local engine=$1 arm=$2
+  shift 2
+  case $arm in
+    docker-cli) bench_dk_line $engine "$@" ;;
+    container-cli) bench_ac_line "$@" ;;
+    *) bench_die "unknown arm $arm" ;;
+  esac
 }
 
 # The command line as it runs: dk and ac expand to their docker and container CLI calls.
@@ -254,6 +342,40 @@ bench_utc() {
   date -u +%Y-%m-%dT%H:%M:%SZ
 }
 
+# Docker Desktop's hypervisor, from its host processes: com.docker.virtualization drives a VM of
+# Apple's Virtualization framework (vz), com.docker.krun drives Docker VMM, built on libkrun (vmm).
+# docker info has no hypervisor field (on VZ it says OperatingSystem "Docker Desktop", KernelVersion
+# *-linuxkit), so the processes decide; OperatingSystem and KernelVersion are kept beside them in
+# meta.json. Sets BENCH_DD_HYPERVISOR to vz, vmm or unknown (neither or both run) and BENCH_DD_EVIDENCE.
+bench_docker_desktop_hypervisor() {
+  local -a comms=(${(f)"$(ps -axo comm=)"})
+  local vz=false vmm=false
+  (( ${comms[(I)*/com.docker.virtualization]} )) && vz=true
+  (( ${comms[(I)*/com.docker.krun]} )) && vmm=true
+  case $vz/$vmm in
+    true/false) BENCH_DD_HYPERVISOR=vz ;;
+    false/true) BENCH_DD_HYPERVISOR=vmm ;;
+    *) BENCH_DD_HYPERVISOR=unknown ;;
+  esac
+  local info
+  info=$(gtimeout -s KILL 30 docker -H $BENCH_DOCKER_DESKTOP_SOCKET info \
+    --format '{"operating_system":{{json .OperatingSystem}},"kernel_version":{{json .KernelVersion}}}' 2>/dev/null) || info=null
+  jq -e . <<<"$info" >/dev/null 2>&1 || info=null
+  BENCH_DD_EVIDENCE=$(jq -nc --arg detected $BENCH_DD_HYPERVISOR --argjson vz $vz --argjson vmm $vmm --argjson info "$info" \
+    '{detected: $detected, process_com_docker_virtualization: $vz, process_com_docker_krun: $vmm, docker_info: $info}')
+}
+
+# Refuses a Docker Desktop label (docker, docker-vmm) whose hypervisor the processes do not show.
+bench_check_docker_desktop_label() {
+  local engine=$1 want=$2
+  bench_in_run $engine || return 0
+  [[ $BENCH_DD_HYPERVISOR == $want ]] && return 0
+  if [[ $BENCH_DD_HYPERVISOR == unknown ]]; then
+    bench_die "cannot tell Docker Desktop's hypervisor for '$engine': com.docker.virtualization (VZ) and com.docker.krun (Docker VMM) run both or neither; evidence: $BENCH_DD_EVIDENCE"
+  fi
+  bench_die "'$engine' needs Docker Desktop on ${${want:/vz/the Apple Virtualization framework}:/vmm/Docker VMM}, but its processes show $BENCH_DD_HYPERVISOR; evidence: $BENCH_DD_EVIDENCE"
+}
+
 # Creates the run folder, checks the engines, records the start of meta.json.
 bench_init() {
   BENCH_ID=$1
@@ -271,6 +393,12 @@ bench_init() {
     dk $engine version --format '{{.Server.Version}}' >/dev/null ||
       bench_die "the $engine engine does not answer on $BENCH_SOCKET[$engine]"
   done
+  if bench_in_docker_desktop; then
+    bench_docker_desktop_hypervisor
+    bench_check_docker_desktop_label docker vz
+    bench_check_docker_desktop_label docker-vmm vmm
+    print -- "docker desktop hypervisor: $BENCH_DD_HYPERVISOR"
+  fi
   mkdir -p -- "$BENCH_OUT"
   : >"$BENCH_OUT/commands.log"
   BENCH_STARTED_UTC=$(bench_utc)
@@ -291,6 +419,49 @@ bench_init() {
   bench_write_meta running
 }
 
+# Prints a command's stdout when it is JSON, else null.
+bench_json_or_null() {
+  local text
+  text=$("$@" 2>/dev/null) || text=''
+  if [[ -n $text ]] && jq -e . <<<"$text" >/dev/null 2>&1; then
+    print -r -- "$text"
+  else
+    print null
+  fi
+}
+
+# One meta.json entry per engine of the run: socket, context, its endpoint, arms, the memory rule,
+# whether container IPs are reachable from the host, docker version and a slice of docker info.
+bench_engines_json() {
+  local entries='{}' engine context context_host
+  for engine in $(bench_engines); do
+    context=$BENCH_CONTEXT[$engine] context_host=''
+    [[ -n $context ]] &&
+      context_host=$(gtimeout -s KILL 30 docker context inspect $context --format '{{.Endpoints.docker.Host}}' 2>/dev/null || true)
+    entries=$(jq -c \
+      --arg engine $engine \
+      --arg socket $BENCH_SOCKET[$engine] \
+      --arg context "$context" \
+      --arg context_host "$context_host" \
+      --arg arms "$BENCH_ARMS[$engine]" \
+      --arg memory_rule "$BENCH_MEMORY_RULE[$engine]" \
+      --argjson host_ip $BENCH_HOST_IP[$engine] \
+      --argjson version "$(bench_json_or_null dk $engine version --format json)" \
+      --argjson info "$(bench_json_or_null dk $engine info --format '{"name":{{json .Name}},"operating_system":{{json .OperatingSystem}},"kernel_version":{{json .KernelVersion}},"server_version":{{json .ServerVersion}},"ncpu":{{.NCPU}},"mem_total":{{.MemTotal}}}')" \
+      '. + {($engine): {
+        socket: $socket,
+        context: ($context | if . == "" then null else . end),
+        context_endpoint: ($context_host | if . == "" then null else . end),
+        arms: ($arms | split(" ")),
+        memory_rule: ($memory_rule | if . == "" then null else . end),
+        container_ip_reachable_from_host: ($host_ip == 1),
+        docker_version: $version,
+        docker_info: $info
+      }}' <<<"$entries")
+  done
+  print -r -- "$entries"
+}
+
 # Writes meta.json: versions, host, limits, images, commands, load average.
 bench_write_meta() {
   local state=$1
@@ -299,17 +470,21 @@ bench_write_meta() {
     load_end=$(bench_loadavg)
     ended="\"$(bench_utc)\""
   fi
-  # Only the engines of this run are asked: a Docker-only run never touches socktainer or Apple's CLI.
-  local docker_version=null docker_info=null
-  local apple_docker_version=null container_version='' socktainer_version=''
-  if (( ${BENCH_ORDER[(Ie)docker]} )); then
-    docker_version=$(dk docker version --format json 2>/dev/null || print null)
-    docker_info=$(dk docker info --format '{"ncpu":{{.NCPU}},"mem_total":{{.MemTotal}}}' 2>/dev/null || print null)
+  # Only the engines of this run are asked: a run without apple never touches socktainer or Apple's CLI.
+  local colima_version='' orbstack_version='' container_version='' socktainer_version=''
+  # The first line of each, taken in zsh: `| head -1` ends the writer with SIGPIPE, which pipefail
+  # turns into a failure.
+  bench_in_run colima && colima_version=${${(f)"$(colima version 2>&1)"}[1]}
+  if bench_in_run orbstack && (( $+commands[orb] )); then
+    orbstack_version=${${(f)"$(orb version 2>&1)"}[1]}
   fi
-  if (( ${BENCH_ORDER[(Ie)apple]} )); then
-    apple_docker_version=$(dk apple version --format json 2>/dev/null || print null)
+  if bench_in_run apple; then
     container_version=$(container --version 2>&1)
-    socktainer_version=$(socktainer --version 2>&1 | head -1)
+    socktainer_version=${${(f)"$(socktainer --version 2>&1)"}[1]}
+  fi
+  local dd_hypervisor=null
+  if bench_in_docker_desktop; then
+    dd_hypervisor=$BENCH_DD_EVIDENCE
   fi
   local foreign=$(for k v in ${(kv)BENCH_FOREIGN}; do print -r -- "$k $v"; done | jq -Rn '[inputs | split(" ") | {(.[0]): (.[1] | tonumber)}] | add // {}')
   jq -n \
@@ -326,11 +501,10 @@ bench_write_meta() {
     --arg fio "$IMAGE_FIO" \
     --arg sysbench "$IMAGE_SYSBENCH" \
     --arg iperf3 "$IMAGE_IPERF3" \
-    --arg docker_socket "$BENCH_SOCKET[docker]" \
-    --arg apple_socket "$BENCH_SOCKET[apple]" \
-    --argjson docker_version "$docker_version" \
-    --argjson apple_docker_version "$apple_docker_version" \
-    --argjson docker_info "$docker_info" \
+    --argjson engines "$(bench_engines_json)" \
+    --argjson dd_hypervisor "$dd_hypervisor" \
+    --arg colima_version "$colima_version" \
+    --arg orbstack_version "$orbstack_version" \
     --arg container_version "$container_version" \
     --arg socktainer_version "$socktainer_version" \
     --arg hyperfine_version "$(hyperfine --version 2>&1)" \
@@ -344,7 +518,8 @@ bench_write_meta() {
     --argjson foreign "$foreign" \
     --argjson notes "$(print -l -- $BENCH_NOTES | jq -R . | jq -s 'map(select(length > 0))')" \
     --rawfile commands "$BENCH_OUT/commands.log" \
-    '{
+    'def orNull: if . == "" then null else . end;
+    {
       experiment: $experiment,
       state: $state,
       started_utc: $started,
@@ -354,15 +529,15 @@ bench_write_meta() {
       limits: {cpus: $cpus, memory: $memory},
       label: $label,
       images: {alpine: $alpine, fio: $fio, sysbench: $sysbench, iperf3: $iperf3},
-      sockets: {docker: $docker_socket, apple: $apple_socket},
+      engines: $engines,
+      docker_desktop_hypervisor: $dd_hypervisor,
       versions: {
-        docker_desktop: $docker_version,
-        socktainer_engine_api: $apple_docker_version,
-        container: ($container_version | if . == "" then null else . end),
-        socktainer: ($socktainer_version | if . == "" then null else . end),
+        colima: ($colima_version | orNull),
+        orbstack: ($orbstack_version | orNull),
+        container: ($container_version | orNull),
+        socktainer: ($socktainer_version | orNull),
         hyperfine: $hyperfine_version
       },
-      docker_desktop_vm: $docker_info,
       host: {macos: $macos, macos_build: $macos_build, model: $model, ncpu: $ncpu, memsize: $memsize},
       loadavg: {start: $load_start, end: $load_end},
       foreign_running_containers_at_start: $foreign,
@@ -382,7 +557,7 @@ bench_cleanup() {
     ids=(${(f)"$(dk $engine volume ls -q --filter label=$BENCH_LABEL 2>/dev/null)"})
     (( $#ids )) && dk $engine volume rm -f $ids >/dev/null 2>&1
   done
-  (( ${BENCH_ORDER[(Ie)apple]} )) || return 0
+  bench_in_run apple || return 0
   # Containers made with Apple's own CLI carry the label in their configuration.
   ids=(${(f)"$(ac list --all --format json 2>/dev/null |
     jq -r --arg k $BENCH_LABEL_KEY '.[] | select(.configuration.labels[$k] == "1") | .id' 2>/dev/null)"})
@@ -390,11 +565,13 @@ bench_cleanup() {
   return 0
 }
 
+# Cleans up and writes the final meta.json, once. Takes the exit status, or reads $?.
 bench_on_exit() {
   local rc=$?
+  (( $# )) && rc=$1
   (( BENCH_INITIALIZED )) || return 0
   BENCH_INITIALIZED=0
-  setopt noerrexit
+  setopt localoptions noerrexit
   print -- "cleaning up containers and volumes labelled $BENCH_LABEL"
   bench_cleanup
   local state=failed
@@ -404,5 +581,11 @@ bench_on_exit() {
   print -- "meta: $BENCH_OUT/meta.json"
 }
 
+# zsh 5.9 runs neither the EXIT trap nor zshexit when errexit ends the shell inside a function, or
+# when a trap calls exit inside one (probe: `setopt errexit; trap "print ran" EXIT; f() { false; }; f`
+# prints nothing). So the ZERR trap, which fires where errexit is about to exit, cleans up first;
+# only in the main shell, as a $(...) subshell inherits the trap. The signal trap cleans up before
+# its exit for the same reason.
 trap bench_on_exit EXIT
-trap 'BENCH_INTERRUPTED=1; exit 130' INT TERM HUP
+trap 'BENCH_EXIT_STATUS=$?; (( ZSH_SUBSHELL )) || bench_on_exit $BENCH_EXIT_STATUS' ZERR
+trap 'BENCH_INTERRUPTED=1; bench_on_exit 130; exit 130' INT TERM HUP

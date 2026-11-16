@@ -24,7 +24,7 @@ bench_parse_args "$@"
 bench_init sysbench-cpu
 BENCH_NOTES+=(
   "sysbench cpu --threads=$threads --time=$duration run (default --cpu-max-prime=10000); container --cpus $BENCH_CPUS --memory $BENCH_MEMORY"
-  "Apple gives the container VM $BENCH_CPUS vCPUs plus one of overhead; Docker caps the container at $BENCH_CPUS CPUs of its shared VM with a cgroup quota"
+  "Apple gives the container VM $BENCH_CPUS vCPUs plus one of overhead; Docker Desktop, Colima and OrbStack cap the container at $BENCH_CPUS CPUs of their shared VM with a cgroup quota"
 )
 
 BENCH_CALL_TIMEOUT=$(( duration + 120 ))

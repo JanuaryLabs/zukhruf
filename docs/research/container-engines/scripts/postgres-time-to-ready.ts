@@ -1,13 +1,15 @@
 // Experiment 2, postgres-time-to-ready: one slot of runs on one engine, through @zukhruf/docker.
 // postgres-time-to-ready.zsh calls it once per slot; run it through that wrapper.
 //
-// Usage: node --conditions=@zukhruf/source postgres-time-to-ready.ts --engine docker|apple
+// Usage: node --conditions=@zukhruf/source postgres-time-to-ready.ts --engine <name>
 //          --host <unix://socket> --slot <slot> --image <ref> --label <key=value>
-//          --name-prefix <prefix> --out <slot.json> [--runs N] [--cpus N] [--memory 1g] [--dry-run]
+//          --name-prefix <prefix> --out <slot.json> [--ip-path] [--runs N] [--cpus N] [--memory 1g]
+//          [--dry-run]
+// --engine is the label of the engine table in lib.zsh; --host is the socket that reaches it.
 //
 // Each run creates the container with the body of packages/testing/src/databases/postgres.ts
 // (its Env and MemorySwappiness 0) plus the shared limits, starts it, and polls until Postgres
-// answers, then removes it. The data folder is on tmpfs through HostConfig.Mounts on both engines:
+// answers, then removes it. The data folder is on tmpfs through HostConfig.Mounts on every engine:
 // socktainer ignores HostConfig.Tmpfs (backlog #4434) but honours a tmpfs mount.
 //
 // Three independent loops poll every --interval-ms until each succeeds or --cap-ms passes:
@@ -16,8 +18,8 @@
 //   published  a TCP connect to the published 127.0.0.1 port, then a Postgres SSLRequest; only
 //              the server itself answers it with 'S' or 'N', so a port forwarder that accepts
 //              the connect before Postgres listens does not count
-//   ip         the same probe on <container IP>:5432; Apple only, as Docker Desktop's container
-//              IPs are not reachable from the host
+//   ip         the same probe on <container IP>:5432; only with --ip-path, which the wrapper
+//              passes where the Mac reaches container IPs (Apple; not Docker Desktop or Colima)
 // ready_published_ms = max(oracle, published answer); ready_ip_ms = max(oracle, ip answer).
 // Every time is in ms from t0, taken just before the create, except start_ms and remove_ms.
 import { writeFileSync } from 'node:fs';
@@ -41,6 +43,7 @@ const { values } = parseArgs({
     memory: { type: 'string', default: '1g' },
     'interval-ms': { type: 'string', default: '50' },
     'cap-ms': { type: 'string', default: '60000' },
+    'ip-path': { type: 'boolean', default: false },
     'dry-run': { type: 'boolean', default: false },
   },
 });
@@ -69,8 +72,9 @@ function bytes(text: string): number {
 }
 
 const engine = required('engine');
-if (engine !== 'docker' && engine !== 'apple')
-  throw new Error('--engine must be docker or apple');
+if (!/^[a-z][a-z0-9-]*$/.test(engine))
+  throw new Error('--engine takes an engine name such as docker or colima');
+const ipPath = values['ip-path']!;
 const host = required('host');
 const slot = required('slot');
 const image = required('image');
@@ -116,9 +120,9 @@ if (values['dry-run']) {
       `slot ${slot} on ${engine} (${host}): 1 first run, then ${runs} runs; each:`,
       `  create ${namePrefix}-pg-${slot}-<n> with ${JSON.stringify(body)}`,
       '  start; read container.port(5432)' +
-        (engine === 'apple' ? ' and the container IP from an inspect' : ''),
+        (ipPath ? ' and the container IP from an inspect' : ''),
       `  poll every ${intervalMs} ms, cap ${capMs} ms: exec ${oracleCmd.join(' ')}; SSLRequest to 127.0.0.1:<port>` +
-        (engine === 'apple' ? '; SSLRequest to <ip>:5432' : ''),
+        (ipPath ? '; SSLRequest to <ip>:5432' : ''),
       '  remove { force: true, v: true }',
       `  write ${out}`,
     ].join('\n'),
@@ -266,7 +270,7 @@ async function measure(docker: Docker, index: number): Promise<Run> {
 
     const [published, inspect] = await Promise.all([
       owned.port(5432),
-      engine === 'apple' ? owned.inspect() : undefined,
+      ipPath ? owned.inspect() : undefined,
     ]);
     if (!published) throw new Error('5432/tcp is not published');
     run.published = published;
@@ -293,14 +297,14 @@ async function measure(docker: Docker, index: number): Promise<Run> {
       run.metrics.oracle_ms,
       run.metrics.published_answer_ms,
     );
-    if (engine === 'apple')
+    if (ipPath)
       run.metrics.ready_ip_ms = latestOf(
         run.metrics.oracle_ms,
         run.metrics.ip_answer_ms,
       );
     if (run.metrics.ready_published_ms === null)
       throw new Error(`not ready within ${capMs} ms`);
-    if (engine === 'apple' && run.metrics.ready_ip_ms === null)
+    if (ipPath && run.metrics.ready_ip_ms === null)
       throw new Error(`not ready on the container IP within ${capMs} ms`);
   } catch (error) {
     run.error = String(error);
@@ -329,7 +333,7 @@ for (let index = 0; index <= runs; index += 1) {
   const ready = run.metrics.ready_published_ms;
   console.log(
     `   ${index === 0 ? 'first' : `run ${index}`}: ready ${ready === null ? '-' : Math.round(ready)} ms` +
-      (engine === 'apple'
+      (ipPath
         ? `, on the IP ${run.metrics.ready_ip_ms === null ? '-' : Math.round(run.metrics.ready_ip_ms)} ms`
         : '') +
       (run.error ? `  FAILED ${run.error}` : ''),
@@ -344,6 +348,7 @@ writeFileSync(
       engine,
       slot,
       host,
+      ipPath,
       apiVersion: docker.apiVersion,
       startedUtc,
       endedUtc: new Date().toISOString(),

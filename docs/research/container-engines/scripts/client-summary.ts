@@ -45,7 +45,7 @@ if (values['dry-run']) {
 }
 
 const slotFiles = readdirSync(dir)
-  .filter((name) => /^\d{2}-(docker|apple)\.json$/.test(name))
+  .filter((name) => /^\d{2}-[a-z][a-z0-9-]*\.json$/.test(name))
   .sort();
 if (slotFiles.length === 0) throw new Error(`no slot files in ${dir}`);
 

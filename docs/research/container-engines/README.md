@@ -2,12 +2,14 @@
 
 This record decides one thing: should Apple's container engine replace Docker Desktop as Ezz's everyday engine on this Mac? Apple's engine is `container` 1.7.1. Our client reaches it through socktainer 1.6.1, a Docker Engine API server on top of it. Ezz, 2026-11-15: "if it is better than docker then I want to use it instead of docker". The verdict is switch or don't switch. If Apple wins on criteria 1 and 2 and is not worse on 3, the record ends with a switch plan. If it loses, the record says by how much and where.
 
+Ezz widened the field on 2026-11-16: Colima, OrbStack and Docker Desktop on its Docker VMM hypervisor are measured too, and the Apple arm waits for a socktainer release built for container 1.7.1. The question becomes which engine beats Docker Desktop on VZ, today's engine, on the criteria below.
+
 The experiments are in `experiments.yaml`. A first batch ran on 2026-11-15 and is invalid (its attempts in `experiments.yaml` say why); no experiment has a result yet.
 
 ## Criteria, in order
 
 1. Wall time of the Docker-backed test suites: packages docker, mutex, then testing's database suites once backlog #4205 lands.
-2. Every suite green on Apple's engine, including SQL Server (an amd64 image under Rosetta), leases and the reaper.
+2. Every suite green on the candidate engine, including SQL Server (an amd64 image under Rosetta), leases and the reaper.
 3. Idle host memory and container start time.
 4. The cost of switching:
    - socktainer is a third-party dependency.
@@ -15,17 +17,27 @@ The experiments are in `experiments.yaml`. A first batch ran on 2026-11-15 and i
    - Other repos on this Mac use Docker: text2sql, serverize, deepagents.
    - Apple's helper needs a macOS Files & Folders grant to bind-mount from ~/Desktop, where this repo lives; Docker Desktop already has it. Without the grant, a run with such a bind mount hangs (sandboxd logs `kTCCServiceSystemPolicyDesktopFolder` denied).
 
-## The two engines
+## Engines in scope
 
-Docker Desktop runs one shared Linux VM (8 CPUs, 8 GiB here). Apple's engine boots one small VM per container, and each container has its own IP (192.168.64.x).
+The scripts address each engine by its Docker Engine API socket; `scripts/README.md` holds the engine table (socket, docker context, memory attribution, arms).
+
+| Engine                     | Script name  | State on 2026-11-16                                                                                                                 |
+| -------------------------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Docker Desktop on VZ       | `docker`     | Today's engine and the baseline: one shared Linux VM (8 CPUs, 8 GiB) on Apple's Virtualization framework.                           |
+| Docker Desktop, Docker VMM | `docker-vmm` | The same socket while Docker Desktop runs on its Docker VMM hypervisor (libkrun); a manual setting switch, checked by each script.  |
+| Colima                     | `colima`     | 0.10.3 running: Docker 29.5.2 in one Lima VM on VZ, virtiofs, Rosetta, 8 CPUs, 8 GiB, `--port-forwarder grpc`.                      |
+| OrbStack                   | `orbstack`   | Not installed yet; its socket and context are in the table, its memory attribution is to verify on install.                         |
+| Apple `container` 1.7.1    | `apple`      | Paused until socktainer ships a release built for container 1.7.1; one small VM per container, each with its own IP (192.168.64.x). |
+
+Considered and not testable: **Kiri**. Its only trace is a flagged Show HN post (news.ycombinator.com item 50353261), and no repository was found. As described it is an OCI runtime, the runc layer inside a Linux VM, not an engine that runs containers on a Mac.
 
 ```
-Docker Desktop                          Apple container 1.7.1
---------------                          ---------------------
+Docker Desktop, Colima, OrbStack        Apple container 1.7.1
+--------------------------------        ---------------------
 client                                  client
   |                                       |
-  | unix:///Users/ezzabuzaid/             | unix:///opt/homebrew/var/run/socktainer/
-  |   .docker/run/docker.sock             |   .socktainer/container.sock
+  | unix://<engine socket>                | unix:///opt/homebrew/var/run/socktainer/
+  |                                       |   .socktainer/container.sock
   v                                       v
 +---------------------------+           socktainer 1.6.1 (Engine API)
 | one Linux VM (8 CPU, 8GiB)|             |
@@ -46,10 +58,10 @@ socktainer runs with `HOME=/opt/homebrew/var/run/socktainer`.
 
 | Rule                | Detail                                                                                                                                                 |
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Same limits         | The same CPU and memory limits on both engines.                                                                                                        |
+| Same limits         | The same CPU and memory limits on every engine.                                                                                                        |
 | Pinned images       | Every image is pinned by digest.                                                                                                                       |
 | Cold and warm apart | The first container after an engine update downloads a 66 MB init image (~18 s). socktainer's first create took 17.8 s. Cold runs are reported apart.  |
-| Interleaving        | Runs go A, B, A, B.                                                                                                                                    |
+| Interleaving        | Runs go A, B, C, A, B, C over the engines of a run.                                                                                                    |
 | Noise floor         | This Mac is shared and noisy. An effect counts only when it is larger than the spread between two runs of the same engine.                             |
 | Long runs           | `caffeinate -dimsu`.                                                                                                                                   |
 | Micro benchmarks    | hyperfine 2.0.0 with `--warmup 3 --runs 30 --export-json`.                                                                                             |
@@ -81,7 +93,7 @@ Not a result: uncontrolled. `run --rm alpine true`, warm, 4 to 8 runs each.
 
 ## Status
 
-Paused: Apple-side measurements wait for a socktainer release built for container 1.7.1 (Ezz, 2026-11-16). socktainer 1.6.1 is built for container 1.6.1 and warns of the mismatch at start.
+Apple-side measurements are paused until a socktainer release built for container 1.7.1 (Ezz, 2026-11-16); socktainer 1.6.1 is built for container 1.6.1 and warns of the mismatch at start. Docker Desktop on VZ and Colima are ready to measure; Docker VMM waits for the switch, OrbStack for its install.
 
 The runs update this table.
 

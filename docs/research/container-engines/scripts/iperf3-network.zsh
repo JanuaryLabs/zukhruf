@@ -6,8 +6,11 @@
 #   container-to-container  a client container (same limits) on the engine's default network
 #                           connects to the server's container IP
 #   host-published          iperf3 on the macOS host connects to 127.0.0.1:<port>
-#   host-ip (Apple only)    iperf3 on the macOS host connects to the server's 192.168.64.x IP;
-#                           Docker Desktop's container IPs are not reachable from the host
+#   host-ip                 iperf3 on the macOS host connects to the server's container IP, only
+#                           on engines whose container IPs the Mac reaches (BENCH_HOST_IP in
+#                           lib.zsh): Apple's 192.168.64.x. Docker Desktop's and Colima's container
+#                           IPs sit on a bridge inside their VM that the Mac has no route to; each
+#                           slot pings the IP once and records the answer, so the table is checked
 # The host paths need iperf3 on the host (brew install iperf3); without it they are skipped and
 # meta.json says so. Each path gets one discarded 3 s warm-up run, then --repeats measured runs.
 
@@ -28,7 +31,7 @@ bench_parse_args "$@"
 bench_init iperf3-network
 BENCH_NOTES+=(
   "iperf3 -t $duration -J, $repeats runs per path per slot after a discarded 3 s run; TCP, one stream, client sends"
-  "server and client containers: --cpus $BENCH_CPUS --memory $BENCH_MEMORY; socktainer's network connect is a no-op, so both containers use the default network"
+  "server and client containers: --cpus $BENCH_CPUS --memory $BENCH_MEMORY; both containers use the engine's default network (socktainer's network connect is a no-op)"
   "Apple's published-port forwarder drops a connection when the client half-closes; a failed host-published run keeps iperf3's error JSON"
 )
 
@@ -37,7 +40,7 @@ if [[ -z $host_iperf3 ]]; then
   print -u2 -- "warning: no iperf3 on the host; the host-published and host-ip paths are skipped (brew install iperf3)"
   BENCH_NOTES+=("host iperf3 missing: host-published and host-ip paths skipped")
 else
-  BENCH_NOTES+=("host iperf3: $host_iperf3 ($(iperf3 --version | head -1))")
+  BENCH_NOTES+=("host iperf3: $host_iperf3 (${${(f)"$(iperf3 --version)"}[1]})")
 fi
 
 # The server runs with --forceflush: without a TTY iperf3 buffers its stdout, so "Server listening"
@@ -69,6 +72,15 @@ measure_route() {
 
 BENCH_CALL_TIMEOUT=$(( duration + 120 ))
 
+# True when the container IP answers one ping from the host within 2 s.
+host_ip_reachable() {
+  local engine=$1 ip=$2
+  # A dry run follows the table.
+  (( BENCH_DRY_RUN )) && return $(( ! BENCH_HOST_IP[$engine] ))
+  bench_log_cmd ping -c 1 -t 2 $ip
+  ping -c 1 -t 2 $ip >/dev/null 2>&1
+}
+
 measure_slot() {
   local engine=$1 slot=$2
   local server=$BENCH_NAME_PREFIX-iperf3-$slot
@@ -81,8 +93,15 @@ measure_slot() {
   measure_route $slot container-to-container dk $engine run --rm $BENCH_LIMITS $IMAGE_IPERF3 -c $ip
   if [[ -n $host_iperf3 ]]; then
     measure_route $slot host-published gtimeout -s KILL $BENCH_CALL_TIMEOUT iperf3 -c 127.0.0.1 -p $port
-    if [[ $engine == apple ]]; then
+    if (( BENCH_HOST_IP[$engine] )); then
+      host_ip_reachable $engine $ip ||
+        bench_fail "$engine's table says its container IPs are reachable from the host, but $ip does not answer a ping"
       measure_route $slot host-ip gtimeout -s KILL $BENCH_CALL_TIMEOUT iperf3 -c $ip
+    elif host_ip_reachable $engine $ip; then
+      print -u2 -- "warning: $ip on $engine answers a ping, but BENCH_HOST_IP[$engine] is 0; host-ip not measured"
+      BENCH_NOTES+=("$slot: host-ip not measured, although $ip answered a ping; check BENCH_HOST_IP[$engine]")
+    else
+      BENCH_NOTES+=("$slot: host-ip not measured: $engine's container IP $ip is not reachable from the host (no ping answer)")
     fi
   fi
   bench_run dk $engine rm -f $server >/dev/null

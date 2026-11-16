@@ -5,7 +5,8 @@
 #
 # Each slot: one first run (it includes any image unpack), stored apart, then --runs runs.
 # Each run: create, start, poll every 50 ms (cap 60 s) the in-container pg_isready oracle, the
-# published 127.0.0.1 port and, on Apple, the container IP; then remove. The image is pulled
+# published 127.0.0.1 port and, on engines whose container IPs the Mac reaches (BENCH_HOST_IP in
+# lib.zsh: Apple), the container IP; then remove. The image is pulled
 # before the first slot if an engine lacks it.
 
 BENCH_USAGE="usage: postgres-time-to-ready.zsh [options] [--runs N]
@@ -31,10 +32,10 @@ BENCH_NOTES+=(
   "image: postgres:18-alpine $IMAGE_POSTGRES"
   "client: @zukhruf/docker from packages/docker (node --conditions=@zukhruf/source); one node process per slot"
   "body: Env and MemorySwappiness 0 of packages/testing/src/databases/postgres.ts; NanoCpus $BENCH_CPUS e9, Memory $BENCH_MEMORY; 5432/tcp published on 127.0.0.1 with HostPort \"\""
-  "data folder on tmpfs through HostConfig.Mounts [{Type: tmpfs, Target: /var/lib/postgresql, SizeBytes 512 MiB, Mode 01777}] on BOTH engines: socktainer ignores HostConfig.Tmpfs (backlog #4434)"
+  "data folder on tmpfs through HostConfig.Mounts [{Type: tmpfs, Target: /var/lib/postgresql, SizeBytes 512 MiB, Mode 01777}] on EVERY engine: socktainer ignores HostConfig.Tmpfs (backlog #4434)"
   "per slot: 1 first run (stored as 'first'), then $runs runs; poll every 50 ms, cap 60 s"
   "oracle: exec pg_isready -h 127.0.0.1 -U postgres -t 1; published and ip paths: TCP connect plus a Postgres SSLRequest answered 'S' or 'N'; ready_<path>_ms = max(oracle, answer on the path)"
-  "the ip path (host to the container IP) runs on Apple only; Docker Desktop's container IPs are not reachable from the host"
+  "the ip path (host to the container IP) runs only where BENCH_HOST_IP is 1 (Apple); Docker Desktop's and Colima's container IPs are not reachable from the host"
 )
 
 # Logs a node call; in a dry run, runs it with --dry-run so that it prints its plan and touches no engine.
@@ -62,7 +63,9 @@ done
 
 measure_slot() {
   local engine=$1 slot=$2
-  run_node "$BENCH_SCRIPTS_DIR/postgres-time-to-ready.ts" --engine $engine --host $BENCH_SOCKET[$engine] \
+  local -a ip_path=()
+  (( BENCH_HOST_IP[$engine] )) && ip_path=(--ip-path)
+  run_node "$BENCH_SCRIPTS_DIR/postgres-time-to-ready.ts" --engine $engine --host $BENCH_SOCKET[$engine] $ip_path \
     --slot $slot --runs $runs --cpus $BENCH_CPUS --memory $BENCH_MEMORY --image $IMAGE_POSTGRES \
     --label $BENCH_LABEL --name-prefix $BENCH_NAME_PREFIX --out "$BENCH_OUT/$slot.json"
   # A failed run keeps its error in the slot file; fail the slot unless one measured run succeeded.

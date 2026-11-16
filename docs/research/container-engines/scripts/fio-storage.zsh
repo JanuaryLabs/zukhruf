@@ -6,6 +6,11 @@
 # with docker exec, so container start-up is outside every measurement. Per target and block size,
 # randwrite runs first (fio lays the file out before it times anything) and randread then reads
 # that file and deletes it (--unlink=1). --ramp_time is the warm-up of each job.
+#
+# Before the first job, the slot proves its bind mount is the host folder: a marker written on the
+# host must read back inside the container, and one written inside must read back on the host. An
+# unshared host path does not fail the run: it silently becomes an empty folder on the VM's disk,
+# and fio would measure that disk instead.
 
 BENCH_USAGE="usage: fio-storage.zsh [options] [--runtime SECONDS]
 
@@ -25,13 +30,15 @@ bench_parse_args "$@"
 bench_init fio-storage
 # The bind-mount source lives outside ~/Desktop, where this repo is: macOS guards ~/Desktop with a
 # Files & Folders grant that Docker Desktop has and Apple's helper lacks (its run hangs). The user's
-# temporary folder (/var/folders/...) is not guarded, and Docker Desktop shares it by default.
+# temporary folder (/var/folders/...) is not guarded; Docker Desktop shares it by default and
+# Colima's mounts list it (writable). verify_bind proves the share on every slot.
 bind_root=$(getconf DARWIN_USER_TEMP_DIR)zukhruf-bench-fio-$$
 BENCH_NOTES+=(
   "fio --size=256M --direct=1 --ioengine=libaio --iodepth=32 --time_based --runtime=$runtime --ramp_time=2"
-  "direct=1 bypasses the guest page cache only; on a bind mount the host may still cache the file (virtiofs on both engines)"
-  "the root filesystem target is /var/tmp: overlayfs on Docker Desktop, the container's ext4 block device on Apple"
-  "the named volume is ext4 on a block device on both engines"
+  "direct=1 bypasses the guest page cache only; on a bind mount the host may still cache the file (virtiofs on Docker Desktop, Colima and Apple)"
+  "the root filesystem target is /var/tmp: overlayfs in the shared VM of Docker Desktop, Colima and OrbStack; the container's ext4 block device on Apple"
+  "the named volume is on the VM's disk on every engine"
+  "each slot proves its bind mount first: a host-written marker read inside the container, and a container-written marker read on the host"
   "bind-mount source: $bind_root/bind-<slot> (outside ~/Desktop, which needs a macOS Files & Folders grant)"
 )
 
@@ -51,6 +58,25 @@ fio_job() {
     print -u2 -- "warning: fio $target $rw $bs failed on $engine (exit $?); its output is kept"
 }
 
+# Fails the experiment unless /mnt/bind in the container is the host folder: a marker written on
+# the host reads back inside, and a marker written inside reads back on the host.
+verify_bind() {
+  local engine=$1 container=$2 bind=$3
+  (( BENCH_DRY_RUN )) && return 0
+  local token="$engine-$$-$EPOCHREALTIME"
+  print -r -- "host $token" >"$bind/zukhruf-bench-host-marker"
+  local seen=$(bench_output dk $engine exec $container cat /mnt/bind/zukhruf-bench-host-marker 2>&1 || true)
+  [[ $seen == "host $token" ]] ||
+    bench_fail "the bind mount on $engine is not $bind: the container reads '${seen}' for the host marker; an unshared host path becomes an empty folder in the VM, and fio would measure the VM's disk"
+  bench_run dk $engine exec $container sh -c "printf '%s\n' 'container $token' >/mnt/bind/zukhruf-bench-container-marker"
+  local back=''
+  [[ -f $bind/zukhruf-bench-container-marker ]] && back=$(<"$bind/zukhruf-bench-container-marker")
+  [[ $back == "container $token" ]] ||
+    bench_fail "the bind mount on $engine is read-only or not $bind: the host does not see the container's marker"
+  rm -f -- "$bind/zukhruf-bench-host-marker" "$bind/zukhruf-bench-container-marker"
+  print -- "   bind mount verified: $bind"
+}
+
 measure_slot() {
   local engine=$1 slot=$2 target bs
   local bind=$bind_root/bind-$slot
@@ -61,6 +87,7 @@ measure_slot() {
   bench_run dk $engine run -d --name $container $BENCH_LIMITS \
     -v "$bind:/mnt/bind" -v "$volume:/mnt/volume" \
     $IMAGE_FIO sleep infinity >/dev/null
+  verify_bind $engine $container $bind
   for target in $targets; do
     for bs in $sizes; do
       fio_job $engine $container $slot $target $bs randwrite

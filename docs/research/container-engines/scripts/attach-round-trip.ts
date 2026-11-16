@@ -1,7 +1,7 @@
 // Experiment 7, attach-round-trip: one slot of cat leases on one engine, through @zukhruf/docker.
 // attach-round-trip.zsh calls it once per slot; run it through that wrapper.
 //
-// Usage: node --conditions=@zukhruf/source attach-round-trip.ts --engine docker|apple
+// Usage: node --conditions=@zukhruf/source attach-round-trip.ts --engine <name>
 //          --host <unix://socket> --slot <slot> --image <alpine ref> --label <key=value>
 //          --name-prefix <prefix> --out <slot.json> [--containers N] [--writes N] [--cpus N]
 //          [--memory 1g] [--dry-run]
@@ -66,8 +66,8 @@ function bytes(text: string): number {
 }
 
 const engine = required('engine');
-if (engine !== 'docker' && engine !== 'apple')
-  throw new Error('--engine must be docker or apple');
+if (!/^[a-z][a-z0-9-]*$/.test(engine))
+  throw new Error('--engine takes an engine name such as docker or colima');
 const host = required('host');
 const slot = required('slot');
 const image = required('image');
