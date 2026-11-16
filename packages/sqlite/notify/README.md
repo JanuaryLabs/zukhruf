@@ -260,7 +260,7 @@ The package throws its own errors. A host that needs its own error translates at
 | Consumer                | How                                                                                                                                                                                                                                                             | Record                |
 | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- |
 | `@zukhruf/sqlite-queue` | `useListenNotify` across instances. A send wakes the workers of each `SqliteJobQueue` on the same file, as a `pg_notify` wakes each pg-boss listener on the schema. The poll of pg-boss stays as the backstop. The README line that states the divergence goes. | backlog #4334         |
-| `@zukhruf/pool`         | Two channels for each pool: "a new job" (the owner listens, the payload is empty) and "an output" (each sending host listens, the payload is the job id).                                                                                                       | map tickets 11 and 20 |
+| `@zukhruf/pool`         | Two channels for each pool: "a new job" (the owner listens, the payload is the revision of the job) and "an output" (each sending host listens, the payload is the job id).                                                                                     | map tickets 11 and 20 |
 
 ## The same concepts in other systems
 
