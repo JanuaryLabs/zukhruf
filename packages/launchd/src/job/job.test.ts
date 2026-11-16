@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import type { AgentJob, DaemonJob } from '../index.ts';
+import {
+  type AbsolutePath,
+  type AgentJob,
+  type DaemonJob,
+  isAbsolutePath,
+} from '../index.ts';
 
 test('a job that launchd refuses, misreads or ignores fails the type check', () => {
   // A function that is never called: the type checker reads it, and an @ts-expect-error with no error fails the typecheck.
@@ -237,4 +242,22 @@ test('the jobs of the README, of launchd.plist(5) and of xpc_events(3) type chec
       'com.example.exampled',
     ],
   );
+});
+
+test('a resolved path string is an AbsolutePath only after isAbsolutePath narrows it', () => {
+  // A function that is never called: the type checker reads it, and an @ts-expect-error with no error fails the typecheck.
+  const narrow = (resolved: string): readonly AbsolutePath[] => {
+    // @ts-expect-error a string from path.resolve() is not known to begin with `/`.
+    const unchecked: AbsolutePath = resolved;
+    if (!isAbsolutePath(resolved)) throw new Error(`${resolved} is relative`);
+    return [unchecked, resolved];
+  };
+
+  assert.equal(typeof narrow, 'function');
+});
+
+test('isAbsolutePath accepts a path that begins with / and refuses each path launchd would not expand', () => {
+  const paths = ['/a/b', 'a/b', './a', '', '~/a'];
+
+  assert.deepEqual(paths.filter(isAbsolutePath), ['/a/b']);
 });

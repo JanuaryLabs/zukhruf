@@ -242,6 +242,15 @@ const server: AgentJob = {
 
 - **Program.** `Program` is an absolute path: "The Program key must be an absolute path" (launchd.plist(5), lines 142-143). With no `Program`, item 0 of `ProgramArguments` is the program. It can be a name, but launchd finds a name in `/usr/bin:/bin:/usr/sbin:/sbin` (`_PATH_STDPATH`, lines 144-146), not in your `PATH`. A job has `Program`, a non-empty `ProgramArguments`, or both: then `ProgramArguments` is the whole argument vector, with its item 0 (lines 719-726).
 - **Paths.** Each other key that takes a path takes an absolute path, `` `/${string}` ``. launchd expands no `~` and no `$HOME`.
+
+  A host that holds a resolved path string narrows it to `AbsolutePath` with `isAbsolutePath`:
+
+  ```ts
+  const root = resolve(directory);
+  if (!isAbsolutePath(root)) throw new Error(`${root} is not absolute`);
+  const watchPaths: AgentJob['WatchPaths'] = [root];
+  ```
+
 - **KeepAlive.** "If multiple keys are provided, launchd ORs them" (lines 191-193). The watcher above starts again after a failure, and while the file exists.
 - **Calendar intervals.** A missing field is a wildcard (lines 366-367). The fields are unions of their ranges: `Minute` 0-59, `Hour` 0-23, `Day` 1-31, `Weekday` 0-7 (0 and 7 are Sunday), `Month` 1-12. When the computer sleeps through an interval, launchd starts the job when it wakes, and starts it once for many missed intervals (lines 372-375). A `StartInterval` that falls in a sleep is missed (lines 357-362).
 - **Sockets.** A socket has `SockPathName`, or `SecureSocketWithKey`, or the keys of a network socket, never keys of two forms. `SockPathMode` is decimal: "Property lists don't support octal" (lines 635-638). The program gets the sockets through `launch_activate_socket(3)` (lines 578-581).
@@ -435,6 +444,9 @@ export type ServiceState =
 
 /** An absolute path. launchd expands no `~` and no `$HOME`. */
 export type AbsolutePath = `/${string}`;
+
+/** Whether a path, such as one from `path.resolve()`, is an `AbsolutePath`, after `path.isAbsolute` of `node:path`. */
+export function isAbsolutePath(path: string): path is AbsolutePath;
 
 /** The keys of launchd.plist(5) that agents and daemons share: `Program`, or a non-empty `ProgramArguments`, or both. */
 export type Job = {

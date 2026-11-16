@@ -5,7 +5,7 @@ export {
   PermissionDeniedError,
   ServiceNotFoundError,
 } from './errors.ts';
-export type { AbsolutePath } from './job/absolute-path.ts';
+export { type AbsolutePath, isAbsolutePath } from './job/absolute-path.ts';
 export type { AgentJob, SessionType } from './job/agent-job.ts';
 export type { CalendarInterval } from './job/calendar-interval.ts';
 export type { DaemonJob } from './job/daemon-job.ts';
