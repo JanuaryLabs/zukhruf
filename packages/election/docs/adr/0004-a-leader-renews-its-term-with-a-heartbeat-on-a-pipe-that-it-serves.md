@@ -1,6 +1,6 @@
 # A leader renews its term with a heartbeat on a pipe that it serves
 
-Status: Proposed 2026-11-15 for the owner's review (backlog #4371). Revised the same day to wait on pushes, not on a period ([ADR 0007](./0007-a-candidate-waits-on-pushes-from-the-leaders-pipe-not-on-a-period.md)). Not built.
+Status: Proposed 2026-11-15 for the owner's review (backlog #4371). Revised the same day to wait on pushes, not on a period ([ADR 0007](./0007-a-candidate-waits-on-pushes-from-the-leaders-pipe-not-on-a-period.md)). Built 2026-11-15.
 
 The claim of `SqliteElection` is a kernel file lock. A hung leader keeps it: a leader that `SIGSTOP` stopped, or a leader whose event loop is blocked. Its term never ends, and no candidate can win (pool ticket 13; research 12-13 §G).
 
@@ -42,6 +42,6 @@ This backend takes no `renewDeadline`. In client-go, the holder gives up after `
 
 - `SqliteElectionOptions` gets `leaseDuration` and `heartbeatInterval`. `pollInterval` goes, with no alias ([ADR 0008](./0008-the-backend-owns-the-wait-between-two-tries-and-poll-leaves-the-campaign.md)).
 - The constructor throws a `RangeError` unless `0 < heartbeatInterval < leaseDuration`.
-- The heartbeat timer starts in `watch` and stops when the watch is disposed. It does not keep the process alive (`unref`). The pipe opens when the claim is won, and it closes in `close(claim)`, after the lock is free (ADR 0007).
+- The pipe and its heartbeat timer start when the claim is won, and they stop in `close(claim)`, after the lock is free (ADR 0007). They are steps of `SqliteElection` itself, not of `watch`, so a subclass that overrides `watch` still has a leader that sends heartbeats. The timer does not keep the process alive (`unref`).
 - The signal of a term of `SqliteElection` still never aborts. A living leader never loses its term.
 - To prove when built: a connect to the pipe of a stopped leader succeeds, because the kernel accepts it into the listen backlog [inference, not run]. A reader that connects after the hang depends on it: it gets no heartbeat, and its deadline comes.

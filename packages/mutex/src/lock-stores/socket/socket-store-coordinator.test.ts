@@ -67,11 +67,7 @@ async function leaderAfterFailover(graceWindow: number) {
   const directory = stack.use(
     await new TemporaryFiles().directory('mutex-test-'),
   );
-  const earlier = await socketElection(
-    directory.path,
-    10,
-    globalThis,
-  ).campaign();
+  const earlier = await socketElection(directory.path, globalThis).campaign();
   await earlier?.resign();
   const store = stack.use(
     new SocketStore(directory.path, {

@@ -1,6 +1,6 @@
 # A candidate waits on pushes from the leader's pipe, not on a period
 
-Status: Proposed 2026-11-15 for the owner's review (backlog #4371). Revised the same day after the owner's words: "all we do here is because of using "pull/poll" insted of push". Not built.
+Status: Proposed 2026-11-15 for the owner's review (backlog #4371). Revised the same day after the owner's words: "all we do here is because of using "pull/poll" insted of push". Built 2026-11-15.
 
 Today a candidate finds that the leader left only by its next try. It tries every `pollInterval`, 10 ms, so each candidate that waits makes 100 tries a second for the whole term. After `SIGKILL` of the leader, the next candidate leads in about 10 ms ([concepts](../concepts/leader-election.md#evidence)). A socket tells it sooner: each client of a Unix socket gets `end` 1.6 ms to 3.7 ms after a kill of the server, on macOS and on Linux (research 20a P1).
 
@@ -25,7 +25,7 @@ A candidate tries the claim (EAFP). When the try does not win, it waits for the 
 | The end of the back-off after a failed connect                   | timer, capped              | It tries again: the claim first, then the record and the connect.                                                                                 |
 | The abort of the campaign's signal, or the campaign's `timeout`  | the caller's               | An abort rejects with `signal.reason`. At the `timeout`, it tries one last time, and then it resolves `undefined`.                                |
 
-Before it waits, the candidate reads the leader record ([ADR 0005](./0005-the-leader-record-names-the-process-and-the-pipe-of-a-term.md)) and connects to its `address` one time, as `PipeAddress#connect` does (pipes ADR 0006). It keeps the connection across the waits of one campaign, until the close.
+Before it waits, the candidate reads the leader record ([ADR 0005](./0005-the-leader-record-names-the-process-and-the-pipe-of-a-term.md)) and connects to its `address` one time, as `PipeAddress#connect` does (pipes ADR 0006). It keeps the connection for the wait, until the close or the end of the campaign. A wait on the connection ends only then, so the next wait connects again, to the next leader.
 
 - No record, `ENOENT` or `ECONNREFUSED` on the connect: no process serves the pipe of the record. A new leader holds the claim but has not written its record or listened yet, or a published leader leads. The candidate waits the back-off.
 - `EACCES` on the connect: the folder of the pipe belongs to another user. The candidate waits the back-off, as after the `EPERM` of a kill (ADR 0006).
@@ -46,7 +46,7 @@ ZooKeeper's recipe lets each client watch only the znode just below its own, "to
 
 ## The order of the end of a term
 
-`close(claim)` frees the lock first. Then it closes the server and destroys each connection to it, because a `PipeServer` keeps open connections open (pipes README). Thus a candidate that the close wakes finds the claim free. The watch is disposed before the release, so the heartbeats stop first, but the pipe stays open until the lock is free.
+`close(claim)` frees the lock first. Then it closes the server and destroys each connection to it, because a `PipeServer` keeps open connections open (pipes README). Thus a candidate that the close wakes finds the claim free. The heartbeats stop when the pipe closes, so the pipe and its heartbeats last until the lock is free.
 
 ## Considered Options
 

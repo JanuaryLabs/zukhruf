@@ -78,7 +78,7 @@ export class SingleFlight<T> implements AsyncDisposable {
     const endpoint = new PipeEndpoint(resolve(directory, 'flight.sock'), {
       prefix: 'zukhruf-single-flight',
     });
-    const election = flightElection(directory, POLL_INTERVAL, clock);
+    const election = flightElection(directory, clock);
     const locks = new KeyLocks(directory, POLL_INTERVAL, clock);
     this.#client = new FlightClient(
       new ConnectionSupervisor(

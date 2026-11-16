@@ -1,9 +1,13 @@
-import { type Clock, poll } from '@zukhruf/async';
+import { type Clock, timeout as deadlineAfter } from '@zukhruf/async';
 
 import { Term } from './term.ts';
 
 export interface CampaignOptions {
-  /** Milliseconds to keep trying before conceding to the current leader. Defaults to one attempt. */
+  /**
+   * Milliseconds to keep trying before conceding to the current leader.
+   * Defaults to one attempt. `Infinity` waits until the campaign wins or its
+   * signal aborts.
+   */
   timeout?: number | undefined;
   /** Stops the campaign, which then rejects with `signal.reason`. A term won after it aborted is given up. */
   signal?: AbortSignal | undefined;
@@ -11,11 +15,12 @@ export interface CampaignOptions {
 
 /**
  * Elects one leader among candidates. The campaign is the same for each
- * backend: open an attempt, try the claim until it is won or the time is
- * up, watch the won claim, and hand it to a term. Each backend is a
- * subclass that implements the steps for its claim.
+ * backend: open an attempt, try the claim, wait for a change that lets a try
+ * win, try again until the claim is won or the time is up, watch the won
+ * claim, and hand it to a term. Each backend is a subclass that implements
+ * the steps for its claim.
  *
- * A backend keeps five rules:
+ * A backend keeps six rules:
  * - `tryClaim` returns the epoch of the term it won, in the same step, and
  *   each epoch is higher than every earlier one and below 2^31.
  * - `tryClaim` reports `afterCleanShutdown` only when the term just before
@@ -26,14 +31,14 @@ export interface CampaignOptions {
  * - `release` is never called after a loss: the claim may be another
  *   candidate's by then.
  * - `close` frees the attempt's resources, after each end.
+ * - `waitForChange` settles when its signal aborts, and never ends the
+ *   attempt itself.
  */
 export abstract class LeaderElection<Claim> {
-  readonly #pollInterval: number;
   /** The clock of the campaign: `globalThis` in production, a fake clock in a test. */
   protected readonly clock: Clock;
 
-  protected constructor(pollInterval: number, clock: Clock) {
-    this.#pollInterval = pollInterval;
+  protected constructor(clock: Clock) {
     this.clock = clock;
   }
 
@@ -62,6 +67,15 @@ export abstract class LeaderElection<Claim> {
     claim: Claim,
     signal: AbortSignal | undefined,
   ): Promise<Pick<Term, 'epoch' | 'afterCleanShutdown'> | undefined>;
+
+  /**
+   * Resolves when a try of the claim can win: the holder left, was ended,
+   * or the backend wants a new try. Settles when `signal` aborts.
+   */
+  protected abstract waitForChange(
+    claim: Claim,
+    signal: AbortSignal,
+  ): Promise<void>;
 
   /** Watches a won claim for as long as its term lasts, and calls `lose` when the backend takes it away. */
   protected abstract watch(
@@ -92,12 +106,7 @@ export abstract class LeaderElection<Claim> {
     const claim = await this.open(signal);
     let won: Pick<Term, 'epoch' | 'afterCleanShutdown'> | undefined;
     try {
-      won = await poll(() => this.tryClaim(claim, signal), {
-        interval: this.#pollInterval,
-        signal,
-        clock: this.clock,
-        deadline,
-      });
+      won = await this.#tryUntil(claim, deadline, signal);
     } catch (error) {
       await this.close(claim).catch(() => {});
       throw error;
@@ -107,6 +116,42 @@ export abstract class LeaderElection<Claim> {
       return undefined;
     }
     return this.#begin(claim, won, signal);
+  }
+
+  /** Tries the claim, and after each try that does not win, waits for a change, until the deadline gives one last try. */
+  async #tryUntil(
+    claim: Claim,
+    deadline: number,
+    signal: AbortSignal | undefined,
+  ): Promise<Pick<Term, 'epoch' | 'afterCleanShutdown'> | undefined> {
+    for (;;) {
+      const won = await this.tryClaim(claim, signal);
+      if (won !== undefined) return won;
+      const left = deadline - this.clock.performance.now();
+      if (left <= 0) return undefined;
+      await this.#waitForChange(claim, left, signal);
+    }
+  }
+
+  /** Waits for the backend's change, up to `left` milliseconds; rejects with `signal.reason` when the caller leaves. */
+  async #waitForChange(
+    claim: Claim,
+    left: number,
+    signal: AbortSignal | undefined,
+  ): Promise<void> {
+    using limit =
+      left === Infinity
+        ? undefined
+        : deadlineAfter(left, { clock: this.clock });
+    const stops = [signal, limit?.signal].filter((stop) => stop !== undefined);
+    const wait = AbortSignal.any(stops);
+    try {
+      await this.waitForChange(claim, wait);
+    } catch (error) {
+      // After an abort, the backend settles as it can; the deadline gives one last try.
+      if (!wait.aborted) throw error;
+    }
+    signal?.throwIfAborted();
   }
 
   /** Hands a won claim to its term, or gives it up when the caller left meanwhile. */

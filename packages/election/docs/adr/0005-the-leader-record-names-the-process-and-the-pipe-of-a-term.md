@@ -1,6 +1,6 @@
 # The leader record names the process and the pipe of a term
 
-Status: Proposed 2026-11-15 for the owner's review (backlog #4371). Not built.
+Status: Proposed 2026-11-15 for the owner's review (backlog #4371). Built 2026-11-15.
 
 A candidate and an observer must know three facts about the leader: which pipe to connect to ([ADR 0004](./0004-a-leader-renews-its-term-with-a-heartbeat-on-a-pipe-that-it-serves.md)), how long a silence to accept, and which process to end when the leader hangs ([ADR 0006](./0006-a-candidate-ends-a-leader-that-is-silent-past-the-lease-duration.md)). Node has no file lock API, so a candidate cannot ask the kernel for the process that holds the claim. POSIX `fcntl(F_GETLK)` gives it, but only outside Node (research 12-13 §G). Thus the leader writes the facts itself.
 
@@ -22,11 +22,13 @@ The winner of a claim writes the leader record, `<claimFile>.leader`, beside the
 
 The record has no `heartbeatInterval`. A reader keeps only the deadline, so it does not need the period ([ADR 0004](./0004-a-leader-renews-its-term-with-a-heartbeat-on-a-pipe-that-it-serves.md)).
 
-The steps of `tryClaim` after it wins are, in this order: it writes the epoch to the disk, it listens on the pipe, and it writes the record. Then the term begins. Thus a record always names a pipe that listens, or listened. The write is an atomic replace with `atomicWrite` of `@zukhruf/fs`, so a reader never sees a part of it. It is not synced to the disk: after a power loss, no process of the old term lives.
+The steps of `tryClaim` after it wins are, in this order: it writes the epoch to the disk, it removes the socket file of the pipe that the old record names, it listens on the pipe, and it writes the record. Then the term begins. Thus a record always names a pipe that listens, or listened. The write is an atomic replace with `atomicWrite` of `@zukhruf/fs`, so a reader never sees a part of it. It is not synced to the disk: after a power loss, no process of the old term lives.
 
 The pipe has a plain name: 32 random hex digits, with the prefix `zukhruf-election`. Thus it is in the default folder of the user, `/tmp/zukhruf-election-<uid>`, with the mode `0700` (pipes ADR 0002). Another user cannot connect to it (research 20a P5). Its socket path has about 58 bytes, so it fits in the limit of 103 bytes for each directory. sqlite-notify names its pipes the same way and publishes the address in its table. A random name is never used again, so a connect to the address of an old record never reaches a new leader.
 
 Nothing removes the record. A leader that removed it after its release could remove the record of the next leader. The next leader replaces it. A record of an older term names a pipe that is closed: a connect gives `ECONNREFUSED`, or `ENOENT` when the file is gone. A reader then waits a short back-off and tries again ([ADR 0007](./0007-a-candidate-waits-on-pushes-from-the-leaders-pipe-not-on-a-period.md)).
+
+A leader that closes its pipe removes its socket file, but a killed leader leaves it. Thus the winner of a new term removes the socket file that the record it replaces names, after it holds the claim, with `rm(path, { force: true })` and no check before (EAFP). Only the holder of the claim gets there, so no process serves that pipe any more. The sender of `@zukhruf/sqlite-notify` removes the file of a dead listener the same way. On Windows a pipe goes with its process, so there is no file to remove.
 
 ## Considered Options
 
@@ -37,7 +39,7 @@ Nothing removes the record. A leader that removed it after its release could rem
 
 ## Consequences
 
-- A directory of `SqliteElection` has one more file, `<claimFile>.leader`, and the default folder of the user has one socket file for each leader.
+- A directory of `SqliteElection` has one more file, `<claimFile>.leader`. The default folder of the user has one socket file for each live leader, and at most one stale socket file, of the last killed leader, until the next term begins.
 - A reader reads the record with `readFile`. The record is not the claim file, so the read keeps the lock of the leader.
 - A leader that hangs after its win and before its record cannot be found: no record names it. That time is a few milliseconds. Node gives no way to close it, because it has no `F_GETLK`.
 - A published leader writes no record and serves no pipe. A new candidate under it finds no record, so it waits its back-off and tries again, at most once a second ([ADR 0007](./0007-a-candidate-waits-on-pushes-from-the-leaders-pipe-not-on-a-period.md)). A hang of a published leader is not found.

@@ -1,6 +1,6 @@
 # A candidate ends a leader that is silent past the lease duration
 
-Status: Proposed 2026-11-15 for the owner's review (backlog #4371). Revised the same day: the deadline of the heartbeat starts the kill, not a count in each try. Not built.
+Status: Proposed 2026-11-15 for the owner's review (backlog #4371). Revised the same day: the deadline of the heartbeat starts the kill, not a count in each try. Built 2026-11-15.
 
 On one computer, the claim of `SqliteElection` is a kernel file lock. Only the end of the process of the leader frees it (research 12-13 §G). Each supervisor that finds a hang ends the process: systemd's watchdog sends a signal, and the kubelet restarts the container. A cluster fences a silent peer the same way: Pacemaker's STONITH turns it off (research 12-13 §E, §G). Thus a reader of the leader's pipe ends a hung leader. A reader is a candidate that waits for the claim ([ADR 0007](./0007-a-candidate-waits-on-pushes-from-the-leaders-pipe-not-on-a-period.md)), or an observer ([ADR 0009](./0009-a-process-that-does-not-campaign-observes-the-leader.md)). Then the kernel frees the claim, and a candidate wins it.
 
@@ -16,6 +16,8 @@ What the kill gives:
 | Another error       | The campaign rejects with that error, and the `left` promise of an observer rejects. Only the two codes above are expected (EAFP).                                                                                      |
 
 The kernel lets a process send a signal only to a process of the same user. A reader that runs as root can end a leader of any user.
+
+A reader never sends the kill to its own process: a record that names `process.pid` of the reader is refused, as `EPERM` is. That process runs the reader, so it is not hung, and a kill would end the reader with it. A heartbeat of its own leader can be late, for example when the leader's clock and the reader's clock differ.
 
 `SIGKILL`, because it is the only signal that ends a stopped process: POSIX keeps each other signal pending until `SIGCONT`. A handler of `SIGTERM`, for example of `@zukhruf/shutdown`, runs on the event loop, so it never runs in a process whose event loop is blocked. The kubelet also sends `SIGKILL` after its grace time.
 

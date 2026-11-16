@@ -60,7 +60,7 @@ export class SocketStore
           directory,
           new ElectingConnector({
             address: endpoint.address,
-            election: socketElection(directory, pollInterval, clock),
+            election: socketElection(directory, clock),
             pollInterval,
             clock,
             serve: async (term) => {

@@ -2,11 +2,12 @@
 
 This package keeps a few small files and checks that other packages also have. Each one is listed here with its source and what changed, so that a fix in one copy goes into each copy, and the commit names all of them.
 
-| Copy                                                                | Source                                                          | What changed                                                                               | Backlog                                              |
-| ------------------------------------------------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------ | ---------------------------------------------------- |
-| `src/testing/fact-timeout.ts`                                       | `packages/mutex/src/testing/fact-timeout.ts`                    | Nothing.                                                                                   | #2509                                                |
-| `src/testing/worker-process.ts`                                     | `packages/mutex/src/testing/worker-process.ts`                  | No `host` and no `nodeOptions` option. The message check is inline, with no `isRecord`.    | #2509                                                |
-| The decimal check in `readEpoch` of `src/sqlite/sqlite-election.ts` | `FencingToken.parse` in `packages/fencing/src/fencing-token.ts` | The check is inline in `readEpoch`. It throws a `SyntaxError` instead of returning `null`. | — (root ADR 0001 rule 4: a tiny helper stays a copy) |
+| Copy                                                                | Source                                                          | What changed                                                                                 | Backlog                                              |
+| ------------------------------------------------------------------- | --------------------------------------------------------------- | -------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| `src/testing/fact-timeout.ts`                                       | `packages/mutex/src/testing/fact-timeout.ts`                    | Nothing.                                                                                     | #2509                                                |
+| `src/testing/worker-process.ts`                                     | `packages/mutex/src/testing/worker-process.ts`                  | No `host` and no `nodeOptions` option. The message check is inline, with no `isRecord`.      | #2509                                                |
+| `succeed` in `src/sqlite/sqlite-election.test.ts`                   | `succeed` in `src/sqlite/sqlite-election.pipe.test.ts`          | Nothing. A successor wins and resigns, so the socket file of a killed last leader goes away. | #4446                                                |
+| The decimal check in `readEpoch` of `src/sqlite/sqlite-election.ts` | `FencingToken.parse` in `packages/fencing/src/fencing-token.ts` | The check is inline in `readEpoch`. It throws a `SyntaxError` instead of returning `null`.   | — (root ADR 0001 rule 4: a tiny helper stays a copy) |
 
 The test helpers are in three packages now: the mutex, the single flight and this one. The temporary directory of the tests is `TemporaryFiles` of `@zukhruf/testing/fs`, so this package keeps no copy of `scratch-directory.ts`. The maintainer chose a third copy for them, and backlog #2509 records it. The claim of `SqliteElection` is a `FileLock` of `@zukhruf/fs`, so this package keeps no copy of the SQLite result-code checks.
 
@@ -43,13 +44,13 @@ Three test helpers are in the tests of this package and in the tests of two othe
 **`LosableElection`.** Three places.
 
 - Places: `packages/election/src/sqlite/sqlite-election.test.ts`, `packages/mutex/src/lock-stores/socket/lock-server.test.ts` and `packages/single-flight/src/coordinator/flight-server.test.ts`.
-- Same: a subclass of `SqliteElection` that takes a `loss` signal. Its `watch` calls `lose` when `loss` aborts. SQLite never takes the claim from a leader that lives, so only this backend shows what a lost term does.
-- Differs: the claim file and the epoch file. This package uses `term.lock` and `term.epoch`, the mutex uses `leader.lock` and `leader.epoch`, and the single flight uses `flight.lock` and `flight.epoch`. The mutex and the single flight also set `pollInterval: 10`. The comment names the tests of each package.
+- Same: a subclass of `SqliteElection` that takes a `loss` signal. Its `watch` calls `lose` when `loss` aborts. Its leader still sends heartbeats, because the pipe of the term sends them, not the `watch` of `SqliteElection`. SQLite never takes the claim from a leader that lives, so only this backend shows what a lost term does.
+- Differs: the claim file and the epoch file. This package uses `term.lock` and `term.epoch`, the mutex uses `leader.lock` and `leader.epoch`, and the single flight uses `flight.lock` and `flight.epoch`. The comment names the tests of each package.
 
-## Code that the design moves
+## Code that the hung-leader design moved
 
-Not built yet ([ADR 0008](./adr/0008-the-backend-owns-the-wait-between-two-tries-and-poll-leaves-the-campaign.md), [ADR 0009](./adr/0009-a-process-that-does-not-campaign-observes-the-leader.md), backlog #4371).
+[ADR 0008](./adr/0008-the-backend-owns-the-wait-between-two-tries-and-poll-leaves-the-campaign.md), [ADR 0009](./adr/0009-a-process-that-does-not-campaign-observes-the-leader.md), backlog #4371.
 
-- **The back-off.** The design has three places that wait a capped back-off after a failed connect: the wait of `SqliteElection`, the `ElectingConnector` of `@zukhruf/mutex`, and its copy in `@zukhruf/single-flight`. The Rule of Three counts places, so the back-off goes to `@zukhruf/async` before the design is built, and no package keeps a copy. Its API goes on paper there first.
-- **`LosableElection`.** The mutex and the single flight drop `pollInterval: 10` from their copies. The three copies then differ only in their file names.
+- **The back-off.** The wait of `SqliteElection` after a failed connect is `Backoff` of `@zukhruf/async`, so this package keeps no copy. The `ElectingConnector` of `@zukhruf/mutex` and its copy in `@zukhruf/single-flight` are the other two places of the design, and they use `Backoff` too when they move to the observer.
+- **`LosableElection`.** The three copies differ only in their file names.
 - **No copy of `notify()`.** The first version of this paper made the campaign a second copy of pg-boss's `notify()`, after the port in `packages/sqlite/queue/src/timers.ts` and `src/worker.ts:157-165`. The campaign no longer waits on a period, so that copy does not come.

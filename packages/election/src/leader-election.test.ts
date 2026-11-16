@@ -5,7 +5,7 @@ import { setImmediate as drain } from 'node:timers/promises';
 import { createClock } from '@sinonjs/fake-timers';
 
 // A backend is written against the package's public entry, as an outside author would.
-import type { Clock } from '@zukhruf/async';
+import { type Clock, delay } from '@zukhruf/async';
 
 import { LeaderElection, LeaseLostError } from './index.ts';
 import { factTimeout } from './testing/fact-timeout.ts';
@@ -33,18 +33,21 @@ interface Script {
 }
 
 /**
- * A backend whose claim is the number of its attempt. It records each step it
- * is asked for, so a test reads what the campaign and the term did.
+ * A backend whose claim is the number of its attempt. It has no push, so it
+ * polls in its own wait for a change, every `interval`. It records each step
+ * it is asked for, so a test reads what the campaign and the term did.
  */
 class ScriptedElection extends LeaderElection<number> {
   readonly steps: string[] = [];
   readonly #script: Script;
+  readonly #interval: number;
   #attempts = 0;
   #tries = 0;
 
-  constructor(clock: Clock, script: Script, pollInterval = 1) {
-    super(pollInterval, clock);
+  constructor(clock: Clock, script: Script, interval = 1) {
+    super(clock);
     this.#script = script;
+    this.#interval = interval;
   }
 
   protected async open(): Promise<number> {
@@ -64,6 +67,10 @@ class ScriptedElection extends LeaderElection<number> {
     if (Error.isError(answer)) throw answer;
     if (answer === 'busy' || answer === undefined) return undefined;
     return { epoch: answer, afterCleanShutdown: false };
+  }
+
+  protected waitForChange(_claim: number, signal: AbortSignal): Promise<void> {
+    return delay(this.#interval, { clock: this.clock, signal });
   }
 
   protected watch(claim: number, lose: (reason: Error) => void): Disposable {
@@ -392,7 +399,7 @@ describe('A campaign', () => {
     assert.deepEqual(steps, ['open 1', 'try 1', 'close 1']);
   });
 
-  test('a campaign tries again every poll interval of its backend until it wins, and its term carries the exact epoch that the backend gave', async (t) => {
+  test('a campaign tries again each time the wait of its backend for a change ends, until it wins, and its term carries the exact epoch that the backend gave', async (t) => {
     // Arrange: the backend's epoch is large and not one more than the last, as an etcd revision is.
     const clock = createClock();
     const election = new ScriptedElection(
@@ -407,10 +414,11 @@ describe('A campaign', () => {
       won = true;
       return term;
     });
+    // The timer of the timeout and the timer of the backend's wait.
     await t.waitFor(() =>
       assert.equal(
         clock.countTimers(),
-        1,
+        2,
         'The campaign must wait on the clock that it was given',
       ),
     );
@@ -438,8 +446,8 @@ describe('A campaign', () => {
     await term.resign();
   });
 
-  test('a campaign that the backend keeps busy gives up at the first try at or after its timeout on the clock', async (t) => {
-    // Arrange
+  test('a campaign that the backend keeps busy ends its wait at its timeout on the clock, tries one last time, and gives up', async (t) => {
+    // Arrange: the backend's waits end at 40 and 80 ms; the timeout ends the third at 100 ms.
     const clock = createClock();
     const election = new ScriptedElection(clock, { tries: ['busy'] }, 40);
 
@@ -449,8 +457,8 @@ describe('A campaign', () => {
       settled = true;
       return term;
     });
-    await t.waitFor(() => assert.equal(clock.countTimers(), 1));
-    await clock.tickAsync(119);
+    await t.waitFor(() => assert.ok(clock.countTimers() >= 1));
+    await clock.tickAsync(99);
     const settledEarly = settled;
     await clock.tickAsync(1);
 
@@ -460,12 +468,16 @@ describe('A campaign', () => {
       false,
       'The campaign must keep trying until its timeout on the clock',
     );
-    assert.equal(
-      settled,
-      true,
-      'The try at 120 ms is the first one after the timeout of 100 ms',
-    );
+    assert.equal(settled, true, 'The campaign must give up at its timeout');
     assert.equal(await campaigning, undefined);
+    assert.deepEqual(election.steps, [
+      'open 1',
+      'try 1',
+      'try 1',
+      'try 1',
+      'try 1',
+      'close 1',
+    ]);
     assert.equal(
       clock.countTimers(),
       0,

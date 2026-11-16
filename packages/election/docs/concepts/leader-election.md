@@ -14,7 +14,7 @@
 - **A leader that stops.** The operating system kernel keeps the SQLite file lock. When the leader process stops, the kernel removes the lock, also after `SIGKILL`. Then the next campaign wins.
 - **The epoch.** The winner reads `<directory>/<epochFile>`, adds 1, and writes it back. Only the winner can do this, so the epoch always increases. The write is on the disk before the campaign resolves, so a power loss cannot give the same epoch two times.
 - **A clean shutdown.** A term that resigns clean writes its epoch to `<directory>/<claimFile>.clean` before it gives the claim up. The next winner reads that note and removes it. The note tells of a clean shutdown only when its epoch is the epoch just before the new one. The write is atomic but not synced to the disk: a lost note only makes the next term recover when it did not have to.
-- **A campaign does not block.** A candidate tries once, waits `pollInterval`, and tries again until `timeout`. The process continues other work between the tries. (A SQLite busy timeout would stop the event loop of each candidate.)
+- **A campaign does not block.** A candidate tries once. When another candidate leads, the candidate waits on the pipe of the leader, and it tries again when the pipe closes, until `timeout`. The process continues other work while it waits. (A SQLite busy timeout would stop the event loop of each candidate.) The README tells how a candidate ends a hung leader ([A leader that hangs](../../README.md#a-leader-that-hangs)).
 
 ```ts
 import { SqliteElection } from '@zukhruf/election';

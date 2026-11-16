@@ -454,7 +454,6 @@ describe('Socket store disposal', () => {
     // Assert
     await using term = await socketElection(
       directory.path,
-      10,
       globalThis,
     ).campaign();
     assert.ok(term, 'A disposed store must not keep a leadership term');
@@ -503,7 +502,6 @@ describe('Socket store lock server failure', () => {
       );
       await using term = await socketElection(
         directory.path,
-        10,
         globalThis,
       ).campaign();
       assert.ok(
@@ -703,7 +701,6 @@ describe('Socket store follower failure', () => {
       );
       await using _term = await socketElection(
         directory.path,
-        10,
         globalThis,
       ).campaign();
       let peerClosed = false;

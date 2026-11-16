@@ -73,7 +73,6 @@ describe('Socket store protocol handshake', () => {
       );
       await using _term = await socketElection(
         directory.path,
-        10,
         globalThis,
       ).campaign();
       await using _leader = await standInLeader(directory.path, (peer, line) =>
@@ -107,11 +106,7 @@ describe('Socket store protocol handshake', () => {
       await using directory = await new TemporaryFiles().directory(
         'mutex-test-',
       );
-      const term = await socketElection(
-        directory.path,
-        10,
-        globalThis,
-      ).campaign();
+      const term = await socketElection(directory.path, globalThis).campaign();
       assert.ok(term, 'The stand-in must win the first term');
       await using _leader = await standInLeader(directory.path, (peer) => {
         peer.destroy();
@@ -238,11 +233,7 @@ describe('Socket store protocol handshake', () => {
       await using directory = await new TemporaryFiles().directory(
         'mutex-test-',
       );
-      const term = await socketElection(
-        directory.path,
-        10,
-        globalThis,
-      ).campaign();
+      const term = await socketElection(directory.path, globalThis).campaign();
       assert.ok(term, 'The stand-in must win the first term');
       await using successor = new SocketStore(directory.path, {
         clock: globalThis,
@@ -287,11 +278,7 @@ describe('Socket store protocol handshake', () => {
       await using directory = await new TemporaryFiles().directory(
         'mutex-test-',
       );
-      const term = await socketElection(
-        directory.path,
-        10,
-        globalThis,
-      ).campaign();
+      const term = await socketElection(directory.path, globalThis).campaign();
       assert.ok(term, 'The stand-in must win the first term');
       let hellos = 0;
       let first: Socket | undefined;
@@ -412,7 +399,6 @@ describe('Socket store protocol handshake', () => {
       );
       await using _term = await socketElection(
         directory.path,
-        10,
         globalThis,
       ).campaign();
       let peerClosed = false;

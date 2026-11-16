@@ -5,7 +5,6 @@ import { join } from 'node:path';
 import { describe, test } from 'node:test';
 
 import { SqliteElection } from '@zukhruf/election';
-import type { FileLock } from '@zukhruf/fs';
 import { LeaseLostError } from '@zukhruf/lease';
 import { PipeEndpoint } from '@zukhruf/pipes';
 import { TemporaryFiles } from '@zukhruf/testing/fs';
@@ -29,14 +28,13 @@ class LosableElection extends SqliteElection {
       directory,
       claimFile: 'leader.lock',
       epochFile: 'leader.epoch',
-      pollInterval: 10,
     });
     this.#loss = loss;
   }
 
   // The parameters are optional because SqliteElection's watch declares none.
   protected override watch(
-    _claim?: FileLock,
+    _claim?: unknown,
     lose?: (reason: Error) => void,
   ): Disposable {
     return addAbortListener(this.#loss, () =>

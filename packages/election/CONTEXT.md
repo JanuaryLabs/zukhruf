@@ -44,9 +44,9 @@ _Avoid_: Expired, revoked
 A subclass of `LeaderElection` that implements one kind of claim. `SqliteElection` is the backend of this package.
 _Avoid_: Driver, adapter, provider
 
-## Language of the design for review
+## Language of a hung leader
 
-Not built yet (backlog #4371, ADRs 0004 to 0009). These words tell how a candidate waits on the leader, and how a hung leader is found and ended.
+These words tell how a candidate waits on the leader, and how a hung leader is found and ended (backlog #4371, ADRs 0004 to 0009).
 
 **Hung leader**:
 A leader whose process lives but does not run: `SIGSTOP` stopped it, or its event loop is blocked. It keeps the claim, it sends no heartbeat, and the kernel keeps its pipe open. A process that waits for a slow helper while its event loop runs is not a hung leader.

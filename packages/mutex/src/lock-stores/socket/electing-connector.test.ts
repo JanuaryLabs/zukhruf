@@ -19,7 +19,7 @@ describe('Electing connector', () => {
   test('a connect aborted while it campaigns resigns the term it wins and never serves', async () => {
     // Arrange: nobody serves the directory, and the abort lands while the campaign wins.
     await using directory = await new TemporaryFiles().directory('mutex-test-');
-    const election = socketElection(directory.path, 10, globalThis);
+    const election = socketElection(directory.path, globalThis);
     const abort = new AbortController();
     const served: Term[] = [];
     const connector = new ElectingConnector({
@@ -47,7 +47,6 @@ describe('Electing connector', () => {
     assert.deepEqual(served, [], 'An aborted connect must not start serving');
     await using next = await socketElection(
       directory.path,
-      10,
       globalThis,
     ).campaign();
     assert.ok(next, 'An aborted connect must resign the term it won');

@@ -1,6 +1,6 @@
 # The backend owns the wait between two tries, and poll leaves the campaign
 
-Status: Proposed 2026-11-15 for the owner's review (backlog #4371). Rewritten the same day for a campaign that waits on events. It replaces "The campaign owns its early wake, and poll gets none", which was written for a campaign that polls. Not built.
+Status: Proposed 2026-11-15 for the owner's review (backlog #4371). Rewritten the same day for a campaign that waits on events. It replaces "The campaign owns its early wake, and poll gets none", which was written for a campaign that polls. Built 2026-11-15.
 
 The campaign waits between two tries with `poll` of `@zukhruf/async` (`src/leader-election.ts:102-107`). `poll` waits a fixed `interval`, and only its signal can end that wait early. An abort rejects the poll (`packages/async/src/poll.ts:38-49`). The first version of this paper kept `poll` and asked where an early wake belongs: in `poll`, or in the campaign.
 
@@ -31,7 +31,7 @@ The campaign is then a loop with no period:
 4. `waitForChange(claim, wait)`, where `wait` aborts when the campaign's signal aborts or the deadline comes. The base sets the deadline timer on its `clock`, and sets none for an infinite `timeout`.
 5. After an abort of the campaign's signal, the campaign closes the attempt and rejects with `signal.reason`. Else it goes to step 2. Thus a deadline gives one last try, as `poll` does today.
 
-A backend with no push polls in its own `waitForChange`, for example with `delay` of `@zukhruf/async`. Then the period is a fact of that backend, and the base has none. The connection of `SqliteElection` lives in the attempt: `waitForChange` opens it the first time and keeps it, and `close(claim)` destroys it.
+A backend with no push polls in its own `waitForChange`, for example with `delay` of `@zukhruf/async`. Then the period is a fact of that backend, and the base has none. The connection of `SqliteElection` lives for one `waitForChange`: the wait opens it, and the close of the pipe or the abort of the wait destroys it. A wait on the connection ends only with one of those two, so a connection that outlived its wait would never be used again.
 
 The constructor of `LeaderElection` takes only the clock: `super(clock)`. `pollInterval` goes, with no alias.
 

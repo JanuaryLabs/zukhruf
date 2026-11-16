@@ -91,7 +91,7 @@ async function followerOfStandIn() {
   const directory = stack.use(
     await new TemporaryFiles().directory('mutex-test-'),
   );
-  stack.use(await socketElection(directory.path, 10, globalThis).campaign());
+  stack.use(await socketElection(directory.path, globalThis).campaign());
   const leader = stack.use(await standInLeader(directory.path));
   const store = stack.use(
     new SocketStore(directory.path, { clock: globalThis, pollInterval: 10 }),
@@ -747,7 +747,6 @@ describe('A follower process through a reconnect', () => {
     await using directory = await new TemporaryFiles().directory('mutex-test-');
     await using _term = await socketElection(
       directory.path,
-      10,
       globalThis,
     ).campaign();
     await using leader = await standInLeader(directory.path);
@@ -806,7 +805,6 @@ describe('A follower process through a reconnect', () => {
     await using directory = await new TemporaryFiles().directory('mutex-test-');
     await using _term = await socketElection(
       directory.path,
-      10,
       globalThis,
     ).campaign();
     await using leader = await standInLeader(directory.path);

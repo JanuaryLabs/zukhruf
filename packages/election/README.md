@@ -49,20 +49,18 @@ a second candidate wins: undefined
 next term: 2n
 ```
 
-- `campaign({ timeout, signal })` resolves with a `Term`, or with `undefined` when another candidate still leads after `timeout` milliseconds. Without a `timeout`, it tries once. When `signal` aborts, it rejects with `signal.reason`, and a claim that it won meanwhile is given up.
+- `campaign({ timeout, signal })` resolves with a `Term`, or with `undefined` when another candidate still leads after `timeout` milliseconds. Without a `timeout`, it tries once. With `timeout: Infinity`, it waits until it wins or `signal` aborts. When `signal` aborts, it rejects with `signal.reason`, and a claim that it won meanwhile is given up.
 - `claimFile` and `epochFile` are files in `directory`. Candidates with the same directory and the same file names are one group. Never delete `claimFile` while candidates run: a new file lets a second leader win.
 - `epochFile` holds the epoch of the last term as decimal digits. When it holds other text, `campaign` rejects with a `SyntaxError` that names the file, gives the claim up, and does not change the file. An example is the empty file that `@zukhruf/mutex` 0.2.0 or earlier can leave after a power loss, because those versions did not sync the file to the disk. Thus the epochs never start again at 1, and each new term has a higher epoch than each earlier term.
 - `lastEpoch()` resolves with the epoch of the last term in `epochFile`, or with `0n` when no term was won yet. It only reads the file. It does not campaign, it does not take the claim, and it does not create a file or the directory. Use it to find out if a value from an earlier term is stale, for example a fencing token that an old leader made with `EpochTokenSource`. A new term can start immediately after the read, so the answer can be old when you get it. When `epochFile` holds text that is not decimal digits, `lastEpoch()` rejects with the same `SyntaxError` as `campaign`. When it cannot read the file for another reason, it rejects with that error. It never answers `0n` for a file that it cannot read.
 - A term that resigns clean writes a third file, `<claimFile>.clean`, beside `claimFile`. It holds the epoch of that term. The next term reads it and removes it.
 - The directory must be on a local file system. On a network file system, `campaign` rejects with `NetworkDirectoryError`.
-- `pollInterval` is the time between two tries, in milliseconds. It defaults to 10. A try never blocks the process. The design in [A leader that hangs](#a-leader-that-hangs) removes it: a candidate waits on pushes from the leader.
-- `clock` is the clock that the campaign waits on, and that measures its `timeout`. It is required. Give `globalThis` in production. A test gives a fake clock, for example `createClock()` of `@sinonjs/fake-timers`, and moves the time of the campaign without a real wait ([`@zukhruf/async`](../async/README.md#run-a-wait-on-a-clock)).
+- A try never blocks the process. Between two tries, a candidate waits on pushes from the leader, not on a period ([A leader that hangs](#a-leader-that-hangs)).
+- `clock` is the clock that the campaign waits on, and that measures its `timeout`, the heartbeats of a leader and the deadline of a reader. It is required. Give `globalThis` in production. A test gives a fake clock, for example `createClock()` of `@sinonjs/fake-timers`, and moves the time of the campaign without a real wait ([`@zukhruf/async`](../async/README.md#run-a-wait-on-a-clock)).
 
 ## A leader that hangs
 
-Design for review: not built yet (backlog #4371). The text above tells what the package does today.
-
-A hung leader keeps the claim of `SqliteElection` today: a leader that `SIGSTOP` stopped, or a leader whose event loop is blocked. The kernel frees the claim only when the process ends, so no candidate can win, and the group waits forever. In the design, the leader pushes a heartbeat on a pipe, a candidate waits on that pipe, and a candidate ends a leader that is silent for too long. A candidate waits as etcd's `Campaign` and ZooKeeper's leader election recipe wait: on a push, not on a period ([ADR 0007](./docs/adr/0007-a-candidate-waits-on-pushes-from-the-leaders-pipe-not-on-a-period.md)).
+A hung leader keeps the claim of `SqliteElection`: a leader that `SIGSTOP` stopped, or a leader whose event loop is blocked. The kernel frees the claim only when the process ends. Thus the leader pushes a heartbeat on a pipe, a candidate waits on that pipe, and a candidate ends a leader that is silent for too long. A candidate waits as etcd's `Campaign` and ZooKeeper's leader election recipe wait: on a push, not on a period ([ADR 0007](./docs/adr/0007-a-candidate-waits-on-pushes-from-the-leaders-pipe-not-on-a-period.md)).
 
 ```ts
 const election = new SqliteElection({
@@ -77,19 +75,18 @@ const election = new SqliteElection({
 await using term = await election.campaign({ timeout: Infinity, signal });
 ```
 
-- **The pipe.** The winner of a claim serves a pipe of [`@zukhruf/pipes`](../pipes/README.md) for its term. It sends a heartbeat on each connection when it accepts it, and then every `heartbeatInterval` ([ADR 0004](./docs/adr/0004-a-leader-renews-its-term-with-a-heartbeat-on-a-pipe-that-it-serves.md)).
-- **The leader record.** The winner writes `<claimFile>.leader` beside `claimFile`, before its term begins. It holds the epoch of the term, the process id of the leader, the address of its pipe, and its `leaseDuration` ([ADR 0005](./docs/adr/0005-the-leader-record-names-the-process-and-the-pipe-of-a-term.md)).
+- **The pipe.** The winner of a claim serves a pipe of [`@zukhruf/pipes`](../pipes/README.md) for its term. It sends a heartbeat on each connection when it accepts it, and then every `heartbeatInterval` until the term closes, also when a subclass overrides `watch` ([ADR 0004](./docs/adr/0004-a-leader-renews-its-term-with-a-heartbeat-on-a-pipe-that-it-serves.md)).
+- **The leader record.** The winner writes `<claimFile>.leader` beside `claimFile`, before its term begins. It holds the epoch of the term, the process id of the leader, the address of its pipe, and its `leaseDuration`. The winner first removes the socket file of the pipe that the old record names, which a killed leader leaves ([ADR 0005](./docs/adr/0005-the-leader-record-names-the-process-and-the-pipe-of-a-term.md)).
 - **The wait.** A candidate tries the claim. When another candidate holds it, the candidate reads the record, connects to the pipe, and waits. The close of the pipe tells it that the leader left, and it tries at once. A candidate under a healthy leader makes no try ([ADR 0007](./docs/adr/0007-a-candidate-waits-on-pushes-from-the-leaders-pipe-not-on-a-period.md)).
-- **A hung leader.** A candidate that hears no heartbeat for the `leaseDuration` of the record sends `SIGKILL` to the process of the record, but only while it holds that process's pipe open. The kernel frees the claim and closes the pipe, and the candidate tries. The kernel refuses the kill for a process of another user: then the candidate ends nothing, and it waits for the close until its `timeout` ([ADR 0006](./docs/adr/0006-a-candidate-ends-a-leader-that-is-silent-past-the-lease-duration.md)).
+- **A hung leader.** A candidate that hears no heartbeat for the `leaseDuration` of the record sends `SIGKILL` to the process of the record, but only while it holds that process's pipe open. The kernel frees the claim and closes the pipe, and the candidate tries. The kernel refuses the kill for a process of another user: then the candidate ends nothing, and it waits for the close until its `timeout`. A reader never ends its own process, in the same way ([ADR 0006](./docs/adr/0006-a-candidate-ends-a-leader-that-is-silent-past-the-lease-duration.md)).
 - **A new leader that does not serve its pipe yet.** A connect that gives `ENOENT` or `ECONNREFUSED` comes while a new leader starts, or under a published leader. The candidate waits a back-off and tries again: 25 ms first, then 1.6 times longer each time, with a jitter of ±20 %, at most 1000 ms.
-- **An observer.** `election.observe()` returns a `LeaderObserver` for a process that does not campaign. It holds a connection to the leader's pipe and ends a silent leader as a candidate does. `observer.left` resolves `'closed'` when the leader left, `'ended'` when the observer ended it, and `'absent'` when no leader served a pipe. Dispose it to close the connection. The followers of `@zukhruf/mutex` and `@zukhruf/single-flight` use it ([ADR 0009](./docs/adr/0009-a-process-that-does-not-campaign-observes-the-leader.md)).
+- **An observer.** `election.observe()` returns a `LeaderObserver` for a process that does not campaign. It holds a connection to the leader's pipe and ends a silent leader as a candidate does. `observer.left` resolves `'closed'` when the leader left, `'ended'` when the observer ended it, and `'absent'` when no leader served a pipe. It rejects with any other error. Dispose it to close the connection; then `left` does not settle. Its connection and its deadline do not keep the process alive. One observer reads one term ([ADR 0009](./docs/adr/0009-a-process-that-does-not-campaign-observes-the-leader.md)).
 - `leaseDuration` is the longest silence, in milliseconds, that a candidate or an observer accepts from the leader. It defaults to 15000, as the `LeaseDuration` of Kubernetes. A reader uses the value in the record, so the leader decides it.
 - `heartbeatInterval` is the time between two heartbeats, in milliseconds. It defaults to a third of `leaseDuration`, as etcd's client sends a keepalive every TTL / 3. The name is etcd's `heartbeat-interval`.
-- `pollInterval` goes, with no alias. The constructor throws a `RangeError` unless `0 < heartbeatInterval < leaseDuration`.
-- `campaign({ timeout: Infinity })` waits until it wins or its signal aborts. Without a `timeout`, it still tries once.
+- The constructor throws a `RangeError` unless `0 < heartbeatInterval < leaseDuration`.
+- The pipe, its connections and the heartbeat timer of a leader do not keep its process alive. A waiting candidate keeps its process alive until the campaign ends.
 - Run the candidates of one group as one user, in one PID namespace, with one `/tmp`. A candidate that runs as root can end a leader of any user.
 - With `SqliteElection`, a hung leader never runs again after a takeover: a new term starts only after the old process ended. A leader that runs again before its deadline still leads, and its `term.signal` does not abort.
-- A backend gets a seventh step, `waitForChange(claim, signal)`. It resolves when a try can win, and it settles when `signal` aborts. The base keeps the deadline and the abort of the campaign, and it no longer polls. The constructor of `LeaderElection` takes only the clock ([ADR 0008](./docs/adr/0008-the-backend-owns-the-wait-between-two-tries-and-poll-leaves-the-campaign.md)).
 
 ## The term
 
@@ -116,28 +113,31 @@ const token = await tokens.next('orders');
 
 ## Write a backend
 
-`LeaderElection` is an abstract class. It runs the campaign, and it owns the term. A backend is a subclass that implements six steps for its claim:
+`LeaderElection` is an abstract class. It runs the campaign, and it owns the term. Its constructor takes only the clock. A backend is a subclass that implements seven steps for its claim ([ADR 0008](./docs/adr/0008-the-backend-owns-the-wait-between-two-tries-and-poll-leaves-the-campaign.md)):
 
 | Step                                | What it does                                                                                                                                          |
 | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `open(signal)`                      | Prepares one attempt, for example a connection. The campaign calls `tryClaim` on it again and again.                                                  |
 | `tryClaim(claim, signal)`           | Tries the claim once. Resolves with `{ epoch, afterCleanShutdown }` for the term it won, or with `undefined` while another candidate holds the claim. |
+| `waitForChange(claim, signal)`      | Resolves when a try of the claim can win: the holder left, was ended, or the backend wants a new try. Settles when `signal` aborts.                   |
 | `watch(claim, lose)`                | Watches a won claim for as long as its term lasts. Calls `lose` when the backend takes the claim away. Returns a `Disposable` that stops the watch.   |
 | `recordCleanShutdown(claim, epoch)` | Records that the term of `epoch` resigned clean. The campaign calls it before `release`, while the term still holds the claim.                        |
 | `release(claim)`                    | Gives a won claim up when the leader resigns.                                                                                                         |
 | `close(claim)`                      | Frees the resources of an attempt, at each end.                                                                                                       |
 
-A backend must keep five rules:
+A backend must keep six rules:
 
 1. `tryClaim` gives the epoch in the same step that wins the claim. Each epoch is higher than each earlier one, and below 2^31.
 2. `tryClaim` gives `afterCleanShutdown: true` only when the term just before this one recorded a clean shutdown. It reads each record one time only. Thus a crash after a clean term never reads as clean.
 3. `watch` calls `lose` before the backend can give the claim to another candidate. For a claim that the backend keeps only for a time, renew it well before that time ends, and count the time on a monotonic clock. Then an old leader stops before a new one starts.
 4. The campaign never calls `recordCleanShutdown` or `release` after a loss, because the claim can be another candidate's then.
 5. The campaign calls `close` after each end: a won term, a lost term, a failed attempt, or an attempt that never won.
+6. `waitForChange` settles when its signal aborts, and it never ends the attempt itself. The campaign aborts that signal at its `timeout`, and then it tries one last time. A backend with no push polls in its own `waitForChange`, for example with `delay` of `@zukhruf/async`.
 
-This backend elects among the candidates of one process. Its claim is an entry in a map:
+This backend elects among the candidates of one process. Its claim is an entry in a map, and it has no push, so it polls:
 
 ```ts
+import { delay } from '@zukhruf/async';
 import { LeaderElection } from '@zukhruf/election';
 
 const holders = new Map<string, bigint>();
@@ -148,7 +148,7 @@ class MapElection extends LeaderElection<string> {
   readonly #name: string;
 
   constructor(name: string) {
-    super(10);
+    super(globalThis);
     this.#name = name;
   }
 
@@ -164,6 +164,11 @@ class MapElection extends LeaderElection<string> {
     lastEpoch += 1n;
     holders.set(name, lastEpoch);
     return { epoch: lastEpoch, afterCleanShutdown };
+  }
+
+  // A resign deletes the entry, but nothing tells the waiting candidates.
+  protected waitForChange(_name: string, signal: AbortSignal) {
+    return delay(10, { clock: this.clock, signal });
   }
 
   // Nothing takes an entry of the map away, so there is nothing to watch.
@@ -240,6 +245,7 @@ npx nx run election:build       # compiles src/ to dist/
 src/
   leader-election.ts     LeaderElection: the campaign, and the steps of a backend
   term.ts                Term: the epoch, the lease on leadership, and resign
-  sqlite/                SqliteElection: the backend of one host
+  sqlite/                SqliteElection: the backend of one host, its leader pipe,
+                         its leader record, and the readers of the pipe
   testing/               the helpers that start candidate processes in the tests
 ```

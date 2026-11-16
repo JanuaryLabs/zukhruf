@@ -1,6 +1,6 @@
 # A process that does not campaign observes the leader
 
-Status: Proposed 2026-11-15 for the owner's review (backlog #4371). Not built.
+Status: Proposed 2026-11-15 for the owner's review (backlog #4371). Built 2026-11-15.
 
 The socket lock store of `@zukhruf/mutex` and the coordinator of `@zukhruf/single-flight` have followers. A follower reached the leader's server, so it does not campaign until that connection closes (`ElectingConnector`, `packages/mutex/src/lock-stores/socket/electing-connector.ts:40-56`, and its copy in `packages/single-flight/src/connection/electing-connector.ts`). A hung leader keeps the connection open and answers nothing. Thus each follower waits forever, and no candidate ends the leader. The owner put this in the scope of #4371 (2026-11-15: "part of this work").
 

@@ -716,7 +716,6 @@ describe('A single flight in its directory', () => {
       directory: directory.path,
       claimFile: 'flight.lock',
       epochFile: 'flight.epoch',
-      pollInterval: 10,
     }).campaign();
     assert.ok(earlier, 'The first campaign in an empty directory must win');
     await earlier.resign();
