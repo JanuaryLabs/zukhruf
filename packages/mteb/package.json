@@ -1,7 +1,7 @@
 {
   "name": "@zukhruf/mteb",
   "version": "0.4.0",
-  "description": "A TypeScript port of the MTEB evaluation engine (Massive Text Embedding Benchmark, version 2.26.28): tasks, evaluators, metrics, search, results and the result cache, for retrieval, reranking, pair classification, STS, clustering, classification, multilabel classification and regression. The encoder is an AI SDK embedding model.",
+  "description": "A TypeScript port of the evaluation engine of MTEB (Massive Text Embedding Benchmark) 2.26.28, with the same scores and files as MTEB. Its tasks and evaluators cover retrieval, reranking, pair classification, STS, clustering, classification, multilabel classification and regression. It has trec_eval and scikit-learn metrics, BM25 in the languages of MTEB, hybrid search, cross-encoders, results, comparison tables, a paired bootstrap test, the result and embedding caches and the CO₂ tracker. The encoder is an AI SDK embedding model.",
   "license": "Apache-2.0",
   "private": true,
   "repository": {

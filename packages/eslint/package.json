@@ -1,7 +1,7 @@
 {
   "name": "@zukhruf/eslint",
   "version": "0.8.18",
-  "description": "ESLint rules and configs shared across workspaces. Every check is its own named rule, so a repo's own config cannot silently erase it.",
+  "description": "ESLint rules and configs shared across workspaces. Each check is its own named rule, so a repo's own config cannot silently erase it. This workspace lints itself with it.",
   "license": "MIT",
   "repository": {
     "type": "git",

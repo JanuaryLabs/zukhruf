@@ -9,12 +9,12 @@ import {
   preCommit,
 } from '@zukhruf/git-hooks';
 
-import { ReadmeRows } from './readme-rows.ts';
+import { ReadmeTable } from './readme-table.ts';
 
 await preCommit([
   new Sync(),
   new Format(),
   new NoNumericPins(),
   new DependencyChecks(),
-  new ReadmeRows(),
+  new ReadmeTable(),
 ]);

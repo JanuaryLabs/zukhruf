@@ -2,7 +2,7 @@
   "name": "@zukhruf/vector-decisions",
   "version": "0.1.0",
   "private": true,
-  "description": "Typed decisions over embedding vectors, ported from Venn: Choice, Score and yes/no questions answered by a small head over a frozen reader, families fitted on labelled vectors, and comparisons with stored vectors.",
+  "description": "Typed decisions over embedding vectors, a TypeScript port of the library core of Venn: Choice, Score and yes/no questions answered from vectors by a small head over a frozen reader, families fitted on labelled vectors, and comparisons with stored vectors. In progress, built one unit at a time.",
   "license": "MIT",
   "repository": {
     "type": "git",

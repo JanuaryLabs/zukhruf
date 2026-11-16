@@ -48,6 +48,9 @@ jobs:
           - name: Check that a copy ledger records each copy in the test files
             run: npx nx run copy-check:check
 
+          - name: Check that the README's Packages table is the one the package.json descriptions give
+            run: npx nx run readme-table:check
+
       # The projects tagged platform:darwin run in the darwin job.
       - name: Lint, type check, test and build what changed
         run: npx nx affected -t lint typecheck test test-network build --exclude='tag:platform:darwin'

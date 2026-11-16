@@ -1,0 +1,23 @@
+{
+  "name": "readme-table",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "tools/readme-table/src",
+  "projectType": "application",
+  "tags": ["std:tool"],
+  "targets": {
+    "generate": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "options": {
+        "command": "node tools/readme-table/src/generate.ts"
+      }
+    },
+    "check": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "options": {
+        "command": "node tools/readme-table/src/check.ts"
+      }
+    }
+  }
+}

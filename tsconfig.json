@@ -126,6 +126,9 @@
       "path": "./tools/copy-check"
     },
     {
+      "path": "./tools/readme-table"
+    },
+    {
       "path": "./packages/launchd"
     }
   ]

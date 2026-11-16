@@ -1,7 +1,7 @@
 {
   "name": "@zukhruf/python",
   "version": "0.8.18",
-  "description": "CPython 3.12 results in JavaScript: the compensated sum() of floats, repr() of a float, json.loads with the order of keys and ints apart from floats, and the white space of str.isspace().",
+  "description": "The results of CPython 3.12 in JavaScript: the compensated `sum()` of floats, the `repr()` of a float, `json.loads` with the order of keys and ints apart from floats, and the white space of `str.isspace()`.",
   "license": "MIT",
   "repository": {
     "type": "git",
