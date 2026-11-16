@@ -169,6 +169,16 @@ export default defineConfig(
       '@nx/enforce-module-boundaries': moduleBoundaryRule('shipped'),
     },
   },
+  // The pre-commit hook runs a step that tools/readme-table owns. The hook is
+  // a file that git runs, not a package, so it imports the step by its path.
+  {
+    files: ['.husky/*.ts'],
+    rules: {
+      '@nx/enforce-module-boundaries': moduleBoundaryRule('shipped', [
+        '../tools/readme-table/src/readme-table-step.ts',
+      ]),
+    },
+  },
   {
     files: [...TESTS, ...TEST_SUPPORT],
     rules: {

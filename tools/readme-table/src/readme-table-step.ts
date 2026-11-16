@@ -2,10 +2,7 @@ import { posix } from 'node:path';
 
 import { type Commit, type Outcome, Step } from '@zukhruf/git-hooks';
 
-import {
-  STALE,
-  generatedReadme,
-} from '../tools/readme-table/src/packages-table.ts';
+import { STALE, generatedReadme } from './packages-table.ts';
 
 // The Packages table of the root README comes from the package.json
 // description of each workspace package (tools/readme-table). When a commit

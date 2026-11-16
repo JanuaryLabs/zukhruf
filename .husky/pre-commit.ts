@@ -9,7 +9,7 @@ import {
   preCommit,
 } from '@zukhruf/git-hooks';
 
-import { ReadmeTable } from './readme-table.ts';
+import { ReadmeTable } from '../tools/readme-table/src/readme-table-step.ts';
 
 await preCommit([
   new Sync(),

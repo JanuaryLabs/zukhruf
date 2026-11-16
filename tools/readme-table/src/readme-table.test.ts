@@ -5,7 +5,10 @@ import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
+import { Commit } from '@zukhruf/git-hooks';
 import { TemporaryFiles } from '@zukhruf/testing/fs';
+
+import { ReadmeTable } from './readme-table-step.ts';
 
 const readme = `# workspace
 
@@ -152,4 +155,73 @@ test('a staged package.json with no description stops generate, and names the fi
     stderr,
     /packages\/queue\/package\.json needs a name and a description/,
   );
+});
+
+test('the pre-commit step skips a commit that stages no package.json and no README', async () => {
+  // Arrange
+  await using workspace = await new TemporaryFiles().directory('readme-table-');
+  await write(workspace.path, {
+    'package.json': JSON.stringify({ workspaces: ['packages/*'] }),
+    'README.md': readme,
+    'notes.txt': 'Not a package.',
+  });
+  git(workspace.path, 'init', '-q');
+  git(workspace.path, 'add', 'notes.txt');
+
+  // Act
+  const outcome = await new ReadmeTable().run(
+    new Commit(workspace.path, process.env),
+  );
+
+  // Assert
+  assert.equal(outcome.kind, 'skip');
+});
+
+test('the pre-commit step fails a commit whose staged README has no row for a staged package', async () => {
+  // Arrange
+  await using workspace = await new TemporaryFiles().directory('readme-table-');
+  await write(workspace.path, {
+    'package.json': JSON.stringify({ workspaces: ['packages/*'] }),
+    'packages/queue/package.json': JSON.stringify({
+      name: '@x/queue',
+      description: 'Jobs that wait their turn.',
+    }),
+    'README.md': readme,
+  });
+  git(workspace.path, 'init', '-q');
+  git(workspace.path, 'add', '.');
+
+  // Act
+  const outcome = await new ReadmeTable().run(
+    new Commit(workspace.path, process.env),
+  );
+
+  // Assert
+  assert.equal(outcome.kind, 'fail');
+  assert.match(outcome.message, /npx nx run readme-table:generate/);
+});
+
+test('the pre-commit step passes a commit whose staged README holds the generated table', async () => {
+  // Arrange
+  await using workspace = await new TemporaryFiles().directory('readme-table-');
+  await write(workspace.path, {
+    'package.json': JSON.stringify({ workspaces: ['packages/*'] }),
+    'packages/queue/package.json': JSON.stringify({
+      name: '@x/queue',
+      description: 'Jobs that wait their turn.',
+    }),
+    'README.md': readme,
+  });
+  git(workspace.path, 'init', '-q');
+  git(workspace.path, 'add', '.');
+  assert.equal(run('generate.ts', workspace.path).status, 0);
+  git(workspace.path, 'add', 'README.md');
+
+  // Act
+  const outcome = await new ReadmeTable().run(
+    new Commit(workspace.path, process.env),
+  );
+
+  // Assert
+  assert.equal(outcome.kind, 'pass');
 });
