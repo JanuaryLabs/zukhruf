@@ -1,0 +1,29 @@
+# A follower observes the coordinator, so a frozen coordinator is ended
+
+A process of a single flight that reached the server of the coordinator did not campaign until that connection closed. A coordinator that froze, for example during `SIGSTOP`, kept each connection open and answered nothing. Thus each call of each process waited forever, and no process could become the coordinator. Also, between two tries a process waited 10 ms. Thus a process under a coordinator whose server did not listen yet made 100 tries a second.
+
+`SqliteElection` now has a heartbeat on the pipe of the leader, and an observer of the leader, after etcd's `Election.Observe` ([election ADR 0009](../../../election/docs/adr/0009-a-process-that-does-not-campaign-observes-the-leader.md)). The socket lock store of the mutex uses them ([mutex ADR 0031](../../../mutex/docs/adr/0031-a-follower-observes-the-leader-so-a-frozen-leader-is-ended.md)). The electing connector of this package is a copy of the mutex code ([ADR 0006](./0006-the-election-and-the-connection-are-a-copy-of-the-mutex-code.md)), so it changes in the same way:
+
+- A follower observes the coordinator from its `hello` until its connection closes. The observer reports `'closed'` when the coordinator left, and `'ended'` when it ended a coordinator that was silent for longer than the lease duration. When it reports one of them before the coordinator answers the `hello`, the follower closes its connection and continues as after a hang-up. After the `welcome`, the follower does nothing with the report: when the process of the coordinator ends, the kernel closes the connection of the follower too, and the follower connects again as after each death of a coordinator. The observer reports `'absent'` when the coordinator serves no pipe, for example a coordinator of a published version. Then the follower follows that coordinator as before.
+- After a lost try, a process waits for the first of two events: the observer reports that the coordinator left, or the next step of a back-off ends. Then it tries again. The back-off is the back-off of the election: 25 ms, × 1.6, ± 20 %, at most 1000 ms (`Backoff` of `@zukhruf/async`). One observer lasts across the steps, so it also ends a coordinator that froze before its server listened.
+- A try is one try of the claim: `campaign()` with no `timeout`. Before, it was a campaign of 10 ms.
+- `SingleFlightOptions.leaseDuration` is added. The single flight gives it to `SqliteElection`, and the election writes it in the leader record. Thus each follower uses the lease duration of the coordinator. The default is the default of the election, 15000 ms.
+- The key locks keep their check every 10 ms. A key lock is a file lock for each key, not the election (backlog #4433).
+
+## Considered Options
+
+- **The 10 ms waits, and no observer.** This was the behavior before. A frozen coordinator stops each call forever.
+- **A follower campaigns while it follows.** Each follower would hold two connections to one coordinator. Its campaign would win a term that it must serve at once, while it still follows the old server.
+- **A time limit on each call.** A call can wait as long as its caller allows, for example while a frozen leader holds the key lock. Thus no time limit tells a frozen coordinator from a long flight.
+- **A new observer for each step of the back-off.** The longest step is approximately 1200 ms. An observer that lives for one step never comes to a longer lease duration. Thus a coordinator that froze before its server listened would never be ended.
+- **An observer of the coordinator, and a back-off while no server listens, as the mutex does.** This option was selected.
+
+## Consequences
+
+- A follower ends a frozen coordinator after the lease duration of that coordinator. A survivor becomes the coordinator, each leader reasserts its flight, and each joiner rejoins it. The test "a coordinator frozen past its lease duration is ended by a follower, a survivor coordinates, and the joiner gets the outcome of the flight in progress" shows this.
+- A process ends a coordinator that froze before its server listened, and then it becomes the coordinator. The test "a process ends a coordinator that froze before its flight server listened, and coordinates" shows this.
+- A killed coordinator is replaced at once, as before: the kernel closes each connection to it.
+- A follower that the coordinator welcomed keeps its connection when the pipe of the coordinator closes and its server does not. A follower whose `hello` has no answer gives up the connection when the coordinator leaves. The tests "a follower keeps its connection when the coordinator leaves after the welcome, and leaves the close to the kernel" and "a process whose hello gets no answer gives up the connection when the coordinator leaves, and coordinates" show this.
+- A process whose coordinator serves no server yet makes no try until the coordinator leaves or a step of the back-off ends. The test "a process that lost its try waits on the coordinator, not on a timer, and tries again once the coordinator leaves" shows this.
+- A coordinator that does not run for longer than its lease duration is ended too, for example during a long block of its event loop. Set `leaseDuration` above the longest pause of your processes ([election ADR 0006](../../../election/docs/adr/0006-a-candidate-ends-a-leader-that-is-silent-past-the-lease-duration.md)). A follower cannot end a coordinator of another user.
+- A frozen leader in a process that is not the coordinator keeps its flight and its key lock, as before ([ADR 0010](./0010-a-leader-holds-a-kernel-lock-on-its-key-until-its-outcome-is-handed-over.md)). When the process of a frozen leader is also the coordinator, a follower ends that process after the lease duration. Then the kernel frees the key lock, and the joiners get `FlightInterruptedError`, as when the process of a leader that is the coordinator stops.

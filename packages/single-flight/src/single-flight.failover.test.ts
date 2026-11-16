@@ -19,7 +19,13 @@ import {
   journalOf,
 } from './testing/caller.ts';
 import { factTimeout } from './testing/fact-timeout.ts';
+import { succeedLastLeader } from './testing/succeed-last-leader.ts';
 import { type WorkerProcess, startWorker } from './testing/worker-process.ts';
+
+const flightElectionUrl = new URL(
+  './connection/flight-election.ts',
+  import.meta.url,
+);
 
 const onUnix = {
   skip:
@@ -47,8 +53,12 @@ async function caller(
  * The coordinator, by construction: the first process that makes a call while
  * no other process uses the directory wins the first term.
  */
-async function coordinatorOf(t: TestContext, directory: string) {
-  const coordinator = await caller(t, directory, 'coordinator');
+async function coordinatorOf(
+  t: TestContext,
+  directory: string,
+  options?: CallerOptions,
+) {
+  const coordinator = await caller(t, directory, 'coordinator', options);
   coordinator.child.send({ type: 'run', call: 'warm-up', key: 'warm-up' });
   await heard(t, coordinator, 'leading', 'warm-up');
   coordinator.child.send({ type: 'finish', call: 'warm-up', value: 'warm' });
@@ -134,6 +144,7 @@ describe('A single flight across processes when a leader stops', () => {
   test('a joiner whose leader process stops gets FlightInterruptedError, and its next call leads a new flight', async (t) => {
     // Arrange: the coordinator, a leader in its own process, and a joiner in another.
     await using directory = await new TemporaryFiles().directory('flights-');
+    await using _successor = succeedLastLeader(directory.path);
     await using _coordinator = await coordinatorOf(t, directory.path);
     await using leader = await caller(t, directory.path, 'leader');
     run(leader, 'l', 'sync');
@@ -166,6 +177,7 @@ describe('A single flight across processes when a leader stops', () => {
   test('joiners of a leader that was also the coordinator get FlightInterruptedError from the next coordinator, and nobody runs the work again', async (t) => {
     // Arrange: the coordinator leads the flight itself, and two processes join it.
     await using directory = await new TemporaryFiles().directory('flights-');
+    await using _successor = succeedLastLeader(directory.path);
     await using coordinator = await caller(t, directory.path, 'coordinator');
     run(coordinator, 'l', 'sync');
     await heard(t, coordinator, 'leading', 'l');
@@ -192,6 +204,7 @@ describe('A single flight across processes when a leader stops', () => {
   test('a fresh run of a key whose leader disposed its single flight while the work runs starts the work only once that work ended', async (t) => {
     // Arrange
     await using directory = await new TemporaryFiles().directory('flights-');
+    await using _successor = succeedLastLeader(directory.path);
     await using _coordinator = await coordinatorOf(t, directory.path);
     await using leader = await caller(t, directory.path, 'leader');
     run(leader, 'l', 'sync');
@@ -374,6 +387,7 @@ describe('A single flight across processes when the coordinator stops', () => {
   test('a leader in another process keeps its flight, and every joiner gets its value', async (t) => {
     // Arrange
     await using directory = await new TemporaryFiles().directory('flights-');
+    await using _successor = succeedLastLeader(directory.path);
     await using coordinator = await coordinatorOf(t, directory.path);
     await using leader = await caller(t, directory.path, 'leader');
     run(leader, 'l', 'sync');
@@ -403,6 +417,7 @@ describe('A single flight across processes when the coordinator stops', () => {
   test('joiners of a flight whose leader stops after a failover get FlightInterruptedError from the next coordinator', async (t) => {
     // Arrange: the leader leads two flights, and the joiner joins both.
     await using directory = await new TemporaryFiles().directory('flights-');
+    await using _successor = succeedLastLeader(directory.path);
     await using coordinator = await coordinatorOf(t, directory.path);
     await using leader = await caller(t, directory.path, 'leader');
     run(leader, 'l', 'sync');
@@ -435,6 +450,7 @@ describe('A single flight across processes when the coordinator disposes', () =>
   test('a leader in another process keeps its flight when the coordinator disposes, and the joiner gets its value', async (t) => {
     // Arrange
     await using directory = await new TemporaryFiles().directory('flights-');
+    await using _successor = succeedLastLeader(directory.path);
     await using coordinator = await coordinatorOf(t, directory.path);
     await using leader = await caller(t, directory.path, 'leader');
     run(leader, 'l', 'sync');
@@ -471,6 +487,7 @@ describe('A single flight across processes when the coordinator disposes', () =>
     async (t) => {
       // Arrange: this process coordinates and leads, and the joiner's process will not read for a while.
       await using directory = await new TemporaryFiles().directory('flights-');
+      await using _successor = succeedLastLeader(directory.path);
       await using flights = new SingleFlight({
         clock: globalThis,
         directory: directory.path,
@@ -533,6 +550,7 @@ describe('A single flight across processes in the gaps of a failover', () => {
     async (t) => {
       // Arrange: the coordinator is frozen, so it never answers the call.
       await using directory = await new TemporaryFiles().directory('flights-');
+      await using _successor = succeedLastLeader(directory.path);
       await using coordinator = await coordinatorOf(t, directory.path);
       await using next = await connected(t, directory.path, 'next');
       coordinator.child.kill('SIGSTOP');
@@ -558,6 +576,7 @@ describe('A single flight across processes in the gaps of a failover', () => {
     async (t) => {
       // Arrange
       await using directory = await new TemporaryFiles().directory('flights-');
+      await using _successor = succeedLastLeader(directory.path);
       await using coordinator = await coordinatorOf(t, directory.path);
       await using leader = await caller(t, directory.path, 'leader');
       run(leader, 'l', 'sync');
@@ -606,6 +625,7 @@ describe('A single flight across processes in the gaps of a failover', () => {
     async (t) => {
       // Arrange: the leader is frozen, so its flight is not reasserted when the fresh run arrives.
       await using directory = await new TemporaryFiles().directory('flights-');
+      await using _successor = succeedLastLeader(directory.path);
       await using coordinator = await coordinatorOf(t, directory.path);
       await using leader = await caller(t, directory.path, 'leader');
       run(leader, 'l', 'sync');
@@ -641,6 +661,7 @@ describe('A single flight across processes in the gaps of a failover', () => {
   test('a fresh run of a key that no process holds leads after the coordinator stops', async (t) => {
     // Arrange
     await using directory = await new TemporaryFiles().directory('flights-');
+    await using _successor = succeedLastLeader(directory.path);
     await using coordinator = await coordinatorOf(t, directory.path);
     await using probe = await connected(t, directory.path, 'probe');
 
@@ -660,6 +681,7 @@ describe('A single flight across processes in the gaps of a failover', () => {
     async (t) => {
       // Arrange
       await using directory = await new TemporaryFiles().directory('flights-');
+      await using _successor = succeedLastLeader(directory.path);
       await using coordinator = await coordinatorOf(t, directory.path);
       await using leader = await caller(t, directory.path, 'leader');
       run(leader, 'l', 'sync');
@@ -696,6 +718,7 @@ describe('A single flight across processes in the gaps of a failover', () => {
     async (t) => {
       // Arrange: the next coordinator knows no flight, so it rejects the leader's reassertion.
       await using directory = await new TemporaryFiles().directory('flights-');
+      await using _successor = succeedLastLeader(directory.path);
       await using coordinator = await coordinatorOf(t, directory.path);
       await using leader = await caller(t, directory.path, 'leader');
       run(leader, 'l', 'sync');
@@ -738,6 +761,7 @@ describe('A single flight across processes in the gaps of a failover', () => {
     async (t) => {
       // Arrange: the next coordinator knows no flight, so it rejects the leader's reassertion.
       await using directory = await new TemporaryFiles().directory('flights-');
+      await using _successor = succeedLastLeader(directory.path);
       await using coordinator = await coordinatorOf(t, directory.path);
       await using leader = await caller(t, directory.path, 'leader');
       run(leader, 'l', 'sync');
@@ -769,6 +793,7 @@ describe('A single flight across processes in the gaps of a failover', () => {
     async (t) => {
       // Arrange: the next coordinator knows no flight, so it rejects the leader's reassertion.
       await using directory = await new TemporaryFiles().directory('flights-');
+      await using _successor = succeedLastLeader(directory.path);
       await using coordinator = await coordinatorOf(t, directory.path);
       await using leader = await caller(t, directory.path, 'leader', {
         codec: 'encode-throws',
@@ -804,6 +829,7 @@ describe('A single flight across processes in the gaps of a failover', () => {
       // leader's reassertion; then it stops, and a process of the group
       // coordinates the term after it.
       await using directory = await new TemporaryFiles().directory('flights-');
+      await using _successor = succeedLastLeader(directory.path);
       await using coordinator = await coordinatorOf(t, directory.path);
       await using leader = await caller(t, directory.path, 'leader');
       run(leader, 'l', 'sync');
@@ -858,6 +884,7 @@ describe('A single flight across processes in the gaps of a failover', () => {
     async (t) => {
       // Arrange: the leader leads two flights, and the joiner joins both.
       await using directory = await new TemporaryFiles().directory('flights-');
+      await using _successor = succeedLastLeader(directory.path);
       await using coordinator = await coordinatorOf(t, directory.path);
       await using leader = await caller(t, directory.path, 'leader');
       run(leader, 'l', 'sync');
@@ -903,6 +930,7 @@ describe('A single flight across processes when a leader is frozen past a failov
     async (t) => {
       // Arrange
       await using directory = await new TemporaryFiles().directory('flights-');
+      await using _successor = succeedLastLeader(directory.path);
       await using coordinator = await coordinatorOf(t, directory.path);
       await using leader = await caller(t, directory.path, 'leader');
       run(leader, 'l', 'sync');
@@ -972,6 +1000,7 @@ describe('A single flight across processes when a leader is frozen past a failov
     async (t) => {
       // Arrange
       await using directory = await new TemporaryFiles().directory('flights-');
+      await using _successor = succeedLastLeader(directory.path);
       await using coordinator = await coordinatorOf(t, directory.path);
       await using leader = await caller(t, directory.path, 'leader');
       run(leader, 'l', 'sync');
@@ -1038,6 +1067,7 @@ describe('A single flight across processes when a leader is frozen past a failov
     async (t) => {
       // Arrange
       await using directory = await new TemporaryFiles().directory('flights-');
+      await using _successor = succeedLastLeader(directory.path);
       await using coordinator = await coordinatorOf(t, directory.path);
       await using leader = await caller(t, directory.path, 'leader');
       run(leader, 'l', 'sync');
@@ -1104,6 +1134,7 @@ describe('A single flight across processes when a leader is frozen past a failov
     async (t) => {
       // Arrange
       await using directory = await new TemporaryFiles().directory('flights-');
+      await using _successor = succeedLastLeader(directory.path);
       await using coordinator = await coordinatorOf(t, directory.path);
       await using leader = await caller(t, directory.path, 'leader');
       run(leader, 'l', 'sync');
@@ -1164,6 +1195,7 @@ describe('A single flight across processes when a leader is frozen past a failov
     async (t) => {
       // Arrange: the leader's caller stops waiting, and the work runs on.
       await using directory = await new TemporaryFiles().directory('flights-');
+      await using _successor = succeedLastLeader(directory.path);
       await using coordinator = await coordinatorOf(t, directory.path);
       await using leader = await caller(t, directory.path, 'leader');
       run(leader, 'l', 'sync');
@@ -1225,6 +1257,7 @@ describe('A single flight across processes when a leader is frozen past a failov
     async (t) => {
       // Arrange
       await using directory = await new TemporaryFiles().directory('flights-');
+      await using _successor = succeedLastLeader(directory.path);
       await using coordinator = await coordinatorOf(t, directory.path);
       await using leader = await caller(t, directory.path, 'leader');
       run(leader, 'l', 'sync');
@@ -1264,6 +1297,7 @@ describe('A single flight across processes when a leader is frozen past a failov
     async (t) => {
       // Arrange
       await using directory = await new TemporaryFiles().directory('flights-');
+      await using _successor = succeedLastLeader(directory.path);
       await using coordinator = await coordinatorOf(t, directory.path);
       await using leader = await caller(t, directory.path, 'leader');
       run(leader, 'l', 'sync');
@@ -1294,6 +1328,7 @@ describe('A single flight across processes after a flight lands', () => {
   test('a run in another process after the flight landed leads a new flight, and the work runs again', async (t) => {
     // Arrange
     await using directory = await new TemporaryFiles().directory('flights-');
+    await using _successor = succeedLastLeader(directory.path);
     await using _coordinator = await coordinatorOf(t, directory.path);
     await using leader = await caller(t, directory.path, 'leader');
     run(leader, 'l', 'sync');
@@ -1316,4 +1351,106 @@ describe('A single flight across processes after a flight lands', () => {
       ['leader:work:sync', 'next:work:sync'],
     );
   });
+});
+
+describe('A single flight across processes when the coordinator freezes', () => {
+  // The default lease duration, 15 s, is longer than factTimeout, so the
+  // coordinator's short one must reach the followers through its single flight.
+  test(
+    'a coordinator frozen past its lease duration is ended by a follower, a survivor coordinates, and the joiner gets the outcome of the flight in progress',
+    onUnix,
+    async (t) => {
+      // Arrange: a coordinator with a short lease, a leader in its own
+      // process, and a joiner in another.
+      await using directory = await new TemporaryFiles().directory('flights-');
+      await using _successor = succeedLastLeader(directory.path);
+      await using coordinator = await coordinatorOf(t, directory.path, {
+        leaseDuration: 500,
+      });
+      await using leader = await caller(t, directory.path, 'leader');
+      run(leader, 'l', 'sync');
+      await heard(t, leader, 'leading', 'l');
+      await using joiner = await caller(t, directory.path, 'joiner');
+      run(joiner, 'j', 'sync');
+      await heard(t, joiner, 'joined', 'j');
+
+      // Act: the coordinator freezes.
+      coordinator.child.kill('SIGSTOP');
+
+      // Assert: a follower ended it, a survivor won the next term, and the
+      // flight in progress lands for the joiner.
+      await t.waitFor(
+        () =>
+          assert.equal(
+            coordinator.child.signalCode,
+            'SIGKILL',
+            `A follower must end the frozen coordinator.\n${coordinator.stderr}`,
+          ),
+        { interval: 5, timeout: factTimeout },
+      );
+      await newTerm(t, directory.path, '2');
+      leader.child.send({ type: 'finish', call: 'l', value: 'shared' });
+      const landed = await heard(t, leader, 'value', 'l');
+      const shared = await heard(t, joiner, 'value', 'j');
+      assert.equal(landed.value, 'shared');
+      assert.equal(shared.value, 'shared');
+      assert.equal(shared.joined, true);
+      assert.deepEqual(await journal(directory.path), [
+        'coordinator:work:warm-up',
+        'leader:work:sync',
+      ]);
+    },
+  );
+
+  // The lease, 1500 ms, outlasts the longest step of the back-off, about
+  // 1200 ms, so only a watch that lasts across the steps reaches its end.
+  test(
+    'a process ends a coordinator that froze before its flight server listened, and coordinates',
+    onUnix,
+    async (t) => {
+      // Arrange: a process wins the term with a short lease and freezes
+      // before it serves.
+      await using directory = await new TemporaryFiles().directory('flights-');
+      await using _successor = succeedLastLeader(directory.path);
+      await using coordinator = startWorker(
+        `import { flightElection } from ${JSON.stringify(flightElectionUrl.href)};
+        const term = await flightElection(${JSON.stringify(directory.path)}, globalThis, 1500).campaign();
+        // A listener keeps the channel to the test, and so this process, alive.
+        process.on('message', () => {});
+        process.send({ type: term ? 'coordinating' : 'lost' });`,
+        'coordinator',
+      );
+      await t.waitFor(
+        () =>
+          assert.ok(
+            coordinator.has('coordinating'),
+            `The coordinator must win the term.\n${coordinator.stderr}`,
+          ),
+        { interval: 5, timeout: factTimeout },
+      );
+      coordinator.child.kill('SIGSTOP');
+      await using flights = new SingleFlight<string>({
+        clock: globalThis,
+        directory: directory.path,
+        codec: { encode: (value) => value, decode: (text) => text },
+      });
+
+      // Act
+      const result = await flights.run('sync', async () => 'ran', {
+        signal: AbortSignal.timeout(factTimeout),
+      });
+
+      // Assert
+      assert.deepEqual(result, { value: 'ran', joined: false });
+      await t.waitFor(
+        () =>
+          assert.equal(
+            coordinator.child.signalCode,
+            'SIGKILL',
+            `The process must end the frozen coordinator.\n${coordinator.stderr}`,
+          ),
+        { interval: 5, timeout: factTimeout },
+      );
+    },
+  );
 });

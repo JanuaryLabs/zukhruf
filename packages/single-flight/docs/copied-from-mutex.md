@@ -12,6 +12,8 @@ On 2026-10-10, the mutex changed several of these originals. The maintainer chos
 
 On 2026-11-09, this package copied the mutex commits `39f1cb3` and `d9a7c36` (backlog #3111). The maintainer's rule is: do not design for older versions. Thus a coordinator refuses each first line that is not a hello of its protocol and version. A hang-up has no deadline. `ProtocolVersionError` always has `theirs`. The `unsupported` answer and `RequestEnvelope` are gone.
 
+On 2026-11-16, this package copied the mutex commit `cc26618` (backlog #4371, step 3c). A follower observes the coordinator with the `LeaderObserver` of `@zukhruf/election`, so a frozen coordinator is ended ([ADR 0011](./adr/0011-a-follower-observes-the-coordinator-so-a-frozen-coordinator-is-ended.md)). The 10 ms waits of the electing connector are gone. `SingleFlightOptions` has `leaseDuration`, as `SocketStoreOptions` has.
+
 ## Moved to `@zukhruf/fs`
 
 The file helpers and the check that refuses a network directory are no longer copies. Both packages use `@zukhruf/fs` (its ADR 0001): `durableWrite`, `isErrno`, `patiently`, `assertLocalDirectory`, and one `NetworkDirectoryError` class that this package gives from its entry point.
@@ -33,7 +35,7 @@ The supervisor's `Unavailable` state cannot occur in this package: `ElectingConn
 ## Copied with changes
 
 **`lock-stores/socket/socket-election.ts` → `connection/flight-election.ts`.**
-The claim file is `flight.lock`, not `leader.lock`. The epoch file is `flight.epoch`, not `leader.epoch`. The function is `flightElection`, not `socketElection`.
+The claim file is `flight.lock`, not `leader.lock`. The epoch file is `flight.epoch`, not `leader.epoch`. The function is `flightElection`, not `socketElection`. Both take `leaseDuration` as the third argument and give it to `SqliteElection`.
 Why: a single flight and a socket lock store can use one directory. With the same file names, they would share one election. The winner would serve only one of them, and the other one would never find a server.
 
 **`lock-stores/remote/connector.ts` → `connection/connector.ts`.**
@@ -71,7 +73,8 @@ The message names the single flight's coordinator, not the socket store's leader
 **`lock-stores/socket/electing-connector.ts` → `connection/electing-connector.ts`.**
 
 - It has no `connected` callback. In the mutex, that callback only emits the `follower` role event. This package has no role event. Thus `#follow` needs no stack that destroys the socket when the callback throws.
-- `#lead` is `#coordinate`.
+- `#lead` is `#coordinate`, and `#observeLeader` is `#observeCoordinator`. The comments say coordinator, not leader.
+- The constant `backoff` and the classes `BetweenTries`, `Unwatched` and `Watching` are the same, except the words of their comments.
 - In the mutex, `#lead` wraps its own socket in `OwnServerConnection`, so its close waits until the own lock server read the last release ([mutex ADR 0018](../../mutex/docs/adr/0018-the-next-leader-skips-the-grace-window-after-a-clean-shutdown.md)). `#coordinate` uses a plain `SocketConnection`.
 
 **`lock-stores/socket/socket-store.ts` (`socketPathFor`, `SOCKET_PATH_LIMIT`) → `connection/socket-path.ts`.**
@@ -100,7 +103,10 @@ The test of an exhausted epoch in `coordinator/flight-coordinator.test.ts` is a 
 Only the import paths and the prefix of the Windows pipe differ.
 
 **`lock-stores/socket/electing-connector.test.ts` → `connection/electing-connector.test.ts`.**
-The tests use `flightElection` and `flight.sock`, and give no `connected` callback. The names say coordinator, not leader.
+The tests use `flightElection` and `flight.sock`, and give no `connected` callback. The names say coordinator, not leader. Each `readline` interface on a peer of a stand-in server has an `error` listener, as the other tests of this package have. One test is only here: "a connect outlasts a coordinator that keeps its term and hangs up on each hello, for as long as that lasts".
+
+**`lock-stores/socket/socket-store.test.ts` → `single-flight.failover.test.ts`, two tests.**
+"A leader frozen past its lease duration is ended by a follower" and "a process ends a leader that froze before its lock server listened" have a test each in `single-flight.failover.test.ts`, in the group "when the coordinator freezes". They are not copies: they drive caller processes, and the first one checks that the joiner gets the outcome of the flight in progress, not that a holder keeps its key.
 
 **`lock-stores/socket/lock-server.test.ts` → `coordinator/flight-server.test.ts`.**
 A single flight has no role event. Thus the test reads `flight.epoch` to see that the next process coordinates, and it checks that a new lease token carries a higher epoch.
@@ -108,10 +114,16 @@ The test helper `listening` is byte-identical in the two files. It connects to a
 
 ## Test helpers copied
 
-The tests start real processes, so this package also copies two helpers from `packages/mutex/src/testing`. They are not part of the package: the build leaves `src/testing` out.
+The tests start real processes, so this package also copies four helpers from `packages/mutex/src/testing`. They are not part of the package: the build leaves `src/testing` out.
 
 **`testing/fact-timeout.ts` → `testing/fact-timeout.ts`.**
 Copied without a change.
+
+**`testing/stand-in-server.ts` → `testing/stand-in-server.ts`.**
+Only its comment differs: it names a single flight, not a store.
+
+**`testing/succeed-last-leader.ts` → `testing/succeed-last-leader.ts`.**
+It wins and resigns a term of `flightElection`, not of `socketElection`. Its comment says coordinator and single flights. The tests that start caller processes dispose it after their processes, so the suite leaves no socket file of an election pipe in the temporary folder of the system.
 
 **`testing/worker-process.ts` → `testing/worker-process.ts`.**
 `startWorker` has no options: no `host` (it joins a child to the mutex's IPC coordinator) and no `nodeOptions`. The worker has no `exit` and no `find`. These tests use none of them.
@@ -146,7 +158,7 @@ The rules below are not file copies. Each package writes them in its own code, s
 
 - Places: the constructor and `[Symbol.asyncDispose]` of `SingleFlight` (`single-flight.ts`), and of `SocketStore` (`lock-stores/socket/socket-store.ts`).
 - Same: the client talks through a `ConnectionSupervisor`, a `LocalDirectoryConnector` and an `ElectingConnector`. `serve` starts the server through an `AsyncDisposableStack`, so a failure before the server fully started closes it. The servers of this process are in one stack. The disposal closes the client first, and then the servers.
-- Differs: the flight server gets no grace window. It gets the key locks, and the client gets them too, with a read of the epoch on disk (`lastEpoch` of the election) to find a stale lead ([ADR 0010](./adr/0010-a-leader-holds-a-kernel-lock-on-its-key-until-its-outcome-is-handed-over.md)). The lock server gets a grace window in each term after the first, except after a clean shutdown (mutex ADR 0018). `SocketStore` emits its role events: `leader` in `serve`, and `follower` from `connected`. Its poll interval is an option. The single flight has no role event, and its poll interval is a constant of 10 milliseconds.
+- Differs: the flight server gets no grace window. It gets the key locks, and the client gets them too, with a read of the epoch on disk (`lastEpoch` of the election) to find a stale lead ([ADR 0010](./adr/0010-a-leader-holds-a-kernel-lock-on-its-key-until-its-outcome-is-handed-over.md)). The lock server gets a grace window in each term after the first, except after a clean shutdown (mutex ADR 0018). `SocketStore` emits its role events: `leader` in `serve`, and `follower` from `connected`. The single flight has no role event. Both give their `leaseDuration` option to the election, and neither has a poll interval for the election. The single flight keeps a constant of 10 milliseconds for its key locks only (backlog #4433).
 
 **The reassertion with a newer token.**
 

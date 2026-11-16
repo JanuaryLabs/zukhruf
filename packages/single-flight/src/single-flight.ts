@@ -20,7 +20,7 @@ import {
 import { KeyLocks } from './key-lock/key-locks.ts';
 import type { Outcome } from './protocol/flight-protocol.ts';
 
-/** Milliseconds between two attempts to reach the coordinator, to win its term, or to take a key's lock. */
+/** Milliseconds between two tries to take a key's lock (backlog #4433). */
 const POLL_INTERVAL = 10;
 
 /** The low bits of a token count grants within a term; the high bits are the term's epoch (`EpochTokenSource`). */
@@ -41,6 +41,14 @@ export interface SingleFlightOptions<T> {
   codec: Codec<T>;
   /** The clock of every wait of the group: `globalThis` in production, a fake clock in a test. */
   clock: Clock;
+  /**
+   * The longest silence, in milliseconds, that the other processes accept
+   * from this process while it is the coordinator. A process ends a
+   * coordinator that is silent for longer, for example one stopped with
+   * SIGSTOP, and a survivor takes over. The default is the one of
+   * `SqliteElection`.
+   */
+  leaseDuration?: number;
 }
 
 export interface RunOptions {
@@ -72,13 +80,18 @@ export class SingleFlight<T> implements AsyncDisposable {
   /** The flight servers this process started; disposing closes them. */
   readonly #servers = new AsyncDisposableStack();
 
-  constructor({ directory, codec, clock }: SingleFlightOptions<T>) {
+  constructor({
+    directory,
+    codec,
+    clock,
+    leaseDuration,
+  }: SingleFlightOptions<T>) {
     this.#codec = codec;
     // A Unix socket file in the directory on macOS and Linux; on Windows, a named pipe named by a hash of that path.
     const endpoint = new PipeEndpoint(resolve(directory, 'flight.sock'), {
       prefix: 'zukhruf-single-flight',
     });
-    const election = flightElection(directory, clock);
+    const election = flightElection(directory, clock, leaseDuration);
     const locks = new KeyLocks(directory, POLL_INTERVAL, clock);
     this.#client = new FlightClient(
       new ConnectionSupervisor(
@@ -87,7 +100,6 @@ export class SingleFlight<T> implements AsyncDisposable {
           new ElectingConnector({
             address: endpoint.address,
             election,
-            pollInterval: POLL_INTERVAL,
             clock,
             serve: async (term) => {
               // Until serving has fully started, a failure closes the new server, so no server outlives its term.

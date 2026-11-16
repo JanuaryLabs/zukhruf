@@ -12,6 +12,8 @@ export type CallerCodec = 'json' | 'dates' | 'encode-throws' | 'decode-throws';
 
 export interface CallerOptions {
   codec?: CallerCodec;
+  /** The `leaseDuration` of its single flight; the default is the election's. */
+  leaseDuration?: number;
 }
 
 /** Where each caller process appends `<name>:work:<key>` when its work runs, so a test counts the runs of the work. */
@@ -36,7 +38,7 @@ export function journalOf(directory: string) {
  */
 export function callerSource(
   directory: string,
-  { codec = 'json' }: CallerOptions = {},
+  { codec = 'json', leaseDuration }: CallerOptions = {},
 ) {
   return `
     import { appendFileSync } from 'node:fs';
@@ -63,6 +65,7 @@ export function callerSource(
     const flights = new SingleFlight({ clock: globalThis,
       directory: ${JSON.stringify(directory)},
       codec: codecs[${JSON.stringify(codec)}],
+      leaseDuration: ${JSON.stringify(leaseDuration)},
     });
     const finishes = new Map();
     const cancels = new Map();

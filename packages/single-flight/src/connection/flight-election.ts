@@ -12,11 +12,13 @@ import { SqliteElection } from '@zukhruf/election';
 export function flightElection(
   directory: string,
   clock: Clock,
+  leaseDuration?: number,
 ): SqliteElection {
   return new SqliteElection({
     directory,
     claimFile: 'flight.lock',
     epochFile: 'flight.epoch',
+    leaseDuration,
     clock,
   });
 }

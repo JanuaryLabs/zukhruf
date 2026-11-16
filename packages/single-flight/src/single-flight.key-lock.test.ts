@@ -13,6 +13,7 @@ import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { callerSource, journalOf } from './testing/caller.ts';
 import { factTimeout } from './testing/fact-timeout.ts';
+import { succeedLastLeader } from './testing/succeed-last-leader.ts';
 import { type WorkerProcess, startWorker } from './testing/worker-process.ts';
 
 /**
@@ -194,6 +195,7 @@ describe('A single flight across processes while a run waits for its key', () =>
   test('a caller that stops waiting while its run waits for the key cancels that flight, its work never runs, and the key is free once the running work ended', async (t) => {
     // Arrange: the runner is told to lead while the holder's work still runs.
     await using directory = await new TemporaryFiles().directory('flights-');
+    await using _successor = succeedLastLeader(directory.path);
     await using coordinator = await leadingCoordinator(directory.path);
     await using holder = await caller(t, directory.path, 'holder');
     run(holder, 'l', 'sync');
@@ -237,6 +239,7 @@ describe('A single flight across processes while a run waits for its key', () =>
   test('a single flight disposed while its run waits for the key rejects that run as closed, and the key is free once the running work ended', async (t) => {
     // Arrange: the runner is told to lead while the holder's work still runs.
     await using directory = await new TemporaryFiles().directory('flights-');
+    await using _successor = succeedLastLeader(directory.path);
     await using _coordinator = await leadingCoordinator(directory.path);
     await using holder = await caller(t, directory.path, 'holder');
     run(holder, 'l', 'sync');
@@ -268,6 +271,7 @@ describe('A single flight across processes while a run waits for its key', () =>
     // Arrange: platform setup that no operation exposes. A plain file where
     // the folder of the key locks belongs makes every key lock fail.
     await using directory = await new TemporaryFiles().directory('flights-');
+    await using _successor = succeedLastLeader(directory.path);
     const folder = join(directory.path, 'execution-locks');
     await writeFile(folder, '');
     await using runner = await caller(t, directory.path, 'runner');
@@ -296,6 +300,7 @@ describe('A single flight across processes when the work of a key ends', () => {
   test('a leader whose work fails frees its key: a run in another process leads a new flight', async (t) => {
     // Arrange
     await using directory = await new TemporaryFiles().directory('flights-');
+    await using _successor = succeedLastLeader(directory.path);
     await using _coordinator = await coordinatorOf(t, directory.path);
     await using leader = await caller(t, directory.path, 'leader');
     run(leader, 'l', 'sync');
@@ -329,6 +334,7 @@ describe('A single flight across processes with keys that are no file names', ()
   test('a run of a key with slashes, dots and more characters than a file name leads and gets its value', async (t) => {
     // Arrange
     await using directory = await new TemporaryFiles().directory('flights-');
+    await using _successor = succeedLastLeader(directory.path);
     await using worker = await coordinatorOf(t, directory.path);
     const key = `../${'x/'.repeat(200)}`;
 
@@ -351,6 +357,7 @@ describe('A single flight across processes with keys that differ only in case', 
   test('runs of `Sync` and `sync` in two processes both lead while both works run', async (t) => {
     // Arrange
     await using directory = await new TemporaryFiles().directory('flights-');
+    await using _successor = succeedLastLeader(directory.path);
     await using _coordinator = await coordinatorOf(t, directory.path);
     await using upper = await caller(t, directory.path, 'upper');
     await using lower = await caller(t, directory.path, 'lower');
@@ -374,6 +381,7 @@ describe('A single flight across processes with keys that differ only in case', 
   test('a run of `Sync` made while the work of `sync` runs in the same process leads at once', async (t) => {
     // Arrange
     await using directory = await new TemporaryFiles().directory('flights-');
+    await using _successor = succeedLastLeader(directory.path);
     await using worker = await coordinatorOf(t, directory.path);
     run(worker, 'outer', 'sync');
     await heard(t, worker, 'leading', 'outer');
