@@ -1,6 +1,6 @@
 {
   "name": "@zukhruf/pipes",
-  "version": "0.8.19",
+  "version": "0.8.20",
   "description": "One name gives a pipe that one program listens on and other programs of the computer connect to: a Unix socket in a folder of this user on macOS and Linux, a named pipe on Windows. After .NET's `System.IO.Pipes`, on `node:net`.",
   "license": "MIT",
   "repository": {
@@ -41,6 +41,6 @@
     "access": "public"
   },
   "devDependencies": {
-    "@zukhruf/testing": "^0.8.19"
+    "@zukhruf/testing": "^0.8.20"
   }
 }
