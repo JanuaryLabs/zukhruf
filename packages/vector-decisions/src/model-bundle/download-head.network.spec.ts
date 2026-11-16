@@ -19,7 +19,10 @@ test('downloadHead gives the venn-1 head at its commit, which modelDirectory and
     'vector-decisions-hub-',
   );
 
-  const directory = await downloadHead({ cacheDir: cache.path });
+  const directory = await downloadHead({
+    cacheDir: cache.path,
+    clock: globalThis,
+  });
 
   assert.equal(
     directory,
@@ -48,7 +51,7 @@ test('a second downloadHead with the same cache needs no network', async () => {
   await using cache = await new TemporaryFiles().directory(
     'vector-decisions-hub-',
   );
-  const first = await downloadHead({ cacheDir: cache.path });
+  const first = await downloadHead({ cacheDir: cache.path, clock: globalThis });
 
   // Without --allow-net, the permission model of Node refuses each network
   // call with ERR_ACCESS_DENIED.
@@ -59,9 +62,46 @@ test('a second downloadHead with the same cache needs no network', async () => {
     '--input-type=module',
     '--eval',
     `import { downloadHead } from ${JSON.stringify(new URL('../index.ts', import.meta.url).href)};
-process.stdout.write(await downloadHead({ cacheDir: process.argv[1] }));`,
+process.stdout.write(await downloadHead({ cacheDir: process.argv[1], clock: globalThis }));`,
     cache.path,
   ]);
 
   assert.equal(stdout, first);
+});
+
+// @huggingface/hub 2.17.11 downloads each file into one "<blob>.incomplete"
+// for every process, so a second process lost the file that the first had
+// renamed (#4457).
+test('four processes that download the head at once into one empty cache each give the head, whose files match their digests', async () => {
+  await using cache = await new TemporaryFiles().directory(
+    'vector-decisions-hub-',
+  );
+  const download = () =>
+    promisify(execFile)(process.execPath, [
+      '--input-type=module',
+      '--eval',
+      `import { downloadHead, modelDirectory } from ${JSON.stringify(new URL('../index.ts', import.meta.url).href)};
+process.stdout.write(await modelDirectory(await downloadHead({ cacheDir: process.argv[1], clock: globalThis })));`,
+      cache.path,
+    ]);
+
+  const outputs = await Promise.all([
+    download(),
+    download(),
+    download(),
+    download(),
+  ]);
+
+  assert.deepEqual(
+    outputs.map(({ stdout }) => stdout.split('\n').at(-1)),
+    Array(4).fill(
+      join(
+        cache.path,
+        'models--markrussinovich--venn-1',
+        'snapshots',
+        REVISION,
+        'assets',
+      ),
+    ),
+  );
 });

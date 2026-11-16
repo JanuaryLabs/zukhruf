@@ -177,7 +177,7 @@ test('load refuses the config.json of a head that reads another reader', async (
   await using copy = await new TemporaryFiles().directory(
     'vector-decisions-head-',
   );
-  const head = await downloadHead();
+  const head = await downloadHead({ clock: globalThis });
   await copyFile(
     join(head, 'universal.safetensors'),
     join(copy.path, 'universal.safetensors'),

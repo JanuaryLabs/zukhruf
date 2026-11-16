@@ -33,7 +33,7 @@ test('the venn-1 head, downloaded, checked and read, gives the logits of Venn', 
     'vector-decisions-hub-',
   );
   const directory = await modelDirectory(
-    await downloadHead({ cacheDir: cache.path }),
+    await downloadHead({ cacheDir: cache.path, clock: globalThis }),
   );
   const head = CosineAbstention.fromWeights(
     await loadWeights(join(directory, 'universal.safetensors')),

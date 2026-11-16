@@ -40,7 +40,7 @@ export async function goldenService(options: {
 }): Promise<DecisionService> {
   return DecisionService.load({
     ...options,
-    directory: await downloadHead(),
+    directory: await downloadHead({ clock: globalThis }),
   });
 }
 

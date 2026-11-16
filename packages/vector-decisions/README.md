@@ -64,11 +64,15 @@ import {
   modelDirectory,
 } from '@zukhruf/vector-decisions';
 
-const directory = await modelDirectory(await downloadHead());
+const directory = await modelDirectory(
+  await downloadHead({ clock: globalThis }),
+);
 const weights = await loadWeights(join(directory, 'universal.safetensors'));
 ```
 
-`downloadHead({ cacheDir? })` downloads the files of the venn-1 head (`markrussinovich/venn-1`) at the commit `e618a6919e5a15c6ced46c9874424363c2955283`, as Venn's `cli.download_head` does (`venn/cli.py:50`). It downloads `manifest.json` first, then each file that the manifest lists, and gives their directory. The download goes through `@huggingface/hub`, into the cache of Hugging Face: `cacheDir`, else `HF_HUB_CACHE`, else `HF_HOME/hub`, else `~/.cache/huggingface/hub`. Python's `huggingface_hub` uses the same folder in the same order, so Python and this package share one copy. The revision is a commit, so a file that the cache already holds needs no network.
+`downloadHead({ cacheDir?, clock })` downloads the files of the venn-1 head (`markrussinovich/venn-1`) at the commit `e618a6919e5a15c6ced46c9874424363c2955283`, as Venn's `cli.download_head` does (`venn/cli.py:50`). It downloads `manifest.json` first, then each file that the manifest lists, and gives their directory. The download goes through `@huggingface/hub`, into the cache of Hugging Face: `cacheDir`, else `HF_HUB_CACHE`, else `HF_HOME/hub`, else `~/.cache/huggingface/hub`. Python's `huggingface_hub` uses the same folder in the same order, so Python and this package share one copy. The revision is a commit, so a file that the cache already holds needs no network.
+
+Processes that download the head at once into one cache download each file once. Each download holds a lock on a file in `.locks/models--markrussinovich--venn-1` of the cache, as `huggingface_hub` does, because `@huggingface/hub` writes each file to one `.incomplete` path for every process. A process that waits for the lock tries again every 50 ms on `clock`: give `globalThis`, or a fake clock in a test. The lock of `huggingface_hub` is another kind of lock, so it does not keep a Python download and this one apart.
 
 `modelDirectory(path)` reads `manifest.json` in the directory and compares the SHA-256 of each file that it lists with its digest, as Venn's `runtime.model_directory` does (`venn/runtime.py:11`). Then it gives the directory back. It throws an `InvalidModelArtifactError` with the name of the file when:
 
@@ -150,7 +154,7 @@ using database = open('vectors.sqlite');
 const service = await DecisionService.load({
   model, // any AI SDK embedding model of EmbeddingGemma 2
   database,
-  directory: await downloadHead(),
+  directory: await downloadHead({ clock: globalThis }),
   registryPath: 'calibrations.json', // the temperatures of registerCalibration
 });
 const { answers, vector } = await service.decide({
