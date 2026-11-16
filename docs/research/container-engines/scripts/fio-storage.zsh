@@ -11,7 +11,8 @@ BENCH_USAGE="usage: fio-storage.zsh [options] [--runtime SECONDS]
 
 Runs fio randwrite and randread, bs 4k and 1m, size 256M, direct=1, libaio iodepth 32,
 time-based (--runtime, default 20 s, after a 2 s ramp), on /mnt/bind (a host folder under the
-run folder), /mnt/volume (a named volume) and /var/tmp (the root filesystem)."
+user's temporary folder, /var/folders/...), /mnt/volume (a named volume) and /var/tmp (the root
+filesystem)."
 
 source "${0:A:h}/lib.zsh"
 typeset -a opt_runtime=()
@@ -22,11 +23,16 @@ bench_require_positive "--runtime takes whole seconds" $runtime
 BENCH_CALL_TIMEOUT=$(( runtime + 300 ))
 bench_parse_args "$@"
 bench_init fio-storage
+# The bind-mount source lives outside ~/Desktop, where this repo is: macOS guards ~/Desktop with a
+# Files & Folders grant that Docker Desktop has and Apple's helper lacks (its run hangs). The user's
+# temporary folder (/var/folders/...) is not guarded, and Docker Desktop shares it by default.
+bind_root=$(getconf DARWIN_USER_TEMP_DIR)zukhruf-bench-fio-$$
 BENCH_NOTES+=(
   "fio --size=256M --direct=1 --ioengine=libaio --iodepth=32 --time_based --runtime=$runtime --ramp_time=2"
   "direct=1 bypasses the guest page cache only; on a bind mount the host may still cache the file (virtiofs on both engines)"
   "the root filesystem target is /var/tmp: overlayfs on Docker Desktop, the container's ext4 block device on Apple"
   "the named volume is ext4 on a block device on both engines"
+  "bind-mount source: $bind_root/bind-<slot> (outside ~/Desktop, which needs a macOS Files & Folders grant)"
 )
 
 typeset -A target_dir=(bind /mnt/bind volume /mnt/volume rootfs /var/tmp)
@@ -47,7 +53,7 @@ fio_job() {
 
 measure_slot() {
   local engine=$1 slot=$2 target bs
-  local bind=$BENCH_OUT/bind-$slot
+  local bind=$bind_root/bind-$slot
   local volume=$BENCH_NAME_PREFIX-fio-$slot
   local container=$BENCH_NAME_PREFIX-fio-$slot
   (( BENCH_DRY_RUN )) || mkdir -p -- "$bind"
@@ -69,3 +75,4 @@ measure_slot() {
 }
 
 bench_each_slot measure_slot
+(( BENCH_DRY_RUN )) || rmdir -- "$bind_root" 2>/dev/null || true

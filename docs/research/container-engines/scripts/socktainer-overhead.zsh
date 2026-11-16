@@ -6,9 +6,13 @@
 # its socket); Apple through its own CLI (container create/start/inspect/delete). The two Apple arms
 # reach the same container-apiserver, so their difference is socktainer's cost per call.
 #
-# Each step is one hyperfine run (--warmup 3 --runs 30) that times only that call: --prepare builds
-# the state the step needs (and first removes a leftover of the same name), --conclude removes it.
-# hyperfine runs these through sh and subtracts its measured shell start-up time.
+# Each step is one hyperfine run (--warmup 3 --runs 30, --shell=none) that times only that call:
+# --prepare builds the state the step needs (and first removes a leftover of the same name),
+# --conclude removes it; hyperfine always runs those two through sh.
+# The whole-sequence arm chains the four calls with &&, so it needs a shell: it runs with
+# --shell=default, so each of its runs includes one sh start. hyperfine 2.0 measures that start
+# apart (its shell calibration) and subtracts it from every run, so the wall time is the four calls
+# plus calibration noise of about a millisecond; see the README.
 
 BENCH_USAGE="usage: socktainer-overhead.zsh [options]
 
@@ -21,7 +25,8 @@ bench_init socktainer-overhead
 BENCH_NOTES+=(
   "rm is 'rm -f' on the docker CLI and 'container delete --force' on Apple's CLI; both stop a running container first"
   "inspect detail differs: the docker CLI prints the Engine API shape, Apple's CLI prints its own configuration and status"
-  "hyperfine runs the commands through sh and subtracts the shell start-up time it measures"
+  "the step arms run with hyperfine --shell=none; --prepare, --conclude, --setup and --cleanup always run through sh"
+  "the sequence arm runs with hyperfine --shell=default: each run includes one sh start, which hyperfine measures apart (shell calibration) and subtracts"
 )
 
 # Prints the command line of one step for one arm. Steps: create run start inspect rm.
@@ -54,28 +59,34 @@ measure_arm() {
   local slot=$1 arm=$2
   local name=$BENCH_NAME_PREFIX-$arm
   local -a hf=(hyperfine --style basic --warmup 3 --runs 30)
+  local step
   local remove=$(remove_line $arm $name)
 
-  bench_run $hf --command-name "$arm create" --export-json "$BENCH_OUT/$slot-$arm-create.json" \
+  bench_run $hf -N --command-name "$arm create" --export-json "$BENCH_OUT/$slot-$arm-create.json" \
     --prepare "$remove" --conclude "$remove" \
     "$(step_line $arm create $name)"
 
-  bench_run $hf --command-name "$arm start" --export-json "$BENCH_OUT/$slot-$arm-start.json" \
+  bench_run $hf -N --command-name "$arm start" --export-json "$BENCH_OUT/$slot-$arm-start.json" \
     --prepare "$remove; $(step_line $arm create $name) >/dev/null" --conclude "$remove" \
     "$(step_line $arm start $name)"
 
-  bench_run $hf --command-name "$arm inspect" --export-json "$BENCH_OUT/$slot-$arm-inspect.json" \
+  bench_run $hf -N --command-name "$arm inspect" --export-json "$BENCH_OUT/$slot-$arm-inspect.json" \
     --setup "$remove; $(step_line $arm run $name) >/dev/null" --cleanup "$remove" \
     "$(step_line $arm inspect $name)"
 
-  bench_run $hf --command-name "$arm rm" --export-json "$BENCH_OUT/$slot-$arm-rm.json" \
+  bench_run $hf -N --command-name "$arm rm" --export-json "$BENCH_OUT/$slot-$arm-rm.json" \
     --prepare "$remove; $(step_line $arm run $name) >/dev/null" --conclude "$remove" \
     "$(step_line $arm rm $name)"
 
+  # The && chain needs a shell; this arm includes one sh start per run (see the header).
   local sequence="$(step_line $arm create $name) && $(step_line $arm start $name) && $(step_line $arm inspect $name) && $(step_line $arm rm $name)"
-  bench_run $hf --command-name "$arm sequence" --export-json "$BENCH_OUT/$slot-$arm-sequence.json" \
+  bench_run $hf --shell=default --command-name "$arm sequence" --export-json "$BENCH_OUT/$slot-$arm-sequence.json" \
     --prepare "$remove" --conclude "$remove" \
     "$sequence"
+
+  for step in create start inspect rm sequence; do
+    bench_require_hyperfine "$BENCH_OUT/$slot-$arm-$step.json"
+  done
 }
 
 measure_slot() {

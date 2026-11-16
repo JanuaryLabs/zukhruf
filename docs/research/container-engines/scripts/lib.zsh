@@ -77,6 +77,28 @@ bench_die() {
   exit 2
 }
 
+# Fails the experiment: a measurement gave no result. meta.json ends with state "failed".
+bench_fail() {
+  print -u2 -- "FAILED: $*"
+  exit 1
+}
+
+# Fails the experiment unless a result file exists and is not empty. A .json file must also parse,
+# and give a value other than false or null for the jq filter (default: the whole document).
+bench_require_result() {
+  local file=$1 filter=${2:-.}
+  (( BENCH_DRY_RUN )) && return 0
+  [[ -s $file ]] || bench_fail "measured nothing: $file is missing or empty"
+  if [[ $file == *.json ]] && ! jq -e "$filter" "$file" >/dev/null 2>&1; then
+    bench_fail "$file is not the expected JSON (jq -e '$filter' fails)"
+  fi
+}
+
+# hyperfine 2.0 keeps its timings, in seconds, at .results[i].summary.time_wall_clock.
+bench_require_hyperfine() {
+  bench_require_result $1 '.results | length > 0 and all(.summary.time_wall_clock.median | type == "number")'
+}
+
 # Dies with the message unless every value after it is a positive whole number.
 bench_require_positive() {
   local message=$1 value
@@ -179,13 +201,17 @@ bench_output() {
   "$@"
 }
 
-# Runs a command with its stdout written to a file, and logs both. Returns the command's status.
+# Runs a command with its stdout written to a file, and logs both. Unless the file is /dev/null,
+# fails the experiment when the file is empty or, for .json, does not parse. Otherwise returns the
+# command's status, so a caller can keep a failed run's output (iperf3's error JSON) and go on.
 bench_capture() {
-  local file=$1
+  local file=$1 rc=0
   shift
   bench_log_line "$(bench_expand_line "$@") > ${(q-)file}"
   (( BENCH_DRY_RUN )) && return 0
-  "$@" >"$file"
+  "$@" >"$file" || rc=$?
+  [[ $file == /dev/null ]] || bench_require_result "$file"
+  return $rc
 }
 
 bench_sleep() {
@@ -273,9 +299,18 @@ bench_write_meta() {
     load_end=$(bench_loadavg)
     ended="\"$(bench_utc)\""
   fi
-  local docker_version=$(dk docker version --format json 2>/dev/null || print null)
-  local apple_docker_version=$(dk apple version --format json 2>/dev/null || print null)
-  local docker_info=$(dk docker info --format '{"ncpu":{{.NCPU}},"mem_total":{{.MemTotal}}}' 2>/dev/null || print null)
+  # Only the engines of this run are asked: a Docker-only run never touches socktainer or Apple's CLI.
+  local docker_version=null docker_info=null
+  local apple_docker_version=null container_version='' socktainer_version=''
+  if (( ${BENCH_ORDER[(Ie)docker]} )); then
+    docker_version=$(dk docker version --format json 2>/dev/null || print null)
+    docker_info=$(dk docker info --format '{"ncpu":{{.NCPU}},"mem_total":{{.MemTotal}}}' 2>/dev/null || print null)
+  fi
+  if (( ${BENCH_ORDER[(Ie)apple]} )); then
+    apple_docker_version=$(dk apple version --format json 2>/dev/null || print null)
+    container_version=$(container --version 2>&1)
+    socktainer_version=$(socktainer --version 2>&1 | head -1)
+  fi
   local foreign=$(for k v in ${(kv)BENCH_FOREIGN}; do print -r -- "$k $v"; done | jq -Rn '[inputs | split(" ") | {(.[0]): (.[1] | tonumber)}] | add // {}')
   jq -n \
     --arg experiment "$BENCH_ID" \
@@ -296,8 +331,8 @@ bench_write_meta() {
     --argjson docker_version "$docker_version" \
     --argjson apple_docker_version "$apple_docker_version" \
     --argjson docker_info "$docker_info" \
-    --arg container_version "$(container --version 2>&1)" \
-    --arg socktainer_version "$(socktainer --version 2>&1 | head -1)" \
+    --arg container_version "$container_version" \
+    --arg socktainer_version "$socktainer_version" \
     --arg hyperfine_version "$(hyperfine --version 2>&1)" \
     --arg macos "$(sw_vers -productVersion)" \
     --arg macos_build "$(sw_vers -buildVersion)" \
@@ -323,8 +358,8 @@ bench_write_meta() {
       versions: {
         docker_desktop: $docker_version,
         socktainer_engine_api: $apple_docker_version,
-        container: $container_version,
-        socktainer: $socktainer_version,
+        container: ($container_version | if . == "" then null else . end),
+        socktainer: ($socktainer_version | if . == "" then null else . end),
         hyperfine: $hyperfine_version
       },
       docker_desktop_vm: $docker_info,
@@ -337,15 +372,17 @@ bench_write_meta() {
   mv -- "$BENCH_OUT/meta.json.tmp" "$BENCH_OUT/meta.json"
 }
 
-# Removes every container and volume labelled dev.zukhruf.bench=1 on both engines. Touches nothing else.
+# Removes every container and volume labelled dev.zukhruf.bench=1 on the engines of this run.
+# Touches nothing else.
 bench_cleanup() {
   local engine ids
-  for engine in docker apple; do
+  for engine in $(bench_engines); do
     ids=(${(f)"$(dk $engine ps -aq --filter label=$BENCH_LABEL 2>/dev/null)"})
     (( $#ids )) && dk $engine rm -f -v $ids >/dev/null 2>&1
     ids=(${(f)"$(dk $engine volume ls -q --filter label=$BENCH_LABEL 2>/dev/null)"})
     (( $#ids )) && dk $engine volume rm -f $ids >/dev/null 2>&1
   done
+  (( ${BENCH_ORDER[(Ie)apple]} )) || return 0
   # Containers made with Apple's own CLI carry the label in their configuration.
   ids=(${(f)"$(ac list --all --format json 2>/dev/null |
     jq -r --arg k $BENCH_LABEL_KEY '.[] | select(.configuration.labels[$k] == "1") | .id' 2>/dev/null)"})

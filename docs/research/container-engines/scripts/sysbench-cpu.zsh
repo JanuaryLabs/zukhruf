@@ -49,7 +49,10 @@ if (( ! BENCH_DRY_RUN )); then
     print -- "slot\trun\tevents_per_second"
     for file in "$BENCH_OUT"/*-run-*.txt(N); do
       name=${file:t:r}
-      print -- "${name%-run-*}\t${name##*-run-}\t$(awk '/events per second:/ { print $4 }' "$file")"
+      eps=$(awk '/events per second:/ { print $4 }' "$file")
+      [[ -n $eps ]] || bench_fail "$file has no 'events per second' line"
+      print -- "${name%-run-*}\t${name##*-run-}\t$eps"
     done
   } >"$BENCH_OUT/summary.tsv"
+  (( $(wc -l <"$BENCH_OUT/summary.tsv") > 1 )) || bench_fail "summary.tsv lists no run"
 fi

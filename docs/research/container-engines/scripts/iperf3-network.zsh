@@ -40,26 +40,30 @@ else
   BENCH_NOTES+=("host iperf3: $host_iperf3 ($(iperf3 --version | head -1))")
 fi
 
+# The server runs with --forceflush: without a TTY iperf3 buffers its stdout, so "Server listening"
+# never reaches the logs. The logs are read whole: with pipefail, `logs | grep -q` fails when grep
+# exits early and the docker CLI dies of SIGPIPE.
 wait_for_server() {
   local engine=$1 name=$2 n
   (( BENCH_DRY_RUN )) && return 0
   for n in {1..30}; do
-    dk $engine logs $name 2>&1 | grep -q 'Server listening' && return 0
+    [[ $(dk $engine logs $name 2>&1) == *'Server listening'* ]] && return 0
     sleep 1
   done
-  print -u2 -- "warning: the iperf3 server on $engine did not report listening in 30 s; measuring anyway"
+  bench_fail "the iperf3 server on $engine did not report listening in 30 s"
 }
 
-# Runs one path: a discarded warm-up, then the measured runs. The client is a command prefix.
-measure_path() {
-  local slot=$1 path=$2
+# Runs one route: a discarded warm-up, then the measured runs. The client is a command prefix.
+# Not `path`: in zsh that name is the array tied to PATH, and a local of it loses every command.
+measure_route() {
+  local slot=$1 route=$2
   shift 2
   local -a client=("$@")
   local n
   bench_capture /dev/null $client -t 3 -J || true
   for n in {1..$repeats}; do
-    bench_capture "$BENCH_OUT/$slot-$path-$n.json" $client -t $duration -J ||
-      print -u2 -- "warning: iperf3 $path run $n failed (exit $?); its JSON is kept"
+    bench_capture "$BENCH_OUT/$slot-$route-$n.json" $client -t $duration -J ||
+      print -u2 -- "warning: iperf3 $route run $n failed (exit $?); its JSON is kept"
   done
 }
 
@@ -68,20 +72,30 @@ BENCH_CALL_TIMEOUT=$(( duration + 120 ))
 measure_slot() {
   local engine=$1 slot=$2
   local server=$BENCH_NAME_PREFIX-iperf3-$slot
-  bench_run dk $engine run -d --name $server $BENCH_LIMITS -p 127.0.0.1:$port:5201 $IMAGE_IPERF3 -s >/dev/null
+  bench_run dk $engine run -d --name $server $BENCH_LIMITS -p 127.0.0.1:$port:5201 $IMAGE_IPERF3 -s --forceflush >/dev/null
   wait_for_server $engine $server
   local ip=$(bench_output dk $engine inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' $server)
   [[ -n $ip ]] || bench_die "no IP for the iperf3 server on $engine"
   print -- "   server IP $ip"
 
-  measure_path $slot container-to-container dk $engine run --rm $BENCH_LIMITS $IMAGE_IPERF3 -c $ip
+  measure_route $slot container-to-container dk $engine run --rm $BENCH_LIMITS $IMAGE_IPERF3 -c $ip
   if [[ -n $host_iperf3 ]]; then
-    measure_path $slot host-published gtimeout -s KILL $BENCH_CALL_TIMEOUT iperf3 -c 127.0.0.1 -p $port
+    measure_route $slot host-published gtimeout -s KILL $BENCH_CALL_TIMEOUT iperf3 -c 127.0.0.1 -p $port
     if [[ $engine == apple ]]; then
-      measure_path $slot host-ip gtimeout -s KILL $BENCH_CALL_TIMEOUT iperf3 -c $ip
+      measure_route $slot host-ip gtimeout -s KILL $BENCH_CALL_TIMEOUT iperf3 -c $ip
     fi
   fi
   bench_run dk $engine rm -f $server >/dev/null
 }
 
 bench_each_slot measure_slot
+
+# A failed run keeps iperf3's error JSON, so a run that measured nothing still writes a file.
+# Fail unless at least one run on every route measured a throughput.
+if (( ! BENCH_DRY_RUN )); then
+  for route in container-to-container ${host_iperf3:+host-published}; do
+    files=("$BENCH_OUT"/*-$route-*.json(N))
+    (( $#files )) && jq -s -e 'any(.[]; .end.sum_received.bits_per_second > 0)' $files >/dev/null ||
+      bench_fail "no iperf3 run on the $route route measured a throughput"
+  done
+fi

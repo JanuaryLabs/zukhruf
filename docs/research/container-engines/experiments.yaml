@@ -16,7 +16,18 @@
   risks: Cold runs (init image download, socktainer's first create) must stay out of the warm runs.
   source: zot24/macos-container-benchmarks; Jmeg8r/apple-container-vs-docker
   status: proposed
-  attempts: []
+  attempts:
+    - date: 2026-11-15
+      status: invalid
+      reasons:
+        - "socktainer 1.6.1 (Homebrew bottle) is built for apple/container 1.6.1 (Package.swift at tag v1.6.1 pins exactly 1.6.1) but container 1.7.1 ran; socktainer's startup log warns 'Apple Container version mismatch: detected 1.7.1 but this socktainer binary requires 1.6.1'"
+        - 'the Mac was busy: load average 31.1 (1 min) at the start, and 6 other containers ran on Docker Desktop, among them the 4 shared zukhruf-testing database servers of another session'
+      raw: ~/.claude/scratch/container-engines/runs-attempt-1-invalid/startup-alpine-true/20261115T194549Z
+      contaminated_orientation_only:
+        note: contaminated, orientation only; medians of 30 runs each, interleaved slots 01-docker, 02-apple, 03-docker, 04-apple
+        docker_docker_cli_ms: [241.3, 195.4]
+        apple_container_cli_ms: [918.8, 886.4]
+        apple_via_socktainer_ms: [1215.1, 1187.2]
   verdict: null
 
 - id: postgres-time-to-ready
@@ -49,7 +60,14 @@
   risks: The two CLIs may not do the same work per step (for example, inspect detail).
   source: none; our question
   status: proposed
-  attempts: []
+  attempts:
+    - date: 2026-11-15
+      status: invalid
+      reasons:
+        - "socktainer 1.6.1 (Homebrew bottle) is built for apple/container 1.6.1 (Package.swift at tag v1.6.1 pins exactly 1.6.1) but container 1.7.1 ran; socktainer's startup log warns 'Apple Container version mismatch: detected 1.7.1 but this socktainer binary requires 1.6.1'"
+        - 'the Mac was busy: load average 11.4 at the start, and 4 shared zukhruf-testing database servers of another session ran on Docker Desktop'
+        - "script bug: hyperfine 2.0 refused the whole-sequence arm, whose command contains &&, with 'Explicitly choose how to execute it: -S / --shell=default ... -N / --shell=none' (exit 1 after 19 s); fixed: that arm runs with --shell=default"
+      raw: ~/.claude/scratch/container-engines/runs-attempt-1-invalid/socktainer-overhead/20261115T194828Z
   verdict: null
 
 - id: suites-wall-time
@@ -81,7 +99,14 @@
   risks: The host page cache.
   source: apple/container #882; Jmeg8r/apple-container-vs-docker
   status: proposed
-  attempts: []
+  attempts:
+    - date: 2026-11-15
+      status: invalid
+      reasons:
+        - "socktainer 1.6.1 (Homebrew bottle) is built for apple/container 1.6.1 (Package.swift at tag v1.6.1 pins exactly 1.6.1) but container 1.7.1 ran; socktainer's startup log warns 'Apple Container version mismatch: detected 1.7.1 but this socktainer binary requires 1.6.1'"
+        - 'the Mac was busy: load average 15.6 at the start, and 4 shared zukhruf-testing database servers of another session ran on Docker Desktop'
+        - "script bug: the Apple slot's docker run -d with a bind mount from under ~/Desktop hung until gtimeout killed it (exit 137); sandboxd logged tcc_server_message_request_authorization(kTCCServiceSystemPolicyDesktopFolder) failed: Apple's helper has no Files & Folders grant for ~/Desktop; fixed: the bind source is under the user's temporary folder"
+      raw: ~/.claude/scratch/container-engines/runs-attempt-1-invalid/fio-storage/20261115T194847Z
   verdict: null
 
 - id: idle-memory
@@ -97,7 +122,14 @@
   risks: Finding every host process of each engine.
   source: Jmeg8r/apple-container-vs-docker
   status: proposed
-  attempts: []
+  attempts:
+    - date: 2026-11-15
+      status: invalid
+      reasons:
+        - "socktainer 1.6.1 (Homebrew bottle) is built for apple/container 1.6.1 (Package.swift at tag v1.6.1 pins exactly 1.6.1) but container 1.7.1 ran; socktainer's startup log warns 'Apple Container version mismatch: detected 1.7.1 but this socktainer binary requires 1.6.1'"
+        - 'the Mac was busy: load average 3.4 at the start, and 4 shared zukhruf-testing database servers of another session ran on Docker Desktop'
+        - 'the script refused to start, as designed, because 4 foreign containers ran on Docker Desktop (exit 2); nothing was measured'
+      raw: ~/.claude/scratch/container-engines/runs-attempt-1-invalid/idle-memory/20261115T195848Z
   verdict: null
 
 - id: attach-round-trip
@@ -129,7 +161,14 @@
   risks: network connect is a no-op on socktainer; containers must share the default network.
   source: zot24/macos-container-benchmarks
   status: proposed
-  attempts: []
+  attempts:
+    - date: 2026-11-15
+      status: invalid
+      reasons:
+        - "socktainer 1.6.1 (Homebrew bottle) is built for apple/container 1.6.1 (Package.swift at tag v1.6.1 pins exactly 1.6.1) but container 1.7.1 ran; socktainer's startup log warns 'Apple Container version mismatch: detected 1.7.1 but this socktainer binary requires 1.6.1'"
+        - 'the Mac was busy: load average 3.0 at the start, and 4 shared zukhruf-testing database servers of another session ran on Docker Desktop'
+        - 'script bug: every captured JSON file is 0 bytes and the experiment exited 0; measure_path declared `local path`, which in zsh is the array tied to PATH, so every client call failed with exit 127 (command not found); fixed: the local is `route`, and every result file must be non-empty JSON'
+      raw: ~/.claude/scratch/container-engines/runs-attempt-1-invalid/iperf3-network/20261115T200505Z
   verdict: null
 
 - id: sysbench-cpu
@@ -145,5 +184,11 @@
   risks: Apple takes whole vCPUs only; limits must match.
   source: RepoFlow blog; Jmeg8r/apple-container-vs-docker
   status: proposed
-  attempts: []
+  attempts:
+    - date: 2026-11-15
+      status: invalid
+      reasons:
+        - "socktainer 1.6.1 (Homebrew bottle) is built for apple/container 1.6.1 (Package.swift at tag v1.6.1 pins exactly 1.6.1) but container 1.7.1 ran; socktainer's startup log warns 'Apple Container version mismatch: detected 1.7.1 but this socktainer binary requires 1.6.1'"
+        - 'the Mac was busy: load average 17.7 at the start, and 4 shared zukhruf-testing database servers of another session ran on Docker Desktop'
+      raw: ~/.claude/scratch/container-engines/runs-attempt-1-invalid/sysbench-cpu/20261115T200715Z
   verdict: null

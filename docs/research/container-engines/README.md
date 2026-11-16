@@ -2,7 +2,7 @@
 
 This record decides one thing: should Apple's container engine replace Docker Desktop as Ezz's everyday engine on this Mac? Apple's engine is `container` 1.7.1. Our client reaches it through socktainer 1.6.1, a Docker Engine API server on top of it. Ezz, 2026-11-15: "if it is better than docker then I want to use it instead of docker". The verdict is switch or don't switch. If Apple wins on criteria 1 and 2 and is not worse on 3, the record ends with a switch plan. If it loses, the record says by how much and where.
 
-The experiments are in `experiments.yaml`. No experiment has run yet.
+The experiments are in `experiments.yaml`. A first batch ran on 2026-11-15 and is invalid (its attempts in `experiments.yaml` say why); no experiment has a result yet.
 
 ## Criteria, in order
 
@@ -13,6 +13,7 @@ The experiments are in `experiments.yaml`. No experiment has run yet.
    - socktainer is a third-party dependency.
    - Known differences: no pause, network connect is a no-op, whole vCPUs only, and Apple's published-port forwarder drops a connection when the client half-closes.
    - Other repos on this Mac use Docker: text2sql, serverize, deepagents.
+   - Apple's helper needs a macOS Files & Folders grant to bind-mount from ~/Desktop, where this repo lives; Docker Desktop already has it. Without the grant, a run with such a bind mount hangs (sandboxd logs `kTCCServiceSystemPolicyDesktopFolder` denied).
 
 ## The two engines
 
@@ -43,16 +44,19 @@ socktainer runs with `HOME=/opt/homebrew/var/run/socktainer`.
 
 ## Method rules
 
-| Rule                | Detail                                                                                                                                                |
-| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Same limits         | The same CPU and memory limits on both engines.                                                                                                       |
-| Pinned images       | Every image is pinned by digest.                                                                                                                      |
-| Cold and warm apart | The first container after an engine update downloads a 66 MB init image (~18 s). socktainer's first create took 17.8 s. Cold runs are reported apart. |
-| Interleaving        | Runs go A, B, A, B.                                                                                                                                   |
-| Noise floor         | This Mac is shared and noisy. An effect counts only when it is larger than the spread between two runs of the same engine.                            |
-| Long runs           | `caffeinate -dimsu`.                                                                                                                                  |
-| Micro benchmarks    | hyperfine 2.0.0 with `--warmup 3 --runs 30 --export-json`.                                                                                            |
-| Raw output          | Each run's raw output is kept under `docs/research/container-engines/runs/<experiment-id>/`.                                                          |
+| Rule                | Detail                                                                                                                                                 |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Same limits         | The same CPU and memory limits on both engines.                                                                                                        |
+| Pinned images       | Every image is pinned by digest.                                                                                                                       |
+| Cold and warm apart | The first container after an engine update downloads a 66 MB init image (~18 s). socktainer's first create took 17.8 s. Cold runs are reported apart.  |
+| Interleaving        | Runs go A, B, A, B.                                                                                                                                    |
+| Noise floor         | This Mac is shared and noisy. An effect counts only when it is larger than the spread between two runs of the same engine.                             |
+| Long runs           | `caffeinate -dimsu`.                                                                                                                                   |
+| Micro benchmarks    | hyperfine 2.0.0 with `--warmup 3 --runs 30 --export-json`.                                                                                             |
+| hyperfine 2.0 JSON  | Timings, in seconds, are at `.results[i].summary.time_wall_clock.{median,mean,min,max,stddev,count}`, not at `.results[i].median` as in hyperfine 1.x. |
+| vCPUs on Apple      | Apple gives N+1 vCPUs for `--cpus N`: `container run --cpus 1` shows `nproc` 2; through socktainer, NanoCpus 1e9, 2e9 and 3e9 give 2, 3 and 4.         |
+| Result checks       | Every result file must be non-empty, and JSON must parse; a run that measured nothing fails its experiment.                                            |
+| Raw output          | Each run's raw output is kept under `docs/research/container-engines/runs/<experiment-id>/`.                                                           |
 
 ## Prior art
 
@@ -76,6 +80,8 @@ Not a result: uncontrolled. `run --rm alpine true`, warm, 4 to 8 runs each.
 | Docker Desktop          | 0.16-0.19 s |
 
 ## Status
+
+Paused: Apple-side measurements wait for a socktainer release built for container 1.7.1 (Ezz, 2026-11-16). socktainer 1.6.1 is built for container 1.6.1 and warns of the mismatch at start.
 
 The runs update this table.
 

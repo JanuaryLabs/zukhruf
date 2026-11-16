@@ -45,12 +45,13 @@ fi
 levels=(0 1 10 30)
 
 sample_level() {
-  local engine=$1 slot=$2 level=$3 n
+  local engine=$1 slot=$2 level=$3 n file
   bench_sleep $settle
   for n in {1..$samples}; do
     (( n > 1 )) && bench_sleep $interval
-    bench_run node "$BENCH_SCRIPTS_DIR/engine-memory.ts" --engine $engine --footprint \
-      --out "$BENCH_OUT/$slot-level-$(printf %02d $level)-sample-$n.json"
+    file=$BENCH_OUT/$slot-level-$(printf %02d $level)-sample-$n.json
+    bench_run node "$BENCH_SCRIPTS_DIR/engine-memory.ts" --engine $engine --footprint --out "$file"
+    bench_require_result "$file"
   done
 }
 

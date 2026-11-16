@@ -27,9 +27,11 @@ measure() {
     first_done[$arm]=1
     bench_run hyperfine -N --style basic --runs 1 --command-name "$arm (first)" \
       --export-json "$BENCH_OUT/first-$arm.json" "$line"
+    bench_require_hyperfine "$BENCH_OUT/first-$arm.json"
   fi
   bench_run hyperfine -N --style basic --warmup 3 --runs 30 --command-name "$arm" \
     --export-json "$BENCH_OUT/$slot-$arm.json" "$line"
+  bench_require_hyperfine "$BENCH_OUT/$slot-$arm.json"
 }
 
 measure_slot() {
