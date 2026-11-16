@@ -8,9 +8,9 @@
 # the engine's context from the engine table and unsets DOCKER_HOST; the current context is never
 # changed. The script checks that each context's endpoint is the engine's socket.
 #
-# Steps: one build of the projects (nx run-many -t build), then one unmeasured warm-up run per
+# Steps: one build of the projects (nx run-many -t build), then (unless --no-warmup) one unmeasured warm-up run per
 # engine and project (it pulls images and creates the shared database servers), then per project
-# the measured runs over the engine order, A,B,A,B. Each measured run waits for a quiet Mac first:
+# the measured runs over the engine order, A,B,A,B. Unless --no-gate, each measured run waits for a quiet Mac first:
 # 1-minute load average below --max-load and no other `node --test` process, polled every 15 s for
 # up to --max-wait minutes; a run that never gets one is recorded as skipped: busy.
 #
@@ -28,12 +28,16 @@ run per engine and project. Default --interleave for this script: 3.
   --projects a,b  The nx projects (default docker,mutex,testing).
   --max-load L    Wait before each measured run until the 1-minute load average is below L (default 8).
   --max-wait M    Minutes to wait for that before the run is skipped as busy (default 20).
-  --cap M         Minutes before gtimeout stops one nx run (default 40)."
+  --cap M         Minutes before gtimeout stops one nx run (default 40).
+  --no-gate       Skip the quiet gate; each run still records load and other 'node --test' processes.
+  --no-warmup     Skip the warm-up runs (images and database servers from an earlier warm-up stay)."
 
 source "${0:A:h}/lib.zsh"
 zmodload zsh/stat
-typeset -a opt_projects=() opt_max_load=() opt_max_wait=() opt_cap=()
-zparseopts -D -E -- -projects:=opt_projects -max-load:=opt_max_load -max-wait:=opt_max_wait -cap:=opt_cap
+typeset -a opt_projects=() opt_max_load=() opt_max_wait=() opt_cap=() opt_no_gate=() opt_no_warmup=()
+zparseopts -D -E -- -projects:=opt_projects -max-load:=opt_max_load -max-wait:=opt_max_wait -cap:=opt_cap \
+  -no-gate=opt_no_gate -no-warmup=opt_no_warmup
+gate=$(( $#opt_no_gate == 0 )) warmup=$(( $#opt_no_warmup == 0 ))
 typeset -a projects=(${(s:,:)${opt_projects[-1]:-docker,mutex,testing}})
 max_load=${opt_max_load[-1]:-8}
 max_wait=${opt_max_wait[-1]:-20}
@@ -64,8 +68,20 @@ fi
 
 BENCH_NOTES+=(
   "projects: ${(j:,:)projects}; each run: DOCKER_CONTEXT=<engine context>, DOCKER_HOST unset, NX_DAEMON=false, nx run <project>:test --skip-sync --skip-nx-cache --excludeTaskDependencies, under gtimeout -k 30 ${cap}m"
-  "one warm-up run per engine and project before the measured runs (kind warmup in runs); measured runs per project in the order ${BENCH_ORDER[*]}"
-  "quiet gate before each measured run: 1-minute load average below $max_load and no other 'node --test' process, polled every 15 s for up to $max_wait min, else the run is skipped: busy"
+  "measured runs per project in the order ${BENCH_ORDER[*]}"
+  "junit_suspect: a run whose testcase count differs by more than 5% from the project's first count (warm-up, else first measured run) is kept and flagged, since a peer's run of the same project writes the same junit file"
+)
+if (( warmup )); then
+  BENCH_NOTES+=("one warm-up run per engine and project before the measured runs (kind warmup in runs)")
+else
+  BENCH_NOTES+=('warmup: "skipped by --no-warmup"')
+fi
+if (( gate )); then
+  BENCH_NOTES+=("quiet gate before each measured run: 1-minute load average below $max_load and no other 'node --test' process, polled every 15 s for up to $max_wait min, else the run is skipped: busy")
+else
+  BENCH_NOTES+=('gate: "off"' "no quiet gate (--no-gate): runs start whatever the load; each run records load and other 'node --test' processes at start and end")
+fi
+BENCH_NOTES+=(
   "wall_s is \$EPOCHREALTIME around the whole nx command (nx start, the test run, teardown); junit counts are grep -a -c of <testcase, <failure and <skipped in the run's copy of packages/<project>/test-results.xml"
   "other sessions share this checkout: each run records git HEAD and git status --porcelain of its project"
 )
@@ -83,7 +99,9 @@ bench_write_meta() {
   mv -- "$BENCH_OUT/meta.json.tmp" "$BENCH_OUT/meta.json"
 }
 
-typeset -ga missing_junit=() red_runs=() odd_exits=()
+typeset -ga missing_junit=() red_runs=() odd_exits=() suspect_runs=()
+# The first junit testcase count per project: the reference for junit_suspect.
+typeset -gA ref_testcases=()
 
 load1() {
   local -a parts=(${=$(sysctl -n vm.loadavg)})
@@ -136,13 +154,13 @@ run_suite() {
   (( BENCH_DRY_RUN )) && return 0
   local head=$(git rev-parse HEAD)
   local porcelain=$(git status --porcelain -- packages/$project)
-  local started=$(bench_utc) load_start=$(bench_loadavg) begin_s=$EPOCHSECONDS
+  local started=$(bench_utc) load_start=$(bench_loadavg) others_start=$(other_tests) begin_s=$EPOCHSECONDS
   local begin=$EPOCHREALTIME rc=0
   $cmd >"$log" 2>&1 || rc=$?
   local end=$EPOCHREALTIME
   local wall=$(printf '%.3f' $(( end - begin )))
-  local load_end=$(bench_loadavg)
-  local testcases=null failures=null skipped_tests=null have_junit=false
+  local load_end=$(bench_loadavg) others_end=$(other_tests)
+  local testcases=null failures=null skipped_tests=null have_junit=false suspect=false
   local -a mtime=()
   [[ -f $junit ]] && zstat -A mtime +mtime -- "$junit"
   if (( $#mtime )) && (( mtime[1] >= begin_s )) && [[ -s $junit ]]; then
@@ -151,6 +169,14 @@ run_suite() {
     testcases=$(grep -a -c '<testcase' "$copy" || true)
     failures=$(grep -a -c '<failure' "$copy" || true)
     skipped_tests=$(grep -a -c '<skipped' "$copy" || true)
+    local ref=${ref_testcases[$project]:-}
+    if [[ -z $ref ]]; then
+      ref_testcases[$project]=$testcases
+    elif (( testcases * 100 > ref * 105 || testcases * 100 < ref * 95 )); then
+      suspect=true
+      suspect_runs+=("$label: $testcases testcases, the project's first count was $ref")
+      print -u2 -- "   warning: junit_suspect: $testcases testcases vs $ref; a peer's run of $project may have written the junit file"
+    fi
   else
     missing_junit+=($label)
   fi
@@ -159,11 +185,13 @@ run_suite() {
     --argjson timed_out $(( rc == 124 || rc == 137 ? 1 : 0 )) \
     --argjson junit $have_junit --argjson testcases $testcases --argjson failures $failures \
     --argjson skipped_tests $skipped_tests --argjson load_start "$load_start" --argjson load_end "$load_end" \
+    --argjson others_start $others_start --argjson others_end $others_end --argjson suspect $suspect \
     --arg head $head --arg porcelain "$porcelain" \
     '{label: $label, kind: $kind, engine: $engine, context: $context, project: $project,
       started_utc: $started, wall_s: $wall, exit: $exit, timed_out: ($timed_out == 1),
-      junit: $junit, testcases: $testcases, failures: $failures, skipped_tests: $skipped_tests,
+      junit: $junit, junit_suspect: $suspect, testcases: $testcases, failures: $failures, skipped_tests: $skipped_tests,
       skipped: null, loadavg: {start: $load_start, end: $load_end},
+      other_tests_start: $others_start, other_tests_end: $others_end,
       git: {head: $head, status_porcelain: ($porcelain | split("\n") | map(select(length > 0)))}}'
   print -- "   ${wall}s, exit $rc, testcases $testcases, failures $failures, skipped $skipped_tests"
   if [[ $failures != null ]] && (( failures > 0 )); then
@@ -186,17 +214,19 @@ if (( ! BENCH_DRY_RUN )); then
   (( build_rc == 0 )) || bench_fail "the build failed (exit $build_rc); see $BENCH_OUT/build.log"
 fi
 
-for project in $projects; do
-  for engine in $(bench_engines); do
-    run_suite $engine $project warmup-$engine-$project warmup
+if (( warmup )); then
+  for project in $projects; do
+    for engine in $(bench_engines); do
+      run_suite $engine $project warmup-$engine-$project warmup
+    done
   done
-done
+fi
 
 for project in $projects; do
   for i in {1..$#BENCH_ORDER}; do
     engine=$BENCH_ORDER[$i]
     label=$(bench_slot $i)-$project
-    if quiet_gate; then
+    if (( ! gate )) || quiet_gate; then
       run_suite $engine $project $label measured
     else
       print -- "== $label (measured): skipped, busy"
@@ -223,6 +253,7 @@ print -- "summary: $BENCH_OUT/summary.tsv"
 column -t -s $'\t' "$BENCH_OUT/summary.tsv"
 
 for line in $red_runs; do print -u2 -- "CRITERION 2 (red suite): $line"; done
+for line in $suspect_runs; do print -u2 -- "warning: junit_suspect: $line"; done
 for line in $odd_exits; do print -u2 -- "warning: $line; see its log"; done
 (( $#missing_junit == 0 )) ||
   bench_fail "no fresh junit file from: ${(j:, :)missing_junit} (packages/<project>/test-results.xml was missing or older than the run)"
