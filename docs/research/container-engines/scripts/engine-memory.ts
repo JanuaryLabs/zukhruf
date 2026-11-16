@@ -1,6 +1,6 @@
 // Sums the host memory of one container engine's processes, for experiment 6 (idle-memory).
 //
-// Usage: node engine-memory.ts --engine docker|docker-vmm|colima|apple --out <file.json> [--footprint]
+// Usage: node engine-memory.ts --engine docker|docker-vmm|colima|orbstack|apple --out <file.json> [--footprint]
 //
 // Docker Desktop on VZ, Colima and Apple run their VMs in com.apple.Virtualization.VirtualMachine
 // XPC processes, whose parent is launchd, so a VM process is attributed to the engine whose owner
@@ -10,7 +10,9 @@
 // Apple. lstart has whole-second resolution; ties between two Apple containers do not change the
 // Apple total. A VM no owner claims within 60 s is listed as unattributed and counted in no engine.
 // On Docker VMM the VM runs inside com.docker.krun, a Docker.app process, so docker-vmm expects no
-// Virtualization VM process. OrbStack's processes are not read yet: --engine orbstack fails.
+// Virtualization VM process. OrbStack runs its VM inside its own "OrbStack Helper" process (vmgr,
+// under OrbStack.app/Contents/Frameworks), with no Virtualization VM process, so orbstack expects
+// none either; the OrbStack app process is its ui.
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
@@ -18,7 +20,7 @@ import { basename, join } from 'node:path';
 import { parseArgs } from 'node:util';
 
 /** The host-process families; docker and docker-vmm are both Docker Desktop's. */
-type Family = 'docker-desktop' | 'colima' | 'apple';
+type Family = 'docker-desktop' | 'colima' | 'orbstack' | 'apple';
 type Role = 'helper' | 'ui' | 'vm' | 'shim';
 
 interface Process {
@@ -40,13 +42,14 @@ const FAMILY_OF_ENGINE: Record<string, Family> = {
   docker: 'docker-desktop',
   'docker-vmm': 'docker-desktop',
   colima: 'colima',
+  orbstack: 'orbstack',
   apple: 'apple',
 };
 const VM_PROCESS = 'com.apple.Virtualization.VirtualMachine';
 const COLIMA_LIMA_HOME = join(homedir(), '.colima', '_lima');
 const isColima = (process: Process) =>
   process.args.includes(`${COLIMA_LIMA_HOME}/`);
-const VM_OWNER: Record<Family, (process: Process) => boolean> = {
+const VM_OWNER: Partial<Record<Family, (process: Process) => boolean>> = {
   'docker-desktop': (process) =>
     basename(process.comm) === 'com.docker.virtualization',
   colima: (process) =>
@@ -65,11 +68,6 @@ const { values } = parseArgs({
   },
 });
 const engine = values.engine;
-if (engine === 'orbstack') {
-  throw new Error(
-    "orbstack: its host processes are not read yet, so nothing can be attributed to it; after install, read them with 'ps -axww -o pid,ppid,rss,lstart,args' and add its rule here and to BENCH_MEMORY_RULE in lib.zsh",
-  );
-}
 const family = engine === undefined ? undefined : FAMILY_OF_ENGINE[engine];
 if (!family) {
   throw new Error(
@@ -133,6 +131,15 @@ function familyOf(
   ) {
     return { family: 'colima', role: 'helper' };
   }
+  if (process.comm.startsWith('/Applications/OrbStack.app/')) {
+    if (process.comm.includes('/Contents/Frameworks/OrbStack Helper.app/')) {
+      return { family: 'orbstack', role: 'vm' };
+    }
+    if (process.comm === '/Applications/OrbStack.app/Contents/MacOS/OrbStack') {
+      return { family: 'orbstack', role: 'ui' };
+    }
+    return { family: 'orbstack', role: 'helper' };
+  }
   if (name === 'socktainer') {
     return { family: 'apple', role: 'shim' };
   }
@@ -155,7 +162,7 @@ function attributeVms(processes: Process[]): {
   );
   const owners = processes.flatMap((process) => {
     const owner = (Object.keys(VM_OWNER) as Family[]).find((key) =>
-      VM_OWNER[key](process),
+      VM_OWNER[key]?.(process),
     );
     return owner ? [{ process, family: owner }] : [];
   });

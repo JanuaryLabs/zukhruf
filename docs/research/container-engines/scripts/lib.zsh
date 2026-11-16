@@ -46,7 +46,7 @@ typeset -gA BENCH_MEMORY_RULE=(
   docker 'Docker.app and com.docker.* processes, plus the Virtualization VM process paired by start time with com.docker.virtualization'
   docker-vmm 'Docker.app and com.docker.* processes; the VM runs inside com.docker.krun, so no Virtualization VM process is expected'
   colima 'limactl processes and the ssh mux of ~/.colima/_lima, plus the Virtualization VM process paired by start time with the limactl hostagent (its pid is in ~/.colima/_lima/colima/vz.pid)'
-  orbstack ''
+  orbstack 'OrbStack.app processes: the app as ui, OrbStack Helper (vmgr, which holds the VM; no Virtualization VM process) as vm, any other as helper'
   apple 'container-* processes and socktainer, plus each Virtualization VM process paired by start time with a container-runtime-linux'
 )
 typeset -gA BENCH_ARMS=(
@@ -56,12 +56,12 @@ typeset -gA BENCH_ARMS=(
   orbstack docker-cli
   apple 'docker-cli container-cli'
 )
-# OrbStack documents direct container IPs from the Mac; set 1 once that is verified on install.
+# OrbStack: verified 2026-11-16, the Mac reached a container IP (192.168.215.2) with nc; see README.md.
 typeset -gA BENCH_HOST_IP=(
   docker 0
   docker-vmm 0
   colima 0
-  orbstack 0
+  orbstack 1
   apple 1
 )
 typeset -gr BENCH_DEFAULT_ENGINES=docker,colima
