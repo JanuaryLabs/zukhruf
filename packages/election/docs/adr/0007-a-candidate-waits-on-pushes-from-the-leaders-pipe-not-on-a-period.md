@@ -2,7 +2,7 @@
 
 Status: Proposed 2026-11-15 for the owner's review (backlog #4371). Revised the same day after the owner's words: "all we do here is because of using "pull/poll" insted of push". Built 2026-11-15.
 
-Today a candidate finds that the leader left only by its next try. It tries every `pollInterval`, 10 ms, so each candidate that waits makes 100 tries a second for the whole term. After `SIGKILL` of the leader, the next candidate leads in about 10 ms ([concepts](../concepts/leader-election.md#evidence)). A socket tells it sooner: each client of a Unix socket gets `end` 1.6 ms to 3.7 ms after a kill of the server, on macOS and on Linux (research 20a P1).
+Today a candidate finds that the leader left only by its next try. It tries every `pollInterval`, 10 ms, so each candidate that waits makes 100 tries a second for the whole term. After `SIGKILL` of the leader, the next candidate leads in about 10 ms ([concepts](../concepts/leader-election.md#evidence)). A socket tells it sooner: each client of a Unix socket hears 1.6 ms to 3.7 ms after a kill of the server (research 20a P1). An accepted client gets `end` on macOS and on Linux; a client still in the backlog gets `end` on macOS but `ECONNRESET` on Linux. The reader treats an error like `end` (`socket.on('error', close)` in [leader-reader.ts](../../src/sqlite/leader-reader.ts)).
 
 ## What the leading systems do
 
