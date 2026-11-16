@@ -109,7 +109,12 @@
     workload: nx run docker:test, nx run mutex:test, and testing's database suites after #4205
   hypothesis: The main criterion. Per-container VM boots may slow suites that start many containers.
   measure: >-
-    Wall time of each nx target, A,B,A,B, at least 3 runs per engine, under caffeinate -dimsu.
+    scripts/suites-wall-time.zsh: after one build and one warm-up run per engine and project,
+    the wall time ($EPOCHREALTIME) of
+    'DOCKER_CONTEXT=<engine context> nx run <project>:test --skip-sync --skip-nx-cache --excludeTaskDependencies'
+    for docker, mutex and testing, A,B,A,B, 3 runs per engine (--interleave 3), each behind a quiet gate
+    (1-minute load below 8, no other node --test), under caffeinate -dimsu; per run the nx exit code
+    and the junit testcases, failures and skipped of test-results.xml.
   expected: Unknown; this row decides the verdict.
   risks: Depends on backlog #4430's client fixes, and on #4205 for testing. A red suite counts against criterion 2.
   source: none; our suites

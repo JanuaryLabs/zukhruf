@@ -7,13 +7,12 @@ One script per experiment in `../experiments.yaml`, named by the experiment id, 
 | 1   | startup-alpine-true    | `startup-alpine-true.zsh`                                         |
 | 2   | postgres-time-to-ready | `postgres-time-to-ready.zsh` (drives `postgres-time-to-ready.ts`) |
 | 3   | socktainer-overhead    | `socktainer-overhead.zsh`                                         |
+| 4   | suites-wall-time       | `suites-wall-time.zsh`                                            |
 | 5   | fio-storage            | `fio-storage.zsh`                                                 |
 | 6   | idle-memory            | `idle-memory.zsh`                                                 |
 | 7   | attach-round-trip      | `attach-round-trip.zsh` (drives `attach-round-trip.ts`)           |
 | 8   | iperf3-network         | `iperf3-network.zsh`                                              |
 | 9   | sysbench-cpu           | `sysbench-cpu.zsh`                                                |
-
-Experiment 4 runs the nx test targets; its command is below and its script comes later.
 
 ## Engines
 
@@ -131,13 +130,37 @@ Metrics in the slot files and `summary.tsv`, in ms:
 - **The container IP** comes from the inspect's `NetworkSettings.Networks`. If socktainer gives none, the run records `the inspect gives no IPAddress` and fails, so the slot file shows it at once.
 - **wait removed** may not be served by socktainer; `exit_to_removed_wait_ms` is then null and the slot file keeps the error in `waitRemovedError`. `exit_to_removed_ms` does not depend on it.
 
-## Experiment 4 (script comes later)
+## Experiment 4: the test suites
 
-The package selects the engine from `DOCKER_HOST`, so each command runs once per engine, interleaved, under `caffeinate -dimsu`, with `DOCKER_HOST` set to the engine's socket from the engines table:
+`suites-wall-time.zsh` times `nx run <project>:test` on each engine. It decides criterion 1, and every red suite it records is a criterion-2 finding.
 
 ```sh
-DOCKER_HOST=unix://$HOME/.docker/run/docker.sock ...
-DOCKER_HOST=unix://$HOME/.colima/default/docker.sock ...
+docs/research/container-engines/scripts/suites-wall-time.zsh                    # docker,mutex,testing on docker,colima, 3 rounds
+docs/research/container-engines/scripts/suites-wall-time.zsh --projects docker --interleave 1
 ```
 
-`/usr/bin/time -p npx nx run docker:test --skip-nx-cache` and `/usr/bin/time -p npx nx run mutex:test --skip-nx-cache` (then testing's database suites once #4205 lands), at least 3 runs per engine. A red suite is recorded with its exit code; it counts against criterion 2.
+Own options: `--projects a,b` (default `docker,mutex,testing`), `--max-load L` (default 8), `--max-wait M` (minutes, default 20), `--cap M` (minutes per nx run, default 40). `--interleave` defaults to 3 here.
+
+The suites pick their engine as the Docker CLI does: `DOCKER_HOST`, then `DOCKER_CONTEXT`, then `currentContext` (the context store of `@zukhruf/docker`; `packages/testing/src/scripts/docker-global-setup.ts` resolves the context once and sets `DOCKER_HOST` for the test processes). So each run sets `DOCKER_CONTEXT` to the engine's context from the engine table and unsets `DOCKER_HOST`; the current context is never changed. The script refuses an engine without a context (`apple`) and a context whose endpoint is not the engine's socket.
+
+Steps:
+
+1. One build: `NX_DAEMON=false npx nx run-many -t build -p <projects> --skip-sync` (`build.log`); a failed build fails the experiment.
+2. One unmeasured warm-up run per engine and project. It pulls the images and creates the shared database servers, so both engines are measured warm.
+3. Per project, the measured runs over the engine order, A,B,A,B. Before each, a quiet gate waits until the 1-minute load average is below `--max-load` and no other `node --test` process runs (another suite is noise, and a run of the same project writes the same junit file), polling every 15 s for up to `--max-wait` minutes. A run that gets no quiet Mac is recorded as `skipped: "busy"`.
+
+Each run is `gtimeout -k 30 <cap> env -u DOCKER_HOST DOCKER_CONTEXT=<context> NX_DAEMON=false npx nx run <project>:test --skip-sync --skip-nx-cache --excludeTaskDependencies`, timed with `$EPOCHREALTIME`. `--excludeTaskDependencies` keeps the build out of the measured time; nx 23.2.1 takes it on `nx run` and passes none of these flags to the test command.
+
+| Output                            | Holds                                                                                                                                                                                                                                                                                                           |
+| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `<label>.log`                     | The nx output of one run. Labels: `warmup-<engine>-<project>`, `<NN>-<engine>-<project>`.                                                                                                                                                                                                                       |
+| `<label>-test-results.xml`        | That run's copy of `packages/<project>/test-results.xml`.                                                                                                                                                                                                                                                       |
+| `runs.jsonl`, `meta.json` `.runs` | Per run: kind (`warmup`, `measured`), engine, context, project, `wall_s`, nx `exit`, `timed_out`, junit `testcases`, `failures`, `skipped_tests` (`grep -a -c` of `<testcase`, `<failure`, `<skipped`), load average at start and end, `git rev-parse HEAD` and `git status --porcelain -- packages/<project>`. |
+| `summary.tsv`                     | Per engine and project, measured runs only: `n`, `median_s`, `min_s`, `max_s`, `failures_total`, `skipped_busy`.                                                                                                                                                                                                |
+
+A run with failures is kept, never retried, and printed as `CRITERION 2 (red suite)`; a non-zero exit with no junit failure is printed as a warning. A run that leaves no junit file written during the run fails the experiment at the end (`FAILED`, exit 1), after every run is recorded.
+
+### Traps
+
+- **Shared checkout.** Other sessions edit and test in this checkout. A red suite may come from a peer's unfinished work in that package rather than from the engine: the per-run `git status --porcelain` shows it, and the same failure on every engine points there.
+- **Unlabelled containers.** The suites' containers and the shared database servers are not labelled `dev.zukhruf.bench=1`, so the script's cleanup leaves them; the suites' own reaper removes a run's objects.
