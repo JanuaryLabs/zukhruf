@@ -43,7 +43,7 @@ lines.on('line', (line) => {
 });
 `;
 
-class EchoWorker implements Worker {
+class EchoWorker implements Worker<string, string> {
   readonly #child = spawn(process.execPath, ['-e', script]);
   readonly #waiting: ((line: string) => void)[] = [];
   readonly #exit = new Latch();
@@ -86,7 +86,7 @@ class EchoWorker implements Worker {
     this.#child.stdin.write('fail\n');
   }
 
-  echo(text: string): Promise<string> {
+  run(text: string): Promise<string> {
     this.#child.stdin.write(`${text}\n`);
     return this.#next();
   }
@@ -127,15 +127,15 @@ test('an on-demand pool starts no worker until a job needs one, then reuses it',
   await pool.ready();
   assert.equal(created.length, 0);
 
-  assert.equal(await pool.use((worker) => worker.echo('one')), 'one');
-  assert.equal(await pool.use((worker) => worker.echo('two')), 'two');
+  assert.equal(await pool.use((worker) => worker.run('one')), 'one');
+  assert.equal(await pool.use((worker) => worker.run('two')), 'two');
   assert.equal(created.length, 1);
 
   assert.deepEqual(
     await Promise.all([
-      pool.use((worker) => worker.echo('a')),
-      pool.use((worker) => worker.echo('b')),
-      pool.use((worker) => worker.echo('c')),
+      pool.use((worker) => worker.run('a')),
+      pool.use((worker) => worker.run('b')),
+      pool.use((worker) => worker.run('c')),
     ]),
     ['a', 'b', 'c'],
   );
@@ -216,7 +216,7 @@ test('a leader-first pool starts the others together once the first is ready, an
     },
     clock: globalThis,
   });
-  const job = pool.use((worker) => worker.echo('during warm-up'));
+  const job = pool.use((worker) => worker.run('during warm-up'));
   await setTimeout(200);
   assert.equal(created.length, 1, 'no worker may start beside the leader');
 
@@ -229,7 +229,7 @@ test('a leader-first pool starts the others together once the first is ready, an
   await created[1]!.exited();
   const results = await Promise.all(
     Array.from({ length: 3 }, (_, index) =>
-      pool.use((worker) => worker.echo(String(index))),
+      pool.use((worker) => worker.run(String(index))),
     ),
   );
   assert.deepEqual(results, ['0', '1', '2']);
@@ -253,8 +253,8 @@ test('a job aborted while it runs kills only its worker, and the next job takes 
   await pool.ready();
   const stop = new AbortController();
   const reason = new Error('Stop this job');
-  const hung = pool.use((worker) => worker.echo('hang'), stop.signal);
-  const other = pool.use((worker) => worker.echo('other'));
+  const hung = pool.use((worker) => worker.run('hang'), stop.signal);
+  const other = pool.use((worker) => worker.run('other'));
   await setTimeout(100);
 
   stop.abort(reason);
@@ -263,7 +263,7 @@ test('a job aborted while it runs kills only its worker, and the next job takes 
   assert.equal(created[0]!.dead, true);
   assert.equal(created[1]!.dead, false);
 
-  assert.equal(await pool.use((worker) => worker.echo('next')), 'next');
+  assert.equal(await pool.use((worker) => worker.run('next')), 'next');
   assert.equal(created.length, 2);
   await created[0]!.exited();
 });
@@ -284,13 +284,13 @@ test('a queued job aborted before its turn never runs', async () => {
   const first = Promise.withResolvers<void>();
   const busy = pool.use(async (worker) => {
     await first.promise;
-    return worker.echo('busy');
+    return worker.run('busy');
   });
   let ran = false;
   const stop = new AbortController();
   const queued = pool.use(async (worker) => {
     ran = true;
-    return worker.echo('queued');
+    return worker.run('queued');
   }, stop.signal);
 
   stop.abort();
@@ -314,7 +314,7 @@ test('a job aborted while its worker warms up leaves the warm-up running for lat
     clock: globalThis,
   });
   const stop = new AbortController();
-  const waiting = pool.use((worker) => worker.echo('never'), stop.signal);
+  const waiting = pool.use((worker) => worker.run('never'), stop.signal);
 
   stop.abort();
   await assert.rejects(waiting, { name: 'AbortError' });
@@ -322,7 +322,7 @@ test('a job aborted while its worker warms up leaves the warm-up running for lat
 
   created[0]!.release();
   await pool.ready();
-  assert.equal(await pool.use((worker) => worker.echo('later')), 'later');
+  assert.equal(await pool.use((worker) => worker.run('later')), 'later');
   assert.equal(created.length, 1);
 });
 
@@ -343,10 +343,10 @@ test('a worker that fails to start fails the job waiting for it, and the next jo
   });
 
   await assert.rejects(
-    pool.use((worker) => worker.echo('first')),
+    pool.use((worker) => worker.run('first')),
     /Echo worker exited/,
   );
-  assert.equal(await pool.use((worker) => worker.echo('second')), 'second');
+  assert.equal(await pool.use((worker) => worker.run('second')), 'second');
   assert.equal(created.length, 2);
 });
 
@@ -369,7 +369,7 @@ test('disposing a pool stops every worker, rejects waiting and later jobs, and s
   });
   const ready = assert.rejects(pool.ready());
   const jobs = Promise.allSettled(
-    Array.from({ length: 3 }, () => pool.use((worker) => worker.echo('x'))),
+    Array.from({ length: 3 }, () => pool.use((worker) => worker.run('x'))),
   );
 
   await pool[Symbol.asyncDispose]();
@@ -379,7 +379,7 @@ test('disposing a pool stops every worker, rejects waiting and later jobs, and s
     ['rejected', 'rejected', 'rejected'],
   );
   await assert.rejects(
-    pool.use((worker) => worker.echo('after')),
+    pool.use((worker) => worker.run('after')),
     { name: 'AbortError' },
   );
   assert.equal(created.length, 1, 'the second worker must never start');
@@ -1315,7 +1315,7 @@ test('a pool keeps alive a worker it stops running while the sizing keeps it, an
     clock: globalThis,
   });
   await pool.ready();
-  const run = (text: string) => pool.use((worker) => worker.echo(text));
+  const run = (text: string) => pool.use((worker) => worker.run(text));
   assert.deepEqual(await Promise.all([run('a'), run('b')]), ['a', 'b']);
 
   sizing.current = 1;
@@ -1348,15 +1348,15 @@ test('a job that started before the pool resized does not count toward the new s
     clock: globalThis,
   });
   await pool.ready();
-  const slow = pool.use((worker) => worker.echo('sleep 400'));
+  const slow = pool.use((worker) => worker.run('sleep 400'));
   const fast = pool.use(async (worker) => {
-    const text = await worker.echo('sleep 50');
+    const text = await worker.run('sleep 50');
     sizing.current = 1;
     return text;
   });
   // Waiting jobs make the times measurable once the slow job ends.
   const waiting = Array.from({ length: 3 }, () =>
-    pool.use((worker) => worker.echo('sleep 10')),
+    pool.use((worker) => worker.run('sleep 10')),
   );
 
   await Promise.all([slow, fast, ...waiting]);
@@ -1390,8 +1390,8 @@ test('an eager pool replaces an idle worker that exits on its own, before any jo
 
   assert.deepEqual(
     await Promise.all([
-      pool.use((worker) => worker.echo('a')),
-      pool.use((worker) => worker.echo('b')),
+      pool.use((worker) => worker.run('a')),
+      pool.use((worker) => worker.run('b')),
     ]),
     ['a', 'b'],
   );
@@ -1423,7 +1423,7 @@ test('stats count the workers that start, wait idle or are lent, and the jobs th
   const jobs = ['a', 'b', 'c'].map((text) =>
     pool.use(async (worker) => {
       await gate.wait();
-      return worker.echo(text);
+      return worker.run(text);
     }),
   );
   try {
@@ -1471,7 +1471,7 @@ test('stats leave out a worker that exits while a job holds it, and a read keeps
   const gate = new Latch();
   const job = pool.use(async (worker) => {
     await gate.wait();
-    return worker.echo('late');
+    return worker.run('late');
   });
   try {
     await t.waitFor(
@@ -1520,7 +1520,7 @@ test('stats leave out an idle worker that exits from an on-demand pool', async (
     },
     clock: globalThis,
   });
-  assert.equal(await pool.use((worker) => worker.echo('one')), 'one');
+  assert.equal(await pool.use((worker) => worker.run('one')), 'one');
   assert.deepEqual(pool.stats, { starting: 0, idle: 1, lent: 0, waiting: 0 });
 
   created[0]!.kill();
@@ -1566,7 +1566,7 @@ test('an eager pool waits before it replaces a worker that exits early: 1 s, dou
     );
     await clock.tickAsync(1);
     assert.equal(pool.stats.starting, 1, `the pool starts at ${wait} ms`);
-    assert.equal(await pool.use((next) => next.echo('up')), 'up');
+    assert.equal(await pool.use((next) => next.run('up')), 'up');
   }
   assert.equal(created.length, 8);
 });
@@ -1675,7 +1675,7 @@ test('a worker that a job starts in an eager pool and whose warm-up fails fails 
   // warm-up fails. A job that waits anyway fails on the real clock of
   // AbortSignal.timeout.
   await assert.rejects(
-    pool.use((worker) => worker.echo('now'), AbortSignal.timeout(10_000)),
+    pool.use((worker) => worker.run('now'), AbortSignal.timeout(10_000)),
     /Echo worker exited/,
   );
   assert.equal(created.length, 2);
@@ -1720,7 +1720,7 @@ test('a job that needs a slot in back-off after a failed warm-up starts its work
 
   // The timers do not move, so the job cannot wait out the back-off.
   assert.equal(
-    await pool.use((worker) => worker.echo('now'), AbortSignal.timeout(10_000)),
+    await pool.use((worker) => worker.run('now'), AbortSignal.timeout(10_000)),
     'now',
   );
   assert.equal(
@@ -1779,7 +1779,7 @@ test('an on-demand pool starts no worker after a failed warm-up until a job need
     clock,
   });
   await assert.rejects(
-    pool.use((worker) => worker.echo('first')),
+    pool.use((worker) => worker.run('first')),
     /Echo worker exited/,
   );
 
@@ -1787,7 +1787,7 @@ test('an on-demand pool starts no worker after a failed warm-up until a job need
   assert.equal(created.length, 1, 'no worker starts by itself');
   assert.equal(
     await pool.use(
-      (worker) => worker.echo('second'),
+      (worker) => worker.run('second'),
       AbortSignal.timeout(10_000),
     ),
     'second',
@@ -1818,7 +1818,7 @@ test('a job that needs a slot in back-off starts its worker at once, and the bac
   // The timers do not move, so the job cannot wait out the back-off. A job
   // that waits anyway fails on the real clock of AbortSignal.timeout.
   assert.equal(
-    await pool.use((worker) => worker.echo('now'), AbortSignal.timeout(10_000)),
+    await pool.use((worker) => worker.run('now'), AbortSignal.timeout(10_000)),
     'now',
   );
   await clock.tickAsync(60_000);
@@ -1873,7 +1873,7 @@ test('a worker that ran 10 minutes is replaced at once, and ends the back-off', 
   created[0]!.kill();
   await created[0]!.exited();
   await clock.tickAsync(1_000);
-  assert.equal(await pool.use((worker) => worker.echo('up')), 'up');
+  assert.equal(await pool.use((worker) => worker.run('up')), 'up');
 
   // The worker runs ten minutes on the clock. No timer of the pool waits.
   await clock.tickAsync(600_000);
@@ -1899,7 +1899,7 @@ test('a slot that the sizing stops keeping during its back-off starts no stray w
     clock,
   });
   await pool.ready();
-  const run = (text: string) => pool.use((worker) => worker.echo(text));
+  const run = (text: string) => pool.use((worker) => worker.run(text));
   created[1]!.kill();
   await created[1]!.exited();
   // Slot 1 backs off: its worker is gone and no new one starts yet.
@@ -1972,7 +1972,7 @@ test('a job that takes an idle worker before its idle timeout passes keeps it, a
   assert.equal(
     await pool.use((worker) => {
       timersWhileLent = clock.countTimers();
-      return worker.echo('busy');
+      return worker.run('busy');
     }),
     'busy',
   );
@@ -2006,7 +2006,7 @@ test('a pool does not evict a worker while a job holds it past its idle timeout,
   const gate = new Latch();
   const held = pool.use(async (worker) => {
     await gate.wait();
-    return worker.echo('held');
+    return worker.run('held');
   });
   try {
     await t.waitFor(() => assert.equal(pool.stats.lent, 1));
@@ -2053,7 +2053,7 @@ test('an evicted worker starts no replacement and no back-off, and a job then st
     // real clock of AbortSignal.timeout.
     assert.equal(
       await pool.use(
-        (worker) => worker.echo('now'),
+        (worker) => worker.run('now'),
         AbortSignal.timeout(10_000),
       ),
       'now',
@@ -2125,7 +2125,7 @@ test('a pool does not evict a worker that the sizing keeps but does not run, and
     clock,
   });
   await pool.ready();
-  const run = (text: string) => pool.use((worker) => worker.echo(text));
+  const run = (text: string) => pool.use((worker) => worker.run(text));
 
   sizing.current = 1;
   assert.equal(await run('a'), 'a');
@@ -2133,7 +2133,7 @@ test('a pool does not evict a worker that the sizing keeps but does not run, and
   const gate = new Latch();
   const held = pool.use(async (worker) => {
     await gate.wait();
-    return worker.echo('held');
+    return worker.run('held');
   });
   try {
     await t.waitFor(() => assert.equal(pool.stats.lent, 1));
@@ -2180,7 +2180,7 @@ test('a worker evicted after it ran 10 minutes ends the back-off', async (t) => 
   const done = Promise.withResolvers<void>();
   const holding = pool.use(async (worker) => {
     await done.promise;
-    return worker.echo('up');
+    return worker.run('up');
   });
   await t.waitFor(() => assert.equal(pool.stats.lent, 1));
   await clock.tickAsync(600_000);
@@ -2188,7 +2188,7 @@ test('a worker evicted after it ran 10 minutes ends the back-off', async (t) => 
   assert.equal(await holding, 'up');
   await clock.tickAsync(1_000);
   await created[1]!.exited();
-  assert.equal(await pool.use((worker) => worker.echo('again')), 'again');
+  assert.equal(await pool.use((worker) => worker.run('again')), 'again');
 
   created[2]!.kill();
   await created[2]!.exited();
@@ -2274,8 +2274,8 @@ test('a job takes an idle worker before it starts or waits for one in a lower sl
     });
     assert.deepEqual(
       await Promise.all([
-        pool.use((worker) => worker.echo('a')),
-        pool.use((worker) => worker.echo('b')),
+        pool.use((worker) => worker.run('a')),
+        pool.use((worker) => worker.run('b')),
       ]),
       ['a', 'b'],
     );
@@ -2421,12 +2421,12 @@ test('a job joins a worker that starts before it starts one in an empty slot', a
     clock: globalThis,
   });
   const stop = new AbortController();
-  const waiting = pool.use((worker) => worker.echo('never'), stop.signal);
+  const waiting = pool.use((worker) => worker.run('never'), stop.signal);
   stop.abort();
   await assert.rejects(waiting, { name: 'AbortError' });
   assert.deepEqual(pool.stats, { starting: 1, idle: 0, lent: 0, waiting: 0 });
 
-  const job = pool.use((worker) => worker.echo('joined'));
+  const job = pool.use((worker) => worker.run('joined'));
   try {
     await t.waitFor(() => assert.equal(pool.stats.waiting, 1), {
       interval: 10,
@@ -2459,7 +2459,7 @@ test('a job takes an empty slot before a slot in back-off', async () => {
   await pool.ready();
   // A job holds the first worker while the eviction lets the idle second one
   // go, which leaves its slot empty.
-  const held = pool.use((worker) => worker.echo('hang'));
+  const held = pool.use((worker) => worker.run('hang'));
   await clock.tickAsync(60_000);
   await created[1]!.exited();
   // An early exit during the job puts the first slot in a back-off of 1 s
@@ -2467,7 +2467,7 @@ test('a job takes an empty slot before a slot in back-off', async () => {
   created[0]!.kill();
   await assert.rejects(held, /Echo worker exited/);
 
-  assert.equal(await pool.use((worker) => worker.echo('empty')), 'empty');
+  assert.equal(await pool.use((worker) => worker.run('empty')), 'empty');
   assert.equal(created.length, 3);
   await clock.tickAsync(1_000);
   // The worker is created a microtask after its slot starts.
@@ -2500,7 +2500,7 @@ test('the pool aborts the signal of an idle wait when a job takes the worker, st
 
   await pool.use(async (worker) => {
     assert.equal(signals[0]!.aborted, true, 'a job took the worker');
-    return worker.echo('busy');
+    return worker.run('busy');
   });
   assert.equal(signals.length, 2);
   assert.equal(signals[1]!.aborted, false);

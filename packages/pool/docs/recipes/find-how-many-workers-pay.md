@@ -21,7 +21,13 @@ import { availableParallelism } from 'node:os';
 import { createInterface } from 'node:readline';
 
 import { Coprocess } from '@zukhruf/coprocess';
-import { HillClimbing, IdleTimeout, OnDemand, Pool } from '@zukhruf/pool';
+import {
+  HillClimbing,
+  IdleTimeout,
+  OnDemand,
+  Pool,
+  type Worker,
+} from '@zukhruf/pool';
 
 if (process.argv[2] === 'helper') {
   // A helper reads one request a line and answers it. Each job uses the CPU
@@ -32,6 +38,31 @@ if (process.argv[2] === 'helper') {
     process.stdout.write(`${JSON.stringify({ done: JSON.parse(line).id })}\n`);
   }
 } else {
+  // A worker runs each job on its helper.
+  class HelperWorker implements Worker<{ id: number }, unknown> {
+    readonly #helper = new Coprocess(
+      process.execPath,
+      [import.meta.filename, 'helper'],
+      { name: 'helper' },
+    );
+
+    run(input: { id: number }): Promise<unknown> {
+      return this.#helper.request(input);
+    }
+
+    exited(): Promise<unknown> {
+      return this.#helper.exited();
+    }
+
+    kill(): void {
+      this.#helper.kill();
+    }
+
+    close(): Promise<void> {
+      return this.#helper.close();
+    }
+  }
+
   const { availableMemory } = process;
   await using pool = new Pool({
     size: new HillClimbing({
@@ -41,10 +72,7 @@ if (process.argv[2] === 'helper') {
     startup: new OnDemand(),
     eviction: new IdleTimeout({ after: 300_000 }),
     clock: globalThis,
-    create: () =>
-      new Coprocess(process.execPath, [import.meta.filename, 'helper'], {
-        name: 'helper',
-      }),
+    create: () => new HelperWorker(),
   });
 
   // A backlog: 32 callers send jobs, one after the other, for 40 seconds.
@@ -53,7 +81,7 @@ if (process.argv[2] === 'helper') {
   let id = 0;
   const callers = Array.from({ length: 32 }, async () => {
     while (!stop.aborted) {
-      await pool.use((helper) => helper.request({ id: id++ }));
+      await pool.use((worker) => worker.run({ id: id++ }));
       done++;
     }
   });

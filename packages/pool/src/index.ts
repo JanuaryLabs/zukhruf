@@ -9,6 +9,7 @@ export { OnDemand } from './on-demand.ts';
 export { OrderedReady } from './ordered-ready.ts';
 export { Parallel } from './parallel.ts';
 export { Pool } from './pool.ts';
+export { PoolWorkers } from './pool-workers.ts';
 export type { PoolStats } from './pool-stats.ts';
 export { Resources } from './resources.ts';
 export type { Computer } from './capacity.ts';

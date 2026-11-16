@@ -42,6 +42,10 @@
   },
   "dependencies": {
     "@zukhruf/async": "^0.8.19",
+    "@zukhruf/election": "^0.8.19",
+    "@zukhruf/sqlite-notify": "^0.8.19",
+    "@zukhruf/sqlite-open": "^0.8.19",
+    "@zukhruf/sqlite-queue": "^0.8.19",
     "p-queue": "10.0.0"
   },
   "devDependencies": {

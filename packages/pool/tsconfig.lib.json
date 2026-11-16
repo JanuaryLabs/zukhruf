@@ -12,6 +12,18 @@
       "path": "../async/tsconfig.lib.json"
     },
     {
+      "path": "../election/tsconfig.lib.json"
+    },
+    {
+      "path": "../sqlite/notify/tsconfig.lib.json"
+    },
+    {
+      "path": "../sqlite/open/tsconfig.lib.json"
+    },
+    {
+      "path": "../sqlite/queue/tsconfig.lib.json"
+    },
+    {
       "path": "../testing/tsconfig.lib.json"
     }
   ]

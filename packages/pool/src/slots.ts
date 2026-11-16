@@ -57,7 +57,9 @@ export interface Slot<T> {
 // minutes, after a back-off when it exited early or its warm-up failed. The
 // disposal stops every worker. Who queues the jobs, and how many at a time,
 // is the host's: resized tells it when the sizing changes how many slots run.
-export class Slots<T extends Worker> implements AsyncDisposable {
+export class Slots<
+  T extends Worker<never, unknown>,
+> implements AsyncDisposable {
   readonly #create: () => T;
   readonly #startup: Startup;
   readonly #sizing: Sizing;

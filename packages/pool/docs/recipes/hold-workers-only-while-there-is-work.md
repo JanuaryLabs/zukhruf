@@ -54,7 +54,7 @@ if (role === 'helper') {
 } else {
   let started = 0;
 
-  class ModelWorker implements Worker {
+  class ModelWorker implements Worker<string, unknown> {
     readonly #helper: Coprocess;
 
     constructor(folder: string) {
@@ -75,7 +75,7 @@ if (role === 'helper') {
       );
     }
 
-    read(file: string): Promise<unknown> {
+    run(file: string): Promise<unknown> {
       return this.#helper.request(file);
     }
 
@@ -116,7 +116,7 @@ if (role === 'helper') {
         clock: globalThis,
         create: () => new ModelWorker(this.#folder),
       });
-      return this.#pool.use((worker) => worker.read(file));
+      return this.#pool.use((worker) => worker.run(file));
     }
 
     async [Symbol.asyncDispose](): Promise<void> {

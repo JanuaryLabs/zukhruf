@@ -1,6 +1,6 @@
 # Pool and PoolWorkers take one worker kind
 
-Status: Proposed 2026-11-16 for Ezz's review (backlog #3527). Not built in the pool. `WorkerKind` is built (2026-11-16): its name, revision and rules, the check of its channels and its queue name. `Pool` and `PoolWorkers` do not take it yet.
+Status: Proposed 2026-11-16 for Ezz's review (backlog #3527). `WorkerKind` is built (2026-11-16): its name, revision and rules, the check of its channels and its queue name. `PoolWorkers` takes it, and creates the queue of its revision with its rules. `Pool` does not take it yet.
 
 A host that only sends must know four things about the jobs (map ticket 16):
 

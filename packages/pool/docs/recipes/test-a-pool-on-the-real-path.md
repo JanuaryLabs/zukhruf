@@ -30,9 +30,40 @@ import PQueue from 'p-queue';
 
 import { delay } from '@zukhruf/async';
 import { Coprocess } from '@zukhruf/coprocess';
-import { HillClimbing, NoEviction, Parallel, Pool } from '@zukhruf/pool';
+import {
+  HillClimbing,
+  NoEviction,
+  Parallel,
+  Pool,
+  type Worker,
+} from '@zukhruf/pool';
 
 type FakeClock = ReturnType<typeof createClock>;
+
+/** A worker that runs each job on a real helper process. */
+class HelperWorker implements Worker<unknown, unknown> {
+  readonly #helper = new Coprocess(
+    process.execPath,
+    [import.meta.filename, 'helper'],
+    { name: 'helper' },
+  );
+
+  run(input: unknown): Promise<unknown> {
+    return this.#helper.request(input);
+  }
+
+  exited(): Promise<unknown> {
+    return this.#helper.exited();
+  }
+
+  kill(): void {
+    this.#helper.kill();
+  }
+
+  close(): Promise<void> {
+    return this.#helper.close();
+  }
+}
 
 /**
  * Moves the clock 10 ms at a time until `done` holds, and lets the event loop
@@ -42,7 +73,7 @@ type FakeClock = ReturnType<typeof createClock>;
  */
 async function drive(
   clock: FakeClock,
-  pool: Pool<Coprocess>,
+  pool: Pool<HelperWorker>,
   done: () => boolean,
   limit: number,
 ): Promise<void> {
@@ -64,8 +95,8 @@ if (process.argv[2] === 'helper') {
       const clock = createClock();
       // The jobs share an engine of three units: a fourth worker only waits.
       const engine = new PQueue({ concurrency: 3 });
-      const started: Coprocess[] = [];
-      const closed: Coprocess[] = [];
+      const started: HelperWorker[] = [];
+      const closed: HelperWorker[] = [];
       await using pool = new Pool({
         // A computer with four CPUs and memory for many workers.
         size: new HillClimbing({
@@ -79,11 +110,7 @@ if (process.argv[2] === 'helper') {
         eviction: new NoEviction(),
         clock,
         create: () => {
-          const helper = new Coprocess(
-            process.execPath,
-            [import.meta.filename, 'helper'],
-            { name: 'helper' },
-          );
+          const helper = new HelperWorker();
           started.push(helper);
           void helper.exited().then(() => closed.push(helper));
           return helper;

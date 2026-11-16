@@ -49,7 +49,7 @@ if (role === 'helper') {
   }
 } else {
   // A worker is ready when its helper has the model in memory.
-  class ModelWorker implements Worker {
+  class ModelWorker implements Worker<unknown, unknown> {
     readonly #helper: Coprocess;
 
     constructor(cache: string) {
@@ -62,6 +62,10 @@ if (role === 'helper') {
 
     async ready(): Promise<void> {
       await this.#helper.request({ warm: true });
+    }
+
+    run(input: unknown): Promise<unknown> {
+      return this.#helper.request(input);
     }
 
     exited(): Promise<unknown> {

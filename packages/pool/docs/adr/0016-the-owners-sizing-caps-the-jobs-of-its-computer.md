@@ -1,6 +1,6 @@
 # The owner's sizing caps the jobs of its computer
 
-Status: Proposed 2026-11-16 for Ezz's review (backlog #3527). Not built.
+Status: Proposed 2026-11-16 for Ezz's review (backlog #3527). Built in `PoolWorkers` (2026-11-16).
 
 The Neural Engine limits the Vision jobs of a computer. Two programs together read 51 to 75 images a second on 2026-11-02, and 12 workers on one computer gave E5RT failures (context-compiler `docs/vision-*.md`). Something must cap the jobs that run at once. Two places can: the pool's own sizing, or a count in the shared store (pg-boss `groupConcurrency`, a cap for each group across all computers).
 

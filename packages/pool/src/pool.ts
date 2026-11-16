@@ -16,7 +16,7 @@ import type { Worker } from './worker.ts';
 // eager and the worker was idle: at once when it ran 10 minutes, after a
 // back-off when it exited early or its warm-up failed. The owner disposes the
 // pool, which stops every worker.
-export class Pool<T extends Worker> implements AsyncDisposable {
+export class Pool<T extends Worker<never, unknown>> implements AsyncDisposable {
   readonly #queue: PQueue;
   readonly #slots: Slots<T>;
   readonly #clock: Clock;

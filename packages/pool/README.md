@@ -16,10 +16,10 @@ await using pool = new Pool({
   clock: globalThis,
   create: () => new VisionWorker('/path/to/vision-worker'),
 });
-const text = await pool.use((worker) => worker.read('/tmp/receipt.png'));
+const text = await pool.use((worker) => worker.run('/tmp/receipt.png'));
 ```
 
-A worker gives `exited()`, `kill()`, `close()`, and optionally `ready()`. A `Coprocess` of `@zukhruf/coprocess` has all of them.
+A worker gives `run(input)`, `exited()`, `kill()`, `close()`, and optionally `ready()`. `run` does one job and resolves with its output ([ADR 0012](./docs/adr/0012-a-job-is-data-and-the-worker-kind-runs-it.md)). A `Coprocess` of `@zukhruf/coprocess` has all of them except `run`, so a worker class keeps the `Coprocess` and gives its `request` as `run`.
 
 A job takes an idle worker first. When no worker is idle, the job takes a worker that starts. Only when no worker starts does the job start a new worker. Of the idle workers, a job takes the one in the lowest slot. Thus jobs one at a time use one worker, and the other idle workers stay idle until their eviction lets them go.
 
@@ -126,7 +126,7 @@ An eviction of your own gets the clock of the pool as the third argument of `idl
 
 ## One pool for the computer
 
-Design for review (backlog #3527). `WorkerKind` and `computerStore` are built. The rest is not built yet. The text above tells what the package does today. [ADR 0011](./docs/adr/0011-every-pool-is-a-pool-for-the-computer-and-one-owner-pulls-its-jobs-from-a-store-that-every-host-writes-to.md) to [ADR 0026](./docs/adr/0026-start-accepts-a-job-now-and-a-job-handle-reads-its-output-later-from-any-host.md) record the design. The tickets and the research named here are in the pool map, `.scratch/one-pool-for-the-computer/` at the workspace root, which git does not track.
+Design for review (backlog #3527). `WorkerKind`, `computerStore` and `PoolWorkers` are built. `PoolWorkers` does not yet `touch` its running jobs or apply the kind's time limit, so a job that runs longer than its heartbeat of 10 s goes back to the store. It has no `stats` and no `ready()` yet. `Pool` with `start`, `handle` and `run` is not built yet, and `use` stays until it is. The text above tells what the package does today. [ADR 0011](./docs/adr/0011-every-pool-is-a-pool-for-the-computer-and-one-owner-pulls-its-jobs-from-a-store-that-every-host-writes-to.md) to [ADR 0026](./docs/adr/0026-start-accepts-a-job-now-and-a-job-handle-reads-its-output-later-from-any-host.md) record the design. The tickets and the research named here are in the pool map, `.scratch/one-pool-for-the-computer/` at the workspace root, which git does not track.
 
 Today each host builds its own pool, so several hosts on one computer run several full pools, and they compete for one Neural Engine (#2896, #3868). In the design, every pool is a pool for the computer. On each computer, one host owns the workers of a pool. Every host writes its jobs to one store, and only the owner takes them. A job is data, so it can go from one host to another. The pool for the computer replaces the pool of today: `use((worker) => …)` goes away.
 
@@ -214,7 +214,7 @@ const store = join(scratch.path, 'store.sqlite');
 ### The API
 
 ```ts
-import type { Clock } from '@zukhruf/async';
+import type { WallClock } from '@zukhruf/async';
 
 export class WorkerKind<Input, Output> {
   constructor(options: {
@@ -238,7 +238,7 @@ export class Pool<Input, Output> implements AsyncDisposable {
   constructor(options: {
     kind: WorkerKind<Input, Output>;
     store: string;
-    clock: Clock;
+    clock: WallClock;
   });
   /** Sends the job, and resolves when the store has it. */
   start(input: Input): Promise<JobHandle<Output>>;
@@ -256,7 +256,7 @@ export class PoolWorkers<Input, Output> implements AsyncDisposable {
   constructor(options: {
     kind: WorkerKind<Input, Output>;
     store: string;
-    clock: Clock;
+    clock: WallClock;
     create: () => Worker<Input, Output>;
     size: Sizing;
     startup: Startup;
@@ -309,6 +309,8 @@ export class DisposedError extends Error {}
 - **The two roles.** `Pool` sends. `PoolWorkers` offers workers and has no `run`. They meet only through the worker kind and the store, as BullMQ's `Queue` and `Worker` meet through the queue name ([ADR 0013](./docs/adr/0013-pool-sends-jobs-and-pool-workers-offers-the-workers-of-its-host.md)).
 - **A job is data.** The input and the output are JSON. A file goes by reference: a path on one computer. The code of a job is the worker's `run` ([ADR 0012](./docs/adr/0012-a-job-is-data-and-the-worker-kind-runs-it.md)).
 - **The store** is a required address. A path of a SQLite file is the store of one computer, through [`@zukhruf/sqlite-queue`](../sqlite/queue/README.md). A `postgres://` address joins computers, through pg-boss. `computerStore(env)` gives `zukhruf-pool/store.sqlite` in the user's state folder: `$HOME/Library/Application Support` on macOS, `$XDG_STATE_HOME` (or `$HOME/.local/state`) on Linux, `%LOCALAPPDATA%` on Windows. It reads `process.platform`, and takes `env` as its input, as Go's `os.UserConfigDir` reads `runtime.GOOS`. Every `Pool` and `PoolWorkers` opens the store and creates the queue of its revision ([ADR 0015](./docs/adr/0015-the-store-is-a-required-input-and-computer-store-gives-the-store-of-the-computer.md)).
+- **The clock.** The store keeps the wall time of each job, so `Pool` and `PoolWorkers` take a `WallClock` of [`@zukhruf/async`](../async/README.md): `globalThis` in production. The pool gives `@zukhruf/sqlite-queue` pg-boss's clock, made from it.
+- **A failure of the store** ends the host's campaign or ownership: a standby stops its campaign, and an owner stops fetching, finishes its running jobs, closes its workers and resigns, and the disposal of `PoolWorkers` rejects with the failure. The jobs stay in the store for the next owner.
 - **The cap.** The owner's sizing caps the jobs of its computer. The store keeps no count of running jobs. A new owner starts its sizing fresh ([ADR 0016](./docs/adr/0016-the-owners-sizing-caps-the-jobs-of-its-computer.md)).
 - **The owner asks, then takes.** It calls `fetch(name, { batchSize: free })` on the queue of its revision for its free workers, settles each job with `complete` or `fail` by its attempt, and calls `touch` for each running job every 5 s on a heartbeat of 10 s. It fetches when a worker becomes free, at a "new job" wake, and at the backstop ([ADR 0017](./docs/adr/0017-the-owner-asks-then-takes-as-many-jobs-as-it-has-free-workers.md)).
 - **News travels by push.** Two channels for each pool: "a new job", with the revision, which the owner hears, and "an output", with the job id, which each waiting `Pool` hears. On one computer they go through [`@zukhruf/sqlite-notify`](../sqlite/notify/README.md), across computers through Postgres `LISTEN` / `NOTIFY`. The store is the truth, and a wake only says "read the store". A backstop each second on one computer finds a lost wake, and a job that the store's monitor failed ([ADR 0018](./docs/adr/0018-news-travels-by-push-through-the-notify-of-the-store-with-a-backstop.md)).
