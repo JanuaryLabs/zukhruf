@@ -75,3 +75,71 @@ _Avoid_: Free, available
 **Stats**:
 The counts of the workers that start, the idle workers, the lent workers, and the jobs that wait for a worker, at the moment of one read.
 _Avoid_: Metrics (a metric is measured over time), status (one value)
+
+## The pool for the computer
+
+Design for review: not built yet (backlog #3527). The words above tell what the package does today. The words below are the words of the design in the README section "One pool for the computer" and ADRs 0011 to 0026. When the design is built, they join the list above.
+
+**Job** (in the design):
+Data: the input of one worker kind, which a caller sends to the store, and the output that the owner writes back. The pool still lends one worker to the job until the job ends.
+_Avoid_: Task, request, message
+
+**Host**:
+One running copy of a program that builds the pool. Several hosts on one computer build the same pool.
+_Avoid_: Process, instance
+
+**Owner**:
+The one host on a computer that holds the workers of a pool. Leader election picks it.
+_Avoid_: Leader (an election term), coordinator, master
+
+**Standby**:
+A host that offers its workers and does not own. It starts no workers until it owns.
+_Avoid_: Follower, candidate (election terms), replica
+
+**Store**:
+The durable place of the jobs of a pool, which every host writes to: a SQLite file on one computer, a Postgres database across computers.
+_Avoid_: Queue (one name in the store), database, broker
+
+**Worker kind**:
+The name, the revision and the job rules of a pool, with the types of its input and its output. `Pool` and `PoolWorkers` both take it.
+_Avoid_: Worker class (the class that `create` builds), job type, task
+
+**Revision**:
+The integer of a worker kind that its author raises when `run` changes in a way that matters. Each revision has its own queue in the store. An owner refuses a job of an older revision.
+_Avoid_: Version (a release of a package)
+
+**Input**, **Output**:
+The JSON data that a job takes and gives. A file goes by reference, never as bytes.
+_Avoid_: Payload, arguments, result
+
+**Caller**:
+A host whose `run` waits for a job. The job of a caller is cancelled when the caller's host is gone. A host that only holds a job handle is not a caller.
+_Avoid_: Client, sender, requester
+
+**Job handle**:
+The value that `start` and `handle(id)` give: the id of one job in the store, a wait for its output, and its cancel. Any host can make the handle of a job from its id until the store deletes the job. In the code: `JobHandle`, after Temporal's `WorkflowHandle`.
+_Avoid_: Future, promise (a promise belongs to one host), AsyncResult (Celery's name), ticket
+
+**Shared job**:
+A job of a kind whose policy is `exclusive`. Callers that give identical inputs share it.
+_Avoid_: Singleton, deduplicated job
+
+**Leave**:
+The end of one caller's wait on a shared job, or `cancel()` of its job handle. The store does not change, and the job runs to its end for the other callers.
+_Avoid_: Cancel (a cancel ends the job), detach
+
+**Cancel**:
+The end of a job that cannot be shared, by its caller or by `cancel()` of its job handle. The store drops the job when it waits, and the owner kills its worker when it runs.
+_Avoid_: Abort (the caller's signal aborts, and the pool then cancels or leaves), revoke
+
+**Wake**:
+A notification through the store that tells a host to read the store: "a new job" for the owner, or "an output" with a job id for a caller.
+_Avoid_: Signal, event, ping
+
+**Backstop**:
+The read of the store at a fixed interval that finds what no wake told: a lost wake, or a job that the store's monitor failed.
+_Avoid_: Poll (a read with no wake at all), fallback
+
+**Hand-over**:
+The owner's clean exit. It stops fetching, finishes its running jobs, resigns and closes its workers.
+_Avoid_: Failover (that follows the end of an owner), drain
