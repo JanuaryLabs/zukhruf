@@ -1,6 +1,6 @@
 # A hung owner is ended by the election, and its late acts are fenced
 
-Status: Proposed 2026-11-16 for Ezz's review (backlog #3527). The election part is built (backlog #4371). `PoolWorkers` campaigns with `timeout: Infinity` and the signal of its disposal (2026-11-16).
+Status: Proposed 2026-11-16 for Ezz's review (backlog #3527). The election part is built (backlog #4371). `PoolWorkers` campaigns with `timeout: Infinity` and the signal of its disposal (2026-11-16). It kills the worker of a hung helper at the kind's time limit, and settles nothing for a job that a touch did not find under its claim.
 
 The claim of `SqliteElection` is a kernel file lock. A hung owner keeps it: a process that `SIGSTOP` stopped, a debugger, or a blocked event loop. No standby then wins, and every job of the computer waits (map ticket 13, research 02).
 

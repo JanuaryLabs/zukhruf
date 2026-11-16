@@ -4,11 +4,25 @@ import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { TestContext } from 'node:test';
 
+import { createClock } from '@sinonjs/fake-timers';
+
 import { Latch } from '@zukhruf/async';
-import { SqliteJobQueue } from '@zukhruf/sqlite-queue';
+import {
+  SqliteJobQueue,
+  type SqliteJobQueueOptions,
+} from '@zukhruf/sqlite-queue';
 import { settleWithin } from '@zukhruf/testing/async';
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 import { describe, test } from '@zukhruf/testing/node';
+
+import {
+  Fixed,
+  NoEviction,
+  Parallel,
+  PoolWorkers,
+  type Worker,
+  WorkerKind,
+} from './index.ts';
 
 // The longest wait for a fact that should hold at once; it bounds a broken
 // run and asserts no speed.
@@ -21,8 +35,9 @@ const queue = 'echo.r1';
 // of argv[1], with the settings of argv[2], and reports to the test over IPC.
 // Its workers live in the host: run reports the job and answers with the
 // host's pid after input.ms, throws input.fail, and never answers in the host
-// whose pid is input.hangIn. "dispose" disposes the PoolWorkers; a lingering
-// host then stays alive.
+// whose pid is input.hangIn. A worker of a host with closeHangs never ends
+// its close. "dispose" disposes the PoolWorkers; a lingering host then stays
+// alive.
 const host = `
 import { setTimeout as sleep } from 'node:timers/promises';
 import { Fixed, NoEviction, Parallel, PoolWorkers, WorkerKind } from ${JSON.stringify(new URL('./index.ts', import.meta.url).href)};
@@ -41,7 +56,10 @@ class HostWorker {
   }
   exited() { return this.#exit.promise; }
   kill() { this.#exit.resolve(); }
-  async close() { this.#exit.resolve(); }
+  async close() {
+    this.#exit.resolve();
+    if (settings.closeHangs) await new Promise(() => {});
+  }
 }
 
 let workers;
@@ -90,6 +108,7 @@ class Host implements AsyncDisposable {
       retryLimit: number;
       policy?: 'standard' | 'exclusive';
       linger?: boolean;
+      closeHangs?: boolean;
     },
     cwd?: string,
   ) {
@@ -156,12 +175,16 @@ class Host implements AsyncDisposable {
   }
 }
 
-/** The test's own connection to the store, as a host that only sends. */
-async function sender(store: string) {
+/**
+ * The test's own connection to the store, as a host that only sends. On a
+ * fake clock it stamps its jobs with the time of the owner's clock.
+ */
+async function sender(store: string, clock?: FakeClock) {
   const jobs = await new SqliteJobQueue({
     path: store,
     supervise: false,
     schedule: false,
+    ...(clock && { clock: bossClock(clock) }),
   }).start();
   return { jobs, [Symbol.asyncDispose]: () => jobs.stop() };
 }
@@ -347,6 +370,43 @@ describe('PoolWorkers', { concurrency: true }, () => {
     assert.equal(owner.running, true);
   });
 
+  test('an owner that disposes resigns once its running job ends, before its workers close', async (t) => {
+    await using folder = await new TemporaryFiles().directory('pool-');
+    const store = join(folder.path, 'store.sqlite');
+    await using owner = new Host(store, {
+      workers: 1,
+      retryLimit: 0,
+      closeHangs: true,
+    });
+    await owner.report(owns, 'the owner');
+    await using standby = new Host(store, { workers: 1, retryLimit: 0 });
+    await standby.report(constructed, 'the standby');
+    await using sending = await sender(store);
+    await sending.jobs.send(queue, { input: { id: 'running', ms: 500 } });
+    await owner.report((report) => 'started' in report, 'the start');
+
+    owner.send('dispose');
+    await standby.report(owns, 'the standby owns');
+    const [whenOwned] = await sending.jobs.findJobs(queue);
+    assert.equal(whenOwned?.state, 'completed');
+    await sending.jobs.send(queue, { input: { id: 'next' } });
+
+    const jobs = await settled(t, sending.jobs, 2);
+    assert.deepEqual(
+      Object.fromEntries(
+        jobs.map((job) => [inputOf(job.data).id, [job.state, job.output]]),
+      ),
+      {
+        running: ['completed', { output: { host: owner.pid, id: 'running' } }],
+        next: ['completed', { output: { host: standby.pid, id: 'next' } }],
+      },
+    );
+    assert.equal(
+      owner.reports.some((report) => 'disposed' in report),
+      false,
+    );
+  });
+
   test('a host that disposes its PoolWorkers exits by itself', async () => {
     await using folder = await new TemporaryFiles().directory('pool-');
     const store = join(folder.path, 'store.sqlite');
@@ -362,7 +422,320 @@ describe('PoolWorkers', { concurrency: true }, () => {
   });
 });
 
-/** Waits until the store has `count` jobs of the queue, each settled. */
+describe('PoolWorkers on a fake clock', { concurrency: true }, () => {
+  test('a running job that the store cancels loses its worker at the next touch, and the other running job keeps its own', async (t) => {
+    await using folder = await new TemporaryFiles().directory('pool-');
+    const clock = createClock(Date.now());
+    const workers = new HeldWorkers();
+    await using owner = await ownerOn(t, clock, folder.path, workers, {
+      workers: 2,
+      expireInSeconds: 60,
+    });
+    await using sending = await sender(owner.store, clock);
+    const cancelled = await sending.jobs.send(queue, { input: { id: 'a' } });
+    await sending.jobs.send(queue, { input: { id: 'b' } });
+    await fetched(t, clock, workers, 'a', 'b');
+
+    await sending.jobs.cancel(queue, cancelled!);
+    await runFor(clock, 5_000);
+
+    assert.equal(workers.killed('a'), true);
+    assert.equal(workers.killed('b'), false);
+    // The killed worker's slot takes the next job on a new worker, while b
+    // still runs.
+    await sending.jobs.send(queue, { input: { id: 'c' } });
+    await fetched(t, clock, workers, 'c');
+    assert.notEqual(workers.of('c'), workers.of('a'));
+    workers.answer('b');
+    workers.answer('c');
+    const jobs = await settled(t, sending.jobs, 3);
+    assert.deepEqual(
+      Object.fromEntries(jobs.map((job) => [inputOf(job.data).id, job.state])),
+      { a: 'cancelled', b: 'completed', c: 'completed' },
+    );
+  });
+
+  test("the owner kills the worker of a job at the kind's expireInSeconds, not before, and fails the job", async (t) => {
+    await using folder = await new TemporaryFiles().directory('pool-');
+    const clock = createClock(Date.now());
+    const workers = new HeldWorkers();
+    await using owner = await ownerOn(t, clock, folder.path, workers, {
+      workers: 1,
+      expireInSeconds: 7,
+    });
+    await using sending = await sender(owner.store, clock);
+    await sending.jobs.send(queue, { input: { id: 'hung' } });
+    await fetched(t, clock, workers, 'hung');
+    const limit = (await fetchedAt(sending.jobs)) + 7_000;
+
+    await runFor(clock, limit - 10 - clock.now);
+    const [early] = await sending.jobs.findJobs(queue);
+    assert.deepEqual([early?.state, workers.killed('hung')], ['active', false]);
+    await runFor(clock, 20);
+
+    assert.equal(workers.killed('hung'), true);
+    const [job] = await settled(t, sending.jobs, 1);
+    assert.deepEqual(
+      [job?.state, job?.output],
+      ['failed', { name: 'Error', message: 'handler execution exceeded 7s' }],
+    );
+    // The slot of the killed worker runs the next job on a new worker.
+    await sending.jobs.send(queue, { input: { id: 'next' } });
+    await fetched(t, clock, workers, 'next');
+    assert.notEqual(workers.of('next'), workers.of('hung'));
+    workers.answer('next');
+    await settled(t, sending.jobs, 2);
+  });
+
+  test('the owner touches each running job every 5 s, so jobs that run past their heartbeat of 10 s stay active and complete', async (t) => {
+    await using folder = await new TemporaryFiles().directory('pool-');
+    const clock = createClock(Date.now());
+    const workers = new HeldWorkers();
+    await using owner = await ownerOn(t, clock, folder.path, workers, {
+      workers: 2,
+      expireInSeconds: 60,
+    });
+    await using sending = await sender(owner.store, clock);
+    await sending.jobs.send(queue, { input: { id: 'a' } });
+    await sending.jobs.send(queue, { input: { id: 'b' } });
+    await fetched(t, clock, workers, 'a', 'b');
+
+    await runFor(clock, 6_000);
+    const touched = await sending.jobs.findJobs(queue);
+    assert.equal(touched.length, 2);
+    for (const job of touched) {
+      const at = job.heartbeatOn!.getTime() - job.startedOn!.getTime();
+      assert.ok(at >= 5_000 && at < 5_100, `touched at ${at}`);
+    }
+    await runFor(clock, 19_000);
+    const running = await sending.jobs.findJobs(queue);
+    assert.deepEqual(
+      running.map((job) => job.state),
+      ['active', 'active'],
+    );
+    workers.answer('a');
+    workers.answer('b');
+
+    const jobs = await settled(t, sending.jobs, 2);
+    assert.deepEqual(
+      jobs.map((job) => job.state),
+      ['completed', 'completed'],
+    );
+  });
+
+  test("an owner that disposes while its worker hangs ends its disposal at the kind's expireInSeconds and fails the job", async (t) => {
+    await using folder = await new TemporaryFiles().directory('pool-');
+    const clock = createClock(Date.now());
+    const workers = new HeldWorkers();
+    await using owner = await ownerOn(t, clock, folder.path, workers, {
+      workers: 1,
+      expireInSeconds: 7,
+    });
+    await using sending = await sender(owner.store, clock);
+    await sending.jobs.send(queue, { input: { id: 'hung' } });
+    await fetched(t, clock, workers, 'hung');
+
+    const limit = (await fetchedAt(sending.jobs)) + 7_000;
+
+    let disposed = false;
+    const disposal = owner.dispose().finally(() => {
+      disposed = true;
+    });
+    await runFor(clock, limit - 10 - clock.now);
+    assert.equal(disposed, false);
+    await runFor(clock, 20);
+    await settleWithin(disposal, 'the disposal', factTimeout);
+
+    assert.equal(workers.killed('hung'), true);
+    const [job] = await sending.jobs.findJobs(queue);
+    assert.deepEqual(
+      [job?.state, job?.output],
+      ['failed', { name: 'Error', message: 'handler execution exceeded 7s' }],
+    );
+  });
+});
+
+type FakeClock = ReturnType<typeof createClock>;
+type BossClock = NonNullable<SqliteJobQueueOptions['clock']>;
+
+/**
+ * Workers in the test process. run holds each job until the test answers it,
+ * and kill only records the kill and ends the worker, so a killed job never
+ * answers.
+ */
+class HeldWorkers {
+  readonly #jobs = new Map<string, HeldJob>();
+  readonly #killed = new Set<HeldWorker>();
+
+  create = (): HeldWorker => new HeldWorker(this.#jobs, this.#killed);
+
+  running(id: string): boolean {
+    return this.#jobs.has(id);
+  }
+
+  /** The worker that ran the job. */
+  of(id: string): HeldWorker {
+    return this.#job(id).worker;
+  }
+
+  /** Whether the worker that ran the job was killed. */
+  killed(id: string): boolean {
+    return this.#killed.has(this.of(id));
+  }
+
+  answer(id: string): void {
+    this.#job(id).answer();
+  }
+
+  answerAll(): void {
+    for (const { answer } of this.#jobs.values()) answer();
+  }
+
+  #job(id: string): HeldJob {
+    const job = this.#jobs.get(id);
+    assert.ok(job, `job ${id} never ran`);
+    return job;
+  }
+}
+
+interface HeldJob {
+  readonly worker: HeldWorker;
+  readonly answer: () => void;
+}
+
+class HeldWorker implements Worker<{ id: string }, { id: string }> {
+  readonly #exit = new Latch();
+  readonly #jobs: Map<string, HeldJob>;
+  readonly #killed: Set<HeldWorker>;
+
+  constructor(jobs: Map<string, HeldJob>, killed: Set<HeldWorker>) {
+    this.#jobs = jobs;
+    this.#killed = killed;
+  }
+
+  run(input: { id: string }): Promise<{ id: string }> {
+    const answered = Promise.withResolvers<{ id: string }>();
+    this.#jobs.set(input.id, {
+      worker: this,
+      answer: () => answered.resolve({ id: input.id }),
+    });
+    return answered.promise;
+  }
+
+  exited(): Promise<void> {
+    return this.#exit.wait();
+  }
+
+  kill(): void {
+    this.#killed.add(this);
+    this.#exit.open();
+  }
+
+  async close(): Promise<void> {
+    this.#exit.open();
+  }
+}
+
+/** PoolWorkers of the "echo" kind in the test process, once it owns. */
+async function ownerOn(
+  t: TestContext,
+  clock: FakeClock,
+  folder: string,
+  workers: HeldWorkers,
+  settings: { workers: number; expireInSeconds: number },
+) {
+  const store = join(folder, 'store.sqlite');
+  let created = 0;
+  const owner = new PoolWorkers({
+    kind: new WorkerKind<{ id: string }, { id: string }>({
+      name: 'echo',
+      revision: 1,
+      policy: 'standard',
+      retryLimit: 0,
+      expireInSeconds: settings.expireInSeconds,
+    }),
+    store,
+    clock,
+    create: () => {
+      created++;
+      return workers.create();
+    },
+    size: new Fixed(settings.workers),
+    startup: new Parallel(),
+    eviction: new NoEviction(),
+  });
+  await t.waitFor(() => assert.ok(created > 0, 'the owner'), {
+    interval: 5,
+    timeout: factTimeout,
+  });
+  let disposal: Promise<void> | undefined;
+  const dispose = () => (disposal ??= owner[Symbol.asyncDispose]());
+  return {
+    store,
+    /** Disposes the owner once: its running jobs end by themselves or at the time limit. */
+    dispose,
+    /** Answers every held job first, so a failed test does not wait for a time limit on a clock that stands still. */
+    [Symbol.asyncDispose]: () => {
+      workers.answerAll();
+      return dispose();
+    },
+  };
+}
+
+/**
+ * Moves the fake clock `ms` milliseconds, 10 ms at a time, with a turn of the
+ * event loop after each step for the store's SQLite work.
+ */
+async function runFor(clock: FakeClock, ms: number): Promise<void> {
+  const end = clock.now + ms;
+  while (clock.now < end) {
+    await clock.tickAsync(10);
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+}
+
+/**
+ * Moves the fake clock past the owner's backstop, which fetches the jobs that
+ * wait, then waits in real time, with the clock still, until each job of `ids`
+ * runs on a worker: a worker's start and the election take real I/O.
+ */
+async function fetched(
+  t: TestContext,
+  clock: FakeClock,
+  workers: HeldWorkers,
+  ...ids: string[]
+): Promise<void> {
+  await runFor(clock, 1_000);
+  await t.waitFor(
+    () => {
+      for (const id of ids) assert.ok(workers.running(id), `job ${id} runs`);
+    },
+    { interval: 5, timeout: factTimeout },
+  );
+}
+
+/** The fake-clock time at which the owner fetched the one job of the queue. */
+async function fetchedAt(jobs: SqliteJobQueue): Promise<number> {
+  const [job] = await jobs.findJobs(queue);
+  assert.ok(job?.startedOn, 'the job was fetched');
+  return job.startedOn.getTime();
+}
+
+/** pg-boss's clock, which the queue takes, on the fake clock. */
+function bossClock(clock: FakeClock): BossClock {
+  // pg-boss's timers are opaque, and a method's parameters are bivariant, so
+  // the fake clock's timers fit them.
+  const timers: Omit<BossClock, 'now'> = clock;
+  return {
+    now: () => clock.now,
+    setTimeout: (callback, ms) => timers.setTimeout(callback, ms),
+    clearTimeout: (timer) => timers.clearTimeout(timer),
+    setInterval: (callback, ms) => timers.setInterval(callback, ms),
+    clearInterval: (timer) => timers.clearInterval(timer),
+  };
+}
+
+/** Waits until the store has `count` jobs of the queue, each settled or cancelled. */
 function settled(
   t: TestContext,
   jobs: SqliteJobQueue,
@@ -373,7 +746,8 @@ function settled(
     async () => {
       const found = await jobs.findJobs(queue);
       assert.equal(found.length, count);
-      for (const job of found) assert.match(job.state, /^(completed|failed)$/);
+      for (const job of found)
+        assert.match(job.state, /^(completed|failed|cancelled)$/);
       return found;
     },
     { interval: 20, timeout },

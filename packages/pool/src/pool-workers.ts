@@ -3,9 +3,9 @@ import { SqliteElection, type Term } from '@zukhruf/election';
 
 import type { Eviction } from './eviction.ts';
 import type { Sizing } from './sizing.ts';
-import { Slots } from './slots.ts';
+import { type Slot, Slots } from './slots.ts';
 import type { Startup } from './startup.ts';
-import { Store } from './store.ts';
+import { Store, TOUCH_INTERVAL } from './store.ts';
 import type { WorkerKind } from './worker-kind.ts';
 import type { Worker } from './worker.ts';
 
@@ -17,14 +17,26 @@ interface Envelope<Input> {
   readonly input: Input;
 }
 
+/** The end of one run of a job on a worker. */
+type Outcome<Output> =
+  | { readonly output: Output }
+  | { readonly failure: unknown }
+  // The kind's time limit ended first.
+  | { readonly expired: true }
+  // A touch did not find the job under the owner's claim: the store took it
+  // back, for example by a cancel or by a heartbeat that lapsed.
+  | { readonly gone: true };
+
 /**
  * Offers this host's workers of one kind, and owns them while this host
  * leads the election of the kind's store (ADR 0013). A standby starts no
  * worker (ADR 0023). The owner takes as many jobs from the queue of its
  * revision as it has free workers, runs each on a worker, and settles it with
  * complete or fail (ADR 0017), so its sizing caps the jobs of its computer
- * (ADR 0016). The disposal stops fetching, waits for the running jobs, closes
- * the workers and resigns.
+ * (ADR 0016). While a job runs, the owner touches it every 5 s, and kills its
+ * worker when the store took the job back or the kind's time limit ends. The
+ * disposal is a hand-over: it stops fetching, waits for the running jobs,
+ * resigns, and then closes the workers (ADR 0023).
  */
 export class PoolWorkers<Input, Output> implements AsyncDisposable {
   readonly #kind: WorkerKind<Input, Output>;
@@ -131,8 +143,9 @@ export class PoolWorkers<Input, Output> implements AsyncDisposable {
       }
     } finally {
       await Promise.all(running);
-      await slots[Symbol.asyncDispose]();
+      // A standby takes over before the workers close: a close can be slow.
       await term.resign();
+      await slots[Symbol.asyncDispose]();
     }
   }
 
@@ -150,6 +163,10 @@ export class PoolWorkers<Input, Output> implements AsyncDisposable {
 
   // Runs one fetched job on a worker, and settles it by its attempt. A
   // worker that fails to start fails the job, as the worker's own failure.
+  // The kind's time limit and the touches start at the fetch, as the store
+  // counts both from it, so a warm start counts too. At the time limit the
+  // owner kills the worker and fails the job; when the store took the job
+  // back, it kills the worker and settles nothing.
   async #run(
     slots: Slots<Worker<Input, Output>>,
     job: { id: string; retryCount: number; data: unknown },
@@ -157,36 +174,94 @@ export class PoolWorkers<Input, Output> implements AsyncDisposable {
   ): Promise<void> {
     const attempt = { id: job.id, retryCount: job.retryCount };
     const slot = slots.lend();
+    const ended = new AbortController();
     try {
-      const outcome = await slots.borrow(slot).then(
-        async (worker) => {
-          const started = this.#clock.performance.now();
-          try {
-            if (!isEnvelope<Input>(job.data))
-              throw new TypeError('The job has no input: no Pool sent it.');
-            return { output: await worker.run(job.data.input) };
-          } catch (error) {
-            return { failure: error };
-          } finally {
-            slots.record(started, backlog());
-          }
-        },
-        (error: unknown) => ({ failure: error }),
-      );
+      const outcome = await Promise.race([
+        this.#work(slots, slot, job.data, backlog, ended.signal),
+        this.#watch(attempt, ended.signal),
+      ]);
+      ended.abort();
       // A settle that affects no row finds the job under another claim: the
       // store fenced it, and the output is dropped (ADR 0017).
       if ('output' in outcome)
         await this.#store.queue.complete(this.#kind.queue, attempt, {
           output: outcome.output,
         });
-      else
+      else if ('failure' in outcome)
         await this.#store.queue.fail(
           this.#kind.queue,
           attempt,
           failure(outcome.failure),
         );
+      else if ('expired' in outcome)
+        await this.#store.queue.fail(
+          this.#kind.queue,
+          attempt,
+          // The error of pg-boss's work at the time limit (manager.js:606).
+          failure(
+            new Error(
+              `handler execution exceeded ${this.#kind.expireInSeconds}s`,
+            ),
+          ),
+        );
     } finally {
+      ended.abort();
       slots.release(slot);
+    }
+  }
+
+  // Runs the input on the worker of the slot. The end of the run kills the
+  // worker of a run that has not ended, and leaves its outcome unread.
+  async #work(
+    slots: Slots<Worker<Input, Output>>,
+    slot: Slot<Worker<Input, Output>>,
+    data: unknown,
+    backlog: () => boolean,
+    ended: AbortSignal,
+  ): Promise<Outcome<Output>> {
+    let worker: Worker<Input, Output>;
+    try {
+      worker = await slots.borrow(slot);
+    } catch (error) {
+      return { failure: error };
+    }
+    if (ended.aborted) return { gone: true };
+    const kill = () => slots.kill(slot, worker);
+    ended.addEventListener('abort', kill, { once: true });
+    const started = this.#clock.performance.now();
+    try {
+      if (!isEnvelope<Input>(data))
+        throw new TypeError('The job has no input: no Pool sent it.');
+      return { output: await worker.run(data.input) };
+    } catch (error) {
+      return { failure: error };
+    } finally {
+      ended.removeEventListener('abort', kill);
+      if (!ended.aborted) slots.record(started, backlog());
+    }
+  }
+
+  // Touches the job every 5 s until the run ends, and resolves when the
+  // kind's time limit ends or a touch finds that the store took the job back.
+  async #watch(
+    attempt: { id: string; retryCount: number },
+    ended: AbortSignal,
+  ): Promise<Outcome<Output>> {
+    const deadline =
+      this.#clock.performance.now() + this.#kind.expireInSeconds * 1_000;
+    for (;;) {
+      const left = deadline - this.#clock.performance.now();
+      if (left <= 0) return { expired: true };
+      await delay(Math.min(TOUCH_INTERVAL, left), {
+        clock: this.#clock,
+        signal: ended,
+      });
+      if (this.#clock.performance.now() >= deadline) return { expired: true };
+      const { affected } = await this.#store.queue.touch(
+        this.#kind.queue,
+        attempt,
+      );
+      if (affected === 0) return { gone: true };
     }
   }
 

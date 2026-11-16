@@ -16,6 +16,9 @@ import type { WorkerKind } from './worker-kind.ts';
 // owner goes back to the store about 11 s after its last touch (ADR 0017).
 const HEARTBEAT_SECONDS = 10;
 
+/** The owner touches each running job at half its heartbeat, as pg-boss's work does (manager.js:538). */
+export const TOUCH_INTERVAL = (HEARTBEAT_SECONDS * 1_000) / 2;
+
 type BossClock = NonNullable<SqliteJobQueueOptions['clock']>;
 
 /**

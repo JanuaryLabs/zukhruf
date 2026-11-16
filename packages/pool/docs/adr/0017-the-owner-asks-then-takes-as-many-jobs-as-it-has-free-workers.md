@@ -1,6 +1,6 @@
 # The owner asks, then takes as many jobs as it has free workers
 
-Status: Proposed 2026-11-16 for Ezz's review (backlog #3527). Partly built in `PoolWorkers` (2026-11-16): the fetch of the free workers, the settle by the attempt, the queue rules with `heartbeatSeconds: 10`, and the supervise and monitor passes of 1 s. It fetches when a worker becomes free and at the backstop. The `touch` every 5 s, the time limit, the cancel from the store, and the "new job" wake are not built yet.
+Status: Proposed 2026-11-16 for Ezz's review (backlog #3527). Partly built in `PoolWorkers` (2026-11-16): the fetch of the free workers, the settle by the attempt, the queue rules with `heartbeatSeconds: 10`, and the supervise and monitor passes of 1 s. It fetches when a worker becomes free and at the backstop. It touches each running job every 5 s, and kills the worker at the time limit or when a touch affects 0 rows. The "new job" wake is not built yet.
 
 The owner's sizing changes the number of workers while the pool runs ([ADR 0016](./0016-the-owners-sizing-caps-the-jobs-of-its-computer.md)). pg-boss's `work(name, options, handler)` fixes `localConcurrency` and `batchSize` when it is called, and polls at least every 500 ms. With a fixed count above the size of the pool, the store gives the owner jobs that it cannot start. A fetched job is `active` in the store, so `pool.stats()` counts it as running. When the owner dies, such a job uses one of its retries although no worker ran it, and a kind with no retries loses a job that never started (map ticket 17).
 
