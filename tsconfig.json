@@ -108,6 +108,9 @@
       "path": "./packages/pipes"
     },
     {
+      "path": "./packages/ssh"
+    },
+    {
       "path": "./packages/sqlite/changefeed"
     },
     {

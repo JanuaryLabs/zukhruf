@@ -1,0 +1,50 @@
+{
+  "name": "@zukhruf/ssh",
+  "version": "0.8.25",
+  "private": true,
+  "description": "An SSH client and server that run inside the Node process: a client connects to an SSH server, runs commands in sessions, and dials sockets and ports on the remote host. After Go's `golang.org/x/crypto/ssh`, on ssh2.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JanuaryLabs/zukhruf",
+    "directory": "packages/ssh"
+  },
+  "bugs": {
+    "url": "https://github.com/JanuaryLabs/zukhruf/issues"
+  },
+  "homepage": "https://github.com/JanuaryLabs/zukhruf/tree/main/packages/ssh#readme",
+  "keywords": [
+    "ssh",
+    "ssh-client",
+    "ssh-server",
+    "openssh",
+    "ssh2",
+    "known-hosts",
+    "ssh-agent",
+    "port-forwarding"
+  ],
+  "type": "module",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "@zukhruf/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "!dist/spec/**",
+    "!**/*.tsbuildinfo",
+    "!**/*.test.*"
+  ],
+  "dependencies": {
+    "ssh2": "1.17.0"
+  },
+  "devDependencies": {
+    "@sinonjs/fake-timers": "15.4.0",
+    "@types/ssh2": "^1.15.6",
+    "@zukhruf/fs": "*"
+  }
+}

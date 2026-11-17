@@ -1,0 +1,7 @@
+{
+  "name": "ssh",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/ssh/src",
+  "projectType": "library",
+  "tags": ["layer:island", "std:base"]
+}

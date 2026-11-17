@@ -66,6 +66,8 @@
     "@vgpu/adapter-node": true,
     "nx": false,
     "unrs-resolver": false,
-    "fsevents": false
+    "fsevents": false,
+    "ssh2": false,
+    "cpu-features": false
   }
 }
