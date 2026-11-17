@@ -1,4 +1,4 @@
-import { Latch } from '@zukhruf/async';
+import { Future } from '@zukhruf/async';
 import { type Lease, LeaseController } from '@zukhruf/lease';
 
 /** What a term needs from its election to end: the backend's steps for the claim it won. */
@@ -25,9 +25,6 @@ export interface ResignOptions {
   clean: boolean;
 }
 
-/** How a term ended, as data: a latch never rejects. */
-type Ending = { failed: false } | { failed: true; error: unknown };
-
 /**
  * One term of the elected leader: a lease on leadership. It ends when the
  * leader resigns, when its process dies, or when the backend takes the claim
@@ -47,7 +44,7 @@ export class Term implements Lease, AsyncDisposable {
   readonly #lease = new LeaseController('leadership');
   /** Aborts once the term starts to end, by resign or by loss. */
   readonly #ending = new AbortController();
-  readonly #ended = new Latch<Ending>();
+  readonly #ended = new Future<void>();
   readonly #watching = new DisposableStack();
 
   constructor(
@@ -75,10 +72,14 @@ export class Term implements Lease, AsyncDisposable {
     if (!this.#ending.signal.aborted) {
       this.#ending.abort();
       this.#lease.end();
-      this.#ended.open(await this.#giveUp(options?.clean === true));
+      try {
+        await this.#giveUp(options?.clean === true);
+        this.#ended.resolve();
+      } catch (error) {
+        this.#ended.reject(error);
+      }
     }
-    const ending = await this.#ended.wait();
-    if (ending.failed) throw ending.error;
+    await this.#ended.wait();
   }
 
   [Symbol.asyncDispose](): Promise<void> {
@@ -96,10 +97,10 @@ export class Term implements Lease, AsyncDisposable {
     // held by then, so it stops before its claim is freed.
     void Promise.resolve()
       .then(() => this.#freeLost())
-      .then((ending) => this.#ended.open(ending));
+      .then(() => this.#ended.resolve());
   }
 
-  async #giveUp(clean: boolean): Promise<Ending> {
+  async #giveUp(clean: boolean): Promise<void> {
     try {
       this.#watching.dispose();
       // Before the release: until then no other candidate can hold the claim.
@@ -107,14 +108,9 @@ export class Term implements Lease, AsyncDisposable {
       await this.#steps.release();
     } catch (error) {
       await this.#steps.close().catch(() => {});
-      return { failed: true, error };
+      throw error;
     }
-    try {
-      await this.#steps.close();
-      return { failed: false };
-    } catch (error) {
-      return { failed: true, error };
-    }
+    await this.#steps.close();
   }
 
   /**
@@ -122,12 +118,11 @@ export class Term implements Lease, AsyncDisposable {
    * the next leader's claim. Only its resources are freed, and a loss has no
    * caller to report a failure to.
    */
-  async #freeLost(): Promise<Ending> {
+  async #freeLost(): Promise<void> {
     try {
       this.#watching.dispose();
     } finally {
       await this.#steps.close().catch(() => {});
     }
-    return { failed: false };
   }
 }
