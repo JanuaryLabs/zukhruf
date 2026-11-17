@@ -6,9 +6,9 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
+import { TemporaryFiles } from '@zukhruf/fs';
 import { Mutex } from '@zukhruf/mutex';
 import { TicketQueueFileStore } from '@zukhruf/mutex/file-system';
-import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { createApp } from './create-app.ts';
 import { FencedStock } from './fenced-stock.ts';

@@ -6,7 +6,7 @@ import { syncBuiltinESMExports } from 'node:module';
 import { dirname } from 'node:path';
 import { type TestContext, describe, test } from 'node:test';
 
-import { TemporaryFiles } from '@zukhruf/testing/fs';
+import { TemporaryFiles } from '@zukhruf/fs';
 
 import { FileTokenSource } from './index.ts';
 

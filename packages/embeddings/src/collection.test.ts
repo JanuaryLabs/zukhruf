@@ -4,8 +4,8 @@ import { describe, test } from 'node:test';
 
 import { MockEmbeddingModelV4 } from 'ai/test';
 
+import { TemporaryFiles } from '@zukhruf/fs';
 import { open } from '@zukhruf/sqlite-open';
-import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import {
   Collection,

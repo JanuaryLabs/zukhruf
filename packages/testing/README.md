@@ -23,7 +23,6 @@ Each area has its own import path, so a test loads only the drivers it uses. The
 | `@zukhruf/testing/bigquery`   | `BigQuery`                                             | `@google-cloud/bigquery` |
 | `@zukhruf/testing/http`       | `HttpServer`                                           |                          |
 | `@zukhruf/testing/streams`    | `StreamHarness`                                        |                          |
-| `@zukhruf/testing/fs`         | `TemporaryFiles`                                       |                          |
 | `@zukhruf/testing/msw`        | `Msw`                                                  | `msw`                    |
 | `@zukhruf/testing/preload`    | `notInstalled`                                         |                          |
 
@@ -227,25 +226,7 @@ The handler is a Node.js request listener. A web framework gives one for its fet
 
 ## Temporary directories
 
-`new TemporaryFiles().directory(prefix)` creates an empty directory in `os.tmpdir()`. Its name starts with `prefix`. The handle has `path` and `cleanup`. Disposal removes the directory and all that it holds.
-
-```ts
-import { TemporaryFiles } from '@zukhruf/testing/fs';
-
-const files = new TemporaryFiles();
-
-test('writes the report', async (t) => {
-  await using directory = await files.directory('report-');
-  await writeReport(join(directory.path, 'report.json'));
-  t.assert.ok(existsSync(join(directory.path, 'report.json')));
-});
-```
-
-`path` is the real path: the acquisition resolves symbolic links. On macOS, `os.tmpdir()` is below `/var`, and `/var` is a link to `/private/var`. git, a child process and a bind mount give the resolved path. Thus a test can compare their output with `path` directly.
-
-On Windows, a process that still holds a file open stops its removal for a short time. Thus disposal retries the removal on `EBUSY`, `EMFILE`, `ENFILE`, `ENOTEMPTY` and `EPERM`. It retries 8 times, and it waits 50 ms longer before each retry: 50 + 100 + … + 400 = 1.8 s at most. A removal that does not fail does not wait. When the last retry fails, disposal rejects with the error.
-
-The only option is `parent`, the directory that holds the new directory. The default is `os.tmpdir()`. A Unix socket path has a limit of 104 bytes on macOS and 108 bytes on Linux. On macOS, the real path of `os.tmpdir()` uses 56 of them. Thus give a short parent, such as `/tmp`, for a socket. Node resolves a package from the parent directories of the file that imports it. Thus give a parent in the repository when a file in the directory imports a package of the repository.
+A test makes its temporary directory with `TemporaryFiles` of [`@zukhruf/fs`](../fs/README.md#make-a-temporary-directory), the same class that production code uses.
 
 ## Environment variables
 
@@ -285,13 +266,13 @@ import spawn from 'nano-spawn';
 
 import { notInstalled } from '@zukhruf/testing/preload';
 
-test('the fs area loads without msw', async () => {
+test('the http area loads without msw', async () => {
   await spawn(process.execPath, [
     '--import',
     notInstalled('msw'),
     '--input-type=module',
     '--eval',
-    "await import('@zukhruf/testing/fs');",
+    "await import('@zukhruf/testing/http');",
   ]);
 });
 ```

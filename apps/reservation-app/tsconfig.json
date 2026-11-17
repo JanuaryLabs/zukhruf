@@ -18,6 +18,9 @@
     },
     {
       "path": "../../packages/testing"
+    },
+    {
+      "path": "../../packages/fs/tsconfig.json"
     }
   ]
 }

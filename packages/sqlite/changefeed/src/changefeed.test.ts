@@ -6,8 +6,8 @@ import { test } from 'node:test';
 import { setImmediate } from 'node:timers/promises';
 
 import { poll } from '@zukhruf/async';
+import { TemporaryFiles } from '@zukhruf/fs';
 import * as sqliteOpen from '@zukhruf/sqlite-open';
-import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import {
   Baseline,

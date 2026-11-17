@@ -6,7 +6,7 @@ import { createInterface } from 'node:readline';
 import { describe } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 
-import { TemporaryFiles } from '@zukhruf/testing/fs';
+import { TemporaryFiles } from '@zukhruf/fs';
 import { test } from '@zukhruf/testing/node';
 
 import { factTimeout } from '../../testing/fact-timeout.ts';

@@ -11,7 +11,7 @@
       "path": "../../packages/git-hooks"
     },
     {
-      "path": "../../packages/testing"
+      "path": "../../packages/fs/tsconfig.json"
     }
   ]
 }

@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
+import { TemporaryFiles } from '@zukhruf/fs';
+
 import { Docker, DockerEngineError } from './index.ts';
 import { fakeEngine } from './testing/fake-engine.ts';
-import { scratchDirectory } from './testing/scratch-directory.ts';
 
 // No test here prunes a real engine. On the containerd image store, each prune
 // ends the lease of each pull in progress, whatever its filters (Moby,
@@ -12,7 +13,7 @@ import { scratchDirectory } from './testing/scratch-directory.ts';
 
 test('prune() sends its filters to POST /images/prune, and gives the deleted images and the space reclaimed', async () => {
   // Arrange
-  await using scratch = await scratchDirectory();
+  await using scratch = await new TemporaryFiles().directory('docker-test-');
   const methods: (string | undefined)[] = [];
   await using engine = await fakeEngine({
     directory: scratch.path,
@@ -50,7 +51,7 @@ test('prune() sends its filters to POST /images/prune, and gives the deleted ima
 
 test('prune() with no filters sends no filters query', async () => {
   // Arrange
-  await using scratch = await scratchDirectory();
+  await using scratch = await new TemporaryFiles().directory('docker-test-');
   await using engine = await fakeEngine({
     directory: scratch.path,
     apiVersion: '1.51',
@@ -74,7 +75,7 @@ test('prune() with no filters sends no filters query', async () => {
 
 test('prune() that the engine refuses rejects with DockerEngineError that names the request', async () => {
   // Arrange
-  await using scratch = await scratchDirectory();
+  await using scratch = await new TemporaryFiles().directory('docker-test-');
   await using engine = await fakeEngine({
     directory: scratch.path,
     apiVersion: '1.51',
@@ -104,7 +105,7 @@ test('prune() that the engine refuses rejects with DockerEngineError that names 
 // A prune that ignores the signal never ends here, and that must fail the test, not hang it.
 test('prune() whose signal aborts rejects with the reason of the signal', async () => {
   // Arrange: the engine never answers the prune.
-  await using scratch = await scratchDirectory();
+  await using scratch = await new TemporaryFiles().directory('docker-test-');
   await using engine = await fakeEngine({
     directory: scratch.path,
     apiVersion: '1.51',

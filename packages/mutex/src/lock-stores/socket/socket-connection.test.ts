@@ -5,7 +5,7 @@ import { type Socket, connect, createServer } from 'node:net';
 import { join } from 'node:path';
 import { describe, test } from 'node:test';
 
-import { TemporaryFiles } from '@zukhruf/testing/fs';
+import { TemporaryFiles } from '@zukhruf/fs';
 
 import { factTimeout } from '../../testing/fact-timeout.ts';
 import { SocketConnection } from './socket-connection.ts';

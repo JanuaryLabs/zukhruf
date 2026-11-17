@@ -4,12 +4,12 @@ import { join } from 'node:path';
 import { describe, test } from 'node:test';
 
 import type { Clock } from '@zukhruf/async';
-import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { atomicWrite } from './atomic-write.ts';
 import { createExclusive } from './create-exclusive.ts';
 import { draftSuffixLength } from './draft.ts';
 import { durableWrite } from './durable-write.ts';
+import { TemporaryFiles } from './temporary-files.ts';
 
 /** The longest file name that ext4, APFS, NTFS and tmpfs accept. */
 const longestFileName = 255;

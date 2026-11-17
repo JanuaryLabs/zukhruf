@@ -36,7 +36,7 @@ function memberName(member: AstNode): string | undefined {
  * the copies drift: one forgets the retry that Windows needs for a file that
  * is still open, another compares the path with what a child process reports,
  * which on macOS is the real path behind the `/var` symlink. `TemporaryFiles`
- * of `@zukhruf/testing/fs` gives the real path and removes the directory with
+ * of `@zukhruf/fs` gives the real path and removes the directory with
  * the retry. Only the calls of `node:fs` and `node:fs/promises` are reported:
  * the rule follows the imports of the file, not a value passed in.
  */
@@ -50,7 +50,7 @@ const rule: Rule.RuleModule = {
     schema: [],
     messages: {
       matched:
-        'Use `await using dir = await new TemporaryFiles().directory(prefix)` from @zukhruf/testing/fs: one standard temp directory for tests, at its real path, removed with a retry for Windows.',
+        'Use `await using dir = await new TemporaryFiles().directory(prefix)` from @zukhruf/fs: one standard temp directory for tests, at its real path, removed with a retry for Windows.',
     },
   },
   create(context) {

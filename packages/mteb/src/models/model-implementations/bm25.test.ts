@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
-import { TemporaryFiles } from '@zukhruf/testing/fs';
+import { TemporaryFiles } from '@zukhruf/fs';
 
 import { AbsTaskRetrieval } from '../../abstasks/retrieval.ts';
 import { TaskMetadata } from '../../abstasks/task-metadata.ts';

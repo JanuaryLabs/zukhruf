@@ -5,8 +5,8 @@ import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
+import { TemporaryFiles } from '@zukhruf/fs';
 import { Commit } from '@zukhruf/git-hooks';
-import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { ReadmeTable } from './readme-table-step.ts';
 

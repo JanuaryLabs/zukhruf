@@ -6,10 +6,9 @@ import { syncBuiltinESMExports } from 'node:module';
 import { join, sep } from 'node:path';
 import { type TestContext, describe, test } from 'node:test';
 
-import { TemporaryFiles } from '@zukhruf/testing/fs';
-
 import { assertLocalDirectory } from './local-directory.ts';
 import { NetworkDirectoryError } from './network-directory-error.ts';
+import { TemporaryFiles } from './temporary-files.ts';
 
 /** The `f_type` that Linux's statfs reports for each network file system, from the kernel's and Lustre's headers. */
 const networkFileSystems = [

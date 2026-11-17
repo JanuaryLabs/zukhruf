@@ -9,7 +9,7 @@ import { promisify } from 'node:util';
 
 import type { Assertion } from 'promptfoo';
 
-import { TemporaryFiles } from '@zukhruf/testing/fs';
+import { TemporaryFiles } from '@zukhruf/fs';
 
 import { Recall, type Scorer } from '../index.ts';
 import {

@@ -3,11 +3,12 @@ import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, test } from 'node:test';
 
+import { TemporaryFiles } from '@zukhruf/fs';
+
 import { type ConnectOptions, Docker } from './index.ts';
 import { writeContextStore } from './testing/context-store-files.ts';
 import { fakeEngine } from './testing/fake-engine.ts';
 import { ENTRY, lastJson, runScenario } from './testing/scenario.ts';
-import { scratchDirectory } from './testing/scratch-directory.ts';
 
 const platformHost =
   process.platform === 'win32'
@@ -38,7 +39,7 @@ await docker[Symbol.asyncDispose]();
 describe('Docker.connect() selects the engine in the order of the Docker CLI', () => {
   test('DOCKER_HOST wins over DOCKER_CONTEXT and currentContext', async () => {
     // Arrange
-    await using scratch = await scratchDirectory();
+    await using scratch = await new TemporaryFiles().directory('docker-test-');
     await using fromHost = await fakeEngine({
       directory: await mkdirIn(scratch.path, 'host'),
       apiVersion: '1.51',
@@ -77,7 +78,7 @@ describe('Docker.connect() selects the engine in the order of the Docker CLI', (
 
   test('DOCKER_CONTEXT wins over currentContext', async () => {
     // Arrange
-    await using scratch = await scratchDirectory();
+    await using scratch = await new TemporaryFiles().directory('docker-test-');
     await using fromVariable = await fakeEngine({
       directory: await mkdirIn(scratch.path, 'variable'),
       apiVersion: '1.51',
@@ -110,7 +111,7 @@ describe('Docker.connect() selects the engine in the order of the Docker CLI', (
 
   test('currentContext of config.json selects the engine when no variable is set', async () => {
     // Arrange
-    await using scratch = await scratchDirectory();
+    await using scratch = await new TemporaryFiles().directory('docker-test-');
     await using fromConfig = await fakeEngine({
       directory: await mkdirIn(scratch.path, 'config'),
       apiVersion: '1.51',
@@ -133,7 +134,7 @@ describe('Docker.connect() selects the engine in the order of the Docker CLI', (
 
   test('~/.docker is the configuration directory when DOCKER_CONFIG is not set', async () => {
     // Arrange: a child process, because HOME is the home directory of the process.
-    await using scratch = await scratchDirectory();
+    await using scratch = await new TemporaryFiles().directory('docker-test-');
     await using fromConfig = await fakeEngine({
       directory: await mkdirIn(scratch.path, 'config'),
       apiVersion: '1.51',
@@ -158,7 +159,7 @@ describe('Docker.connect() selects the engine in the order of the Docker CLI', (
 
   test('without an environment, no variable applies and only the context store selects the engine', async () => {
     // Arrange: a child process, because the variables must be in the environment of the process.
-    await using scratch = await scratchDirectory();
+    await using scratch = await new TemporaryFiles().directory('docker-test-');
     await using fromConfig = await fakeEngine({
       directory: await mkdirIn(scratch.path, 'config'),
       apiVersion: '1.51',
@@ -190,7 +191,7 @@ describe('Docker.connect() selects the engine in the order of the Docker CLI', (
 
   test('the default context and the default host of the platform when nothing selects an engine', async () => {
     // Arrange
-    await using scratch = await scratchDirectory();
+    await using scratch = await new TemporaryFiles().directory('docker-test-');
 
     // Act
     const result = await selected({
@@ -213,7 +214,7 @@ describe('Docker.connect() selects the engine in the order of the Docker CLI', (
 
   test('a context option ignores DOCKER_HOST and DOCKER_CONTEXT', async () => {
     // Arrange
-    await using scratch = await scratchDirectory();
+    await using scratch = await new TemporaryFiles().directory('docker-test-');
     await using named = await fakeEngine({
       directory: await mkdirIn(scratch.path, 'named'),
       apiVersion: '1.51',
@@ -245,7 +246,7 @@ describe('Docker.connect() selects the engine in the order of the Docker CLI', (
 
   test('the context option default takes its host from DOCKER_HOST, as in the Docker CLI', async () => {
     // Arrange
-    await using scratch = await scratchDirectory();
+    await using scratch = await new TemporaryFiles().directory('docker-test-');
     await using fromHost = await fakeEngine({
       directory: await mkdirIn(scratch.path, 'host'),
       apiVersion: '1.51',
@@ -268,7 +269,7 @@ describe('Docker.connect() selects the engine in the order of the Docker CLI', (
 
   test('a host option ignores the environment', async () => {
     // Arrange
-    await using scratch = await scratchDirectory();
+    await using scratch = await new TemporaryFiles().directory('docker-test-');
     await using given = await fakeEngine({
       directory: await mkdirIn(scratch.path, 'given'),
       apiVersion: '1.51',
@@ -298,7 +299,7 @@ describe('Docker.connect() selects the engine in the order of the Docker CLI', (
 
   test('a context that the context store does not have is a ContextNotFoundError, from the option or from DOCKER_CONTEXT', async () => {
     // Arrange
-    await using scratch = await scratchDirectory();
+    await using scratch = await new TemporaryFiles().directory('docker-test-');
     const config = join(scratch.path, 'docker-config');
     await writeContextStore(config, { contexts: {} });
 
@@ -325,7 +326,7 @@ describe('Docker.connect() selects the engine in the order of the Docker CLI', (
 
   test('a tcp:// host is an UnsupportedHostError, from the option, from DOCKER_HOST or from a context', async () => {
     // Arrange
-    await using scratch = await scratchDirectory();
+    await using scratch = await new TemporaryFiles().directory('docker-test-');
     const config = join(scratch.path, 'docker-config');
     const fromOption = 'tcp://127.0.0.1:2375';
     const fromVariable = 'tcp://127.0.0.1:2376';
@@ -359,7 +360,7 @@ describe('Docker.connect() selects the engine in the order of the Docker CLI', (
 
   test('an empty DOCKER_HOST or DOCKER_CONTEXT is the same as an unset one', async () => {
     // Arrange
-    await using scratch = await scratchDirectory();
+    await using scratch = await new TemporaryFiles().directory('docker-test-');
     await using fromConfig = await fakeEngine({
       directory: await mkdirIn(scratch.path, 'config'),
       apiVersion: '1.51',
@@ -388,7 +389,7 @@ describe('Docker.connect() selects the engine in the order of the Docker CLI', (
 describe('Docker.contexts()', () => {
   test('lists the default context and each stored context, and marks the current one', async () => {
     // Arrange
-    await using scratch = await scratchDirectory();
+    await using scratch = await new TemporaryFiles().directory('docker-test-');
     const config = join(scratch.path, 'docker-config');
     await writeContextStore(config, {
       currentContext: 'desktop-linux',
@@ -452,7 +453,7 @@ describe('Docker.contexts()', () => {
 
   test('gives the same host for the default context as connect() with the same environment', async () => {
     // Arrange
-    await using scratch = await scratchDirectory();
+    await using scratch = await new TemporaryFiles().directory('docker-test-');
     await using fromHost = await fakeEngine({
       directory: await mkdirIn(scratch.path, 'host'),
       apiVersion: '1.51',
@@ -481,7 +482,7 @@ describe('Docker.contexts()', () => {
 
   test('gives only the default context when the configuration directory does not exist', async () => {
     // Arrange
-    await using scratch = await scratchDirectory();
+    await using scratch = await new TemporaryFiles().directory('docker-test-');
 
     // Act
     const result = await Docker.contexts({

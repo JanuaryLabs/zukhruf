@@ -5,8 +5,8 @@ import { test } from 'node:test';
 
 import * as sqliteVec from 'sqlite-vec';
 
+import { TemporaryFiles } from '@zukhruf/fs';
 import { open } from '@zukhruf/sqlite-open';
-import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { Declaration } from './index.ts';
 

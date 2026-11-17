@@ -9,8 +9,10 @@ import { type TestContext, describe, test } from 'node:test';
 
 import { createClock } from '@sinonjs/fake-timers';
 
-import { NetworkDirectoryError as FsNetworkDirectoryError } from '@zukhruf/fs';
-import { TemporaryFiles } from '@zukhruf/testing/fs';
+import {
+  NetworkDirectoryError as FsNetworkDirectoryError,
+  TemporaryFiles,
+} from '@zukhruf/fs';
 
 import { NetworkDirectoryError, SqliteElection, type Term } from '../index.ts';
 import { factTimeout } from '../testing/fact-timeout.ts';

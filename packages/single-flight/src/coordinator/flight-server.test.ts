@@ -6,8 +6,8 @@ import { join } from 'node:path';
 import { describe, test } from 'node:test';
 
 import { SqliteElection } from '@zukhruf/election';
+import { TemporaryFiles } from '@zukhruf/fs';
 import { PipeEndpoint } from '@zukhruf/pipes';
-import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { LeaseLostError, SingleFlight } from '../index.ts';
 import { KeyLocks } from '../key-lock/key-locks.ts';

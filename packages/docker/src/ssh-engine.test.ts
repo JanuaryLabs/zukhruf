@@ -3,11 +3,12 @@ import { randomUUID } from 'node:crypto';
 import { delimiter, join } from 'node:path';
 import { describe, test } from 'node:test';
 
+import { TemporaryFiles } from '@zukhruf/fs';
+
 import { writeContextStore } from './testing/context-store-files.ts';
 import { IMAGE, TEST_LABEL, connect, removeLabeled } from './testing/engine.ts';
 import { fakeEngine } from './testing/fake-engine.ts';
 import { ENTRY, lastJson, runScenario } from './testing/scenario.ts';
-import { scratchDirectory } from './testing/scratch-directory.ts';
 import {
   NOT_RESPONDING,
   PERMISSION_DENIED,
@@ -52,7 +53,7 @@ describe('the connection helper of an ssh:// host', () => {
     },
     async () => {
       // Arrange
-      await using home = await scratchDirectory();
+      await using home = await new TemporaryFiles().directory('docker-test-');
       await using standIn = await sshStandIn({ kind: 'permission-denied' });
       const scenario = `
 import { ConnectionFailedError, Docker } from ${JSON.stringify(ENTRY)};
@@ -94,7 +95,7 @@ try {
     },
     async () => {
       // Arrange
-      await using home = await scratchDirectory();
+      await using home = await new TemporaryFiles().directory('docker-test-');
       await using engine = await fakeEngine({
         directory: home.path,
         apiVersion: '1.51',
@@ -160,7 +161,7 @@ await docker[Symbol.asyncDispose]();
     },
     async () => {
       // Arrange
-      await using home = await scratchDirectory();
+      await using home = await new TemporaryFiles().directory('docker-test-');
       await using engine = await fakeEngine({
         directory: home.path,
         apiVersion: '1.51',
@@ -226,7 +227,7 @@ await docker[Symbol.asyncDispose]();
     },
     async () => {
       // Arrange
-      await using home = await scratchDirectory();
+      await using home = await new TemporaryFiles().directory('docker-test-');
       const argvOf = async (host: string) => {
         await using standIn = await sshStandIn({ kind: 'permission-denied' });
         const scenario = `
@@ -266,7 +267,7 @@ console.log('{}');
     },
     async () => {
       // Arrange
-      await using home = await scratchDirectory();
+      await using home = await new TemporaryFiles().directory('docker-test-');
       await using standIn = await sshStandIn({ kind: 'permission-denied' });
       const scenario = `
 import { Docker } from ${JSON.stringify(ENTRY)};
@@ -309,7 +310,7 @@ console.log('{}');
     },
     async () => {
       // Arrange
-      await using home = await scratchDirectory();
+      await using home = await new TemporaryFiles().directory('docker-test-');
       await using standIn = await sshStandIn({ kind: 'permission-denied' });
       const sshFlags = [
         '-o',
@@ -359,7 +360,7 @@ console.log('{}');
     },
     async () => {
       // Arrange
-      await using home = await scratchDirectory();
+      await using home = await new TemporaryFiles().directory('docker-test-');
       const argvOf = async (sshFlags: string[]) => {
         await using standIn = await sshStandIn({ kind: 'permission-denied' });
         const scenario = `
@@ -401,7 +402,7 @@ console.log('{}');
     },
     async () => {
       // Arrange
-      await using home = await scratchDirectory();
+      await using home = await new TemporaryFiles().directory('docker-test-');
       const config = join(home.path, 'docker-config');
       await writeContextStore(config, { contexts: { remote: HOST } });
       const argvOf = async (selection: object) => {
@@ -458,7 +459,7 @@ console.log('{}');
     },
     async () => {
       // Arrange
-      await using home = await scratchDirectory();
+      await using home = await new TemporaryFiles().directory('docker-test-');
       await using engine = await fakeEngine({
         directory: home.path,
         apiVersion: '1.51',
@@ -490,7 +491,7 @@ await docker[Symbol.asyncDispose]();
     },
     async () => {
       // Arrange
-      await using home = await scratchDirectory();
+      await using home = await new TemporaryFiles().directory('docker-test-');
       const scenario = `
 import { ConnectionFailedError, Docker } from ${JSON.stringify(ENTRY)};
 try {
@@ -533,7 +534,7 @@ try {
     },
     async () => {
       // Arrange
-      await using home = await scratchDirectory();
+      await using home = await new TemporaryFiles().directory('docker-test-');
       await using standIn = await sshStandIn({
         kind: 'engine',
         socketPath: String(engineSocket),
@@ -585,7 +586,7 @@ await docker[Symbol.asyncDispose]();
     },
     async () => {
       // Arrange
-      await using home = await scratchDirectory();
+      await using home = await new TemporaryFiles().directory('docker-test-');
       await using sequential = await sshStandIn({
         kind: 'engine',
         socketPath: String(engineSocket),
@@ -637,7 +638,7 @@ console.log('{}');
     },
     async () => {
       // Arrange
-      await using home = await scratchDirectory();
+      await using home = await new TemporaryFiles().directory('docker-test-');
       await using standIn = await sshStandIn({
         kind: 'engine',
         socketPath: String(engineSocket),
@@ -670,7 +671,7 @@ console.log(JSON.stringify({ warnings }));
     },
     async () => {
       // Arrange
-      await using home = await scratchDirectory();
+      await using home = await new TemporaryFiles().directory('docker-test-');
       await using engine = await fakeEngine({
         directory: home.path,
         apiVersion: '1.51',
@@ -724,7 +725,7 @@ await docker[Symbol.asyncDispose]();
     },
     async () => {
       // Arrange
-      await using home = await scratchDirectory();
+      await using home = await new TemporaryFiles().directory('docker-test-');
       await using engine = await fakeEngine({
         directory: home.path,
         apiVersion: '1.51',
@@ -781,7 +782,7 @@ await docker[Symbol.asyncDispose]();
     },
     async () => {
       // Arrange
-      await using home = await scratchDirectory();
+      await using home = await new TemporaryFiles().directory('docker-test-');
       const event = `${JSON.stringify({
         Type: 'container',
         Action: 'start',
@@ -852,7 +853,7 @@ await docker[Symbol.asyncDispose]();
     },
     async () => {
       // Arrange
-      await using home = await scratchDirectory();
+      await using home = await new TemporaryFiles().directory('docker-test-');
       // The stand-in keeps running after its standard input ends, so only a kill ends it.
       await using standIn = await sshStandIn({
         kind: 'engine',
@@ -896,7 +897,7 @@ console.log(JSON.stringify({ started: pids.length, alive }));
     },
     async (t) => {
       // Arrange
-      await using home = await scratchDirectory();
+      await using home = await new TemporaryFiles().directory('docker-test-');
       await using standIn = await sshStandIn({
         kind: 'engine',
         socketPath: String(engineSocket),
@@ -947,7 +948,7 @@ describe('an exec over an ssh:// host', () => {
       // Arrange
       await using local = await connect(IMAGE);
       const run = randomUUID();
-      await using home = await scratchDirectory();
+      await using home = await new TemporaryFiles().directory('docker-test-');
       await using standIn = await sshStandIn({
         kind: 'engine',
         socketPath: String(engineSocket),
@@ -1008,7 +1009,7 @@ await docker[Symbol.asyncDispose]();
       // Arrange
       await using local = await connect(IMAGE);
       const run = randomUUID();
-      await using home = await scratchDirectory();
+      await using home = await new TemporaryFiles().directory('docker-test-');
       await using standIn = await sshStandIn({
         kind: 'engine',
         socketPath: String(engineSocket),
@@ -1064,7 +1065,7 @@ await docker[Symbol.asyncDispose]();
       // Arrange
       await using local = await connect(IMAGE);
       const run = randomUUID();
-      await using home = await scratchDirectory();
+      await using home = await new TemporaryFiles().directory('docker-test-');
       await using standIn = await sshStandIn({
         kind: 'engine',
         socketPath: String(engineSocket),

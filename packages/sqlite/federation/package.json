@@ -44,6 +44,7 @@
     "@zukhruf/sqlite-open": "^0.8.20"
   },
   "devDependencies": {
+    "@zukhruf/fs": "^0.8.20",
     "@zukhruf/testing": "^0.8.20"
   }
 }

@@ -7,12 +7,13 @@ import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { type TestContext, test } from 'node:test';
 
+import { TemporaryFiles } from '@zukhruf/fs';
+
 import type { Database } from '../databases/database.ts';
 import { Mariadb } from '../databases/mariadb.ts';
 import { Mysql } from '../databases/mysql.ts';
 import { Postgres } from '../databases/postgres.ts';
 import { SqlServer } from '../databases/sqlserver.ts';
-import { TemporaryFiles } from '../fs/temporary-files.ts';
 import { engine, proxyless } from '../testing/current-engine.ts';
 import { docker } from '../testing/engine-client.ts';
 import { EngineProxy } from '../testing/engine-proxy.ts';

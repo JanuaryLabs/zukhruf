@@ -16,10 +16,7 @@ import { type Socket, connect } from 'node:net';
 import { join } from 'node:path';
 import type { Duplex } from 'node:stream';
 
-import {
-  type TemporaryDirectory,
-  TemporaryFiles,
-} from '../fs/temporary-files.ts';
+import { type TemporaryDirectory, TemporaryFiles } from '@zukhruf/fs';
 
 /** A request that reached the proxy. `path` has no API version and no query. */
 export interface ProxiedRequest {

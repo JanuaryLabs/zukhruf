@@ -7,8 +7,8 @@ import { join, resolve, win32 } from 'node:path';
 import { createInterface } from 'node:readline';
 import { describe } from 'node:test';
 
+import { TemporaryFiles } from '@zukhruf/fs';
 import { UnchangedJournal, open } from '@zukhruf/sqlite-open';
-import { TemporaryFiles } from '@zukhruf/testing/fs';
 import { test } from '@zukhruf/testing/node';
 
 import { Mutex } from '../../index.ts';

@@ -6,7 +6,7 @@ import { test } from 'node:test';
 
 import type { EmbeddingModelV4 } from '@ai-sdk/provider';
 
-import { TemporaryFiles } from '@zukhruf/testing/fs';
+import { TemporaryFiles } from '@zukhruf/fs';
 
 import {
   AbsTaskRetrieval,

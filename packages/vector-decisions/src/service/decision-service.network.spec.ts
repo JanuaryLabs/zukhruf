@@ -8,8 +8,8 @@ import { test } from 'node:test';
 
 import type { MockEmbeddingModelV4 } from 'ai/test';
 
+import { TemporaryFiles } from '@zukhruf/fs';
 import { open } from '@zukhruf/sqlite-open';
-import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import {
   type Answer,

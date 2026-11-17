@@ -6,8 +6,8 @@ import type { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 
 import { ChangeWatcher } from '@zukhruf/async';
+import { TemporaryFiles } from '@zukhruf/fs';
 import * as sqliteOpen from '@zukhruf/sqlite-open';
-import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { DataVersion, UnavailableError } from './index.ts';
 

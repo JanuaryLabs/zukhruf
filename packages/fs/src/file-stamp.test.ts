@@ -3,9 +3,8 @@ import { chmod, mkdir, rename, rm, utimes, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
-import { TemporaryFiles } from '@zukhruf/testing/fs';
-
 import { FileStamp, FileStamps } from './index.ts';
+import { TemporaryFiles } from './temporary-files.ts';
 
 // A whole second, which a double holds exactly, so a writer can give a file
 // back the same write time to the nanosecond, as rsync -t and tar do.

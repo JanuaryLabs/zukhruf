@@ -17,8 +17,6 @@ import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-import { TemporaryFiles } from '@zukhruf/testing/fs';
-
 import {
   DeniedError,
   type Journal,
@@ -30,6 +28,7 @@ import {
   WriteAheadLog,
   open,
 } from './index.ts';
+import { scratchDirectory } from './testing/scratch-directory.ts';
 
 // chmod denies nothing on Windows, and nothing to root.
 const noChmod = process.platform === 'win32' || process.getuid?.() === 0;
@@ -60,7 +59,7 @@ test(
   // folder but not write it.
   { skip: noChmod },
   async () => {
-    await using dir = await new TemporaryFiles().directory('open-');
+    await using dir = await scratchDirectory();
     const path = join(dir.path, 'notes.sqlite');
     {
       using owner = open(path, { journal: new PersistentWriteAheadLog() });
@@ -86,7 +85,7 @@ test(
 
 for (const [name, journal] of journals) {
   test(`${name}: a reader does not wait for an owner that writes a large transaction`, async () => {
-    await using dir = await new TemporaryFiles().directory('open-');
+    await using dir = await scratchDirectory();
     const path = join(dir.path, 'notes.sqlite');
     using owner = open(path, { journal: journal() });
     owner.exec(`CREATE TABLE notes (title TEXT);
@@ -112,7 +111,7 @@ for (const [name, journal] of journals) {
   });
 
   test(`${name}: an owner killed inside a write transaction leaves a file that a reader reads at once, with only the commits`, async () => {
-    await using dir = await new TemporaryFiles().directory('open-');
+    await using dir = await scratchDirectory();
     const path = join(dir.path, 'notes.sqlite');
     const child = inChild(`
         const owner = open(${JSON.stringify(path)}, { journal: new ${name}() });
@@ -136,7 +135,7 @@ for (const [name, journal] of journals) {
 }
 
 test('a reader never changes a database in a rollback journal', async () => {
-  await using dir = await new TemporaryFiles().directory('open-');
+  await using dir = await scratchDirectory();
   const path = join(dir.path, 'vendor.sqlite');
   // A program that is not ours keeps its store in a rollback journal.
   {
@@ -174,7 +173,7 @@ function unavailable(path: string, errcode: 14 | 1544 = 14) {
 }
 
 test('a missing file, or a missing folder, is an UnavailableError', async () => {
-  await using dir = await new TemporaryFiles().directory('open-');
+  await using dir = await scratchDirectory();
   const file = join(dir.path, 'missing.sqlite');
   const folder = join(dir.path, 'missing', 'notes.sqlite');
 
@@ -188,7 +187,7 @@ test(
   // same CANTOPEN (14).
   { skip: noChmod },
   async () => {
-    await using dir = await new TemporaryFiles().directory('open-');
+    await using dir = await scratchDirectory();
     const path = join(dir.path, 'notes.sqlite');
     open(path).close();
     await chmod(path, 0o000);
@@ -202,7 +201,7 @@ test(
   'an owner in a folder that it cannot write is an UnavailableError',
   { skip: noChmod },
   async () => {
-    await using dir = await new TemporaryFiles().directory('open-');
+    await using dir = await scratchDirectory();
     const path = join(dir.path, 'notes.sqlite');
     new DatabaseSync(path).close();
     await chmod(dir.path, 0o555);
@@ -215,7 +214,7 @@ test(
 );
 
 test('a file that is not a database is the error of SQLite, not an UnavailableError', async () => {
-  await using dir = await new TemporaryFiles().directory('open-');
+  await using dir = await scratchDirectory();
   const path = join(dir.path, 'notes.sqlite');
   writeFileSync(
     path,
@@ -241,7 +240,7 @@ test(
   'an owner whose journal step fails leaves no file open',
   { skip: !existsSync('/dev/fd') },
   async () => {
-    await using dir = await new TemporaryFiles().directory('open-');
+    await using dir = await scratchDirectory();
     const path = join(dir.path, 'notes.sqlite');
     writeFileSync(
       path,
@@ -263,7 +262,7 @@ test(
   'UnavailableError.from takes the file system codes for a missing or denied file',
   { skip: noChmod },
   async () => {
-    await using dir = await new TemporaryFiles().directory('open-');
+    await using dir = await scratchDirectory();
     const file = join(dir.path, 'notes.sqlite');
     writeFileSync(file, '');
     const denied = join(dir.path, 'denied.sqlite');
@@ -311,7 +310,7 @@ function unavailableAs(
 
 test('a path with no file is a MissingError', async () => {
   // Arrange
-  await using dir = await new TemporaryFiles().directory('open-');
+  await using dir = await scratchDirectory();
   const path = join(dir.path, 'missing.sqlite');
 
   // Act
@@ -323,7 +322,7 @@ test('a path with no file is a MissingError', async () => {
 
 test('a file in a folder that is not there, or below a file, is a MissingError, for a reader and for an owner', async () => {
   // Arrange
-  await using dir = await new TemporaryFiles().directory('open-');
+  await using dir = await scratchDirectory();
   const inMissingFolder = join(dir.path, 'missing', 'notes.sqlite');
   const file = join(dir.path, 'notes.sqlite');
   writeFileSync(file, '');
@@ -345,7 +344,7 @@ test(
   { skip: noChmod },
   async () => {
     // Arrange
-    await using dir = await new TemporaryFiles().directory('open-');
+    await using dir = await scratchDirectory();
     const path = join(dir.path, 'notes.sqlite');
     open(path).close();
     await chmod(path, 0o000);
@@ -366,7 +365,7 @@ test(
   { skip: noChmod },
   async () => {
     // Arrange
-    await using dir = await new TemporaryFiles().directory('open-');
+    await using dir = await scratchDirectory();
     const folder = join(dir.path, 'denied');
     const present = join(folder, 'notes.sqlite');
     const absent = join(folder, 'missing.sqlite');
@@ -394,7 +393,7 @@ test(
   { skip: noChmod },
   async () => {
     // Arrange
-    await using dir = await new TemporaryFiles().directory('open-');
+    await using dir = await scratchDirectory();
     const path = join(dir.path, 'notes.sqlite');
     new DatabaseSync(path).close();
     await chmod(dir.path, 0o555);
@@ -416,7 +415,7 @@ test(
   async () => {
     // Arrange: a symbolic link to itself is not missing and not denied, and
     // the file system cannot open the text of a file: URL as a path.
-    await using dir = await new TemporaryFiles().directory('open-');
+    await using dir = await scratchDirectory();
     const loop = join(dir.path, 'loop.sqlite');
     symlinkSync(loop, loop);
     const denied = join(dir.path, 'notes.sqlite');
@@ -446,7 +445,7 @@ test(
   { skip: noChmod },
   async () => {
     // Arrange
-    await using dir = await new TemporaryFiles().directory('open-');
+    await using dir = await scratchDirectory();
     const file = join(dir.path, 'notes.sqlite');
     writeFileSync(file, '');
     const denied = join(dir.path, 'denied.sqlite');
@@ -536,7 +535,7 @@ async function holdLock(
 }
 
 test('with no timeout, an owner waits out the write lock of another program', async () => {
-  await using dir = await new TemporaryFiles().directory('open-');
+  await using dir = await scratchDirectory();
   const path = join(dir.path, 'notes.sqlite');
   open(path).close();
   const other = await holdWriteLock(path, 2000);
@@ -556,7 +555,7 @@ test('with no timeout, an owner waits out the write lock of another program', as
 });
 
 test('with timeout 0, an owner fails at once on the write lock of another program', async () => {
-  await using dir = await new TemporaryFiles().directory('open-');
+  await using dir = await scratchDirectory();
   const path = join(dir.path, 'notes.sqlite');
   open(path).close();
   const other = await holdWriteLock(path, 1000);
@@ -596,7 +595,7 @@ test('a database in memory has no file, so it gets no journal, and works', () =>
 });
 
 test('open applies a journal that the caller writes', async () => {
-  await using dir = await new TemporaryFiles().directory('open-');
+  await using dir = await scratchDirectory();
   class Stamped implements Journal {
     apply(database: DatabaseSync): void {
       database.exec('PRAGMA user_version = 7');
@@ -611,7 +610,7 @@ test('open applies a journal that the caller writes', async () => {
 });
 
 test('open gives a DatabaseSync, and takes the options and the paths of new DatabaseSync', async () => {
-  await using dir = await new TemporaryFiles().directory('open-');
+  await using dir = await scratchDirectory();
   const path = join(dir.path, 'notes.sqlite');
 
   using owner = open(path, { readBigInts: true, returnArrays: true });
@@ -636,7 +635,7 @@ test('open gives a DatabaseSync, and takes the options and the paths of new Data
 });
 
 test('UnchangedJournal opens a lock file that another program holds, with no wait', async () => {
-  await using dir = await new TemporaryFiles().directory('open-');
+  await using dir = await scratchDirectory();
   const path = join(dir.path, 'lock');
   // A lock file, as @zukhruf/fs holds it: no journal of its own on disk, and
   // an exclusive transaction while it holds the lock.
@@ -656,7 +655,7 @@ test('UnchangedJournal opens a lock file that another program holds, with no wai
 });
 
 test('RollbackJournal changes a write-ahead log to the rollback journal, and leaves no -wal or -shm', async () => {
-  await using dir = await new TemporaryFiles().directory('open-');
+  await using dir = await scratchDirectory();
   const path = join(dir.path, 'staging.sqlite');
   open(path).close();
 
@@ -675,7 +674,7 @@ test('RollbackJournal changes a write-ahead log to the rollback journal, and lea
 });
 
 test('the default journal is a write-ahead log with a size limit, and leaves no -wal or -shm after the last close', async () => {
-  await using dir = await new TemporaryFiles().directory('open-');
+  await using dir = await scratchDirectory();
   const path = join(dir.path, 'notes.sqlite');
   {
     using owner = open(path);
@@ -696,7 +695,7 @@ test('the default journal is a write-ahead log with a size limit, and leaves no 
 });
 
 test('an owner opens a database in a rollback journal that another program reads, and changes it to a write-ahead log', async () => {
-  await using dir = await new TemporaryFiles().directory('open-');
+  await using dir = await scratchDirectory();
   const path = join(dir.path, 'notes.sqlite');
   {
     using vendor = new DatabaseSync(path);
@@ -724,7 +723,7 @@ test('an owner opens a database in a rollback journal that another program reads
 });
 
 test('after the journal step, the owner can load an extension only when the caller allows it', async () => {
-  await using dir = await new TemporaryFiles().directory('open-');
+  await using dir = await scratchDirectory();
   const suffix =
     process.platform === 'darwin'
       ? 'dylib'
@@ -785,7 +784,7 @@ for (const [name, journal] of [
   ],
 ] as const) {
   test(`${name} with a page size gives a new file that page size, in a write-ahead log`, async () => {
-    await using dir = await new TemporaryFiles().directory('open-');
+    await using dir = await scratchDirectory();
 
     using owner = open(join(dir.path, 'vectors.sqlite'), {
       journal: journal(),
@@ -811,7 +810,7 @@ for (const [name, journal] of [
   ],
 ] as const) {
   test(`${name} syncs at checkpoints by default, so a commit does not wait for the disk`, async () => {
-    await using dir = await new TemporaryFiles().directory('open-');
+    await using dir = await scratchDirectory();
 
     using owner = open(join(dir.path, 'notes.sqlite'), { journal: journal() });
 
@@ -819,7 +818,7 @@ for (const [name, journal] of [
   });
 
   test(`${name} with synchronous 'full' syncs at each commit, so a commit survives a power loss`, async () => {
-    await using dir = await new TemporaryFiles().directory('open-');
+    await using dir = await scratchDirectory();
 
     using owner = open(join(dir.path, 'jobs.sqlite'), {
       journal: journal({ synchronous: 'full' }),
@@ -830,7 +829,7 @@ for (const [name, journal] of [
 }
 
 test('a page size does not change an existing write-ahead log, which keeps its own page size', async () => {
-  await using dir = await new TemporaryFiles().directory('open-');
+  await using dir = await scratchDirectory();
   const path = join(dir.path, 'vectors.sqlite');
   {
     using first = open(path);

@@ -268,18 +268,17 @@ export default defineConfig(
       ],
     },
   },
-  // @zukhruf/testing depends on docker, and docker on async, so the tests of
-  // these two packages cannot import TemporaryFiles: that import would make a
-  // cycle in the build (docs/adr/0001, line 29). Docker keeps its own copy of
-  // the temporary directory (packages/docker/docs/copied-code.md).
+  // @zukhruf/fs depends on async and sqlite-open, so the tests of these two
+  // packages cannot import TemporaryFiles: that import would make a cycle in
+  // the build (docs/adr/0001). sqlite-open keeps a copy of the temporary
+  // directory (packages/sqlite/open/docs/copied-code.md).
   {
-    files: ['packages/docker/**', 'packages/async/**'],
+    files: ['packages/async/**', 'packages/sqlite/open/**'],
     rules: { 'zukhruf/no-raw-temp-directory': 'off' },
   },
   // @zukhruf/sqlite-open is the one place that constructs DatabaseSync. The
-  // SQLite fixture of @zukhruf/testing cannot use it: sqlite-open tests with
-  // @zukhruf/testing, so that import would make a cycle in the build
-  // (docs/adr/0001, line 29), and its lock holder needs a busy timeout of 0.
+  // SQLite fixture of @zukhruf/testing does not use it: its lock holder needs
+  // a busy timeout of 0.
   {
     files: ['packages/sqlite/open/**', 'packages/testing/src/databases/**'],
     rules: { 'zukhruf/no-raw-database-sync': 'off' },
@@ -294,7 +293,7 @@ export default defineConfig(
   // The tests of TemporaryFiles arrange their parent folders with node:fs, so
   // that the subject under test does not make its own fixtures.
   {
-    files: ['packages/testing/src/fs/temporary-files.test.ts'],
+    files: ['packages/fs/src/temporary-files.test.ts'],
     rules: { 'zukhruf/no-raw-temp-directory': 'off' },
   },
   // The tests of the UI packages import them by their names, as an app does,

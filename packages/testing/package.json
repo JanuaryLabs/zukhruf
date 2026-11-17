@@ -104,12 +104,6 @@
       "import": "./dist/streams/stream-harness.js",
       "default": "./dist/streams/stream-harness.js"
     },
-    "./fs": {
-      "@zukhruf/source": "./src/fs/temporary-files.ts",
-      "types": "./dist/fs/temporary-files.d.ts",
-      "import": "./dist/fs/temporary-files.js",
-      "default": "./dist/fs/temporary-files.js"
-    },
     "./msw": {
       "@zukhruf/source": "./src/msw/msw.ts",
       "types": "./dist/msw/msw.d.ts",
@@ -153,6 +147,7 @@
   "dependencies": {
     "@zukhruf/async": "^0.8.20",
     "@zukhruf/docker": "^0.8.20",
+    "@zukhruf/fs": "^0.8.20",
     "nano-spawn": "^2.1.0",
     "p-memoize": "^8.0.0",
     "p-retry": "^8.0.1"

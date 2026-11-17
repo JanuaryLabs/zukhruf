@@ -3,7 +3,7 @@ import { chmod, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
-import { TemporaryFiles } from '@zukhruf/testing/fs';
+import { TemporaryFiles } from '@zukhruf/fs';
 
 import { repository as commitRepository } from '../testing/pre-commit-repository.ts';
 import { repository as pushRepository } from '../testing/pre-push-repository.ts';

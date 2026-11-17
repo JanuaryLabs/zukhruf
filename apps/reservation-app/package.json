@@ -9,6 +9,7 @@
     "hono": "^4.13.13"
   },
   "devDependencies": {
+    "@zukhruf/fs": "*",
     "@zukhruf/testing": "*"
   }
 }

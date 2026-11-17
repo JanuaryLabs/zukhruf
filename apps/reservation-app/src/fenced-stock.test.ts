@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { describe, test } from 'node:test';
 
 import { FencingToken } from '@zukhruf/fencing';
-import { TemporaryFiles } from '@zukhruf/testing/fs';
+import { TemporaryFiles } from '@zukhruf/fs';
 
 import { FencedStock } from './fenced-stock.ts';
 

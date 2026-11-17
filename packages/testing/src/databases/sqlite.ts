@@ -4,7 +4,7 @@ import { DatabaseSync } from 'node:sqlite';
 
 import spawn, { SubprocessError } from 'nano-spawn';
 
-import { TemporaryFiles } from '../fs/temporary-files.ts';
+import { TemporaryFiles } from '@zukhruf/fs';
 
 export interface SqliteDatabase extends AsyncDisposable {
   path: string;

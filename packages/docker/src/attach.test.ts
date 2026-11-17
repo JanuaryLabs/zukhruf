@@ -6,6 +6,8 @@ import { delimiter } from 'node:path';
 import { describe, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 
+import { TemporaryFiles } from '@zukhruf/fs';
+
 import {
   ContainerNotFoundError,
   ContainerNotRunningError,
@@ -14,7 +16,6 @@ import {
 } from './index.ts';
 import { IMAGE, TEST_LABEL, connect, removeLabeled } from './testing/engine.ts';
 import { ENTRY, lastJson, runScenario } from './testing/scenario.ts';
-import { scratchDirectory } from './testing/scratch-directory.ts';
 import {
   isAlive,
   localEngineSocket,
@@ -255,7 +256,7 @@ describe('container.attach({ ref: false })', () => {
     { skip: needsLocalEngine },
     async () => {
       // Arrange
-      await using home = await scratchDirectory();
+      await using home = await new TemporaryFiles().directory('docker-test-');
       const host = `unix://${String(engineSocket)}`;
       await using cleaner = await Docker.connect({ clock: globalThis, host });
       if (!(await cleaner.images.inspect(IMAGE)))
@@ -289,7 +290,7 @@ describe('container.attach({ ref: false })', () => {
     { skip: needsLocalEngine },
     async (t) => {
       // Arrange
-      await using home = await scratchDirectory();
+      await using home = await new TemporaryFiles().directory('docker-test-');
       const host = `unix://${String(engineSocket)}`;
       await using cleaner = await Docker.connect({ clock: globalThis, host });
       if (!(await cleaner.images.inspect(IMAGE)))
@@ -337,7 +338,7 @@ describe('container.attach({ ref: false })', () => {
     { skip: needsLocalEngine },
     async (t) => {
       // Arrange
-      await using home = await scratchDirectory();
+      await using home = await new TemporaryFiles().directory('docker-test-');
       await using standIn = await sshStandIn({
         kind: 'engine',
         socketPath: String(engineSocket),
@@ -393,7 +394,7 @@ describe('container.spawn({ ref: false })', () => {
     { skip: needsLocalEngine },
     async () => {
       // Arrange
-      await using home = await scratchDirectory();
+      await using home = await new TemporaryFiles().directory('docker-test-');
       const host = `unix://${String(engineSocket)}`;
       await using cleaner = await Docker.connect({ clock: globalThis, host });
       if (!(await cleaner.images.inspect(IMAGE)))
@@ -424,7 +425,7 @@ describe('container.spawn({ ref: false })', () => {
     { skip: needsLocalEngine },
     async (t) => {
       // Arrange
-      await using home = await scratchDirectory();
+      await using home = await new TemporaryFiles().directory('docker-test-');
       await using standIn = await sshStandIn({
         kind: 'engine',
         socketPath: String(engineSocket),

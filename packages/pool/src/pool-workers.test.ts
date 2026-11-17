@@ -7,12 +7,12 @@ import type { TestContext } from 'node:test';
 import { createClock } from '@sinonjs/fake-timers';
 
 import { Latch } from '@zukhruf/async';
+import { TemporaryFiles } from '@zukhruf/fs';
 import {
   SqliteJobQueue,
   type SqliteJobQueueOptions,
 } from '@zukhruf/sqlite-queue';
 import { settleWithin } from '@zukhruf/testing/async';
-import { TemporaryFiles } from '@zukhruf/testing/fs';
 import { describe, test } from '@zukhruf/testing/node';
 
 import {

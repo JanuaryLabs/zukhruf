@@ -9,9 +9,8 @@ import { createInterface } from 'node:readline';
 import { describe } from 'node:test';
 import type { TestContext } from 'node:test';
 
-import { FileLock } from '@zukhruf/fs';
+import { FileLock, TemporaryFiles } from '@zukhruf/fs';
 import { UnchangedJournal, open } from '@zukhruf/sqlite-open';
-import { TemporaryFiles } from '@zukhruf/testing/fs';
 import { test } from '@zukhruf/testing/node';
 
 import { ProtocolVersionError, SingleFlight } from './index.ts';

@@ -6,7 +6,8 @@ import { test } from 'node:test';
 
 import spawn from 'nano-spawn';
 
-import { TemporaryFiles } from '../fs/temporary-files.ts';
+import { TemporaryFiles } from '@zukhruf/fs';
+
 import { fakeEngine } from '../testing/fake-engine.ts';
 
 const skip =

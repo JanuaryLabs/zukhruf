@@ -4,11 +4,12 @@ import { writeFile } from 'node:fs/promises';
 import { delimiter, join } from 'node:path';
 import { describe, test } from 'node:test';
 
+import { TemporaryFiles } from '@zukhruf/fs';
+
 import { ConnectionFailedError, Docker, DockerError } from './index.ts';
 import { IMAGE, TEST_LABEL, removeLabeled } from './testing/engine.ts';
 import { fakeEngine } from './testing/fake-engine.ts';
 import { ENTRY, lastJson, runScenario } from './testing/scenario.ts';
-import { scratchDirectory } from './testing/scratch-directory.ts';
 import {
   isAlive,
   localEngineSocket,
@@ -111,7 +112,7 @@ describe('disposal of a client with open streams', () => {
     { skip: needsLocalEngine },
     async () => {
       // Arrange
-      await using home = await scratchDirectory();
+      await using home = await new TemporaryFiles().directory('docker-test-');
       const host = `unix://${String(engineSocket)}`;
       await using cleaner = await Docker.connect({ clock: globalThis, host });
       if (!(await cleaner.images.inspect(IMAGE))) {
@@ -142,7 +143,7 @@ describe('disposal of a client with open streams', () => {
     { skip: needsLocalEngine },
     async () => {
       // Arrange
-      await using home = await scratchDirectory();
+      await using home = await new TemporaryFiles().directory('docker-test-');
       await using standIn = await sshStandIn({
         kind: 'engine',
         socketPath: String(engineSocket),
@@ -197,7 +198,7 @@ describe('disposal of a client with open streams', () => {
 describe('requests during and after disposal', () => {
   test('through a Unix socket, a request in flight and a request after disposal started reject with the DockerError of disposal, and the second one reaches no engine', async (t) => {
     // Arrange: the engine never answers /info.
-    await using scratch = await scratchDirectory();
+    await using scratch = await new TemporaryFiles().directory('docker-test-');
     await using engine = await fakeEngine({
       directory: scratch.path,
       apiVersion: '1.51',
@@ -240,7 +241,7 @@ describe('requests during and after disposal', () => {
     { skip: posixOnly },
     async () => {
       // Arrange: the engine never answers /info, and marks that it got it.
-      await using home = await scratchDirectory();
+      await using home = await new TemporaryFiles().directory('docker-test-');
       const seen = join(home.path, 'info-seen');
       await writeFile(seen, '');
       await using engine = await fakeEngine({

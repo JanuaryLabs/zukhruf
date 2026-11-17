@@ -4,7 +4,7 @@ import { describe, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 
 import { EpochExhaustedError, type TokenSource } from '@zukhruf/fencing';
-import { TemporaryFiles } from '@zukhruf/testing/fs';
+import { TemporaryFiles } from '@zukhruf/fs';
 
 import type { Connection, ConnectionEvents } from '../connection/connection.ts';
 import { KeyLocks } from '../key-lock/key-locks.ts';

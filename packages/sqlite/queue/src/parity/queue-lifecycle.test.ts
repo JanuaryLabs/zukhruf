@@ -4,7 +4,7 @@ import { describe, it } from 'node:test';
 
 import { type Clock, PgBoss, type UpdateQueueOptions } from 'pg-boss';
 
-import { TemporaryFiles } from '@zukhruf/testing/fs';
+import { TemporaryFiles } from '@zukhruf/fs';
 
 import { SqliteJobQueue } from '../index.ts';
 import { Parity } from './parity.ts';

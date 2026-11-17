@@ -13,8 +13,8 @@ import { connect } from 'node:net';
 import { join } from 'node:path';
 import { describe, test } from 'node:test';
 
+import { TemporaryFiles } from '@zukhruf/fs';
 import { settleWithin } from '@zukhruf/testing/async';
-import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import {
   PipeAddress,

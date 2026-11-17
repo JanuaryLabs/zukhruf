@@ -8,7 +8,7 @@ import { type TestContext, describe, test } from 'node:test';
 import { createClock } from '@sinonjs/fake-timers';
 
 import type { Clock } from '@zukhruf/async';
-import { TemporaryFiles } from '@zukhruf/testing/fs';
+import { TemporaryFiles } from '@zukhruf/fs';
 
 import { SqliteElection } from '../index.ts';
 import { factTimeout } from '../testing/fact-timeout.ts';

@@ -6,9 +6,8 @@ import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { test } from 'node:test';
 
-import { FileStamp } from '@zukhruf/fs';
+import { FileStamp, TemporaryFiles } from '@zukhruf/fs';
 import { RollbackJournal, open } from '@zukhruf/sqlite-open';
-import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { DataVersion, UnavailableError } from './index.ts';
 

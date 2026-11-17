@@ -7,8 +7,8 @@ import { describe, it } from 'node:test';
 
 import { TestClock, type WorkOptions } from 'pg-boss';
 
+import { TemporaryFiles } from '@zukhruf/fs';
 import { settleWithin } from '@zukhruf/testing/async';
-import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { SqliteJobQueue } from './index.ts';
 import { id } from './testing/job-id.ts';

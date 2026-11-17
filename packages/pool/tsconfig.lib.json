@@ -25,6 +25,9 @@
     },
     {
       "path": "../testing/tsconfig.lib.json"
+    },
+    {
+      "path": "../fs/tsconfig.lib.json"
     }
   ]
 }

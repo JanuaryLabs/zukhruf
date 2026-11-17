@@ -43,6 +43,7 @@
     "@zukhruf/async": "^0.8.20"
   },
   "devDependencies": {
-    "@sinonjs/fake-timers": "15.4.0"
+    "@sinonjs/fake-timers": "15.4.0",
+    "@zukhruf/fs": "^0.8.20"
   }
 }

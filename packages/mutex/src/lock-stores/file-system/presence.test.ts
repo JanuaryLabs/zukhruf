@@ -9,8 +9,8 @@ import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { describe } from 'node:test';
 
+import { TemporaryFiles } from '@zukhruf/fs';
 import { UnavailableError } from '@zukhruf/sqlite-open';
-import { TemporaryFiles } from '@zukhruf/testing/fs';
 import { test } from '@zukhruf/testing/node';
 
 import { Modes } from '../../mutex/acquire-modes/modes.ts';

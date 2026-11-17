@@ -4,9 +4,10 @@ import type { ServerResponse } from 'node:http';
 import type { Duplex } from 'node:stream';
 import { describe, test } from 'node:test';
 
+import { TemporaryFiles } from '@zukhruf/fs';
+
 import { Docker } from './index.ts';
 import { fakeEngine } from './testing/fake-engine.ts';
-import { scratchDirectory } from './testing/scratch-directory.ts';
 
 /** A frame of standard output of a multiplexed stream. */
 function stdoutFrame(data: string | Uint8Array): Buffer {
@@ -72,7 +73,7 @@ async function waitsForTheEndOfTheInput(directory: string, output: Buffer) {
 describe('the end of the input of an attach and an exec without stdin', () => {
   test('containers.run() ends the input of its attach at once, and all of the output that the engine sends after the end of the input arrives', async () => {
     // Arrange
-    await using scratch = await scratchDirectory();
+    await using scratch = await new TemporaryFiles().directory('docker-test-');
     const output = Buffer.alloc(1024 * 1024, 0x62);
     await using engine = await waitsForTheEndOfTheInput(scratch.path, output);
     await using docker = await Docker.connect({
@@ -94,7 +95,7 @@ describe('the end of the input of an attach and an exec without stdin', () => {
 
   test('exec() without stdin ends its input at once, and all of the output that the engine sends after the end of the input arrives', async () => {
     // Arrange
-    await using scratch = await scratchDirectory();
+    await using scratch = await new TemporaryFiles().directory('docker-test-');
     const output = Buffer.alloc(1024 * 1024, 0x62);
     await using engine = await waitsForTheEndOfTheInput(scratch.path, output);
     await using docker = await Docker.connect({

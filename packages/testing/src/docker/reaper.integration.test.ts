@@ -10,8 +10,8 @@ import { type TestContext, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 
 import { ContainerNotFoundError } from '@zukhruf/docker';
+import { TemporaryFiles } from '@zukhruf/fs';
 
-import { TemporaryFiles } from '../fs/temporary-files.ts';
 import { engine, proxyless } from '../testing/current-engine.ts';
 import { docker } from '../testing/engine-client.ts';
 import { EngineProxy } from '../testing/engine-proxy.ts';

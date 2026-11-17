@@ -9,7 +9,7 @@ import { describe, test } from 'node:test';
 import type { TestContext } from 'node:test';
 
 import { SqliteElection } from '@zukhruf/election';
-import { TemporaryFiles } from '@zukhruf/testing/fs';
+import { TemporaryFiles } from '@zukhruf/fs';
 
 import { callerSource, journalOf } from './testing/caller.ts';
 import { factTimeout } from './testing/fact-timeout.ts';

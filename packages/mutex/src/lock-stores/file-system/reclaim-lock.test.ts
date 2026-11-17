@@ -6,7 +6,7 @@ import { syncBuiltinESMExports } from 'node:module';
 import { join } from 'node:path';
 import { type TestContext, describe } from 'node:test';
 
-import { TemporaryFiles } from '@zukhruf/testing/fs';
+import { TemporaryFiles } from '@zukhruf/fs';
 import { test } from '@zukhruf/testing/node';
 
 import { factTimeout } from '../../testing/fact-timeout.ts';

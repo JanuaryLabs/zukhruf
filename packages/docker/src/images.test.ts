@@ -3,6 +3,8 @@ import { hash, randomUUID } from 'node:crypto';
 import { describe, test } from 'node:test';
 import { setTimeout } from 'node:timers/promises';
 
+import { TemporaryFiles } from '@zukhruf/fs';
+
 import {
   Docker,
   DockerEngineError,
@@ -14,7 +16,6 @@ import { tarEntries } from './tar-reader.ts';
 import { tarArchive } from './tar-writer.ts';
 import { TEST_LABEL, connect, removeLabeled } from './testing/engine.ts';
 import { fakeEngine } from './testing/fake-engine.ts';
-import { scratchDirectory } from './testing/scratch-directory.ts';
 
 const HELLO = 'hello-world';
 
@@ -131,7 +132,7 @@ describe('docker.images', () => {
 
   test('a pull that the engine answers with 404 is an ImageNotFoundError with the reference', async () => {
     // Arrange: the answer of an engine for a repository that the registry does not have.
-    await using scratch = await scratchDirectory();
+    await using scratch = await new TemporaryFiles().directory('docker-test-');
     await using engine = await fakeEngine({
       directory: scratch.path,
       apiVersion: '1.51',
@@ -169,7 +170,7 @@ describe('docker.images', () => {
 
   test('an error in the progress of a pull is a DockerEngineError with no status, also when the lines arrive in parts', async () => {
     // Arrange: the engine answers 200, then reports the error in the progress.
-    await using scratch = await scratchDirectory();
+    await using scratch = await new TemporaryFiles().directory('docker-test-');
     await using engine = await fakeEngine({
       directory: scratch.path,
       apiVersion: '1.51',
@@ -217,7 +218,7 @@ describe('docker.images', () => {
 
   test('a pull reads the progress to its end, names the tag latest for a bare repository, and sends auth as base64url JSON', async () => {
     // Arrange
-    await using scratch = await scratchDirectory();
+    await using scratch = await new TemporaryFiles().directory('docker-test-');
     const auths: (string | undefined)[] = [];
     const ended = Promise.withResolvers<void>();
     await using engine = await fakeEngine({
@@ -267,7 +268,9 @@ describe('docker.images', () => {
   for (const operation of ['pull', 'push'] as const) {
     test(`${operation}() sends auth as padded base64url, which the URLEncoding of Go decodes: its length is a multiple of 4`, async () => {
       // Arrange: a JSON of 37 bytes, so base64 of it ends with padding.
-      await using scratch = await scratchDirectory();
+      await using scratch = await new TemporaryFiles().directory(
+        'docker-test-',
+      );
       const auths: string[] = [];
       await using engine = await fakeEngine({
         directory: scratch.path,
@@ -431,7 +434,7 @@ describe('docker.images', () => {
 
   test('an error in the progress of a push of an image that is on the engine is a DockerEngineError with no status, not ImageNotFoundError', async () => {
     // Arrange: the engine answers 200, reports the error of the registry in the progress, and has the image.
-    await using scratch = await scratchDirectory();
+    await using scratch = await new TemporaryFiles().directory('docker-test-');
     await using engine = await fakeEngine({
       directory: scratch.path,
       apiVersion: '1.51',
@@ -483,7 +486,7 @@ describe('docker.images', () => {
 
   test('an error in the progress of a push of an image that is not on the engine is an ImageNotFoundError with the reference', async () => {
     // Arrange: the engine answers 200, reports the error in the progress, and an inspect of the reference gets 404.
-    await using scratch = await scratchDirectory();
+    await using scratch = await new TemporaryFiles().directory('docker-test-');
     await using engine = await fakeEngine({
       directory: scratch.path,
       apiVersion: '1.51',
@@ -596,7 +599,7 @@ describe('docker.images', () => {
 
   test('inspect(), save() and load() with a platform reject with UnsupportedEngineError before the request when the API version is lower than the call needs', async () => {
     // Arrange
-    await using scratch = await scratchDirectory();
+    await using scratch = await new TemporaryFiles().directory('docker-test-');
     const calls = [
       {
         apiVersion: '1.48',
@@ -659,7 +662,7 @@ describe('docker.images', () => {
 
   test('at the lowest API version of each call, inspect(), save() and load() send each platform as one platform parameter of OCI platform JSON', async () => {
     // Arrange: an engine at the version of the call that answers with an empty success.
-    await using scratch = await scratchDirectory();
+    await using scratch = await new TemporaryFiles().directory('docker-test-');
     const platformsOf = (path: string | undefined) =>
       new URL(path ?? '', 'http://engine').searchParams
         .getAll('platform')

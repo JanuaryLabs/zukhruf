@@ -39,8 +39,5 @@
   ],
   "publishConfig": {
     "access": "public"
-  },
-  "devDependencies": {
-    "@zukhruf/testing": "^0.8.20"
   }
 }

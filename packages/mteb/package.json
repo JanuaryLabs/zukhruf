@@ -71,6 +71,7 @@
     "@ai-sdk/openai-compatible": "3.0.79",
     "@ai-sdk/provider": "^4.0.34",
     "@types/heap": "^0.2.35",
+    "@zukhruf/fs": "*",
     "@zukhruf/testing": "*"
   }
 }

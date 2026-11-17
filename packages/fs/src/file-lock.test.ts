@@ -8,9 +8,9 @@ import { text } from 'node:stream/consumers';
 import { describe, test } from 'node:test';
 
 import { UnavailableError, UnchangedJournal, open } from '@zukhruf/sqlite-open';
-import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { FileLock } from './file-lock.ts';
+import { TemporaryFiles } from './temporary-files.ts';
 
 const fileLockUrl = new URL('./file-lock.ts', import.meta.url);
 

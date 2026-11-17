@@ -7,7 +7,7 @@ import { syncBuiltinESMExports } from 'node:module';
 import { join } from 'node:path';
 import { describe } from 'node:test';
 
-import { TemporaryFiles } from '@zukhruf/testing/fs';
+import { TemporaryFiles } from '@zukhruf/fs';
 import { test } from '@zukhruf/testing/node';
 
 import { Mutex } from '../../mutex/mutex.ts';

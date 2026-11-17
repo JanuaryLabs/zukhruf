@@ -4,8 +4,8 @@ import { type Socket, connect, createServer } from 'node:net';
 import { join } from 'node:path';
 
 import { Docker } from '@zukhruf/docker';
+import { TemporaryFiles } from '@zukhruf/fs';
 import { DockerTestbed } from '@zukhruf/testing/docker';
-import { TemporaryFiles } from '@zukhruf/testing/fs';
 import type { DatabaseOptions } from '@zukhruf/testing/postgres';
 
 import { DockerEngineStore } from '../../lock-stores/docker/docker-engine-store.ts';

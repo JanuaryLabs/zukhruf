@@ -4,9 +4,10 @@ import { type Duplex, getDefaultHighWaterMark } from 'node:stream';
 import { describe, test } from 'node:test';
 import { setImmediate, setTimeout } from 'node:timers/promises';
 
+import { TemporaryFiles } from '@zukhruf/fs';
+
 import { Docker, IncompleteOutputError } from './index.ts';
 import { fakeEngine } from './testing/fake-engine.ts';
-import { scratchDirectory } from './testing/scratch-directory.ts';
 
 const HIGH_WATER_MARK = getDefaultHighWaterMark(false);
 
@@ -121,7 +122,9 @@ describe('the end of the output of an exec and an attach', () => {
     },
     async () => {
       // Arrange
-      await using scratch = await scratchDirectory();
+      await using scratch = await new TemporaryFiles().directory(
+        'docker-test-',
+      );
       await using engine = await standIn(scratch.path);
       await using docker = await Docker.connect({
         clock: globalThis,
@@ -155,7 +158,9 @@ describe('the end of the output of an exec and an attach', () => {
     },
     async () => {
       // Arrange
-      await using scratch = await scratchDirectory();
+      await using scratch = await new TemporaryFiles().directory(
+        'docker-test-',
+      );
       await using engine = await standIn(scratch.path);
       await using docker = await Docker.connect({
         clock: globalThis,
@@ -191,7 +196,9 @@ describe('the end of the output of an exec and an attach', () => {
     },
     async () => {
       // Arrange
-      await using scratch = await scratchDirectory();
+      await using scratch = await new TemporaryFiles().directory(
+        'docker-test-',
+      );
       await using engine = await standIn(scratch.path);
       await using docker = await Docker.connect({
         clock: globalThis,
@@ -222,7 +229,7 @@ describe('the end of the output of an exec and an attach', () => {
 
   test('a stdin write that fails before any output came is an IncompleteOutputError with the exit code and the write error', async () => {
     // Arrange
-    await using scratch = await scratchDirectory();
+    await using scratch = await new TemporaryFiles().directory('docker-test-');
     await using engine = await standIn(scratch.path);
     void engine.socket.then((socket) => socket.destroy());
     await using docker = await Docker.connect({
@@ -249,7 +256,7 @@ describe('the end of the output of an exec and an attach', () => {
 
   test('a stdin write that fails while the caller has not taken the output is an IncompleteOutputError', async () => {
     // Arrange
-    await using scratch = await scratchDirectory();
+    await using scratch = await new TemporaryFiles().directory('docker-test-');
     await using engine = await standIn(scratch.path);
     await using docker = await Docker.connect({
       clock: globalThis,
@@ -281,7 +288,7 @@ describe('the end of the output of an exec and an attach', () => {
 
   test('a stdin write that fails after the caller took the output is not an error: the output ends, with the exit code', async () => {
     // Arrange
-    await using scratch = await scratchDirectory();
+    await using scratch = await new TemporaryFiles().directory('docker-test-');
     await using engine = await standIn(scratch.path);
     await using docker = await Docker.connect({
       clock: globalThis,
@@ -316,7 +323,7 @@ describe('the end of the output of an exec and an attach', () => {
 
   test('a caller that does not take the output stops the reads, and the reads go on when it takes the output', async () => {
     // Arrange
-    await using scratch = await scratchDirectory();
+    await using scratch = await new TemporaryFiles().directory('docker-test-');
     await using engine = await standIn(scratch.path);
     await using docker = await Docker.connect({
       clock: globalThis,

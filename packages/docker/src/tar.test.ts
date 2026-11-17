@@ -4,9 +4,10 @@ import { link, mkdir, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, test } from 'node:test';
 
+import { TemporaryFiles } from '@zukhruf/fs';
+
 import { tarEntries } from './tar-reader.ts';
 import { type TarWriterEntry, tarArchive } from './tar-writer.ts';
-import { scratchDirectory } from './testing/scratch-directory.ts';
 
 /**
  * Runs the tar program of this machine with `input`, if any, on its standard
@@ -143,7 +144,9 @@ describe('the tar archives of the package', () => {
     },
     async () => {
       // Arrange
-      await using scratch = await scratchDirectory();
+      await using scratch = await new TemporaryFiles().directory(
+        'docker-test-',
+      );
       const tree = join(scratch.path, 'tree');
       await mkdir(join(tree, ...UNSPLITTABLE.split('/').slice(0, -1)), {
         recursive: true,

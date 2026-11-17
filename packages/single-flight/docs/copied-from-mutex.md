@@ -128,7 +128,7 @@ It wins and resigns a term of `flightElection`, not of `socketElection`. Its com
 **`testing/worker-process.ts` → `testing/worker-process.ts`.**
 `startWorker` has no options: no `host` (it joins a child to the mutex's IPC coordinator) and no `nodeOptions`. The worker has no `exit` and no `find`. These tests use none of them.
 
-The temporary directory of the tests is not a copy: the tests use `TemporaryFiles` of `@zukhruf/testing/fs`, with the prefix `flights-`.
+The temporary directory of the tests is not a copy: the tests use `TemporaryFiles` of `@zukhruf/fs`, with the prefix `flights-`.
 
 These helpers do not belong in `@zukhruf/coordinator`. They stay copies, also in a third package: the election has a third copy, and [its ledger](../../election/docs/copied-code.md) records it. Only a test helper whose knowledge is in three or more repositories goes into `@zukhruf/testing` ([testing ADR 0016](../../testing/docs/adr/0016-a-test-helper-goes-into-an-area-when-three-repositories-have-its-knowledge-and-it-does-not-use-mock.md)). The knowledge of these helpers is only in this repository.
 

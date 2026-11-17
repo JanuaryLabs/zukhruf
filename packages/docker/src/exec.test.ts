@@ -3,6 +3,8 @@ import { createHash, randomUUID } from 'node:crypto';
 import { describe, test } from 'node:test';
 import { setTimeout } from 'node:timers/promises';
 
+import { TemporaryFiles } from '@zukhruf/fs';
+
 import {
   ContainerNotFoundError,
   ContainerNotRunningError,
@@ -12,7 +14,6 @@ import {
 } from './index.ts';
 import { IMAGE, TEST_LABEL, connect, removeLabeled } from './testing/engine.ts';
 import { fakeEngine } from './testing/fake-engine.ts';
-import { scratchDirectory } from './testing/scratch-directory.ts';
 
 /** A started container of alpine:3 with the label of this test run, that sleeps. */
 async function startSleeper(docker: Docker, run: string) {
@@ -289,7 +290,7 @@ describe('container.exec()', () => {
 
   test('a 409 of the exec start, for a container that stopped after the exec create, is a ContainerNotRunningError with the state of an inspect', async () => {
     // Arrange
-    await using scratch = await scratchDirectory();
+    await using scratch = await new TemporaryFiles().directory('docker-test-');
     await using engine = await fakeEngine({
       directory: scratch.path,
       apiVersion: '1.51',

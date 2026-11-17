@@ -10,9 +10,8 @@ import { describe, test } from 'node:test';
 import { createClock } from '@sinonjs/fake-timers';
 
 import type { CampaignOptions, Term } from '@zukhruf/election';
-import { FileLock } from '@zukhruf/fs';
+import { FileLock, TemporaryFiles } from '@zukhruf/fs';
 import { PipeAddress } from '@zukhruf/pipes';
-import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { isRecord } from '../../shared/is-record.ts';
 import { factTimeout } from '../../testing/fact-timeout.ts';

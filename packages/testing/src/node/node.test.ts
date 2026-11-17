@@ -5,7 +5,8 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import type { TestContext } from 'node:test';
 
-import { TemporaryFiles } from '../fs/temporary-files.ts';
+import { TemporaryFiles } from '@zukhruf/fs';
+
 import {
   describe as parameterizedDescribe,
   it as parameterizedIt,

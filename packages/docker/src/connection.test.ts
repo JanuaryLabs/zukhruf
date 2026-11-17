@@ -4,6 +4,8 @@ import { chmod, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, test } from 'node:test';
 
+import { TemporaryFiles } from '@zukhruf/fs';
+
 import {
   ConnectionFailedError,
   Docker,
@@ -13,7 +15,6 @@ import {
 } from './index.ts';
 import { fakeEngine } from './testing/fake-engine.ts';
 import { ENTRY, lastJson, runScenario } from './testing/scenario.ts';
-import { scratchDirectory } from './testing/scratch-directory.ts';
 
 const cannotDenyTheSocket =
   process.platform === 'win32'
@@ -25,7 +26,7 @@ const cannotDenyTheSocket =
 describe('Docker.connect() refuses an engine it cannot use', () => {
   test('a socket that does not exist is a ConnectionFailedError', async () => {
     // Arrange
-    await using scratch = await scratchDirectory();
+    await using scratch = await new TemporaryFiles().directory('docker-test-');
     const host = `unix://${join(scratch.path, 'absent.sock')}`;
 
     // Act
@@ -44,7 +45,7 @@ describe('Docker.connect() refuses an engine it cannot use', () => {
 
   test('a socket file that a killed engine left behind is a ConnectionFailedError', async () => {
     // Arrange
-    await using scratch = await scratchDirectory();
+    await using scratch = await new TemporaryFiles().directory('docker-test-');
     const socketPath = join(scratch.path, 'stale.sock');
     const listener = spawn(
       process.execPath,
@@ -91,7 +92,9 @@ createServer().listen(${JSON.stringify(socketPath)}, () => console.log('listenin
     { skip: cannotDenyTheSocket },
     async () => {
       // Arrange
-      await using scratch = await scratchDirectory();
+      await using scratch = await new TemporaryFiles().directory(
+        'docker-test-',
+      );
       await using engine = await fakeEngine({
         directory: scratch.path,
         apiVersion: '1.51',
@@ -121,7 +124,7 @@ createServer().listen(${JSON.stringify(socketPath)}, () => console.log('listenin
 
   test('an engine with an API version below 1.44 is an UnsupportedEngineError', async () => {
     // Arrange
-    await using scratch = await scratchDirectory();
+    await using scratch = await new TemporaryFiles().directory('docker-test-');
     await using engine = await fakeEngine({
       directory: scratch.path,
       apiVersion: '1.20',
@@ -143,7 +146,7 @@ createServer().listen(${JSON.stringify(socketPath)}, () => console.log('listenin
 
   test('a signal aborts a ping that the engine never answers, with the reason of the signal', async (t) => {
     // Arrange
-    await using scratch = await scratchDirectory();
+    await using scratch = await new TemporaryFiles().directory('docker-test-');
     await using engine = await fakeEngine({
       directory: scratch.path,
       apiVersion: '1.51',
@@ -172,7 +175,7 @@ createServer().listen(${JSON.stringify(socketPath)}, () => console.log('listenin
 describe('Docker.connect() negotiates the API version', () => {
   test('an engine above the highest version gets the highest version, compared by number', async () => {
     // Arrange
-    await using scratch = await scratchDirectory();
+    await using scratch = await new TemporaryFiles().directory('docker-test-');
     await using higher = await fakeEngine({
       directory: await mkdirIn(scratch.path, 'higher'),
       apiVersion: '1.99',
@@ -205,7 +208,7 @@ describe('Docker.connect() negotiates the API version', () => {
 
   test('an engine between the lowest and the highest version gets its own version in each path', async () => {
     // Arrange
-    await using scratch = await scratchDirectory();
+    await using scratch = await new TemporaryFiles().directory('docker-test-');
     await using engine = await fakeEngine({
       directory: scratch.path,
       apiVersion: '1.50',
@@ -236,7 +239,7 @@ describe('Docker.connect() negotiates the API version', () => {
 describe('a request that the engine answers with an error', () => {
   test('is a DockerEngineError with the status, the method, the path and the message of the engine', async () => {
     // Arrange
-    await using scratch = await scratchDirectory();
+    await using scratch = await new TemporaryFiles().directory('docker-test-');
     await using engine = await fakeEngine({
       directory: scratch.path,
       apiVersion: '1.51',
@@ -270,7 +273,7 @@ describe('a request that the engine answers with an error', () => {
 describe('a connection that the engine closes before its answer', () => {
   test('is a ConnectionFailedError that says the connection failed after it opened', async () => {
     // Arrange
-    await using scratch = await scratchDirectory();
+    await using scratch = await new TemporaryFiles().directory('docker-test-');
     await using engine = await fakeEngine({
       directory: scratch.path,
       apiVersion: '1.51',
@@ -304,7 +307,7 @@ describe('a connection that the engine closes before its answer', () => {
 describe('a connection that the engine closes after its answer started', () => {
   test('rejects the iteration of events() with the error of Node, not with a DockerError, after the events that came', async () => {
     // Arrange
-    await using scratch = await scratchDirectory();
+    await using scratch = await new TemporaryFiles().directory('docker-test-');
     await using engine = await fakeEngine({
       directory: scratch.path,
       apiVersion: '1.51',
@@ -341,7 +344,7 @@ describe('a connection that the engine closes after its answer started', () => {
 describe('the connections of a client', () => {
   test('disposal closes each connection to the engine', async () => {
     // Arrange
-    await using scratch = await scratchDirectory();
+    await using scratch = await new TemporaryFiles().directory('docker-test-');
     await using engine = await fakeEngine({
       directory: scratch.path,
       apiVersion: '1.51',
@@ -367,7 +370,7 @@ describe('the connections of a client', () => {
 
   test('when disposal resolves, the connection of a request in flight is closed: the process has no open connection', async () => {
     // Arrange: the engine never answers /info.
-    await using scratch = await scratchDirectory();
+    await using scratch = await new TemporaryFiles().directory('docker-test-');
     await using engine = await fakeEngine({
       directory: scratch.path,
       apiVersion: '1.51',
@@ -404,7 +407,7 @@ console.log(JSON.stringify({ inUse, afterDisposal, inFlight: await inFlight }));
 
   test('a process that connects and never disposes the client still exits by itself', async () => {
     // Arrange
-    await using scratch = await scratchDirectory();
+    await using scratch = await new TemporaryFiles().directory('docker-test-');
     await using engine = await fakeEngine({
       directory: scratch.path,
       apiVersion: '1.51',

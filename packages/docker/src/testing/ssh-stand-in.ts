@@ -1,6 +1,7 @@
-import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+
+import { TemporaryFiles } from '@zukhruf/fs';
 
 import { Docker, type DockerContext, type Environment } from '../index.ts';
 
@@ -110,7 +111,8 @@ if (mode.notRespondingAfter) {
  * Disposal removes the directory.
  */
 export async function sshStandIn(mode: SshStandInMode) {
-  const path = await mkdtemp(join(tmpdir(), 'docker-ssh-'));
+  const directory = await new TemporaryFiles().directory('docker-ssh-');
+  const { path } = directory;
   await writeFile(join(path, 'ssh'), script, { mode: 0o755 });
   await writeFile(join(path, 'ssh-mode.json'), JSON.stringify(mode));
   return {
@@ -127,8 +129,7 @@ export async function sshStandIn(mode: SshStandInMode) {
         }),
       );
     },
-    [Symbol.asyncDispose]: () =>
-      rm(path, { recursive: true, force: true, maxRetries: 5, retryDelay: 20 }),
+    [Symbol.asyncDispose]: directory.cleanup,
   };
 }
 

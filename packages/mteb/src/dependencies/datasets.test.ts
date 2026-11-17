@@ -6,7 +6,7 @@ import { gzipSync } from 'node:zlib';
 
 import { z } from 'zod';
 
-import { TemporaryFiles } from '@zukhruf/testing/fs';
+import { TemporaryFiles } from '@zukhruf/fs';
 import { HttpServer } from '@zukhruf/testing/http';
 
 import { AbsTask, type MTEBModels } from '../abstasks/abstask.ts';

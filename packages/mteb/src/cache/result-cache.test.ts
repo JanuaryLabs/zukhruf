@@ -9,7 +9,7 @@ import {
 import { join } from 'node:path';
 import { test } from 'node:test';
 
-import { TemporaryFiles } from '@zukhruf/testing/fs';
+import { TemporaryFiles } from '@zukhruf/fs';
 
 import { TaskMetadata } from '../abstasks/task-metadata.ts';
 import { ModelMeta } from '../models/model-meta.ts';

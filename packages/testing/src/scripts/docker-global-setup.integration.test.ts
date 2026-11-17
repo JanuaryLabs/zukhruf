@@ -26,6 +26,7 @@ import {
   ContainerNotFoundError,
   Docker,
 } from '@zukhruf/docker';
+import { type TemporaryDirectory, TemporaryFiles } from '@zukhruf/fs';
 
 import { EngineLease } from '../docker/engine-lease.ts';
 import { DockerTestbed } from '../docker/index.ts';
@@ -36,10 +37,6 @@ import {
   reaperRequest,
 } from '../docker/reaper.ts';
 import { RunRecords } from '../docker/run-records.ts';
-import {
-  type TemporaryDirectory,
-  TemporaryFiles,
-} from '../fs/temporary-files.ts';
 import { engine, proxyless } from '../testing/current-engine.ts';
 import { docker } from '../testing/engine-client.ts';
 import { EngineProxy } from '../testing/engine-proxy.ts';

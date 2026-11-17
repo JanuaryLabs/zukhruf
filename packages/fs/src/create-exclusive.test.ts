@@ -6,9 +6,8 @@ import { syncBuiltinESMExports } from 'node:module';
 import { join } from 'node:path';
 import { type TestContext, describe, test } from 'node:test';
 
-import { TemporaryFiles } from '@zukhruf/testing/fs';
-
 import { createExclusive } from './create-exclusive.ts';
+import { TemporaryFiles } from './temporary-files.ts';
 
 /** Records each `link` with the content its source holds at that moment; every link still reaches the disk. */
 function recordLinks(t: TestContext) {

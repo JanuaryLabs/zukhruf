@@ -10,9 +10,9 @@ import spawn from 'nano-spawn';
 import pg from 'pg';
 
 import { ConnectionFailedError, Docker } from '@zukhruf/docker';
+import { TemporaryFiles } from '@zukhruf/fs';
 
 import { timebox } from '../async/index.ts';
-import { TemporaryFiles } from '../fs/temporary-files.ts';
 import { engine, proxyless } from '../testing/current-engine.ts';
 import { EngineProxy } from '../testing/engine-proxy.ts';
 import { library } from '../testing/global-setup-run.ts';

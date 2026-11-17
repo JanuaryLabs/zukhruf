@@ -4,9 +4,9 @@ import { describe, test } from 'node:test';
 
 import { createClock } from '@sinonjs/fake-timers';
 
+import { TemporaryFiles } from '@zukhruf/fs';
 import { WriteAheadLog, open } from '@zukhruf/sqlite-open';
 import { transaction } from '@zukhruf/sqlite-transaction';
-import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { Notifications } from './index.ts';
 import { addressesOf, hear, startProgram } from './testing/program.ts';

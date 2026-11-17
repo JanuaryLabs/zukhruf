@@ -4,6 +4,8 @@ import { randomUUID } from 'node:crypto';
 import { Readable } from 'node:stream';
 import { describe, test } from 'node:test';
 
+import { TemporaryFiles } from '@zukhruf/fs';
+
 import {
   type Container,
   ContainerNotFoundError,
@@ -15,7 +17,6 @@ import {
 } from './index.ts';
 import { IMAGE, TEST_LABEL, connect, removeLabeled } from './testing/engine.ts';
 import { fakeEngine } from './testing/fake-engine.ts';
-import { scratchDirectory } from './testing/scratch-directory.ts';
 
 /** The output of a command in the container; it fails the test on a non-zero exit code. */
 async function shell(container: Container, script: string): Promise<string> {
@@ -230,7 +231,7 @@ describe('the files of a container', () => {
     // Arrange: the engine answers HEAD of the archive with 404 in both cases.
     // The inspect of c1 finds it, so its miss is a missing path; c2 is
     // removed after find(), so its miss is a missing container.
-    await using scratch = await scratchDirectory();
+    await using scratch = await new TemporaryFiles().directory('docker-test-');
     const inspects = new Map<string, number>();
     await using engine = await fakeEngine({
       directory: scratch.path,
@@ -275,7 +276,7 @@ describe('the files of a container', () => {
 
   test('stat() of a 500 rejects with a DockerEngineError of that status', async () => {
     // Arrange
-    await using scratch = await scratchDirectory();
+    await using scratch = await new TemporaryFiles().directory('docker-test-');
     await using engine = await fakeEngine({
       directory: scratch.path,
       apiVersion: '1.51',

@@ -12,8 +12,8 @@ import {
 } from 'ai';
 import type { MockEmbeddingModelV4 } from 'ai/test';
 
+import { TemporaryFiles } from '@zukhruf/fs';
 import { open } from '@zukhruf/sqlite-open';
-import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { DecisionService, DecisionServiceModel } from '../index.ts';
 import {

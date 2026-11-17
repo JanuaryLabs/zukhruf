@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
+import { TemporaryFiles } from '@zukhruf/fs';
+
 import { Docker } from './index.ts';
 import { fakeEngine } from './testing/fake-engine.ts';
-import { scratchDirectory } from './testing/scratch-directory.ts';
 
 /** A frame of a multiplexed stream: 1 is standard output, 2 standard error. */
 function frame(marker: 1 | 2, data: string): Buffer {
@@ -68,7 +69,7 @@ async function standIn(directory: string, tty: boolean, contentType?: string) {
 describe('the output of an engine that sends no Content-Type, as socktainer', () => {
   test('an exec without a TTY gives stdout and stderr apart', async () => {
     // Arrange
-    await using scratch = await scratchDirectory();
+    await using scratch = await new TemporaryFiles().directory('docker-test-');
     await using engine = await standIn(scratch.path, false);
     await using docker = await Docker.connect({
       clock: globalThis,
@@ -93,7 +94,7 @@ describe('the output of an engine that sends no Content-Type, as socktainer', ()
 
   test('an exec with a TTY gives each byte as stdout, even bytes that look like a frame', async () => {
     // Arrange
-    await using scratch = await scratchDirectory();
+    await using scratch = await new TemporaryFiles().directory('docker-test-');
     await using engine = await standIn(scratch.path, false);
     await using docker = await Docker.connect({
       clock: globalThis,
@@ -116,7 +117,7 @@ describe('the output of an engine that sends no Content-Type, as socktainer', ()
 
   test('an attach to a container without a TTY gives stdout and stderr apart', async () => {
     // Arrange
-    await using scratch = await scratchDirectory();
+    await using scratch = await new TemporaryFiles().directory('docker-test-');
     await using engine = await standIn(scratch.path, false);
     await using docker = await Docker.connect({
       clock: globalThis,
@@ -139,7 +140,7 @@ describe('the output of an engine that sends no Content-Type, as socktainer', ()
 
   test('an attach to a container with a TTY gives each byte as stdout', async () => {
     // Arrange
-    await using scratch = await scratchDirectory();
+    await using scratch = await new TemporaryFiles().directory('docker-test-');
     await using engine = await standIn(scratch.path, true);
     await using docker = await Docker.connect({
       clock: globalThis,
@@ -162,7 +163,7 @@ describe('the output of an engine that sends no Content-Type, as socktainer', ()
 
   test('the logs of a container without a TTY give stdout and stderr apart', async () => {
     // Arrange
-    await using scratch = await scratchDirectory();
+    await using scratch = await new TemporaryFiles().directory('docker-test-');
     await using engine = await standIn(scratch.path, false);
     await using docker = await Docker.connect({
       clock: globalThis,
@@ -184,7 +185,7 @@ describe('the output of an engine that sends no Content-Type, as socktainer', ()
 
   test('the logs of a container with a TTY give each byte as stdout', async () => {
     // Arrange
-    await using scratch = await scratchDirectory();
+    await using scratch = await new TemporaryFiles().directory('docker-test-');
     await using engine = await standIn(scratch.path, true);
     await using docker = await Docker.connect({
       clock: globalThis,
@@ -208,7 +209,7 @@ describe('the output of an engine that sends no Content-Type, as socktainer', ()
 describe('the Content-Type of the output', () => {
   test('an exec with a TTY gives each byte as stdout when the engine names a multiplexed stream', async () => {
     // Arrange
-    await using scratch = await scratchDirectory();
+    await using scratch = await new TemporaryFiles().directory('docker-test-');
     await using engine = await standIn(
       scratch.path,
       false,
@@ -231,7 +232,7 @@ describe('the Content-Type of the output', () => {
 
   test('the logs of a container without a TTY give stdout and stderr apart when the engine names a raw stream', async () => {
     // Arrange
-    await using scratch = await scratchDirectory();
+    await using scratch = await new TemporaryFiles().directory('docker-test-');
     await using engine = await standIn(
       scratch.path,
       false,

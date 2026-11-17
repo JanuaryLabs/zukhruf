@@ -12,7 +12,7 @@ import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { promisify } from 'node:util';
 
-import { TemporaryFiles } from '@zukhruf/testing/fs';
+import { TemporaryFiles } from '@zukhruf/fs';
 
 import type { MTEBModels } from '../abstasks/abstask.ts';
 import { AbsTaskRetrieval } from '../abstasks/retrieval.ts';

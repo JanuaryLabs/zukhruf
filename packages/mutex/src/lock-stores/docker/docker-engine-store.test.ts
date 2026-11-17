@@ -9,8 +9,8 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
 import { Docker } from '@zukhruf/docker';
+import { TemporaryFiles } from '@zukhruf/fs';
 import { DockerTestbed } from '@zukhruf/testing/docker';
-import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { Mutex } from '../../index.ts';
 import { factTimeout } from '../../testing/fact-timeout.ts';

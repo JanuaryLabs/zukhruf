@@ -10,9 +10,9 @@ import { Worker } from 'node:worker_threads';
 import { createClock } from '@sinonjs/fake-timers';
 
 import { SqliteElection } from '@zukhruf/election';
+import { TemporaryFiles } from '@zukhruf/fs';
 import { Mutex } from '@zukhruf/mutex';
 import { SocketStore } from '@zukhruf/mutex/socket';
-import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import {
   type Codec,

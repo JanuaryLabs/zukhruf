@@ -4,9 +4,9 @@ import { describe, test } from 'node:test';
 
 import { createClock } from '@sinonjs/fake-timers';
 
+import { TemporaryFiles } from '@zukhruf/fs';
 import { WriteAheadLog, open } from '@zukhruf/sqlite-open';
 import { settleWithin } from '@zukhruf/testing/async';
-import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import {
   DeniedError,

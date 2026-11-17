@@ -5,10 +5,10 @@ import { setImmediate } from 'node:timers/promises';
 
 import { type Job, TestClock } from 'pg-boss';
 
+import { TemporaryFiles } from '@zukhruf/fs';
 import { type Notification, Notifications } from '@zukhruf/sqlite-notify';
 import { open } from '@zukhruf/sqlite-open';
 import { settleWithin } from '@zukhruf/testing/async';
-import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { SqliteJobQueue } from './index.ts';
 import { id } from './testing/job-id.ts';

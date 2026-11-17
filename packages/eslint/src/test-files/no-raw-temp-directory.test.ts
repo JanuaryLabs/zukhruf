@@ -7,7 +7,7 @@ test('no-raw-temp-directory reports a temporary directory that node:fs makes', (
   typescriptRuleTester().run('no-raw-temp-directory', rule, {
     valid: [
       {
-        code: `import { TemporaryFiles } from '@zukhruf/testing/fs';\nawait using dir = await new TemporaryFiles().directory('x-');`,
+        code: `import { TemporaryFiles } from '@zukhruf/fs';\nawait using dir = await new TemporaryFiles().directory('x-');`,
       },
       // A function of the same name that node:fs does not give.
       { code: `const mkdtemp = (prefix) => prefix;\nmkdtemp('x-');` },

@@ -28,7 +28,7 @@ A test file is a `*.test.*` or `*.spec.*` file, or a file in `src/testing`, whic
 
 The lint checks direct imports only. A host that imports the mutex does not also need the tools, although the tests of the mutex import them.
 
-The shipped code of a tool can import a base package. For example, `testing` uses `docker` to send requests to the engine, and `docker` uses `async`. A package that `testing` depends on, now `docker` and `async`, never imports `@zukhruf/testing` in its tests. Such an import makes a cycle in the build: `testing` needs the build of `docker`, and the tests of `docker` would need the build of `testing`.
+The shipped code of a tool can import a base package. For example, `testing` uses `docker` to send requests to the engine, and `docker` uses `async`. A package that `testing` depends on, now `docker`, `fs`, `async` and `sqlite-open`, never imports `@zukhruf/testing` in its tests. The tests of `async` and `sqlite-open` also do not import `@zukhruf/fs`, which depends on them. Such an import makes a cycle in the build: `testing` needs the build of `docker`, and the tests of `docker` would need the build of `testing`.
 
 Each package also keeps its `layer:island` tag. That tag answers a different question: the package imports no runtime of a host, such as Hono or Electron.
 

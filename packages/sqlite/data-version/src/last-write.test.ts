@@ -4,8 +4,8 @@ import { join } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 
+import { TemporaryFiles } from '@zukhruf/fs';
 import * as sqliteOpen from '@zukhruf/sqlite-open';
-import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { DataVersion, UnavailableError, lastWrite } from './index.ts';
 

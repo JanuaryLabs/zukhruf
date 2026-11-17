@@ -5,9 +5,9 @@ import { join } from 'node:path';
 import { describe, test } from 'node:test';
 
 import { SqliteElection } from '@zukhruf/election';
+import { TemporaryFiles } from '@zukhruf/fs';
 import { LeaseLostError } from '@zukhruf/lease';
 import { PipeEndpoint } from '@zukhruf/pipes';
-import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { factTimeout } from '../../testing/fact-timeout.ts';
 import { onUnixSockets } from '../../testing/on-unix-sockets.ts';

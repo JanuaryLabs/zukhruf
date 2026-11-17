@@ -10,7 +10,7 @@ import type { TestContext } from 'node:test';
 import { setTimeout } from 'node:timers/promises';
 
 import { SqliteElection } from '@zukhruf/election';
-import { TemporaryFiles } from '@zukhruf/testing/fs';
+import { TemporaryFiles } from '@zukhruf/fs';
 
 import { SingleFlight } from './index.ts';
 import {

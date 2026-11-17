@@ -3,7 +3,7 @@ import { lstat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, test } from 'node:test';
 
-import { TemporaryFiles } from '@zukhruf/testing/fs';
+import { TemporaryFiles } from '@zukhruf/fs';
 
 import { PipeEndpoint } from './index.ts';
 import { defaultFolder } from './testing/default-folder.ts';

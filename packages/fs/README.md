@@ -222,6 +222,29 @@ console.log(stamps.modifiedAt); // the newest write of the files that are presen
 
 No package on npm does this job. [ADR 0004](./docs/adr/0004-a-file-stamp-is-the-stat-data-that-git-compares.md) tells why each candidate failed.
 
+## Make a temporary directory
+
+`new TemporaryFiles().directory(prefix)` makes an empty directory in `os.tmpdir()`. Its name starts with `prefix`. The handle has `path` and `cleanup`. Disposal removes the directory and all that it holds.
+
+```ts
+import { join } from 'node:path';
+
+import { TemporaryFiles } from '@zukhruf/fs';
+
+await using scratch = await new TemporaryFiles().directory('report-');
+await writeReport(join(scratch.path, 'report.json'));
+```
+
+`directorySync(prefix)` does the same for code that cannot wait, such as a synchronous `Symbol.dispose`. Its handle is `Disposable`, so it goes with `using`.
+
+`path` is the real path: the acquisition resolves symbolic links. On macOS, `os.tmpdir()` is below `/var`, and `/var` is a link to `/private/var`. git, a child process and a bind mount give the resolved path. Thus code can compare their output with `path` directly.
+
+On Windows, a process that still holds a file open stops its removal for a short time. Thus disposal retries the removal on `EBUSY`, `EMFILE`, `ENFILE`, `ENOTEMPTY` and `EPERM`. It retries 8 times, and it waits 50 ms longer before each retry: 50 + 100 + … + 400 = 1.8 s at most. A removal that does not fail does not wait. When the last retry fails, disposal rejects (or, for `directorySync`, throws) with the error. Node's own `mkdtempDisposable` does not retry, and it gives the path as you wrote it.
+
+The only option is `parent`, the directory that holds the new directory. The default is `os.tmpdir()`. Give a parent on the disk of a file that you rename out of the directory, because a rename across two disks fails with `EXDEV`. A Unix socket path has a limit of 104 bytes on macOS and 108 bytes on Linux. On macOS, the real path of `os.tmpdir()` uses 56 of them. Thus give a short parent, such as `/tmp`, for a socket. Node resolves a package from the parent directories of the file that imports it. Thus give a parent in the repository when a file in the directory imports a package of the repository.
+
+[ADR 0008 of `@zukhruf/testing`](../testing/docs/adr/0008-a-temporary-directory-retries-its-removal-and-gives-its-real-path.md) records why the directory retries its removal and gives its real path.
+
 ## Check the error code
 
 `isErrno(error, code)` tells if `error` is a Node.js system error with that error code.

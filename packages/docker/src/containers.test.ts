@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { describe, test } from 'node:test';
 
+import { TemporaryFiles } from '@zukhruf/fs';
+
 import {
   BindSourceNotFoundError,
   ContainerNotFoundError,
@@ -17,7 +19,6 @@ import {
 import { IMAGE, TEST_LABEL, connect, removeLabeled } from './testing/engine.ts';
 import { fakeEngine } from './testing/fake-engine.ts';
 import { ENTRY, lastJson, runScenario } from './testing/scenario.ts';
-import { scratchDirectory } from './testing/scratch-directory.ts';
 
 /** A body of alpine:3 with the label of this test run, that sleeps when it starts. */
 function sleeper(run: string) {
@@ -141,7 +142,7 @@ describe('answers that are not errors', () => {
 describe('a removal that is already in progress', () => {
   test('when the other removal fails and leaves the container dead, remove() sends a forced removal again and resolves when an inspect gets 404', async () => {
     // Arrange: the first DELETE meets a removal in progress, which then fails. A wait for removed never answers.
-    await using scratch = await scratchDirectory();
+    await using scratch = await new TemporaryFiles().directory('docker-test-');
     const deletes: string[] = [];
     let inspects = 0;
     await using engine = await fakeEngine({
@@ -198,7 +199,7 @@ describe('a removal that is already in progress', () => {
 
   test('an abort of the signal ends the wait for a removal in progress with its reason', async () => {
     // Arrange: the removal in progress never ends.
-    await using scratch = await scratchDirectory();
+    await using scratch = await new TemporaryFiles().directory('docker-test-');
     await using engine = await fakeEngine({
       directory: scratch.path,
       apiVersion: '1.51',
@@ -512,7 +513,7 @@ describe('a request that the engine refuses for one container', () => {
     // Arrange: moby marks the container Dead during the removal and resets
     // RemovalInProgress at its end, so an inspect that waited on the lock of
     // the container reads 'dead' (CI run 40297823395).
-    await using scratch = await scratchDirectory();
+    await using scratch = await new TemporaryFiles().directory('docker-test-');
     await using engine = await fakeEngine({
       directory: scratch.path,
       apiVersion: '1.51',
@@ -644,7 +645,7 @@ describe('container.port()', () => {
   test('a binding of each interface gives the IPv4 loopback address before the IPv6 one', async () => {
     // Arrange: the Ports of inspects of Docker Desktop for `-p 80` and
     // `-p '[::]::81'`, with the IPv6 binding of port 80 put first.
-    await using scratch = await scratchDirectory();
+    await using scratch = await new TemporaryFiles().directory('docker-test-');
     await using engine = await fakeEngine({
       directory: scratch.path,
       apiVersion: '1.51',
@@ -693,7 +694,7 @@ describe('container.port()', () => {
 describe('containers.inspect()', () => {
   test('an answer of the engine that is an error and not a 404 rejects with DockerEngineError', async () => {
     // Arrange
-    await using scratch = await scratchDirectory();
+    await using scratch = await new TemporaryFiles().directory('docker-test-');
     await using engine = await fakeEngine({
       directory: scratch.path,
       apiVersion: '1.51',
@@ -737,7 +738,7 @@ describe('containers.inspect()', () => {
 
   test('an abort of the signal rejects with its reason', async () => {
     // Arrange: the engine never answers the inspect.
-    await using scratch = await scratchDirectory();
+    await using scratch = await new TemporaryFiles().directory('docker-test-');
     const controller = new AbortController();
     const reason = new Error('the caller stopped waiting');
     await using engine = await fakeEngine({
@@ -808,7 +809,7 @@ describe('containers.inspect()', () => {
 
   test('one call sends one request, for a container that exists and for one that is missing', async () => {
     // Arrange
-    await using scratch = await scratchDirectory();
+    await using scratch = await new TemporaryFiles().directory('docker-test-');
     await using engine = await fakeEngine({
       directory: scratch.path,
       apiVersion: '1.51',

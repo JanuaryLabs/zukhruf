@@ -13,10 +13,9 @@ import { syncBuiltinESMExports } from 'node:module';
 import { dirname, join } from 'node:path';
 import { type TestContext, describe, test } from 'node:test';
 
-import { TemporaryFiles } from '@zukhruf/testing/fs';
-
 import { atomicWrite } from './atomic-write.ts';
 import { durableWrite } from './durable-write.ts';
+import { TemporaryFiles } from './temporary-files.ts';
 
 type DiskEvent =
   | { op: 'write' | 'sync'; path: string }

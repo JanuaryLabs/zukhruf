@@ -48,6 +48,10 @@ _Avoid_: Claim (the election uses a file lock as its claim), presence (the mutex
 What the file system says about the file at a path: its device, its inode, its size, and the times of its last write and its last change, to the nanosecond. A write or a new file at the path changes it. A missing file has a stamp of its own.
 _Avoid_: Fingerprint (a hash of the content), version (`@zukhruf/sqlite-data-version` gives a different number), checksum, mtime (one part of the stamp)
 
+**Temporary directory**:
+An empty directory that one acquisition owns, at its real path. Its disposal removes it with all that it holds, and retries while Windows refuses a file for a moment.
+_Avoid_: Scratch directory, temp dir
+
 **Missing file**:
 No file is at the path, or a part of the path is a file and not a folder (`ENOENT`, `ENOTDIR`). A folder that the process may not search is not a missing file: its error reaches the caller.
 _Avoid_: Absent, deleted (a missing file can also never have existed)

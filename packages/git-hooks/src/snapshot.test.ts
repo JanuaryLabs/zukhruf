@@ -4,7 +4,7 @@ import { chmod, mkdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
-import { TemporaryFiles } from '@zukhruf/testing/fs';
+import { TemporaryFiles } from '@zukhruf/fs';
 
 import type { Commit } from './index.ts';
 import { hookedGit, isolatedEnvironment } from './testing/hooked-repository.ts';

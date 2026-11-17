@@ -8,8 +8,8 @@ import { promisify } from 'node:util';
 
 import { TestClock } from 'pg-boss';
 
+import { TemporaryFiles } from '@zukhruf/fs';
 import { open } from '@zukhruf/sqlite-open';
-import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { SqliteJobQueue } from './index.ts';
 import { id } from './testing/job-id.ts';
