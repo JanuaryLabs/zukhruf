@@ -213,6 +213,13 @@ The rule decides each manifest's options itself, so your options add to the shar
 
 `manifest/recommended` also has `manifest/no-truncated-description`. The npm registry keeps only the first 255 characters of a package's `description`. `npm view` and the npm search do not show the rest. The rule reports a `description` that is longer than 255 characters. It does not check a manifest with `"private": true`, because npm does not publish it. Put the key fact in the description, and put the details in the README.
 
+`manifest/recommended` also has `manifest/nx-family-pinned`. `nx` ships a native addon, and each `@nx/*` package depends on `nx` at its own version. When two versions are asked for, npm nests a second `nx`, with its own addon, under the package that asked. So the rule allows one version of the nx family:
+
+- In the workspace root `package.json`, every `nx` and `@nx/*` entry in `dependencies`, `devDependencies` and `optionalDependencies` has an exact version, with no range operator, and that version is the version of the root's `nx`.
+- Every other `package.json` names `nx` and `@nx/*` packages only in `peerDependencies`, with any range.
+
+The workspace root is the nearest folder with an `nx.json`, a `pnpm-workspace.yaml`, or a `package.json` that declares `workspaces`. A `package.json` outside any workspace is a root itself. The rule runs on each `package.json` that ESLint lints, so the root's clause runs only where the root `package.json` is linted.
+
 ## React
 
 `@zukhruf/eslint/react` gives the configs that the React community maintains. The package adds no rule of its own to them and changes no severity. Use it in the `eslint.config.mjs` of a React project. Put it first, and then the root config, as before:
