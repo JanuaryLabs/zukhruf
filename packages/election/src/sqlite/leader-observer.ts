@@ -1,10 +1,6 @@
-import { type Clock, Latch } from '@zukhruf/async';
+import { type Clock, Future } from '@zukhruf/async';
 
 import { type Left, readLeader } from './leader-reader.ts';
-
-/** How the observation ended, as data: a latch never rejects. */
-type Outcome =
-  { failed: false; left: Left | 'absent' } | { failed: true; error: unknown };
 
 /**
  * A reader of the leader's pipe that never tries the claim, after etcd's
@@ -13,7 +9,7 @@ type Outcome =
  */
 export class LeaderObserver implements Disposable {
   readonly #stop = new AbortController();
-  readonly #outcome = new Latch<Outcome>();
+  readonly #left = new Future<Left | 'absent'>();
 
   constructor(recordPath: string, clock: Clock) {
     readLeader(recordPath, {
@@ -21,11 +17,10 @@ export class LeaderObserver implements Disposable {
       ref: false,
       signal: this.#stop.signal,
     }).then(
-      (left) => this.#outcome.open({ failed: false, left }),
+      (left) => this.#left.resolve(left),
       (error: unknown) => {
         // After a disposal, `left` tells nothing.
-        if (!this.#stop.signal.aborted)
-          this.#outcome.open({ failed: true, error });
+        if (!this.#stop.signal.aborted) this.#left.reject(error);
       },
     );
   }
@@ -37,10 +32,7 @@ export class LeaderObserver implements Disposable {
    * disposal.
    */
   get left(): Promise<Left | 'absent'> {
-    return this.#outcome.wait().then((outcome) => {
-      if (outcome.failed) throw outcome.error;
-      return outcome.left;
-    });
+    return this.#left.wait();
   }
 
   /** Closes the connection and clears the deadline. */
