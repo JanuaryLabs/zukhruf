@@ -24,15 +24,20 @@ export const dockerNamespaceLabel = 'zukhruf.mutex.namespace';
 
 /** Where the stores of a Docker engine case meet. The location of the fixture is this object as JSON. */
 interface DockerEngineLocation {
-  host: string;
   namespace: string;
   /**
-   * The test run's variables from the fixture's environment, empty outside a
-   * run. Each process that opens a store reads the run's labels from them,
-   * which records the process in the run. Only these two: the location is
-   * in each child's source, so the rest of the environment would reach argv.
+   * The environment of each store and of its testbed: `DOCKER_HOST` with the
+   * engine that the fixture resolved, and the test run's variables from the
+   * fixture's environment, empty outside a run. The store connects its own
+   * client from it, and the testbed reads the labels from it and holds the
+   * run's reaper over a client of its own, so the store creates on the engine
+   * where the testbed holds the reaper, and a store that disposes its client
+   * never cuts that hold. The read of the labels records the process in the
+   * run. Only these three: the location is in each child's source, so the
+   * rest of the environment would reach argv.
    */
-  run: {
+  environment: {
+    DOCKER_HOST: string;
     ZUKHRUF_TESTING_RUN_ID?: string | undefined;
     ZUKHRUF_TESTING_RUN_DIR?: string | undefined;
   };
@@ -63,9 +68,9 @@ export async function dockerEngineFixture(
     return { host: docker.host };
   })();
   const location: DockerEngineLocation = {
-    host,
     namespace: `zukhruf-mutex-test-${randomUUID()}`,
-    run: {
+    environment: {
+      DOCKER_HOST: host,
       ZUKHRUF_TESTING_RUN_ID: environment.ZUKHRUF_TESTING_RUN_ID,
       ZUKHRUF_TESTING_RUN_DIR: environment.ZUKHRUF_TESTING_RUN_DIR,
     },
@@ -98,14 +103,14 @@ export async function dockerEngineFixture(
  * never disposes its client can exit.
  */
 export function dockerEngineStore(location: string) {
-  const { host, namespace, run }: DockerEngineLocation = JSON.parse(location);
-  const docker = Docker.connect({ clock: globalThis, host });
+  const { namespace, environment }: DockerEngineLocation = JSON.parse(location);
+  const docker = Docker.connect({ clock: globalThis, environment });
   const store = docker.then(async (client) => {
     // Before the first claim: the read records this process in the run and
-    // holds the run's reaper, which removes what it created after the run
-    // (@zukhruf/testing ADR 0013 and ADR 0020).
+    // holds the run's reaper on the engine of `client`, which removes what it
+    // created after the run (@zukhruf/testing ADR 0013 and ADR 0020).
     const { Labels: labels } = await new DockerTestbed({
-      environment: run,
+      environment,
     }).defaults();
     return new DockerEngineStore({
       docker: client,
@@ -249,9 +254,17 @@ export async function engineProxy(docker: Docker) {
 export const partitionable: Partitionable = {
   heartbeatInterval: 500,
   async partitionable(location, clock) {
-    const { host, namespace, run }: DockerEngineLocation = JSON.parse(location);
+    const { namespace, environment }: DockerEngineLocation =
+      JSON.parse(location);
     const stack = new AsyncDisposableStack();
-    const direct = stack.use(await Docker.connect({ clock: globalThis, host }));
+    const direct = stack.use(
+      await Docker.connect({ clock: globalThis, environment }),
+    );
+    // The run's reaper is held on the engine itself, never through the proxy
+    // that partition() cuts.
+    const { Labels: labels } = await new DockerTestbed({
+      environment,
+    }).defaults();
     const proxy = stack.use(await engineProxy(direct));
     const client = stack.use(
       await Docker.connect({ clock: globalThis, host: proxy.host }),
@@ -262,8 +275,7 @@ export const partitionable: Partitionable = {
         image: dockerImage,
         namespace,
         heartbeatInterval: this.heartbeatInterval,
-        labels: (await new DockerTestbed({ environment: run }).defaults())
-          .Labels,
+        labels,
         clock,
       }),
       partition: () => proxy.partition(),

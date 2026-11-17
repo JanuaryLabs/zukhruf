@@ -97,7 +97,7 @@ export default defineConfig(
   {
     files: ['**/*.{test,spec}.ts', '**/*.{test,spec}.tsx', '**/src/testing/**'],
     rules: {
-      'zukhruf/no-short-test-timeout': ['error', { minimum: 240_000 }],
+      'zukhruf/no-short-test-timeout': ['error', { minimum: 300_000 }],
     },
   },
   {

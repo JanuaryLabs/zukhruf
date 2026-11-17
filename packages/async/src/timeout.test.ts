@@ -1,9 +1,13 @@
 import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
 import { describe, test } from 'node:test';
+import { promisify } from 'node:util';
 
 import { createClock } from '@sinonjs/fake-timers';
 
 import { timeout } from './timeout.ts';
+
+const execFileAsync = promisify(execFile);
 
 describe('timeout', () => {
   test('a timeout that the block disposed never aborts, and leaves no timer on the clock', async () => {
@@ -131,6 +135,78 @@ describe('timeout', () => {
       limit.signal.aborted,
       true,
       'The signal must abort when the rest of the time ends',
+    );
+  });
+
+  test('a process whose only pending work is a timeout that leaves ref out ends before the signal aborts, as with AbortSignal.timeout', async () => {
+    // Arrange: 60 s count in parts of 6 s, longer than the 5 s that the run
+    // waits, so a part that keeps the process alive fails the run.
+    const program = `
+        import { timeout } from ${JSON.stringify(import.meta.resolve('./timeout.ts'))};
+        const limit = timeout(60_000, { clock: globalThis });
+        limit.signal.addEventListener('abort', () => console.log(limit.signal.reason.name));
+      `;
+
+    // Act
+    const { stdout } = await execFileAsync(
+      process.execPath,
+      ['--input-type=module', '--eval', program],
+      { timeout: 5_000 },
+    );
+
+    // Assert
+    assert.equal(
+      stdout,
+      '',
+      'Without ref, the timeout must not keep the process alive until it aborts',
+    );
+  });
+
+  test('a process that other work keeps alive past the first parts of a timeout that leaves ref out still ends before the signal aborts: no part keeps it alive', async () => {
+    // Arrange: 2 s count in ten parts of 200 ms. A timer of 500 ms keeps the
+    // process alive while the second and the third part start.
+    const program = `
+        import { timeout } from ${JSON.stringify(import.meta.resolve('./timeout.ts'))};
+        const limit = timeout(2_000, { clock: globalThis });
+        limit.signal.addEventListener('abort', () => console.log(limit.signal.reason.name));
+        setTimeout(() => {}, 500);
+      `;
+
+    // Act
+    const { stdout } = await execFileAsync(
+      process.execPath,
+      ['--input-type=module', '--eval', program],
+      { timeout: 10_000 },
+    );
+
+    // Assert
+    assert.equal(
+      stdout,
+      '',
+      'Without ref, no part of the timeout must keep the process alive until it aborts',
+    );
+  });
+
+  test('a process whose only pending work is a timeout with ref true stays alive through each part until the signal aborts with a TimeoutError', async () => {
+    // Arrange: 200 ms count in ten parts of 20 ms.
+    const program = `
+        import { timeout } from ${JSON.stringify(import.meta.resolve('./timeout.ts'))};
+        const limit = timeout(200, { clock: globalThis, ref: true });
+        limit.signal.addEventListener('abort', () => console.log(limit.signal.reason.name));
+      `;
+
+    // Act
+    const { stdout } = await execFileAsync(
+      process.execPath,
+      ['--input-type=module', '--eval', program],
+      { timeout: 10_000 },
+    );
+
+    // Assert
+    assert.equal(
+      stdout,
+      'TimeoutError\n',
+      'With ref true, the timeout must keep the process alive until it aborts',
     );
   });
 });

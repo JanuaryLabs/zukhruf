@@ -31,10 +31,11 @@ const ownGlobalSetup = 'src/testing/docker-global-setup.ts';
 export const createNodes: CreateNodes<TestOptions> = [
   '{package.json,**/package.json,project.json,**/project.json,**/*.test.{ts,mts,cts,js,mjs},**/{vite,vitest}.config.{js,ts,mjs,mts,cjs,cts}}',
   async (files, options, context) => {
-    // The defaults of ADR 0004: 240 s is the slowest readiness bound of
-    // @zukhruf/testing (SQL Server, 180 s) plus 60 s for the test itself, and
-    // no repo adds a flag for each project.
-    const { timeout = 240_000, flags = [] } = options ?? {};
+    // The defaults of ADR 0004: 300 s is the sum of the readiness bounds of
+    // @zukhruf/testing that one test can pay in a row (the reaper hold, 60 s,
+    // and the slowest server, SQL Server, 180 s) plus 60 s for the test
+    // itself, and no repo adds a flag for each project.
+    const { timeout = 300_000, flags = [] } = options ?? {};
     const configFiles = files.filter((file) =>
       ['package.json', 'project.json'].includes(basename(file)),
     );

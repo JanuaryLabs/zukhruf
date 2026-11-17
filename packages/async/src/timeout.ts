@@ -1,9 +1,18 @@
 import type { Clock } from './clock.ts';
-import { TIMER_MAX } from './delay.ts';
+import { TIMER_MAX, unref } from './delay.ts';
 
 export interface TimeoutOptions {
   /** The clock that the timer runs on: `globalThis` in production, a fake clock in a test. */
   clock: Clock;
+  /**
+   * With `true`, the timer keeps the process alive until the signal aborts or
+   * until the disposal. Without it, the timer does not keep the process
+   * alive, as the timer of `AbortSignal.timeout` does not: `timeout` calls
+   * `unref()` on each timer of the clock, when the timer has one. Give `true`
+   * when the abort must come also while no other work keeps the process alive
+   * (ADR 0012).
+   */
+  ref?: boolean | undefined;
 }
 
 /** A signal that aborts after a time on a clock. A disposal stops its timer. */
@@ -26,8 +35,9 @@ const PARTS = 10;
  * wait ends: `using limit = timeout(ms, { clock })`. The time runs in parts
  * of at most one timer each, so a timeout longer than one timer can hold
  * lasts the full time, and the time of a system sleep does not use it up.
+ * Without `ref: true`, the timeout does not keep the process alive.
  */
-export function timeout(ms: number, { clock }: TimeoutOptions): Timeout {
+export function timeout(ms: number, { clock, ref }: TimeoutOptions): Timeout {
   const controller = new AbortController();
   const part = Math.min(Math.max(Math.ceil(ms / PARTS), 1), TIMER_MAX);
   let timer: unknown;
@@ -47,6 +57,7 @@ export function timeout(ms: number, { clock }: TimeoutOptions): Timeout {
       },
       Math.min(left, part),
     );
+    if (ref !== true) unref(timer);
   };
   count(ms);
   return {

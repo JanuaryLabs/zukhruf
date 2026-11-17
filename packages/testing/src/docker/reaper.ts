@@ -1,10 +1,14 @@
+import { randomUUID } from 'node:crypto';
+
 import pMemoize, { pMemoizeClear } from 'p-memoize';
 
 import { type Clock, poll, timeout, untilAborted } from '@zukhruf/async';
 import {
+  BindSourceNotFoundError,
   type Container,
   ContainerNotFoundError,
   ContainerNotRunningError,
+  type ContainerProcess,
   type Docker,
   type EngineApi,
   ImageNotFoundError,
@@ -34,6 +38,15 @@ export const REAPER_IMAGE = 'docker:28.5.2-cli';
 /** Marks the reaper of a run, with the run's id. It is not the run's label: the reaper would remove itself. */
 export const REAPER_LABEL = 'dev.zukhruf.testing.reaper';
 
+/** Marks a reaper with a value of its own, which it looks for through its socket (ADR 0020, item 14). */
+const SELF_LABEL = 'dev.zukhruf.testing.reaper.self';
+
+/** Marks a reaper with the source of its socket on the engine's host (ADR 0020, item 14). */
+const SOCKET_LABEL = 'dev.zukhruf.testing.reaper.socket';
+
+/** The path of the engine's socket in a reaper, where its `docker` CLI looks by default. */
+const SOCKET = '/var/run/docker.sock';
+
 /** Marks a server that `reuse()` shares (ADR 0019). */
 export const SERVER_LABEL = 'dev.zukhruf.testing.server';
 
@@ -59,9 +72,15 @@ export interface ReaperSettings {
   sweepTries: number;
   /** The time a `created` sweep lease gets to start before the reaper removes it. */
   leasePatience: number;
+  /**
+   * The readiness bound of a hold: the longest that a process waits for it,
+   * with its image pull, create, start, check of the socket and answer
+   * (ADR 0020, item 15).
+   */
+  readiness: number;
 }
 
-/** The values of the probe and of Ryuk, and of ADR 0014 and ADR 0019. */
+/** The values of the probe and of Ryuk, and of ADR 0014, ADR 0019 and ADR 0020. */
 export const REAPER_DEFAULTS: ReaperSettings = {
   grace: 2_000,
   interval: 1_000,
@@ -73,6 +92,7 @@ export const REAPER_DEFAULTS: ReaperSettings = {
   sweepWait: 30_000,
   sweepTries: 3,
   leasePatience: 5_000,
+  readiness: 60_000,
 };
 
 /** The name of the reaper of the run `runId` on an engine: one reaper for each run (ADR 0020, item 7). */
@@ -86,14 +106,29 @@ const COLLECTORS: readonly Collector[] = [postgres, mysql, mariadb, sqlserver];
 const DOOR = '/tmp/door';
 
 /**
- * The exec of a holder. Its answer is its first line: `held` once it holds
- * the door shared, then its `cat` keeps the lock until the hold ends, or
- * `closing` when the reaper closed its door.
+ * The file of the reaper's check of its socket: `verified` when the socket
+ * reaches the reaper's own engine, else the reason why not (ADR 0020, item 14).
+ */
+const BIND = '/tmp/bind';
+
+/**
+ * The mark of a first holder: a holder writes it once it holds the door, so
+ * a hold that ended before the reaper looked still ends the wait for a first
+ * holder (ADR 0020, item 9).
+ */
+const CAME = '/tmp/came';
+
+/**
+ * The exec of a holder. It waits for the check of the reaper's socket. Its
+ * answer is its first line: `unverified` and the reason when the socket does
+ * not reach the reaper's engine, `held` once it holds the door shared and
+ * wrote the mark of a first holder, then its `cat` keeps the lock until the
+ * hold ends, or `closing` when the reaper closed its door.
  */
 const HOLD = [
   'sh',
   '-c',
-  `exec 8>>${DOOR}; flock -n -s 8 || { echo closing; exit 0; }; echo held; exec cat`,
+  `until [ -e ${BIND} ]; do sleep 0.05; done; read -r bind < ${BIND}; [ "$bind" = verified ] || { echo "unverified $bind"; exit 0; }; exec 8>>${DOOR}; flock -n -s 8 || { echo closing; exit 0; }; : > ${CAME}; echo held; exec cat`,
 ];
 
 /** A word of `sh` in double quotes. Each `\u0000name\u0000` in `text` becomes the variable `name`. */
@@ -207,6 +242,8 @@ gone() {
 }
 
 # Takes the sweep lease of the fingerprint $1: a cat that ends with this reaper.
+# The - after the image: socktainer 1.6.1 runs the image's own Cmd when the
+# command is empty (#4205).
 lease() {
   name="${sweepLeaseName('$1')}"
   fifo=/tmp/lease-$1
@@ -216,7 +253,7 @@ lease() {
     tries=$((tries + 1))
     rm -f "$fifo" "$fifo.id" "$fifo.err"
     mkfifo "$fifo"
-    docker run -i --rm --name "$name" --cidfile "$fifo.id" --label "${LEASE_LABEL}=sweep" --label "${LEASED_SERVER_LABEL}=$1" --entrypoint cat ${LEASE_IMAGE} < "$fifo" > /dev/null 2> "$fifo.err" &
+    docker run -i --rm --name "$name" --cidfile "$fifo.id" --label "${LEASE_LABEL}=sweep" --label "${LEASED_SERVER_LABEL}=$1" --entrypoint cat ${LEASE_IMAGE} - < "$fifo" > /dev/null 2> "$fifo.err" &
     job=$!
     exec 9> "$fifo"
     started=$(($(now) + REAPER_REQUEST_TIMEOUT))
@@ -273,8 +310,25 @@ revive() {
   done
 }
 
+# Looks through the socket for this reaper, by the value of its own label
+# (ADR 0020, item 14). A socket that does not answer, or that reaches another
+# engine, is not the socket of this reaper's engine. Then the reaper removes
+# nothing: it writes why, for a holder to read, and waits for that holder to
+# remove it.
+if found=$(once docker ps -a -q --filter "label=${SELF_LABEL}=$REAPER_SELF" 2>&1); then
+  if [ -n "$found" ]; then bind=verified; else bind="the socket reaches an engine that does not run this reaper"; fi
+else
+  reason=$(echo "$found" | tail -n 1)
+  bind="the socket does not answer: \${reason:-no answer within $REAPER_REQUEST_TIMEOUT ms}"
+fi
+echo "$bind" > ${BIND}.new && mv ${BIND}.new ${BIND}
+if [ "$bind" != verified ]; then
+  sleep "$(seconds $((REAPER_FIRST_HOLDER + REAPER_REQUEST_TIMEOUT)))"
+  exit 1
+fi
+
 first=$(($(now) + REAPER_FIRST_HOLDER))
-until [ "$(holders)" -gt 0 ] || [ "$(now)" -ge "$first" ]; do sleep $tick; done
+until [ "$(holders)" -gt 0 ] || [ -e ${CAME} ] || [ "$(now)" -ge "$first" ]; do sleep $tick; done
 while :; do
   while [ "$(holders)" -gt 0 ]; do sleep $tick; done
   quiet "$REAPER_GRACE" || continue
@@ -296,17 +350,25 @@ done
 `;
 }
 
-/** The body of the reaper of the run `runId`, with its inputs in its environment. */
+/**
+ * The body of the reaper of the run `runId`, with its inputs in its
+ * environment and the file `socket` of the engine's host as its socket. The
+ * mount is a `bind` mount, so a `socket` that the engine's host does not have
+ * fails the create and creates no directory there.
+ */
 export function reaperRequest(
   runId: string,
   settings: ReaperSettings,
+  socket: string,
 ): EngineApi.ContainerCreateRequest {
+  const self = randomUUID();
   return {
     Image: REAPER_IMAGE,
     Entrypoint: ['sh', '-c', script()],
     Cmd: [],
     Env: [
       `REAPER_RUN=${runId}`,
+      `REAPER_SELF=${self}`,
       `REAPER_GRACE=${settings.grace}`,
       `REAPER_INTERVAL=${settings.interval}`,
       `REAPER_PASSES=${settings.passes}`,
@@ -318,12 +380,28 @@ export function reaperRequest(
       `REAPER_SWEEP_TRIES=${settings.sweepTries}`,
       `REAPER_LEASE_PATIENCE=${settings.leasePatience}`,
     ],
-    Labels: { [REAPER_LABEL]: runId },
+    Labels: {
+      [REAPER_LABEL]: runId,
+      [SELF_LABEL]: self,
+      [SOCKET_LABEL]: socket,
+    },
     HostConfig: {
       AutoRemove: true,
-      Binds: ['/var/run/docker.sock:/var/run/docker.sock'],
+      Mounts: [{ Type: 'bind', Source: socket, Target: SOCKET }],
     },
   };
+}
+
+/**
+ * The sources of the reaper's socket on the engine's host, in the order a
+ * hold tries them (ADR 0020, item 14): the socket of the engine's host, and
+ * the path of the client's socket when the client reaches the engine at a
+ * `unix://` host.
+ */
+function socketSources(docker: Docker): string[] {
+  if (!docker.host.startsWith('unix://')) return [SOCKET];
+  const own = new URL(docker.host).pathname;
+  return own === SOCKET ? [SOCKET] : [SOCKET, own];
 }
 
 /**
@@ -350,23 +428,25 @@ export function closingTime(settings: ReaperSettings): number {
 
 /**
  * Resolves when the engine removed `reaper`, which closed its door. Its waits
- * keep no process running. Fails after the closing time of the reaper.
+ * keep no process running. Fails after the closing time of the reaper, or
+ * with the reason of `signal`.
  */
 async function closed(
   docker: Docker,
   reaper: Container,
   settings: ReaperSettings,
   clock: Clock,
+  signal: AbortSignal,
 ): Promise<void> {
   const ms = closingTime(settings);
   const removed = await poll(
     async () =>
-      (await docker.containers.find(reaper.id)) === undefined
+      (await docker.containers.find(reaper.id, { signal })) === undefined
         ? true
         : undefined,
     {
       interval: settings.interval,
-      signal: undefined,
+      signal,
       clock,
       deadline: clock.performance.now() + ms,
       ref: false,
@@ -378,48 +458,64 @@ async function closed(
     );
 }
 
+/** A reaper that runs, and the source of its socket on the engine's host. */
+interface RunningReaper {
+  container: Container;
+  socket: string;
+}
+
 /**
- * The reaper of `runId`, created when it does not exist, and started when it
- * did not start. Gives undefined once a reaper that ends is gone: a later call
- * gets a new one. A missing image is pulled. A reaper that ended and stays,
- * for example one whose removal by the engine failed, is removed here: nobody
- * else removes it.
+ * The reaper of `runId`, created with `socket` as its socket when it does not
+ * exist, and started when it did not start. Gives undefined once a reaper
+ * that ends is gone: a later call gets a new one. A missing image is pulled.
+ * A reaper that ended and stays, for example one whose removal by the engine
+ * failed, is removed here: nobody else removes it. A `socket` that the
+ * engine's host does not have rejects with BindSourceNotFoundError. Each
+ * call to the engine stops when `signal` aborts.
  */
 async function running(
   docker: Docker,
   runId: string,
   settings: ReaperSettings,
   clock: Clock,
-): Promise<Container | undefined> {
-  const request = reaperRequest(runId, settings);
+  socket: string,
+  signal: AbortSignal,
+): Promise<RunningReaper | undefined> {
+  const request = reaperRequest(runId, settings, socket);
   const name = reaperName(runId);
   let reaper: Container;
   try {
     ({ container: reaper } = await docker.containers.createOrGet(request, {
       name,
+      signal,
     }));
   } catch (error) {
     if (!(error instanceof ImageNotFoundError)) throw error;
-    await docker.images.pull(error.image);
+    await docker.images.pull(error.image, { signal });
     ({ container: reaper } = await docker.containers.createOrGet(request, {
       name,
+      signal,
     }));
   }
   let state: string | undefined;
+  let source: string | undefined;
   try {
-    state = (await reaper.inspect()).State?.Status;
+    const inspected = await reaper.inspect({ signal });
+    state = inspected.State?.Status;
+    source = inspected.Config?.Labels?.[SOCKET_LABEL];
     if (state === 'created') {
-      await reaper.start();
+      await reaper.start({ signal });
       state = 'running';
     }
   } catch (error) {
     if (error instanceof ContainerNotFoundError) return undefined;
     throw error;
   }
-  if (state === 'running') return reaper;
+  if (state === 'running')
+    return { container: reaper, socket: source ?? socket };
   if (state === 'exited' || state === 'dead')
-    await reaper.remove({ force: true });
-  else await closed(docker, reaper, settings, clock);
+    await reaper.remove({ force: true, signal });
+  else await closed(docker, reaper, settings, clock, signal);
   return undefined;
 }
 
@@ -464,18 +560,175 @@ async function drained(output: AsyncIterator<OutputChunk>): Promise<void> {
   }
 }
 
+/** What the reaper of a run answered a holder. */
+type Answer =
+  /** The holder holds the door: its `cat` keeps the hold until its input or its output ends. */
+  | {
+      kind: 'held';
+      socket: string;
+      holder: ContainerProcess;
+      output: AsyncIterator<OutputChunk>;
+    }
+  /** The reaper verified its socket and closed its door. */
+  | { kind: 'closing'; socket: string; reaper: Container }
+  /** The reaper ended before it answered. */
+  | { kind: 'ended' };
+
+/** The reason in an answer `unverified <reason>` of HOLD. */
+const UNVERIFIED = /^unverified (.*)$/;
+
+/**
+ * Asks the reaper of `runId` for a hold, and creates it when the run has
+ * none on this engine (ADR 0020, item 14). A reaper answers only after it
+ * found itself through its socket. A reaper whose socket does not reach its
+ * engine is removed, and the next of `sources` is tried. Rejects with an
+ * error that names the engine and each source with its result when no source
+ * reaches it. Each call to the engine stops when `signal` aborts.
+ */
+async function answer(
+  docker: Docker,
+  runId: string,
+  settings: ReaperSettings,
+  clock: Clock,
+  sources: readonly string[],
+  signal: AbortSignal,
+): Promise<Answer> {
+  const results = new Map<string, string>();
+  for (;;) {
+    const socket = sources.find((source) => !results.has(source));
+    if (socket === undefined)
+      throw new Error(
+        `The reaper ${reaperName(runId)} found no socket of the engine ${docker.host} that reaches that engine: ${[
+          ...results,
+        ]
+          .map(([source, result]) => `${source}: ${result}`)
+          .join('; ')}`,
+      );
+    let reaper;
+    try {
+      reaper = await running(docker, runId, settings, clock, socket, signal);
+    } catch (error) {
+      if (!(error instanceof BindSourceNotFoundError)) throw error;
+      results.set(socket, 'the engine’s host has no file at this path');
+      continue;
+    }
+    if (reaper === undefined) return { kind: 'ended' };
+    const reply = await ask(reaper.container, signal);
+    if (reply === undefined) return { kind: 'ended' };
+    const { line, holder, output } = reply;
+    if (line === 'held')
+      return { kind: 'held', socket: reaper.socket, holder, output };
+    if (line === 'closing')
+      return {
+        kind: 'closing',
+        socket: reaper.socket,
+        reaper: reaper.container,
+      };
+    const reason = UNVERIFIED.exec(line)?.[1];
+    if (reason === undefined)
+      throw new Error(
+        `The reaper ${reaperName(runId)} gave an unknown answer: ${line}`,
+      );
+    // The run's reaper can have another socket than the one asked for, when
+    // another process of the run created it first. Both sources are marked,
+    // so each round marks one more source, and the loop ends.
+    results.set(
+      socket,
+      reaper.socket === socket
+        ? reason
+        : `the run's reaper uses the source ${reaper.socket}: ${reason}`,
+    );
+    results.set(reaper.socket, reason);
+    await reaper.container
+      .remove({ force: true, signal })
+      .catch((error: unknown) => {
+        if (!(error instanceof ContainerNotFoundError)) throw error;
+      });
+  }
+}
+
+/**
+ * Asks `reaper` for a hold with HOLD, and gives its first line and its exec.
+ * Undefined when the reaper ended first. An abort of `signal` before the
+ * caller's hold settled ends the exec.
+ */
+async function ask(
+  reaper: Container,
+  signal: AbortSignal,
+): Promise<
+  | {
+      line: string;
+      holder: ContainerProcess;
+      output: AsyncIterator<OutputChunk>;
+    }
+  | undefined
+> {
+  let holder;
+  try {
+    holder = await reaper.spawn(
+      { Cmd: HOLD },
+      { stdin: true, ref: false, signal },
+    );
+  } catch (error) {
+    // The reaper ended between the inspect and the exec.
+    if (
+      error instanceof ContainerNotRunningError ||
+      error instanceof ContainerNotFoundError
+    )
+      return undefined;
+    throw error;
+  }
+  const output = holder[Symbol.asyncIterator]();
+  const line = await firstLine(output);
+  return line === undefined ? undefined : { line, holder, output };
+}
+
+/**
+ * Runs `hold`, a hold of the reaper of `runId`, within its readiness bound
+ * (ADR 0020, item 15). The waits of a hold keep no process running, as its
+ * exec does not; the timer of the bound does, unless `ref` is false. Past the
+ * bound, the signal of the hold aborts with an error that names the reaper
+ * and the bound: each call to the engine of the hold stops, and the hold
+ * rejects with that error, also for each caller that joined it.
+ */
+async function whileHeld(
+  hold: (signal: AbortSignal) => Promise<void>,
+  runId: string,
+  settings: ReaperSettings,
+  clock: Clock,
+  ref: boolean,
+): Promise<void> {
+  using limit = timeout(settings.readiness, { clock, ref });
+  const bound = new AbortController();
+  limit.signal.addEventListener(
+    'abort',
+    () =>
+      bound.abort(
+        new Error(
+          `The hold of the reaper ${reaperName(runId)} was not ready within its readiness bound of ${settings.readiness} ms`,
+          { cause: limit.signal.reason },
+        ),
+      ),
+    { once: true },
+  );
+  await untilAborted(hold(bound.signal), bound.signal);
+}
+
 /**
  * The hold of this process on the reaper of its run: one `cat` exec with
  * `ref: false` that holds the door of the reaper (ADR 0020, item 7). It ends
  * when this process exits, for any reason. When it ends while this process
  * lives, it is taken again at once: on the same reaper, or on the next one
- * when that reaper closed.
+ * when that reaper closed. The source of the socket of the first reaper that
+ * it held is tried first for each next reaper (item 14).
  */
 export class ReaperHold {
   readonly #docker: Docker;
   readonly #runId: string;
   readonly #settings: ReaperSettings;
   readonly #clock: Clock;
+  /** The sources of the reaper's socket, in the order a hold tries them: the source of the last reaper that answered comes first. */
+  #sources: readonly string[];
 
   private constructor(
     docker: Docker,
@@ -487,6 +740,7 @@ export class ReaperHold {
     this.#runId = runId;
     this.#settings = settings;
     this.#clock = clock;
+    this.#sources = socketSources(docker);
   }
 
   /**
@@ -512,92 +766,119 @@ export class ReaperHold {
    * again by the next call.
    */
   async held(): Promise<void> {
-    // The waits of a hold keep no process running, as its exec does not. A
-    // caller that waits for the hold keeps this process running while it
-    // waits, as the request that it waits to make would, for at most each
-    // try of the hold: one exec and the closing time of a reaper.
-    const ms =
-      (this.#settings.retries + 1) *
-      (this.#settings.requestTimeout + closingTime(this.#settings));
-    using alive = timeout(ms, { clock: this.#clock });
-    try {
-      await untilAborted(this.#hold(), alive.signal);
-    } catch (error) {
-      if (!alive.signal.aborted) throw error;
-      throw new Error(
-        `The hold of the reaper ${reaperName(this.#runId)} did not end within ${ms} ms`,
-        { cause: error },
-      );
-    }
-  }
-
-  /** The hold, once at a time: it is cleared when the hold ends, and a failed one is not kept. */
-  readonly #hold = pMemoize(async (): Promise<void> => {
-    const { retries } = this.#settings;
-    for (let attempt = 0; attempt <= retries; attempt++) {
-      const reaper = await running(
-        this.#docker,
-        this.#runId,
-        this.#settings,
-        this.#clock,
-      );
-      if (reaper === undefined) continue;
-      const answer = await this.#ask(reaper);
-      if (answer === 'held') return;
-      if (answer === 'closing')
-        await closed(this.#docker, reaper, this.#settings, this.#clock);
-    }
-    throw new Error(
-      `The reaper ${reaperName(this.#runId)} ended or closed on each of ${retries + 1} tries to hold it`,
+    await whileHeld(
+      (signal) => this.#hold(signal),
+      this.#runId,
+      this.#settings,
+      this.#clock,
+      true,
     );
-  });
-
-  /** Asks `reaper` for a hold, and gives its answer. A hold that it gives is watched. */
-  async #ask(reaper: Container): Promise<string | undefined> {
-    let holder;
-    try {
-      holder = await reaper.spawn({ Cmd: HOLD }, { stdin: true, ref: false });
-    } catch (error) {
-      // The reaper ended between the inspect and the exec.
-      if (
-        error instanceof ContainerNotRunningError ||
-        error instanceof ContainerNotFoundError
-      )
-        return undefined;
-      throw error;
-    }
-    const output = holder[Symbol.asyncIterator]();
-    const answer = await firstLine(output);
-    if (answer === 'held') void this.#watch(output);
-    return answer;
   }
 
   /**
+   * The hold, once at a time: it is cleared when the hold ends, and a failed
+   * one is not kept. A call while one runs waits for that one, which stops at
+   * the signal of the call that started it.
+   */
+  readonly #hold = pMemoize(
+    async (signal: AbortSignal): Promise<void> => {
+      const { retries } = this.#settings;
+      for (let attempt = 0; attempt <= retries; attempt++) {
+        const reply = await answer(
+          this.#docker,
+          this.#runId,
+          this.#settings,
+          this.#clock,
+          this.#sources,
+          signal,
+        );
+        if (reply.kind === 'ended') continue;
+        const { socket } = reply;
+        this.#sources = [
+          socket,
+          ...this.#sources.filter((source) => source !== socket),
+        ];
+        if (reply.kind === 'held') {
+          void this.#watch(reply.output);
+          return;
+        }
+        await closed(
+          this.#docker,
+          reply.reaper,
+          this.#settings,
+          this.#clock,
+          signal,
+        );
+      }
+      throw new Error(
+        `The reaper ${reaperName(this.#runId)} ended or closed on each of ${retries + 1} tries to hold it`,
+      );
+    },
+    { cacheKey: () => 'hold' },
+  );
+
+  /**
    * Takes the hold again at once when its output ends while this process
-   * lives. A failure of that hold is not kept: the next held() tries again.
+   * lives, within its readiness bound, whose timer keeps no process running.
+   * A failure of that hold is not kept: the next held() tries again.
    */
   async #watch(output: AsyncIterator<OutputChunk>): Promise<void> {
     await drained(output);
     pMemoizeClear(this.#hold);
-    await this.#hold().catch(() => {});
+    await whileHeld(
+      (signal) => this.#hold(signal),
+      this.#runId,
+      this.#settings,
+      this.#clock,
+      false,
+    ).catch(() => {});
   }
 }
 
 /**
- * Starts the reaper of the dead run `runId` with no wait for a first holder,
- * and does not wait for it (ADR 0020, item 9). A reaper of the run that still
- * runs keeps the run. One that ended is replaced, at most `settings.retries`
- * more times.
+ * Starts the reaper of the dead run `runId`, and does not wait for it to act
+ * (ADR 0020, item 9). It holds that reaper only until the reaper verified its
+ * socket (item 14), and ends that hold at once. A reaper of the run that
+ * still runs keeps the run. One that ended is replaced, at most
+ * `settings.retries` more times, within the readiness bound of the hold.
  */
 export async function startReaper(
   docker: Docker,
   runId: string,
   settings: ReaperSettings = REAPER_DEFAULTS,
 ): Promise<void> {
-  const immediate = { ...settings, firstHolder: 0 };
-  for (let attempt = 0; attempt <= settings.retries; attempt++)
-    if ((await running(docker, runId, immediate, globalThis)) !== undefined)
+  await whileHeld(
+    (signal) => started(docker, runId, settings, signal),
+    runId,
+    settings,
+    globalThis,
+    true,
+  );
+}
+
+/** The hold of startReaper: until the reaper verified its socket, or until it closed. */
+async function started(
+  docker: Docker,
+  runId: string,
+  settings: ReaperSettings,
+  signal: AbortSignal,
+): Promise<void> {
+  for (let attempt = 0; attempt <= settings.retries; attempt++) {
+    const reply = await answer(
+      docker,
+      runId,
+      settings,
+      globalThis,
+      socketSources(docker),
+      signal,
+    );
+    if (reply.kind === 'closing') return;
+    if (reply.kind === 'held') {
+      await reply.holder.stdin?.close();
+      await drained(reply.output);
       return;
+    }
+  }
   throw new Error(
     `The reaper ${reaperName(runId)} ended on each of ${settings.retries + 1} tries to start it`,
   );

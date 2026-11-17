@@ -59,7 +59,7 @@ Node's hook that runs after the test processes of a run end. It is synchronous a
 _Avoid_: Cleanup hook
 
 **Reaper**:
-A container of one run on one engine, with the engine's socket mounted (ADR 0020). Each test process of the run holds it with one `cat` exec, and takes the hold again at once when it ends while the process lives. About 2 s after the last holder ended, it closes, so a later holder holds the next reaper of the run, and it removes the run's containers and volumes, drops the run's databases in the shared servers, checks again a few times, removes the expired shared servers, and exits.
+A container of one run on one engine (ADR 0020). It mounts a socket of the engine's host, and lets a holder in only after it finds itself through that socket. Each test process of the run holds it with one `cat` exec, and takes the hold again at once when it ends while the process lives. About 2 s after the last holder ended, it closes, so a later holder holds the next reaper of the run, and it removes the run's containers and volumes, drops the run's databases in the shared servers, checks again a few times, removes the expired shared servers, and exits.
 _Avoid_: Ryuk, janitor
 
 **Runner**:

@@ -6,8 +6,9 @@ export async function settleWithin<T>(
   timeoutMs = 5_000,
 ): Promise<T> {
   // A real deadline: it bounds how long the test waits, so a fake clock that
-  // the test moves must not end it.
-  using limit = timeout(timeoutMs, { clock: globalThis });
+  // the test moves must not end it. It keeps the process alive, so a promise
+  // that never settles fails with the label.
+  using limit = timeout(timeoutMs, { clock: globalThis, ref: true });
   const expired = Promise.withResolvers<never>();
   limit.signal.addEventListener(
     'abort',

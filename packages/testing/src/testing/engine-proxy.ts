@@ -24,11 +24,31 @@ export interface ProxiedRequest {
   path: string;
 }
 
-/** Runs before the proxy forwards a matching request: await to hold or delay it, throw to refuse it. */
-export type Intercept = (request: ProxiedRequest) => unknown;
+/**
+ * Runs before the proxy forwards a matching request: await to hold or delay
+ * it, throw to refuse it. `left` aborts when the client of the request closes
+ * its connection before the answer, as a client does at the abort of its
+ * signal.
+ */
+export type Intercept = (request: ProxiedRequest, left: AbortSignal) => unknown;
 
 const unversioned = (url: string): string =>
   new URL(url, 'http://engine').pathname.replace(/^\/v\d+\.\d+(?=\/)/, '');
+
+/**
+ * The body of `request`, or undefined when its client left before it sent the
+ * whole body: Node then aborts the read with ECONNRESET, and the request never
+ * reaches the engine.
+ */
+async function body(request: IncomingMessage): Promise<Buffer[] | undefined> {
+  try {
+    return await Array.fromAsync<Buffer>(request);
+  } catch (error) {
+    if (Error.isError(error) && 'code' in error && error.code === 'ECONNRESET')
+      return undefined;
+    throw error;
+  }
+}
 
 export class EngineProxy implements AsyncDisposable {
   /** The Unix socket of the local engine that the proxy forwards to. */
@@ -128,7 +148,11 @@ export class EngineProxy implements AsyncDisposable {
     this.requests.push(proxied);
     // Read the whole body first: a held request reaches the engine even
     // after its client is gone, as one that the engine already received.
-    const chunks: Buffer[] = await Array.fromAsync(request);
+    const chunks = await body(request);
+    if (chunks === undefined) {
+      response.destroy();
+      return;
+    }
     const matching = this.#intercepts.filter(
       ({ method, path }) =>
         method === proxied.method &&
@@ -136,6 +160,11 @@ export class EngineProxy implements AsyncDisposable {
           ? path === proxied.path
           : path.test(proxied.path)),
     );
+    const left = new AbortController();
+    if (response.destroyed) left.abort();
+    response.once('close', () => {
+      if (!response.writableFinished) left.abort();
+    });
     let pending = matching.length > 0;
     if (pending) this.#unanswered += 1;
     const answered = () => {
@@ -145,7 +174,8 @@ export class EngineProxy implements AsyncDisposable {
       this.#answers.emit('answered');
     };
     try {
-      for (const { intercept } of matching) await intercept(proxied);
+      for (const { intercept } of matching)
+        await intercept(proxied, left.signal);
     } catch (error) {
       answered();
       response.writeHead(502).end(String(error));
@@ -189,7 +219,11 @@ export class EngineProxy implements AsyncDisposable {
     });
     // Node gives the body of the upgrade request, such as the JSON of an
     // exec start, to the request, and only the bytes after it to `head`.
-    const chunks: Buffer[] = await Array.fromAsync(request);
+    const chunks = await body(request);
+    if (chunks === undefined) {
+      client.destroy();
+      return;
+    }
     const engine = connect(this.#engine);
     this.#track(engine);
     const headers: string[] = [];

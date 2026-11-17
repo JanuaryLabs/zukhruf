@@ -74,37 +74,33 @@ test('one instance acquires concurrent databases with independent scope cleanup'
   }
 });
 
-test(
-  'explicit SQL Server startup creates the requested database and owns cleanup',
-  { timeout: 240_000 },
-  async (t) => {
-    const database = `owned_${randomUUID().replaceAll('-', '')}`;
-    const server = await new SqlServer({
-      environment: process.env,
-      database,
-    }).start();
-    const id = server.containerId;
-    {
-      await using owned = server;
-      const { default: sql } = await import('mssql');
-      const pool = new sql.ConnectionPool(owned.connectionString);
-      try {
-        await pool.connect();
-        const result = await pool.request().query('SELECT DB_NAME() AS name');
-        assert.equal(result.recordset[0].name, database);
-      } finally {
-        await pool.close();
-      }
+test('explicit SQL Server startup creates the requested database and owns cleanup', async (t) => {
+  const database = `owned_${randomUUID().replaceAll('-', '')}`;
+  const server = await new SqlServer({
+    environment: process.env,
+    database,
+  }).start();
+  const id = server.containerId;
+  {
+    await using owned = server;
+    const { default: sql } = await import('mssql');
+    const pool = new sql.ConnectionPool(owned.connectionString);
+    try {
+      await pool.connect();
+      const result = await pool.request().query('SELECT DB_NAME() AS name');
+      assert.equal(result.recordset[0].name, database);
+    } finally {
+      await pool.close();
     }
-    await t.waitFor(
-      async () => {
-        const client = await docker.client();
-        assert.equal(await client.containers.find(id), undefined);
-      },
-      { timeout: 10_000 },
-    );
-  },
-);
+  }
+  await t.waitFor(
+    async () => {
+      const client = await docker.client();
+      assert.equal(await client.containers.find(id), undefined);
+    },
+    { timeout: 10_000 },
+  );
+});
 
 interface DatabaseHandle {
   containerId: string;

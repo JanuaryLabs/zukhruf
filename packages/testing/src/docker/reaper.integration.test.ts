@@ -2,23 +2,32 @@ import assert from 'node:assert/strict';
 import { type ChildProcess, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
-import { mkdir, readdir } from 'node:fs/promises';
-import { connect, createServer } from 'node:net';
+import { chmod, mkdir, readdir } from 'node:fs/promises';
+import { type Socket, connect, createServer } from 'node:net';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { type TestContext, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 
-import { ContainerNotFoundError } from '@zukhruf/docker';
+import { createClock } from '@sinonjs/fake-timers';
+
+import {
+  type Container,
+  ContainerNotFoundError,
+  Docker,
+} from '@zukhruf/docker';
 import { TemporaryFiles } from '@zukhruf/fs';
 
+import { timebox } from '../async/timebox.ts';
 import { engine, proxyless } from '../testing/current-engine.ts';
 import { docker } from '../testing/engine-client.ts';
 import { EngineProxy } from '../testing/engine-proxy.ts';
+import { DockerTestbed } from './index.ts';
 import {
   REAPER_DEFAULTS,
   REAPER_IMAGE,
   REAPER_LABEL,
+  ReaperHold,
   type ReaperSettings,
   SERVER_LABEL,
   reaperName,
@@ -119,12 +128,17 @@ function creator(run: string, settings: ReaperSettings): Program {
 }
 
 /**
- * A test process of the run `run` whose records are in `records`: it holds
- * the run's reaper through `DockerTestbed.defaults()` once, prints the labels
- * as JSON, and then, for each line `create`, creates a container with those labels through
- * a client of its own, as a sandbox launcher does, and prints its id.
+ * A test process of the run `run` whose records are in `records`, with
+ * `environment` over this process's: it holds the run's reaper through
+ * `DockerTestbed.defaults()` once, prints the labels as JSON, and then, for
+ * each line `create`, creates a container with those labels through a client
+ * of its own, as a sandbox launcher does, and prints its id.
  */
-function launcher(run: string, records: string): Program {
+function launcher(
+  run: string,
+  records: string,
+  environment: NodeJS.ProcessEnv = {},
+): Program {
   return program(
     `
       import { createInterface } from 'node:readline';
@@ -141,6 +155,7 @@ function launcher(run: string, records: string): Program {
     `,
     {
       ...process.env,
+      ...environment,
       ZUKHRUF_TESTING_RUN_ID: run,
       ZUKHRUF_TESTING_RUN_DIR: records,
     },
@@ -291,7 +306,11 @@ async function proxiedReaper(
   assert.ok(address !== null && typeof address === 'object');
   if ((await docker.images.inspect(REAPER_IMAGE)) === undefined)
     await docker.images.pull(REAPER_IMAGE);
-  const body = reaperRequest(run, { ...settings, firstHolder: 0 });
+  const body = reaperRequest(
+    run,
+    { ...settings, firstHolder: 0 },
+    '/var/run/docker.sock',
+  );
   const reaper = await docker.containers.create(
     {
       ...body,
@@ -312,14 +331,19 @@ async function proxiedReaper(
   return reaper.id;
 }
 
-/** Holds the first request of the proxy to `method` `path` until release(). */
-function holdFirst(proxy: EngineProxy, method: string, path: string) {
+/** Holds the `nth` request of the proxy to `method` `path`, counted from 1, until release(). */
+function holdNth(
+  proxy: EngineProxy,
+  method: string,
+  path: string | RegExp,
+  nth: number,
+) {
   const reached = Promise.withResolvers<void>();
   const release = Promise.withResolvers<void>();
-  let first = true;
+  let seen = 0;
   proxy.intercept(method, path, async () => {
-    if (!first) return;
-    first = false;
+    seen += 1;
+    if (seen !== nth) return;
     reached.resolve();
     await release.promise;
   });
@@ -639,6 +663,238 @@ test('a hold on a reaper that is closing waits until the engine removed it, and 
   }
 });
 
+test('a hold on a reaper that stays closing past the readiness bound of the hold rejects with the hold’s named error', async (t) => {
+  const run = randomUUID();
+  // After its first pass, the reaper keeps its door closed for 10 minutes.
+  const closing = { ...quick, grace: 0, passes: 1, interval: 600_000 };
+  const readiness = 3_000;
+  try {
+    const id = await object(run);
+    await startReaper(docker, run, closing);
+    // The first pass removed the run's container: the reaper is closing.
+    await gone(t, async () => assert.equal(await exists(id), false));
+
+    await assert.rejects(
+      ReaperHold.take(docker, run, { ...quick, readiness }, globalThis),
+      {
+        message: `The hold of the reaper ${reaperName(run)} was not ready within its readiness bound of ${readiness} ms`,
+      },
+    );
+  } finally {
+    await removeRun(run);
+  }
+});
+
+test(
+  'a held() that joins the hold a cut hold takes again rejects with the hold’s named error when the bound of that hold ends, before its own bound',
+  { skip: proxyless },
+  async () => {
+    const run = randomUUID();
+    const readiness = 2_000;
+    const clock = createClock();
+    await using stack = new AsyncDisposableStack();
+    try {
+      const proxy = stack.use(await EngineProxy.start(engine));
+      const client = stack.use(
+        await Docker.connect({
+          clock: globalThis,
+          environment: { DOCKER_HOST: proxy.host },
+        }),
+      );
+      // The first exec create is the hold that take() takes. The second is
+      // the hold that is taken again after the cut: held here, so that hold
+      // is in flight when held() joins it.
+      const again = holdNth(proxy, 'POST', /^\/containers\/[^/]+\/exec$/, 2);
+      stack.defer(() => again.release());
+      const hold = await ReaperHold.take(
+        client,
+        run,
+        { ...quick, readiness },
+        clock,
+      );
+      const [reaper] = await reapers(run);
+      assert.ok(reaper);
+      const [cat] = await holdersOf(reaper);
+      assert.ok(cat);
+
+      // The engine ends the exec of the hold, as at a break of its connection.
+      await (await docker.containers.find(reaper))!.exec({
+        Cmd: ['kill', cat],
+      });
+      // The bound of the hold taken again starts before its exec create.
+      await within(again.reached, 20_000, 'the hold taken again');
+      clock.tick(readiness / 2);
+      const joined = hold.held();
+      // The bound of the hold taken again ends here. The bound of held()
+      // started half a bound later, so it does not end.
+      clock.tick(readiness / 2);
+
+      await assert.rejects(within(joined, 20_000, 'the end of held()'), {
+        message: `The hold of the reaper ${reaperName(run)} was not ready within its readiness bound of ${readiness} ms`,
+      });
+    } finally {
+      await removeRun(run);
+    }
+  },
+);
+
+test(
+  'a hold on a reaper that stays closing ends its wait for the removal of that reaper at the readiness bound: its client leaves the request in flight',
+  { skip: proxyless },
+  async (t) => {
+    const run = randomUUID();
+    // After its first pass, the reaper keeps its door closed for 10 minutes.
+    const closing = { ...quick, grace: 0, passes: 1, interval: 600_000 };
+    const readiness = 3_000;
+    const clock = createClock();
+    try {
+      const id = await object(run);
+      await startReaper(docker, run, closing);
+      // The first pass removed the run's container: the reaper is closing.
+      await gone(t, async () => assert.equal(await exists(id), false));
+      await using stack = new AsyncDisposableStack();
+      const proxy = stack.use(await EngineProxy.start(engine));
+      const client = stack.use(
+        await Docker.connect({
+          clock: globalThis,
+          environment: { DOCKER_HOST: proxy.host },
+        }),
+      );
+      // The reaper answers `closing` to the exec of the hold. The first
+      // inspect after that exec starts is the hold's wait for the removal of
+      // the reaper: held here until its client leaves.
+      const reached = Promise.withResolvers<void>();
+      const left = Promise.withResolvers<void>();
+      const release = Promise.withResolvers<void>();
+      stack.defer(() => release.resolve());
+      let holding = false;
+      proxy.intercept(
+        'GET',
+        /^\/containers\/[^/]+\/json$/,
+        async (_, signal) => {
+          if (
+            holding ||
+            !proxy.requests.some(({ path }) =>
+              /^\/exec\/[^/]+\/start$/.test(path),
+            )
+          )
+            return;
+          holding = true;
+          reached.resolve();
+          const leaving = signal.aborted
+            ? Promise.resolve()
+            : once(signal, 'abort');
+          void leaving.then(() => left.resolve());
+          await Promise.race([leaving, release.promise]);
+        },
+      );
+      const taking = ReaperHold.take(
+        client,
+        run,
+        { ...quick, readiness },
+        clock,
+      );
+      taking.catch(() => {});
+      await within(
+        reached.promise,
+        20_000,
+        'the wait for the removal of the closing reaper',
+      );
+
+      clock.tick(readiness);
+
+      await within(left.promise, 10_000, 'the client leaving that wait');
+      await assert.rejects(taking, {
+        message: `The hold of the reaper ${reaperName(run)} was not ready within its readiness bound of ${readiness} ms`,
+      });
+    } finally {
+      await removeRun(run);
+    }
+  },
+);
+
+test(
+  'a hold whose create of the reaper gets no answer ends that create at the readiness bound: its client leaves the request in flight',
+  { skip: proxyless },
+  async () => {
+    const run = randomUUID();
+    const readiness = 3_000;
+    const clock = createClock();
+    try {
+      // The proxy forwards the create once its client left, and its disposal
+      // waits for the engine's answer, so the cleanup sees that reaper.
+      await using stack = new AsyncDisposableStack();
+      const proxy = stack.use(await EngineProxy.start(engine));
+      const client = stack.use(
+        await Docker.connect({
+          clock: globalThis,
+          environment: { DOCKER_HOST: proxy.host },
+        }),
+      );
+      const reached = Promise.withResolvers<void>();
+      const left = Promise.withResolvers<void>();
+      const release = Promise.withResolvers<void>();
+      stack.defer(() => release.resolve());
+      let holding = false;
+      proxy.intercept('POST', '/containers/create', async (_, signal) => {
+        if (holding) return;
+        holding = true;
+        reached.resolve();
+        const leaving = signal.aborted
+          ? Promise.resolve()
+          : once(signal, 'abort');
+        void leaving.then(() => left.resolve());
+        await Promise.race([leaving, release.promise]);
+      });
+      const taking = ReaperHold.take(
+        client,
+        run,
+        { ...quick, readiness },
+        clock,
+      );
+      taking.catch(() => {});
+      await within(reached.promise, 20_000, 'the create of the reaper');
+
+      clock.tick(readiness);
+
+      await within(left.promise, 10_000, 'the client leaving the create');
+      await assert.rejects(taking, {
+        message: `The hold of the reaper ${reaperName(run)} was not ready within its readiness bound of ${readiness} ms`,
+      });
+    } finally {
+      await removeRun(run);
+    }
+  },
+);
+
+test(
+  'the start of the reaper of a dead run rejects with the hold’s named error when its readiness bound ends first',
+  { skip: proxyless },
+  async () => {
+    const run = randomUUID();
+    try {
+      // The bound can end after the engine got the create of the reaper, which
+      // then lands after the rejection. Each request goes through the proxy,
+      // whose disposal waits until the engine answered each create it
+      // forwarded and closes the rest, so the cleanup sees that reaper.
+      await using proxy = await EngineProxy.start(engine);
+      proxy.intercept('POST', '/containers/create', () => {});
+      await using client = await Docker.connect({
+        clock: globalThis,
+        environment: { DOCKER_HOST: proxy.host },
+      });
+      await assert.rejects(
+        startReaper(client, run, { ...quick, readiness: 1 }),
+        {
+          message: `The hold of the reaper ${reaperName(run)} was not ready within its readiness bound of 1 ms`,
+        },
+      );
+    } finally {
+      await removeRun(run);
+    }
+  },
+);
+
 test(
   'a holder that comes while a pass of the reaper runs keeps what it creates while it lives',
   { skip: proxyless },
@@ -649,8 +905,10 @@ test(
     let late: Program | undefined;
     try {
       const proxy = stack.use(await EngineProxy.start(engine));
-      // The first request of a pass is its list of the run's containers.
-      const listing = holdFirst(proxy, 'GET', '/containers/json');
+      // The first list of containers is the reaper's check of its socket
+      // (ADR 0020, item 14). The second is the first request of the pass: its
+      // list of the run's containers.
+      const listing = holdNth(proxy, 'GET', '/containers/json', 2);
       stack.defer(() => listing.release());
       const since = Math.floor(Date.now() / 1000) - 1;
       const reaper = await proxiedReaper(stack, proxy, run, {
@@ -705,7 +963,7 @@ test(
     try {
       const proxy = stack.use(await EngineProxy.start(engine));
       // A pass lists the run's volumes after it removed the run's containers.
-      const listing = holdFirst(proxy, 'GET', '/volumes');
+      const listing = holdNth(proxy, 'GET', '/volumes', 1);
       stack.defer(() => listing.release());
       const since = Math.floor(Date.now() / 1000) - 1;
       const reaper = await proxiedReaper(stack, proxy, run, {
@@ -821,5 +1079,367 @@ test('defaults() in a run holds the run’s reaper, records its process, and giv
     await killed(launched.child);
     await removeRun(run);
     await gone(t, async () => assert.deepEqual(await reapers(run), []));
+  }
+});
+
+/** Marks a reaper with the source of its socket on the engine's host (ADR 0020, item 14). */
+const SOCKET_LABEL = 'dev.zukhruf.testing.reaper.socket';
+
+/** A second engine of this run, and a client of it through a unix socket of this machine. */
+interface SecondEngine extends AsyncDisposable {
+  /** The container of the second engine, on the engine of this process. */
+  container: Container;
+  client: Docker;
+  /** The `unix://` host of the relay. */
+  host: string;
+}
+
+/** A path of a unix socket that fits the 104 bytes of macOS. */
+const shortSocket = () => `/tmp/zt-${randomUUID().slice(0, 8)}.sock`;
+
+/**
+ * A docker-in-docker engine, created by this run's testbed, whose dockerd
+ * listens on each path of `sockets`, with `binds`, and a unix socket at
+ * `relay` on this machine that relays to its TCP port. The testbed publishes
+ * that port on 127.0.0.1 of the engine's host only: it gives root there.
+ */
+async function secondEngine({
+  sockets,
+  binds = [],
+  relay,
+}: {
+  sockets: string[];
+  binds?: string[];
+  relay: string;
+}): Promise<SecondEngine> {
+  await using stack = new AsyncDisposableStack();
+  const service = stack.use(
+    await new DockerTestbed({ environment: process.env }).serve(
+      {
+        Image: 'docker:28.5.2-dind',
+        Cmd: [
+          'dockerd',
+          ...sockets.map((socket) => `--host=unix://${socket}`),
+          '--host=tcp://0.0.0.0:2375',
+          '--tls=false',
+        ],
+        Env: ['DOCKER_TLS_CERTDIR='],
+        HostConfig: { Privileged: true, Binds: binds },
+      },
+      {
+        internalPort: 2375,
+        healthy: ({ port }) =>
+          timebox(
+            async () => {
+              const ping = await fetch(`http://127.0.0.1:${port}/_ping`);
+              if (!ping.ok) throw new Error(`The ping answered ${ping.status}`);
+            },
+            { maxRetryTime: 60_000 },
+          ),
+      },
+    ),
+  );
+  const connections = new Set<Socket>();
+  const server = createServer((client) => {
+    const upstream = connect(service.port, service.host);
+    for (const socket of [client, upstream]) {
+      connections.add(socket);
+      socket.on('close', () => connections.delete(socket));
+    }
+    client.pipe(upstream).pipe(client);
+    client.on('error', () => upstream.destroy());
+    upstream.on('error', () => client.destroy());
+  });
+  server.listen(relay);
+  await once(server, 'listening');
+  stack.defer(
+    () =>
+      new Promise<void>((resolve) => {
+        server.close(() => resolve());
+        for (const socket of connections) socket.destroy();
+      }),
+  );
+  await chmod(relay, 0o600);
+  const host = `unix://${relay}`;
+  const client = stack.use(
+    await Docker.connect({
+      clock: globalThis,
+      environment: { DOCKER_HOST: host },
+    }),
+  );
+  // Platform setup that no product operation exposes: the second engine starts
+  // with no image, and a pull from Docker Hub inside it in each test is slow
+  // and meets the rate limit of Docker Hub. The engine of this process has
+  // each image that the tests and the reaper use there, or pulls it once, and
+  // loads it into the second engine.
+  const images = [REAPER_IMAGE, 'alpine:latest'];
+  for (const image of images) {
+    if ((await docker.images.inspect(image)) === undefined) {
+      await docker.images.pull(image);
+    }
+  }
+  await client.images.load(await docker.images.save(images));
+  const owned = stack.move();
+  return {
+    container: service.container,
+    client,
+    host,
+    [Symbol.asyncDispose]: () => owned.disposeAsync(),
+  };
+}
+
+/** The source of the socket of each reaper of `run` on the engine of `client`. */
+const reaperSockets = async (client: Docker, run: string) =>
+  (
+    await client.containers.list({
+      all: true,
+      filters: { label: [`${REAPER_LABEL}=${run}`] },
+    })
+  )
+    // The socket label is the contract of ADR 0020, item 14, and the only view of which socket a reaper used.
+    .map(({ Labels }) => Labels?.[SOCKET_LABEL]);
+
+/**
+ * The source of the socket of each reaper of `run` that the second engine
+ * removes from now on, in order. The stream starts at the second engine's own
+ * clock, so an event before the stream attaches is still in it.
+ */
+async function removedReapers(second: SecondEngine, run: string) {
+  const { stdout } = await second.container.exec({ Cmd: ['date', '+%s'] });
+  const since = Number(stdout.trim());
+  const watch = new AbortController();
+  const sockets: (string | undefined)[] = [];
+  const watching = (async () => {
+    for await (const { Actor } of second.client.events({
+      since,
+      filters: { label: [`${REAPER_LABEL}=${run}`], event: ['destroy'] },
+      signal: watch.signal,
+    }))
+      // The socket label is the contract of ADR 0020, item 14, and the only view of which socket a reaper used.
+      sockets.push(Actor?.Attributes?.[SOCKET_LABEL]);
+  })();
+  watching.catch(() => {});
+  return { sockets, [Symbol.dispose]: () => watch.abort() };
+}
+
+test('a hold whose /var/run/docker.sock reaches another engine removes that reaper, holds one on the socket of its client, and that reaper removes the run’s objects on its engine once the holder is killed', async (t) => {
+  await using directory = await new TemporaryFiles().directory(
+    'zukhruf-testing-reaper-',
+  );
+  const relay = shortSocket();
+  // Its /var/run/docker.sock is the socket of the engine of this process.
+  await using second = await secondEngine({
+    sockets: [relay],
+    binds: ['/var/run/docker.sock:/var/run/docker.sock'],
+    relay,
+  });
+  const run = randomUUID();
+  using removed = await removedReapers(second, run);
+  const launched = launcher(run, await recordsOf(directory.path), {
+    DOCKER_HOST: second.host,
+  });
+  try {
+    await launched.line();
+    const held = await reaperSockets(second.client, run);
+    launched.send('create');
+    const id = await launched.line();
+
+    await killed(launched.child);
+
+    assert.deepEqual(held, [relay]);
+    await gone(
+      t,
+      async () => {
+        assert.deepEqual(removed.sockets, ['/var/run/docker.sock', relay]);
+        assert.equal(await second.client.containers.find(id), undefined);
+        assert.deepEqual(await reaperSockets(second.client, run), []);
+      },
+      60_000,
+    );
+  } finally {
+    await killed(launched.child);
+  }
+});
+
+test('defaults() rejects with each socket that it tried and why, when no socket reaches the engine, and leaves no reaper and no directory at the missing path', async () => {
+  await using directory = await new TemporaryFiles().directory(
+    'zukhruf-testing-reaper-',
+  );
+  const relay = shortSocket();
+  // It has no file at the path of the relay, and its /var/run/docker.sock is
+  // the socket of the engine of this process.
+  await using second = await secondEngine({
+    sockets: [shortSocket()],
+    binds: ['/var/run/docker.sock:/var/run/docker.sock'],
+    relay,
+  });
+  const run = randomUUID();
+  const testbed = new DockerTestbed({
+    environment: {
+      DOCKER_HOST: second.host,
+      ZUKHRUF_TESTING_RUN_ID: run,
+      ZUKHRUF_TESTING_RUN_DIR: await recordsOf(directory.path),
+    },
+  });
+  try {
+    await assert.rejects(testbed.defaults(), {
+      message: `The reaper ${reaperName(run)} found no socket of the engine ${second.host} that reaches that engine: /var/run/docker.sock: the socket reaches an engine that does not run this reaper; ${relay}: the engine’s host has no file at this path`,
+    });
+
+    assert.deepEqual(await reaperSockets(second.client, run), []);
+    const { exitCode } = await second.container.exec({
+      Cmd: ['test', '-e', relay],
+    });
+    assert.equal(exitCode, 1);
+  } finally {
+    await (await testbed.client())[Symbol.asyncDispose]();
+  }
+});
+
+test('a hold whose /var/run/docker.sock and client socket both reach the engine keeps /var/run/docker.sock', async () => {
+  await using directory = await new TemporaryFiles().directory(
+    'zukhruf-testing-reaper-',
+  );
+  const relay = shortSocket();
+  await using second = await secondEngine({
+    sockets: ['/var/run/docker.sock', relay],
+    relay,
+  });
+  const run = randomUUID();
+  const launched = launcher(run, await recordsOf(directory.path), {
+    DOCKER_HOST: second.host,
+  });
+  try {
+    await launched.line();
+
+    assert.deepEqual(await reaperSockets(second.client, run), [
+      '/var/run/docker.sock',
+    ]);
+  } finally {
+    await killed(launched.child);
+  }
+});
+
+test('the start of the reaper of a dead run on an engine whose /var/run/docker.sock reaches another engine starts a reaper on the socket of its client, which removes the run’s objects on its engine', async (t) => {
+  const relay = shortSocket();
+  // Its /var/run/docker.sock is the socket of the engine of this process.
+  await using second = await secondEngine({
+    sockets: [relay],
+    binds: ['/var/run/docker.sock:/var/run/docker.sock'],
+    relay,
+  });
+  const run = randomUUID();
+  using removed = await removedReapers(second, run);
+  const owned = await second.client.containers.create({
+    Image: 'alpine:latest',
+    Cmd: ['sleep', '3600'],
+    Labels: { [RUN_LABEL]: run },
+  });
+  await owned.start();
+
+  await startReaper(second.client, run, quick);
+
+  await gone(
+    t,
+    async () => {
+      assert.deepEqual(removed.sockets, ['/var/run/docker.sock', relay]);
+      assert.equal(await second.client.containers.find(owned.id), undefined);
+      assert.deepEqual(await reaperSockets(second.client, run), []);
+    },
+    60_000,
+  );
+});
+
+test('defaults() names /var/run/docker.sock as a socket that does not answer, when the engine’s host has a file there that no engine listens on', async () => {
+  await using directory = await new TemporaryFiles().directory(
+    'zukhruf-testing-reaper-',
+  );
+  const relay = shortSocket();
+  // It has no file at the path of the relay, and its dockerd listens on
+  // another path only.
+  await using second = await secondEngine({ sockets: [shortSocket()], relay });
+  // Platform setup that no operation of the testbed exposes: a regular file at
+  // /var/run/docker.sock of the engine's host.
+  const made = await second.container.exec({
+    Cmd: ['sh', '-c', ': > /var/run/docker.sock'],
+  });
+  assert.equal(made.exitCode, 0);
+  const run = randomUUID();
+  const testbed = new DockerTestbed({
+    environment: {
+      DOCKER_HOST: second.host,
+      ZUKHRUF_TESTING_RUN_ID: run,
+      ZUKHRUF_TESTING_RUN_DIR: await recordsOf(directory.path),
+    },
+  });
+  try {
+    await assert.rejects(testbed.defaults(), {
+      message: `The reaper ${reaperName(run)} found no socket of the engine ${second.host} that reaches that engine: /var/run/docker.sock: the socket does not answer: Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?; ${relay}: the engine’s host has no file at this path`,
+    });
+
+    assert.deepEqual(await reaperSockets(second.client, run), []);
+  } finally {
+    await (await testbed.client())[Symbol.asyncDispose]();
+  }
+});
+
+test('a test process whose reaper on the socket of its client was removed holds a new reaper on that socket first, before /var/run/docker.sock, which reaches another engine', async (t) => {
+  await using directory = await new TemporaryFiles().directory(
+    'zukhruf-testing-reaper-',
+  );
+  const relay = shortSocket();
+  // Its /var/run/docker.sock is the socket of the engine of this process.
+  await using second = await secondEngine({
+    sockets: [relay],
+    binds: ['/var/run/docker.sock:/var/run/docker.sock'],
+    relay,
+  });
+  const run = randomUUID();
+  using removed = await removedReapers(second, run);
+  const launched = launcher(run, await recordsOf(directory.path), {
+    DOCKER_HOST: second.host,
+  });
+  try {
+    await launched.line();
+    const [first] = await second.client.containers.list({
+      filters: { label: [`${REAPER_LABEL}=${run}`] },
+    });
+    assert.ok(first);
+
+    // The engine ends the hold, as at a removal of the reaper by another tool.
+    await (
+      await second.client.containers.find(first.Id)
+    )?.remove({
+      force: true,
+    });
+    await gone(
+      t,
+      async () => {
+        const [next] = await second.client.containers.list({
+          filters: { label: [`${REAPER_LABEL}=${run}`] },
+        });
+        assert.ok(next !== undefined && next.Id !== first.Id, 'a new reaper');
+        assert.deepEqual(await reaperSockets(second.client, run), [relay]);
+      },
+      30_000,
+    );
+    await killed(launched.child);
+
+    await gone(
+      t,
+      async () => {
+        assert.deepEqual(removed.sockets, [
+          '/var/run/docker.sock',
+          relay,
+          relay,
+        ]);
+        assert.deepEqual(await reaperSockets(second.client, run), []);
+      },
+      // A kill before the new hold attached leaves the reaper waiting for a
+      // first holder: 60 s by default.
+      90_000,
+    );
+  } finally {
+    await killed(launched.child);
   }
 });

@@ -53,7 +53,8 @@ function wait(ms: number, { clock, signal, ref }: DelayOptions): Promise<void> {
   );
 }
 
-function unref(timer: unknown): void {
+/** Calls `unref()` on a timer of a clock, when the timer has one. */
+export function unref(timer: unknown): void {
   if (
     typeof timer === 'object' &&
     timer !== null &&

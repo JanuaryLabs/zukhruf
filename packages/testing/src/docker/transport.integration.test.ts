@@ -129,24 +129,20 @@ test('MySQL exposes its protocol on the Node host', async () => {
   }
 });
 
-test(
-  'SQL Server runs the full image on every engine and accepts host connections',
-  { timeout: 240_000 },
-  async () => {
-    const { default: sql } = await import('mssql');
-    await using database = await new SqlServer({
-      environment: process.env,
-    }).start();
-    assert.equal(database.image, SQL_SERVER_FULL_IMAGE);
-    const pool = new sql.ConnectionPool(database.connectionString);
-    try {
-      await pool.connect();
-      assert.equal(
-        (await pool.request().query('SELECT 42 AS value')).recordset[0].value,
-        42,
-      );
-    } finally {
-      await pool.close();
-    }
-  },
-);
+test('SQL Server runs the full image on every engine and accepts host connections', async () => {
+  const { default: sql } = await import('mssql');
+  await using database = await new SqlServer({
+    environment: process.env,
+  }).start();
+  assert.equal(database.image, SQL_SERVER_FULL_IMAGE);
+  const pool = new sql.ConnectionPool(database.connectionString);
+  try {
+    await pool.connect();
+    assert.equal(
+      (await pool.request().query('SELECT 42 AS value')).recordset[0].value,
+      42,
+    );
+  } finally {
+    await pool.close();
+  }
+});

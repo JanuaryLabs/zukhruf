@@ -33,6 +33,7 @@ import { DockerTestbed } from '../docker/index.ts';
 import {
   REAPER_DEFAULTS,
   REAPER_IMAGE,
+  REAPER_LABEL,
   reaperName,
   reaperRequest,
 } from '../docker/reaper.ts';
@@ -459,16 +460,36 @@ test(
       const state = await readState<Omit<SmallState, 'id'>>(t, statePath);
       run = state.run;
       const label = `dev.zukhruf.testing.run=${state.run}`;
+      // The engine created the run's reaper before the release, so the
+      // events from that second of the engine's own clock on hold each event
+      // of the late create, however late the stream attaches.
+      const [reaper] = await docker.containers.list({
+        all: true,
+        filters: { label: [`${REAPER_LABEL}=${state.run}`] },
+      });
+      const since = reaper?.Created;
+      assert.ok(since !== undefined, 'the run has its reaper');
       // After the grace of 2 s and the first pass, before the last re-check pass.
       await setTimeout(3_000);
 
       gate.resolve();
 
-      await t.waitFor(
-        async () => assert.notDeepEqual(await labelled(label), []),
-        { timeout: 10_000, interval: 50 },
-      );
-      await reaped(t, async () => assert.deepEqual(await labelled(label), []));
+      const seen: { action: string | undefined; id: string | undefined }[] = [];
+      for await (const { Action, Actor } of docker.events({
+        since,
+        filters: { label: [label], event: ['create', 'destroy'] },
+        signal: t.signal,
+      })) {
+        seen.push({ action: Action, id: Actor?.ID });
+        if (Action === 'destroy') break;
+      }
+      const late = seen[0]?.id;
+      assert.notEqual(late, undefined, 'the engine created the late container');
+      assert.deepEqual(seen, [
+        { action: 'create', id: late },
+        { action: 'destroy', id: late },
+      ]);
+      assert.deepEqual(await labelled(label), []);
     } finally {
       // Never leave the create held.
       gate.resolve();
@@ -1068,22 +1089,30 @@ test('a reaper of another run that was left created, with no records, is started
   // The reaper of a process that was killed between its create and its
   // start: no operation of the package leaves one, so the test creates it.
   const created = await docker.containers.create(
-    reaperRequest(stale, {
-      ...REAPER_DEFAULTS,
-      grace: 300,
-      interval: 200,
-      passes: 1,
-      // Its window to be started is twice this: 4 s, less than the run below takes.
-      requestTimeout: 2_000,
-      firstHolder: 0,
-    }),
+    reaperRequest(
+      stale,
+      {
+        ...REAPER_DEFAULTS,
+        grace: 300,
+        interval: 200,
+        passes: 1,
+        // Its window to be started is twice this: 4 s, less than the run below takes.
+        requestTimeout: 2_000,
+        firstHolder: 0,
+      },
+      '/var/run/docker.sock',
+    ),
     { name: reaperName(stale) },
   );
   objects.defer(() => removeContainer(created.id).catch(() => {}));
   // A reaper whose creator may still start it: its window is 2 h.
   const young = randomUUID();
   const waiting = await docker.containers.create(
-    reaperRequest(young, { ...REAPER_DEFAULTS, requestTimeout: 3_600_000 }),
+    reaperRequest(
+      young,
+      { ...REAPER_DEFAULTS, requestTimeout: 3_600_000 },
+      '/var/run/docker.sock',
+    ),
     { name: reaperName(young) },
   );
   objects.defer(() => removeContainer(waiting.id).catch(() => {}));
@@ -1882,13 +1911,17 @@ async function proxiedReaper(
   if ((await docker.images.inspect(REAPER_IMAGE)) === undefined)
     await docker.images.pull(REAPER_IMAGE);
   const run = randomUUID();
-  const body = reaperRequest(run, {
-    ...REAPER_DEFAULTS,
-    grace: 0,
-    passes: 0,
-    firstHolder: 0,
-    serverTtl: 1,
-  });
+  const body = reaperRequest(
+    run,
+    {
+      ...REAPER_DEFAULTS,
+      grace: 0,
+      passes: 0,
+      firstHolder: 0,
+      serverTtl: 1,
+    },
+    '/var/run/docker.sock',
+  );
   const reaper = await docker.containers.create(
     {
       ...body,

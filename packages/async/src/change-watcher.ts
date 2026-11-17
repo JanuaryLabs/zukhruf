@@ -73,12 +73,14 @@ export class ChangeWatcher<G extends Gauge> {
   }
 
   // One check. Its timer ends with the check, before the consumer gets it.
+  // The timer keeps the process alive, as the wait between checks does, so a
+  // read that never answers fails at the timeout and the watch goes on.
   async #check(
     watchStarted: number,
     last: Map<G, Value>,
     signal: AbortSignal,
   ): Promise<ReadonlyMap<G, Outcome>> {
-    using limit = timeout(this.#timeout, { clock: this.#clock });
+    using limit = timeout(this.#timeout, { clock: this.#clock, ref: true });
     const check = new Check(
       watchStarted,
       this.#clock.Date.now(),

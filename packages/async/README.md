@@ -316,12 +316,12 @@ const state = await readState(container, { signal: limit.signal });
 
 - The signal aborts with a `DOMException` whose name is `TimeoutError`, as the signal of `AbortSignal.timeout` does.
 - A disposal stops the timer, and the signal then does not abort. `using` disposes the timeout at the end of the block.
-- The timer keeps the process alive until it fires or until the disposal. The timer of `AbortSignal.timeout` does not keep the process alive, but no call can stop it.
+- The timer does not keep the process alive, as the timer of `AbortSignal.timeout` does not. The work that the timeout limits, such as a request, keeps the process alive. Give `ref: true` when the signal must abort also while no other work keeps the process alive: `timeout(ms, { clock, ref: true })`.
 - To stop a wait at the timeout or at the signal of the caller, give `AbortSignal.any([signal, limit.signal])`.
 - The time runs in ten parts, each on one timer of at most 2^31-1 ms, so a timeout can be longer than one timer can hold.
 - A part that ends late uses up only its own length. On macOS, a timer of Node.js counts the time of a system sleep, so a timer that was running when the computer slept fires at the wake. The timeout then still gives the wait the rest of its time: a timeout of 5 seconds that slept in its first half second aborts 4.5 seconds after the wake, not at the wake. A process that the system stopped gets the same.
 
-See [ADR 0006](./docs/adr/0006-a-timeout-is-a-signal-on-the-clock-that-the-caller-gives.md) and [ADR 0010](./docs/adr/0010-a-timeout-counts-its-time-in-parts.md).
+See [ADR 0006](./docs/adr/0006-a-timeout-is-a-signal-on-the-clock-that-the-caller-gives.md), [ADR 0010](./docs/adr/0010-a-timeout-counts-its-time-in-parts.md) and [ADR 0012](./docs/adr/0012-a-timeout-keeps-the-process-alive-only-when-the-caller-says-so.md).
 
 ## Run a wait on a clock
 

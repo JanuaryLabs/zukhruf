@@ -91,7 +91,8 @@ export class EngineLease implements AsyncDisposable {
         {
           Image: LEASE_IMAGE,
           Entrypoint: ['cat'],
-          Cmd: [],
+          // socktainer 1.6.1 runs the image's own Cmd when Cmd is empty (#4205).
+          Cmd: ['-'],
           OpenStdin: true,
           StdinOnce: true,
           AttachStdin: true,

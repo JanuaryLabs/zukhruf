@@ -1,5 +1,7 @@
 # A timeout is a signal on the clock that the caller gives
 
+Superseded in part on 2026-11-17 (#4205) for `ref`. `timeout` now takes `ref`, and without `ref: true` its timer does not keep the process alive, as the timer of `AbortSignal.timeout` does not ([ADR 0012](./0012-a-timeout-keeps-the-process-alive-only-when-the-caller-says-so.md)). The paragraph "`timeout` has no `ref` option" and the last consequence no longer hold.
+
 Superseded in part on 2026-11-13 (context-compiler #4293) for the timer. `timeout` now counts its time in ten parts, each on its own timer, and no longer runs on `delay`, so the time of a system sleep does not use it up ([ADR 0010](./0010-a-timeout-counts-its-time-in-parts.md)). The signal aborts when the last timer fires.
 
 Superseded in part on 2026-11-07 (#3922) for the timer. `timeout` now runs its time on `delay`, and the disposal aborts that delay, so a timeout can be longer than one timer can hold ([ADR 0009](./0009-a-wait-longer-than-one-timer-runs-on-a-chain-of-timers.md)). The signal aborts one microtask after the timer fires. The rest of the decision below stays true.
