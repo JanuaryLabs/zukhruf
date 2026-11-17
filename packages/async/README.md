@@ -1,6 +1,6 @@
 # @zukhruf/async
 
-Helpers for code that waits for promises: `untilAborted` cancels a wait, `Latch` holds callers until something happened, `delay` waits a fixed time on a clock, `timeout` stops a wait after a time on a clock, `poll` calls an attempt again until it gives a value, `Backoff` gives a longer wait before each retry, and `ChangeWatcher` reads gauges again and again and tells which values changed. `@zukhruf/mutex`, `@zukhruf/single-flight` and `@zukhruf/election` use them.
+Helpers for code that waits for promises: `untilAborted` cancels a wait, `Latch` holds callers until something happened, `Lock` lets one caller at a time do a thing, `Semaphore` lets a number of callers at a time do it, `delay` waits a fixed time on a clock, `timeout` stops a wait after a time on a clock, `poll` calls an attempt again until it gives a value, `Backoff` gives a longer wait before each retry, and `ChangeWatcher` reads gauges again and again and tells which values changed. `@zukhruf/mutex`, `@zukhruf/single-flight` and `@zukhruf/election` use them.
 
 The words in these documents have one meaning each. See the glossary in [CONTEXT.md](./CONTEXT.md).
 
@@ -53,6 +53,62 @@ const value = await done.wait(); // 'report'
 A latch never rejects. It keeps its value in a box, so it never adopts a promise, whatever its type. Thus a class can keep a latch in a field: the latch cannot fail before somebody awaits it. A latch whose type names a promise refuses one at compile time, because a wait would adopt the promise and could then reject. To share the outcome of work that can fail, give the latch a value that tells how the work ended, for example the `PromiseSettledResult` of `Promise.allSettled`. Each caller then throws the error for itself. See [ADR 0002](./docs/adr/0002-a-latch-carries-a-value-never-a-failure.md).
 
 To stop a wait on a latch, cancel it: `untilAborted(latch.wait(), signal)`.
+
+A latch always starts closed. Each latch that a caller opened at once was a lock or a wait group: it ran work in order, or it waited until a count of work was zero. To run work one at a time, see [Let one caller at a time do a thing, with a lock](#let-one-caller-at-a-time-do-a-thing-with-a-lock) (#4519).
+
+## Let one caller at a time do a thing, with a lock
+
+A lock lets one caller at a time hold it. The other callers wait in a line, and they get the lock in the order in which they came. `run` holds the lock while the work runs, and frees it when the work ends, also when the work fails.
+
+```ts
+import { Lock } from '@zukhruf/async';
+
+const writes = new Lock();
+
+// Two writes of the state file never overlap, and they run in the order of the calls.
+await writes.run(() => writeState(state), { signal });
+```
+
+To hold the lock for more than one call, acquire it. Dispose the handle to free the lock: `using` frees it at the end of the block.
+
+```ts
+{
+  using held = await writes.acquire({ signal });
+  const state = await readState();
+  await writeState({ ...state, count: state.count + 1 });
+}
+```
+
+- A failed work rejects `run` with its error, and the next caller then gets the lock. A failed write thus never stops the writes after it.
+- When `signal` aborts while the caller waits, the caller leaves the line, and the call rejects with the reason of the signal. The work of a cancelled `run` never starts.
+- When `signal` aborted before the call, the call rejects at once, and the caller takes nothing, also when the lock is free.
+- `tryAcquire()` gives the handle only when the lock is free and nobody waits, else `undefined`. It never goes before a caller in the line.
+- A second dispose of one handle frees nothing.
+- A lock is not reentrant: a holder that acquires again waits for itself.
+- To limit the wait, give the signal of a `timeout`. See [Stop a wait after a time](#stop-a-wait-after-a-time).
+
+A lock is a semaphore of one permit. See [ADR 0013](./docs/adr/0013-a-lock-is-a-semaphore-of-one-that-grants-in-order-and-a-cancel-leaves-the-line.md).
+
+## Let a number of callers at a time do a thing, with a semaphore
+
+A semaphore has a count of permits. A caller that finds a free permit holds it at once. A caller that finds no free permit waits in a line, and the permits go to the line in the order in which the callers came. Dispose the permit to give it back.
+
+```ts
+import { Semaphore } from '@zukhruf/async';
+
+// At most 4 downloads at the same time.
+const downloads = new Semaphore(4);
+
+async function download(url: string) {
+  using permit = await downloads.acquire({ signal });
+  return fetch(url, { signal });
+}
+```
+
+- A dispose gives the permit to the first caller in the line at once. Thus `tryAcquire()` gives `undefined` while callers wait, also just after a dispose.
+- A cancel, a cancel before the call and a second dispose have the same rules as for a lock.
+- When the turn of a caller comes in the same step as its cancel, the cancel wins, and the permit passes on to the next caller.
+- The constructor throws a `RangeError` for a count of permits that is not a positive integer.
 
 ## Poll an attempt until it gives a value
 

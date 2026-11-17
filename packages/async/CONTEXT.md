@@ -20,6 +20,26 @@ _Avoid_: Abort (the signal aborts; the caller cancels), abandon (in single fligh
 A gate that starts closed and opens once, with a value. A wait on the latch ends when the latch opens, and gets the value. The latch never closes again and never rejects.
 _Avoid_: Deferred, future (both can fail), event (an event can happen again), flag
 
+**Lock**:
+`Lock`. It lets one holder at a time hold it: a semaphore of one permit. A lock is not reentrant.
+_Avoid_: Mutex (the `@zukhruf/mutex` package; its keys can cross processes), critical section, queue
+
+**Semaphore**:
+`Semaphore`. It has a count of permits, and lets at most that many holders hold one at the same time. A caller that finds no free permit waits in the line.
+_Avoid_: Limiter, pool (`@zukhruf/pool` lends workers), throttle (a throttle limits calls in a time)
+
+**Permit**:
+The right to go on that a caller holds while it does its work. A dispose of the permit gives it back, and a second dispose gives back nothing. For a lock, the permit is the handle that `acquire` gives.
+_Avoid_: Token (a fencing token of `@zukhruf/mutex`), slot, ticket
+
+**Line**:
+The callers of a lock or a semaphore that wait for a permit, first come first. A dispose gives the permit to the first caller in the line. A caller that cancels leaves the line.
+_Avoid_: Queue (`@zukhruf/sqlite-queue` keeps jobs), waiters list
+
+**Holder**:
+A caller that holds a permit of a lock or a semaphore, from the grant to the dispose.
+_Avoid_: Owner (a holder can give its permit to other code), user
+
 **Attempt**:
 One call that tries to get a value now, and does not wait. It gives the value, or `undefined` when there is no value yet.
 _Avoid_: Try (the keyword), check (a check reads values to find a change), probe
