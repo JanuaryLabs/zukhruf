@@ -1,6 +1,6 @@
 {
   "name": "@zukhruf/eslint",
-  "version": "0.8.21",
+  "version": "0.8.22",
   "description": "ESLint rules and configs shared across workspaces. Each check is its own named rule, so a repo's own config cannot silently erase it. This workspace lints itself with it.",
   "license": "MIT",
   "repository": {
@@ -68,8 +68,8 @@
     "ts-api-utils": "^2.5.0"
   },
   "devDependencies": {
-    "@zukhruf/fs": "^0.8.21",
-    "@zukhruf/testing": "^0.8.21"
+    "@zukhruf/fs": "^0.8.22",
+    "@zukhruf/testing": "^0.8.22"
   },
   "peerDependencies": {
     "@e18e/eslint-plugin": "^0.8.1",
