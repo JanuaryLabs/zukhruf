@@ -1,14 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import {
-  chmod,
-  mkdir,
-  readFile,
-  rm,
-  symlink,
-  writeFile,
-} from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join, posix } from 'node:path';
+import { chmod, mkdir, readFile, symlink, writeFile } from 'node:fs/promises';
+import { posix } from 'node:path';
+
+import { TemporaryFiles } from '@zukhruf/fs';
 
 import { DockerHost, quote } from './host.ts';
 import { type ProcessRun, directoryPrefix } from './run-records.ts';
@@ -17,28 +11,40 @@ import { type ProcessRun, directoryPrefix } from './run-records.ts';
 export class DockerDirectory implements AsyncDisposable {
   readonly path: string;
   readonly host: DockerHost;
-  readonly #record: AsyncDisposable | undefined;
+  readonly #owned: AsyncDisposableStack;
 
   private constructor(
     path: string,
     host: DockerHost,
-    record: AsyncDisposable | undefined,
+    owned: AsyncDisposableStack,
   ) {
     this.path = path;
     this.host = host;
-    this.#record = record;
+    this.#owned = owned;
   }
 
   static async create(
     host: DockerHost,
     run: ProcessRun | undefined,
   ): Promise<DockerDirectory> {
-    const name = `${directoryPrefix(run?.id)}${randomUUID()}`;
-    const path = host.remote ? `/tmp/${name}` : join(tmpdir(), name);
+    // The record outlives the directory: the global teardown removes the
+    // directory if this process dies before it removed the directory itself.
+    await using resources = new AsyncDisposableStack();
+    await using directory = new AsyncDisposableStack();
+    const prefix = directoryPrefix(run?.id);
+    const path = host.remote
+      ? `/tmp/${prefix}${randomUUID()}`
+      : directory.use(await new TemporaryFiles().directory(prefix)).path;
     const record = await run?.records.record('directory', path);
-    if (host.remote) await host.shell(`mkdir -m 700 -- ${quote(path)}`);
-    else await mkdir(path, { mode: 0o700 });
-    return new DockerDirectory(path, host, record);
+    if (record) resources.use(record);
+    if (host.remote) {
+      await host.shell(`mkdir -m 700 -- ${quote(path)}`);
+      directory.defer(async () => {
+        await host.shell(`rm -rf -- ${quote(path)}`);
+      });
+    }
+    resources.use(directory.move());
+    return new DockerDirectory(path, host, resources.move());
   }
 
   private resolve(name: string): string {
@@ -92,9 +98,6 @@ export class DockerDirectory implements AsyncDisposable {
   }
 
   async [Symbol.asyncDispose](): Promise<void> {
-    if (this.host.remote)
-      await this.host.shell(`rm -rf -- ${quote(this.path)}`);
-    else await rm(this.path, { recursive: true, force: true });
-    await this.#record?.[Symbol.asyncDispose]();
+    await this.#owned.disposeAsync();
   }
 }
