@@ -1,8 +1,6 @@
-import { readFileSync } from 'node:fs';
-import { findPackageJSON } from 'node:module';
-
 import type { ESLint, Linter } from 'eslint';
 
+import manifest from '../package.json' with { type: 'json' };
 import { base } from './base/config.ts';
 import { betterAuth } from './better-auth/config.ts';
 import type { Concept } from './concept.ts';
@@ -16,7 +14,6 @@ import { reactRouter } from './react-router/config.ts';
 import { react } from './react/config.ts';
 import { tailwind } from './tailwind/config.ts';
 import { tests } from './test-files/config.ts';
-import { isRecord } from './unknown-values.ts';
 
 const concepts: Concept[] = [
   base,
@@ -33,21 +30,12 @@ const concepts: Concept[] = [
   nxProjectJson,
 ];
 
-function packageVersion(): string {
-  const manifest: unknown = JSON.parse(
-    readFileSync(findPackageJSON(import.meta.url) ?? '', 'utf8'),
-  );
-  return isRecord(manifest) && typeof manifest['version'] === 'string'
-    ? manifest['version']
-    : '0.0.0';
-}
-
 const configs: Record<string, Linter.Config[]> = {};
 
 const plugin = {
   meta: {
     name: '@zukhruf/eslint',
-    version: packageVersion(),
+    version: manifest.version,
     namespace: 'zukhruf',
   },
   rules: Object.fromEntries(
