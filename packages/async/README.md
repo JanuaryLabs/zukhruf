@@ -1,6 +1,6 @@
 # @zukhruf/async
 
-Helpers for code that waits for promises: `untilAborted` cancels a wait, `Latch` holds callers until something happened, `Lock` lets one caller at a time do a thing, `Semaphore` lets a number of callers at a time do it, `delay` waits a fixed time on a clock, `timeout` stops a wait after a time on a clock, `poll` calls an attempt again until it gives a value, `Backoff` gives a longer wait before each retry, and `ChangeWatcher` reads gauges again and again and tells which values changed. `@zukhruf/mutex`, `@zukhruf/single-flight` and `@zukhruf/election` use them.
+Helpers for code that waits for promises: `untilAborted` cancels a wait, `Latch` holds callers until something happened, `Future` gives callers the value or the failure of work that ends once, `Lock` lets one caller at a time do a thing, `Semaphore` lets a number of callers at a time do it, `delay` waits a fixed time on a clock, `timeout` stops a wait after a time on a clock, `poll` calls an attempt again until it gives a value, `Backoff` gives a longer wait before each retry, and `ChangeWatcher` reads gauges again and again and tells which values changed. `@zukhruf/mutex`, `@zukhruf/single-flight` and `@zukhruf/election` use them.
 
 The words in these documents have one meaning each. See the glossary in [CONTEXT.md](./CONTEXT.md).
 
@@ -50,11 +50,43 @@ done.open('report');
 const value = await done.wait(); // 'report'
 ```
 
-A latch never rejects. It keeps its value in a box, so it never adopts a promise, whatever its type. Thus a class can keep a latch in a field: the latch cannot fail before somebody awaits it. A latch whose type names a promise refuses one at compile time, because a wait would adopt the promise and could then reject. To share the outcome of work that can fail, give the latch a value that tells how the work ended, for example the `PromiseSettledResult` of `Promise.allSettled`. Each caller then throws the error for itself. See [ADR 0002](./docs/adr/0002-a-latch-carries-a-value-never-a-failure.md).
+A latch never rejects. It keeps its value in a box, so it never adopts a promise, whatever its type. Thus a class can keep a latch in a field: the latch cannot fail before somebody awaits it. A latch whose type names a promise refuses one at compile time, because a wait would adopt the promise and could then reject. To share the outcome of work that can fail, use a future. See [Give callers the outcome of work that can fail, with a future](#give-callers-the-outcome-of-work-that-can-fail-with-a-future) and [ADR 0002](./docs/adr/0002-a-latch-carries-a-value-never-a-failure.md).
 
 To stop a wait on a latch, cancel it: `untilAborted(latch.wait(), signal)`.
 
 A latch always starts closed. Each latch that a caller opened at once was a lock or a wait group: it ran work in order, or it waited until a count of work was zero. To run work one at a time, see [Let one caller at a time do a thing, with a lock](#let-one-caller-at-a-time-do-a-thing-with-a-lock) (#4519).
+
+## Give callers the outcome of work that can fail, with a future
+
+A future holds the outcome of work that ends once: a value or a failure. `resolve` settles it with a value, and `reject` settles it with a failure. A wait on the future ends when it settles: it gets the value, or it rejects with the reason. A wait that starts after the future settled ends at once, with the same value or the same reason.
+
+```ts
+import { Future } from '@zukhruf/async';
+
+const report = new Future<string>();
+
+report.resolve('done');
+const value = await report.wait(); // 'done'
+
+const failed = new Future<string>();
+failed.reject(new Error('disk full'));
+await failed.wait(); // Rejects with the error 'disk full'.
+```
+
+`Future.run(work)` starts the work and gives a future that settles with its outcome:
+
+```ts
+// Each caller that waits gets the same value, and the read runs once.
+const config = Future.run(() => readFile('config.json', 'utf8'));
+```
+
+- The first `resolve` or `reject` settles the future. A later `resolve` or `reject` changes nothing.
+- A future keeps its failure as data, and only a wait rejects. Thus a failure that nobody waits for leaves no unhandled rejection, and a class can keep a future in a field.
+- A future whose type names a promise refuses one at compile time in `resolve`, because a wait would adopt the promise.
+- `run` turns a work that throws at once into a failure of the future, as a work that rejects. `run` itself never throws.
+- To stop a wait on a future, cancel it: `untilAborted(future.wait(), signal)`. The work continues.
+
+A future holds a latch that carries the outcome as a `PromiseSettledResult`. See [ADR 0014](./docs/adr/0014-a-future-keeps-its-failure-as-data-and-only-a-wait-rejects.md).
 
 ## Let one caller at a time do a thing, with a lock
 

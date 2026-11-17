@@ -18,7 +18,11 @@ _Avoid_: Abort (the signal aborts; the caller cancels), abandon (in single fligh
 
 **Latch**:
 A gate that starts closed and opens once, with a value. A wait on the latch ends when the latch opens, and gets the value. The latch never closes again and never rejects.
-_Avoid_: Deferred, future (both can fail), event (an event can happen again), flag
+_Avoid_: Deferred (a deferred can fail), event (an event can happen again), flag
+
+**Future**:
+`Future`. It holds the outcome of work that ends once: a value or a failure. The first resolve or reject settles it. Each wait gets the value or rejects with the reason, also a wait that starts after the future settled. It keeps the failure as data, so only a wait rejects. The name is the one of Java `CompletableFuture`, Scala `Promise` and `Future`, and Rust futures.
+_Avoid_: Deferred, TaskCompletionSource (the name in .NET), CompletableDeferred (the name in Kotlin), promise (a promise in a field can reject when nobody awaits it)
 
 **Lock**:
 `Lock`. It lets one holder at a time hold it: a semaphore of one permit. A lock is not reentrant.
