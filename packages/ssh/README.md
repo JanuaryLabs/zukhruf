@@ -241,7 +241,7 @@ No process carries the connection to a jump host. When the owner dies, the kerne
 
 ## Check the host key
 
-`KnownHosts` checks a key as Go's `knownhosts` does ([ADR 0005](./docs/adr/0005-host-keys-are-checked-as-gos-knownhosts-checks-them-under-openssh-stricthostkeychecking.md)). It reads plain names, patterns with `*`, `?` and `!`, hashed names (`|1|`), `[host]:port` for a port other than 22, and `@revoked` lines. `hostKeyAlgorithms()` puts the algorithms of the known keys first, as OpenSSH does, so the server signs with a key that the client knows (golang/go#29286).
+`KnownHosts` checks a key as Go's `knownhosts` does, and matches a line as OpenSSH does where the two differ ([ADR 0005](./docs/adr/0005-host-keys-are-checked-as-gos-knownhosts-checks-them-under-openssh-stricthostkeychecking.md)). It reads plain names, patterns with `*`, `?` and `!`, hashed names (`|1|`), `[host]:port` for a port other than 22, and `@revoked` lines. `hostKeyAlgorithms()` puts the algorithms of the known keys first, as OpenSSH does, so the server signs with a key that the client knows (golang/go#29286).
 
 A host key callback that adds an unknown key and refuses a changed or revoked one is OpenSSH's `accept-new`:
 

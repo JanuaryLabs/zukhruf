@@ -14,6 +14,13 @@ Ezz accepted this decision on 2026-11-17 (backlog #4503): "Accept (Recommended)"
 
 `KnownHosts` of `@zukhruf/ssh/knownhosts` checks a host key as Go's `knownhosts` does. `@zukhruf/ssh/config` applies the resolved `StrictHostKeyChecking` around it, and never prompts.
 
+Where Go's `knownhosts` v0.59.0 and OpenSSH match a line differently, the package follows OpenSSH, as the accepted option says ("Exactly OpenSSH's behaviour per setting, with Go's error types"), and as `ssh-keygen -F` shows on the same file (the tests check each rule against it):
+
+- A pattern matches the whole lookup name, `[hostname]:port` included, with no case: `*` matches `[h]:2222`, and `[h]:*` matches each port. Go matches the host part only, with case and an exact port.
+- An `@revoked` line applies only when its host patterns match the host, as OpenSSH's `load_hostkeys` keeps only the matching lines. Go revokes the key for each host.
+- An `@cert-authority` line never makes a plain host key acceptable. Go's `checkAddr` accepts a plain key that equals the authority key.
+- A line that cannot be read is skipped, as OpenSSH skips it. Go rejects a file that has no valid line.
+
 - `KnownHosts.read(files)` reads the files in order. A missing file is empty, as for OpenSSH. `@zukhruf/ssh/config` gives the user files first, then the global files.
 - `check(hostname, port, key)` looks up `hostname`, or `[hostname]:port` when the port is not 22, as Go's `knownhosts.Normalize` writes it. `@zukhruf/ssh/config` gives the `HostKeyAlias` in place of the hostname when one is set.
 - It matches plain names, patterns with `*`, `?` and `!`, and hashed names. A match on an `@revoked` line throws `RevokedError`. No known key for the name throws `KeyError` with an empty `want`. Known keys that are all different from the key throw `KeyError` whose `want` lists them, each with its file and line.

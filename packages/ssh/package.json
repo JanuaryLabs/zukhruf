@@ -31,6 +31,12 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./knownhosts": {
+      "@zukhruf/source": "./src/knownhosts.ts",
+      "types": "./dist/knownhosts.d.ts",
+      "import": "./dist/knownhosts.js",
+      "default": "./dist/knownhosts.js"
     }
   },
   "files": [

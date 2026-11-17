@@ -1,2 +1,2 @@
 /** @zukhruf/ssh: an SSH client and server inside the Node process. */
-export {};
+export { PublicKey } from './public-key.ts';
