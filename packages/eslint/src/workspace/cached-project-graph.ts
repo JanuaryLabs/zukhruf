@@ -1,7 +1,9 @@
 import { join, resolve } from 'node:path';
 
 import {
+  DependencyType,
   type ProjectGraph,
+  type ProjectGraphDependency,
   type ProjectGraphProjectNode,
   readCachedProjectGraph,
   workspaceRoot,
@@ -36,6 +38,37 @@ export function workspacePackageName(
   );
   const name = isRecord(manifest) ? manifest['name'] : undefined;
   return typeof name === 'string' ? name : undefined;
+}
+
+/**
+ * Whether the edge comes from the source project's code, as a static or a
+ * dynamic import. An implicit dependency (`implicitDependencies`) only orders
+ * the builds: the source's code never loads the target.
+ */
+export function isImport({ type }: ProjectGraphDependency): boolean {
+  return type !== DependencyType.implicit;
+}
+
+/**
+ * `from` and every workspace project it reaches through the edges that
+ * `follow` keeps, transitively, by name.
+ */
+export function reachableProjects(
+  graph: ProjectGraph,
+  from: ProjectGraphProjectNode,
+  follow: (dependency: ProjectGraphDependency) => boolean,
+): Map<string, ProjectGraphProjectNode> {
+  const seen = new Map([[from.name, from]]);
+  const visit = (name: string) => {
+    for (const dependency of graph.dependencies[name] ?? []) {
+      const node = graph.nodes[dependency.target];
+      if (!node || seen.has(node.name) || !follow(dependency)) continue;
+      seen.set(node.name, node);
+      visit(node.name);
+    }
+  };
+  visit(from.name);
+  return seen;
 }
 
 /** The graph's project whose folder is `projectRoot`, an absolute path. */

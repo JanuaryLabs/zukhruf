@@ -7,6 +7,7 @@ import {
 } from '@nx/devkit';
 
 import { isRecord, stringsAt } from '../unknown-values.ts';
+import { reachableProjects } from '../workspace/cached-project-graph.ts';
 import { readJson } from '../workspace/project-manifest.ts';
 
 /** The file paths a manifest's `exports` maps to, in any of its forms. */
@@ -31,24 +32,18 @@ function publishesTesting(manifest: unknown): boolean {
   );
 }
 
-/** `project` and, when its build inlines them, the workspace projects it imports, transitively. */
+/**
+ * The projects whose files Nx's dependency-checks reads for `project`: the
+ * project itself and, when it is bundled, every project the graph's edges
+ * reach from it, as Nx follows them.
+ */
 function checkedProjects(
   graph: ProjectGraph,
   project: ProjectGraphProjectNode,
   bundled: boolean,
 ): ProjectGraphProjectNode[] {
-  const seen = new Map([[project.name, project]]);
-  if (!bundled) return [...seen.values()];
-  const visit = (name: string) => {
-    for (const { target } of graph.dependencies[name] ?? []) {
-      const node = graph.nodes[target];
-      if (!node || seen.has(target)) continue;
-      seen.set(target, node);
-      visit(target);
-    }
-  };
-  visit(project.name);
-  return [...seen.values()];
+  if (!bundled) return [project];
+  return [...reachableProjects(graph, project, () => true).values()];
 }
 
 /**

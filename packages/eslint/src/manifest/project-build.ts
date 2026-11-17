@@ -1,7 +1,10 @@
 import type { ProjectGraph, ProjectGraphProjectNode } from '@nx/devkit';
 
 import { isRecord, stringsAt } from '../unknown-values.ts';
-import { workspacePackageName } from '../workspace/cached-project-graph.ts';
+import {
+  isImport,
+  workspacePackageName,
+} from '../workspace/cached-project-graph.ts';
 
 /**
  * What a project's package.json must declare.
@@ -78,11 +81,13 @@ export class ProjectBuild {
     const externals = esbuild ? esbuildExternals(build?.options) : [];
     const external = (name: string) =>
       externals.some((pattern) => matchesExternal(name, pattern));
-    const installs = graph.dependencies[project.name]?.some(({ target }) => {
-      const dependency = graph.nodes[target];
-      const name = dependency && workspacePackageName(dependency);
-      return name !== undefined && external(name);
-    });
+    const installs = graph.dependencies[project.name]
+      ?.filter(isImport)
+      .some(({ target }) => {
+        const dependency = graph.nodes[target];
+        const name = dependency && workspacePackageName(dependency);
+        return name !== undefined && external(name);
+      });
     this.shape = installs ? 'unbundled' : 'bundled';
     this.inlined = Object.values(graph.nodes)
       .flatMap((node) => workspacePackageName(node) ?? [])

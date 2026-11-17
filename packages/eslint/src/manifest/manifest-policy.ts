@@ -4,6 +4,7 @@ import {
   type DependencyPolicyOptions,
   dependencyPolicy,
 } from '../nx-policy/dependency-policy.ts';
+import { buildOrderOnlyPackages } from './build-order.ts';
 import { ProjectBuild } from './project-build.ts';
 import { testSupportFiles } from './test-support.ts';
 
@@ -25,8 +26,9 @@ export interface ManifestPolicyOptions extends Omit<
  * The complete `@nx/dependency-checks` options for `project`: the shared
  * policy, the repo's entries, the project's own extras, and what its shape
  * demands. A bundled project declares the npm packages its workspace imports
- * pull in. No project declares the workspace packages its build inlines, or
- * what a `testing/` folder that its manifest does not publish imports.
+ * pull in. No project declares the workspace packages its build inlines, what
+ * a project it only builds after imports, or what a `testing/` folder that its
+ * manifest does not publish imports.
  */
 export function manifestPolicy(
   graph: ProjectGraph,
@@ -49,6 +51,7 @@ export function manifestPolicy(
     ],
     ignoredDependencies: [
       ...build.inlined,
+      ...(bundled ? buildOrderOnlyPackages(graph, project) : []),
       ...ignoredDependencies,
       ...(projects[project.data.root]?.ignoredDependencies ?? []),
     ],

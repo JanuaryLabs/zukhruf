@@ -7,6 +7,8 @@ import { fixtureConfig, lint } from '../testing/run-eslint.ts';
 
 const LEFT_PAD =
   'sha512-XI5MPzVNApjAyhQzphX8BkmKsKUxD4LdyK24iZeQ9x9KXt8ys0eo2V1lPb4fGkuVqsXHKVjTomyT2l2mnaTfZQA==';
+const RIGHT_PAD =
+  'sha512-bYBjgxmkvTAfgIYy328fmkwhp39v8lwVgWhhrzxPV3yHtcSqyYKe9/XOhvW48UFjATg3VuJbpsp5822ACNvkmw==';
 
 type App = (
   | {
@@ -20,6 +22,10 @@ type App = (
 ) & {
   /** The workspace packages its code imports. */
   imports?: string[];
+  /** The workspace packages its code loads with `import()`. */
+  lazyImports?: string[];
+  /** Projects it builds after without importing them. */
+  implicitDependencies?: string[];
 };
 
 interface Layout {
@@ -33,12 +39,14 @@ interface Layout {
   greetManifest?: Record<string, unknown>;
   /** greet's files under `src/`, by name; by default `index.ts` imports left-pad. */
   greetSource?: Record<string, string>;
+  /** shout's files under `src/`, by name; by default `index.ts` imports nothing. */
+  shoutSource?: Record<string, string>;
 }
 
 /**
  * A workspace of apps and two libraries: `greet` imports the npm package
- * `left-pad`, and `shout` imports nothing. Nx learns npm packages from the
- * lockfile.
+ * `left-pad`, and `shout` imports nothing. Nx learns npm packages, `left-pad`
+ * and `right-pad`, from the lockfile.
  */
 function workspaceFiles({
   apps,
@@ -48,6 +56,9 @@ function workspaceFiles({
   greetManifest = {},
   greetSource = {
     'index.ts': `import leftPad from 'left-pad';\nexport const greet = () => leftPad('hi', 5);\n`,
+  },
+  shoutSource = {
+    'index.ts': `export const shout = (text: string) => text.toUpperCase();\n`,
   },
 }: Layout): Record<string, string> {
   const workspaces = [
@@ -63,7 +74,7 @@ function workspaceFiles({
       '': {
         name: 'fx',
         workspaces: ['apps/*', 'libs/*'],
-        dependencies: { 'left-pad': '1.3.0' },
+        dependencies: { 'left-pad': '1.3.0', 'right-pad': '1.0.1' },
       },
       ...Object.fromEntries(
         workspaces.flatMap(([folder, name]) => [
@@ -76,6 +87,11 @@ function workspaceFiles({
         resolved: 'https://registry.npmjs.org/left-pad/-/left-pad-1.3.0.tgz',
         integrity: LEFT_PAD,
       },
+      'node_modules/right-pad': {
+        version: '1.0.1',
+        resolved: 'https://registry.npmjs.org/right-pad/-/right-pad-1.0.1.tgz',
+        integrity: RIGHT_PAD,
+      },
     },
   };
   const appFiles = Object.entries(apps).flatMap(([name, app]) => {
@@ -86,12 +102,13 @@ function workspaceFiles({
       version: '0.0.0',
       dependencies: {},
     };
-    const source = (app.imports ?? ['@fx/greet'])
-      .map(
+    const source = [
+      ...(app.imports ?? ['@fx/greet']).map(
         (pkg, index) =>
           `import * as m${index} from '${pkg}';\nconsole.log(m${index});\n`,
-      )
-      .join('');
+      ),
+      ...(app.lazyImports ?? []).map((pkg) => `void import('${pkg}');\n`),
+    ].join('');
     return 'build' in app
       ? [
           [`apps/${name}/package.json`, JSON.stringify(manifest)],
@@ -100,6 +117,7 @@ function workspaceFiles({
             JSON.stringify({
               name,
               projectType: 'application',
+              implicitDependencies: app.implicitDependencies ?? [],
               targets: { build: app.build },
             }),
           ],
@@ -110,7 +128,10 @@ function workspaceFiles({
             `apps/${name}/package.json`,
             JSON.stringify({
               ...manifest,
-              nx: { projectType: 'application' },
+              nx: {
+                projectType: 'application',
+                implicitDependencies: app.implicitDependencies ?? [],
+              },
               scripts: { build: app.buildScript },
             }),
           ],
@@ -123,7 +144,7 @@ function workspaceFiles({
       name: 'fx',
       private: true,
       workspaces: ['apps/*', 'libs/*'],
-      dependencies: { 'left-pad': '1.3.0' },
+      dependencies: { 'left-pad': '1.3.0', 'right-pad': '1.0.1' },
     }),
     'package-lock.json': JSON.stringify(lock),
     'eslint.config.mjs': fixtureConfig(`{
@@ -164,7 +185,12 @@ function workspaceFiles({
         build: { executor: 'nx:run-commands', options: { command: 'true' } },
       },
     }),
-    'libs/shout/src/index.ts': `export const shout = (text: string) => text.toUpperCase();\n`,
+    ...Object.fromEntries(
+      Object.entries(shoutSource).map(([name, source]) => [
+        `libs/shout/src/${name}`,
+        source,
+      ]),
+    ),
   };
 }
 
@@ -193,6 +219,68 @@ test('a bundled app must declare the npm packages its workspace imports pull in,
     assert.match(findings[0]?.message ?? '', /left-pad/);
     assert.doesNotMatch(findings[0]?.message ?? '', /@fx\/greet/);
   }
+});
+
+test('a bundled app does not declare the npm packages of a project it only builds after', async () => {
+  // Arrange: web imports greet and builds after shout, whose code imports
+  // left-pad, as greet's does, and right-pad.
+  await using workspace = await fixtureWorkspace(
+    workspaceFiles({
+      apps: { web: { build: VITE_BUILD, implicitDependencies: ['shout'] } },
+      shoutSource: {
+        'index.ts': `import leftPad from 'left-pad';\nimport rightPad from 'right-pad';\nexport const shout = () => leftPad(rightPad('hi', 5), 9);\n`,
+      },
+    }),
+  );
+  buildProjectGraph(workspace.root);
+
+  // Act
+  const findings = lint(workspace.root, ['apps/web/package.json']);
+
+  // Assert
+  assert.equal(findings.length, 1);
+  assert.match(findings[0]?.message ?? '', /left-pad/);
+  assert.doesNotMatch(findings[0]?.message ?? '', /right-pad/);
+});
+
+test('a bundled app declares what a project it builds after pulls in when it also imports that project, through another project or with import()', async () => {
+  // Arrange: both apps build after shout, whose code imports right-pad. chain
+  // imports greet, which imports shout; lazy loads shout with import().
+  await using workspace = await fixtureWorkspace(
+    workspaceFiles({
+      apps: {
+        chain: { build: VITE_BUILD, implicitDependencies: ['shout'] },
+        lazy: {
+          build: VITE_BUILD,
+          imports: [],
+          lazyImports: ['@fx/shout'],
+          implicitDependencies: ['shout'],
+        },
+      },
+      greetSource: {
+        'index.ts': `import leftPad from 'left-pad';\nimport { shout } from '@fx/shout';\nexport const greet = () => shout(leftPad('hi', 5));\n`,
+      },
+      shoutSource: {
+        'index.ts': `import rightPad from 'right-pad';\nexport const shout = (text: string) => rightPad(text, 9);\n`,
+      },
+    }),
+  );
+  buildProjectGraph(workspace.root);
+
+  // Act
+  const findings = lint(workspace.root, [
+    'apps/chain/package.json',
+    'apps/lazy/package.json',
+  ]);
+
+  // Assert
+  const demandedOf = (app: string) =>
+    findings
+      .filter(({ file }) => file === workspace.path(`apps/${app}/package.json`))
+      .map(({ message }) => message)
+      .join('\n');
+  assert.match(demandedOf('chain'), /right-pad/);
+  assert.match(demandedOf('lazy'), /right-pad/);
 });
 
 test('an app that does not bundle declares its workspace imports, not their npm packages', async () => {
@@ -241,6 +329,10 @@ test('an app declares the workspace packages its build leaves to node_modules, a
       }),
     },
     'other-suffix': { build: esbuild({ external: ['@fx/*-ui'] }) },
+    'implicit-external': {
+      build: esbuild({ external: ['@fx/shout'] }),
+      implicitDependencies: ['shout'],
+    },
     'overlapping-wildcard': { build: esbuild({ external: ['@fx/gr*reet'] }) },
     'not-imported': { build: esbuild({ external: ['@fx/shout', 'left-pad'] }) },
   };
