@@ -48,6 +48,7 @@ export type Command =
 function source(path: string, maxQueuedNotifications: number | undefined) {
   return `
 import { createInterface } from 'node:readline';
+import { Lock } from '@zukhruf/async';
 import { Notifications } from ${JSON.stringify(packageIndex)};
 import { WriteAheadLog, open } from '@zukhruf/sqlite-open';
 import { transaction } from '@zukhruf/sqlite-transaction';
@@ -116,10 +117,12 @@ const commands = {
     print({ event: 'disposed' });
   },
 };
-let chain = Promise.resolve();
+const turns = new Lock();
 input.on('line', (line) => {
   const command = JSON.parse(line);
-  chain = chain.then(() => commands[command.do](command)).catch((error) => print({ event: 'error', message: String(error) }));
+  void turns.run(async () => {
+    try { await commands[command.do](command); } catch (error) { print({ event: 'error', message: String(error) }); }
+  }, { signal: undefined });
 });
 print({ event: 'ready' });
 `;

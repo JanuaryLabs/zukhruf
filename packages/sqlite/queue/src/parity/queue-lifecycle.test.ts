@@ -185,6 +185,27 @@ describe('queue lifecycle', () => {
     }
   });
 
+  // pg-boss returns its #startingPromise to a start that comes while one
+  // runs (node_modules/pg-boss/dist/index.js:112-117).
+  it('rejects a start that comes during a failing start with the same error', async () => {
+    await using dir = await new TemporaryFiles().directory('queue-start-');
+    const queue = new SqliteJobQueue({
+      path: join(dir.path, 'missing', 'queue.sqlite'),
+      schedule: false,
+    });
+    try {
+      const [first, second] = await Promise.all([
+        outcome(() => queue.start()),
+        outcome(() => queue.start()),
+      ]);
+
+      assert.notEqual(first, 'resolved');
+      assert.equal(second, first);
+    } finally {
+      await queue.stop({ graceful: false, close: true });
+    }
+  });
+
   it('validates updateQueue options the way pg-boss does', async () => {
     // pg-boss's UpdateQueueOptions type omits policy and partition; an
     // untyped caller can still pass them, which is what pg-boss guards.

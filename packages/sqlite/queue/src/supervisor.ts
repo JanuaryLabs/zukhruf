@@ -101,7 +101,7 @@ export class Supervisor extends EventEmitter<
     }
     phase.timer?.stop();
     this.#phase = { kind: 'stopped', database: phase.database };
-    await this.#pass.inFlight?.settled();
+    await Promise.allSettled([this.#pass.inFlight?.wait()]);
   }
 
   get #stopped(): boolean {

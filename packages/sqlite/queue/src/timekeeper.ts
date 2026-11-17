@@ -191,7 +191,7 @@ export class Timekeeper extends EventEmitter<Pick<PgBossEventMap, 'error'>> {
     this.#phase = { kind: 'stopped' };
     await this.#manager.offWork(Timekeeper.sendIt, { wait: true });
     phase.timer.stop();
-    await this.#pass.inFlight?.settled();
+    await Promise.allSettled([this.#pass.inFlight?.wait()]);
   }
 
   // timekeeper.js:335-384

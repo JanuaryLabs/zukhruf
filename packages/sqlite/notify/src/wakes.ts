@@ -1,7 +1,7 @@
 import { rm } from 'node:fs/promises';
 import type { Socket } from 'node:net';
 
-import { Latch } from '@zukhruf/async';
+import { Latch, WaitGroup } from '@zukhruf/async';
 import { PipeAddress } from '@zukhruf/pipes';
 
 /** A listener as a sender reads it from its row. */
@@ -28,7 +28,8 @@ export class Wakes {
   // The wakes of the transactions of this turn; a microtask is queued while
   // the map is not empty.
   readonly #due = new Map<string, string>();
-  readonly #removals = new Set<Latch>();
+  // The removals of socket files in flight, which close waits for.
+  readonly #removals = new WaitGroup();
   readonly #wakeOwn: (id: string) => boolean;
   readonly #fail: (error: unknown) => void;
 
@@ -67,7 +68,7 @@ export class Wakes {
     const connections = [...this.#connections.values()];
     this.#connections.clear();
     await Promise.all(connections.map((connection) => connection.end()));
-    await Promise.all([...this.#removals].map((removal) => removal.wait()));
+    await this.#removals.wait({ signal: undefined });
   }
 
   #flush(): void {
@@ -97,14 +98,10 @@ export class Wakes {
   // removes a pipe when its program exits.
   #removeFile(address: string): void {
     if (process.platform === 'win32') return;
-    const removal = new Latch();
-    this.#removals.add(removal);
+    const removal = this.#removals.add();
     void rm(address, { force: true })
       .catch(this.#fail)
-      .finally(() => {
-        this.#removals.delete(removal);
-        removal.open();
-      });
+      .finally(() => removal[Symbol.dispose]());
   }
 }
 

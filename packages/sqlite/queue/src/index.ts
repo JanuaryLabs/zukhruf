@@ -33,7 +33,7 @@ import {
   systemClock,
 } from 'pg-boss';
 
-import { Latch } from '@zukhruf/async';
+import { WaitGroup } from '@zukhruf/async';
 import { Notifications } from '@zukhruf/sqlite-notify';
 import { WriteAheadLog, open } from '@zukhruf/sqlite-open';
 import { transaction } from '@zukhruf/sqlite-transaction';
@@ -209,8 +209,8 @@ export class SqliteJobQueue
   readonly #queueCacheIntervalSeconds: number;
   readonly #intervals: SuperviseIntervals;
   #queueCacheInterval: ClockTimer | undefined;
-  // The offWork() cleanups a stop waits for, each opened once it settles.
-  readonly #pendingCleanups = new Set<Latch>();
+  // The offWork() cleanups a stop waits for, each counted until it settles.
+  readonly #pendingCleanups = new WaitGroup();
   readonly #localGroups = new LocalGroups();
   readonly #supervisor: Supervisor;
   // attorney.js:412
@@ -282,11 +282,11 @@ export class SqliteJobQueue
   async start(): Promise<this> {
     const stopping = this.#stopping.inFlight;
     if (stopping) {
-      await stopping.settled();
+      await Promise.allSettled([stopping.wait()]);
     }
     const starting = this.#starting.inFlight;
     if (starting) {
-      return starting.result();
+      return starting.wait();
     }
     if (this.#lifecycle.kind === 'running') {
       return this;
@@ -399,11 +399,11 @@ export class SqliteJobQueue
   async stop(options: StopOptions = {}): Promise<void> {
     const starting = this.#starting.inFlight;
     if (starting) {
-      await starting.settled();
+      await Promise.allSettled([starting.wait()]);
     }
     const stopping = this.#stopping.inFlight;
     if (stopping) {
-      return stopping.result();
+      return stopping.wait();
     }
     const { close = true, graceful = true } = options;
     // An instance not running is already stopped; asked to close, one that
@@ -479,7 +479,11 @@ export class SqliteJobQueue
       deadlineTimer = systemClock.setTimeout(resolve, timeout);
     });
     try {
-      await Promise.race([this.#settleCleanups(), deadline]);
+      // manager.js:1088-1094: waits until no worker is still stopping.
+      await Promise.race([
+        this.#pendingCleanups.wait({ signal: undefined }),
+        deadline,
+      ]);
     } finally {
       systemClock.clearTimeout(deadlineTimer);
     }
@@ -629,14 +633,11 @@ export class SqliteJobQueue
       await cleanup;
       this.#forgetLocalGroups(name);
     } else {
-      const pending = new Latch();
-      this.#pendingCleanups.add(pending);
-      const settled = () => {
-        this.#pendingCleanups.delete(pending);
+      const pending = this.#pendingCleanups.add();
+      void cleanup.then(() => {
+        pending[Symbol.dispose]();
         this.#forgetLocalGroups(name);
-        pending.open();
-      };
-      cleanup.then(settled, settled);
+      });
     }
   }
 
@@ -650,15 +651,6 @@ export class SqliteJobQueue
       );
     if (!live) {
       this.#localGroups.forget(name);
-    }
-  }
-
-  // manager.js:1088-1094: resolves once no worker is still stopping.
-  async #settleCleanups(): Promise<void> {
-    while (this.#pendingCleanups.size > 0) {
-      await Promise.all(
-        Array.from(this.#pendingCleanups, (pending) => pending.wait()),
-      );
     }
   }
 

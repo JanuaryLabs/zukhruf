@@ -1,6 +1,6 @@
 import type { Clock, WipData, WorkOptions, WorkerState } from 'pg-boss';
 
-import { Latch } from '@zukhruf/async';
+import { Future } from '@zukhruf/async';
 
 import { Timers } from './timers.ts';
 
@@ -59,7 +59,7 @@ export class Worker<TJob> {
   // Aborts the round's wait; a fresh one arms each wait.
   #wake = new AbortController();
   // How the loop ended, which stop() waits for.
-  readonly #ran = new Latch<{ ok: true } | { ok: false; error: unknown }>();
+  readonly #ran = new Future<void>();
   // What the loop saw last, as pg-boss reports it in toWipData.
   #observed: Observed = {
     lastFetchedOn: null,
@@ -96,9 +96,9 @@ export class Worker<TJob> {
   // rejects the stop that waits for it, and is unhandled when no stop waits.
   start(): void {
     void this.#run().then(
-      () => this.#ran.open({ ok: true }),
+      () => this.#ran.resolve(),
       (error: unknown) => {
-        this.#ran.open({ ok: false, error });
+        this.#ran.reject(error);
         if (!this.stopping) {
           throw error;
         }
@@ -181,10 +181,7 @@ export class Worker<TJob> {
     }
     this.#state = 'stopping';
     this.#wake.abort();
-    const ran = await this.#ran.wait();
-    if (!ran.ok) {
-      throw ran.error;
-    }
+    await this.#ran.wait();
   }
 
   // worker.js:123-139

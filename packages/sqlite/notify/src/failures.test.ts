@@ -228,6 +228,30 @@ describe('dispose and unlisten', () => {
     assert.deepEqual(heard.errors, []);
   });
 
+  test('two listen calls at once register one listener row, and each channel gets its notifications', async () => {
+    await using folder = await new TemporaryFiles().directory('notify-');
+    const path = `${folder.path}/app.sqlite`;
+    await using notifications = new Notifications({
+      path,
+      clock: createClock(),
+    });
+    const heard = hear(notifications);
+
+    await Promise.all([
+      notifications.listen('jobs'),
+      notifications.listen('mail'),
+    ]);
+    notifications.notify('jobs', 'job');
+    notifications.notify('mail', 'letter');
+
+    assert.equal(addressesOf(path, process.pid).length, 1);
+    assert.deepEqual(
+      (await heard.count(2)).map((n) => n.payload),
+      ['job', 'letter'],
+    );
+    assert.deepEqual(heard.errors, []);
+  });
+
   test('{ path } closes its own connection at dispose; { database } leaves the caller connection open', async () => {
     await using folder = await new TemporaryFiles().directory('notify-');
     const path = `${folder.path}/app.sqlite`;

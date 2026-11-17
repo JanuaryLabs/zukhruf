@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import type { DatabaseSync, SQLOutputValue, StatementSync } from 'node:sqlite';
 
-import { type Clock, Latch } from '@zukhruf/async';
+import { type Clock, Future, Lock } from '@zukhruf/async';
 import { WriteAheadLog, open } from '@zukhruf/sqlite-open';
 import { transaction } from '@zukhruf/sqlite-transaction';
 
@@ -12,7 +12,6 @@ import { Listening, type QueuedNotification } from './listening.ts';
 import { QueueFullError } from './queue-full-error.ts';
 import { RemovalCheck } from './removal-check.ts';
 import { HIGHEST_ID } from './schema.ts';
-import { Steps } from './steps.ts';
 import { Tables } from './tables.ts';
 import { type Addressed, Wakes } from './wakes.ts';
 
@@ -70,7 +69,7 @@ export class Notifications
   // its row is removed.
   readonly #wanted = new Set<string>();
   // listen, unlisten and dispose change the listener one after another.
-  readonly #steps = new Steps();
+  readonly #changes = new Lock();
   #listener: Listener = { kind: 'idle' };
   #lastTrim = -Infinity;
   #lifetime: Lifetime = { kind: 'open' };
@@ -144,25 +143,28 @@ export class Notifications
     checkChannel(channel);
     this.#assertOpen();
     this.#wanted.add(channel);
-    await this.#steps.run(async () => {
-      if (!this.#wanted.has(channel)) return;
-      try {
-        if (this.#listener.kind === 'listening') {
-          this.#listener.listening.add(channel);
-          return;
+    await this.#changes.run(
+      async () => {
+        if (!this.#wanted.has(channel)) return;
+        try {
+          if (this.#listener.kind === 'listening') {
+            this.#listener.listening.add(channel);
+            return;
+          }
+          const listening = await Listening.register(channel, {
+            path: this.#path,
+            clock: this.#clock,
+            deliver: (row) => this.#deliver(row),
+            fail: (error) => this.emit('error', error),
+          });
+          this.#listener = { kind: 'listening', listening };
+        } catch (error) {
+          this.#wanted.delete(channel);
+          throw error;
         }
-        const listening = await Listening.register(channel, {
-          path: this.#path,
-          clock: this.#clock,
-          deliver: (row) => this.#deliver(row),
-          fail: (error) => this.emit('error', error),
-        });
-        this.#listener = { kind: 'listening', listening };
-      } catch (error) {
-        this.#wanted.delete(channel);
-        throw error;
-      }
-    });
+      },
+      { signal: undefined },
+    );
   }
 
   /** Stops the notifications of the channel at once; the last one removes the listener's row and closes its socket. */
@@ -170,11 +172,14 @@ export class Notifications
     checkChannel(channel);
     this.#assertOpen();
     this.#wanted.delete(channel);
-    await this.#steps.run(async () => {
-      if (this.#listener.kind !== 'listening') return;
-      if (await this.#listener.listening.remove(channel))
-        this.#listener = { kind: 'idle' };
-    });
+    await this.#changes.run(
+      async () => {
+        if (this.#listener.kind !== 'listening') return;
+        if (await this.#listener.listening.remove(channel))
+          this.#listener = { kind: 'idle' };
+      },
+      { signal: undefined },
+    );
   }
 
   /**
@@ -223,30 +228,31 @@ export class Notifications
 
   /** Writes the wakes that are due, ends the connections to other listeners, removes this listener's rows, closes its socket and the connections that it opened. */
   async [Symbol.asyncDispose](): Promise<void> {
-    if (this.#lifetime.kind === 'open') {
-      const ended = new Latch<PromiseSettledResult<void>>();
-      this.#lifetime = { kind: 'disposed', ended };
-      const [outcome] = await Promise.allSettled([this.#dispose()]);
-      ended.open(outcome);
-    }
-    const outcome = await this.#lifetime.ended.wait();
-    if (outcome.status === 'rejected') throw outcome.reason;
+    if (this.#lifetime.kind === 'open')
+      this.#lifetime = {
+        kind: 'disposed',
+        ended: Future.run(() => this.#dispose()),
+      };
+    await this.#lifetime.ended.wait();
   }
 
   async #dispose(): Promise<void> {
     this.#wanted.clear();
-    await this.#steps.run(async () => {
-      try {
-        await this.#wakes.close();
-        if (this.#listener.kind === 'listening') {
-          const { listening } = this.#listener;
-          this.#listener = { kind: 'idle' };
-          await listening.end();
+    await this.#changes.run(
+      async () => {
+        try {
+          await this.#wakes.close();
+          if (this.#listener.kind === 'listening') {
+            const { listening } = this.#listener;
+            this.#listener = { kind: 'idle' };
+            await listening.end();
+          }
+        } finally {
+          if (this.#owned) this.#database.close();
         }
-      } finally {
-        if (this.#owned) this.#database.close();
-      }
-    });
+      },
+      { signal: undefined },
+    );
   }
 
   // Gives the laggards, which the trim waits for. They are woken whatever
@@ -294,7 +300,4 @@ type Listener =
 
 type Lifetime =
   | { readonly kind: 'open' }
-  | {
-      readonly kind: 'disposed';
-      readonly ended: Latch<PromiseSettledResult<void>>;
-    };
+  | { readonly kind: 'disposed'; readonly ended: Future<void> };
