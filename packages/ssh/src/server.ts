@@ -25,6 +25,7 @@ import {
   exitCommandChannel,
   halfClosing,
   openCommandChannel,
+  parseTerminalModes,
   removeKeepalive,
 } from './ssh2-server-channel.ts';
 
@@ -261,6 +262,7 @@ function attach(
   info: ClientInfo,
 ): Attached {
   removeKeepalive(connection);
+  parseTerminalModes(connection);
   const channels = new Inbox<IncomingChannel>();
   const requests = new Inbox<GlobalRequest>();
   const closed = new Latch();
@@ -619,14 +621,9 @@ export class ServerSession {
         reply,
       );
     });
-    session.on('pty', (_accept, reject, info: PseudoTtyInfo | undefined) => {
+    // The modes come from parseTerminalModes, also those that ssh2 cannot name.
+    session.on('pty', (_accept, reject, info: PseudoTtyInfo) => {
       const reply = slot(reject);
-      // ssh2 drops the whole request when it meets a terminal mode that it
-      // does not know, such as IUTF8 (RFC 8160): such a pty is refused.
-      if (info === undefined) {
-        reply(false);
-        return;
-      }
       deliver(
         {
           type: 'pty-req',

@@ -1025,3 +1025,128 @@ test(
     assert.equal(seen.term, 'vt100');
   },
 );
+
+test(
+  'exit with a vendor signal name reaches the client as exit-signal with that name',
+  { skip: noSsh },
+  async () => {
+    // Arrange
+    await using rig = await startSshClientRig(async (socket) => {
+      await using conn = await ServerConn.handshake(socket, {
+        hostKeys: [rig.hostKey],
+        publicKey: (_user, key) => key.equals(rig.userKey),
+      });
+      await eachSession(conn, async (session) => {
+        for await (const request of session.requests()) {
+          if (request.type === 'exec') {
+            request.accept();
+            await session.exit({
+              signal: 'XCPU@openssh.com',
+              coreDumped: true,
+            });
+            return;
+          }
+        }
+      });
+    });
+    const key = PrivateKey.parse(
+      await readFile(join(rig.directory, 'id_ed25519')),
+    );
+    await using client = await Client.dial(`127.0.0.1:${rig.port}`, {
+      user: 'test',
+      auth: [{ type: 'publickey', signers: async () => [key] }],
+      hostKey: () => {},
+      clock: createClock(),
+    });
+
+    // Act
+    const ran = client.newSession().run('true');
+
+    // Assert
+    await assert.rejects(
+      ran,
+      (error) =>
+        error instanceof ExitError &&
+        error.exit.kind === 'signal' &&
+        error.exit.signal === 'XCPU@openssh.com' &&
+        error.exit.coreDumped,
+    );
+  },
+);
+
+test(
+  'the pty-req of ssh on a real terminal reaches the session with its modes, IUTF8 (RFC 8160) among them',
+  { skip: noSsh },
+  async () => {
+    // Arrange
+    const seen: { term?: string; modes?: Readonly<Record<string, number>> } =
+      {};
+    await using rig = await startSshClientRig(async (socket) => {
+      await using conn = await ServerConn.handshake(socket, {
+        hostKeys: [rig.hostKey],
+        publicKey: (_user, key) => key.equals(rig.userKey),
+      });
+      await eachSession(conn, async (session) => {
+        for await (const request of session.requests()) {
+          if (request.type === 'pty-req') {
+            seen.term = request.term;
+            seen.modes = request.modes;
+            request.accept();
+          } else if (request.type === 'exec') {
+            request.accept();
+            await session.exit(0);
+            return;
+          } else if ('reject' in request) {
+            request.reject();
+          }
+        }
+      });
+    });
+
+    // Act
+    const ssh = await rig.ssh(['-tt'], ['true'], {
+      terminal: true,
+      env: { TERM: 'xterm-test' },
+    });
+
+    // Assert
+    assert.equal(ssh.code, 0, `${ssh.stdout}${ssh.stderr}`);
+    assert.equal(seen.term, 'xterm-test');
+    assert.ok(seen.modes !== undefined && 'IUTF8' in seen.modes, ssh.stdout);
+    assert.ok('VINTR' in (seen.modes ?? {}));
+  },
+);
+
+test(
+  'replies to deferred session requests keep the order of the requests: a pty-req refused after its exec was accepted reaches ssh as a refused pty',
+  { skip: noSsh },
+  async () => {
+    // Arrange
+    await using rig = await startSshClientRig(async (socket) => {
+      await using conn = await ServerConn.handshake(socket, {
+        hostKeys: [rig.hostKey],
+        publicKey: (_user, key) => key.equals(rig.userKey),
+      });
+      await eachSession(conn, async (session) => {
+        const held: { pty?: { reject(): void } } = {};
+        for await (const request of session.requests()) {
+          if (request.type === 'pty-req') {
+            held.pty = request;
+          } else if (request.type === 'exec') {
+            request.accept();
+            held.pty?.reject();
+            await session.exit(0);
+            return;
+          }
+        }
+      });
+    });
+
+    // Act
+    const ssh = await rig.ssh(['-tt'], ['true']);
+
+    // Assert
+    assert.match(ssh.stderr, /PTY allocation request failed/);
+    assert.doesNotMatch(ssh.stderr, /exec request failed/);
+  },
+);

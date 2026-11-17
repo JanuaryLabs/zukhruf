@@ -39,6 +39,8 @@ export interface SshClientRig extends AsyncDisposable {
     options?: {
       readonly input?: string;
       readonly env?: Readonly<Record<string, string>>;
+      /** Runs ssh under `script`, so that its stdin is a terminal and it sends the modes of that terminal. The stdin of script is /dev/null: BSD script fails on a socket, and Node's pipes on macOS are sockets. */
+      readonly terminal?: boolean;
     },
   ): Promise<SshRun>;
 }
@@ -106,29 +108,28 @@ export async function startSshClientRig(
       hostKey,
       userKey,
       async ssh(args, command, options = {}) {
-        const child = spawn(
+        const argv = [
           'ssh',
-          [
-            '-F',
-            config,
-            '-p',
-            String(port),
-            ...args,
-            'test@127.0.0.1',
-            ...command,
-          ],
-          {
-            env: { PATH: process.env['PATH'], ...options.env },
-            stdio: ['pipe', 'pipe', 'pipe'],
-          },
-        );
+          '-F',
+          config,
+          '-p',
+          String(port),
+          ...args,
+          'test@127.0.0.1',
+          ...command,
+        ];
+        const [file, ...fileArgs] = options.terminal ? underScript(argv) : argv;
+        const child = spawn(file ?? 'ssh', fileArgs, {
+          env: { PATH: process.env['PATH'], ...options.env },
+          stdio: [options.terminal ? 'ignore' : 'pipe', 'pipe', 'pipe'],
+        });
         const stdout: Buffer[] = [];
         const stderr: Buffer[] = [];
-        child.stdout.on('data', (chunk: Buffer) => stdout.push(chunk));
-        child.stderr.on('data', (chunk: Buffer) => stderr.push(chunk));
+        child.stdout?.on('data', (chunk: Buffer) => stdout.push(chunk));
+        child.stderr?.on('data', (chunk: Buffer) => stderr.push(chunk));
         const closed = Promise.withResolvers<number | null>();
         child.once('close', closed.resolve);
-        child.stdin.end(options.input);
+        child.stdin?.end(options.input);
         const code = await closed.promise;
         return {
           code,
@@ -152,6 +153,15 @@ export async function startSshClientRig(
     await directory[Symbol.asyncDispose]();
     throw error;
   }
+}
+
+/** BSD script takes the command as argv; util-linux script takes one shell string and needs -e for its exit status. */
+function underScript(argv: readonly string[]): readonly string[] {
+  if (process.platform === 'darwin') {
+    return ['script', '-q', '/dev/null', ...argv];
+  }
+  const quoted = argv.map((arg) => `'${arg.replaceAll("'", "'\\''")}'`);
+  return ['script', '-q', '-e', '-c', quoted.join(' '), '/dev/null'];
 }
 
 function portOf(server: Server): number {
