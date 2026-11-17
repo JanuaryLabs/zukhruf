@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import { Latch, type WallClock, poll } from '@zukhruf/async';
+import { Future, type WallClock, poll } from '@zukhruf/async';
 import { FileLock, TemporaryFiles } from '@zukhruf/fs';
 
 import { type Git, gitIn } from '../git.ts';
@@ -25,15 +25,11 @@ export interface Clone {
   readonly nxCacheDirectory: string;
 }
 
-// The outcome of one piece of work, kept as data in a latch, so a failure
-// rejects only the callers that wait for it.
-type Outcome<T> = Latch<PromiseSettledResult<T>>;
-
 // A clone, and what its disposal frees: the folder, and the lease on the
 // install that its node_modules links to.
 interface Opened {
-  readonly clone: Outcome<Clone>;
-  packages: Outcome<void> | undefined;
+  readonly clone: Future<Clone>;
+  packages: Future<void> | undefined;
   readonly resources: AsyncDisposableStack;
 }
 
@@ -114,12 +110,12 @@ export class Snapshots implements AsyncDisposable {
       await this.#evictOtherThan(commit);
     }
     const opened = this.#opened.get(commit) ?? this.#start(commit);
-    const clone = await settled(opened.clone);
+    const clone = await opened.clone.wait();
     if (packages) {
-      opened.packages ??= outcomeOf(() =>
+      opened.packages ??= Future.run(() =>
         this.#link(clone, name, opened.resources),
       );
-      await settled(opened.packages);
+      await opened.packages.wait();
     }
     return clone;
   }
@@ -155,7 +151,7 @@ export class Snapshots implements AsyncDisposable {
   #start(commit: string): Opened {
     const resources = new AsyncDisposableStack();
     const opened: Opened = {
-      clone: outcomeOf(() => this.#clone(commit, resources)),
+      clone: Future.run(() => this.#clone(commit, resources)),
       packages: undefined,
       resources,
     };
@@ -284,22 +280,6 @@ async function acquire(
 
 // `work`, run at the first call; each later call waits for the same outcome.
 function memoized<T>(work: () => Promise<T>): () => Promise<T> {
-  let outcome: Outcome<T> | undefined;
-  return () => settled((outcome ??= outcomeOf(work)));
-}
-
-// The outcome of `work`: it starts now, and each caller waits for the same
-// outcome.
-function outcomeOf<T>(work: () => Promise<T>): Outcome<T> {
-  const outcome: Outcome<T> = new Latch();
-  void Promise.allSettled([Promise.try(work)]).then(([result]) =>
-    outcome.open(result),
-  );
-  return outcome;
-}
-
-async function settled<T>(outcome: Outcome<T>): Promise<T> {
-  const result = await outcome.wait();
-  if (result.status === 'rejected') throw result.reason;
-  return result.value;
+  let outcome: Future<T> | undefined;
+  return () => (outcome ??= Future.run(work)).wait();
 }
