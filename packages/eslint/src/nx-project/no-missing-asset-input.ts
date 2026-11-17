@@ -5,18 +5,8 @@ import type { Rule } from 'eslint';
 import ignore, { type Ignore } from 'ignore';
 
 import { type AstNode, isType } from '../authoring/ast.ts';
+import { objectProperties, propertyKey } from '../authoring/json-ast.ts';
 import { workspaceRootOf } from '../workspace/workspace-root.ts';
-
-function keyName(property: AstNode): string | undefined {
-  const key = property['key'];
-  if (isType(key, 'JSONLiteral') && typeof key['value'] === 'string') {
-    return key['value'];
-  }
-  if (isType(key, 'JSONIdentifier') && typeof key['name'] === 'string') {
-    return key['name'];
-  }
-  return undefined;
-}
 
 function stringValue(node: unknown): string | undefined {
   return isType(node, 'JSONLiteral') && typeof node['value'] === 'string'
@@ -145,13 +135,24 @@ const rule: Rule.RuleModule = {
       }
     };
 
-    function underTargets(node: Rule.Node): boolean {
-      return context.sourceCode
-        .getAncestors(node)
-        .some(
-          (ancestor) =>
-            isType(ancestor, 'JSONProperty') && keyName(ancestor) === 'targets',
-        );
+    // Nx reads project.json like JSON.parse: of two properties with the same
+    // key only the last is read, so an `assets` list inside an earlier one
+    // is never copied.
+    function isTargetAssets(assets: AstNode): boolean {
+      const properties = [
+        ...context.sourceCode.getAncestors(assets),
+        assets,
+      ].filter((node): node is AstNode => isType(node, 'JSONProperty'));
+      return (
+        properties.some((property) => propertyKey(property) === 'targets') &&
+        properties.every((property) => {
+          const key = propertyKey(property);
+          return (
+            key !== undefined &&
+            new Map(objectProperties(property.parent)).get(key) === property
+          );
+        })
+      );
     }
 
     function checkStringEntry(element: AstNode): void {
@@ -177,19 +178,12 @@ const rule: Rule.RuleModule = {
     }
 
     function checkObjectEntry(element: AstNode): void {
-      const properties = element['properties'];
-      if (!Array.isArray(properties)) {
-        return;
-      }
-      const fields = new Map<string, unknown>();
-      for (const property of properties) {
-        if (isType(property, 'JSONProperty')) {
-          const key = keyName(property);
-          if (key !== undefined) {
-            fields.set(key, property['value']);
-          }
-        }
-      }
+      const fields = new Map(
+        objectProperties(element).map(([key, property]) => [
+          key,
+          property['value'],
+        ]),
+      );
       const value = fields.get('input');
       if (!isType(value, 'JSONLiteral')) {
         return;
@@ -220,7 +214,7 @@ const rule: Rule.RuleModule = {
         if (!isType(node, 'JSONProperty')) {
           return;
         }
-        if (keyName(node) !== 'assets' || !underTargets(node)) {
+        if (propertyKey(node) !== 'assets' || !isTargetAssets(node)) {
           return;
         }
         const value = node['value'];

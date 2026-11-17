@@ -51,6 +51,17 @@ test('no-missing-asset-input', async () => {
         code: '{"metadata":{"assets":["./does-not-exist.json"]}}',
         filename,
       },
+      // Nx reads project.json like JSON.parse, so the last `assets` key wins
+      // and a dead path in an earlier one is never copied.
+      {
+        code: '{"targets":{"build":{"options":{"assets":["./does-not-exist.json"],"assets":["./openapi.json"]}}}}',
+        filename,
+      },
+      // The last `targets` key wins, so an `assets` list in an earlier one is never read.
+      {
+        code: '{"targets":{"build":{"options":{"assets":["./does-not-exist.json"]}}},"targets":{}}',
+        filename,
+      },
       // Outside any workspace the rule stays silent.
       {
         code: projectJson('["./does-not-exist.json"]'),

@@ -1,25 +1,14 @@
 import type { Rule } from 'eslint';
 
 import { type AstNode, isType } from '../authoring/ast.ts';
+import { objectProperties } from '../authoring/json-ast.ts';
 
 /** The npm registry stores at most this many characters of a description. */
 const LIMIT = 255;
 
-/**
- * The value of the manifest's top-level `name` field. npm reads package.json
- * with `JSON.parse`, so every key is a quoted string.
- */
+/** The value of the manifest's top-level `name` field, as npm reads it with `JSON.parse`. */
 function fieldValue(manifest: AstNode, name: string): unknown {
-  const properties = manifest['properties'];
-  const property: unknown = Array.isArray(properties)
-    ? properties.find(
-        (entry: unknown) =>
-          isType(entry, 'JSONProperty') &&
-          isType(entry['key'], 'JSONLiteral') &&
-          entry['key']['value'] === name,
-      )
-    : undefined;
-  return isType(property, 'JSONProperty') ? property['value'] : undefined;
+  return new Map(objectProperties(manifest)).get(name)?.['value'];
 }
 
 /**
