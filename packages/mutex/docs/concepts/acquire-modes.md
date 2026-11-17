@@ -88,7 +88,7 @@ The lock store has a third operation, `isHeld(key)`, for a [holder check](../../
 
 The mutex gives the caller's signal to the acquire mode, and the acquire mode gives it to the lock store. Thus the lock store stops the wait at once. The mutex also watches the signal itself. Thus an acquire mode that does not give the signal on cannot make a caller that cancelled wait.
 
-**A caller that gives up or cancels keeps its place in line.** Some lock stores have a queue that a waiter cannot leave from the middle. `MemoryStore` and `TicketQueueFileStore` keep the place of a caller that stopped its wait. When that place reaches the front, `MemoryStore` passes the key on to the next caller at once. `TicketQueueFileStore` ends the presence of that caller, so the next waiter removes its ticket at its next poll. Thus a caller that stopped its wait never blocks the callers after it, and the order of the queue does not change.
+**A caller that gives up or cancels never blocks the callers after it.** `MemoryStore` takes that caller out of its line at once, and the caller behind it moves up ([ADR 0032](../adr/0032-a-cancelled-waiter-of-the-memory-store-leaves-the-line.md)). `TicketQueueFileStore` has a queue that a waiter cannot leave from the middle, so it keeps the place of that caller and ends its presence. The next waiter then removes its ticket at its next poll. In both lock stores, the order of the line does not change.
 
 ## Write your own acquire mode
 

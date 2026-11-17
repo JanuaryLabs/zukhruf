@@ -64,6 +64,9 @@ Start with the [project README](../README.md). The glossary is in [CONTEXT.md](.
 27. [Docker engine tokens come from a ladder of named volumes](./adr/0027-docker-engine-tokens-come-from-a-ladder-of-named-volumes.md)
 28. [A Docker engine token is the higher of the engine time and the ladder](./adr/0028-a-docker-engine-token-is-the-higher-of-the-engine-time-and-the-ladder.md)
 29. [A Docker engine store marks its claims and rungs with the labels of the caller](./adr/0029-a-docker-engine-store-marks-its-claims-and-rungs-with-the-labels-of-the-caller.md)
+30. [Each lock store runs the lock-store contract from its own tests, and a capability is a typed parameter](./adr/0030-each-lock-store-runs-the-lock-store-contract-from-its-own-tests-and-a-capability-is-a-typed-parameter.md)
+31. [A follower observes the leader, so a frozen leader is ended](./adr/0031-a-follower-observes-the-leader-so-a-frozen-leader-is-ended.md)
+32. [A cancelled waiter of the memory store leaves the line](./adr/0032-a-cancelled-waiter-of-the-memory-store-leaves-the-line.md)
 
 ## Copied code
 
