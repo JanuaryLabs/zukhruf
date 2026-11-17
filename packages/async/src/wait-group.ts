@@ -1,10 +1,6 @@
 import { Latch } from './latch.ts';
 import { untilAborted } from './until-aborted.ts';
-
-export interface WaitOptions {
-  /** Cancels the wait: the wait rejects with `signal.reason`. The count does not change. */
-  signal: AbortSignal | undefined;
-}
+import { type WaitOptions } from './wait-options.ts';
 
 /**
  * Counts the work in flight, and lets callers wait until the count is zero.
@@ -36,7 +32,8 @@ export class WaitGroup {
   /**
    * Ends at once when the count is zero, else when the count next reaches
    * zero, also when an `add` follows in the same step. When the signal
-   * aborts, also before the call, the wait rejects with its reason.
+   * aborts, also before the call, the wait rejects with its reason, and
+   * the count does not change.
    */
   async wait({ signal }: WaitOptions): Promise<void> {
     signal?.throwIfAborted();

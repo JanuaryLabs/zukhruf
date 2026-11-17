@@ -1,6 +1,6 @@
 # @zukhruf/async
 
-Helpers for code that waits for promises: `untilAborted` cancels a wait, `Latch` holds callers until something happened, `Future` gives callers the value or the failure of work that ends once, `Lock` lets one caller at a time do a thing, `Semaphore` lets a number of callers at a time do it, `WaitGroup` waits until the work in flight is done, `delay` waits a fixed time on a clock, `timeout` stops a wait after a time on a clock, `poll` calls an attempt again until it gives a value, `Backoff` gives a longer wait before each retry, and `ChangeWatcher` reads gauges again and again and tells which values changed. `@zukhruf/mutex`, `@zukhruf/single-flight` and `@zukhruf/election` use them.
+Helpers for code that waits for promises: `untilAborted` cancels a wait, `Latch` holds callers until something happened, `Future` gives callers the value or the failure of work that ends once, `Lock` lets one caller at a time do a thing, `Semaphore` lets a number of callers at a time do it, `WaitGroup` waits until the work in flight is done, `Cond` wakes every caller that waits now, `delay` waits a fixed time on a clock, `timeout` stops a wait after a time on a clock, `poll` calls an attempt again until it gives a value, `Backoff` gives a longer wait before each retry, and `ChangeWatcher` reads gauges again and again and tells which values changed. `@zukhruf/mutex`, `@zukhruf/single-flight` and `@zukhruf/election` use them.
 
 The words in these documents have one meaning each. See the glossary in [CONTEXT.md](./CONTEXT.md).
 
@@ -168,6 +168,36 @@ await commands.wait({ signal });
 - No listener stays on the signal after a wait ends, so a signal that lives long can serve many waits.
 
 A wait group holds a latch, and puts a new latch in its place each time the count reaches zero. See [ADR 0015](./docs/adr/0015-a-wait-group-counts-disposable-tokens-and-may-count-up-again-after-zero.md).
+
+## Wake every caller that waits now, with a cond
+
+A cond wakes the callers that wait for a change of a state. `broadcast()` ends each wait that started before it. A cond carries no value, so a woken caller checks its state again, and waits again when the state has not changed.
+
+```ts
+import { Cond } from '@zukhruf/async';
+
+const arrived = new Cond();
+const queue: Job[] = [];
+
+function give(job: Job) {
+  queue.push(job);
+  arrived.broadcast();
+}
+
+async function take(signal: AbortSignal) {
+  while (queue.length === 0) await arrived.wait({ signal });
+  return queue.shift();
+}
+```
+
+- A wait starts in the step of the call. Thus a wait that starts just before a broadcast, in the same step, ends at that broadcast, and a check of the state followed by a wait cannot miss a broadcast.
+- A broadcast keeps nothing. A wait that starts after a broadcast waits for the next one.
+- A broadcast with no wait changes nothing.
+- When `signal` aborts during the wait, the wait rejects with the reason of the signal, and its listener leaves the signal. The other waits still end at the next broadcast.
+- When `signal` aborted before the call, the wait rejects at once.
+- No listener stays on the signal after a wait ends, so a signal that lives long can serve many waits.
+
+A cond is the one of Go `sync.Cond`, without its lock: the step of the call does the job of the lock. A cond holds a latch, and puts a new latch in its place at each broadcast. See [ADR 0016](./docs/adr/0016-a-cond-wakes-the-waits-that-started-before-a-broadcast-and-keeps-nothing-for-a-later-wait.md).
 
 ## Poll an attempt until it gives a value
 

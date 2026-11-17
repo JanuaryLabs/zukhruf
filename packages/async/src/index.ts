@@ -1,5 +1,6 @@
 export { Backoff, type BackoffOptions, type Jitter } from './backoff.ts';
 export { type Clock, type WallClock } from './clock.ts';
+export { Cond } from './cond.ts';
 export { delay, type DelayOptions } from './delay.ts';
 export { Future } from './future.ts';
 export { Latch } from './latch.ts';
@@ -8,7 +9,8 @@ export { poll, type PollOptions } from './poll.ts';
 export { type AcquireOptions, Semaphore } from './semaphore.ts';
 export { timeout, type Timeout, type TimeoutOptions } from './timeout.ts';
 export { untilAborted } from './until-aborted.ts';
-export { WaitGroup, type WaitOptions } from './wait-group.ts';
+export { WaitGroup } from './wait-group.ts';
+export { type WaitOptions } from './wait-options.ts';
 export { type Check } from './check.ts';
 export {
   ChangeWatcher,

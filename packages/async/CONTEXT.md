@@ -52,6 +52,10 @@ _Avoid_: Countdown, countdown latch (Java `CountDownLatch` and .NET `CountdownEv
 The handle that `add` of a wait group gives. The wait group counts it until a dispose, and a second dispose changes nothing. The name is the one of tokio_util `TaskTrackerToken`. It is not a fencing token of `@zukhruf/mutex`.
 _Avoid_: Permit (a permit is a right to go on; a token only counts), ticket, lease
 
+**Cond**:
+`Cond`. It wakes the callers that wait for a change of a state. A broadcast ends each wait that started before it, also a wait that started in the same step, and keeps nothing for a later wait. A cond carries no value: a woken caller checks its state again. The name is the one of Go `sync.Cond`, without its lock.
+_Avoid_: Notify (tokio `Notify` keeps a permit for a later wait), event (an event stays set), condition variable with a lock (Python `asyncio.Condition` and Java `Condition` hold a lock), signal (a signal is an `AbortSignal`)
+
 **Attempt**:
 One call that tries to get a value now, and does not wait. It gives the value, or `undefined` when there is no value yet.
 _Avoid_: Try (the keyword), check (a check reads values to find a change), probe
