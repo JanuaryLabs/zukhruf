@@ -6,7 +6,6 @@ import { describe, test } from '@zukhruf/testing/node';
 
 import { Modes } from '../../mutex/acquire-modes/modes.ts';
 import { Mutex } from '../../mutex/mutex.ts';
-import { factTimeout } from '../fact-timeout.ts';
 import { startThread, threadSource } from './peers.ts';
 import type { Host, SharedByThreads, Subject } from './subject.ts';
 
@@ -146,7 +145,7 @@ export function threads<H extends Host>(
       );
     });
 
-    test('the key of a worker thread that was terminated goes to the next waiter', async () => {
+    test('the key of a worker thread that was terminated goes to the next waiter', async (t) => {
       // Arrange: this thread asks first, so a SocketStore leads from here and
       // terminating the holder never ends the leader's term.
       await using fixture = await store.fixture(process.env);
@@ -182,21 +181,13 @@ export function threads<H extends Host>(
 
       // Act: the thread stops for good while it holds the key.
       await thread.terminate();
-      const next = await mutex.acquire(
-        'product:42',
-        async (lease) => lease.token,
-        {
-          mode: Modes.skipIfBusy({
-            waitAtMost: factTimeout,
-            clock: globalThis,
-          }),
-        },
-      );
 
       // Assert: a terminated thread can never release, so nothing should keep its key.
       assert.equal(
-        next.acquired,
-        true,
+        await mutex.acquire('product:42', async () => 'granted', {
+          signal: t.signal,
+        }),
+        'granted',
         'The key is still held by a thread that no longer exists',
       );
     });

@@ -4,6 +4,7 @@ import { writeFile } from 'node:fs/promises';
 import { delimiter, join } from 'node:path';
 import { describe, test } from 'node:test';
 
+import { poll } from '@zukhruf/async';
 import { TemporaryFiles } from '@zukhruf/fs';
 
 import { ConnectionFailedError, Docker, DockerError } from './index.ts';
@@ -110,7 +111,7 @@ describe('disposal of a client with open streams', () => {
   test(
     'through a Unix socket, the iterations reject and the process exits by itself',
     { skip: needsLocalEngine },
-    async () => {
+    async (t) => {
       // Arrange
       await using home = await new TemporaryFiles().directory('docker-test-');
       const host = `unix://${String(engineSocket)}`;
@@ -124,7 +125,7 @@ describe('disposal of a client with open streams', () => {
         const result = await runScenario(
           disposeWhileIterating(JSON.stringify({ host }), run),
           { HOME: home.path },
-          AbortSignal.timeout(30_000),
+          t.signal,
         );
 
         // Assert
@@ -141,7 +142,7 @@ describe('disposal of a client with open streams', () => {
   test(
     'through ssh, the iterations reject, each ssh process ends, and the process exits by itself',
     { skip: needsLocalEngine },
-    async () => {
+    async (t) => {
       // Arrange
       await using home = await new TemporaryFiles().directory('docker-test-');
       await using standIn = await sshStandIn({
@@ -167,7 +168,7 @@ describe('disposal of a client with open streams', () => {
             PATH: `${standIn.path}${delimiter}${process.env.PATH}`,
             HOME: home.path,
           },
-          AbortSignal.timeout(30_000),
+          t.signal,
         );
 
         // Assert
@@ -210,10 +211,10 @@ describe('requests during and after disposal', () => {
     });
     const inFlight = docker.info();
     inFlight.catch(() => undefined);
-    await t.waitFor(() => assert.ok(engine.paths.includes('/v1.51/info')), {
-      interval: 10,
-      timeout: 10_000,
-    });
+    await poll(
+      async () => (engine.paths.includes('/v1.51/info') ? true : undefined),
+      { signal: t.signal, clock: globalThis, interval: 10 },
+    );
 
     // Act
     const disposing = docker[Symbol.asyncDispose]();
@@ -239,7 +240,7 @@ describe('requests during and after disposal', () => {
   test(
     'through ssh, a request in flight and a request after disposal started reject with the DockerError of disposal, and when disposal resolves no ssh process runs and none started after it',
     { skip: posixOnly },
-    async () => {
+    async (t) => {
       // Arrange: the engine never answers /info, and marks that it got it.
       await using home = await new TemporaryFiles().directory('docker-test-');
       const seen = join(home.path, 'info-seen');
@@ -284,7 +285,7 @@ console.log(JSON.stringify({ inFlight: await inFlight, late: await late, started
             PATH: `${standIn.path}${delimiter}${process.env.PATH}`,
             HOME: home.path,
           },
-          AbortSignal.timeout(30_000),
+          t.signal,
         );
 
         // Assert

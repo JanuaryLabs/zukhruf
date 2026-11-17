@@ -77,7 +77,11 @@ describe('poll', () => {
 
     // Assert
     const rejected = assert.rejects(polling, (error) => error === failure);
-    await t.waitFor(() => assert.equal(attempts, 1));
+    await poll(async () => (attempts === 1 ? true : undefined), {
+      signal: t.signal,
+      clock: globalThis,
+      interval: 1,
+    });
     assert.equal(
       clock.countTimers(),
       0,
@@ -101,7 +105,11 @@ describe('poll', () => {
       { interval: 60_000, signal: controller.signal, clock },
     );
     const rejected = assert.rejects(polling, (error) => error === reason);
-    await t.waitFor(() => assert.equal(clock.countTimers(), 1));
+    await poll(async () => (clock.countTimers() === 1 ? true : undefined), {
+      signal: t.signal,
+      clock: globalThis,
+      interval: 1,
+    });
 
     // Act
     controller.abort(reason);
@@ -232,7 +240,11 @@ describe('poll', () => {
       },
       { interval, signal: undefined, clock },
     );
-    await t.waitFor(() => assert.equal(clock.countTimers(), 1));
+    await poll(async () => (clock.countTimers() === 1 ? true : undefined), {
+      signal: t.signal,
+      clock: globalThis,
+      interval: 1,
+    });
     assert.deepEqual(times, [0], 'The first attempt must come before any wait');
     let settled = false;
     void polling.then(() => {

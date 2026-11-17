@@ -13,10 +13,7 @@ import { ConnectionFailedError, Docker } from '@zukhruf/docker';
 const nodeImage = 'node:26-alpine';
 const noEngine = await (async () => {
   try {
-    const docker = await Docker.connect({
-      clock: globalThis,
-      signal: AbortSignal.timeout(10_000),
-    });
+    const docker = await Docker.connect({ clock: globalThis });
     await docker[Symbol.asyncDispose]();
     return false;
   } catch (error) {
@@ -578,7 +575,7 @@ describe('Shutdown', () => {
     test(
       `as PID 1 in a container, ${stopRequest} ends the process with exit code ${exitCode} when the cleanup ${cleanup}`,
       { skip: noEngine },
-      async () => {
+      async (t) => {
         // Arrange
         await using docker = await Docker.connect({ clock: globalThis });
         if ((await docker.images.inspect(nodeImage)) === undefined) {
@@ -625,9 +622,7 @@ describe('Shutdown', () => {
         });
         // A program that does not end must not keep its container: the
         // cancel rejects the reads, and the disposal removes the container.
-        const output = await container.attach({
-          signal: AbortSignal.timeout(60_000),
-        });
+        const output = await container.attach({ signal: t.signal });
         await container.start();
         const chunks = output[Symbol.asyncIterator]();
         const decoder = new TextDecoder();

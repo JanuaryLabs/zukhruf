@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 
-import { factTimeout } from '../../testing/fact-timeout.ts';
+import { untilAborted } from '@zukhruf/async';
+
 import { settle } from '../../testing/timing.ts';
 import { tokensThatFailOnce } from '../../testing/tokens-that-fail-once.ts';
 import { watch } from '../../testing/watch.ts';
@@ -36,7 +37,8 @@ describe('MemoryStore', () => {
     const first = store.acquire('product:42');
     const giveUp = new AbortController();
     const quitter = store.acquire('product:42', { signal: giveUp.signal });
-    const last = watch(store.acquire('product:42'));
+    const lastAcquire = store.acquire('product:42');
+    const last = watch(lastAcquire);
 
     // Act: the middle waiter gives up, then the holder and the first waiter release in turn.
     giveUp.abort();
@@ -60,14 +62,8 @@ describe('MemoryStore', () => {
       'pending',
       'The last waiter must wait for the first waiter',
     );
-    await t.waitFor(
-      () =>
-        assert.ok(
-          last.now.status === 'fulfilled',
-          'The last waiter must get the key once the first releases',
-        ),
-      { interval: 5, timeout: factTimeout },
-    );
+    // The last waiter must get the key once the first releases.
+    await untilAborted(lastAcquire, t.signal);
   });
 
   test('a try is busy while the key is held and succeeds after the release', async () => {

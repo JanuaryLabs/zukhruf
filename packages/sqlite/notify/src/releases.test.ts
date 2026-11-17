@@ -105,7 +105,7 @@ async function thisRelease() {
 }
 
 describe('two releases on one file', () => {
-  test('an older release constructs on a file a newer release made, keeps its column and its values, and still listens and notifies', async () => {
+  test('an older release constructs on a file a newer release made, keeps its column and its values, and still listens and notifies', async (t) => {
     await using folder = await new TemporaryFiles().directory('notify-');
     const path = join(folder.path, 'app.sqlite');
     const newer = await newerRelease(join(folder.path, 'newer'));
@@ -122,7 +122,9 @@ describe('two releases on one file', () => {
     await notifications.listen('jobs');
     notifications.notify('jobs', 'from older');
     assert.deepEqual(
-      (await heard.count(1)).map(({ payload }) => payload),
+      (await heard.count(1, { signal: t.signal })).map(
+        ({ payload }) => payload,
+      ),
       ['from older'],
     );
     assert.deepEqual(heard.errors, []);
@@ -186,12 +188,12 @@ describe('two releases on one file', () => {
 });
 
 describe('a file that a release before the version record made', () => {
-  test('keeps the rows of a listener, which still hears, and records this release', async () => {
+  test('keeps the rows of a listener, which still hears, and records this release', async (t) => {
     await using folder = await new TemporaryFiles().directory('notify-');
     const path = join(folder.path, 'app.sqlite');
-    await using listener = await startProgram(path);
+    await using listener = await startProgram(path, { signal: t.signal });
     listener.do({ do: 'listen', channel: 'jobs' });
-    await listener.printedOne('listened', (p) => p.event === 'listened');
+    await listener.printedOne((p) => p.event === 'listened');
     {
       // The releases before the version record had no zukhruf_notify_version.
       // No public operation makes an older shape, so it is dropped in SQL.

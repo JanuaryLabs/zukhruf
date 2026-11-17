@@ -4,11 +4,11 @@ import { setTimeout as delay } from 'node:timers/promises';
 
 import { createClock } from '@sinonjs/fake-timers';
 
+import { waitFor } from '@zukhruf/testing/async';
 import { describe, test } from '@zukhruf/testing/node';
 
 import { Modes } from '../../mutex/acquire-modes/modes.ts';
 import { Mutex } from '../../mutex/mutex.ts';
-import { factTimeout } from '../fact-timeout.ts';
 import { grantedWithin } from '../granted-within.ts';
 import { hold } from '../hold.ts';
 import { settle } from '../timing.ts';
@@ -73,8 +73,8 @@ export function acquireModes<H extends Host>(store: Subject<H>): void {
           mode: Modes.skipIfBusy({ waitAtMost: 100, clock }),
         });
         // The lock store answered that the key is busy, so the limit runs.
-        await t.waitFor(() => assert.equal(clock.countTimers(), 1), {
-          timeout: factTimeout,
+        await waitFor(() => assert.equal(clock.countTimers(), 1), {
+          signal: t.signal,
         });
 
         // Act
@@ -90,18 +90,23 @@ export function acquireModes<H extends Host>(store: Subject<H>): void {
       }
     });
 
-    test('skipIfBusy({ waitAtMost }) acquires when the key is released within the limit', async () => {
-      // Arrange
+    test('skipIfBusy({ waitAtMost }) acquires when the key is released within the limit', async (t) => {
+      // Arrange: the limit runs on a fake clock; the lock store runs on real time.
       await using fixture = await store.fixture(process.env);
       await using host = store.open(fixture.location);
       const mutex = new Mutex(host.store);
       const holder = await hold(mutex, 'report:daily');
+      const clock = createClock();
+      const attempt = mutex.acquire('report:daily', async () => 'report', {
+        mode: Modes.skipIfBusy({ waitAtMost: 100, clock }),
+      });
+      // The lock store answered that the key is busy, so the limit runs.
+      await waitFor(() => assert.equal(clock.countTimers(), 1), {
+        signal: t.signal,
+      });
 
       // Act
-      const attempt = mutex.acquire('report:daily', async () => 'report', {
-        mode: Modes.skipIfBusy({ waitAtMost: factTimeout, clock: globalThis }),
-      });
-      await delay(50);
+      await clock.tickAsync(99);
       await holder.release();
 
       // Assert

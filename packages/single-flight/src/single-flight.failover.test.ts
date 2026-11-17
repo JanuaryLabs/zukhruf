@@ -9,8 +9,11 @@ import { describe, test } from 'node:test';
 import type { TestContext } from 'node:test';
 import { setTimeout } from 'node:timers/promises';
 
+import { untilAborted } from '@zukhruf/async';
 import { SqliteElection } from '@zukhruf/election';
 import { TemporaryFiles } from '@zukhruf/fs';
+import { waitFor } from '@zukhruf/testing/async';
+import { type WorkerProcess, startWorker } from '@zukhruf/testing/process';
 
 import { SingleFlight } from './index.ts';
 import {
@@ -18,9 +21,7 @@ import {
   callerSource,
   journalOf,
 } from './testing/caller.ts';
-import { factTimeout } from './testing/fact-timeout.ts';
 import { succeedLastLeader } from './testing/succeed-last-leader.ts';
-import { type WorkerProcess, startWorker } from './testing/worker-process.ts';
 
 const flightElectionUrl = new URL(
   './connection/flight-election.ts',
@@ -42,10 +43,7 @@ async function caller(
   options?: CallerOptions,
 ) {
   const worker = startWorker(callerSource(directory, options), name);
-  await t.waitFor(() => assert.ok(worker.has('ready'), worker.stderr), {
-    interval: 5,
-    timeout: factTimeout,
-  });
+  await worker.next('ready', { signal: t.signal });
   return worker;
 }
 
@@ -73,21 +71,10 @@ async function heard(
   type: string,
   call: string,
 ) {
-  const find = () =>
-    worker.messages.find(
-      (message) => message.type === type && message.call === call,
-    );
-  await t.waitFor(
-    () =>
-      assert.ok(
-        find() !== undefined,
-        `No ${type} for ${call}; got ${JSON.stringify(worker.messages)} ${worker.stderr}`,
-      ),
-    { interval: 5, timeout: factTimeout },
+  return worker.next(
+    (message) => message.type === type && message.call === call,
+    { signal: t.signal },
   );
-  const message = find();
-  assert.ok(message);
-  return message;
 }
 
 /** Whether the call `call` of `worker` leads by now. */
@@ -108,21 +95,10 @@ async function firstOf(
   call: string,
   types: readonly string[],
 ) {
-  const find = () =>
-    worker.messages.find(
-      (message) => message.call === call && types.includes(message.type),
-    );
-  await t.waitFor(
-    () =>
-      assert.ok(
-        find() !== undefined,
-        `No ${types.join(' or ')} for ${call}; got ${JSON.stringify(worker.messages)} ${worker.stderr}`,
-      ),
-    { interval: 5, timeout: factTimeout },
+  return worker.next(
+    (message) => message.call === call && types.includes(message.type),
+    { signal: t.signal },
   );
-  const message = find();
-  assert.ok(message);
-  return message;
 }
 
 /** Runs `key` in `worker` as the call `call`. */
@@ -215,10 +191,7 @@ describe('A single flight across processes when a leader stops', () => {
     // once the probe's run of another key, sent after the fresh run, has its
     // answer, the fresh run had its chance to lead.
     leader.child.send({ type: 'dispose' });
-    await t.waitFor(() => assert.ok(leader.has('disposed'), leader.stderr), {
-      interval: 5,
-      timeout: factTimeout,
-    });
+    await leader.next('disposed', { signal: t.signal });
     run(probe, 'fresh', 'sync');
     await heard(t, probe, 'called', 'fresh');
     run(probe, 'other', 'other');
@@ -271,9 +244,8 @@ describe('A single flight across processes when a leader stops', () => {
 
 /** Waits until a new coordinator won its term: it records the term's epoch before it serves. */
 async function newTerm(t: TestContext, directory: string, epoch: string) {
-  await t.waitFor(async () => assert.equal(await epochOf(directory), epoch), {
-    interval: 5,
-    timeout: factTimeout,
+  await waitFor(async () => assert.equal(await epochOf(directory), epoch), {
+    signal: t.signal,
   });
 }
 
@@ -330,6 +302,7 @@ async function rejectingSuccessor(
   directory: string,
   coordinator: WorkerProcess,
   frozen: WorkerProcess[],
+  signal: AbortSignal,
 ) {
   await using serving = new AsyncDisposableStack();
   for (const worker of frozen) worker.child.kill('SIGSTOP');
@@ -341,7 +314,7 @@ async function rejectingSuccessor(
       directory,
       claimFile: 'flight.lock',
       epochFile: 'flight.epoch',
-    }).campaign({ timeout: factTimeout });
+    }).campaign({ timeout: Infinity, signal });
     assert.ok(term, 'The test process must win the next term');
     serving.defer(() => term.resign());
     const socketPath = join(directory, 'flight.sock');
@@ -461,10 +434,7 @@ describe('A single flight across processes when the coordinator disposes', () =>
 
     // Act: the coordinator disposes, and the leader lands at the next coordinator.
     coordinator.child.send({ type: 'dispose' });
-    await t.waitFor(
-      () => assert.ok(coordinator.has('disposed'), coordinator.stderr),
-      { interval: 5, timeout: factTimeout },
-    );
+    await coordinator.next('disposed', { signal: t.signal });
     await newTerm(t, directory.path, '2');
     leader.child.send({ type: 'finish', call: 'l', value: { files: 42 } });
     const led = await heard(t, leader, 'value', 'l');
@@ -522,13 +492,13 @@ describe('A single flight across processes when the coordinator disposes', () =>
         await leading;
         disposing = flights[Symbol.asyncDispose]();
         // The server removes its socket file in the step that closes it and ends each connection.
-        await t.waitFor(
+        await waitFor(
           () =>
             assert.equal(
               existsSync(join(directory.path, 'flight.sock')),
               false,
             ),
-          { interval: 5, timeout: factTimeout },
+          { signal: t.signal },
         );
       } finally {
         joiner.child.kill('SIGCONT');
@@ -730,6 +700,7 @@ describe('A single flight across processes in the gaps of a failover', () => {
         directory.path,
         coordinator,
         [leader, joiner],
+        t.signal,
       );
       const lost = await heard(t, leader, 'lost', 'l');
 
@@ -773,6 +744,7 @@ describe('A single flight across processes in the gaps of a failover', () => {
         directory.path,
         coordinator,
         [leader, joiner],
+        t.signal,
       );
       await heard(t, leader, 'lost', 'l');
 
@@ -807,6 +779,7 @@ describe('A single flight across processes in the gaps of a failover', () => {
         directory.path,
         coordinator,
         [leader, joiner],
+        t.signal,
       );
       await heard(t, leader, 'lost', 'l');
 
@@ -840,6 +813,7 @@ describe('A single flight across processes in the gaps of a failover', () => {
           directory.path,
           coordinator,
           [leader, probe],
+          t.signal,
         );
         await heard(t, leader, 'lost', 'l');
       }
@@ -1012,10 +986,7 @@ describe('A single flight across processes when a leader is frozen past a failov
       let ledBesideLeader: boolean;
       try {
         coordinator.child.send({ type: 'dispose' });
-        await t.waitFor(
-          () => assert.ok(coordinator.has('disposed'), coordinator.stderr),
-          { interval: 5, timeout: factTimeout },
-        );
+        await coordinator.next('disposed', { signal: t.signal });
         await newTerm(t, directory.path, '2');
         run(probe, 'fresh', 'sync');
         await heard(t, probe, 'called', 'fresh');
@@ -1354,8 +1325,9 @@ describe('A single flight across processes after a flight lands', () => {
 });
 
 describe('A single flight across processes when the coordinator freezes', () => {
-  // The default lease duration, 15 s, is longer than factTimeout, so the
-  // coordinator's short one must reach the followers through its single flight.
+  // The coordinator's short lease must reach the followers through its
+  // single flight: a follower ends a frozen leader after the lease duration
+  // of its record, and the default lease duration is 15 s.
   test(
     'a coordinator frozen past its lease duration is ended by a follower, a survivor coordinates, and the joiner gets the outcome of the flight in progress',
     onUnix,
@@ -1373,20 +1345,21 @@ describe('A single flight across processes when the coordinator freezes', () => 
       await using joiner = await caller(t, directory.path, 'joiner');
       run(joiner, 'j', 'sync');
       await heard(t, joiner, 'joined', 'j');
+      const record = JSON.parse(
+        await readFile(join(directory.path, 'flight.lock.leader'), 'utf8'),
+      );
 
       // Act: the coordinator freezes.
       coordinator.child.kill('SIGSTOP');
 
       // Assert: a follower ended it, a survivor won the next term, and the
       // flight in progress lands for the joiner.
-      await t.waitFor(
-        () =>
-          assert.equal(
-            coordinator.child.signalCode,
-            'SIGKILL',
-            `A follower must end the frozen coordinator.\n${coordinator.stderr}`,
-          ),
-        { interval: 5, timeout: factTimeout },
+      await untilAborted(coordinator.closed, t.signal);
+      assert.equal(record.leaseDuration, 500);
+      assert.equal(
+        coordinator.child.signalCode,
+        'SIGKILL',
+        `A follower must end the frozen coordinator.\n${coordinator.stderr}`,
       );
       await newTerm(t, directory.path, '2');
       leader.child.send({ type: 'finish', call: 'l', value: 'shared' });
@@ -1420,13 +1393,14 @@ describe('A single flight across processes when the coordinator freezes', () => 
         process.send({ type: term ? 'coordinating' : 'lost' });`,
         'coordinator',
       );
-      await t.waitFor(
-        () =>
-          assert.ok(
-            coordinator.has('coordinating'),
-            `The coordinator must win the term.\n${coordinator.stderr}`,
-          ),
-        { interval: 5, timeout: factTimeout },
+      const outcome = await coordinator.next(
+        (message) => message.type === 'coordinating' || message.type === 'lost',
+        { signal: t.signal },
+      );
+      assert.equal(
+        outcome.type,
+        'coordinating',
+        `The coordinator must win the term.\n${coordinator.stderr}`,
       );
       coordinator.child.kill('SIGSTOP');
       await using flights = new SingleFlight<string>({
@@ -1437,19 +1411,16 @@ describe('A single flight across processes when the coordinator freezes', () => 
 
       // Act
       const result = await flights.run('sync', async () => 'ran', {
-        signal: AbortSignal.timeout(factTimeout),
+        signal: t.signal,
       });
 
       // Assert
       assert.deepEqual(result, { value: 'ran', joined: false });
-      await t.waitFor(
-        () =>
-          assert.equal(
-            coordinator.child.signalCode,
-            'SIGKILL',
-            `The process must end the frozen coordinator.\n${coordinator.stderr}`,
-          ),
-        { interval: 5, timeout: factTimeout },
+      await untilAborted(coordinator.closed, t.signal);
+      assert.equal(
+        coordinator.child.signalCode,
+        'SIGKILL',
+        `The process must end the frozen coordinator.\n${coordinator.stderr}`,
       );
     },
   );

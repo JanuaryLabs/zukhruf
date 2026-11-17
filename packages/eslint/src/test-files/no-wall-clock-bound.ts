@@ -141,12 +141,12 @@ function assertedTrue(call: AstNode): unknown {
 /**
  * A limit on real time is a claim about speed, and load breaks it: a database
  * notices a dead client when it does, and a loaded runner does everything late.
- * A loop that stops at a time is a hand-written `t.waitFor`, and an assertion
+ * A loop that stops at a time is a hand-written `waitFor`, and an assertion
  * that an elapsed time is below a number is a speed claim. Wait for the fact
- * with `t.waitFor`, and run a timer of your own on `createClock()`. A lower
- * bound stays allowed, because load only makes it more true. The rule follows
- * variables in the same file. A time that comes from another process, or from a
- * property, is not seen.
+ * with `waitFor` of `@zukhruf/testing/async` on `t.signal`, and run a timer of
+ * your own on `createClock()`. A lower bound stays allowed, because load only
+ * makes it more true. The rule follows variables in the same file. A time that
+ * comes from another process, or from a property, is not seen.
  */
 const rule: Rule.RuleModule = {
   meta: {
@@ -157,9 +157,9 @@ const rule: Rule.RuleModule = {
     },
     schema: [],
     messages: {
-      loop: 'This loop stops at a time on the real clock: use t.waitFor(() => { assert… }, { interval, timeout }), whose limit only catches a fact that never comes.',
+      loop: "This loop stops at a time on the real clock: use waitFor(() => { assert… }, { signal: t.signal }) from @zukhruf/testing/async, which ends at the test's limit.",
       assertion:
-        'This assertion claims a speed on the real clock, and load breaks it: wait for the fact with t.waitFor, or run your own timer on createClock(). A lower bound stays allowed.',
+        'This assertion claims a speed on the real clock, and load breaks it: wait for the fact with waitFor(…, { signal: t.signal }), or run your own timer on createClock(). A lower bound stays allowed.',
     },
   },
   create(context) {

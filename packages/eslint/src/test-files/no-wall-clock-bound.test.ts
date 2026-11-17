@@ -8,7 +8,7 @@ test('no-wall-clock-bound reports a loop that stops at a time, and an assertion 
     valid: [
       // Wait for the fact.
       {
-        code: `await t.waitFor(async () => assert.equal(await held(), false), { interval: 5, timeout: 10_000 });`,
+        code: `await waitFor(async () => assert.equal(await held(), false), { signal: t.signal });`,
       },
       // A lower bound stays true under load.
       {

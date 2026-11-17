@@ -8,6 +8,7 @@ import { test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 
 import { TemporaryFiles } from '@zukhruf/fs';
+import { waitFor } from '@zukhruf/testing/async';
 
 import { repository } from './testing/pre-push-repository.ts';
 import { toolPackages } from './testing/tool-packages.ts';
@@ -333,9 +334,8 @@ test('a second pre-push build in the same repo waits for the first, prints that 
   await repo.git('remote', 'add', 'second', second);
   const gate = join(repo.top, 'gate');
   const first = start(repo, { PROBE_GATE: gate }, '--quiet', 'origin', 'main');
-  await t.waitFor(() => assert.ok(existsSync(`${gate}.started`)), {
-    interval: 50,
-    timeout: 20_000,
+  await waitFor(() => assert.ok(existsSync(`${gate}.started`)), {
+    signal: t.signal,
   });
 
   // Act
@@ -346,9 +346,8 @@ test('a second pre-push build in the same repo waits for the first, prints that 
     'second',
     'main',
   );
-  await t.waitFor(() => assert.match(waiting.stderr(), /waiting/), {
-    interval: 50,
-    timeout: 20_000,
+  await waitFor(() => assert.match(waiting.stderr(), /waiting/), {
+    signal: t.signal,
   });
   // The gate stays closed for 5 s, a window in which the second build must
   // not start its tasks: if it does, it writes `<gate>.second` and fails.

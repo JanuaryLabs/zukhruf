@@ -23,9 +23,9 @@ async function startScript(
 }
 
 describe('container.logs()', () => {
-  test('logs() gives stdout, stderr and output in the order of the engine, and takes tail, since and timestamps', async () => {
+  test('logs() gives stdout, stderr and output in the order of the engine, and takes tail, since and timestamps', async (t) => {
     // Arrange
-    await using docker = await connect(IMAGE);
+    await using docker = await connect(IMAGE, t.signal);
     const run = randomUUID();
     try {
       const container = await startScript(
@@ -60,9 +60,9 @@ describe('container.logs()', () => {
     }
   });
 
-  test('the logs of a container with a TTY are all stdout', async () => {
+  test('the logs of a container with a TTY are all stdout', async (t) => {
     // Arrange
-    await using docker = await connect(IMAGE);
+    await using docker = await connect(IMAGE, t.signal);
     const run = randomUUID();
     try {
       const container = await startScript(docker, run, 'echo err >&2', true);
@@ -81,9 +81,9 @@ describe('container.logs()', () => {
 });
 
 describe('container.followLogs()', () => {
-  test('the iteration gives the chunks as the container writes them and ends when the container stops', async () => {
+  test('the iteration gives the chunks as the container writes them and ends when the container stops', async (t) => {
     // Arrange
-    await using docker = await connect(IMAGE);
+    await using docker = await connect(IMAGE, t.signal);
     const run = randomUUID();
     try {
       const container = await startScript(
@@ -94,7 +94,7 @@ describe('container.followLogs()', () => {
 
       // Act
       const chunks = await Array.fromAsync(
-        container.followLogs({ signal: AbortSignal.timeout(20_000) }),
+        container.followLogs({ signal: t.signal }),
         ({ stream, data }) => ({
           stream,
           text: new TextDecoder().decode(data),
@@ -112,9 +112,9 @@ describe('container.followLogs()', () => {
     }
   });
 
-  test('an abort of the signal rejects the iteration with its reason', async () => {
+  test('an abort of the signal rejects the iteration with its reason', async (t) => {
     // Arrange
-    await using docker = await connect(IMAGE);
+    await using docker = await connect(IMAGE, t.signal);
     const run = randomUUID();
     try {
       const container = await startScript(docker, run, 'echo first; sleep 300');
@@ -137,9 +137,9 @@ describe('container.followLogs()', () => {
 });
 
 describe('docker.events()', () => {
-  test('the events give the start of a container that a filter selects, and an abort rejects the iteration with its reason', async () => {
+  test('the events give the start of a container that a filter selects, and an abort rejects the iteration with its reason', async (t) => {
     // Arrange
-    await using docker = await connect(IMAGE);
+    await using docker = await connect(IMAGE, t.signal);
     const run = randomUUID();
     const controller = new AbortController();
     const reason = new Error('the caller stopped reading');

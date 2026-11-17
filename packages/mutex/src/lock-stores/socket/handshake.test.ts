@@ -6,10 +6,11 @@ import { createInterface } from 'node:readline';
 import { describe } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 
+import { Latch, untilAborted } from '@zukhruf/async';
 import { TemporaryFiles } from '@zukhruf/fs';
+import { waitFor } from '@zukhruf/testing/async';
 import { test } from '@zukhruf/testing/node';
 
-import { factTimeout } from '../../testing/fact-timeout.ts';
 import { onUnixSockets } from '../../testing/on-unix-sockets.ts';
 import { outcome } from '../../testing/outcome.ts';
 import { standInServer } from '../../testing/stand-in-server.ts';
@@ -100,7 +101,7 @@ describe('Socket store protocol handshake', () => {
   test(
     'a store whose leader hangs up while it stops leads in its place',
     onUnixSockets,
-    async () => {
+    async (t) => {
       // Arrange: a stopping leader hangs up on the hello and ends its term a moment later, as a real shutdown does.
       await using directory = await new TemporaryFiles().directory(
         'mutex-test-',
@@ -121,7 +122,7 @@ describe('Socket store protocol handshake', () => {
         // Act
         const result = await outcome(
           store.acquire('product:42', {
-            signal: AbortSignal.timeout(factTimeout),
+            signal: t.signal,
           }),
         );
 
@@ -137,7 +138,7 @@ describe('Socket store protocol handshake', () => {
   test(
     'a store that reaches a hung-up socket with no leader behind it leads',
     onUnixSockets,
-    async () => {
+    async (t) => {
       // Arrange: something hangs up on the socket path, but nobody holds the term.
       await using directory = await new TemporaryFiles().directory(
         'mutex-test-',
@@ -154,7 +155,7 @@ describe('Socket store protocol handshake', () => {
       // Act
       const result = await outcome(
         store.acquire('product:42', {
-          signal: AbortSignal.timeout(factTimeout),
+          signal: t.signal,
         }),
       );
 
@@ -223,7 +224,7 @@ describe('Socket store protocol handshake', () => {
   test(
     'a store hung up on during a failover follows the leader that took over',
     onUnixSockets,
-    async () => {
+    async (t) => {
       // Arrange: when the store says hello, the stopping leader ends its term, another store takes it over, and only then does the stopping leader hang up.
       await using directory = await new TemporaryFiles().directory(
         'mutex-test-',
@@ -252,7 +253,7 @@ describe('Socket store protocol handshake', () => {
 
       // Act
       const result = await outcome(
-        store.acquire('product:42', { signal: AbortSignal.timeout(10_000) }),
+        store.acquire('product:42', { signal: t.signal }),
       );
 
       // Assert: the hang-up came from a leader that stopped, so the store follows its successor.
@@ -365,9 +366,9 @@ describe('Socket store protocol handshake', () => {
         );
 
         // Assert: the leader welcomes the peer and still sees the request behind the hello.
-        await t.waitFor(
+        await waitFor(
           () => assert.ok(answers.length >= 2, `Got ${answers.join(' | ')}`),
-          { interval: 5, timeout: factTimeout },
+          { signal: t.signal },
         );
         assert.deepEqual(
           answers.map((line) => JSON.parse(line).op),
@@ -391,30 +392,26 @@ describe('Socket store protocol handshake', () => {
         directory.path,
         globalThis,
       ).campaign();
-      let peerClosed = false;
-      let greeted = false;
+      const peerClosed = new Latch();
+      const greeted = new Latch();
       await using _leader = await standInLeader(directory.path, (peer) => {
-        greeted = true;
-        peer.once('close', () => (peerClosed = true));
+        greeted.open();
+        peer.once('close', () => peerClosed.open());
       });
       const store = new SocketStore(directory.path, {
         clock: globalThis,
       });
       const acquiring = outcome(store.acquire('product:42'));
-      await t.waitFor(() => assert.ok(greeted, 'The store must say hello'), {
-        interval: 5,
-        timeout: factTimeout,
-      });
+      // The store must say hello.
+      await untilAborted(greeted.wait(), t.signal);
 
       // Act
       await store[Symbol.asyncDispose]();
 
       // Assert: closing does not wait for an answer that never comes, and the connection is closed.
       assert.ok(Error.isError(await acquiring));
-      await t.waitFor(
-        () => assert.ok(peerClosed, 'The store must close the connection'),
-        { interval: 5, timeout: factTimeout },
-      );
+      // The store must close the connection.
+      await untilAborted(peerClosed.wait(), t.signal);
     },
   );
 
@@ -435,10 +432,10 @@ describe('Socket store protocol handshake', () => {
         allowHalfOpen: true,
       });
       await once(socket, 'connect');
-      let released = false;
+      const released = new Latch();
       // Writing to a leader that let go fails; writing to one that only paused its side does not.
-      socket.on('error', () => (released = true));
-      socket.on('close', () => (released = true));
+      socket.on('error', () => released.open());
+      socket.on('close', () => released.open());
       socket.resume();
 
       // Act: after its hello, the peer keeps writing instead of hanging up.
@@ -449,14 +446,8 @@ describe('Socket store protocol handshake', () => {
 
       try {
         // Assert
-        await t.waitFor(
-          () =>
-            assert.ok(
-              released,
-              'The leader must close its side of a peer it refused',
-            ),
-          { interval: 5, timeout: factTimeout },
-        );
+        // The leader must close its side of a peer it refused.
+        await untilAborted(released.wait(), t.signal);
       } finally {
         clearInterval(writing);
         socket.destroy();

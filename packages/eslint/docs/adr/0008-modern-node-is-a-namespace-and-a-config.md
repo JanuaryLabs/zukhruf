@@ -1,5 +1,7 @@
 # Modern Node is a namespace and a config
 
+Superseded in part on 2026-11-17 (#4205) for how a test waits for the fact (the paragraph after the table of candidates). A wait in a test ends on `t.signal`, which aborts at the limit of the test, and sets no limit of its own. `zukhruf/no-own-wait-limit` reports `t.waitFor`, `settleWithin` and `AbortSignal.timeout` in a test.
+
 Node and JavaScript add APIs that replace older code. The `node-native` skill finds this code, but only when a person runs the skill. A check finds it on each lint run, so these checks go into ESLint. The skill finds new candidates, and it proves that a package can go.
 
 `createHash(algorithm).update(data).digest(encoding)` is the first case. No installed or published rule reports it, so this package must own the check. A rule name for each API, such as `zukhruf/no-one-shot-create-hash`, makes hundreds of top-level names. So the checks go under one namespace, `modern-node`, and one config, `modern-node/recommended`. This is the shape of `hermes/recommended`: the plugin has its own rules with short names, and the config also turns on rules of other plugins. A new check joins the namespace, and no repo changes its config.

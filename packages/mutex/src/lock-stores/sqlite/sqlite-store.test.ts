@@ -7,14 +7,13 @@ import { setTimeout as delay } from 'node:timers/promises';
 
 import { TemporaryFiles } from '@zukhruf/fs';
 import { test } from '@zukhruf/testing/node';
+import { startWorker } from '@zukhruf/testing/process';
 
 import { Modes } from '../../mutex/acquire-modes/modes.ts';
 import { Mutex } from '../../mutex/mutex.ts';
 import { isRecord } from '../../shared/is-record.ts';
-import { factTimeout } from '../../testing/fact-timeout.ts';
 import { hold } from '../../testing/hold.ts';
 import { mutexUrl } from '../../testing/module-urls.ts';
-import { startWorker } from '../../testing/worker-process.ts';
 import { SqliteStore } from './sqlite-store.ts';
 
 const posixOnly =
@@ -145,14 +144,8 @@ describe('SqliteStore holder record', () => {
 			`,
       'holder',
     );
-    await t.waitFor(
-      () =>
-        assert.ok(
-          holder.has('entered'),
-          `The holder must enter its task.\n${holder.stderr}`,
-        ),
-      { interval: 5, timeout: factTimeout },
-    );
+    // The holder must enter its task.
+    await holder.next('entered', { signal: t.signal });
     holder.child.kill('SIGKILL');
     await holder.closed;
     const mutex = new Mutex(

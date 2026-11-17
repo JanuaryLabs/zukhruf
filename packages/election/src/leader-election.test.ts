@@ -6,9 +6,9 @@ import { createClock } from '@sinonjs/fake-timers';
 
 // A backend is written against the package's public entry, as an outside author would.
 import { type Clock, delay } from '@zukhruf/async';
+import { waitFor } from '@zukhruf/testing/async';
 
 import { LeaderElection, LeaseLostError } from './index.ts';
-import { factTimeout } from './testing/fact-timeout.ts';
 
 interface Script {
   /** What each try answers, in order: an epoch, `busy`, or an error. The last answer repeats. */
@@ -415,12 +415,14 @@ describe('A campaign', () => {
       return term;
     });
     // The timer of the timeout and the timer of the backend's wait.
-    await t.waitFor(() =>
-      assert.equal(
-        clock.countTimers(),
-        2,
-        'The campaign must wait on the clock that it was given',
-      ),
+    await waitFor(
+      () =>
+        assert.equal(
+          clock.countTimers(),
+          2,
+          'The campaign must wait on the clock that it was given',
+        ),
+      { signal: t.signal },
     );
     await clock.tickAsync(79);
     const wonEarly = won;
@@ -457,7 +459,9 @@ describe('A campaign', () => {
       settled = true;
       return term;
     });
-    await t.waitFor(() => assert.ok(clock.countTimers() >= 1));
+    await waitFor(() => assert.ok(clock.countTimers() >= 1), {
+      signal: t.signal,
+    });
     await clock.tickAsync(99);
     const settledEarly = settled;
     await clock.tickAsync(1);
@@ -574,13 +578,13 @@ describe('A campaign that its caller stops', () => {
     const campaigning = settle(
       election.campaign({ timeout: 120_000, signal: stop.signal }),
     );
-    await t.waitFor(
+    await waitFor(
       () =>
         assert.ok(
           election.steps.includes('try 1'),
           'The campaign must try the claim before it waits',
         ),
-      { interval: 5, timeout: factTimeout },
+      { signal: t.signal },
     );
     stop.abort(reason);
     const result = await campaigning;

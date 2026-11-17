@@ -305,9 +305,9 @@ describe('docker.images', () => {
     });
   }
 
-  test('tag() gives the image a second name that inspect() and list() find, tag() of a missing image is an ImageNotFoundError, and remove() of the name resolves twice', async () => {
+  test('tag() gives the image a second name that inspect() and list() find, tag() of a missing image is an ImageNotFoundError, and remove() of the name resolves twice', async (t) => {
     // Arrange
-    await using docker = await connect(HELLO);
+    await using docker = await connect(HELLO, t.signal);
     const run = randomUUID();
     const name = `zukhruf-test-${run}:x`;
     const missing = `zukhruf-missing-${run}:1`;
@@ -352,9 +352,9 @@ describe('docker.images', () => {
     }
   });
 
-  test('save() and load() carry images: two removed names come back with the same ID', async () => {
+  test('save() and load() carry images: two removed names come back with the same ID', async (t) => {
     // Arrange
-    await using docker = await connect(HELLO);
+    await using docker = await connect(HELLO, t.signal);
     const run = randomUUID();
     const first = `zukhruf-test-${run}:x`;
     const second = `zukhruf-test-${run}:y`;

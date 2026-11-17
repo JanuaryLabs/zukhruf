@@ -11,7 +11,8 @@ Each area has its own import path, so a test loads only the drivers it uses. The
 | Import                        | Gives                                                  | Needs                    |
 | ----------------------------- | ------------------------------------------------------ | ------------------------ |
 | `@zukhruf/testing/node`       | Native `test`, `it`, `suite`, `describe` with `.each`  |                          |
-| `@zukhruf/testing/async`      | `timebox`, `settleWithin`                              |                          |
+| `@zukhruf/testing/async`      | `waitFor`, `timebox`                                   |                          |
+| `@zukhruf/testing/process`    | `startWorker`                                          |                          |
 | `@zukhruf/testing/docker`     | `DockerTestbed`, `ServiceContainer`, `DockerDirectory` | a Docker engine          |
 | `@zukhruf/testing/postgres`   | `Postgres`                                             | a Docker engine          |
 | `@zukhruf/testing/mysql`      | `Mysql`                                                | a Docker engine          |
@@ -222,7 +223,43 @@ The handler is a Node.js request listener. A web framework gives one for its fet
 
 ## Waiting
 
-`timebox(fn, options)` retries `fn` until it stops throwing, every 250 ms for at most 30 seconds by default. It takes every p-retry option. `settleWithin(promise, label, ms)` rejects when a promise that cannot be cancelled does not settle in time. When an operation accepts an `AbortSignal`, pass `AbortSignal.timeout(ms)` to it instead.
+`waitFor(check, { signal, interval })` calls `check` until it returns without an error, and resolves with its value. `check` can be async. The signal is the limit of the wait: pass `t.signal`, so the test's own timeout ends it, and the test has no number of its own. When the signal aborts, also during a check, the wait stops its timer and rejects with `signal.reason`, with the last error of `check` as its `cause`. The interval is 50 ms by default. The waits run on real time, so a test that moves a fake clock does not move them, and the check can read that clock's timers.
+
+```ts
+await waitFor(() => assert.equal(clock.countTimers(), 1), { signal: t.signal });
+```
+
+Wait for an event when one exists; `waitFor` is for a fact that only a read shows. Precedent: vitest `vi.waitFor` and Testing Library `waitFor` also retry while the check throws, and keep its last error. They take a timeout; `waitFor` takes a signal. Node's `t.waitFor` takes no signal.
+
+A wait for an event in a test is `untilAborted(promise, t.signal)` of `@zukhruf/async`, and an operation that accepts an `AbortSignal` gets `t.signal`. A test sets no number of its own. `AbortSignal.timeout(ms)` sets one, and `zukhruf/no-own-wait-limit` of `@zukhruf/eslint` reports it in a test, as it reports `t.waitFor`. `t.signal` aborts only when the runner has a test limit, so a direct `node --test` run needs `--test-timeout=<ms>` (the nx test target sets 300000). Then a hung wait ends.
+
+`timebox(fn, options)` retries `fn` until it stops throwing, every 250 ms for at most 30 seconds by default. It takes every p-retry option.
+
+## Worker processes
+
+`startWorker(source, name, { admit, nodeOptions })` runs `source` as an ES module in its own Node process, with `name` as `argv[1]` and an IPC channel back to the test. Disposal kills the worker. The worker also exits when the test process ends, even by SIGKILL, because it reads the end of its stdin. `admit` runs with the child before it can send anything, for example to join it to a coordinator.
+
+The handle records each message whose `type` is a string, in `messages`, and the worker's stderr, in `stderr`. `exit` is how the worker exited, `closed` resolves when it closed. `has(type)` and `find(type)` read the messages so far.
+
+`next(match, { signal })` resolves with the first message that `match` selects, sent before or after the call. It rejects with the worker's stderr when the worker closes first, and with `signal.reason` when the signal aborts. `match` is a type, or a predicate over the message. The predicate sees each message once, in the order the worker sent it, and none after it selected one, so it can count:
+
+```ts
+await worker.next('ready', { signal: t.signal });
+await worker.next(
+  (message) => message.type === 'leader' || message.type === 'follower',
+  { signal: t.signal },
+);
+await worker.next(
+  (message) => message.type === 'answer' && message.call === 2,
+  { signal: t.signal },
+);
+let roles = 0;
+await worker.next((message) => message.type === 'role' && ++roles === 2, {
+  signal: t.signal,
+});
+```
+
+Precedent: Playwright's `waitForEvent(event, predicate)` and Node's `events.once(emitter, name, { signal })`.
 
 ## Temporary directories
 

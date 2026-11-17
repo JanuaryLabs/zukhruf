@@ -30,9 +30,9 @@ function sleeper(run: string) {
 }
 
 describe('a handle owns its container only when it created it', () => {
-  test('disposal of the OwnedContainer from create() removes the container', async () => {
+  test('disposal of the OwnedContainer from create() removes the container', async (t) => {
     // Arrange
-    await using docker = await connect(IMAGE);
+    await using docker = await connect(IMAGE, t.signal);
     const run = randomUUID();
     try {
       let id = '';
@@ -51,9 +51,9 @@ describe('a handle owns its container only when it created it', () => {
     }
   });
 
-  test('a Container from find() has no disposal and keeps acting on the first container after its name is reused', async () => {
+  test('a Container from find() has no disposal and keeps acting on the first container after its name is reused', async (t) => {
     // Arrange
-    await using docker = await connect(IMAGE);
+    await using docker = await connect(IMAGE, t.signal);
     const run = randomUUID();
     const name = `zukhruf-test-${run}`;
     try {
@@ -89,9 +89,9 @@ describe('a handle owns its container only when it created it', () => {
 });
 
 describe('answers that are not errors', () => {
-  test('start() of a running container and stop() of a stopped one resolve, and remove() of a missing one resolves', async () => {
+  test('start() of a running container and stop() of a stopped one resolve, and remove() of a missing one resolves', async (t) => {
     // Arrange
-    await using docker = await connect(IMAGE);
+    await using docker = await connect(IMAGE, t.signal);
     const run = randomUUID();
     try {
       const container = await docker.containers.create(sleeper(run));
@@ -111,9 +111,9 @@ describe('answers that are not errors', () => {
     }
   });
 
-  test('three concurrent force removals of one running container all resolve', async () => {
+  test('three concurrent force removals of one running container all resolve', async (t) => {
     // Arrange
-    await using docker = await connect(IMAGE);
+    await using docker = await connect(IMAGE, t.signal);
     const run = randomUUID();
     try {
       const container = await docker.containers.create(sleeper(run));
@@ -140,7 +140,7 @@ describe('answers that are not errors', () => {
 });
 
 describe('a removal that is already in progress', () => {
-  test('when the other removal fails and leaves the container dead, remove() sends a forced removal again and resolves when an inspect gets 404', async () => {
+  test('when the other removal fails and leaves the container dead, remove() sends a forced removal again and resolves when an inspect gets 404', async (t) => {
     // Arrange: the first DELETE meets a removal in progress, which then fails. A wait for removed never answers.
     await using scratch = await new TemporaryFiles().directory('docker-test-');
     const deletes: string[] = [];
@@ -186,7 +186,7 @@ describe('a removal that is already in progress', () => {
     // Act
     const removing = container.remove({
       v: true,
-      signal: AbortSignal.timeout(10_000),
+      signal: t.signal,
     });
 
     // Assert
@@ -236,9 +236,9 @@ describe('a removal that is already in progress', () => {
 });
 
 describe('containers.createOrGet()', () => {
-  test('eight concurrent calls with one name create one container, and each call gives its ID', async () => {
+  test('eight concurrent calls with one name create one container, and each call gives its ID', async (t) => {
     // Arrange
-    await using docker = await connect(IMAGE);
+    await using docker = await connect(IMAGE, t.signal);
     const run = randomUUID();
     const name = `zukhruf-test-${run}`;
     try {
@@ -247,7 +247,7 @@ describe('containers.createOrGet()', () => {
         Array.from({ length: 8 }, () =>
           docker.containers.createOrGet(sleeper(run), {
             name,
-            signal: AbortSignal.timeout(30_000),
+            signal: t.signal,
           }),
         ),
       );
@@ -270,9 +270,9 @@ describe('containers.createOrGet()', () => {
 });
 
 describe('a create that the engine refuses', () => {
-  test('a taken name is a NameConflictError with the taken name', async () => {
+  test('a taken name is a NameConflictError with the taken name', async (t) => {
     // Arrange
-    await using docker = await connect(IMAGE);
+    await using docker = await connect(IMAGE, t.signal);
     const run = randomUUID();
     const name = `zukhruf-test-${run}`;
     try {
@@ -296,9 +296,9 @@ describe('a create that the engine refuses', () => {
     }
   });
 
-  test('an image that is not on the engine is an ImageNotFoundError with the image', async () => {
+  test('an image that is not on the engine is an ImageNotFoundError with the image', async (t) => {
     // Arrange
-    await using docker = await connect(IMAGE);
+    await using docker = await connect(IMAGE, t.signal);
     const run = randomUUID();
     const image = `zukhruf-missing-${run}:1`;
     try {
@@ -320,9 +320,9 @@ describe('a create that the engine refuses', () => {
     }
   });
 
-  test('a bind mount whose source does not exist is a BindSourceNotFoundError with the path', async () => {
+  test('a bind mount whose source does not exist is a BindSourceNotFoundError with the path', async (t) => {
     // Arrange
-    await using docker = await connect(IMAGE);
+    await using docker = await connect(IMAGE, t.signal);
     const run = randomUUID();
     const source = `/zukhruf-missing-${run}`;
     try {
@@ -345,9 +345,9 @@ describe('a create that the engine refuses', () => {
     }
   });
 
-  test('start() of a container on a network that does not exist is a NetworkNotFoundError with the network', async () => {
+  test('start() of a container on a network that does not exist is a NetworkNotFoundError with the network', async (t) => {
     // Arrange: the engine creates the container (201) and refuses the start.
-    await using docker = await connect(IMAGE);
+    await using docker = await connect(IMAGE, t.signal);
     const run = randomUUID();
     const network = `zukhruf-missing-${run}`;
     try {
@@ -373,9 +373,9 @@ describe('a create that the engine refuses', () => {
 });
 
 describe('containers.run()', () => {
-  test('a run whose start fails rejects, removes its container, and leaves no connection open: the process exits by itself', async () => {
+  test('a run whose start fails rejects, removes its container, and leaves no connection open: the process exits by itself', async (t) => {
     // Arrange: the client of the scenario is never disposed, so only open connections keep it running.
-    await using docker = await connect(IMAGE);
+    await using docker = await connect(IMAGE, t.signal);
     const run = randomUUID();
     const scenario = `
 import { Docker } from ${JSON.stringify(ENTRY)};
@@ -398,11 +398,7 @@ try {
     );
     try {
       // Act
-      const result = await runScenario(
-        scenario,
-        environment,
-        AbortSignal.timeout(30_000),
-      );
+      const result = await runScenario(scenario, environment, t.signal);
 
       // Assert
       assert.equal(result.exitCode, 0, result.stderr);
@@ -422,9 +418,9 @@ try {
 });
 
 describe('a request that the engine refuses for one container', () => {
-  test('remove() without force of a running container is a ContainerRunningError and keeps the container', async () => {
+  test('remove() without force of a running container is a ContainerRunningError and keeps the container', async (t) => {
     // Arrange
-    await using docker = await connect(IMAGE);
+    await using docker = await connect(IMAGE, t.signal);
     const run = randomUUID();
     try {
       const container = await docker.containers.create(sleeper(run));
@@ -432,7 +428,7 @@ describe('a request that the engine refuses for one container', () => {
 
       // Act
       const removing = container.remove({
-        signal: AbortSignal.timeout(10_000),
+        signal: t.signal,
       });
 
       // Assert
@@ -450,9 +446,9 @@ describe('a request that the engine refuses for one container', () => {
     }
   });
 
-  test('start() of a removed container is a ContainerNotFoundError with its ID', async () => {
+  test('start() of a removed container is a ContainerNotFoundError with its ID', async (t) => {
     // Arrange
-    await using docker = await connect(IMAGE);
+    await using docker = await connect(IMAGE, t.signal);
     const run = randomUUID();
     try {
       const container = await docker.containers.create(sleeper(run));
@@ -473,9 +469,9 @@ describe('a request that the engine refuses for one container', () => {
     }
   });
 
-  test('start() that races a removal without force runs the container or is a ContainerNotFoundError with its ID', async () => {
+  test('start() that races a removal without force runs the container or is a ContainerNotFoundError with its ID', async (t) => {
     // Arrange: the engine answers a start during the removal with 409 "marked for removal", after it with 404.
-    await using docker = await connect(IMAGE);
+    await using docker = await connect(IMAGE, t.signal);
     const run = randomUUID();
     try {
       for (let round = 0; round < 10; round += 1) {
@@ -560,9 +556,9 @@ describe('a request that the engine refuses for one container', () => {
 });
 
 describe('container.kill()', () => {
-  test('a kill of a created container is a ContainerNotRunningError with the state created', async () => {
+  test('a kill of a created container is a ContainerNotRunningError with the state created', async (t) => {
     // Arrange
-    await using docker = await connect(IMAGE);
+    await using docker = await connect(IMAGE, t.signal);
     const run = randomUUID();
     try {
       const container = await docker.containers.create(sleeper(run));
@@ -583,9 +579,9 @@ describe('container.kill()', () => {
     }
   });
 
-  test('a container goes through pause, unpause, restart and kill, and wait() gives its exit code', async () => {
+  test('a container goes through pause, unpause, restart and kill, and wait() gives its exit code', async (t) => {
     // Arrange
-    await using docker = await connect(IMAGE);
+    await using docker = await connect(IMAGE, t.signal);
     const run = randomUUID();
     try {
       const container = await docker.containers.create(sleeper(run));
@@ -613,9 +609,9 @@ describe('container.kill()', () => {
 });
 
 describe('container.port()', () => {
-  test('a published port gives its host and port, and an unpublished port gives undefined', async () => {
+  test('a published port gives its host and port, and an unpublished port gives undefined', async (t) => {
     // Arrange
-    await using docker = await connect(IMAGE);
+    await using docker = await connect(IMAGE, t.signal);
     const run = randomUUID();
     try {
       const container = await docker.containers.create({
@@ -760,9 +756,9 @@ describe('containers.inspect()', () => {
     await assert.rejects(inspecting, (error: unknown) => error === reason);
   });
 
-  test('a name and an ID that no container has give undefined', async () => {
+  test('a name and an ID that no container has give undefined', async (t) => {
     // Arrange
-    await using docker = await connect(IMAGE);
+    await using docker = await connect(IMAGE, t.signal);
     const run = randomUUID();
 
     // Act
@@ -776,9 +772,9 @@ describe('containers.inspect()', () => {
     assert.equal(byId, undefined);
   });
 
-  test('the ID and the name of a container each give the inspect answer of that container', async () => {
+  test('the ID and the name of a container each give the inspect answer of that container', async (t) => {
     // Arrange: a second container shows that the answer is of the one asked for.
-    await using docker = await connect(IMAGE);
+    await using docker = await connect(IMAGE, t.signal);
     const run = randomUUID();
     const name = `zukhruf-test-${run}`;
     try {
@@ -846,9 +842,9 @@ describe('containers.inspect()', () => {
 });
 
 describe('containers.list()', () => {
-  test('a label filter gives only the containers with that label', async () => {
+  test('a label filter gives only the containers with that label', async (t) => {
     // Arrange
-    await using docker = await connect(IMAGE);
+    await using docker = await connect(IMAGE, t.signal);
     const run = randomUUID();
     const other = randomUUID();
     try {
@@ -878,13 +874,13 @@ describe('containers.list()', () => {
 });
 
 describe('HostConfig', () => {
-  test('the engine keeps each field of the docker run flags of a sandbox, and an inspect gives each one back', async () => {
+  test('the engine keeps each field of the docker run flags of a sandbox, and an inspect gives each one back', async (t) => {
     // Arrange: values that each engine accepts at the create, and that differ from
     // what the engine stores for an omitted field, so a field the request drops fails
     // the test. -1 is the MemorySwap that every engine keeps: with no swap accounting,
     // the engine changes a positive value to -1. The container never starts: on a host
     // with no GPU, the start of a DeviceRequests entry fails with 500.
-    await using docker = await connect(IMAGE);
+    await using docker = await connect(IMAGE, t.signal);
     const run = randomUUID();
     const hostConfig = {
       Memory: 256 * 1024 ** 2,

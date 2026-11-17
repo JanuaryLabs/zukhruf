@@ -6,6 +6,8 @@ import rule from './no-timer-race.ts';
 test('no-timer-race reports a race against a timer that rejects or throws', () => {
   typescriptRuleTester().run('no-timer-race', rule, {
     valid: [
+      // The wait ends at the test's limit.
+      { code: `await untilAborted(work, t.signal);` },
       // A timer that resolves a marker asserts that the promise stays pending.
       { code: `await Promise.race([work, sleep(1200).then(() => false)]);` },
       { code: `await Promise.race([work, delay(ms, 'pending')]);` },

@@ -8,11 +8,11 @@ import { join } from 'node:path';
 import { describe } from 'node:test';
 
 import { TemporaryFiles } from '@zukhruf/fs';
+import { waitFor } from '@zukhruf/testing/async';
 import { test } from '@zukhruf/testing/node';
+import { startWorker } from '@zukhruf/testing/process';
 
 import { Mutex } from '../../mutex/mutex.ts';
-import { factTimeout } from '../../testing/fact-timeout.ts';
-import { startWorker } from '../../testing/worker-process.ts';
 import { TicketQueueFileStore } from './ticket-queue-file-store.ts';
 
 const storeUrl = new URL('./ticket-queue-file-store.ts', import.meta.url);
@@ -48,15 +48,15 @@ describe('TicketQueueFileStore', () => {
       await renaming.promise;
       // A waiter appends its ticket to the file that the rename is about to replace.
       const waiter = store.acquire('product:42', {
-        signal: AbortSignal.timeout(factTimeout),
+        signal: t.signal,
       });
-      await t.waitFor(
+      await waitFor(
         () =>
           assert.ok(
             ticketsIn(queue) === 2,
             'The waiter must append its ticket',
           ),
-        { interval: 5, timeout: factTimeout },
+        { signal: t.signal },
       );
       // The rename replaces the queue with a copy that has no ticket for the waiter.
       proceed.resolve();
@@ -86,23 +86,17 @@ describe('TicketQueueFileStore holder check', () => {
 				process.send({ type: 'entered' });
 			`;
     await using holder = startWorker(caller(10), 'holder');
-    await t.waitFor(
-      () =>
-        assert.ok(
-          holder.has('entered'),
-          `The holder must enter.\n${holder.stderr}`,
-        ),
-      { interval: 5, timeout: factTimeout },
-    );
+    // The holder must enter.
+    await holder.next('entered', { signal: t.signal });
     await using waiter = startWorker(caller(60_000), 'waiter');
     // No operation says that a waiter is in line, so the wait reads the queue.
-    await t.waitFor(
+    await waitFor(
       () =>
         assert.ok(
           ticketsIn(queue) === 2,
           `The waiter must join the line.\n${waiter.stderr}`,
         ),
-      { interval: 5, timeout: factTimeout },
+      { signal: t.signal },
     );
     const mutex = new Mutex(
       new TicketQueueFileStore(directory.path, { clock: globalThis }),
@@ -136,7 +130,7 @@ const errorsIn = (error: unknown): unknown[] =>
 describe('TicketQueueFileStore damaged queue', () => {
   // Text that is not JSON, or JSON that names no caller.
   void test.each(['garbage', '{"pid":1}'], (damaged) =>
-    test(`a first ticket line that holds ${damaged} makes every call reject with a SyntaxError and stays first`, async () => {
+    test(`a first ticket line that holds ${damaged} makes every call reject with a SyntaxError and stays first`, async (t) => {
       // Arrange: a power loss can leave a complete line whose bytes never reached the disk; no operation writes one.
       // (A line without its newline is an append still in progress, which the store skips.)
       await using directory = await new TemporaryFiles().directory(
@@ -152,7 +146,7 @@ describe('TicketQueueFileStore damaged queue', () => {
       // Act
       const calls = await Promise.allSettled([
         store.acquire('report-daily', {
-          signal: AbortSignal.timeout(factTimeout),
+          signal: t.signal,
         }),
         store.tryAcquire('report-daily'),
         store.isHeld('report-daily'),

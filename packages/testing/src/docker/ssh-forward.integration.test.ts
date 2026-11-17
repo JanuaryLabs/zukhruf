@@ -8,6 +8,7 @@ import spawn from 'nano-spawn';
 
 import { TemporaryFiles } from '@zukhruf/fs';
 
+import { waitFor } from '../async/wait-for.ts';
 import { fakeEngine } from '../testing/fake-engine.ts';
 
 const skip =
@@ -511,9 +512,9 @@ test(
     // Assert: ssh, orphaned, sees its stdin end and exits.
     const pid = Number(await readFile(join(directory.path, 'ssh.pid'), 'utf8'));
     try {
-      await t.waitFor(
+      await waitFor(
         () => assert.throws(() => process.kill(pid, 0), { code: 'ESRCH' }),
-        { timeout: 10_000, interval: 20 },
+        { signal: t.signal, interval: 20 },
       );
     } finally {
       try {

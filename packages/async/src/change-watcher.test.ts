@@ -16,9 +16,20 @@ import {
   Period,
   type Primitive,
   type Sample,
+  poll,
 } from './index.ts';
 
 const execFileAsync = promisify(execFile);
+
+const waitForTimer = (
+  clock: ReturnType<typeof createClock>,
+  signal: AbortSignal,
+) =>
+  poll(async () => (clock.countTimers() === 1 ? true : undefined), {
+    signal,
+    clock: globalThis,
+    interval: 1,
+  });
 
 // A gauge whose value the test sets, and that counts its reads.
 class Setting extends Gauge<Primitive> {
@@ -68,11 +79,11 @@ describe('ChangeWatcher', () => {
     const timersAfterCheck = clock.countTimers();
     notes.current = 'b';
     const second = checks.next();
-    await t.waitFor(() => assert.equal(clock.countTimers(), 1));
+    await waitForTimer(clock, t.signal);
     await clock.tickAsync(5);
     const changedNotes = await second;
     const third = checks.next();
-    await t.waitFor(() => assert.equal(clock.countTimers(), 1));
+    await waitForTimer(clock, t.signal);
     await clock.tickAsync(5);
     const noChange = await third;
 
@@ -111,7 +122,7 @@ describe('ChangeWatcher', () => {
     }).watch(new AbortController().signal);
     const next = async () => {
       const result = checks.next();
-      await t.waitFor(() => assert.equal(clock.countTimers(), 1));
+      await waitForTimer(clock, t.signal);
       await clock.tickAsync(5);
       return (await result).value ?? undefined;
     };
@@ -153,7 +164,7 @@ describe('ChangeWatcher', () => {
     }).watch(new AbortController().signal);
     const next = async () => {
       const result = checks.next();
-      await t.waitFor(() => assert.equal(clock.countTimers(), 1));
+      await waitForTimer(clock, t.signal);
       await clock.tickAsync(5);
       return (await result).value ?? undefined;
     };
@@ -200,7 +211,11 @@ describe('ChangeWatcher', () => {
 
     // Act
     const first = checks.next();
-    await t.waitFor(() => assert.equal(other.reads, 1));
+    await poll(async () => (other.reads === 1 ? true : undefined), {
+      signal: t.signal,
+      clock: globalThis,
+      interval: 1,
+    });
     await clock.tickAsync(50);
     const outcomes = (await first).value ?? undefined;
 
@@ -234,7 +249,7 @@ describe('ChangeWatcher', () => {
     }).watch(new AbortController().signal);
     const next = async () => {
       const result = checks.next();
-      await t.waitFor(() => assert.equal(clock.countTimers(), 1));
+      await waitForTimer(clock, t.signal);
       await clock.tickAsync(5);
       return (await result).value?.get(group) ?? undefined;
     };
@@ -264,7 +279,7 @@ describe('ChangeWatcher', () => {
     }).watch(new AbortController().signal);
     const after = async (ms: number) => {
       const result = checks.next();
-      await t.waitFor(() => assert.equal(clock.countTimers(), 1));
+      await waitForTimer(clock, t.signal);
       clock.setSystemTime(clock.now + ms - 30_000);
       await clock.tickAsync(30_000);
       return (await result).value?.get(hour)?.state;
@@ -298,7 +313,7 @@ describe('ChangeWatcher', () => {
 
     // Act
     const next = checks.next();
-    await t.waitFor(() => assert.equal(clock.countTimers(), 1));
+    await waitForTimer(clock, t.signal);
     await clock.tickAsync(5);
 
     // Assert
@@ -322,7 +337,7 @@ describe('ChangeWatcher', () => {
     // Act
     const firstCheck = (await checks.next()).value ?? undefined;
     const next = checks.next();
-    await t.waitFor(() => assert.equal(clock.countTimers(), 1));
+    await waitForTimer(clock, t.signal);
     await clock.tickAsync(5);
     await next;
 
@@ -433,7 +448,7 @@ describe('ChangeWatcher', () => {
     }).watch(controller.signal);
     await checks.next();
     const next = checks.next();
-    await t.waitFor(() => assert.equal(clock.countTimers(), 1));
+    await waitForTimer(clock, t.signal);
 
     // Act
     controller.abort(new Error('the watch stopped'));
@@ -593,7 +608,7 @@ describe('ChangeWatcher', () => {
 
     // Act
     const second = checks.next();
-    await t.waitFor(() => assert.equal(clock.countTimers(), 1));
+    await waitForTimer(clock, t.signal);
     await clock.tickAsync(thirtyDays - 1);
     const readsEarly = books.reads;
     await clock.tickAsync(1);

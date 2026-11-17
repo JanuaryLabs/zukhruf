@@ -14,7 +14,6 @@ import { join } from 'node:path';
 import { describe, test } from 'node:test';
 
 import { TemporaryFiles } from '@zukhruf/fs';
-import { settleWithin } from '@zukhruf/testing/async';
 
 import {
   PipeAddress,
@@ -23,7 +22,7 @@ import {
   UnsafeFolderError,
 } from './index.ts';
 import { defaultFolder } from './testing/default-folder.ts';
-import { factTimeout, packageIndex, startProgram } from './testing/program.ts';
+import { packageIndex, startProgram } from './testing/program.ts';
 
 const posixOnly =
   process.platform === 'win32' ? 'a Unix socket file and its folder' : false;
@@ -58,7 +57,7 @@ describe(
   'endpoint.listen after a server was killed',
   { skip: posixOnly },
   () => {
-    test('the killed server leaves its file, a connect is refused and leaves it, and the next listen on the plain name removes it and serves', async () => {
+    test('the killed server leaves its file, a connect is refused and leaves it, and the next listen on the plain name removes it and serves', async (t) => {
       // Arrange
       await using folder = defaultFolder();
       const endpoint = new PipeEndpoint('greeter', { prefix: folder.prefix });
@@ -67,11 +66,11 @@ describe(
         startProgram(`import { PipeEndpoint } from ${JSON.stringify(packageIndex)};
 await new PipeEndpoint('greeter', { prefix: ${JSON.stringify(folder.prefix)} }).listen(() => console.log('accepted'));
 console.log('listening');`);
-      await killed.printed('listening');
+      await killed.printed('listening', { signal: t.signal });
       const before = await lstat(folder.path);
       const client = connect(endpoint.address.path);
       await once(client, 'connect');
-      await killed.printed('accepted');
+      await killed.printed('accepted', { signal: t.signal });
       const events: string[] = [];
       client.on('data', () => {});
       client.once('end', () => events.push('end'));
@@ -79,7 +78,7 @@ console.log('listening');`);
         events.push('close'),
       );
       killed.child.kill('SIGKILL');
-      await killed.exited;
+      await killed.exited({ signal: t.signal });
       await clientClosed;
 
       // Act
@@ -100,7 +99,7 @@ console.log('listening');`);
       assert.equal(server.endpoint, endpoint);
     });
 
-    test('the next listen on a rooted name removes the leftover file and serves', async () => {
+    test('the next listen on a rooted name removes the leftover file and serves', async (t) => {
       // Arrange
       await using scratch = await new TemporaryFiles().directory('pipes-', {
         parent: '/tmp',
@@ -109,9 +108,9 @@ console.log('listening');`);
       const endpoint = new PipeEndpoint(name, { prefix: 'unused' });
       {
         await using killed = startProgram(listenerSource(name, 'unused'));
-        await killed.printed('listening');
+        await killed.printed('listening', { signal: t.signal });
         killed.child.kill('SIGKILL');
-        await killed.exited;
+        await killed.exited({ signal: t.signal });
       }
       assert.equal(await codeOf(endpoint.address.connect()), 'ECONNREFUSED');
 
@@ -127,7 +126,7 @@ console.log('listening');`);
 );
 
 describe('a client of another program', { skip: posixOnly }, () => {
-  test('connects to the published path and reads what the server wrote', async () => {
+  test('connects to the published path and reads what the server wrote', async (t) => {
     // Arrange
     await using folder = defaultFolder();
     await using _server = await new PipeEndpoint('greeter', {
@@ -145,7 +144,7 @@ for await (const chunk of socket) text += chunk;
 console.log(text);`);
 
     // Assert
-    await client.printed('hello from the server');
+    await client.printed('hello from the server', { signal: t.signal });
   });
 });
 
@@ -437,7 +436,7 @@ describe('the server', { skip: posixOnly }, () => {
     assert.equal(await codeOf(lstat(endpoint.address.path)), 'ENOENT');
   });
 
-  test('unref lets its program exit while it listens', async () => {
+  test('unref lets its program exit while it listens', async (t) => {
     // Arrange
     await using folder = defaultFolder();
     await using program =
@@ -446,12 +445,8 @@ const server = await new PipeEndpoint('greeter', { prefix: ${JSON.stringify(fold
 console.log(server.unref() === server ? 'unref gives the server' : 'unref gives another value');`);
 
     // Act
-    await program.printed('unref gives the server');
-    const code = await settleWithin(
-      program.exited,
-      'the program exits',
-      factTimeout,
-    );
+    await program.printed('unref gives the server', { signal: t.signal });
+    const code = await program.exited({ signal: t.signal });
 
     // Assert
     assert.equal(code, 0);

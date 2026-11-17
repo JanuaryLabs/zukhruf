@@ -24,9 +24,9 @@ async function removeLabeledAndVolumes(
 }
 
 describe('docker.volumes', () => {
-  test('create() with a taken name rejects with NameConflictError, and createOrGet() gives the existing volume, with no disposal, and leaves it in place', async () => {
+  test('create() with a taken name rejects with NameConflictError, and createOrGet() gives the existing volume, with no disposal, and leaves it in place', async (t) => {
     // Arrange
-    await using docker = await connect(IMAGE);
+    await using docker = await connect(IMAGE, t.signal);
     const run = randomUUID();
     const name = `zukhruf-test-${run}`;
     try {
@@ -63,9 +63,9 @@ describe('docker.volumes', () => {
     }
   });
 
-  test('createOrGet() with a free name creates the volume and gives an OwnedVolume whose disposal removes it', async () => {
+  test('createOrGet() with a free name creates the volume and gives an OwnedVolume whose disposal removes it', async (t) => {
     // Arrange
-    await using docker = await connect(IMAGE);
+    await using docker = await connect(IMAGE, t.signal);
     const run = randomUUID();
     const name = `zukhruf-test-${run}`;
     try {
@@ -88,9 +88,9 @@ describe('docker.volumes', () => {
     }
   });
 
-  test('remove() of a volume that a container uses rejects with VolumeInUseError', async () => {
+  test('remove() of a volume that a container uses rejects with VolumeInUseError', async (t) => {
     // Arrange
-    await using docker = await connect(IMAGE);
+    await using docker = await connect(IMAGE, t.signal);
     const run = randomUUID();
     try {
       const volume = await docker.volumes.create({
@@ -121,9 +121,9 @@ describe('docker.volumes', () => {
     }
   });
 
-  test('inspect() of a removed volume rejects with VolumeNotFoundError, its remove() resolves, and find() gives undefined', async () => {
+  test('inspect() of a removed volume rejects with VolumeNotFoundError, its remove() resolves, and find() gives undefined', async (t) => {
     // Arrange
-    await using docker = await connect(IMAGE);
+    await using docker = await connect(IMAGE, t.signal);
     const run = randomUUID();
     try {
       const volume = await docker.volumes.create({
@@ -150,9 +150,9 @@ describe('docker.volumes', () => {
     }
   });
 
-  test('a volume with no name gets one from the engine, list() with a label filter gives it, and the disposal of its OwnedVolume removes it', async () => {
+  test('a volume with no name gets one from the engine, list() with a label filter gives it, and the disposal of its OwnedVolume removes it', async (t) => {
     // Arrange
-    await using docker = await connect(IMAGE);
+    await using docker = await connect(IMAGE, t.signal);
     const run = randomUUID();
     const filters = { label: [`${TEST_LABEL}=${run}`] };
     try {

@@ -28,6 +28,7 @@ import {
 } from '@zukhruf/docker';
 import { type TemporaryDirectory, TemporaryFiles } from '@zukhruf/fs';
 
+import { waitFor } from '../async/wait-for.ts';
 import { EngineLease } from '../docker/engine-lease.ts';
 import { DockerTestbed } from '../docker/index.ts';
 import {
@@ -159,7 +160,7 @@ const labelled = async (label: string): Promise<string[]> =>
  * last test process of the run ended (ADR 0020).
  */
 const reaped = (t: TestContext, check: () => Promise<void>): Promise<void> =>
-  t.waitFor(check, { timeout: 30_000, interval: 100 });
+  waitFor(check, { signal: t.signal, interval: 100 });
 
 const removeContainer = async (id: string): Promise<void> =>
   (await docker.containers.find(id))?.remove({ force: true, v: true });
@@ -177,13 +178,10 @@ function alive(pid: number): boolean {
 }
 
 async function readState<T>(t: TestContext, statePath: string): Promise<T> {
-  await t.waitFor(
-    async () => {
-      JSON.parse(await readFile(statePath, 'utf8'));
-    },
-    { timeout: 60_000, interval: 250 },
-  );
-  return JSON.parse(await readFile(statePath, 'utf8'));
+  return waitFor(async () => JSON.parse(await readFile(statePath, 'utf8')), {
+    signal: t.signal,
+    interval: 250,
+  });
 }
 
 async function removeLeftovers(state: State | undefined): Promise<void> {
@@ -382,8 +380,8 @@ for (const mode of [
           // The runner does not wait for a signalled test process, so the
           // teardown may keep the run's records; the next run removes them.
           const { pid } = state;
-          await t.waitFor(() => assert.equal(alive(pid), false), {
-            timeout: 10_000,
+          await waitFor(() => assert.equal(alive(pid), false), {
+            signal: t.signal,
           });
           await emptyRun(file, env);
         }
@@ -591,9 +589,7 @@ async function killedRun(
     process.kill(worker, 'SIGKILL');
     await dead.exited;
     const pid = worker;
-    await t.waitFor(() => assert.equal(alive(pid), false), {
-      timeout: 10_000,
-    });
+    await waitFor(() => assert.equal(alive(pid), false), { signal: t.signal });
     assert.equal(await exists(state.general), true);
     const recover = () =>
       spawn(
@@ -691,7 +687,7 @@ test(
     });
     try {
       const first = recover();
-      await t.waitFor(() => access(marker), { interval: 50, timeout: 30_000 });
+      await waitFor(() => access(marker), { signal: t.signal, interval: 50 });
       const results = await Promise.allSettled([first, recover()]);
 
       await assertRecovered(t, results, state, root, recover);
@@ -860,8 +856,8 @@ async function reaperHolder(t: TestContext, run: string) {
     ],
     process.env,
   );
-  await t.waitFor(() => assert.match(holding.output(), /^held$/m), {
-    timeout: 60_000,
+  await waitFor(() => assert.match(holding.output(), /^held$/m), {
+    signal: t.signal,
     interval: 50,
   });
   return holding;
@@ -1133,13 +1129,13 @@ test('a reaper of another run that was left created, with no records, is started
     timeout: 150_000,
   });
 
-  await t.waitFor(
+  await waitFor(
     async () => {
       assert.equal(await exists(created.id), false);
       assert.equal(await exists(staleObjects.container), false);
       assert.equal(await volumeExists(staleObjects.volume), false);
     },
-    { timeout: 60_000, interval: 200 },
+    { signal: t.signal, interval: 200 },
   );
   assert.equal((await waiting.inspect()).State?.Status, 'created');
   assert.equal(await running(liveReaper.id), true);
@@ -1498,9 +1494,9 @@ const processLeases = async (fingerprint: string): Promise<string[]> =>
 
 /** Waits until the shared server of `fingerprint` has no process lease. */
 async function unleased(t: TestContext, fingerprint: string): Promise<void> {
-  await t.waitFor(
+  await waitFor(
     async () => assert.deepEqual(await processLeases(fingerprint), []),
-    { timeout: 20_000, interval: 100 },
+    { signal: t.signal, interval: 100 },
   );
 }
 
@@ -2006,9 +2002,9 @@ test(
       );
       const holding = holder(t, directory.path, probe, env);
       holding.catch(() => {});
-      await t.waitFor(
+      await waitFor(
         async () => assert.equal((await processLeases(fingerprint)).length, 1),
-        { timeout: 60_000, interval: 100 },
+        { signal: t.signal, interval: 100 },
       );
 
       listing.release();
@@ -2084,9 +2080,9 @@ test('a process waits for the sweep lease of its server, and then gets a running
     lease = await sweepLeaseOf(fingerprint);
     await removeContainer(server);
     waiting = started([file], env);
-    await t.waitFor(
+    await waitFor(
       async () => assert.equal((await processLeases(fingerprint)).length, 1),
-      { timeout: 60_000, interval: 100 },
+      { signal: t.signal, interval: 100 },
     );
     // Without the wait, the process gets the server in well under 5 s.
     await setTimeout(5_000);
@@ -2337,10 +2333,8 @@ test('a sweep lease that ended and was not removed does not stop the next sweep 
       { name: sweepLease(fingerprint) },
     );
     await stale.start();
-    await t.waitFor(
-      async () => assert.equal((await stale.inspect()).State?.Status, 'exited'),
-      { timeout: 20_000, interval: 100 },
-    );
+    await stale.wait({ condition: 'not-running', signal: t.signal });
+    assert.equal((await stale.inspect()).State?.Status, 'exited');
 
     await sweep(directory.path, engine);
 

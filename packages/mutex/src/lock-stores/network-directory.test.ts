@@ -6,9 +6,9 @@ import { join } from 'node:path';
 import { describe } from 'node:test';
 
 import { TemporaryFiles } from '@zukhruf/fs';
+import { waitFor } from '@zukhruf/testing/async';
 import { test } from '@zukhruf/testing/node';
 
-import { factTimeout } from '../testing/fact-timeout.ts';
 import { mountAs, onLinux } from '../testing/network-mount.ts';
 import { outcome } from '../testing/outcome.ts';
 import { LockFileStore, NetworkDirectoryError } from './file-system/index.ts';
@@ -65,13 +65,13 @@ describe('A lock directory on a network file system', () => {
         // Act: the leader stops while the directory would now look like a network mount.
         using _mount = mountAs(t, directory.path, 0x6969n);
         await leader[Symbol.asyncDispose]();
-        await t.waitFor(
+        await waitFor(
           () =>
             assert.ok(
               roles.includes('leader'),
               'The follower must take over as leader',
             ),
-          { interval: 5, timeout: factTimeout },
+          { signal: t.signal },
         );
 
         // Assert: the mount is live, yet the takeover did not judge the directory again, so the holder never lost its key.

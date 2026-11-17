@@ -54,7 +54,7 @@ function jobsIn(path: string): string[] {
 }
 
 describe('the queue holds a row until each listener read it', () => {
-  test('C10: a full queue fails the sender program with QueueFullError, and its transaction does not commit; the listener position frees it', async () => {
+  test('C10: a full queue fails the sender program with QueueFullError, and its transaction does not commit; the listener position frees it', async (t) => {
     await using folder = await new TemporaryFiles().directory('notify-');
     const path = `${folder.path}/app.sqlite`;
     const clock = createClock();
@@ -62,6 +62,7 @@ describe('the queue holds a row until each listener read it', () => {
     const heard = hear(listener);
     await listener.listen('jobs');
     await using sender = await startProgram(path, {
+      signal: t.signal,
       maxQueuedNotifications: 3,
     });
     const outcomes = () =>
@@ -71,16 +72,13 @@ describe('the queue holds a row until each listener read it', () => {
     const send = async (payload: string) => {
       const before = outcomes().length;
       sender.do({ do: 'notify with a job', channel: 'jobs', payload });
-      await sender.printedOne(
-        `the outcome of ${payload}`,
-        () => outcomes().length > before,
-      );
+      await sender.printedOne(() => outcomes().length > before);
       return outcomes().at(-1);
     };
 
     for (const payload of ['j0', 'j1', 'j2'])
       assert.equal((await send(payload))?.event, 'committed');
-    await heard.count(3);
+    await heard.count(3, { signal: t.signal });
     assert.deepEqual(await send('j3'), {
       event: 'failed',
       name: 'QueueFullError',
@@ -93,17 +91,17 @@ describe('the queue holds a row until each listener read it', () => {
 
     assert.equal((await send('j4'))?.event, 'committed');
     assert.deepEqual(
-      (await heard.count(4)).map((n) => n.payload),
+      (await heard.count(4, { signal: t.signal })).map((n) => n.payload),
       ['j0', 'j1', 'j2', 'j4'],
     );
   });
 
-  test('the trim keeps every row that a stopped listener program has not read', async () => {
+  test('the trim keeps every row that a stopped listener program has not read', async (t) => {
     await using folder = await new TemporaryFiles().directory('notify-');
     const path = `${folder.path}/app.sqlite`;
-    await using listener = await startProgram(path);
+    await using listener = await startProgram(path, { signal: t.signal });
     listener.do({ do: 'listen', channel: 'jobs' });
-    await listener.printedOne('listened', (p) => p.event === 'listened');
+    await listener.printedOne((p) => p.event === 'listened');
     listener.child.kill('SIGSTOP');
     const clock = createClock();
     await using sender = new Notifications({ path, clock });
@@ -123,7 +121,7 @@ describe('the queue holds a row until each listener read it', () => {
     );
   });
 
-  test('with no listener, a trim deletes at most 10,000 rows, at most once a second; a later listener still gets the new rows', async () => {
+  test('with no listener, a trim deletes at most 10,000 rows, at most once a second; a later listener still gets the new rows', async (t) => {
     await using folder = await new TemporaryFiles().directory('notify-');
     const path = `${folder.path}/app.sqlite`;
     using database = open(path, {
@@ -156,28 +154,28 @@ describe('the queue holds a row until each listener read it', () => {
     await listener.listen('jobs');
     sender.notify('jobs', 'after the trim');
     assert.deepEqual(
-      (await heard.count(1)).map((n) => n.payload),
+      (await heard.count(1, { signal: t.signal })).map((n) => n.payload),
       ['after the trim'],
     );
   });
 
-  test('a position write that finds the file busy is skipped, and a later backstop writes it', async () => {
+  test('a position write that finds the file busy is skipped, and a later backstop writes it', async (t) => {
     await using folder = await new TemporaryFiles().directory('notify-');
     const path = `${folder.path}/app.sqlite`;
     const clock = createClock();
     await using listener = new Notifications({ path, clock });
     const heard = hear(listener);
     await listener.listen('jobs');
-    await using other = await startProgram(path);
+    await using other = await startProgram(path, { signal: t.signal });
     other.do({ do: 'notify', channel: 'jobs', payloads: ['read'] });
-    await heard.count(1);
+    await heard.count(1, { signal: t.signal });
     other.do({ do: 'hold the write lock' });
-    await other.printedOne('locked', (p) => p.event === 'locked');
+    await other.printedOne((p) => p.event === 'locked');
 
     await clock.tickAsync(1000);
     assert.deepEqual(positionsIn(path), [0]);
     other.do({ do: 'release the write lock' });
-    await other.printedOne('released', (p) => p.event === 'released');
+    await other.printedOne((p) => p.event === 'released');
     await clock.tickAsync(1000);
 
     assert.deepEqual(positionsIn(path), [1]);
@@ -186,13 +184,13 @@ describe('the queue holds a row until each listener read it', () => {
 });
 
 describe('the trim wakes the listener at the lowest position, whatever its channel', () => {
-  test('a listener program killed on a channel that nobody sends on: the sends on another channel never fill the queue, and its rows and its socket file go', async () => {
+  test('a listener program killed on a channel that nobody sends on: the sends on another channel never fill the queue, and its rows and its socket file go', async (t) => {
     await using folder = await new TemporaryFiles().directory('notify-');
     const path = `${folder.path}/app.sqlite`;
     const clock = createClock();
-    await using killed = await startProgram(path);
+    await using killed = await startProgram(path, { signal: t.signal });
     killed.do({ do: 'listen', channel: 'quiet' });
-    await killed.printedOne('listened', (p) => p.event === 'listened');
+    await killed.printedOne((p) => p.event === 'listened');
     const [address] = addressesOf(path, killed.pid);
     assert.ok(address);
     await using busy = new Notifications({ path, clock });
@@ -216,7 +214,7 @@ describe('the trim wakes the listener at the lowest position, whatever its chann
 
     assert.deepEqual(addressesOf(path, killed.pid), []);
     assert.deepEqual(
-      (await heard.count(6)).map((n) => n.payload),
+      (await heard.count(6, { signal: t.signal })).map((n) => n.payload),
       numbered('n', 6),
     );
     await sender[Symbol.asyncDispose]();
@@ -224,7 +222,7 @@ describe('the trim wakes the listener at the lowest position, whatever its chann
     assert.deepEqual(errors, []);
   });
 
-  test("a dead listener's removal in a caller's transaction that rolls back: the sender still knows it dead, and its next send removes its rows and its socket file", async () => {
+  test("a dead listener's removal in a caller's transaction that rolls back: the sender still knows it dead, and its next send removes its rows and its socket file", async (t) => {
     await using folder = await new TemporaryFiles().directory('notify-');
     const path = `${folder.path}/app.sqlite`;
     using database = open(path, {
@@ -233,9 +231,9 @@ describe('the trim wakes the listener at the lowest position, whatever its chann
     // The clock never moves, so no trim after the first wakes the dead one.
     await using sender = new Notifications({ database, clock: createClock() });
     const errors = hear(sender).errors;
-    await using killed = await startProgram(path);
+    await using killed = await startProgram(path, { signal: t.signal });
     killed.do({ do: 'listen', channel: 'quiet' });
-    await killed.printedOne('listened', (p) => p.event === 'listened');
+    await killed.printedOne((p) => p.event === 'listened');
     const [address] = addressesOf(path, killed.pid);
     assert.ok(address);
     killed.child.kill('SIGKILL');
@@ -264,7 +262,7 @@ describe('the trim wakes the listener at the lowest position, whatever its chann
     assert.deepEqual(errors, []);
   });
 
-  test("a sender that notifies only in a caller's transactions that commit removes a killed listener's row, and its socket file before its dispose ends", async () => {
+  test("a sender that notifies only in a caller's transactions that commit removes a killed listener's row, and its socket file before its dispose ends", async (t) => {
     await using folder = await new TemporaryFiles().directory('notify-');
     const path = `${folder.path}/app.sqlite`;
     using database = open(path, {
@@ -272,9 +270,9 @@ describe('the trim wakes the listener at the lowest position, whatever its chann
     });
     await using sender = new Notifications({ database, clock: createClock() });
     const errors = hear(sender).errors;
-    await using killed = await startProgram(path);
+    await using killed = await startProgram(path, { signal: t.signal });
     killed.do({ do: 'listen', channel: 'jobs' });
-    await killed.printedOne('listened', (p) => p.event === 'listened');
+    await killed.printedOne((p) => p.event === 'listened');
     const [address] = addressesOf(path, killed.pid);
     assert.ok(address);
     killed.child.kill('SIGKILL');
@@ -294,7 +292,7 @@ describe('the trim wakes the listener at the lowest position, whatever its chann
     assert.deepEqual(errors, []);
   });
 
-  test("a dead listener's removal in a caller's transaction that rolls back: past the microtask the sender still knows it dead, and its next send removes its rows and its socket file", async () => {
+  test("a dead listener's removal in a caller's transaction that rolls back: past the microtask the sender still knows it dead, and its next send removes its rows and its socket file", async (t) => {
     await using folder = await new TemporaryFiles().directory('notify-');
     const path = `${folder.path}/app.sqlite`;
     using database = open(path, {
@@ -302,9 +300,9 @@ describe('the trim wakes the listener at the lowest position, whatever its chann
     });
     await using sender = new Notifications({ database, clock: createClock() });
     const errors = hear(sender).errors;
-    await using killed = await startProgram(path);
+    await using killed = await startProgram(path, { signal: t.signal });
     killed.do({ do: 'listen', channel: 'jobs' });
-    await killed.printedOne('listened', (p) => p.event === 'listened');
+    await killed.printedOne((p) => p.event === 'listened');
     const [address] = addressesOf(path, killed.pid);
     assert.ok(address);
     killed.child.kill('SIGKILL');
@@ -336,7 +334,7 @@ describe('the trim wakes the listener at the lowest position, whatever its chann
     assert.deepEqual(errors, []);
   });
 
-  test("a dead listener's removal in a caller's transaction that stays open past the microtask and then rolls back: the sender still knows it dead, and its next send removes its rows and its socket file", async () => {
+  test("a dead listener's removal in a caller's transaction that stays open past the microtask and then rolls back: the sender still knows it dead, and its next send removes its rows and its socket file", async (t) => {
     await using folder = await new TemporaryFiles().directory('notify-');
     const path = `${folder.path}/app.sqlite`;
     using database = open(path, {
@@ -344,9 +342,9 @@ describe('the trim wakes the listener at the lowest position, whatever its chann
     });
     await using sender = new Notifications({ database, clock: createClock() });
     const errors = hear(sender).errors;
-    await using killed = await startProgram(path);
+    await using killed = await startProgram(path, { signal: t.signal });
     killed.do({ do: 'listen', channel: 'jobs' });
-    await killed.printedOne('listened', (p) => p.event === 'listened');
+    await killed.printedOne((p) => p.event === 'listened');
     const [address] = addressesOf(path, killed.pid);
     assert.ok(address);
     killed.child.kill('SIGKILL');
@@ -372,13 +370,13 @@ describe('the trim wakes the listener at the lowest position, whatever its chann
     assert.deepEqual(errors, []);
   });
 
-  test('a stopped listener program on a channel that nobody else sends on keeps its row when the trim wakes it, and after SIGCONT gets every row of its channel once, in order', async () => {
+  test('a stopped listener program on a channel that nobody else sends on keeps its row when the trim wakes it, and after SIGCONT gets every row of its channel once, in order', async (t) => {
     await using folder = await new TemporaryFiles().directory('notify-');
     const path = `${folder.path}/app.sqlite`;
     const clock = createClock();
-    await using hung = await startProgram(path);
+    await using hung = await startProgram(path, { signal: t.signal });
     hung.do({ do: 'listen', channel: 'quiet' });
-    await hung.printedOne('listened', (p) => p.event === 'listened');
+    await hung.printedOne((p) => p.event === 'listened');
     const [address] = addressesOf(path, hung.pid);
     assert.ok(address);
     hung.child.kill('SIGSTOP');

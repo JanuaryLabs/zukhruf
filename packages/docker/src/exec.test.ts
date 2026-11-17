@@ -46,9 +46,9 @@ function assertResultOrIncomplete(
 }
 
 describe('container.exec()', () => {
-  test('stdin reaches the command, and the end of the input ends it: cat gives the input back', async () => {
+  test('stdin reaches the command, and the end of the input ends it: cat gives the input back', async (t) => {
     // Arrange
-    await using docker = await connect(IMAGE);
+    await using docker = await connect(IMAGE, t.signal);
     const run = randomUUID();
     try {
       const container = await startSleeper(docker, run);
@@ -56,7 +56,7 @@ describe('container.exec()', () => {
       // Act
       const result = await container.exec(
         { Cmd: ['cat'] },
-        { stdin: 'hello\n', signal: AbortSignal.timeout(20_000) },
+        { stdin: 'hello\n', signal: t.signal },
       );
 
       // Assert
@@ -71,19 +71,18 @@ describe('container.exec()', () => {
     }
   });
 
-  test('a command that does not read all of its input gives its result, or an IncompleteOutputError with its exit code, and never an error of the socket: true and head -c1 with 10 MB of stdin', async () => {
+  test('a command that does not read all of its input gives its result, or an IncompleteOutputError with its exit code, and never an error of the socket: true and head -c1 with 10 MB of stdin', async (t) => {
     // Arrange
-    await using docker = await connect(IMAGE);
+    await using docker = await connect(IMAGE, t.signal);
     const run = randomUUID();
     try {
       const container = await startSleeper(docker, run);
       const stdin = new Uint8Array(10 * 1024 * 1024).fill(0x61);
-      const signal = AbortSignal.timeout(30_000);
 
       // Act
       const [ignored, first] = await Promise.allSettled([
-        container.exec({ Cmd: ['true'] }, { stdin, signal }),
-        container.exec({ Cmd: ['head', '-c1'] }, { stdin, signal }),
+        container.exec({ Cmd: ['true'] }, { stdin, signal: t.signal }),
+        container.exec({ Cmd: ['head', '-c1'] }, { stdin, signal: t.signal }),
       ]);
 
       // Assert
@@ -104,9 +103,9 @@ describe('container.exec()', () => {
     }
   });
 
-  test('stdout and stderr come apart and in the order of the engine in output, and a non-zero exit code is data', async () => {
+  test('stdout and stderr come apart and in the order of the engine in output, and a non-zero exit code is data', async (t) => {
     // Arrange
-    await using docker = await connect(IMAGE);
+    await using docker = await connect(IMAGE, t.signal);
     const run = randomUUID();
     try {
       const container = await startSleeper(docker, run);
@@ -132,9 +131,9 @@ describe('container.exec()', () => {
     }
   });
 
-  test('a character whose bytes come in two writes, with stderr between them, is one character in stdout and output', async () => {
+  test('a character whose bytes come in two writes, with stderr between them, is one character in stdout and output', async (t) => {
     // Arrange
-    await using docker = await connect(IMAGE);
+    await using docker = await connect(IMAGE, t.signal);
     const run = randomUUID();
     try {
       const container = await startSleeper(docker, run);
@@ -157,9 +156,9 @@ describe('container.exec()', () => {
     }
   });
 
-  test('1 MB of output arrives byte for byte', async () => {
+  test('1 MB of output arrives byte for byte', async (t) => {
     // Arrange
-    await using docker = await connect(IMAGE);
+    await using docker = await connect(IMAGE, t.signal);
     const run = randomUUID();
     try {
       const container = await startSleeper(docker, run);
@@ -189,9 +188,9 @@ describe('container.exec()', () => {
     }
   });
 
-  test('with a TTY, each chunk is stdout', async () => {
+  test('with a TTY, each chunk is stdout', async (t) => {
     // Arrange
-    await using docker = await connect(IMAGE);
+    await using docker = await connect(IMAGE, t.signal);
     const run = randomUUID();
     try {
       const container = await startSleeper(docker, run);
@@ -218,9 +217,9 @@ describe('container.exec()', () => {
     }
   });
 
-  test('a signal cancels the wait of exec() with its reason, and the command still runs to its end', async () => {
+  test('a signal cancels the wait of exec() with its reason, and the command still runs to its end', async (t) => {
     // Arrange
-    await using docker = await connect(IMAGE);
+    await using docker = await connect(IMAGE, t.signal);
     const run = randomUUID();
     try {
       const container = await startSleeper(docker, run);
@@ -245,9 +244,9 @@ describe('container.exec()', () => {
     }
   });
 
-  test('exec() of a stopped container is a ContainerNotRunningError with the state exited, and of a paused one with the state paused', async () => {
+  test('exec() of a stopped container is a ContainerNotRunningError with the state exited, and of a paused one with the state paused', async (t) => {
     // Arrange
-    await using docker = await connect(IMAGE);
+    await using docker = await connect(IMAGE, t.signal);
     const run = randomUUID();
     try {
       const stopped = await startSleeper(docker, run);
@@ -341,9 +340,9 @@ describe('container.exec()', () => {
     });
   });
 
-  test('exec() of a removed container is a ContainerNotFoundError with its ID', async () => {
+  test('exec() of a removed container is a ContainerNotFoundError with its ID', async (t) => {
     // Arrange
-    await using docker = await connect(IMAGE);
+    await using docker = await connect(IMAGE, t.signal);
     const run = randomUUID();
     try {
       const container = await startSleeper(docker, run);
@@ -365,9 +364,9 @@ describe('container.exec()', () => {
 });
 
 describe('container.spawn()', () => {
-  test('an empty write does not end the input, and close() ends it', async () => {
+  test('an empty write does not end the input, and close() ends it', async (t) => {
     // Arrange
-    await using docker = await connect(IMAGE);
+    await using docker = await connect(IMAGE, t.signal);
     const run = randomUUID();
     try {
       const container = await startSleeper(docker, run);
@@ -400,9 +399,9 @@ describe('container.spawn()', () => {
     }
   });
 
-  test('a command that writes faster than the caller reads waits for the caller', async () => {
+  test('a command that writes faster than the caller reads waits for the caller', async (t) => {
     // Arrange: the command writes 1000 blocks of 64 KB and records each block in a file by a rename, so a read never finds it empty.
-    await using docker = await connect(IMAGE);
+    await using docker = await connect(IMAGE, t.signal);
     const run = randomUUID();
     try {
       const container = await startSleeper(docker, run);
@@ -430,9 +429,9 @@ describe('container.spawn()', () => {
     }
   });
 
-  test('a second iteration of a container process rejects', async () => {
+  test('a second iteration of a container process rejects', async (t) => {
     // Arrange
-    await using docker = await connect(IMAGE);
+    await using docker = await connect(IMAGE, t.signal);
     const run = randomUUID();
     try {
       const container = await startSleeper(docker, run);
@@ -454,9 +453,9 @@ describe('container.spawn()', () => {
     }
   });
 
-  test('an iteration that ends early and an exit code that no one reads cause no unhandled rejection', async () => {
+  test('an iteration that ends early and an exit code that no one reads cause no unhandled rejection', async (t) => {
     // Arrange
-    await using docker = await connect(IMAGE);
+    await using docker = await connect(IMAGE, t.signal);
     const run = randomUUID();
     const unhandled: unknown[] = [];
     const record = (reason: unknown) => unhandled.push(reason);
@@ -480,9 +479,9 @@ describe('container.spawn()', () => {
     }
   });
 
-  test('an abort of the signal rejects the iteration with its reason', async () => {
+  test('an abort of the signal rejects the iteration with its reason', async (t) => {
     // Arrange
-    await using docker = await connect(IMAGE);
+    await using docker = await connect(IMAGE, t.signal);
     const run = randomUUID();
     try {
       const container = await startSleeper(docker, run);

@@ -4,6 +4,7 @@ import { chmod, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, test } from 'node:test';
 
+import { poll } from '@zukhruf/async';
 import { TemporaryFiles } from '@zukhruf/fs';
 
 import {
@@ -161,10 +162,10 @@ createServer().listen(${JSON.stringify(socketPath)}, () => console.log('listenin
       host: engine.host,
       signal: controller.signal,
     });
-    await t.waitFor(() => assert.ok(engine.paths.includes('/_ping')), {
-      interval: 5,
-      timeout: 10_000,
-    });
+    await poll(
+      async () => (engine.paths.includes('/_ping') ? true : undefined),
+      { signal: t.signal, clock: globalThis, interval: 5 },
+    );
     controller.abort(reason);
 
     // Assert
@@ -368,7 +369,7 @@ describe('the connections of a client', () => {
     assert.equal(engine.openConnections, 0);
   });
 
-  test('when disposal resolves, the connection of a request in flight is closed: the process has no open connection', async () => {
+  test('when disposal resolves, the connection of a request in flight is closed: the process has no open connection', async (t) => {
     // Arrange: the engine never answers /info.
     await using scratch = await new TemporaryFiles().directory('docker-test-');
     await using engine = await fakeEngine({
@@ -390,7 +391,11 @@ console.log(JSON.stringify({ inUse, afterDisposal, inFlight: await inFlight }));
 `;
 
     // Act
-    const result = await runScenario(scenario, { HOME: scratch.path });
+    const result = await runScenario(
+      scenario,
+      { HOME: scratch.path },
+      t.signal,
+    );
 
     // Assert
     assert.deepEqual(
@@ -405,7 +410,7 @@ console.log(JSON.stringify({ inUse, afterDisposal, inFlight: await inFlight }));
     );
   });
 
-  test('a process that connects and never disposes the client still exits by itself', async () => {
+  test('a process that connects and never disposes the client still exits by itself', async (t) => {
     // Arrange
     await using scratch = await new TemporaryFiles().directory('docker-test-');
     await using engine = await fakeEngine({
@@ -427,7 +432,7 @@ console.log('connected');
     const result = await runScenario(
       scenario,
       { HOME: scratch.path },
-      AbortSignal.timeout(15_000),
+      t.signal,
     );
 
     // Assert

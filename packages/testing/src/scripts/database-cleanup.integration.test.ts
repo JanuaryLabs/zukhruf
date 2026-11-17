@@ -9,6 +9,7 @@ import { type TestContext, test } from 'node:test';
 
 import { TemporaryFiles } from '@zukhruf/fs';
 
+import { waitFor } from '../async/wait-for.ts';
 import type { Database } from '../databases/database.ts';
 import { Mariadb } from '../databases/mariadb.ts';
 import { Mysql } from '../databases/mysql.ts';
@@ -156,13 +157,10 @@ async function readState(
   t: TestContext,
   statePath: string,
 ): Promise<{ database: string }> {
-  await t.waitFor(
-    async () => {
-      JSON.parse(await readFile(statePath, 'utf8'));
-    },
-    { timeout: 10_000, interval: 100 },
-  );
-  return JSON.parse(await readFile(statePath, 'utf8'));
+  return waitFor(async () => JSON.parse(await readFile(statePath, 'utf8')), {
+    signal: t.signal,
+    interval: 100,
+  });
 }
 
 /** Removes the servers that a test created under its own verification label. */
@@ -208,10 +206,10 @@ for (const kind of kinds) {
         assert.doesNotMatch(run.output, /retained ownership record/);
         const { database } = await readState(t, statePath);
         // The reaper drops it about 2 s after the run's last test process.
-        await t.waitFor(
+        await waitFor(
           async () =>
             assert.equal(await kind.exists(own, database), false, run.output),
-          { timeout: 30_000, interval: 200 },
+          { signal: t.signal, interval: 200 },
         );
         assert.equal(await kind.exists(own, own.database), true);
       } finally {
@@ -260,10 +258,10 @@ test(
       assert.notEqual(run.code, 0, run.output);
       const { database } = await readState(t, statePath);
       // The reaper drops it about 2 s after the run's last test process.
-      await t.waitFor(
+      await waitFor(
         async () =>
           assert.equal(await postgres.exists(own, database), false, run.output),
-        { timeout: 30_000, interval: 200 },
+        { signal: t.signal, interval: 200 },
       );
       assert.equal(await postgres.exists(own, other.database), true);
     } finally {
@@ -295,10 +293,10 @@ test(
       assert.equal(run.code, 0, run.output);
       const { database } = await readState(t, statePath);
       // The reaper drops it about 2 s after the run's last test process.
-      await t.waitFor(
+      await waitFor(
         async () =>
           assert.equal(await postgres.exists(own, database), false, run.output),
-        { timeout: 30_000, interval: 200 },
+        { signal: t.signal, interval: 200 },
       );
     } finally {
       await removeScope(scope);
@@ -348,10 +346,10 @@ test(
       assert.doesNotMatch(run.output, /retained ownership record/);
       const { database } = await readState(t, statePath);
       // The reaper drops it about 2 s after the run's last test process.
-      await t.waitFor(
+      await waitFor(
         async () =>
           assert.equal(await postgres.exists(own, database), false, run.output),
-        { timeout: 30_000, interval: 200 },
+        { signal: t.signal, interval: 200 },
       );
     } finally {
       await removeScope(scope);

@@ -4,6 +4,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 
 import { createClock } from '@sinonjs/fake-timers';
 
+import { waitFor } from '@zukhruf/testing/async';
 import { describe } from '@zukhruf/testing/node';
 
 import { MemoryStore } from '../lock-stores/memory/memory-store.ts';
@@ -31,7 +32,9 @@ describe('The time limit of skip if busy', () => {
     const acquiring = mutex.acquire('report:daily', async () => 'report', {
       mode: Modes.skipIfBusy({ waitAtMost: 20, clock }),
     });
-    await t.waitFor(() => assert.equal(clock.countTimers(), 1));
+    await waitFor(() => assert.equal(clock.countTimers(), 1), {
+      signal: t.signal,
+    });
 
     // Act
     await clock.tickAsync(100);

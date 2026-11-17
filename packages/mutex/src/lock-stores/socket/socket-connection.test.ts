@@ -5,9 +5,9 @@ import { type Socket, connect, createServer } from 'node:net';
 import { join } from 'node:path';
 import { describe, test } from 'node:test';
 
+import { Latch, untilAborted } from '@zukhruf/async';
 import { TemporaryFiles } from '@zukhruf/fs';
 
-import { factTimeout } from '../../testing/fact-timeout.ts';
 import { SocketConnection } from './socket-connection.ts';
 
 describe('Socket connection', () => {
@@ -29,7 +29,11 @@ describe('Socket connection', () => {
     await once(socket, 'connect');
     const connection = new SocketConnection<{ n: number }>(socket);
     let closed = false;
-    connection.once('close', () => (closed = true));
+    const closing = new Latch();
+    connection.once('close', () => {
+      closed = true;
+      closing.open();
+    });
 
     try {
       // Act: keep writing until the dead peer makes a write fail.
@@ -38,14 +42,8 @@ describe('Socket connection', () => {
       }
 
       // Assert: the loss arrives as `close`, and the process did not crash.
-      await t.waitFor(
-        () =>
-          assert.ok(
-            closed,
-            'The connection must report the dead peer as closed',
-          ),
-        { interval: 5, timeout: factTimeout },
-      );
+      // The connection must report the dead peer as closed.
+      await untilAborted(closing.wait(), t.signal);
       assert.equal(closed, true);
     } finally {
       socket.destroy();

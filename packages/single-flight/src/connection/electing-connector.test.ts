@@ -12,9 +12,9 @@ import { createClock } from '@sinonjs/fake-timers';
 import type { CampaignOptions, Term } from '@zukhruf/election';
 import { FileLock, TemporaryFiles } from '@zukhruf/fs';
 import { PipeAddress } from '@zukhruf/pipes';
+import { waitFor } from '@zukhruf/testing/async';
 
 import { isRecord } from '../shared/is-record.ts';
-import { factTimeout } from '../testing/fact-timeout.ts';
 import { standInServer } from '../testing/stand-in-server.ts';
 import { ElectingConnector } from './electing-connector.ts';
 import { flightElection } from './flight-election.ts';
@@ -56,24 +56,24 @@ describe('Electing connector', () => {
       const connecting = connector.connect(abort.signal);
       connecting.catch(() => {});
       // Nothing listens on flight.sock, so a connection is to the coordinator's pipe.
-      await t.waitFor(
+      await waitFor(
         () =>
           assert.ok(connects >= 1, 'The process must watch the coordinator'),
-        { interval: 5, timeout: factTimeout },
+        { signal: t.signal },
       );
 
       // Act: the coordinator leaves.
       await held.resign();
 
       // Assert
-      await t.waitFor(
+      await waitFor(
         () =>
           assert.equal(
             served.length,
             1,
             'The process must win the term once the coordinator left',
           ),
-        { interval: 5, timeout: factTimeout },
+        { signal: t.signal },
       );
       await assert.rejects(connecting, { name: 'AbortError' });
       assert.equal(
@@ -120,14 +120,14 @@ describe('Electing connector', () => {
       const connection = await connector.connect(new AbortController().signal);
       try {
         // The first connection is to flight.sock, and the second to the coordinator's pipe.
-        await t.waitFor(
+        await waitFor(
           () =>
             assert.equal(
               sockets[1]?.readyState,
               'open',
               'The follower must watch the coordinator',
             ),
-          { interval: 5, timeout: factTimeout },
+          { signal: t.signal },
         );
         const [toServer, toCoordinator] = sockets;
         assert.ok(toServer && toCoordinator);
@@ -187,27 +187,27 @@ describe('Electing connector', () => {
       const connecting = connector.connect(abort.signal);
       connecting.catch(() => {});
       // One connection to flight.sock, and one to the coordinator's pipe.
-      await t.waitFor(
+      await waitFor(
         () =>
           assert.ok(
             connects >= 2,
             'The process must greet the server and watch the coordinator',
           ),
-        { interval: 5, timeout: factTimeout },
+        { signal: t.signal },
       );
 
       // Act: the coordinator leaves, and its server still keeps the hello unanswered.
       await held.resign();
 
       // Assert
-      await t.waitFor(
+      await waitFor(
         () =>
           assert.equal(
             served.length,
             1,
             'The process must give up the unanswered hello and win the term',
           ),
-        { interval: 5, timeout: factTimeout },
+        { signal: t.signal },
       );
       await assert.rejects(connecting, { name: 'AbortError' });
     } finally {
@@ -248,14 +248,14 @@ describe('Electing connector', () => {
     try {
       const connecting = connector.connect(abort.signal);
       connecting.catch(() => {});
-      await t.waitFor(
+      await waitFor(
         () =>
           assert.equal(
             clock.countTimers(),
             1,
             'The process must wait for a step of the back-off',
           ),
-        { interval: 5, timeout: factTimeout },
+        { signal: t.signal },
       );
       assert.equal(
         triedAt.length,
@@ -268,14 +268,14 @@ describe('Electing connector', () => {
       await clock.tickAsync(30);
 
       // Assert
-      await t.waitFor(
+      await waitFor(
         () =>
           assert.equal(
             served.length,
             1,
             'The process must win the term at its next try',
           ),
-        { interval: 5, timeout: factTimeout },
+        { signal: t.signal },
       );
       await assert.rejects(connecting, { name: 'AbortError' });
       const [first, second, ...more] = triedAt;
@@ -450,7 +450,7 @@ describe('Electing connector', () => {
     }
   });
 
-  test('a connect outlasts a coordinator that keeps its term and hangs up on each hello, for as long as that lasts', async () => {
+  test('a connect outlasts a coordinator that keeps its term and hangs up on each hello, for as long as that lasts', async (t) => {
     // Arrange: for five seconds on the clock, a coordinator hangs up on each hello and no campaign wins. After them, it welcomes.
     await using directory = await new TemporaryFiles().directory('flights-');
     const socketPath =
@@ -488,9 +488,7 @@ describe('Electing connector', () => {
 
     try {
       // Act
-      const connection = await connector.connect(
-        AbortSignal.timeout(factTimeout),
-      );
+      const connection = await connector.connect(t.signal);
       connection.close();
 
       // Assert

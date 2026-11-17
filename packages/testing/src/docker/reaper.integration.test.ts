@@ -11,14 +11,12 @@ import { setTimeout as delay } from 'node:timers/promises';
 
 import { createClock } from '@sinonjs/fake-timers';
 
-import {
-  type Container,
-  ContainerNotFoundError,
-  Docker,
-} from '@zukhruf/docker';
+import { untilAborted } from '@zukhruf/async';
+import { type Container, Docker } from '@zukhruf/docker';
 import { TemporaryFiles } from '@zukhruf/fs';
 
 import { timebox } from '../async/timebox.ts';
+import { waitFor } from '../async/wait-for.ts';
 import { engine, proxyless } from '../testing/current-engine.ts';
 import { docker } from '../testing/engine-client.ts';
 import { EngineProxy } from '../testing/engine-proxy.ts';
@@ -239,19 +237,8 @@ async function removeRun(run: string, others: string[] = []): Promise<void> {
       .catch(() => {});
 }
 
-const gone = (t: TestContext, check: () => Promise<void>, timeout = 20_000) =>
-  t.waitFor(check, { timeout, interval: 100 });
-
-/** Resolves when the engine removed the container `id`; fails after `ms`. */
-async function removed(id: string, ms = 20_000): Promise<void> {
-  try {
-    await (
-      await docker.containers.find(id)
-    )?.wait({ condition: 'removed', signal: AbortSignal.timeout(ms) });
-  } catch (error) {
-    if (!(error instanceof ContainerNotFoundError)) throw error;
-  }
-}
+const gone = (t: TestContext, check: () => Promise<void>) =>
+  waitFor(check, { signal: t.signal, interval: 100 });
 
 /** Resolves at the end of the next exec in the container `id`, from `since` on. */
 async function execEnded(id: string, since: number, signal: AbortSignal) {
@@ -350,15 +337,20 @@ function holdNth(
   return { reached: reached.promise, release: () => release.resolve() };
 }
 
-/** `promise`, or a rejection that names `what` after `ms`. */
-async function within<T>(promise: Promise<T>, ms: number, what: string) {
-  const limit = AbortSignal.timeout(ms);
-  return Promise.race([
-    promise,
-    once(limit, 'abort').then(() => {
-      throw new Error(`${what} did not happen within ${ms} ms`);
-    }),
-  ]);
+/** `promise`, or, when `signal` aborts first, a rejection that names `what`. */
+async function within<T>(
+  promise: Promise<T>,
+  signal: AbortSignal,
+  what: string,
+): Promise<T> {
+  try {
+    return await untilAborted(promise, signal);
+  } catch (error) {
+    if (signal.aborted && error === signal.reason) {
+      throw new Error(`${what} did not happen`, { cause: error });
+    }
+    throw error;
+  }
 }
 
 test('one reaper of a run keeps the run’s objects while one of its holders lives, and removes them, with their anonymous volumes, after the last one ended', async (t) => {
@@ -521,12 +513,8 @@ exec sleep 3600`,
 
     await killed(child);
 
-    await gone(
-      t,
-      async () => assert.deepEqual(await reapers(run), []),
-      // Within the grace, one list, one drop that times out, and the expiry pass.
-      settings.grace + 4 * settings.requestTimeout + 5_000,
-    );
+    // Within the grace, one list, one drop that times out, and the expiry pass.
+    await gone(t, async () => assert.deepEqual(await reapers(run), []));
     const { stdout } = await fake.exec({ Cmd: ['ls', '/databases'] });
     assert.equal(stdout.trim(), database);
     assert.equal(await exists(owned), false);
@@ -587,14 +575,10 @@ test('a test process whose hold was cut holds the reaper again at once, and the 
     ids.push(await launched.line());
     await killed(launched.child);
 
-    await gone(
-      t,
-      async () => {
-        assert.equal(await exists(ids[0]!), false);
-        assert.deepEqual(await reapers(run), []);
-      },
-      30_000,
-    );
+    await gone(t, async () => {
+      assert.equal(await exists(ids[0]!), false);
+      assert.deepEqual(await reapers(run), []);
+    });
   } finally {
     await killed(launched.child);
     await removeRun(run, ids);
@@ -623,14 +607,10 @@ test('a test process whose reaper was removed holds a new reaper at once, and th
     ids.push(await launched.line());
     await killed(launched.child);
 
-    await gone(
-      t,
-      async () => {
-        assert.equal(await exists(ids[0]!), false);
-        assert.deepEqual(await reapers(run), []);
-      },
-      30_000,
-    );
+    await gone(t, async () => {
+      assert.equal(await exists(ids[0]!), false);
+      assert.deepEqual(await reapers(run), []);
+    });
   } finally {
     await killed(launched.child);
     await removeRun(run, ids);
@@ -688,7 +668,7 @@ test('a hold on a reaper that stays closing past the readiness bound of the hold
 test(
   'a held() that joins the hold a cut hold takes again rejects with the hold’s named error when the bound of that hold ends, before its own bound',
   { skip: proxyless },
-  async () => {
+  async (t) => {
     const run = randomUUID();
     const readiness = 2_000;
     const clock = createClock();
@@ -722,14 +702,14 @@ test(
         Cmd: ['kill', cat],
       });
       // The bound of the hold taken again starts before its exec create.
-      await within(again.reached, 20_000, 'the hold taken again');
+      await within(again.reached, t.signal, 'the hold taken again');
       clock.tick(readiness / 2);
       const joined = hold.held();
       // The bound of the hold taken again ends here. The bound of held()
       // started half a bound later, so it does not end.
       clock.tick(readiness / 2);
 
-      await assert.rejects(within(joined, 20_000, 'the end of held()'), {
+      await assert.rejects(within(joined, t.signal, 'the end of held()'), {
         message: `The hold of the reaper ${reaperName(run)} was not ready within its readiness bound of ${readiness} ms`,
       });
     } finally {
@@ -797,13 +777,13 @@ test(
       taking.catch(() => {});
       await within(
         reached.promise,
-        20_000,
+        t.signal,
         'the wait for the removal of the closing reaper',
       );
 
       clock.tick(readiness);
 
-      await within(left.promise, 10_000, 'the client leaving that wait');
+      await within(left.promise, t.signal, 'the client leaving that wait');
       await assert.rejects(taking, {
         message: `The hold of the reaper ${reaperName(run)} was not ready within its readiness bound of ${readiness} ms`,
       });
@@ -816,7 +796,7 @@ test(
 test(
   'a hold whose create of the reaper gets no answer ends that create at the readiness bound: its client leaves the request in flight',
   { skip: proxyless },
-  async () => {
+  async (t) => {
     const run = randomUUID();
     const readiness = 3_000;
     const clock = createClock();
@@ -853,11 +833,11 @@ test(
         clock,
       );
       taking.catch(() => {});
-      await within(reached.promise, 20_000, 'the create of the reaper');
+      await within(reached.promise, t.signal, 'the create of the reaper');
 
       clock.tick(readiness);
 
-      await within(left.promise, 10_000, 'the client leaving the create');
+      await within(left.promise, t.signal, 'the client leaving the create');
       await assert.rejects(taking, {
         message: `The hold of the reaper ${reaperName(run)} was not ready within its readiness bound of ${readiness} ms`,
       });
@@ -916,7 +896,7 @@ test(
         grace: 0,
         passes: 0,
       });
-      await within(listing.reached, 20_000, 'the list of the pass');
+      await within(listing.reached, t.signal, 'the list of the pass');
 
       late = creator(run, quick);
       const created = late.line();
@@ -926,21 +906,23 @@ test(
       refused.catch(() => {});
       await within(
         Promise.race([created, refused]),
-        20_000,
+        t.signal,
         'a hold or its refusal',
       );
       watch.abort();
       listing.release();
-      ids.push(await within(created, 60_000, 'the create of the late holder'));
+      ids.push(
+        await within(created, t.signal, 'the create of the late holder'),
+      );
       // The volume list of the pass comes after its removal of the containers.
-      await t.waitFor(
+      await waitFor(
         () =>
           assert.ok(
             proxy.requests.some(
               ({ method, path }) => method === 'GET' && path === '/volumes',
             ),
           ),
-        { timeout: 20_000, interval: 100 },
+        { signal: t.signal, interval: 100 },
       );
 
       assert.equal(await exists(ids[1]!), true);
@@ -971,7 +953,7 @@ test(
         grace: 0,
         passes: 0,
       });
-      await within(listing.reached, 20_000, 'the volume list of the pass');
+      await within(listing.reached, t.signal, 'the volume list of the pass');
 
       late = creator(run, quick);
       const created = late.line();
@@ -981,22 +963,20 @@ test(
       refused.catch(() => {});
       await within(
         Promise.race([created, refused]),
-        20_000,
+        t.signal,
         'a hold or its refusal',
       );
       watch.abort();
       listing.release();
-      ids.push(await within(created, 60_000, 'the create of the late holder'));
+      ids.push(
+        await within(created, t.signal, 'the create of the late holder'),
+      );
       await killed(late.child);
 
-      await gone(
-        t,
-        async () => {
-          assert.equal(await exists(ids[1]!), false);
-          assert.deepEqual(await reapers(run), []);
-        },
-        30_000,
-      );
+      await gone(t, async () => {
+        assert.equal(await exists(ids[1]!), false);
+        assert.deepEqual(await reapers(run), []);
+      });
     } finally {
       if (late) await killed(late.child);
       await removeRun(run, ids);
@@ -1247,15 +1227,11 @@ test('a hold whose /var/run/docker.sock reaches another engine removes that reap
     await killed(launched.child);
 
     assert.deepEqual(held, [relay]);
-    await gone(
-      t,
-      async () => {
-        assert.deepEqual(removed.sockets, ['/var/run/docker.sock', relay]);
-        assert.equal(await second.client.containers.find(id), undefined);
-        assert.deepEqual(await reaperSockets(second.client, run), []);
-      },
-      60_000,
-    );
+    await gone(t, async () => {
+      assert.deepEqual(removed.sockets, ['/var/run/docker.sock', relay]);
+      assert.equal(await second.client.containers.find(id), undefined);
+      assert.deepEqual(await reaperSockets(second.client, run), []);
+    });
   } finally {
     await killed(launched.child);
   }
@@ -1339,15 +1315,11 @@ test('the start of the reaper of a dead run on an engine whose /var/run/docker.s
 
   await startReaper(second.client, run, quick);
 
-  await gone(
-    t,
-    async () => {
-      assert.deepEqual(removed.sockets, ['/var/run/docker.sock', relay]);
-      assert.equal(await second.client.containers.find(owned.id), undefined);
-      assert.deepEqual(await reaperSockets(second.client, run), []);
-    },
-    60_000,
-  );
+  await gone(t, async () => {
+    assert.deepEqual(removed.sockets, ['/var/run/docker.sock', relay]);
+    assert.equal(await second.client.containers.find(owned.id), undefined);
+    assert.deepEqual(await reaperSockets(second.client, run), []);
+  });
 });
 
 test('defaults() names /var/run/docker.sock as a socket that does not answer, when the engine’s host has a file there that no engine listens on', async () => {
@@ -1412,33 +1384,21 @@ test('a test process whose reaper on the socket of its client was removed holds 
     )?.remove({
       force: true,
     });
-    await gone(
-      t,
-      async () => {
-        const [next] = await second.client.containers.list({
-          filters: { label: [`${REAPER_LABEL}=${run}`] },
-        });
-        assert.ok(next !== undefined && next.Id !== first.Id, 'a new reaper');
-        assert.deepEqual(await reaperSockets(second.client, run), [relay]);
-      },
-      30_000,
-    );
+    await gone(t, async () => {
+      const [next] = await second.client.containers.list({
+        filters: { label: [`${REAPER_LABEL}=${run}`] },
+      });
+      assert.ok(next !== undefined && next.Id !== first.Id, 'a new reaper');
+      assert.deepEqual(await reaperSockets(second.client, run), [relay]);
+    });
     await killed(launched.child);
 
-    await gone(
-      t,
-      async () => {
-        assert.deepEqual(removed.sockets, [
-          '/var/run/docker.sock',
-          relay,
-          relay,
-        ]);
-        assert.deepEqual(await reaperSockets(second.client, run), []);
-      },
-      // A kill before the new hold attached leaves the reaper waiting for a
-      // first holder: 60 s by default.
-      90_000,
-    );
+    // A kill before the new hold attached leaves the reaper waiting for a
+    // first holder: 60 s by default.
+    await gone(t, async () => {
+      assert.deepEqual(removed.sockets, ['/var/run/docker.sock', relay, relay]);
+      assert.deepEqual(await reaperSockets(second.client, run), []);
+    });
   } finally {
     await killed(launched.child);
   }

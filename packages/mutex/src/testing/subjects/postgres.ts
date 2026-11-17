@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import pg from 'pg';
 
 import type { Clock } from '@zukhruf/async';
+import { waitFor } from '@zukhruf/testing/async';
 import { type DatabaseOptions, Postgres } from '@zukhruf/testing/postgres';
 
 import {
@@ -265,7 +266,7 @@ export const sessionControl: SessionControl = {
   async untilASessionWaits(t, location) {
     const observer = await adminOf(location);
     try {
-      await t.waitFor(
+      await waitFor(
         async () => {
           const { rows } = await observer.query(
             `SELECT count(*)::int AS waiting FROM pg_stat_activity
@@ -273,7 +274,7 @@ export const sessionControl: SessionControl = {
           );
           assert.ok(rows[0].waiting > 0, 'No session waits for a lock.');
         },
-        { interval: 10, timeout: 10_000 },
+        { interval: 10, signal: t.signal },
       );
     } finally {
       await observer.end();

@@ -9,12 +9,13 @@ import { createInterface } from 'node:readline';
 import { describe } from 'node:test';
 import type { TestContext } from 'node:test';
 
+import { Latch, untilAborted } from '@zukhruf/async';
 import { FileLock, TemporaryFiles } from '@zukhruf/fs';
 import { UnchangedJournal, open } from '@zukhruf/sqlite-open';
+import { waitFor } from '@zukhruf/testing/async';
 import { test } from '@zukhruf/testing/node';
 
 import { ProtocolVersionError, SingleFlight } from './index.ts';
-import { factTimeout } from './testing/fact-timeout.ts';
 
 // Processes of different versions of this package meet on the wire, so these
 // tests speak it byte by byte, as such a process would.
@@ -48,13 +49,17 @@ async function peerOf(directory: string) {
   socket.on('error', () => {});
   let received = '';
   let closed = false;
+  const hungUp = new Latch();
   socket.setEncoding('utf8');
   const readers = new Set<() => void>();
   socket.on('data', (chunk: string) => {
     received += chunk;
     for (const read of readers) read();
   });
-  socket.once('close', () => (closed = true));
+  socket.once('close', () => {
+    closed = true;
+    hungUp.open();
+  });
   await once(socket, 'connect');
   return {
     send: (line: string) => socket.write(`${line}\n`),
@@ -76,9 +81,13 @@ async function peerOf(directory: string) {
     get closed() {
       return closed;
     },
+    /** Resolves when the connection closed. */
+    hungUp: hungUp.wait(),
     [Symbol.dispose]: () => socket.destroy(),
   };
 }
+
+type Peer = Awaited<ReturnType<typeof peerOf>>;
 
 const settle = <T>(running: Promise<T>) =>
   running.then(
@@ -87,18 +96,10 @@ const settle = <T>(running: Promise<T>) =>
   );
 
 /** Waits until `peer` got `count` lines. */
-function linesOf(
-  t: TestContext,
-  peer: { readonly received: string },
-  count: number,
-) {
-  return t.waitFor(
-    () =>
-      assert.ok(
-        peer.received.split('\n').length - 1 >= count,
-        `Got ${JSON.stringify(peer.received)}`,
-      ),
-    { interval: 5, timeout: factTimeout },
+function linesOf(t: TestContext, peer: Peer, count: number) {
+  return untilAborted(
+    peer.until(() => peer.received.split('\n').length - 1 >= count),
+    t.signal,
   );
 }
 
@@ -120,18 +121,14 @@ function answersTo(peer: { readonly received: string }, id: string) {
 /** Waits until `peer` got an answer to `id` that matches `pattern`, and returns it. */
 async function answerOf(
   t: TestContext,
-  peer: { readonly received: string },
+  peer: Peer,
   id: string,
   pattern: RegExp,
 ) {
   const find = () => answersTo(peer, id).find((line) => pattern.test(line));
-  await t.waitFor(
-    () =>
-      assert.ok(
-        find() !== undefined,
-        `No ${pattern} for ${id}; got ${JSON.stringify(peer.received)}`,
-      ),
-    { interval: 5, timeout: factTimeout },
+  await untilAborted(
+    peer.until(() => find() !== undefined),
+    t.signal,
   );
   const answer = find();
   assert.ok(answer);
@@ -348,10 +345,7 @@ describe('The wire of a single flight', () => {
       peer.send('{"op":"hello","version":1}');
 
       // Assert
-      await t.waitFor(
-        () => assert.ok(peer.closed, 'The coordinator must hang up'),
-        { interval: 5, timeout: factTimeout },
-      );
+      await untilAborted(peer.hungUp, t.signal);
       assert.equal(
         peer.received,
         '{"op":"refused","protocol":"single-flight","version":1}\n',
@@ -380,10 +374,7 @@ describe('The wire of a single flight', () => {
           peer.send(line);
 
           // Assert
-          await t.waitFor(
-            () => assert.ok(peer.closed, 'The coordinator must hang up'),
-            { interval: 5, timeout: factTimeout },
-          );
+          await untilAborted(peer.hungUp, t.signal);
           assert.equal(
             peer.received,
             '{"op":"refused","protocol":"single-flight","version":1}\n',
@@ -446,13 +437,13 @@ describe('The wire of a single flight', () => {
       });
       // This run starts the coordinator.
       const warmUp = settle(flights.run('warm-up', async () => 'warm'));
-      await t.waitFor(
+      await waitFor(
         () =>
           assert.ok(
             existsSync(join(directory.path, 'flight.sock')),
             'The coordinator must listen',
           ),
-        { interval: 5, timeout: factTimeout },
+        { signal: t.signal },
       );
       using peer = await peerOf(directory.path);
       peer.send('{"op":"hello","protocol":"single-flight","version":1}');
@@ -529,13 +520,9 @@ describe('The wire of a single flight', () => {
         peer.send(`{"op":"run","id":"b","key":"sync","flight":"${token}"}`);
         peer.send(`{"op":"run","id":"b","key":"sync","flight":"${token}"}`);
         peer.send('{"op":"run","id":"c","key":"other"}');
-        await t.waitFor(
-          () =>
-            assert.ok(
-              /"id":"c".*\n/.test(peer.received),
-              `Got ${JSON.stringify(peer.received)}`,
-            ),
-          { interval: 5, timeout: factTimeout },
+        await untilAborted(
+          peer.until(() => /"id":"c".*\n/.test(peer.received)),
+          t.signal,
         );
 
         // Assert
@@ -613,10 +600,7 @@ describe('The wire of a single flight', () => {
       peer.send('run sync');
 
       // Assert
-      await t.waitFor(
-        () => assert.ok(peer.closed, 'The coordinator must hang up'),
-        { interval: 5, timeout: factTimeout },
-      );
+      await untilAborted(peer.hungUp, t.signal);
       assert.equal(peer.received, '{"op":"welcome"}\n');
     },
   );
@@ -897,6 +881,8 @@ describe('The wire of a single flight while a process holds a key', () => {
       await answerOf(t, joiner, 'k', /"op":"interrupted"/);
       second.send('{"op":"land","id":"a","outcome":{"value":"kept"}}');
       await answerOf(t, joiner, 'j', /"op":"(landed|interrupted)"/);
+      // The answer to the landing comes on another connection, in no order with the joiner's.
+      await answerOf(t, second, 'a', /./);
 
       // Assert
       assert.deepEqual(answersTo(joiner, 'j'), [
@@ -946,14 +932,11 @@ describe('The wire of a single flight while a process holds a key', () => {
         // takes the key, as a leader does, lands, and lets the key go.
         held.unlock();
         late.send(`{"op":"run","id":"${x}","key":"${key}"}`);
-        await t.waitFor(
-          () =>
-            assert.ok(
-              answersTo(waiter, p).some(isLead) ||
-                answersTo(late, x).some(isLead),
-              `Nobody leads: ${JSON.stringify(waiter.received)} ${JSON.stringify(late.received)}`,
-            ),
-          { interval: 5, timeout: factTimeout },
+        const someoneLeads = () =>
+          answersTo(waiter, p).some(isLead) || answersTo(late, x).some(isLead);
+        await untilAborted(
+          Promise.race([waiter.until(someoneLeads), late.until(someoneLeads)]),
+          t.signal,
         );
         const [leader, id, joiner, joinerId] = answersTo(waiter, p).some(isLead)
           ? [waiter, p, late, x]

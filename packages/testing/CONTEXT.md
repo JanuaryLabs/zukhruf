@@ -73,6 +73,14 @@ _Avoid_: Worker record, PID file
 A later run removing what an earlier run left: the recorded paths, and, through the earlier run's reaper, its engine objects. It deletes the earlier run's records only when the engine has no reaper of that run and nothing that one would remove. Otherwise it starts that run's reaper, or leaves a running one alone, and keeps the records. Recovery waits until that run's runner and recorded processes have ended.
 _Avoid_: Garbage collection, prune
 
+**Wait**:
+A call that resolves when a fact is true, and that the test's signal limits. `waitFor` calls a check until it passes; `next` resolves with a message of a worker process.
+_Avoid_: Poll loop, sleep
+
+**Worker process**:
+A Node process that a test starts with `startWorker`, with an IPC channel back to the test. Its handle records the messages it sends. It exits when its handle is disposed or the test process ends.
+_Avoid_: Child, subprocess (for the handle)
+
 **Area**:
 A part of the package with its own import path, such as `docker` or `postgres`.
 _Avoid_: Module, entry

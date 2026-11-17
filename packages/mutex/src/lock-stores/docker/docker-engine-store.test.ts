@@ -10,13 +10,13 @@ import { promisify } from 'node:util';
 
 import { Docker } from '@zukhruf/docker';
 import { TemporaryFiles } from '@zukhruf/fs';
+import { waitFor } from '@zukhruf/testing/async';
 import { DockerTestbed } from '@zukhruf/testing/docker';
+import { startWorker } from '@zukhruf/testing/process';
 
 import { Mutex } from '../../index.ts';
-import { factTimeout } from '../../testing/fact-timeout.ts';
 import { hold } from '../../testing/hold.ts';
 import { engineProxy } from '../../testing/subjects/docker-engine.ts';
-import { startWorker } from '../../testing/worker-process.ts';
 import { DockerEngineStore } from './index.ts';
 
 /**
@@ -115,14 +115,7 @@ test("a killed holder's key goes to the next waiter", async (t) => {
     holderSource(fixture.namespace, 'report:daily'),
     'holder',
   );
-  await t.waitFor(
-    () =>
-      assert.ok(
-        holder.has('holding'),
-        `The holder did not take the key: ${holder.stderr}`,
-      ),
-    { interval: 5, timeout: factTimeout },
-  );
+  await holder.next('holding', { signal: t.signal });
   const waiting = new Mutex(fixture.store()).acquire(
     'report:daily',
     async (lease) => lease.token.value,
@@ -297,14 +290,14 @@ test('a holder that lost its claim during the mint gets no token', async () => {
   );
 });
 
-test('the tokens increase after docker container prune', async () => {
-  // Arrange: each step has its own time limit, so one stalled step cannot use up the whole test's time.
+test('the tokens increase after docker container prune', async (t) => {
+  // Arrange
   await using fixture = await engine();
   const mutex = new Mutex(fixture.store());
   const first = await mutex.acquire(
     'report:daily',
     async (lease) => lease.token.value,
-    { signal: AbortSignal.timeout(20_000) },
+    { signal: t.signal },
   );
 
   // Act: an operator prunes the containers of the namespace that do not run.
@@ -317,12 +310,12 @@ test('the tokens increase after docker container prune', async () => {
       '--filter',
       `label=${namespaceLabel}=${fixture.namespace}`,
     ],
-    { signal: AbortSignal.timeout(20_000) },
+    { signal: t.signal },
   );
   const second = await mutex.acquire(
     'report:daily',
     async (lease) => lease.token.value,
-    { signal: AbortSignal.timeout(20_000) },
+    { signal: t.signal },
   );
 
   // Assert
@@ -515,9 +508,9 @@ test("a holder whose list missed a stale minter's new rung still gets a token ab
 
   // Act: the stale minter creates the rung above the previous token and removes the rung of the previous holder, and then the next holder creates its rung.
   staleRung.release();
-  await t.waitFor(async () => assert.ok(!(await ladder()).includes(previous)), {
+  await waitFor(async () => assert.ok(!(await ladder()).includes(previous)), {
     interval: 5,
-    timeout: engineBound,
+    signal: t.signal,
   });
   nextRung.release();
   const outcome = await outcomeOf(next, engineBound);
@@ -823,31 +816,24 @@ const killedHolderSource = (statePath: string) => `
 `;
 
 /**
- * How long the test waits for the run's reaper to remove what a killed test
- * process left. The reaper acts after its grace (2 s) and its 5 re-check
- * passes 1 s apart, each with requests of up to 10 s
- * (@zukhruf/testing ADR 0020). The limit is far above that and only catches
- * a reaper that never acts: it claims no speed.
- */
-const REAPED_WITHIN = 120_000;
-
-/**
  * Resolves when each of `containers` and `volumes` has its destroy event
  * since `since`, in seconds. `since` replays the events that came before the
- * call, so an object that went first is not missed.
+ * call, so an object that went first is not missed. The wait ends when
+ * `signal` aborts.
  */
 async function destroyed(
   docker: Docker,
   since: number,
   containers: string[],
   volumes: string[],
+  signal: AbortSignal,
 ): Promise<void> {
   const left = new Set([...containers, ...volumes]);
   if (left.size === 0) return;
   for await (const { Actor } of docker.events({
     since,
     filters: { type: ['container', 'volume'], event: ['destroy'] },
-    signal: AbortSignal.timeout(REAPED_WITHIN),
+    signal,
   })) {
     if (Actor?.ID !== undefined) left.delete(Actor.ID);
     if (left.size === 0) return;
@@ -911,6 +897,7 @@ test('a rung left by a killed test process is removed by the run’s reaper afte
         ({ Id }) => Id,
       ),
       (await docker.volumes.list({ filters })).map(({ Name }) => Name),
+      t.signal,
     );
     const containers = await docker.containers.list({ all: true, filters });
     const volumes = await docker.volumes.list({ filters });

@@ -7,6 +7,7 @@ import { describe, test } from 'node:test';
 import { promisify } from 'node:util';
 
 import { TemporaryFiles } from '@zukhruf/fs';
+import { waitFor } from '@zukhruf/testing/async';
 
 import {
   type AgentJob,
@@ -20,7 +21,6 @@ import {
 // The labels of this file. They are fixed, because launchd keeps the enable
 // override of each label it saw, and the other test file has its own.
 const PREFIX = 'dev.zukhruf.launchd.test.service.';
-const WAIT = { interval: 100, timeout: 20_000 };
 
 describe('Service', { concurrency: true }, () => {
   test('kickstart and kill of a label that the domain does not have reject with ServiceNotFoundError', async () => {
@@ -90,12 +90,15 @@ describe('Service', { concurrency: true }, () => {
         });
 
         // Assert
-        await t.waitFor(async () => {
-          assert.deepEqual(await service.state(), {
-            state: 'not running',
-            lastExitStatus: status,
-          });
-        }, WAIT);
+        await waitFor(
+          async () => {
+            assert.deepEqual(await service.state(), {
+              state: 'not running',
+              lastExitStatus: status,
+            });
+          },
+          { signal: t.signal, interval: 100 },
+        );
       } finally {
         await service.uninstall();
       }
@@ -134,12 +137,15 @@ describe('Service', { concurrency: true }, () => {
       assert.ok(running.state === 'running');
       assert.equal(running.pid, restarted);
       await service.kill('SIGTERM');
-      await t.waitFor(async () => {
-        assert.deepEqual(await service.state(), {
-          state: 'not running',
-          lastExitStatus: undefined,
-        });
-      }, WAIT);
+      await waitFor(
+        async () => {
+          assert.deepEqual(await service.state(), {
+            state: 'not running',
+            lastExitStatus: undefined,
+          });
+        },
+        { signal: t.signal, interval: 100 },
+      );
       await assert.rejects(service.kill('SIGTERM'), (error) => {
         assert.ok(error instanceof LaunchctlError);
         assert.ok(!(error instanceof ServiceNotFoundError));
@@ -169,12 +175,15 @@ describe('Service', { concurrency: true }, () => {
         // launchd waits 10 s by default before it starts a job again.
         ThrottleInterval: 1,
       });
-      await t.waitFor(async () => {
-        assert.deepEqual(await service.state(), {
-          state: 'not running',
-          lastExitStatus: 3,
-        });
-      }, WAIT);
+      await waitFor(
+        async () => {
+          assert.deepEqual(await service.state(), {
+            state: 'not running',
+            lastExitStatus: 3,
+          });
+        },
+        { signal: t.signal, interval: 100 },
+      );
 
       // Act
       const pid = await service.kickstart();
@@ -209,34 +218,40 @@ describe('Service', { concurrency: true }, () => {
     try {
       await launchd.install(job);
       await service.kickstart();
-      await t.waitFor(() => stat(trapped), WAIT);
+      await waitFor(() => stat(trapped), { signal: t.signal, interval: 100 });
 
       // Act
       await service.kill('SIGHUP');
 
       // Assert
-      await t.waitFor(async () => {
-        assert.deepEqual(await service.state(), {
-          state: 'not running',
-          lastExitStatus: 7,
-        });
-      }, WAIT);
+      await waitFor(
+        async () => {
+          assert.deepEqual(await service.state(), {
+            state: 'not running',
+            lastExitStatus: 7,
+          });
+        },
+        { signal: t.signal, interval: 100 },
+      );
 
       // Arrange
       await rm(trapped);
       await service.kickstart();
-      await t.waitFor(() => stat(trapped), WAIT);
+      await waitFor(() => stat(trapped), { signal: t.signal, interval: 100 });
 
       // Act
       await service.kill(constants.signals.SIGUSR1);
 
       // Assert
-      await t.waitFor(async () => {
-        assert.deepEqual(await service.state(), {
-          state: 'not running',
-          lastExitStatus: 9,
-        });
-      }, WAIT);
+      await waitFor(
+        async () => {
+          assert.deepEqual(await service.state(), {
+            state: 'not running',
+            lastExitStatus: 9,
+          });
+        },
+        { signal: t.signal, interval: 100 },
+      );
     } finally {
       await service.uninstall();
     }
@@ -252,11 +267,14 @@ describe('Service', { concurrency: true }, () => {
         ProgramArguments: ['/bin/sleep', '600'],
         RunAtLoad: true,
       });
-      const before = await t.waitFor(async () => {
-        const state = await service.state();
-        assert.ok(state.state === 'running', state.state);
-        return state;
-      }, WAIT);
+      const before = await waitFor(
+        async () => {
+          const state = await service.state();
+          assert.ok(state.state === 'running', state.state);
+          return state;
+        },
+        { signal: t.signal, interval: 100 },
+      );
 
       // Act
       await service.disable();
@@ -279,9 +297,12 @@ describe('Service', { concurrency: true }, () => {
       assert.deepEqual(await service.state(), { state: 'not loaded' });
       await service.enable();
       await service.bootstrap();
-      await t.waitFor(async () => {
-        assert.equal((await service.state()).state, 'running');
-      }, WAIT);
+      await waitFor(
+        async () => {
+          assert.equal((await service.state()).state, 'running');
+        },
+        { signal: t.signal, interval: 100 },
+      );
     } finally {
       await service.uninstall();
     }
@@ -306,9 +327,12 @@ describe('Service', { concurrency: true }, () => {
       assert.deepEqual(await service.state(), { state: 'not loaded' });
       assert.equal(await readFile(service.file, 'utf8'), content);
       await service.bootstrap();
-      await t.waitFor(async () => {
-        assert.equal((await service.state()).state, 'running');
-      }, WAIT);
+      await waitFor(
+        async () => {
+          assert.equal((await service.state()).state, 'running');
+        },
+        { signal: t.signal, interval: 100 },
+      );
     } finally {
       await service.uninstall();
     }
@@ -331,7 +355,7 @@ describe('Service', { concurrency: true }, () => {
         RunAtLoad: true,
         ExitTimeOut: 2,
       });
-      await t.waitFor(() => stat(trapped), WAIT);
+      await waitFor(() => stat(trapped), { signal: t.signal, interval: 100 });
       const old = await service.state();
       assert.ok(old.state === 'running');
 
@@ -342,11 +366,14 @@ describe('Service', { concurrency: true }, () => {
       assert.deepEqual(await service.state(), { state: 'not loaded' });
       assert.throws(() => process.kill(old.pid, 0), { code: 'ESRCH' });
       await service.bootstrap();
-      await t.waitFor(async () => {
-        const state = await service.state();
-        assert.ok(state.state === 'running');
-        assert.notEqual(state.pid, old.pid);
-      }, WAIT);
+      await waitFor(
+        async () => {
+          const state = await service.state();
+          assert.ok(state.state === 'running');
+          assert.notEqual(state.pid, old.pid);
+        },
+        { signal: t.signal, interval: 100 },
+      );
     } finally {
       await service.uninstall();
     }
@@ -375,14 +402,17 @@ describe('Service', { concurrency: true }, () => {
     } satisfies AgentJob;
     try {
       await launchd.install(job);
-      await t.waitFor(() => stat(started), WAIT);
+      await waitFor(() => stat(started), { signal: t.signal, interval: 100 });
       const running = await service.state();
       assert.ok(running.state === 'running');
       const bootoutController = new AbortController();
 
       // Act
       const bootout = service.bootout({ signal: bootoutController.signal });
-      await t.waitFor(() => stat(terminated), WAIT);
+      await waitFor(() => stat(terminated), {
+        signal: t.signal,
+        interval: 100,
+      });
       bootoutController.abort(new Error('cancelled bootout'));
 
       // Assert
@@ -392,15 +422,18 @@ describe('Service', { concurrency: true }, () => {
       );
       assert.notEqual((await service.state()).state, 'not loaded');
       process.kill(running.pid, 'SIGKILL');
-      await t.waitFor(async () => {
-        assert.deepEqual(await service.state(), { state: 'not loaded' });
-      }, WAIT);
+      await waitFor(
+        async () => {
+          assert.deepEqual(await service.state(), { state: 'not loaded' });
+        },
+        { signal: t.signal, interval: 100 },
+      );
 
       // Arrange
       await rm(started);
       await rm(terminated);
       await service.bootstrap();
-      await t.waitFor(() => stat(started), WAIT);
+      await waitFor(() => stat(started), { signal: t.signal, interval: 100 });
       const rerun = await service.state();
       assert.ok(rerun.state === 'running');
       const uninstallController = new AbortController();
@@ -409,7 +442,10 @@ describe('Service', { concurrency: true }, () => {
       const uninstall = service.uninstall({
         signal: uninstallController.signal,
       });
-      await t.waitFor(() => stat(terminated), WAIT);
+      await waitFor(() => stat(terminated), {
+        signal: t.signal,
+        interval: 100,
+      });
       uninstallController.abort(new Error('cancelled uninstall'));
 
       // Assert
@@ -418,9 +454,12 @@ describe('Service', { concurrency: true }, () => {
         (error) => error === uninstallController.signal.reason,
       );
       process.kill(rerun.pid, 'SIGKILL');
-      await t.waitFor(async () => {
-        assert.deepEqual(await service.state(), { state: 'not loaded' });
-      }, WAIT);
+      await waitFor(
+        async () => {
+          assert.deepEqual(await service.state(), { state: 'not loaded' });
+        },
+        { signal: t.signal, interval: 100 },
+      );
       await stat(service.file);
     } finally {
       await service.uninstall();
@@ -437,9 +476,12 @@ describe('Service', { concurrency: true }, () => {
         ProgramArguments: ['/bin/sleep', '600'],
         RunAtLoad: true,
       });
-      await t.waitFor(async () => {
-        assert.equal((await service.state()).state, 'running');
-      }, WAIT);
+      await waitFor(
+        async () => {
+          assert.equal((await service.state()).state, 'running');
+        },
+        { signal: t.signal, interval: 100 },
+      );
 
       // Act
       await service.uninstall();

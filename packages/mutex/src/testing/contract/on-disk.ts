@@ -4,13 +4,12 @@ import { join, relative } from 'node:path';
 
 import { TemporaryFiles } from '@zukhruf/fs';
 import { describe, test } from '@zukhruf/testing/node';
+import { startWorker } from '@zukhruf/testing/process';
 
 import { NetworkDirectoryError } from '../../lock-stores/file-system/index.ts';
 import { Mutex } from '../../mutex/mutex.ts';
-import { factTimeout } from '../fact-timeout.ts';
 import { mountAs, networkFileSystems, onLinux } from '../network-mount.ts';
 import { outcome } from '../outcome.ts';
-import { startWorker } from '../worker-process.ts';
 import { holderSource } from './peers.ts';
 import type { Host, OnDisk, SharedByProcesses, Subject } from './subject.ts';
 
@@ -209,14 +208,8 @@ export function passiveLooks<H extends Host>(
         'holder',
         { admit: (child) => sharing.admit(host, child) },
       );
-      await t.waitFor(
-        () =>
-          assert.ok(
-            holder.has('entered'),
-            `The holder process must enter its task.\n${holder.stderr}`,
-          ),
-        { interval: 5, timeout: factTimeout },
-      );
+      // The holder process must enter its task.
+      await holder.next('entered', { signal: t.signal });
       holder.child.kill('SIGKILL');
       await holder.closed;
       const mutex = new Mutex(host.store);

@@ -237,10 +237,10 @@ function comparedResults(
 
 /**
  * A race against a timer that rejects fails the test when the promise is late,
- * with an error the test wrote itself, and leaves the promise running. A
- * timeout belongs to the test (`{ timeout }`), or to `settleWithin`, which
- * names what was late. Follows one variable: a timer built in a helper that
- * returns it is not seen. A timer that resolves a marker
+ * with an error the test wrote itself, and leaves the promise running. The
+ * limit belongs to the test target: `untilAborted(promise, t.signal)` ends the
+ * wait when the test's limit aborts `t.signal`. Follows one variable: a timer
+ * built in a helper that returns it is not seen. A timer that resolves a marker
  * (`sleep(ms).then(() => false)`, `delay(ms, 'pending')`) asserts that the
  * promise stays pending, which is a different check, and stays allowed, but an
  * assertion that the result is not the marker is a deadline in disguise: it
@@ -255,9 +255,9 @@ const rule: Rule.RuleModule = {
     schema: [],
     messages: {
       matched:
-        'This race fails the test when the promise is late: use settleWithin(promise, label, ms) from @zukhruf/testing/async, or give the test its own { timeout }.',
+        "This race fails the test when the promise is late: use untilAborted(promise, t.signal) from @zukhruf/async, which ends at the test's limit.",
       deadline:
-        'This race asserts that the timer lost, so it is a deadline in disguise, and load breaks it: await the promise, or wait for the fact with t.waitFor.',
+        'This race asserts that the timer lost, so it is a deadline in disguise, and load breaks it: await the promise, or wait for the fact with waitFor(…, { signal: t.signal }).',
     },
   },
   create(context) {

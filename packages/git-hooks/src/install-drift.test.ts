@@ -7,6 +7,7 @@ import { test } from 'node:test';
 import { promisify } from 'node:util';
 
 import { TemporaryFiles } from '@zukhruf/fs';
+import { waitFor } from '@zukhruf/testing/async';
 
 import { hookedGit, installHook } from './testing/hooked-repository.ts';
 import { repository } from './testing/pre-push-repository.ts';
@@ -376,14 +377,14 @@ test('while a push builds on an install, commits that install two other lockfile
     push.once('close', resolve),
   );
   try {
-    await t.waitFor(
+    await waitFor(
       () => {
         assert.ok(
           existsSync(`${gate}.started`),
           `The push did not reach its gate:\n${stderr.join('')}`,
         );
       },
-      { interval: 100, timeout: 120_000 },
+      { signal: t.signal, interval: 100 },
     );
     const leased = await readdir(installs);
 

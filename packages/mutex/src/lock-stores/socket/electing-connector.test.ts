@@ -9,12 +9,13 @@ import { describe, test } from 'node:test';
 
 import { createClock } from '@sinonjs/fake-timers';
 
+import { untilAborted } from '@zukhruf/async';
 import type { CampaignOptions, Term } from '@zukhruf/election';
 import { FileLock, TemporaryFiles } from '@zukhruf/fs';
 import { PipeAddress } from '@zukhruf/pipes';
+import { waitFor } from '@zukhruf/testing/async';
 
 import { isRecord } from '../../shared/is-record.ts';
-import { factTimeout } from '../../testing/fact-timeout.ts';
 import { standInServer } from '../../testing/stand-in-server.ts';
 import { ElectingConnector } from './electing-connector.ts';
 import { socketElection } from './socket-election.ts';
@@ -57,25 +58,23 @@ describe('Electing connector', () => {
       const connecting = connector.connect(abort.signal);
       connecting.catch(() => {});
       // Nothing listens on lock.sock, so a connection is to the leader's pipe.
-      await t.waitFor(
+      await waitFor(
         () => assert.ok(connects >= 1, 'The process must watch the leader'),
-        { interval: 5, timeout: factTimeout },
+        { signal: t.signal },
       );
 
       // Act: the leader leaves.
       await held.resign();
 
       // Assert
-      await t.waitFor(
-        () =>
-          assert.equal(
-            served.length,
-            1,
-            'The process must win the term once the leader left',
-          ),
-        { interval: 5, timeout: factTimeout },
+      await assert.rejects(untilAborted(connecting, t.signal), {
+        name: 'AbortError',
+      });
+      assert.equal(
+        served.length,
+        1,
+        'The process must win the term once the leader left',
       );
-      await assert.rejects(connecting, { name: 'AbortError' });
       assert.equal(
         campaigns,
         2,
@@ -121,14 +120,14 @@ describe('Electing connector', () => {
       const connection = await connector.connect(new AbortController().signal);
       try {
         // The first connection is to lock.sock, and the second to the leader's pipe.
-        await t.waitFor(
+        await waitFor(
           () =>
             assert.equal(
               sockets[1]?.readyState,
               'open',
               'The follower must watch the leader',
             ),
-          { interval: 5, timeout: factTimeout },
+          { signal: t.signal },
         );
         const [toServer, toLeader] = sockets;
         assert.ok(toServer && toLeader);
@@ -189,29 +188,27 @@ describe('Electing connector', () => {
       const connecting = connector.connect(abort.signal);
       connecting.catch(() => {});
       // One connection to lock.sock, and one to the leader's pipe.
-      await t.waitFor(
+      await waitFor(
         () =>
           assert.ok(
             connects >= 2,
             'The process must greet the server and watch the leader',
           ),
-        { interval: 5, timeout: factTimeout },
+        { signal: t.signal },
       );
 
       // Act: the leader leaves, and its server still keeps the hello unanswered.
       await held.resign();
 
       // Assert
-      await t.waitFor(
-        () =>
-          assert.equal(
-            served.length,
-            1,
-            'The process must give up the unanswered hello and win the term',
-          ),
-        { interval: 5, timeout: factTimeout },
+      await assert.rejects(untilAborted(connecting, t.signal), {
+        name: 'AbortError',
+      });
+      assert.equal(
+        served.length,
+        1,
+        'The process must give up the unanswered hello and win the term',
       );
-      await assert.rejects(connecting, { name: 'AbortError' });
     } finally {
       unsubscribe('net.client.socket', onSocket);
       for (const term of served) await term.resign();
@@ -251,14 +248,14 @@ describe('Electing connector', () => {
     try {
       const connecting = connector.connect(abort.signal);
       connecting.catch(() => {});
-      await t.waitFor(
+      await waitFor(
         () =>
           assert.equal(
             clock.countTimers(),
             1,
             'The process must wait for a step of the back-off',
           ),
-        { interval: 5, timeout: factTimeout },
+        { signal: t.signal },
       );
       assert.equal(
         triedAt.length,
@@ -271,16 +268,14 @@ describe('Electing connector', () => {
       await clock.tickAsync(30);
 
       // Assert
-      await t.waitFor(
-        () =>
-          assert.equal(
-            served.length,
-            1,
-            'The process must win the term at its next try',
-          ),
-        { interval: 5, timeout: factTimeout },
+      await assert.rejects(untilAborted(connecting, t.signal), {
+        name: 'AbortError',
+      });
+      assert.equal(
+        served.length,
+        1,
+        'The process must win the term at its next try',
       );
-      await assert.rejects(connecting, { name: 'AbortError' });
       const [first, second, ...more] = triedAt;
       assert.ok(
         first !== undefined && second !== undefined && more.length === 0,

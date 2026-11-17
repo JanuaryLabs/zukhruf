@@ -12,7 +12,6 @@ import { test } from '@zukhruf/testing/node';
 
 import type { LockStore } from '../../mutex/lock-store.ts';
 import { Mutex } from '../../mutex/mutex.ts';
-import { factTimeout } from '../../testing/fact-timeout.ts';
 import { tokensThatFailOnce } from '../../testing/tokens-that-fail-once.ts';
 import { SqliteStore } from '../sqlite/sqlite-store.ts';
 import { LockFileStore } from './lock-file-store.ts';
@@ -315,7 +314,7 @@ describe('File lock stores on Windows', () => {
 describe('LockFileStore damaged lock file', () => {
   // Text that is not JSON, or JSON that names no caller.
   void test.each(['garbage', '{"pid":1}'], (damaged) =>
-    test(`a lock file that holds ${damaged} makes every call reject with a SyntaxError and stays as it is`, async () => {
+    test(`a lock file that holds ${damaged} makes every call reject with a SyntaxError and stays as it is`, async (t) => {
       // Arrange: a power loss in the middle of a write can leave such a file; no operation writes one.
       await using directory = await new TemporaryFiles().directory(
         'mutex-test-',
@@ -330,7 +329,7 @@ describe('LockFileStore damaged lock file', () => {
       // Act
       const calls = await Promise.allSettled([
         store.acquire('report-daily', {
-          signal: AbortSignal.timeout(factTimeout),
+          signal: t.signal,
         }),
         store.tryAcquire('report-daily'),
         store.isHeld('report-daily'),

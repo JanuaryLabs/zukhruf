@@ -7,12 +7,12 @@ import { type TestContext, describe, test } from 'node:test';
 
 import { createClock } from '@sinonjs/fake-timers';
 
-import type { Clock } from '@zukhruf/async';
+import { type Clock, untilAborted } from '@zukhruf/async';
 import { TemporaryFiles } from '@zukhruf/fs';
+import { waitFor } from '@zukhruf/testing/async';
+import { type WorkerProcess, startWorker } from '@zukhruf/testing/process';
 
 import { SqliteElection } from '../index.ts';
-import { factTimeout } from '../testing/fact-timeout.ts';
-import { type WorkerProcess, startWorker } from '../testing/worker-process.ts';
 
 const indexUrl = new URL('../index.ts', import.meta.url);
 
@@ -26,8 +26,8 @@ const electionIn = (directory: string, clock: Clock = globalThis) =>
   });
 
 /**
- * A process that campaigns with the given lease, reports the outcome, keeps
- * any term until killed, and answers each message with a pong of its id.
+ * A process that campaigns with the given lease until it wins, reports it,
+ * keeps the term until killed, and answers each message with a pong of its id.
  */
 const leaderSource = (
   directory: string,
@@ -42,8 +42,8 @@ const leaderSource = (
 		epochFile: 'term.epoch',
 		leaseDuration: ${leaseDuration},
 		heartbeatInterval: ${heartbeatInterval},
-	}).campaign({ timeout: ${factTimeout} });
-	process.send(term ? { type: 'leader' } : { type: 'follower' });
+	}).campaign({ timeout: Infinity });
+	process.send({ type: term ? 'leader' : 'follower' });
 `;
 
 /**
@@ -81,8 +81,8 @@ const forgetfulLeaderSource = (
 		epochFile: 'term.epoch',
 		leaseDuration: ${leaseDuration},
 		heartbeatInterval: ${heartbeatInterval},
-	}).campaign({ timeout: ${factTimeout} });
-	process.send(term ? { type: 'leader' } : { type: 'follower' });
+	}).campaign({ timeout: Infinity });
+	process.send({ type: term ? 'leader' : 'follower' });
 `;
 
 /**
@@ -133,53 +133,37 @@ const selfObserverSource = (directory: string) => `
  * so a killed leader's socket file goes with the replaced record. Copied in
  * sqlite-election.test.ts (docs/copied-code.md).
  */
-async function succeed(directory: string) {
+async function succeed(directory: string, signal: AbortSignal) {
   const successor = await electionIn(directory).campaign({
-    timeout: factTimeout,
+    timeout: Infinity,
+    signal,
   });
   assert.ok(successor, 'A successor must win once the last leader ended');
   await successor.resign();
-}
-
-async function reported(t: TestContext, worker: WorkerProcess, type: string) {
-  await t.waitFor(
-    () =>
-      assert.ok(
-        worker.has(type),
-        `The process must report ${type}.\n${worker.stderr}`,
-      ),
-    { interval: 5, timeout: factTimeout },
-  );
 }
 
 /** Resolves when the process answers a message: it runs, and nobody ended it. */
 async function answers(t: TestContext, worker: WorkerProcess) {
   const id = randomUUID();
   worker.child.send({ id });
-  await reported(t, worker, `pong ${id}`);
+  await worker.next(`pong ${id}`, { signal: t.signal });
 }
 
-/** Records when `running` settles, so a test can wait for it with `t.waitFor`. */
+/** Records how `running` settles, and `done` resolves when it has. */
 function track<T>(running: Promise<T>) {
-  const state: { settled: boolean; value?: T; error?: unknown } = {
+  const state: {
+    settled: boolean;
+    value?: T;
+    error?: unknown;
+    done: Promise<unknown>;
+  } = {
     settled: false,
+    done: running.then(
+      (value) => Object.assign(state, { settled: true, value }),
+      (error: unknown) => Object.assign(state, { settled: true, error }),
+    ),
   };
-  running.then(
-    (value) => Object.assign(state, { settled: true, value }),
-    (error: unknown) => Object.assign(state, { settled: true, error }),
-  );
   return state;
-}
-
-async function settledIn(
-  t: TestContext,
-  state: { settled: boolean },
-  what: string,
-) {
-  await t.waitFor(() => assert.ok(state.settled, what), {
-    interval: 5,
-    timeout: factTimeout,
-  });
 }
 
 /**
@@ -192,9 +176,8 @@ async function waitingOnOneTimer(
   t: TestContext,
   clock: { countTimers(): number },
 ) {
-  await t.waitFor(() => assert.equal(clock.countTimers(), 1), {
-    interval: 5,
-    timeout: factTimeout,
+  await waitFor(() => assert.equal(clock.countTimers(), 1), {
+    signal: t.signal,
   });
 }
 
@@ -221,7 +204,7 @@ describe('A candidate that waits on the leader of a SQLite election', () => {
       }),
       'leader',
     );
-    await reported(t, leader, 'leader');
+    await leader.next('leader', { signal: t.signal });
     const clock = createClock();
     const campaigning = track(
       electionIn(directory.path, clock).campaign({ timeout: Infinity }),
@@ -231,7 +214,7 @@ describe('A candidate that waits on the leader of a SQLite election', () => {
     // Act
     leader.child.kill('SIGKILL');
     await leader.closed;
-    await settledIn(t, campaigning, 'The candidate must win after the kill');
+    await untilAborted(campaigning.done, t.signal);
 
     // Assert
     await using successor = campaigning.value;
@@ -254,7 +237,7 @@ describe('A candidate that waits on the leader of a SQLite election', () => {
         }),
         'leader',
       );
-      await reported(t, leader, 'leader');
+      await leader.next('leader', { signal: t.signal });
       leader.child.kill('SIGSTOP');
       const clock = createClock();
       const campaigning = track(
@@ -264,8 +247,8 @@ describe('A candidate that waits on the leader of a SQLite election', () => {
 
       // Act
       await clock.tickAsync(300);
-      await settledIn(t, track(leader.closed), 'The leader must be ended');
-      await settledIn(t, campaigning, 'The candidate must win after the kill');
+      await untilAborted(leader.closed, t.signal);
+      await untilAborted(campaigning.done, t.signal);
 
       // Assert
       await using successor = campaigning.value;
@@ -288,7 +271,7 @@ describe('A candidate that waits on the leader of a SQLite election', () => {
       'leader',
     );
     try {
-      await reported(t, leader, 'leader');
+      await leader.next('leader', { signal: t.signal });
 
       // Act
       const outcome = await electionIn(directory.path).campaign({
@@ -300,7 +283,7 @@ describe('A candidate that waits on the leader of a SQLite election', () => {
       await answers(t, leader);
     } finally {
       await leader[Symbol.asyncDispose]();
-      await succeed(directory.path);
+      await succeed(directory.path, t.signal);
     }
   });
 
@@ -321,12 +304,12 @@ describe('A candidate that waits on the leader of a SQLite election', () => {
       }),
       'dead',
     );
-    await reported(t, dead, 'leader');
+    await dead.next('leader', { signal: t.signal });
     dead.child.kill('SIGKILL');
     await dead.closed;
     const holder = startWorker(publishedLeaderSource(directory.path), 'holder');
     try {
-      await reported(t, holder, 'holding');
+      await holder.next('holding', { signal: t.signal });
       const record = JSON.parse(await readFile(recordPath, 'utf8'));
       await writeFile(
         recordPath,
@@ -340,12 +323,11 @@ describe('A candidate that waits on the leader of a SQLite election', () => {
         electionIn(directory.path, clock).campaign({ timeout: 5_000 }),
       );
       // The deadline of the campaign and the first wait of its back-off.
-      await t.waitFor(() => assert.equal(clock.countTimers(), 2), {
-        interval: 5,
-        timeout: factTimeout,
+      await waitFor(() => assert.equal(clock.countTimers(), 2), {
+        signal: t.signal,
       });
       await clock.tickAsync(5_000);
-      await settledIn(t, campaigning, 'The campaign must end at its timeout');
+      await untilAborted(campaigning.done, t.signal);
 
       // Assert
       assert.equal(await observer.left, 'absent');
@@ -354,7 +336,7 @@ describe('A candidate that waits on the leader of a SQLite election', () => {
       await answers(t, holder);
     } finally {
       await holder[Symbol.asyncDispose]();
-      await succeed(directory.path);
+      await succeed(directory.path, t.signal);
     }
   });
 
@@ -367,7 +349,7 @@ describe('A candidate that waits on the leader of a SQLite election', () => {
       publishedLeaderSource(directory.path),
       'holder',
     );
-    await reported(t, holder, 'holding');
+    await holder.next('holding', { signal: t.signal });
     const clock = createClock();
     const campaigning = track(
       electionIn(directory.path, clock).campaign({ timeout: Infinity }),
@@ -385,11 +367,7 @@ describe('A candidate that waits on the leader of a SQLite election', () => {
     await holder.closed;
     await waitingOnOneTimer(t, clock);
     await clock.nextAsync();
-    await settledIn(
-      t,
-      campaigning,
-      'The candidate must win after the holder ends',
-    );
+    await untilAborted(campaigning.done, t.signal);
 
     // Assert
     await using successor = campaigning.value;
@@ -423,16 +401,15 @@ describe('A candidate that waits on the leader of a SQLite election', () => {
     const campaigning = track(
       electionIn(directory.path, clock).campaign({ timeout: 1_000 }),
     );
-    await t.waitFor(() => assert.equal(clock.countTimers(), 2), {
-      interval: 5,
-      timeout: factTimeout,
+    await waitFor(() => assert.equal(clock.countTimers(), 2), {
+      signal: t.signal,
     });
 
     // Act
     await clock.tickAsync(999);
     const settledEarly = campaigning.settled;
     await clock.tickAsync(1);
-    await settledIn(t, campaigning, 'The campaign must end at its timeout');
+    await untilAborted(campaigning.done, t.signal);
 
     // Assert
     assert.equal(settledEarly, false, 'The campaign ended before its timeout');
@@ -455,7 +432,7 @@ describe('A candidate that waits on the leader of a SQLite election', () => {
 
     // Act
     await first.resign();
-    await settledIn(t, campaigning, 'The candidate must win after the resign');
+    await untilAborted(campaigning.done, t.signal);
 
     // Assert
     await using successor = campaigning.value;
@@ -483,7 +460,7 @@ describe('A candidate that waits on the leader of a SQLite election', () => {
 
     // Act
     stop.abort(reason);
-    await settledIn(t, campaigning, 'The campaign must stop at the abort');
+    await untilAborted(campaigning.done, t.signal);
 
     // Assert
     assert.equal(campaigning.error, reason);
@@ -515,19 +492,16 @@ describe('The leader of a SQLite election', () => {
 
     try {
       // Act
-      await t.waitFor(() => assert.equal(received(), 1), {
-        interval: 5,
-        timeout: factTimeout,
+      await waitFor(() => assert.equal(received(), 1), {
+        signal: t.signal,
       });
       await clock.tickAsync(100);
-      await t.waitFor(() => assert.equal(received(), 2), {
-        interval: 5,
-        timeout: factTimeout,
+      await waitFor(() => assert.equal(received(), 2), {
+        signal: t.signal,
       });
       await clock.tickAsync(100);
-      await t.waitFor(() => assert.equal(received(), 3), {
-        interval: 5,
-        timeout: factTimeout,
+      await waitFor(() => assert.equal(received(), 3), {
+        signal: t.signal,
       });
 
       // Assert
@@ -558,7 +532,7 @@ describe('The leader of a SQLite election', () => {
       'leader',
     );
     try {
-      await reported(t, leader, 'leader');
+      await leader.next('leader', { signal: t.signal });
       using observer = electionIn(directory.path).observe();
       const left = track(observer.left);
       const record = JSON.parse(
@@ -571,13 +545,13 @@ describe('The leader of a SQLite election', () => {
 
       try {
         // Act: 30 heartbeats span 1450 ms, past the lease duration of 1000 ms.
-        await t.waitFor(
+        await waitFor(
           () =>
             assert.ok(
               received() >= 30,
               `The leader sent ${received()} heartbeats.\n${leader.stderr}`,
             ),
-          { interval: 5, timeout: factTimeout },
+          { signal: t.signal },
         );
 
         // Assert
@@ -588,7 +562,7 @@ describe('The leader of a SQLite election', () => {
       }
     } finally {
       await leader[Symbol.asyncDispose]();
-      await succeed(directory.path);
+      await succeed(directory.path, t.signal);
     }
   });
 
@@ -607,7 +581,7 @@ describe('The leader of a SQLite election', () => {
         }),
         'leader',
       );
-      await reported(t, leader, 'leader');
+      await leader.next('leader', { signal: t.signal });
       const { address } = JSON.parse(
         await readFile(join(directory.path, 'term.lock.leader'), 'utf8'),
       );
@@ -616,7 +590,7 @@ describe('The leader of a SQLite election', () => {
       await access(address);
 
       // Act
-      await succeed(directory.path);
+      await succeed(directory.path, t.signal);
 
       // Assert
       await assert.rejects(access(address), { code: 'ENOENT' });
@@ -638,7 +612,7 @@ describe('The leader of a SQLite election', () => {
         }),
         'leader',
       );
-      await reported(t, leader, 'leader');
+      await leader.next('leader', { signal: t.signal });
       const { address } = JSON.parse(
         await readFile(join(directory.path, 'term.lock.leader'), 'utf8'),
       );
@@ -715,7 +689,7 @@ describe('An observer of a SQLite election', () => {
       }),
       'leader',
     );
-    await reported(t, leader, 'leader');
+    await leader.next('leader', { signal: t.signal });
     const clock = createClock();
     using observer = electionIn(directory.path, clock).observe();
     await waitingOnOneTimer(t, clock);
@@ -726,7 +700,7 @@ describe('An observer of a SQLite election', () => {
     // Assert
     assert.equal(await observer.left, 'closed');
     await leader.closed;
-    await succeed(directory.path);
+    await succeed(directory.path, t.signal);
   });
 
   test(
@@ -744,7 +718,7 @@ describe('An observer of a SQLite election', () => {
         }),
         'leader',
       );
-      await reported(t, leader, 'leader');
+      await leader.next('leader', { signal: t.signal });
       leader.child.kill('SIGSTOP');
       const clock = createClock();
       using observer = electionIn(directory.path, clock).observe();
@@ -755,9 +729,9 @@ describe('An observer of a SQLite election', () => {
 
       // Assert
       assert.equal(await observer.left, 'ended');
-      await settledIn(t, track(leader.closed), 'The leader must be ended');
+      await untilAborted(leader.closed, t.signal);
       assert.equal(leader.child.signalCode, 'SIGKILL');
-      await succeed(directory.path);
+      await succeed(directory.path, t.signal);
     },
   );
 
@@ -769,11 +743,11 @@ describe('An observer of a SQLite election', () => {
     const worker = startWorker(selfObserverSource(directory.path), 'worker');
     try {
       // Act
-      await reported(t, worker, 'ticked');
+      await worker.next('ticked', { signal: t.signal });
 
       // Assert
       await answers(t, worker);
-      await reported(t, worker, 'left unsettled');
+      await worker.next('left unsettled', { signal: t.signal });
       assert.equal(
         worker.find('ticked')?.timers,
         0,
@@ -781,7 +755,7 @@ describe('An observer of a SQLite election', () => {
       );
     } finally {
       await worker[Symbol.asyncDispose]();
-      await succeed(directory.path);
+      await succeed(directory.path, t.signal);
     }
   });
 
@@ -814,7 +788,7 @@ describe('An observer of a SQLite election', () => {
         'leader',
       );
       try {
-        await reported(t, leader, 'leader');
+        await leader.next('leader', { signal: t.signal });
         leader.child.kill('SIGSTOP');
         const clock = createClock();
         const observer = electionIn(directory.path, clock).observe();
@@ -831,7 +805,7 @@ describe('An observer of a SQLite election', () => {
         assert.equal(left.settled, false);
       } finally {
         await leader[Symbol.asyncDispose]();
-        await succeed(directory.path);
+        await succeed(directory.path, t.signal);
       }
     },
   );

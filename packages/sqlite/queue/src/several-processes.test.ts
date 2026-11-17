@@ -7,8 +7,9 @@ import { describe, it } from 'node:test';
 
 import { TestClock, type WorkOptions } from 'pg-boss';
 
+import { untilAborted } from '@zukhruf/async';
 import { TemporaryFiles } from '@zukhruf/fs';
-import { settleWithin } from '@zukhruf/testing/async';
+import { waitFor } from '@zukhruf/testing/async';
 
 import { SqliteJobQueue } from './index.ts';
 import { id } from './testing/job-id.ts';
@@ -25,6 +26,7 @@ function startWorker(
   options: WorkOptions,
   handler: 'complete' | 'hold',
   onJob: (jobId: string) => void,
+  signal: AbortSignal,
 ) {
   const source = `
     import { createInterface } from 'node:readline';
@@ -57,7 +59,7 @@ function startWorker(
     else onJob(line);
   });
   return {
-    ready: () => settleWithin(ready.promise, 'a worker process opens', 10_000),
+    ready: () => untilAborted(ready.promise, signal),
     work() {
       child.stdin.write('work\n');
     },
@@ -65,15 +67,11 @@ function startWorker(
     // jobs, only says that it read all its input.
     async idle() {
       child.stdin.end();
-      await settleWithin(idle.promise, 'a worker process is idle', 10_000);
+      await untilAborted(idle.promise, signal);
     },
     // The exit code, once the process ends by itself.
     async exit() {
-      const [code] = await settleWithin(
-        exited,
-        'a worker process exits',
-        10_000,
-      );
+      const [code] = await untilAborted(exited, signal);
       return code;
     },
     async [Symbol.asyncDispose]() {
@@ -88,7 +86,7 @@ function startWorker(
 // claim (node_modules/pg-boss/dist/plans.js:1885). pg-boss needs a server for
 // a second process, so the parity suite has one process on each side.
 describe('several processes on one queue file', () => {
-  it('run each job one time', async () => {
+  it('run each job one time', async (t) => {
     await using dir = await new TemporaryFiles().directory('sqlite-queue-');
     const path = join(dir.path, 'queue.db');
     const workerQueue = { path, name: 'jobs', useListenNotify: false };
@@ -110,14 +108,32 @@ describe('several processes on one queue file', () => {
       if (new Set(runs).size === ids.length) allRan.resolve();
     };
     const options = { batchSize: 5, burstWhenBatchFull: true };
-    await using first = startWorker(workerQueue, options, 'complete', onJob);
-    await using second = startWorker(workerQueue, options, 'complete', onJob);
-    await using third = startWorker(workerQueue, options, 'complete', onJob);
+    await using first = startWorker(
+      workerQueue,
+      options,
+      'complete',
+      onJob,
+      t.signal,
+    );
+    await using second = startWorker(
+      workerQueue,
+      options,
+      'complete',
+      onJob,
+      t.signal,
+    );
+    await using third = startWorker(
+      workerQueue,
+      options,
+      'complete',
+      onJob,
+      t.signal,
+    );
     const workers = [first, second, third];
     await Promise.all(workers.map((worker) => worker.ready()));
 
     for (const worker of workers) worker.work();
-    await settleWithin(allRan.promise, 'each job runs', 10_000);
+    await untilAborted(allRan.promise, t.signal);
     await Promise.all(workers.map((worker) => worker.idle()));
 
     assert.deepEqual(
@@ -128,7 +144,7 @@ describe('several processes on one queue file', () => {
     assert.deepEqual(runs.toSorted(), ids);
   });
 
-  it('never run more jobs of a group than groupConcurrency', async () => {
+  it('never run more jobs of a group than groupConcurrency', async (t) => {
     await using dir = await new TemporaryFiles().directory('sqlite-queue-');
     const path = join(dir.path, 'queue.db');
     const workerQueue = { path, name: 'jobs', useListenNotify: false };
@@ -175,14 +191,32 @@ describe('several processes on one queue file', () => {
       minPriority: priority,
       maxPriority: priority,
     });
-    await using first = startWorker(workerQueue, options(1), 'hold', onJob);
-    await using second = startWorker(workerQueue, options(2), 'hold', onJob);
-    await using third = startWorker(workerQueue, options(3), 'hold', onJob);
+    await using first = startWorker(
+      workerQueue,
+      options(1),
+      'hold',
+      onJob,
+      t.signal,
+    );
+    await using second = startWorker(
+      workerQueue,
+      options(2),
+      'hold',
+      onJob,
+      t.signal,
+    );
+    await using third = startWorker(
+      workerQueue,
+      options(3),
+      'hold',
+      onJob,
+      t.signal,
+    );
     const workers = [first, second, third];
     await Promise.all(workers.map((worker) => worker.ready()));
 
     for (const worker of workers) worker.work();
-    await settleWithin(allFull.promise, 'each group is full', 10_000);
+    await untilAborted(allFull.promise, t.signal);
     await Promise.all(workers.map((worker) => worker.idle()));
 
     assert.deepEqual(
@@ -206,12 +240,16 @@ describe('several processes on one queue file', () => {
     }
     const claimed = Promise.withResolvers<void>();
     {
-      await using owner = startWorker(workerQueue, {}, 'hold', () =>
-        claimed.resolve(),
+      await using owner = startWorker(
+        workerQueue,
+        {},
+        'hold',
+        () => claimed.resolve(),
+        t.signal,
       );
       await owner.ready();
       owner.work();
-      await settleWithin(claimed.promise, 'the process runs the job', 10_000);
+      await untilAborted(claimed.promise, t.signal);
     }
     // The process that stays has a clock of its own, which starts at the
     // real time and which the test moves, so the test does not wait 10 real
@@ -237,9 +275,9 @@ describe('several processes on one queue file', () => {
       // last one.
       await clock.tick(120_000);
 
-      await t.waitFor(
+      await waitFor(
         () => assert.deepEqual(runs, [{ id: id(1), retryCount: 1 }]),
-        { interval: 5, timeout: 10_000 },
+        { signal: t.signal, interval: 5 },
       );
     } finally {
       await survivor.stop();
@@ -250,9 +288,11 @@ describe('several processes on one queue file', () => {
   // due now sends a pg_notify on a notify queue, whether or not the sender
   // listens (manager.js:1132-1134). Each listener on the schema then wakes
   // the workers of the queue that the payload names (notifier.js:57,
-  // manager.js:1137-1143), before their poll. The poll here is 60 seconds,
-  // also when the queue does not listen (attorney.js:587, 601).
-  it('wake the workers of each process that listens, when another process sends to a notify queue', async () => {
+  // manager.js:1137-1143), before their poll. The poll here is an hour, also
+  // when the queue does not listen (attorney.js:587, 601): longer than the
+  // test runner lets a test run (--test-timeout), so only the notification
+  // can run the second job of each queue before the test ends.
+  it('wake the workers of each process that listens, when another process sends to a notify queue', async (t) => {
     await using dir = await new TemporaryFiles().directory('sqlite-queue-');
     const path = join(dir.path, 'queue.db');
     const sender = new SqliteJobQueue(path);
@@ -276,33 +316,27 @@ describe('several processes on one queue file', () => {
       };
       await using first = startWorker(
         { path, name: 'first', useListenNotify: true },
-        { pollingIntervalSeconds: 60 },
+        { pollingIntervalSeconds: 3600 },
         'complete',
         onJob,
+        t.signal,
       );
       await using second = startWorker(
         { path, name: 'second', useListenNotify: true },
-        { pollingIntervalSeconds: 60 },
+        { pollingIntervalSeconds: 3600 },
         'complete',
         onJob,
+        t.signal,
       );
       await Promise.all([first.ready(), second.ready()]);
       first.work();
       second.work();
-      await settleWithin(
-        Promise.all([runOf(1), runOf(2)]),
-        'each process runs its first job',
-        10_000,
-      );
+      await untilAborted(Promise.all([runOf(1), runOf(2)]), t.signal);
 
       await sender.send('first', null, { id: id(3) });
       await sender.send('second', null, { id: id(4) });
 
-      await settleWithin(
-        Promise.all([runOf(3), runOf(4)]),
-        'each process runs the job of the other process before its poll of 60 seconds',
-        10_000,
-      );
+      await untilAborted(Promise.all([runOf(3), runOf(4)]), t.signal);
     } finally {
       await sender.stop();
     }
@@ -310,7 +344,7 @@ describe('several processes on one queue file', () => {
 
   // pg-boss's stop() closes its listener (index.js:228, notifier.js:70-77):
   // the program that stopped its queue ends by itself.
-  it('let a process that listened end by itself after it stops its queue', async () => {
+  it('let a process that listened end by itself after it stops its queue', async (t) => {
     await using dir = await new TemporaryFiles().directory('sqlite-queue-');
     const path = join(dir.path, 'queue.db');
     await using worker = startWorker(
@@ -318,6 +352,7 @@ describe('several processes on one queue file', () => {
       {},
       'complete',
       () => {},
+      t.signal,
     );
     await worker.ready();
 

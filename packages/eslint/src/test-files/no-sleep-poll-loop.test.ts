@@ -7,7 +7,7 @@ test('no-sleep-poll-loop reports a loop that sleeps between checks', () => {
   typescriptRuleTester().run('no-sleep-poll-loop', rule, {
     valid: [
       {
-        code: `await t.waitFor(() => assert.ok(ready()), { interval: 10, timeout: 1000 });`,
+        code: `await waitFor(() => assert.ok(ready()), { signal: t.signal });`,
       },
       // A fixed pause outside a loop is a window, not a poll.
       { code: `await delay(5000);` },

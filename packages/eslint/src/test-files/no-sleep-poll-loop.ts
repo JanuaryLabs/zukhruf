@@ -59,10 +59,11 @@ function enclosingLoop(node: AstNode): AstNode | undefined {
 }
 
 /**
- * A loop that sleeps between checks is a hand-written `t.waitFor`: each copy
+ * A loop that sleeps between checks is a hand-written `waitFor`: each copy
  * picks its own interval and deadline, and most fail with "the condition never
- * held" instead of the check's own error. `t.waitFor` of node:test retries
- * until the check passes and fails with the last error. A `for await` loop
+ * held" instead of the check's own error. `waitFor` of `@zukhruf/testing/async`
+ * retries until the check passes, ends when `t.signal` aborts at the test's
+ * limit, and gives the last error of the check as the cause. A `for await` loop
  * and a timer awaited in a callback that the loop builds are not polls.
  */
 const rule: Rule.RuleModule = {
@@ -72,7 +73,7 @@ const rule: Rule.RuleModule = {
     schema: [],
     messages: {
       matched:
-        'Use t.waitFor(() => { assert… }, { interval, timeout }): it retries until the check passes and fails with the last error.',
+        "Use waitFor(() => { assert… }, { signal: t.signal }) from @zukhruf/testing/async: it retries until the check passes, ends at the test's limit, and gives the last error of the check.",
     },
   },
   create(context) {

@@ -5,14 +5,13 @@ import type { TestContext } from 'node:test';
 
 import { createClock } from '@sinonjs/fake-timers';
 
-import type { Clock } from '@zukhruf/async';
-import { settleWithin } from '@zukhruf/testing/async';
+import { type Clock, untilAborted } from '@zukhruf/async';
+import { waitFor } from '@zukhruf/testing/async';
 import { describe, test } from '@zukhruf/testing/node';
 
 import { LeaseLostError } from '../../index.ts';
 import type { LockStore } from '../../mutex/lock-store.ts';
 import { Mutex } from '../../mutex/mutex.ts';
-import { factTimeout } from '../fact-timeout.ts';
 import { hold } from '../hold.ts';
 import { uniqueKey } from './keys.ts';
 import type { Host, Subject } from './subject.ts';
@@ -101,15 +100,15 @@ export function leaseLoss<H extends Host>(
       const lost = assert.rejects(run, LeaseLostError);
       const lease = await holding.promise;
       // The next heartbeat waits one interval on the clock.
-      await t.waitFor(() => assert.equal(clock.countTimers(), 1), {
-        timeout: factTimeout,
+      await waitFor(() => assert.equal(clock.countTimers(), 1), {
+        signal: t.signal,
       });
 
       // Act: the heartbeat asks, and the partition holds the answer.
       await clock.tickAsync(partitionable.heartbeatInterval);
       // The time limit of the heartbeat waits on the clock.
-      await t.waitFor(() => assert.equal(clock.countTimers(), 1), {
-        timeout: factTimeout,
+      await waitFor(() => assert.equal(clock.countTimers(), 1), {
+        signal: t.signal,
       });
       const heldAfterOne = !lease.aborted;
       await clock.tickAsync(partitionable.heartbeatInterval);
@@ -136,7 +135,7 @@ export function sessions<H extends Host>(
   control: SessionControl,
 ): void {
   describe(`Sessions with ${store.name}`, () => {
-    test('a killed session loses its lease before the next heartbeat', async () => {
+    test('a killed session loses its lease before the next heartbeat', async (t) => {
       // Arrange: a heartbeat far longer than the wait, so only the end of the session can tell the holder.
       await using fixture = await store.fixture(process.env);
       await using watched = await control.watched(fixture.location, 60_000);
@@ -155,11 +154,8 @@ export function sessions<H extends Host>(
       );
 
       // Assert
-      const signal = await settleWithin(
-        lost.promise,
-        'the lease of a killed session to abort',
-        factTimeout,
-      );
+      // The lease of a killed session aborts.
+      const signal = await untilAborted(lost.promise, t.signal);
       assert.ok(
         signal.reason instanceof LeaseLostError,
         'A session that the server ended must abort the lease',
@@ -167,7 +163,7 @@ export function sessions<H extends Host>(
       await assert.rejects(run, LeaseLostError);
     });
 
-    test('a session that reconnects silently loses its lease', async () => {
+    test('a session that reconnects silently loses its lease', async (t) => {
       // Arrange: the holder's session hides the end of its connection and connects again.
       // The store sees the new connection only after another store took the key, and
       // a heartbeat interval longer than a reconnect and a take keeps its beat in time.
@@ -196,11 +192,8 @@ export function sessions<H extends Host>(
           'The reconnect itself must not lose the lease',
         );
         assert.ok(lease, 'The ended connection must have freed the key');
-        await settleWithin(
-          lost,
-          'the lease of a session that no longer holds the lock to abort',
-          factTimeout,
-        );
+        // The lease of a session that no longer holds the lock aborts.
+        await untilAborted(lost, t.signal);
         const reason: unknown = handle.signal.reason;
         assert.ok(reason instanceof LeaseLostError);
         assert.match(String(reason.cause), /no longer holds the lock/);
@@ -237,7 +230,7 @@ export function sessions<H extends Host>(
 
       // Assert
       assert.equal(
-        await settleWithin(next, 'the next waiter to get the key', factTimeout),
+        await untilAborted(next, t.signal),
         'granted',
         'A grant to a cancelled waiter must be released, so the next waiter gets the key',
       );
@@ -269,14 +262,7 @@ export function sessions<H extends Host>(
         cancel.abort(reason);
 
         // Assert
-        assert.equal(
-          await settleWithin(
-            outcome,
-            'the cancelled acquire to settle',
-            factTimeout,
-          ),
-          reason,
-        );
+        assert.equal(await untilAborted(outcome, t.signal), reason);
       } finally {
         await holder.release();
       }
@@ -338,11 +324,7 @@ export function pools<H extends Host>(
 
       // Assert: first the next acquire, because a cancel that keeps the only session never lets it settle.
       assert.equal(
-        await settleWithin(
-          next,
-          'the next acquire on the only session',
-          factTimeout,
-        ),
+        await untilAborted(next, t.signal),
         'ran',
         'A cancel must give back its turn and its session',
       );

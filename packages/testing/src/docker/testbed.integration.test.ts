@@ -13,6 +13,7 @@ import { ConnectionFailedError, Docker } from '@zukhruf/docker';
 import { TemporaryFiles } from '@zukhruf/fs';
 
 import { timebox } from '../async/index.ts';
+import { waitFor } from '../async/wait-for.ts';
 import { engine, proxyless } from '../testing/current-engine.ts';
 import { EngineProxy } from '../testing/engine-proxy.ts';
 import { library } from '../testing/global-setup-run.ts';
@@ -218,10 +219,10 @@ test('a served server whose readiness fails is removed, and the failure has the 
   assert.ok(Error.isError(failure));
   assert.deepEqual(failure.cause, new Error('not ready'));
   assert.equal(served.length, 1);
-  await t.waitFor(
+  await waitFor(
     async () =>
       assert.equal(await client.containers.find(served[0] ?? ''), undefined),
-    { timeout: 10_000 },
+    { signal: t.signal },
   );
 });
 
@@ -263,10 +264,10 @@ test('a served server whose container exits before it is ready is removed, and t
   assert.match(failure.message, new RegExp(`printed-${scope}`));
   assert.equal(failure.cause, readiness);
   assert.equal(served.length, 1);
-  await t.waitFor(
+  await waitFor(
     async () =>
       assert.equal(await client.containers.find(served[0] ?? ''), undefined),
-    { timeout: 10_000 },
+    { signal: t.signal },
   );
 });
 
@@ -441,13 +442,13 @@ test(
       await exited;
 
       // Assert
-      await t.waitFor(
+      await waitFor(
         () =>
           assert.deepEqual(
             ssh.filter((pid) => alive(pid)),
             [],
           ),
-        { timeout: 15_000, interval: 100 },
+        { signal: t.signal, interval: 100 },
       );
       await (
         await client.containers.find(String(line))

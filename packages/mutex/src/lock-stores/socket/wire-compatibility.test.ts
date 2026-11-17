@@ -7,16 +7,17 @@ import { join, resolve, win32 } from 'node:path';
 import { createInterface } from 'node:readline';
 import { describe } from 'node:test';
 
+import { Latch, untilAborted } from '@zukhruf/async';
 import { TemporaryFiles } from '@zukhruf/fs';
 import { UnchangedJournal, open } from '@zukhruf/sqlite-open';
+import { waitFor } from '@zukhruf/testing/async';
 import { test } from '@zukhruf/testing/node';
+import { startWorker } from '@zukhruf/testing/process';
 
 import { Mutex } from '../../index.ts';
-import { factTimeout } from '../../testing/fact-timeout.ts';
 import { onUnixSockets } from '../../testing/on-unix-sockets.ts';
 import { taskOutcome } from '../../testing/outcome.ts';
 import { standInServer } from '../../testing/stand-in-server.ts';
-import { startWorker } from '../../testing/worker-process.ts';
 import { ProtocolVersionError, type SocketRole, SocketStore } from './index.ts';
 
 // Every process of every published version that shares a directory meets the
@@ -68,10 +69,10 @@ async function publishedPeer(directory: string, bytes: string) {
   const socket = connect(join(directory, 'lock.sock'));
   socket.on('error', () => {});
   let received = '';
-  let closed = false;
+  const closed = new Latch();
   socket.setEncoding('utf8');
   socket.on('data', (chunk: string) => (received += chunk));
-  socket.once('close', () => (closed = true));
+  socket.once('close', () => closed.open());
   await once(socket, 'connect');
   socket.write(bytes);
   return {
@@ -79,9 +80,8 @@ async function publishedPeer(directory: string, bytes: string) {
     get received() {
       return received;
     },
-    get closed() {
-      return closed;
-    },
+    /** Opens when the leader hung up. */
+    closed,
     [Symbol.dispose]: () => socket.destroy(),
   };
 }
@@ -115,11 +115,11 @@ describe('What a socket store shares with other versions in its directory', () =
       store.on('role', (role) => roles.push(role));
       const mutex = new Mutex(store);
 
+      const limit = AbortSignal.timeout(300);
+
       // Act
       const whileHeld = await taskOutcome(
-        mutex.acquire('product:42', async () => {}, {
-          signal: AbortSignal.timeout(300),
-        }),
+        mutex.acquire('product:42', async () => {}, { signal: limit }),
       );
       const rolesWhileHeld = [...roles];
       term.release();
@@ -128,7 +128,7 @@ describe('What a socket store shares with other versions in its directory', () =
       );
 
       // Assert
-      assert.notEqual(whileHeld, 'granted', 'The store led beside the term');
+      assert.equal(whileHeld, limit.reason, 'The store led beside the term');
       assert.deepEqual(rolesWhileHeld, []);
       assert.equal(afterRelease, 'granted');
       assert.deepEqual(roles, ['leader']);
@@ -250,13 +250,13 @@ describe('What a socket store shares with other versions in its directory', () =
         }),
       );
       // A release has no answer, so the store sends it without waiting.
-      await t.waitFor(
+      await waitFor(
         () =>
           assert.ok(
             requests.some(({ op }) => op === 'release'),
             `Requests: ${JSON.stringify(requests)}`,
           ),
-        { interval: 5, timeout: factTimeout },
+        { signal: t.signal },
       );
 
       // Assert
@@ -292,13 +292,13 @@ describe('What a socket store shares with other versions in its directory', () =
       );
 
       // Assert
-      await t.waitFor(
+      await waitFor(
         () =>
           assert.ok(
             follower.received.includes('\n'),
             `Got ${JSON.stringify(follower.received)}`,
           ),
-        { interval: 5, timeout: factTimeout },
+        { signal: t.signal },
       );
       assert.equal(follower.received, '{"op":"welcome"}\n');
     },
@@ -321,14 +321,8 @@ describe('What a socket store shares with other versions in its directory', () =
       );
 
       // Assert
-      await t.waitFor(
-        () =>
-          assert.ok(
-            other.closed,
-            `The leader must hang up; got ${JSON.stringify(other.received)}`,
-          ),
-        { interval: 5, timeout: factTimeout },
-      );
+      // The leader must hang up.
+      await untilAborted(other.closed.wait(), t.signal);
       assert.equal(other.received, '{"op":"refused","version":2}\n');
     },
   );
@@ -350,24 +344,24 @@ describe('What a socket store shares with other versions in its directory', () =
         directory.path,
         '{"op":"hello","version":2}\n{"op":"acquire","id":"a","key":"product:42"}\n',
       );
-      await t.waitFor(
+      await waitFor(
         () =>
           assert.ok(
             lines(follower.received) === 2,
             `Got ${JSON.stringify(follower.received)}`,
           ),
-        { interval: 5, timeout: factTimeout },
+        { signal: t.signal },
       );
       follower.socket.write(
         '{"op":"release","id":"a"}\n{"op":"acquire","id":"b","key":"product:42"}\n',
       );
-      await t.waitFor(
+      await waitFor(
         () =>
           assert.ok(
             lines(follower.received) === 3,
             `Got ${JSON.stringify(follower.received)}`,
           ),
-        { interval: 5, timeout: factTimeout },
+        { signal: t.signal },
       );
 
       // Assert
@@ -427,22 +421,16 @@ describe('What a socket store shares with other versions in its directory', () =
       // Act
       using tooLong = await publishedPeer(directory.path, `${helloOf(1025)}\n`);
       using longest = await publishedPeer(directory.path, `${helloOf(1024)}\n`);
-      await t.waitFor(
+      await waitFor(
         () =>
           assert.ok(
             longest.received.includes('\n'),
             `Got ${JSON.stringify(longest.received)}`,
           ),
-        { interval: 5, timeout: factTimeout },
+        { signal: t.signal },
       );
-      await t.waitFor(
-        () =>
-          assert.ok(
-            tooLong.closed,
-            `The leader must hang up; got ${JSON.stringify(tooLong.received)}`,
-          ),
-        { interval: 5, timeout: factTimeout },
-      );
+      // The leader must hang up.
+      await untilAborted(tooLong.closed.wait(), t.signal);
 
       // Assert
       assert.equal(longest.received, '{"op":"welcome"}\n');
@@ -548,16 +536,12 @@ describe('What a socket store shares with other versions on Windows', () => {
       'windows-follower',
       { nodeOptions: asOnWindows },
     );
-    await t.waitFor(
-      () =>
-        assert.ok(
-          follower.has('hello') ||
-            follower.has('role') ||
-            follower.exit !== null,
-          `No hello on ${pipe}. ${follower.stderr}`,
-        ),
-      { interval: 5, timeout: factTimeout },
-    );
+    // A hello, a role or an exit; the assertion below says which.
+    await follower
+      .next(({ type }) => type === 'hello' || type === 'role', {
+        signal: t.signal,
+      })
+      .catch(() => {});
 
     // Assert
     assert.equal(
@@ -595,14 +579,12 @@ describe('What a socket store shares with other versions on Windows', () => {
       'windows-leader',
       { nodeOptions: asOnWindows },
     );
-    await t.waitFor(
-      () =>
-        assert.ok(
-          leader.has('answer') || leader.has('failed') || leader.exit !== null,
-          `No answer on ${pipe}. ${leader.stderr}`,
-        ),
-      { interval: 5, timeout: factTimeout },
-    );
+    // An answer, a failure or an exit; the assertions below say which.
+    await leader
+      .next(({ type }) => type === 'answer' || type === 'failed', {
+        signal: t.signal,
+      })
+      .catch(() => {});
 
     // Assert
     assert.equal(leader.find('role')?.role, 'leader');

@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { delimiter, join } from 'node:path';
 import { describe, test } from 'node:test';
 
+import { poll } from '@zukhruf/async';
 import { TemporaryFiles } from '@zukhruf/fs';
 
 import { writeContextStore } from './testing/context-store-files.ts';
@@ -41,7 +42,7 @@ function scenarioEnvironment(standIn: string, home: string) {
 /** A scenario that connects to HOST, runs `body` with `docker`, and prints the JSON of its result. */
 const withClient = (body: string) => `
 import { Docker } from ${JSON.stringify(ENTRY)};
-const docker = await Docker.connect({ clock: globalThis, host: ${JSON.stringify(HOST)}, signal: AbortSignal.timeout(20_000) });
+const docker = await Docker.connect({ clock: globalThis, host: ${JSON.stringify(HOST)} });
 ${body}
 `;
 
@@ -51,14 +52,14 @@ describe('the connection helper of an ssh:// host', () => {
     {
       skip: posixOnly,
     },
-    async () => {
+    async (t) => {
       // Arrange
       await using home = await new TemporaryFiles().directory('docker-test-');
       await using standIn = await sshStandIn({ kind: 'permission-denied' });
       const scenario = `
 import { ConnectionFailedError, Docker } from ${JSON.stringify(ENTRY)};
 try {
-  await Docker.connect({ clock: globalThis, host: ${JSON.stringify(HOST)}, signal: AbortSignal.timeout(20_000) });
+  await Docker.connect({ clock: globalThis, host: ${JSON.stringify(HOST)} });
   console.log(JSON.stringify({ connected: true }));
 } catch (error) {
   console.log(JSON.stringify({
@@ -75,6 +76,7 @@ try {
       const result = await runScenario(
         scenario,
         scenarioEnvironment(standIn.path, home.path),
+        t.signal,
       );
 
       // Assert
@@ -93,7 +95,7 @@ try {
     {
       skip: posixOnly,
     },
-    async () => {
+    async (t) => {
       // Arrange
       await using home = await new TemporaryFiles().directory('docker-test-');
       await using engine = await fakeEngine({
@@ -130,6 +132,7 @@ await docker[Symbol.asyncDispose]();
         const result = await runScenario(
           scenario,
           scenarioEnvironment(standIn.path, home.path),
+          t.signal,
         );
 
         // Assert
@@ -159,7 +162,7 @@ await docker[Symbol.asyncDispose]();
     {
       skip: posixOnly,
     },
-    async () => {
+    async (t) => {
       // Arrange
       await using home = await new TemporaryFiles().directory('docker-test-');
       await using engine = await fakeEngine({
@@ -199,6 +202,7 @@ await docker[Symbol.asyncDispose]();
         const result = await runScenario(
           scenario,
           scenarioEnvironment(standIn.path, home.path),
+          t.signal,
         );
 
         // Assert
@@ -225,7 +229,7 @@ await docker[Symbol.asyncDispose]();
     {
       skip: posixOnly,
     },
-    async () => {
+    async (t) => {
       // Arrange
       await using home = await new TemporaryFiles().directory('docker-test-');
       const argvOf = async (host: string) => {
@@ -238,6 +242,7 @@ console.log('{}');
         await runScenario(
           scenario,
           scenarioEnvironment(standIn.path, home.path),
+          t.signal,
         );
         return (await standIn.runs()).map(({ argv }) => argv);
       };
@@ -265,7 +270,7 @@ console.log('{}');
     {
       skip: posixOnly,
     },
-    async () => {
+    async (t) => {
       // Arrange
       await using home = await new TemporaryFiles().directory('docker-test-');
       await using standIn = await sshStandIn({ kind: 'permission-denied' });
@@ -276,7 +281,11 @@ console.log('{}');
 `;
 
       // Act
-      await runScenario(scenario, scenarioEnvironment(standIn.path, home.path));
+      await runScenario(
+        scenario,
+        scenarioEnvironment(standIn.path, home.path),
+        t.signal,
+      );
 
       // Assert
       assert.deepEqual(
@@ -308,7 +317,7 @@ console.log('{}');
     {
       skip: posixOnly,
     },
-    async () => {
+    async (t) => {
       // Arrange
       await using home = await new TemporaryFiles().directory('docker-test-');
       await using standIn = await sshStandIn({ kind: 'permission-denied' });
@@ -325,7 +334,11 @@ console.log('{}');
 `;
 
       // Act
-      await runScenario(scenario, scenarioEnvironment(standIn.path, home.path));
+      await runScenario(
+        scenario,
+        scenarioEnvironment(standIn.path, home.path),
+        t.signal,
+      );
 
       // Assert
       assert.deepEqual(
@@ -358,7 +371,7 @@ console.log('{}');
     {
       skip: posixOnly,
     },
-    async () => {
+    async (t) => {
       // Arrange
       await using home = await new TemporaryFiles().directory('docker-test-');
       const argvOf = async (sshFlags: string[]) => {
@@ -371,6 +384,7 @@ console.log('{}');
         await runScenario(
           scenario,
           scenarioEnvironment(standIn.path, home.path),
+          t.signal,
         );
         return (await standIn.runs()).map(({ argv }) => argv);
       };
@@ -400,7 +414,7 @@ console.log('{}');
     {
       skip: posixOnly,
     },
-    async () => {
+    async (t) => {
       // Arrange
       await using home = await new TemporaryFiles().directory('docker-test-');
       const config = join(home.path, 'docker-config');
@@ -415,6 +429,7 @@ console.log('{}');
         await runScenario(
           scenario,
           scenarioEnvironment(standIn.path, home.path),
+          t.signal,
         );
         return (await standIn.runs()).map(({ argv }) => argv);
       };
@@ -457,7 +472,7 @@ console.log('{}');
     {
       skip: posixOnly,
     },
-    async () => {
+    async (t) => {
       // Arrange
       await using home = await new TemporaryFiles().directory('docker-test-');
       await using engine = await fakeEngine({
@@ -476,6 +491,7 @@ await docker[Symbol.asyncDispose]();
       const result = await runScenario(
         scenario,
         scenarioEnvironment(standIn.path, home.path),
+        t.signal,
       );
 
       // Assert
@@ -489,13 +505,13 @@ await docker[Symbol.asyncDispose]();
     {
       skip: posixOnly,
     },
-    async () => {
+    async (t) => {
       // Arrange
       await using home = await new TemporaryFiles().directory('docker-test-');
       const scenario = `
 import { ConnectionFailedError, Docker } from ${JSON.stringify(ENTRY)};
 try {
-  await Docker.connect({ clock: globalThis, host: ${JSON.stringify(HOST)}, signal: AbortSignal.timeout(20_000) });
+  await Docker.connect({ clock: globalThis, host: ${JSON.stringify(HOST)} });
   console.log(JSON.stringify({ connected: true }));
 } catch (error) {
   console.log(JSON.stringify({
@@ -508,10 +524,14 @@ try {
 `;
 
       // Act
-      const result = await runScenario(scenario, {
-        PATH: home.path,
-        HOME: home.path,
-      });
+      const result = await runScenario(
+        scenario,
+        {
+          PATH: home.path,
+          HOME: home.path,
+        },
+        t.signal,
+      );
 
       // Assert
       assert.deepEqual(
@@ -532,7 +552,7 @@ try {
     {
       skip: needsLocalEngine,
     },
-    async () => {
+    async (t) => {
       // Arrange
       await using home = await new TemporaryFiles().directory('docker-test-');
       await using standIn = await sshStandIn({
@@ -556,6 +576,7 @@ await docker[Symbol.asyncDispose]();
       const result = await runScenario(
         scenario,
         scenarioEnvironment(standIn.path, home.path),
+        t.signal,
       );
 
       // Assert
@@ -584,7 +605,7 @@ await docker[Symbol.asyncDispose]();
     {
       skip: needsLocalEngine,
     },
-    async () => {
+    async (t) => {
       // Arrange
       await using home = await new TemporaryFiles().directory('docker-test-');
       await using sequential = await sshStandIn({
@@ -605,6 +626,7 @@ await docker[Symbol.asyncDispose]();
 console.log('{}');
 `),
         scenarioEnvironment(sequential.path, home.path),
+        t.signal,
       );
       const together = await runScenario(
         withClient(`
@@ -613,6 +635,7 @@ await docker[Symbol.asyncDispose]();
 console.log('{}');
 `),
         scenarioEnvironment(concurrent.path, home.path),
+        t.signal,
       );
 
       // Assert
@@ -636,7 +659,7 @@ console.log('{}');
     {
       skip: needsLocalEngine,
     },
-    async () => {
+    async (t) => {
       // Arrange
       await using home = await new TemporaryFiles().directory('docker-test-');
       await using standIn = await sshStandIn({
@@ -656,6 +679,7 @@ console.log(JSON.stringify({ warnings }));
       const result = await runScenario(
         scenario,
         scenarioEnvironment(standIn.path, home.path),
+        t.signal,
       );
 
       // Assert
@@ -669,7 +693,7 @@ console.log(JSON.stringify({ warnings }));
     {
       skip: posixOnly,
     },
-    async () => {
+    async (t) => {
       // Arrange
       await using home = await new TemporaryFiles().directory('docker-test-');
       await using engine = await fakeEngine({
@@ -702,6 +726,7 @@ await docker[Symbol.asyncDispose]();
         const result = await runScenario(
           scenario,
           scenarioEnvironment(standIn.path, home.path),
+          t.signal,
         );
 
         // Assert
@@ -723,7 +748,7 @@ await docker[Symbol.asyncDispose]();
     {
       skip: posixOnly,
     },
-    async () => {
+    async (t) => {
       // Arrange
       await using home = await new TemporaryFiles().directory('docker-test-');
       await using engine = await fakeEngine({
@@ -759,6 +784,7 @@ await docker[Symbol.asyncDispose]();
         const result = await runScenario(
           scenario,
           scenarioEnvironment(standIn.path, home.path),
+          t.signal,
         );
 
         // Assert
@@ -780,7 +806,7 @@ await docker[Symbol.asyncDispose]();
     {
       skip: posixOnly,
     },
-    async () => {
+    async (t) => {
       // Arrange
       await using home = await new TemporaryFiles().directory('docker-test-');
       const event = `${JSON.stringify({
@@ -830,6 +856,7 @@ await docker[Symbol.asyncDispose]();
         const result = await runScenario(
           scenario,
           scenarioEnvironment(standIn.path, home.path),
+          t.signal,
         );
 
         // Assert
@@ -851,7 +878,7 @@ await docker[Symbol.asyncDispose]();
     {
       skip: needsLocalEngine,
     },
-    async () => {
+    async (t) => {
       // Arrange
       await using home = await new TemporaryFiles().directory('docker-test-');
       // The stand-in keeps running after its standard input ends, so only a kill ends it.
@@ -874,6 +901,7 @@ console.log(JSON.stringify({ started: pids.length, alive }));
         const result = await runScenario(
           scenario,
           scenarioEnvironment(standIn.path, home.path),
+          t.signal,
         );
 
         // Assert
@@ -911,7 +939,7 @@ console.log('connected');
       const result = await runScenario(
         scenario,
         scenarioEnvironment(standIn.path, home.path),
-        AbortSignal.timeout(15_000),
+        t.signal,
       );
 
       // Assert
@@ -920,10 +948,11 @@ console.log('connected');
       const pids = (await standIn.runs()).map(({ pid }) => pid);
       try {
         assert.equal(pids.length, 2);
-        await t.waitFor(() => assert.deepEqual(pids.filter(isAlive), []), {
-          interval: 20,
-          timeout: 10_000,
-        });
+        await poll(
+          async () => (pids.filter(isAlive).length === 0 ? true : undefined),
+          { signal: t.signal, clock: globalThis, interval: 20 },
+        );
+        assert.deepEqual(pids.filter(isAlive), []);
       } finally {
         for (const pid of pids.filter(isAlive)) process.kill(pid, 'SIGKILL');
       }
@@ -944,9 +973,9 @@ describe('an exec over an ssh:// host', () => {
     {
       skip: needsLocalEngine,
     },
-    async () => {
+    async (t) => {
       // Arrange
-      await using local = await connect(IMAGE);
+      await using local = await connect(IMAGE, t.signal);
       const run = randomUUID();
       await using home = await new TemporaryFiles().directory('docker-test-');
       await using standIn = await sshStandIn({
@@ -981,6 +1010,7 @@ await docker[Symbol.asyncDispose]();
         const result = await runScenario(
           scenario,
           scenarioEnvironment(standIn.path, home.path),
+          t.signal,
         );
 
         // Assert
@@ -1005,9 +1035,9 @@ await docker[Symbol.asyncDispose]();
     {
       skip: needsLocalEngine,
     },
-    async () => {
+    async (t) => {
       // Arrange
-      await using local = await connect(IMAGE);
+      await using local = await connect(IMAGE, t.signal);
       const run = randomUUID();
       await using home = await new TemporaryFiles().directory('docker-test-');
       await using standIn = await sshStandIn({
@@ -1042,6 +1072,7 @@ await docker[Symbol.asyncDispose]();
         const result = await runScenario(
           scenario,
           scenarioEnvironment(standIn.path, home.path),
+          t.signal,
         );
 
         // Assert
@@ -1061,9 +1092,9 @@ await docker[Symbol.asyncDispose]();
     {
       skip: needsLocalEngine,
     },
-    async () => {
+    async (t) => {
       // Arrange
-      await using local = await connect(IMAGE);
+      await using local = await connect(IMAGE, t.signal);
       const run = randomUUID();
       await using home = await new TemporaryFiles().directory('docker-test-');
       await using standIn = await sshStandIn({
@@ -1088,6 +1119,7 @@ await docker[Symbol.asyncDispose]();
         const result = await runScenario(
           scenario,
           scenarioEnvironment(standIn.path, home.path),
+          t.signal,
         );
 
         // Assert

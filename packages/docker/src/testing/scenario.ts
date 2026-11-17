@@ -12,12 +12,12 @@ export const ENTRY = new URL('../index.ts', import.meta.url).href;
 /**
  * Runs `source` as an ES module in its own Node process, with `env` as its
  * whole environment: the environment of the test process never reaches it.
- * The signal kills the process.
+ * The signal, such as `t.signal`, kills the process.
  */
 export async function runScenario(
   source: string,
   env: Record<string, string>,
-  signal: AbortSignal = AbortSignal.timeout(30_000),
+  signal: AbortSignal,
 ): Promise<ScenarioResult> {
   const child = spawn(
     process.execPath,

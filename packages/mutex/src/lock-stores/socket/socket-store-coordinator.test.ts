@@ -7,11 +7,12 @@ import { createInterface } from 'node:readline';
 import { type TestContext, describe } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 
+import { untilAborted } from '@zukhruf/async';
 import { TemporaryFiles } from '@zukhruf/fs';
+import { waitFor } from '@zukhruf/testing/async';
 import { test } from '@zukhruf/testing/node';
 
 import { isRecord } from '../../shared/is-record.ts';
-import { factTimeout } from '../../testing/fact-timeout.ts';
 import { grantedWithin } from '../../testing/granted-within.ts';
 import { settle } from '../../testing/timing.ts';
 import { SocketStore } from './index.ts';
@@ -88,15 +89,14 @@ async function rawPeer(t: TestContext, directory: string) {
   socket.on('error', () => {});
   await once(socket, 'connect');
   const received: Record<string, unknown>[] = [];
-  createInterface({ input: socket }).on('line', (line) => {
+  const reader = createInterface({ input: socket }).on('line', (line) => {
     const message: unknown = JSON.parse(line);
     received.push(isRecord(message) ? message : { line });
   });
+  const answered = once(reader, 'line');
   socket.write(`${JSON.stringify({ op: 'hello', version: 2 })}\n`);
-  await t.waitFor(
-    () => assert.ok(received.length > 0, 'The leader must answer the hello'),
-    { interval: 5, timeout: factTimeout },
-  );
+  // The leader must answer the hello.
+  await untilAborted(answered, t.signal);
   assert.equal(received.shift()?.op, 'welcome');
   const lines = (requests: unknown[]) =>
     requests.map((request) => `${JSON.stringify(request)}\n`).join('');
@@ -137,13 +137,13 @@ describe('A leader after a failover', () => {
       [],
       'Nothing may be granted during the grace window',
     );
-    await t.waitFor(
+    await waitFor(
       () =>
         assert.ok(
           waiter.received.some((response) => response.op === 'granted'),
           'The acquire must be granted once the grace window ends',
         ),
-      { interval: 5, timeout: factTimeout },
+      { signal: t.signal },
     );
   });
 
@@ -157,13 +157,13 @@ describe('A leader after a failover', () => {
     holder.send({ op: 'reassert', id: 'h', key: 'product:42', token: '7' });
 
     // Assert
-    await t.waitFor(
+    await waitFor(
       () =>
         assert.ok(
           holder.received.length > 0,
           'The leader must answer the reassert',
         ),
-      { interval: 5, timeout: factTimeout },
+      { signal: t.signal },
     );
     assert.deepEqual(holder.received, [{ op: 'rejected', id: 'h' }]);
   });
@@ -193,13 +193,13 @@ describe('A leader after a failover', () => {
       'The waiter was granted a key that a holder reasserted',
     );
     assert.equal(otherKey, 'granted', 'Other keys must not wait');
-    await t.waitFor(
+    await waitFor(
       () =>
         assert.ok(
           waiter.received[0]?.op === 'granted',
           'The waiter must get the key after the release',
         ),
-      { interval: 5, timeout: factTimeout },
+      { signal: t.signal },
     );
   });
 
@@ -213,13 +213,13 @@ describe('A leader after a failover', () => {
     older.send({ op: 'reassert', id: 'o', key: 'product:42', token: '5' });
     await delay(settle);
     newer.send({ op: 'reassert', id: 'n', key: 'product:42', token: '9' });
-    await t.waitFor(
+    await waitFor(
       () =>
         assert.ok(
           older.received.length > 0,
           'The older claim must be answered',
         ),
-      { interval: 5, timeout: factTimeout },
+      { signal: t.signal },
     );
     const olderAnswers = [...older.received];
     older.drop();
@@ -235,11 +235,8 @@ describe('A leader after a failover', () => {
       'The newer holder must still have the key',
     );
     newer.send({ op: 'release', id: 'n' });
-    assert.equal(
-      await grantedWithin(next, factTimeout),
-      'granted',
-      'The key must be free after the newer holder releases it',
-    );
+    // The key must be free after the newer holder releases it
+    await untilAborted(next, t.signal);
   });
 
   test('waiters that arrive during the grace window are granted in arrival order', async (t) => {
@@ -250,13 +247,13 @@ describe('A leader after a failover', () => {
     first.send({ op: 'acquire', id: 'f', key: 'product:42' });
     await delay(settle);
     second.send({ op: 'acquire', id: 's', key: 'product:42' });
-    await t.waitFor(
+    await waitFor(
       () =>
         assert.ok(
           first.received.length > 0,
           'The first waiter must be granted when the grace window ends',
         ),
-      { interval: 5, timeout: factTimeout },
+      { signal: t.signal },
     );
     await delay(settle);
     const secondBeforeRelease = [...second.received];
@@ -271,13 +268,13 @@ describe('A leader after a failover', () => {
       [],
       'The second waiter must wait for the first',
     );
-    await t.waitFor(
+    await waitFor(
       () =>
         assert.ok(
           second.received.some((response) => response.op === 'granted'),
           'The second waiter must be granted after the first releases',
         ),
-      { interval: 5, timeout: factTimeout },
+      { signal: t.signal },
     );
   });
 
@@ -290,10 +287,10 @@ describe('A leader after a failover', () => {
     peer.send({ op: 'try', id: 't', key: 'product:42' });
 
     // Assert: nothing is granted during the grace window, so the key counts as busy.
-    await t.waitFor(
+    await waitFor(
       () =>
         assert.ok(peer.received.length > 0, 'The leader must answer the try'),
-      { interval: 5, timeout: factTimeout },
+      { signal: t.signal },
     );
     assert.deepEqual(peer.received, [{ op: 'busy', id: 't' }]);
   });
@@ -308,10 +305,10 @@ describe('A leader after a failover', () => {
     peer.send({ op: 'try', id: 't', key: 'product:42' });
 
     // Assert
-    await t.waitFor(
+    await waitFor(
       () =>
         assert.ok(peer.received.length > 0, 'The leader must answer the try'),
-      { interval: 5, timeout: factTimeout },
+      { signal: t.signal },
     );
     assert.equal(peer.received[0]?.op, 'granted');
   });
@@ -367,11 +364,8 @@ describe('A leader after a failover', () => {
           'A holder that already let the key go must not be told it lost it',
         );
         newer.send({ op: 'release', id: 'newer' });
-        assert.equal(
-          await grantedWithin(waiter, factTimeout),
-          'granted',
-          'The key must be free after the newer holder releases it',
-        );
+        // The key must be free after the newer holder releases it
+        await untilAborted(waiter, t.signal);
       }),
   );
 
@@ -387,13 +381,13 @@ describe('A leader after a failover', () => {
 
     // Act: a stale holder from an older term reasserts the same key.
     stale.send({ op: 'reassert', id: 'stale', key: 'product:42', token: '5' });
-    await t.waitFor(
+    await waitFor(
       () =>
         assert.ok(
           stale.received.length > 0,
           'The stale claim must be answered',
         ),
-      { interval: 5, timeout: factTimeout },
+      { signal: t.signal },
     );
 
     // Assert: the highest token seen still decides, so the stale holder cannot take the key.
@@ -422,11 +416,8 @@ describe('Requests that a leader reads in one turn', () => {
       'A repeated reassert must not free a key its holder still has',
     );
     holder.send({ op: 'release', id: 'h' });
-    assert.equal(
-      await grantedWithin(waiter, factTimeout),
-      'granted',
-      'The key must be free after the holder releases it',
-    );
+    // The key must be free after the holder releases it
+    await untilAborted(waiter, t.signal);
   });
 
   test('of two claims for one key in one write, the newer outranks the older before it is registered', async (t) => {
@@ -449,11 +440,8 @@ describe('Requests that a leader reads in one turn', () => {
       'The newer claim must have the key after the grace window',
     );
     peer.send({ op: 'release', id: 'n' });
-    assert.equal(
-      await grantedWithin(waiter, factTimeout),
-      'granted',
-      'An outranked claim must not keep the key after the newer claim releases it',
-    );
+    // An outranked claim must not keep the key after the newer claim releases it
+    await untilAborted(waiter, t.signal);
     assert.deepEqual(peer.received, [{ op: 'rejected', id: 'o' }]);
   });
 
@@ -490,11 +478,8 @@ describe('Requests that a leader reads in one turn', () => {
     holder.leave({ op: 'reassert', id: 'h', key: 'product:42', token: '5' });
 
     // Assert: once the grace window ends, the key is free.
-    assert.equal(
-      await grantedWithin(scene.leader.acquire('product:42'), factTimeout),
-      'granted',
-      'A peer that left must not keep the key it reasserted',
-    );
+    // A peer that left must not keep the key it reasserted
+    await untilAborted(scene.leader.acquire('product:42'), t.signal);
   });
 
   test('a resent acquire is granted once, and its release frees the key', async (t) => {
@@ -507,13 +492,13 @@ describe('Requests that a leader reads in one turn', () => {
       { op: 'acquire', id: 'a', key: 'product:42' },
       { op: 'acquire', id: 'a', key: 'product:42' },
     );
-    await t.waitFor(
+    await waitFor(
       () =>
         assert.ok(
           peer.received.length > 0,
           'The first acquire must be granted',
         ),
-      { interval: 5, timeout: factTimeout },
+      { signal: t.signal },
     );
     peer.send({ op: 'release', id: 'a' });
     await delay(settle);
@@ -524,11 +509,8 @@ describe('Requests that a leader reads in one turn', () => {
       1,
       'The same request id must be granted only once',
     );
-    assert.equal(
-      await grantedWithin(scene.leader.acquire('product:42'), factTimeout),
-      'granted',
-      'Releasing the request must free the key for the next caller',
-    );
+    // Releasing the request must free the key for the next caller
+    await untilAborted(scene.leader.acquire('product:42'), t.signal);
   });
 
   test('a resent try is granted once, and its release frees the key', async (t) => {
@@ -541,10 +523,10 @@ describe('Requests that a leader reads in one turn', () => {
       { op: 'try', id: 't', key: 'product:42' },
       { op: 'try', id: 't', key: 'product:42' },
     );
-    await t.waitFor(
+    await waitFor(
       () =>
         assert.ok(peer.received.length > 0, 'The first try must be granted'),
-      { interval: 5, timeout: factTimeout },
+      { signal: t.signal },
     );
     peer.send({ op: 'release', id: 't' });
     await delay(settle);
@@ -555,11 +537,8 @@ describe('Requests that a leader reads in one turn', () => {
       ['granted'],
       'The same request id must be answered only once, with its grant',
     );
-    assert.equal(
-      await grantedWithin(scene.leader.acquire('product:42'), factTimeout),
-      'granted',
-      'Releasing the request must free the key for the next caller',
-    );
+    // Releasing the request must free the key for the next caller
+    await untilAborted(scene.leader.acquire('product:42'), t.signal);
   });
 });
 
@@ -578,11 +557,8 @@ describe('A peer that gives up or leaves', () => {
     await holder[Symbol.asyncDispose]();
 
     // Assert: the key does not go to the peer that left.
-    assert.equal(
-      await grantedWithin(scene.leader.acquire('product:42'), factTimeout),
-      'granted',
-      'A peer that left must not keep the key it waited for',
-    );
+    // A peer that left must not keep the key it waited for
+    await untilAborted(scene.leader.acquire('product:42'), t.signal);
   });
 
   test('a waiter that cancels does not keep the key from the callers after it, even if it never releases a late grant', async (t) => {
@@ -593,9 +569,9 @@ describe('A peer that gives up or leaves', () => {
     await using holder = await rawPeer(t, scene.directory);
     await using quitter = await rawPeer(t, scene.directory);
     holder.send({ op: 'acquire', id: 'h', key: 'product:42' });
-    await t.waitFor(
+    await waitFor(
       () => assert.ok(holder.received.length > 0, 'The holder must be granted'),
-      { interval: 5, timeout: factTimeout },
+      { signal: t.signal },
     );
     quitter.send(
       { op: 'acquire', id: 'q', key: 'product:42' },
@@ -607,10 +583,7 @@ describe('A peer that gives up or leaves', () => {
     holder.send({ op: 'release', id: 'h' });
 
     // Assert: the next caller gets the key, and the waiter that cancelled was never granted.
-    assert.equal(
-      await grantedWithin(scene.leader.acquire('product:42'), factTimeout),
-      'granted',
-    );
+    await untilAborted(scene.leader.acquire('product:42'), t.signal);
     assert.deepEqual(
       quitter.received,
       [],
@@ -625,13 +598,13 @@ describe('Requests a leader does not know, and looks', () => {
     await using scene = await firstLeader();
     await using peer = await rawPeer(t, scene.directory);
     peer.send({ op: 'acquire', id: 'a', key: 'product:42' });
-    await t.waitFor(
+    await waitFor(
       () =>
         assert.ok(
           peer.received.some((response) => response.op === 'granted'),
           'The peer must be granted the key',
         ),
-      { interval: 5, timeout: factTimeout },
+      { signal: t.signal },
     );
 
     // Act: JSON lines that are not requests (no record, no id, no op, neither, an op it does not know), then a look.
@@ -643,23 +616,23 @@ describe('Requests a leader does not know, and looks', () => {
       { op: 'renew', id: 'r' },
       { op: 'isHeld', id: 'look', key: 'product:42' },
     );
-    await t.waitFor(
+    await waitFor(
       () =>
         assert.ok(
           peer.received.some((response) => response.id === 'look'),
           'The leader must answer the look after the lines it cannot read',
         ),
-      { interval: 5, timeout: factTimeout },
+      { signal: t.signal },
     );
     // Asked after the look was answered, so an answer to any earlier line is in by now.
     peer.send({ op: 'isHeld', id: 'after', key: 'product:7' });
-    await t.waitFor(
+    await waitFor(
       () =>
         assert.ok(
           peer.received.some((response) => response.id === 'after'),
           'The leader must answer the second look',
         ),
-      { interval: 5, timeout: factTimeout },
+      { signal: t.signal },
     );
     const stillHeld = await scene.leader.isHeld('product:42');
 
@@ -686,13 +659,13 @@ describe('Requests a leader does not know, and looks', () => {
     );
     await delay(150);
     const duringGrace = [...looker.received];
-    await t.waitFor(
+    await waitFor(
       () =>
         assert.ok(
           looker.received.length === 2,
           'The looks must be answered once the grace window ends',
         ),
-      { interval: 5, timeout: factTimeout },
+      { signal: t.signal },
     );
 
     // Assert

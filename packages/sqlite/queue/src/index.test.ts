@@ -5,10 +5,11 @@ import { setImmediate } from 'node:timers/promises';
 
 import { type Job, TestClock } from 'pg-boss';
 
+import { untilAborted } from '@zukhruf/async';
 import { TemporaryFiles } from '@zukhruf/fs';
 import { type Notification, Notifications } from '@zukhruf/sqlite-notify';
 import { open } from '@zukhruf/sqlite-open';
-import { settleWithin } from '@zukhruf/testing/async';
+import { waitFor } from '@zukhruf/testing/async';
 
 import { SqliteJobQueue } from './index.ts';
 import { id } from './testing/job-id.ts';
@@ -130,14 +131,14 @@ describe('SqliteJobQueue', () => {
       handledJobs.push(...jobs);
     });
 
-    await t.waitFor(
+    await waitFor(
       async () => {
         const [job] = await queue.findJobs('chat-run', {
           id: jobId,
         });
         assert.equal(job?.state, 'completed');
       },
-      { interval: 5, timeout: 10_000 },
+      { signal: t.signal, interval: 5 },
     );
 
     assert.equal(handledJobs.length, 1);
@@ -165,9 +166,9 @@ describe('SqliteJobQueue', () => {
       assert.ok(jobId);
 
       await queue.work('jobs', {}, async () => {});
-      await t.waitFor(() => assert.notEqual(errors.length, 0), {
+      await waitFor(() => assert.notEqual(errors.length, 0), {
+        signal: t.signal,
         interval: 5,
-        timeout: 10_000,
       });
 
       const [job] = await queue.findJobs('jobs', { id: jobId });
@@ -198,9 +199,9 @@ describe('SqliteJobQueue', () => {
       assert.ok(jobId);
 
       await queue.work('jobs', {}, async () => {});
-      await t.waitFor(() => assert.notEqual(errors.length, 0), {
+      await waitFor(() => assert.notEqual(errors.length, 0), {
+        signal: t.signal,
         interval: 5,
-        timeout: 10_000,
       });
 
       const [job] = await queue.findJobs('jobs', { id: jobId });
@@ -343,9 +344,11 @@ describe('SqliteJobQueue', () => {
   // A pg-boss listener hears the NOTIFY of its own instance
   // (notifier.js:57). On a file the notification goes through
   // @zukhruf/sqlite-notify, and the instance that sent it hears it too,
-  // before its poll. The poll here is 60 seconds, also when the queue does
-  // not listen (attorney.js:587, 601).
-  it('wakes its own waiting worker when it sends to a notify queue on a file', async () => {
+  // before its poll. The poll here is an hour, also when the queue does not
+  // listen (attorney.js:587, 601): longer than the test runner lets a test run
+  // (--test-timeout), so only the notification can run the second job before
+  // the test ends.
+  it('wakes its own waiting worker when it sends to a notify queue on a file', async (t) => {
     await using dir = await new TemporaryFiles().directory('sqlite-queue-');
     const queue = new SqliteJobQueue({
       path: join(dir.path, 'queue.db'),
@@ -358,21 +361,21 @@ describe('SqliteJobQueue', () => {
       await queue.send('jobs', null, { id: id(1) });
       const first = Promise.withResolvers<void>();
       const second = Promise.withResolvers<void>();
-      await queue.work('jobs', { pollingIntervalSeconds: 60 }, async (jobs) => {
-        for (const job of jobs) {
-          if (job.id === id(1)) first.resolve();
-          if (job.id === id(2)) second.resolve();
-        }
-      });
-      await settleWithin(first.promise, 'the first job runs', 10_000);
+      await queue.work(
+        'jobs',
+        { pollingIntervalSeconds: 3600 },
+        async (jobs) => {
+          for (const job of jobs) {
+            if (job.id === id(1)) first.resolve();
+            if (job.id === id(2)) second.resolve();
+          }
+        },
+      );
+      await untilAborted(first.promise, t.signal);
 
       await queue.send('jobs', null, { id: id(2) });
 
-      await settleWithin(
-        second.promise,
-        'the second job runs before the poll of 60 seconds',
-        10_000,
-      );
+      await untilAborted(second.promise, t.signal);
     } finally {
       await queue.stop();
     }
@@ -382,7 +385,7 @@ describe('SqliteJobQueue', () => {
   // 'pgboss_' and 24 hex digits of the SHA-224 of the schema 'pgboss', and the
   // payload is the name of the queue. Another program on the file, which
   // listens on that channel, hears the send.
-  it("notifies pg-boss's channel with the queue name when it sends to a notify queue on a file", async () => {
+  it("notifies pg-boss's channel with the queue name when it sends to a notify queue on a file", async (t) => {
     await using dir = await new TemporaryFiles().directory('sqlite-queue-');
     const path = join(dir.path, 'queue.db');
     const queue = new SqliteJobQueue(path);
@@ -398,11 +401,7 @@ describe('SqliteJobQueue', () => {
 
       await queue.send('jobs', null, { id: id(1) });
 
-      const notification = await settleWithin(
-        heard.promise,
-        'the listener hears the send',
-        10_000,
-      );
+      const notification = await untilAborted(heard.promise, t.signal);
       assert.deepEqual(
         { channel: notification.channel, payload: notification.payload },
         { channel: 'pgboss_454650302e472074f72063fd', payload: 'jobs' },
@@ -432,9 +431,9 @@ describe('SqliteJobQueue', () => {
       await handlersReleased;
     });
 
-    await t.waitFor(() => assert.equal(activeJobs.length, 2), {
+    await waitFor(() => assert.equal(activeJobs.length, 2), {
+      signal: t.signal,
       interval: 5,
-      timeout: 10_000,
     });
     assert.deepEqual(
       activeJobs.map((job) => job.id).sort(),
@@ -442,12 +441,12 @@ describe('SqliteJobQueue', () => {
     );
 
     releaseHandlers();
-    await t.waitFor(
+    await waitFor(
       async () => {
         const jobs = await queue.findJobs('chat-run');
         assert.ok(jobs.every((job) => job.state === 'completed'));
       },
-      { interval: 5, timeout: 10_000 },
+      { signal: t.signal, interval: 5 },
     );
     await queue.stop({ graceful: true, close: true });
   });
@@ -470,17 +469,17 @@ describe('SqliteJobQueue', () => {
       throw new Error('handler failed');
     });
 
-    await t.waitFor(() => assert.equal(attempts, 1), {
+    await waitFor(() => assert.equal(attempts, 1), {
+      signal: t.signal,
       interval: 5,
-      timeout: 10_000,
     });
     await clock.tick(2000);
-    await t.waitFor(
+    await waitFor(
       async () => {
         const [job] = await queue.findJobs('automation-run', { id: jobId });
         assert.equal(job?.state, 'failed');
       },
-      { interval: 5, timeout: 10_000 },
+      { signal: t.signal, interval: 5 },
     );
     const [job] = await queue.findJobs('automation-run', { id: jobId });
 
@@ -514,14 +513,14 @@ describe('SqliteJobQueue', () => {
       await handlerBlocked;
     });
 
-    await t.waitFor(
+    await waitFor(
       async () => {
         const [job] = await queue.findJobs('chat-run', {
           id: jobId,
         });
         assert.equal(job?.state, 'active');
       },
-      { interval: 5, timeout: 10_000 },
+      { signal: t.signal, interval: 5 },
     );
 
     const inFlightJobs = await queue.findJobs('chat-run');

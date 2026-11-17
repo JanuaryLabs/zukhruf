@@ -114,10 +114,7 @@ The test helper `listening` is byte-identical in the two files. It connects to a
 
 ## Test helpers copied
 
-The tests start real processes, so this package also copies four helpers from `packages/mutex/src/testing`. They are not part of the package: the build leaves `src/testing` out.
-
-**`testing/fact-timeout.ts` → `testing/fact-timeout.ts`.**
-Copied without a change.
+The tests start real processes, so this package also copies two helpers from `packages/mutex/src/testing`. They are not part of the package: the build leaves `src/testing` out.
 
 **`testing/stand-in-server.ts` → `testing/stand-in-server.ts`.**
 Only its comment differs: it names a single flight, not a store.
@@ -125,12 +122,9 @@ Only its comment differs: it names a single flight, not a store.
 **`testing/succeed-last-leader.ts` → `testing/succeed-last-leader.ts`.**
 It wins and resigns a term of `flightElection`, not of `socketElection`. Its comment says coordinator and single flights. The tests that start caller processes dispose it after their processes, so the suite leaves no socket file of an election pipe in the temporary folder of the system.
 
-**`testing/worker-process.ts` → `testing/worker-process.ts`.**
-`startWorker` has no options: no `host` (it joins a child to the mutex's IPC coordinator) and no `nodeOptions`. The worker has no `exit` and no `find`. These tests use none of them.
+The temporary directory of the tests is not a copy: the tests use `TemporaryFiles` of `@zukhruf/fs`, with the prefix `flights-`. The worker process is not a copy either: the tests use `startWorker` of `@zukhruf/testing/process`, as the mutex and the election do. The tests keep no copy of `fact-timeout.ts`: a wait in a test ends at the limit of the test, `t.signal` (backlog #4205).
 
-The temporary directory of the tests is not a copy: the tests use `TemporaryFiles` of `@zukhruf/fs`, with the prefix `flights-`.
-
-These helpers do not belong in `@zukhruf/coordinator`. They stay copies, also in a third package: the election has a third copy, and [its ledger](../../election/docs/copied-code.md) records it. Only a test helper whose knowledge is in three or more repositories goes into `@zukhruf/testing` ([testing ADR 0016](../../testing/docs/adr/0016-a-test-helper-goes-into-an-area-when-three-repositories-have-its-knowledge-and-it-does-not-use-mock.md)). The knowledge of these helpers is only in this repository.
+These helpers do not belong in `@zukhruf/coordinator`. They stay copies. Only a test helper whose knowledge is in three or more repositories goes into `@zukhruf/testing` ([testing ADR 0016](../../testing/docs/adr/0016-a-test-helper-goes-into-an-area-when-three-repositories-have-its-knowledge-and-it-does-not-use-mock.md)). The knowledge of these helpers is only in this repository.
 
 ## Not copied
 

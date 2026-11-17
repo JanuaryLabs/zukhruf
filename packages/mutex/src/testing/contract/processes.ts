@@ -3,16 +3,17 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 
+import { untilAborted } from '@zukhruf/async';
 import { TemporaryFiles } from '@zukhruf/fs';
+import { waitFor } from '@zukhruf/testing/async';
 import { describe, test } from '@zukhruf/testing/node';
+import { startWorker } from '@zukhruf/testing/process';
 
 import { Mutex } from '../../mutex/mutex.ts';
-import { factTimeout } from '../fact-timeout.ts';
 import { hold } from '../hold.ts';
 import { modesUrl, mutexUrl } from '../module-urls.ts';
 import { settle } from '../timing.ts';
 import { watch } from '../watch.ts';
-import { startWorker } from '../worker-process.ts';
 import { label, longKey } from './keys.ts';
 import { childPrelude, holderSource, storeIn } from './peers.ts';
 import type { Host, SharedByProcesses, Subject } from './subject.ts';
@@ -43,14 +44,8 @@ export function processes<H extends Host>(
         'holder',
         { admit: (child) => sharing.admit(host, child) },
       );
-      await t.waitFor(
-        () =>
-          assert.ok(
-            holder.has('entered'),
-            `The holder process must enter its task.\n${holder.stderr}`,
-          ),
-        { interval: 5, timeout: factTimeout },
-      );
+      // The holder process must enter its task.
+      await holder.next('entered', { signal: t.signal });
       const mutex = new Mutex(host.store);
 
       // Act
@@ -60,9 +55,9 @@ export function processes<H extends Host>(
 
       // Assert: the store sees the end of the holder some time after its process closed.
       assert.equal(whileAlive, true);
-      await t.waitFor(
+      await waitFor(
         async () => assert.equal(await mutex.isHeld('report:daily'), false),
-        { interval: 5, timeout: factTimeout },
+        { signal: t.signal },
       );
     });
 
@@ -75,14 +70,8 @@ export function processes<H extends Host>(
         'holder',
         { admit: (child) => sharing.admit(host, child) },
       );
-      await t.waitFor(
-        () =>
-          assert.ok(
-            holder.has('entered'),
-            `The holder process must enter its task.\n${holder.stderr}`,
-          ),
-        { interval: 5, timeout: factTimeout },
-      );
+      // The holder process must enter its task.
+      await holder.next('entered', { signal: t.signal });
       holder.child.kill('SIGKILL');
       await holder.closed;
       const mutex = new Mutex(host.store);
@@ -120,14 +109,8 @@ export function processes<H extends Host>(
           'looker',
           { admit: (child) => sharing.admit(host, child) },
         );
-        await t.waitFor(
-          () =>
-            assert.ok(
-              looker.has('looked'),
-              `The child must report its look.\n${looker.stderr}`,
-            ),
-          { interval: 5, timeout: factTimeout },
-        );
+        // The child must report its look.
+        await looker.next('looked', { signal: t.signal });
 
         // Assert
         assert.equal(looker.find('looked')?.held, true);
@@ -194,49 +177,35 @@ export function processes<H extends Host>(
           admit: (child) => sharing.admit(host, child),
         });
         const stderr = () => first.stderr + second.stderr;
-        const waitFor = (condition: () => boolean, message: string) =>
-          t.waitFor(() => assert.ok(condition(), `${message}\n${stderr()}`), {
-            interval: 5,
-            timeout: factTimeout,
-          });
 
-        await t.waitFor(
-          () =>
-            assert.ok(
-              first.has('ready') && second.has('ready'),
-              `Both Node processes must be ready before the contention scenario starts\n${stderr()}`,
-            ),
-          { interval: 5, timeout: factTimeout },
-        );
+        // Both Node processes must be ready before the contention scenario starts.
+        await Promise.all([
+          first.next('ready', { signal: t.signal }),
+          second.next('ready', { signal: t.signal }),
+        ]);
 
         // Act: first holds the key while second attempts to acquire that same key.
         first.child.send('start');
         // The first acquire of a new process also opens the store.
-        await t.waitFor(
-          () =>
-            assert.ok(
-              first.has('entered'),
-              `The first process must enter its callback\n${stderr()}`,
-            ),
-          { interval: 5, timeout: factTimeout },
-        );
+        // The first process must enter its callback.
+        await first.next('entered', { signal: t.signal });
         second.child.send('start');
-        await waitFor(
-          () => second.has('attempted'),
-          'The second process must attempt the same resource key',
-        );
+        // The second process must attempt the same resource key.
+        await second.next('attempted', { signal: t.signal });
         // Both workers are already running. Keep the first callback open briefly
         // so an unprotected second callback has an opportunity to overlap it.
         await delay(windowFor(store, 100), undefined, { signal: t.signal });
         first.child.send('finish');
-        await waitFor(
-          () => first.has('completed') && second.has('entered'),
-          'After the first operation finishes, the second process must enter its callback',
-        );
+        // After the first operation finishes, the second process must enter its callback.
+        await Promise.all([
+          first.next('completed', { signal: t.signal }),
+          second.next('entered', { signal: t.signal }),
+        ]);
         second.child.send('finish');
-        await waitFor(
-          () => first.exit !== null && second.exit !== null,
-          'Both processes must finish their operations and exit',
+        // Both processes must finish their operations and exit.
+        await untilAborted(
+          Promise.all([first.closed, second.closed]),
+          t.signal,
         );
 
         // Assert: both callers finish, and the actual callback intervals never overlap.
@@ -282,21 +251,15 @@ export function processes<H extends Host>(
           'holder',
           { admit: (child) => sharing.admit(host, child) },
         );
-        await t.waitFor(
-          () =>
-            assert.ok(
-              holder.has('entered'),
-              `The holder process must enter its callback.\n${holder.stderr}`,
-            ),
-          { interval: 5, timeout: factTimeout },
-        );
+        // The holder process must enter its callback.
+        await holder.next('entered', { signal: t.signal });
         const mutex = new Mutex(host.store);
 
         // Act: the holder dies without releasing, then this process asks for the same key.
         holder.child.kill('SIGKILL');
         await holder.closed;
         const acquired = await mutex.acquire(key, async () => true, {
-          signal: AbortSignal.timeout(factTimeout),
+          signal: t.signal,
         });
 
         // Assert: the dead holder's lock is recovered instead of blocking forever.
@@ -396,20 +359,16 @@ export function processes<H extends Host>(
         await using holder = startWorker(holderSource, 'holder', {
           admit: (child) => sharing.admit(host, child),
         });
-        await t.waitFor(
-          () =>
-            assert.ok(
-              holder.has('holding'),
-              `The holder must take the key\n${holder.stderr}`,
-            ),
-          { interval: 5, timeout: factTimeout },
-        );
+        // The holder must take the key
+        await holder.next('holding', { signal: t.signal });
 
         // Act: the holder freezes, and this process waits for the key.
         holder.child.kill('SIGSTOP');
-        const waiter = watch(
-          mutex.acquire('product:42', async (lease) => lease.token),
+        const acquire = mutex.acquire(
+          'product:42',
+          async (lease) => lease.token,
         );
+        const waiter = watch(acquire);
         await delay(windowFor(store, settle * 10));
         const whileFrozen = waiter.now.status;
         holder.child.kill('SIGCONT');
@@ -421,17 +380,8 @@ export function processes<H extends Host>(
           'pending',
           'A waiter took the key of a frozen holder, which can still resume and write',
         );
-        await t.waitFor(
-          () =>
-            assert.ok(
-              waiter.now.status === 'fulfilled',
-              'The waiter must get the key once the holder releases it',
-            ),
-          {
-            interval: 5,
-            timeout: factTimeout,
-          },
-        );
+        // The waiter must get the key once the holder releases it.
+        await untilAborted(acquire, t.signal);
       },
     );
   });
@@ -456,18 +406,8 @@ export function processes<H extends Host>(
       );
 
       // Act
-      await t.waitFor(
-        () =>
-          assert.ok(
-            child.has('results'),
-            `The child must report.\n${child.stderr}`,
-          ),
-        {
-          interval: 5,
-          // The child starts, then makes three attempts that each cost about one grant.
-          timeout: factTimeout,
-        },
-      );
+      // The child must report.
+      await child.next('results', { signal: t.signal });
       await holder.release();
 
       // Assert: both skips gave up, the wait was cancelled, and no grant was left with the child.

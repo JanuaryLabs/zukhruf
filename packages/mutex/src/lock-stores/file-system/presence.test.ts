@@ -9,15 +9,16 @@ import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { describe } from 'node:test';
 
+import { Latch, untilAborted } from '@zukhruf/async';
 import { TemporaryFiles } from '@zukhruf/fs';
 import { UnavailableError } from '@zukhruf/sqlite-open';
+import { waitFor } from '@zukhruf/testing/async';
 import { test } from '@zukhruf/testing/node';
+import { startWorker } from '@zukhruf/testing/process';
 
 import { Modes } from '../../mutex/acquire-modes/modes.ts';
 import { Mutex } from '../../mutex/mutex.ts';
-import { factTimeout } from '../../testing/fact-timeout.ts';
 import { modesUrl, mutexUrl } from '../../testing/module-urls.ts';
-import { startWorker } from '../../testing/worker-process.ts';
 import { LockFileStore } from './lock-file-store.ts';
 import { TicketQueueFileStore } from './ticket-queue-file-store.ts';
 
@@ -79,21 +80,21 @@ const callerSource = (store: Store, directory: string) => `
 	}
 `;
 
-/** Asks once without waiting, the way a cron tick skips a busy job. */
-const skipOnce = (store: Store, directory: string) =>
+/** Waits for the key until `signal` aborts. */
+const takeOnce = (store: Store, directory: string, signal: AbortSignal) =>
   new Mutex(store.create(directory)).acquire(
     'product-42',
     async () => 'got it',
-    { mode: Modes.skipIfBusy({ waitAtMost: factTimeout, clock: globalThis }) },
+    { signal },
   );
 
 const presenceFilesIn = async (directory: string) =>
   (await readdir(directory)).filter((file) => file.endsWith('.presence'));
 
 /** Takes the key once and gives it back, which also evicts any gone caller ahead of it. */
-const takeAndRelease = (store: Store, directory: string) =>
+const takeAndRelease = (store: Store, directory: string, signal: AbortSignal) =>
   new Mutex(store.create(directory)).acquire('product-42', async () => {}, {
-    signal: AbortSignal.timeout(factTimeout),
+    signal,
   });
 
 const ticketsIn = (queue: string) => {
@@ -131,33 +132,30 @@ void test.each(stores, (store) => {
           },
         );
         try {
-          let holder: { pid: number } | undefined;
+          const holding = new Latch<{ pid: number }>();
           createInterface({ input: shell.stdout }).on('line', (line) => {
             const message = JSON.parse(line);
-            if (message.type === 'holding') holder = message;
+            if (message.type === 'holding') holding.open(message);
           });
-          await t.waitFor(
-            () =>
-              assert.ok(holder !== undefined, 'The holder must take the key'),
-            { interval: 5, timeout: factTimeout },
-          );
-          process.kill(holder!.pid, 'SIGKILL');
-          await t.waitFor(
+          // The holder must take the key.
+          const holder = await untilAborted(holding.wait(), t.signal);
+          process.kill(holder.pid, 'SIGKILL');
+          await waitFor(
             () =>
               assert.ok(
-                execFileSync('ps', ['-o', 'stat=', '-p', String(holder!.pid)], {
+                execFileSync('ps', ['-o', 'stat=', '-p', String(holder.pid)], {
                   encoding: 'utf8',
                 }).startsWith('Z'),
                 'The killed holder must stay a zombie',
               ),
-            { interval: 5, timeout: factTimeout },
+            { signal: t.signal },
           );
 
           // Act
-          const result = await skipOnce(store, directory.path);
+          const result = await takeOnce(store, directory.path, t.signal);
 
           // Assert: a zombie runs no code, so its key is free.
-          assert.deepEqual(result, { acquired: true, value: 'got it' });
+          assert.equal(result, 'got it');
         } finally {
           shell.kill('SIGKILL');
           await once(shell, 'close');
@@ -178,21 +176,14 @@ void test.each(stores, (store) => {
           callerSource(store, directory.path),
           'holder',
         );
-        await t.waitFor(() => assert.ok(holder.has('holding'), holder.stderr), {
-          interval: 5,
-          timeout: factTimeout,
-        });
+        await holder.next('holding', { signal: t.signal });
         await chmod(directory.path, 0o555);
         try {
           // Act
           holder.child.send('release');
-          await t.waitFor(
-            () =>
-              assert.ok(
-                holder.has('release failed') || holder.has('released'),
-                holder.stderr,
-              ),
-            { interval: 5, timeout: factTimeout },
+          await holder.next(
+            ({ type }) => type === 'release failed' || type === 'released',
+            { signal: t.signal },
           );
           assert.ok(
             holder.has('release failed'),
@@ -203,12 +194,12 @@ void test.each(stores, (store) => {
         }
 
         // Assert: the holder's process lives on, but it holds nothing any more.
-        const result = await skipOnce(store, directory.path);
-        assert.deepEqual(result, { acquired: true, value: 'got it' });
+        const result = await takeOnce(store, directory.path, t.signal);
+        assert.equal(result, 'got it');
       },
     );
 
-    test('a lock record without a presence file fails the acquire with both file names', async () => {
+    test('a lock record without a presence file fails the acquire with both file names', async (t) => {
       // Arrange: an older version wrote the record, naming this live
       // process, and keeps no presence file. Platform setup that no
       // operation of this version exposes.
@@ -226,7 +217,7 @@ void test.each(stores, (store) => {
       const acquiring = new Mutex(store.create(directory.path)).acquire(
         'product-42',
         async () => {},
-        { signal: AbortSignal.timeout(factTimeout) },
+        { signal: t.signal },
       );
 
       // Assert: the waiter names what is in the way instead of guessing,
@@ -276,22 +267,19 @@ void test.each(stores, (store) => {
         callerSource(store, directory.path),
         'holder',
       );
-      await t.waitFor(() => assert.ok(holder.has('holding'), holder.stderr), {
-        interval: 5,
-        timeout: factTimeout,
-      });
+      await holder.next('holding', { signal: t.signal });
       assert.equal((await presenceFilesIn(directory.path)).length, 1);
       holder.child.kill('SIGKILL');
       await holder.closed;
 
       // Act
-      await takeAndRelease(store, directory.path);
+      await takeAndRelease(store, directory.path, t.signal);
 
       // Assert
       assert.deepEqual(await presenceFilesIn(directory.path), []);
     });
 
-    test('callers that ask for a free key at the same moment leave one holder and no presence file', async () => {
+    test('callers that ask for a free key at the same moment leave one holder and no presence file', async (t) => {
       // Arrange: twenty callers in this process skip the key if it is busy.
       await using directory = await new TemporaryFiles().directory(
         'mutex-test-',
@@ -308,7 +296,7 @@ void test.each(stores, (store) => {
           ),
         ),
       );
-      await takeAndRelease(store, directory.path);
+      await takeAndRelease(store, directory.path, t.signal);
 
       // Assert: one caller held the key, and every caller that lost left nothing behind.
       assert.equal(results.filter((result) => result.acquired).length, 1);
@@ -327,16 +315,13 @@ void test.each(stores, (store) => {
           callerSource(store, directory.path),
           'holder',
         );
-        await t.waitFor(() => assert.ok(holder.has('holding'), holder.stderr), {
-          interval: 5,
-          timeout: factTimeout,
-        });
+        await holder.next('holding', { signal: t.signal });
         const [presence] = await presenceFilesIn(directory.path);
         assert.ok(presence, 'The holder must keep a presence file');
         await chmod(join(directory.path, presence), 0o000);
 
         // Act
-        const acquiring = skipOnce(store, directory.path);
+        const acquiring = takeOnce(store, directory.path, t.signal);
 
         // Assert: the fault surfaces as it is, not as a record without a presence.
         await assert.rejects(acquiring, (error: unknown) => {
@@ -389,20 +374,18 @@ void test.each(stores, (store) => {
     );
     try {
       // Act
-      await t
-        .waitFor(
-          () =>
-            assert.ok(
-              workers.every((w) => w.has('done') || w.has('failed')),
-              'Every process must finish its rounds',
-            ),
-          { interval: 5, timeout: 50_000 },
-        )
-        .catch((error: unknown) => {
-          throw new Error(workers.map((w) => w.stderr).join(''), {
-            cause: error,
-          });
+      // Every process must finish its rounds.
+      await Promise.all(
+        workers.map((w) =>
+          w.next(({ type }) => type === 'done' || type === 'failed', {
+            signal: t.signal,
+          }),
+        ),
+      ).catch((error: unknown) => {
+        throw new Error(workers.map((w) => w.stderr).join(''), {
+          cause: error,
         });
+      });
 
       // Assert: no caller failed, no write was fenced off, and no two callers were inside at once.
       assert.deepEqual(
@@ -439,33 +422,27 @@ describe('TicketQueueFileStore: presence files of waiters', () => {
       callerSource(ticketQueue, directory.path),
       'holder',
     );
-    await t.waitFor(() => assert.ok(holder.has('holding'), holder.stderr), {
-      interval: 5,
-      timeout: factTimeout,
-    });
+    await holder.next('holding', { signal: t.signal });
     await using waiter = startWorker(
       callerSource(ticketQueue, directory.path),
       'waiter',
     );
-    await t.waitFor(
+    await waitFor(
       () =>
         assert.ok(
           ticketsIn(queueIn(directory.path)) === 2,
           'The waiter must be in line',
         ),
-      { interval: 5, timeout: factTimeout },
+      { signal: t.signal },
     );
     assert.equal((await presenceFilesIn(directory.path)).length, 2);
     waiter.child.kill('SIGKILL');
     await waiter.closed;
     holder.child.send('release');
-    await t.waitFor(() => assert.ok(holder.has('released'), holder.stderr), {
-      interval: 5,
-      timeout: factTimeout,
-    });
+    await holder.next('released', { signal: t.signal });
 
     // Act
-    await takeAndRelease(ticketQueue, directory.path);
+    await takeAndRelease(ticketQueue, directory.path, t.signal);
 
     // Assert
     assert.deepEqual(await presenceFilesIn(directory.path), []);
@@ -505,30 +482,24 @@ describe('TicketQueueFileStore: presence files of waiters', () => {
           callerSource(ticketQueue, directory.path),
           'holder',
         );
-        await t.waitFor(() => assert.ok(holder.has('holding'), holder.stderr), {
-          interval: 5,
-          timeout: factTimeout,
-        });
+        await holder.next('holding', { signal: t.signal });
         await endWait(new Mutex(ticketQueue.create(directory.path)), () =>
-          t.waitFor(
+          waitFor(
             () =>
               assert.ok(
                 ticketsIn(queueIn(directory.path)) === 2,
                 `The waiter must line up behind the holder.\n${holder.stderr}`,
               ),
-            { interval: 5, timeout: factTimeout },
+            { signal: t.signal },
           ),
         );
         assert.equal(ticketsIn(queueIn(directory.path)), 2);
         assert.equal((await presenceFilesIn(directory.path)).length, 2);
         holder.child.send('release');
-        await t.waitFor(
-          () => assert.ok(holder.has('released'), holder.stderr),
-          { interval: 5, timeout: factTimeout },
-        );
+        await holder.next('released', { signal: t.signal });
 
         // Act
-        await takeAndRelease(ticketQueue, directory.path);
+        await takeAndRelease(ticketQueue, directory.path, t.signal);
 
         // Assert
         assert.deepEqual(await presenceFilesIn(directory.path), []);
@@ -544,10 +515,7 @@ test('TicketQueueFileStore: a skip gets a key whose queue holds only callers tha
     callerSource(ticketQueue, directory.path),
     'holder',
   );
-  await t.waitFor(() => assert.ok(holder.has('holding'), holder.stderr), {
-    interval: 5,
-    timeout: factTimeout,
-  });
+  await holder.next('holding', { signal: t.signal });
   await using first = startWorker(
     callerSource(ticketQueue, directory.path),
     'first',
@@ -556,9 +524,9 @@ test('TicketQueueFileStore: a skip gets a key whose queue holds only callers tha
     callerSource(ticketQueue, directory.path),
     'second',
   );
-  await t.waitFor(
+  await waitFor(
     () => assert.ok(ticketsIn(queue) === 3, 'Both waiters must be in line'),
-    { interval: 5, timeout: factTimeout },
+    { signal: t.signal },
   );
   for (const caller of [holder, first, second]) {
     caller.child.kill('SIGKILL');

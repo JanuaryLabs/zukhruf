@@ -132,7 +132,7 @@ describe('Docker.connect() selects the engine in the order of the Docker CLI', (
     assert.deepEqual(result, { context: 'from-config', host: fromConfig.host });
   });
 
-  test('~/.docker is the configuration directory when DOCKER_CONFIG is not set', async () => {
+  test('~/.docker is the configuration directory when DOCKER_CONFIG is not set', async (t) => {
     // Arrange: a child process, because HOME is the home directory of the process.
     await using scratch = await new TemporaryFiles().directory('docker-test-');
     await using fromConfig = await fakeEngine({
@@ -148,6 +148,7 @@ describe('Docker.connect() selects the engine in the order of the Docker CLI', (
     const result = await runScenario(
       connectScenario('{ environment: process.env }'),
       { HOME: scratch.path },
+      t.signal,
     );
 
     // Assert
@@ -157,7 +158,7 @@ describe('Docker.connect() selects the engine in the order of the Docker CLI', (
     });
   });
 
-  test('without an environment, no variable applies and only the context store selects the engine', async () => {
+  test('without an environment, no variable applies and only the context store selects the engine', async (t) => {
     // Arrange: a child process, because the variables must be in the environment of the process.
     await using scratch = await new TemporaryFiles().directory('docker-test-');
     await using fromConfig = await fakeEngine({
@@ -174,12 +175,16 @@ describe('Docker.connect() selects the engine in the order of the Docker CLI', (
     });
 
     // Act
-    const result = await runScenario(connectScenario('{}'), {
-      HOME: scratch.path,
-      DOCKER_HOST: fromHost.host,
-      DOCKER_CONTEXT: 'other',
-      DOCKER_CONFIG: join(scratch.path, 'absent'),
-    });
+    const result = await runScenario(
+      connectScenario('{}'),
+      {
+        HOME: scratch.path,
+        DOCKER_HOST: fromHost.host,
+        DOCKER_CONTEXT: 'other',
+        DOCKER_CONFIG: join(scratch.path, 'absent'),
+      },
+      t.signal,
+    );
 
     // Assert
     assert.deepEqual(lastJson(result), {

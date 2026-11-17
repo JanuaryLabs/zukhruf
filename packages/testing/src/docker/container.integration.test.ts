@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
+import { waitFor } from '../async/wait-for.ts';
 import { DockerTestbed } from './index.ts';
 
 const image = 'alpine:latest';
@@ -16,12 +17,8 @@ test('a container keeps what it printed after its command exits, until disposal 
     Cmd: ['sh', '-c', 'echo printed; echo complained >&2'],
   });
 
-  await t.waitFor(
-    async () => {
-      assert.equal((await container.inspect()).State?.Status, 'exited');
-    },
-    { timeout: 10_000 },
-  );
+  await container.wait({ condition: 'not-running', signal: t.signal });
+  assert.equal((await container.inspect()).State?.Status, 'exited');
 
   // Act
   const { output } = await container.logs();
@@ -53,14 +50,14 @@ test('a container runs its command with the hostname, environment, labels and vo
       'echo "$GREETING from $(hostname)" > /data/greeting; exec sleep 600',
     ],
   });
-  await t.waitFor(
+  await waitFor(
     async () => {
       assert.equal(
         (await container.exec({ Cmd: ['cat', '/data/greeting'] })).stdout,
         'hello from holder\n',
       );
     },
-    { timeout: 10_000 },
+    { signal: t.signal },
   );
   const name = `zukhruf-testing-reader-${scope}`;
 
@@ -147,12 +144,8 @@ test('kill stops the main process of a running container', async (t) => {
   await container.kill();
 
   // Assert
-  await t.waitFor(
-    async () => {
-      assert.equal((await container.inspect()).State?.Status, 'exited');
-    },
-    { timeout: 10_000 },
-  );
+  await container.wait({ condition: 'not-running', signal: t.signal });
+  assert.equal((await container.inspect()).State?.Status, 'exited');
   assert.equal((await container.inspect()).State?.ExitCode, 137);
 });
 

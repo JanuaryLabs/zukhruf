@@ -8,8 +8,8 @@ import { SqliteElection } from '@zukhruf/election';
 import { TemporaryFiles } from '@zukhruf/fs';
 import { LeaseLostError } from '@zukhruf/lease';
 import { PipeEndpoint } from '@zukhruf/pipes';
+import { waitFor } from '@zukhruf/testing/async';
 
-import { factTimeout } from '../../testing/fact-timeout.ts';
 import { onUnixSockets } from '../../testing/on-unix-sockets.ts';
 import { LockServer } from './lock-server.ts';
 import { type SocketRole, SocketStore } from './socket-store.ts';
@@ -124,13 +124,13 @@ describe('Lock server', () => {
         loss.abort();
 
         // Assert: the server dropped its follower, which then won the next term.
-        await t.waitFor(
+        await waitFor(
           () =>
             assert.ok(
               roles.includes('leader'),
               'The follower must lead once the server of the lost term closes',
             ),
-          { interval: 5, timeout: factTimeout },
+          { signal: t.signal },
         );
         assert.deepEqual(roles, ['follower', 'leader']);
         const lease = await store.acquire('product:42');

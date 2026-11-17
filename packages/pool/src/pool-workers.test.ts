@@ -6,13 +6,13 @@ import type { TestContext } from 'node:test';
 
 import { createClock } from '@sinonjs/fake-timers';
 
-import { Latch } from '@zukhruf/async';
+import { Latch, untilAborted } from '@zukhruf/async';
 import { TemporaryFiles } from '@zukhruf/fs';
 import {
   SqliteJobQueue,
   type SqliteJobQueueOptions,
 } from '@zukhruf/sqlite-queue';
-import { settleWithin } from '@zukhruf/testing/async';
+import { waitFor } from '@zukhruf/testing/async';
 import { describe, test } from '@zukhruf/testing/node';
 
 import {
@@ -23,10 +23,6 @@ import {
   type Worker,
   WorkerKind,
 } from './index.ts';
-
-// The longest wait for a fact that should hold at once; it bounds a broken
-// run and asserts no speed.
-const factTimeout = 10_000;
 
 // The queue of the kind that each host builds: "echo", revision 1.
 const queue = 'echo.r1';
@@ -144,8 +140,7 @@ class Host implements AsyncDisposable {
   /** Resolves with the first report that matches, as soon as it arrives. */
   async report(
     match: (report: Report) => boolean,
-    label: string,
-    timeout = factTimeout,
+    { signal }: { signal: AbortSignal },
   ): Promise<Report> {
     const found = this.reports.find(match);
     if (found) return found;
@@ -155,7 +150,7 @@ class Host implements AsyncDisposable {
     };
     this.#child.on('message', listener);
     try {
-      return await settleWithin(arrived.promise, label, timeout);
+      return await untilAborted(arrived.promise, signal);
     } finally {
       this.#child.off('message', listener);
     }
@@ -193,7 +188,7 @@ const owns = (report: Report) => 'created' in report;
 const constructed = (report: Report) => 'constructed' in report;
 
 describe('PoolWorkers', { concurrency: true }, () => {
-  test('a host whose store is a postgres:// address is refused and opens no file', async () => {
+  test('a host whose store is a postgres:// address is refused and opens no file', async (t) => {
     await using folder = await new TemporaryFiles().directory('pool-');
     await using refused = new Host(
       'postgres://localhost/pool',
@@ -201,10 +196,9 @@ describe('PoolWorkers', { concurrency: true }, () => {
       folder.path,
     );
 
-    const report = await refused.report(
-      (report) => 'refused' in report,
-      'the refusal',
-    );
+    const report = await refused.report((report) => 'refused' in report, {
+      signal: t.signal,
+    });
 
     assert.deepEqual(report, { refused: 'TypeError' });
     assert.equal(await refused.closed(), 1);
@@ -239,9 +233,9 @@ describe('PoolWorkers', { concurrency: true }, () => {
     await using folder = await new TemporaryFiles().directory('pool-');
     const store = join(folder.path, 'store.sqlite');
     await using owner = new Host(store, { workers: 2, retryLimit: 0 });
-    await owner.report(owns, 'the owner');
+    await owner.report(owns, { signal: t.signal });
     await using standby = new Host(store, { workers: 2, retryLimit: 0 });
-    await standby.report(constructed, 'the standby');
+    await standby.report(constructed, { signal: t.signal });
     await using sending = await sender(store);
 
     for (const id of ['a', 'b', 'c', 'd', 'e', 'f'])
@@ -258,7 +252,7 @@ describe('PoolWorkers', { concurrency: true }, () => {
     assert.deepEqual(standby.reports, [{ constructed: true }]);
   });
 
-  test("the owner creates the kind's queue with the kind's rules and a heartbeat of 10 s", async () => {
+  test("the owner creates the kind's queue with the kind's rules and a heartbeat of 10 s", async (t) => {
     await using folder = await new TemporaryFiles().directory('pool-');
     const store = join(folder.path, 'store.sqlite');
     await using owner = new Host(store, {
@@ -266,7 +260,7 @@ describe('PoolWorkers', { concurrency: true }, () => {
       retryLimit: 3,
       policy: 'exclusive',
     });
-    await owner.report(owns, 'the owner');
+    await owner.report(owns, { signal: t.signal });
     await using sending = await sender(store);
 
     const id = await sending.jobs.send(queue, { input: { id: 'a' } });
@@ -287,7 +281,7 @@ describe('PoolWorkers', { concurrency: true }, () => {
     await using folder = await new TemporaryFiles().directory('pool-');
     const store = join(folder.path, 'store.sqlite');
     await using owner = new Host(store, { workers: 2, retryLimit: 0 });
-    await owner.report(owns, 'the owner');
+    await owner.report(owns, { signal: t.signal });
     await using sending = await sender(store);
 
     await sending.jobs.send(queue, { input: { id: 'done' } });
@@ -309,7 +303,7 @@ describe('PoolWorkers', { concurrency: true }, () => {
     await using folder = await new TemporaryFiles().directory('pool-');
     const store = join(folder.path, 'store.sqlite');
     await using owner = new Host(store, { workers: 2, retryLimit: 0 });
-    await owner.report(owns, 'the owner');
+    await owner.report(owns, { signal: t.signal });
     await using sending = await sender(store);
 
     // Each job runs longer than the backstop, so the owner fetches again
@@ -324,7 +318,7 @@ describe('PoolWorkers', { concurrency: true }, () => {
     ] as const)
       await sending.jobs.send(queue, { input: { id, ms } });
 
-    const jobs = await settled(t, sending.jobs, 5, 30_000);
+    const jobs = await settled(t, sending.jobs, 5);
     // A fetched job is active from its startedOn until its completedOn.
     const moments = jobs.flatMap(({ startedOn, completedOn }) => [
       { at: startedOn!.getTime(), change: 1 },
@@ -341,21 +335,21 @@ describe('PoolWorkers', { concurrency: true }, () => {
     await using folder = await new TemporaryFiles().directory('pool-');
     const store = join(folder.path, 'store.sqlite');
     await using owner = new Host(store, { workers: 1, retryLimit: 1 });
-    await owner.report(owns, 'the owner');
+    await owner.report(owns, { signal: t.signal });
     await using standby = new Host(store, { workers: 1, retryLimit: 1 });
-    await standby.report(constructed, 'the standby');
+    await standby.report(constructed, { signal: t.signal });
     await using sending = await sender(store);
     await sending.jobs.send(queue, {
       input: { id: 'held', hangIn: owner.pid },
     });
-    await owner.report((report) => 'started' in report, 'the start');
+    await owner.report((report) => 'started' in report, { signal: t.signal });
 
     owner.kill();
     await owner.closed();
 
     // The job comes back by its heartbeat of 10 s, found by a supervise and
     // monitor pass each second: the defaults of 60 s miss this bound.
-    const [job] = await settled(t, sending.jobs, 1, 30_000);
+    const [job] = await settled(t, sending.jobs, 1);
     assert.deepEqual(
       [job?.state, job?.output],
       ['completed', { output: { host: standby.pid, id: 'held' } }],
@@ -370,15 +364,15 @@ describe('PoolWorkers', { concurrency: true }, () => {
       retryLimit: 0,
       linger: true,
     });
-    await owner.report(owns, 'the owner');
+    await owner.report(owns, { signal: t.signal });
     await using standby = new Host(store, { workers: 1, retryLimit: 0 });
-    await standby.report(constructed, 'the standby');
+    await standby.report(constructed, { signal: t.signal });
     await using sending = await sender(store);
     await sending.jobs.send(queue, { input: { id: 'running', ms: 1_000 } });
-    await owner.report((report) => 'started' in report, 'the start');
+    await owner.report((report) => 'started' in report, { signal: t.signal });
 
     owner.send('dispose');
-    await owner.report((report) => 'disposed' in report, 'the disposal');
+    await owner.report((report) => 'disposed' in report, { signal: t.signal });
     await sending.jobs.send(queue, { input: { id: 'next' } });
 
     const jobs = await settled(t, sending.jobs, 2);
@@ -402,15 +396,15 @@ describe('PoolWorkers', { concurrency: true }, () => {
       retryLimit: 0,
       closeHangs: true,
     });
-    await owner.report(owns, 'the owner');
+    await owner.report(owns, { signal: t.signal });
     await using standby = new Host(store, { workers: 1, retryLimit: 0 });
-    await standby.report(constructed, 'the standby');
+    await standby.report(constructed, { signal: t.signal });
     await using sending = await sender(store);
     await sending.jobs.send(queue, { input: { id: 'running', ms: 500 } });
-    await owner.report((report) => 'started' in report, 'the start');
+    await owner.report((report) => 'started' in report, { signal: t.signal });
 
     owner.send('dispose');
-    await standby.report(owns, 'the standby owns');
+    await standby.report(owns, { signal: t.signal });
     const [whenOwned] = await sending.jobs.findJobs(queue);
     assert.equal(whenOwned?.state, 'completed');
     await sending.jobs.send(queue, { input: { id: 'next' } });
@@ -431,18 +425,15 @@ describe('PoolWorkers', { concurrency: true }, () => {
     );
   });
 
-  test('a host that disposes its PoolWorkers exits by itself', async () => {
+  test('a host that disposes its PoolWorkers exits by itself', async (t) => {
     await using folder = await new TemporaryFiles().directory('pool-');
     const store = join(folder.path, 'store.sqlite');
     await using owner = new Host(store, { workers: 1, retryLimit: 0 });
-    await owner.report(owns, 'the owner');
+    await owner.report(owns, { signal: t.signal });
 
     owner.send('dispose');
 
-    assert.equal(
-      await settleWithin(owner.closed(), 'the exit', factTimeout),
-      0,
-    );
+    assert.equal(await untilAborted(owner.closed(), t.signal), 0);
   });
 });
 
@@ -568,7 +559,7 @@ describe('PoolWorkers on a fake clock', { concurrency: true }, () => {
     await runFor(clock, limit - 10 - clock.now);
     assert.equal(disposed, false);
     await runFor(clock, 20);
-    await settleWithin(disposal, 'the disposal', factTimeout);
+    await untilAborted(disposal, t.signal);
 
     assert.equal(workers.killed('hung'), true);
     const [job] = await sending.jobs.findJobs(queue);
@@ -688,9 +679,9 @@ async function ownerOn(
     startup: new Parallel(),
     eviction: new NoEviction(),
   });
-  await t.waitFor(() => assert.ok(created > 0, 'the owner'), {
+  await waitFor(() => assert.ok(created > 0, 'the owner'), {
+    signal: t.signal,
     interval: 5,
-    timeout: factTimeout,
   });
   let disposal: Promise<void> | undefined;
   const dispose = () => (disposal ??= owner[Symbol.asyncDispose]());
@@ -730,11 +721,11 @@ async function fetched(
   ...ids: string[]
 ): Promise<void> {
   await runFor(clock, 1_000);
-  await t.waitFor(
+  await waitFor(
     () => {
       for (const id of ids) assert.ok(workers.running(id), `job ${id} runs`);
     },
-    { interval: 5, timeout: factTimeout },
+    { signal: t.signal, interval: 5 },
   );
 }
 
@@ -760,13 +751,8 @@ function bossClock(clock: FakeClock): BossClock {
 }
 
 /** Waits until the store has `count` jobs of the queue, each settled or cancelled. */
-function settled(
-  t: TestContext,
-  jobs: SqliteJobQueue,
-  count: number,
-  timeout = factTimeout,
-) {
-  return t.waitFor(
+function settled(t: TestContext, jobs: SqliteJobQueue, count: number) {
+  return waitFor(
     async () => {
       const found = await jobs.findJobs(queue);
       assert.equal(found.length, count);
@@ -774,7 +760,7 @@ function settled(
         assert.match(job.state, /^(completed|failed|cancelled)$/);
       return found;
     },
-    { interval: 20, timeout },
+    { signal: t.signal, interval: 20 },
   );
 }
 

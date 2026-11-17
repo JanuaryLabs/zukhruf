@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { Connection, Request, TYPES } from 'tedious';
 
 import type { Clock } from '@zukhruf/async';
+import { waitFor } from '@zukhruf/testing/async';
 import type { DatabaseOptions } from '@zukhruf/testing/postgres';
 import { SqlServer } from '@zukhruf/testing/sqlserver';
 
@@ -250,7 +251,7 @@ export const sessionControl: SessionControl = {
     };
   },
   async untilASessionWaits(t, location) {
-    await t.waitFor(
+    await waitFor(
       async () => {
         const rows = await observe(
           location,
@@ -259,7 +260,7 @@ export const sessionControl: SessionControl = {
         );
         assert.ok(Number(rows[0]?.waiting) > 0, 'No session waits for a lock.');
       },
-      { interval: 10, timeout: 10_000 },
+      { interval: 10, signal: t.signal },
     );
   },
 };

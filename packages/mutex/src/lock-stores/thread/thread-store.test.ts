@@ -3,6 +3,7 @@ import { once } from 'node:events';
 import { setTimeout as delay } from 'node:timers/promises';
 import { Worker } from 'node:worker_threads';
 
+import { waitFor } from '@zukhruf/testing/async';
 import { describe, test } from '@zukhruf/testing/node';
 
 import { Modes } from '../../mutex/acquire-modes/modes.ts';
@@ -15,7 +16,6 @@ import {
 } from '../../testing/contract/peers.ts';
 import { skipperBody } from '../../testing/contract/processes.ts';
 import { windowFor } from '../../testing/contract/window.ts';
-import { factTimeout } from '../../testing/fact-timeout.ts';
 import { hold } from '../../testing/hold.ts';
 import { modesUrl, mutexUrl } from '../../testing/module-urls.ts';
 import {
@@ -61,9 +61,9 @@ describe(`Cross-thread mutex with ${store.name}`, () => {
 
     try {
       // Act: the thread asks for the same key while the main thread holds it.
-      await t.waitFor(
+      await waitFor(
         () => assert.ok(events.includes('requested'), 'The thread must start'),
-        { interval: 5, timeout: factTimeout },
+        { signal: t.signal },
       );
       await delay(windowFor(store, settle));
       const enteredWhileHeld = events.includes('entered');
@@ -76,16 +76,13 @@ describe(`Cross-thread mutex with ${store.name}`, () => {
         false,
         'The thread entered while the main thread held the key',
       );
-      await t.waitFor(
+      await waitFor(
         () =>
           assert.ok(
             events.includes('entered'),
             'The thread must enter once the main thread releases',
           ),
-        {
-          interval: 5,
-          timeout: factTimeout,
-        },
+        { signal: t.signal },
       );
     } finally {
       finishMain.resolve();
@@ -160,13 +157,13 @@ describe(`Cross-thread mutex with ${store.name}`, () => {
 
     try {
       // Act
-      await t.waitFor(
+      await waitFor(
         () =>
           assert.ok(
             events.includes('released'),
             'The thread must take and release the key after its other messages',
           ),
-        { interval: 5, timeout: factTimeout },
+        { signal: t.signal },
       );
       // A key that is never handed over keeps this await open until the test times out.
       const next = await mutex.acquire(
@@ -211,10 +208,10 @@ describe(`Cross-thread mutex with ${store.name}`, () => {
     });
 
     try {
-      await t.waitFor(
+      await waitFor(
         () =>
           assert.ok(request !== undefined, 'The thread must ask for the key'),
-        { interval: 5, timeout: factTimeout },
+        { signal: t.signal },
       );
 
       // Act: a grant for the thread's request, with a token that no coordinator issues.
@@ -232,16 +229,13 @@ describe(`Cross-thread mutex with ${store.name}`, () => {
         false,
         'The thread entered on a grant that was not valid',
       );
-      await t.waitFor(
+      await waitFor(
         () =>
           assert.ok(
             events.includes('entered'),
             'The thread must enter once the main thread releases',
           ),
-        {
-          interval: 5,
-          timeout: factTimeout,
-        },
+        { signal: t.signal },
       );
     } finally {
       finishMain.resolve();
@@ -349,7 +343,7 @@ describe(`Acquire modes across threads with ${store.name}`, () => {
 });
 
 describe('A worker or child whose token cannot be minted', () => {
-  test('a worker thread learns that its acquire failed, takes another key, and that key is free once the thread stops', async () => {
+  test('a worker thread learns that its acquire failed, takes another key, and that key is free once the thread stops', async (t) => {
     // Arrange: the parent's token source fails for the first grant.
     const coordinator = new ThreadLockCoordinator({
       tokens: tokensThatFailOnce(
@@ -394,12 +388,7 @@ describe('A worker or child whose token cannot be minted', () => {
       const next = await mutex.acquire(
         'product:43',
         async () => 'granted' as const,
-        {
-          mode: Modes.skipIfBusy({
-            waitAtMost: factTimeout,
-            clock: globalThis,
-          }),
-        },
+        { signal: t.signal },
       );
 
       // Assert
@@ -408,8 +397,8 @@ describe('A worker or child whose token cannot be minted', () => {
         'GrantFailedError: The lock coordinator could not grant "product:42": The token file could not be written.',
       );
       assert.equal(
-        next.acquired,
-        true,
+        next,
+        'granted',
         'The key of a thread that stopped must be free',
       );
     } finally {

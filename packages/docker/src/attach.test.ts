@@ -6,6 +6,7 @@ import { delimiter } from 'node:path';
 import { describe, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 
+import { poll } from '@zukhruf/async';
 import { TemporaryFiles } from '@zukhruf/fs';
 
 import {
@@ -32,9 +33,9 @@ async function labeledIds(docker: Docker, run: string): Promise<string[]> {
 }
 
 describe('container.attach()', () => {
-  test('an attach before start() gets all output and the exit code', async () => {
+  test('an attach before start() gets all output and the exit code', async (t) => {
     // Arrange
-    await using docker = await connect(IMAGE);
+    await using docker = await connect(IMAGE, t.signal);
     const run = randomUUID();
     try {
       const container = await docker.containers.create({
@@ -60,9 +61,9 @@ describe('container.attach()', () => {
     }
   });
 
-  test('an attach to a running container gets the output from then on and the exit code when it stops', async () => {
+  test('an attach to a running container gets the output from then on and the exit code when it stops', async (t) => {
     // Arrange
-    await using docker = await connect(IMAGE);
+    await using docker = await connect(IMAGE, t.signal);
     const run = randomUUID();
     try {
       const container = await docker.containers.create({
@@ -72,7 +73,7 @@ describe('container.attach()', () => {
       });
       await container.start();
       for await (const _early of container.followLogs({
-        signal: AbortSignal.timeout(20_000),
+        signal: t.signal,
       })) {
         break;
       }
@@ -93,9 +94,9 @@ describe('container.attach()', () => {
     }
   });
 
-  test('stdin of an attach reaches the main process, and close() ends its input', async () => {
+  test('stdin of an attach reaches the main process, and close() ends its input', async (t) => {
     // Arrange
-    await using docker = await connect(IMAGE);
+    await using docker = await connect(IMAGE, t.signal);
     const run = randomUUID();
     try {
       const container = await docker.containers.create({
@@ -127,9 +128,9 @@ describe('container.attach()', () => {
     }
   });
 
-  test('an attach to an exited container is a ContainerNotRunningError with the state exited, and to a paused one with the state paused', async () => {
+  test('an attach to an exited container is a ContainerNotRunningError with the state exited, and to a paused one with the state paused', async (t) => {
     // Arrange
-    await using docker = await connect(IMAGE);
+    await using docker = await connect(IMAGE, t.signal);
     const run = randomUUID();
     try {
       const exited = await docker.containers.create({
@@ -149,8 +150,8 @@ describe('container.attach()', () => {
 
       // Act
       const [toExited, toPaused] = await Promise.allSettled([
-        exited.attach({ signal: AbortSignal.timeout(20_000) }),
-        paused.attach({ signal: AbortSignal.timeout(20_000) }),
+        exited.attach({ signal: t.signal }),
+        paused.attach({ signal: t.signal }),
       ]);
 
       // Assert
@@ -239,12 +240,16 @@ const { stdout } = await container.exec({ Cmd: ['pgrep', '-x', 'cat'] });
 console.log(JSON.stringify({ id: container.id, held: stdout.trim() !== '' }));
 `;
 
-/** Resolves when the container is gone, and rejects when it is still there after 20 s. */
-async function removed(docker: Docker, id: string): Promise<void> {
+/** Resolves when the container is gone, and rejects with the reason of `signal` when it is still there. */
+async function removed(
+  docker: Docker,
+  id: string,
+  signal: AbortSignal,
+): Promise<void> {
   try {
     await (
       await docker.containers.find(id)
-    )?.wait({ condition: 'removed', signal: AbortSignal.timeout(20_000) });
+    )?.wait({ condition: 'removed', signal });
   } catch (error) {
     if (!(error instanceof ContainerNotFoundError)) throw error;
   }
@@ -254,7 +259,7 @@ describe('container.attach({ ref: false })', () => {
   test(
     'through a Unix socket, a process that holds an attach with ref: false exits by itself, and its cat then ends and the engine removes it',
     { skip: needsLocalEngine },
-    async () => {
+    async (t) => {
       // Arrange
       await using home = await new TemporaryFiles().directory('docker-test-');
       const host = `unix://${String(engineSocket)}`;
@@ -271,13 +276,13 @@ describe('container.attach({ ref: false })', () => {
             '{ stdin: true, ref: false }',
           ),
           { HOME: home.path },
-          AbortSignal.timeout(30_000),
+          t.signal,
         );
 
         // Assert
         assert.equal(result.exitCode, 0, result.stderr);
         const { id } = Object(lastJson(result));
-        await removed(cleaner, String(id));
+        await removed(cleaner, String(id), t.signal);
         assert.equal(await cleaner.containers.find(String(id)), undefined);
       } finally {
         await removeLabeled(cleaner, run);
@@ -315,10 +320,12 @@ describe('container.attach({ ref: false })', () => {
       try {
         // Act: the scenario reaches its hold. With ref: false it exits about 1 s
         // later, and load only makes this window longer.
-        await t.waitFor(
-          () => assert.match(stdout, /"id"/, `No hold line. stderr: ${stderr}`),
-          { interval: 5, timeout: 30_000 },
-        );
+        await poll(async () => (stdout.includes('"id"') ? true : undefined), {
+          signal: t.signal,
+          clock: globalThis,
+          interval: 5,
+        });
+        assert.match(stdout, /"id"/, `No hold line. stderr: ${stderr}`);
         await delay(3000);
         const exitWhileHeld = scenario.exitCode;
 
@@ -362,22 +369,21 @@ describe('container.attach({ ref: false })', () => {
             PATH: `${standIn.path}${delimiter}${process.env.PATH}`,
             HOME: home.path,
           },
-          AbortSignal.timeout(30_000),
+          t.signal,
         );
 
         // Assert
         assert.equal(result.exitCode, 0, result.stderr);
         const { id } = Object(lastJson(result));
-        await removed(cleaner, String(id));
+        await removed(cleaner, String(id), t.signal);
         assert.equal(await cleaner.containers.find(String(id)), undefined);
-        await t.waitFor(
-          async () =>
-            assert.deepEqual(
-              (await standIn.runs()).map(({ pid }) => pid).filter(isAlive),
-              [],
-            ),
-          { interval: 50, timeout: 20_000 },
+        const alive = async () =>
+          (await standIn.runs()).map(({ pid }) => pid).filter(isAlive);
+        await poll(
+          async () => ((await alive()).length === 0 ? true : undefined),
+          { signal: t.signal, clock: globalThis, interval: 50 },
         );
+        assert.deepEqual(await alive(), []);
       } finally {
         for (const { pid } of await standIn.runs()) {
           if (isAlive(pid)) process.kill(pid, 'SIGKILL');
@@ -392,7 +398,7 @@ describe('container.spawn({ ref: false })', () => {
   test(
     'through a Unix socket, a process that holds an exec with ref: false exits by itself, and its cat then ends',
     { skip: needsLocalEngine },
-    async () => {
+    async (t) => {
       // Arrange
       await using home = await new TemporaryFiles().directory('docker-test-');
       const host = `unix://${String(engineSocket)}`;
@@ -405,14 +411,14 @@ describe('container.spawn({ ref: false })', () => {
         const result = await runScenario(
           holdSpawn(JSON.stringify({ host }), run),
           { HOME: home.path },
-          AbortSignal.timeout(30_000),
+          t.signal,
         );
 
         // Assert: the main process ends when no cat is left.
         assert.equal(result.exitCode, 0, result.stderr);
         const { id, held } = Object(lastJson(result));
         assert.equal(held, true, 'The cat runs while its holder lives');
-        await removed(cleaner, String(id));
+        await removed(cleaner, String(id), t.signal);
         assert.equal(await cleaner.containers.find(String(id)), undefined);
       } finally {
         await removeLabeled(cleaner, run);
@@ -445,23 +451,22 @@ describe('container.spawn({ ref: false })', () => {
             PATH: `${standIn.path}${delimiter}${process.env.PATH}`,
             HOME: home.path,
           },
-          AbortSignal.timeout(30_000),
+          t.signal,
         );
 
         // Assert
         assert.equal(result.exitCode, 0, result.stderr);
         const { id, held } = Object(lastJson(result));
         assert.equal(held, true, 'The cat runs while its holder lives');
-        await removed(cleaner, String(id));
+        await removed(cleaner, String(id), t.signal);
         assert.equal(await cleaner.containers.find(String(id)), undefined);
-        await t.waitFor(
-          async () =>
-            assert.deepEqual(
-              (await standIn.runs()).map(({ pid }) => pid).filter(isAlive),
-              [],
-            ),
-          { interval: 50, timeout: 20_000 },
+        const alive = async () =>
+          (await standIn.runs()).map(({ pid }) => pid).filter(isAlive);
+        await poll(
+          async () => ((await alive()).length === 0 ? true : undefined),
+          { signal: t.signal, clock: globalThis, interval: 50 },
         );
+        assert.deepEqual(await alive(), []);
       } finally {
         for (const { pid } of await standIn.runs()) {
           if (isAlive(pid)) process.kill(pid, 'SIGKILL');
@@ -473,9 +478,9 @@ describe('container.spawn({ ref: false })', () => {
 });
 
 describe('containers.run()', () => {
-  test('run() gives the output and a non-zero exit code, keeps the labels and removes its container', async () => {
+  test('run() gives the output and a non-zero exit code, keeps the labels and removes its container', async (t) => {
     // Arrange
-    await using docker = await connect(IMAGE);
+    await using docker = await connect(IMAGE, t.signal);
     const run = randomUUID();
     const since = Math.floor(Date.now() / 1000) - 1;
     try {
@@ -497,7 +502,7 @@ describe('containers.run()', () => {
       for await (const event of docker.events({
         since,
         filters: { type: ['container'], label: [`${TEST_LABEL}=${run}`] },
-        signal: AbortSignal.timeout(20_000),
+        signal: t.signal,
       })) {
         actions.push(event.Action ?? '');
         if (event.Action === 'destroy') break;
@@ -511,9 +516,9 @@ describe('containers.run()', () => {
     }
   });
 
-  test('with a TTY, run() gives standard error in stdout', async () => {
+  test('with a TTY, run() gives standard error in stdout', async (t) => {
     // Arrange
-    await using docker = await connect(IMAGE);
+    await using docker = await connect(IMAGE, t.signal);
     const run = randomUUID();
     try {
       // Act
@@ -533,9 +538,9 @@ describe('containers.run()', () => {
     }
   });
 
-  test('a cancel while the container runs rejects with the reason and removes the container', async () => {
+  test('a cancel while the container runs rejects with the reason and removes the container', async (t) => {
     // Arrange
-    await using docker = await connect(IMAGE);
+    await using docker = await connect(IMAGE, t.signal);
     const run = randomUUID();
     const controller = new AbortController();
     const reason = new Error('the caller stopped waiting');
@@ -553,7 +558,7 @@ describe('containers.run()', () => {
       for await (const _started of docker.events({
         since,
         filters: { label: [`${TEST_LABEL}=${run}`], event: ['start'] },
-        signal: AbortSignal.timeout(20_000),
+        signal: t.signal,
       })) {
         break;
       }
@@ -569,9 +574,9 @@ describe('containers.run()', () => {
     }
   });
 
-  test('a start that fails rejects with its error and removes the container', async () => {
+  test('a start that fails rejects with its error and removes the container', async (t) => {
     // Arrange
-    await using docker = await connect(IMAGE);
+    await using docker = await connect(IMAGE, t.signal);
     const run = randomUUID();
     const network = `zukhruf-missing-${run}`;
     try {

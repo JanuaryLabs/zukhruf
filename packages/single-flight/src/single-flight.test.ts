@@ -9,10 +9,12 @@ import { Worker } from 'node:worker_threads';
 
 import { createClock } from '@sinonjs/fake-timers';
 
+import { Latch, untilAborted } from '@zukhruf/async';
 import { SqliteElection } from '@zukhruf/election';
 import { TemporaryFiles } from '@zukhruf/fs';
 import { Mutex } from '@zukhruf/mutex';
 import { SocketStore } from '@zukhruf/mutex/socket';
+import { waitFor } from '@zukhruf/testing/async';
 
 import {
   type Codec,
@@ -20,7 +22,6 @@ import {
   NetworkDirectoryError,
   SingleFlight,
 } from './index.ts';
-import { factTimeout } from './testing/fact-timeout.ts';
 
 /** Values that are text already. */
 const asText: Codec<string> = {
@@ -422,7 +423,10 @@ describe('A single flight shares the run in progress', () => {
     });
     const flight = controlledWork<string>();
     let joins = 0;
-    const onJoin = () => joins++;
+    const bothJoined = new Latch();
+    const onJoin = () => {
+      if (++joins === 2) bothJoined.open();
+    };
 
     // Act
     const calls = [
@@ -432,10 +436,7 @@ describe('A single flight shares the run in progress', () => {
     ];
     await flight.started;
     // The joiners hear onJoin before the outcome, so the flight ends once both did.
-    await t.waitFor(() => assert.ok(joins === 2, `${joins} callers joined`), {
-      interval: 5,
-      timeout: factTimeout,
-    });
+    await untilAborted(bothJoined.wait(), t.signal);
     flight.finish('report');
     const results = await Promise.all(calls);
 
@@ -727,13 +728,13 @@ describe('A single flight in its directory', () => {
         codec: asText,
       });
       void settle(second.run('sync', async () => 'second'));
-      await t.waitFor(
+      await waitFor(
         () =>
           assert.ok(
             existsSync(join(directory.path, 'flight.sock')),
             'The second term must start serving',
           ),
-        { interval: 5, timeout: factTimeout },
+        { signal: t.signal },
       );
     }
     // The clock never moves, so a call that waited on it, as for a grace

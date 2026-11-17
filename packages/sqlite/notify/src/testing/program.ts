@@ -3,13 +3,10 @@ import { once } from 'node:events';
 import { rm } from 'node:fs/promises';
 import { createInterface } from 'node:readline';
 
+import { untilAborted } from '@zukhruf/async';
 import { open } from '@zukhruf/sqlite-open';
-import { settleWithin } from '@zukhruf/testing/async';
 
 import type { Notification, Notifications } from '../index.ts';
-
-/** How long a test waits for a fact of real I/O, never asserting that it came sooner. */
-export const factTimeout = 10_000;
 
 /** The package index, for a program's `import`. */
 const packageIndex = new URL('../index.ts', import.meta.url).href;
@@ -138,29 +135,30 @@ export interface Program extends AsyncDisposable {
   /** The notifications that the program got so far. */
   readonly notifications: readonly Printed[];
   do(command: Command): void;
-  /** Resolves with the first printed object, past or coming, that `match` accepts, within `factTimeout`. */
-  printedOne(
-    label: string,
-    match: (printed: Printed) => boolean,
-  ): Promise<Printed>;
-  /** Resolves when the program got `count` notifications, within `factTimeout`. */
+  /** Resolves with the first printed object, past or coming, that `match` accepts. */
+  printedOne(match: (printed: Printed) => boolean): Promise<Printed>;
+  /** Resolves when the program got `count` notifications. */
   heard(count: number): Promise<readonly Printed[]>;
 }
 
 export interface ProgramOptions {
+  /** The limit of each wait of the program and of its disposal, for example `t.signal`. */
+  signal: AbortSignal;
   maxQueuedNotifications?: number;
 }
 
 /**
  * Runs a program with one `Notifications` on the file at `path`, in its own
  * Node process, and resolves when it is ready. Disposing ends it: a stopped
- * program is continued and disposed; a program that does not end in time is
- * killed, and the socket files of its listener rows are removed.
+ * program is continued and disposed; a program that does not end before
+ * `signal` aborts is killed, and the socket files of its listener rows are
+ * removed.
  */
 export async function startProgram(
   path: string,
-  options: ProgramOptions = {},
+  options: ProgramOptions,
 ): Promise<Program> {
+  const { signal } = options;
   const child = spawn(
     process.execPath,
     [
@@ -177,7 +175,7 @@ export async function startProgram(
     printed.push(JSON.parse(line));
     for (const watcher of watchers) watcher();
   });
-  const until = <T>(label: string, check: () => T | undefined): Promise<T> => {
+  const until = <T>(check: () => T | undefined): Promise<T> => {
     const found = Promise.withResolvers<T>();
     const watcher = () => {
       const value = check();
@@ -185,7 +183,7 @@ export async function startProgram(
     };
     watchers.add(watcher);
     watcher();
-    return settleWithin(found.promise, label, factTimeout).finally(() =>
+    return untilAborted(found.promise, signal).finally(() =>
       watchers.delete(watcher),
     );
   };
@@ -202,11 +200,11 @@ export async function startProgram(
     do(command) {
       child.stdin!.write(`${JSON.stringify(command)}\n`);
     },
-    printedOne(label, match) {
-      return until(label, () => printed.find(match));
+    printedOne(match) {
+      return until(() => printed.find(match));
     },
     heard(count) {
-      return until(`${count} notifications`, () => {
+      return until(() => {
         const heard = notifications();
         return heard.length >= count ? heard : undefined;
       });
@@ -216,7 +214,7 @@ export async function startProgram(
       child.kill('SIGCONT');
       program.do({ do: 'dispose' });
       try {
-        await settleWithin(exited, 'the program exits', factTimeout);
+        await untilAborted(exited, signal);
       } catch {
         child.kill('SIGKILL');
         await exited;
@@ -224,10 +222,7 @@ export async function startProgram(
       }
     },
   };
-  await program.printedOne(
-    'the program is ready',
-    (value) => value.event === 'ready',
-  );
+  await program.printedOne((value) => value.event === 'ready');
   return program;
 }
 
@@ -249,8 +244,11 @@ async function removeSocketFiles(path: string, processId: number) {
 export interface Heard {
   readonly notifications: readonly Notification[];
   readonly errors: readonly unknown[];
-  /** Resolves when `count` notifications came, within `factTimeout`. */
-  count(count: number): Promise<readonly Notification[]>;
+  /** Resolves when `count` notifications came. */
+  count(
+    count: number,
+    options: { signal: AbortSignal },
+  ): Promise<readonly Notification[]>;
 }
 
 export function hear(notifications: Notifications): Heard {
@@ -265,18 +263,16 @@ export function hear(notifications: Notifications): Heard {
   return {
     notifications: heard,
     errors,
-    count(count) {
+    count(count, { signal }) {
       const reached = Promise.withResolvers<readonly Notification[]>();
       const watcher = () => {
         if (heard.length >= count) reached.resolve(heard);
       };
       watchers.add(watcher);
       watcher();
-      return settleWithin(
-        reached.promise,
-        `${count} notifications`,
-        factTimeout,
-      ).finally(() => watchers.delete(watcher));
+      return untilAborted(reached.promise, signal).finally(() =>
+        watchers.delete(watcher),
+      );
     },
   };
 }

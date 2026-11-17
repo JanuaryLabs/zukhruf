@@ -5,6 +5,7 @@ import { test } from 'node:test';
 import type { Docker } from '@zukhruf/docker';
 
 import { timebox } from '../async/index.ts';
+import { waitFor } from '../async/wait-for.ts';
 import { DockerTestbed } from './index.ts';
 
 /**
@@ -152,23 +153,23 @@ test('Docker identity preserves configuration, ownership, and unfinished creatio
       }),
       { cause: new Error('owned startup failed') },
     );
-    await t.waitFor(
+    await waitFor(
       async () =>
         assert.equal(await client.containers.find(failedName), undefined),
-      { timeout: 10_000 },
+      { signal: t.signal },
     );
 
     // Arrange: a creator that died between create and start. The inspected
     // labels keep the identity, so the test does not repeat the fingerprint.
     const inspection = await first.container.inspect();
     await first.container.remove({ force: true, v: true });
-    await t.waitFor(
+    await waitFor(
       async () =>
         assert.equal(
           await client.containers.find(first.container.id),
           undefined,
         ),
-      { timeout: 10_000 },
+      { signal: t.signal },
     );
     await client.containers.create(
       {

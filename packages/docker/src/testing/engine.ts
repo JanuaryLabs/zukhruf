@@ -3,14 +3,22 @@ import { Docker } from '../index.ts';
 export const TEST_LABEL = 'dev.zukhruf.docker.test';
 export const IMAGE = 'alpine:3';
 
-/** The engine that the environment of the test run selects, with `image` on it. */
-export async function connect(image: string): Promise<Docker> {
+/**
+ * The engine that the environment of the test run selects, with `image` on it.
+ * The signal, such as `t.signal`, stops the connection and the pull.
+ */
+export async function connect(
+  image: string,
+  signal: AbortSignal,
+): Promise<Docker> {
   const docker = await Docker.connect({
     clock: globalThis,
     environment: process.env,
-    signal: AbortSignal.timeout(15_000),
+    signal,
   });
-  if (!(await docker.images.inspect(image))) await docker.images.pull(image);
+  if (!(await docker.images.inspect(image, { signal }))) {
+    await docker.images.pull(image, { signal });
+  }
   return docker;
 }
 

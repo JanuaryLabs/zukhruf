@@ -8,10 +8,10 @@ import { describe, test } from 'node:test';
 import { SqliteElection } from '@zukhruf/election';
 import { TemporaryFiles } from '@zukhruf/fs';
 import { PipeEndpoint } from '@zukhruf/pipes';
+import { waitFor } from '@zukhruf/testing/async';
 
 import { LeaseLostError, SingleFlight } from '../index.ts';
 import { KeyLocks } from '../key-lock/key-locks.ts';
-import { factTimeout } from '../testing/fact-timeout.ts';
 import { FlightServer } from './flight-server.ts';
 
 /**
@@ -140,13 +140,13 @@ describe('Flight server', () => {
         loss.abort();
 
         // Assert: the server dropped its follower, which then won the next term.
-        await t.waitFor(
+        await waitFor(
           () =>
             assert.ok(
               epochOf(directory.path) === String(term.epoch + 1n),
               `The follower must coordinate once the server of the lost term closes; flight.epoch is ${JSON.stringify(epochOf(directory.path))}`,
             ),
-          { interval: 5, timeout: factTimeout },
+          { signal: t.signal },
         );
         let token = 0n;
         await flights.run('product:42', async (lease) => {

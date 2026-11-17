@@ -6,12 +6,12 @@ import { syncBuiltinESMExports } from 'node:module';
 import { join } from 'node:path';
 import { type TestContext, describe } from 'node:test';
 
+import { untilAborted } from '@zukhruf/async';
 import { TemporaryFiles } from '@zukhruf/fs';
 import { test } from '@zukhruf/testing/node';
+import { startWorker } from '@zukhruf/testing/process';
 
-import { factTimeout } from '../../testing/fact-timeout.ts';
 import { type Settlement, watch } from '../../testing/watch.ts';
-import { startWorker } from '../../testing/worker-process.ts';
 import { LockFileStore } from './lock-file-store.ts';
 import { TicketQueueFileStore } from './ticket-queue-file-store.ts';
 
@@ -116,10 +116,7 @@ describe('A waiter that dies while it evicts a dead holder', () => {
         holderSource(store.url, store.name, directory.path),
         'holder',
       );
-      await t.waitFor(() => assert.ok(holder.has('holding'), holder.stderr), {
-        interval: 5,
-        timeout: factTimeout,
-      });
+      await holder.next('holding', { signal: t.signal });
       holder.child.kill('SIGKILL');
       await holder.closed;
       await using evicter = startWorker(
@@ -131,10 +128,7 @@ describe('A waiter that dies while it evicts a dead holder', () => {
         ),
         'evicter',
       );
-      await t.waitFor(
-        () => assert.ok(evicter.has('evicting'), evicter.stderr),
-        { interval: 5, timeout: factTimeout },
-      );
+      await evicter.next('evicting', { signal: t.signal });
       const first = store.create(directory.path);
       const second = store.create(directory.path);
 
@@ -157,31 +151,21 @@ describe('A waiter that dies while it evicts a dead holder', () => {
         [],
         'A waiter that dies while it evicts must leave no journal behind',
       );
-      const firstLease = watch(
-        first.acquire('product:42', {
-          signal: AbortSignal.timeout(factTimeout),
-        }),
-      );
-      const secondLease = watch(
-        second.acquire('product:42', {
-          signal: AbortSignal.timeout(factTimeout),
-        }),
-      );
+      const firstAcquire = first.acquire('product:42', { signal: t.signal });
+      const secondAcquire = second.acquire('product:42', { signal: t.signal });
+      const firstLease = watch(firstAcquire);
+      const secondLease = watch(secondAcquire);
 
       // Assert: the dead holder is evicted after all, and the key goes to one waiter at a time.
-      await t.waitFor(
-        () =>
-          assert.ok(
-            firstLease.now.status !== 'pending' ||
-              secondLease.now.status !== 'pending',
-            'A dead evicter must not keep the dead holder in place',
-          ),
-        { interval: 5, timeout: factTimeout },
+      // A dead evicter must not keep the dead holder in place.
+      await untilAborted(
+        Promise.race([firstAcquire, secondAcquire]).catch(() => {}),
+        t.signal,
       );
-      const [winner, loser] =
+      const [winner, loser, loserAcquire] =
         firstLease.now.status !== 'pending'
-          ? [firstLease, secondLease]
-          : [secondLease, firstLease];
+          ? [firstLease, secondLease, secondAcquire]
+          : [secondLease, firstLease, firstAcquire];
       const won = settlementOf(winner);
       assert.ok(
         won.status === 'fulfilled',
@@ -193,13 +177,10 @@ describe('A waiter that dies while it evicts a dead holder', () => {
         'Two waiters must not hold the key at once',
       );
       await won.value[Symbol.asyncDispose]();
-      await t.waitFor(
-        () =>
-          assert.ok(
-            loser.now.status !== 'pending',
-            'The other waiter must get the key once it is released',
-          ),
-        { interval: 5, timeout: factTimeout },
+      // The other waiter must get the key once it is released.
+      await untilAborted(
+        loserAcquire.catch(() => {}),
+        t.signal,
       );
       const lost = settlementOf(loser);
       assert.ok(
@@ -220,10 +201,7 @@ describe('A waiter that dies while it evicts a dead holder', () => {
         holderSource(store.url, store.name, directory.path),
         'holder',
       );
-      await t.waitFor(() => assert.ok(holder.has('holding'), holder.stderr), {
-        interval: 5,
-        timeout: factTimeout,
-      });
+      await holder.next('holding', { signal: t.signal });
       holder.child.kill('SIGKILL');
       await holder.closed;
       const [lockFile] = (await readdir(directory.path)).filter((file) =>
@@ -240,7 +218,7 @@ describe('A waiter that dies while it evicts a dead holder', () => {
       // Act
       const acquiring = store
         .create(directory.path)
-        .acquire('product:42', { signal: AbortSignal.timeout(factTimeout) });
+        .acquire('product:42', { signal: t.signal });
 
       // Assert: the waiter says which file is in the way instead of waiting forever.
       await assert.rejects(acquiring, (error: unknown) => {

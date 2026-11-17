@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { type TestContext, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
+import { waitFor } from '@zukhruf/testing/async';
 import { DockerTestbed } from '@zukhruf/testing/docker';
 import { describe } from '@zukhruf/testing/node';
 
@@ -112,7 +113,7 @@ function holdingIn(
   t: TestContext,
   container: Container,
 ): Promise<{ pid: number; token: string }> {
-  return t.waitFor(
+  return waitFor(
     async () => {
       const line = (await container.logs()).stdout
         .split('\n')
@@ -120,7 +121,7 @@ function holdingIn(
       assert.ok(line, `The holder in ${container.id} must take the key`);
       return JSON.parse(line);
     },
-    { interval: 100, timeout: 20000 },
+    { interval: 100, signal: t.signal },
   );
 }
 

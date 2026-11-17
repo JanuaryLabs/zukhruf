@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { promisify } from 'node:util';
 
+import { waitFor } from '../async/wait-for.ts';
 import { DockerTestbed } from '../docker/index.ts';
 import { Postgres } from './postgres.ts';
 import { SqlServer } from './sqlserver.ts';
@@ -93,12 +94,12 @@ test('explicit SQL Server startup creates the requested database and owns cleanu
       await pool.close();
     }
   }
-  await t.waitFor(
+  await waitFor(
     async () => {
       const client = await docker.client();
       assert.equal(await client.containers.find(id), undefined);
     },
-    { timeout: 10_000 },
+    { signal: t.signal },
   );
 });
 
@@ -278,13 +279,13 @@ for (const [engine, helper, config] of [
         const shared = await client.containers.find(server.containerId);
         assert.equal((await shared?.inspect())?.State?.Running, true);
         await shared?.stop();
-        await t.waitFor(
+        await waitFor(
           async () =>
             assert.equal(
               await client.containers.find(server.containerId),
               undefined,
             ),
-          { timeout: 10_000 },
+          { signal: t.signal },
         );
         const replacement = await run(false);
         assert.notEqual(replacement.containerId, server.containerId);

@@ -4,15 +4,14 @@ import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 
 import { TemporaryFiles } from '@zukhruf/fs';
+import { waitFor } from '@zukhruf/testing/async';
 import { describe, test } from '@zukhruf/testing/node';
+import { startWorker } from '@zukhruf/testing/process';
 
-import { Modes } from '../../mutex/acquire-modes/modes.ts';
 import { Mutex } from '../../mutex/mutex.ts';
-import { factTimeout } from '../../testing/fact-timeout.ts';
 import { mutexUrl } from '../../testing/module-urls.ts';
 import { settle } from '../../testing/timing.ts';
 import { tokensThatFailOnce } from '../../testing/tokens-that-fail-once.ts';
-import { startWorker } from '../../testing/worker-process.ts';
 import { IpcLockCoordinator } from './index.ts';
 
 describe('Process-tree mutex with IpcStore', () => {
@@ -39,14 +38,8 @@ describe('Process-tree mutex with IpcStore', () => {
     );
 
     // Act
-    await t.waitFor(
-      () =>
-        assert.ok(
-          child.has('released'),
-          `The child must take and release the key after its other messages.\n${child.stderr}`,
-        ),
-      { interval: 5, timeout: factTimeout },
-    );
+    // The child must take and release the key after its other messages.
+    await child.next('released', { signal: t.signal });
     // A key that is never handed over keeps this await open until the test times out.
     const next = await mutex.acquire(
       'product:42',
@@ -118,12 +111,12 @@ describe('Process-tree mutex with IpcStore', () => {
         (await readFile(journal, 'utf8').catch(() => '')).trim().split('\n');
       let log: string[] = [];
       const waitForLog = (line: string, message: string) =>
-        t.waitFor(
+        waitFor(
           async () => {
             log = await childLog();
             assert.ok(log.includes(line), `${message}\n${parent.stderr}`);
           },
-          { interval: 10, timeout: factTimeout },
+          { signal: t.signal },
         );
 
       await waitForLog(
@@ -137,12 +130,12 @@ describe('Process-tree mutex with IpcStore', () => {
       await parent.closed;
 
       // Assert: the child is told plainly instead of waiting forever or being granted.
-      await t.waitFor(
+      await waitFor(
         async () => {
           log = await childLog();
           assert.ok(log.some((line) => line.startsWith('rejected:')));
         },
-        { interval: 10, timeout: factTimeout },
+        { signal: t.signal },
       );
       assert.deepEqual(
         log,
@@ -206,7 +199,7 @@ describe('Process-tree mutex with IpcStore', () => {
       );
       let log: string[] = [];
       const waitForLog = (done: (log: string[]) => boolean, message: string) =>
-        t.waitFor(
+        waitFor(
           async () => {
             log = (await readFile(journal, 'utf8').catch(() => ''))
               .trim()
@@ -216,7 +209,7 @@ describe('Process-tree mutex with IpcStore', () => {
               `${message}\n${log.join('\n')}\n${parent.stderr}`,
             );
           },
-          { interval: 10, timeout: factTimeout },
+          { signal: t.signal },
         );
       await waitForLog(
         (lines) => lines.includes('waiting'),
@@ -288,22 +281,14 @@ describe('A worker or child whose token cannot be minted', () => {
     );
 
     // Act: the child reports while it holds the second key, and then exits.
-    await t.waitFor(
-      () =>
-        assert.ok(
-          child.has('holding'),
-          `The child must report while it holds a key.\n${child.stderr}`,
-        ),
-      { interval: 5, timeout: factTimeout },
-    );
+    // The child must report while it holds a key.
+    await child.next('holding', { signal: t.signal });
     child.child.kill('SIGKILL');
     await child.closed;
     const next = await mutex.acquire(
       'product:43',
       async () => 'granted' as const,
-      {
-        mode: Modes.skipIfBusy({ waitAtMost: factTimeout, clock: globalThis }),
-      },
+      { signal: t.signal },
     );
 
     // Assert
@@ -312,8 +297,8 @@ describe('A worker or child whose token cannot be minted', () => {
       'GrantFailedError: The lock coordinator could not grant "product:42": The token file could not be written.',
     );
     assert.equal(
-      next.acquired,
-      true,
+      next,
+      'granted',
       'The key of a child that exited must be free',
     );
   });

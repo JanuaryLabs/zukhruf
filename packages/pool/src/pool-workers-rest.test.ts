@@ -6,6 +6,7 @@ import { createClock } from '@sinonjs/fake-timers';
 import { Latch } from '@zukhruf/async';
 import { TemporaryFiles } from '@zukhruf/fs';
 import { SqliteJobQueue } from '@zukhruf/sqlite-queue';
+import { waitFor } from '@zukhruf/testing/async';
 import { describe, test } from '@zukhruf/testing/node';
 
 import {
@@ -16,10 +17,6 @@ import {
   type Worker,
   WorkerKind,
 } from './index.ts';
-
-// The longest wait for a fact that should hold at once; it bounds a broken
-// run and asserts no speed.
-const factTimeout = 10_000;
 
 // The queue of the kind "echo", revision 1.
 const queue = 'echo.r1';
@@ -72,17 +69,17 @@ describe('PoolWorkers rest', () => {
       schedule: false,
     }).start();
     try {
-      await t.waitFor(() => assert.ok(created > 0, 'the owner'), {
+      await waitFor(() => assert.ok(created > 0, 'the owner'), {
         interval: 5,
-        timeout: factTimeout,
+        signal: t.signal,
       });
       await jobs.send(queue, { input: { id: 'a' } });
       await jobs.send(queue, { input: { id: 'b' } });
       // The backstop fetches a and b, which no wake told of.
       await clock.tickAsync(1_000);
-      await t.waitFor(() => assert.deepEqual([...answers.keys()], ['a', 'b']), {
+      await waitFor(() => assert.deepEqual([...answers.keys()], ['a', 'b']), {
         interval: 5,
-        timeout: factTimeout,
+        signal: t.signal,
       });
       await jobs.send(queue, { input: { id: 'c' } });
       await jobs.send(queue, { input: { id: 'd' } });
@@ -91,9 +88,9 @@ describe('PoolWorkers rest', () => {
       answers.get('b')!();
 
       // The fake clock stands still: only the ends of a and b can wake the owner.
-      await t.waitFor(
+      await waitFor(
         () => assert.deepEqual([...answers.keys()], ['a', 'b', 'c', 'd']),
-        { interval: 5, timeout: factTimeout },
+        { interval: 5, signal: t.signal },
       );
     } finally {
       for (const answer of answers.values()) answer();

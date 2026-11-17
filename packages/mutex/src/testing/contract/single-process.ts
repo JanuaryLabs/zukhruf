@@ -8,14 +8,14 @@ import { Hono } from 'hono';
 
 import { Latch, untilAborted } from '@zukhruf/async';
 import type { FencingToken } from '@zukhruf/fencing';
+import { waitFor } from '@zukhruf/testing/async';
 import { describe, test } from '@zukhruf/testing/node';
+import { startWorker } from '@zukhruf/testing/process';
 
 import { Modes } from '../../mutex/acquire-modes/modes.ts';
 import { Mutex } from '../../mutex/mutex.ts';
-import { factTimeout } from '../fact-timeout.ts';
 import { mutexUrl } from '../module-urls.ts';
 import { settle } from '../timing.ts';
-import { startWorker } from '../worker-process.ts';
 import { label, longKey } from './keys.ts';
 import { storeIn } from './peers.ts';
 import type { Host, Subject } from './subject.ts';
@@ -124,14 +124,8 @@ export function singleProcess<H extends Host>(store: Subject<H>): void {
           nodeOptions: ['--unhandled-rejections=strict'],
         },
       );
-      await t.waitFor(
-        () =>
-          assert.ok(
-            application.exit !== null,
-            `The application must finish.\n${application.stderr}`,
-          ),
-        { interval: 5, timeout: factTimeout },
-      );
+      // The application must finish.
+      await untilAborted(application.closed, t.signal);
 
       // Assert: catching a callback error must be enough to keep the app running.
       assert.deepEqual(
@@ -147,7 +141,7 @@ export function singleProcess<H extends Host>(store: Subject<H>): void {
       await using host = store.open(fixture.location);
       const mutex = new Mutex(host.store);
       const finishFirst = Promise.withResolvers<void>();
-      let firstStarted = false;
+      const firstStarted = new Latch();
       let secondStarted = false;
       const operations: Array<Promise<boolean>> = [];
 
@@ -155,22 +149,13 @@ export function singleProcess<H extends Host>(store: Subject<H>): void {
         // Act: submit a second operation for the resource while the first is active.
         operations.push(
           mutex.acquire('product:42', async () => {
-            firstStarted = true;
+            firstStarted.open();
             await finishFirst.promise;
             return true;
           }),
         );
-        await t.waitFor(
-          () =>
-            assert.ok(
-              firstStarted,
-              'The first operation must start when its product has no active operation',
-            ),
-          {
-            interval: 5,
-            timeout: factTimeout,
-          },
-        );
+        // The first operation must start when its product has no active operation.
+        await untilAborted(firstStarted.wait(), t.signal);
         operations.push(
           mutex.acquire('product:42', async () => {
             secondStarted = true;
@@ -237,16 +222,13 @@ export function singleProcess<H extends Host>(store: Subject<H>): void {
       );
 
       try {
-        await t.waitFor(
+        await waitFor(
           () =>
             assert.ok(
               entered === 1,
               'One request must enter while the burst is submitted',
             ),
-          {
-            interval: 5,
-            timeout: factTimeout,
-          },
+          { signal: t.signal },
         );
         await delay(windowFor(store, settle));
         finishFirst.resolve();
@@ -285,46 +267,32 @@ export function singleProcess<H extends Host>(store: Subject<H>): void {
       await using host = store.open(fixture.location);
       const mutex = new Mutex(host.store);
       const finishFirst = Promise.withResolvers<void>();
-      let firstStarted = false;
-      let secondFinished = false;
+      const firstStarted = new Latch();
+      const secondFinished = new Latch();
       const operations: Array<Promise<boolean>> = [];
 
       try {
         operations.push(
           mutex.acquire('product:42', async () => {
-            firstStarted = true;
+            firstStarted.open();
             await finishFirst.promise;
             return true;
           }),
         );
-        await t.waitFor(
-          () =>
-            assert.ok(
-              firstStarted,
-              'Product 42 must be held before product 99 is requested',
-            ),
-          {
-            interval: 5,
-            timeout: factTimeout,
-          },
-        );
+        // Product 42 must be held before product 99 is requested.
+        await untilAborted(firstStarted.wait(), t.signal);
 
         // Act: this operation uses a different resource key.
         operations.push(
           mutex.acquire('product:99', async () => {
-            secondFinished = true;
+            secondFinished.open();
             return true;
           }),
         );
 
         // Assert: product 99 progressed before product 42 was released.
-        await t.waitFor(
-          () => assert.ok(secondFinished, 'An unrelated product was blocked'),
-          {
-            interval: 5,
-            timeout: factTimeout,
-          },
-        );
+        // An unrelated product must not be blocked.
+        await untilAborted(secondFinished.wait(), t.signal);
         finishFirst.resolve();
         assert.deepEqual(
           await Promise.allSettled(operations),
@@ -391,7 +359,7 @@ export function singleProcess<H extends Host>(store: Subject<H>): void {
           await using host = store.open(fixture.location);
           const mutex = new Mutex(host.store);
           const finishFirst = Promise.withResolvers<void>();
-          let firstStarted = false;
+          const firstStarted = new Latch();
           let secondStarted = false;
           const operations: Array<Promise<boolean>> = [];
 
@@ -399,22 +367,13 @@ export function singleProcess<H extends Host>(store: Subject<H>): void {
             // Act: two callers use exactly the same resource name.
             operations.push(
               mutex.acquire(key, async () => {
-                firstStarted = true;
+                firstStarted.open();
                 await finishFirst.promise;
                 return true;
               }),
             );
-            await t.waitFor(
-              () =>
-                assert.ok(
-                  firstStarted,
-                  `The first operation for ${label(key)} must start`,
-                ),
-              {
-                interval: 5,
-                timeout: factTimeout,
-              },
-            );
+            // The first operation for the name must start.
+            await untilAborted(firstStarted.wait(), t.signal);
             operations.push(
               mutex.acquire(key, async () => {
                 secondStarted = true;
@@ -459,21 +418,15 @@ export function singleProcess<H extends Host>(store: Subject<H>): void {
           await using host = store.open(fixture.location);
           const mutex = new Mutex(host.store);
           const finishHolder = Promise.withResolvers<void>();
-          let holding = false;
+          const holding = new Latch();
           const holder = mutex.acquire(held, async () => {
-            holding = true;
+            holding.open();
             await finishHolder.promise;
           });
 
           try {
-            await t.waitFor(
-              () =>
-                assert.ok(holding, `The holder of ${label(held)} must start`),
-              {
-                interval: 5,
-                timeout: factTimeout,
-              },
-            );
+            // The holder of the first name must start.
+            await untilAborted(holding.wait(), t.signal);
 
             // Act: another caller asks for the second name and does not wait.
             const result = await mutex.acquire(other, async () => 'ran', {
@@ -501,20 +454,15 @@ export function singleProcess<H extends Host>(store: Subject<H>): void {
       await using host = store.open(fixture.location);
       const mutex = new Mutex(host.store);
       const finishHolder = Promise.withResolvers<void>();
-      let holding = false;
+      const holding = new Latch();
       const holder = mutex.acquire('Sync', async () => {
-        holding = true;
+        holding.open();
         await finishHolder.promise;
       });
 
       try {
-        await t.waitFor(
-          () => assert.ok(holding, "The holder of 'Sync' must start"),
-          {
-            interval: 5,
-            timeout: factTimeout,
-          },
-        );
+        // The holder of 'Sync' must start.
+        await untilAborted(holding.wait(), t.signal);
 
         // Act: other callers ask for 'sync' and 'SYNC' and do not wait.
         const lower = await mutex.acquire('sync', async () => 'ran', {

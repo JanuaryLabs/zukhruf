@@ -9,20 +9,19 @@ import { type TestContext, test } from 'node:test';
 
 import { Docker } from '@zukhruf/docker';
 import { TemporaryFiles } from '@zukhruf/fs';
-import { timebox } from '@zukhruf/testing/async';
+import { timebox, waitFor } from '@zukhruf/testing/async';
 import { DockerTestbed } from '@zukhruf/testing/docker';
+import { startWorker } from '@zukhruf/testing/process';
 
-import { factTimeout } from './fact-timeout.ts';
 import { mutexUrl } from './module-urls.ts';
 import {
   dockerImage,
   subject as dockerSubject,
 } from './subjects/docker-engine.ts';
-import { startWorker } from './worker-process.ts';
 
 const memoryUrl = new URL('./subjects/memory.ts', import.meta.url);
 const dockerUrl = new URL('./subjects/docker-engine.ts', import.meta.url);
-const workerProcessUrl = new URL('./worker-process.ts', import.meta.url);
+const workerProcessUrl = import.meta.resolve('@zukhruf/testing/process');
 
 /** Whether the process `pid` still runs. EPERM means the OS gave the pid to a process of another user. */
 const isRunning = (pid: number) => {
@@ -44,7 +43,7 @@ test('a matrix child exits when its test process is killed', async (t) => {
   // Arrange: a test process starts a matrix child that grants a key again and again.
   await using testProcess = startWorker(
     `
-				import { startWorker } from ${JSON.stringify(workerProcessUrl.href)};
+				import { startWorker } from ${JSON.stringify(workerProcessUrl)};
 
 				const child = startWorker(\`
 					import { setTimeout as delay } from 'node:timers/promises';
@@ -65,14 +64,8 @@ test('a matrix child exits when its test process is killed', async (t) => {
 			`,
     'test process',
   );
-  await t.waitFor(
-    () =>
-      assert.ok(
-        testProcess.has('granting'),
-        `The matrix child must grant.\n${testProcess.stderr}`,
-      ),
-    { interval: 5, timeout: factTimeout },
-  );
+  // The matrix child must grant.
+  await testProcess.next('granting', { signal: t.signal });
   const pid = Number(testProcess.find('granting')?.pid);
   try {
     // Act
@@ -80,13 +73,13 @@ test('a matrix child exits when its test process is killed', async (t) => {
     await testProcess.closed;
 
     // Assert
-    await t.waitFor(
+    await waitFor(
       () =>
         assert.ok(
           !isRunning(pid),
           'The matrix child must exit when its test process is killed',
         ),
-      { interval: 5, timeout: factTimeout },
+      { signal: t.signal },
     );
   } finally {
     if (isRunning(pid)) process.kill(pid, 'SIGKILL');
@@ -132,13 +125,13 @@ test('a matrix child that opens the DockerEngineStore records itself in the run 
   await child.next('started', { signal: t.signal });
 
   // Assert
-  await t.waitFor(
+  await waitFor(
     () =>
       assert.ok(
         recordedPids(records.path).includes(child.child.pid!),
         'The run must have a process record of the matrix child once it opened the store',
       ),
-    { interval: 5, timeout: factTimeout },
+    { signal: t.signal },
   );
   // The disposal kills the child: a kill during its take of the hold would
   // leave the run's reaper created.
@@ -275,13 +268,13 @@ async function onSecondEngine(
   });
 
   await using child = startWorker(source(fixture.location), 'child');
-  await t.waitFor(
+  await waitFor(
     () =>
       assert.ok(
         child.has('acquired'),
         `The matrix child must acquire a key.\n${child.stderr}`,
       ),
-    { interval: 5, timeout: 120_000 },
+    { interval: 5, signal: t.signal },
   );
 
   const claims = `dev.zukhruf.testing.run=${run}`;

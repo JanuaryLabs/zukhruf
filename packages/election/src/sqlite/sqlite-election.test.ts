@@ -9,14 +9,15 @@ import { type TestContext, describe, test } from 'node:test';
 
 import { createClock } from '@sinonjs/fake-timers';
 
+import { untilAborted } from '@zukhruf/async';
 import {
   NetworkDirectoryError as FsNetworkDirectoryError,
   TemporaryFiles,
 } from '@zukhruf/fs';
+import { waitFor } from '@zukhruf/testing/async';
+import { startWorker } from '@zukhruf/testing/process';
 
 import { NetworkDirectoryError, SqliteElection, type Term } from '../index.ts';
-import { factTimeout } from '../testing/fact-timeout.ts';
-import { startWorker } from '../testing/worker-process.ts';
 
 const indexUrl = new URL('../index.ts', import.meta.url);
 
@@ -75,9 +76,10 @@ class LosableElection extends SqliteElection {
  * so a killed leader's socket file goes with the replaced record. Copied
  * from sqlite-election.pipe.test.ts (docs/copied-code.md).
  */
-async function succeed(directory: string) {
+async function succeed(directory: string, signal: AbortSignal) {
   const successor = await electionIn(directory).campaign({
-    timeout: factTimeout,
+    timeout: Infinity,
+    signal,
   });
   assert.ok(successor, 'A successor must win once the last leader ended');
   await successor.resign();
@@ -104,15 +106,14 @@ describe('A SQLite election across processes', () => {
       candidates.use(startWorker(candidateSource(directory.path, 300), name)),
     );
     try {
-      await t.waitFor(
-        () =>
-          assert.ok(
-            workers.every(
-              (worker) => worker.has('leader') || worker.has('follower'),
-            ),
-            `Every candidate must report its outcome.\n${workers.map((worker) => worker.stderr).join('')}`,
+      await Promise.all(
+        workers.map((worker) =>
+          worker.next(
+            (message) =>
+              message.type === 'leader' || message.type === 'follower',
+            { signal: t.signal },
           ),
-        { interval: 5, timeout: factTimeout },
+        ),
       );
 
       // Assert
@@ -123,7 +124,7 @@ describe('A SQLite election across processes', () => {
       );
     } finally {
       await candidates.disposeAsync();
-      await succeed(directory.path);
+      await succeed(directory.path, t.signal);
     }
   });
 
@@ -137,15 +138,7 @@ describe('A SQLite election across processes', () => {
       candidateSource(directory.path, 1000),
       'leader',
     );
-    await t.waitFor(
-      () =>
-        assert.ok(
-          leader.has('leader'),
-          `The first candidate must lead.\n${leader.stderr}`,
-        ),
-      { interval: 5, timeout: factTimeout },
-    );
-    const epoch = leader.find('leader')?.epoch;
+    const { epoch } = await leader.next('leader', { signal: t.signal });
     assert.ok(typeof epoch === 'string', 'The leader must report its epoch');
     assert.equal(
       await election.campaign({ timeout: 100 }),
@@ -156,7 +149,10 @@ describe('A SQLite election across processes', () => {
     // Act: the leader dies without resigning.
     leader.child.kill('SIGKILL');
     await leader.closed;
-    await using successor = await election.campaign({ timeout: factTimeout });
+    await using successor = await election.campaign({
+      timeout: Infinity,
+      signal: t.signal,
+    });
 
     // Assert
     assert.ok(successor, 'A candidate must take over once the leader is gone');
@@ -206,7 +202,7 @@ describe('A SQLite election across processes', () => {
     const clock = createClock();
     const stop = new AbortController();
     let successor: Term | undefined;
-    void new SqliteElection({
+    const settled = new SqliteElection({
       clock,
       directory: directory.path,
       claimFile: 'term.lock',
@@ -218,18 +214,15 @@ describe('A SQLite election across processes', () => {
         () => {},
       );
     // Its one timer is the deadline of the heartbeat: it holds the pipe.
-    await t.waitFor(() => assert.equal(clock.countTimers(), 1), {
-      interval: 5,
-      timeout: factTimeout,
+    await waitFor(() => assert.equal(clock.countTimers(), 1), {
+      signal: t.signal,
     });
 
     try {
       // Act
       loss.abort();
-      await t.waitFor(
-        () => assert.ok(successor, 'The candidate must win after the loss'),
-        { interval: 5, timeout: factTimeout },
-      );
+      await untilAborted(settled, t.signal);
+      assert.ok(successor, 'The candidate must win after the loss');
 
       // Assert
       assert.equal(successor?.epoch, 2n);
@@ -599,19 +592,15 @@ describe('A clean shutdown in a SQLite election', () => {
       candidateSource(directory.path, 1000),
       'leader',
     );
-    await t.waitFor(
-      () =>
-        assert.ok(
-          leader.has('leader'),
-          `The second candidate must lead.\n${leader.stderr}`,
-        ),
-      { interval: 5, timeout: factTimeout },
-    );
+    await leader.next('leader', { signal: t.signal });
 
     // Act: the second leader dies without resigning.
     leader.child.kill('SIGKILL');
     await leader.closed;
-    await using next = await election.campaign({ timeout: factTimeout });
+    await using next = await election.campaign({
+      timeout: Infinity,
+      signal: t.signal,
+    });
 
     // Assert
     assert.ok(next, 'A candidate must take over once the leader is gone');

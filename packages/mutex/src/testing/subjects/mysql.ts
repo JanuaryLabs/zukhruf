@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import mysql from 'mysql2/promise';
 
 import type { Clock } from '@zukhruf/async';
+import { waitFor } from '@zukhruf/testing/async';
 import { Mysql } from '@zukhruf/testing/mysql';
 import type { DatabaseOptions } from '@zukhruf/testing/postgres';
 
@@ -219,7 +220,7 @@ export const sessionControl: SessionControl = {
   async untilASessionWaits(t, location) {
     await using observer = await mysql.createConnection(serverAt(location));
 
-    await t.waitFor(
+    await waitFor(
       async () => {
         const [rows] = await observer.query<mysql.RowDataPacket[]>(
           `SELECT COUNT(*) AS waiting FROM information_schema.PROCESSLIST
@@ -230,7 +231,7 @@ export const sessionControl: SessionControl = {
           'No session waits for a lock.',
         );
       },
-      { interval: 10, timeout: 10_000 },
+      { interval: 10, signal: t.signal },
     );
   },
 };

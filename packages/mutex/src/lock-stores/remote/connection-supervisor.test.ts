@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict';
+import { once } from 'node:events';
 import { describe, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 
+import { untilAborted } from '@zukhruf/async';
+import { waitFor } from '@zukhruf/testing/async';
+
 import { isRecord } from '../../shared/is-record.ts';
-import { factTimeout } from '../../testing/fact-timeout.ts';
 import {
   scriptedConnector,
   scriptedPeer,
@@ -51,7 +54,8 @@ describe('Connection supervisor', () => {
     supervisor.open();
 
     // Act
-    const closing = watch(supervisor.close());
+    const close = supervisor.close();
+    const closing = watch(close);
     await delay(settle);
     const beforeSettled = closing.now.status;
     connecting.reject(signal?.reason);
@@ -63,14 +67,8 @@ describe('Connection supervisor', () => {
       'pending',
       'Close must wait for the connect it aborted',
     );
-    await t.waitFor(
-      () =>
-        assert.ok(
-          closing.now.status === 'fulfilled',
-          'Close must finish once the connect settles',
-        ),
-      { interval: 5, timeout: factTimeout },
-    );
+    // Close must finish once the connect settles.
+    await untilAborted(close, t.signal);
   });
 
   // Kept as a double: every shipped connector is async, so only a stand-in throws before it returns a promise.
@@ -86,13 +84,12 @@ describe('Connection supervisor', () => {
 
     try {
       // Act
+      const failed = once(supervisor, 'failed');
       supervisor.open();
 
       // Assert
-      await t.waitFor(
-        () => assert.ok(events.length > 0, 'The failure must be reported'),
-        { interval: 5, timeout: factTimeout },
-      );
+      // The failure must be reported.
+      await untilAborted(failed, t.signal);
       assert.deepEqual(events, ['Error: EACCES']);
     } finally {
       await supervisor.close();
@@ -108,14 +105,8 @@ describe('Connection supervisor', () => {
     });
     supervisor.open();
     calls[0]!.resolve(peer.connection);
-    await t.waitFor(
-      () =>
-        assert.ok(
-          events.includes('connected'),
-          'The connection must be reported',
-        ),
-      { interval: 5, timeout: factTimeout },
-    );
+    // The connection must be reported.
+    await untilAborted(once(supervisor, 'connected'), t.signal);
 
     try {
       // Act
@@ -140,24 +131,12 @@ describe('Connection supervisor', () => {
     const second = scriptedPeer<Message, Message>();
     supervisor.open();
     calls[0]!.resolve(first.connection);
-    await t.waitFor(
-      () =>
-        assert.ok(
-          events.includes('connected'),
-          'The connection must be reported',
-        ),
-      { interval: 5, timeout: factTimeout },
-    );
+    // The connection must be reported.
+    await untilAborted(once(supervisor, 'connected'), t.signal);
     first.drop();
     calls[1]!.resolve(second.connection);
-    await t.waitFor(
-      () =>
-        assert.ok(
-          events.filter((event) => event === 'connected').length === 2,
-          'The replacement must be reported',
-        ),
-      { interval: 5, timeout: factTimeout },
-    );
+    // The replacement must be reported.
+    await untilAborted(once(supervisor, 'connected'), t.signal);
 
     try {
       // Act
@@ -189,14 +168,8 @@ describe('Connection supervisor', () => {
       // Act
       const whileConnecting = supervisor.send({ n: 1 });
       calls[0]!.resolve(peer.connection);
-      await t.waitFor(
-        () =>
-          assert.ok(
-            events.includes('connected'),
-            'The connection must be reported',
-          ),
-        { interval: 5, timeout: factTimeout },
-      );
+      // The connection must be reported.
+      await untilAborted(once(supervisor, 'connected'), t.signal);
       const whileDropping = supervisor.send({ n: 2 });
 
       // Assert
@@ -241,9 +214,9 @@ describe('Connection supervisor', () => {
       // Assert
       assert.deepEqual(duringLoss, { status: 'connecting', sent: false });
       assert.deepEqual(first.sent, []);
-      await t.waitFor(
+      await waitFor(
         () => assert.ok(calls.length === 2, 'The supervisor must reconnect'),
-        { interval: 5, timeout: factTimeout },
+        { signal: t.signal },
       );
     } finally {
       await supervisor.close();

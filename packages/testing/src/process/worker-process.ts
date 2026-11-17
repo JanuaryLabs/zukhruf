@@ -2,44 +2,57 @@ import { type ChildProcess, spawn } from 'node:child_process';
 
 import { untilAborted } from '@zukhruf/async';
 
-import { isRecord } from '../shared/is-record.ts';
-
 export interface WorkerMessage {
   type: string;
   [field: string]: unknown;
 }
 
+/** Selects a message: its `type`, or a predicate over the whole message. */
+export type MessageMatch = string | ((message: WorkerMessage) => boolean);
+
 export interface WorkerProcess extends AsyncDisposable {
   readonly child: ChildProcess;
+  /** Resolves when the child exited and closed its pipes. */
   readonly closed: Promise<void>;
+  /** Each message the child sent, in order. */
   readonly messages: WorkerMessage[];
+  /** The child's stderr, each chunk prefixed with the worker's name. */
   stderr: string;
+  /** How the child exited, or `null` while it runs. */
   exit: { code: number | null; signal: NodeJS.Signals | null } | null;
   has(type: string): boolean;
   find(type: string): WorkerMessage | undefined;
   /**
-   * The first message of `type`, sent before or after the call. Rejects with
-   * the child's stderr when the child closes first, and with the reason of
-   * `signal` when it aborts.
+   * The first message that `match` selects, sent before or after the call.
+   * A predicate sees each message once, in the order the child sent it, so it
+   * can count. Rejects with the child's stderr when the child closes first,
+   * and with the reason of `signal` when it aborts.
    */
-  next(type: string, options: { signal: AbortSignal }): Promise<WorkerMessage>;
+  next(
+    match: MessageMatch,
+    options: { signal: AbortSignal },
+  ): Promise<WorkerMessage>;
+}
+
+export interface WorkerOptions {
+  /** Runs with the child before it can send anything, for example to join it to a coordinator. */
+  admit?: (child: ChildProcess) => void;
+  /** Node flags before `--eval`. */
+  nodeOptions?: string[];
 }
 
 const isWorkerMessage = (message: unknown): message is WorkerMessage =>
-  isRecord(message) && typeof message.type === 'string';
-
-export interface WorkerOptions {
-  /** Joins the child to a coordinator before it can send anything. */
-  admit?: (child: ChildProcess) => void;
-  nodeOptions?: string[];
-}
+  typeof message === 'object' &&
+  message !== null &&
+  'type' in message &&
+  typeof message.type === 'string';
 
 /**
  * Ends the child when this process ends, even by SIGKILL: the OS closes the
  * write end of the child's stdin, and the child reads its end. A `disconnect`
  * listener on the IPC channel would keep each child alive until its parent
- * ends, and an unref of the channel would let an IpcStore child exit while it
- * waits for a grant. The unref stdin keeps nothing alive. ESM hoists the
+ * ends, and an unref of the channel would let a child exit while it waits for
+ * a message of the parent. The unref stdin keeps nothing alive. ESM hoists the
  * imports of `source` above it.
  */
 const exitWithParent =
@@ -74,30 +87,33 @@ export function startWorker(
     messages: [],
     stderr: '',
     exit: null,
-    has(type: string) {
+    has(type) {
       return worker.messages.some((message) => message.type === type);
     },
-    find(type: string) {
+    find(type) {
       return worker.messages.find((message) => message.type === type);
     },
-    next(type: string, { signal }: { signal: AbortSignal }) {
-      const arrived = worker.find(type);
+    next(match, { signal }) {
+      const selects =
+        typeof match === 'string'
+          ? (message: WorkerMessage) => message.type === match
+          : match;
+      const arrived = worker.messages.find(selects);
       if (arrived) return Promise.resolve(arrived);
       const message = Promise.withResolvers<WorkerMessage>();
       const onMessage = (sent: unknown) => {
-        if (isWorkerMessage(sent) && sent.type === type) message.resolve(sent);
+        if (!isWorkerMessage(sent) || !selects(sent)) return;
+        child.off('message', onMessage);
+        message.resolve(sent);
       };
       child.on('message', onMessage);
-      void closed.promise.then(() => {
-        const last = worker.find(type);
-        if (last) message.resolve(last);
-        else
-          message.reject(
-            new Error(
-              `${name} closed with ${JSON.stringify(worker.exit)} before it sent '${type}'.\n${worker.stderr}`,
-            ),
-          );
-      });
+      void closed.promise.then(() =>
+        message.reject(
+          new Error(
+            `${name} closed with ${JSON.stringify(worker.exit)} before it sent ${typeof match === 'string' ? `'${match}'` : 'a selected message'}.\n${worker.stderr}`,
+          ),
+        ),
+      );
       return untilAborted(message.promise, signal).finally(() =>
         child.off('message', onMessage),
       );
