@@ -13,6 +13,7 @@ import ssh2, {
 
 import { type Clock, Future, Latch, timeout } from '@zukhruf/async';
 
+import { splitHostPort } from './address.ts';
 import type { Signer } from './private-key.ts';
 import { PublicKey } from './public-key.ts';
 import {
@@ -120,7 +121,7 @@ export class Client implements AsyncDisposable {
     config: ClientConfig,
     options: { readonly family?: 4 | 6; readonly signal?: AbortSignal } = {},
   ): Promise<Client> {
-    const { host, port } = splitAddress(address);
+    const { host, port } = splitHostPort(address);
     return Client.#start(address, config, options.signal, () =>
       connect({
         host,
@@ -147,7 +148,7 @@ export class Client implements AsyncDisposable {
     open: () => Duplex,
   ): Promise<Client> {
     signal?.throwIfAborted();
-    const { host, port } = splitAddress(address);
+    const { host, port } = splitHostPort(address);
     const serverHostKey = offeredHostKeyAlgorithms(config.hostKeyAlgorithms);
     const limit =
       config.connectTimeout === undefined
@@ -502,14 +503,4 @@ function offeredHostKeyAlgorithms(
     );
   }
   return offered;
-}
-
-function splitAddress(address: string): { host: string; port: number } {
-  const colon = address.lastIndexOf(':');
-  const port = Number(address.slice(colon + 1));
-  if (colon < 0 || !Number.isInteger(port) || port < 0 || port > 65_535) {
-    throw new TypeError(`ssh: the address ${address} is not host:port`);
-  }
-  const host = address.slice(0, colon).replace(/^\[(.*)\]$/, '$1');
-  return { host, port };
 }
