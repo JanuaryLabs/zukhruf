@@ -1,4 +1,4 @@
-import { Backoff, type Clock, Latch, delay } from '@zukhruf/async';
+import { Backoff, type Clock, Future, delay } from '@zukhruf/async';
 
 import type { Eviction } from './eviction.ts';
 import type { PoolStats } from './pool-stats.ts';
@@ -36,7 +36,7 @@ type State<T> =
   | { readonly kind: 'empty' }
   | {
       readonly kind: 'starting';
-      readonly outcome: Latch<PromiseSettledResult<T>>;
+      readonly outcome: Future<T>;
     }
   | Ready<T>
   | { readonly kind: 'lost'; readonly worker: T; readonly since: number }
@@ -69,7 +69,7 @@ export class Slots<
   readonly #lent = new Set<Slot<T>>();
   readonly #workers = new Set<T>();
   readonly #stopped = new AbortController();
-  readonly #started = new Latch<PromiseSettledResult<void>>();
+  readonly #started: Future<void>;
   readonly #clock: Clock;
   // How many slots run, and since when.
   #current: number;
@@ -99,10 +99,9 @@ export class Slots<
     const outcomes = options.startup.eager
       ? this.#running().map((slot) => this.#spawn(slot))
       : [];
-    Promise.all(outcomes.map((outcome) => settled(outcome))).then(
-      () => this.#started.open({ status: 'fulfilled', value: undefined }),
-      (reason: unknown) => this.#started.open({ status: 'rejected', reason }),
-    );
+    this.#started = Future.run(async () => {
+      await Promise.all(outcomes.map((outcome) => outcome.wait()));
+    });
   }
 
   // Aborted when the slots are disposed.
@@ -112,9 +111,8 @@ export class Slots<
 
   // Settles when the workers the startup starts with the slots are ready, and
   // rejects when one of them fails to start.
-  async ready(): Promise<void> {
-    const outcome = await this.#started.wait();
-    if (outcome.status === 'rejected') throw outcome.reason;
+  ready(): Promise<void> {
+    return this.#started.wait();
   }
 
   // The stats, given how many jobs wait in the host's queue.
@@ -165,9 +163,9 @@ export class Slots<
     }
     // A job does not wait out a back-off: its worker starts now, and the start
     // ends the wait of the back-off.
-    const worker = await settled(
-      state.kind === 'starting' ? state.outcome : this.#spawn(slot),
-    );
+    const worker = await (
+      state.kind === 'starting' ? state.outcome : this.#spawn(slot)
+    ).wait();
     const now = slot.state;
     if (now.kind === 'ready' && now.worker === worker) return worker;
     // The worker exited between its start and this borrow.
@@ -236,50 +234,42 @@ export class Slots<
     return since;
   }
 
-  #spawn(slot: Slot<T>): Latch<PromiseSettledResult<T>> {
-    const outcome = new Latch<PromiseSettledResult<T>>();
-    this.#enter(slot, { kind: 'starting', outcome });
+  #spawn(slot: Slot<T>): Future<T> {
     const turn = Promise.withResolvers<void>();
-    this.#startup
-      .turn(turn.promise)
-      .then(async () => {
+    const outcome: Future<T> = Future.run(async () => {
+      let worker: T;
+      try {
+        await this.#startup.turn(turn.promise);
         this.#stopped.signal.throwIfAborted();
-        const worker = this.#create();
+        worker = this.#create();
         this.#workers.add(worker);
         try {
           await worker.ready?.();
-          return worker;
         } catch (error) {
           worker.kill();
           await this.#close(worker);
           throw error;
         }
-      })
-      .then(
-        (worker) => {
-          if (slot.state.kind === 'starting' && slot.state.outcome === outcome)
-            this.#rest(slot, worker, this.#clock.performance.now());
-          outcome.open({ status: 'fulfilled', value: worker });
-          turn.resolve();
-          void worker.exited().then(() => this.#ended(slot, worker));
-        },
-        (reason: unknown) => {
-          if (
-            slot.state.kind === 'starting' &&
-            slot.state.outcome === outcome
-          ) {
-            this.#enter(slot, { kind: 'empty' });
-            // A failed warm-up is an early exit, whoever started the worker,
-            // as HikariCP tries a failed create again (ADR 0010).
-            if (this.#startup.eager && !this.#stopped.signal.aborted) {
-              slot.early++;
-              this.#restart(slot);
-            }
+      } catch (reason) {
+        if (slot.state.kind === 'starting' && slot.state.outcome === outcome) {
+          this.#enter(slot, { kind: 'empty' });
+          // A failed warm-up is an early exit, whoever started the worker,
+          // as HikariCP tries a failed create again (ADR 0010).
+          if (this.#startup.eager && !this.#stopped.signal.aborted) {
+            slot.early++;
+            this.#restart(slot);
           }
-          outcome.open({ status: 'rejected', reason });
-          turn.resolve();
-        },
-      );
+        }
+        throw reason;
+      } finally {
+        turn.resolve();
+      }
+      if (slot.state.kind === 'starting' && slot.state.outcome === outcome)
+        this.#rest(slot, worker, this.#clock.performance.now());
+      void worker.exited().then(() => this.#ended(slot, worker));
+      return worker;
+    });
+    this.#enter(slot, { kind: 'starting', outcome });
     return outcome;
   }
 
@@ -385,7 +375,7 @@ export class Slots<
     if (state.kind === 'ready' || state.kind === 'lost')
       void this.#close(state.worker);
     else if (state.kind === 'starting')
-      void settled(state.outcome).then(
+      void state.outcome.wait().then(
         (worker) => this.#close(worker),
         () => undefined,
       );
@@ -402,11 +392,4 @@ export class Slots<
     for (const worker of this.#workers) worker.kill();
     await Promise.all([...this.#workers].map((worker) => worker.close()));
   }
-}
-
-// The worker a creation gave, or its failure.
-async function settled<T>(outcome: Latch<PromiseSettledResult<T>>): Promise<T> {
-  const result = await outcome.wait();
-  if (result.status === 'rejected') throw result.reason;
-  return result.value;
 }

@@ -1,4 +1,4 @@
-import PQueue from 'p-queue';
+import { Lock } from '@zukhruf/async';
 
 import type { Startup } from './startup.ts';
 
@@ -7,14 +7,11 @@ import type { Startup } from './startup.ts';
 // pods of an OrderedReady StatefulSet.
 export class OrderedReady implements Startup {
   readonly eager = true;
-  readonly #queue = new PQueue({ concurrency: 1 });
+  readonly #lock = new Lock();
 
-  turn(settled: Promise<void>): Promise<void> {
-    const turn = Promise.withResolvers<void>();
-    void this.#queue.add(() => {
-      turn.resolve();
-      return settled;
-    });
-    return turn.promise;
+  async turn(settled: Promise<void>): Promise<void> {
+    const held = await this.#lock.acquire({ signal: undefined });
+    const free = () => held[Symbol.dispose]();
+    void settled.then(free, free);
   }
 }

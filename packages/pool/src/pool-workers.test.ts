@@ -211,6 +211,30 @@ describe('PoolWorkers', { concurrency: true }, () => {
     assert.deepEqual(await readdir(folder.path, { recursive: true }), []);
   });
 
+  test("a host whose kind's expireInSeconds the store refuses rejects its disposal with the store's failure", async () => {
+    await using folder = await new TemporaryFiles().directory('pool-');
+    const host = new PoolWorkers({
+      kind: new WorkerKind<{ id: string }, { id: string }>({
+        name: 'echo',
+        revision: 1,
+        policy: 'standard',
+        retryLimit: 0,
+        expireInSeconds: 25 * 60 * 60,
+      }),
+      store: join(folder.path, 'store.sqlite'),
+      clock: globalThis,
+      create: new HeldWorkers().create,
+      size: new Fixed(1),
+      startup: new Parallel(),
+      eviction: new NoEviction(),
+    });
+
+    await assert.rejects(
+      host[Symbol.asyncDispose](),
+      /expiration cannot exceed 24 hours/,
+    );
+  });
+
   test('of two hosts on one store, only the owner starts workers and runs the jobs', async (t) => {
     await using folder = await new TemporaryFiles().directory('pool-');
     const store = join(folder.path, 'store.sqlite');

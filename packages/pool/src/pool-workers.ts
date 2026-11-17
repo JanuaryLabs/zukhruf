@@ -1,4 +1,4 @@
-import { Latch, type WallClock, delay } from '@zukhruf/async';
+import { Future, type WallClock, delay } from '@zukhruf/async';
 import { SqliteElection, type Term } from '@zukhruf/election';
 
 import type { Eviction } from './eviction.ts';
@@ -50,9 +50,9 @@ export class PoolWorkers<Input, Output> implements AsyncDisposable {
   readonly #disposed = new AbortController();
   // Aborts with the first failure of the store: the host then stops owning.
   readonly #failed = new AbortController();
-  // Opens when the host stops offering its workers, with the failure that
-  // stopped it, if one did.
-  readonly #ended = new Latch<PromiseSettledResult<void>>();
+  // Settles when the host stops offering its workers, and fails with the
+  // failure that stopped it, if one did.
+  readonly #ended: Future<void>;
 
   constructor(options: {
     kind: WorkerKind<Input, Output>;
@@ -81,10 +81,7 @@ export class PoolWorkers<Input, Output> implements AsyncDisposable {
       epochFile: `${options.kind.name}.epoch`,
       clock: options.clock,
     });
-    this.#live().then(
-      () => this.#ended.open({ status: 'fulfilled', value: undefined }),
-      (reason: unknown) => this.#ended.open({ status: 'rejected', reason }),
-    );
+    this.#ended = Future.run(() => this.#live());
   }
 
   async #live(): Promise<void> {
@@ -267,9 +264,11 @@ export class PoolWorkers<Input, Output> implements AsyncDisposable {
 
   async [Symbol.asyncDispose](): Promise<void> {
     this.#disposed.abort();
-    const ended = await this.#ended.wait();
-    await this.#store[Symbol.asyncDispose]();
-    if (ended.status === 'rejected') throw ended.reason;
+    try {
+      await this.#ended.wait();
+    } finally {
+      await this.#store[Symbol.asyncDispose]();
+    }
   }
 }
 
