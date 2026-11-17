@@ -5,13 +5,13 @@ import type { Scorecard } from './scorecard.ts';
 // The epochs of one test of a run, with the weight of its case.
 export class TestEpochs {
   readonly weight: number;
-  readonly #scorecards: Scorecard[] = [];
+  readonly #scorecards: Pick<Scorecard, 'ratios'>[] = [];
 
   constructor(weight: number) {
     this.weight = weight;
   }
 
-  add(scorecard: Scorecard): void {
+  add(scorecard: Pick<Scorecard, 'ratios'>): void {
     this.#scorecards.push(scorecard);
   }
 

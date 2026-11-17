@@ -6,6 +6,7 @@ import { Linear, PercentileInterval } from '@zukhruf/statistics';
 import {
   PairedBootstrap,
   Precision,
+  Ratio,
   Recall,
   Run,
   ScorerSet,
@@ -39,6 +40,25 @@ test('a run refuses a second epoch of a test with another weight, because the we
     message:
       'Test "t1" has the weight 2, not 1: the weight belongs to the case',
   });
+});
+
+test('a run takes the ratios of a scorecard alone, so a host that scores without a scorer of this package adds its own numbers', () => {
+  const recall = (value: number) => ({
+    ratios: new Map([['recall', new Ratio(value, 1)]]),
+  });
+  const baseline = new Run();
+  const change = new Run();
+  for (const id of ['t1', 't2']) {
+    baseline.add(id, recall(0), 1);
+    change.add(id, recall(1), 1);
+  }
+
+  const verdict = paired.verdict(baseline, change, 'recall', {
+    higherIsBetter: true,
+  });
+
+  assert.equal(verdict.difference.observed, 1);
+  assert.equal(verdict.improvements, 2);
 });
 
 test('a paired bootstrap refuses two runs that do not have the same tests, and names each test id of one run only', () => {

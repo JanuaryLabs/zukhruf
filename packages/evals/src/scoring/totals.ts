@@ -6,7 +6,7 @@ import type { Scorecard } from './scorecard.ts';
 export class Totals {
   readonly #sums = new Map<string, RatioOfSums>();
 
-  add(scorecard: Scorecard, weight: number): void {
+  add(scorecard: Pick<Scorecard, 'ratios'>, weight: number): void {
     for (const [name, ratio] of scorecard.ratios) {
       this.#sums
         .getOrInsertComputed(name, () => new RatioOfSums())

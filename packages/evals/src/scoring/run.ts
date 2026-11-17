@@ -10,7 +10,11 @@ const testsOf = (run: Run) =>
 // The scorecards of one model on many tests. A second add of a test id is
 // one more epoch of that test.
 export class Run {
-  add(testId: string, scorecard: Scorecard, weight: number): void {
+  add(
+    testId: string,
+    scorecard: Pick<Scorecard, 'ratios'>,
+    weight: number,
+  ): void {
     const test = testsOf(this).getOrInsertComputed(
       testId,
       () => new TestEpochs(weight),

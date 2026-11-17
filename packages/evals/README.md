@@ -143,7 +143,7 @@ const brier = paired.verdict(baseline, change, 'brier', {
 });
 ```
 
-A run holds the scorecards of one model. A second `add` of a test id is one more epoch of that test: startup-credits adds three runs of one model as three epochs of one `Run`. To test many names, call `verdict` once for each name, and correct the p-values, such as with `holm` of `@zukhruf/mteb`. To test one name, use its p-value as it is.
+A run holds the scorecards of one model. It reads only their ratios, as `Totals` does, so a host that scores without a scorer of this package adds `{ ratios }` alone. A second `add` of a test id is one more epoch of that test: startup-credits adds three runs of one model as three epochs of one `Run`. To test many names, call `verdict` once for each name, and correct the p-values, such as with `holm` of `@zukhruf/mteb`. To test one name, use its p-value as it is.
 
 ```ts
 // @zukhruf/evals: two runs side by side
@@ -155,7 +155,11 @@ import type {
 /** The scorecards of one model on many tests. A test can have many epochs. */
 export class Run {
   /** Adds one epoch of a test. Another weight for a test id that the run has is a RangeError. */
-  add(testId: string, scorecard: Scorecard, weight: number): void;
+  add(
+    testId: string,
+    scorecard: Pick<Scorecard, 'ratios'>,
+    weight: number,
+  ): void;
 }
 
 export type Verdict = {

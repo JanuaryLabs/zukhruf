@@ -20,6 +20,15 @@ test('Totals adds the scorecards of a run into micro averages: all right values 
   assert.equal(totals.get('recall').value, 2 / 4);
 });
 
+test('Totals takes the ratios of a scorecard alone, so a host that scores without a scorer of this package adds its own numbers', () => {
+  const totals = new Totals();
+
+  totals.add({ ratios: new Map([['recall', new Ratio(1, 2)]]) }, 1);
+  totals.add({ ratios: new Map([['recall', new Ratio(2, 2)]]) }, 1);
+
+  assert.equal(totals.get('recall').value, 3 / 4);
+});
+
 test('Totals names a ratio that no scorecard gave', () => {
   const totals = new Totals();
 
