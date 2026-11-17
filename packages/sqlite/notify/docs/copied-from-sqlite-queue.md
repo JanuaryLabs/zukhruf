@@ -35,3 +35,9 @@ The one line that differs is the comment that names the ADR: `docs/adr/0006` in 
 
 **`upgrade.test.ts` (the test of a file whose `pgboss_version` a release before the version column made) → `releases.test.ts` (the test of a file that a release before the version record made).**
 Here, the release before the record had no version table, so the test drops `zukhruf_notify_version`. A listener program that listened before still hears, and the file records this release.
+
+**`bundle.test.ts` → `bundle.test.ts`.**
+Both prove that a bundle of the package loads in a folder with no `package.json` of the package, because `release.ts` imports the version as JSON (#4516).
+
+- The bundle has no `banner` that gives it a `require`. Why: pg-boss requires CommonJS modules, and this package has no CommonJS dependency.
+- The test reads `Notifications`, not `SqliteJobQueue`.

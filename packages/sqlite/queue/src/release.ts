@@ -1,17 +1,13 @@
-import { readFileSync } from 'node:fs';
+import manifest from '../package.json' with { type: 'json' };
 
 // A release of this package, by the version in its package.json. Fixed
 // versioning raises the version at each release, so the versions order the
 // releases and no person keeps a schema number (docs/adr/0006).
 export class Release {
-  // ../package.json is the package root from src/ and from dist/ alike.
-  static readonly current = new Release(
-    String(
-      JSON.parse(
-        readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
-      ).version,
-    ),
-  );
+  // ../package.json is the package root from src/ and from dist/ alike. A
+  // JSON import, not a read of a file beside the module: a bundler copies the
+  // manifest into the bundle, where no package.json is beside it (#4516).
+  static readonly current = new Release(manifest.version);
 
   readonly version: string;
   readonly #parts: readonly [number, number, number];

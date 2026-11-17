@@ -54,6 +54,7 @@
   "devDependencies": {
     "@electric-sql/pglite": "0.5.8",
     "@zukhruf/fs": "^0.8.21",
-    "@zukhruf/testing": "^0.8.21"
+    "@zukhruf/testing": "^0.8.21",
+    "esbuild": "0.28.2"
   }
 }
