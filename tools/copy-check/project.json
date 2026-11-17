@@ -10,7 +10,8 @@
       "cache": false,
       "options": {
         "command": "node tools/copy-check/src/main.ts"
-      }
+      },
+      "dependsOn": ["^build"]
     }
   }
 }
