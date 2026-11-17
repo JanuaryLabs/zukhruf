@@ -14,6 +14,15 @@ export {
 export { PublicKey } from './public-key.ts';
 export { RemoteListener } from './remote-listener.ts';
 export {
+  type GlobalRequest,
+  type IncomingChannel,
+  type Prompt,
+  type ServerConfig,
+  ServerConn,
+  ServerSession,
+  type SessionRequest,
+} from './server.ts';
+export {
   type Exit,
   ExitError,
   ExitMissingError,

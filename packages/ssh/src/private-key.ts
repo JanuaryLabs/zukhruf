@@ -9,6 +9,45 @@ export interface Signer {
   sign(data: Uint8Array, algorithm?: string): Promise<Uint8Array>;
 }
 
+// The comments of this declaration do not name the protocol library: a check
+// greps the .d.ts files for its name.
+/**
+ * The ParsedKey of the protocol library (ADR 0003), written out so that no
+ * .d.ts of the package imports it. ServerConn gives it to the server of the
+ * library, which signs the key exchange with it synchronously (kex.js:731 of
+ * version 1.17.0); a Signer signs asynchronously. Not exported from the package.
+ * The static block of PrivateKey checks that a ParsedKey is a ProtocolKey, and
+ * ServerConn checks the other direction.
+ */
+export interface ProtocolKey {
+  type:
+    | 'ssh-rsa'
+    | 'ssh-dss'
+    | 'ssh-ed25519'
+    | 'ecdsa-sha2-nistp256'
+    | 'ecdsa-sha2-nistp384'
+    | 'ecdsa-sha2-nistp521';
+  comment: string;
+  sign(data: Buffer | string, algo?: string): Buffer;
+  verify(data: Buffer | string, signature: Buffer, algo?: string): boolean;
+  isPrivateKey(): boolean;
+  getPrivatePEM(): string;
+  getPublicPEM(): string;
+  getPublicSSH(): Buffer;
+  equals(key: Buffer | string | ProtocolKey): boolean;
+}
+
+const bridge: { protocolKeyOf: (key: PrivateKey) => ProtocolKey } = {
+  protocolKeyOf: () => {
+    throw new Error('ssh: the PrivateKey class has not loaded');
+  },
+};
+
+/** The ProtocolKey of a PrivateKey. Not exported from the package. */
+export function protocolKeyOf(key: PrivateKey): ProtocolKey {
+  return bridge.protocolKeyOf(key);
+}
+
 export class PassphraseMissingError extends Error {
   readonly publicKey: PublicKey | undefined;
 
@@ -31,6 +70,10 @@ const rsaHashes: Readonly<Record<string, string>> = {
 export class PrivateKey implements Signer {
   readonly publicKey: PublicKey;
   readonly #key: ParsedKey;
+
+  static {
+    bridge.protocolKeyOf = (key) => key.#key;
+  }
 
   private constructor(key: ParsedKey) {
     this.#key = key;
