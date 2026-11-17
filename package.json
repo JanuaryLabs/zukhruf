@@ -65,6 +65,7 @@
     "webgpu": true,
     "@vgpu/adapter-node": true,
     "nx": false,
-    "unrs-resolver": false
+    "unrs-resolver": false,
+    "fsevents": false
   }
 }
