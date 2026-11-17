@@ -1,5 +1,5 @@
 import { once } from 'node:events';
-import { mkdtempDisposable, stat } from 'node:fs/promises';
+import { stat } from 'node:fs/promises';
 import { type Socket, connect, createServer } from 'node:net';
 import { join } from 'node:path';
 
@@ -10,9 +10,10 @@ import command, {
 } from 'nano-spawn';
 
 import { timeout } from '@zukhruf/async';
+import { TemporaryFiles } from '@zukhruf/fs';
 
 import { timebox } from '../async/timebox.ts';
-import { type ProcessRun, forwardPrefix } from './run-records.ts';
+import { type ProcessRun, forwardName } from './run-records.ts';
 
 export const quote = (value: string): string =>
   `'${value.replaceAll("'", "'\\''")}'`;
@@ -114,7 +115,9 @@ export class DockerHost {
       // Keep the Unix socket path below macOS's 104-byte limit. The private
       // directory and ownership record also cover workers killed mid-test.
       const directory = resources.use(
-        await mkdtempDisposable(forwardPrefix(run?.id)),
+        await new TemporaryFiles().directory(forwardName(run?.id), {
+          parent: '/tmp',
+        }),
       );
       if (run)
         resources.use(await run.records.record('forward', directory.path));

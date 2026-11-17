@@ -290,10 +290,14 @@ export default defineConfig(
     files: ['packages/async/src/latch.ts'],
     rules: { 'zukhruf/no-promise-field': 'off' },
   },
-  // The tests of TemporaryFiles arrange their parent folders with node:fs, so
-  // that the subject under test does not make its own fixtures.
+  // TemporaryFiles is the one place that makes a temporary directory with
+  // node:fs. Its tests arrange their parent folders with node:fs, so that the
+  // subject under test does not make its own fixtures.
   {
-    files: ['packages/fs/src/temporary-files.test.ts'],
+    files: [
+      'packages/fs/src/temporary-files.ts',
+      'packages/fs/src/temporary-files.test.ts',
+    ],
     rules: { 'zukhruf/no-raw-temp-directory': 'off' },
   },
   // The tests of the UI packages import them by their names, as an app does,

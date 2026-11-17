@@ -5,7 +5,7 @@
 //
 // The argument names the folder for the result cache, the predictions and
 // the page; by default, a new folder in the temporary folder of the system.
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -44,7 +44,10 @@ class Bm25Fixture extends AbsTaskRetrieval {
   }
 }
 
-const folder = process.argv[2] ?? mkdtempSync(join(tmpdir(), 'mteb-report-'));
+// The report page stays for you to open, so the default folder is fixed, and
+// a second run reuses the evaluations that its result cache keeps.
+const folder = process.argv[2] ?? join(tmpdir(), 'mteb-report');
+mkdirSync(folder, { recursive: true });
 const task = new Bm25Fixture();
 const baseline = bm25S.loadModel();
 const models: MTEBModels[] = [baseline, bm25S.loadModel({ k1: 1.2, b: 0.5 })];

@@ -1,8 +1,9 @@
-import { mkdtempDisposable, readFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { runJscpd } from 'jscpd';
+
+import { TemporaryFiles } from '@zukhruf/fs';
 
 export interface CloneSide {
   name: string;
@@ -47,7 +48,7 @@ const TEST_FILES = '**/{*.test.*,*.spec.*,src/testing/**}';
 export async function clonesBetweenTestFiles(
   workspace: string,
 ): Promise<Clone[]> {
-  await using output = await mkdtempDisposable(join(tmpdir(), 'copy-check-'));
+  await using output = await new TemporaryFiles().directory('copy-check-');
   const run = runJscpd(
     [
       '.',

@@ -1,9 +1,13 @@
-import { constants, rmSync } from 'node:fs';
-import { copyFile, mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { constants } from 'node:fs';
+import { copyFile, rm } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 
-import { FileStamps, isErrno } from '@zukhruf/fs';
+import {
+  FileStamps,
+  type TemporaryDirectorySync,
+  TemporaryFiles,
+  isErrno,
+} from '@zukhruf/fs';
 import { RollbackJournal, UnavailableError, open } from '@zukhruf/sqlite-open';
 
 import { DatabaseChangingError } from './database-changing-error.ts';
@@ -27,16 +31,16 @@ const clone = (from: string, to: string) =>
  */
 export class OwnerCopy implements Disposable {
   readonly file: string;
-  readonly #folder: string;
+  readonly #folder: TemporaryDirectorySync;
 
-  private constructor(folder: string, file: string) {
+  private constructor(folder: TemporaryDirectorySync, file: string) {
     this.#folder = folder;
     this.file = file;
   }
 
   static async take(path: string): Promise<OwnerCopy> {
-    const folder = await mkdtemp(join(tmpdir(), 'zukhruf-snapshot-'));
-    const copy = new OwnerCopy(folder, join(folder, basename(path)));
+    const folder = new TemporaryFiles().directorySync('zukhruf-snapshot-');
+    const copy = new OwnerCopy(folder, join(folder.path, basename(path)));
     try {
       await copy.#fill(path);
       return copy;
@@ -80,7 +84,7 @@ export class OwnerCopy implements Disposable {
   }
 
   [Symbol.dispose](): void {
-    rmSync(this.#folder, { recursive: true, force: true });
+    this.#folder.cleanup();
   }
 }
 

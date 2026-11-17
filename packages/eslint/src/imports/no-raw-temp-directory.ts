@@ -32,9 +32,9 @@ function memberName(member: AstNode): string | undefined {
 }
 
 /**
- * Each test that makes its own temporary directory picks its own cleanup, and
- * the copies drift: one forgets the retry that Windows needs for a file that
- * is still open, another compares the path with what a child process reports,
+ * Code that makes its own temporary directory picks its own cleanup, and the
+ * copies drift: one forgets the retry that Windows needs for a file that is
+ * still open, another compares the path with what a child process reports,
  * which on macOS is the real path behind the `/var` symlink. `TemporaryFiles`
  * of `@zukhruf/fs` gives the real path and removes the directory with
  * the retry. Only the calls of `node:fs` and `node:fs/promises` are reported:
@@ -45,12 +45,12 @@ const rule: Rule.RuleModule = {
     type: 'problem',
     docs: {
       description:
-        'Disallow a raw temporary directory in tests; use TemporaryFiles',
+        'Disallow a raw temporary directory; use TemporaryFiles of @zukhruf/fs',
     },
     schema: [],
     messages: {
       matched:
-        'Use `await using dir = await new TemporaryFiles().directory(prefix)` from @zukhruf/fs: one standard temp directory for tests, at its real path, removed with a retry for Windows.',
+        'Use `await using dir = await new TemporaryFiles().directory(prefix)` from @zukhruf/fs, or `using dir = new TemporaryFiles().directorySync(prefix)` in code that cannot wait: one standard temporary directory, at its real path, removed with a retry for Windows.',
     },
   },
   create(context) {

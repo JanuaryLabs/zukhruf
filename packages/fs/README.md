@@ -243,7 +243,7 @@ On Windows, a process that still holds a file open stops its removal for a short
 
 The only option is `parent`, the directory that holds the new directory. The default is `os.tmpdir()`. Give a parent on the disk of a file that you rename out of the directory, because a rename across two disks fails with `EXDEV`. A Unix socket path has a limit of 104 bytes on macOS and 108 bytes on Linux. On macOS, the real path of `os.tmpdir()` uses 56 of them. Thus give a short parent, such as `/tmp`, for a socket. Node resolves a package from the parent directories of the file that imports it. Thus give a parent in the repository when a file in the directory imports a package of the repository.
 
-[ADR 0008 of `@zukhruf/testing`](../testing/docs/adr/0008-a-temporary-directory-retries-its-removal-and-gives-its-real-path.md) records why the directory retries its removal and gives its real path.
+[ADR 0006](./docs/adr/0006-a-temporary-directory-retries-its-removal-and-gives-its-real-path.md) records why the directory retries its removal and gives its real path. [Root ADR 0006](../../docs/adr/0006-production-code-and-tests-make-a-temporary-directory-with-temporaryfiles-of-zukhruf-fs.md) records why production code uses it too, and why it has a synchronous form.
 
 ## Check the error code
 

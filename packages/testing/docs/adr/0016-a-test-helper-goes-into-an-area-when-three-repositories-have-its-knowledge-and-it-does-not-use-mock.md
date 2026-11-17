@@ -21,7 +21,7 @@ Each other test helper stays out of the areas. In different packages, it stays a
 
 Before a helper goes into an area, do two checks. First, look for an API of Node that does the same work. A pattern that Node covers gets a lint rule, not a helper. Examples are `t.waitFor` in place of a poll loop, and `Array.fromAsync` in place of a loop that only collects. Second, write the area as a README before its code.
 
-The inventory gave two areas: the temporary directory (`TemporaryFiles` of `@zukhruf/testing/fs`, [ADR 0008](./0008-a-temporary-directory-retries-its-removal-and-gives-its-real-path.md)) and the msw interception (`@zukhruf/testing/msw`, [ADR 0010](./0010-the-msw-area-is-always-strict-and-records-each-request.md)). The environment scope met both conditions, but it was removed before its release ([ADR 0009](./0009-a-test-never-changes-the-environment-of-its-process.md)).
+The inventory gave two areas: the temporary directory (`TemporaryFiles` of `@zukhruf/testing/fs`, [ADR 0008, now fs ADR 0006](../../../fs/docs/adr/0006-a-temporary-directory-retries-its-removal-and-gives-its-real-path.md)) and the msw interception (`@zukhruf/testing/msw`, [ADR 0010](./0010-the-msw-area-is-always-strict-and-records-each-request.md)). The environment scope met both conditions, but it was removed before its release ([ADR 0009](./0009-a-test-never-changes-the-environment-of-its-process.md)).
 
 ## Considered Options
 

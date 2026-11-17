@@ -1,9 +1,11 @@
 import { execFileSync } from 'node:child_process';
-import { readFileSync, readdirSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
+import { readFileSync, readdirSync, realpathSync, rmSync } from 'node:fs';
+import { basename, dirname, join } from 'node:path';
+
+import { isErrno } from '@zukhruf/fs';
 
 import { DockerHost, SHELL_TIMEOUT, quote } from '../docker/host.ts';
-import { directoryPrefix, forwardPrefix } from '../docker/run-records.ts';
+import { directoryPrefix, forwardName } from '../docker/run-records.ts';
 
 /** What the global setup writes to run.json. */
 export interface Run {
@@ -11,6 +13,20 @@ export interface Run {
   endpoint: string;
   pid: number;
 }
+
+// A forward directory is a direct child of /tmp whose name starts with the
+// run's prefix. The real path of its parent decides, so `..` cannot lead out,
+// and a record that names /tmp as written still matches. A parent that is
+// gone is no parent of a forward directory.
+const isForwardDirectory = (path: string, id: string): boolean => {
+  if (!basename(path).startsWith(forwardName(id))) return false;
+  try {
+    return realpathSync(dirname(path)) === realpathSync('/tmp');
+  } catch (error) {
+    if (isErrno(error, 'ENOENT') || isErrno(error, 'ENOTDIR')) return false;
+    throw error;
+  }
+};
 
 const recordedPath = (file: string): string => {
   const { path }: { path: string } = JSON.parse(readFileSync(file, 'utf8'));
@@ -29,10 +45,7 @@ export function removeRecordedPaths(run: Run, directory: string): void {
     const record = join(directory, file);
     if (file.startsWith('forward-')) {
       const path = recordedPath(record);
-      if (
-        !path.startsWith(forwardPrefix(run.id)) ||
-        path.slice(5).includes('/')
-      )
+      if (!isForwardDirectory(path, run.id))
         throw new Error(`Invalid SSH forwarding cleanup record: ${path}`);
       rmSync(path, { recursive: true, force: true });
     } else if (file.startsWith('directory-')) {

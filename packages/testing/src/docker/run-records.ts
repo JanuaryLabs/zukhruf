@@ -93,6 +93,6 @@ export function readRun(
 export const directoryPrefix = (id: string | undefined): string =>
   `zukhruf-testing-${id ?? 'standalone'}-`;
 
-/** The path prefix of the private directory behind an SSH port forward. */
-export const forwardPrefix = (id: string | undefined): string =>
-  `/tmp/zukhruf-testing-forward-${id ?? 'standalone'}-`;
+/** The name prefix of the private directory in /tmp behind an SSH port forward. */
+export const forwardName = (id: string | undefined): string =>
+  `zukhruf-testing-forward-${id ?? 'standalone'}-`;

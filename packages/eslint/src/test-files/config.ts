@@ -4,7 +4,6 @@ import noCatchAllMswHandler from './no-catch-all-msw-handler.ts';
 import noDirectMswServer from './no-direct-msw-server.ts';
 import noGlobalTestMock from './no-global-test-mock.ts';
 import noProcessEnvWrite from './no-process-env-write.ts';
-import noRawTempDirectory from './no-raw-temp-directory.ts';
 import noShortTestTimeout from './no-short-test-timeout.ts';
 import noSleepPollLoop from './no-sleep-poll-loop.ts';
 import noTestLifecycleHooks from './no-test-lifecycle-hooks.ts';
@@ -21,7 +20,6 @@ const rules = {
   'no-wall-clock-bound': noWallClockBound,
   'no-short-test-timeout': noShortTestTimeout,
   'no-global-test-mock': noGlobalTestMock,
-  'no-raw-temp-directory': noRawTempDirectory,
 };
 
 export const tests: Concept = {
