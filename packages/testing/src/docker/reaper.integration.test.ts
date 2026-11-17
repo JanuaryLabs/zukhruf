@@ -36,6 +36,12 @@ import {
 const RUN_LABEL = 'dev.zukhruf.testing.run';
 const KIND_LABEL = 'dev.zukhruf.testing.kind';
 
+/** Pulls `image` when the engine of this process does not have it. */
+async function present(image: string): Promise<void> {
+  if ((await docker.images.inspect(image)) === undefined)
+    await docker.images.pull(image);
+}
+
 /** Short inputs, as the tests of Ryuk give it (ADR 0020, item 4). */
 const quick: ReaperSettings = {
   ...REAPER_DEFAULTS,
@@ -240,14 +246,26 @@ async function removeRun(run: string, others: string[] = []): Promise<void> {
 const gone = (t: TestContext, check: () => Promise<void>) =>
   waitFor(check, { signal: t.signal, interval: 100 });
 
-/** Resolves at the end of the next exec in the container `id`, from `since` on. */
-async function execEnded(id: string, since: number, signal: AbortSignal) {
-  for await (const _ of docker.events({
+/**
+ * Gives the id of the exec of the next `event` in the container `id`, from
+ * `since` on: of the exec `exec` only, when given.
+ */
+async function execEvent(
+  id: string,
+  since: number,
+  event: 'exec_start' | 'exec_die',
+  signal: AbortSignal,
+  exec?: string,
+): Promise<string | undefined> {
+  for await (const { Actor } of docker.events({
     since,
-    filters: { container: [id], event: ['exec_die'] },
+    filters: { container: [id], event: [event] },
     signal,
-  }))
-    return;
+  })) {
+    const found = Actor?.Attributes?.execID;
+    if (exec === undefined || found === exec) return found;
+  }
+  return undefined;
 }
 
 /**
@@ -256,13 +274,15 @@ async function execEnded(id: string, since: number, signal: AbortSignal) {
  * tests give its reaper a client that fails chosen calls. Its `docker` CLI
  * reads `DOCKER_HOST`, so the test points it at a TCP port of this process
  * that forwards to the proxy (as in docker-global-setup.integration.test.ts).
+ * Gives its id, and its exit code once the engine removed it.
  */
 async function proxiedReaper(
   stack: AsyncDisposableStack,
   proxy: EngineProxy,
   run: string,
   settings: ReaperSettings,
-): Promise<string> {
+): Promise<{ id: string; exited: Promise<number> }> {
+  await present('alpine:latest');
   // Docker Desktop resolves host.docker.internal to this machine. On a native
   // Linux engine the reaper reaches this machine at the gateway of the
   // default bridge; the relay listens there only, never on every address.
@@ -291,8 +311,7 @@ async function proxiedReaper(
   );
   const address = relay.address();
   assert.ok(address !== null && typeof address === 'object');
-  if ((await docker.images.inspect(REAPER_IMAGE)) === undefined)
-    await docker.images.pull(REAPER_IMAGE);
+  await present(REAPER_IMAGE);
   const body = reaperRequest(
     run,
     { ...settings, firstHolder: 0 },
@@ -314,8 +333,12 @@ async function proxiedReaper(
     },
     { name: reaperName(run) },
   );
+  const exited = reaper
+    .wait({ condition: 'removed' })
+    .then(({ StatusCode }) => StatusCode);
+  exited.catch(() => {});
   await reaper.start();
-  return reaper.id;
+  return { id: reaper.id, exited };
 }
 
 /** Holds the `nth` request of the proxy to `method` `path`, counted from 1, until release(). */
@@ -355,6 +378,7 @@ async function within<T>(
 
 test('one reaper of a run keeps the run’s objects while one of its holders lives, and removes them, with their anonymous volumes, after the last one ended', async (t) => {
   const run = randomUUID();
+  await present('alpine:latest');
   const holders: ChildProcess[] = [];
   try {
     holders.push(await holder(run, quick), await holder(run, quick));
@@ -366,7 +390,8 @@ test('one reaper of a run keeps the run’s objects while one of its holders liv
     const reapersWhileHeld = await reapers(run);
 
     await killed(holders[0]!);
-    // Longer than the grace and each pass of the reaper.
+    // A fixed window, longer than the grace and each pass of the reaper: the
+    // test proves that the reaper removed nothing while one holder lives.
     await delay(quick.grace + quick.interval * quick.passes + 2_000);
     const keptWhileOneHolds = [await exists(id), await volumeExists(volume)];
     await killed(holders[1]!);
@@ -388,6 +413,7 @@ test('one reaper of a run keeps the run’s objects while one of its holders liv
 
 test('the reaper of a run keeps a shared server that carries the run’s label', async (t) => {
   const run = randomUUID();
+  await present('alpine:latest');
   let child: ChildProcess | undefined;
   try {
     child = await holder(run, quick);
@@ -409,19 +435,26 @@ test('the reaper of a run keeps a shared server that carries the run’s label',
 
 test('a holder that comes during the grace stops the countdown, and the reaper acts after that holder ended', async (t) => {
   const run = randomUUID();
-  const settings = { ...quick, grace: 3_000 };
+  await present('alpine:latest');
+  // Much longer than the start of a holder, so the second holder comes within it.
+  const settings = { ...quick, grace: 15_000 };
   const holders: ChildProcess[] = [];
   try {
     holders.push(await holder(run, settings));
     const id = await object(run);
+    const [reaper] = await reapers(run);
+    assert.ok(reaper);
 
     await killed(holders[0]!);
     holders.push(await holder(run, settings));
-    await delay(settings.grace + settings.interval * settings.passes + 2_000);
-    const keptWhileHeldAgain = await exists(id);
+    const heldAgain = {
+      reapers: await reapers(run),
+      holders: (await holdersOf(reaper)).length,
+      kept: await exists(id),
+    };
     await killed(holders[1]!);
 
-    assert.equal(keptWhileHeldAgain, true);
+    assert.deepEqual(heldAgain, { reapers: [reaper], holders: 1, kept: true });
     await gone(t, async () => assert.equal(await exists(id), false));
   } finally {
     for (const child of holders) await killed(child);
@@ -431,75 +464,122 @@ test('a holder that comes during the grace stops the countdown, and the reaper a
 
 test('a container that the engine creates after the first pass of the reaper is removed by a re-check pass', async (t) => {
   const run = randomUUID();
-  const settings = { ...quick, grace: 300, interval: 1_500, passes: 2 };
+  await present('alpine:latest');
+  // The re-check passes span 6 s after the first pass.
+  const settings = { ...quick, grace: 300, interval: 3_000, passes: 2 };
   let child: ChildProcess | undefined;
   const ids: string[] = [];
+  const watch = new AbortController();
   try {
     child = await holder(run, settings);
     ids.push(await object(run));
+    const since = Math.floor(Date.now() / 1000) - 1;
+    const destroyed = (async () => {
+      for await (const _ of docker.events({
+        since,
+        filters: { container: [ids[0]!], event: ['destroy'] },
+        signal: watch.signal,
+      }))
+        return;
+    })();
+    destroyed.catch(() => {});
     await killed(child);
-    // After the first pass, before the first re-check pass.
-    await gone(t, async () => assert.equal(await exists(ids[0]!), false));
+    // The first pass removes the first container, after its list.
+    await within(destroyed, t.signal, 'the removal by the first pass');
 
-    ids.push(await object(run));
+    // No anonymous volume: one would hold up the volume removal of the first pass.
+    const late = await docker.containers.create({
+      Image: 'alpine:latest',
+      Cmd: ['sleep', '3600'],
+      Labels: { [RUN_LABEL]: run },
+    });
+    ids.push(late.id);
+    await late.start();
 
     await gone(t, async () => {
       assert.equal(await exists(ids[1]!), false);
       assert.deepEqual(await reapers(run), []);
     });
   } finally {
+    watch.abort();
     if (child) await killed(child);
     await removeRun(run, ids);
   }
 });
 
-test('a reaper whose removal fails tries it again one interval later, and removes the volume once the engine allows it', async (t) => {
-  const run = randomUUID();
-  const settings = { ...quick, interval: 500, passes: 0, retries: 8 };
-  let child: ChildProcess | undefined;
-  let user: string | undefined;
-  try {
-    child = await holder(run, settings);
-    const { name: volume } = await docker.volumes.create({
-      Labels: { [RUN_LABEL]: run },
-    });
-    // Not of the run: the engine refuses the removal of the volume until it is gone.
-    const using = await docker.containers.create({
-      Image: 'alpine:latest',
-      Cmd: ['sleep', '2'],
-      HostConfig: { AutoRemove: true, Binds: [`${volume}:/data`] },
-    });
-    user = using.id;
-    await using.start();
+test(
+  'a reaper whose removal fails tries it again one interval later, and removes the volume once the engine allows it',
+  { skip: proxyless },
+  async (t) => {
+    const run = randomUUID();
+    await present('alpine:latest');
+    await using stack = new AsyncDisposableStack();
+    let user: string | undefined;
+    try {
+      const { name: volume } = await docker.volumes.create({
+        Labels: { [RUN_LABEL]: run },
+      });
+      // Not of the run: the engine refuses the removal of the volume while it runs.
+      const using = await docker.containers.create({
+        Image: 'alpine:latest',
+        Cmd: ['sleep', '3600'],
+        HostConfig: { Binds: [`${volume}:/data`] },
+      });
+      user = using.id;
+      await using.start();
+      const proxy = stack.use(await EngineProxy.start(engine));
+      const removal = `/volumes/${volume}`;
+      // The reaper tries a removal again only after the engine refused it, so a
+      // second try means the first was refused. The volume is freed before the
+      // engine gets that second try.
+      let tries = 0;
+      proxy.intercept('DELETE', removal, async () => {
+        tries += 1;
+        if (tries === 2) await using.remove({ force: true });
+      });
 
-    await killed(child);
+      await proxiedReaper(stack, proxy, run, {
+        ...quick,
+        interval: 500,
+        passes: 0,
+        retries: 8,
+      });
 
-    await gone(t, async () => {
-      assert.equal(await volumeExists(volume), false);
-      assert.deepEqual(await reapers(run), []);
-    });
-  } finally {
-    if (child) await killed(child);
-    await removeRun(run, user === undefined ? [] : [user]);
-  }
-});
+      await gone(t, async () => {
+        assert.equal(await volumeExists(volume), false);
+        assert.deepEqual(await reapers(run), []);
+      });
+      const deletes = proxy.requests.filter(
+        ({ method, path }) => method === 'DELETE' && path === removal,
+      );
+      assert.ok(
+        deletes.length >= 2,
+        `${deletes.length} removals of the volume`,
+      );
+    } finally {
+      await removeRun(run, user === undefined ? [] : [user]);
+    }
+  },
+);
 
 test('a reaper whose drop of a database never gets an answer ends within its request time limit, keeps that database, and removes the run’s containers', async (t) => {
   const run = randomUUID();
+  await present('alpine:latest');
   const database = `test_${run.replaceAll('-', '')}_0123456789abcdef`;
   const settings = { ...quick, grace: 100, passes: 0, requestTimeout: 1_000 };
   let child: ChildProcess | undefined;
   let server: string | undefined;
   try {
     // A shared Postgres server whose psql lists the run's database and never
-    // ends a drop. The database is a file that the drop would remove.
+    // ends a drop. The database is a file that the drop would remove. A drop
+    // writes its command to /dropped first.
     const fake = await docker.containers.create({
       Image: 'alpine:latest',
       Entrypoint: [
         'sh',
         '-c',
         `mkdir -p /databases && touch /databases/${database}
-printf '%s\\n' '#!/bin/sh' 'case "$*" in *DROP*) sleep 3600; rm -f /databases/*;; *) ls /databases;; esac' > /usr/local/bin/psql
+printf '%s\\n' '#!/bin/sh' 'case "$*" in *DROP*) echo "$*" > /dropped; sleep 3600; rm -f /databases/*;; *) ls /databases;; esac' > /usr/local/bin/psql
 chmod +x /usr/local/bin/psql
 exec sleep 3600`,
       ],
@@ -515,6 +595,8 @@ exec sleep 3600`,
 
     // Within the grace, one list, one drop that times out, and the expiry pass.
     await gone(t, async () => assert.deepEqual(await reapers(run), []));
+    const dropped = await fake.exec({ Cmd: ['cat', '/dropped'] });
+    assert.match(dropped.stdout, new RegExp(`DROP DATABASE.*${database}`));
     const { stdout } = await fake.exec({ Cmd: ['ls', '/databases'] });
     assert.equal(stdout.trim(), database);
     assert.equal(await exists(owned), false);
@@ -526,6 +608,7 @@ exec sleep 3600`,
 
 test('a reaper that no holder holds removes the run’s objects after its wait for a first holder, and exits', async (t) => {
   const run = randomUUID();
+  await present('alpine:latest');
   const ids: string[] = [];
   try {
     ids.push(await object(run));
@@ -553,6 +636,7 @@ test('a test process whose hold was cut holds the reaper again at once, and the 
     'zukhruf-testing-reaper-',
   );
   const run = randomUUID();
+  await present('alpine:latest');
   const launched = launcher(run, await recordsOf(directory.path));
   const ids: string[] = [];
   try {
@@ -590,6 +674,7 @@ test('a test process whose reaper was removed holds a new reaper at once, and th
     'zukhruf-testing-reaper-',
   );
   const run = randomUUID();
+  await present('alpine:latest');
   const launched = launcher(run, await recordsOf(directory.path));
   const ids: string[] = [];
   try {
@@ -619,6 +704,7 @@ test('a test process whose reaper was removed holds a new reaper at once, and th
 
 test('a hold on a reaper that is closing waits until the engine removed it, and holds the next reaper of the run', async (t) => {
   const run = randomUUID();
+  await present('alpine:latest');
   // The re-check passes keep the reaper closing for about 4.5 s.
   const settings = { ...quick, grace: 300, interval: 1_500, passes: 3 };
   const holders: ChildProcess[] = [];
@@ -645,6 +731,7 @@ test('a hold on a reaper that is closing waits until the engine removed it, and 
 
 test('a hold on a reaper that stays closing past the readiness bound of the hold rejects with the hold’s named error', async (t) => {
   const run = randomUUID();
+  await present('alpine:latest');
   // After its first pass, the reaper keeps its door closed for 10 minutes.
   const closing = { ...quick, grace: 0, passes: 1, interval: 600_000 };
   const readiness = 3_000;
@@ -723,6 +810,7 @@ test(
   { skip: proxyless },
   async (t) => {
     const run = randomUUID();
+    await present('alpine:latest');
     // After its first pass, the reaper keeps its door closed for 10 minutes.
     const closing = { ...quick, grace: 0, passes: 1, interval: 600_000 };
     const readiness = 3_000;
@@ -880,6 +968,7 @@ test(
   { skip: proxyless },
   async (t) => {
     const run = randomUUID();
+    await present('alpine:latest');
     await using stack = new AsyncDisposableStack();
     const ids = [await object(run)];
     let late: Program | undefined;
@@ -891,7 +980,7 @@ test(
       const listing = holdNth(proxy, 'GET', '/containers/json', 2);
       stack.defer(() => listing.release());
       const since = Math.floor(Date.now() / 1000) - 1;
-      const reaper = await proxiedReaper(stack, proxy, run, {
+      const { id: reaper } = await proxiedReaper(stack, proxy, run, {
         ...quick,
         grace: 0,
         passes: 0,
@@ -902,7 +991,7 @@ test(
       const created = late.line();
       created.catch(() => {});
       const watch = new AbortController();
-      const refused = execEnded(reaper, since, watch.signal);
+      const refused = execEvent(reaper, since, 'exec_die', watch.signal);
       refused.catch(() => {});
       await within(
         Promise.race([created, refused]),
@@ -939,6 +1028,7 @@ test(
   { skip: proxyless },
   async (t) => {
     const run = randomUUID();
+    await present('alpine:latest');
     await using stack = new AsyncDisposableStack();
     const ids = [await object(run)];
     let late: Program | undefined;
@@ -948,7 +1038,7 @@ test(
       const listing = holdNth(proxy, 'GET', '/volumes', 1);
       stack.defer(() => listing.release());
       const since = Math.floor(Date.now() / 1000) - 1;
-      const reaper = await proxiedReaper(stack, proxy, run, {
+      const { id: reaper } = await proxiedReaper(stack, proxy, run, {
         ...quick,
         grace: 0,
         passes: 0,
@@ -959,7 +1049,7 @@ test(
       const created = late.line();
       created.catch(() => {});
       const watch = new AbortController();
-      const refused = execEnded(reaper, since, watch.signal);
+      const refused = execEvent(reaper, since, 'exec_die', watch.signal);
       refused.catch(() => {});
       await within(
         Promise.race([created, refused]),
@@ -984,6 +1074,193 @@ test(
   },
 );
 
+/** The name of the sweep lease of `fingerprint`: the name each reaper and each test process of that server agree on (ADR 0014). */
+const sweepLease = (fingerprint: string): string =>
+  `zukhruf-testing-sweep-${fingerprint}`;
+
+test(
+  'a reaper that finds the sweep lease of an expired shared server taken on each of its sweepTries keeps that server and exits 0',
+  { skip: proxyless },
+  async (t) => {
+    const run = randomUUID();
+    const fingerprint = randomUUID();
+    const lease = sweepLease(fingerprint);
+    const sweepTries = 3;
+    await using stack = new AsyncDisposableStack();
+    let server: string | undefined;
+    try {
+      await present('alpine:latest');
+      await present('busybox:1.37.0');
+      const shared = await docker.containers.create({
+        Image: 'alpine:latest',
+        Cmd: ['sleep', '3600'],
+        Labels: { [SERVER_LABEL]: fingerprint },
+      });
+      server = shared.id;
+      await shared.start();
+      // The reaper reads the age of a server in whole seconds of the engine's
+      // clock: a server is older than a TTL of 1 ms from the next second on.
+      const born = Math.floor(
+        Date.parse((await shared.inspect()).Created ?? '') / 1000,
+      );
+      await waitFor(
+        async () => {
+          const { stdout } = await shared.exec({ Cmd: ['date', '-u', '+%s'] });
+          assert.ok(Number(stdout.trim()) > born, 'the server is 1 s old');
+        },
+        { signal: t.signal, interval: 200 },
+      );
+      const proxy = stack.use(await EngineProxy.start(engine));
+      // Another holder of the sweep lease, such as a reaper of another run,
+      // takes it again before each create of the reaper under test, and lets
+      // it go when that reaper looks for its end. The sweep lease of each
+      // other shared server is refused, so the test keeps them all.
+      const events: ('try' | 'gone')[] = [];
+      proxy.intercept('POST', '/containers/create', async ({ body }) => {
+        const { Labels: labels = {} }: { Labels?: Record<string, string> } =
+          JSON.parse(body);
+        if (labels['dev.zukhruf.testing.lease'] !== 'sweep') return;
+        if (labels['dev.zukhruf.testing.lease.server'] !== fingerprint)
+          throw new Error('The test keeps each other shared server.');
+        events.push('try');
+        if ((await docker.containers.find(lease)) !== undefined) return;
+        const taken = await docker.containers.create(
+          {
+            Image: 'busybox:1.37.0',
+            Entrypoint: ['cat'],
+            Cmd: [],
+            OpenStdin: true,
+          },
+          { name: lease },
+        );
+        await taken.start();
+      });
+      proxy.intercept('GET', `/containers/${lease}/json`, async () => {
+        const taken = await docker.containers.find(lease);
+        if (taken === undefined) return;
+        await taken.remove({ force: true });
+        events.push('gone');
+      });
+
+      const { exited } = await proxiedReaper(stack, proxy, run, {
+        ...quick,
+        grace: 0,
+        passes: 0,
+        serverTtl: 1,
+        sweepTries,
+      });
+
+      assert.equal(await within(exited, t.signal, 'the end of the reaper'), 0);
+      assert.deepEqual(
+        events,
+        Array.from({ length: sweepTries }, () => ['try', 'gone']).flat(),
+      );
+      assert.equal(await exists(server), true);
+    } finally {
+      await removeRun(run, server === undefined ? [lease] : [server, lease]);
+    }
+  },
+);
+
+test('a reaper whose shared server is removed while it drops the run’s database in it removes the run’s containers and exits 0', async (t) => {
+  const run = randomUUID();
+  const database = `test_${run.replaceAll('-', '')}_0123456789abcdef`;
+  // No request time limit ends the drop: only the removal of its server does.
+  const settings = { ...quick, grace: 100, passes: 0, requestTimeout: 600_000 };
+  let child: ChildProcess | undefined;
+  let server: string | undefined;
+  try {
+    await present('alpine:latest');
+    // A shared Postgres server whose psql lists the run's database, and
+    // writes the command of a drop to /dropped and never ends it.
+    const fake = await docker.containers.create({
+      Image: 'alpine:latest',
+      Entrypoint: [
+        'sh',
+        '-c',
+        `mkdir -p /databases && touch /databases/${database}
+printf '%s\\n' '#!/bin/sh' 'case "$*" in *DROP*) echo "$*" > /dropped; exec sleep 3600;; *) ls /databases;; esac' > /usr/local/bin/psql
+chmod +x /usr/local/bin/psql
+exec sleep 3600`,
+      ],
+      Cmd: [],
+      Labels: { [SERVER_LABEL]: randomUUID(), [KIND_LABEL]: 'postgres' },
+    });
+    server = fake.id;
+    await fake.start();
+    child = await holder(run, settings);
+    const owned = await object(run);
+    const reaper = await docker.containers.find(reaperName(run));
+    assert.ok(reaper);
+    const exited = reaper
+      .wait({ condition: 'removed' })
+      .then(({ StatusCode }) => StatusCode);
+    exited.catch(() => {});
+    await killed(child);
+    await waitFor(
+      async () => {
+        const dropped = await fake.exec({ Cmd: ['cat', '/dropped'] });
+        assert.match(dropped.stdout, new RegExp(`DROP DATABASE.*${database}`));
+      },
+      { signal: t.signal, interval: 100 },
+    );
+
+    await fake.remove({ force: true, v: true });
+
+    assert.equal(await within(exited, t.signal, 'the end of the reaper'), 0);
+    assert.equal(await exists(owned), false);
+  } finally {
+    if (child) await killed(child);
+    await removeRun(run, server === undefined ? [] : [server]);
+  }
+});
+
+test(
+  'a holder whose test process is killed before the reaper checked its socket ends its exec, and leaves no cat in the reaper',
+  { skip: proxyless },
+  async (t) => {
+    const run = randomUUID();
+    await using stack = new AsyncDisposableStack();
+    let owner: Program | undefined;
+    try {
+      const proxy = stack.use(await EngineProxy.start(engine));
+      // The first list of containers is the reaper's check of its socket
+      // (ADR 0020, item 14): held here, so a holder waits for its result. No
+      // request time limit ends that check.
+      const check = holdNth(proxy, 'GET', '/containers/json', 1);
+      stack.defer(() => check.release());
+      const since = Math.floor(Date.now() / 1000) - 1;
+      const { id: reaper } = await proxiedReaper(stack, proxy, run, {
+        ...quick,
+        requestTimeout: 600_000,
+      });
+      await within(check.reached, t.signal, 'the check of the socket');
+      const watch = new AbortController();
+      stack.defer(() => watch.abort());
+      const started = execEvent(reaper, since, 'exec_start', watch.signal);
+      started.catch(() => {});
+      owner = program(`
+        const docker = await Docker.connect({ clock: globalThis, environment: process.env });
+        await ReaperHold.take(docker, ${JSON.stringify(run)}, ${JSON.stringify(quick)}, globalThis);
+      `);
+      const hold = await within(started, t.signal, 'the exec of the hold');
+      assert.ok(hold !== undefined, 'the exec of the hold has an id');
+
+      await killed(owner.child);
+
+      await within(
+        execEvent(reaper, since, 'exec_die', t.signal, hold),
+        t.signal,
+        'the end of the exec of the hold',
+      );
+      assert.deepEqual(await holdersOf(reaper), []);
+    } finally {
+      if (owner) await killed(owner.child);
+      await removeRun(run);
+    }
+  },
+);
+
 /** A container with the name and the label of the reaper of `run` that exited, and that the engine does not remove, unlike a real one. */
 async function staleReaper(run: string): Promise<string> {
   const stale = await docker.containers.create(
@@ -1001,6 +1278,7 @@ async function staleReaper(run: string): Promise<string> {
 
 test('a hold of a run whose reaper ended and was never removed holds a new reaper', async () => {
   const run = randomUUID();
+  await present('alpine:latest');
   let child: ChildProcess | undefined;
   try {
     const stale = await staleReaper(run);
@@ -1019,6 +1297,7 @@ test('a hold of a run whose reaper ended and was never removed holds a new reape
 
 test('the start of the reaper of a dead run whose reaper ended and was never removed starts a new reaper, which removes the run’s objects', async (t) => {
   const run = randomUUID();
+  await present('alpine:latest');
   const ids: string[] = [];
   try {
     await staleReaper(run);
@@ -1153,11 +1432,7 @@ async function secondEngine({
   // each image that the tests and the reaper use there, or pulls it once, and
   // loads it into the second engine.
   const images = [REAPER_IMAGE, 'alpine:latest'];
-  for (const image of images) {
-    if ((await docker.images.inspect(image)) === undefined) {
-      await docker.images.pull(image);
-    }
-  }
+  for (const image of images) await present(image);
   await client.images.load(await docker.images.save(images));
   const owned = stack.move();
   return {

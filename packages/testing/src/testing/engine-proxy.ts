@@ -19,10 +19,12 @@ import type { Duplex } from 'node:stream';
 import { Cond } from '@zukhruf/async';
 import { type TemporaryDirectory, TemporaryFiles } from '@zukhruf/fs';
 
-/** A request that reached the proxy. `path` has no API version and no query. */
+/** A request that reached the proxy whole. `path` has no API version and no query. */
 export interface ProxiedRequest {
   method: string;
   path: string;
+  /** The body as UTF-8, such as the JSON of a create; empty when the request has none. */
+  body: string;
 }
 
 /**
@@ -66,7 +68,7 @@ export class EngineProxy implements AsyncDisposable {
   /** Broadcasts when the engine answers an intercepted request. */
   readonly #answers = new Cond();
   readonly #server: Server;
-  /** Each request in the order it arrived, also the ones refused. */
+  /** Each request in the order its whole body arrived, also the ones refused. */
   readonly requests: ProxiedRequest[] = [];
 
   private constructor(engine: string, directory: TemporaryDirectory) {
@@ -143,11 +145,6 @@ export class EngineProxy implements AsyncDisposable {
     request: IncomingMessage,
     response: ServerResponse,
   ): Promise<void> {
-    const proxied = {
-      method: request.method ?? 'GET',
-      path: unversioned(request.url ?? '/'),
-    };
-    this.requests.push(proxied);
     // Read the whole body first: a held request reaches the engine even
     // after its client is gone, as one that the engine already received.
     const chunks = await body(request);
@@ -155,6 +152,12 @@ export class EngineProxy implements AsyncDisposable {
       response.destroy();
       return;
     }
+    const proxied = {
+      method: request.method ?? 'GET',
+      path: unversioned(request.url ?? '/'),
+      body: Buffer.concat(chunks).toString('utf8'),
+    };
+    this.requests.push(proxied);
     const matching = this.#intercepts.filter(
       ({ method, path }) =>
         method === proxied.method &&
@@ -215,10 +218,6 @@ export class EngineProxy implements AsyncDisposable {
     client: Duplex,
     head: Buffer,
   ): Promise<void> {
-    this.requests.push({
-      method: request.method ?? 'GET',
-      path: unversioned(request.url ?? '/'),
-    });
     // Node gives the body of the upgrade request, such as the JSON of an
     // exec start, to the request, and only the bytes after it to `head`.
     const chunks = await body(request);
@@ -226,6 +225,11 @@ export class EngineProxy implements AsyncDisposable {
       client.destroy();
       return;
     }
+    this.requests.push({
+      method: request.method ?? 'GET',
+      path: unversioned(request.url ?? '/'),
+      body: Buffer.concat(chunks).toString('utf8'),
+    });
     const engine = connect(this.#engine);
     this.#track(engine);
     const headers: string[] = [];

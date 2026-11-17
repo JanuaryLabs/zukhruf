@@ -222,7 +222,15 @@ export async function startProgram(
       }
     },
   };
-  await program.printedOne((value) => value.event === 'ready');
+  try {
+    await program.printedOne((value) => value.event === 'ready');
+  } catch (error) {
+    // A program listens only on a command, after it is ready: before that it
+    // has no listener rows and no socket files to remove.
+    child.kill('SIGKILL');
+    await exited;
+    throw error;
+  }
   return program;
 }
 

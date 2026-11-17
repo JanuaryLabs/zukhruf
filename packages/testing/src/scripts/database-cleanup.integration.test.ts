@@ -315,6 +315,8 @@ test(
     try {
       await using own = await postgres.create(process.env, scope);
       // A MySQL server that does not answer yet: its client is not there.
+      if ((await docker.images.inspect('alpine:latest')) === undefined)
+        await docker.images.pull('alpine:latest');
       const starting = await docker.containers.create({
         Image: 'alpine:latest',
         Cmd: ['sleep', '600'],

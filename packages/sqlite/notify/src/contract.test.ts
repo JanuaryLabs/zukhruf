@@ -1,9 +1,13 @@
 import assert from 'node:assert/strict';
+import { ChildProcess } from 'node:child_process';
+import { subscribe, unsubscribe } from 'node:diagnostics_channel';
+import { once } from 'node:events';
 import { stat } from 'node:fs/promises';
 import { describe, test } from 'node:test';
 
 import { createClock } from '@sinonjs/fake-timers';
 
+import { untilAborted } from '@zukhruf/async';
 import { TemporaryFiles } from '@zukhruf/fs';
 import { WriteAheadLog, open } from '@zukhruf/sqlite-open';
 import { transaction } from '@zukhruf/sqlite-transaction';
@@ -354,5 +358,41 @@ describe('the socket folder', () => {
     assert.ok(Buffer.byteLength(address!) <= 70);
     assert.ok((await stat(address!)).isSocket());
     assert.equal((await stat(socketFolder)).mode & 0o777, 0o700);
+  });
+});
+
+describe('the test program', () => {
+  test('a program whose wait for ready fails is killed before the start rejects', async (t) => {
+    await using folder = await new TemporaryFiles().directory('notify-');
+    const path = `${folder.path}/app.sqlite`;
+    const spawned: ChildProcess[] = [];
+    const record = (message: unknown) => {
+      if (
+        typeof message === 'object' &&
+        message !== null &&
+        'process' in message &&
+        message.process instanceof ChildProcess
+      )
+        spawned.push(message.process);
+    };
+    subscribe('child_process', record);
+    try {
+      await assert.rejects(
+        startProgram(path, { signal: AbortSignal.abort() }),
+        { name: 'AbortError' },
+      );
+
+      assert.equal(spawned.length, 1);
+      assert.throws(() => process.kill(spawned[0]!.pid!, 0), {
+        code: 'ESRCH',
+      });
+    } finally {
+      unsubscribe('child_process', record);
+      for (const child of spawned)
+        if (child.exitCode === null && child.signalCode === null) {
+          child.kill('SIGKILL');
+          await untilAborted(once(child, 'exit'), t.signal);
+        }
+    }
   });
 });

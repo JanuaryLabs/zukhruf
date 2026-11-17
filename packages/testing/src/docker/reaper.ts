@@ -119,16 +119,20 @@ const BIND = '/tmp/bind';
 const CAME = '/tmp/came';
 
 /**
- * The exec of a holder. It waits for the check of the reaper's socket. Its
- * answer is its first line: `unverified` and the reason when the socket does
- * not reach the reaper's engine, `held` once it holds the door shared and
- * wrote the mark of a first holder, then its `cat` keeps the lock until the
- * hold ends, or `closing` when the reaper closed its door.
+ * The exec of a holder. It waits for the check of the reaper's socket, and
+ * ends with no answer when its input ends first: its owner went away (#4512).
+ * BusyBox `read -t` gives 1 both at a timeout and at the end of the input, so
+ * the wait reads with `head`, which a SIGPIPE from `timeout` ends with no
+ * message; no owner writes to a holder. Its answer is its first line:
+ * `unverified` and the reason when the socket does not reach the reaper's
+ * engine, `held` once it holds the door shared and wrote the mark of a first
+ * holder, then its `cat` keeps the lock until the hold ends, or `closing` when
+ * the reaper closed its door.
  */
 const HOLD = [
   'sh',
   '-c',
-  `until [ -e ${BIND} ]; do sleep 0.05; done; read -r bind < ${BIND}; [ "$bind" = verified ] || { echo "unverified $bind"; exit 0; }; exec 8>>${DOOR}; flock -n -s 8 || { echo closing; exit 0; }; : > ${CAME}; echo held; exec cat`,
+  `until [ -e ${BIND} ]; do timeout -s PIPE 0.05 head -c 1 > /dev/null && exit 0; done; read -r bind < ${BIND}; [ "$bind" = verified ] || { echo "unverified $bind"; exit 0; }; exec 8>>${DOOR}; flock -n -s 8 || { echo closing; exit 0; }; : > ${CAME}; echo held; exec cat`,
 ];
 
 /** A word of `sh` in double quotes. Each `\u0000name\u0000` in `text` becomes the variable `name`. */

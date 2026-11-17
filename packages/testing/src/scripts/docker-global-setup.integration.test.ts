@@ -21,6 +21,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import spawn, { SubprocessError } from 'nano-spawn';
 
+import { untilAborted } from '@zukhruf/async';
 import {
   BindSourceNotFoundError,
   ContainerNotFoundError,
@@ -139,6 +140,12 @@ const emptyRun = (file: string, env: Record<string, string | undefined>) =>
     runnerArgs('--test-name-pattern=no-matching-tests', file),
     { env, timeout: 90_000 },
   );
+
+/** Pulls `image` when the engine does not have it, for a create that does not pull. */
+async function present(image: string): Promise<void> {
+  if ((await docker.images.inspect(image)) === undefined)
+    await docker.images.pull(image);
+}
 
 const exists = async (id: string): Promise<boolean> =>
   (await docker.containers.find(id)) !== undefined;
@@ -421,8 +428,7 @@ test(
     const statePath = join(directory.path, 'state.json');
     const file = join(directory.path, 'worker.test.ts');
     // The image must not be pulled behind the held create.
-    if ((await docker.images.inspect('alpine:latest')) === undefined)
-      await docker.images.pull('alpine:latest');
+    await present('alpine:latest');
     // A slow create, such as one on a busy engine: the engine has the
     // request, and it creates the container after the test removes the gate.
     // Disposed after the proxy, which waits until the engine answered the
@@ -430,12 +436,17 @@ test(
     await using leftovers = new AsyncDisposableStack();
     await using proxy = await EngineProxy.start(engine);
     const gate = Promise.withResolvers<void>();
-    // The second create: the first one is the create of the run's reaper.
-    let creates = 0;
-    proxy.intercept('POST', '/containers/create', () => {
-      creates += 1;
-      if (creates === 2) return gate.promise;
+    const late = randomUUID();
+    proxy.intercept('POST', '/containers/create', ({ body }) => {
+      const { Image, Labels } = JSON.parse(body);
+      if (
+        Image === 'alpine:latest' &&
+        Labels?.['dev.zukhruf.testing.probe'] === late
+      )
+        return gate.promise;
     });
+    // The first pass of the reaper removes the early container: the late
+    // create reaches the engine after that pass listed the run.
     await writeFile(
       file,
       `
@@ -443,8 +454,10 @@ test(
       import { writeFile } from 'node:fs/promises';
       import { DockerTestbed } from ${library};
       test('a slow create', { timeout: 5000 }, async () => {
-        await writeFile(${JSON.stringify(statePath)}, JSON.stringify({ run: process.env.ZUKHRUF_TESTING_RUN_ID, record: process.env.ZUKHRUF_TESTING_RUN_DIR, pid: process.pid }));
-        await new DockerTestbed({ environment: process.env }).start({ Image: 'alpine:latest', Cmd: ['sleep', '600'] });
+        const testbed = new DockerTestbed({ environment: process.env });
+        const early = await testbed.start({ Image: 'alpine:latest', Cmd: ['sleep', '600'] });
+        await writeFile(${JSON.stringify(statePath)}, JSON.stringify({ run: process.env.ZUKHRUF_TESTING_RUN_ID, record: process.env.ZUKHRUF_TESTING_RUN_DIR, pid: process.pid, early: early.id }));
+        await testbed.start({ Image: 'alpine:latest', Cmd: ['sleep', '600'], Labels: { 'dev.zukhruf.testing.probe': ${JSON.stringify(late)} } });
       });
     `,
     );
@@ -455,22 +468,21 @@ test(
       // the engine still has its create.
       const killed = started(runnerArgs('--test-force-exit', file), env);
       assert.notEqual(await killed.exited, 0, killed.output());
-      const state = await readState<Omit<SmallState, 'id'>>(t, statePath);
+      const state = await readState<Omit<SmallState, 'id'> & { early: string }>(
+        t,
+        statePath,
+      );
       run = state.run;
       const label = `dev.zukhruf.testing.run=${state.run}`;
-      // The engine created the run's reaper before the release, so the
-      // events from that second of the engine's own clock on hold each event
-      // of the late create, however late the stream attaches.
+      // The engine created the run's reaper before the early container, so
+      // the events from that second of the engine's own clock on hold each
+      // event of both containers, however late the stream attaches.
       const [reaper] = await docker.containers.list({
         all: true,
         filters: { label: [`${REAPER_LABEL}=${state.run}`] },
       });
       const since = reaper?.Created;
       assert.ok(since !== undefined, 'the run has its reaper');
-      // After the grace of 2 s and the first pass, before the last re-check pass.
-      await setTimeout(3_000);
-
-      gate.resolve();
 
       const seen: { action: string | undefined; id: string | undefined }[] = [];
       for await (const { Action, Actor } of docker.events({
@@ -478,14 +490,22 @@ test(
         filters: { label: [label], event: ['create', 'destroy'] },
         signal: t.signal,
       })) {
+        if (Actor?.ID === state.early) {
+          if (Action === 'destroy') gate.resolve();
+          continue;
+        }
         seen.push({ action: Action, id: Actor?.ID });
         if (Action === 'destroy') break;
       }
-      const late = seen[0]?.id;
-      assert.notEqual(late, undefined, 'the engine created the late container');
+      const created = seen[0]?.id;
+      assert.notEqual(
+        created,
+        undefined,
+        'the engine created the late container',
+      );
       assert.deepEqual(seen, [
-        { action: 'create', id: late },
-        { action: 'destroy', id: late },
+        { action: 'create', id: created },
+        { action: 'destroy', id: created },
       ]);
       assert.deepEqual(await labelled(label), []);
     } finally {
@@ -647,19 +667,6 @@ test(
     await using directory = await runsDirectory('zukhruf-testing-recovery-');
     await using proxy = await EngineProxy.start(engine);
     const { state, recover, root } = await killedRun(t, directory.path, proxy);
-    // The first create of a reaper passes; every later one waits two
-    // seconds, so a second runner inside the same dead run's recovery runs
-    // after the first one has finished it.
-    const recovering = proxy.requests.length;
-    proxy.intercept('POST', '/containers/create', async () => {
-      const creates = proxy.requests
-        .slice(recovering)
-        .filter(
-          ({ method, path }) =>
-            method === 'POST' && path === '/containers/create',
-        );
-      if (creates.length > 1) await setTimeout(2_000);
-    });
     try {
       const results = await Promise.allSettled([recover(), recover()]);
 
@@ -677,21 +684,30 @@ test(
     await using directory = await runsDirectory('zukhruf-testing-recovery-');
     await using proxy = await EngineProxy.start(engine);
     const { state, recover, root } = await killedRun(t, directory.path, proxy);
-    // Each create of a reaper marks that a recovery has claimed its run and
-    // starts its reaper, and takes two seconds, so the second runner starts
-    // while the first one is still inside the dead run's recovery.
-    const marker = join(directory.path, 'recovering');
+    // The create of the dead run's reaper is held until the second runner
+    // ended: that runner starts and ends while the first one is inside the
+    // dead run's recovery, with its claim on the run.
+    const reached = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    let holding = false;
     proxy.intercept('POST', '/containers/create', async () => {
-      await writeFile(marker, '');
-      await setTimeout(2_000);
+      if (holding) return;
+      holding = true;
+      reached.resolve();
+      await release.promise;
     });
     try {
       const first = recover();
-      await waitFor(() => access(marker), { signal: t.signal, interval: 50 });
-      const results = await Promise.allSettled([first, recover()]);
+      first.catch(() => {});
+      await untilAborted(reached.promise, t.signal);
+      const second = recover();
+      await second.catch(() => {});
+      release.resolve();
+      const results = await Promise.allSettled([first, second]);
 
       await assertRecovered(t, results, state, root, recover);
     } finally {
+      release.resolve();
       await removeLeftovers(state);
     }
   },
@@ -1063,8 +1079,8 @@ test('a reaper of another run that was left created, with no records, is started
   );
   const stale = randomUUID();
   const live = randomUUID();
-  if ((await docker.images.inspect(REAPER_IMAGE)) === undefined)
-    await docker.images.pull(REAPER_IMAGE);
+  await present(REAPER_IMAGE);
+  await present('alpine:latest');
   await using objects = new AsyncDisposableStack();
   const owned = async (run: string) => {
     const container = await docker.containers.create({
@@ -1213,6 +1229,7 @@ test('the reaper removes a container and a volume of a test process that only re
   const file = join(directory.path, 'worker.test.ts');
   // A sandbox launcher reads the labels and creates everything through its
   // own Docker client: the test process makes no other acquisition.
+  await present('alpine:latest');
   await writeFile(
     file,
     `
@@ -1877,6 +1894,7 @@ async function proxiedReaper(
   // the gateway of the default bridge, through the host-gateway entry: the
   // relay listens there, never on every address, because an engine proxy
   // that the LAN reaches is root on the machine.
+  await present('alpine:latest');
   const resolves = await docker.containers.run({
     Image: 'alpine:latest',
     Cmd: ['getent', 'hosts', 'host.docker.internal'],
@@ -1904,8 +1922,7 @@ async function proxiedReaper(
   assert.ok(address !== null && typeof address === 'object');
   const { port } = address;
   // The test creates the reaper itself, so it pulls its image as a hold does.
-  if ((await docker.images.inspect(REAPER_IMAGE)) === undefined)
-    await docker.images.pull(REAPER_IMAGE);
+  await present(REAPER_IMAGE);
   const run = randomUUID();
   const body = reaperRequest(
     run,
@@ -2084,7 +2101,8 @@ test('a process waits for the sweep lease of its server, and then gets a running
       async () => assert.equal((await processLeases(fingerprint)).length, 1),
       { signal: t.signal, interval: 100 },
     );
-    // Without the wait, the process gets the server in well under 5 s.
+    // A fixed window: it proves that the process does not get the server
+    // while the sweep lease lives, and it gets one in well under 5 s without it.
     await setTimeout(5_000);
     const proceededBeforeRelease = existsSync(statePath);
 
