@@ -27,9 +27,12 @@ export interface Sshd extends AsyncDisposable {
  * A real OpenSSH server for one test, with no root and no fixed port: a
  * `node:net` server on 127.0.0.1 port 0 starts `/usr/sbin/sshd -i` in inetd
  * mode for each connection, as OpenSSH's regress/test-exec.sh does with its
- * sshd_proxy. The config uses only options that OpenSSH 9.6 knows.
+ * sshd_proxy. The config uses only options that OpenSSH 9.6 knows; `config`
+ * adds lines, such as `AcceptEnv LANG`.
  */
-export async function startSshd(): Promise<Sshd> {
+export async function startSshd(
+  options: { readonly config?: readonly string[] } = {},
+): Promise<Sshd> {
   const directory = await new TemporaryFiles().directory('ssh-', {
     parent: '/tmp',
   });
@@ -52,6 +55,7 @@ export async function startSshd(): Promise<Sshd> {
         `HostKey ${hostKey}`,
         `AuthorizedKeysFile ${authorizedKeys}`,
         'PidFile none',
+        ...(options.config ?? []),
         '',
       ].join('\n'),
     );

@@ -2,6 +2,7 @@ import { connect } from 'node:net';
 import type { Duplex } from 'node:stream';
 
 import ssh2, {
+  type ClientChannel,
   type IdentityCallback,
   type NextAuthHandler,
   type ParsedKey,
@@ -14,6 +15,15 @@ import { type Clock, Future, Latch, timeout } from '@zukhruf/async';
 
 import type { Signer } from './private-key.ts';
 import { PublicKey } from './public-key.ts';
+import {
+  type Exit,
+  type Pty,
+  Session,
+  type SessionChannel,
+  type SessionRequest,
+  type SignalName,
+  createSession,
+} from './session.ts';
 
 /** Go's ssh.ClientConfig. */
 export interface ClientConfig {
@@ -32,6 +42,8 @@ export interface ClientConfig {
     readonly interval: number;
     readonly countMax: number;
   };
+  /** The env requests that each new session sends before its first other request, with no reply wanted. OpenSshConfig#dial fills it from SetEnv, and from the variables of the caller's environment that SendEnv names. OpenSSH's SetEnv and SendEnv. */
+  readonly sessionEnv?: Readonly<Record<string, string>>;
 }
 
 export type HostKeyCallback = (
@@ -60,28 +72,46 @@ export class AuthenticationError extends Error {
   }
 }
 
+// What ended the connection: nothing yet, the caller's close(), or an error.
+// ssh2 emits the close of the connection before it closes its channels
+// (client.js:813-829), so a channel that closes with the connection reads it.
+interface ConnectionPhase {
+  readonly cause: Error | undefined;
+}
+
+const connected: ConnectionPhase = { cause: undefined };
+const closedByCaller: ConnectionPhase = { cause: undefined };
+
 /** One SSH connection and its channels. Go's ssh.Client. */
 export class Client implements AsyncDisposable {
   readonly user: string;
   /** The version line of the server, such as SSH-2.0-OpenSSH_10.3. Go's ServerVersion. */
   readonly serverVersion: string;
   readonly #connection: ssh2.Client;
+  readonly #sessionEnv: Readonly<Record<string, string>>;
   readonly #closed = new Latch();
   readonly #ended = new Future<void>();
+  #phase: ConnectionPhase = connected;
 
   private constructor(
     connection: ssh2.Client,
-    user: string,
+    config: ClientConfig,
     serverVersion: string,
   ) {
     this.#connection = connection;
-    this.user = user;
+    this.#sessionEnv = config.sessionEnv ?? {};
+    this.user = config.user;
     this.serverVersion = serverVersion;
-    connection.on('error', (error: Error) => this.#ended.reject(error));
+    connection.on('error', (error: Error) => this.#end(error));
     connection.once('close', () => {
-      this.#ended.reject(new Error('ssh: the server closed the connection'));
+      this.#end(new Error('ssh: the server closed the connection'));
       this.#closed.open();
     });
+  }
+
+  #end(cause: Error): void {
+    if (this.#phase === connected) this.#phase = { cause };
+    this.#ended.reject(cause);
   }
 
   /** Opens a TCP connection to `address` (host:port) with node:net, and runs the handshake on it. Go's ssh.Dial. */
@@ -161,9 +191,7 @@ export class Client implements AsyncDisposable {
       signal?.removeEventListener('abort', onAbort);
       if (settled) return;
       settled = true;
-      started.resolve(
-        new Client(connection, config.user, serverVersion.value()),
-      );
+      started.resolve(new Client(connection, config, serverVersion.value()));
     });
 
     const authenticate = new Authentication(config, (error) => fail(error));
@@ -196,6 +224,17 @@ export class Client implements AsyncDisposable {
     return started.promise;
   }
 
+  /** A session. Its channel opens at start(), run(), output(), combinedOutput() or shell(). Go's Client.NewSession. */
+  newSession(): Session {
+    return createSession((request) =>
+      openSession(
+        this.#connection,
+        { ...request, env: { ...this.#sessionEnv, ...request.env } },
+        () => this.#phase.cause,
+      ),
+    );
+  }
+
   /** Resolves after close(). Rejects with the error that ended the connection. Go's Conn.Wait. */
   wait(): Promise<void> {
     return this.#ended.wait();
@@ -203,6 +242,7 @@ export class Client implements AsyncDisposable {
 
   /** Sends SSH_MSG_DISCONNECT and closes the transport. A later call waits for the same close. */
   close(): Promise<void> {
+    if (this.#phase === connected) this.#phase = closedByCaller;
     this.#ended.resolve();
     this.#connection.end();
     return this.#closed.wait();
@@ -211,6 +251,110 @@ export class Client implements AsyncDisposable {
   [Symbol.asyncDispose](): Promise<void> {
     return this.close();
   }
+}
+
+// ssh2 1.17.0 sends each env first with no reply wanted, then pty-req, then
+// exec or shell (client.js:1192-1308). shell() with a window of false asks
+// for no pty.
+function openSession(
+  connection: ssh2.Client,
+  request: SessionRequest,
+  endedBy: () => Error | undefined,
+): Promise<SessionChannel> {
+  const opened = Promise.withResolvers<SessionChannel>();
+  const callback = (error: Error | undefined, channel: ClientChannel): void => {
+    if (error) opened.reject(error);
+    else opened.resolve(adaptChannel(channel, endedBy));
+  };
+  const env = { ...request.env };
+  const pty = ptyOptions(request.pty);
+  if (request.command === undefined) {
+    connection.shell(pty ?? false, { env }, callback);
+  } else {
+    connection.exec(request.command, { env, ...(pty && { pty }) }, callback);
+  }
+  return opened.promise;
+}
+
+function ptyOptions(pty: Pty | undefined): ssh2.PseudoTtyOptions | undefined {
+  if (pty === undefined) return undefined;
+  return {
+    term: pty.term,
+    rows: pty.size.rows,
+    cols: pty.size.columns,
+    width: pty.size.width ?? 0,
+    height: pty.size.height ?? 0,
+    ...(pty.modes && { modes: pty.modes }),
+  };
+}
+
+function adaptChannel(
+  channel: ClientChannel,
+  endedBy: () => Error | undefined,
+): SessionChannel {
+  let exit: Exit | undefined;
+  channel.on(
+    'exit',
+    (
+      code: number | null,
+      signal?: string,
+      coreDumped?: boolean,
+      errorMessage?: string,
+    ) => {
+      if (code !== null) {
+        exit = { kind: 'status', exitStatus: code };
+        return;
+      }
+      // ssh2 adds SIG to the name of exit-signal (client.js:676).
+      const name = signal?.replace(/^SIG/, '') ?? '';
+      if (!isExitSignal(name)) return;
+      exit = {
+        kind: 'signal',
+        signal: name,
+        coreDumped: coreDumped === true,
+        errorMessage: errorMessage ?? '',
+      };
+    },
+  );
+  return {
+    stream: channel,
+    stderr: channel.stderr,
+    onClose: (listener) =>
+      channel.once('close', () => listener(exit, endedBy())),
+    windowChange: (size) =>
+      channel.setWindow(
+        size.rows,
+        size.columns,
+        size.height ?? 0,
+        size.width ?? 0,
+      ),
+    signal: (name) => channel.signal(name),
+    close: () => channel.close(),
+  };
+}
+
+const signalNames: readonly string[] = [
+  'ABRT',
+  'ALRM',
+  'FPE',
+  'HUP',
+  'ILL',
+  'INT',
+  'KILL',
+  'PIPE',
+  'QUIT',
+  'SEGV',
+  'TERM',
+  'USR1',
+  'USR2',
+] satisfies SignalName[];
+
+// A name outside RFC 4254 §6.10 with no @ breaks the RFC; its exit is not
+// known, so wait() rejects with ExitMissingError.
+function isExitSignal(
+  name: string,
+): name is SignalName | `${string}@${string}` {
+  return signalNames.includes(name) || name.includes('@');
 }
 
 // The auth methods in the order of the config, after the "none" request that

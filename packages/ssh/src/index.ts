@@ -12,3 +12,12 @@ export {
   type Signer,
 } from './private-key.ts';
 export { PublicKey } from './public-key.ts';
+export {
+  type Exit,
+  ExitError,
+  ExitMissingError,
+  Session,
+  type SignalName,
+  type TerminalModes,
+  type WindowSize,
+} from './session.ts';
