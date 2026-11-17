@@ -102,7 +102,7 @@ class Inspect extends Step<Push> {
   async run(push: Push) {
     const [update] = push.updates;
     if (update === undefined || update.kind === 'delete') return this.fail('no head');
-    const seen = await push.inSnapshot(update.head, async (folder) => {
+    const seen = await push.snapshot(update.head, { packages: true }).then(async ({ folder }) => {
       const modules = join(folder, 'node_modules');
       return {
         probe: JSON.parse(readFileSync(join(modules, 'probe-dep/package.json'), 'utf8')).version,
@@ -480,7 +480,7 @@ class Inspect extends Step<Push> {
   async run(push: Push) {
     const [update] = push.updates;
     if (update === undefined || update.kind === 'delete') return this.fail('no head');
-    const seen = await push.inSnapshot(update.head, async (folder) =>
+    const seen = await push.snapshot(update.head, { packages: true }).then(async ({ folder }) =>
       createRequire(join(folder, 'index.js'))('carrier-dep').value,
     ).catch((error: Error) => error);
     if (seen instanceof Error) return this.fail(seen.message.trimEnd());
@@ -604,7 +604,7 @@ class Inspect extends Step<Push> {
   async run(push: Push) {
     const [update] = push.updates;
     if (update === undefined || update.kind === 'delete') return this.fail('no head');
-    const seen = await push.inSnapshot(update.head, async (folder) => ({
+    const seen = await push.snapshot(update.head, { packages: true }).then(async ({ folder }) => ({
       workspace: realpathSync(join(folder, 'node_modules/@probe/ws')) === join(folder, 'packages/ws'),
       ignored: existsSync(join(folder, '.evals')),
     })).catch((error: Error) => error);

@@ -6,9 +6,28 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import { TemporaryFiles } from '@zukhruf/fs';
-import { Commit } from '@zukhruf/git-hooks';
+import { preCommit } from '@zukhruf/git-hooks/testing';
 
 import { ReadmeTable } from './readme-table-step.ts';
+
+// A lockfile with no dependency, and a node_modules installed from it, so the
+// snapshot of the staged commit links the repo's own packages and installs
+// nothing. .gitignore keeps node_modules out of the commit.
+const emptyInstall = {
+  '.gitignore': 'node_modules\n',
+  'package-lock.json': JSON.stringify({
+    name: 'probe',
+    lockfileVersion: 3,
+    requires: true,
+    packages: { '': { name: 'probe' } },
+  }),
+  'node_modules/.package-lock.json': JSON.stringify({
+    name: 'probe',
+    lockfileVersion: 3,
+    requires: true,
+    packages: {},
+  }),
+};
 
 const readme = `# workspace
 
@@ -50,6 +69,7 @@ test('a staged package with no row fails the check, and says how to fix it', asy
       description: 'Jobs that wait their turn.',
     }),
     'README.md': readme,
+    ...emptyInstall,
   });
   git(workspace.path, 'init', '-q');
   git(workspace.path, 'add', '.');
@@ -83,6 +103,7 @@ test('generate writes one row for each staged package, sorted by name, from its 
       description: 'The web site.',
     }),
     'README.md': readme,
+    ...emptyInstall,
   });
   git(workspace.path, 'init', '-q');
   git(workspace.path, 'add', '.');
@@ -115,6 +136,7 @@ test('a package that is on disk but not staged gets no row', async () => {
       description: 'Jobs that wait their turn.',
     }),
     'README.md': readme,
+    ...emptyInstall,
   });
   git(workspace.path, 'init', '-q');
   git(workspace.path, 'add', '.');
@@ -142,6 +164,7 @@ test('a staged package.json with no description stops generate, and names the fi
     'package.json': JSON.stringify({ workspaces: ['packages/*'] }),
     'packages/queue/package.json': JSON.stringify({ name: '@x/queue' }),
     'README.md': readme,
+    ...emptyInstall,
   });
   git(workspace.path, 'init', '-q');
   git(workspace.path, 'add', '.');
@@ -164,14 +187,17 @@ test('the pre-commit step skips a commit that stages no package.json and no READ
     'package.json': JSON.stringify({ workspaces: ['packages/*'] }),
     'README.md': readme,
     'notes.txt': 'Not a package.',
+    ...emptyInstall,
   });
   git(workspace.path, 'init', '-q');
   git(workspace.path, 'add', 'notes.txt');
 
   // Act
-  const outcome = await new ReadmeTable().run(
-    new Commit({ root: workspace.path, environment: process.env }),
+  const [outcome] = await preCommit(
+    { root: workspace.path, environment: process.env },
+    [new ReadmeTable()],
   );
+  assert.ok(outcome);
 
   // Assert
   assert.equal(outcome.kind, 'skip');
@@ -187,14 +213,17 @@ test('the pre-commit step fails a commit whose staged README has no row for a st
       description: 'Jobs that wait their turn.',
     }),
     'README.md': readme,
+    ...emptyInstall,
   });
   git(workspace.path, 'init', '-q');
   git(workspace.path, 'add', '.');
 
   // Act
-  const outcome = await new ReadmeTable().run(
-    new Commit({ root: workspace.path, environment: process.env }),
+  const [outcome] = await preCommit(
+    { root: workspace.path, environment: process.env },
+    [new ReadmeTable()],
   );
+  assert.ok(outcome);
 
   // Assert
   assert.equal(outcome.kind, 'fail');
@@ -211,6 +240,7 @@ test('the pre-commit step passes a commit whose staged README holds the generate
       description: 'Jobs that wait their turn.',
     }),
     'README.md': readme,
+    ...emptyInstall,
   });
   git(workspace.path, 'init', '-q');
   git(workspace.path, 'add', '.');
@@ -218,9 +248,11 @@ test('the pre-commit step passes a commit whose staged README holds the generate
   git(workspace.path, 'add', 'README.md');
 
   // Act
-  const outcome = await new ReadmeTable().run(
-    new Commit({ root: workspace.path, environment: process.env }),
+  const [outcome] = await preCommit(
+    { root: workspace.path, environment: process.env },
+    [new ReadmeTable()],
   );
+  assert.ok(outcome);
 
   // Assert
   assert.equal(outcome.kind, 'pass');

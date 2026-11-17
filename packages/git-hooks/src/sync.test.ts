@@ -7,8 +7,8 @@ import { promisify } from 'node:util';
 
 import { TemporaryFiles } from '@zukhruf/fs';
 
-import { nxPackages } from './testing/nx-packages.ts';
 import { repository } from './testing/pre-commit-repository.ts';
+import { toolPackages } from './testing/tool-packages.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -18,10 +18,14 @@ const execFileAsync = promisify(execFile);
 // install. The base commit is made without the hook.
 async function workspace(folder: string, hook: string) {
   const repo = await repository(folder, hook);
-  await nxPackages(repo.root, [
-    { folder: 'packages/a', name: '@probe/a' },
-    { folder: 'packages/b', name: '@probe/b' },
-  ]);
+  await toolPackages(
+    repo.root,
+    ['nx', '@nx', 'typescript'],
+    [
+      { folder: 'packages/a', name: '@probe/a' },
+      { folder: 'packages/b', name: '@probe/b' },
+    ],
+  );
   await repo.write('.gitignore', 'node_modules\n.nx\n');
   await repo.write(
     'package.json',

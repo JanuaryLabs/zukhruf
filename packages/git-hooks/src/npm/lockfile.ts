@@ -41,6 +41,15 @@ export class Lockfile {
       .filter((key) => !inNodeModules(key) && !key.startsWith('..'));
   }
 
+  // The dependencies that npm recorded for one project, `""` for the root,
+  // in each section of its package.json, as that package.json held them when
+  // npm wrote the lockfile. Undefined when the lockfile has no such project.
+  specs(project: string): DependencySpecs | undefined {
+    const entry = this.#packages.find(([key]) => key === project)?.[1];
+    if (entry === undefined) return undefined;
+    return dependencySpecs(entry);
+  }
+
   // The packages in a node_modules folder that are not links, by their key.
   thirdParty(): Map<string, ThirdPartyPackage> {
     const packages = new Map<string, ThirdPartyPackage>();
@@ -85,6 +94,40 @@ export class Lockfile {
       if (inNodeModules(entry[0]) && field(entry[1], 'link') !== true)
         yield entry;
   }
+}
+
+// The sections of a package.json that name dependencies, as npm records
+// them for a project in the lockfile.
+export const DEPENDENCY_SECTIONS = [
+  'dependencies',
+  'devDependencies',
+  'optionalDependencies',
+  'peerDependencies',
+] as const;
+
+// The specs of each dependency section of a package.json or of a project
+// entry of a lockfile: name to spec. A missing section has no names.
+export type DependencySpecs = Readonly<
+  Record<(typeof DEPENDENCY_SECTIONS)[number], ReadonlyMap<string, string>>
+>;
+
+export function dependencySpecs(manifest: unknown): DependencySpecs {
+  const specs = (section: string): ReadonlyMap<string, string> => {
+    const names = field(manifest, section);
+    return new Map(
+      typeof names === 'object' && names !== null
+        ? Object.entries(names).flatMap(([name, spec]) =>
+            typeof spec === 'string' ? [[name, spec] as const] : [],
+          )
+        : [],
+    );
+  };
+  return {
+    dependencies: specs('dependencies'),
+    devDependencies: specs('devDependencies'),
+    optionalDependencies: specs('optionalDependencies'),
+    peerDependencies: specs('peerDependencies'),
+  };
 }
 
 function inNodeModules(key: string): boolean {

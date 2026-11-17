@@ -6,6 +6,7 @@ import { test } from 'node:test';
 import { TemporaryFiles } from '@zukhruf/fs';
 
 import { repository } from './testing/pre-commit-repository.ts';
+import { toolPackages } from './testing/tool-packages.ts';
 
 const dependencyChecksOnly = `import { DependencyChecks, preCommit } from '@zukhruf/git-hooks';
 await preCommit([new DependencyChecks()]);
@@ -35,6 +36,9 @@ const clean = `${JSON.stringify({ name: 'a', dependencies: {} }, null, 2)}\n`;
 
 async function workspace(root: string) {
   const repo = await repository(root, dependencyChecksOnly);
+  await toolPackages(root, ['eslint']);
+  await repo.write('.gitignore', 'node_modules\n');
+  await repo.git('add', 'package-lock.json', '.gitignore');
   await repo.write('eslint.config.mjs', eslintConfig);
   await mkdir(join(root, 'packages/a/src'), { recursive: true });
   await mkdir(join(root, 'packages/b/src'), { recursive: true });
@@ -91,4 +95,24 @@ test('the staged copy of a package.json is judged, not the working tree', async 
 
   // Assert
   assert.equal(result.code, 0, result.stderr);
+});
+
+test('a commit that only deletes a file of a project lints the package.json of that project, since a deletion can leave a dependency unused', async () => {
+  // Arrange
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
+  const repo = await workspace(folder.path);
+  await repo.write('packages/a/package.json', banned);
+  await repo.write('packages/a/src/index.ts', 'export const a = 1;\n');
+  await repo.write('packages/a/src/old.ts', 'export const old = 1;\n');
+  await repo.git('add', '.');
+  await repo.git('commit', '--no-verify', '--quiet', '-m', 'base');
+  await repo.git('rm', '--quiet', 'packages/a/src/old.ts');
+
+  // Act
+  const result = await repo.commit('delete old');
+
+  // Assert
+  assert.notEqual(result.code, 0);
+  assert.match(result.stderr, /packages\/a\/package\.json:\d+/);
+  assert.match(result.stderr, /left-pad is not allowed/);
 });

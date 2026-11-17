@@ -1,5 +1,7 @@
 # A hook reads the staged commit, and stages only the files that its steps wrote
 
+Superseded in part on 2026-11-16 by [ADR 0004](./0004-a-step-reads-a-tree-and-runs-its-tools-in-a-snapshot.md) for how a step stages files and for the module that reads the environment. A step that writes files runs its work in a private snapshot of the staged commit, and the hook stages the files that the work changed and that the globs of the step match (`generate`). The host, `src/scripts/host.ts`, is the one module that reads the process, and `Commit` holds no environment. The rest of the decision below stays true.
+
 The repos of one developer copied their pre-commit hooks by hand. A survey of 54 repos on 2026-10-23 found these copies:
 
 - 14 repos ran lint-staged with `prettier --write`.

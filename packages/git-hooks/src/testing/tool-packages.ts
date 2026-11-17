@@ -4,24 +4,37 @@ import { join } from 'node:path';
 const zukhrufModules = new URL('../../../../node_modules', import.meta.url)
   .pathname;
 
+// The bin that each tool that a step runs puts in node_modules/.bin.
+const bins: Readonly<Record<string, string>> = {
+  nx: '../nx/dist/bin/nx.js',
+  prettier: '../prettier/bin/prettier.cjs',
+  eslint: '../eslint/bin/eslint.js',
+};
+
 // Gives a test repo at `root` the packages that a snapshot of its commit
-// links: a node_modules with zukhruf's nx, @nx and typescript, a link to each
-// workspace package, and the hidden lockfile of that install, with nx and
-// typescript at the versions that zukhruf installed. It writes the
-// package-lock.json that the commit stages: the root, nx, typescript, each
-// workspace package and its link. The hidden lockfile then matches it, so the
-// snapshot uses this node_modules and installs nothing.
-export async function nxPackages(
+// links: a node_modules with zukhruf's install of each of `tools` (a package
+// or a scope such as @nx) and its bin, a link to each workspace package, and
+// the hidden lockfile of that install, with each tool package at the version
+// that zukhruf installed. It writes the package-lock.json that the commit
+// stages: the root, the tool packages, each workspace package and its link.
+// The hidden lockfile then matches it, so the snapshot uses this node_modules
+// and installs nothing.
+export async function toolPackages(
   root: string,
-  workspaces: readonly { readonly folder: string; readonly name: string }[],
+  tools: readonly string[],
+  workspaces: readonly {
+    readonly folder: string;
+    readonly name: string;
+  }[] = [],
 ): Promise<void> {
   const modules = join(root, 'node_modules');
   await mkdir(join(modules, '.bin'), { recursive: true });
-  for (const name of ['nx', '@nx', 'typescript'])
+  for (const name of tools)
     await symlink(join(zukhrufModules, name), join(modules, name));
-  await symlink('../nx/dist/bin/nx.js', join(modules, '.bin/nx'));
   const packages: Record<string, object> = {};
-  for (const name of ['nx', 'typescript']) {
+  for (const name of tools.filter((tool) => !tool.startsWith('@'))) {
+    const bin = bins[name];
+    if (bin !== undefined) await symlink(bin, join(modules, '.bin', name));
     const manifest: unknown = JSON.parse(
       await readFile(join(zukhrufModules, name, 'package.json'), 'utf8'),
     );

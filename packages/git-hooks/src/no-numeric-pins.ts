@@ -74,14 +74,21 @@ export class NoNumericPins extends Step<Commit> {
 
   async run(commit: Commit): Promise<Outcome> {
     const pins: string[] = [];
-    for (const path of await commit.files()) {
+    const tree = await commit.tree();
+    for (const entry of await commit.changes()) {
+      // A deleted file pins nothing, and the staged copy of a link or a
+      // submodule is a path or a commit id, not content.
+      if (entry.change === 'deleted' || entry.kind !== 'file') continue;
+      const { path } = entry;
+      const content = await tree.read(path);
+      if (content === undefined) continue;
       if (basename(path) === 'package.json') {
-        pins.push(...manifestPins(path, await commit.blob(path)));
+        pins.push(...manifestPins(path, content));
         continue;
       }
       const patterns = linePatterns(path);
       if (patterns === undefined) continue;
-      pins.push(...matchingLines(path, await commit.blob(path), patterns));
+      pins.push(...matchingLines(path, content, patterns));
     }
     if (pins.length === 0) return this.pass('no staged Node or npm pin');
     return this.fail(

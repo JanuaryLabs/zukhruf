@@ -1,6 +1,5 @@
 import { type Git, gitIn } from './git.ts';
 import { type RefUpdate, readRefUpdates } from './ref-update.ts';
-import { runNx } from './snapshot/nx.ts';
 import { PackagedSnapshot, Snapshot } from './snapshot/snapshot.ts';
 import type { Snapshots } from './snapshot/snapshots.ts';
 import { type DiffEntry, Tree, changesBetween } from './tree.ts';
@@ -81,32 +80,5 @@ export class Push {
   ): Promise<Snapshot> {
     const clone = await this.#snapshots.open(sha, sha.slice(0, 7), packages);
     return packages ? new PackagedSnapshot(clone) : new Snapshot(clone);
-  }
-
-  // Runs `work` with the folder and the environment of the packaged snapshot
-  // of one commit.
-  async inSnapshot<T>(
-    sha: string,
-    work: (folder: string, environment: NodeJS.ProcessEnv) => Promise<T>,
-  ): Promise<T> {
-    const { folder, environment } = await this.#snapshots.open(
-      sha,
-      sha.slice(0, 7),
-      true,
-    );
-    return await work(folder, environment);
-  }
-
-  // Runs nx in the snapshot of one commit, and gives its standard output.
-  // When nx exits with a code other than 0, it throws.
-  nx(sha: string, ...args: string[]): Promise<string> {
-    return this.inSnapshot(sha, async (folder, environment) => {
-      const { code, stdout, stderr } = await runNx(folder, environment, args);
-      if (code !== 0)
-        throw new Error(
-          `nx ${args.join(' ')} exited with ${code}:\n${`${stdout}${stderr}`.trimEnd()}`,
-        );
-      return stdout;
-    });
   }
 }

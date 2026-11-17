@@ -1,26 +1,22 @@
-import { execFile, spawn } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import {
   chmod,
   copyFile,
   lstat,
   mkdir,
-  mkdtempDisposable,
   readlink,
   rm,
   symlink,
 } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { text } from 'node:stream/consumers';
-import { promisify } from 'node:util';
+
+import { TemporaryFiles } from '@zukhruf/fs';
 
 import { type Git, gitIn } from './git.ts';
-import { withoutRepoVariables } from './repo-variables.ts';
 import { PackagedSnapshot, Snapshot } from './snapshot/snapshot.ts';
 import type { Snapshots } from './snapshot/snapshots.ts';
 import { type DiffEntry, Tree, changesBetween, matches } from './tree.ts';
-
-const execFileAsync = promisify(execFile);
 
 // The author and the committer of the commit that the hook writes from the
 // staged tree. They do not change, so one tree and one parent give one commit.
@@ -50,12 +46,12 @@ interface CommitOptions {
   // The hook environment, for the git commands on the repo.
   readonly environment: NodeJS.ProcessEnv;
   // The snapshots of the hook, which the runner deletes at the end.
-  readonly snapshots?: Snapshots;
+  readonly snapshots: Snapshots;
   // Prints a line under the current step, such as a working-tree copy that
   // generate left alone.
-  readonly notice?: (message: string) => void;
+  readonly notice: (message: string) => void;
   // Gets the staged tree after each generate that staged files.
-  readonly generated?: (tree: string) => void;
+  readonly generated: (tree: string) => void;
 }
 
 // The staged commit: the index of the repo at `root`. Each read of a staged
@@ -63,13 +59,11 @@ interface CommitOptions {
 // sessions can edit the working tree while the hook runs. The git commands get
 // the hook environment, so git keeps the index that `git commit` gave the hook
 // in GIT_INDEX_FILE. Each tool gets the tool environment, which the host
-// computes, in the snapshots of the hook. A repo's own test that builds a
-// Commit gives one environment and no snapshots; the tool environment then
-// comes from that environment.
+// computes, in the snapshots of the hook.
 export class Commit {
-  readonly root: string;
+  readonly #root: string;
   readonly #environment: NodeJS.ProcessEnv;
-  readonly #snapshots: Snapshots | undefined;
+  readonly #snapshots: Snapshots;
   readonly #notice: (message: string) => void;
   readonly #generated: (tree: string) => void;
   readonly #git: Git;
@@ -78,10 +72,10 @@ export class Commit {
     root,
     environment,
     snapshots,
-    notice = () => {},
-    generated = () => {},
+    notice,
+    generated,
   }: CommitOptions) {
-    this.root = root;
+    this.#root = root;
     this.#environment = environment;
     this.#snapshots = snapshots;
     this.#notice = notice;
@@ -121,10 +115,6 @@ export class Commit {
   async snapshot({
     packages = false,
   }: { readonly packages?: boolean } = {}): Promise<Snapshot> {
-    if (this.#snapshots === undefined)
-      throw new TypeError(
-        'this Commit has no snapshots: preCommit builds the Commit that has them',
-      );
     const clone = await this.#snapshots.open(
       await this.#stagedCommit(),
       'the staged commit',
@@ -144,10 +134,6 @@ export class Commit {
     globs: readonly string[],
     work: (snapshot: PackagedSnapshot) => Promise<void>,
   ): Promise<Generated> {
-    if (this.#snapshots === undefined)
-      throw new TypeError(
-        'this Commit has no snapshots: preCommit builds the Commit that has them',
-      );
     await using clone = await this.#snapshots.openPrivate(
       await this.#stagedCommit(),
       'the staged commit',
@@ -166,14 +152,14 @@ export class Commit {
       if (entry.change === 'deleted') {
         lines.push(`0 ${'0'.repeat(this.#nullLength(staged))}\t${entry.path}`);
         if (copy === staged)
-          await rm(join(this.root, entry.path), { force: true });
+          await rm(join(this.#root, entry.path), { force: true });
         else this.#leftAlone(entry.path);
         continue;
       }
       const source = join(clone.folder, entry.path);
       const { mode, object } = await this.#store(entry.path, source);
       lines.push(`${mode} ${object}\t${entry.path}`);
-      if (copy === staged) await place(source, join(this.root, entry.path));
+      if (copy === staged) await place(source, join(this.#root, entry.path));
       else this.#leftAlone(entry.path);
     }
     if (isPartialCommit(this.#environment))
@@ -191,119 +177,20 @@ export class Commit {
     return { kind: 'staged', entries };
   }
 
-  // The paths that the commit adds, copies, modifies or renames.
-  async staged(): Promise<string[]> {
-    const output = await this.#git(
-      'diff',
-      '--cached',
-      '--name-only',
-      '--diff-filter=ACMR',
-      '-z',
-    );
-    return output.split('\0').filter((path) => path !== '');
-  }
-
-  // The staged paths whose staged copy is the content of a file. The staged
-  // copy of a link is the path that it points to, and that of a submodule is
-  // a commit id, so a check of their content would judge the wrong text.
-  async files(): Promise<string[]> {
-    const entries = await this.#git('ls-files', '--stage', '-z');
-    const files = new Set(
-      entries
-        .split('\0')
-        .filter((entry) => /^100(644|755) /.test(entry))
-        .map((entry) => entry.slice(entry.indexOf('\t') + 1)),
-    );
-    return (await this.staged()).filter((path) => files.has(path));
-  }
-
-  // The staged copy of one file.
-  blob(path: string): Promise<string> {
-    return this.#git('cat-file', 'blob', `:${path}`);
-  }
-
-  // Runs `work` on a copy of the staged tree in a temporary folder, for a
-  // check that reads many files at once. The folder is removed afterwards.
-  async inSnapshot<T>(work: (folder: string) => Promise<T>): Promise<T> {
-    await using snapshot = await mkdtempDisposable(
-      join(tmpdir(), 'git-hooks-'),
-    );
-    await this.#git('checkout-index', '--all', `--prefix=${snapshot.path}/`);
-    // Awaited here, so the folder stays until `work` ends.
-    return await work(snapshot.path);
-  }
-
-  // The tracked files whose working-tree copy differs from the staged copy.
-  async modified(): Promise<string[]> {
-    const output = await this.#git('diff', '--name-only', '-z');
-    return output.split('\0').filter((path) => path !== '');
-  }
-
-  // Stages files that a step wrote itself. A step never stages anything else.
-  async stage(paths: readonly string[]): Promise<void> {
-    await this.#git('add', '--', ...paths);
-  }
-
-  // Runs the repo's own nx with no daemon, so a hook started from a GUI or an
-  // agent shell does not leave a daemon behind or read its stale graph. nx
-  // and its tasks get none of git's variables of the repo, so a task that
-  // runs git in its own folder never reaches the repo. The git commands of
-  // the commit keep them, so they read and write the commit's index.
-  async nx(...args: string[]): Promise<string> {
-    const { stdout } = await execFileAsync(
-      join(this.root, 'node_modules/.bin/nx'),
-      args,
-      {
-        cwd: this.root,
-        env: {
-          ...(this.#snapshots?.toolEnvironment ??
-            (await withoutRepoVariables(this.#environment))),
-          NX_DAEMON: 'false',
-        },
-        encoding: 'utf8',
-        maxBuffer: 2 ** 30,
-      },
-    );
-    return stdout;
-  }
-
-  // The nx projects that the staged files affect. The files come from the
-  // staged commit, so an edit that is only in the working tree affects nothing.
-  async affected(): Promise<string[]> {
-    const staged = await this.staged();
-    if (staged.length === 0) return [];
-    const output = await this.nx(
-      'show',
-      'projects',
-      '--affected',
-      `--files=${staged.join(',')}`,
-      '--json',
-    );
-    const projects: unknown = JSON.parse(output);
-    if (
-      !Array.isArray(projects) ||
-      !projects.every(
-        (project): project is string => typeof project === 'string',
-      )
-    )
-      throw new TypeError(
-        `nx show projects gave ${output.trim()}, not a list of names`,
-      );
-    return projects;
-  }
-
   // The object of the working-tree copy of `path` as git would store it, or
   // undefined when there is none.
   async #workingObject(path: string): Promise<string | undefined> {
-    const file = join(this.root, path);
+    const file = join(this.#root, path);
     const stats = await lstat(file).catch(() => undefined);
     if (stats === undefined) return undefined;
     if (stats.isSymbolicLink())
       return (
-        await gitWithInput(this.root, this.#environment, await readlink(file), [
-          'hash-object',
-          '--stdin',
-        ])
+        await gitWithInput(
+          this.#root,
+          this.#environment,
+          await readlink(file),
+          ['hash-object', '--stdin'],
+        )
       ).trim();
     return (
       await this.#git('hash-object', `--path=${path}`, '--', file)
@@ -322,7 +209,7 @@ export class Commit {
         mode: '120000',
         object: (
           await gitWithInput(
-            this.root,
+            this.#root,
             this.#environment,
             await readlink(source),
             ['hash-object', '-w', '--stdin'],
@@ -353,7 +240,7 @@ export class Commit {
   // it fails while a peer's git command holds it.
   async #updateIndex(info: string): Promise<void> {
     try {
-      await gitWithInput(this.root, this.#environment, info, [
+      await gitWithInput(this.#root, this.#environment, info, [
         'update-index',
         '--index-info',
       ]);
@@ -373,14 +260,12 @@ export class Commit {
   // index while the hook runs. So the tree is written from a private copy of
   // the index of the hook. No index file is an empty index.
   async #stagedTree(): Promise<string> {
-    await using copy = await mkdtempDisposable(
-      join(tmpdir(), 'git-hooks-index-'),
-    );
+    await using copy = await new TemporaryFiles().directory('git-hooks-index-');
     const index = join(copy.path, 'index');
     try {
       await copyFile(
         resolve(
-          this.root,
+          this.#root,
           (await this.#git('rev-parse', '--git-path', 'index')).trim(),
         ),
         index,
@@ -394,7 +279,7 @@ export class Commit {
         throw error;
     }
     return (
-      await gitIn(this.root, { ...this.#environment, GIT_INDEX_FILE: index })(
+      await gitIn(this.#root, { ...this.#environment, GIT_INDEX_FILE: index })(
         'write-tree',
       )
     ).trim();
@@ -406,7 +291,7 @@ export class Commit {
     const parent = await this.#revision('HEAD');
     const tree = await this.#stagedTree();
     return (
-      await gitIn(this.root, { ...this.#environment, ...stagedCommitter })(
+      await gitIn(this.#root, { ...this.#environment, ...stagedCommitter })(
         'commit-tree',
         '--no-gpg-sign',
         '-m',

@@ -61,48 +61,6 @@ async function withoutLocalEnvVars(
   );
 }
 
-test('a tool that a pre-commit step runs gets the hook environment without the git variables of the repo: no GIT_INDEX_FILE, GIT_DIR or GIT_WORK_TREE, and each other variable as git gave it', async () => {
-  // Arrange
-  await using folder = await new TemporaryFiles().directory('git-hooks-');
-  const repo = await commitRepository(
-    folder.path,
-    `import { type Commit, Step, preCommit } from '@zukhruf/git-hooks';
-class Show extends Step<Commit> {
-  readonly name = 'env';
-  async run(commit: Commit) {
-    const tool: unknown = JSON.parse(await commit.nx('show'));
-    return this.pass(JSON.stringify({ hook: process.env, tool }));
-  }
-}
-await preCommit([new Show()]);
-`,
-  );
-  await mkdir(join(repo.root, 'node_modules/.bin'), { recursive: true });
-  await repo.write('node_modules/.bin/nx', printEnvironment);
-  await chmod(join(repo.root, 'node_modules/.bin/nx'), 0o755);
-  await repo.write('a.txt', 'a\n');
-  await repo.git('add', 'a.txt');
-
-  // Act
-  // With --git-dir and --work-tree, git gives the hook GIT_DIR and
-  // GIT_WORK_TREE of the committing repo, and GIT_INDEX_FILE of the commit.
-  const result = await repo.commit(
-    'first',
-    `--git-dir=${join(repo.root, '.git')}`,
-    `--work-tree=${repo.root}`,
-  );
-
-  // Assert
-  assert.equal(result.code, 0, result.stderr);
-  const { hook, tool } = environments(result.stderr);
-  for (const name of ['GIT_INDEX_FILE', 'GIT_DIR', 'GIT_WORK_TREE'])
-    assert.ok(name in hook, `git must give the hook ${name}`);
-  assert.deepEqual(tool, {
-    ...(await withoutLocalEnvVars(repo.git, hook)),
-    NX_DAEMON: 'false',
-  });
-});
-
 test('a tool that a pre-push step runs in a snapshot gets the hook environment without the git variables of the repo, with the nx settings of the snapshot', async () => {
   // Arrange
   await using folder = await new TemporaryFiles().directory('git-hooks-');
@@ -114,7 +72,8 @@ class Show extends Step<Push> {
   async run(push: Push) {
     const [update] = push.updates;
     if (update === undefined || update.kind === 'delete') return this.fail('no head');
-    const tool: unknown = JSON.parse(await push.nx(update.head, 'show'));
+    const snapshot = await push.snapshot(update.head, { packages: true });
+    const tool: unknown = JSON.parse((await snapshot.bin('nx', ['show'])).stdout);
     return this.pass(JSON.stringify({ hook: process.env, tool }));
   }
 }

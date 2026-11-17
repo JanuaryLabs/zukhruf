@@ -8,8 +8,8 @@ import { promisify } from 'node:util';
 
 import { TemporaryFiles } from '@zukhruf/fs';
 
-import { nxPackages } from './testing/nx-packages.ts';
 import { repository } from './testing/pre-commit-repository.ts';
+import { toolPackages } from './testing/tool-packages.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -22,8 +22,9 @@ const execFileAsync = promisify(execFile);
 // `openapi`. The base commit is made without the hook.
 async function workspace(folder: string, hook: string) {
   const repo = await repository(folder, hook);
-  await nxPackages(
+  await toolPackages(
     repo.root,
+    ['nx', '@nx', 'typescript', 'prettier'],
     ['backend', 'frontend', 'other', 'backend-e2e'].map((name) => ({
       folder: `packages/${name}`,
       name: `@probe/${name}`,

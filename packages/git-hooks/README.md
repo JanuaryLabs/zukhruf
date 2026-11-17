@@ -1,6 +1,6 @@
 # @zukhruf/git-hooks
 
-Git hooks written in TypeScript. A pre-commit hook runs steps in order against the staged commit. The steps check the staged copy of each file with Prettier and change nothing, run `nx sync` and stage only the files that sync wrote, and build generated files when nx says that their projects are affected. A pre-push hook runs steps in order against the push. Its build step builds each pushed commit in a snapshot, never the working tree. A commit-msg hook runs steps in order against the message of the commit. Its scope step stops a subject that nx release reads with the wrong scope. A repo adds a step of its own as a class.
+Git hooks written in TypeScript. A pre-commit hook runs steps in order against the staged commit. The steps check the staged copy of each file with Prettier and change nothing, run `nx sync` on the staged commit and stage only the files that sync wrote, and build generated files when nx says that their projects are affected. A step reads a tree of the commit, and runs its tools in a snapshot of the commit, never in the working tree. A pre-push hook runs steps in order against the push. Its build step builds each pushed commit in a snapshot, never the working tree. A commit-msg hook runs steps in order against the message of the commit. Its scope step stops a subject that nx release reads with the wrong scope. A repo adds a step of its own as a class.
 
 The words in these documents have one meaning each. See the glossary in [CONTEXT.md](./CONTEXT.md).
 
@@ -38,7 +38,7 @@ Tell git where the hooks are, in the `prepare` script of `package.json`:
 
 ## Check the format of the staged files
 
-`Format` checks the staged copy of each staged file with the Prettier config of the repo. It skips the files that `.prettierignore` names, the files that Prettier has no parser for, and links, because the staged copy of a link is the path that it points to. When a file is not formatted, or Prettier cannot parse it, the commit stops and the hook names each file:
+`Format` checks the staged copy of each staged file with the Prettier and the Prettier config of the commit. It runs Prettier in the snapshot of the staged commit, with the commit's packages (see [Where a step runs its tools](#where-a-step-runs-its-tools)). It skips the files that `.prettierignore` names, the files that Prettier has no parser for, and links, because the staged copy of a link is the path that it points to. When a file is not formatted, or Prettier cannot parse it, the commit stops and the hook names each file:
 
 ```text
 format    2 staged files are not formatted:
@@ -52,7 +52,7 @@ The step changes no file and stages nothing. A file that is partly staged is jud
 
 ## Stage the files that nx sync writes
 
-`Sync` runs `nx sync` and stages the files that it changed. The option `stage` names the files that the sync generators of the repo write. The default is `**/tsconfig*.json`. A repo with the Tailwind sync generator adds its style sheets:
+`Sync` runs `nx sync` in a snapshot of the staged commit, and stages the files that it changed there. The option `stage` holds globs of the files that the sync generators of the repo write. The default is `**/tsconfig*.json`. A repo with the Tailwind sync generator adds its style sheets:
 
 ```ts
 import { Format, Sync, preCommit } from '@zukhruf/git-hooks';
@@ -63,7 +63,7 @@ await preCommit([
 ]);
 ```
 
-The step does not stage a file that was changed before the hook ran, or a changed file that `stage` does not name: another session can edit the same working tree. When `nx sync` fails, the commit stops, and the hook shows the reason that nx gave.
+nx sync reads the staged commit, so an edit that is not staged does not change what it writes. The step stages only a changed file that `stage` matches. It also writes that file into the working tree, but only when the working-tree copy still equals the old staged copy, so `git status` stays clean. When the working-tree copy holds another edit, the step leaves it, and the hook names it. When `nx sync` fails, the commit stops, and the hook shows the reason that nx gave. A partial commit, such as `git commit --only` or `git commit <paths>`, cannot take a synced file: the commit stops, and the hook names the files and the command that adds them (see [Write generated files](#write-generated-files)).
 
 ## Refuse a Node or npm version written as a number
 
@@ -82,9 +82,55 @@ import { Format, NoNumericPins, Sync, preCommit } from '@zukhruf/git-hooks';
 await preCommit([new Sync(), new Format(), new NoNumericPins()]);
 ```
 
+## Keep package-lock.json in step with each package.json
+
+`LockfileSync` runs when a commit changes a `package.json`, `package-lock.json` or `.npmrc`, a deletion included. The commit stops when the staged lockfile does not record the staged manifests, so CI and each image install the commit with `npm ci`:
+
+- each dependency of a staged `package.json` must have the spec that the lockfile recorded for its project. `npm ci` accepts a range edit that the locked version still satisfies, such as `^1.0.0` to `^1.2.0` with `1.3.0` locked, so the lockfile would keep the old range;
+- then `npm ci --dry-run` runs in the snapshot of the staged commit: npm's own check that the lockfile holds each dependency of each `package.json`, such as a new workspace package. It reads the npm cache first and the registry only for what the cache does not hold.
+
+A commit with a `package.json` and no `package-lock.json` stops too. The fix for each case is the same: run `npm install`, stage `package-lock.json`, and commit again.
+
+```ts
+import { LockfileSync, NpmrcPolicy, preCommit } from '@zukhruf/git-hooks';
+
+await preCommit([new NpmrcPolicy(), new LockfileSync()]);
+```
+
+## Decide how npm installs, in the repo
+
+`NpmrcPolicy` reads the staged `.npmrc` on each commit. The repo's `.npmrc` decides two settings for each install, so the `~/.npmrc` of the user never does:
+
+- `legacy-peer-deps=false`: npm resolves peer dependencies for real. Write `legacy-peer-deps=true` only under a comment that names the peer conflict and the backlog item that tracks it, such as `# express 5 against a peer of express 4 (#2394)`.
+- `strict-allow-scripts=true`: an install fails when a dependency has an install script that `allowScripts` in `package.json` does not name. Without it, npm skips the script and only warns.
+
+The commit stops when `.npmrc` is missing, when a setting is missing, has another value, or is set twice (npm reads a key that is set twice as a list), and when `legacy-peer-deps=true` has no such comment. The step reads `.npmrc` as npm does: spaces around `=`, quoted values and a comment after a value are allowed, and only the keys above the first `[section]` count.
+
+```ts
+import { NoNumericPins, NpmrcPolicy, preCommit } from '@zukhruf/git-hooks';
+
+await preCommit([new NoNumericPins(), new NpmrcPolicy()]);
+```
+
+## Install from the lockfile in a Dockerfile
+
+`DockerfileInstallsFromLockfile` reads the staged copy of each staged Dockerfile, such as `Dockerfile`, `Dockerfile.migration` or `api.Dockerfile`. The commit stops when a `RUN` instruction installs packages without the lockfile: `npm install` (and its other names, such as `npm i` and `npm add`), `yarn` or `yarn add`, and `pnpm` or `bun` with `install`, `i` or `add`. `npm install` resolves the ranges of `package.json` when the image builds, so the image runs versions that no commit names. Write `npm ci` after a `COPY` of `package.json` and `package-lock.json`, and `npm ci --omit=dev` for a runtime image. A global install of a tool, such as `npm install -g npm@latest`, passes.
+
+The step reads `RUN` as Docker does: continuation lines, flags such as `--mount`, the exec form `["npm", "install"]`, and a heredoc.
+
+```ts
+import {
+  DockerfileInstallsFromLockfile,
+  NoNumericPins,
+  preCommit,
+} from '@zukhruf/git-hooks';
+
+await preCommit([new NoNumericPins(), new DockerfileInstallsFromLockfile()]);
+```
+
 ## Lint the package.json of each touched project
 
-`DependencyChecks` lints the staged `package.json` of each project that the commit touches, with the repo's own ESLint config. The project of a staged file is the nearest folder above it that has a `package.json` in the commit. A dependency rule, such as Nx's `dependency-checks`, reports on `package.json`, so a lint of the staged source files alone never runs it. Without this step, an import of an undeclared package passes the commit and fails CI after the push. The step changes nothing. It needs `eslint` in the repo:
+`DependencyChecks` lints the staged `package.json` of each project that the commit touches, with the ESLint and the ESLint config of the commit. It runs ESLint in the snapshot of the staged commit, with the commit's packages. The project of a changed path is the nearest folder above it that has a `package.json` in the staged tree. A deleted path touches its project too. A dependency rule, such as Nx's `dependency-checks`, reports on `package.json`, so a lint of the staged source files alone never runs it. Without this step, an import of an undeclared package passes the commit and fails CI after the push. The step changes nothing. It needs `eslint` in the repo:
 
 ```ts
 import { DependencyChecks, Format, preCommit } from '@zukhruf/git-hooks';
@@ -94,7 +140,7 @@ await preCommit([new Format(), new DependencyChecks()]);
 
 ## Build generated files
 
-`Codegen` runs nx targets that write generated files, and stages those files. With `when`, it builds only when nx says that the staged files affect one of those projects:
+`Codegen` runs nx targets that write generated files in a snapshot of the staged commit. It stages each file that the targets changed there and that `stage` matches. `stage` holds globs. With `when`, it builds only when nx says that the changes of the commit affect one of those projects:
 
 ```ts
 import { Codegen, Format, Sync, preCommit } from '@zukhruf/git-hooks';
@@ -104,33 +150,226 @@ await preCommit([
   new Codegen({
     when: ['backend', 'frontend'],
     run: ['backend:build', 'frontend:build'],
-    stage: ['openapi.json', 'packages/client/src'],
+    stage: ['openapi.json', 'packages/client/src/**'],
   }),
   new Format(),
 ]);
 ```
 
-The targets run in the order that `run` gives. When a target fails, the commit stops, and the hook shows the reason that the target gave. Put `Format` after `Codegen`, so that the generated files are checked too. nx and its tasks get none of the variables that tie git to one repo (see [Where a pre-push build runs](#where-a-pre-push-build-runs)), so a target that runs git in a folder of its own does not change the repo. The hook's own git commands keep these variables, so they read and write the index of the commit.
+The targets run in the order that `run` gives. They build from the staged commit, so an edit that is not staged is not in the generated files. When a target fails, the commit stops, and the hook shows the reason that the target gave. The working tree and a partial commit follow the same rules as for `Sync`. Put `Format` after `Codegen`, so that the generated files are checked too. nx and its tasks get the tool environment (see [Where a step runs its tools](#where-a-step-runs-its-tools)), so a target that runs git in a folder of its own does not change the repo.
 
-## Add a step of your own
+## Write a step
 
-A pre-commit step is a subclass of `Step<Commit>`. It names itself and gives an outcome: `this.pass()`, `this.skip(why)` or `this.fail(why)`. A fail stops the commit. `Commit` reads the staged commit: `staged()`, `files()` (the staged paths that hold file content, without links and submodules), `blob(path)`, `touches(globs)`, and `inSnapshot(work)`, which runs `work` on a copy of the staged tree in a temporary folder:
+A pre-commit step is a subclass of `Step<Commit>`. It names itself and gives an outcome: `this.pass()`, `this.skip(why)` or `this.fail(why)`. A fail stops the commit. A step reads the commit only through its subject. It never reads the working tree, and it never gets an environment.
+
+`Commit`, `Push` and `CommitMessage` are types, not classes: the hook builds them. Import them with `type`. These are the types that a step uses:
+
+```ts
+interface Commit {
+  tree(): Promise<Tree>;
+  changes(): Promise<readonly DiffEntry[]>;
+  touches(globs: readonly string[]): Promise<boolean>;
+  snapshot(options?: { readonly packages?: false }): Promise<Snapshot>;
+  snapshot(options: { readonly packages: true }): Promise<PackagedSnapshot>;
+  generate(
+    globs: readonly string[],
+    work: (snapshot: PackagedSnapshot) => Promise<void>,
+  ): Promise<readonly DiffEntry[]>;
+}
+
+interface Push {
+  readonly remote: { readonly name: string; readonly url: string };
+  readonly updates: readonly RefUpdate[];
+  tree(sha: string): Promise<Tree>;
+  changes(
+    update: Extract<RefUpdate, { kind: 'create' | 'update' }>,
+  ): Promise<readonly DiffEntry[]>;
+  snapshot(
+    sha: string,
+    options?: { readonly packages?: false },
+  ): Promise<Snapshot>;
+  snapshot(
+    sha: string,
+    options: { readonly packages: true },
+  ): Promise<PackagedSnapshot>;
+}
+
+interface Tree {
+  readonly id: string;
+  entries(globs?: readonly string[]): readonly TreeEntry[];
+  read(path: string): Promise<string | undefined>;
+}
+
+interface TreeEntry {
+  readonly path: string;
+  readonly kind: 'file' | 'link' | 'submodule';
+}
+
+type DiffEntry =
+  | {
+      readonly change: 'added' | 'modified' | 'type-changed';
+      readonly path: string;
+      readonly kind: 'file' | 'link' | 'submodule';
+    }
+  | { readonly change: 'deleted'; readonly path: string };
+
+interface Snapshot {
+  readonly folder: string;
+  run(
+    command: string,
+    args: readonly string[],
+    options?: { readonly env?: Readonly<Record<string, string>> },
+  ): Promise<ProcessResult>;
+}
+
+interface PackagedSnapshot extends Snapshot {
+  readonly nxCacheDirectory: string;
+  bin(
+    name: string,
+    args: readonly string[],
+    options?: { readonly env?: Readonly<Record<string, string>> },
+  ): Promise<ProcessResult>;
+}
+
+interface ProcessResult {
+  readonly status: number | null;
+  readonly stdout: string;
+  readonly stderr: string;
+}
+```
+
+### Read the commit
+
+`commit.tree()` gives the staged tree: the tree that `git write-tree` writes from the index of the hook. A tree does not change, so a step judges one state of the commit. After `generate` stages a file, `tree()` gives the new tree. `tree.id` is the object id of the tree.
+
+`tree.entries(globs?)` lists the tree entries, without folders. Each entry has its `path` and its `kind`: `file` (also an executable file), `link` or `submodule`. With `globs`, it lists only the paths that match one of them, as `path.matchesGlob` of Node matches them. `tree.read(path)` gives the content of an entry as UTF-8 text, or `undefined` when the tree has no file or link at `path`. The content of a link is the path that it points to, so a step that checks content reads only the entries of the kind `file`.
+
+`commit.changes()` gives the diff entries from the tree of `HEAD` to the staged tree. Each entry has its `path` and its `change`: `added`, `modified`, `deleted` or `type-changed`. An entry that is not deleted also has the `kind` of its new entry. A rename is a deleted entry and an added entry. A step that checks content skips the deleted entries. `commit.touches(globs)` says whether a diff entry matches one of the globs, and deleted entries count. Thus a commit that only deletes `package-lock.json` touches `package-lock.json`.
+
+This step reads a file that the commit need not change:
 
 ```ts
 import { type Commit, Step } from '@zukhruf/git-hooks';
 
-export class DesignCheck extends Step<Commit> {
-  readonly name = 'design';
+export class StrictPeers extends Step<Commit> {
+  readonly name = 'npmrc';
 
   async run(commit: Commit) {
-    if (!(await commit.touches(['DESIGN.md', 'apps/**/*.css'])))
-      return this.skip('no design files staged');
-    const valid = await commit.inSnapshot((folder) => checkDesign(folder));
-    return valid
+    const npmrc = await (await commit.tree()).read('.npmrc');
+    if (npmrc === undefined) return this.fail('the commit has no .npmrc');
+    return /^legacy-peer-deps\s*=\s*false\s*$/m.test(npmrc)
       ? this.pass()
-      : this.fail('DESIGN.md disagrees with the styles');
+      : this.fail('.npmrc does not set legacy-peer-deps=false');
   }
 }
+```
+
+### Run a tool in a snapshot
+
+`commit.snapshot()` gives the snapshot of the staged tree (see [Where a step runs its tools](#where-a-step-runs-its-tools)). `snapshot.folder` is its folder. `snapshot.run(command, args)` runs a command from the `PATH` in that folder, with the tool environment. A snapshot with packages also has `snapshot.bin(name, args)`, which runs `node_modules/.bin/<name>` of the snapshot in the same way. The option `env` adds variables. Each call gives a `ProcessResult`: the `status`, which is the exit code or `null` when a signal ended the process, the `stdout` and the `stderr`. An exit code other than 0 is a result, not an error. When the command cannot start, the call throws the error of Node.
+
+A snapshot has no `node_modules` unless the step asks for packages with `commit.snapshot({ packages: true })`, which gives a `PackagedSnapshot`. These are the packages of the commit's own lockfile, so the tree must have `package-lock.json`, or `snapshot` throws. The steps that ask for the same tree share one snapshot, so a step does not change the files in it. A later ask for packages adds a `node_modules` to the same snapshot. A step that writes files uses `generate`. The hook deletes each snapshot after the last step. `snapshot.nxCacheDirectory` is the nx cache of the state folder, where nx writes the summary of its last run.
+
+This step runs npm on the staged tree. `npm ci --dry-run` needs no `node_modules`, so the step asks for no packages:
+
+```ts
+import { type Commit, Step } from '@zukhruf/git-hooks';
+
+const npmFiles = ['**/package.json', 'package-lock.json', '.npmrc'];
+
+export class LockfileInSync extends Step<Commit> {
+  readonly name = 'lockfile';
+
+  async run(commit: Commit) {
+    if (!(await commit.touches(npmFiles)))
+      return this.skip('no manifest, lockfile or .npmrc changed');
+    const snapshot = await commit.snapshot();
+    const npm = await snapshot.run('npm', [
+      'ci',
+      '--dry-run',
+      '--ignore-scripts',
+      '--no-audit',
+      '--no-fund',
+    ]);
+    return npm.status === 0
+      ? this.pass('package-lock.json records the manifests')
+      : this.fail(npm.stderr.trimEnd());
+  }
+}
+```
+
+### Write generated files
+
+A step that writes files calls `commit.generate(globs, work)`. `work` runs in a private snapshot of the staged tree, with packages. Then the hook stages each file that the work changed, added or deleted there, and that matches one of the globs. A file that `.gitignore` names is not staged. `generate` gives the diff entries of the files that it staged. After it, `commit.tree()` gives the new staged tree, and the next steps read that tree.
+
+The hook also writes each staged file into the working tree, or deletes it there, but only when the working-tree copy still equals the old staged copy. Thus `git status` stays clean. When the working-tree copy holds another edit, the hook leaves it. It prints a line that names the file, under the name of the step.
+
+When `work` throws, `generate` stages nothing and throws the same error. In a partial commit, such as `git commit --only` or `git commit <paths>`, git commits its real index after the hook, so a file that the hook staged would be in the commit but not in the index. There, `generate` writes the working-tree copies by the same rule, stages nothing, and throws an error that names the files and the command that adds them to the commit.
+
+```ts
+import { type Commit, Step } from '@zukhruf/git-hooks';
+
+export class OpenApi extends Step<Commit> {
+  readonly name = 'openapi';
+
+  async run(commit: Commit) {
+    try {
+      const staged = await commit.generate(
+        ['openapi.json'],
+        async (snapshot) => {
+          const nx = await snapshot.bin('nx', ['run', 'api:openapi']);
+          if (nx.status !== 0) throw new Error(nx.stderr.trimEnd());
+        },
+      );
+      return this.pass(`staged ${staged.length} generated files`);
+    } catch (error) {
+      if (!Error.isError(error)) throw error;
+      return this.fail(error.message);
+    }
+  }
+}
+```
+
+### How a hook runs its steps
+
+`preCommit`, `prePush` and `commitMsg` run their steps with one loop. The loop runs the steps in order, prints the outcome of each step, and stops at the first fail. When each step passed or skipped, the pre-commit hook writes the tree of the index again: the index guard. When that tree differs from the last staged tree that the steps read, the commit stops: the index changed while the hook ran, for example because another session ran `git add`. At the end, the hook deletes each snapshot that the steps opened.
+
+### Test a step
+
+`@zukhruf/git-hooks/testing` runs steps as each hook runs them, with the folder and the environment that the test gives. It gives the outcome of each step that ran, in order, and stops after the first fail, as the hook does. The index guard, `generate` and the snapshots work as in the hook:
+
+- `preCommit({ root, environment }, steps)` runs pre-commit steps against the index of the repo at `root`.
+- `prePush({ root, environment, remote, input }, steps)` runs pre-push steps. `remote` has the `name` and the `url`, and `input` holds the lines that git gives the hook on its standard input.
+- `commitMsg({ root, environment, file }, steps)` runs commit-msg steps on the message in `file`.
+
+```ts
+import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import { mkdtempDisposable, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import test from 'node:test';
+
+import { preCommit } from '@zukhruf/git-hooks/testing';
+
+import { StrictPeers } from './strict-peers.ts';
+
+test('a commit without .npmrc fails', async () => {
+  // Arrange
+  await using repo = await mkdtempDisposable(join(tmpdir(), 'npmrc-'));
+  execFileSync('git', ['init', '--quiet'], { cwd: repo.path });
+  await writeFile(join(repo.path, 'package.json'), '{}\n');
+  execFileSync('git', ['add', 'package.json'], { cwd: repo.path });
+
+  // Act
+  const [outcome] = await preCommit(
+    { root: repo.path, environment: process.env },
+    [new StrictPeers()],
+  );
+
+  // Assert
+  assert.equal(outcome?.kind, 'fail');
+});
 ```
 
 ## Install the pre-push hook
@@ -216,25 +455,25 @@ In one repo, one pre-push build runs at a time. A second push waits for the firs
 build     waiting for another pre-push build in this repo
 ```
 
-## Where a pre-push build runs
+## Where a step runs its tools
 
-Each pushed commit is built in a snapshot: a clone of the repo in a temporary folder outside the repo, with the files of that commit. The hook makes the clone with `git clone --shared --no-checkout`, and then runs `git checkout --detach <sha>` in it. The clone shares the object store of the repo through `objects/info/alternates`, so git copies no objects. The snapshot holds what the commit holds, and nothing that is only in the working tree. A file that `.gitignore` names, such as `.env`, is not in the snapshot. Git writes the files of the commit as in each checkout: it makes the links and the executable files, and it applies `.gitattributes` and the filters of your git config.
+A step runs its tools in a snapshot: a clone of the repo in a temporary folder outside the repo, with the files of one commit. Both hooks make it in the same way. The hook makes the clone with `git clone --shared --no-checkout`, and then runs `git checkout --detach <sha>` in it. For the staged commit, the hook first writes a commit of the staged tree with `git commit-tree`, with `HEAD` as its parent, and with an author, a committer and a date that do not change. Thus one tree and one parent always give the same commit. No ref holds that commit, and `git gc` prunes it. The clone shares the object store of the repo through `objects/info/alternates`, so git copies no objects. The snapshot holds what the commit holds, and nothing that is only in the working tree. A file that `.gitignore` names, such as `.env`, is not in the snapshot. Git writes the files of the commit as in each checkout: it makes the links and the executable files, and it applies `.gitattributes` and the filters of your git config.
 
-nx runs in the snapshot, and git commands in nx work there. The snapshot is a repo of its own, so git sees a clean checkout of the pushed commit, with no changed and no untracked files. `nx affected --base --head` works, because git finds the base commit through the shared object store.
+nx and the other tools run in the snapshot, and git commands in them work there. The snapshot is a repo of its own, so git sees a clean checkout of the commit, with no changed and no untracked files. `nx affected --base --head` works, because git finds the base commit through the shared object store.
 
-nx and its tasks get none of the variables that tie git to one repo, such as `GIT_DIR`, `GIT_WORK_TREE` and `GIT_INDEX_FILE`. The hook removes each variable that `git rev-parse --local-env-vars` lists. Git removes the same list when it runs a command in another repo, such as a submodule. Thus a task that runs `git init` in a temporary folder of its own makes a repo in that folder, and does not change the repo that pushes. Before 0.3.43, the hook gave nx these variables. In sdk-it, a test ran `git init` in a temporary folder, and git wrote `core.worktree` into the config of the real repo. The snapshot was then deleted, so each git command in the repo failed.
+Each tool gets the tool environment: the environment of the hook without the variables that tie git to one repo, such as `GIT_DIR`, `GIT_WORK_TREE` and `GIT_INDEX_FILE`. The hook removes each variable that `git rev-parse --local-env-vars` lists. Git removes the same list when it runs a command in another repo, such as a submodule (githooks(5)). Thus a task that runs `git init` in a temporary folder of its own makes a repo in that folder, and does not change the repo of the hook. In a snapshot, the tool environment also has `NX_DAEMON=false` and the nx cache of the state folder. Only the hook's own git commands on the repo keep these variables, so they read and write the index of the commit.
 
-The snapshot uses the packages that the repo installed when they match the `package-lock.json` of the commit. Then the setup takes about 1 s. A workspace package resolves to its folder in the snapshot, not in the working tree.
+A snapshot has a `node_modules` only when a step asks for packages. It then uses the packages that the repo installed when they match the `package-lock.json` of the commit. Then the setup takes about 1 s. A workspace package resolves to its folder in the snapshot, not in the working tree.
 
-When the installed packages do not match the `package-lock.json` of the commit, the hook installs that lockfile in a folder of its own, and the snapshot uses that install. This is install drift: a package that the lockfile names is missing or has a different version, or a package is installed that the lockfile does not name. An extra package is drift too, because code that imports it builds here and fails in CI. Install drift occurs when a peer changed the dependencies but did not commit the change, or when the push sends a commit with other dependencies. The hook prints a line before the install, because a full install takes some time:
+When the installed packages do not match the `package-lock.json` of the commit, the hook installs that lockfile in a folder of its own, and the snapshot uses that install. This is install drift: a package that the lockfile names is missing or has a different version, or a package is installed that the lockfile does not name. An extra package is drift too, because code that imports it builds here and fails in CI. Install drift occurs when a peer changed the dependencies but did not commit the change, when a commit changes the lockfile, or when the push sends a commit with other dependencies. The hook prints a line before the install, because a full install takes some time:
 
 ```text
 build     a1b2c3d: the installed packages differ from package-lock.json; installing it with npm ci (first time for this lockfile)
 ```
 
-The install runs `npm ci --ignore-scripts`, and then `npm rebuild` with the names of the dependencies that have install scripts. The lockfile marks these dependencies with `hasInstallScript`. Thus the install scripts of the dependencies run, such as those of esbuild and prisma. With npm 12, only the install scripts that the `allowScripts` of the repo's `package.json` approves run, as in the repo's own `npm install`. To approve a dependency, run `npm install-scripts approve <name>`. The scripts of the repo and of its workspace packages, such as `prepare`, do not run. The install has a copy of each folder of the commit that a `file:` dependency links to, such as a vendored package, because the packages of the install resolve it in the install. Each push copies these folders again from its commit, because their files can change while the lockfile stays the same. The first push with a new lockfile waits for a full install. The next pushes with that lockfile use the same install. The hook keeps the two installs that it used last. A repo with no `node_modules` gets its install the same way.
+The install starts from a copy of the full tree of the commit, without `.git` and `node_modules`. Thus npm finds each file that it reads in a clean checkout: the `package.json` of the root and of each workspace, the lockfile, `.npmrc`, the patch files that `patchedDependencies` names, a `.npm-extension.mjs`, and the folders that `file:` dependencies link to. npm gets the tool environment. The install runs `npm ci --ignore-scripts`, and then `npm rebuild` with the names of the dependencies that have install scripts. The lockfile marks these dependencies with `hasInstallScript`. Thus the install scripts of the dependencies run, such as those of esbuild and prisma. With npm 12, only the install scripts that the `allowScripts` of the repo's `package.json` approves run, as in the repo's own `npm install`. To approve a dependency, run `npm install-scripts approve <name>`. The scripts of the repo and of its workspace packages, such as `prepare`, do not run. The name of an install is the hash of the lockfile and the `.npmrc` together, so a change of either one makes a new install. The first commit or push with a new lockfile waits for a full install. The next ones use the same install. Each use copies again the folders of the commit that a `file:` dependency links to, such as a vendored package, because their files can change while the lockfile stays the same, and the packages of the install resolve them in the install. A folder that the lockfile names but the commit does not have, such as a workspace that `.gitignore` names, is not copied. The hook keeps the two installs that it used last. A repo with no `node_modules` gets its install the same way.
 
-The hook keeps the installs and the nx cache of the pre-push builds in its state folder: `git-hooks` in the common git folder of the repo (`git rev-parse --git-common-dir`). Linked worktrees use the same state folder. The nx cache of the working tree (`.nx`) is not used, and the hook does not write to it. A file lock in the state folder lets one pre-push build run at a time. The hook deletes each snapshot after its build.
+The hook keeps the installs and the nx cache in its state folder: `git-hooks` in the common git folder of the repo (`git rev-parse --git-common-dir`). Linked worktrees use the same state folder. The nx cache of the working tree (`.nx`) is not used, and the hook does not write to it. The pre-push hook holds the file lock `build.lock` in the state folder from its first snapshot to its end, so one pre-push build runs at a time. A hook holds `installs.lock` only while it installs or prunes, so a commit does not wait for a pre-push build. The hook deletes each snapshot after the last step.
 
 On Windows, the snapshot links to folders with junctions, which need no administrator rights.
 
@@ -255,7 +494,7 @@ A create or an update also has a `head` and a `base`. The `head` is the local co
 - When the remote has the `head` already, the `base` is the `head`, and the range is empty.
 - When the remote has no commit of that history, there is no `base`, and the step must check the whole history.
 
-`push.inSnapshot(sha, work)` runs `work` on the snapshot of one commit. `work` gets the folder of the snapshot and an environment for the tools that it runs there: the environment of the hook without the variables that tie git to one repo, `NX_DAEMON=false`, and the nx cache of the state folder. `push.nx(sha, ...args)` runs nx in the snapshot of one commit, with that environment, and gives its standard output. When nx exits with a code other than 0, it throws.
+`push.tree(sha)` gives the tree of one commit, as `commit.tree()` gives the staged tree (see [Write a step](#write-a-step)). `push.changes(update)` gives the diff entries of a create or an update: from the tree of its `base` to the tree of its `head`, or from the empty tree when there is no `base`. `push.snapshot(sha, options?)` gives the snapshot of one commit, as `commit.snapshot` does. The first snapshot of a push takes `build.lock` of the repo, so a second push waits for it.
 
 This step runs the tests of the projects that each pushed range affects:
 
@@ -268,17 +507,16 @@ export class AffectedTest extends Step<Push> {
   async run(push: Push) {
     const updates = push.updates.filter((update) => update.kind !== 'delete');
     if (updates.length === 0) return this.skip('the push only deletes refs');
-    try {
-      for (const { base, head } of updates)
-        await push.nx(
-          head,
-          ...(base === undefined
-            ? ['run-many', '-t', 'test']
-            : ['affected', '-t', 'test', `--base=${base}`, `--head=${head}`]),
-        );
-    } catch (error) {
-      if (!(error instanceof Error)) throw error;
-      return this.fail(error.message.trimEnd());
+    for (const { base, head } of updates) {
+      const snapshot = await push.snapshot(head, { packages: true });
+      const nx = await snapshot.bin(
+        'nx',
+        base === undefined
+          ? ['run-many', '-t', 'test']
+          : ['affected', '-t', 'test', `--base=${base}`, `--head=${head}`],
+      );
+      if (nx.status !== 0)
+        return this.fail(`${nx.stdout}${nx.stderr}`.trimEnd());
     }
     return this.pass();
   }

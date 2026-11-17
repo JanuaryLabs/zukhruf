@@ -1,35 +1,46 @@
-import { join } from 'node:path';
-
-import { check, getFileInfo, resolveConfig } from 'prettier';
-
 import type { Commit } from './commit.ts';
 import { type Outcome, Step } from './step.ts';
 
-// Checks the staged copy of each staged file with the repo's Prettier config,
-// and changes nothing. A step that formatted and staged files would also stage
+// Checks the staged copy of each staged file with the commit's own Prettier,
+// config and .prettierignore, in the snapshot of the staged commit, and
+// changes nothing. A step that formatted and staged files would also stage
 // the edits that another session made to them at the same moment.
 export class Format extends Step<Commit> {
   readonly name = 'format';
 
   async run(commit: Commit): Promise<Outcome> {
-    const unformatted: { path: string; reason?: string }[] = [];
-    const ignorePath = join(commit.root, '.prettierignore');
-    for (const path of await commit.files()) {
-      const file = join(commit.root, path);
-      // Prettier gives no parser for a file that .prettierignore names or that
-      // it cannot format, so no list of extensions here.
-      const { inferredParser } = await getFileInfo(file, { ignorePath });
-      if (inferredParser === null) continue;
-      const options = await resolveConfig(file);
-      try {
-        const source = await commit.blob(path);
-        const formatted = await check(source, { ...options, filepath: file });
-        if (!formatted) unformatted.push({ path });
-      } catch (error) {
-        const [reason = ''] = String(error).split('\n');
-        unformatted.push({ path, reason });
-      }
+    // The staged copy of a link or a submodule is a path or a commit id, so
+    // only files are checked.
+    const files = (await commit.changes()).flatMap((entry) =>
+      entry.change !== 'deleted' && entry.kind === 'file' ? [entry.path] : [],
+    );
+    if (files.length === 0) return this.pass('no staged file to check');
+    const snapshot = await commit.snapshot({ packages: true });
+    // --ignore-unknown skips a file that .prettierignore names or that
+    // Prettier cannot format, so no list of extensions here.
+    const { stdout, stderr } = await snapshot.bin('prettier', [
+      '--list-different',
+      '--ignore-unknown',
+      '--',
+      ...files,
+    ]);
+    // Prettier prints `[error] <path>: <reason>` for a file it cannot parse,
+    // and then the code frame on more [error] lines. A reason is read only
+    // by the path of a checked file, so a code frame line names no file.
+    const reasons = new Map<string, string>();
+    for (const line of stderr.split('\n')) {
+      const [, path, reason] = /^\[error\] (.+?): (.+)$/.exec(line) ?? [];
+      if (path !== undefined && reason !== undefined) reasons.set(path, reason);
     }
+    const different = new Set(stdout.split('\n'));
+    // In the order of the staged files, as the command at the end lists them.
+    const unformatted = files.flatMap(
+      (path): { path: string; reason?: string }[] => {
+        const reason = reasons.get(path);
+        if (reason !== undefined) return [{ path, reason }];
+        return different.has(path) ? [{ path }] : [];
+      },
+    );
     if (unformatted.length === 0)
       return this.pass('the staged files are formatted');
     const paths = unformatted.map(({ path }) => path);

@@ -1,10 +1,9 @@
 import { existsSync } from 'node:fs';
-import { mkdir, mkdtempDisposable, realpath } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { Latch, type WallClock, poll } from '@zukhruf/async';
-import { FileLock } from '@zukhruf/fs';
+import { FileLock, TemporaryFiles } from '@zukhruf/fs';
 
 import { type Git, gitIn } from '../git.ts';
 import { hasInstallDrift } from './drift.ts';
@@ -193,9 +192,9 @@ export class Snapshots implements AsyncDisposable {
       this.#hook === 'pre-push' ? 'nx' : 'nx-pre-commit',
     );
     const temporary = resources.use(
-      await mkdtempDisposable(join(tmpdir(), 'git-hooks-snapshot-')),
+      await new TemporaryFiles().directory('git-hooks-snapshot-'),
     );
-    const folder = join(await realpath(temporary.path), 'tree');
+    const folder = join(temporary.path, 'tree');
     await gitIn(temporary.path, this.toolEnvironment)(
       'clone',
       '--shared',

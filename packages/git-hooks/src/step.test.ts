@@ -82,10 +82,11 @@ class Design extends Step<Commit> {
   async run(commit: Commit) {
     if (!(await commit.touches(['docs/**'])))
       return this.skip('no design files staged');
-    const seen = await commit.inSnapshot(async (snapshot) => ({
-      snapshot,
-      content: await readFile(join(snapshot, 'docs/design.md'), 'utf8'),
-    }));
+    const { folder } = await commit.snapshot();
+    const seen = {
+      snapshot: folder,
+      content: await readFile(join(folder, 'docs/design.md'), 'utf8'),
+    };
     return seen.content === 'staged\\n'
       ? this.pass(\`checked the staged copy in \${seen.snapshot}\`)
       : this.fail(\`read \${JSON.stringify(seen.content)}, not the staged copy\`);

@@ -1,4 +1,5 @@
-import { CommitMessage } from '../commit-message.ts';
+import type { CommitMessage } from '../commit-message.ts';
+import { runCommitMsg } from '../run/commit-msg.ts';
 import type { Step } from '../step.ts';
 import { Host } from './host.ts';
 
@@ -9,15 +10,14 @@ export async function commitMsg(
 ): Promise<void> {
   const host = new Host();
   const [file = ''] = host.arguments;
-  const message = await CommitMessage.read(
-    host.root,
-    host.hookEnvironment,
-    file,
+  const { kind } = await runCommitMsg(
+    {
+      root: host.root,
+      hookEnvironment: host.hookEnvironment,
+      print: (name, message) => host.print(name, message),
+      file,
+    },
+    steps,
   );
-  for (const step of steps) {
-    const outcome = await step.run(message);
-    host.print(step.name, outcome.message);
-    if (outcome.kind === 'fail')
-      return host.stop('commit stopped by the commit-msg hook');
-  }
+  if (kind === 'failed') host.stop('commit stopped by the commit-msg hook');
 }

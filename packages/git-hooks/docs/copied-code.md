@@ -13,3 +13,8 @@ The Rule of Three counts places, not packages. Code that a second place needs is
 
 - Places: `src/codegen.test.ts` and `src/sync.test.ts`.
 - Same: `node_modules` is a link to the install of this workspace, and the repo gets the `.gitignore` and the `package.json` of an npm workspace.
+
+**`isDockerfile`.**
+
+- Places: `src/no-numeric-pins.ts` and `src/dockerfile-installs.ts`.
+- Same: a file whose name is `Dockerfile`, or holds `Dockerfile` as a part between dots, such as `Dockerfile.migration` or `api.Dockerfile`.

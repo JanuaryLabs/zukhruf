@@ -1,12 +1,15 @@
 export { Build } from './build.ts';
 export { Codegen } from './codegen.ts';
-export { Commit } from './commit.ts';
-export { CommitMessage } from './commit-message.ts';
+export type { Commit, Generated } from './commit.ts';
+export type { CommitMessage } from './commit-message.ts';
 export { DependencyChecks } from './dependency-checks.ts';
+export { DockerfileInstallsFromLockfile } from './dockerfile-installs.ts';
 export { Format } from './format.ts';
+export { LockfileSync } from './lockfile-sync.ts';
 export { NoNumericPins } from './no-numeric-pins.ts';
+export { NpmrcPolicy } from './npmrc-policy.ts';
 export { NxReleaseScope } from './nx-release-scope.ts';
-export { Push } from './push.ts';
+export type { Push } from './push.ts';
 export type { RefUpdate } from './ref-update.ts';
 export { commitMsg } from './scripts/commit-msg.ts';
 export { preCommit } from './scripts/pre-commit.ts';

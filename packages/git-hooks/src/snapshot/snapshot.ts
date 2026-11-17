@@ -31,9 +31,10 @@ export class Snapshot {
 
   // Runs a command from the PATH, or a file at an absolute path, in the
   // snapshot. An exit code other than 0 is a result, not an error. A command
-  // that cannot start throws the error of Node. No shell runs, except for a
-  // .cmd file on Windows, which only a shell runs; its arguments then get no
-  // quotes.
+  // that cannot start throws the error of Node. No shell runs, except on
+  // Windows for a .cmd file and for a command from the PATH, which can be a
+  // .cmd file such as npm: Node starts a .cmd file only through a shell. The
+  // arguments then get no quotes.
   async run(
     command: string,
     args: readonly string[],
@@ -43,7 +44,9 @@ export class Snapshot {
       cwd: this.folder,
       env: { ...this.#environment, ...options.env },
       stdio: ['ignore', 'pipe', 'pipe'],
-      shell: process.platform === 'win32' && command.endsWith('.cmd'),
+      shell:
+        process.platform === 'win32' &&
+        (command.endsWith('.cmd') || !/[\\/]/.test(command)),
     });
     const [stdout, stderr, status] = await Promise.all([
       text(child.stdout),

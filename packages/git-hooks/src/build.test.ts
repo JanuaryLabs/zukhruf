@@ -9,8 +9,8 @@ import { setTimeout as delay } from 'node:timers/promises';
 
 import { TemporaryFiles } from '@zukhruf/fs';
 
-import { nxPackages } from './testing/nx-packages.ts';
 import { repository } from './testing/pre-push-repository.ts';
+import { toolPackages } from './testing/tool-packages.ts';
 
 // Starts `git push` with more environment variables for the hook.
 function start(
@@ -132,8 +132,9 @@ console.log(\`built \${project}\`);
       },
     },
   };
-  await nxPackages(
+  await toolPackages(
     repo.root,
+    ['nx', '@nx', 'typescript'],
     Object.keys(projects).map((name) => ({
       folder: `packages/${name}`,
       name: `@probe/${name}`,

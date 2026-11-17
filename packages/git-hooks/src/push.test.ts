@@ -403,7 +403,7 @@ async function workspace(folder: string, hook: string) {
   return repo;
 }
 
-test('push.nx sees a clean checkout of the head: nx affected lists the projects of the pushed range, and not the edits or new files in the working tree', async () => {
+test('nx in the packaged snapshot of a pushed head sees a clean checkout of the head: nx affected lists the projects of the pushed range, and not the edits or new files in the working tree', async () => {
   // Arrange
   await using folder = await new TemporaryFiles().directory('git-hooks-');
   const repo = await workspace(
@@ -416,7 +416,9 @@ class Affected extends Step<Push> {
     if (update === undefined || update.kind === 'delete' || update.base === undefined)
       return this.fail('no range');
     const affected = (...range: string[]) =>
-      push.nx(update.head, 'show', 'projects', '--affected', ...range, '--json');
+      push
+        .snapshot(update.head, { packages: true })
+        .then(async (snapshot) => (await snapshot.bin('nx', ['show', 'projects', '--affected', ...range, '--json'])).stdout);
     const ranged = await affected(\`--base=\${update.base}\`, \`--head=\${update.head}\`);
     const uncommitted = await affected(\`--base=\${update.base}\`);
     return this.pass(JSON.stringify({ ranged: JSON.parse(ranged), uncommitted: JSON.parse(uncommitted) }));
