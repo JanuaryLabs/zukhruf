@@ -1,5 +1,7 @@
 import { type ChildProcess, spawn } from 'node:child_process';
 
+import { untilAborted } from '@zukhruf/async';
+
 import { isRecord } from '../shared/is-record.ts';
 
 export interface WorkerMessage {
@@ -15,6 +17,12 @@ export interface WorkerProcess extends AsyncDisposable {
   exit: { code: number | null; signal: NodeJS.Signals | null } | null;
   has(type: string): boolean;
   find(type: string): WorkerMessage | undefined;
+  /**
+   * The first message of `type`, sent before or after the call. Rejects with
+   * the child's stderr when the child closes first, and with the reason of
+   * `signal` when it aborts.
+   */
+  next(type: string, options: { signal: AbortSignal }): Promise<WorkerMessage>;
 }
 
 const isWorkerMessage = (message: unknown): message is WorkerMessage =>
@@ -71,6 +79,28 @@ export function startWorker(
     },
     find(type: string) {
       return worker.messages.find((message) => message.type === type);
+    },
+    next(type: string, { signal }: { signal: AbortSignal }) {
+      const arrived = worker.find(type);
+      if (arrived) return Promise.resolve(arrived);
+      const message = Promise.withResolvers<WorkerMessage>();
+      const onMessage = (sent: unknown) => {
+        if (isWorkerMessage(sent) && sent.type === type) message.resolve(sent);
+      };
+      child.on('message', onMessage);
+      void closed.promise.then(() => {
+        const last = worker.find(type);
+        if (last) message.resolve(last);
+        else
+          message.reject(
+            new Error(
+              `${name} closed with ${JSON.stringify(worker.exit)} before it sent '${type}'.\n${worker.stderr}`,
+            ),
+          );
+      });
+      return untilAborted(message.promise, signal).finally(() =>
+        child.off('message', onMessage),
+      );
     },
     async [Symbol.asyncDispose]() {
       if (child.exitCode === null && child.signalCode === null)

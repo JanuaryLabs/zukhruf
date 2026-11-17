@@ -6,6 +6,7 @@ import {
 
 import { Hono } from 'hono';
 
+import { Latch, untilAborted } from '@zukhruf/async';
 import type { FencingToken } from '@zukhruf/fencing';
 import { describe, test } from '@zukhruf/testing/node';
 
@@ -30,30 +31,30 @@ export function singleProcess<H extends Host>(store: Subject<H>): void {
       const mutex = new Mutex(host.store);
       const failure = new Error('Storage unavailable');
       const failFirst = Promise.withResolvers<void>();
+      const firstStarted = new Latch();
       const events: string[] = [];
       const operations: Array<Promise<boolean>> = [];
 
       try {
         // Act: another operation for the same key queues while the first is active, then the first fails.
-        operations.push(
-          mutex.acquire('product:42', async () => {
-            events.push('first started');
-            await failFirst.promise;
-            await nextTurn();
-            events.push('first failed');
-            throw failure;
-          }),
-        );
-        await t.waitFor(
-          () =>
-            assert.ok(
-              events.includes('first started'),
-              'The first operation must start when its product has no active operation',
-            ),
-          {
-            interval: 5,
-            timeout: factTimeout,
-          },
+        const first = mutex.acquire('product:42', async () => {
+          events.push('first started');
+          firstStarted.open();
+          await failFirst.promise;
+          await nextTurn();
+          events.push('first failed');
+          throw failure;
+        });
+        operations.push(first);
+        // The first operation must start when its product has no active operation.
+        await untilAborted(
+          Promise.race([
+            firstStarted.wait(),
+            first.then(() => {
+              throw new Error('The first operation settled before it started');
+            }),
+          ]),
+          t.signal,
         );
         operations.push(
           mutex.acquire('product:42', async () => {

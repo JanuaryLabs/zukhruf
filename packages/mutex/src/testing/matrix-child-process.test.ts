@@ -119,14 +119,8 @@ test('a matrix child that opens the DockerEngineStore records itself in the run 
     'child',
     { admit: (child) => store.process.admit(host, child) },
   );
-  await t.waitFor(
-    () =>
-      assert.ok(
-        child.has('started'),
-        `The matrix child must start.\n${child.stderr}`,
-      ),
-    { interval: 5, timeout: factTimeout },
-  );
+  // The matrix child must start.
+  await child.next('started', { signal: t.signal });
 
   // Assert
   await t.waitFor(
@@ -139,12 +133,6 @@ test('a matrix child that opens the DockerEngineStore records itself in the run 
   );
   // The disposal kills the child: a kill during its take of the hold would
   // leave the run's reaper created.
-  await t.waitFor(
-    () =>
-      assert.ok(
-        child.has('held'),
-        `The matrix child must hold the run's reaper.\n${child.stderr}`,
-      ),
-    { interval: 5, timeout: factTimeout },
-  );
+  // The matrix child must hold the run's reaper.
+  await child.next('held', { signal: t.signal });
 });
