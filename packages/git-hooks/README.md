@@ -300,11 +300,11 @@ export class LockfileInSync extends Step<Commit> {
 
 ### Write generated files
 
-A step that writes files calls `commit.generate(globs, work)`. `work` runs in a private snapshot of the staged tree, with packages. Then the hook stages each file that the work changed, added or deleted there, and that matches one of the globs. A file that `.gitignore` names is not staged. `generate` gives the diff entries of the files that it staged. After it, `commit.tree()` gives the new staged tree, and the next steps read that tree.
+A step that writes files calls `commit.generate(globs, work)`. `work` runs in a private snapshot of the staged tree, with packages. Then the hook stages each file that the work changed, added or deleted there, and that matches one of the globs. A file that `.gitignore` names is not staged. `generate` gives `{ kind: 'staged', entries }`, the diff entries of the files that it staged. After it, `commit.tree()` gives the new staged tree, and the next steps read that tree.
 
 The hook also writes each staged file into the working tree, or deletes it there, but only when the working-tree copy still equals the old staged copy. Thus `git status` stays clean. When the working-tree copy holds another edit, the hook leaves it. It prints a line that names the file, under the name of the step.
 
-When `work` throws, `generate` stages nothing and throws the same error. In a partial commit, such as `git commit --only` or `git commit <paths>`, git commits its real index after the hook, so a file that the hook staged would be in the commit but not in the index. There, `generate` writes the working-tree copies by the same rule, stages nothing, and throws an error that names the files and the command that adds them to the commit.
+When `work` throws, `generate` stages nothing and throws the same error. In a partial commit, such as `git commit --only` or `git commit <paths>`, git commits its real index after the hook, so a file that the hook staged would be in the commit but not in the index. There, `generate` writes the working-tree copies by the same rule, stages nothing, and gives `{ kind: 'not-staged', entries, reason }`: the reason names the files and the command that adds them to the commit.
 
 ```ts
 import { type Commit, Step } from '@zukhruf/git-hooks';
@@ -314,14 +314,15 @@ export class OpenApi extends Step<Commit> {
 
   async run(commit: Commit) {
     try {
-      const staged = await commit.generate(
+      const generated = await commit.generate(
         ['openapi.json'],
         async (snapshot) => {
           const nx = await snapshot.bin('nx', ['run', 'api:openapi']);
           if (nx.status !== 0) throw new Error(nx.stderr.trimEnd());
         },
       );
-      return this.pass(`staged ${staged.length} generated files`);
+      if (generated.kind === 'not-staged') return this.fail(generated.reason);
+      return this.pass(`staged ${generated.entries.length} generated files`);
     } catch (error) {
       if (!Error.isError(error)) throw error;
       return this.fail(error.message);

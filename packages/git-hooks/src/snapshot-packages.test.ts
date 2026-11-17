@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { hash } from 'node:crypto';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { promisify } from 'node:util';
@@ -263,3 +264,130 @@ test('the install has each file of the commit that npm reads: the patch file of 
   assert.match(result.stderr, installing);
   assert.equal(shown(result.stderr).code, "exports.v = 'patched';\n");
 });
+
+test(
+  'a build in a snapshot with packages emits the declaration that the same build emits in the checkout: a type of a dependency of a dependency is named by its package name (#4555)',
+  { todo: '#4555' },
+  async () => {
+    // Arrange
+    await using folder = await new TemporaryFiles().directory('git-hooks-');
+    const tsc = createRequire(import.meta.url).resolve('typescript/bin/tsc');
+    const root = join(folder.path, 'repo');
+    await mkdir(root);
+    const repo = await repository(
+      root,
+      `import { type Commit, Step, preCommit } from '@zukhruf/git-hooks';
+class Declarations extends Step<Commit> {
+  readonly name = 'declarations';
+  async run(commit: Commit) {
+    try {
+      const generated = await commit.generate(['packages/client/dist/**'], async (snapshot) => {
+        const tsc = await snapshot.run('node', [${JSON.stringify(tsc)}, '-p', 'packages/client']);
+        if (tsc.status !== 0) throw new Error(tsc.stdout + tsc.stderr);
+      });
+      return generated.kind === 'staged' ? this.pass('emitted') : this.fail(generated.reason);
+    } catch (error) {
+      if (!Error.isError(error)) throw error;
+      return this.fail(error.message);
+    }
+  }
+}
+await preCommit([new Declarations()]);
+`,
+    );
+    const environment = isolatedEnvironment(root);
+    const npm = (cwd: string, ...args: string[]) =>
+      execFileAsync('npm', [...args, '--offline', '--no-audit', '--no-fund'], {
+        cwd,
+        env: environment,
+      });
+    const tarballs = join(folder.path, 'tarballs');
+    await mkdir(tarballs);
+    const pack = async (
+      name: string,
+      dependencies: Record<string, string>,
+      declarations: string,
+    ) => {
+      const source = join(folder.path, 'sources', name);
+      await mkdir(source, { recursive: true });
+      await writeFile(
+        join(source, 'package.json'),
+        JSON.stringify({
+          name,
+          version: '1.0.0',
+          types: 'index.d.ts',
+          dependencies,
+        }),
+      );
+      await writeFile(join(source, 'index.d.ts'), declarations);
+      await npm(source, 'pack', '--pack-destination', tarballs);
+      return `file:${join(tarballs, `${name}-1.0.0.tgz`)}`;
+    };
+    // npm hoists leaf, and only the declarations of dep import it, as only
+    // @types/node imports undici-types in the build of thing.
+    const leaf = await pack(
+      'leaf',
+      {},
+      'export interface Thing { readonly a: number }\n',
+    );
+    const dep = await pack(
+      'dep',
+      { leaf },
+      "import type { Thing } from 'leaf';\nexport declare function make(): Thing;\n",
+    );
+    await repo.write('.gitignore', 'node_modules\n');
+    await repo.write(
+      'package.json',
+      `${JSON.stringify({ name: 'probe', private: true, type: 'module', workspaces: ['packages/*'] })}\n`,
+    );
+    await mkdir(join(root, 'packages/client/src'), { recursive: true });
+    await repo.write(
+      'packages/client/package.json',
+      `${JSON.stringify({ name: '@probe/client', version: '0.0.0', type: 'module', dependencies: { dep } })}\n`,
+    );
+    await repo.write(
+      'packages/client/tsconfig.json',
+      `${JSON.stringify({
+        compilerOptions: {
+          module: 'nodenext',
+          strict: true,
+          declaration: true,
+          emitDeclarationOnly: true,
+          rootDir: 'src',
+          outDir: 'dist',
+        },
+        include: ['src'],
+      })}\n`,
+    );
+    await repo.write(
+      'packages/client/src/index.ts',
+      "import { make } from 'dep';\nexport const made = make();\n",
+    );
+    await npm(root, 'install', '--ignore-scripts');
+    await repo.git(
+      'add',
+      '.gitignore',
+      'package.json',
+      'package-lock.json',
+      'packages/client',
+    );
+    const checkoutDist = join(folder.path, 'checkout-dist');
+    await execFileAsync(
+      'node',
+      [tsc, '-p', 'packages/client', '--outDir', checkoutDist],
+      { cwd: root, env: environment },
+    );
+    const inCheckout = await readFile(join(checkoutDist, 'index.d.ts'), 'utf8');
+    assert.match(inCheckout, /import\("leaf"\)\.Thing/);
+
+    // Act
+    const result = await repo.commit('client');
+
+    // Assert
+    assert.equal(result.code, 0, result.stderr);
+    assert.equal(
+      await repo.git('show', 'HEAD:packages/client/dist/index.d.ts'),
+      inCheckout,
+    );
+  },
+);
