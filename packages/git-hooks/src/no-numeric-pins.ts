@@ -15,7 +15,7 @@ function isWorkflow(path: string): boolean {
 }
 
 function isDockerfile(path: string): boolean {
-  return /(^|\.)Dockerfile(\.|$)/.test(basename(path));
+  return /(^|\.)dockerfile(\.|$)/i.test(basename(path));
 }
 
 function isObject(value: unknown): value is object {

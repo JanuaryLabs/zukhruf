@@ -22,6 +22,8 @@ test('a commit that pins Node by number in .nvmrc, a workflow or a Dockerfile is
     "jobs:\n  ci:\n    steps:\n      - uses: actions/setup-node@v4\n        with:\n          node-version: '22.x'\n",
   );
   await repo.write('Dockerfile', 'FROM node:22-alpine\nRUN npm ci\n');
+  await mkdir(join(repo.root, 'docker'), { recursive: true });
+  await repo.write('docker/dockerfile.api', 'FROM node:24-slim\n');
   await repo.git('add', '.');
 
   // Act
@@ -32,6 +34,7 @@ test('a commit that pins Node by number in .nvmrc, a workflow or a Dockerfile is
   assert.match(result.stderr, /\.nvmrc:1/);
   assert.match(result.stderr, /\.github\/workflows\/ci\.yml:6/);
   assert.match(result.stderr, /Dockerfile:1/);
+  assert.match(result.stderr, /docker\/dockerfile\.api:1/);
   assert.match(result.stderr, /lts\/\*/);
 });
 

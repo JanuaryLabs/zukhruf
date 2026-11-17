@@ -11,7 +11,7 @@ const dockerOnly = `import { DockerfileInstallsFromLockfile, preCommit } from '@
 await preCommit([new DockerfileInstallsFromLockfile()]);
 `;
 
-test('a staged Dockerfile that runs npm install is stopped, also inside a continuation line and after the flags of RUN, and the hook names each line', async () => {
+test('a staged Dockerfile that runs npm install is stopped, also inside a continuation line and after the flags of RUN, also in a lowercase dockerfile.api, and the hook names each line', async () => {
   // Arrange
   await using folder = await new TemporaryFiles().directory('git-hooks-');
   const repo = await repository(folder.path, dockerOnly);
@@ -27,6 +27,11 @@ test('a staged Dockerfile that runs npm install is stopped, also inside a contin
       'RUN --mount=type=cache,target=/root/.npm npm install',
       '',
     ].join('\n'),
+  );
+  await mkdir(join(repo.root, 'docker'), { recursive: true });
+  await repo.write(
+    'docker/dockerfile.api',
+    'FROM node:lts-alpine\nRUN npm install\n',
   );
   await repo.git('add', '.');
 
@@ -44,6 +49,7 @@ test('a staged Dockerfile that runs npm install is stopped, also inside a contin
     result.stderr,
     /apps\/api\/Dockerfile\.migration:6 {2}npm install$/m,
   );
+  assert.match(result.stderr, /docker\/dockerfile\.api:2 {2}npm install$/m);
   assert.match(result.stderr, /RUN npm ci/);
 });
 

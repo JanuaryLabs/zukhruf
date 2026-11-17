@@ -114,7 +114,7 @@ await preCommit([new NoNumericPins(), new NpmrcPolicy()]);
 
 ## Install from the lockfile in a Dockerfile
 
-`DockerfileInstallsFromLockfile` reads the staged copy of each staged Dockerfile, such as `Dockerfile`, `Dockerfile.migration` or `api.Dockerfile`. The commit stops when a `RUN` instruction installs packages without the lockfile: `npm install` (and its other names, such as `npm i` and `npm add`), `yarn` or `yarn add`, and `pnpm` or `bun` with `install`, `i` or `add`. `npm install` resolves the ranges of `package.json` when the image builds, so the image runs versions that no commit names. Write `npm ci` after a `COPY` of `package.json` and `package-lock.json`, and `npm ci --omit=dev` for a runtime image. A global install of a tool, such as `npm install -g npm@latest`, passes.
+`DockerfileInstallsFromLockfile` reads the staged copy of each staged Dockerfile, in any case, such as `Dockerfile`, `Dockerfile.migration`, `api.Dockerfile` or `dockerfile.api`. The commit stops when a `RUN` instruction installs packages without the lockfile: `npm install` (and its other names, such as `npm i` and `npm add`), `yarn` or `yarn add`, and `pnpm` or `bun` with `install`, `i` or `add`. `npm install` resolves the ranges of `package.json` when the image builds, so the image runs versions that no commit names. Write `npm ci` after a `COPY` of `package.json` and `package-lock.json`, and `npm ci --omit=dev` for a runtime image. A global install of a tool, such as `npm install -g npm@latest`, passes.
 
 The step reads `RUN` as Docker does: continuation lines, flags such as `--mount`, the exec form `["npm", "install"]`, and a heredoc.
 

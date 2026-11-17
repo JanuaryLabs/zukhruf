@@ -5,7 +5,7 @@ import { type Outcome, Step } from './step.ts';
 
 // A copy of `isDockerfile` in no-numeric-pins.ts (docs/copied-code.md).
 function isDockerfile(path: string): boolean {
-  return /(^|\.)Dockerfile(\.|$)/.test(basename(path));
+  return /(^|\.)dockerfile(\.|$)/i.test(basename(path));
 }
 
 // npm's names for `npm install` and for `npm install-test`, which installs

@@ -17,4 +17,4 @@ The Rule of Three counts places, not packages. Code that a second place needs is
 **`isDockerfile`.**
 
 - Places: `src/no-numeric-pins.ts` and `src/dockerfile-installs.ts`.
-- Same: a file whose name is `Dockerfile`, or holds `Dockerfile` as a part between dots, such as `Dockerfile.migration` or `api.Dockerfile`.
+- Same: a file whose name is `Dockerfile`, or holds it as a part between dots, in any case, such as `Dockerfile.migration`, `api.Dockerfile` or `dockerfile.api`.
