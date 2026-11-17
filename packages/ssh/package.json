@@ -46,6 +46,7 @@
     "!**/*.test.*"
   ],
   "dependencies": {
+    "@zukhruf/async": "*",
     "ssh2": "1.17.0"
   },
   "devDependencies": {

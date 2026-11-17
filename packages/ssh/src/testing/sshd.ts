@@ -19,6 +19,8 @@ export interface Sshd extends AsyncDisposable {
   readonly hostPublicKey: string;
   /** The temporary directory that holds the keys and the config. */
   readonly directory: string;
+  /** Sends the signal to the `sshd -i` of each open connection. */
+  kill(signal: NodeJS.Signals): void;
 }
 
 /**
@@ -75,6 +77,9 @@ export async function startSshd(): Promise<Sshd> {
       userKey,
       hostPublicKey,
       directory: directory.path,
+      kill(signal) {
+        for (const child of children) child.kill(signal);
+      },
       async [Symbol.asyncDispose]() {
         const closed = once(server, 'close');
         server.close();
@@ -82,6 +87,9 @@ export async function startSshd(): Promise<Sshd> {
           [...children].map(async (child) => {
             const exited = once(child, 'exit');
             child.kill('SIGTERM');
+            // A test may have stopped it; a stopped process ends only after
+            // it continues.
+            child.kill('SIGCONT');
             await exited;
           }),
         );

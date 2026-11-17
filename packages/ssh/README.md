@@ -322,7 +322,7 @@ await using client = await Client.dial('box.example.com:22', {
   connectTimeout: 10_000,
   keepalive: { interval: 10_000, countMax: 2 },
 });
-await client.wait().catch((error) => console.error('lost', error.cause));
+await client.wait().catch((error) => console.error('lost', error));
 ```
 
 `client.wait()` resolves after `close()`, and rejects with the error that ended the connection. It is Go's `Conn.Wait`.
