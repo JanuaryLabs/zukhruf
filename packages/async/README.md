@@ -1,6 +1,6 @@
 # @zukhruf/async
 
-Helpers for code that waits for promises: `untilAborted` cancels a wait, `Latch` holds callers until something happened, `Future` gives callers the value or the failure of work that ends once, `Lock` lets one caller at a time do a thing, `Semaphore` lets a number of callers at a time do it, `delay` waits a fixed time on a clock, `timeout` stops a wait after a time on a clock, `poll` calls an attempt again until it gives a value, `Backoff` gives a longer wait before each retry, and `ChangeWatcher` reads gauges again and again and tells which values changed. `@zukhruf/mutex`, `@zukhruf/single-flight` and `@zukhruf/election` use them.
+Helpers for code that waits for promises: `untilAborted` cancels a wait, `Latch` holds callers until something happened, `Future` gives callers the value or the failure of work that ends once, `Lock` lets one caller at a time do a thing, `Semaphore` lets a number of callers at a time do it, `WaitGroup` waits until the work in flight is done, `delay` waits a fixed time on a clock, `timeout` stops a wait after a time on a clock, `poll` calls an attempt again until it gives a value, `Backoff` gives a longer wait before each retry, and `ChangeWatcher` reads gauges again and again and tells which values changed. `@zukhruf/mutex`, `@zukhruf/single-flight` and `@zukhruf/election` use them.
 
 The words in these documents have one meaning each. See the glossary in [CONTEXT.md](./CONTEXT.md).
 
@@ -54,7 +54,7 @@ A latch never rejects. It keeps its value in a box, so it never adopts a promise
 
 To stop a wait on a latch, cancel it: `untilAborted(latch.wait(), signal)`.
 
-A latch always starts closed. Each latch that a caller opened at once was a lock or a wait group: it ran work in order, or it waited until a count of work was zero. To run work one at a time, see [Let one caller at a time do a thing, with a lock](#let-one-caller-at-a-time-do-a-thing-with-a-lock) (#4519).
+A latch always starts closed. Each latch that a caller opened at once was a lock or a wait group: it ran work in order, or it waited until a count of work was zero. To run work one at a time, see [Let one caller at a time do a thing, with a lock](#let-one-caller-at-a-time-do-a-thing-with-a-lock) (#4519). To wait until a count of work is zero, see [Wait until the work in flight is done, with a wait group](#wait-until-the-work-in-flight-is-done-with-a-wait-group) (#4527).
 
 ## Give callers the outcome of work that can fail, with a future
 
@@ -141,6 +141,33 @@ async function download(url: string) {
 - A cancel, a cancel before the call and a second dispose have the same rules as for a lock.
 - When the turn of a caller comes in the same step as its cancel, the cancel wins, and the permit passes on to the next caller.
 - The constructor throws a `RangeError` for a count of permits that is not a positive integer.
+
+## Wait until the work in flight is done, with a wait group
+
+A wait group counts the work in flight. `add` gives a token, and the wait group counts the token until you dispose it. A wait ends when the count is zero. After zero, the count can go up again, as in a Go `sync.WaitGroup`.
+
+```ts
+import { WaitGroup } from '@zukhruf/async';
+
+const commands = new WaitGroup();
+
+async function handle(command: Command) {
+  using _command = commands.add();
+  await run(command);
+}
+
+// At shutdown: stop new commands, then wait for the commands that run.
+await commands.wait({ signal });
+```
+
+- A wait on a count of zero ends at once.
+- A wait on a count above zero ends when the count next reaches zero. Each wait that started before that zero ends, also when an `add` follows the zero in the same step. A wait that starts after that `add` waits for the new work.
+- A second dispose of one token changes nothing.
+- When `signal` aborts during the wait, the wait rejects with the reason of the signal, and its listener leaves the signal. The count does not change, and the work continues.
+- When `signal` aborted before the call, the wait rejects at once, also when the count is zero.
+- No listener stays on the signal after a wait ends, so a signal that lives long can serve many waits.
+
+A wait group holds a latch, and puts a new latch in its place each time the count reaches zero. See [ADR 0015](./docs/adr/0015-a-wait-group-counts-disposable-tokens-and-may-count-up-again-after-zero.md).
 
 ## Poll an attempt until it gives a value
 

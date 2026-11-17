@@ -34,7 +34,7 @@ _Avoid_: Limiter, pool (`@zukhruf/pool` lends workers), throttle (a throttle lim
 
 **Permit**:
 The right to go on that a caller holds while it does its work. A dispose of the permit gives it back, and a second dispose gives back nothing. For a lock, the permit is the handle that `acquire` gives.
-_Avoid_: Token (a fencing token of `@zukhruf/mutex`), slot, ticket
+_Avoid_: Token (a token of a wait group counts work; a fencing token of `@zukhruf/mutex` orders writes), slot, ticket
 
 **Line**:
 The callers of a lock or a semaphore that wait for a permit, first come first. A dispose gives the permit to the first caller in the line. A caller that cancels leaves the line.
@@ -43,6 +43,14 @@ _Avoid_: Queue (`@zukhruf/sqlite-queue` keeps jobs), waiters list
 **Holder**:
 A caller that holds a permit of a lock or a semaphore, from the grant to the dispose.
 _Avoid_: Owner (a holder can give its permit to other code), user
+
+**Wait group**:
+`WaitGroup`. It counts the work in flight, one token for each work, and a wait on it ends when the count is zero. The count can go up again after zero: each time it reaches zero, each wait that started before that zero ends. The name is the one of Go `sync.WaitGroup`.
+_Avoid_: Countdown, countdown latch (Java `CountDownLatch` and .NET `CountdownEvent` cannot count up after zero), task tracker (the name in tokio_util), latch (a latch opens once)
+
+**Token**:
+The handle that `add` of a wait group gives. The wait group counts it until a dispose, and a second dispose changes nothing. The name is the one of tokio_util `TaskTrackerToken`. It is not a fencing token of `@zukhruf/mutex`.
+_Avoid_: Permit (a permit is a right to go on; a token only counts), ticket, lease
 
 **Attempt**:
 One call that tries to get a value now, and does not wait. It gives the value, or `undefined` when there is no value yet.
