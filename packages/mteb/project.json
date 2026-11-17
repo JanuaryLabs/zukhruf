@@ -29,6 +29,7 @@
     },
     "compare": {
       "executor": "nx:run-commands",
+      "dependsOn": ["^build"],
       "cache": false,
       "options": {
         "command": "node examples/compare-models.ts",
@@ -37,6 +38,7 @@
     },
     "table": {
       "executor": "nx:run-commands",
+      "dependsOn": ["^build"],
       "cache": false,
       "options": {
         "command": "node examples/table.ts",
@@ -45,6 +47,7 @@
     },
     "report": {
       "executor": "nx:run-commands",
+      "dependsOn": ["^build"],
       "cache": false,
       "options": {
         "command": "node examples/report.ts",
