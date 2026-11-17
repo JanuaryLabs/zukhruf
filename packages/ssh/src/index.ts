@@ -12,6 +12,7 @@ export {
   type Signer,
 } from './private-key.ts';
 export { PublicKey } from './public-key.ts';
+export { RemoteListener } from './remote-listener.ts';
 export {
   type Exit,
   ExitError,

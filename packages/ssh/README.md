@@ -194,18 +194,22 @@ A server can refuse a dial. Tailscale SSH allows a `'unix'` dial only under the 
 The package has no forwarder class, as in Go and Rust ([ADR 0009](./docs/adr/0009-the-caller-forwards-a-local-port-with-node-net-and-client-dial.md)). Listen with `node:net`, and dial for each connection:
 
 ```ts
-import { createServer } from 'node:net';
+import { type Socket, createServer } from 'node:net';
 import { pipeline } from 'node:stream/promises';
 
-await using server = createServer({ allowHalfOpen: true }, async (socket) => {
+async function carry(socket: Socket): Promise<void> {
   const remote = await client
     .dial('tcp', '127.0.0.1:5432')
     .catch(() => undefined);
-  if (!remote) return socket.destroy();
+  if (!remote) return void socket.destroy();
   await Promise.allSettled([
     pipeline(socket, remote),
     pipeline(remote, socket),
   ]);
+}
+
+await using server = createServer({ allowHalfOpen: true }, (socket) => {
+  void carry(socket);
 }).listen(0, '127.0.0.1');
 ```
 
@@ -333,7 +337,7 @@ await client.wait().catch((error) => console.error('lost', error));
 
 ```ts
 import { readFile } from 'node:fs/promises';
-import { createServer } from 'node:net';
+import { type Socket, createServer } from 'node:net';
 
 import { PrivateKey, PublicKey, ServerConn } from '@zukhruf/ssh';
 import type { ServerSession } from '@zukhruf/ssh';
@@ -358,7 +362,7 @@ async function serve(session: ServerSession): Promise<void> {
   }
 }
 
-createServer(async (socket) => {
+async function accept(socket: Socket): Promise<void> {
   await using conn = await ServerConn.handshake(socket, {
     hostKeys: [hostKey],
     publicKey: (user, key) => user === 'test' && key.equals(allowed),
@@ -372,6 +376,10 @@ createServer(async (socket) => {
     sessions.push(serve(channel.accept()));
   }
   await Promise.allSettled(sessions);
+}
+
+createServer((socket) => {
+  void accept(socket);
 }).listen(2222);
 ```
 

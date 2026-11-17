@@ -20,18 +20,22 @@ Ezz accepted this decision on 2026-11-17, together with [ADR 0006](./0006-a-jump
 The package has no forwarder class. The caller listens with `node:net` and calls `client.dial('tcp', address)` for each connection:
 
 ```ts
-import { createServer } from 'node:net';
+import { type Socket, createServer } from 'node:net';
 import { pipeline } from 'node:stream/promises';
 
-const server = createServer({ allowHalfOpen: true }, async (socket) => {
+async function carry(socket: Socket): Promise<void> {
   const remote = await client
     .dial('tcp', '127.0.0.1:5432')
     .catch(() => undefined);
-  if (!remote) return socket.destroy();
+  if (!remote) return void socket.destroy();
   await Promise.allSettled([
     pipeline(socket, remote),
     pipeline(remote, socket),
   ]);
+}
+
+const server = createServer({ allowHalfOpen: true }, (socket) => {
+  void carry(socket);
 });
 server.listen(0, '127.0.0.1');
 ```

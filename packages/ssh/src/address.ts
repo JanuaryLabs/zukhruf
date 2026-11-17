@@ -8,3 +8,8 @@ export function splitHostPort(address: string): { host: string; port: number } {
   const host = address.slice(0, colon).replace(/^\[(.*)\]$/, '$1');
   return { host, port };
 }
+
+/** Go's `net.JoinHostPort`: an IPv6 host gets brackets. */
+export function joinHostPort(host: string, port: number): string {
+  return host.includes(':') ? `[${host}]:${port}` : `${host}:${port}`;
+}

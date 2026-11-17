@@ -13,9 +13,14 @@ import ssh2, {
 
 import { type Clock, Future, Latch, timeout } from '@zukhruf/async';
 
-import { splitHostPort } from './address.ts';
+import { joinHostPort, splitHostPort } from './address.ts';
+import { ChannelStream } from './channel-stream.ts';
 import type { Signer } from './private-key.ts';
 import { PublicKey } from './public-key.ts';
+import {
+  type RemoteListener,
+  createRemoteListener,
+} from './remote-listener.ts';
 import {
   type Exit,
   type Pty,
@@ -92,6 +97,10 @@ export class Client implements AsyncDisposable {
   readonly #sessionEnv: Readonly<Record<string, string>>;
   readonly #closed = new Latch();
   readonly #ended = new Future<void>();
+  readonly #listeners = new Map<
+    string,
+    (stream: Duplex, origin: string) => void
+  >();
   #phase: ConnectionPhase = connected;
 
   private constructor(
@@ -104,6 +113,17 @@ export class Client implements AsyncDisposable {
     this.user = config.user;
     this.serverVersion = serverVersion;
     connection.on('error', (error: Error) => this.#end(error));
+    connection.on('tcp connection', (info, accept, reject) =>
+      this.#accept(
+        `${info.destIP}:${info.destPort}`,
+        joinHostPort(info.srcIP, info.srcPort),
+        accept,
+        reject,
+      ),
+    );
+    connection.on('unix connection', (info, accept, reject) =>
+      this.#accept(info.socketPath, '', accept, reject),
+    );
     connection.once('close', () => {
       this.#end(new Error('ssh: the server closed the connection'));
       this.#closed.open();
@@ -236,6 +256,129 @@ export class Client implements AsyncDisposable {
     );
   }
 
+  /** 'tcp': a direct-tcpip channel to host:port. 'unix': a direct-streamlocal@openssh.com channel to a socket path. Go's Client.Dial. */
+  async dial(
+    network: 'tcp' | 'unix',
+    address: string,
+    options: { readonly signal?: AbortSignal } = {},
+  ): Promise<Duplex> {
+    const connection = this.#connection;
+    const target = network === 'tcp' ? splitHostPort(address) : undefined;
+    const channel = await reply<ClientChannel>(
+      options.signal,
+      (resolve, reject) => {
+        const opened = (error: Error | undefined, stream: ClientChannel) => {
+          if (error) reject(openFailure(error));
+          else resolve(stream);
+        };
+        // As Go's Client.Dial, the originator is 0.0.0.0 port 0.
+        if (target === undefined) {
+          connection.openssh_forwardOutStreamLocal(address, opened);
+        } else {
+          connection.forwardOut('0.0.0.0', 0, target.host, target.port, opened);
+        }
+      },
+      (late) => late.close(),
+    );
+    return new ChannelStream(channel, () => this.#phase.cause);
+  }
+
+  /** tcpip-forward. Each connection comes to connectionListener with its origin, host:port of the peer. Go's Client.Listen. */
+  listen(
+    network: 'tcp',
+    address: string,
+    connectionListener: (stream: Duplex, origin: string) => void,
+    options?: { readonly signal?: AbortSignal },
+  ): Promise<RemoteListener>;
+  /** streamlocal-forward@openssh.com. A forwarded-streamlocal@openssh.com channel carries no origin. Go's Client.ListenUnix. */
+  listen(
+    network: 'unix',
+    path: string,
+    connectionListener: (stream: Duplex) => void,
+    options?: { readonly signal?: AbortSignal },
+  ): Promise<RemoteListener>;
+  async listen(
+    network: 'tcp' | 'unix',
+    address: string,
+    connectionListener: (stream: Duplex, origin: string) => void,
+    options: { readonly signal?: AbortSignal } = {},
+  ): Promise<RemoteListener> {
+    const forward = await reply<Forward>(
+      options.signal,
+      (resolve, reject) => {
+        if (network === 'tcp') this.#forwardTcp(address, resolve, reject);
+        else this.#forwardUnix(address, resolve, reject);
+      },
+      (late) => late.cancel(() => undefined),
+    );
+    this.#listeners.set(forward.key, connectionListener);
+    return createRemoteListener(network, forward.address, async () => {
+      this.#listeners.delete(forward.key);
+      if (this.#phase !== connected) return;
+      const cancelled = Promise.withResolvers<void>();
+      forward.cancel((error) =>
+        error ? cancelled.reject(error) : cancelled.resolve(),
+      );
+      await cancelled.promise;
+    });
+  }
+
+  #forwardTcp(
+    address: string,
+    resolve: (forward: Forward) => void,
+    reject: (error: Error) => void,
+  ): void {
+    const connection = this.#connection;
+    const { host, port } = splitHostPort(address);
+    connection.forwardIn(host, port, (error, bound) => {
+      if (error) {
+        reject(listenRefused(address, error));
+        return;
+      }
+      resolve({
+        key: `${host}:${bound}`,
+        address: joinHostPort(host, bound),
+        cancel: (callback) => connection.unforwardIn(host, bound, callback),
+      });
+    });
+  }
+
+  #forwardUnix(
+    path: string,
+    resolve: (forward: Forward) => void,
+    reject: (error: Error) => void,
+  ): void {
+    const connection = this.#connection;
+    connection.openssh_forwardInStreamLocal(path, (error) => {
+      if (error) {
+        reject(listenRefused(path, error));
+        return;
+      }
+      resolve({
+        key: path,
+        address: path,
+        cancel: (callback) =>
+          connection.openssh_unforwardInStreamLocal(path, callback),
+      });
+    });
+  }
+
+  // ssh2 accepts a forwarded channel only for a forward that it asked for,
+  // and gives each one to the client's event (client.js:1977-1993).
+  #accept(
+    key: string,
+    origin: string,
+    accept: () => ssh2.Channel,
+    reject: () => void,
+  ): void {
+    const listener = this.#listeners.get(key);
+    if (listener === undefined) {
+      reject();
+      return;
+    }
+    listener(new ChannelStream(accept(), () => this.#phase.cause), origin);
+  }
+
   /** Resolves after close(). Rejects with the error that ended the connection. Go's Conn.Wait. */
   wait(): Promise<void> {
     return this.#ended.wait();
@@ -252,6 +395,65 @@ export class Client implements AsyncDisposable {
   [Symbol.asyncDispose](): Promise<void> {
     return this.close();
   }
+}
+
+/** A forward that the server accepted, as the client's events name it. */
+interface Forward {
+  readonly key: string;
+  readonly address: string;
+  cancel(callback: (error?: Error | null) => void): void;
+}
+
+/**
+ * Runs a request of ssh2 that answers once. An abort rejects with the
+ * signal's reason; an answer that comes after it is undone.
+ */
+function reply<T>(
+  signal: AbortSignal | undefined,
+  start: (resolve: (value: T) => void, reject: (error: Error) => void) => void,
+  undo: (late: T) => void,
+): Promise<T> {
+  if (signal?.aborted) return Promise.reject(signal.reason);
+  const answered = Promise.withResolvers<T>();
+  let aborted = false;
+  const onAbort = (): void => {
+    aborted = true;
+    answered.reject(signal?.reason);
+  };
+  signal?.addEventListener('abort', onAbort, { once: true });
+  const settle = (): boolean => {
+    signal?.removeEventListener('abort', onAbort);
+    return !aborted;
+  };
+  try {
+    start(
+      (value) => (settle() ? answered.resolve(value) : undo(value)),
+      (error) => settle() && answered.reject(error),
+    );
+  } catch (error) {
+    // ssh2 throws at once on a closed connection.
+    settle();
+    answered.reject(error);
+  }
+  return answered.promise;
+}
+
+// ssh2 1.17.0 names the server's reason in the message of a channel open
+// failure, with a reason code (utils.js:7-26). Other errors, such as the loss
+// of the connection, have no code.
+function openFailure(error: Error): Error {
+  if (!('reason' in error)) return error;
+  const description = error.message.replace(
+    /^\(SSH\) Channel open failure: /,
+    '',
+  );
+  return new Error(`ssh: the server refused the channel: ${description}`);
+}
+
+function listenRefused(address: string, error: Error): Error {
+  return new Error(`ssh: the server refused to listen on ${address}`, {
+    cause: error,
+  });
 }
 
 // ssh2 1.17.0 sends each env first with no reply wanted, then pty-req, then
