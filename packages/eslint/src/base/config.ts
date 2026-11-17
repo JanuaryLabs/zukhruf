@@ -218,6 +218,14 @@ export const base: Concept = {
             'error',
             noFloatingPromises(),
           ],
+          // A promise returned without await from a `try`, `catch` or
+          // `finally`, or from a scope that holds a `using` declaration,
+          // leaves that block while the work still runs: the `finally` runs
+          // and an `await using` resource is disposed under it.
+          '@typescript-eslint/return-await': [
+            'error',
+            'error-handling-correctness-only',
+          ],
           // A promise-returning function in a void slot loses its rejection
           // the same way.
           '@typescript-eslint/no-misused-promises': [
