@@ -1,4 +1,4 @@
-import { Future, type WallClock, delay } from '@zukhruf/async';
+import { Cond, Future, type WallClock, delay } from '@zukhruf/async';
 import { SqliteElection, type Term } from '@zukhruf/election';
 
 import type { Eviction } from './eviction.ts';
@@ -106,14 +106,15 @@ export class PoolWorkers<Input, Output> implements AsyncDisposable {
   async #own(term: Term, stop: AbortSignal): Promise<void> {
     const owning = AbortSignal.any([stop, term.signal]);
     const running = new Set<Promise<void>>();
-    let wake = Promise.withResolvers<void>();
+    // Broadcasts when a run ends, the sizing changes or the backstop ends.
+    const changed = new Cond();
     const slots = new Slots<Worker<Input, Output>>({
       size: this.#size,
       startup: this.#startup,
       eviction: this.#eviction,
       create: this.#create,
       clock: this.#clock,
-      resized: () => wake.resolve(),
+      resized: () => changed.broadcast(),
     });
     // Whether the last fetch took every job it asked for, so more may wait.
     let backlog = false;
@@ -130,13 +131,15 @@ export class PoolWorkers<Input, Output> implements AsyncDisposable {
               .catch((error: unknown) => this.#failed.abort(error))
               .finally(() => {
                 running.delete(run);
-                wake.resolve();
+                changed.broadcast();
               });
             running.add(run);
           }
         }
-        await this.#rest(wake.promise, owning);
-        wake = Promise.withResolvers<void>();
+        // A run that ended or a resize during the fetch broadcast before the
+        // rest began to wait, so check its free slots again in the same step.
+        if (this.#size.current - running.size > 0 && backlog) continue;
+        await this.#rest(changed, owning);
       }
     } finally {
       await Promise.all(running);
@@ -146,16 +149,21 @@ export class PoolWorkers<Input, Output> implements AsyncDisposable {
     }
   }
 
-  // Waits for the backstop, a wake, or the end of the ownership.
-  async #rest(wake: Promise<void>, owning: AbortSignal): Promise<void> {
-    const woken = new AbortController();
-    void wake.then(() => woken.abort());
-    const signal = AbortSignal.any([owning, woken.signal]);
-    await delay(BACKSTOP, { clock: this.#clock, signal }).catch(
-      (error: unknown) => {
-        if (!signal.aborted) throw error;
-      },
+  // Waits for the next broadcast, or the end of the ownership. The backstop
+  // broadcasts too, so each rest is one wait that a broadcast ends, and no
+  // cancelled wait stays on the cond.
+  async #rest(changed: Cond, owning: AbortSignal): Promise<void> {
+    const backstop = this.#clock.setTimeout(
+      () => changed.broadcast(),
+      BACKSTOP,
     );
+    try {
+      await changed.wait({ signal: owning });
+    } catch (error) {
+      if (error !== owning.reason) throw error;
+    } finally {
+      this.#clock.clearTimeout(backstop);
+    }
   }
 
   // Runs one fetched job on a worker, and settles it by its attempt. A

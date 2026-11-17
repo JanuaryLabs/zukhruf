@@ -3,7 +3,7 @@
  * socket of its own that forwards each request to a local engine. A test
  * points a runner at `host` and holds, delays or refuses chosen requests.
  */
-import { EventEmitter, once } from 'node:events';
+import { once } from 'node:events';
 import { rm } from 'node:fs/promises';
 import {
   type IncomingMessage,
@@ -16,6 +16,7 @@ import { type Socket, connect } from 'node:net';
 import { join } from 'node:path';
 import type { Duplex } from 'node:stream';
 
+import { Cond } from '@zukhruf/async';
 import { type TemporaryDirectory, TemporaryFiles } from '@zukhruf/fs';
 
 /** A request that reached the proxy. `path` has no API version and no query. */
@@ -62,8 +63,8 @@ export class EngineProxy implements AsyncDisposable {
   readonly #sockets = new Set<Socket | Duplex>();
   /** The intercepted requests that the engine has not answered yet. */
   #unanswered = 0;
-  /** Emits 'answered' when the engine answers an intercepted request. */
-  readonly #answers = new EventEmitter();
+  /** Broadcasts when the engine answers an intercepted request. */
+  readonly #answers = new Cond();
   readonly #server: Server;
   /** Each request in the order it arrived, also the ones refused. */
   readonly requests: ProxiedRequest[] = [];
@@ -124,7 +125,8 @@ export class EngineProxy implements AsyncDisposable {
 
   /** Waits until the engine answers each intercepted request, then closes. */
   async [Symbol.asyncDispose](): Promise<void> {
-    while (this.#unanswered > 0) await once(this.#answers, 'answered');
+    while (this.#unanswered > 0)
+      await this.#answers.wait({ signal: undefined });
     if (this.#server.listening) await this.close();
     await this.#directory.cleanup();
   }
@@ -171,7 +173,7 @@ export class EngineProxy implements AsyncDisposable {
       if (!pending) return;
       pending = false;
       this.#unanswered -= 1;
-      this.#answers.emit('answered');
+      this.#answers.broadcast();
     };
     try {
       for (const { intercept } of matching)
