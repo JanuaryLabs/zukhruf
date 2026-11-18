@@ -117,7 +117,10 @@ export class DockerTestbed {
       throw error;
     });
     try {
-      return { client, host: new DockerHost(client.host, this.#run) };
+      return {
+        client,
+        host: new DockerHost(client.host, this.#run, this.#environment),
+      };
     } catch (error) {
       await client[Symbol.asyncDispose]();
       throw error;

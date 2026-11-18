@@ -1,275 +1,220 @@
 import { once } from 'node:events';
-import { stat } from 'node:fs/promises';
-import { type Socket, connect, createServer } from 'node:net';
+import { type Socket, createServer } from 'node:net';
 import { join } from 'node:path';
+import type { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 
-import command, {
-  type Result,
-  type Subprocess,
-  SubprocessError,
-} from 'nano-spawn';
+import pMemoize, { pMemoizeClear } from 'p-memoize';
 
-import { timeout } from '@zukhruf/async';
-import { TemporaryFiles } from '@zukhruf/fs';
+import { isErrno } from '@zukhruf/fs';
+import type { Client } from '@zukhruf/ssh';
+import { type Environment, OpenSshConfig } from '@zukhruf/ssh/config';
+import { ControlClient } from '@zukhruf/ssh/control';
 
-import { timebox } from '../async/timebox.ts';
-import { type ProcessRun, forwardName } from './run-records.ts';
+import type { ProcessRun } from './run-records.ts';
 
 export const quote = (value: string): string =>
   `'${value.replaceAll("'", "'\\''")}'`;
-
-/** How long one command in the SSH engine's remote shell may take. */
-const SHELL_TIMEOUT = 30_000;
-
-/** The part of the standard error of `ssh` that an error message keeps: the last 4 KB. */
-const STDERR_LIMIT = 4096;
-
-/** OpenSSH logs a line for each client connection that fails, so the reason it ended is at the end. */
-const endOfStderr = (stderr: string): string =>
-  stderr.slice(-STDERR_LIMIT).trim();
 
 /** Local Unix sockets, Docker Desktop's named pipe on Windows, and SSH engines. A `tcp://` engine may be on another machine. */
 const supportedEndpoints = ['unix://', 'npipe://', 'ssh://'];
 
 /**
- * A command this process started. A killed process leaves its commands
- * running; their process records keep its run until they end.
+ * The flags of the SSH connection of this process: a host that does not
+ * answer fails the connect, and a connection that stops answering ends, so
+ * no call waits forever. The user's config cannot override them: OpenSSH
+ * takes the first value that it gets for an option.
  */
-async function recorded(
-  run: ProcessRun | undefined,
-  subprocess: Subprocess,
-): Promise<Result> {
-  if (!run) return subprocess;
-  // Awaited below; a command that fails while its record is written must
-  // not count as an unhandled rejection.
-  subprocess.catch(() => {});
-  const { pid } = await subprocess.nodeChildProcess;
-  // Node leaves pid undefined when the spawn failed: no process to record.
-  if (pid === undefined) return subprocess;
-  await using _record = await run.records.recordProcess(pid);
-  return await subprocess;
+const SSH_FLAGS = [
+  '-o',
+  'ConnectTimeout=10',
+  '-o',
+  'ServerAliveInterval=10',
+  '-o',
+  'ServerAliveCountMax=2',
+];
+
+/** The socket in the run's directory where the global setup serves the run's SSH connection (ADR 0024). */
+const MASTER_SOCKET = 'ssh.sock';
+
+/** What a command in the shell of the engine's host printed. */
+export interface ShellResult {
+  stdout: string;
+  stderr: string;
 }
 
+async function text(stream: Readable): Promise<string> {
+  const chunks = await Array.fromAsync(stream, (chunk) => Buffer.from(chunk));
+  return Buffer.concat(chunks).toString('utf8');
+}
+
+const messageOf = (error: unknown): string =>
+  Error.isError(error) ? error.message : String(error);
+
 /**
- * The endpoint of an engine, for what the Engine API does not do: a shell
- * on the host of an SSH engine and port forwards from it. With a run, each
- * command it starts has a process record while it runs.
+ * The endpoint of an engine, for what the Engine API does not do: a shell on
+ * the host of an SSH engine and port forwards from it. In a run whose global
+ * setup serves the run's SSH connection, it opens each channel through that
+ * control master; otherwise through one SSH connection of its own, opened on
+ * first use with the settings of OpenSSH for `environment`.
  */
 export class DockerHost {
   readonly endpoint: string;
-  readonly #run: ProcessRun | undefined;
+  readonly #master: ControlClient | undefined;
+  readonly #environment: Environment;
+  /** The sessions that run on each connection of this host. */
+  readonly #sessions = new WeakMap<Client, number>();
+  /** The SSH connection of this process, opened on first use, and again on the use after it was lost. */
+  readonly #connect = pMemoize(async (): Promise<Client> => {
+    const client = await this.#dial();
+    const forget = (): void => pMemoizeClear(this.#connect);
+    void client.wait().then(forget, forget);
+    return client;
+  });
 
-  constructor(endpoint: string, run: ProcessRun | undefined) {
+  constructor(
+    endpoint: string,
+    run: ProcessRun | undefined,
+    environment: Environment,
+  ) {
     if (!supportedEndpoints.some((scheme) => endpoint.startsWith(scheme))) {
       throw new Error(
         `Unsupported Docker endpoint ${endpoint}; tests support ${supportedEndpoints.join(', ')}`,
       );
     }
     this.endpoint = endpoint;
-    this.#run = run;
+    this.#master = run
+      ? new ControlClient(join(run.records.directory, MASTER_SOCKET))
+      : undefined;
+    this.#environment = environment;
   }
 
   get remote(): boolean {
     return this.endpoint.startsWith('ssh://');
   }
 
-  #sshArgs(options: string[] = []): string[] {
-    const url = new URL(this.endpoint);
-    // Pass the original hostname to OpenSSH: ~/.ssh/config, jump hosts, keys,
-    // agents and host-key policy continue to work exactly as for Docker.
-    return [
-      '-T',
-      '-o',
-      'BatchMode=yes',
-      '-o',
-      'ConnectTimeout=10',
-      '-o',
-      'ServerAliveInterval=10',
-      '-o',
-      'ServerAliveCountMax=2',
-      ...(url.port ? ['-p', url.port] : []),
-      ...(url.username ? ['-l', decodeURIComponent(url.username)] : []),
-      ...options,
-      url.hostname,
-    ];
+  /** Runs `script` in the shell of the engine's host, with `input` on its stdin. A status other than 0 rejects with what the script printed on stderr. */
+  async shell(script: string, input?: string): Promise<ShellResult> {
+    return this.#through(async (channels) => {
+      await using session = channels.newSession();
+      await session.start(script);
+      // A script that exits before it reads its input fails the write;
+      // its exit status decides the outcome.
+      session.stdin.once('error', () => {});
+      session.stdin.end(input);
+      const [stdout, stderr, failure] = await Promise.all([
+        text(session.stdout),
+        text(session.stderr),
+        session.wait().then(
+          () => undefined,
+          (error: unknown) => ({ error }),
+        ),
+      ]);
+      if (failure !== undefined)
+        throw new Error(
+          `${script} failed on the engine host ${this.endpoint}: ${stderr.trim() || messageOf(failure.error)}`,
+          { cause: failure.error },
+        );
+      return { stdout, stderr };
+    });
   }
 
-  shell(script: string, input?: string): Promise<Result> {
-    return recorded(
-      this.#run,
-      command('ssh', [...this.#sshArgs(), script], {
-        stdin: input === undefined ? 'ignore' : { string: input },
-        timeout: SHELL_TIMEOUT,
-      }),
-    );
-  }
-
+  /**
+   * A TCP port on 127.0.0.1 of this machine whose connections each reach
+   * 127.0.0.1:`port` of the engine's host through a channel. A channel that
+   * the loss of its SSH connection ended makes close() reject.
+   */
   async forward(
     port: number,
   ): Promise<{ port: number; close: () => Promise<void> }> {
-    const run = this.#run;
     if (!this.remote) return { port, close: async () => {} };
-    const resources = new AsyncDisposableStack();
-    const close = () => resources.disposeAsync();
-    try {
-      // Keep the Unix socket path below macOS's 104-byte limit. The private
-      // directory and ownership record also cover workers killed mid-test.
-      const directory = resources.use(
-        await new TemporaryFiles().directory(forwardName(run?.id), {
-          parent: '/tmp',
-        }),
-      );
-      if (run) resources.use(await run.records.recordForward(directory.path));
-      const path = join(directory.path, 's');
-      const sockets = new Set<Socket>();
-      const server = createServer((socket) => {
-        const channel = connect(path);
-        const pairs: [Socket, Socket][] = [
-          [socket, channel],
-          [channel, socket],
-        ];
-        for (const [stream, peer] of pairs) {
-          sockets.add(stream);
-          stream.on('error', () => peer.destroy());
-          stream.once('close', () => {
-            sockets.delete(stream);
-            peer.destroy();
-          });
-        }
-        socket.pipe(channel).pipe(socket);
+    // An engine host that this process cannot reach fails the forward here,
+    // not at the first connection of a database client.
+    if (!this.#master) await this.#connect();
+    const sockets = new Set<Socket>();
+    let lost: Error | undefined;
+    const carry = async (socket: Socket): Promise<void> => {
+      sockets.add(socket);
+      socket.once('close', () => sockets.delete(socket));
+      const channel = await this.#through((channels) =>
+        channels.dial('tcp', `127.0.0.1:${port}`),
+      ).catch(() => undefined);
+      if (!channel) return void socket.destroy();
+      // A channel of a lost connection fails with the error of the loss as
+      // its cause (@zukhruf/ssh); a write to a channel that the far end
+      // closed has none.
+      channel.once('error', (error: Error) => {
+        if (error.cause !== undefined) lost ??= error;
       });
-      // OpenSSH multiplexes client streams over one authenticated connection.
-      // Node owns the ephemeral TCP listener, so no port-reservation race or
-      // fresh SSH login is added to each database client's connect timeout.
-      // A remote `cat` on a stdin pipe this process holds, not -N: when this
-      // process dies, even by SIGKILL, the OS closes the pipe, `cat` reads
-      // EOF and ssh exits instead of staying connected under PID 1. The
-      // command needs a remote shell, which the Docker CLI over ssh already
-      // uses to run `docker system dial-stdio`.
-      const ssh = command(
-        'ssh',
-        [
-          ...this.#sshArgs([
-            '-S',
-            'none',
-            '-o',
-            'ControlMaster=no',
-            '-o',
-            'ControlPersist=no',
-            '-o',
-            'ExitOnForwardFailure=yes',
-            '-L',
-            `${path}:127.0.0.1:${port}`,
-          ]),
-          'cat >/dev/null',
-        ],
-        { stdin: 'pipe', stdout: 'ignore' },
-      );
-      // How ssh ended, with what it printed: a Result for exit 0, or the
-      // SubprocessError for a failure or a signal.
-      const exit = ssh.then(
-        (result): Result => result,
-        (error: unknown) => {
-          if (error instanceof SubprocessError) return error;
-          throw error;
-        },
-      );
-      void exit.then(() => {
-        for (const socket of sockets) socket.destroy();
-        if (server.listening) server.close();
-      });
-      const child = await ssh.nodeChildProcess;
-      // nano-spawn gives what ssh printed only after ssh ended. The readiness
-      // error is made while ssh still runs. nano-spawn set the encoding.
-      let printed = '';
-      child.stderr!.on('data', (chunk: string) => {
-        printed = (printed + chunk).slice(-STDERR_LIMIT);
-      });
-      // Disposed after ssh has stopped.
-      if (run && child.pid !== undefined)
-        resources.use(await run.records.recordProcess(child.pid));
-      resources.defer(async () => {
-        child.stdin!.end();
-        // A real deadline on a real process.
-        using deadline = timeout(1_000, { clock: globalThis });
-        deadline.signal.addEventListener('abort', () => child.kill('SIGKILL'), {
-          once: true,
-        });
-        await exit;
-      });
-      resources.defer(async () => {
-        const closed = new Promise<void>((resolve, reject) =>
-          server.close((error) =>
-            error &&
-            !('code' in error && error.code === 'ERR_SERVER_NOT_RUNNING')
-              ? reject(error)
-              : resolve(),
-          ),
-        );
+      await Promise.allSettled([
+        pipeline(socket, channel),
+        pipeline(channel, socket),
+      ]);
+    };
+    const server = createServer({ allowHalfOpen: true }, (socket) => {
+      void carry(socket);
+    });
+    server.listen(0, '127.0.0.1');
+    await once(server, 'listening');
+    server.unref();
+    const address = server.address();
+    if (!address || typeof address === 'string')
+      throw new Error('Docker forwarding did not acquire a TCP port');
+    let closing: Promise<void> | undefined;
+    const close = (): Promise<void> => {
+      closing ??= (async () => {
+        const closed = once(server, 'close');
+        server.close();
         for (const socket of sockets) socket.destroy();
         await closed;
-      });
-      // OpenSSH binds local forwards after authentication. Wait for that
-      // listener before publishing the TCP port to a database client.
-      const waiting = new AbortController();
+        if (lost)
+          throw new Error(`Docker SSH forwarding was lost: ${lost.message}`, {
+            cause: lost,
+          });
+      })();
+      return closing;
+    };
+    return { port: address.port, close };
+  }
+
+  /**
+   * Opens a channel through the run's control master, or through the
+   * connection of this process when no master serves the run: a master
+   * socket that does not exist (ENOENT) means that the run's global setup
+   * serves none. A master that died (ECONNREFUSED) fails the call.
+   */
+  async #through<T>(
+    open: (channels: Client | ControlClient) => Promise<T>,
+  ): Promise<T> {
+    if (this.#master) {
       try {
-        await Promise.race([
-          timebox(
-            async () => {
-              if (!(await stat(path)).isSocket())
-                throw new Error(
-                  'Docker SSH forwarding did not create a Unix socket',
-                );
-            },
-            {
-              maxRetryTime: 15_000,
-              signal: waiting.signal,
-              shouldRetry: ({ error }) =>
-                'code' in error && error.code === 'ENOENT',
-            },
-          ).catch((error: unknown) => {
-            if (
-              !Error.isError(error) ||
-              !('code' in error) ||
-              error.code !== 'ENOENT'
-            )
-              throw error;
-            const said = endOfStderr(printed);
-            throw new Error(
-              `Docker SSH forwarding did not open its socket within 15 s${said ? `: ${said}` : '.'}`,
-              { cause: error },
-            );
-          }),
-          exit.then((outcome) => {
-            throw new Error(
-              `Docker SSH forwarding exited: ${endOfStderr(outcome.stderr)}`,
-              { cause: outcome },
-            );
-          }),
-        ]);
-      } finally {
-        waiting.abort();
+        return await open(this.#master);
+      } catch (error) {
+        if (!isErrno(error, 'ENOENT')) throw error;
       }
-      // Runs first on close, before ssh is stopped: an ssh that already
-      // exited ended the forward while it was in use.
-      resources.defer(async () => {
-        if (child.exitCode === null && child.signalCode === null) return;
-        const outcome = await exit;
-        throw new Error(
-          `Docker SSH forwarding was lost: ${endOfStderr(outcome.stderr)}`,
-          { cause: outcome },
-        );
-      });
-      server.listen(0, '127.0.0.1');
-      await once(server, 'listening');
-      server.unref();
-      const address = server.address();
-      if (!address || typeof address === 'string')
-        throw new Error('Docker forwarding did not acquire a TCP port');
-      return { port: address.port, close };
-    } catch (error) {
-      await close();
-      throw error;
     }
+    const client = await this.#connect();
+    // The connection keeps the process alive only while a channel opens or
+    // a session runs on it.
+    const before = this.#sessions.get(client) ?? 0;
+    this.#sessions.set(client, before + 1);
+    if (before === 0) client.ref();
+    try {
+      return await open(client);
+    } finally {
+      const after = (this.#sessions.get(client) ?? 1) - 1;
+      this.#sessions.set(client, after);
+      if (after === 0) client.unref();
+    }
+  }
+
+  async #dial(): Promise<Client> {
+    const config = await OpenSshConfig.resolve(this.endpoint, {
+      flags: SSH_FLAGS,
+      environment: this.#environment,
+    });
+    const client = await config.dial({ clock: globalThis });
+    client.unref();
+    return client;
   }
 }

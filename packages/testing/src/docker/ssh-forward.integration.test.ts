@@ -1,542 +1,449 @@
 import assert from 'node:assert/strict';
-import { readFile, writeFile } from 'node:fs/promises';
-import type { IncomingMessage, ServerResponse } from 'node:http';
+import { execFile, spawn } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
+import { once } from 'node:events';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { type Socket, connect, createServer } from 'node:net';
+import { userInfo } from 'node:os';
 import { join } from 'node:path';
+import { createInterface } from 'node:readline';
+import type { Readable } from 'node:stream';
 import { test } from 'node:test';
-
-import spawn from 'nano-spawn';
+import { promisify } from 'node:util';
 
 import { TemporaryFiles } from '@zukhruf/fs';
+import { ExitError } from '@zukhruf/ssh';
+import { type Environment, OpenSshConfig } from '@zukhruf/ssh/config';
+import { ControlMaster } from '@zukhruf/ssh/control';
 
-import { waitFor } from '../async/wait-for.ts';
-import { fakeEngine } from '../testing/fake-engine.ts';
+import { timebox } from '../async/timebox.ts';
+import { engine } from '../testing/current-engine.ts';
+import { type Sshd, startSshd } from '../testing/sshd.ts';
+import { DockerHost, quote } from './host.ts';
+import { TEST_RUN_DIRECTORY, TEST_RUN_ID, readRun } from './run-records.ts';
+import type { ServiceContainer } from './service-container.ts';
+import { DockerTestbed } from './testbed.ts';
 
-const skip =
-  process.platform === 'win32'
-    ? 'the ssh stand-in is a POSIX executable'
-    : false;
+const run = promisify(execFile);
+
+const noSshd = process.platform === 'win32' ? 'Windows has no sshd' : false;
+const noEngine =
+  noSshd ||
+  (engine.startsWith('unix://')
+    ? false
+    : `the echo container's port is on this machine only for a local unix:// engine, not ${engine}`);
+
+/** The real ssh of this machine, which `ssh -G` runs. */
+const realSsh = noSshd
+  ? ''
+  : (await run('sh', ['-c', 'command -v ssh'])).stdout.trim();
+
+/** The engine host of the tests: the `Host` of the ssh_config that `reaching` writes. */
+const ENGINE_HOST = 'ssh://engine';
+
+const testbed = new DockerTestbed({ environment: process.env });
 
 /**
- * Docker.connect now runs `ssh -G` itself, and on `ssh -G` the stand-in of
- * these modes listens on a path next to node and never exits: a todo would
- * hang until the test timeout.
+ * The environment of a process whose OpenSSH reaches `sshd` as the Host
+ * `engine`, through `port`. OpenSSH reads the user's config from the home of
+ * the passwd entry, not from HOME, so no variable names a config: the PATH
+ * gives an `ssh` that runs the real one with -F. Only `ssh -G` runs it.
  */
-const UNTIL_U8 = '#4503: the ssh stand-in hangs on ssh -G';
-
-/** The container that the engine stand-in creates. */
-const CONTAINER = 'standin-container';
-
-/** More than 4 KB of standard error: each line is about 60 characters. */
-const NOISE_LINES = 200;
-const FIRST_NOISE_LINE =
-  'channel 0: open failed: connect failed: Connection refused';
-const LAST_NOISE_LINE = `channel ${NOISE_LINES - 1}: open failed: connect failed: Connection refused`;
-
-/**
- * The part of `message` after `prefix` is the end of what a noisy ssh
- * printed: its last line, without its first, trimmed, in at most 4 KB.
- */
-function assertEndOfStderr(message: string, prefix: string, lastLine: string) {
-  assert.ok(message.startsWith(prefix), message);
-  const stderr = message.slice(prefix.length);
-  assert.equal(stderr, stderr.trim());
-  assert.ok(stderr.endsWith(lastLine), stderr.slice(-200));
-  assert.ok(!stderr.includes(FIRST_NOISE_LINE), stderr.slice(0, 200));
-  assert.ok(
-    stderr.length <= 4096 && stderr.length > 4000,
-    `${stderr.length} characters`,
+async function reaching(sshd: Sshd, port = sshd.port): Promise<Environment> {
+  const knownHosts = join(sshd.directory, 'known_hosts');
+  await writeFile(
+    knownHosts,
+    `[127.0.0.1]:${sshd.port} ${sshd.hostPublicKey}\n`,
   );
-}
-
-/**
- * Stands in for OpenSSH. `ssh … docker system dial-stdio` pipes its stdin and
- * stdout to the engine stand-in's socket, named in `engine-socket`, as the
- * Docker CLI does on the engine's host. `ssh -L <socket>:127.0.0.1:<port>
- * <host> 'cat >/dev/null'` is the forward: it exits when its stdin ends, as
- * the remote `cat` does. `ssh-mode` picks the forward's behavior: `serve`
- * opens the socket, `refused` fails to connect, `silent` never opens the
- * socket, `stubborn` stays up after its stdin ends. A `lose` file ends the
- * forward the way a dead connection does, and a `stdin-ended` file records
- * that its stdin ended. With a `noisy` file, the forward first prints
- * NOISE_LINES lines of the kind that OpenSSH logs for each client connection
- * that the far end refused. Messages are OpenSSH's.
- */
-const sshStandIn = `#!${process.execPath}
-const { connect, createServer } = require('node:net');
-const { existsSync, readFileSync, writeFileSync, writeSync } = require('node:fs');
-const { join } = require('node:path');
-if (process.argv.includes('dial-stdio')) {
-  const socket = connect(readFileSync(join(__dirname, 'engine-socket'), 'utf8'));
-  process.stdin.pipe(socket);
-  socket.pipe(process.stdout);
-  socket.on('close', () => process.exit(0));
-  socket.on('error', () => process.exit(1));
-} else {
-  writeFileSync(join(__dirname, 'ssh.pid'), String(process.pid));
-  const mode = readFileSync(join(__dirname, 'ssh-mode'), 'utf8').trim();
-  if (existsSync(join(__dirname, 'noisy'))) {
-    // A blocking write: all of it is in the pipe before a mode exits.
-    for (let channel = 0; channel < ${NOISE_LINES}; channel++)
-      writeSync(2, 'channel ' + channel + ': open failed: connect failed: Connection refused\\n');
-  }
-  if (mode === 'refused') {
-    process.stderr.write('ssh: connect to host sshhost port 22: Connection refused\\n');
-    process.exit(255);
-  }
-  if (process.argv.at(-1) === 'cat >/dev/null') {
-    process.stdin.resume();
-    process.stdin.on('end', () => {
-      writeFileSync(join(__dirname, 'stdin-ended'), '');
-      if (mode !== 'stubborn') process.exit(0);
-    });
-  }
-  if (mode !== 'silent') {
-    const spec = process.argv[process.argv.indexOf('-L') + 1];
-    createServer().listen(spec.slice(0, spec.lastIndexOf(':127.0.0.1:')));
-  }
-  setInterval(() => {
-    if (existsSync(join(__dirname, 'lose'))) {
-      process.stderr.write('Timeout, server sshhost not responding.\\n');
-      process.exit(255);
-    }
-  }, 20);
-}
-`;
-
-/**
- * Answers what serve() and cleanup() ask an engine for one container whose
- * port 5432 is published on the engine host's 127.0.0.1:49999. With
- * `removalFails`, the engine refuses the container's removal.
- */
-const engineAnswer =
-  ({ removalFails }: { removalFails: boolean }) =>
-  (request: IncomingMessage, response: ServerResponse) => {
-    request.resume();
-    const path = new URL(request.url ?? '', 'http://engine').pathname.replace(
-      /^\/v[\d.]+/,
+  const config = join(sshd.directory, 'ssh_config');
+  await writeFile(
+    config,
+    [
+      `Host ${new URL(ENGINE_HOST).hostname}`,
+      '  HostName 127.0.0.1',
+      `  Port ${port}`,
+      `  User ${userInfo().username}`,
+      `  IdentityFile ${sshd.userKey}`,
+      '  IdentitiesOnly yes',
+      '  IdentityAgent none',
+      `  UserKnownHostsFile ${knownHosts}`,
+      '  GlobalKnownHostsFile /dev/null',
+      '  StrictHostKeyChecking yes',
       '',
-    );
-    const answer = (status: number, body?: unknown) => {
-      response.writeHead(status, { 'Content-Type': 'application/json' });
-      response.end(body === undefined ? undefined : JSON.stringify(body));
-    };
-    const route = `${request.method} ${path}`;
-    if (route === 'POST /containers/create')
-      return answer(201, { Id: CONTAINER, Warnings: [] });
-    if (route === `POST /containers/${CONTAINER}/start`) return answer(204);
-    if (route === `GET /containers/${CONTAINER}/json`)
-      return answer(200, {
-        Id: CONTAINER,
-        NetworkSettings: {
-          Ports: { '5432/tcp': [{ HostIp: '127.0.0.1', HostPort: '49999' }] },
-        },
-      });
-    if (route === `DELETE /containers/${CONTAINER}`)
-      return removalFails
-        ? answer(500, { message: 'the engine stand-in refuses the removal' })
-        : answer(204);
-    return answer(404, { message: `unexpected: ${route}` });
-  };
-
-/**
- * A directory holding the ssh stand-in, with its forward in `mode`, and an
- * engine stand-in that the stand-in's dial-stdio reaches. With `noisy`, the
- * forward prints its noise lines when it starts. Disposal stops the
- * engine, then removes the directory.
- */
-async function standIns(
-  mode: string,
-  { withSsh = true, removalFails = false, noisy = false } = {},
-) {
-  const resources = new AsyncDisposableStack();
-  try {
-    const directory = await new TemporaryFiles().directory(
-      'zukhruf-testing-ssh-',
-    );
-    resources.use(directory);
-    const engine = resources.use(
-      await fakeEngine({
-        directory: directory.path,
-        apiVersion: '1.51',
-        answer: engineAnswer({ removalFails }),
-      }),
-    );
-    if (withSsh)
-      await writeFile(join(directory.path, 'ssh'), sshStandIn, {
-        mode: 0o755,
-      });
-    await writeFile(join(directory.path, 'ssh-mode'), mode);
-    if (noisy) await writeFile(join(directory.path, 'noisy'), '');
-    await writeFile(join(directory.path, 'engine-socket'), engine.socketPath);
-    const stack = resources.move();
-    return {
-      path: directory.path,
-      [Symbol.asyncDispose]: () => stack.disposeAsync(),
-    };
-  } catch (error) {
-    await resources.disposeAsync();
-    throw error;
-  }
+    ].join('\n'),
+  );
+  const bin = join(sshd.directory, 'bin');
+  await mkdir(bin, { recursive: true });
+  await writeFile(
+    join(bin, 'ssh'),
+    `#!/bin/sh\nexec ${quote(realSsh)} -F ${quote(config)} "$@"\n`,
+    { mode: 0o755 },
+  );
+  return { PATH: `${bin}:/usr/bin:/bin` };
 }
 
-/**
- * Runs `body` in a new Node process whose PATH starts with the stand-ins and
- * whose DOCKER_HOST is an ssh:// engine. `body` prints one JSON line.
- */
-async function scenario(directory: string, body: string, path?: string) {
-  const source = `
-    import { connect } from 'node:net';
-    import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-    import { setTimeout as delay } from 'node:timers/promises';
-    import { DockerTestbed } from ${JSON.stringify(new URL('./index.ts', import.meta.url).href)};
-    const directory = ${JSON.stringify(directory)};
-    const testbed = new DockerTestbed({ environment: process.env });
-    const failure = (error) => ({
-      message: error.message,
-      cause: error.cause && { name: error.cause.name, message: error.cause.message, exitCode: error.cause.exitCode, code: error.cause.code, cause: error.cause.cause?.message },
-      error: error.error?.message,
-      suppressed: error.suppressed?.message,
-    });
-    const settled = (promise) => promise.then(() => 'resolved', failure);
-    // null when ssh never started: a missing pid must not read as "stopped".
-    const sshAlive = () => {
-      if (!existsSync(directory + '/ssh.pid')) return null;
-      try { process.kill(Number(readFileSync(directory + '/ssh.pid', 'utf8')), 0); return true; }
-      catch { return false; }
-    };
-    // No event reports that a port closed: only a refused connection does, so callers retry this.
-    const refuses = (port) => new Promise((resolve) => {
-      const socket = connect(port, '127.0.0.1');
-      socket.once('connect', () => { socket.destroy(); resolve(false); });
-      socket.once('error', () => resolve(true));
-    });
-    ${body}
-  `;
-  const { stdout, stderr } = await spawn(
-    process.execPath,
-    ['--no-warnings', '--input-type=module', '--eval', source],
+/** A port on 127.0.0.1 where nothing listens: a connect to it is refused. */
+async function closedPort(): Promise<number> {
+  const server = createServer().listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const address = server.address();
+  assert.ok(address !== null && typeof address !== 'string');
+  server.close();
+  await once(server, 'close');
+  return address.port;
+}
+
+async function text(stream: Readable): Promise<string> {
+  const chunks = await Array.fromAsync(stream, (chunk) => Buffer.from(chunk));
+  return Buffer.concat(chunks).toString('utf8');
+}
+
+/** Sends `message` to 127.0.0.1:`port`, ends the input, and reads the answer to its end. */
+async function echo(port: number, message: string): Promise<string> {
+  const socket = connect(port, '127.0.0.1');
+  socket.end(message);
+  return text(socket);
+}
+
+/** A container on the local engine whose port 80 echoes each connection: busybox nc runs cat for each one. */
+function echoService(): Promise<ServiceContainer> {
+  return testbed.serve(
+    { Image: 'alpine:latest', Cmd: ['nc', '-lk', '-p', '80', '-e', 'cat'] },
     {
-      env: {
-        PATH: path ?? `${directory}:${process.env.PATH}`,
-        DOCKER_HOST: 'ssh://tester@sshhost',
-        DOCKER_CONTEXT: undefined,
-        // Undefined, not deleted: nano-spawn adds process.env back. The
-        // stand-in engine runs no reaper, so the scenario is in no run.
-        ZUKHRUF_TESTING_RUN_ID: undefined,
-        ZUKHRUF_TESTING_RUN_DIR: undefined,
-      },
+      internalPort: 80,
+      healthy: (service, signal) =>
+        timebox(
+          async () => assert.equal(await echo(service.port, 'up'), 'up'),
+          { signal },
+        ),
     },
   );
-  return { result: JSON.parse(stdout.split('\n').at(-1)!), stderr };
+}
+
+/** An open connection to 127.0.0.1:`port` that has had an answer, so its channel is open at the far end. */
+async function openConnection(port: number): Promise<Socket> {
+  const socket = connect(port, '127.0.0.1');
+  socket.write('ping');
+  const [answer]: unknown[] = await once(socket, 'data');
+  assert.equal(String(answer), 'ping');
+  return socket;
+}
+
+/** A run of the global setup with its directory at `directory`, as a test process reads it. */
+function runAt(directory: string) {
+  return readRun({
+    [TEST_RUN_ID]: randomUUID(),
+    [TEST_RUN_DIRECTORY]: directory,
+  });
+}
+
+/** A Node process that runs `body` with `DockerHost` in scope. */
+function nodeWithHost(body: string) {
+  const source = `
+    import { connect } from 'node:net';
+    import { DockerHost } from ${JSON.stringify(new URL('./host.ts', import.meta.url).href)};
+    ${body}
+  `;
+  return ['--no-warnings', '--input-type=module', '--eval', source];
 }
 
 test(
-  'a forward lost after it started makes disconnect reject with what ssh said',
-  // #4503: U8 moves testing's forward onto @zukhruf/ssh and rewrites this file.
-  { skip: skip || UNTIL_U8 },
+  'a lost SSH connection ends the open connections of a forward, and close rejects with the loss',
+  { skip: noEngine },
   async () => {
-    // Arrange: the forward is up.
-    await using directory = await standIns('serve');
+    // Arrange: a connection through the forward has had its answer.
+    await using sshd = await startSshd();
+    await using service = await echoService();
+    const host = new DockerHost(ENGINE_HOST, undefined, await reaching(sshd));
+    const forward = await host.forward(service.port);
+    const socket = await openConnection(forward.port);
+    const ended = once(socket, 'close');
 
-    // Act: the connection dies, then the test lets the server go.
-    const { result, stderr } = await scenario(
-      directory.path,
-      `
-      const server = await testbed.serve({ Image: 'standin' }, { internalPort: 5432 });
-      writeFileSync(directory + '/lose', '');
-      while (!(await refuses(server.port))) await delay(20);
-      console.log(JSON.stringify({ disconnect: await settled(server.disconnect()) }));
-      `,
-    );
+    // Act: the engine host ends every SSH connection.
+    sshd.kill('SIGKILL');
+    await ended;
 
     // Assert
-    assert.equal(
-      result.disconnect.message,
-      'Docker SSH forwarding was lost: Timeout, server sshhost not responding.',
-    );
-    assert.equal(stderr, '');
+    await assert.rejects(forward.close(), {
+      message: 'Docker SSH forwarding was lost: ssh: the connection was lost',
+    });
   },
 );
 
 test(
-  'a forward lost after ssh printed more than 4 KB makes disconnect reject with the end of it, where the reason is',
-  // #4503: U8 moves testing's forward onto @zukhruf/ssh and rewrites this file.
-  { skip: skip || UNTIL_U8 },
+  'a forward to an engine host that does not answer rejects with the error of the connect',
+  { skip: noSshd },
   async () => {
-    // Arrange: the forward is up, and ssh has logged many refused channels.
-    await using directory = await standIns('serve', { noisy: true });
-
-    // Act: the connection dies, and ssh says why last.
-    const { result } = await scenario(
-      directory.path,
-      `
-      const server = await testbed.serve({ Image: 'standin' }, { internalPort: 5432 });
-      writeFileSync(directory + '/lose', '');
-      while (!(await refuses(server.port))) await delay(20);
-      console.log(JSON.stringify({ disconnect: await settled(server.disconnect()) }));
-      `,
+    // Arrange: the config names a port where nothing listens.
+    await using sshd = await startSshd();
+    const host = new DockerHost(
+      ENGINE_HOST,
+      undefined,
+      await reaching(sshd, await closedPort()),
     );
+
+    // Act
+    const forward = host.forward(80);
 
     // Assert
-    assertEndOfStderr(
-      result.disconnect.message,
-      'Docker SSH forwarding was lost: ',
-      'Timeout, server sshhost not responding.',
-    );
-    assert.equal(result.disconnect.cause?.exitCode, 255);
+    await assert.rejects(forward, { code: 'ECONNREFUSED' });
   },
 );
 
 test(
-  'cleanup keeps both errors when the container removal fails and the forward was lost',
-  // #4503: U8 moves testing's forward onto @zukhruf/ssh and rewrites this file.
-  { skip: skip || UNTIL_U8 },
-  async () => {
-    // Arrange: the forward is up, and the engine will refuse the removal.
-    await using directory = await standIns('serve', { removalFails: true });
-
-    // Act
-    const { result } = await scenario(
-      directory.path,
-      `
-      const server = await testbed.serve({ Image: 'standin' }, { internalPort: 5432 });
-      writeFileSync(directory + '/lose', '');
-      while (!(await refuses(server.port))) await delay(20);
-      console.log(JSON.stringify({ cleanup: await settled(server.cleanup()) }));
-      `,
-    );
-
-    // Assert: neither failure hides the other.
-    const messages = [
-      result.cleanup.message,
-      result.cleanup.error,
-      result.cleanup.suppressed,
-    ];
-    assert.ok(
-      messages.includes(
-        'Docker SSH forwarding was lost: Timeout, server sshhost not responding.',
-      ),
-      JSON.stringify(result.cleanup),
-    );
-    assert.ok(
-      messages.includes('the engine stand-in refuses the removal'),
-      JSON.stringify(result.cleanup),
-    );
-  },
-);
-
-test(
-  'an ssh that fails to start rejects serve with what ssh said, and prints nothing',
-  // #4503: U8 moves testing's forward onto @zukhruf/ssh and rewrites this file.
-  { skip, todo: '#4503' },
-  async () => {
-    // Arrange: ssh cannot reach the engine's host.
-    await using directory = await standIns('refused');
-
-    // Act
-    const { result, stderr } = await scenario(
-      directory.path,
-      `console.log(JSON.stringify({
-        serve: await settled(testbed.serve({ Image: 'standin' }, { internalPort: 5432 })),
-      }));`,
-    );
-
-    // Assert: one error carries the reason; nothing is written beside it.
-    assert.equal(
-      result.serve.message,
-      'Docker SSH forwarding exited: ssh: connect to host sshhost port 22: Connection refused',
-    );
-    assert.equal(result.serve.cause.exitCode, 255);
-    assert.equal(stderr, '');
-  },
-);
-
-test(
-  'an ssh that fails to start after it printed more than 4 KB rejects serve with the end of it, where the reason is',
-  // #4503: U8 moves testing's forward onto @zukhruf/ssh and rewrites this file.
-  { skip, todo: '#4503' },
-  async () => {
-    // Arrange: ssh logs many lines, then cannot reach the engine's host.
-    await using directory = await standIns('refused', { noisy: true });
-
-    // Act
-    const { result } = await scenario(
-      directory.path,
-      `console.log(JSON.stringify({
-        serve: await settled(testbed.serve({ Image: 'standin' }, { internalPort: 5432 })),
-      }));`,
-    );
-
-    // Assert
-    assertEndOfStderr(
-      result.serve.message,
-      'Docker SSH forwarding exited: ',
-      'ssh: connect to host sshhost port 22: Connection refused',
-    );
-    assert.equal(result.serve.cause.exitCode, 255);
-  },
-);
-
-test(
-  'a machine without ssh fails the first acquisition at once: Docker is required, and the connection failure as cause',
-  { skip },
-  async () => {
-    // Arrange: PATH holds no ssh.
-    await using directory = await standIns('serve', { withSsh: false });
-
-    // Act
-    const { result } = await scenario(
-      directory.path,
-      `const serve = await settled(testbed.serve({ Image: 'standin' }, { internalPort: 5432 }));
-      console.log(JSON.stringify({ serve }));`,
-      directory.path,
-    );
-
-    // Assert: the spawn failure ends the wait, with its cause.
-    assert.equal(
-      result.serve.message,
-      'Docker is required for container-backed tests',
-      JSON.stringify(result.serve),
-    );
-    assert.equal(result.serve.cause?.name, 'ConnectionFailedError');
-    assert.equal(result.serve.cause?.cause, 'spawn ssh ENOENT');
-  },
-);
-
-test(
-  'an ssh that never opens its socket fails serve at the readiness limit and is stopped',
-  // #4503: U8 moves testing's forward onto @zukhruf/ssh and rewrites this file.
-  { skip: skip || UNTIL_U8 },
-  async () => {
-    // Arrange: ssh stays up but never binds the forward.
-    await using directory = await standIns('silent');
-
-    // Act
-    const { result } = await scenario(
-      directory.path,
-      `const started = performance.now();
-      const serve = await settled(testbed.serve({ Image: 'standin' }, { internalPort: 5432 }));
-      console.log(JSON.stringify({ serve, ms: performance.now() - started, sshAlive: sshAlive() }));`,
-    );
-
-    // Assert: serve waits out the socket's limit, then says that the socket
-    // never opened, with the missing socket as cause, and leaves no ssh behind.
-    assert.equal(
-      result.serve.message,
-      'Docker SSH forwarding did not open its socket within 15 s.',
-      JSON.stringify(result.serve),
-    );
-    assert.equal(result.serve.cause?.code, 'ENOENT');
-    assert.match(
-      result.serve.cause?.message ?? '',
-      /ENOENT: no such file or directory, stat '.*zukhruf-testing-forward-.*\/s'/,
-    );
-    assert.ok(result.ms >= 14_000, `serve gave up after ${result.ms} ms`);
-    assert.equal(result.sshAlive, false);
-  },
-);
-
-test(
-  'an ssh that never opens its socket fails serve with the end of what it printed while it ran',
-  // #4503: U8 moves testing's forward onto @zukhruf/ssh and rewrites this file.
-  { skip: skip || UNTIL_U8 },
-  async () => {
-    // Arrange: ssh prints more than 4 KB, stays up and never binds the forward.
-    await using directory = await standIns('silent', { noisy: true });
-
-    // Act
-    const { result } = await scenario(
-      directory.path,
-      `const serve = await settled(testbed.serve({ Image: 'standin' }, { internalPort: 5432 }));
-      console.log(JSON.stringify({ serve }));`,
-    );
-
-    // Assert
-    assertEndOfStderr(
-      result.serve.message,
-      'Docker SSH forwarding did not open its socket within 15 s: ',
-      LAST_NOISE_LINE,
-    );
-    assert.equal(result.serve.cause?.code, 'ENOENT');
-  },
-);
-
-test(
-  'an ssh that stays up after its stdin ends is killed on disconnect, which still resolves',
-  // #4503: U8 moves testing's forward onto @zukhruf/ssh and rewrites this file.
-  { skip: skip || UNTIL_U8 },
-  async () => {
-    // Arrange: ssh does not exit when disconnect ends its stdin, so disconnect falls back to SIGKILL.
-    await using directory = await standIns('stubborn');
-
-    // Act
-    const { result, stderr } = await scenario(
-      directory.path,
-      `const server = await testbed.serve({ Image: 'standin' }, { internalPort: 5432 });
-      const disconnect = await settled(server.disconnect());
-      console.log(JSON.stringify({ disconnect, sshAlive: sshAlive() }));`,
-    );
-
-    // Assert: a deliberate close is not a lost forward.
-    assert.equal(result.disconnect, 'resolved', JSON.stringify(result));
-    assert.equal(result.sshAlive, false);
-    assert.equal(stderr, '');
-  },
-);
-
-test(
-  'a disconnect resolves, stops ssh and prints nothing',
-  // #4503: U8 moves testing's forward onto @zukhruf/ssh and rewrites this file.
-  { skip: skip || UNTIL_U8 },
+  'a script that exits with a status other than 0 rejects shell with what it printed on stderr',
+  { skip: noSshd },
   async () => {
     // Arrange
-    await using directory = await standIns('serve');
+    await using sshd = await startSshd();
+    const host = new DockerHost(ENGINE_HOST, undefined, await reaching(sshd));
 
     // Act
-    const { result, stderr } = await scenario(
-      directory.path,
-      `const server = await testbed.serve({ Image: 'standin' }, { internalPort: 5432 });
-      const disconnect = await settled(server.disconnect());
-      console.log(JSON.stringify({ disconnect, sshAlive: sshAlive(), stdinEnded: existsSync(directory + '/stdin-ended') }));`,
-    );
+    const shell = host.shell("echo 'no such fixture' >&2; exit 3");
 
-    // Assert: ssh stopped because disconnect ended its stdin, not by the SIGKILL fallback.
-    assert.equal(result.disconnect, 'resolved', JSON.stringify(result));
-    assert.equal(result.sshAlive, false);
-    assert.equal(result.stdinEnded, true);
-    assert.equal(stderr, '');
+    // Assert
+    await assert.rejects(shell, (error: Error) => {
+      assert.match(error.message, /: no such fixture$/);
+      assert.ok(error.cause instanceof ExitError);
+      assert.deepEqual(error.cause.exit, { kind: 'status', exitStatus: 3 });
+      return true;
+    });
   },
 );
 
 test(
-  'an ssh forward ends by itself when the process that opened it is killed',
-  // #4503: U8 moves testing's forward onto @zukhruf/ssh and rewrites this file.
-  { skip: skip || UNTIL_U8 },
+  'a process killed while its forward carries a connection leaves no process of the connection on the engine host',
+  { skip: noEngine },
   async (t) => {
-    // Arrange
-    await using directory = await standIns('serve');
+    // Arrange: a process holds a forward with a connection through it.
+    await using sshd = await startSshd();
+    await using service = await echoService();
+    const environment = await reaching(sshd);
+    const child = spawn(
+      process.execPath,
+      nodeWithHost(`
+        const host = new DockerHost(${JSON.stringify(ENGINE_HOST)}, undefined, ${JSON.stringify(environment)});
+        const forward = await host.forward(${service.port});
+        const socket = connect(forward.port, '127.0.0.1');
+        socket.write('ping');
+        socket.once('data', () => console.log('carrying'));
+      `),
+      { stdio: ['ignore', 'pipe', 'inherit'] },
+    );
+    const exited = once(child, 'exit');
+    try {
+      const [line]: unknown[] = await once(
+        createInterface({ input: child.stdout }),
+        'line',
+      );
+      assert.equal(line, 'carrying');
 
-    // Act: the process that opened the forward dies without closing it.
-    await assert.rejects(
-      scenario(
-        directory.path,
-        `await testbed.serve({ Image: 'standin' }, { internalPort: 5432 });
-        process.kill(process.pid, 'SIGKILL');`,
-      ),
-      { signalName: 'SIGKILL' },
+      // Act
+      child.kill('SIGKILL');
+      await exited;
+
+      // Assert: each sshd of the process's connections has exited.
+      await sshd.connectionsEnded({ signal: t.signal });
+    } finally {
+      child.kill('SIGKILL');
+    }
+  },
+);
+
+test(
+  'close of a forward closes its port and the connections that it carries',
+  { skip: noEngine },
+  async () => {
+    // Arrange
+    await using sshd = await startSshd();
+    await using service = await echoService();
+    const host = new DockerHost(ENGINE_HOST, undefined, await reaching(sshd));
+    const forward = await host.forward(service.port);
+    const socket = await openConnection(forward.port);
+    const ended = once(socket, 'close');
+
+    // Act
+    await forward.close();
+
+    // Assert
+    await ended;
+    await assert.rejects(echo(forward.port, 'after close'), {
+      code: 'ECONNREFUSED',
+    });
+  },
+);
+
+test(
+  'a forward carries a connection to the port of the engine host, both ways',
+  { skip: noEngine },
+  async () => {
+    // Arrange
+    await using sshd = await startSshd();
+    await using service = await echoService();
+    const host = new DockerHost(ENGINE_HOST, undefined, await reaching(sshd));
+    const forward = await host.forward(service.port);
+    try {
+      // Act
+      const answer = await echo(forward.port, 'through the engine host');
+
+      // Assert
+      assert.equal(answer, 'through the engine host');
+    } finally {
+      await forward.close();
+    }
+  },
+);
+
+test(
+  'shell gives the stdout of a script that reads its input on stdin, with the last newline',
+  { skip: noSshd },
+  async () => {
+    // Arrange
+    await using sshd = await startSshd();
+    const host = new DockerHost(ENGINE_HOST, undefined, await reaching(sshd));
+
+    // Act
+    const { stdout } = await host.shell('cat', 'first line\nsecond line\n');
+
+    // Assert
+    assert.equal(stdout, 'first line\nsecond line\n');
+  },
+);
+
+test(
+  'after its SSH connection was lost, the next shell of the host opens a new one',
+  { skip: noEngine },
+  async () => {
+    // Arrange: the host's connection is lost while a forward carries a connection.
+    await using sshd = await startSshd();
+    await using service = await echoService();
+    const host = new DockerHost(ENGINE_HOST, undefined, await reaching(sshd));
+    const forward = await host.forward(service.port);
+    const socket = await openConnection(forward.port);
+    const ended = once(socket, 'close');
+    sshd.kill('SIGKILL');
+    await ended;
+    await forward.close().catch(() => {});
+
+    // Act
+    const { stdout } = await host.shell('echo again');
+
+    // Assert
+    assert.equal(stdout, 'again\n');
+  },
+);
+
+test(
+  'in a run whose global setup serves the run’s SSH connection, shell goes through that control master',
+  { skip: noSshd },
+  async () => {
+    // Arrange: the run's directory holds the master, as the global setup
+    // will serve it (ADR 0024). A connection of the host's own would be
+    // refused.
+    await using sshd = await startSshd();
+    await using directory = await new TemporaryFiles().directory('run-', {
+      parent: '/tmp',
+    });
+    const config = await OpenSshConfig.resolve(ENGINE_HOST, {
+      environment: await reaching(sshd),
+    });
+    await using client = await config.dial({ clock: globalThis });
+    await using _master = await ControlMaster.listen(
+      client,
+      join(directory.path, 'ssh.sock'),
+    );
+    const host = new DockerHost(
+      ENGINE_HOST,
+      runAt(directory.path),
+      await reaching(sshd, await closedPort()),
     );
 
-    // Assert: ssh, orphaned, sees its stdin end and exits.
-    const pid = Number(await readFile(join(directory.path, 'ssh.pid'), 'utf8'));
+    // Act
+    const { stdout } = await host.shell('echo through the master');
+
+    // Assert
+    assert.equal(stdout, 'through the master\n');
+  },
+);
+
+test(
+  'in a run whose global setup serves the run’s SSH connection, a forward carries its connections through that control master',
+  { skip: noEngine },
+  async () => {
+    // Arrange: as above; a connection of the host's own would be refused.
+    await using sshd = await startSshd();
+    await using service = await echoService();
+    await using directory = await new TemporaryFiles().directory('run-', {
+      parent: '/tmp',
+    });
+    const config = await OpenSshConfig.resolve(ENGINE_HOST, {
+      environment: await reaching(sshd),
+    });
+    await using client = await config.dial({ clock: globalThis });
+    await using _master = await ControlMaster.listen(
+      client,
+      join(directory.path, 'ssh.sock'),
+    );
+    const host = new DockerHost(
+      ENGINE_HOST,
+      runAt(directory.path),
+      await reaching(sshd, await closedPort()),
+    );
+    const forward = await host.forward(service.port);
     try {
-      await waitFor(
-        () => assert.throws(() => process.kill(pid, 0), { code: 'ESRCH' }),
-        { signal: t.signal, interval: 20 },
-      );
+      // Act
+      const answer = await echo(forward.port, 'through the master');
+
+      // Assert
+      assert.equal(answer, 'through the master');
     } finally {
-      try {
-        process.kill(pid, 'SIGKILL');
-      } catch {}
+      await forward.close();
     }
+  },
+);
+
+test(
+  'in a run whose global setup serves no SSH connection, shell opens a connection of its own',
+  { skip: noSshd },
+  async () => {
+    // Arrange: the run's directory has no master socket.
+    await using sshd = await startSshd();
+    await using directory = await new TemporaryFiles().directory('run-', {
+      parent: '/tmp',
+    });
+    const host = new DockerHost(
+      ENGINE_HOST,
+      runAt(directory.path),
+      await reaching(sshd),
+    );
+
+    // Act
+    const { stdout } = await host.shell('echo on its own');
+
+    // Assert
+    assert.equal(stdout, 'on its own\n');
+  },
+);
+
+test(
+  'a shell keeps its process alive until the script ends, and the idle connection then lets the process exit',
+  { skip: noSshd },
+  async () => {
+    // Arrange
+    await using sshd = await startSshd();
+    const environment = await reaching(sshd);
+
+    // Act: nothing but the shell keeps the process alive.
+    const { stdout } = await run(
+      process.execPath,
+      nodeWithHost(`
+        const host = new DockerHost(${JSON.stringify(ENGINE_HOST)}, undefined, ${JSON.stringify(environment)});
+        void host.shell('sleep 1; echo done').then(({ stdout }) => process.stdout.write(stdout));
+      `),
+      { timeout: 30_000, killSignal: 'SIGKILL' },
+    );
+
+    // Assert: the output came, and the process ended by itself.
+    assert.equal(stdout, 'done\n');
   },
 );

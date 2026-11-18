@@ -16,6 +16,9 @@
     },
     {
       "path": "../fs/tsconfig.lib.json"
+    },
+    {
+      "path": "../ssh/tsconfig.lib.json"
     }
   ]
 }

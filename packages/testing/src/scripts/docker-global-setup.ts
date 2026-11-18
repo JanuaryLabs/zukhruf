@@ -110,7 +110,7 @@ export async function globalSetup(): Promise<void> {
   );
   if (!current) throw new Error('Docker selects no context');
   // Refuses an engine that the tests do not support.
-  const { endpoint } = new DockerHost(current.host, undefined);
+  const { endpoint } = new DockerHost(current.host, undefined, process.env);
   await recover(root, endpoint);
 
   const run: Run = { id: randomUUID(), endpoint, pid: process.pid };

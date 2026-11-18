@@ -74,7 +74,7 @@ export class DockerDirectory implements AsyncDisposable {
 
   async readFile(name: string): Promise<string> {
     const path = this.resolve(name);
-    // base64 prevents nano-spawn from stripping the fixture's trailing newline.
+    // base64 carries the fixture's bytes exactly through the session's text output.
     if (this.host.remote)
       return Buffer.from(
         (await this.host.shell(`base64 < ${quote(path)}`)).stdout,
