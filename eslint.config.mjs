@@ -86,6 +86,7 @@ export default defineConfig(
       'zukhruf/hono',
       'zukhruf/diagnostics',
       'zukhruf/nx-project-json',
+      'zukhruf/tsconfig',
       'island/recommended',
       'manifest/recommended',
     ],
