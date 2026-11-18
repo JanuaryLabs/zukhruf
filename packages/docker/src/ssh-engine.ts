@@ -1,6 +1,6 @@
 import { Duplex, type Readable } from 'node:stream';
 
-import { type WallClock, untilAborted } from '@zukhruf/async';
+import { RefCount, type WallClock, untilAborted } from '@zukhruf/async';
 import { type Client, OpenChannelError } from '@zukhruf/ssh';
 import { OpenSshConfig } from '@zukhruf/ssh/config';
 
@@ -28,68 +28,49 @@ class ChannelError extends Error {
 }
 
 /**
- * Keeps the SSH client ref'd while one of its channels is in use, and unrefs
- * it when none is, so an idle client does not keep the process running (the
- * pattern of RemoteLockClient#updateRef in @zukhruf/mutex). The client is
- * ref'd until the first channel, the ping of connect(), is released.
+ * Whether a connection holds the client ref'd: each state gives the next one.
+ * http.Agent calls ref() and unref() on a socket many times
+ * (keepSocketAlive, reuseSocket), and each change of state moves the count
+ * of the client once.
  */
-class ChannelsInUse {
-  readonly #client: Client;
-  #count = 0;
-
-  constructor(client: Client) {
-    this.#client = client;
-  }
-
-  hold(): void {
-    this.#count += 1;
-    if (this.#count === 1) this.#client.ref();
-  }
-
-  release(): void {
-    this.#count -= 1;
-    if (this.#count === 0) this.#client.unref();
-  }
-}
-
-/** Whether a connection keeps the client ref'd: each state gives the next one. */
 interface RefState {
-  ref(inUse: ChannelsInUse): RefState;
-  unref(inUse: ChannelsInUse): RefState;
+  ref(refs: RefCount): RefState;
+  unref(): RefState;
 }
-
-const counted: RefState = {
-  ref: () => counted,
-  unref: (inUse) => {
-    inUse.release();
-    return uncounted;
-  },
-};
 
 const uncounted: RefState = {
-  ref: (inUse) => {
-    inUse.hold();
-    return counted;
-  },
+  ref: (refs) => counted(refs.hold()),
   unref: () => uncounted,
 };
+
+function counted(held: Disposable): RefState {
+  const state: RefState = {
+    ref: () => state,
+    unref: () => {
+      held[Symbol.dispose]();
+      return uncounted;
+    },
+  };
+  return state;
+}
 
 /**
  * One connection to the engine: an open direct-streamlocal@openssh.com
  * channel to the engine socket, with the calls that Node's http.Agent makes
  * on a socket. The end of its write side sends channel EOF, so the engine
  * reads the end of the input of a hijacked connection, and its output stays
- * open. It comes counted in `inUse`.
+ * open. It comes with the hold of `refs` that its open took.
  */
 class ChannelConnection extends Duplex implements Connection {
   readonly #channel: Duplex;
-  readonly #inUse: ChannelsInUse;
-  #ref: RefState = counted;
+  readonly #refs: RefCount;
+  #ref: RefState;
 
-  constructor(channel: Duplex, inUse: ChannelsInUse) {
+  constructor(channel: Duplex, refs: RefCount, held: Disposable) {
     super({ allowHalfOpen: true });
     this.#channel = channel;
-    this.#inUse = inUse;
+    this.#refs = refs;
+    this.#ref = counted(held);
     channel.on('data', (chunk: Buffer) => {
       if (!this.push(chunk)) channel.pause();
     });
@@ -132,13 +113,13 @@ class ChannelConnection extends Duplex implements Connection {
 
   /** A connection in use keeps the process running. */
   ref(): this {
-    if (!this.destroyed) this.#ref = this.#ref.ref(this.#inUse);
+    if (!this.destroyed) this.#ref = this.#ref.ref(this.#refs);
     return this;
   }
 
   /** An idle connection, or one with `ref: false`, does not keep the process running. */
   unref(): this {
-    this.#ref = this.#ref.unref(this.#inUse);
+    this.#ref = this.#ref.unref();
     return this;
   }
 
@@ -167,13 +148,14 @@ export class SshDialer implements Dialer {
   readonly #client: Client;
   readonly #host: string;
   readonly #socketPath: string;
-  readonly #inUse: ChannelsInUse;
+  /** Keeps the client ref'd while a channel is in use (the client is ref'd until the first channel, the ping of connect(), is released). */
+  readonly #refs: RefCount;
 
   private constructor(client: Client, host: string, socketPath: string) {
     this.#client = client;
     this.#host = host;
     this.#socketPath = socketPath;
-    this.#inUse = new ChannelsInUse(client);
+    this.#refs = new RefCount(client);
   }
 
   /**
@@ -231,12 +213,12 @@ export class SshDialer implements Dialer {
    * AllowStreamLocalForwarding no.
    */
   async dial(): Promise<Connection> {
-    this.#inUse.hold();
+    const opening = this.#refs.hold();
     try {
       const channel = await this.#client.dial('unix', this.#socketPath);
-      return new ChannelConnection(channel, this.#inUse);
+      return new ChannelConnection(channel, this.#refs, opening);
     } catch (error) {
-      this.#inUse.release();
+      opening[Symbol.dispose]();
       if (error instanceof OpenChannelError) {
         throw new ConnectionFailedError(this.#host, {
           cause: error,
