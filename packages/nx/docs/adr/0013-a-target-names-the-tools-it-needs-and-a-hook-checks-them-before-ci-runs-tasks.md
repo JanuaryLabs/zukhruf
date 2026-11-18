@@ -1,6 +1,6 @@
 # A target names the tools it needs, and a hook checks them before CI runs tasks
 
-Status: Proposed 2026-11-18 (backlog #4654), for the owner's review.
+Status: Rejected 2026-11-18 by the owner (backlog #4654). The check is not built; each CI workflow keeps installing its tools by hand. This record stays so the design is not proposed again without new facts.
 
 The standard says: CI installs each tool that a target runs ([Rules that are still prose](../../README.md#rules-that-are-still-prose)). No check enforces it. A **tool** here is a command that a target runs and that `npm ci` does not install, for example `tofu`, `zig` or `docker`. Nx puts `node_modules/.bin` first on the `PATH` of each `nx:run-commands` task (`nx/dist/src/executors/run-commands/running-tasks.js:516-533`), so a command from the lockfile is always there. A tool is not.
 
