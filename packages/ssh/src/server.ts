@@ -17,6 +17,7 @@ import { Future, Latch } from '@zukhruf/async';
 
 import { splitHostPort } from './address.ts';
 import { type PrivateKey, protocolKeyOf } from './private-key.ts';
+import type { Prompt } from './prompt.ts';
 import { PublicKey } from './public-key.ts';
 import type { SignalName, TerminalModes, WindowSize } from './session.ts';
 import {
@@ -28,12 +29,6 @@ import {
   parseTerminalModes,
   removeKeepalive,
 } from './ssh2-server-channel.ts';
-
-/** RFC 4256 §3.2. */
-export interface Prompt {
-  readonly prompt: string;
-  readonly echo: boolean;
-}
 
 /** Go's ssh.ServerConfig. No clock: the server waits on no timer, and the signal of ServerConn.handshake bounds a slow handshake. */
 export interface ServerConfig {

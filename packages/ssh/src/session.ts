@@ -25,7 +25,8 @@ export interface SessionChannel {
   close(): void;
 }
 
-export interface SessionRequest {
+/** The command, the env and the pty that a session sends when its channel opens. */
+export interface SessionStart {
   /** undefined for a shell. */
   readonly command: string | undefined;
   readonly env: Readonly<Record<string, string>>;
@@ -38,7 +39,7 @@ export interface Pty {
   readonly modes: TerminalModes | undefined;
 }
 
-export type OpenSession = (request: SessionRequest) => Promise<SessionChannel>;
+export type OpenSession = (start: SessionStart) => Promise<SessionChannel>;
 
 const bridge: { construct: (open: OpenSession) => Session } = {
   construct: () => {

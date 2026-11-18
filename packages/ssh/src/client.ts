@@ -4,8 +4,10 @@ import type { Duplex } from 'node:stream';
 import ssh2, {
   type ClientChannel,
   type IdentityCallback,
+  type KeyboardInteractiveCallback,
   type NextAuthHandler,
   type ParsedKey,
+  type Prompt as ProtocolPrompt,
   type ServerHostKeyAlgorithm,
   type SignCallback,
   type SigningRequestOptions,
@@ -16,6 +18,7 @@ import { type Clock, Future, Latch, timeout } from '@zukhruf/async';
 import { joinHostPort, splitHostPort } from './address.ts';
 import { ChannelStream } from './channel-stream.ts';
 import type { Signer } from './private-key.ts';
+import type { Prompt } from './prompt.ts';
 import { PublicKey } from './public-key.ts';
 import {
   type RemoteListener,
@@ -26,7 +29,7 @@ import {
   type Pty,
   Session,
   type SessionChannel,
-  type SessionRequest,
+  type SessionStart,
   type SignalName,
   createSession,
 } from './session.ts';
@@ -64,11 +67,19 @@ export type HostKeyCallback = (
   key: PublicKey,
 ) => void | Promise<void>;
 
-/** Go's ssh.AuthMethod: PublicKeysCallback. */
-export type AuthMethod = {
-  readonly type: 'publickey';
-  readonly signers: () => Promise<readonly Signer[]>;
-};
+/** Go's ssh.AuthMethod: PublicKeysCallback, Password, KeyboardInteractive. */
+export type AuthMethod =
+  | {
+      readonly type: 'publickey';
+      readonly signers: () => Promise<readonly Signer[]>;
+    }
+  | { readonly type: 'password'; readonly password: string }
+  | {
+      readonly type: 'keyboard-interactive';
+      readonly respond: (
+        prompts: readonly Prompt[],
+      ) => Promise<readonly string[]>;
+    };
 
 export class AuthenticationError extends Error {
   readonly attempted: readonly string[];
@@ -256,10 +267,10 @@ export class Client implements AsyncDisposable {
 
   /** A session. Its channel opens at start(), run(), output(), combinedOutput() or shell(). Go's Client.NewSession. */
   newSession(): Session {
-    return createSession((request) =>
+    return createSession((start) =>
       openSession(
         this.#connection,
-        { ...request, env: { ...this.#sessionEnv, ...request.env } },
+        { ...start, env: { ...this.#sessionEnv, ...start.env } },
         () => this.#phase.cause,
       ),
     );
@@ -471,7 +482,7 @@ function listenRefused(address: string, error: Error): Error {
 // shell() with a window of false asks for no pty.
 function openSession(
   connection: ssh2.Client,
-  request: SessionRequest,
+  start: SessionStart,
   endedBy: () => Error | undefined,
 ): Promise<SessionChannel> {
   const opened = Promise.withResolvers<SessionChannel>();
@@ -479,12 +490,12 @@ function openSession(
     if (error) opened.reject(error);
     else opened.resolve(adaptChannel(channel, endedBy));
   };
-  const env = { ...request.env };
-  const pty = ptyOptions(request.pty);
-  if (request.command === undefined) {
+  const env = { ...start.env };
+  const pty = ptyOptions(start.pty);
+  if (start.command === undefined) {
     connection.shell(pty ?? false, { env }, callback);
   } else {
-    connection.exec(request.command, { env, ...(pty && { pty }) }, callback);
+    connection.exec(start.command, { env, ...(pty && { pty }) }, callback);
   }
   return opened.promise;
 }
@@ -605,13 +616,54 @@ class Authentication {
     if (!this.#attempted.includes(method.type)) {
       this.#attempted.push(method.type);
     }
-    method
-      .signers()
-      .then(
-        (signers) =>
-          next({ type: 'agent', username, agent: new SignerAgent(signers) }),
-        this.#fail,
-      );
+    switch (method.type) {
+      case 'publickey':
+        method.signers().then(
+          (signers) =>
+            next({
+              type: 'agent',
+              username,
+              agent: new SignerAgent(signers),
+            }),
+          this.#fail,
+        );
+        return;
+      case 'password':
+        next({ type: 'password', username, password: method.password });
+        return;
+      case 'keyboard-interactive':
+        next({
+          type: 'keyboard-interactive',
+          username,
+          prompt: (_name, _instructions, _lang, prompts, finish) =>
+            this.#answer(method.respond, prompts, finish),
+        });
+    }
+  }
+
+  // ssh2 1.17.0 answers a round with zero prompts itself, and calls prompt
+  // only for a round that has one (client.js:477-499).
+  #answer(
+    respond: (prompts: readonly Prompt[]) => Promise<readonly string[]>,
+    prompts: readonly ProtocolPrompt[],
+    finish: KeyboardInteractiveCallback,
+  ): void {
+    const asked = prompts.map(({ prompt, echo }) => ({
+      prompt,
+      echo: echo === true,
+    }));
+    Promise.try(() => respond(asked)).then((answers) => {
+      // As Go's KeyboardInteractiveChallenge.auth, which sends no answers then.
+      if (answers.length !== asked.length) {
+        this.#fail(
+          new Error(
+            `ssh: incorrect number of answers from keyboard-interactive callback ${answers.length} (expected ${asked.length})`,
+          ),
+        );
+        return;
+      }
+      finish([...answers]);
+    }, this.#fail);
   }
 }
 

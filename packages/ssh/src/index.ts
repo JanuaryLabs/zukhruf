@@ -11,12 +11,12 @@ export {
   PrivateKey,
   type Signer,
 } from './private-key.ts';
+export type { Prompt } from './prompt.ts';
 export { PublicKey } from './public-key.ts';
 export { RemoteListener } from './remote-listener.ts';
 export {
   type GlobalRequest,
   type IncomingChannel,
-  type Prompt,
   type ServerConfig,
   ServerConn,
   ServerSession,
