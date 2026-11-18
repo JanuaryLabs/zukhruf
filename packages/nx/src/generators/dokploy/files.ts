@@ -410,12 +410,12 @@ export function registryTf(stack: Stack, registry: Registry): string {
   return `# Dokploy runs \`docker login\` on the server when it stores a registry, and a
 # compose deploy pulls with that login, so the server pulls the private images.
 # The login is the server's docker login for ghcr.io: each stack on the server
-# that stores a GHCR registry replaces it.
+# that stores a GHCR registry replaces it. The URL is a bare host: Dokploy
+# refuses one with a scheme ("Registry URL must be a valid hostname or
+# hostname:port").
 resource "dokploy_registry" "ghcr" {
   registry_name = "${stack.name}-ghcr"
   registry_type = "cloud"
-  # A bare host: Dokploy refuses a URL with a scheme ("Registry URL must be a
-  # valid hostname or hostname:port"), found by meddit's first deploy.
   registry_url  = "ghcr.io"
   image_prefix  = "ghcr.io"
   username      = "${registry.username}"
