@@ -44,6 +44,10 @@ _Avoid_: Queue (`@zukhruf/sqlite-queue` keeps jobs), waiters list
 A caller that holds a permit of a lock or a semaphore, from the grant to the dispose.
 _Avoid_: Owner (a holder can give its permit to other code), user
 
+**Ref count**:
+`RefCount`. It keeps a handle of the event loop ref'd while work holds a token of it, and unrefs the handle when the last token is disposed. The name comes from libuv's ref and Node's `refCounted`; a ref count does not wait for anything.
+_Avoid_: Keep-alive (the word of HTTP and of TCP), wait group (a wait group lets callers wait for zero)
+
 **Wait group**:
 `WaitGroup`. It counts the work in flight, one token for each work, and a wait on it ends when the count is zero. The count can go up again after zero: each time it reaches zero, each wait that started before that zero ends. The name is the one of Go `sync.WaitGroup`.
 _Avoid_: Countdown, countdown latch (Java `CountDownLatch` and .NET `CountdownEvent` cannot count up after zero), task tracker (the name in tokio_util), latch (a latch opens once)

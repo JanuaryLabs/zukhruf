@@ -1,6 +1,6 @@
 # @zukhruf/async
 
-Helpers for code that waits for promises: `untilAborted` cancels a wait, `Latch` holds callers until something happened, `Future` gives callers the value or the failure of work that ends once, `Lock` lets one caller at a time do a thing, `Semaphore` lets a number of callers at a time do it, `WaitGroup` waits until the work in flight is done, `Cond` wakes every caller that waits now, `delay` waits a fixed time on a clock, `timeout` stops a wait after a time on a clock, `poll` calls an attempt again until it gives a value, `Backoff` gives a longer wait before each retry, and `ChangeWatcher` reads gauges again and again and tells which values changed. `@zukhruf/mutex`, `@zukhruf/single-flight` and `@zukhruf/election` use them.
+Helpers for code that waits for promises: `untilAborted` cancels a wait, `Latch` holds callers until something happened, `Future` gives callers the value or the failure of work that ends once, `Lock` lets one caller at a time do a thing, `Semaphore` lets a number of callers at a time do it, `WaitGroup` waits until the work in flight is done, `RefCount` keeps the process alive only while work holds a handle, `Cond` wakes every caller that waits now, `delay` waits a fixed time on a clock, `timeout` stops a wait after a time on a clock, `poll` calls an attempt again until it gives a value, `Backoff` gives a longer wait before each retry, and `ChangeWatcher` reads gauges again and again and tells which values changed. `@zukhruf/mutex`, `@zukhruf/single-flight` and `@zukhruf/election` use them.
 
 The words in these documents have one meaning each. See the glossary in [CONTEXT.md](./CONTEXT.md).
 
@@ -168,6 +168,29 @@ await commands.wait({ signal });
 - No listener stays on the signal after a wait ends, so a signal that lives long can serve many waits.
 
 A wait group holds a latch, and puts a new latch in its place each time the count reaches zero. See [ADR 0015](./docs/adr/0015-a-wait-group-counts-disposable-tokens-and-may-count-up-again-after-zero.md).
+
+## Keep the process alive only while work holds a handle, with a ref count
+
+A ref count keeps a handle of the event loop ref'd while work holds it, and unrefs it when no work does, so an idle client or socket does not keep the process alive. `hold` gives a token, and the ref count holds the handle until you dispose the token. The handle is anything with `ref()` and `unref()`: a socket, a server, a timer, an SSH client.
+
+```ts
+import { RefCount } from '@zukhruf/async';
+
+const refs = new RefCount(client);
+client.unref();
+
+async function request(command: Command) {
+  using _request = refs.hold();
+  return await client.send(command);
+}
+```
+
+- The first hold refs the handle. The dispose of the last hold unrefs it.
+- A second dispose of one token changes nothing.
+- The constructor leaves the handle as it is, ref'd or unref'd.
+- What counts as work stays with you: a channel in use, a request that waits for its answer.
+
+libuv keeps one flag for each handle, not a count, so code that shares one handle between many users counts on top of it, as Node does for the IPC channel of a child process (`refCounted` and `unrefCounted`). See [ADR 0017](./docs/adr/0017-a-ref-count-holds-a-handle-ref-d-while-work-holds-a-token.md).
 
 ## Wake every caller that waits now, with a cond
 

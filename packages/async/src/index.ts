@@ -9,6 +9,7 @@ export { poll, type PollOptions } from './poll.ts';
 export { type AcquireOptions, Semaphore } from './semaphore.ts';
 export { timeout, type Timeout, type TimeoutOptions } from './timeout.ts';
 export { untilAborted } from './until-aborted.ts';
+export { type Referable, RefCount } from './ref-count.ts';
 export { WaitGroup } from './wait-group.ts';
 export { type WaitOptions } from './wait-options.ts';
 export { type Check } from './check.ts';
