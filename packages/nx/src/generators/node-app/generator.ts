@@ -55,7 +55,7 @@ interface ProjectPackageJson {
   scripts?: Record<string, string>;
   dependencies?: Record<string, string>;
   devDependencies?: Record<string, string>;
-  nx?: { targets?: Record<string, unknown> };
+  nx?: { projectType?: string; targets?: Record<string, unknown> };
 }
 
 export const createRequireBanner =
@@ -259,6 +259,10 @@ function writeProjectPackageJson(tree: Tree, app: ProjectIdentity): void {
       };
       packageJson.nx = {
         ...packageJson.nx,
+        // @nx/node writes no projectType into package.json. @zukhruf/eslint
+        // reads it: an application bundles, so its manifest declares the npm
+        // packages of each workspace package it imports, not the package.
+        projectType: 'application',
         targets: {
           ...targets,
           build: buildTarget(app.projectRoot),

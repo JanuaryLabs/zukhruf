@@ -147,3 +147,11 @@ _Avoid_: Domain (Dokploy has domain resources), URL
 **Pull registry**:
 The `dokploy_registry` that logs the Dokploy server in to GHCR, so a compose deploy pulls private images. `registryUser` adds it.
 _Avoid_: Image registry (GHCR is the registry), docker login
+
+**Db package**:
+The package that the `prisma` generator writes, `@<scope>/<name>`: the Prisma schema, the migrations, `createPrisma` and the test helper. Its generated client in `src/prisma` is not committed; the `generate` target writes it. A backend bundles it.
+_Avoid_: Prisma project, persistence layer, ORM package
+
+**Schema replay**:
+What `applySchema` of `<db package>/testing` does: it runs each committed `migration.sql` in order on an empty test database, with no `_prisma_migrations` record. `prisma migrate deploy` applies migrations everywhere else.
+_Avoid_: Migrate, seed, reset

@@ -146,6 +146,8 @@ test('the manifest and the portless domain come from the app and the workspace s
   const packageJson = readJson(tree, 'apps/backend/package.json');
   assert.equal(packageJson.name, '@meddit/backend');
   assert.equal(packageJson.type, 'module');
+  // @zukhruf/eslint reads it to tell a bundled app from a library.
+  assert.equal(packageJson.nx.projectType, 'application');
   assert.deepEqual(packageJson.dependencies, {
     '@godaddy/terminus': appPackageVersions['@godaddy/terminus'],
     '@hono/node-server': appPackageVersions['@hono/node-server'],

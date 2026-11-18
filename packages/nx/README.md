@@ -1,19 +1,19 @@
 # @zukhruf/nx
 
-This package is the Nx part of the monorepo standard. Each workspace copied the same Nx configuration into each project. This package gives that configuration one time, in areas. Each area has its own import path, and the package has no root entry point. Two [generators](#generators) write the root files of a workspace, and four [app generators](#app-generators) add its projects. The lint rules stay in `@zukhruf/eslint`, and the Git hooks stay in `@zukhruf/git-hooks`.
+This package is the Nx part of the monorepo standard. Each workspace copied the same Nx configuration into each project. This package gives that configuration one time, in areas. Each area has its own import path, and the package has no root entry point. Two [generators](#generators) write the root files of a workspace, four [app generators](#app-generators) add its projects, and the [prisma generator](#prisma-generator) adds a db package. The lint rules stay in `@zukhruf/eslint`, and the Git hooks stay in `@zukhruf/git-hooks`.
 
 The words in these documents have one meaning each. See the glossary in [CONTEXT.md](./CONTEXT.md).
 
 ## Areas
 
-| Area             | Import path            | Status                                                                                          |
-| ---------------- | ---------------------- | ----------------------------------------------------------------------------------------------- |
-| format           | `@zukhruf/nx/format`   | This README                                                                                     |
-| test             | `@zukhruf/nx/test`     | This README                                                                                     |
-| lint             | `@zukhruf/nx/lint`     | This README                                                                                     |
-| portless         | `@zukhruf/nx/portless` | Candidate (#3336): 14 projects in 3 repos                                                       |
-| opentofu, prisma | `@zukhruf/nx/<area>`   | This README (#3339)                                                                             |
-| generators       | `@zukhruf/nx:<name>`   | This README: `preset` and `init` (#3337); `node-app`, `react-app`, `pair`, `ui-package` (#3338) |
+| Area             | Import path            | Status                                                                                                            |
+| ---------------- | ---------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| format           | `@zukhruf/nx/format`   | This README                                                                                                       |
+| test             | `@zukhruf/nx/test`     | This README                                                                                                       |
+| lint             | `@zukhruf/nx/lint`     | This README                                                                                                       |
+| portless         | `@zukhruf/nx/portless` | Candidate (#3336): 14 projects in 3 repos                                                                         |
+| opentofu, prisma | `@zukhruf/nx/<area>`   | This README (#3339)                                                                                               |
+| generators       | `@zukhruf/nx:<name>`   | This README: `preset` and `init` (#3337); `node-app`, `react-app`, `pair`, `ui-package` (#3338); `prisma` (#4604) |
 
 The lint rules stay in `@zukhruf/eslint`. The `lint` area gives only the inputs of the `lint` target (#3335).
 
@@ -1060,6 +1060,83 @@ The tests run each generator on a virtual `Tree` with Nx 23.2.1, which zukhruf's
 After the steps of [Test the preset before a release](#test-the-preset-before-a-release), in the generated repo: run the 3 commands of [Add a backend, a web app and their pair](#add-a-backend-a-web-app-and-their-pair), then `npx nx run-many -t typecheck lint test build`, the first commit (each hook passes), `npx nx run @acme/backend:docker:build`, and a container whose `/api/healthz` reports `git rev-parse HEAD`.
 
 The decisions are in [ADR 0010](./docs/adr/0010-the-app-generators-move-here-and-call-the-generators-of-nx.md). The backlog item of the app generators is #3338.
+
+## prisma generator
+
+`prisma` writes a Postgres db package on Prisma 7 and `@prisma/adapter-pg`, and can connect a node-app to it. text2sql holds 5 copies of the package and factory 1, and meddit is the next one, so the shape moves here (#4604). The targets come from the [prisma area](#prisma): the generator writes none.
+
+### Add a db package
+
+```sh
+npx nx g @zukhruf/nx:prisma packages/db --backend apps/backend
+npm install
+npx nx sync
+npx nx run @acme/db:generate
+```
+
+Then `npx nx run-many -t typecheck lint test build` passes, and the tests of `@acme/db` and `@acme/backend` run against a Postgres of `@zukhruf/testing`. Leave out `--backend` for a package that no backend uses yet.
+
+### Signature of the prisma generator
+
+```ts
+// @zukhruf/nx:prisma
+interface PrismaOptions {
+  directory: string; // the project root, for example packages/db
+  backend?: string; // the project root of a node-app, for example apps/backend
+}
+```
+
+The schema sets `additionalProperties: false`. The package name is `@<scope>/<last segment of directory>`, for example `@acme/db`.
+
+### What the prisma generator writes
+
+| File                                  | Content                                                                                                                                                                                                  |
+| ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `schema.prisma`                       | the `prisma-client` generator with `output = "src/prisma"` and `importFileExtension = "ts"`, and the `postgresql` datasource; the models go in `models/*.prisma`                                         |
+| `prisma.config.ts`                    | `schema: '.'`, `migrations.path: 'migrations'`, `url` from `CONNECTION_STRING` and `shadowDatabaseUrl` from `SHADOW_CONNECTION_STRING`, each read only when set, so `generate` runs with none; no dotenv |
+| `migrations/migration_lock.toml`      | `provider = "postgresql"`                                                                                                                                                                                |
+| `models/.gitkeep`                     | the image copies `models/`, so the folder is in Git before the first model                                                                                                                               |
+| `src/index.ts`                        | `createPrisma({ connectionString })` on the Postgres adapter, and each export of the generated client; it reads no environment                                                                           |
+| `src/testing.ts`                      | `applySchema(connectionString)`: runs each `migrations/*/migration.sql` in order with `pg`, with no `_prisma_migrations` record, for a test database that is thrown away                                 |
+| `src/index.test.ts`                   | a query on a database of `@zukhruf/testing/postgres` after `applySchema`; the project has the tag `test:docker`                                                                                          |
+| `package.json`                        | the `.` and `./testing` exports (`development` the source, `import` `dist`); `@prisma/client`, `@prisma/adapter-pg`, `pg` and `tslib` in `dependencies`; `prisma` and `@types/pg` in `devDependencies`   |
+| `tsconfig.lib.json`                   | the build: JavaScript and declarations into `dist`, with `rewriteRelativeImportExtensions`, because the generated client imports `.ts` files                                                             |
+| `tsconfig.json`, `tsconfig.test.json` | the solution file and the tests, as in node-app                                                                                                                                                          |
+| `eslint.config.mjs`                   | ignores `src/prisma`; Modern Node; `allowDefaultProject` for `prisma.config.ts`                                                                                                                          |
+| `.env.example`, `.env`                | `CONNECTION_STRING=` and `SHADOW_CONNECTION_STRING=`; `.env` only when missing                                                                                                                           |
+| `Dockerfile.migration`                | `npm ci --workspace=<package>` installs the CLI from the lockfile, and `CMD npx prisma migrate deploy` applies the migrations to the `CONNECTION_STRING` of the container                                |
+
+At the root: `@zukhruf/nx/prisma` in `plugins`; `generate` in the `dependsOn` of the `typecheck` and `build` defaults, with `...`; `<root>/src/prisma` in `.gitignore` and `.prettierignore`; `.dockerignore` when missing; the package root in `workspaces` when no `<parent>/*` glob holds it; `@zukhruf/testing`; and `@prisma/engines: true`, `prisma: false`, `ssh2: false`, `cpu-features: false` in `allowScripts`. A second run keeps the files of the package and adds no line or key twice.
+
+With `--backend`, the node-app gets:
+
+- `CONNECTION_STRING: z.string().min(1)` in `src/env.ts`, and the key in `.env.example` and in a `.env` that has none.
+- In `src/startup.ts`, the client and one `SELECT 1` before the app serves, so a database that refuses the connection stops the boot. `$connect()` alone opens no connection on a driver adapter.
+- `await prisma.$disconnect()` in the terminus `onSignal` of `src/server.ts`.
+- `src/database.test.ts`, which imports the package through its exports, and the tag `test:docker`.
+- The npm packages of the db package in its `dependencies`, not the package: the bundle inlines the package and leaves them external, so `prune-lockfile` puts them in the image.
+
+### Versions that the prisma generator writes
+
+`prisma`, `@prisma/client` and `@prisma/adapter-pg` have one exact version, 7.10.1, in `appPackageVersions`. The `latest` tag of `prisma` is a release candidate of 8 (8.0.0-rc.34 on 2026-11-18) while the other two are at 7.10.1, so no version comes from `latest`, and a test checks that the three are equal and stable.
+
+### Migrations
+
+Write a migration by hand, or with `npx prisma migrate diff --from-empty --to-schema . --script` in the package for the first one, into `migrations/<timestamp>_<name>/migration.sql`. Apply it with `nx run @acme/db:deploy`, or with the image. `migrate dev` needs a TTY, so an agent does not run it, and nothing runs `migrate reset` on a shared database.
+
+### Errors of the prisma generator
+
+| Error                                                                  | When                                                      |
+| ---------------------------------------------------------------------- | --------------------------------------------------------- |
+| `apps/api has no sdk-it.config.ts, so it is not a node-app. Run …`     | `--backend` names a project that `node-app` did not write |
+| `packages/db already belongs to @acme/other.`                          | `directory` holds another package                         |
+| `apps/backend/src/server.ts has no "import './startup.ts';", so the …` | a backend file lost the line that the wiring changes      |
+
+### Test the prisma generator before a release
+
+After the steps of [Test the preset before a release](#test-the-preset-before-a-release): `node-app apps/backend`, the 4 commands of [Add a db package](#add-a-db-package), and `npx nx run-many -t typecheck lint test build`. Then add a model and a first migration, put `@zukhruf/nx` back on the registry version (`npm ci` in an image cannot read a `file:` tarball), build `Dockerfile.migration`, and run its container against a new `postgres:18-alpine`: `prisma migrate deploy` applies the migration. On 2026-11-18 each step passed, and the backend image served `/api/healthz` with one database session and stopped at start with a wrong password.
+
+The decisions are in [ADR 0012](./docs/adr/0012-the-prisma-generator-writes-a-postgres-db-package-and-wires-a-backend.md). The backlog item is #4604.
 
 ## dokploy generator
 

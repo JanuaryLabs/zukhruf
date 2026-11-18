@@ -13,9 +13,11 @@ export default [
   { settings: { env: { startupFile: 'src/env.ts' } } },
   // No tsconfig of the project includes sdk-it.config.ts, so typed lint gives
   // it the default project. The path is relative to the workspace root, the
-  // tsconfigRootDir of @zukhruf/eslint.
+  // tsconfigRootDir of @zukhruf/eslint. The block takes each .ts file, as the
+  // root block does: one project service serves the process, with the options
+  // of the first file it parses.
   {
-    files: ['sdk-it.config.ts'],
+    files: ['**/*.ts'],
     languageOptions: {
       parserOptions: {
         projectService: {

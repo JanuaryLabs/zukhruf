@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/schema",
+  "$id": "ZukhrufNxPrisma",
+  "title": "Add a Postgres db package on Prisma",
+  "type": "object",
+  "properties": {
+    "directory": {
+      "type": "string",
+      "description": "The project root of the db package, for example packages/db.",
+      "alias": "dir",
+      "$default": { "$source": "argv", "index": 0 },
+      "x-prompt": "Which directory gets the db package?"
+    },
+    "backend": {
+      "type": "string",
+      "description": "The project root of a node-app that connects to the database before it serves, for example apps/backend."
+    }
+  },
+  "required": ["directory"],
+  "additionalProperties": false
+}

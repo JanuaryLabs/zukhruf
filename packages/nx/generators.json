@@ -30,6 +30,11 @@
       "schema": "./src/generators/ui-package/schema.json",
       "description": "Add a buildable React package with a Vite library build, types and a development export condition."
     },
+    "prisma": {
+      "implementation": "./dist/generators/prisma/generator.js",
+      "schema": "./src/generators/prisma/schema.json",
+      "description": "Add a Postgres db package on Prisma 7 and @prisma/adapter-pg, with a migration image and a test helper, and connect a node-app to it."
+    },
     "dokploy": {
       "implementation": "./dist/generators/dokploy/generator.js",
       "schema": "./src/generators/dokploy/schema.json",

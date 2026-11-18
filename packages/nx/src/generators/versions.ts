@@ -88,6 +88,16 @@ export const appPackageVersions = {
   '@vitest/coverage-v8': '5.1.1',
   'happy-dom': '21.0.4',
   vitest: '5.1.1',
+  // prisma: the CLI, the client and its Postgres adapter release together and
+  // must have one version. The `latest` tag of `prisma` is a release candidate
+  // of 8 (8.0.0-rc.34 on 2026-11-18), so the three are pinned to the last
+  // stable version, and a test checks that they are equal (#4604).
+  prisma: '7.10.1',
+  '@prisma/client': '7.10.1',
+  '@prisma/adapter-pg': '7.10.1',
+  // The test helper of a db package replays the migrations with pg.
+  pg: '8.23.1',
+  '@types/pg': '8.23.1',
 } as const satisfies Record<string, string>;
 
 /** The zukhruf packages that the root files load. */
