@@ -68,7 +68,11 @@ async function recover(root: string, endpoint: string): Promise<void> {
   let engine: Docker | undefined;
   const connection = async (): Promise<Docker> =>
     (engine ??= resources.use(
-      await Docker.connect({ clock: globalThis, host: endpoint }),
+      await Docker.connect({
+        clock: globalThis,
+        host: endpoint,
+        environment: process.env,
+      }),
     ));
   // Listed once, for all dead runs, and only when one needs it.
   let databases: Promise<string[]> | undefined;
