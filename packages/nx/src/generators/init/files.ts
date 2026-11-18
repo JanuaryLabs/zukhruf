@@ -1,6 +1,6 @@
-// The content of each root file that a generator writes (monorepo standard
-// §2-8). Each is a string in a .ts module, so tsc puts it in dist with no copy
-// step (ADR 0009).
+// The content of each root file that a generator writes (README, monorepo
+// standard). Each is a string in a .ts module, so tsc puts it in dist with no
+// copy step (ADR 0009).
 
 export const gitignore = `# Dependencies and Nx state
 node_modules/

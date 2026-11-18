@@ -1,7 +1,7 @@
 {
   "name": "@zukhruf/nx",
   "version": "0.8.30",
-  "description": "The Nx part of the monorepo standard: inference plugins for format, test, lint, opentofu and prisma targets, and generators for the root files (preset, init) and the apps (node-app, react-app, pair, ui-package).",
+  "description": "The Nx part of the monorepo standard: inference plugins for format, test, lint, opentofu and prisma targets, and generators for the root files (preset, init), apps (node-app, react-app, pair, ui-package), a db package (prisma) and delivery (dokploy).",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -29,7 +29,8 @@
     "terraform",
     "prisma",
     "generator",
-    "preset"
+    "preset",
+    "dokploy"
   ],
   "type": "module",
   "exports": {

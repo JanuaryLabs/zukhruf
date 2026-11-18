@@ -1,7 +1,7 @@
 // The content of each file that react-app writes into the project. Each is a
 // string in a .ts module, so tsc puts it in dist with no copy step (ADR 0009).
 // The brand of a product (fonts, colors, favicons) is the product's own. The
-// theme script and the `dark` variant are not brand: the monorepo standard §10
+// theme script and the `dark` variant are not brand: the monorepo standard
 // puts them in every web app, and the owner kept them (ADR 0010, decision 1).
 
 export function indexHtml(name: string): string {

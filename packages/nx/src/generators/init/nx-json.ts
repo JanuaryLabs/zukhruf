@@ -102,8 +102,8 @@ export function updateTargetDefault(
 }
 
 /**
- * Merges the keys that the standard owns into nx.json (monorepo standard §4)
- * and keeps the other keys. A list gets the entries that it does not have.
+ * Merges the keys that the monorepo standard owns into nx.json and keeps the
+ * other keys. A list gets the entries that it does not have.
  */
 export function mergeNxJson(tree: Tree): void {
   updateJson(tree, 'nx.json', (nxJson: NxJsonConfiguration) => {

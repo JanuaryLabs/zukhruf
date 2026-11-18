@@ -63,7 +63,7 @@ test('the Vite config, index.html and styles carry no brand', async () => {
   const indexHtml = tree.read('apps/web/index.html', 'utf-8') ?? '';
   assert.match(indexHtml, /<title>web<\/title>/);
   assert.doesNotMatch(indexHtml, /fonts\.googleapis|favicon|theme-color/);
-  // The theme script of standard §10 sets the class before the first paint.
+  // The theme script of the standard sets the class before the first paint.
   assert.match(indexHtml, /localStorage\.getItem\('theme'\)/);
   assert.match(indexHtml, /prefers-color-scheme: dark/);
   assert.ok(

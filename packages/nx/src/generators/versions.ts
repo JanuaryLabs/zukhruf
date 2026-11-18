@@ -19,7 +19,7 @@ export const nxFamily = [
 /**
  * The other root tools, at exact versions. A generator adds a missing one and
  * keeps a version that is there. TypeScript 7 compiles and TypeScript 6 gives
- * its API to typescript-eslint and `@nx/js` (monorepo standard §1). The ESLint
+ * its API to typescript-eslint and `@nx/js` (README, monorepo standard). The ESLint
  * packages are the peers of @zukhruf/eslint that the root config loads, with
  * the 2 of `@zukhruf/eslint/modern-node`.
  */
