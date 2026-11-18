@@ -470,6 +470,34 @@ describe('PoolWorkers on a fake clock', { concurrency: true }, () => {
     );
   });
 
+  test('two jobs that end together free both slots for the next two jobs, with no wait for the backstop', async (t) => {
+    await using folder = await new TemporaryFiles().directory('pool-');
+    const clock = createClock(Date.now());
+    const workers = new HeldWorkers();
+    await using owner = await ownerOn(t, clock, folder.path, workers, {
+      workers: 2,
+      expireInSeconds: 60,
+    });
+    await using sending = await sender(owner.store, clock);
+    await sending.jobs.send(queue, { input: { id: 'a' } });
+    await sending.jobs.send(queue, { input: { id: 'b' } });
+    await fetched(t, clock, workers, 'a', 'b');
+    await sending.jobs.send(queue, { input: { id: 'c' } });
+    await sending.jobs.send(queue, { input: { id: 'd' } });
+
+    workers.answer('a');
+    workers.answer('b');
+
+    // The fake clock stands still: only the ends of a and b can wake the owner.
+    await waitFor(
+      () => {
+        for (const id of ['c', 'd'])
+          assert.ok(workers.running(id), `job ${id} runs`);
+      },
+      { signal: t.signal, interval: 5 },
+    );
+  });
+
   test("the owner kills the worker of a job at the kind's expireInSeconds, not before, and fails the job", async (t) => {
     await using folder = await new TemporaryFiles().directory('pool-');
     const clock = createClock(Date.now());
