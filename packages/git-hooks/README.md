@@ -1,6 +1,6 @@
 # @zukhruf/git-hooks
 
-Git hooks written in TypeScript. A pre-commit hook runs steps in order against the staged commit. The steps check the staged copy of each file with Prettier and change nothing, run `nx sync` on the staged commit and stage only the files that sync wrote, and build generated files when nx says that their projects are affected. A step reads a tree of the commit, and runs its tools in a snapshot of the commit, never in the working tree. A pre-push hook runs steps in order against the push. Its build step builds each pushed commit in a snapshot, never the working tree. A commit-msg hook runs steps in order against the message of the commit. Its scope step stops a subject that nx release reads with the wrong scope. A repo adds a step of its own as a class.
+Git hooks written in TypeScript. A pre-commit hook runs steps in order against the staged commit. The steps check the staged copy of each file with Prettier and change nothing, run `nx sync` on the staged commit and stage only the files that sync wrote, and build generated files when nx says that their projects are affected. A step reads a tree of the commit, and runs its tools in a snapshot of the commit, never in the working tree. A pre-push hook runs steps in order against the push. Its build step builds each pushed commit in a snapshot, never the working tree. A commit-msg hook runs steps in order against the message of the commit. Its scope step stops a subject that nx release reads with the wrong scope. Its breaking step stops a message that nx release reads as a breaking change. A repo adds a step of its own as a class.
 
 The words in these documents have one meaning each. See the glossary in [CONTEXT.md](./CONTEXT.md).
 
@@ -531,9 +531,13 @@ Git runs the commit-msg hook after you write the message, before git makes the c
 
 ```ts
 #!/usr/bin/env node
-import { NxReleaseScope, commitMsg } from '@zukhruf/git-hooks';
+import {
+  NoBreakingChange,
+  NxReleaseScope,
+  commitMsg,
+} from '@zukhruf/git-hooks';
 
-await commitMsg([new NxReleaseScope()]);
+await commitMsg([new NxReleaseScope(), new NoBreakingChange()]);
 ```
 
 Make it executable, and commit a link to it, as for the pre-commit hook:
@@ -562,6 +566,20 @@ scope     nx release reads the scope of this subject as "fs): the lock (3da0916,
 ```
 
 The step asks the parser of the repo's own nx, so it judges the subject as `nx release` of the repo does. It needs `nx` in the repo. The subject is the first paragraph of the message, with its lines joined by spaces, as `git log --format=%s` gives it. The body is not checked. A merge commit and a release commit, such as `chore(release): publish 0.7.0`, pass.
+
+## Ship no breaking change
+
+`NoBreakingChange` stops a commit when nx release reads its message as a breaking change (Conventional Commits 1.0.0). nx release makes a major version of a breaking change. nx reads a `!` before the `: ` of the subject, as in `feat!: x` and `fix(fs)!: x`, and `BREAKING CHANGE:` anywhere in the body, not only in a footer. A body that says "breaking changes" in lower case passes. nx does not read `BREAKING-CHANGE:`, the synonym of the spec, so the step passes it too.
+
+```text
+breaking  nx release reads this message as a breaking change and makes a major
+          version of it. This repo ships no breaking changes.
+          Remove the "!" before the ": " of the subject, and "BREAKING CHANGE:"
+          from the body.
+✖ commit stopped by the commit-msg hook
+```
+
+The step asks the parser of the repo's own nx (`parseGitCommit`), so it judges the message as `nx release` of the repo does. It needs `nx` in the repo. The body is the message after its first paragraph, as `git log --format=%b` gives it. A merge commit passes.
 
 ## Add a commit-msg step of your own
 

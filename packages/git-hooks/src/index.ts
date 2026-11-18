@@ -6,6 +6,7 @@ export { DependencyChecks } from './dependency-checks.ts';
 export { DockerfileInstallsFromLockfile } from './dockerfile-installs.ts';
 export { Format } from './format.ts';
 export { LockfileSync } from './lockfile-sync.ts';
+export { NoBreakingChange } from './no-breaking-change.ts';
 export { NoNumericPins } from './no-numeric-pins.ts';
 export { NpmrcPolicy } from './npmrc-policy.ts';
 export { NxReleaseScope } from './nx-release-scope.ts';
