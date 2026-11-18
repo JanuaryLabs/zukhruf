@@ -23,6 +23,7 @@ import {
   infraRoot,
   lockHcl,
   mainTf,
+  nxignore,
   outputsTf,
   prettierignore,
   providersTf,
@@ -241,6 +242,7 @@ export default async function dokployGenerator(
   });
   tree.write(`${infraRoot}/.gitignore`, gitignore);
   addLines(tree, '.prettierignore', prettierignore);
+  addLines(tree, '.nxignore', nxignore);
   tree.write(`${infraRoot}/.env.example`, envExample(stack));
   tree.write(`${infraRoot}/compose.dokploy.yml`, composeYml(stack));
   tree.write(`${environment}/versions.tf`, versionsTf(stack));

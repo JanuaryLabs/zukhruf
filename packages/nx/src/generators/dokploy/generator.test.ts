@@ -400,6 +400,28 @@ test('the infra project gets its targets from @zukhruf/nx/opentofu, listed after
   );
 });
 
+test('Nx ignores the state that the apply workflow commits, so the commit does not make the infra project affected', async () => {
+  const tree = await workspace();
+
+  await dokployGenerator(tree, { api: 'apps/backend', owner: 'acme' });
+
+  assert.equal(read(tree, '.nxignore'), 'infra/src/terraform.tfstate\n');
+});
+
+test('an existing .nxignore keeps its lines, and a second run adds the state once', async () => {
+  const tree = await workspace();
+  tree.write('.nxignore', '# vendored\nvendor/**');
+  const options: DokployOptions = { api: 'apps/backend', owner: 'acme' };
+
+  await dokployGenerator(tree, options);
+  await dokployGenerator(tree, options);
+
+  assert.equal(
+    read(tree, '.nxignore'),
+    '# vendored\nvendor/**\ninfra/src/terraform.tfstate\n',
+  );
+});
+
 test('a second run changes nothing', async () => {
   const tree = await workspace('packages/db');
   const options: DokployOptions = {

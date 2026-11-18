@@ -63,6 +63,13 @@ tfplan
 ${infraRoot}/src/terraform.tfstate
 `;
 
+// tofu-apply.yml commits the reconciled state after the deploy run that
+// applied it, and affected-range bases the next run on that run's commit, so
+// Nx must not see the state, or every deploy would ship the infra project
+// again (#4695).
+export const nxignore = `${infraRoot}/src/terraform.tfstate
+`;
+
 export function envExample(stack: Stack): string {
   const record =
     stack.host.kind === 'dns'

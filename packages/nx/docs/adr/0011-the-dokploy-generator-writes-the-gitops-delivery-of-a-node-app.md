@@ -1,6 +1,6 @@
 # The dokploy generator writes the GitOps delivery of a node-app
 
-Status: Accepted 2026-11-18 by the owner (backlog #4603), decisions 1 to 22. meddit runs on it in production. Amended 2026-11-18 (#3344): decisions 3, 15, 17 and 22, after zukhruf's actions became building blocks that each repo composes.
+Status: Accepted 2026-11-18 by the owner (backlog #4603), decisions 1 to 22. meddit runs on it in production. Amended 2026-11-18 (#3344): decisions 3, 15, 17 and 22, after zukhruf's actions became building blocks that each repo composes. Amended 2026-11-18 (#4695): decision 23, the state in `.nxignore`.
 
 text2sql (`apps/v2/terraform`, `apps/authx/terraform`) and whatisgoingon (`infra/`) deliver a backend to Dokploy the same way: an OpenTofu project with its encrypted state committed in Git, a raw compose that OpenTofu stores in Dokploy, and a deploy workflow that builds the images, applies the project and rolls the compose out. meddit is the third repo of the shape, so it moves here (#4603, strike 3). whatisgoingon after 402e87b and c9e5d7b is the working reference: it runs in production on zukhruf's kit, `tofu-apply.yml` and the `dokploy-deploy` and `wait-for-health` actions (#3273), and on `@zukhruf/nx/opentofu` (#3339). text2sql v2 is the reference for Postgres and the migrate service.
 
@@ -38,6 +38,7 @@ The package gets the generator `dokploy` in `generators.json`. The README sectio
 20. **The infra project is `infra/`, named `@<scope>/infra`**, as in whatisgoingon. It has no option for its folder (strike 1).
 21. **The generator does not run `init`.** It needs a node-app, whose generator ran `init`.
 22. **`ci.yml` runs the checks of the whole tree as background steps beside `nx affected`, and zizmor audits the workflows.** actionlint 1.7.12 refuses `parallel:` and `background:` steps and has no `$/` (its #760); zizmor 1.32 reads all three (#3344). `.github/zizmor.yml` allows tags and `@main` (`ref-pin`) and the `workflow_run` of `deploy.yml`, which checks out main after a green push run of CI.
+23. **`.nxignore` gets `infra/src/terraform.tfstate`.** `tofu-apply.yml` commits the reconciled state after the commit of the deploy run that applied it, and `affected-range` bases the next run on that commit, so without the line every deploy found the infra project affected and rolled the compose out again (#4695). text2sql found it and ignores `*.tfstate` (edd2ccb2). The generator names the one path it writes, as in `.prettierignore`, so a state file of another stack stays the repo's decision.
 
 ## Considered Options
 
