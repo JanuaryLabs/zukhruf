@@ -1,6 +1,6 @@
 {
   "name": "@zukhruf/shadcn",
-  "version": "0.8.29",
+  "version": "0.8.30",
   "description": "Each shadcn/ui component for Base UI with the nova preset, in one package. An app imports the components from one entry and the styles from one stylesheet. The shadcn CLI writes the source, and nobody edits it by hand.",
   "license": "MIT",
   "repository": {
