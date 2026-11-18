@@ -1,6 +1,6 @@
 # Each element type of the engines has a vector type
 
-Status: proposed, for Ezz's review (2026-11-18).
+Status: accepted by Ezz on 2026-11-18 ("Accept (Recommended)").
 
 The engines of the first release store four element types:
 

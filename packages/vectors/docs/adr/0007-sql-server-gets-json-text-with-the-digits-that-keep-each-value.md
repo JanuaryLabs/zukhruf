@@ -1,6 +1,6 @@
 # SQL Server gets JSON text with the digits that keep each value
 
-Status: proposed, for Ezz's review (2026-11-18).
+Status: accepted by Ezz on 2026-11-18 ("Accept (Recommended)").
 
 SQL Server has a native `VECTOR` type on the wire, but the Node driver does not speak it yet:
 

@@ -1,6 +1,6 @@
 # The package composes into the host's SQL, and never runs it
 
-Status: Ezz chose composition on 2026-11-18 ("Accept (Recommended)"); the details are proposed.
+Status: accepted by Ezz on 2026-11-18 ("Accept (Recommended)").
 
 Each engine has features that the others do not: sqlite-vec has partition keys and int8 and bit vectors, SQL Server has DiskANN, `VECTOR_SEARCH` with iterative filters, float16 and `JSON_VALUE`, and Postgres has HNSW, IVFFlat and sparse vectors. An interface over all engines can give only what all of them have. Ezz: "We should not have an abstraction that limits what each of those vector stores offers. That's why composition is very important."
 

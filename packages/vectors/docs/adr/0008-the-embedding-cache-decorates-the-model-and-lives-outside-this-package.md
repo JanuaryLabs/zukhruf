@@ -1,6 +1,6 @@
 # The embedding cache decorates the model, and lives outside this package
 
-Status: proposed, for Ezz's review (2026-11-18).
+Status: accepted by Ezz on 2026-11-18 ("Accept (Recommended)").
 
 Three places call the model only for text that they did not embed before, under a content key: `@deepagents/retrieval` (`stores/cid.ts`, the sha256 of the text), `@zukhruf/embeddings` (the sha256 of `[provider, modelId, text]`, its ADR 0002) and `@zukhruf/vector-decisions` (`src/reader/vector-cache.ts`, the same key, backlog #4375). Backlog #3134 waits to extract it. The cache uses no vector math and no SQL form: it maps a text to the vector that a model made.
 

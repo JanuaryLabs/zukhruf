@@ -1,6 +1,6 @@
 # The scope and the name come from the vector types of pgvector and the math of .NET
 
-Status: proposed, for Ezz's review (2026-11-18).
+Status: accepted by Ezz on 2026-11-18 ("Accept (Recommended)").
 
 Four programs keep vectors in SQLite, and each one writes its own vector code: `@deepagents/retrieval` (`vectorToBlob`), `@zukhruf/embeddings` (`UnitVector`, `toBlob`, a cosine in JavaScript), `@eltjs/embedding` (`unitVector`, backlog #4118 and #4044) and, through `@zukhruf/embeddings`, the Context Compiler. No program keeps vectors in SQL Server yet. Node v26.13.0 has no vector module, and `node:sqlite` has no vector function.
 

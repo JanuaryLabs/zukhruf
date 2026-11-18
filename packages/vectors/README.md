@@ -1,6 +1,6 @@
 # @zukhruf/vectors
 
-> Design on paper, for review: no code exists yet. On 2026-11-18 Ezz chose the name, a design by composition, and SQLite and SQL Server before Postgres. Each other decision waits for his ruling.
+> Design on paper: no code exists yet. Ezz accepted each ADR on 2026-11-18.
 
 A vector is a list of numbers that a model makes from a text, so that a program can find texts by meaning. Each database keeps and compares vectors in its own way. SQLite has no vector type, sqlite-vec reads float32 bytes, and SQL Server has its own `VECTOR` type. This package gives the vector types, their math, and the form of each vector in each database.
 

@@ -1,6 +1,6 @@
 # Each engine has `toSql` and `fromSql`, after pgvector
 
-Status: proposed, for Ezz's review (2026-11-18).
+Status: accepted by Ezz on 2026-11-18 ("Accept (Recommended)").
 
 Each engine reads another SQL form: SQLite and sqlite-vec read bytes, and SQL Server reads JSON text, because tedious has no `VECTOR` type yet ([ADR 0007](./0007-sql-server-gets-json-text-with-the-digits-that-keep-each-value.md)). The bit order differs too: sqlite-vec packs the least significant bit first, and pgvector writes a bit string with the first bit first.
 

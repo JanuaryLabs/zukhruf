@@ -1,6 +1,6 @@
 # Distances follow the engines, and lower is nearer
 
-Status: proposed, for Ezz's review (2026-11-18).
+Status: accepted by Ezz on 2026-11-18 ("Accept (Recommended)").
 
 Each engine of the first release gives a distance:
 

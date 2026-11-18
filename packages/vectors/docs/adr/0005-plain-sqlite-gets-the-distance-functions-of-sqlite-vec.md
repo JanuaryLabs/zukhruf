@@ -1,6 +1,6 @@
 # Plain SQLite gets the distance functions of sqlite-vec
 
-Status: proposed, for Ezz's review (2026-11-18).
+Status: accepted by Ezz on 2026-11-18 ("Accept (Recommended)").
 
 A program on plain SQLite cannot compare vectors in SQL, so `@zukhruf/embeddings` reads the rows and compares them in JavaScript (its ADR 0001). `node:sqlite` has `database.function(name, options, fn)`. On 2026-11-18 a function registered so sorted the rows of a table in `ORDER BY`, after a `WHERE … OR …` of the host, with `LIMIT`.
 
