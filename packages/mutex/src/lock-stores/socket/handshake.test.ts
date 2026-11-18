@@ -270,7 +270,11 @@ describe('Socket store protocol handshake', () => {
     async () => {
       // Arrange: the store holds a key from the stand-in leader. When the
       // store connects again, the stand-in keeps that hello unanswered,
-      // because it stops: it ends its term, and a successor takes it over.
+      // because it stops, and a successor takes its term over. The stand-in
+      // ends its term before the store connects again, so the store finds no
+      // leader to observe and waits for the answer. (A leader that the store
+      // observes ending its term is left at once, and the store then races
+      // the successor for the free term, ADR 0031.)
       await using directory = await new TemporaryFiles().directory(
         'mutex-test-',
       );
@@ -311,9 +315,9 @@ describe('Socket store protocol handshake', () => {
 
       // Act: the stand-in stops while the store holds the key, and the
       // successor leads before the stand-in hangs up on the store.
+      await term.resign();
       first?.destroy();
       const hungUp = await reconnected.promise;
-      await term.resign();
       const leading = once(successor, 'role');
       const waiting = outcome(
         successor.acquire('product:42').then((granted) => {
@@ -321,7 +325,12 @@ describe('Socket store protocol handshake', () => {
           return granted;
         }),
       );
-      await leading;
+      const [role] = await leading;
+      assert.equal(
+        role,
+        'leader',
+        'The successor must lead before the hang-up',
+      );
       hungUp.destroy();
       // Another key is granted only after the grace window. After it, the
       // successor would grant the waiter if the store had not reasserted its key.
