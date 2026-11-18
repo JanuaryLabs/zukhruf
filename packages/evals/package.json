@@ -1,6 +1,6 @@
 {
   "name": "@zukhruf/evals",
-  "version": "0.8.28",
+  "version": "0.8.29",
   "description": "Scores the answers of an eval against their labels, with one import path for each shape of answer: a core of ratios and totals, ./structured for structured values, ./classification for labels as scikit-learn scores them, and ./promptfoo.",
   "license": "MIT",
   "repository": {
@@ -63,8 +63,8 @@
     "access": "public"
   },
   "dependencies": {
-    "@zukhruf/python": "^0.8.28",
-    "@zukhruf/statistics": "^0.8.28"
+    "@zukhruf/python": "^0.8.29",
+    "@zukhruf/statistics": "^0.8.29"
   },
   "peerDependencies": {
     "@cfworker/json-schema": "4.1.4",
@@ -80,9 +80,9 @@
   },
   "devDependencies": {
     "@cfworker/json-schema": "4.1.4",
-    "@zukhruf/fs": "^0.8.28",
+    "@zukhruf/fs": "^0.8.29",
     "@zukhruf/random": "*",
-    "@zukhruf/testing": "^0.8.28",
+    "@zukhruf/testing": "^0.8.29",
     "munkres": "^2.1.1",
     "promptfoo": "0.125.1",
     "python-random": "1.0.0"
