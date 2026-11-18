@@ -143,6 +143,24 @@ test('the codegen step runs each of its targets in order when nx says one of its
   );
 });
 
+test('the codegen step builds when the only staged change is the deletion of a file in a gated project, and the commit holds the generated files beside the deletion', async () => {
+  // Arrange
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
+  const repo = await workspace(folder.path, gated);
+  await repo.git('rm', '--quiet', 'packages/backend/src/index.ts');
+
+  // Act
+  const result = await repo.commit('delete a backend file');
+
+  // Assert
+  assert.equal(result.code, 0, result.stderr);
+  assert.equal(
+    await repo.git('show', '--name-status', '--format=', 'HEAD'),
+    'A\tclient/index.ts\nA\topenapi.json\nD\tpackages/backend/src/index.ts\n',
+    'The commit must hold the spec and the client made from it, beside the deletion',
+  );
+});
+
 test('the codegen step builds nothing when no gated project is affected by the staged files', async () => {
   // Arrange
   await using folder = await new TemporaryFiles().directory('git-hooks-');
