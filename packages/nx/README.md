@@ -1049,7 +1049,7 @@ The targets of a project are in the `nx` key of its `package.json`: the generato
 
 ### What stays in factory after the move
 
-The brand: the fonts, colors, theme script and favicons of `index.html`. The generated `index.html` and `styles.css` have none of them. factory switches to these generators in C1 (#4611).
+The brand: the fonts, colors and favicons of `index.html`. The generated `index.html` has none of them; it keeps the theme script (light, dark or system, set before the first paint) and `styles.css` keeps the `dark` variant, as the monorepo standard §10 asks (ADR 0010). factory switches to these generators in #4611.
 
 ### Tests of the app generators
 

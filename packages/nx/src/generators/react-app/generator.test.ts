@@ -63,10 +63,18 @@ test('the Vite config, index.html and styles carry no brand', async () => {
   const indexHtml = tree.read('apps/web/index.html', 'utf-8') ?? '';
   assert.match(indexHtml, /<title>web<\/title>/);
   assert.doesNotMatch(indexHtml, /fonts\.googleapis|favicon|theme-color/);
+  // The theme script of standard §10 sets the class before the first paint.
+  assert.match(indexHtml, /localStorage\.getItem\('theme'\)/);
+  assert.match(indexHtml, /prefers-color-scheme: dark/);
+  assert.ok(
+    indexHtml.indexOf('<script>') < indexHtml.indexOf('/src/styles.css'),
+    'the theme script runs before the stylesheet loads',
+  );
   assert.ok(!tree.exists('apps/web/public/favicon.ico'));
   const styles = tree.read('apps/web/src/styles.css', 'utf-8') ?? '';
   assert.match(styles, /@import ['"]tailwindcss['"];/);
   assert.match(styles, /nx-tailwind-sources:start/);
+  assert.match(styles, /@custom-variant dark \(&:is\(\.dark, \.dark \*\)\);/);
   for (const path of ['apps/web/vite.config.ts', 'apps/web/index.html']) {
     assert.doesNotMatch(tree.read(path, 'utf-8') ?? '', /[Ff]actory|text2sql/);
   }
