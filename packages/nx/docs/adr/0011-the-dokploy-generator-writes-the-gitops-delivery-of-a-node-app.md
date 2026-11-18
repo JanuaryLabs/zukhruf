@@ -1,6 +1,6 @@
 # The dokploy generator writes the GitOps delivery of a node-app
 
-Status: Proposed 2026-11-18 (backlog #4603). Decisions 1 to 9 restate #4603, ADR 0007, ADR 0009 and ADR 0010, and are accepted with them. Decisions 10 to 22 are new and wait for the owner.
+Status: Accepted 2026-11-18 by the owner (backlog #4603), decisions 1 to 22. meddit runs on it in production.
 
 text2sql (`apps/v2/terraform`, `apps/authx/terraform`) and whatisgoingon (`infra/`) deliver a backend to Dokploy the same way: an OpenTofu project with its encrypted state committed in Git, a raw compose that OpenTofu stores in Dokploy, and a deploy workflow that builds the images, applies the project and rolls the compose out. meddit is the third repo of the shape, so it moves here (#4603, strike 3). whatisgoingon after 402e87b and c9e5d7b is the working reference: it runs in production on zukhruf's kit, `tofu-apply.yml` and the `dokploy-deploy` and `wait-for-health` actions (#3273), and on `@zukhruf/nx/opentofu` (#3339). text2sql v2 is the reference for Postgres and the migrate service.
 
