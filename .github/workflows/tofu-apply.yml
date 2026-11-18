@@ -9,6 +9,11 @@
 # grants contents: write. The stack sits in <stack>/src/environments/<environment>
 # and reads its passphrase from var.tf_encryption_passphrase and its Dokploy
 # key from var.dokploy_api_key.
+#
+# The stack does not deploy: no provisioner runs a deploy script, since the
+# scripts live in zukhruf's actions, not in the caller's checkout. The caller's
+# next job deploys with the dokploy-deploy and wait-for-health actions when the
+# image changed or `changed` is 'true'.
 name: Tofu Apply
 
 on:
@@ -49,6 +54,9 @@ on:
       outputs:
         description: "The stack's non-sensitive outputs as a JSON object of name to value; read one with fromJSON(needs.<job>.outputs.outputs).<name>."
         value: ${{ jobs.reconcile.outputs.outputs }}
+      changed:
+        description: "'true' when the plan had changes and the apply ran, 'false' when it had none. A caller that deploys through the API redeploys on 'true': Dokploy stores a changed compose but runs it only on compose.deploy."
+        value: ${{ jobs.reconcile.outputs.changed }}
 
 permissions:
   contents: write
@@ -64,6 +72,7 @@ jobs:
       cancel-in-progress: false
     outputs:
       outputs: ${{ steps.stack.outputs.outputs }}
+      changed: ${{ steps.plan.outputs.changes }}
     defaults:
       run:
         working-directory: ${{ inputs.stack }}/src/environments/${{ inputs.environment }}
