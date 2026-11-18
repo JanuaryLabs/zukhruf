@@ -2,6 +2,7 @@ export type { ContainerProcess } from './container-process.ts';
 export {
   Container,
   type ContainerFile,
+  type ContainerUserFile,
   type Containers,
   type Created,
   type LogQuery,

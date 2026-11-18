@@ -49,6 +49,23 @@ export type ContainerFile =
       gid?: number;
     };
 
+/** A file or a directory for writeFiles() with copyUIDGID. The user of the container owns it, so it has no uid or gid. */
+export type ContainerUserFile =
+  | {
+      path: string;
+      data: string | Uint8Array;
+      mode?: number;
+      uid?: never;
+      gid?: never;
+    }
+  | {
+      path: string;
+      directory: true;
+      mode?: number;
+      uid?: never;
+      gid?: never;
+    };
+
 /** The path stat in the header of an archive answer: base64 of JSON. */
 function pathStat(
   headers: IncomingHttpHeaders,
@@ -646,10 +663,18 @@ export class Container {
    * Sends one archive of the files. It extracts the archive in the deepest
    * directory that holds each entry and that exists, which stat() finds. The
    * engine creates each parent directory that an entry implies below it.
+   * With copyUIDGID, each entry belongs to the user of the container
+   * (Config.User), and so does each directory that the write creates: the
+   * archive lists it, because the engine creates an implied directory as root.
    */
+  writeFiles(files: ContainerFile[], options?: CancelOptions): Promise<void>;
+  writeFiles(
+    files: ContainerUserFile[],
+    options: CancelOptions & { copyUIDGID: true },
+  ): Promise<void>;
   async writeFiles(
     files: ContainerFile[],
-    options: CancelOptions = {},
+    options: CancelOptions & { copyUIDGID?: true } = {},
   ): Promise<void> {
     if (files.length === 0) return;
     const mtime = Math.floor(this.#clock.Date.now() / 1000);
@@ -657,6 +682,7 @@ export class Container {
       file,
       path: posix.resolve('/', file.path),
     }));
+    const exists = new Map<string, boolean>();
     let directory = commonDirectory(
       absolute.map(({ path }) => posix.dirname(path)),
     );
@@ -664,28 +690,67 @@ export class Container {
       directory !== '/' &&
       (await this.stat(directory, options)) === undefined
     ) {
+      exists.set(directory, false);
       directory = posix.dirname(directory);
     }
-    const entries = absolute.map(({ file, path }): TarWriterEntry => {
-      const isDirectory = 'directory' in file;
-      return {
-        path: posix.relative(directory, path),
-        type: isDirectory ? 'directory' : 'file',
-        data: isDirectory
-          ? new Uint8Array(0)
-          : typeof file.data === 'string'
-            ? new TextEncoder().encode(file.data)
-            : file.data,
-        mode: file.mode ?? (isDirectory ? 0o755 : 0o644),
-        uid: file.uid ?? 0,
-        gid: file.gid ?? 0,
-        mtime,
-      };
-    });
+    const created = options.copyUIDGID
+      ? (await this.#createdDirectories(absolute, directory, exists, options))
+          .filter((path) => !absolute.some((entry) => entry.path === path))
+          .map((path): { file: ContainerFile; path: string } => ({
+            file: { path, directory: true },
+            path,
+          }))
+      : [];
+    const entries = [...created, ...absolute].map(
+      ({ file, path }): TarWriterEntry => {
+        const isDirectory = 'directory' in file;
+        return {
+          path: posix.relative(directory, path),
+          type: isDirectory ? 'directory' : 'file',
+          data: isDirectory
+            ? new Uint8Array(0)
+            : typeof file.data === 'string'
+              ? new TextEncoder().encode(file.data)
+              : file.data,
+          mode: file.mode ?? (isDirectory ? 0o755 : 0o644),
+          uid: file.uid ?? 0,
+          gid: file.gid ?? 0,
+          mtime,
+        };
+      },
+    );
     await this.putArchive(directory, tarArchive(entries), {
       ...options,
       noOverwriteDirNonDir: true,
     });
+  }
+
+  /**
+   * The directories below `root` that hold an entry and do not exist, parents
+   * first. An existing directory stays out: as an entry, copyUIDGID would give
+   * it to the user of the container.
+   */
+  async #createdDirectories(
+    entries: { path: string }[],
+    root: string,
+    exists: Map<string, boolean>,
+    options: CancelOptions,
+  ): Promise<string[]> {
+    for (const { path } of entries) {
+      for (
+        let directory = posix.dirname(path);
+        directory !== root && !exists.has(directory);
+        directory = posix.dirname(directory)
+      ) {
+        const found = (await this.stat(directory, options)) !== undefined;
+        exists.set(directory, found);
+        if (found) break;
+      }
+    }
+    return [...exists]
+      .filter(([, found]) => !found)
+      .map(([directory]) => directory)
+      .toSorted();
   }
 
   /** The tar stream of a path in the container: a file, or a directory with its tree. */

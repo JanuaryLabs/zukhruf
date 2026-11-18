@@ -9,6 +9,7 @@ import { TemporaryFiles } from '@zukhruf/fs';
 import {
   type Container,
   ContainerNotFoundError,
+  type ContainerUserFile,
   Docker,
   DockerEngineError,
   NotAFileError,
@@ -486,6 +487,58 @@ describe('the files of a container', () => {
     } finally {
       await removeLabeled(docker, run);
     }
+  });
+
+  test('writeFiles() with copyUIDGID gives each entry and each directory it creates to the user of the container, and an existing directory keeps its owner', async (t) => {
+    // Arrange
+    await using docker = await connect(IMAGE, t.signal);
+    const run = randomUUID();
+    try {
+      const container = await docker.containers.create({
+        Image: IMAGE,
+        Cmd: ['sleep', '300'],
+        User: 'guest',
+        Labels: { [TEST_LABEL]: run },
+      });
+      await container.start();
+
+      // Act
+      await container.writeFiles(
+        [
+          { path: '/srv/app/one/a.txt', data: 'a' },
+          { path: '/srv/app/two/b.txt', data: 'b' },
+        ],
+        { copyUIDGID: true },
+      );
+
+      // Assert
+      assert.equal(
+        await shell(
+          container,
+          "stat -c '%n %u %g' /srv /srv/app /srv/app/one /srv/app/one/a.txt /srv/app/two /srv/app/two/b.txt",
+        ),
+        [
+          '/srv 0 0',
+          '/srv/app 405 100',
+          '/srv/app/one 405 100',
+          '/srv/app/one/a.txt 405 100',
+          '/srv/app/two 405 100',
+          '/srv/app/two/b.txt 405 100',
+          '',
+        ].join('\n'),
+      );
+    } finally {
+      await removeLabeled(docker, run);
+    }
+  });
+
+  test('a file for writeFiles() with copyUIDGID has no owner of its own', () => {
+    const file = { path: '/srv/x', data: 'x', uid: 1 };
+
+    // @ts-expect-error The user of the container owns the file, so it has no uid.
+    const owned: ContainerUserFile = file;
+
+    assert.equal(owned.path, '/srv/x');
   });
 
   test('writeFiles() of a file onto a directory rejects, and the tree of the directory stays', async (t) => {

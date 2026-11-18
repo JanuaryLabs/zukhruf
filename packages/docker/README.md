@@ -372,7 +372,8 @@ const stat = await postgres.stat('/srv/run.sh');
 
 - `writeFiles()` sends one archive. It extracts the archive in the deepest directory that holds each entry and that already exists, which it finds with `stat()`. The engine creates each parent directory that an entry implies below that directory. Thus a container with a read-only root filesystem can still get files in a writable volume: the engine checks only the directory of the extraction.
 - A written entry belongs to its `uid` and `gid`, or to root (0:0) when it has none. The package puts them in the archive, and the engine keeps the owner of each entry in the archive.
-- A parent directory that an entry implies is not in the archive. The engine creates it with mode 0755 and the owner of the root of the container, not with the `uid` and `gid` of the entry, and `copyUIDGID` does not change that (`createImpliedDirectories` and `ImpliedDirectoryMode` in [moby/go-archive](https://github.com/moby/go-archive/blob/6a97244bc508500258d8e984a043d61b138c53da/archive.go#L28-L38)). For another owner or mode, list the directory as an entry: `{ path, directory: true, uid, gid }`. The source of the engine gives the same advice.
+- A parent directory that an entry implies is not in the archive. The engine creates it with mode 0755 and the owner of the root of the container, not with the `uid` and `gid` of the entry, and `copyUIDGID` does not change that (`createImpliedDirectories` and `ImpliedDirectoryMode` in [moby/go-archive](https://github.com/moby/go-archive/blob/6a97244bc508500258d8e984a043d61b138c53da/archive.go#L28-L38)). For another owner or mode, list the directory as an entry: `{ path, directory: true, uid, gid }`. The source of the engine gives the same advice. With `copyUIDGID`, `writeFiles()` lists these directories itself (next item).
+- `writeFiles(files, { copyUIDGID: true })` gives each entry to the user of the container (`Config.User`), as the engine resolves that user for an exec. Its files are `ContainerUserFile`s, which have no `uid` or `gid`. It also lists each directory that the write creates, so that the user owns those too. A directory that exists stays out of the archive and keeps its owner, because `copyUIDGID` gives an existing directory entry to the user as well. To find the directories it creates, it stats each directory that holds an entry below the deepest one that exists.
 - `putArchive(directory, archive, { copyUIDGID: true })` gives each extracted entry to the user of the container (`Config.User`) in place of the owner in the archive.
 - `writeFiles()` does not replace a directory with a file, or a file with a directory. It rejects with `DockerEngineError`, the directory or file stays, and `message` is the message of the engine. A directory entry onto a symlink to a directory also rejects. The engine extracts entries in order and stops at the conflict, so the entries before it stay written.
 - `putArchive(directory, archive, { noOverwriteDirNonDir: true })` applies the same refusal to an archive. Without this option, the engine replaces the existing entry: a file over a directory deletes the directory tree.
@@ -739,6 +740,11 @@ export class Container {
   readFile(path: string, options?: CancelOptions): Promise<Uint8Array>;
   /** One archive, extracted in the deepest directory that exists. */
   writeFiles(files: ContainerFile[], options?: CancelOptions): Promise<void>;
+  /** The same, with each entry and each directory that the write creates given to the user of the container. */
+  writeFiles(
+    files: ContainerUserFile[],
+    options: CancelOptions & { copyUIDGID: true },
+  ): Promise<void>;
   getArchive(
     path: string,
     options?: CancelOptions,
@@ -779,6 +785,22 @@ export type ContainerFile =
       mode?: number;
       uid?: number;
       gid?: number;
+    };
+
+export type ContainerUserFile =
+  | {
+      path: string;
+      data: string | Uint8Array;
+      mode?: number;
+      uid?: never;
+      gid?: never;
+    }
+  | {
+      path: string;
+      directory: true;
+      mode?: number;
+      uid?: never;
+      gid?: never;
     };
 
 export interface OutputChunk {
