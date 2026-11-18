@@ -1,6 +1,6 @@
 # Workspace rules read the root files as the tool does
 
-Status: Proposed 2026-11-18 for the owner's review (backlog #4672).
+Status: Accepted 2026-11-18 by the owner (backlog #4672).
 
 The agent of #3342 left two rules of the monorepo standard as prose ([ADR 0009](./0009-project-config-rules-read-the-file-not-the-graph.md)):
 
