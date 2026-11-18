@@ -101,17 +101,21 @@ function program(
   };
 }
 
-/** A process that holds the reaper of `run` with `settings`, prints a line, and lives until it is killed. */
+/** A process with `env` that holds the reaper of `run` with `settings`, prints a line, and lives until it is killed. */
 async function holder(
   run: string,
   settings: ReaperSettings,
+  env: NodeJS.ProcessEnv = process.env,
 ): Promise<ChildProcess> {
-  const { child, line } = program(`
+  const { child, line } = program(
+    `
     const docker = await Docker.connect({ clock: globalThis, environment: process.env });
     await ReaperHold.take(docker, ${JSON.stringify(run)}, ${JSON.stringify(settings)}, globalThis);
     console.log('held');
     setInterval(() => {}, 60_000);
-  `);
+  `,
+    env,
+  );
   assert.equal(await line(), 'held');
   return child;
 }
@@ -206,9 +210,9 @@ const reapers = async (run: string): Promise<string[]> =>
     })
   ).map(({ Id }) => Id);
 
-/** The PIDs of the `cat` processes in the reaper `id`: one for each holder. */
-async function holdersOf(id: string): Promise<string[]> {
-  const reaper = await docker.containers.find(id);
+/** The PIDs of the `cat` processes in the reaper `id` on the engine of `client`: one for each holder. */
+async function holdersOf(id: string, client = docker): Promise<string[]> {
+  const reaper = await client.containers.find(id);
   if (reaper === undefined) return [];
   const { stdout } = await reaper.exec({ Cmd: ['pgrep', '-x', 'cat'] });
   return stdout.split('\n').filter((pid) => pid !== '');
@@ -281,14 +285,14 @@ async function execEvent(
  * tests give its reaper a client that fails chosen calls. Its `docker` CLI
  * reads `DOCKER_HOST`, so the test points it at a TCP port of this process
  * that forwards to the proxy (as in docker-global-setup.integration.test.ts).
- * Gives its id, and its exit code once the engine removed it.
+ * Gives its id, and its end once (endedOnce).
  */
 async function proxiedReaper(
   stack: AsyncDisposableStack,
   proxy: EngineProxy,
   run: string,
   settings: ReaperSettings,
-): Promise<{ id: string; exited: Promise<number> }> {
+): Promise<{ id: string; finished: Promise<void> }> {
   await present('alpine:latest');
   // Docker Desktop resolves host.docker.internal to this machine. On a native
   // Linux engine the reaper reaches this machine at the gateway of the
@@ -324,6 +328,7 @@ async function proxiedReaper(
     { ...settings, firstHolder: 0 },
     '/var/run/docker.sock',
   );
+  const since = Math.floor(Date.now() / 1000) - 1;
   const reaper = await docker.containers.create(
     {
       ...body,
@@ -340,12 +345,32 @@ async function proxiedReaper(
     },
     { name: reaperName(run) },
   );
-  const exited = reaper
-    .wait({ condition: 'removed' })
-    .then(({ StatusCode }) => StatusCode);
-  exited.catch(() => {});
+  const finished = endedOnce(reaper.id, since);
+  finished.catch(() => {});
   await reaper.start();
-  return { id: reaper.id, exited };
+  return { id: reaper.id, finished };
+}
+
+/**
+ * Resolves when the engine destroyed the reaper `id`, from `since` on, after
+ * one start and one end. A reaper removes itself, so its exit code is 137 at
+ * its end, also after a crash that its restart policy followed with a start:
+ * that rejects.
+ */
+async function endedOnce(id: string, since: number): Promise<void> {
+  const actions: (string | undefined)[] = [];
+  for await (const { Action } of docker.events({
+    since,
+    filters: { container: [id], event: ['start', 'die', 'destroy'] },
+  })) {
+    actions.push(Action);
+    if (Action === 'destroy') break;
+  }
+  assert.deepEqual(
+    actions,
+    ['start', 'die', 'destroy'],
+    'the reaper ends once, and its policy never starts it again',
+  );
 }
 
 /** `promise`, or, when `signal` aborts first, a rejection that names `what`. */
@@ -602,6 +627,44 @@ test('a reaper that no holder holds removes the run’s objects after its wait f
     });
   } finally {
     await removeRun(run, ids);
+  }
+});
+
+test('a reaper whose socket does not reach its engine exits 1, and the engine does not start it again', async () => {
+  const run = randomUUID();
+  await present(REAPER_IMAGE);
+  try {
+    // A file of the engine's host that no engine listens on. No holder asks
+    // this reaper, so none removes it after its answer.
+    const reaper = await docker.containers.create(
+      reaperRequest(
+        run,
+        { ...quick, firstHolder: 0, requestTimeout: 1_000 },
+        '/etc/hosts',
+      ),
+      { name: reaperName(run) },
+    );
+    const exited = reaper.wait({ condition: 'next-exit' });
+    await reaper.start();
+    const { StatusCode } = await exited;
+    // A fixed window, longer than the first wait of a restart policy of
+    // Docker (100 ms) and the run of the reaper (1 s): a reaper that the engine
+    // starts again runs, or waits for its next start, after it.
+    await delay(3_000);
+
+    assert.equal(StatusCode, 1);
+    assert.deepEqual(
+      await docker.containers.list({
+        all: true,
+        filters: {
+          label: [`${REAPER_LABEL}=${run}`],
+          status: ['running', 'restarting'],
+        },
+      }),
+      [],
+    );
+  } finally {
+    await removeRun(run);
   }
 });
 
@@ -1035,7 +1098,7 @@ const sweepLease = (fingerprint: string): string =>
   `zukhruf-testing-sweep-${fingerprint}`;
 
 test(
-  'a reaper that finds the sweep lease of an expired shared server taken on each of its sweepTries keeps that server and exits 0',
+  'a reaper that finds the sweep lease of an expired shared server taken on each of its sweepTries keeps that server and ends once',
   { skip: proxyless },
   async (t) => {
     const run = randomUUID();
@@ -1097,7 +1160,7 @@ test(
         events.push('gone');
       });
 
-      const { exited } = await proxiedReaper(stack, proxy, run, {
+      const { finished } = await proxiedReaper(stack, proxy, run, {
         ...quick,
         grace: 0,
         passes: 0,
@@ -1105,7 +1168,7 @@ test(
         sweepTries,
       });
 
-      assert.equal(await within(exited, t.signal, 'the end of the reaper'), 0);
+      await within(finished, t.signal, 'the end of the reaper');
       assert.deepEqual(
         events,
         Array.from({ length: sweepTries }, () => ['try', 'gone']).flat(),
@@ -1117,7 +1180,7 @@ test(
   },
 );
 
-test('a reaper whose shared server is removed while it drops the run’s database in it removes the run’s containers and exits 0', async (t) => {
+test('a reaper whose shared server is removed while it drops the run’s database in it removes the run’s containers and ends once', async (t) => {
   const run = randomUUID();
   const database = `test_${run.replaceAll('-', '')}_0123456789abcdef`;
   // No request time limit ends the drop: only the removal of its server does.
@@ -1143,14 +1206,13 @@ exec sleep 3600`,
     });
     server = fake.id;
     await fake.start();
+    const since = Math.floor(Date.now() / 1000) - 1;
     child = await holder(run, settings);
     const owned = await object(run);
     const reaper = await docker.containers.find(reaperName(run));
     assert.ok(reaper);
-    const exited = reaper
-      .wait({ condition: 'removed' })
-      .then(({ StatusCode }) => StatusCode);
-    exited.catch(() => {});
+    const ended = endedOnce(reaper.id, since);
+    ended.catch(() => {});
     await killed(child);
     await waitFor(
       async () => {
@@ -1162,7 +1224,7 @@ exec sleep 3600`,
 
     await fake.remove({ force: true, v: true });
 
-    assert.equal(await within(exited, t.signal, 'the end of the reaper'), 0);
+    await within(ended, t.signal, 'the end of the reaper');
     assert.equal(await exists(owned), false);
   } finally {
     if (child) await killed(child);
@@ -1215,7 +1277,7 @@ test(
   },
 );
 
-/** A container with the name and the label of the reaper of `run` that exited, and that the engine does not remove, unlike a real one. */
+/** A container with the name and the label of the reaper of `run` that exited and stays, unlike a real one, which removes itself at its end. */
 async function staleReaper(run: string): Promise<string> {
   const stale = await docker.containers.create(
     {
@@ -1305,6 +1367,8 @@ interface SecondEngine extends AsyncDisposable {
   client: Docker;
   /** The `unix://` host of the relay. */
   host: string;
+  /** Stops the dockerd of the second engine and resolves when its next dockerd answers: a restart of the engine. Its wait ends at `signal`. */
+  restart(signal: AbortSignal): Promise<void>;
 }
 
 /** A path of a unix socket that fits the 104 bytes of macOS. */
@@ -1330,6 +1394,15 @@ async function secondEngine({
     await new DockerTestbed({ environment: process.env }).serve(
       {
         Image: 'docker:28.5.2-dind',
+        // Its first process starts dockerd again each time it ends, so a test
+        // restarts the engine with no start of its container: each start
+        // publishes the port on another port of the engine's host.
+        Entrypoint: [
+          'sh',
+          '-c',
+          'while :; do dockerd-entrypoint.sh "$@"; done',
+          'sh',
+        ],
         Cmd: [
           'dockerd',
           ...sockets.map((socket) => `--host=unix://${socket}`),
@@ -1353,8 +1426,14 @@ async function secondEngine({
     ),
   );
   const connections = new Set<Socket>();
-  const server = createServer((client) => {
-    const upstream = connect(service.port, service.host);
+  // Half-open: a client ends its input of an exec before the engine sent the
+  // output, which a relay that closes both ways at that end loses.
+  const server = createServer({ allowHalfOpen: true }, (client) => {
+    const upstream = connect({
+      port: service.port,
+      host: service.host,
+      allowHalfOpen: true,
+    });
     for (const socket of [client, upstream]) {
       connections.add(socket);
       socket.on('close', () => connections.delete(socket));
@@ -1393,6 +1472,18 @@ async function secondEngine({
     container: service.container,
     client,
     host,
+    restart: async (signal) => {
+      const stopped = await service.container.exec({
+        Cmd: [
+          'sh',
+          '-c',
+          'pid=$(pidof dockerd) && kill "$pid" && while kill -0 "$pid" 2>/dev/null; do sleep 0.05; done',
+        ],
+      });
+      if (stopped.exitCode !== 0)
+        throw new Error(`The stop of dockerd exited with ${stopped.exitCode}`);
+      await waitFor(() => client.info(), { signal, interval: 100 });
+    },
     [Symbol.asyncDispose]: () => owned.disposeAsync(),
   };
 }
@@ -1630,5 +1721,164 @@ test('a test process whose reaper on the socket of its client was removed holds 
     });
   } finally {
     await killed(launched.child);
+  }
+});
+
+/** A started container of the run `run` on the engine of `client`. */
+async function objectOn(client: Docker, run: string): Promise<string> {
+  const container = await client.containers.create({
+    Image: 'alpine:latest',
+    Cmd: ['sleep', '3600'],
+    Labels: { [RUN_LABEL]: run },
+  });
+  await container.start();
+  return container.id;
+}
+
+/** The holders of the running reaper of `run` on the engine of `client`: none while no reaper of it runs. */
+async function heldOn(client: Docker, run: string): Promise<number> {
+  const [reaper] = await client.containers.list({
+    filters: { label: [`${REAPER_LABEL}=${run}`] },
+  });
+  return reaper === undefined ? 0 : (await holdersOf(reaper.Id, client)).length;
+}
+
+test('a holder holds the reaper of its run again after a restart of the engine, and that reaper keeps the run’s objects', async (t) => {
+  const relay = shortSocket();
+  await using second = await secondEngine({
+    sockets: ['/var/run/docker.sock'],
+    relay,
+  });
+  const run = randomUUID();
+  const child = await holder(run, quick, {
+    ...process.env,
+    DOCKER_HOST: second.host,
+  });
+  try {
+    const owned = await objectOn(second.client, run);
+
+    await second.restart(t.signal);
+
+    await waitFor(
+      async () => assert.equal(await heldOn(second.client, run), 1),
+      { signal: t.signal, interval: 100 },
+    );
+    assert.notEqual(await second.client.containers.find(owned), undefined);
+  } finally {
+    await killed(child);
+  }
+});
+
+test('a reaper that the engine starts again after its restart waits for a first holder, so a holder that comes back late finds the run’s objects', async (t) => {
+  const relay = shortSocket();
+  await using second = await secondEngine({
+    sockets: ['/var/run/docker.sock'],
+    relay,
+  });
+  const run = randomUUID();
+  const child = await holder(run, quick, {
+    ...process.env,
+    DOCKER_HOST: second.host,
+  });
+  try {
+    const owned = await objectOn(second.client, run);
+
+    // A test process that is slow to come back, as one whose event loop is busy.
+    child.kill('SIGSTOP');
+    try {
+      await second.restart(t.signal);
+      // A fixed window, longer than the grace and the passes of the reaper:
+      // a reaper that did not wait for a first holder removed the run's
+      // objects within it.
+      await delay(quick.grace + quick.interval * quick.passes + 2_000);
+    } finally {
+      child.kill('SIGCONT');
+    }
+
+    await waitFor(
+      async () => assert.equal(await heldOn(second.client, run), 1),
+      { signal: t.signal, interval: 100 },
+    );
+    assert.notEqual(await second.client.containers.find(owned), undefined);
+  } finally {
+    await killed(child);
+  }
+});
+
+test('a reaper whose engine restarts after its last holder was killed starts again by itself, and removes the run’s objects and itself with no test process', async (t) => {
+  const relay = shortSocket();
+  await using second = await secondEngine({
+    sockets: ['/var/run/docker.sock'],
+    relay,
+  });
+  const run = randomUUID();
+  // The grace is longer than the stop of the engine, which ends the reaper
+  // within Docker's stop timeout of 10 s: the engine restarts while the reaper
+  // waits its grace.
+  const settings = { ...quick, grace: 20_000, firstHolder: 1_000 };
+  const child = await holder(run, settings, {
+    ...process.env,
+    DOCKER_HOST: second.host,
+  });
+  try {
+    const owned = await objectOn(second.client, run);
+    await killed(child);
+
+    await second.restart(t.signal);
+    const keptUntilTheRestart =
+      (await second.client.containers.find(owned)) !== undefined;
+
+    assert.equal(keptUntilTheRestart, true);
+    await waitFor(
+      async () => {
+        assert.equal(await second.client.containers.find(owned), undefined);
+        assert.deepEqual(await reaperSockets(second.client, run), []);
+      },
+      { signal: t.signal, interval: 100 },
+    );
+  } finally {
+    await killed(child);
+  }
+});
+
+test('a holder holds the reaper of its run again after a kill of the reaper’s process, and that reaper keeps the run’s objects', async (t) => {
+  const relay = shortSocket();
+  await using second = await secondEngine({
+    sockets: ['/var/run/docker.sock'],
+    relay,
+  });
+  const run = randomUUID();
+  // A short wait for a first holder: a reaper that its holder does not hold
+  // again within it removes the run's objects.
+  const settings = { ...quick, firstHolder: 2_000 };
+  const child = await holder(run, settings, {
+    ...process.env,
+    DOCKER_HOST: second.host,
+  });
+  try {
+    const owned = await objectOn(second.client, run);
+    const [reaper] = await second.client.containers.list({
+      filters: { label: [`${REAPER_LABEL}=${run}`] },
+    });
+    assert.ok(reaper);
+    const pid = (
+      await (await second.client.containers.find(reaper.Id))?.inspect()
+    )?.State?.Pid;
+    assert.ok(pid !== undefined);
+
+    // A SIGKILL on the engine's host, as at a kill for lack of memory: not a
+    // stop through the engine, after which Docker does not start it again.
+    const kill = await second.container.exec({
+      Cmd: ['kill', '-9', String(pid)],
+    });
+
+    assert.equal(kill.exitCode, 0);
+    await waitFor(
+      async () => assert.equal(await heldOn(second.client, run), 1),
+      { signal: t.signal, interval: 100 },
+    );
+    assert.notEqual(await second.client.containers.find(owned), undefined);
+  } finally {
+    await killed(child);
   }
 });

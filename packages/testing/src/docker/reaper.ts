@@ -168,12 +168,17 @@ function dropBranch(collector: Collector): string {
  * door shared. After the last holder ended, it waits the grace, and a holder
  * that comes back stops the countdown. Then it closes the door, removes the
  * run's containers and volumes, drops the run's databases, does the re-check
- * passes and removes the expired shared servers, with the door closed.
+ * passes and removes the expired shared servers, with the door closed, and
+ * removes itself.
  */
 function script(): string {
   return `
 set -u
 exec 9>>${DOOR}
+# A restart by the engine keeps the files of the last start: a mark of a first
+# holder would end the wait for one at once, and an old check of the socket
+# would answer a holder before this start checked it (#4508).
+rm -f ${CAME} ${BIND}
 filter="label=${TEST_RUN_LABEL}=$REAPER_RUN"
 hex=$(echo "$REAPER_RUN" | tr -d -)
 tick=0.05
@@ -330,6 +335,10 @@ if [ "$bind" != verified ]; then
   sleep "$(seconds $((REAPER_FIRST_HOLDER + REAPER_REQUEST_TIMEOUT)))"
   exit 1
 fi
+# The engine starts the reaper again after a restart of the engine or a kill
+# of the reaper (#4508). Only now: a reaper whose socket does not reach its
+# engine ends with exit 1 and must not start again.
+once docker update --restart unless-stopped "$found" >/dev/null
 
 first=$(($(now) + REAPER_FIRST_HOLDER))
 until [ "$(holders)" -gt 0 ] || [ -e ${CAME} ] || [ "$(now)" -ge "$first" ]; do sleep $tick; done
@@ -349,6 +358,10 @@ while :; do
   done
   expire
   revive
+  # Docker refuses a restart policy on a container with AutoRemove, so the
+  # reaper removes itself. When that fails, the engine starts it again after
+  # the exit, and it does its passes again.
+  call docker rm -f "$found" >/dev/null
   exit 0
 done
 `;
@@ -358,7 +371,9 @@ done
  * The body of the reaper of the run `runId`, with its inputs in its
  * environment and the file `socket` of the engine's host as its socket. The
  * mount is a `bind` mount, so a `socket` that the engine's host does not have
- * fails the create and creates no directory there.
+ * fails the create and creates no directory there. It has no restart policy
+ * and no AutoRemove: the reaper sets its policy once it verified its socket,
+ * and removes itself at its end.
  */
 export function reaperRequest(
   runId: string,
@@ -390,7 +405,6 @@ export function reaperRequest(
       [SOCKET_LABEL]: socket,
     },
     HostConfig: {
-      AutoRemove: true,
       Mounts: [{ Type: 'bind', Source: socket, Target: SOCKET }],
     },
   };
@@ -411,7 +425,7 @@ function socketSources(docker: Docker): string[] {
 /**
  * The longest that a reaper can run after it closed its door: its first pass
  * and its re-check passes, `interval` apart, its expiry pass with one sweep,
- * and the start of one reaper left `created`. A pass makes four removals (the list and the removal of the
+ * the start of one reaper left `created`, and its removal of itself. A pass makes four removals (the list and the removal of the
  * containers, then of the volumes), each with its first try and `retries`
  * more, `interval` apart and each within `requestTimeout`, and one list of the
  * shared servers. The expiry pass lists the servers and, for one expired
@@ -427,7 +441,7 @@ export function closingTime(settings: ReaperSettings): number {
   const pass = 4 * removal + requestTimeout;
   const expiry = 4 * requestTimeout + sweepWait;
   const revival = 4 * requestTimeout;
-  return (passes + 1) * pass + passes * interval + expiry + revival;
+  return (passes + 1) * pass + passes * interval + expiry + revival + removal;
 }
 
 /**
@@ -470,10 +484,11 @@ interface RunningReaper {
 
 /**
  * The reaper of `runId`, created with `socket` as its socket when it does not
- * exist, and started when it did not start. Gives undefined once a reaper
- * that ends is gone: a later call gets a new one. A missing image is pulled.
- * A reaper that ended and stays, for example one whose removal by the engine
- * failed, is removed here: nobody else removes it. A `socket` that the
+ * exist, and started when it did not start. A reaper that the engine starts
+ * again by its policy is waited for, one `interval` apart, until it runs.
+ * Gives undefined once a reaper that ends is gone: a later call gets a new
+ * one. A missing image is pulled. A reaper that ended and stays, for example
+ * one that was stopped, is removed here: nobody else removes it. A `socket` that the
  * engine's host does not have rejects with BindSourceNotFoundError. Each
  * call to the engine stops when `signal` aborts.
  */
@@ -511,6 +526,16 @@ async function running(
       await reaper.start({ signal });
       state = 'running';
     }
+    // A reaper that the engine starts again after a kill or a restart of the
+    // engine is `restarting` until it runs: it is not closing (#4508).
+    if (state === 'restarting')
+      state = await poll(
+        async () => {
+          const status = (await reaper.inspect({ signal })).State?.Status;
+          return status === 'restarting' ? undefined : status;
+        },
+        { interval: settings.interval, signal, clock, ref: false },
+      );
   } catch (error) {
     if (error instanceof ContainerNotFoundError) return undefined;
     throw error;
@@ -823,19 +848,37 @@ export class ReaperHold {
 
   /**
    * Takes the hold again at once when its output ends while this process
-   * lives, within its readiness bound, whose timer keeps no process running.
-   * A failure of that hold is not kept: the next held() tries again.
+   * lives, within its readiness bound, and again each `interval` until it
+   * holds: the engine can be away, as at its restart (#4508). Its timers keep
+   * no process running. A held() in the meantime joins the hold that runs, and
+   * rejects with its failure.
    */
   async #watch(output: AsyncIterator<OutputChunk>): Promise<void> {
     await drained(output);
     pMemoizeClear(this.#hold);
-    await whileHeld(
-      (signal) => this.#hold(signal),
-      this.#runId,
-      this.#settings,
-      this.#clock,
-      false,
-    ).catch(() => {});
+    await poll(
+      async () => {
+        try {
+          await whileHeld(
+            (signal) => this.#hold(signal),
+            this.#runId,
+            this.#settings,
+            this.#clock,
+            false,
+          );
+          return true;
+        } catch {
+          // The watch has no caller: held() reports a failure of the hold.
+          return undefined;
+        }
+      },
+      {
+        interval: this.#settings.interval,
+        signal: undefined,
+        clock: this.#clock,
+        ref: false,
+      },
+    );
   }
 }
 

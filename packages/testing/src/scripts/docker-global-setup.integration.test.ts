@@ -1513,7 +1513,7 @@ const DAY = 24 * 60 * 60 * 1000;
  * the TTL of each shared server (ADR 0020, item 4). `settings` changes the
  * settings of that reaper. It may take the sweep lease of the servers of
  * `fingerprints` only, so it keeps every other shared server of the engine.
- * Resolves, once the reaper ended with exit code 0, with the fingerprints of
+ * Resolves, once the reaper ended once (endedOnce), with the fingerprints of
  * `fingerprints` whose sweep lease it asked for: a server it kept without
  * asking was never swept.
  */
@@ -1523,8 +1523,13 @@ async function sweep(
 ): Promise<Set<string>> {
   await using stack = new AsyncDisposableStack();
   const proxy = stack.use(await EngineProxy.start(engine));
-  const { exited } = await proxiedReaper(stack, proxy, fingerprints, settings);
-  assert.equal(await exited, 0, 'the sweep ends with exit code 0');
+  const { finished } = await proxiedReaper(
+    stack,
+    proxy,
+    fingerprints,
+    settings,
+  );
+  await finished;
   const asked = new Set<string>();
   for (const { method, path, body } of proxy.requests) {
     if (method !== 'POST' || path !== '/containers/create') continue;
@@ -1863,14 +1868,14 @@ async function sweepLeaseOf(fingerprint: string): Promise<EngineLease> {
  * server older than 1 ms, or than the `serverTtl` of `settings`, only if it
  * is a server of `fingerprints`: the proxy refuses the sweep lease of each
  * other shared server, so the test keeps the servers of other runs on the
- * engine. Gives its exit code once the engine removed it.
+ * engine. Gives its end once (endedOnce).
  */
 async function proxiedReaper(
   stack: AsyncDisposableStack,
   proxy: EngineProxy,
   fingerprints: readonly string[],
   settings: Partial<ReaperSettings>,
-): Promise<{ exited: Promise<number> }> {
+): Promise<{ finished: Promise<void> }> {
   proxy.sweepOnly(fingerprints);
   // Docker Desktop resolves host.docker.internal to this machine for each
   // container. On a native Linux engine the reaper reaches this machine at
@@ -1919,6 +1924,7 @@ async function proxiedReaper(
     },
     '/var/run/docker.sock',
   );
+  const since = Math.floor(Date.now() / 1000) - 1;
   const reaper = await docker.containers.create(
     {
       ...body,
@@ -1942,14 +1948,34 @@ async function proxiedReaper(
       ?.remove({ force: true })
       .catch(() => {});
   });
-  const exited = reaper
-    .wait({ condition: 'removed' })
-    .then(({ StatusCode }) => StatusCode);
-  exited.catch(() => {});
+  const finished = endedOnce(reaper.id, since);
+  finished.catch(() => {});
   // The reaper reads the age of a server in whole seconds.
   await setTimeout(1_100);
   await reaper.start();
-  return { exited };
+  return { finished };
+}
+
+/**
+ * Resolves when the engine destroyed the reaper `id`, from `since` on, after
+ * one start and one end. A reaper removes itself, so its exit code is 137 at
+ * its end, also after a crash that its restart policy followed with a start:
+ * that rejects.
+ */
+async function endedOnce(id: string, since: number): Promise<void> {
+  const actions: (string | undefined)[] = [];
+  for await (const { Action } of docker.events({
+    since,
+    filters: { container: [id], event: ['start', 'die', 'destroy'] },
+  })) {
+    actions.push(Action);
+    if (Action === 'destroy') break;
+  }
+  assert.deepEqual(
+    actions,
+    ['start', 'die', 'destroy'],
+    'the reaper ends once, and its policy never starts it again',
+  );
 }
 
 /**
@@ -1987,9 +2013,9 @@ test(
       const proxy = stack.use(await EngineProxy.start(engine));
       const listing = sweepHold(proxy, fingerprint);
       stack.defer(() => listing.release());
-      const { exited } = await proxiedReaper(stack, proxy, [fingerprint], {});
+      const { finished } = await proxiedReaper(stack, proxy, [fingerprint], {});
       assert.equal(
-        await firstOf(listing.reached, exited),
+        await firstOf(listing.reached, finished),
         'reached',
         'the reaper must hold the sweep lease of the server',
       );
@@ -2014,7 +2040,7 @@ test(
       listing.release();
       other = await holding;
 
-      assert.equal(await exited, 0);
+      await finished;
       assert.equal(other.id, server);
       assert.equal(await running(server), true);
     } finally {
@@ -2026,7 +2052,7 @@ test(
 );
 
 test(
-  'a reaper whose removal of an expired shared server fails keeps that server and ends with exit code 0',
+  'a reaper whose removal of an expired shared server fails keeps that server and ends once',
   { skip: proxyless },
   async (t) => {
     await using directory = await runsDirectory(
@@ -2048,9 +2074,9 @@ test(
         throw new Error('The engine refuses this removal.');
       });
 
-      const { exited } = await proxiedReaper(stack, proxy, [fingerprint], {});
+      const { finished } = await proxiedReaper(stack, proxy, [fingerprint], {});
 
-      assert.equal(await exited, 0);
+      await finished;
       assert.ok(
         proxy.requests.some(
           ({ method, path }) =>
