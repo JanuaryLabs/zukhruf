@@ -45,7 +45,7 @@ The maintainer decided two points that the record above left open:
 
 What else the code needed:
 
-- The reaper's socket and its host-directory folder depend on whether the engine is remote. In a run on an SSH engine, the client's host is the local `docker.sock`, so `ReaperHold.take` gets the run's endpoint, and `DockerTestbed` reads it from `run.json`.
-- A `DockerHost` in a run reaches the engine host only through the run's master; with no master, it fails and opens no connection of its own.
+- The reaper's socket and its host-directory folder depend on whether the engine is remote. In a run on an SSH engine, the client's host is the local `docker.sock`, so `ReaperHold.take` gets the engine's endpoint. The global setup writes that endpoint into the folder beside the sockets, and a process whose `DOCKER_HOST` is a run's `docker.sock` reads it there, with the master beside it: the connection is named by `DOCKER_HOST` alone, so a child process that a test starts with the ids of another run, as the reaper tests and the mutex matrix do, still reaches the engine host through it. A nested run is handed the engine's endpoint, so it serves a connection of its own.
+- A `DockerHost` takes the path of a master or an environment: with a master it reaches the engine host only through it, and fails when the master is gone.
 - A forward counts a connection that cannot reach the connection or the master as a loss of the forward, and a channel that the server refuses (a port where nothing listens yet) as no loss. `@zukhruf/ssh`'s control client rejects such a refusal with `OpenChannelError` since #4598.
 - The engine socket comes from `docker context inspect` on the engine host, as `@zukhruf/docker` finds it: a copy, in the ledger of copied code.

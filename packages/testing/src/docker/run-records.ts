@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -49,25 +50,35 @@ export const directoryParent = (endpoint: string): string =>
   endpoint.startsWith('ssh://') ? '/tmp' : tmpdir();
 
 /**
- * The folder of the sockets through which the global setup serves the SSH
- * connection of a run on an ssh:// engine (ADR 0024). A Unix socket path must
- * fit sun_path (103 characters on macOS), which a path in the run's directory
- * does not, so the folder is in /tmp, as ssh-agent keeps its socket.
+ * The folder of the run's SSH connection on an ssh:// engine (ADR 0024): its
+ * sockets and the endpoint that they reach. A Unix socket path must fit
+ * sun_path (103 characters on macOS), which a path in the run's directory
+ * does not, so the folder is in /tmp, as ssh-agent keeps its socket. On
+ * Windows, the sockets are named pipes and the folder holds the endpoint.
  */
 export const runSocketFolder = (id: string): string =>
-  `/tmp/zukhruf-testing-${id}`;
+  process.platform === 'win32'
+    ? join(tmpdir(), `zukhruf-testing-${id}`)
+    : `/tmp/zukhruf-testing-${id}`;
 
-/** The sockets of the run's SSH connection: the Engine API at `docker` and the control master at `master`. Named pipes on Windows. */
-export function runSockets(id: string): { docker: string; master: string } {
+/** The files of the run's SSH connection: the Engine API at `docker`, the control master at `master`, and the engine's ssh:// endpoint in `endpoint`. */
+export function runSockets(id: string): {
+  docker: string;
+  master: string;
+  endpoint: string;
+} {
+  const folder = runSocketFolder(id);
+  const endpoint = join(folder, 'endpoint');
   if (process.platform === 'win32')
     return {
       docker: `\\\\.\\pipe\\zukhruf-testing-${id}-docker`,
       master: `\\\\.\\pipe\\zukhruf-testing-${id}-ssh`,
+      endpoint,
     };
-  const folder = runSocketFolder(id);
   return {
     docker: join(folder, 'docker.sock'),
     master: join(folder, 'ssh.sock'),
+    endpoint,
   };
 }
 
@@ -77,4 +88,20 @@ export function runDockerHost(id: string): string {
   return process.platform === 'win32'
     ? `npipe://${docker.replaceAll('\\', '/')}`
     : `unix://${docker}`;
+}
+
+/**
+ * The run's SSH connection that `host` names, when it is the docker.sock of a
+ * run on an ssh:// engine: the endpoint that its global setup wrote beside
+ * the sockets, and its control master. A process finds the connection from
+ * DOCKER_HOST alone, so a child process with the ids of another run still
+ * reaches the engine host through it.
+ */
+export async function servedConnection(
+  host: string,
+): Promise<{ endpoint: string; master: string } | undefined> {
+  const id = /zukhruf-testing-([\da-f-]{36})/.exec(host)?.[1];
+  if (id === undefined || host !== runDockerHost(id)) return undefined;
+  const { endpoint, master } = runSockets(id);
+  return { endpoint: await readFile(endpoint, 'utf8'), master };
 }

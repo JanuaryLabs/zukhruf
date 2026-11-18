@@ -117,7 +117,7 @@ export async function globalSetup(): Promise<void> {
   await rename(pending, join(directory, 'run.json'));
 
   process.env.DOCKER_HOST = endpoint.startsWith('ssh://')
-    ? await serveConnection(run, directory)
+    ? await serveConnection(run)
     : endpoint;
   process.env[TEST_RUN_ID] = run.id;
   process.env[TEST_RUN_DIRECTORY] = directory;
@@ -132,10 +132,10 @@ export async function globalSetup(): Promise<void> {
  * test processes. Nothing of it keeps the runner alive: the end of the runner
  * closes the connection, and the SSH server closes its channels.
  */
-async function serveConnection(run: Run, directory: string): Promise<string> {
+async function serveConnection(run: Run): Promise<string> {
   const sockets = runSockets(run.id);
-  if (process.platform !== 'win32')
-    await mkdir(runSocketFolder(run.id), { mode: 0o700 });
+  await mkdir(runSocketFolder(run.id), { mode: 0o700 });
+  await writeFile(sockets.endpoint, run.endpoint, { mode: 0o600 });
   await using stack = new AsyncDisposableStack();
   const config = await OpenSshConfig.resolve(run.endpoint, {
     flags: SSH_FLAGS,
@@ -143,9 +143,7 @@ async function serveConnection(run: Run, directory: string): Promise<string> {
   });
   const client = stack.use(await config.dial({ clock: globalThis }));
   const master = stack.use(await ControlMaster.listen(client, sockets.master));
-  const host = new DockerHost(run.endpoint, {
-    run: { id: run.id, directory },
-  });
+  const host = new DockerHost(run.endpoint, { master: sockets.master });
   const selected = (await host.shell(ENGINE_HOST_COMMAND)).stdout.trim();
   if (!selected.startsWith('unix://'))
     throw new Error(

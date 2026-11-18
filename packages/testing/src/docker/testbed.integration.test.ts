@@ -401,15 +401,14 @@ test('two processes that reuse one configuration get one server, which disposal 
 });
 
 test(
-  'the ssh connections of a process that is killed with idle connections, one after an exec, exit within 15 s',
+  'a test process of a run on an ssh:// engine starts no ssh process: its engine calls and an exec go through the run’s connection (ADR 0024)',
   {
     skip: engine.startsWith('ssh://')
       ? false
       : `the current context selects ${engine}, not an ssh:// engine`,
   },
-  async (t) => {
-    // Arrange: a process with idle connections to the engine, one of them
-    // used by an exec, that waits to be killed.
+  async () => {
+    // Arrange: a process that creates a container and runs an exec in it.
     const child = spawnProcess(
       process.execPath,
       [
@@ -429,30 +428,18 @@ test(
     const exited = once(child, 'exit');
     const testbed = new DockerTestbed({ environment: process.env });
     const client = await testbed.client();
-    const ssh: number[] = [];
     try {
       const [line] = await once(createInterface(child.stdout), 'line');
-      const children = await spawn('ps', ['-Ao', 'pid=,ppid=,comm=']);
-      for (const row of children.stdout.split('\n')) {
-        const [pid, ppid, command] = row.trim().split(/\s+/);
-        if (Number(ppid) === child.pid && command?.endsWith('ssh'))
-          ssh.push(Number(pid));
-      }
-      assert.ok(ssh.length > 0, 'the process has ssh connections');
 
       // Act
-      child.kill('SIGKILL');
-      await exited;
+      const children = await spawn('ps', ['-Ao', 'pid=,ppid=,comm=']);
 
       // Assert
-      await waitFor(
-        () =>
-          assert.deepEqual(
-            ssh.filter((pid) => alive(pid)),
-            [],
-          ),
-        { signal: t.signal, interval: 100 },
-      );
+      const ssh = children.stdout.split('\n').filter((row) => {
+        const [, ppid, command] = row.trim().split(/\s+/);
+        return Number(ppid) === child.pid && command?.endsWith('ssh');
+      });
+      assert.deepEqual(ssh, []);
       await (
         await client.containers.find(String(line))
       )?.remove({
@@ -460,10 +447,8 @@ test(
         v: true,
       });
     } finally {
-      if (child.exitCode === null && child.signalCode === null)
-        child.kill('SIGKILL');
-      for (const pid of ssh.filter((each) => alive(each)))
-        process.kill(pid, 'SIGKILL');
+      child.kill('SIGKILL');
+      await exited;
     }
   },
 );

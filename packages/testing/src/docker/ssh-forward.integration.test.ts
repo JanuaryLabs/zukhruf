@@ -25,7 +25,7 @@ import {
 } from '../testing/global-setup-run.ts';
 import { type Sshd, startSshd } from '../testing/sshd.ts';
 import { DockerHost, quote } from './host.ts';
-import { type ProcessRun, TEST_RUN_ID } from './run-records.ts';
+import { TEST_RUN_ID } from './run-records.ts';
 import type { ServiceContainer } from './service-container.ts';
 import { DockerTestbed } from './testbed.ts';
 
@@ -141,11 +141,6 @@ async function openConnection(port: number): Promise<Socket> {
   const [answer]: unknown[] = await once(socket, 'data');
   assert.equal(String(answer), 'ping');
   return socket;
-}
-
-/** A run of the global setup with its directory at `directory`, as a test process reads it. */
-function runAt(directory: string): ProcessRun {
-  return { id: randomUUID(), directory };
 }
 
 /** A Node process that runs `body` with `DockerHost` in scope. */
@@ -455,7 +450,7 @@ test(
     // Arrange: a host in a run has no connection of its own.
     await using directory = await new TemporaryFiles().directory('run-');
     const host = new DockerHost(ENGINE_HOST, {
-      run: runAt(directory.path),
+      master: join(directory.path, 'ssh.sock'),
     });
 
     // Act
@@ -472,7 +467,9 @@ test(
   async () => {
     // Arrange
     await using directory = await new TemporaryFiles().directory('run-');
-    const host = new DockerHost(ENGINE_HOST, { run: runAt(directory.path) });
+    const host = new DockerHost(ENGINE_HOST, {
+      master: join(directory.path, 'ssh.sock'),
+    });
     const forward = await host.forward(80);
     const socket = connect(forward.port, '127.0.0.1');
     socket.on('error', () => {});

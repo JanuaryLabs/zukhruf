@@ -1,5 +1,7 @@
 import { fileURLToPath } from 'node:url';
 
+import { engine } from './current-engine.ts';
+
 const setup = fileURLToPath(
   new URL('../scripts/docker-global-setup.ts', import.meta.url),
 );
@@ -16,11 +18,13 @@ export const runnerArgs = (...args: string[]) => [
   ...args,
 ];
 
-/** The environment of a runner that keeps its runs under `state`. */
+/** The environment of a runner that keeps its runs under `state`, on the engine of this process's run. */
 export const runEnvironment = (
   state: string,
 ): Record<string, string | undefined> => ({
   ...process.env,
+  // A nested run serves an SSH connection of its own, not this run's docker.sock.
+  ...(process.env.DOCKER_HOST !== undefined && { DOCKER_HOST: engine }),
   XDG_STATE_HOME: state,
   // Undefined, not deleted: nano-spawn adds process.env back, and Node
   // passes no variable whose value is undefined.

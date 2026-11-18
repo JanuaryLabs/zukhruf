@@ -9,8 +9,6 @@ import { type Client, OpenChannelError } from '@zukhruf/ssh';
 import { type Environment, OpenSshConfig } from '@zukhruf/ssh/config';
 import { ControlClient } from '@zukhruf/ssh/control';
 
-import { type ProcessRun, runSockets } from './run-records.ts';
-
 export const quote = (value: string): string =>
   `'${value.replaceAll("'", "'\\''")}'`;
 
@@ -73,7 +71,7 @@ export class DockerHost {
 
   constructor(
     endpoint: string,
-    reach: { readonly run: ProcessRun } | { readonly environment: Environment },
+    reach: { readonly master: string } | { readonly environment: Environment },
   ) {
     if (!supportedEndpoints.some((scheme) => endpoint.startsWith(scheme))) {
       throw new Error(
@@ -82,8 +80,8 @@ export class DockerHost {
     }
     this.endpoint = endpoint;
     this.#channels =
-      'run' in reach
-        ? { master: new ControlClient(runSockets(reach.run.id).master) }
+      'master' in reach
+        ? { master: new ControlClient(reach.master) }
         : { environment: reach.environment };
   }
 
