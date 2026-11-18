@@ -72,8 +72,8 @@ export async function stateFolder(git: Git): Promise<string> {
 // The snapshots of one run of a hook: one clone of the repo for each commit,
 // made at the first ask. The clone shares the objects of the repo
 // (`git clone --shared`), so git copies none, and git commands in it see a
-// clean checkout of the commit. A later ask for packages links a node_modules into the same clone. Disposing
-// deletes each clone and lets each lock go.
+// clean checkout of the commit. A later ask for packages links a node_modules
+// into the same clone. Disposing deletes each clone and lets each lock go.
 export class Snapshots implements AsyncDisposable {
   readonly toolEnvironment: NodeJS.ProcessEnv;
   readonly #hook: HookKind;
@@ -191,7 +191,16 @@ export class Snapshots implements AsyncDisposable {
       await new TemporaryFiles().directory('git-hooks-snapshot-'),
     );
     const folder = join(temporary.path, 'tree');
+    // The global or system git config of the user can name a core.hooksPath
+    // whose hooks, such as reference-transaction and post-checkout, would run
+    // in every snapshot. An empty folder of hooks runs none, on each platform:
+    // an empty value names the root folder, and on Windows /dev/null is an
+    // ordinary path.
+    const noHooks = join(temporary.path, 'no-hooks');
+    await mkdir(noHooks);
+    const withoutHooks = ['-c', `core.hooksPath=${noHooks}`];
     await gitIn(temporary.path, this.toolEnvironment)(
+      ...withoutHooks,
       'clone',
       '--shared',
       '--no-checkout',
@@ -200,6 +209,7 @@ export class Snapshots implements AsyncDisposable {
       folder,
     );
     await gitIn(folder, this.toolEnvironment)(
+      ...withoutHooks,
       'checkout',
       '--detach',
       '--quiet',

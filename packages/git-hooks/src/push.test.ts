@@ -1,6 +1,13 @@
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
-import { mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import {
+  mkdir,
+  readFile,
+  readdir,
+  rm,
+  symlink,
+  writeFile,
+} from 'node:fs/promises';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
@@ -337,6 +344,69 @@ await prePush([new Refuse(), new After()]);
     await repo.gitIn(repo.top, '--git-dir', repo.remote, 'rev-list', '--all'),
     '',
     'The remote must get no commit',
+  );
+});
+
+test("the snapshot of a pushed head runs none of the user's git hooks: neither the reference-transaction hook that the clone fires nor the post-checkout hook that the checkout fires, from the core.hooksPath of the global git config", async () => {
+  // Arrange
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
+  const repo = await repository(
+    folder.path,
+    `import { readdir, readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { type Push, Step, prePush } from '@zukhruf/git-hooks';
+class Read extends Step<Push> {
+  readonly name = 'read';
+  async run(push: Push) {
+    const [update] = push.updates;
+    if (update === undefined || update.kind === 'delete') return this.fail('no head');
+    const snapshot = await push.snapshot(update.head);
+    return this.pass(JSON.stringify({
+      file: await readFile(join(snapshot.folder, 'a.txt'), 'utf8'),
+      marks: (await readdir(join(snapshot.folder, '.git'))).filter((name) => name.startsWith('ran-')),
+    }));
+  }
+}
+await prePush([new Read()]);
+`,
+    { GIT_CONFIG_GLOBAL: join(folder.path, 'global.gitconfig') },
+  );
+  await repo.write('a.txt', 'checked out\n');
+  await repo.commit('first');
+  // The global git config of the user, written after the base commit, so the
+  // push is the first git command that reads it.
+  // Each hook leaves a mark in the git folder of the repo that ran it.
+  await mkdir(join(folder.path, 'global-hooks'));
+  for (const name of ['reference-transaction', 'post-checkout'])
+    await writeFile(
+      join(folder.path, 'global-hooks', name),
+      '#!/bin/sh\ntouch "$(git rev-parse --git-dir)/ran-$(basename "$0")"\n',
+      { mode: 0o755 },
+    );
+  await writeFile(
+    join(folder.path, 'global.gitconfig'),
+    `[core]\n\thooksPath = ${join(folder.path, 'global-hooks')}\n`,
+  );
+
+  // Act
+  const result = await repo.push('--quiet', 'origin', 'main');
+
+  // Assert
+  assert.equal(result.code, 0, result.stderr);
+  const line = /^read\s+(\{.*\})$/m.exec(result.stderr);
+  assert.ok(line, result.stderr);
+  assert.deepEqual(
+    JSON.parse(line[1] ?? ''),
+    { file: 'checked out\n', marks: [] },
+    'The snapshot must hold the head, and no global hook must run in it',
+  );
+  await repo.gitIn(folder.path, 'clone', '--quiet', repo.root, 'control');
+  assert.deepEqual(
+    (await readdir(join(folder.path, 'control/.git')))
+      .filter((name) => name.startsWith('ran-'))
+      .toSorted(),
+    ['ran-post-checkout', 'ran-reference-transaction'],
+    'A clone outside the hook, with the same global git config, runs both hooks',
   );
 });
 
