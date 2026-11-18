@@ -496,6 +496,53 @@ try {
       }
     },
   );
+
+  test(
+    'an attach whose input stays open ends when its container exits, so the process exits by itself',
+    { skip },
+    async (t) => {
+      // Arrange: the container exits at once, and the attach keeps its input
+      // open, as a lease or a lock claim does.
+      await using local = await localEngine(t.signal);
+      await using sshd = await startEngineSshd(engineVariables(ready(engine)));
+      const sshFlags = await clientFlags(sshd);
+      const label = randomUUID();
+      const scenario = `
+import { Docker } from ${JSON.stringify(ENTRY)};
+const docker = await Docker.connect({
+  clock: globalThis,
+  environment: process.env,
+  host: ${JSON.stringify(SSH_HOST)},
+  sshFlags: ${JSON.stringify(sshFlags)},
+});
+const container = await docker.containers.create({
+  Image: ${JSON.stringify(IMAGE)},
+  Cmd: ['true'],
+  OpenStdin: true,
+  StdinOnce: true,
+  AttachStdin: true,
+  Labels: { ${JSON.stringify(TEST_LABEL)}: ${JSON.stringify(label)} },
+});
+const attach = await container.attach({ stdin: true });
+await container.start();
+console.log(JSON.stringify({ exitCode: await attach.exitCode }));
+`;
+      try {
+        // Act
+        const result = await runScenario(
+          scenario,
+          inheritedEnvironment(),
+          t.signal,
+        );
+
+        // Assert
+        assert.equal(result.exitCode, 0, result.stderr);
+        assert.deepEqual(lastJson(result), { exitCode: 0 });
+      } finally {
+        await removeLabeled(local, label);
+      }
+    },
+  );
 });
 
 describe('the input of an exec over an ssh:// host', () => {
