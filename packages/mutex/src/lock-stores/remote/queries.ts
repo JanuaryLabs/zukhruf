@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
+import type { RefCount } from '@zukhruf/async';
+
 import type { ConnectionSupervisor } from './connection-supervisor.ts';
 import type { LockRequest } from './protocol.ts';
 
@@ -9,6 +11,8 @@ interface Query extends Pick<
   'resolve' | 'reject'
 > {
   key: string;
+  /** Keeps the process alive while the look waits for its answer. */
+  held: Disposable;
 }
 
 /**
@@ -18,24 +22,19 @@ interface Query extends Pick<
  */
 export class Queries {
   readonly #link: ConnectionSupervisor<LockRequest>;
-  /** Called whenever a look starts or ends waiting. */
-  readonly #changed: () => void;
+  /** Keeps the connection ref'd while a look waits. */
+  readonly #refs: RefCount;
   readonly #waiting = new Map<string, Query>();
 
-  constructor(link: ConnectionSupervisor<LockRequest>, changed: () => void) {
+  constructor(link: ConnectionSupervisor<LockRequest>, refs: RefCount) {
     this.#link = link;
-    this.#changed = changed;
-  }
-
-  get size(): number {
-    return this.#waiting.size;
+    this.#refs = refs;
   }
 
   ask(key: string): Promise<boolean> {
     const id = randomUUID();
     const { promise, resolve, reject } = Promise.withResolvers<boolean>();
-    this.#waiting.set(id, { key, resolve, reject });
-    this.#changed();
+    this.#waiting.set(id, { key, resolve, reject, held: this.#refs.hold() });
     this.#link.open();
     this.#link.send({ op: 'isHeld', id, key });
     return promise;
@@ -62,7 +61,7 @@ export class Queries {
     const query = this.#waiting.get(id);
     if (!query) return undefined;
     this.#waiting.delete(id);
-    this.#changed();
+    query.held[Symbol.dispose]();
     return query;
   }
 }

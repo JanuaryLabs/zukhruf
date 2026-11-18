@@ -788,6 +788,39 @@ describe('A follower process through a reconnect', () => {
     );
   });
 
+  test('a follower process whose look was answered lets its process exit', async (t) => {
+    // Arrange: a process looks at a key, and stays alive only until the test says so.
+    await using directory = await new TemporaryFiles().directory('mutex-test-');
+    await using _term = await socketElection(
+      directory.path,
+      globalThis,
+    ).campaign();
+    await using leader = await standInLeader(directory.path);
+    await using looker = startWorker(
+      `
+					import { SocketStore } from ${JSON.stringify(socketUrl.href)};
+					process.once('message', () => {});
+					const store = new SocketStore(${JSON.stringify(directory.path)}, { clock: globalThis });
+					const held = await store.isHeld('product:42');
+					process.send({ type: 'answered', held });
+				`,
+      'looker',
+    );
+    const first = await connection(t, leader, 0);
+    first.welcome();
+    const asked = await request(t, first, 0);
+
+    // Act: the leader answers the look, and the process has nothing else to do.
+    first.answer({ op: 'held', id: asked.id, held: false });
+    await looker.next('answered', { signal: t.signal });
+    looker.child.send('done');
+
+    // Assert: an answered look does not keep the process alive.
+    assert.equal(asked.op, 'isHeld');
+    await untilAborted(looker.closed, t.signal);
+    assert.deepEqual(looker.exit, { code: 0, signal: null }, looker.stderr);
+  });
+
   test('a follower process that only holds keys lets its process exit after a reconnect', async (t) => {
     // Arrange: a process holds a key, and stays alive only until the test says so.
     await using directory = await new TemporaryFiles().directory('mutex-test-');

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import { untilAborted } from '@zukhruf/async';
+import { RefCount, untilAborted } from '@zukhruf/async';
 import { FencingToken } from '@zukhruf/fencing';
 import { LeaseController } from '@zukhruf/lease';
 
@@ -29,6 +29,8 @@ interface Pending extends Pick<
    * `stranded` went out on a connection that was lost before it was answered.
    */
   delivery: 'queued' | 'sent' | 'stranded';
+  /** Keeps the process alive while the request waits for its answer. */
+  held: Disposable;
 }
 
 interface Held {
@@ -47,10 +49,13 @@ export class RemoteLockClient implements LockStore {
   readonly #pending = new Map<string, Pending>();
   readonly #held = new Map<string, Held>();
   readonly #queries: Queries;
+  /** Keeps the connection ref'd while a request or a look waits for its answer. */
+  readonly #refs: RefCount;
 
   constructor(link: ConnectionSupervisor<LockRequest>) {
     this.#link = link;
-    this.#queries = new Queries(link, () => this.#updateRef());
+    this.#refs = new RefCount(link);
+    this.#queries = new Queries(link, this.#refs);
     link.on('connected', () => this.#resume());
     // A message this client cannot read answers nothing it waits for.
     link.on('message', (message) => {
@@ -128,9 +133,9 @@ export class RemoteLockClient implements LockStore {
       delivery: 'queued',
       resolve,
       reject,
+      held: this.#refs.hold(),
     };
     this.#pending.set(id, pending);
-    this.#updateRef();
     this.#link.open();
     this.#dispatch(id, pending);
     return promise;
@@ -206,8 +211,6 @@ export class RemoteLockClient implements LockStore {
 
   /** A new connection: reassert held keys first, then send what waits. */
   #resume() {
-    // A new connection starts with its adapter's default, which may not match whether this client waits.
-    this.#updateRef();
     for (const [id, { key, token }] of this.#held) {
       this.#link.send({ op: 'reassert', id, key, token: token.toString() });
     }
@@ -244,12 +247,7 @@ export class RemoteLockClient implements LockStore {
     const pending = this.#pending.get(id);
     if (!pending) return undefined;
     this.#pending.delete(id);
-    this.#updateRef();
+    pending.held[Symbol.dispose]();
     return pending;
-  }
-
-  #updateRef() {
-    if (this.#pending.size > 0 || this.#queries.size > 0) this.#link.ref();
-    else this.#link.unref();
   }
 }
