@@ -605,12 +605,16 @@ test(
 
     // Act
     await session.windowChange({ rows: 33, columns: 101 });
-    session.stdin.write('tty; stty size; exit\n');
+    // Markers: the shell of a CI runner printed tty's line and stty's with
+    // no line end between them, so the test reads each value by its marker.
+    session.stdin.write(
+      'printf "tty:%s:\\n" "$(tty)"; printf "size:%s:\\n" "$(stty size)"; exit\n',
+    );
     const output = await text(session.stdout);
 
     // Assert
-    assert.match(output, /\/dev\/(pts\/|ttys)\d+/);
-    assert.match(output, /\b33 101\r\n/);
+    assert.match(output, /tty:\/dev\/(pts\/|ttys)\d+:/);
+    assert.match(output, /size:33 101:/);
     await session.wait();
   },
 );

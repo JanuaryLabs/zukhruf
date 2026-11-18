@@ -421,7 +421,14 @@ test(
     sshd.kill('SIGKILL');
 
     // Assert
-    await assert.rejects(client.wait(), /closed the connection/);
+    // The kill of sshd's process group ends the TCP connection with a FIN
+    // (macOS: 'the server closed the connection') or, with data unread in
+    // the socket, an RST (Linux: ECONNRESET); either is a loss, not a close.
+    await assert.rejects(client.wait(), (error) => {
+      assert.ok(Error.isError(error));
+      assert.match(error.message, /closed the connection|ECONNRESET/);
+      return true;
+    });
   },
 );
 
