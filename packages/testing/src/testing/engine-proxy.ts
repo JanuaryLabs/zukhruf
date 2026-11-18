@@ -19,6 +19,8 @@ import type { Duplex } from 'node:stream';
 import { Cond } from '@zukhruf/async';
 import { type TemporaryDirectory, TemporaryFiles } from '@zukhruf/fs';
 
+import { LEASED_SERVER_LABEL, LEASE_LABEL } from '../docker/engine-lease.ts';
+
 /** A request that reached the proxy whole. `path` has no API version and no query. */
 export interface ProxiedRequest {
   method: string;
@@ -109,6 +111,60 @@ export class EngineProxy implements AsyncDisposable {
     this.#intercepts.push({ method, path, intercept });
   }
 
+  /**
+   * Holds the `nth` request with this method and path that `when` accepts,
+   * counted from 1, until release(). `reached` resolves with that request
+   * when it arrives, and `left` when its client then closes its connection.
+   */
+  hold(
+    method: string,
+    path: string | RegExp,
+    nth: number,
+    when?: (request: ProxiedRequest) => boolean | Promise<boolean>,
+  ): {
+    reached: Promise<ProxiedRequest>;
+    left: Promise<void>;
+    release(): void;
+  } {
+    const reached = Promise.withResolvers<ProxiedRequest>();
+    const left = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    let seen = 0;
+    this.intercept(method, path, async (request, signal) => {
+      if (seen >= nth) return;
+      if (when !== undefined && !(await when(request))) return;
+      seen += 1;
+      if (seen !== nth) return;
+      reached.resolve(request);
+      void (signal.aborted ? Promise.resolve() : once(signal, 'abort')).then(
+        () => left.resolve(),
+      );
+      await release.promise;
+    });
+    return {
+      reached: reached.promise,
+      left: left.promise,
+      release: () => release.resolve(),
+    };
+  }
+
+  /**
+   * Refuses the create of the sweep lease of each shared server whose
+   * fingerprint is not one of `fingerprints`. A reaper keeps a server whose
+   * sweep lease it cannot take, so a reaper whose requests go through this
+   * proxy, even one with a TTL of 1 ms, removes no other shared server of the
+   * engine, such as the servers of another session.
+   */
+  sweepOnly(fingerprints: readonly string[]): void {
+    this.intercept('POST', '/containers/create', ({ body }) => {
+      const { Labels: labels }: { Labels: Record<string, string> } =
+        JSON.parse(body);
+      if (labels[LEASE_LABEL] !== 'sweep') return;
+      if (!fingerprints.some((ours) => ours === labels[LEASED_SERVER_LABEL]))
+        throw new Error('The test keeps each other shared server.');
+    });
+  }
+
   /** Listens at the same path again after close(). */
   async listen(): Promise<void> {
     await rm(this.#path, { force: true });
@@ -134,9 +190,6 @@ export class EngineProxy implements AsyncDisposable {
   }
 
   #track(socket: Socket | Duplex): void {
-    // Node's global agent keeps the connection to the engine alive, so the
-    // same socket comes back for each request; its close listener is already on it.
-    if (this.#sockets.has(socket)) return;
     this.#sockets.add(socket);
     socket.once('close', () => this.#sockets.delete(socket));
   }
@@ -153,8 +206,8 @@ export class EngineProxy implements AsyncDisposable {
       return;
     }
     const proxied = {
-      method: request.method ?? 'GET',
-      path: unversioned(request.url ?? '/'),
+      method: request.method!,
+      path: unversioned(request.url!),
       body: Buffer.concat(chunks).toString('utf8'),
     };
     this.requests.push(proxied);
@@ -186,7 +239,11 @@ export class EngineProxy implements AsyncDisposable {
       response.writeHead(502).end(String(error));
       return;
     }
+    // A connection of its own for each request: a pooled connection of Node's
+    // global agent is shared with each other proxy of this process, and the
+    // close() of one would end the requests of the others on it.
     const upstream = forward({
+      agent: false,
       socketPath: this.#engine,
       method: request.method,
       path: request.url,
@@ -226,8 +283,8 @@ export class EngineProxy implements AsyncDisposable {
       return;
     }
     this.requests.push({
-      method: request.method ?? 'GET',
-      path: unversioned(request.url ?? '/'),
+      method: request.method!,
+      path: unversioned(request.url!),
       body: Buffer.concat(chunks).toString('utf8'),
     });
     const engine = connect(this.#engine);

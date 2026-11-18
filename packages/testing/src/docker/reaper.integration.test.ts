@@ -12,7 +12,11 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { createClock } from '@sinonjs/fake-timers';
 
 import { untilAborted } from '@zukhruf/async';
-import { type Container, Docker } from '@zukhruf/docker';
+import {
+  type Container,
+  ContainerNotFoundError,
+  Docker,
+} from '@zukhruf/docker';
 import { TemporaryFiles } from '@zukhruf/fs';
 
 import { timebox } from '../async/timebox.ts';
@@ -256,16 +260,19 @@ async function execEvent(
   event: 'exec_start' | 'exec_die',
   signal: AbortSignal,
   exec?: string,
-): Promise<string | undefined> {
+): Promise<string> {
   for await (const { Actor } of docker.events({
     since,
     filters: { container: [id], event: [event] },
     signal,
   })) {
     const found = Actor?.Attributes?.execID;
-    if (exec === undefined || found === exec) return found;
+    if (exec === undefined || found === exec) {
+      assert.ok(found !== undefined, `the ${event} event has an exec id`);
+      return found;
+    }
   }
-  return undefined;
+  throw new Error('the events of the engine ended');
 }
 
 /**
@@ -339,25 +346,6 @@ async function proxiedReaper(
   exited.catch(() => {});
   await reaper.start();
   return { id: reaper.id, exited };
-}
-
-/** Holds the `nth` request of the proxy to `method` `path`, counted from 1, until release(). */
-function holdNth(
-  proxy: EngineProxy,
-  method: string,
-  path: string | RegExp,
-  nth: number,
-) {
-  const reached = Promise.withResolvers<void>();
-  const release = Promise.withResolvers<void>();
-  let seen = 0;
-  proxy.intercept(method, path, async () => {
-    seen += 1;
-    if (seen !== nth) return;
-    reached.resolve();
-    await release.promise;
-  });
-  return { reached: reached.promise, release: () => release.resolve() };
 }
 
 /** `promise`, or, when `signal` aborts first, a rejection that names `what`. */
@@ -469,23 +457,17 @@ test('a container that the engine creates after the first pass of the reaper is 
   const settings = { ...quick, grace: 300, interval: 3_000, passes: 2 };
   let child: ChildProcess | undefined;
   const ids: string[] = [];
-  const watch = new AbortController();
   try {
     child = await holder(run, settings);
     ids.push(await object(run));
-    const since = Math.floor(Date.now() / 1000) - 1;
-    const destroyed = (async () => {
-      for await (const _ of docker.events({
-        since,
-        filters: { container: [ids[0]!], event: ['destroy'] },
-        signal: watch.signal,
-      }))
-        return;
-    })();
-    destroyed.catch(() => {});
+    const removed = (await docker.containers.find(ids[0]!))!
+      .wait({ condition: 'removed', signal: t.signal })
+      .catch((error: unknown) => {
+        if (!(error instanceof ContainerNotFoundError)) throw error;
+      });
     await killed(child);
     // The first pass removes the first container, after its list.
-    await within(destroyed, t.signal, 'the removal by the first pass');
+    await within(removed, t.signal, 'the removal by the first pass');
 
     // No anonymous volume: one would hold up the volume removal of the first pass.
     const late = await docker.containers.create({
@@ -501,7 +483,6 @@ test('a container that the engine creates after the first pass of the reaper is 
       assert.deepEqual(await reapers(run), []);
     });
   } finally {
-    watch.abort();
     if (child) await killed(child);
     await removeRun(run, ids);
   }
@@ -771,7 +752,7 @@ test(
       // The first exec create is the hold that take() takes. The second is
       // the hold that is taken again after the cut: held here, so that hold
       // is in flight when held() joins it.
-      const again = holdNth(proxy, 'POST', /^\/containers\/[^/]+\/exec$/, 2);
+      const again = proxy.hold('POST', /^\/containers\/[^/]+\/exec$/, 2);
       stack.defer(() => again.release());
       const hold = await ReaperHold.take(
         client,
@@ -831,31 +812,11 @@ test(
       // The reaper answers `closing` to the exec of the hold. The first
       // inspect after that exec starts is the hold's wait for the removal of
       // the reaper: held here until its client leaves.
-      const reached = Promise.withResolvers<void>();
-      const left = Promise.withResolvers<void>();
-      const release = Promise.withResolvers<void>();
-      stack.defer(() => release.resolve());
-      let holding = false;
-      proxy.intercept(
-        'GET',
-        /^\/containers\/[^/]+\/json$/,
-        async (_, signal) => {
-          if (
-            holding ||
-            !proxy.requests.some(({ path }) =>
-              /^\/exec\/[^/]+\/start$/.test(path),
-            )
-          )
-            return;
-          holding = true;
-          reached.resolve();
-          const leaving = signal.aborted
-            ? Promise.resolve()
-            : once(signal, 'abort');
-          void leaving.then(() => left.resolve());
-          await Promise.race([leaving, release.promise]);
-        },
+      const wait = proxy.hold('GET', /^\/containers\/[^/]+\/json$/, 1, () =>
+        proxy.requests.some(({ path }) => /^\/exec\/[^/]+\/start$/.test(path)),
       );
+      stack.defer(() => wait.release());
+      void wait.left.then(() => wait.release());
       const taking = ReaperHold.take(
         client,
         run,
@@ -863,15 +824,22 @@ test(
         clock,
       );
       taking.catch(() => {});
-      await within(
-        reached.promise,
+      const held = await within(
+        wait.reached,
         t.signal,
         'the wait for the removal of the closing reaper',
+      );
+      const exec = proxy.requests.findIndex(({ path }) =>
+        /^\/exec\/[^/]+\/start$/.test(path),
+      );
+      assert.ok(
+        exec !== -1 && proxy.requests.indexOf(held) > exec,
+        'the held inspect comes after the start of the exec of the hold',
       );
 
       clock.tick(readiness);
 
-      await within(left.promise, t.signal, 'the client leaving that wait');
+      await within(wait.left, t.signal, 'the client leaving that wait');
       await assert.rejects(taking, {
         message: `The hold of the reaper ${reaperName(run)} was not ready within its readiness bound of ${readiness} ms`,
       });
@@ -899,21 +867,9 @@ test(
           environment: { DOCKER_HOST: proxy.host },
         }),
       );
-      const reached = Promise.withResolvers<void>();
-      const left = Promise.withResolvers<void>();
-      const release = Promise.withResolvers<void>();
-      stack.defer(() => release.resolve());
-      let holding = false;
-      proxy.intercept('POST', '/containers/create', async (_, signal) => {
-        if (holding) return;
-        holding = true;
-        reached.resolve();
-        const leaving = signal.aborted
-          ? Promise.resolve()
-          : once(signal, 'abort');
-        void leaving.then(() => left.resolve());
-        await Promise.race([leaving, release.promise]);
-      });
+      const create = proxy.hold('POST', '/containers/create', 1);
+      stack.defer(() => create.release());
+      void create.left.then(() => create.release());
       const taking = ReaperHold.take(
         client,
         run,
@@ -921,11 +877,11 @@ test(
         clock,
       );
       taking.catch(() => {});
-      await within(reached.promise, t.signal, 'the create of the reaper');
+      await within(create.reached, t.signal, 'the create of the reaper');
 
       clock.tick(readiness);
 
-      await within(left.promise, t.signal, 'the client leaving the create');
+      await within(create.left, t.signal, 'the client leaving the create');
       await assert.rejects(taking, {
         message: `The hold of the reaper ${reaperName(run)} was not ready within its readiness bound of ${readiness} ms`,
       });
@@ -977,7 +933,7 @@ test(
       // The first list of containers is the reaper's check of its socket
       // (ADR 0020, item 14). The second is the first request of the pass: its
       // list of the run's containers.
-      const listing = holdNth(proxy, 'GET', '/containers/json', 2);
+      const listing = proxy.hold('GET', '/containers/json', 2);
       stack.defer(() => listing.release());
       const since = Math.floor(Date.now() / 1000) - 1;
       const { id: reaper } = await proxiedReaper(stack, proxy, run, {
@@ -1035,7 +991,7 @@ test(
     try {
       const proxy = stack.use(await EngineProxy.start(engine));
       // A pass lists the run's volumes after it removed the run's containers.
-      const listing = holdNth(proxy, 'GET', '/volumes', 1);
+      const listing = proxy.hold('GET', '/volumes', 1);
       stack.defer(() => listing.release());
       const since = Math.floor(Date.now() / 1000) - 1;
       const { id: reaper } = await proxiedReaper(stack, proxy, run, {
@@ -1100,9 +1056,9 @@ test(
       await shared.start();
       // The reaper reads the age of a server in whole seconds of the engine's
       // clock: a server is older than a TTL of 1 ms from the next second on.
-      const born = Math.floor(
-        Date.parse((await shared.inspect()).Created ?? '') / 1000,
-      );
+      const { Created } = await shared.inspect();
+      assert.ok(Created !== undefined, 'the server has its creation time');
+      const born = Math.floor(Date.parse(Created) / 1000);
       await waitFor(
         async () => {
           const { stdout } = await shared.exec({ Cmd: ['date', '-u', '+%s'] });
@@ -1115,13 +1071,12 @@ test(
       // takes it again before each create of the reaper under test, and lets
       // it go when that reaper looks for its end. The sweep lease of each
       // other shared server is refused, so the test keeps them all.
+      proxy.sweepOnly([fingerprint]);
       const events: ('try' | 'gone')[] = [];
       proxy.intercept('POST', '/containers/create', async ({ body }) => {
-        const { Labels: labels = {} }: { Labels?: Record<string, string> } =
+        const { Labels: labels }: { Labels: Record<string, string> } =
           JSON.parse(body);
         if (labels['dev.zukhruf.testing.lease'] !== 'sweep') return;
-        if (labels['dev.zukhruf.testing.lease.server'] !== fingerprint)
-          throw new Error('The test keeps each other shared server.');
         events.push('try');
         if ((await docker.containers.find(lease)) !== undefined) return;
         const taken = await docker.containers.create(
@@ -1227,7 +1182,7 @@ test(
       // The first list of containers is the reaper's check of its socket
       // (ADR 0020, item 14): held here, so a holder waits for its result. No
       // request time limit ends that check.
-      const check = holdNth(proxy, 'GET', '/containers/json', 1);
+      const check = proxy.hold('GET', '/containers/json', 1);
       stack.defer(() => check.release());
       const since = Math.floor(Date.now() / 1000) - 1;
       const { id: reaper } = await proxiedReaper(stack, proxy, run, {
@@ -1244,7 +1199,6 @@ test(
         await ReaperHold.take(docker, ${JSON.stringify(run)}, ${JSON.stringify(quick)}, globalThis);
       `);
       const hold = await within(started, t.signal, 'the exec of the hold');
-      assert.ok(hold !== undefined, 'the exec of the hold has an id');
 
       await killed(owner.child);
 
