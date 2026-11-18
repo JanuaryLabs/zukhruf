@@ -430,6 +430,7 @@ A connection that is lost after the start ends each open channel with an error w
 - **No SFTP.** Go and Rust give it in a separate package (`github.com/pkg/sftp`, russh-sftp). It is a subsystem protocol with its own draft.
 - **No forwarder class for `ssh -L` or `ssh -D`.** The caller composes `node:net` and `client.dial` ([ADR 0009](./docs/adr/0009-the-caller-forwards-a-local-port-with-node-net-and-client-dial.md)). A SOCKS server for `-D` is the same composition, as in Go and Rust.
 - **No certificates.** ssh2 1.17.0 has no `*-cert-v01@openssh.com` algorithm, so `@cert-authority` host keys and certificate user keys do not work ([ADR 0003](./docs/adr/0003-ssh2-speaks-the-protocol.md)).
+- **No security keys and no ML-DSA keys.** ssh2 1.17.0 cannot parse `sk-ssh-ed25519@openssh.com`, `sk-ecdsa-sha2-nistp256@openssh.com` or `ssh-mldsa*` keys, so they work neither as identity files nor through the agent. `@zukhruf/ssh/config` skips such an identity file, and `AgentClient#list` leaves such a key out.
 - **No post-quantum key exchange.** ssh2's best is `curve25519-sha256`. OpenSSH 10.0 made `mlkem768x25519-sha256` its default ([ADR 0003](./docs/adr/0003-ssh2-speaks-the-protocol.md)).
 - **No parser of `ssh_config`.** OpenSSH resolves the config through `ssh -G` ([ADR 0004](./docs/adr/0004-openssh-resolves-the-config-through-ssh-g.md)).
 - **No connection sharing (`ControlMaster`).** The master is a process that outlives its clients. A program shares one `Client` by holding it.
