@@ -19,7 +19,12 @@ import { splitHostPort } from './address.ts';
 import { type PrivateKey, protocolKeyOf } from './private-key.ts';
 import type { Prompt } from './prompt.ts';
 import { PublicKey } from './public-key.ts';
-import type { SignalName, TerminalModes, WindowSize } from './session.ts';
+import {
+  type SignalName,
+  type TerminalModes,
+  type WindowSize,
+  isSignalOrVendorName,
+} from './session.ts';
 import {
   SessionReplies,
   dropCommandChannel,
@@ -643,7 +648,7 @@ export class ServerSession {
     session.on('signal', (_accept, reject, info) => {
       const reply = slot(reject);
       const { name } = info;
-      if (!isSignalName(name)) {
+      if (!isSignalOrVendorName(name)) {
         reply(false);
         return;
       }
@@ -721,26 +726,4 @@ export class ServerSession {
       },
     });
   }
-}
-
-const signalNames: ReadonlySet<string> = new Set<SignalName>([
-  'ABRT',
-  'ALRM',
-  'FPE',
-  'HUP',
-  'ILL',
-  'INT',
-  'KILL',
-  'PIPE',
-  'QUIT',
-  'SEGV',
-  'TERM',
-  'USR1',
-  'USR2',
-]);
-
-function isSignalName(
-  name: string,
-): name is SignalName | `${string}@${string}` {
-  return signalNames.has(name) || name.includes('@');
 }

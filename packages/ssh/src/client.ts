@@ -33,6 +33,7 @@ import {
   type SessionStart,
   type SignalName,
   createSession,
+  isSignalOrVendorName,
 } from './session.ts';
 import {
   type AgentForwarding,
@@ -584,7 +585,9 @@ function adaptChannel(
       }
       // ssh2 adds SIG to the name of exit-signal (client.js:676).
       const name = signal?.replace(/^SIG/, '') ?? '';
-      if (!isExitSignal(name)) return;
+      // A name outside RFC 4254 §6.10 with no @ breaks the RFC; its exit is
+      // not known, so wait() rejects with ExitMissingError.
+      if (!isSignalOrVendorName(name)) return;
       exit = {
         kind: 'signal',
         signal: name,
@@ -608,30 +611,6 @@ function adaptChannel(
     signal: (name) => channel.signal(name),
     close: () => channel.close(),
   };
-}
-
-const signalNames: readonly string[] = [
-  'ABRT',
-  'ALRM',
-  'FPE',
-  'HUP',
-  'ILL',
-  'INT',
-  'KILL',
-  'PIPE',
-  'QUIT',
-  'SEGV',
-  'TERM',
-  'USR1',
-  'USR2',
-] satisfies SignalName[];
-
-// A name outside RFC 4254 §6.10 with no @ breaks the RFC; its exit is not
-// known, so wait() rejects with ExitMissingError.
-function isExitSignal(
-  name: string,
-): name is SignalName | `${string}@${string}` {
-  return signalNames.includes(name) || name.includes('@');
 }
 
 // The auth methods in the order of the config, after the "none" request that

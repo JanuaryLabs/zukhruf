@@ -230,21 +230,37 @@ export interface WindowSize {
 /** The terminal modes of RFC 4254 §8 by name, such as { ECHO: 0, ISIG: 1 }. */
 export type TerminalModes = Readonly<Record<string, number>>;
 
+const signalNames = [
+  'ABRT',
+  'ALRM',
+  'FPE',
+  'HUP',
+  'ILL',
+  'INT',
+  'KILL',
+  'PIPE',
+  'QUIT',
+  'SEGV',
+  'TERM',
+  'USR1',
+  'USR2',
+] as const;
+
 /** RFC 4254 §6.10, with no SIG. */
-export type SignalName =
-  | 'ABRT'
-  | 'ALRM'
-  | 'FPE'
-  | 'HUP'
-  | 'ILL'
-  | 'INT'
-  | 'KILL'
-  | 'PIPE'
-  | 'QUIT'
-  | 'SEGV'
-  | 'TERM'
-  | 'USR1'
-  | 'USR2';
+export type SignalName = (typeof signalNames)[number];
+
+export function isSignalName(value: unknown): value is SignalName {
+  return signalNames.some((name) => name === value);
+}
+
+/** A signal name of RFC 4254 §6.10, or a vendor name with an @, such as sshd's SIG@openssh.com (sig2name in OpenSSH's session.c). */
+export function isSignalOrVendorName(
+  value: unknown,
+): value is SignalName | `${string}@${string}` {
+  return (
+    isSignalName(value) || (typeof value === 'string' && value.includes('@'))
+  );
+}
 
 /** How the command of a session ended: exit-status or exit-signal, RFC 4254 §6.10. */
 export type Exit =
