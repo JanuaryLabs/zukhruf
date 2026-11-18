@@ -6,26 +6,29 @@ export class DockerError extends Error {
   }
 }
 
-/** The codes of a connection that did not open: no socket or no `ssh` on the PATH, a refusal, a denial of the socket. */
+/** The codes of a connection that did not open: no socket, a refusal, a denial of the socket. */
 const DIAL_FAILURES = new Set(['ENOENT', 'ECONNREFUSED', 'EACCES']);
 
 /**
  * The connection failed before the engine answered. The message tells the two
  * cases apart, as the Go client of Moby does: "Cannot connect" when the
  * connection did not open, and "Error during the connection" when it opened
- * and then failed, also when `ssh` exited. The `cause` is the error of Node,
- * or the exit error of `ssh`.
+ * and then failed. The `cause` is the error of Node or of @zukhruf/ssh. A
+ * `detail` follows when the package knows more, such as an SSH server that
+ * refused the engine socket.
  */
 export class ConnectionFailedError extends DockerError {
   readonly host: string;
 
-  constructor(host: string, options?: ErrorOptions) {
+  constructor(host: string, options?: ErrorOptions & { detail?: string }) {
     // The message comes from the cause, so no caller can pair a cause with the message of the other case.
     const code: unknown = Reflect.get(Object(options?.cause), 'code');
-    super(
+    const message =
       typeof code === 'string' && DIAL_FAILURES.has(code)
         ? `Cannot connect to the engine at ${host}.`
-        : `Error during the connection to the engine at ${host}.`,
+        : `Error during the connection to the engine at ${host}.`;
+    super(
+      options?.detail === undefined ? message : `${message} ${options.detail}`,
       options,
     );
     this.name = 'ConnectionFailedError';
@@ -103,9 +106,8 @@ export interface EngineAnswer {
  * incomplete (ADR 0012). On a Unix socket or a named pipe, a write to its
  * standard input failed before the output ended, when no output had come or
  * the caller had not taken the output: Node then destroys the connection, and
- * output that was still on the way is gone. Over SSH, `ssh` exited non-zero
- * before the output ended. The `cause` is the error of the write, or the exit
- * error of `ssh`. The package does not run the command again.
+ * output that was still on the way is gone. The `cause` is the error of the
+ * write. The package does not run the command again.
  */
 export class IncompleteOutputError extends DockerError {
   /** The exit code of the command. */

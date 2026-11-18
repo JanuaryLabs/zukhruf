@@ -96,6 +96,8 @@ What closes the engine's end of the connection is not known. The handlers of Mob
 
 ### Over SSH
 
+> 2026-11-18: since [ADR 0015](./0015-an-ssh-engine-is-reached-through-zukhruf-ssh-in-the-node-process.md), a connection over SSH is a channel of `@zukhruf/ssh`, not `docker system dial-stdio`, so the race below is gone: no remote process copies between the engine and the pipes of `ssh`, and no `SshExitError` exists. The text below records the old transport.
+
 Over SSH, the race has a different form. `docker system dial-stdio` copies between the engine and the pipes of `ssh` ([`dial_stdio.go`](https://github.com/docker/cli/blob/eaae503a22566c7760c0b28df92cfdef36428379/cli/command/system/dial_stdio.go)). When one of its two copies fails, it returns at once, and `ssh` exits non-zero. Output that it did not copy yet is lost on the remote host. The package then destroys the connection with an `SshExitError`, before the output ended.
 
 A probe on 2026-11-14 used an sshd container (`alpine:3` with `docker-cli` on the engine's own socket) and the starved client of the first probe, with the package from source (backlog #4346):

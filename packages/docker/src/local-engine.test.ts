@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
 import { Docker } from './index.ts';
+import { localEngineSocket } from './testing/local-engine.ts';
 import { ENTRY, lastJson, runScenario } from './testing/scenario.ts';
-import { localEngineSocket } from './testing/ssh-stand-in.ts';
 
 const engineSocket = await localEngineSocket(process.env);
 

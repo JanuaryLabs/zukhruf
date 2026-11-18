@@ -11,8 +11,8 @@ import { promisify } from 'node:util';
 
 import { ConnectionFailedError, Docker, DockerError } from './index.ts';
 import { IMAGE, TEST_LABEL, removeLabeled } from './testing/engine.ts';
+import { localEngineSocket } from './testing/local-engine.ts';
 import { ENTRY, runScenario } from './testing/scenario.ts';
-import { localEngineSocket } from './testing/ssh-stand-in.ts';
 import { type Sshd, startSshd } from './testing/sshd.ts';
 
 const run = promisify(execFile);
@@ -636,7 +636,7 @@ console.log('connected');
 
   test(
     'when a process that holds an exec of a silent command and an open events() stream dies by SIGKILL, each connection of sshd ends and no process of it remains',
-    { skip, todo: '#4503' },
+    { skip },
     async (t) => {
       // Arrange
       await using local = await localEngine(t.signal);

@@ -47,3 +47,12 @@ export function lastJson(result: ScenarioResult): unknown {
   }
   return JSON.parse(last);
 }
+
+/** The environment of the test process, for a scenario that runs as a user's process runs. */
+export function inheritedEnvironment(): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(process.env).flatMap(([name, value]) =>
+      value === undefined ? [] : [[name, value]],
+    ),
+  );
+}

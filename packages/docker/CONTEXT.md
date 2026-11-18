@@ -25,15 +25,15 @@ The directory where the Docker CLI keeps its contexts: `contexts/meta/<sha256 of
 **Current context**:
 The context that the Docker CLI selects when a command names none: `DOCKER_CONTEXT`, else `currentContext` in `config.json`, else `default`. When `DOCKER_HOST` is set, the CLI uses the `default` context with that host, whatever the current context is.
 
-**Connection helper**:
-The program that carries an HTTP connection to an SSH engine. `ssh` starts `docker system dial-stdio` on the remote machine, and the client sends HTTP through the standard input and output of `ssh`. Docker calls it a connhelper.
-_Avoid_: Tunnel, port forward (`@zukhruf/testing` forwards a container's port, which is another thing)
+**SSH channel**:
+What carries an HTTP connection to an SSH engine: a `direct-streamlocal@openssh.com` channel of the client's one SSH connection to the engine socket, which `@zukhruf/ssh` opens inside the Node process (ADR 0015). The Docker CLI uses a connection helper instead: an `ssh` process that starts `docker system dial-stdio` on the remote machine.
+_Avoid_: Connection helper (the old transport), tunnel, port forward (`@zukhruf/testing` forwards a container's port, which is another thing)
 
 **API version**:
 The version of the Engine API in the path of each request, as in `/v1.51/containers/json`. The client negotiates it once, when it connects: it uses the lower of its own highest version and the engine's `ApiVersion`.
 
 **Connection failure**:
-The connection failed before the engine answered. Either it did not open: the socket does not exist, the engine refuses the connection, or the system denies the socket. Or it opened and then died before the answer, which includes an `ssh` that exits or cannot log in. A stopped Docker Desktop leaves its socket file behind and refuses each connection. A connection that is lost after the answer started is not a connection failure. Docker's Go client uses the same term (`IsErrConnectionFailed`) with the same limits.
+The connection failed before the engine answered. Either it did not open: the socket does not exist, the engine refuses the connection, or the system denies the socket. Or it opened and then died before the answer. Over SSH it includes a login, a host key or a channel that fails, and a keepalive that ends the connection. A stopped Docker Desktop leaves its socket file behind and refuses each connection. A connection that is lost after the answer started is not a connection failure. Docker's Go client uses the same term (`IsErrConnectionFailed`) with the same limits.
 _Avoid_: Engine down, offline, unavailable
 
 **Handle**:

@@ -1,5 +1,7 @@
 # The engine is the one that the Docker CLI selects
 
+> 2026-11-18: [ADR 0015](./0015-an-ssh-engine-is-reached-through-zukhruf-ssh-in-the-node-process.md) replaces the connection helper of an SSH engine (`ssh … docker system dial-stdio`) with a channel of `@zukhruf/ssh`. The engine is still the one that the Docker CLI selects: on the engine host, `docker context inspect` names it.
+
 A person selects an engine with the Docker CLI: `docker context use`, `DOCKER_CONTEXT` or `DOCKER_HOST`. On 2026-10-20, the repositories that use Docker found their engine in three ways, and the three ways did not agree:
 
 - `@zukhruf/testing/docker` asks the CLI: `docker context inspect --format '{{.Endpoints.docker.Host}}'`. It accepts a Unix socket, a Windows named pipe and an SSH engine.

@@ -2,7 +2,7 @@
 
 > **Status: implemented.** Each call of the `## API` block works, and the tests run it on Docker Desktop (API 1.56) and on an SSH engine (API 1.51). A Windows named pipe is not proved yet (backlog #2753). The decisions are in the [ADRs](./docs/adr/). The package leads, and the repositories that use Docker change to fit it ([ADR 0003](./docs/adr/0003-the-package-leads-and-the-repositories-change.md)).
 
-A client for the Docker Engine API on Node.js. It selects the engine that the Docker CLI selects, and it sends HTTP requests to that engine with `node:http`: through a Unix socket, a Windows named pipe, or SSH. It needs no Docker CLI on the `PATH`, and it has no third-party dependencies; it uses `@zukhruf/async`. Thus a desktop app that starts from the macOS Dock can use it, and so can a test, a sandbox or a deploy tool.
+A client for the Docker Engine API on Node.js. It selects the engine that the Docker CLI selects, and it sends HTTP requests to that engine with `node:http`: through a Unix socket, a Windows named pipe, or SSH, which `@zukhruf/ssh` speaks inside the Node process ([ADR 0015](./docs/adr/0015-an-ssh-engine-is-reached-through-zukhruf-ssh-in-the-node-process.md)). It needs no Docker CLI on the `PATH` of this machine; an SSH engine needs the `ssh` binary, for `ssh -G`, and a Docker CLI on the engine host. It depends on `@zukhruf/async` and `@zukhruf/ssh`, and through it on ssh2. Thus a desktop app that starts from the macOS Dock can use it, and so can a test, a sandbox or a deploy tool.
 
 The package covers the containers of one engine and the resources around them: their images, volumes, networks, files, processes, output and events.
 
@@ -69,31 +69,31 @@ A product with its own rule selects from this list. For example, a scan for data
 
 An error has its own class when a caller does something different after it: start the engine, pull the image, start the container, pick another name ([ADR 0007](./docs/adr/0007-an-error-has-its-own-class-when-the-caller-handles-it-differently.md)). Each class comes from the request and its HTTP status. When one status has two meanings, the package sends one more request to tell them apart.
 
-| Class                      | When                                                                                                                                                                        | What the caller does next                          |
-| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
-| `ConnectionFailedError`    | The connection does not open (no socket, a refusal, an `EACCES` denial, no `ssh`), or it dies before the answer (also when `ssh` exits)                                     | Treat the engine as absent, or ask to start Docker |
-| `UnsupportedEngineError`   | The engine's highest API version is lower than the lowest one that the package supports, or than the one that a call needs                                                  | Ask to update Docker                               |
-| `UnsupportedHostError`     | The host is not `unix://`, `npipe://` or `ssh://`, for example `tcp://`                                                                                                     | Skip that context, or give another host            |
-| `ContextNotFoundError`     | `Docker.connect({ context })` names a context that the context store does not have                                                                                          | Pick another context from `Docker.contexts()`      |
-| `ContainerNotFoundError`   | A request about a container gets 404, or a start gets 409 and an inspect finds the container gone, removing or dead                                                         | Create the container again                         |
-| `ContainerNotRunningError` | An exec or a kill gets 409, or an attach finds the container exited or paused. `state` comes from an inspect: `created`, `exited`, `paused` …                               | Start or unpause it, then try again                |
-| `ContainerRunningError`    | A removal without `force` gets 409, and an inspect shows that the container runs                                                                                            | Stop it first, or remove it with `force`           |
-| `NameConflictError`        | A create of a container, network or volume finds the name taken                                                                                                             | Use `createOrGet()`, or another name               |
-| `ImageNotFoundError`       | A create, a pull or a tag gets 404, or a push reports an error in its progress and an inspect does not find the image                                                       | Pull or build the image; check the name or `auth`  |
-| `NetworkNotFoundError`     | A start or a connect gets 404 (500 on an engine in swarm mode), and a lookup finds the network missing; a request about a network gets 404                                  | Create the network first                           |
-| `VolumeNotFoundError`      | A request about a volume gets 404                                                                                                                                           | Create the volume again                            |
-| `BindSourceNotFoundError`  | A create or a start refuses a bind mount whose `source` does not exist on the engine's host                                                                                 | Tell the user which host path is missing           |
-| `VolumeInUseError`         | A volume removal gets 409                                                                                                                                                   | Remove its containers first, or wait and try again |
-| `NetworkInUseError`        | A network removal gets 403 while running containers are connected                                                                                                           | Disconnect them first                              |
-| `ImageInUseError`          | An image removal gets 409                                                                                                                                                   | Remove its containers first, or use `force`        |
-| `PathNotFoundError`        | A file request gets 404 and the container exists                                                                                                                            | Use a default, or create the file                  |
-| `NotAFileError`            | `readFile()` finds a directory, a link or another kind of entry. `kind` names it                                                                                            | Use `getArchive()` for the tree                    |
-| `ReadOnlyPathError`        | The engine refuses an extraction, and an inspect shows that the directory is on a read-only root filesystem or in a read-only mount                                         | Write under a writable mount, or use `exec()`      |
-| `IncompleteOutputError`    | A stdin write of an exec or an attach fails before the output ends, and no output came or the caller did not take it; over SSH, `ssh` exits non-zero before the output ends | Go on, or run it again if that is safe             |
+| Class                      | When                                                                                                                                                | What the caller does next                          |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| `ConnectionFailedError`    | The connection does not open (no socket, a refusal, an `EACCES` denial, an SSH login, host key or channel that fails), or it dies before the answer | Treat the engine as absent, or ask to start Docker |
+| `UnsupportedEngineError`   | The engine's highest API version is lower than the lowest one that the package supports, or than the one that a call needs                          | Ask to update Docker                               |
+| `UnsupportedHostError`     | The host is not `unix://`, `npipe://` or `ssh://`, for example `tcp://`                                                                             | Skip that context, or give another host            |
+| `ContextNotFoundError`     | `Docker.connect({ context })` names a context that the context store does not have                                                                  | Pick another context from `Docker.contexts()`      |
+| `ContainerNotFoundError`   | A request about a container gets 404, or a start gets 409 and an inspect finds the container gone, removing or dead                                 | Create the container again                         |
+| `ContainerNotRunningError` | An exec or a kill gets 409, or an attach finds the container exited or paused. `state` comes from an inspect: `created`, `exited`, `paused` …       | Start or unpause it, then try again                |
+| `ContainerRunningError`    | A removal without `force` gets 409, and an inspect shows that the container runs                                                                    | Stop it first, or remove it with `force`           |
+| `NameConflictError`        | A create of a container, network or volume finds the name taken                                                                                     | Use `createOrGet()`, or another name               |
+| `ImageNotFoundError`       | A create, a pull or a tag gets 404, or a push reports an error in its progress and an inspect does not find the image                               | Pull or build the image; check the name or `auth`  |
+| `NetworkNotFoundError`     | A start or a connect gets 404 (500 on an engine in swarm mode), and a lookup finds the network missing; a request about a network gets 404          | Create the network first                           |
+| `VolumeNotFoundError`      | A request about a volume gets 404                                                                                                                   | Create the volume again                            |
+| `BindSourceNotFoundError`  | A create or a start refuses a bind mount whose `source` does not exist on the engine's host                                                         | Tell the user which host path is missing           |
+| `VolumeInUseError`         | A volume removal gets 409                                                                                                                           | Remove its containers first, or wait and try again |
+| `NetworkInUseError`        | A network removal gets 403 while running containers are connected                                                                                   | Disconnect them first                              |
+| `ImageInUseError`          | An image removal gets 409                                                                                                                           | Remove its containers first, or use `force`        |
+| `PathNotFoundError`        | A file request gets 404 and the container exists                                                                                                    | Use a default, or create the file                  |
+| `NotAFileError`            | `readFile()` finds a directory, a link or another kind of entry. `kind` names it                                                                    | Use `getArchive()` for the tree                    |
+| `ReadOnlyPathError`        | The engine refuses an extraction, and an inspect shows that the directory is on a read-only root filesystem or in a read-only mount                 | Write under a writable mount, or use `exec()`      |
+| `IncompleteOutputError`    | A stdin write of an exec or an attach fails before the output ends, and no output came or the caller did not take it                                | Go on, or run it again if that is safe             |
 
 Each class extends a base class, so a broad catch still works. `DockerError` is the base of every error of the package. `DockerEngineError` is the base of every answer of the engine that is an error. It has `status` and `request` (the `method` and `path` of the request), and its `message` is the message of the engine. The base keeps the request apart in `request`, so `path` on `PathNotFoundError`, `NotAFileError` and `ReadOnlyPathError` is the path in the container. An error with no class of its own, such as an error in the progress of a pull, is a `DockerEngineError`.
 
-`ConnectionFailedError` has two messages, and its `cause` is the error of Node or the exit error of `ssh`. `Cannot connect to the engine at <host>.` means that the connection did not open. `Error during the connection to the engine at <host>.` means that the connection opened, or `ssh` started, and then it failed before the answer.
+`ConnectionFailedError` has two messages, and its `cause` is the error of Node, of `@zukhruf/ssh` (`AuthenticationError`, `KeyError`, `RevokedError`, `OpenChannelError`) or of `ssh -G`. `Cannot connect to the engine at <host>.` means that the connection did not open. `Error during the connection to the engine at <host>.` means that the connection opened and then failed before the answer. Over SSH, a sentence after the message can name the step that failed ([SSH engines](#ssh-engines)).
 
 A connection that is lost after the answer started is not a `ConnectionFailedError`, and it is not a `DockerError`. The call or the iteration rejects with the error of Node: the message `aborted` and the code `ECONNRESET` for a JSON answer and for a stream such as events, followed logs or the progress of a pull, and the error of the socket for an attach or an exec. The stream does not start again by itself: call the method again. The Go client of Moby has the same rule ([ADR 0011](./docs/adr/0011-only-a-failure-before-the-answer-is-a-connection-failure.md)).
 
@@ -301,9 +301,7 @@ But after a failed write, Node closes the connection, and output that is still o
 - No output came. The package cannot know if the command printed output: `true` prints nothing and loses nothing.
 - The caller did not take the output, and the package stopped the reads. `exec()` and `collect()` take each chunk at once, so they get only the first case.
 
-Over SSH, the failure is different: `ssh` exits non-zero before the output ends, because `docker system dial-stdio` stops when one of its copies fails. Output that it did not copy is lost. The call then also rejects with `IncompleteOutputError`, and the iteration first gives the output that came before the exit. Its `cause` is the `SshExitError`. The package does not read the standard error of `ssh` to decide this.
-
-The error has the exit code of the command, and its `cause` is the error of the write or the `SshExitError`. The output can be incomplete, not certainly incomplete. The caller goes on, or runs the command again when that is safe. The package does not run the command again: the command did run, and some commands are not safe to run two times ([ADR 0012](./docs/adr/0012-a-reset-ends-the-output-and-a-failed-write-is-an-error-only-when-output-can-be-lost.md)).
+The error has the exit code of the command, and its `cause` is the error of the write. The output can be incomplete, not certainly incomplete. The caller goes on, or runs the command again when that is safe. The package does not run the command again: the command did run, and some commands are not safe to run two times ([ADR 0012](./docs/adr/0012-a-reset-ends-the-output-and-a-failed-write-is-an-error-only-when-output-can-be-lost.md)).
 
 `container.spawn()` gives the container process while the command runs. With `stdin: true`, the container process has a writable `stdin`. Only `stdin.close()` ends the input. The package drops an empty write, so an empty write never ends the input.
 
@@ -324,7 +322,7 @@ A command keeps the process running until it ends, as each request in flight doe
 await reaper.spawn({ Cmd: ['cat'] }, { stdin: true, ref: false });
 ```
 
-The end of the input depends on the host. On a Unix socket, the package shuts down the write side of the socket. Over SSH, it closes the standard input of `ssh`, and `docker system dial-stdio` then closes the write side to the engine. On a Windows named pipe, it writes a message of zero bytes, because a pipe has no shutdown of one side: the engine listens on its pipe in message mode and reads that message as the end. `CloseWrite` of go-winio, which the Docker CLI uses, sends the same message.
+The end of the input depends on the host. On a Unix socket, the package shuts down the write side of the socket. Over SSH, it ends the channel with `SSH_MSG_CHANNEL_EOF`, and the SSH server shuts down the write side of the engine socket. On a Windows named pipe, it writes a message of zero bytes, because a pipe has no shutdown of one side: the engine listens on its pipe in message mode and reads that message as the end. `CloseWrite` of go-winio, which the Docker CLI uses, sends the same message.
 
 A signal cancels the wait. It does not stop the command: the Engine API has no request that stops an exec. To stop a command, kill the container, or run the command under `timeout` in the container. A signal also cancels an iteration of a container process: the iteration rejects with the reason of the signal, as each cancel does ([the async glossary](../async/CONTEXT.md)).
 
@@ -512,41 +510,43 @@ await spawn(
 
 ## SSH engines
 
-For an `ssh://` host, the connection helper is this command ([ADR 0010](./docs/adr/0010-ssh-gets-the-options-of-the-docker-cli-and-the-flags-of-the-caller.md)):
+For an `ssh://` host, the client speaks SSH inside the Node process with `@zukhruf/ssh` ([ADR 0015](./docs/adr/0015-an-ssh-engine-is-reached-through-zukhruf-ssh-in-the-node-process.md)):
 
-```sh
-ssh <sshFlags> -T -o BatchMode=yes -o ConnectTimeout=30 -l <user> -p <port> -- <machine> docker system dial-stdio
-```
+1. `ssh -G <sshFlags> -o ConnectTimeout=30 -- <host>` resolves the host with `~/.ssh/config`, as the `ssh` command would: jump hosts, `ProxyCommand`, identity files, the agent, known hosts and `StrictHostKeyChecking`.
+2. The client opens one SSH connection to it.
+3. A session runs `docker context inspect --format '{{.Endpoints.docker.Host}}'` on the engine host: the engine is the one that its Docker CLI selects. It must be a `unix://` engine.
+4. Each connection of the HTTP client is a channel of the SSH connection to that socket (`direct-streamlocal@openssh.com`), not a process.
 
-`-l` and `-p` are there only when the host has a user and a port. `-T`, `-l`, `-p` and `-o ConnectTimeout=30` are the options that the Docker CLI sends. `-o BatchMode=yes` is an option of the package: the Docker CLI does not send it. The package sends no keepalive.
+An attach, an exec, followed logs and events each use their own channel. The client keeps idle channels for the next request. Disposal closes the SSH connection. While no request is in flight and no stream is held, the connection does not keep the process alive. When the process dies, also by `SIGKILL`, the kernel closes its connection, and the SSH server closes every channel and the engine sockets they opened: nothing is left on either machine.
 
-`ssh` reads `~/.ssh/config`, so jump hosts, keys, agents and connection sharing work as they work for the CLI. The remote machine must have `docker` on the `PATH` of its SSH shell.
+An `ssh://` engine needs the `environment` option, such as `process.env`: `ssh -G` runs with it, and the client reads `SSH_AUTH_SOCK` and `HOME` from it. Without it, `Docker.connect` rejects at once with a `ConnectionFailedError` that says so.
 
-Each connection of the client is one `ssh` process. The client keeps idle connections for the next request. An attach, an exec, followed logs and events each use their own connection. Disposal of the client ends the `ssh` processes.
+A server can refuse the channel to the engine socket. Tailscale SSH allows a socket only under the home, `/tmp` and `/run/user/<uid>`, so it refuses a rootful `/run/docker.sock`. `Docker.connect` then rejects with a `ConnectionFailedError` that names the socket, the refusal of the server and the fixes: rootless Docker, whose socket is under `/run/user/<uid>`, or an OpenSSH server. The client does not fall back to `docker system dial-stdio`.
+
+With npm's `strict-allow-scripts`, add `"ssh2": false` and `"cpu-features": false` to `allowScripts`.
 
 ### Give flags to ssh
 
-`sshFlags` are raw flags for `ssh`. Only an engine at an `ssh://` host uses them, also when a context or `DOCKER_HOST` selected that host. An engine at a `unix://` or `npipe://` host ignores them.
+`sshFlags` are raw flags of `ssh`. Only an engine at an `ssh://` host uses them, also when a context or `DOCKER_HOST` selected that host. An engine at a `unix://` or `npipe://` host ignores them.
 
 ```ts
 await using remote = await Docker.connect({
   clock: globalThis,
   host: 'ssh://root@box',
+  environment: process.env,
   sshFlags: ['-o', 'ServerAliveInterval=10', '-o', 'ServerAliveCountMax=2'],
 });
 ```
 
-The flags come first on the command line. OpenSSH uses the first value that it gets for each option, so a flag of the caller wins over an option of the package, and over `~/.ssh/config`. When the flags name `ConnectTimeout`, the package does not send `-o ConnectTimeout=30`. This is the rule of the Docker CLI: `['-o', 'ConnectTimeout=5']` and `['-oConnectTimeout=5']` both name it.
+The flags go to `ssh -G` before the config file, and `-o ConnectTimeout=30` after them. OpenSSH uses the first value that it gets for each option, so a flag of the caller wins over `~/.ssh/config`, and both win over the 30 s of the Docker CLI. A flag that changes the config works (`-o`, `-i`, `-J`, `-F`, `-p`, `-l`); a flag that only changes the run of `ssh`, such as `-v`, does nothing.
 
 ### End a dead connection
 
-`ConnectTimeout` is a limit for the start of a connection only: the connect, the SSH handshake and the key exchange. No call has a time limit after that.
+`ConnectTimeout` is a limit for the start of the connection only: the connect, the SSH handshake and the key exchange. No call has a time limit after that.
 
 Without a keepalive, a connection to a machine that stops answering hangs the call, as it hangs the Docker CLI. The call ends only when its signal aborts.
 
-With a keepalive, `ssh` exits with 255 when the machine stops answering. A call that waits for its answer rejects with `ConnectionFailedError`. Its message is `Error during the connection to the engine at <host>.`, and its `cause` has the exit code and the standard error of `ssh`. An open stream, such as followed logs or events, rejects with the error of Node (`aborted`, `ECONNRESET`), which is not a `DockerError`. The `cause` of that error has the same exit code and standard error.
-
-Set the keepalive in `~/.ssh/config`:
+With a keepalive (`ServerAliveInterval` and `ServerAliveCountMax`, in `~/.ssh/config` or in `sshFlags`), the client ends the connection when the machine stops answering, on the `clock` of the client. A call that waits for its answer rejects with `ConnectionFailedError`: `Error during the connection to the engine at <host>.` An open stream, such as followed logs or events, rejects with the error of Node (`aborted`, `ECONNRESET`), which is not a `DockerError`.
 
 ```
 Host box
@@ -554,9 +554,7 @@ Host box
   ServerAliveCountMax 2
 ```
 
-Or give the same options in `sshFlags`, as in the example above.
-
-With connection sharing (`ControlMaster`), the settings of the master connection apply. The flags of a later `ssh` do not.
+OpenSSH's connection sharing (`ControlMaster`) does not apply: each client has its own SSH connection. The tests of a run share one, through `@zukhruf/testing`.
 
 ## The API version
 
@@ -579,19 +577,19 @@ The lowest version is 1.44. From that version on, "`POST /networks/create` with 
 
 ## The same concepts in other systems
 
-| Concept                     | Other systems                                                                                                                                                                                  |
-| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A client of the Engine API  | [moby/moby/client](https://github.com/moby/moby/tree/master/client) (Go), [bollard](https://github.com/fussybeaver/bollard) (Rust), [dockerode](https://github.com/apocas/dockerode) (Node.js) |
-| The selection of the engine | `resolveContextName` of [docker/cli](https://github.com/docker/cli/blob/master/cli/command/cli.go); the master branch of bollard                                                               |
-| Fixed socket paths          | The client strategies of Testcontainers, and docker-modem. They do not read contexts.                                                                                                          |
-| The connection helper       | [connhelper of docker/cli](https://github.com/docker/cli/blob/master/cli/connhelper/connhelper.go)                                                                                             |
-| An owned handle             | `ownsLifecycle` of microsandbox, which stops a sandbox on disposal only when the handle owns it                                                                                                |
-| A handle by its ID          | The stable `id` of a microsandbox handle, which refuses to act on a replacement that reused the name                                                                                           |
-| Create, or get by name      | `connectOrCreate` of microsandbox: the existing sandbox wins                                                                                                                                   |
-| One stream of chunks        | `ExecEvent` of microsandbox; "Stream format" in the Engine API reference; `stdcopy.StdCopy` of Moby                                                                                            |
-| Files through archives      | `docker cp`; `copyFilesToContainer` of Testcontainers; `fs()` of microsandbox                                                                                                                  |
-| Errors by HTTP status       | `errdefs` of Moby: `NotFound` for 404, `Conflict` for 409, `NotModified` for 304                                                                                                               |
-| API version negotiation     | The Go client of Moby, which negotiates by default                                                                                                                                             |
+| Concept                       | Other systems                                                                                                                                                                                  |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A client of the Engine API    | [moby/moby/client](https://github.com/moby/moby/tree/master/client) (Go), [bollard](https://github.com/fussybeaver/bollard) (Rust), [dockerode](https://github.com/apocas/dockerode) (Node.js) |
+| The selection of the engine   | `resolveContextName` of [docker/cli](https://github.com/docker/cli/blob/master/cli/command/cli.go); the master branch of bollard                                                               |
+| Fixed socket paths            | The client strategies of Testcontainers, and docker-modem. They do not read contexts.                                                                                                          |
+| The SSH channel to the engine | [connhelper of docker/cli](https://github.com/docker/cli/blob/master/cli/connhelper/connhelper.go) (an `ssh` process); Podman's bindings (a channel of its own SSH client)                     |
+| An owned handle               | `ownsLifecycle` of microsandbox, which stops a sandbox on disposal only when the handle owns it                                                                                                |
+| A handle by its ID            | The stable `id` of a microsandbox handle, which refuses to act on a replacement that reused the name                                                                                           |
+| Create, or get by name        | `connectOrCreate` of microsandbox: the existing sandbox wins                                                                                                                                   |
+| One stream of chunks          | `ExecEvent` of microsandbox; "Stream format" in the Engine API reference; `stdcopy.StdCopy` of Moby                                                                                            |
+| Files through archives        | `docker cp`; `copyFilesToContainer` of Testcontainers; `fs()` of microsandbox                                                                                                                  |
+| Errors by HTTP status         | `errdefs` of Moby: `NotFound` for 404, `Conflict` for 409, `NotModified` for 304                                                                                                               |
+| API version negotiation       | The Go client of Moby, which negotiates by default                                                                                                                                             |
 
 ## API
 
@@ -623,7 +621,7 @@ export class Docker implements AsyncDisposable {
   [Symbol.asyncDispose](): Promise<void>;
 }
 
-/** The environment of the host program, such as process.env. The package reads only DOCKER_HOST, DOCKER_CONTEXT and DOCKER_CONFIG. */
+/** The environment of the host program, such as process.env. The package reads DOCKER_HOST, DOCKER_CONTEXT and DOCKER_CONFIG; for an ssh:// engine, `ssh -G` runs with it, and @zukhruf/ssh reads SSH_AUTH_SOCK and HOME from it. An ssh:// engine needs it. */
 export type Environment = Readonly<Record<string, string | undefined>>;
 
 /** A context or a host, never both. */
@@ -631,7 +629,7 @@ export type ConnectOptions = CancelOptions & {
   environment?: Environment;
   /** The clock of the waits of the client, and of the time of the files that it writes: a `WallClock` of `@zukhruf/async`. Production gives `globalThis`. */
   clock: WallClock;
-  /** Raw flags for `ssh`. Only an engine at an `ssh://` host uses them. */
+  /** Raw flags of `ssh`, given to `ssh -G` before the config file. Only an engine at an `ssh://` host uses them. */
   sshFlags?: readonly string[];
 } & ({ context?: string; host?: never } | { host?: string; context?: never });
 

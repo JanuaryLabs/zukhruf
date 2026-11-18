@@ -1,1142 +1,491 @@
 import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { delimiter, join } from 'node:path';
+import { once } from 'node:events';
+import { type Socket, createServer } from 'node:net';
+import { join } from 'node:path';
 import { describe, test } from 'node:test';
+import { setImmediate as nextMacrotask } from 'node:timers/promises';
+import { promisify } from 'node:util';
 
-import { poll } from '@zukhruf/async';
-import { TemporaryFiles } from '@zukhruf/fs';
+import { createClock } from '@sinonjs/fake-timers';
 
-import { writeContextStore } from './testing/context-store-files.ts';
-import { IMAGE, TEST_LABEL, connect, removeLabeled } from './testing/engine.ts';
-import { fakeEngine } from './testing/fake-engine.ts';
-import { ENTRY, lastJson, runScenario } from './testing/scenario.ts';
+import { untilAborted } from '@zukhruf/async';
+import { AuthenticationError, OpenChannelError } from '@zukhruf/ssh';
+import { KeyError } from '@zukhruf/ssh/knownhosts';
+
+import { ConnectionFailedError, Docker } from './index.ts';
 import {
-  NOT_RESPONDING,
-  PERMISSION_DENIED,
-  isAlive,
-  localEngineSocket,
-  sshStandIn,
-} from './testing/ssh-stand-in.ts';
+  SSH_HOST,
+  clientFlags,
+  engineForSshd,
+  engineVariables,
+  ready,
+  skipWithout,
+  startEngineSshd,
+} from './testing/engine-sshd.ts';
+import { IMAGE, TEST_LABEL, removeLabeled } from './testing/engine.ts';
+import {
+  ENTRY,
+  inheritedEnvironment,
+  lastJson,
+  runScenario,
+} from './testing/scenario.ts';
 
-const posixOnly =
-  process.platform === 'win32'
-    ? 'the ssh stand-in is a POSIX executable with a shebang'
-    : false;
+const run = promisify(execFile);
+const engine = await engineForSshd();
+const skip = skipWithout(engine);
 
-const engineSocket = posixOnly
-  ? undefined
-  : await localEngineSocket(process.env);
-const needsLocalEngine =
-  posixOnly ||
-  (engineSocket === undefined
-    ? 'the current context of config.json is not a local unix:// engine'
-    : false);
-
-const HOST = 'ssh://tester@machine:2222';
-
-/** The environment of a scenario: the stand-in is the `ssh` of its PATH. */
-function scenarioEnvironment(standIn: string, home: string) {
-  return { PATH: `${standIn}${delimiter}${process.env.PATH}`, HOME: home };
+/** A TCP server on 127.0.0.1 that accepts each connection and never writes: no SSH banner comes. */
+async function startSilentServer() {
+  const sockets = new Set<Socket>();
+  const server = createServer((socket) => sockets.add(socket));
+  const accepted = once(server, 'connection');
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const address = server.address();
+  assert.ok(address !== null && typeof address === 'object');
+  return {
+    port: address.port,
+    accepted,
+    async [Symbol.asyncDispose]() {
+      for (const socket of sockets) socket.destroy();
+      server.close();
+      await once(server, 'close');
+    },
+  };
 }
 
-/** A scenario that connects to HOST, runs `body` with `docker`, and prints the JSON of its result. */
-const withClient = (body: string) => `
-import { Docker } from ${JSON.stringify(ENTRY)};
-const docker = await Docker.connect({ clock: globalThis, host: ${JSON.stringify(HOST)} });
-${body}
-`;
+/** Whether `promise` settled before the next turn of the event loop. */
+async function settledNow(promise: Promise<unknown>): Promise<boolean> {
+  let settled = false;
+  promise.then(
+    () => (settled = true),
+    () => (settled = true),
+  );
+  await nextMacrotask();
+  return settled;
+}
 
-describe('the connection helper of an ssh:// host', () => {
+/** The engine behind sshd, through its socket, with IMAGE on it. */
+async function localEngine(signal: AbortSignal): Promise<Docker> {
+  const docker = await Docker.connect({
+    clock: globalThis,
+    host: `unix://${ready(engine).engineSocket}`,
+    signal,
+  });
+  if (!(await docker.images.inspect(IMAGE, { signal }))) {
+    await docker.images.pull(IMAGE, { signal });
+  }
+  return docker;
+}
+
+describe('the SSH connection of an ssh:// host', () => {
   test(
-    'ssh that exits with 255 before the answer is a ConnectionFailedError with the exit code and the stderr of ssh',
-    {
-      skip: posixOnly,
-    },
+    'without the environment option, connect() rejects with a ConnectionFailedError that says an ssh:// engine needs it, before any SSH connection',
+    { skip },
     async (t) => {
       // Arrange
-      await using home = await new TemporaryFiles().directory('docker-test-');
-      await using standIn = await sshStandIn({ kind: 'permission-denied' });
-      const scenario = `
-import { ConnectionFailedError, Docker } from ${JSON.stringify(ENTRY)};
-try {
-  await Docker.connect({ clock: globalThis, host: ${JSON.stringify(HOST)} });
-  console.log(JSON.stringify({ connected: true }));
-} catch (error) {
-  console.log(JSON.stringify({
-    failed: error instanceof ConnectionFailedError,
-    host: error.host,
-    message: error.message,
-    exitCode: error.cause?.exitCode,
-    stderr: error.cause?.stderr,
-  }));
-}
-`;
+      await using sshd = await startEngineSshd(engineVariables(ready(engine)));
+      await using silent = await startSilentServer();
+      const sshFlags = await clientFlags(sshd, { port: silent.port });
 
       // Act
-      const result = await runScenario(
-        scenario,
-        scenarioEnvironment(standIn.path, home.path),
-        t.signal,
-      );
+      const connected = Docker.connect({
+        clock: globalThis,
+        host: SSH_HOST,
+        sshFlags,
+        signal: t.signal,
+      });
+      const first = await Promise.race([
+        connected.then(
+          () => 'connected',
+          (error: unknown) => error,
+        ),
+        silent.accepted.then(() => 'an SSH connection'),
+      ]);
 
       // Assert
-      assert.deepEqual(lastJson(result), {
-        failed: true,
-        host: HOST,
-        message: `Error during the connection to the engine at ${HOST}.`,
-        exitCode: 255,
-        stderr: `${PERMISSION_DENIED}\r\n`,
-      });
-    },
-  );
-
-  test(
-    'a call that waits for its answer when ssh exits with 255, as its keepalive does when the machine stops answering, rejects with a ConnectionFailedError with the exit code and the stderr of ssh',
-    {
-      skip: posixOnly,
-    },
-    async (t) => {
-      // Arrange
-      await using home = await new TemporaryFiles().directory('docker-test-');
-      await using engine = await fakeEngine({
-        directory: home.path,
-        apiVersion: '1.51',
-        // The machine is silent: /info never gets an answer.
-        answer: () => undefined,
-      });
-      await using standIn = await sshStandIn({
-        kind: 'engine',
-        socketPath: engine.socketPath,
-        notRespondingAfter: '/info',
-      });
-      const scenario = withClient(`
-import { ConnectionFailedError } from ${JSON.stringify(ENTRY)};
-try {
-  await docker.info();
-  console.log(JSON.stringify({ answered: true }));
-} catch (error) {
-  console.log(JSON.stringify({
-    failed: error instanceof ConnectionFailedError,
-    host: error.host,
-    message: error.message,
-    cause: error.cause?.name,
-    exitCode: error.cause?.exitCode,
-    stderr: error.cause?.stderr,
-  }));
-}
-await docker[Symbol.asyncDispose]();
-`);
-
-      try {
-        // Act
-        const result = await runScenario(
-          scenario,
-          scenarioEnvironment(standIn.path, home.path),
-          t.signal,
-        );
-
-        // Assert
-        assert.deepEqual(
-          lastJson(result),
-          {
-            failed: true,
-            host: HOST,
-            message: `Error during the connection to the engine at ${HOST}.`,
-            cause: 'SshExitError',
-            exitCode: 255,
-            stderr: `${NOT_RESPONDING}\r\n`,
-          },
-          result.stderr,
-        );
-        assert.deepEqual(engine.paths, ['/_ping', '/v1.51/info']);
-      } finally {
-        for (const { pid } of await standIn.runs()) {
-          if (isAlive(pid)) process.kill(pid, 'SIGKILL');
-        }
+      assert.ok(first instanceof ConnectionFailedError, String(first));
+      assert.equal(first.host, SSH_HOST);
+      for (const part of [
+        'needs the `environment` option',
+        'SSH_AUTH_SOCK',
+        'HOME',
+        '`process.env`',
+      ]) {
+        assert.ok(first.message.includes(part), `${part}: ${first.message}`);
       }
     },
   );
 
   test(
-    'an open stream of events, when ssh exits with 255 as its keepalive does when the machine stops answering, gives the events that came and then rejects with an error whose cause has the exit code and the stderr of ssh',
-    {
-      skip: posixOnly,
-    },
+    'without ConnectTimeout in sshFlags, connect() to a server that never answers rejects with a ConnectionFailedError once 30 s pass on the clock of the client, and not before',
+    { skip },
     async (t) => {
       // Arrange
-      await using home = await new TemporaryFiles().directory('docker-test-');
-      await using engine = await fakeEngine({
-        directory: home.path,
-        apiVersion: '1.51',
-        // One event, and then the machine is silent: the answer stays open.
-        answer: (_request, response) => {
-          response.writeHead(200, { 'Content-Type': 'application/json' });
-          response.write(
-            `${JSON.stringify({ Type: 'container', Action: 'start' })}\n`,
-          );
-        },
+      await using sshd = await startEngineSshd(engineVariables(ready(engine)));
+      await using silent = await startSilentServer();
+      const sshFlags = await clientFlags(sshd, { port: silent.port });
+      const clock = createClock();
+      const connected = Docker.connect({
+        clock,
+        environment: process.env,
+        host: SSH_HOST,
+        sshFlags,
+        signal: t.signal,
       });
-      await using standIn = await sshStandIn({
-        kind: 'engine',
-        socketPath: engine.socketPath,
-        notRespondingAfter: '"Action":"start"',
-      });
-      const scenario = withClient(`
-const events = [];
-try {
-  for await (const event of docker.events()) events.push(event.Action);
-  console.log(JSON.stringify({ events, ended: true }));
-} catch (error) {
-  console.log(JSON.stringify({
-    events,
-    cause: error.cause?.name,
-    exitCode: error.cause?.exitCode,
-    stderr: error.cause?.stderr,
-  }));
-}
-await docker[Symbol.asyncDispose]();
-`);
-
-      try {
-        // Act
-        const result = await runScenario(
-          scenario,
-          scenarioEnvironment(standIn.path, home.path),
-          t.signal,
-        );
-
-        // Assert
-        assert.deepEqual(
-          lastJson(result),
-          {
-            events: ['start'],
-            cause: 'SshExitError',
-            exitCode: 255,
-            stderr: `${NOT_RESPONDING}\r\n`,
-          },
-          result.stderr,
-        );
-      } finally {
-        for (const { pid } of await standIn.runs()) {
-          if (isAlive(pid)) process.kill(pid, 'SIGKILL');
-        }
-      }
-    },
-  );
-
-  test(
-    'starts ssh -T -o BatchMode=yes -o ConnectTimeout=30 -l <user> -p <port> -- <machine> docker system dial-stdio',
-    {
-      skip: posixOnly,
-    },
-    async (t) => {
-      // Arrange
-      await using home = await new TemporaryFiles().directory('docker-test-');
-      const argvOf = async (host: string) => {
-        await using standIn = await sshStandIn({ kind: 'permission-denied' });
-        const scenario = `
-import { Docker } from ${JSON.stringify(ENTRY)};
-await Docker.connect({ clock: globalThis, host: ${JSON.stringify(host)} }).catch(() => undefined);
-console.log('{}');
-`;
-        await runScenario(
-          scenario,
-          scenarioEnvironment(standIn.path, home.path),
-          t.signal,
-        );
-        return (await standIn.runs()).map(({ argv }) => argv);
-      };
+      connected.catch(() => undefined);
+      await silent.accepted;
 
       // Act
-      const full = await argvOf(HOST);
-      const bare = await argvOf('ssh://machine');
-      const encoded = await argvOf('ssh://deploy%40ops@machine');
-
-      // Assert
-      const dial = ['docker', 'system', 'dial-stdio'];
-      const fixed = ['-T', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=30'];
-      assert.deepEqual(full, [
-        [...fixed, '-l', 'tester', '-p', '2222', '--', 'machine', ...dial],
-      ]);
-      assert.deepEqual(bare, [[...fixed, '--', 'machine', ...dial]]);
-      assert.deepEqual(encoded, [
-        [...fixed, '-l', 'deploy@ops', '--', 'machine', ...dial],
-      ]);
-    },
-  );
-
-  test(
-    'an IPv6 machine goes to ssh without its brackets, as URL.Hostname() of Go gives it',
-    {
-      skip: posixOnly,
-    },
-    async (t) => {
-      // Arrange
-      await using home = await new TemporaryFiles().directory('docker-test-');
-      await using standIn = await sshStandIn({ kind: 'permission-denied' });
-      const scenario = `
-import { Docker } from ${JSON.stringify(ENTRY)};
-await Docker.connect({ clock: globalThis, host: 'ssh://tester@[fd00::1]:2222' }).catch(() => undefined);
-console.log('{}');
-`;
-
-      // Act
-      await runScenario(
-        scenario,
-        scenarioEnvironment(standIn.path, home.path),
-        t.signal,
-      );
+      clock.tick(29_999);
+      const settledBefore = await settledNow(connected);
+      clock.tick(1);
+      const settledAt = await settledNow(connected);
 
       // Assert
       assert.deepEqual(
-        (await standIn.runs()).map(({ argv }) => argv),
-        [
-          [
-            '-T',
-            '-o',
-            'BatchMode=yes',
-            '-o',
-            'ConnectTimeout=30',
-            '-l',
-            'tester',
-            '-p',
-            '2222',
-            '--',
-            'fd00::1',
-            'docker',
-            'system',
-            'dial-stdio',
-          ],
-        ],
+        { settledBefore, settledAt },
+        {
+          settledBefore: false,
+          settledAt: true,
+        },
       );
+      await assert.rejects(connected, (error) => {
+        assert.ok(error instanceof ConnectionFailedError);
+        assert.equal(error.host, SSH_HOST);
+        assert.ok(error.cause instanceof DOMException);
+        assert.equal(error.cause.name, 'TimeoutError');
+        return true;
+      });
     },
   );
 
   test(
-    'the sshFlags of the caller come first, before -T, in the order of the caller',
-    {
-      skip: posixOnly,
-    },
+    'a ConnectTimeout in sshFlags is the limit of the connection in place of 30 s',
+    { skip },
     async (t) => {
       // Arrange
-      await using home = await new TemporaryFiles().directory('docker-test-');
-      await using standIn = await sshStandIn({ kind: 'permission-denied' });
+      await using sshd = await startEngineSshd(engineVariables(ready(engine)));
+      await using silent = await startSilentServer();
       const sshFlags = [
+        ...(await clientFlags(sshd, { port: silent.port })),
         '-o',
-        'ServerAliveInterval=10',
-        '-o',
-        'ServerAliveCountMax=2',
+        'ConnectTimeout=5',
       ];
-      const scenario = `
-import { Docker } from ${JSON.stringify(ENTRY)};
-await Docker.connect({ clock: globalThis, host: ${JSON.stringify(HOST)}, sshFlags: ${JSON.stringify(sshFlags)} }).catch(() => undefined);
-console.log('{}');
-`;
+      const clock = createClock();
+      const connected = Docker.connect({
+        clock,
+        environment: process.env,
+        host: SSH_HOST,
+        sshFlags,
+        signal: t.signal,
+      });
+      connected.catch(() => undefined);
+      await silent.accepted;
 
       // Act
-      await runScenario(
-        scenario,
-        scenarioEnvironment(standIn.path, home.path),
-        t.signal,
-      );
+      clock.tick(4999);
+      const settledBefore = await settledNow(connected);
+      clock.tick(1);
+      const settledAt = await settledNow(connected);
 
       // Assert
       assert.deepEqual(
-        (await standIn.runs()).map(({ argv }) => argv),
-        [
-          [
-            ...sshFlags,
-            '-T',
-            '-o',
-            'BatchMode=yes',
-            '-o',
-            'ConnectTimeout=30',
-            '-l',
-            'tester',
-            '-p',
-            '2222',
-            '--',
-            'machine',
-            'docker',
-            'system',
-            'dial-stdio',
-          ],
-        ],
+        { settledBefore, settledAt },
+        {
+          settledBefore: false,
+          settledAt: true,
+        },
       );
+      await assert.rejects(connected, ConnectionFailedError);
     },
   );
 
   test(
-    'sshFlags that name ConnectTimeout, as -o ConnectTimeout=5 or as -oConnectTimeout=5, go to ssh with no -o ConnectTimeout=30',
-    {
-      skip: posixOnly,
-    },
+    'a user key that sshd refuses rejects connect() with a ConnectionFailedError whose cause is the AuthenticationError of @zukhruf/ssh',
+    { skip },
     async (t) => {
       // Arrange
-      await using home = await new TemporaryFiles().directory('docker-test-');
-      const argvOf = async (sshFlags: string[]) => {
-        await using standIn = await sshStandIn({ kind: 'permission-denied' });
-        const scenario = `
-import { Docker } from ${JSON.stringify(ENTRY)};
-await Docker.connect({ clock: globalThis, host: 'ssh://machine', sshFlags: ${JSON.stringify(sshFlags)} }).catch(() => undefined);
-console.log('{}');
-`;
-        await runScenario(
-          scenario,
-          scenarioEnvironment(standIn.path, home.path),
-          t.signal,
-        );
-        return (await standIn.runs()).map(({ argv }) => argv);
-      };
+      await using sshd = await startEngineSshd(engineVariables(ready(engine)));
+      const refused = join(sshd.directory, 'refused_ed25519');
+      await run('ssh-keygen', ['-q', '-t', 'ed25519', '-N', '', '-f', refused]);
+      const sshFlags = await clientFlags(sshd, { identityFile: refused });
 
       // Act
-      const twoArguments = await argvOf(['-o', 'ConnectTimeout=5']);
-      const oneArgument = await argvOf(['-oConnectTimeout=5']);
-
-      // Assert
-      const rest = [
-        '-T',
-        '-o',
-        'BatchMode=yes',
-        '--',
-        'machine',
-        'docker',
-        'system',
-        'dial-stdio',
-      ];
-      assert.deepEqual(twoArguments, [['-o', 'ConnectTimeout=5', ...rest]]);
-      assert.deepEqual(oneArgument, [['-oConnectTimeout=5', ...rest]]);
-    },
-  );
-
-  test(
-    'the sshFlags go to ssh when DOCKER_HOST or a context selected the ssh:// host',
-    {
-      skip: posixOnly,
-    },
-    async (t) => {
-      // Arrange
-      await using home = await new TemporaryFiles().directory('docker-test-');
-      const config = join(home.path, 'docker-config');
-      await writeContextStore(config, { contexts: { remote: HOST } });
-      const argvOf = async (selection: object) => {
-        await using standIn = await sshStandIn({ kind: 'permission-denied' });
-        const scenario = `
-import { Docker } from ${JSON.stringify(ENTRY)};
-await Docker.connect({ clock: globalThis, sshFlags: ['-o', 'ServerAliveInterval=10'], ...${JSON.stringify(selection)} }).catch(() => undefined);
-console.log('{}');
-`;
-        await runScenario(
-          scenario,
-          scenarioEnvironment(standIn.path, home.path),
-          t.signal,
-        );
-        return (await standIn.runs()).map(({ argv }) => argv);
-      };
-
-      // Act
-      const fromVariable = await argvOf({ environment: { DOCKER_HOST: HOST } });
-      const fromContext = await argvOf({
-        environment: { DOCKER_CONFIG: config },
-        context: 'remote',
+      const connected = Docker.connect({
+        clock: globalThis,
+        environment: process.env,
+        host: SSH_HOST,
+        sshFlags,
+        signal: t.signal,
       });
 
       // Assert
-      const expected = [
-        [
-          '-o',
-          'ServerAliveInterval=10',
-          '-T',
-          '-o',
-          'BatchMode=yes',
-          '-o',
-          'ConnectTimeout=30',
-          '-l',
-          'tester',
-          '-p',
-          '2222',
-          '--',
-          'machine',
-          'docker',
-          'system',
-          'dial-stdio',
-        ],
-      ];
-      assert.deepEqual(fromVariable, expected);
-      assert.deepEqual(fromContext, expected);
+      await assert.rejects(connected, (error) => {
+        assert.ok(error instanceof ConnectionFailedError);
+        assert.equal(error.host, SSH_HOST);
+        assert.ok(error.cause instanceof AuthenticationError, String(error));
+        return true;
+      });
     },
   );
 
   test(
-    'a unix:// engine ignores the sshFlags: the client connects and starts no ssh',
-    {
-      skip: posixOnly,
-    },
+    'a host key that the known hosts file does not have rejects connect() with a ConnectionFailedError whose cause is the KeyError of @zukhruf/ssh',
+    { skip },
     async (t) => {
       // Arrange
-      await using home = await new TemporaryFiles().directory('docker-test-');
-      await using engine = await fakeEngine({
-        directory: home.path,
-        apiVersion: '1.51',
+      await using sshd = await startEngineSshd(engineVariables(ready(engine)));
+      const sshFlags = await clientFlags(sshd, { knownHosts: '' });
+
+      // Act
+      const connected = Docker.connect({
+        clock: globalThis,
+        environment: process.env,
+        host: SSH_HOST,
+        sshFlags,
+        signal: t.signal,
       });
-      await using standIn = await sshStandIn({ kind: 'permission-denied' });
+
+      // Assert
+      await assert.rejects(connected, (error) => {
+        assert.ok(error instanceof ConnectionFailedError);
+        assert.equal(error.host, SSH_HOST);
+        assert.ok(error.cause instanceof KeyError, String(error));
+        assert.deepEqual(error.cause.want, []);
+        return true;
+      });
+    },
+  );
+});
+
+describe('the engine socket of an ssh:// host', () => {
+  test(
+    'when the Docker CLI on the SSH server selects an engine that is not unix://, connect() rejects with a ConnectionFailedError that names that engine, and the SSH connection ends',
+    { skip },
+    async (t) => {
+      // Arrange
+      await using sshd = await startEngineSshd({
+        ...engineVariables(ready(engine)),
+        DOCKER_HOST: 'tcp://127.0.0.1:2375',
+      });
+      const sshFlags = await clientFlags(sshd);
+
+      // Act
+      const connected = Docker.connect({
+        clock: globalThis,
+        environment: process.env,
+        host: SSH_HOST,
+        sshFlags,
+        signal: t.signal,
+      });
+
+      // Assert
+      await assert.rejects(connected, (error) => {
+        assert.ok(error instanceof ConnectionFailedError);
+        assert.equal(error.host, SSH_HOST);
+        assert.ok(error.message.includes(SSH_HOST), error.message);
+        assert.ok(
+          error.message.includes('tcp://127.0.0.1:2375'),
+          error.message,
+        );
+        return true;
+      });
+      await sshd.connectionsEnded({ signal: t.signal });
+    },
+  );
+
+  test(
+    'when docker context inspect fails on the SSH server, connect() rejects with a ConnectionFailedError that gives its standard error, and the SSH connection ends',
+    { skip },
+    async (t) => {
+      // Arrange
+      const { PATH } = engineVariables(ready(engine));
+      await using sshd = await startEngineSshd({
+        PATH,
+        DOCKER_CONTEXT: 'no-such-context',
+      });
+      const sshFlags = await clientFlags(sshd);
+
+      // Act
+      const connected = Docker.connect({
+        clock: globalThis,
+        environment: process.env,
+        host: SSH_HOST,
+        sshFlags,
+        signal: t.signal,
+      });
+
+      // Assert
+      await assert.rejects(connected, (error) => {
+        assert.ok(error instanceof ConnectionFailedError);
+        assert.equal(error.host, SSH_HOST);
+        assert.ok(
+          error.message.includes('docker context inspect'),
+          error.message,
+        );
+        assert.ok(
+          error.message.includes(
+            'context "no-such-context": context not found',
+          ),
+          error.message,
+        );
+        return true;
+      });
+      await sshd.connectionsEnded({ signal: t.signal });
+    },
+  );
+
+  test(
+    'when the SSH server refuses a connection to the engine socket, connect() rejects with a ConnectionFailedError that names the socket, the refusal and the fixes, and the SSH connection ends',
+    { skip },
+    async (t) => {
+      // Arrange
+      const { engineSocket } = ready(engine);
+      await using sshd = await startEngineSshd(engineVariables(ready(engine)), [
+        'AllowStreamLocalForwarding no',
+      ]);
+      const sshFlags = await clientFlags(sshd);
+
+      // Act
+      const connected = Docker.connect({
+        clock: globalThis,
+        environment: process.env,
+        host: SSH_HOST,
+        sshFlags,
+        signal: t.signal,
+      });
+
+      // Assert
+      await assert.rejects(connected, (error) => {
+        assert.ok(error instanceof ConnectionFailedError);
+        assert.equal(error.host, SSH_HOST);
+        for (const part of [
+          SSH_HOST,
+          engineSocket,
+          'refused',
+          'rootless Docker',
+          '/run/user/<uid>',
+          'OpenSSH server',
+        ]) {
+          assert.ok(error.message.includes(part), `${part}: ${error.message}`);
+        }
+        assert.ok(error.cause instanceof OpenChannelError, String(error.cause));
+        assert.ok(
+          error.message.includes(error.cause.description),
+          `${error.cause.description}: ${error.message}`,
+        );
+        return true;
+      });
+      await sshd.connectionsEnded({ signal: t.signal });
+    },
+  );
+});
+
+describe('the process of a client of an ssh:// host', () => {
+  test(
+    'an attach in use keeps the process running until its output ends, while the client is otherwise idle',
+    { skip },
+    async (t) => {
+      // Arrange
+      await using local = await localEngine(t.signal);
+      await using sshd = await startEngineSshd(engineVariables(ready(engine)));
+      const sshFlags = await clientFlags(sshd);
+      const label = randomUUID();
       const scenario = `
 import { Docker } from ${JSON.stringify(ENTRY)};
-const docker = await Docker.connect({ clock: globalThis, host: ${JSON.stringify(engine.host)}, sshFlags: ['-o', 'ServerAliveInterval=10'] });
-console.log(JSON.stringify({ host: docker.host }));
-await docker[Symbol.asyncDispose]();
+const docker = await Docker.connect({
+  clock: globalThis,
+  environment: process.env,
+  host: ${JSON.stringify(SSH_HOST)},
+  sshFlags: ${JSON.stringify(sshFlags)},
+});
+const container = await docker.containers.create({
+  Image: ${JSON.stringify(IMAGE)},
+  Cmd: ['sh', '-c', 'sleep 1; echo late'],
+  Labels: { ${JSON.stringify(TEST_LABEL)}: ${JSON.stringify(label)} },
+});
+const attached = await container.attach();
+await container.start();
+console.log(JSON.stringify(await attached.collect()));
 `;
-
-      // Act
-      const result = await runScenario(
-        scenario,
-        scenarioEnvironment(standIn.path, home.path),
-        t.signal,
-      );
-
-      // Assert
-      assert.deepEqual(lastJson(result), { host: engine.host }, result.stderr);
-      assert.deepEqual(await standIn.runs(), []);
-    },
-  );
-
-  test(
-    'no ssh on the PATH is a ConnectionFailedError',
-    {
-      skip: posixOnly,
-    },
-    async (t) => {
-      // Arrange
-      await using home = await new TemporaryFiles().directory('docker-test-');
-      const scenario = `
-import { ConnectionFailedError, Docker } from ${JSON.stringify(ENTRY)};
-try {
-  await Docker.connect({ clock: globalThis, host: ${JSON.stringify(HOST)} });
-  console.log(JSON.stringify({ connected: true }));
-} catch (error) {
-  console.log(JSON.stringify({
-    failed: error instanceof ConnectionFailedError,
-    host: error.host,
-    message: error.message,
-    code: error.cause?.code,
-  }));
-}
-`;
-
-      // Act
-      const result = await runScenario(
-        scenario,
-        {
-          PATH: home.path,
-          HOME: home.path,
-        },
-        t.signal,
-      );
-
-      // Assert
-      assert.deepEqual(
-        lastJson(result),
-        {
-          failed: true,
-          host: HOST,
-          message: `Cannot connect to the engine at ${HOST}.`,
-          code: 'ENOENT',
-        },
-        result.stderr,
-      );
-    },
-  );
-
-  test(
-    'info() reaches the engine through ssh, and host and cliEnvironment give the ssh:// host',
-    {
-      skip: needsLocalEngine,
-    },
-    async (t) => {
-      // Arrange
-      await using home = await new TemporaryFiles().directory('docker-test-');
-      await using standIn = await sshStandIn({
-        kind: 'engine',
-        socketPath: String(engineSocket),
-      });
-      const scenario = withClient(`
-const info = await docker.info();
-console.log(JSON.stringify({
-  host: docker.host,
-  context: docker.context,
-  apiVersion: docker.apiVersion,
-  cliEnvironment: docker.cliEnvironment,
-  serverVersion: typeof info.ServerVersion,
-  id: typeof info.ID,
-}));
-await docker[Symbol.asyncDispose]();
-`);
-
-      // Act
-      const result = await runScenario(
-        scenario,
-        scenarioEnvironment(standIn.path, home.path),
-        t.signal,
-      );
-
-      // Assert
-      const answer = lastJson(result);
-      assert.match(
-        String(Reflect.get(Object(answer), 'apiVersion')),
-        /^1\.\d+$/,
-      );
-      assert.deepEqual(
-        { ...Object(answer), apiVersion: undefined },
-        {
-          host: HOST,
-          context: 'default',
-          apiVersion: undefined,
-          cliEnvironment: { DOCKER_HOST: HOST },
-          serverVersion: 'string',
-          id: 'string',
-        },
-        result.stderr,
-      );
-    },
-  );
-
-  test(
-    'requests in sequence reuse one ssh process, and two concurrent requests use two',
-    {
-      skip: needsLocalEngine,
-    },
-    async (t) => {
-      // Arrange
-      await using home = await new TemporaryFiles().directory('docker-test-');
-      await using sequential = await sshStandIn({
-        kind: 'engine',
-        socketPath: String(engineSocket),
-      });
-      await using concurrent = await sshStandIn({
-        kind: 'engine',
-        socketPath: String(engineSocket),
-      });
-
-      // Act
-      const inSequence = await runScenario(
-        withClient(`
-await docker.info();
-await docker.info();
-await docker[Symbol.asyncDispose]();
-console.log('{}');
-`),
-        scenarioEnvironment(sequential.path, home.path),
-        t.signal,
-      );
-      const together = await runScenario(
-        withClient(`
-await Promise.all([docker.info(), docker.info()]);
-await docker[Symbol.asyncDispose]();
-console.log('{}');
-`),
-        scenarioEnvironment(concurrent.path, home.path),
-        t.signal,
-      );
-
-      // Assert
-      assert.equal(inSequence.exitCode, 0, inSequence.stderr);
-      assert.equal(together.exitCode, 0, together.stderr);
-      assert.equal(
-        (await sequential.runs()).length,
-        1,
-        'the ping and two infos in sequence',
-      );
-      assert.equal(
-        (await concurrent.runs()).length,
-        2,
-        'the ping, then two infos at the same time',
-      );
-    },
-  );
-
-  test(
-    '20 requests in sequence on one ssh process give no MaxListenersExceededWarning',
-    {
-      skip: needsLocalEngine,
-    },
-    async (t) => {
-      // Arrange
-      await using home = await new TemporaryFiles().directory('docker-test-');
-      await using standIn = await sshStandIn({
-        kind: 'engine',
-        socketPath: String(engineSocket),
-      });
-      const scenario = `
-const warnings = [];
-process.on('warning', (warning) => warnings.push(warning.name + ': ' + warning.message));
-${withClient(`
-for (let request = 0; request < 20; request++) await docker.info();
-await docker[Symbol.asyncDispose]();
-console.log(JSON.stringify({ warnings }));
-`)}`;
-
-      // Act
-      const result = await runScenario(
-        scenario,
-        scenarioEnvironment(standIn.path, home.path),
-        t.signal,
-      );
-
-      // Assert
-      assert.deepEqual(lastJson(result), { warnings: [] }, result.stderr);
-      assert.equal((await standIn.runs()).length, 1, 'one ssh process');
-    },
-  );
-
-  test(
-    'an idle connection whose ssh exits with 0, as after a restart of the engine, is not used again: the next request starts a new ssh',
-    {
-      skip: posixOnly,
-    },
-    async (t) => {
-      // Arrange
-      await using home = await new TemporaryFiles().directory('docker-test-');
-      await using engine = await fakeEngine({
-        directory: home.path,
-        apiVersion: '1.51',
-        answer: (_request, response) => {
-          response.writeHead(200, { 'Content-Type': 'application/json' });
-          response.end(JSON.stringify({ ID: 'engine' }));
-        },
-      });
-      await using standIn = await sshStandIn({
-        kind: 'engine',
-        socketPath: engine.socketPath,
-        exitAfterFirstAnswer: true,
-      });
-      const scenario = withClient(`
-const { readdirSync } = await import('node:fs');
-const runs = ${JSON.stringify(`${standIn.path}/runs`)};
-const [first] = readdirSync(runs).map((name) => Number.parseInt(name, 10));
-const alive = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
-// The client holds the ssh child and does not expose it, and no event reports the end of another process's child.
-while (alive(first)) await new Promise((resolve) => setTimeout(resolve, 20));
-const info = await docker.info().then((answer) => answer.ID, (error) => error.name + ': ' + error.message);
-console.log(JSON.stringify({ info, started: readdirSync(runs).length }));
-await docker[Symbol.asyncDispose]();
-`);
-
       try {
         // Act
         const result = await runScenario(
           scenario,
-          scenarioEnvironment(standIn.path, home.path),
+          inheritedEnvironment(),
           t.signal,
         );
 
         // Assert
-        assert.deepEqual(
-          lastJson(result),
-          { info: 'engine', started: 2 },
-          result.stderr,
-        );
+        assert.equal(result.exitCode, 0, result.stderr);
+        assert.deepEqual(lastJson(result), {
+          exitCode: 0,
+          stdout: 'late\n',
+          stderr: '',
+          output: 'late\n',
+        });
       } finally {
-        for (const { pid } of await standIn.runs()) {
-          if (isAlive(pid)) process.kill(pid, 'SIGKILL');
-        }
-      }
-    },
-  );
-
-  test(
-    'an idle connection whose ssh exited is not used again while its pipes are still open: the next request starts a new ssh',
-    {
-      skip: posixOnly,
-    },
-    async (t) => {
-      // Arrange
-      await using home = await new TemporaryFiles().directory('docker-test-');
-      await using engine = await fakeEngine({
-        directory: home.path,
-        apiVersion: '1.51',
-        answer: (_request, response) => {
-          response.writeHead(200, { 'Content-Type': 'application/json' });
-          response.end(JSON.stringify({ ID: 'engine' }));
-        },
-      });
-      // A child of the stand-in holds the pipes of the first ssh after its
-      // exit, until the next write to them: a request that the dead
-      // connection takes is certain to reach them.
-      await using standIn = await sshStandIn({
-        kind: 'engine',
-        socketPath: engine.socketPath,
-        exitAfterFirstAnswer: 'pipes-open-until-next-write',
-      });
-      const scenario = withClient(`
-const { readdirSync } = await import('node:fs');
-const runs = ${JSON.stringify(`${standIn.path}/runs`)};
-const [first] = readdirSync(runs).map((name) => Number.parseInt(name, 10));
-const alive = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
-// The client holds the ssh child and does not expose it, and no event reports the end of another process's child.
-while (alive(first)) await new Promise((resolve) => setTimeout(resolve, 20));
-const info = await docker.info().then((answer) => answer.ID, (error) => error.name + ': ' + error.message);
-console.log(JSON.stringify({ info, started: readdirSync(runs).length }));
-await docker[Symbol.asyncDispose]();
-`);
-
-      try {
-        // Act
-        const result = await runScenario(
-          scenario,
-          scenarioEnvironment(standIn.path, home.path),
-          t.signal,
-        );
-
-        // Assert
-        assert.deepEqual(
-          lastJson(result),
-          { info: 'engine', started: 2 },
-          result.stderr,
-        );
-      } finally {
-        for (const { pid } of await standIn.runs()) {
-          if (isAlive(pid)) process.kill(pid, 'SIGKILL');
-        }
-      }
-    },
-  );
-
-  test(
-    'a connection whose ssh exited with 0 before the caller read its answer to the end is not kept: the call right after the answer starts a new ssh and succeeds',
-    {
-      skip: posixOnly,
-    },
-    async (t) => {
-      // Arrange
-      await using home = await new TemporaryFiles().directory('docker-test-');
-      const event = `${JSON.stringify({
-        Type: 'container',
-        Action: 'start',
-        Actor: { ID: 'c'.repeat(64), Attributes: { name: 'n'.repeat(900) } },
-      })}\n`;
-      // 128 KB: more than the 64 KB of the answer that Node reads ahead of the
-      // caller, so the end of the answer waits for the caller, and less than
-      // what the client and the pipe of ssh hold together, so ssh can exit.
-      const EVENTS = Math.ceil((128 * 1024) / event.length);
-      await using engine = await fakeEngine({
-        directory: home.path,
-        apiVersion: '1.51',
-        answer: (request, response) => {
-          response.writeHead(200, { 'Content-Type': 'application/json' });
-          if (request.url?.startsWith('/v1.51/events')) {
-            // An engine that stops ends its events and closes the connection.
-            response.end(event.repeat(EVENTS), () => request.socket.end());
-            return;
-          }
-          response.end(JSON.stringify({ ID: 'engine' }));
-        },
-      });
-      await using standIn = await sshStandIn({
-        kind: 'engine',
-        socketPath: engine.socketPath,
-      });
-      const scenario = withClient(`
-const { readdirSync } = await import('node:fs');
-const runs = ${JSON.stringify(`${standIn.path}/runs`)};
-const [first] = readdirSync(runs).map((name) => Number.parseInt(name, 10));
-const alive = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
-const events = docker.events()[Symbol.asyncIterator]();
-await events.next();
-let read = 1;
-// The client holds the ssh child and does not expose it, and no event reports the end of another process's child.
-while (alive(first)) await new Promise((resolve) => setTimeout(resolve, 20));
-while (!(await events.next()).done) read++;
-const info = await docker.info().then((answer) => answer.ID, (error) => error.name + ': ' + error.message);
-console.log(JSON.stringify({ read, info, started: readdirSync(runs).length }));
-await docker[Symbol.asyncDispose]();
-`);
-
-      try {
-        // Act
-        const result = await runScenario(
-          scenario,
-          scenarioEnvironment(standIn.path, home.path),
-          t.signal,
-        );
-
-        // Assert
-        assert.deepEqual(
-          lastJson(result),
-          { read: EVENTS, info: 'engine', started: 2 },
-          result.stderr,
-        );
-      } finally {
-        for (const { pid } of await standIn.runs()) {
-          if (isAlive(pid)) process.kill(pid, 'SIGKILL');
-        }
-      }
-    },
-  );
-
-  test(
-    'disposal ends each ssh process and waits until it exited',
-    {
-      skip: needsLocalEngine,
-    },
-    async (t) => {
-      // Arrange
-      await using home = await new TemporaryFiles().directory('docker-test-');
-      // The stand-in keeps running after its standard input ends, so only a kill ends it.
-      await using standIn = await sshStandIn({
-        kind: 'engine',
-        socketPath: String(engineSocket),
-        ignoreInputEnd: true,
-      });
-      const scenario = withClient(`
-await Promise.all([docker.info(), docker.info(), docker.info()]);
-const { readdirSync } = await import('node:fs');
-const pids = readdirSync(${JSON.stringify(`${standIn.path}/runs`)}).map((name) => Number.parseInt(name, 10));
-await docker[Symbol.asyncDispose]();
-const alive = pids.filter((pid) => { try { process.kill(pid, 0); return true; } catch { return false; } });
-console.log(JSON.stringify({ started: pids.length, alive }));
-`);
-
-      try {
-        // Act
-        const result = await runScenario(
-          scenario,
-          scenarioEnvironment(standIn.path, home.path),
-          t.signal,
-        );
-
-        // Assert
-        assert.deepEqual(
-          lastJson(result),
-          { started: 3, alive: [] },
-          result.stderr,
-        );
-      } finally {
-        for (const { pid } of await standIn.runs()) {
-          if (isAlive(pid)) process.kill(pid, 'SIGKILL');
-        }
-      }
-    },
-  );
-
-  test(
-    'a process that connects and never disposes the client exits by itself, and its ssh processes end',
-    {
-      skip: needsLocalEngine,
-    },
-    async (t) => {
-      // Arrange
-      await using home = await new TemporaryFiles().directory('docker-test-');
-      await using standIn = await sshStandIn({
-        kind: 'engine',
-        socketPath: String(engineSocket),
-      });
-      const scenario = withClient(`
-await Promise.all([docker.info(), docker.info()]);
-console.log('connected');
-`);
-
-      // Act
-      const result = await runScenario(
-        scenario,
-        scenarioEnvironment(standIn.path, home.path),
-        t.signal,
-      );
-
-      // Assert
-      assert.equal(result.exitCode, 0, result.stderr);
-      assert.equal(result.stdout.trim(), 'connected');
-      const pids = (await standIn.runs()).map(({ pid }) => pid);
-      try {
-        assert.equal(pids.length, 2);
-        await poll(
-          async () => (pids.filter(isAlive).length === 0 ? true : undefined),
-          { signal: t.signal, clock: globalThis, interval: 20 },
-        );
-        assert.deepEqual(pids.filter(isAlive), []);
-      } finally {
-        for (const pid of pids.filter(isAlive)) process.kill(pid, 'SIGKILL');
+        await removeLabeled(local, label);
       }
     },
   );
 });
 
-describe('an exec over an ssh:// host', () => {
-  /** Prints "axb" and keeps its output open for a second: the text "axb" is not in the command. */
-  const PRINTS_THEN_EXITS_3 = [
-    'sh',
-    '-c',
-    'printf "a%sb\\n" x; sleep 1; exit 3',
-  ];
-
+describe('the input of an exec over an ssh:// host', () => {
   test(
-    'ssh that exits non-zero after some output, before the output ended, rejects exec() with an IncompleteOutputError with the exit code of the command and the SshExitError as cause',
-    {
-      skip: needsLocalEngine,
-    },
+    'a command that does not read all of its input gives its whole result: true and head -c1 with 10 MB of stdin',
+    { skip },
     async (t) => {
       // Arrange
-      await using local = await connect(IMAGE, t.signal);
-      const run = randomUUID();
-      await using home = await new TemporaryFiles().directory('docker-test-');
-      await using standIn = await sshStandIn({
-        kind: 'engine',
-        socketPath: String(engineSocket),
-        notRespondingAfter: 'axb',
+      await using local = await localEngine(t.signal);
+      await using sshd = await startEngineSshd(engineVariables(ready(engine)));
+      await using docker = await Docker.connect({
+        clock: globalThis,
+        environment: process.env,
+        host: SSH_HOST,
+        sshFlags: await clientFlags(sshd),
+        signal: t.signal,
       });
+      const label = randomUUID();
       try {
-        const sleeper = await local.containers.create({
-          Image: IMAGE,
-          Cmd: ['sleep', '300'],
-          Labels: { [TEST_LABEL]: run },
-        });
-        await sleeper.start();
-        const scenario = withClient(`
-const container = await docker.containers.find(${JSON.stringify(sleeper.id)});
-try {
-  const result = await container.exec({ Cmd: ${JSON.stringify(PRINTS_THEN_EXITS_3)} });
-  console.log(JSON.stringify({ result }));
-} catch (error) {
-  console.log(JSON.stringify({
-    error: error.name,
-    exitCode: error.exitCode,
-    cause: error.cause?.name,
-    sshExitCode: error.cause?.exitCode,
-  }));
-}
-await docker[Symbol.asyncDispose]();
-`);
-
-        // Act
-        const result = await runScenario(
-          scenario,
-          scenarioEnvironment(standIn.path, home.path),
-          t.signal,
-        );
-
-        // Assert
-        assert.deepEqual(
-          lastJson(result),
+        const container = await docker.containers.create(
           {
-            error: 'IncompleteOutputError',
-            exitCode: 3,
-            cause: 'SshExitError',
-            sshExitCode: 255,
+            Image: IMAGE,
+            // If the exec hangs, --test-force-exit can end the process
+            // before the finally block: the engine then removes the
+            // container when it ends by itself.
+            Cmd: ['sleep', '600'],
+            Labels: { [TEST_LABEL]: label },
+            HostConfig: { AutoRemove: true },
           },
-          result.stderr,
+          { signal: t.signal },
         );
-      } finally {
-        await removeLabeled(local, run);
-      }
-    },
-  );
-
-  test(
-    'ssh that exits non-zero before the output ended gives the output that came before it, then the iteration rejects with an IncompleteOutputError, and exitCode resolves with the exit code of the command',
-    {
-      skip: needsLocalEngine,
-    },
-    async (t) => {
-      // Arrange
-      await using local = await connect(IMAGE, t.signal);
-      const run = randomUUID();
-      await using home = await new TemporaryFiles().directory('docker-test-');
-      await using standIn = await sshStandIn({
-        kind: 'engine',
-        socketPath: String(engineSocket),
-        notRespondingAfter: 'axb',
-      });
-      try {
-        const sleeper = await local.containers.create({
-          Image: IMAGE,
-          Cmd: ['sleep', '300'],
-          Labels: { [TEST_LABEL]: run },
-        });
-        await sleeper.start();
-        const scenario = withClient(`
-const container = await docker.containers.find(${JSON.stringify(sleeper.id)});
-const command = await container.spawn({ Cmd: ${JSON.stringify(PRINTS_THEN_EXITS_3)} });
-const decoder = new TextDecoder();
-let output = '';
-let error;
-try {
-  for await (const chunk of command) output += decoder.decode(chunk.data, { stream: true });
-} catch (rejection) {
-  error = rejection.name;
-}
-const exitCode = await command.exitCode.catch((rejection) => rejection.name);
-console.log(JSON.stringify({ output, error, exitCode }));
-await docker[Symbol.asyncDispose]();
-`);
+        await container.start({ signal: t.signal });
+        const stdin = new Uint8Array(10 * 1024 * 1024).fill(0x61);
 
         // Act
-        const result = await runScenario(
-          scenario,
-          scenarioEnvironment(standIn.path, home.path),
+        // The bound ends a hang at the limit of the test, so the cleanup runs.
+        const results = await untilAborted(
+          Promise.all([
+            container.exec({ Cmd: ['true'] }, { stdin, signal: t.signal }),
+            container.exec(
+              { Cmd: ['head', '-c1'] },
+              { stdin, signal: t.signal },
+            ),
+          ]),
           t.signal,
         );
 
         // Assert
-        assert.deepEqual(
-          lastJson(result),
-          { output: 'axb\n', error: 'IncompleteOutputError', exitCode: 3 },
-          result.stderr,
-        );
+        assert.deepEqual(results, [
+          { exitCode: 0, stdout: '', stderr: '', output: '' },
+          { exitCode: 0, stdout: 'a', stderr: '', output: 'a' },
+        ]);
       } finally {
-        await removeLabeled(local, run);
-      }
-    },
-  );
-
-  test(
-    'an exec whose ssh exits with 0 after the output ended gives its result',
-    {
-      skip: needsLocalEngine,
-    },
-    async (t) => {
-      // Arrange
-      await using local = await connect(IMAGE, t.signal);
-      const run = randomUUID();
-      await using home = await new TemporaryFiles().directory('docker-test-');
-      await using standIn = await sshStandIn({
-        kind: 'engine',
-        socketPath: String(engineSocket),
-      });
-      try {
-        const sleeper = await local.containers.create({
-          Image: IMAGE,
-          Cmd: ['sleep', '300'],
-          Labels: { [TEST_LABEL]: run },
-        });
-        await sleeper.start();
-        const scenario = withClient(`
-const container = await docker.containers.find(${JSON.stringify(sleeper.id)});
-const result = await container.exec({ Cmd: ${JSON.stringify(PRINTS_THEN_EXITS_3)} }).catch((error) => error.name + ': ' + error.message);
-console.log(JSON.stringify({ result }));
-await docker[Symbol.asyncDispose]();
-`);
-
-        // Act
-        const result = await runScenario(
-          scenario,
-          scenarioEnvironment(standIn.path, home.path),
-          t.signal,
-        );
-
-        // Assert
-        assert.deepEqual(
-          lastJson(result),
-          {
-            result: {
-              exitCode: 3,
-              stdout: 'axb\n',
-              stderr: '',
-              output: 'axb\n',
-            },
-          },
-          result.stderr,
-        );
-      } finally {
-        await removeLabeled(local, run);
+        await removeLabeled(local, label);
       }
     },
   );

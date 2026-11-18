@@ -11,7 +11,6 @@ import {
   UnsupportedEngineError,
 } from './errors.ts';
 import type { Filters } from './options.ts';
-import { SshExitError } from './ssh-connection.ts';
 import type { Transport } from './transport.ts';
 
 /** The query of a request. An array repeats the parameter; `filters` goes to the engine as JSON. */
@@ -53,23 +52,6 @@ export interface HijackedConnection {
 type Opened =
   | { response: IncomingMessage; upgrade?: never }
   | { response: IncomingMessage; upgrade: { socket: Duplex; head: Buffer } };
-
-/** The socket errors that are a ConnectionFailedError when they come before the answer. ENOENT is also an absent `ssh`; ECONNRESET is also the "socket hang up" of Node. */
-const CONNECTION_FAILURES = new Set([
-  'ENOENT',
-  'ECONNREFUSED',
-  'EACCES',
-  'EPIPE',
-  'ECONNRESET',
-]);
-
-function errorCode(error: unknown): string | undefined {
-  return Error.isError(error) &&
-    'code' in error &&
-    typeof error.code === 'string'
-    ? error.code
-    : undefined;
-}
 
 function search(query: Query | undefined): string {
   const parameters = new URLSearchParams();
@@ -351,9 +333,7 @@ export class EngineClient {
     request.on('error', (error) => {
       // An error after the answer started is not a connection failure.
       reject(
-        responses.length === 0 &&
-          (error instanceof SshExitError ||
-            CONNECTION_FAILURES.has(errorCode(error) ?? ''))
+        responses.length === 0 && this.#transport.isConnectionFailure(error)
           ? new ConnectionFailedError(this.#host, { cause: error })
           : error,
       );

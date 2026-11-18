@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
-import { delimiter } from 'node:path';
 import { describe, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 
@@ -15,13 +14,23 @@ import {
   Docker,
   NetworkNotFoundError,
 } from './index.ts';
-import { IMAGE, TEST_LABEL, connect, removeLabeled } from './testing/engine.ts';
-import { ENTRY, lastJson, runScenario } from './testing/scenario.ts';
 import {
-  isAlive,
-  localEngineSocket,
-  sshStandIn,
-} from './testing/ssh-stand-in.ts';
+  SSH_HOST,
+  clientFlags,
+  engineForSshd,
+  engineVariables,
+  ready,
+  skipWithout,
+  startEngineSshd,
+} from './testing/engine-sshd.ts';
+import { IMAGE, TEST_LABEL, connect, removeLabeled } from './testing/engine.ts';
+import { localEngineSocket } from './testing/local-engine.ts';
+import {
+  ENTRY,
+  inheritedEnvironment,
+  lastJson,
+  runScenario,
+} from './testing/scenario.ts';
 
 /** The IDs of the containers with the label of this test run. */
 async function labeledIds(docker: Docker, run: string): Promise<string[]> {
@@ -180,18 +189,12 @@ describe('container.attach()', () => {
   });
 });
 
-const posixOnly =
-  process.platform === 'win32'
-    ? 'the ssh stand-in is a POSIX executable with a shebang'
-    : false;
-const engineSocket = posixOnly
-  ? undefined
-  : await localEngineSocket(process.env);
+const engineSocket = await localEngineSocket(process.env);
 const needsLocalEngine =
-  posixOnly ||
-  (engineSocket === undefined
+  engineSocket === undefined
     ? 'the current context of config.json is not a local unix:// engine'
-    : false);
+    : false;
+const sshEngine = await engineForSshd();
 
 /**
  * A scenario that connects with `connect`, creates a labeled `cat` that the
@@ -200,7 +203,7 @@ const needsLocalEngine =
  */
 const holdAttach = (connect: string, run: string, attach: string) => `
 import { Docker } from ${JSON.stringify(ENTRY)};
-const docker = await Docker.connect({ ...${connect}, clock: globalThis });
+const docker = await Docker.connect({ ...${connect}, environment: process.env, clock: globalThis });
 const container = await docker.containers.create({
   Image: ${JSON.stringify(IMAGE)},
   Entrypoint: ['cat'],
@@ -225,7 +228,7 @@ console.log(JSON.stringify({ id: container.id }));
  */
 const holdSpawn = (connect: string, run: string) => `
 import { Docker } from ${JSON.stringify(ENTRY)};
-const docker = await Docker.connect({ ...${connect}, clock: globalThis });
+const docker = await Docker.connect({ ...${connect}, environment: process.env, clock: globalThis });
 const container = await docker.containers.create({
   Image: ${JSON.stringify(IMAGE)},
   Entrypoint: ['sh', '-c', 'until [ -e /tmp/held ]; do sleep 0.05; done; while pgrep -x cat; do sleep 0.05; done'],
@@ -341,18 +344,17 @@ describe('container.attach({ ref: false })', () => {
   );
 
   test(
-    'through ssh, a process that holds an attach with ref: false exits by itself, each ssh process ends, and the engine removes the cat',
-    { skip: needsLocalEngine },
+    'through ssh, a process that holds an attach with ref: false exits by itself, its SSH connection ends, and the engine removes the cat',
+    { skip: skipWithout(sshEngine) },
     async (t) => {
       // Arrange
-      await using home = await new TemporaryFiles().directory('docker-test-');
-      await using standIn = await sshStandIn({
-        kind: 'engine',
-        socketPath: String(engineSocket),
-      });
+      await using sshd = await startEngineSshd(
+        engineVariables(ready(sshEngine)),
+      );
+      const sshFlags = await clientFlags(sshd);
       await using cleaner = await Docker.connect({
         clock: globalThis,
-        host: `unix://${String(engineSocket)}`,
+        host: `unix://${ready(sshEngine).engineSocket}`,
       });
       if (!(await cleaner.images.inspect(IMAGE)))
         await cleaner.images.pull(IMAGE);
@@ -361,14 +363,11 @@ describe('container.attach({ ref: false })', () => {
         // Act
         const result = await runScenario(
           holdAttach(
-            JSON.stringify({ host: 'ssh://tester@machine' }),
+            JSON.stringify({ host: SSH_HOST, sshFlags }),
             run,
             '{ stdin: true, ref: false }',
           ),
-          {
-            PATH: `${standIn.path}${delimiter}${process.env.PATH}`,
-            HOME: home.path,
-          },
+          inheritedEnvironment(),
           t.signal,
         );
 
@@ -377,17 +376,8 @@ describe('container.attach({ ref: false })', () => {
         const { id } = Object(lastJson(result));
         await removed(cleaner, String(id), t.signal);
         assert.equal(await cleaner.containers.find(String(id)), undefined);
-        const alive = async () =>
-          (await standIn.runs()).map(({ pid }) => pid).filter(isAlive);
-        await poll(
-          async () => ((await alive()).length === 0 ? true : undefined),
-          { signal: t.signal, clock: globalThis, interval: 50 },
-        );
-        assert.deepEqual(await alive(), []);
+        await sshd.connectionsEnded({ signal: t.signal });
       } finally {
-        for (const { pid } of await standIn.runs()) {
-          if (isAlive(pid)) process.kill(pid, 'SIGKILL');
-        }
         await removeLabeled(cleaner, run);
       }
     },
@@ -427,18 +417,17 @@ describe('container.spawn({ ref: false })', () => {
   );
 
   test(
-    'through ssh, a process that holds an exec with ref: false exits by itself, each ssh process ends, and its cat then ends',
-    { skip: needsLocalEngine },
+    'through ssh, a process that holds an exec with ref: false exits by itself, its SSH connection ends, and its cat then ends',
+    { skip: skipWithout(sshEngine) },
     async (t) => {
       // Arrange
-      await using home = await new TemporaryFiles().directory('docker-test-');
-      await using standIn = await sshStandIn({
-        kind: 'engine',
-        socketPath: String(engineSocket),
-      });
+      await using sshd = await startEngineSshd(
+        engineVariables(ready(sshEngine)),
+      );
+      const sshFlags = await clientFlags(sshd);
       await using cleaner = await Docker.connect({
         clock: globalThis,
-        host: `unix://${String(engineSocket)}`,
+        host: `unix://${ready(sshEngine).engineSocket}`,
       });
       if (!(await cleaner.images.inspect(IMAGE)))
         await cleaner.images.pull(IMAGE);
@@ -446,11 +435,8 @@ describe('container.spawn({ ref: false })', () => {
       try {
         // Act
         const result = await runScenario(
-          holdSpawn(JSON.stringify({ host: 'ssh://tester@machine' }), run),
-          {
-            PATH: `${standIn.path}${delimiter}${process.env.PATH}`,
-            HOME: home.path,
-          },
+          holdSpawn(JSON.stringify({ host: SSH_HOST, sshFlags }), run),
+          inheritedEnvironment(),
           t.signal,
         );
 
@@ -460,17 +446,8 @@ describe('container.spawn({ ref: false })', () => {
         assert.equal(held, true, 'The cat runs while its holder lives');
         await removed(cleaner, String(id), t.signal);
         assert.equal(await cleaner.containers.find(String(id)), undefined);
-        const alive = async () =>
-          (await standIn.runs()).map(({ pid }) => pid).filter(isAlive);
-        await poll(
-          async () => ((await alive()).length === 0 ? true : undefined),
-          { signal: t.signal, clock: globalThis, interval: 50 },
-        );
-        assert.deepEqual(await alive(), []);
+        await sshd.connectionsEnded({ signal: t.signal });
       } finally {
-        for (const { pid } of await standIn.runs()) {
-          if (isAlive(pid)) process.kill(pid, 'SIGKILL');
-        }
         await removeLabeled(cleaner, run);
       }
     },

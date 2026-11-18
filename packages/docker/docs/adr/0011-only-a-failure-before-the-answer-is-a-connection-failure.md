@@ -1,5 +1,7 @@
 # Only a failure before the answer is a connection failure
 
+> 2026-11-18: over SSH ([ADR 0015](./0015-an-ssh-engine-is-reached-through-zukhruf-ssh-in-the-node-process.md)), no `ssh` exits: a failure before the answer is a failure of `@zukhruf/ssh` or of its channel, and its `cause` is that error, not the exit of `ssh`. The rule of this ADR stays.
+
 A connection to the engine can fail at four moments:
 
 - (a) The connection does not open: the socket does not exist, or the engine refuses the connection.

@@ -1,36 +1,38 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { writeFile } from 'node:fs/promises';
-import { delimiter, join } from 'node:path';
 import { describe, test } from 'node:test';
 
 import { poll } from '@zukhruf/async';
 import { TemporaryFiles } from '@zukhruf/fs';
 
 import { ConnectionFailedError, Docker, DockerError } from './index.ts';
+import {
+  SSH_HOST,
+  clientFlags,
+  engineForSshd,
+  engineVariables,
+  ready,
+  skipWithout,
+  startEngineSshd,
+} from './testing/engine-sshd.ts';
 import { IMAGE, TEST_LABEL, removeLabeled } from './testing/engine.ts';
 import { fakeEngine } from './testing/fake-engine.ts';
-import { ENTRY, lastJson, runScenario } from './testing/scenario.ts';
+import { localEngineSocket } from './testing/local-engine.ts';
 import {
-  isAlive,
-  localEngineSocket,
-  sshStandIn,
-} from './testing/ssh-stand-in.ts';
+  ENTRY,
+  inheritedEnvironment,
+  lastJson,
+  runScenario,
+} from './testing/scenario.ts';
 
 const DISPOSED = /client was disposed/;
 
-const posixOnly =
-  process.platform === 'win32'
-    ? 'the ssh stand-in is a POSIX executable with a shebang'
-    : false;
-const engineSocket = posixOnly
-  ? undefined
-  : await localEngineSocket(process.env);
+const engineSocket = await localEngineSocket(process.env);
 const needsLocalEngine =
-  posixOnly ||
-  (engineSocket === undefined
+  engineSocket === undefined
     ? 'the current context of config.json is not a local unix:// engine'
-    : false);
+    : false;
+const sshEngine = await engineForSshd();
 
 /**
  * A scenario that connects with `connect`, starts a labeled container that
@@ -40,7 +42,7 @@ const needsLocalEngine =
  */
 const disposeWhileIterating = (connect: string, run: string) => `
 import { Docker, DockerError } from ${JSON.stringify(ENTRY)};
-const docker = await Docker.connect({ ...${connect}, clock: globalThis });
+const docker = await Docker.connect({ ...${connect}, environment: process.env, clock: globalThis });
 const container = await docker.containers.create({
   Image: ${JSON.stringify(IMAGE)},
   Cmd: ['sh', '-c', 'echo up; sleep 300'],
@@ -140,18 +142,17 @@ describe('disposal of a client with open streams', () => {
   );
 
   test(
-    'through ssh, the iterations reject, each ssh process ends, and the process exits by itself',
-    { skip: needsLocalEngine },
+    'through ssh, the iterations reject, the SSH connection ends, and the process exits by itself',
+    { skip: skipWithout(sshEngine) },
     async (t) => {
       // Arrange
-      await using home = await new TemporaryFiles().directory('docker-test-');
-      await using standIn = await sshStandIn({
-        kind: 'engine',
-        socketPath: String(engineSocket),
-      });
+      await using sshd = await startEngineSshd(
+        engineVariables(ready(sshEngine)),
+      );
+      const sshFlags = await clientFlags(sshd);
       await using cleaner = await Docker.connect({
         clock: globalThis,
-        host: `unix://${String(engineSocket)}`,
+        host: `unix://${ready(sshEngine).engineSocket}`,
       });
       if (!(await cleaner.images.inspect(IMAGE))) {
         await cleaner.images.pull(IMAGE);
@@ -161,13 +162,10 @@ describe('disposal of a client with open streams', () => {
         // Act
         const result = await runScenario(
           disposeWhileIterating(
-            JSON.stringify({ host: 'ssh://tester@machine' }),
+            JSON.stringify({ host: SSH_HOST, sshFlags }),
             run,
           ),
-          {
-            PATH: `${standIn.path}${delimiter}${process.env.PATH}`,
-            HOME: home.path,
-          },
+          inheritedEnvironment(),
           t.signal,
         );
 
@@ -176,20 +174,8 @@ describe('disposal of a client with open streams', () => {
         const [logs, exec] = Object(lastJson(result));
         assert.match(String(logs), DISPOSED);
         assert.match(String(exec), DISPOSED);
-        const runs = await standIn.runs();
-        assert.ok(
-          runs.length >= 2,
-          'the followed logs and the exec each hold a connection',
-        );
-        assert.deepEqual(
-          runs.map(({ pid }) => pid).filter(isAlive),
-          [],
-          'each ssh process ended',
-        );
+        await sshd.connectionsEnded({ signal: t.signal });
       } finally {
-        for (const { pid } of await standIn.runs()) {
-          if (isAlive(pid)) process.kill(pid, 'SIGKILL');
-        }
         await removeLabeled(cleaner, run);
       }
     },
@@ -238,70 +224,54 @@ describe('requests during and after disposal', () => {
   });
 
   test(
-    'through ssh, a request in flight and a request after disposal started reject with the DockerError of disposal, and when disposal resolves no ssh process runs and none started after it',
-    { skip: posixOnly },
+    'through ssh, a request in flight and a request after disposal started reject with the DockerError of disposal, the second one reaches no engine, and the SSH connection ends',
+    { skip: skipWithout(sshEngine) },
     async (t) => {
-      // Arrange: the engine never answers /info, and marks that it got it.
-      await using home = await new TemporaryFiles().directory('docker-test-');
-      const seen = join(home.path, 'info-seen');
-      await writeFile(seen, '');
+      // Arrange: the engine never answers /info.
+      await using scratch = await new TemporaryFiles().directory(
+        'docker-test-',
+      );
+      const seen = Promise.withResolvers<void>();
       await using engine = await fakeEngine({
-        directory: home.path,
+        directory: scratch.path,
         apiVersion: '1.51',
-        answer: () => void writeFile(seen, 'seen'),
+        answer: () => seen.resolve(),
       });
-      await using standIn = await sshStandIn({
-        kind: 'engine',
-        socketPath: engine.socketPath,
+      await using sshd = await startEngineSshd({
+        ...engineVariables(ready(sshEngine)),
+        DOCKER_HOST: engine.host,
       });
-      // The scenario reads the file because a watcher registers on the next turn
-      // of the event loop, so it can miss a write that lands first (#4094).
-      const scenario = `
-import { readdirSync, readFileSync } from 'node:fs';
-import { setTimeout as delay } from 'node:timers/promises';
-import { ConnectionFailedError, Docker, DockerError } from ${JSON.stringify(ENTRY)};
-const describe = (error) =>
-  error instanceof ConnectionFailedError
-    ? 'ConnectionFailedError'
-    : error instanceof DockerError
-      ? error.message
-      : 'other: ' + error;
-const docker = await Docker.connect({ clock: globalThis, host: 'ssh://tester@machine' });
-const inFlight = docker.info().then(() => 'resolved', describe);
-while (readFileSync(${JSON.stringify(seen)}, 'utf8') === '') await delay(10);
-const disposing = docker[Symbol.asyncDispose]();
-const late = docker.info().then(() => 'resolved', describe);
-await disposing;
-const pids = readdirSync(${JSON.stringify(`${standIn.path}/runs`)}).map((name) => Number.parseInt(name, 10));
-const alive = pids.filter((pid) => { try { process.kill(pid, 0); return true; } catch { return false; } });
-console.log(JSON.stringify({ inFlight: await inFlight, late: await late, started: pids.length, alive }));
-`;
+      const docker = await Docker.connect({
+        clock: globalThis,
+        environment: process.env,
+        host: SSH_HOST,
+        sshFlags: await clientFlags(sshd),
+        signal: t.signal,
+      });
+      const inFlight = docker.info();
+      inFlight.catch(() => undefined);
+      await seen.promise;
 
-      try {
-        // Act
-        const result = await runScenario(
-          scenario,
-          {
-            PATH: `${standIn.path}${delimiter}${process.env.PATH}`,
-            HOME: home.path,
-          },
-          t.signal,
-        );
+      // Act
+      const disposing = docker[Symbol.asyncDispose]();
+      const late = docker.info();
+      late.catch(() => undefined);
+      await disposing;
 
-        // Assert
-        const answer = Object(lastJson(result));
-        assert.match(String(answer.inFlight), DISPOSED, result.stderr);
-        assert.match(String(answer.late), DISPOSED);
-        assert.deepEqual(
-          { started: answer.started, alive: answer.alive },
-          { started: 1, alive: [] },
-          'the ping and the request in flight share one ssh process',
-        );
-      } finally {
-        for (const { pid } of await standIn.runs()) {
-          if (isAlive(pid)) process.kill(pid, 'SIGKILL');
-        }
+      // Assert
+      for (const each of [inFlight, late]) {
+        await assert.rejects(each, (error) => {
+          assert.ok(error instanceof DockerError);
+          assert.equal(error instanceof ConnectionFailedError, false);
+          assert.match(error.message, DISPOSED);
+          return true;
+        });
       }
+      assert.equal(
+        engine.paths.filter((path) => path === '/v1.51/info').length,
+        1,
+      );
+      await sshd.connectionsEnded({ signal: t.signal });
     },
   );
 });

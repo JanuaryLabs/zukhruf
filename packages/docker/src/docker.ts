@@ -15,8 +15,8 @@ import { Images } from './images.ts';
 import { ndjson } from './ndjson.ts';
 import { Networks } from './networks.ts';
 import type { CancelOptions, Filters } from './options.ts';
-import { SshTransport } from './ssh-connection.ts';
-import { SocketTransport } from './transport.ts';
+import { SshDialer } from './ssh-engine.ts';
+import { SocketDialer, Transport } from './transport.ts';
 import { Volumes } from './volumes.ts';
 
 function isEventMessage(value: unknown): value is EngineApi.EventMessage {
@@ -25,8 +25,9 @@ function isEventMessage(value: unknown): value is EngineApi.EventMessage {
 
 /**
  * A context or a host, never both. `clock` is the clock of the waits of the
- * client: `globalThis` in production, a fake clock in a test. `sshFlags` are
- * raw flags for `ssh`: only an engine at an ssh:// host uses them.
+ * client, also of the SSH connection: `globalThis` in production, a fake
+ * clock in a test. `sshFlags` are raw flags of `ssh`, which OpenSSH reads
+ * before the config file: only an engine at an ssh:// host uses them.
  */
 export type ConnectOptions = CancelOptions & {
   environment?: Environment;
@@ -74,10 +75,11 @@ export class Docker implements AsyncDisposable {
     const { signal, clock } = options;
     const engine = await selectEngine(options);
     const parsed = parseHost(engine.host);
-    const transport =
+    const transport = new Transport(
       parsed.kind === 'ssh'
-        ? new SshTransport(parsed.url, options.sshFlags ?? [])
-        : new SocketTransport(parsed.kind, parsed.socketPath);
+        ? await SshDialer.connect(engine.host, options)
+        : new SocketDialer(parsed.kind, parsed.socketPath),
+    );
     try {
       const unversioned = new EngineClient(engine.host, transport);
       const ping = await unversioned.request('GET', '/_ping', { signal });
@@ -134,7 +136,7 @@ export class Docker implements AsyncDisposable {
    * logs and events: an iteration of one of them rejects with a DockerError.
    * A request in flight, and each request after the disposal starts, rejects
    * with the same DockerError. It resolves when each connection is closed;
-   * for an SSH engine, when each `ssh` process exited.
+   * for an SSH engine, also the SSH connection.
    */
   async [Symbol.asyncDispose](): Promise<void> {
     await this.#client.close();

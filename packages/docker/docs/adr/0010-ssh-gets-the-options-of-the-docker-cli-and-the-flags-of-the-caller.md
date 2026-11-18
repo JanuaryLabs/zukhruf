@@ -1,5 +1,7 @@
 # ssh gets the options of the Docker CLI and the flags of the caller
 
+> 2026-11-18: superseded by [ADR 0015](./0015-an-ssh-engine-is-reached-through-zukhruf-ssh-in-the-node-process.md). No `ssh` process runs for a connection: `sshFlags` reach only `ssh -G`, and `ConnectTimeout=30` is added after them, so a flag or the config that sets one still wins.
+
 For an `ssh://` host, the connection helper is one `ssh` process for each connection. `sshArguments` in `packages/docker/src/ssh-connection.ts` starts `ssh -T -o BatchMode=yes … docker system dial-stdio`. It sends no connect timeout and no keepalive, and a caller cannot add an option of `ssh`.
 
 Two backlog items asked for a decision:
