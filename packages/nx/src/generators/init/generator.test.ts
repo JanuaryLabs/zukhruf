@@ -241,6 +241,29 @@ test('a second run changes nothing', async () => {
   }
 });
 
+test('the scripts and allowScripts that are there keep their order', async () => {
+  const tree = workspace();
+  writeJson(tree, 'package.json', {
+    name: '@acme/source',
+    scripts: { build: 'nx run-many -t build', prepare: 'husky' },
+    allowScripts: { esbuild: true, nx: false },
+    devDependencies: {},
+  });
+
+  await initGenerator(tree);
+
+  const packageJson = readJson(tree, 'package.json');
+  assert.deepEqual(Object.entries(packageJson.scripts), [
+    ['build', 'nx run-many -t build'],
+    ['prepare', 'husky'],
+  ]);
+  assert.deepEqual(Object.entries(packageJson.allowScripts), [
+    ['esbuild', true],
+    ['nx', false],
+    ['unrs-resolver', false],
+  ]);
+});
+
 test('the target defaults and lines that are there stay', async () => {
   const tree = workspace();
   writeJson(tree, 'nx.json', {

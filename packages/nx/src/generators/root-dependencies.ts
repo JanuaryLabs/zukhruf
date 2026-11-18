@@ -1,5 +1,6 @@
 import { type Tree, readJson, updateJson } from '@nx/devkit';
 
+import { addMissingKeys } from './add-keys.ts';
 import {
   type RootPackageJson,
   pinNxFamily,
@@ -65,16 +66,16 @@ export function settleRootDependencies(
     }
     packageJson.devDependencies = sortKeys(devDependencies);
     if (settings.allowScripts) {
-      packageJson.allowScripts = {
-        ...settings.allowScripts,
-        ...packageJson.allowScripts,
-      };
+      packageJson.allowScripts = addMissingKeys(
+        packageJson.allowScripts,
+        settings.allowScripts,
+      );
     }
     if (settings.overrides) {
-      packageJson.overrides = {
-        ...settings.overrides,
-        ...packageJson.overrides,
-      };
+      packageJson.overrides = addMissingKeys(
+        packageJson.overrides,
+        settings.overrides,
+      );
     }
     return packageJson;
   });

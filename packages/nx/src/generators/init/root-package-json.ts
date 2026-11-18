@@ -1,5 +1,6 @@
 import { type Tree, updateJson } from '@nx/devkit';
 
+import { addMissingKeys } from '../add-keys.ts';
 import {
   nxFamily,
   nxVersion,
@@ -51,10 +52,9 @@ export function mergeRootPackageJson(tree: Tree): void {
     packageJson.private = true;
     packageJson.type = 'module';
     packageJson.workspaces ??= ['apps/*', 'packages/*', 'tools/*'];
-    packageJson.scripts = {
+    packageJson.scripts = addMissingKeys(packageJson.scripts, {
       prepare: 'git config core.hooksPath .husky || exit 0',
-      ...packageJson.scripts,
-    };
+    });
     const dependencies = packageJson.dependencies ?? {};
     const devDependencies = { ...packageJson.devDependencies };
     for (const [name, version] of Object.entries({
@@ -71,7 +71,10 @@ export function mergeRootPackageJson(tree: Tree): void {
     pinNxFamily(dependencies);
     pinNxFamily(devDependencies);
     packageJson.devDependencies = sortKeys(devDependencies);
-    packageJson.allowScripts = { ...allowScripts, ...packageJson.allowScripts };
+    packageJson.allowScripts = addMissingKeys(
+      packageJson.allowScripts,
+      allowScripts,
+    );
     return packageJson;
   });
 }

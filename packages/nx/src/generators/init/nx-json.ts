@@ -6,6 +6,8 @@ import {
   updateJson,
 } from '@nx/devkit';
 
+import { addMissingKeys } from '../add-keys.ts';
+
 type InputDefinition = NonNullable<
   NxJsonConfiguration['namedInputs']
 >[string][number];
@@ -78,7 +80,7 @@ export function mergeGeneratorDefaults(
     ...generators?.[collection],
   };
   for (const [generator, options] of Object.entries(defaults)) {
-    existing[generator] = { ...options, ...existing[generator] };
+    existing[generator] = addMissingKeys(existing[generator], options);
   }
   return { ...generators, [collection]: existing };
 }

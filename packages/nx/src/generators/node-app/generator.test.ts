@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { readJson } from '@nx/devkit';
+import { readJson, writeJson } from '@nx/devkit';
 
 import {
   generatorTree,
@@ -396,4 +396,23 @@ test('nx.json gets the esbuild default, ^sdk, and test.dependsOn ["...", "^sdk"]
   );
   assert.equal(generators['@nx/node'].application.bundler, 'esbuild');
   assert.equal(generators['@nx/node'].application.unitTestRunner, 'none');
+});
+
+test('a generator default that is there keeps its value and its place', async () => {
+  const tree = generatorTree();
+  writeJson(tree, 'nx.json', {
+    generators: {
+      '@nx/node': { application: { docker: true, linter: 'none' } },
+    },
+  });
+
+  await nodeAppGenerator(tree, { directory: 'apps/backend' });
+
+  const options = Object.entries(
+    readJson(tree, 'nx.json').generators['@nx/node'].application,
+  );
+  assert.deepEqual(options.slice(0, 2), [
+    ['docker', true],
+    ['linter', 'none'],
+  ]);
 });
