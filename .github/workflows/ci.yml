@@ -31,6 +31,12 @@ jobs:
       - name: Set up Zig
         uses: ./.github/actions/setup-zig
 
+      # The dokploy generator's test runs tofu fmt on the files it writes.
+      - name: Set up OpenTofu
+        uses: opentofu/setup-opentofu@v2
+        with:
+          tofu_wrapper: false
+
       - name: Find what changed since the last release
         uses: ./.github/actions/affected-range
 

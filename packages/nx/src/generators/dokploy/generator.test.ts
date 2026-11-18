@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 
 import {
@@ -7,6 +10,8 @@ import {
   readJson,
   writeJson,
 } from '@nx/devkit';
+
+import { TemporaryFiles } from '@zukhruf/fs';
 
 import { changes, generatorTree } from '../../testing/generator-tree.ts';
 import nodeAppGenerator from '../node-app/generator.ts';
@@ -451,6 +456,56 @@ test('a database that is not a Prisma package stops the generator', async () => 
     /packages\/db has no Dockerfile\.migration, so it is not a Prisma package\./,
   );
 });
+
+// The consumer's @zukhruf/nx/opentofu format:check runs tofu fmt -check, so a
+// .tf file that tofu fmt would rewrite fails a freshly generated repo. The
+// content assertions above cannot see HCL alignment (#4657).
+const tofuOnPath =
+  spawnSync('tofu', ['version'], { stdio: 'ignore' }).status === 0;
+
+test(
+  'tofu fmt would change no .tf file the generator writes',
+  { skip: tofuOnPath ? false : 'tofu is not on PATH' },
+  async () => {
+    for (const [hostMode, hostOptions] of Object.entries(hosts)) {
+      for (const postgres of [true, false]) {
+        for (const registry of [true, false]) {
+          const tree = await workspace(postgres ? 'packages/db' : undefined);
+          await dokployGenerator(tree, {
+            api: 'apps/backend',
+            owner: 'Acme-Org',
+            ...hostOptions,
+            ...(postgres ? { database: 'packages/db' } : {}),
+            ...(registry ? { registryUser: 'octocat' } : {}),
+          });
+          await using folder = await new TemporaryFiles().directory(
+            'zukhruf-nx-',
+          );
+          for (const change of tree.listChanges()) {
+            if (change.type === 'DELETE' || !change.path.endsWith('.tf')) {
+              continue;
+            }
+            const path = join(folder.path, change.path);
+            await mkdir(dirname(path), { recursive: true });
+            await writeFile(path, change.content ?? '');
+          }
+
+          const fmt = spawnSync(
+            'tofu',
+            ['fmt', '-check', '-diff', '-recursive', folder.path],
+            { encoding: 'utf8' },
+          );
+
+          assert.equal(
+            fmt.status,
+            0,
+            `host ${hostMode}, postgres ${postgres}, registry ${registry}: tofu fmt would rewrite\n${fmt.stdout}${fmt.stderr}`,
+          );
+        }
+      }
+    }
+  },
+);
 
 test('a zone without a host, or a host outside its zone, stops the generator', async () => {
   const tree = await workspace();
