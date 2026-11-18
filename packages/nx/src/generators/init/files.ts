@@ -203,15 +203,19 @@ export const hooks: Record<string, string> = {
 // and Format refuses a staged file that is not formatted. The other steps
 // refuse a Node or npm version written as a number, an .npmrc without the
 // install policy, a package-lock.json that does not record each staged
-// package.json, a Dockerfile that installs without the lockfile, and a
-// package.json that breaks the lint.
+// package.json, a lockfile that installs react, react-dom or zod twice, a
+// package with an install script that allowScripts does not decide, a
+// Dockerfile that installs without the lockfile, and a package.json that
+// breaks the lint.
 import {
   DependencyChecks,
   DockerfileInstallsFromLockfile,
   Format,
+  InstallScriptsReviewed,
   LockfileSync,
   NoNumericPins,
   NpmrcPolicy,
+  OneRuntimeCopy,
   Sync,
   preCommit,
 } from '@zukhruf/git-hooks';
@@ -222,6 +226,8 @@ await preCommit([
   new NoNumericPins(),
   new NpmrcPolicy(),
   new LockfileSync(),
+  new OneRuntimeCopy(),
+  new InstallScriptsReviewed(),
   new DockerfileInstallsFromLockfile(),
   new DependencyChecks(),
 ]);
