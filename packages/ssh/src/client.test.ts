@@ -423,10 +423,18 @@ test(
     // Assert
     // The kill of sshd's process group ends the TCP connection with a FIN
     // (macOS: 'the server closed the connection') or, with data unread in
-    // the socket, an RST (Linux: ECONNRESET); either is a loss, not a close.
+    // the socket, an RST (Linux: ECONNRESET), and a write that went out
+    // before the client read the RST fails with EPIPE. wait() gives the raw
+    // error, as Go's Client.Wait does (#4658); each is a loss, not a close.
     await assert.rejects(client.wait(), (error) => {
       assert.ok(Error.isError(error));
-      assert.match(error.message, /closed the connection|ECONNRESET/);
+      const code: unknown = Reflect.get(error, 'code');
+      assert.ok(
+        error.message === 'ssh: the server closed the connection' ||
+          code === 'ECONNRESET' ||
+          code === 'EPIPE',
+        `${String(code)}: ${error.message}`,
+      );
       return true;
     });
   },
