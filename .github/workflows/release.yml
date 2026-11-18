@@ -65,10 +65,32 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           npx nx release version
-          # One failed publish, such as a Rekor 409 (0.5.0, 0.6.3), makes Nx skip
-          # the dependents and leaves the version half-published. The second run
-          # skips what is on npm and publishes the rest; a second failure stays red.
-          npx nx release publish || npx nx release publish
+          # A publish can fail with a Rekor 409 when sigstore retries a tlog entry
+          # that Rekor already holds (npm/cli#10078, sigstore/sigstore-js#1708),
+          # and Nx then skips the dependents (0.5.0, 0.6.3, 0.8.26). A second
+          # nx release publish cannot heal that: npm stages a publish for minutes,
+          # so it does not see what the first one published, npm answers "Cannot
+          # publish over previously staged version", which Nx 23.2.1 does not
+          # read as published (npm/cli#9889), and Nx skips the dependents again.
+          # So the retry publishes only the projects that the first run did not,
+          # in their order among each other. It runs the target directly, because
+          # nx release publish refuses a part of a fixed release group. The "-" is
+          # the script name that Nx reads from process.argv[1].
+          node --input-type=module - <<'EOF'
+          import { spawnSync } from 'node:child_process';
+          import { readFile } from 'node:fs/promises';
+          import { releasePublish } from 'nx/release';
+          const results = Object.entries(await releasePublish({}));
+          if (results.every(([, { code }]) => code === 0)) process.exit(0);
+          const published = results.filter(([, { code }]) => code === 0).map(([project]) => project);
+          const { release } = JSON.parse(await readFile('nx.json', 'utf8'));
+          const retry = spawnSync('npx', [
+            'nx', 'run-many', '-t', 'nx-release-publish', '--outputStyle=static', '--excludeTaskDependencies',
+            `--projects=${[release.projects].flat().join(',')}`,
+            ...(published.length > 0 ? [`--exclude=${published.join(',')}`] : []),
+          ], { stdio: 'inherit' });
+          process.exit(retry.status ?? 1);
+          EOF
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_ACCESS_TOKEN }}
           NPM_CONFIG_PROVENANCE: true
