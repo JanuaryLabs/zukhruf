@@ -6,15 +6,14 @@ The words in these documents have one meaning each. See the glossary in [CONTEXT
 
 ## Areas
 
-| Area             | Import path            | Status                                                                                                                                          |
-| ---------------- | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| format           | `@zukhruf/nx/format`   | This README                                                                                                                                     |
-| test             | `@zukhruf/nx/test`     | This README                                                                                                                                     |
-| lint             | `@zukhruf/nx/lint`     | This README                                                                                                                                     |
-| portless         | `@zukhruf/nx/portless` | Candidate (#3336): 14 projects in 3 repos                                                                                                       |
-| opentofu, prisma | `@zukhruf/nx/<area>`   | This README (#3339)                                                                                                                             |
-| tools            | `@zukhruf/nx/tools`    | Proposed (#4654): [tools](#tools), [ADR 0013](./docs/adr/0013-a-target-names-the-tools-it-needs-and-a-hook-checks-them-before-ci-runs-tasks.md) |
-| generators       | `@zukhruf/nx:<name>`   | This README: `preset` and `init` (#3337); `node-app`, `react-app`, `pair`, `ui-package` (#3338); `dokploy` (#4603); `prisma` (#4604)            |
+| Area             | Import path            | Status                                                                                                                               |
+| ---------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| format           | `@zukhruf/nx/format`   | This README                                                                                                                          |
+| test             | `@zukhruf/nx/test`     | This README                                                                                                                          |
+| lint             | `@zukhruf/nx/lint`     | This README                                                                                                                          |
+| portless         | `@zukhruf/nx/portless` | Candidate (#3336): 14 projects in 3 repos                                                                                            |
+| opentofu, prisma | `@zukhruf/nx/<area>`   | This README (#3339)                                                                                                                  |
+| generators       | `@zukhruf/nx:<name>`   | This README: `preset` and `init` (#3337); `node-app`, `react-app`, `pair`, `ui-package` (#3338); `dokploy` (#4603); `prisma` (#4604) |
 
 The lint rules stay in `@zukhruf/eslint`. The `lint` area gives only the inputs of the `lint` target (#3335).
 
@@ -69,7 +68,7 @@ No generator writes these and no check runs them. Each one cost time once.
 - Test fixtures (a Docker database, an HTTP server, a temp folder, msw) come from `@zukhruf/testing`, and `await using` cleans them up.
 - A React component of a library package is tested with `node:test`: the test registers a DOM with `@happy-dom/global-registrator`, then imports `react`, `react-dom/client` and the component from the built package. Node cannot load `.tsx`.
 - `serve` of a backend runs the source, so its `ui.route.ts` answers `/` with `ui/build-missing`. In development the web app runs on the Vite dev server.
-- CI installs each tool that a target runs, for example OpenTofu for the `typecheck` of the infra project. It passed locally only because Homebrew had `tofu`. The [tools](#tools) area is a proposed check for this rule (#4654).
+- CI installs each tool that a target runs, for example OpenTofu for the `typecheck` of the infra project. It passed locally only because Homebrew had `tofu`.
 - On a paid GitHub plan, move the deploy secrets into a `production` environment that only `main` can use.
 - The owner does each one-time step: `gh auth refresh -s workflow` (a push of a workflow file needs the scope) and the repository secrets.
 
@@ -810,94 +809,6 @@ text2sql also has a target `prisma` that runs the Prisma CLI with the arguments 
 | meddit    | #4607        |
 
 The backlog item of the area is #3339.
-
-## tools
-
-> Status: proposed (#4654), for the owner's review. No code yet. See [ADR 0013](./docs/adr/0013-a-target-names-the-tools-it-needs-and-a-hook-checks-them-before-ci-runs-tasks.md).
-
-A **tool** is a command that a target runs and that `npm ci` does not install, for example `tofu`, `zig` or `docker`. Nx puts `node_modules/.bin` on the `PATH` of each task, so a command from the lockfile is always there. A tool is there only when a CI step installs it. The first CI run of whatisgoingon failed with `tofu: not found`: its infra `typecheck` passed on the laptop only because Homebrew had `tofu`. Today 3 workspaces keep the link between a target and its setup step by hand, in 5 steps for 2 tools. The `tools` area checks that link. Before CI runs the first task, it tries each tool that the tasks of the run need, and it stops the run with the step to add when one is missing.
-
-### Use the tools area
-
-List the plugin in `nx.json`:
-
-```json
-{
-  "plugins": ["@zukhruf/nx/format", "@zukhruf/nx/opentofu", "@zukhruf/nx/tools"]
-}
-```
-
-The plugin gives no target. It has only a `preTasksExecution` hook, and the hook runs only when `CI` is `true`. A run on a laptop is not changed.
-
-### Signature of the tools area
-
-```ts
-// @zukhruf/nx/tools
-export interface Tool {
-  /** A command that only reads, for example ['tofu', 'version']. */
-  probe: [string, ...string[]];
-  /** The GitHub Actions step that installs the tool, as YAML. */
-  install: string;
-}
-export const preTasksExecution: PreTasksExecution;
-```
-
-### Name the tools of a target
-
-A target names its tools in `metadata.tools`. The plugin that writes a target writes its tools: the `opentofu` area gives `tofu` to each of its targets. A target that no plugin writes gets its tools in its own `project.json`:
-
-```json
-{
-  "targets": {
-    "native": {
-      "command": "node src/native/build.ts",
-      "metadata": {
-        "tools": [
-          {
-            "probe": ["zig", "version"],
-            "install": "- uses: ./.github/actions/setup-zig"
-          }
-        ]
-      }
-    }
-  }
-}
-```
-
-The same key on an inferred target adds a tool and keeps the tools of the plugin: Nx joins the two arrays. Name a tool even when the command string names it. The check does not read commands: `node src/native/build.ts` runs `zig`, and a test can run `tofu` from its code.
-
-### What the check runs
-
-1. The hook runs the same Nx command again, with `--graph=<temporary file>.json`. Nx writes the task graph of the run, with the `dependsOn` tasks, and runs no task. Thus `affected`, `run-many`, `run`, `--exclude`, `NX_BASE` and `NX_HEAD` give the same tasks as the run.
-2. It reads the `metadata.tools` of the target of each task.
-3. It runs each distinct `probe` one time. A tool is missing when the probe cannot start or does not exit with 0. `docker info` also fails when the Docker daemon does not run.
-4. When a tool is missing, it stops the run before the first task, with exit 1. A task that the cache will answer still needs its tools.
-
-### When a tool is missing
-
-```text
- NX   2 tasks need a tool that this runner does not have
-
-tofu: spawn tofu ENOENT
-  needed by @meddit/infra:format:check, @meddit/infra:typecheck
-  add this step to the job, before the step that runs nx:
-    - uses: opentofu/setup-opentofu@v2
-      with:
-        tofu_wrapper: false
-```
-
-Add the step from the message to the job. Under GitHub Actions each missing tool is also an annotation in the summary of the run.
-
-### Who would name tools
-
-| Place                                         | Tool     | Today                                                                                |
-| --------------------------------------------- | -------- | ------------------------------------------------------------------------------------ |
-| the `opentofu` area, each target              | `tofu`   | whatisgoingon and meddit install it by hand; the `dokploy` generator writes the step |
-| zukhruf `nx:test` (`project.json`)            | `tofu`   | the `dokploy` test skips with no `tofu`, so a lost step stays green                  |
-| zukhruf `sqlite-open:native` (`project.json`) | `zig`    | both jobs of zukhruf install it by hand                                              |
-| the `test` area, the `test:docker` tag        | `docker` | later: `ubuntu-latest` has Docker, and no Docker test runs on macOS yet              |
-
-The backlog item of the area is #4654.
 
 ## generators
 
