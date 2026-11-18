@@ -1,0 +1,159 @@
+# Trunk-based infra reconciliation for an OpenTofu stack whose encrypted state
+# is committed to the repository: main is the desired state. It plans the stack,
+# applies when the plan has changes, and commits the state and the lock file
+# straight back to main. The default GITHUB_TOKEN makes that push, and GitHub
+# starts no workflow from a push made with it, so the loop cannot recurse.
+#
+# Other repositories call it as
+# JanuaryLabs/zukhruf/.github/workflows/tofu-apply.yml@main, from a job that
+# grants contents: write. The stack sits in <stack>/src/environments/<environment>
+# and reads its passphrase from var.tf_encryption_passphrase and its Dokploy
+# key from var.dokploy_api_key.
+name: Tofu Apply
+
+on:
+  workflow_call:
+    inputs:
+      stack:
+        description: The stack root, which holds src/environments/<environment>.
+        required: true
+        type: string
+      environment:
+        description: The environment directory under src/environments.
+        required: false
+        type: string
+        default: production
+      state_file:
+        description: The repository path of the stack's committed encrypted state.
+        required: true
+        type: string
+      tofu_version:
+        description: The OpenTofu version to install.
+        required: false
+        type: string
+        default: latest
+    secrets:
+      TF_ENCRYPTION_PASSPHRASE:
+        description: The key of the committed state, as TF_VAR_tf_encryption_passphrase.
+        required: true
+      DOKPLOY_API_KEY:
+        description: As TF_VAR_dokploy_api_key, and as DOKPLOY_API_KEY for a provisioner that calls the Dokploy API.
+        required: true
+      HCLOUD_TOKEN:
+        description: For a stack that reads the server from the hcloud provider.
+        required: false
+      TF_ENV:
+        description: 'A JSON object of more environment variables for init, plan and apply, such as {"TF_VAR_smtp_password": "...", "GITHUB_TOKEN": "..."}. Each value is masked.'
+        required: false
+    outputs:
+      outputs:
+        description: "The stack's non-sensitive outputs as a JSON object of name to value; read one with fromJSON(needs.<job>.outputs.outputs).<name>."
+        value: ${{ jobs.reconcile.outputs.outputs }}
+
+permissions:
+  contents: write
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Serialize per stack: two racing applies would fork the committed state.
+    # Queued, never cancelled: an interrupted apply is worse than a late one.
+    concurrency:
+      group: tofu-${{ inputs.stack }}-${{ inputs.environment }}
+      cancel-in-progress: false
+    outputs:
+      outputs: ${{ steps.stack.outputs.outputs }}
+    defaults:
+      run:
+        working-directory: ${{ inputs.stack }}/src/environments/${{ inputs.environment }}
+    env:
+      TF_VAR_tf_encryption_passphrase: ${{ secrets.TF_ENCRYPTION_PASSPHRASE }}
+      TF_VAR_dokploy_api_key: ${{ secrets.DOKPLOY_API_KEY }}
+      DOKPLOY_API_KEY: ${{ secrets.DOKPLOY_API_KEY }}
+      HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - uses: opentofu/setup-opentofu@v2
+        with:
+          tofu_version: ${{ inputs.tofu_version }}
+          tofu_wrapper: false
+
+      # GitHub masks a secret as a whole, not the values inside a JSON secret,
+      # so each value is masked here. The exports go to a file that the tofu
+      # steps source, not to GITHUB_ENV, so the commit step never sees them.
+      - name: Take the extra environment
+        working-directory: ${{ github.workspace }}
+        env:
+          TF_ENV: ${{ secrets.TF_ENV }}
+        run: |
+          : > "$RUNNER_TEMP/tf-env.sh"
+          if [ -z "$TF_ENV" ]; then
+            exit 0
+          fi
+          jq -e 'type == "object" and all(keys[]; test("^[A-Za-z_][A-Za-z0-9_]*$"))' <<< "$TF_ENV" > /dev/null || {
+            echo 'TF_ENV must be a JSON object whose keys are environment variable names.' >&2
+            exit 1
+          }
+          jq -r '.[] | tostring | split("\n")[] | select(length > 0) | "::add-mask::" + .' <<< "$TF_ENV"
+          jq -r 'to_entries[] | "export \(.key)=\(.value | tostring | @sh)"' <<< "$TF_ENV" > "$RUNNER_TEMP/tf-env.sh"
+
+      - name: Init
+        run: |
+          : "${TF_VAR_tf_encryption_passphrase:?TF_ENCRYPTION_PASSPHRASE secret missing}"
+          . "$RUNNER_TEMP/tf-env.sh"
+          tofu init -input=false
+
+      - name: Plan
+        id: plan
+        run: |
+          : "${DOKPLOY_API_KEY:?DOKPLOY_API_KEY secret missing}"
+          . "$RUNNER_TEMP/tf-env.sh"
+          set +e
+          tofu plan -input=false -detailed-exitcode -out tfplan
+          code=$?
+          set -e
+          case "$code" in
+            0) echo "changes=false" >> "$GITHUB_OUTPUT" ;;
+            2) echo "changes=true" >> "$GITHUB_OUTPUT" ;;
+            *) exit "$code" ;;
+          esac
+
+      - name: Apply
+        if: ${{ steps.plan.outputs.changes == 'true' }}
+        run: |
+          . "$RUNNER_TEMP/tf-env.sh"
+          tofu apply -input=false tfplan
+
+      - name: Publish the stack's outputs
+        id: stack
+        run: echo "outputs=$(tofu output -json | jq -c 'with_entries(select(.value.sensitive | not) | .value |= .value)')" >> "$GITHUB_OUTPUT"
+
+      # Also after a failed apply: the resources it created before failing are
+      # in this state, and dropping it makes the next apply create them again
+      # (the first whatisgoingon deploy lost four that way).
+      - name: Commit reconciled state
+        if: ${{ always() && steps.plan.outputs.changes == 'true' }}
+        working-directory: ${{ github.workspace }}
+        env:
+          STACK: ${{ inputs.stack }}
+          ENVIRONMENT: ${{ inputs.environment }}
+          STATE_FILE: ${{ inputs.state_file }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add "$STATE_FILE" "$STACK/src/environments/$ENVIRONMENT/.terraform.lock.hcl"
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "chore(infra): reconcile $STACK $ENVIRONMENT state [skip ci]"
+          for attempt in 1 2 3; do
+            if git push origin HEAD:main; then
+              exit 0
+            fi
+            echo "State push attempt ${attempt} rejected; rebasing onto the moved main."
+            git pull --rebase origin main
+          done
+          exit 1

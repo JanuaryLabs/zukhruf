@@ -1,0 +1,31 @@
+name: Wait for health
+description: Polls a health URL until it answers 200 and, given a commit, until the body reports that commit as its "sha". Other repositories use it as JanuaryLabs/zukhruf/.github/actions/wait-for-health@main.
+
+inputs:
+  url:
+    description: The health URL, such as https://app.example.com/api/healthz.
+    required: true
+  sha:
+    description: The commit the body must report as "sha":"<sha>". Without it, any 200 passes, also one from the container being replaced.
+    required: false
+    default: ''
+  attempts:
+    description: How many times to ask.
+    required: false
+    default: '30'
+  delay-seconds:
+    description: The wait between two attempts.
+    required: false
+    default: '10'
+
+runs:
+  using: composite
+  steps:
+    - name: Wait until ${{ inputs.url }} is healthy
+      shell: bash
+      env:
+        URL: ${{ inputs.url }}
+        EXPECTED_SHA: ${{ inputs.sha }}
+        ATTEMPTS: ${{ inputs.attempts }}
+        DELAY_SECONDS: ${{ inputs.delay-seconds }}
+      run: sh "$GITHUB_ACTION_PATH/wait-for-health.sh" "$URL" "$EXPECTED_SHA" "$ATTEMPTS" "$DELAY_SECONDS"

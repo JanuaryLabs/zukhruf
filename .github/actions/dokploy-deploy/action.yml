@@ -1,0 +1,24 @@
+name: Deploy a Dokploy compose
+description: Deploys a Dokploy compose through the API and waits until the deployment it started is done, so a health check after it reaches the new containers. Other repositories use it as JanuaryLabs/zukhruf/.github/actions/dokploy-deploy@main.
+
+inputs:
+  api-url:
+    description: The Dokploy API base URL, ending in /api, such as https://dokploy.example.com/api.
+    required: true
+  api-key:
+    description: A Dokploy API key, sent as x-api-key.
+    required: true
+  compose-id:
+    description: The ID of the compose to deploy.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Deploy compose ${{ inputs.compose-id }}
+      shell: bash
+      env:
+        API_URL: ${{ inputs.api-url }}
+        DOKPLOY_API_KEY: ${{ inputs.api-key }}
+        COMPOSE_ID: ${{ inputs.compose-id }}
+      run: sh "$GITHUB_ACTION_PATH/deploy-compose.sh" "$API_URL" "$COMPOSE_ID"

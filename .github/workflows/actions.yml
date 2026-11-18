@@ -1,0 +1,113 @@
+name: Actions
+
+# Runs the deploy actions that other repositories call against a local fake of
+# the health endpoint and of the Dokploy API: each must pass on the good answer
+# and fail on the bad one.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/actions/dokploy-deploy/**
+      - .github/actions/wait-for-health/**
+      - .github/workflows/actions.yml
+  push:
+    branches: [main]
+    paths:
+      - .github/actions/dokploy-deploy/**
+      - .github/actions/wait-for-health/**
+      - .github/workflows/actions.yml
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-actions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # /healthz reports this commit. A compose.deploy adds a running
+      # deployment, and the next compose.one reports it once and then reports
+      # the compose's outcome: done for "ok", error for "broken".
+      - name: Start the fake health endpoint and Dokploy API
+        env:
+          SHA: ${{ github.sha }}
+        run: |
+          node --input-type=module - > fake.log 2>&1 <<'EOF' &
+          import { createServer } from 'node:http';
+          const composes = { ok: [{ deploymentId: 'old', status: 'done', createdAt: '2026-01-01T00:00:00Z' }], broken: [] };
+          const outcome = { ok: 'done', broken: 'error' };
+          createServer((req, res) => {
+            const url = new URL(req.url, 'http://localhost');
+            const send = (code, body) => res.writeHead(code, { 'content-type': 'application/json' }).end(JSON.stringify(body));
+            if (url.pathname === '/healthz') return send(200, { status: 'ok', sha: process.env.SHA });
+            if (req.headers['x-api-key'] !== 'test-key') return send(401, { message: 'Unauthorized' });
+            const deployments = composes[url.searchParams.get('composeId')];
+            if (url.pathname === '/api/compose.one' && deployments) {
+              const body = { deployments: structuredClone(deployments) };
+              for (const deployment of deployments) if (deployment.status === 'running') deployment.status = outcome[url.searchParams.get('composeId')];
+              return send(200, body);
+            }
+            if (url.pathname === '/api/compose.deploy' && req.method === 'POST') {
+              let raw = '';
+              req.on('data', (chunk) => (raw += chunk));
+              req.on('end', () => {
+                const list = composes[JSON.parse(raw).composeId];
+                list.push({ deploymentId: `d${list.length}`, status: 'running', createdAt: new Date().toISOString() });
+                send(200, true);
+              });
+              return;
+            }
+            send(404, { message: 'Not found' });
+          }).listen(8787);
+          EOF
+          pid=$!
+          for _ in $(seq 1 20); do
+            kill -0 "$pid" 2> /dev/null || break
+            curl --silent --fail http://localhost:8787/healthz > /dev/null && exit 0
+            sleep 0.5
+          done
+          cat fake.log
+          exit 1
+
+      - name: Healthy at this commit
+        uses: ./.github/actions/wait-for-health
+        with:
+          url: http://localhost:8787/healthz
+          sha: ${{ github.sha }}
+
+      - name: Healthy at another commit
+        id: other-sha
+        continue-on-error: true
+        uses: ./.github/actions/wait-for-health
+        with:
+          url: http://localhost:8787/healthz
+          sha: '0000000'
+          attempts: '2'
+          delay-seconds: '1'
+
+      - name: Deploy a compose whose deployment is done
+        uses: ./.github/actions/dokploy-deploy
+        with:
+          api-url: http://localhost:8787/api
+          api-key: test-key
+          compose-id: ok
+
+      - name: Deploy a compose whose deployment fails
+        id: broken
+        continue-on-error: true
+        uses: ./.github/actions/dokploy-deploy
+        with:
+          api-url: http://localhost:8787/api
+          api-key: test-key
+          compose-id: broken
+
+      - name: Both bad answers failed
+        env:
+          OTHER_SHA: ${{ steps.other-sha.outcome }}
+          BROKEN: ${{ steps.broken.outcome }}
+        run: |
+          [ "$OTHER_SHA" = failure ] || { echo "wait-for-health passed for another commit" >&2; exit 1; }
+          [ "$BROKEN" = failure ] || { echo "dokploy-deploy passed for a failed deployment" >&2; exit 1; }
