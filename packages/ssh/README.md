@@ -25,14 +25,15 @@ const uname = await client.newSession().output('uname -sr');
 console.log(String(uname).trim());
 ```
 
-The package has four import paths, after Go's subpackages:
+The package has five import paths, after Go's subpackages:
 
-| Import path               | What it has                                                                  | Go                                                                                           |
-| ------------------------- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `@zukhruf/ssh`            | `Client`, `ClientConfig`, `Session`, `RemoteListener`, keys, `ServerConn`    | `ssh`                                                                                        |
-| `@zukhruf/ssh/agent`      | `AgentClient`, a client of an agent on a socket that the caller connected    | `ssh/agent`                                                                                  |
-| `@zukhruf/ssh/knownhosts` | `KnownHosts`, `KeyError`, `RevokedError`                                     | `ssh/knownhosts`                                                                             |
-| `@zukhruf/ssh/config`     | `OpenSshConfig`: the settings of OpenSSH for a destination, through `ssh -G` | none; tools do it ([ADR 0004](./docs/adr/0004-openssh-resolves-the-config-through-ssh-g.md)) |
+| Import path               | What it has                                                                  | Go                                                                                                                                         |
+| ------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `@zukhruf/ssh`            | `Client`, `ClientConfig`, `Session`, `RemoteListener`, keys, `ServerConn`    | `ssh`                                                                                                                                      |
+| `@zukhruf/ssh/agent`      | `AgentClient`, a client of an agent on a socket that the caller connected    | `ssh/agent`                                                                                                                                |
+| `@zukhruf/ssh/knownhosts` | `KnownHosts`, `KeyError`, `RevokedError`                                     | `ssh/knownhosts`                                                                                                                           |
+| `@zukhruf/ssh/config`     | `OpenSshConfig`: the settings of OpenSSH for a destination, through `ssh -G` | none; tools do it ([ADR 0004](./docs/adr/0004-openssh-resolves-the-config-through-ssh-g.md))                                               |
+| `@zukhruf/ssh/control`    | `ControlMaster`, `ControlClient`: one connection for many processes          | none; OpenSSH's `ControlMaster` ([ADR 0012](./docs/adr/0012-a-control-master-serves-the-channels-of-one-connection-to-other-processes.md)) |
 
 Only `@zukhruf/ssh/config` needs the `ssh` binary.
 
@@ -243,6 +244,27 @@ await using db = await Client.handshake(channel, 'db.internal:22', dbConfig);
 
 No process carries the connection to a jump host. When the owner dies, the kernel closes the TCP connection to the first jump host, and each server closes its part of the chain.
 
+## Share one connection between processes
+
+`ControlMaster.listen(client, path)` serves the channels of a client on a Unix socket, as OpenSSH's `ControlMaster` and `ControlPath` do. A `ControlClient` in another process dials and runs sessions through it, with the calls of `Client` ([ADR 0012](./docs/adr/0012-a-control-master-serves-the-channels-of-one-connection-to-other-processes.md)):
+
+```ts
+import { ControlClient, ControlMaster } from '@zukhruf/ssh/control';
+
+// The process that owns the connection, for example a test runner:
+await using master = await ControlMaster.listen(
+  client,
+  `${runDirectory}/ssh.sock`,
+);
+
+// Each other process:
+const shared = new ControlClient(`${runDirectory}/ssh.sock`);
+const listing = await shared.newSession().output('ls /srv/app');
+const database = await shared.dial('tcp', '127.0.0.1:5432');
+```
+
+Each channel is one connection to the socket, and the close of one closes the other. So a client process that dies closes its channels, and a master process that dies ends every stream of its clients. Nothing waits on a timer, and a `ControlClient` keeps no connection between two channels. The socket gives the connection to each process that can reach it: put it in a directory that only your user can enter. Node.js cannot pass file descriptors, so the protocol is the package's own, not OpenSSH's `PROTOCOL.mux`, and `ssh -S` cannot use the master.
+
 ## Check the host key
 
 `KnownHosts` checks a key as Go's `knownhosts` does, and matches a line as OpenSSH does where the two differ ([ADR 0005](./docs/adr/0005-host-keys-are-checked-as-gos-knownhosts-checks-them-under-openssh-stricthostkeychecking.md)). It reads plain names, patterns with `*`, `?` and `!`, hashed names (`|1|`), `[host]:port` for a port other than 22, and `@revoked` lines. `hostKeyAlgorithms()` puts the algorithms of the known keys first, as OpenSSH does, so the server signs with a key that the client knows (golang/go#29286).
@@ -418,20 +440,21 @@ A connection that is lost after the start ends each open channel with an error w
 
 ## The same concepts in other systems
 
-| Concept                     | Other systems                                                                                                                                                                                                                                                                                          |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| A client and its dial       | Go: `ssh.Dial(network, addr, *ClientConfig)`. Rust russh: `client::connect`. .NET SSH.NET: `SshClient`, `ConnectionInfo`. Podman: `ssh.Dial(*ConnectionDialOptions, mode)` of `containers/common/pkg/ssh`. OpenSSH: `ssh`.                                                                             |
-| A handshake on a stream     | Go: `ssh.NewClientConn(conn, addr, config)`. russh: `connect_stream` (`client/mod.rs`). SSH.NET: none.                                                                                                                                                                                                 |
-| A session                   | Go: `Session` with `Run`, `Start`, `Wait`, `Output`, `Setenv`, `RequestPty`, `WindowChange`, `Signal`, `Shell` (`session.go:167-357`). russh: `channel_open_session`. SSH.NET: `RunCommand`, `CreateCommand`, `SshCommand`. OpenSSH: `ssh host command`.                                               |
-| A dial to a socket or port  | Go: `Client.Dial("unix" \| "tcp", addr)` (`tcpip.go:380-461`). russh: `channel_open_direct_streamlocal`, `channel_open_direct_tcpip`. Podman: `DialNet(client, "unix", url)`. SSH.NET: no streamlocal (#238). OpenSSH: `ssh -W`, `direct-streamlocal@openssh.com` (`PROTOCOL` §2.4).                   |
-| A local forward             | Go and russh: none; the caller listens and dials. SSH.NET: `ForwardedPortLocal`. OpenSSH: `ssh -L`.                                                                                                                                                                                                    |
-| A remote listener           | Go: `Client.Listen`, `ListenTCP`, `ListenUnix` (`tcpip.go:29`, `:116`, `streamlocal.go:34`). russh: `tcpip_forward`, `streamlocal_forward`. SSH.NET: `ForwardedPortRemote`. OpenSSH: `ssh -R`.                                                                                                         |
-| A jump host                 | Go: `NewClientConn` over `Client.Dial`. russh: `connect_stream`. VS Code: an `ssh -J … -W` child (`sshProxyJump.ts:107-114`). SSH.NET: none (#481, #530). OpenSSH: `ProxyJump`, an `ssh -W` child.                                                                                                     |
-| Known hosts                 | Go: `ssh/knownhosts` with `KeyError` and `RevokedError`. Podman: skeema/knownhosts, which orders the host key algorithms (golang/go#29286). russh: known_hosts in its keys module. SSH.NET: only the `HostKeyReceived` event. OpenSSH: sshd(8), SSH_KNOWN_HOSTS FILE FORMAT.                           |
-| The config through `ssh -G` | VS Code: `execFile('ssh', ['-G', '--', host])` and `parseSSHGOutput` (`sshRemoteAgentHostService.ts:1397`). distant: "Tries ssh -G first". zed, `gh codespace`, coder, the Buildkite agent, trzsz-ssh, nh. Go, russh and SSH.NET: none.                                                                |
-| An agent client             | Go: `agent.NewClient(conn)`, `agent.ForwardToRemote`, `agent.RequestAgentForwarding` (`agent/forward.go:19-58`). russh: an agent client in its keys module. SSH.NET: none. OpenSSH: `ssh-add`, `ForwardAgent`.                                                                                         |
-| A server                    | Go: `ssh.NewServerConn` (`server.go:356`). russh: its `server` module. SSH.NET: none. OpenSSH: `sshd`.                                                                                                                                                                                                 |
-| SSH in the owner's process  | Podman's remote client: one connection in its process, the engine socket dialed for each HTTP connection (`pkg/bindings/connection.go`), `dial-stdio` on a session when the server refuses (`connection_stdio.go`). docker-modem: ssh2 with `dial-stdio` for each request. docker/cli: an `ssh` child. |
+| Concept                           | Other systems                                                                                                                                                                                                                                                                                          |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| A client and its dial             | Go: `ssh.Dial(network, addr, *ClientConfig)`. Rust russh: `client::connect`. .NET SSH.NET: `SshClient`, `ConnectionInfo`. Podman: `ssh.Dial(*ConnectionDialOptions, mode)` of `containers/common/pkg/ssh`. OpenSSH: `ssh`.                                                                             |
+| A handshake on a stream           | Go: `ssh.NewClientConn(conn, addr, config)`. russh: `connect_stream` (`client/mod.rs`). SSH.NET: none.                                                                                                                                                                                                 |
+| A session                         | Go: `Session` with `Run`, `Start`, `Wait`, `Output`, `Setenv`, `RequestPty`, `WindowChange`, `Signal`, `Shell` (`session.go:167-357`). russh: `channel_open_session`. SSH.NET: `RunCommand`, `CreateCommand`, `SshCommand`. OpenSSH: `ssh host command`.                                               |
+| A dial to a socket or port        | Go: `Client.Dial("unix" \| "tcp", addr)` (`tcpip.go:380-461`). russh: `channel_open_direct_streamlocal`, `channel_open_direct_tcpip`. Podman: `DialNet(client, "unix", url)`. SSH.NET: no streamlocal (#238). OpenSSH: `ssh -W`, `direct-streamlocal@openssh.com` (`PROTOCOL` §2.4).                   |
+| A local forward                   | Go and russh: none; the caller listens and dials. SSH.NET: `ForwardedPortLocal`. OpenSSH: `ssh -L`.                                                                                                                                                                                                    |
+| A remote listener                 | Go: `Client.Listen`, `ListenTCP`, `ListenUnix` (`tcpip.go:29`, `:116`, `streamlocal.go:34`). russh: `tcpip_forward`, `streamlocal_forward`. SSH.NET: `ForwardedPortRemote`. OpenSSH: `ssh -R`.                                                                                                         |
+| A jump host                       | Go: `NewClientConn` over `Client.Dial`. russh: `connect_stream`. VS Code: an `ssh -J … -W` child (`sshProxyJump.ts:107-114`). SSH.NET: none (#481, #530). OpenSSH: `ProxyJump`, an `ssh -W` child.                                                                                                     |
+| Known hosts                       | Go: `ssh/knownhosts` with `KeyError` and `RevokedError`. Podman: skeema/knownhosts, which orders the host key algorithms (golang/go#29286). russh: known_hosts in its keys module. SSH.NET: only the `HostKeyReceived` event. OpenSSH: sshd(8), SSH_KNOWN_HOSTS FILE FORMAT.                           |
+| The config through `ssh -G`       | VS Code: `execFile('ssh', ['-G', '--', host])` and `parseSSHGOutput` (`sshRemoteAgentHostService.ts:1397`). distant: "Tries ssh -G first". zed, `gh codespace`, coder, the Buildkite agent, trzsz-ssh, nh. Go, russh and SSH.NET: none.                                                                |
+| One connection for many processes | Go, russh and SSH.NET: none. OpenSSH: `ControlMaster`, `ControlPath`, `ssh -S`, with `PROTOCOL.mux`, which passes file descriptors.                                                                                                                                                                    |
+| An agent client                   | Go: `agent.NewClient(conn)`, `agent.ForwardToRemote`, `agent.RequestAgentForwarding` (`agent/forward.go:19-58`). russh: an agent client in its keys module. SSH.NET: none. OpenSSH: `ssh-add`, `ForwardAgent`.                                                                                         |
+| A server                          | Go: `ssh.NewServerConn` (`server.go:356`). russh: its `server` module. SSH.NET: none. OpenSSH: `sshd`.                                                                                                                                                                                                 |
+| SSH in the owner's process        | Podman's remote client: one connection in its process, the engine socket dialed for each HTTP connection (`pkg/bindings/connection.go`), `dial-stdio` on a session when the server refuses (`connection_stdio.go`). docker-modem: ssh2 with `dial-stdio` for each request. docker/cli: an `ssh` child. |
 
 ## What each call does underneath
 
@@ -875,6 +898,29 @@ export class AgentClient {
 export interface AgentKey {
   readonly key: PublicKey;
   readonly comment: string;
+}
+
+// @zukhruf/ssh/control
+
+import type { Duplex } from 'node:stream';
+
+import type { Client, Session } from '@zukhruf/ssh';
+
+/** Serves the channels of a client to other processes on a Unix socket. OpenSSH's ControlMaster and ControlPath. */
+export class ControlMaster implements AsyncDisposable {
+  /** Listens on `path`. Disposal stops the listener and closes each channel that the master serves; it does not close `client`. */
+  static listen(client: Client, path: string): Promise<ControlMaster>;
+  readonly path: string;
+  [Symbol.asyncDispose](): Promise<void>;
+}
+
+/** Opens channels through the master at `path`, one connection to the socket for each channel. */
+export class ControlClient {
+  constructor(path: string);
+  /** As Client#dial. */
+  dial(network: 'tcp' | 'unix', address: string): Promise<Duplex>;
+  /** As Client#newSession. */
+  newSession(): Session;
 }
 
 // @zukhruf/ssh/knownhosts
