@@ -1,58 +1,21 @@
-// A unit vector of float32 values. A dot product of two unit vectors is their
-// cosine similarity.
-export class UnitVector {
-  readonly #values: Float32Array;
+import { Vector } from '@zukhruf/vectors';
 
-  private constructor(values: Float32Array) {
-    this.#values = values;
-  }
-
-  // Divides each value by the length of the vector.
-  static normalize(values: readonly number[]): UnitVector {
-    const length = Math.sqrt(
-      values.reduce((sum, value) => sum + value * value, 0),
+// Divides each value by the length of the embedding, in float64, and rounds
+// once to float32. The result is a unit vector, so its dot product with
+// another one is their cosine similarity. It is not UnitVector.normalize of
+// @zukhruf/vectors: a length of zero, or one that is not finite, is a
+// RangeError for the callers of a collection (that normalize throws
+// ZeroVectorError), and that normalize rounds each value to float32 before it
+// divides, which can change a stored vector in the last bit.
+export function normalize(values: readonly number[]): Vector {
+  const length = Math.sqrt(
+    values.reduce((sum, value) => sum + value * value, 0),
+  );
+  if (length === 0 || !Number.isFinite(length))
+    throw new RangeError(
+      `An embedding must have a finite length that is not zero. Its length is ${length}.`,
     );
-    if (length === 0 || !Number.isFinite(length))
-      throw new RangeError(
-        `An embedding must have a finite length that is not zero. Its length is ${length}.`,
-      );
-    return new UnitVector(Float32Array.from(values, (value) => value / length));
-  }
-
-  // The bytes that SQLite gives are copied, because a Float32Array needs an
-  // offset that is a multiple of 4.
-  static fromBlob(blob: Uint8Array): UnitVector {
-    return new UnitVector(new Float32Array(Uint8Array.from(blob).buffer));
-  }
-
-  get dimension(): number {
-    return this.#values.length;
-  }
-
-  // A copy of the values, so the caller cannot change the vector.
-  toFloat32Array(): Float32Array {
-    return this.#values.slice();
-  }
-
-  toBlob(): Uint8Array {
-    return new Uint8Array(
-      this.#values.buffer,
-      this.#values.byteOffset,
-      this.#values.byteLength,
-    );
-  }
-
-  // An indexed loop: an entries() iterator with destructuring made the
-  // nearest search of each document in a window of 1,001 documents about two
-  // times slower.
-  cosine(other: UnitVector): number {
-    const values = this.#values;
-    const others = other.#values;
-    let sum = 0;
-    for (let index = 0; index < values.length; index++)
-      sum += (values[index] ?? 0) * (others[index] ?? 0);
-    return sum;
-  }
+  return Vector.from(Float32Array.from(values, (value) => value / length));
 }
 
 // The value of a vector column, which SQLite gives as a Uint8Array.

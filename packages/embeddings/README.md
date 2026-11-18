@@ -64,7 +64,7 @@ collection.count(); // 2
 
 ### Search a vector table of your own
 
-Another program can write the vectors into its own table. A `VectorSearch` searches that table with the same rules as a collection. The table or view must have the columns `id` (text) and `vector`. Each `vector` must be a unit vector, as a BLOB of float32 values in the byte order of the platform ([ADR 0005](./docs/adr/0005-a-vector-search-reads-a-vector-table-of-unit-vectors.md)). Each call except a query without a date range also reads the column `published_at` (milliseconds since the Unix epoch). Thus a table of documents with no publish date supports a query without a date range ([ADR 0007](./docs/adr/0007-a-query-without-a-date-range-compares-every-document.md)).
+Another program can write the vectors into its own table. A `VectorSearch` searches that table with the same rules as a collection. The table or view must have the columns `id` (text) and `vector`. Each `vector` must be a unit vector, as a BLOB of float32 values, little-endian, as `toSql` of `@zukhruf/vectors/sqlite` writes it ([ADR 0005](./docs/adr/0005-a-vector-search-reads-a-vector-table-of-unit-vectors.md)). Each call except a query without a date range also reads the column `published_at` (milliseconds since the Unix epoch). Thus a table of documents with no publish date supports a query without a date range ([ADR 0007](./docs/adr/0007-a-query-without-a-date-range-compares-every-document.md)).
 
 ```ts
 import { DatabaseSync } from 'node:sqlite';
@@ -103,7 +103,7 @@ To search a table with other column names, make a view that renames the columns,
 - One database holds one collection.
 - The collection stores the vector of the text, not the text. The caller chooses the text, for example a title and the first sentences.
 - A document has one vector. A long text gives one mean vector, and its details become a small part of it.
-- A vector search requires unit vectors. It does not examine the length or the dimension of a vector.
+- A vector search requires unit vectors. It does not examine the length of a vector. Two vectors of a vector table with other dimensions are the `DimensionMismatchError` of `@zukhruf/vectors`, from its `dot`.
 - The search reads each document in the window ([ADR 0001](./docs/adr/0001-search-compares-each-document-in-the-window.md)). A window of many thousand documents is slow. A neighbour graph decodes each vector once, but it still calculates a similarity for each pair of documents in a window.
 - After a model change, upsert all documents again ([ADR 0002](./docs/adr/0002-the-hash-includes-the-model.md)).
 

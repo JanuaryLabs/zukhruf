@@ -1,8 +1,11 @@
 import type { DatabaseSync } from 'node:sqlite';
 
+import { Vector, dot } from '@zukhruf/vectors';
+import { fromSql } from '@zukhruf/vectors/sqlite';
+
 import { DimensionMismatchError } from './dimension-mismatch-error.ts';
 import { UnknownDocumentError } from './unknown-document-error.ts';
-import { UnitVector, blob } from './vector.ts';
+import { blob, normalize } from './vector.ts';
 
 const DAY_MS = 86_400_000;
 
@@ -15,8 +18,8 @@ export type VectorSearchOptions = {
   // The caller opens and closes the database.
   readonly database: DatabaseSync;
   // A table or a view with the columns id, vector (a unit vector of float32
-  // values in the byte order of the platform) and published_at (milliseconds
-  // since the Unix epoch) (docs/adr/0005).
+  // values, little-endian, as toSql of @zukhruf/vectors/sqlite writes it) and
+  // published_at (milliseconds since the Unix epoch) (docs/adr/0005).
   readonly table: string;
 };
 
@@ -49,7 +52,7 @@ export class VectorSearch {
       .all(publishedAt - window, publishedAt + window, id)
       .map((row) => ({
         id: String(row.id),
-        vector: UnitVector.fromBlob(blob(row.vector)),
+        vector: fromSql(Vector, blob(row.vector)),
       }));
     return ranked(vector, candidates, options.k);
   }
@@ -76,7 +79,7 @@ export class VectorSearch {
       .map((row) => ({
         id: String(row.id),
         publishedAt: Number(row.published_at),
-        vector: UnitVector.fromBlob(blob(row.vector)),
+        vector: fromSql(Vector, blob(row.vector)),
       }));
     return documents
       .values()
@@ -104,14 +107,14 @@ export class VectorSearch {
     vector: readonly number[],
     range?: { readonly from: Date; readonly to: Date },
   ): Neighbour[] {
-    const query = UnitVector.normalize(vector);
+    const query = normalize(vector);
     const stored = this.#database
       .prepare(`SELECT length("vector") AS "bytes" FROM ${this.#table} LIMIT 1`)
       .get();
     if (stored === undefined) return [];
     const dimension = Number(stored.bytes) / Float32Array.BYTES_PER_ELEMENT;
-    if (dimension !== query.dimension)
-      throw new DimensionMismatchError(dimension, query.dimension);
+    if (dimension !== query.dimensions)
+      throw new DimensionMismatchError(dimension, query.dimensions);
     const rows =
       range === undefined
         ? this.#database
@@ -124,17 +127,18 @@ export class VectorSearch {
             .all(range.from.getTime(), range.to.getTime());
     const documents = rows.map((row) => ({
       id: String(row.id),
-      vector: UnitVector.fromBlob(blob(row.vector)),
+      vector: fromSql(Vector, blob(row.vector)),
     }));
     return ranked(query, documents, documents.length);
   }
 
-  // The cosine similarity of two documents.
+  // The cosine similarity of two documents: the dot product of their unit
+  // vectors.
   similarity(a: string, b: string): number {
-    return this.#read(a).vector.cosine(this.#read(b).vector);
+    return dot(this.#read(a).vector, this.#read(b).vector);
   }
 
-  #read(id: string): { vector: UnitVector; publishedAt: number } {
+  #read(id: string): { vector: Vector; publishedAt: number } {
     const row = this.#database
       .prepare(
         `SELECT "vector", "published_at" FROM ${this.#table} WHERE "id" = ?`,
@@ -142,7 +146,7 @@ export class VectorSearch {
       .get(id);
     if (row === undefined) throw new UnknownDocumentError(id);
     return {
-      vector: UnitVector.fromBlob(blob(row.vector)),
+      vector: fromSql(Vector, blob(row.vector)),
       publishedAt: Number(row.published_at),
     };
   }
@@ -150,14 +154,14 @@ export class VectorSearch {
 
 // The k candidates most similar to the vector. Equal similarities sort by id.
 function ranked(
-  vector: UnitVector,
-  candidates: readonly { readonly id: string; readonly vector: UnitVector }[],
+  vector: Vector,
+  candidates: readonly { readonly id: string; readonly vector: Vector }[],
   k: number,
 ): Neighbour[] {
   return candidates
     .map((candidate) => ({
       id: candidate.id,
-      similarity: vector.cosine(candidate.vector),
+      similarity: dot(vector, candidate.vector),
     }))
     .toSorted(
       (left, right) =>

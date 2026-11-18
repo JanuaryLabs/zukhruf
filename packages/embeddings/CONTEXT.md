@@ -9,7 +9,7 @@ The documents and their vectors in one SQLite database. All vectors of a collect
 _Avoid_: Index, store, table
 
 **Vector table**:
-A SQLite table or view with the columns `id` (text) and `vector` (a unit vector as a BLOB of float32 values, in the byte order of the platform). Each call except a query without a date range also reads `published_at` (milliseconds since the Unix epoch). Each row is one document. The table of a collection is a vector table. Another program can write its own vector table.
+A SQLite table or view with the columns `id` (text) and `vector` (a unit vector as a BLOB of float32 values, little-endian, as `toSql` of `@zukhruf/vectors/sqlite` writes it). Each call except a query without a date range also reads `published_at` (milliseconds since the Unix epoch). Each row is one document. The table of a collection is a vector table. Another program can write its own vector table.
 _Avoid_: Index, store, collection (for a table that no collection writes)
 
 **Vector search**:

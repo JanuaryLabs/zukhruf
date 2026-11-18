@@ -4,12 +4,14 @@ import type { DatabaseSync } from 'node:sqlite';
 import { type EmbeddingModel, embedMany } from 'ai';
 
 import { transaction } from '@zukhruf/sqlite-transaction';
+import { Vector } from '@zukhruf/vectors';
+import { fromSql, toSql } from '@zukhruf/vectors/sqlite';
 
 import { DimensionMismatchError } from './dimension-mismatch-error.ts';
 import { collectionSchema } from './schema.ts';
 import { UnknownDocumentError } from './unknown-document-error.ts';
 import { type Neighbour, VectorSearch } from './vector-search.ts';
-import { UnitVector, blob } from './vector.ts';
+import { blob, normalize } from './vector.ts';
 
 export type Document = {
   readonly id: string;
@@ -79,7 +81,7 @@ export class Collection {
             document.id,
             hash,
             document.publishedAt.getTime(),
-            vector.toBlob(),
+            toSql(vector),
           );
         }
         const move = this.#database.prepare(
@@ -139,7 +141,7 @@ export class Collection {
       ids.map((id) => {
         const row = read.get(id);
         if (row === undefined) throw new UnknownDocumentError(id);
-        return [id, UnitVector.fromBlob(blob(row.vector)).toFloat32Array()];
+        return [id, fromSql(Vector, blob(row.vector)).values];
       }),
     );
   }
@@ -163,13 +165,13 @@ export class Collection {
   }
 
   // No texts make no call to the model.
-  async #embed(texts: string[]): Promise<UnitVector[]> {
+  async #embed(texts: string[]): Promise<Vector[]> {
     if (texts.length === 0) return [];
     const { embeddings } = await embedMany({
       model: this.#model,
       values: texts,
     });
-    return embeddings.map((embedding) => UnitVector.normalize(embedding));
+    return embeddings.map((embedding) => normalize(embedding));
   }
 
   // The model is part of the hash, so a new model embeds the text again.
@@ -183,7 +185,7 @@ export class Collection {
   // Before the upsert, each stored vector has one dimension. The new vectors
   // must have the dimension of a vector that the upsert did not replace, and
   // of each other.
-  #checkDimension(replaced: readonly string[], vectors: readonly UnitVector[]) {
+  #checkDimension(replaced: readonly string[], vectors: readonly Vector[]) {
     const [first] = vectors;
     if (first === undefined) return;
     const kept = this.#database
@@ -193,10 +195,10 @@ export class Collection {
       .get(JSON.stringify(replaced));
     const expected =
       kept === undefined
-        ? first.dimension
+        ? first.dimensions
         : Number(kept.bytes) / Float32Array.BYTES_PER_ELEMENT;
     for (const vector of vectors)
-      if (vector.dimension !== expected)
-        throw new DimensionMismatchError(expected, vector.dimension);
+      if (vector.dimensions !== expected)
+        throw new DimensionMismatchError(expected, vector.dimensions);
   }
 }

@@ -6,7 +6,7 @@ Thus `VectorSearch` does the search, and the collection does not. `new VectorSea
 
 ## The vectors must be unit vectors
 
-The search calculates a similarity as the dot product of two vectors. The dot product is the cosine only when the two vectors are unit vectors. Thus each vector in a vector table must be a unit vector. The program that writes the table normalizes each vector before it writes it. The search does not normalize a vector, and it does not examine the length of a vector.
+The search calculates a similarity as the dot product of two vectors, with `dot` of `@zukhruf/vectors`. The dot product is the cosine only when the two vectors are unit vectors. Thus each vector in a vector table must be a unit vector. The program that writes the table normalizes each vector before it writes it. The search does not normalize a vector, and it does not examine the length of a vector.
 
 FAISS has the same rule. Its flat inner-product index (`IndexFlatIP`) gives the cosine only when the caller normalizes the vectors first, with `faiss.normalize_L2`.
 
@@ -19,7 +19,7 @@ FAISS has the same rule. Its flat inner-product index (`IndexFlatIP`) gives the 
 ## Consequences
 
 - A collection gives the same results as before.
-- A program that writes a vector table normalizes each vector, and stores it as float32 values in the byte order of the platform, as a collection does.
+- A program that writes a vector table normalizes each vector, and stores it as float32 values, little-endian, as a collection does with `toSql` of `@zukhruf/vectors/sqlite`. The search reads each BLOB with `fromSql` of the same module. Little-endian is the byte order of each platform that Node runs on, so a table written in the byte order of the platform before this change reads the same.
 - A vector that is not a unit vector gives an incorrect similarity, and the search does not tell it.
-- All vectors of one vector table must have one dimension (ADR 0003). The search does not examine the dimension.
+- All vectors of one vector table must have one dimension (ADR 0003). The search does not examine the dimension before it compares, but `dot` of `@zukhruf/vectors` throws its own `DimensionMismatchError` for two vectors of other dimensions.
 - The search prepares its statements on each call. Thus the table or the view can come after the `VectorSearch`. A name that SQLite cannot find gives the SQLite error of that call.
