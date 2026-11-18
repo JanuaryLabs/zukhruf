@@ -1,4 +1,5 @@
-import { join, posix } from 'node:path';
+import { globSync } from 'node:fs';
+import { join, posix, relative, resolve, sep } from 'node:path';
 
 import {
   type ProjectGraph,
@@ -17,19 +18,57 @@ function exportTargets(exports: unknown): string[] {
   return isRecord(exports) ? Object.values(exports).flatMap(exportTargets) : [];
 }
 
+/** Whether `folder` is the folder `entry` names or lies inside it. */
+function isInside(folder: string, entry: string): boolean {
+  const path = posix.relative(entry, folder);
+  return path !== '..' && !path.startsWith('../');
+}
+
 /**
- * Whether the manifest publishes a `testing/` folder: an `exports` target or
- * a `files` entry names a `testing` segment, or an `exports` target has a
- * `*`, which can reach any folder.
+ * Whether the manifest publishes the `testing/` folder at `folder`, relative
+ * to the project root: an `exports` target or a `files` entry names a
+ * `testing` segment, an `exports` target has a `*`, which can reach any
+ * folder, or a `files` entry names the folder or a folder that holds it.
  */
-function publishesTesting(manifest: unknown): boolean {
+function publishes(manifest: unknown, folder: string): boolean {
   const exports = isRecord(manifest) ? exportTargets(manifest['exports']) : [];
+  const files = stringsAt(manifest, 'files');
   return (
     exports.some((path) => path.includes('*')) ||
-    [...exports, ...stringsAt(manifest, 'files')].some((path) =>
+    [...exports, ...files].some((path) =>
       path.split('/').includes('testing'),
-    )
+    ) ||
+    files.some((entry) => isInside(folder, entry))
   );
+}
+
+/**
+ * The `testing/` folders of `project`, relative to its root. A folder inside
+ * another project's root belongs to that project, as its files do in Nx.
+ */
+function testingFolders(
+  graph: ProjectGraph,
+  project: ProjectGraphProjectNode,
+): string[] {
+  const root = join(workspaceRoot, project.data.root);
+  const otherRoots = new Set(
+    Object.values(graph.nodes)
+      .filter(({ name }) => name !== project.name)
+      .map(({ data }) => join(workspaceRoot, data.root)),
+  );
+  return globSync('**/testing', {
+    cwd: root,
+    withFileTypes: true,
+    exclude: (entry) =>
+      entry.name === 'node_modules' ||
+      otherRoots.has(resolve(root, entry.parentPath, entry.name)),
+  })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) =>
+      relative(root, join(entry.parentPath, entry.name))
+        .split(sep)
+        .join(posix.sep),
+    );
 }
 
 /**
@@ -58,12 +97,12 @@ export function testSupportFiles(
   project: ProjectGraphProjectNode,
   bundled: boolean,
 ): string[] {
-  return checkedProjects(graph, project, bundled)
-    .filter(
-      ({ data }) =>
-        !publishesTesting(
-          readJson(join(workspaceRoot, data.root, 'package.json')),
-        ),
-    )
-    .map(({ data }) => posix.join(data.root, '**/testing/**'));
+  return checkedProjects(graph, project, bundled).flatMap((node) => {
+    const manifest = readJson(
+      join(workspaceRoot, node.data.root, 'package.json'),
+    );
+    return testingFolders(graph, node)
+      .filter((folder) => !publishes(manifest, folder))
+      .map((folder) => posix.join(node.data.root, folder, '**'));
+  });
 }
