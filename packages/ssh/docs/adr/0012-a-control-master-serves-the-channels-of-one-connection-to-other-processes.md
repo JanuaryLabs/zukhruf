@@ -18,15 +18,15 @@ Ezz decided on 2026-11-18 (backlog #4503) that a test run shares one SSH connect
 Each channel is one connection to the Unix socket:
 
 1. The client connects and sends one request: a dial (`tcp` or `unix`, and the address) or a session (the command or a shell, the env, the pty).
-2. The master opens the channel on its connection and sends one reply: success, or the error of the open with its message and its `code`.
-3. A dial then carries the bytes of the channel both ways, with no frame. The end of one side is `SSH_MSG_CHANNEL_EOF` on the other.
-4. A session carries frames: stdin, the end of stdin, `window-change` and `signal` from the client; stdout, stderr and the exit (status or signal) from the master.
+2. The master opens the channel on its connection and sends one reply: success, or the error of the open with its message, its `code` and its chain of causes.
+3. A dial then carries frames: data and the end of the data both ways, and from the master a last frame with the error when the channel failed. The end of one side is `SSH_MSG_CHANNEL_EOF` on the other. Raw bytes would be shorter, but the close of a master that died, or lost its connection, would then look the same as a clean end.
+4. A session carries frames: stdin, the end of stdin, `window-change`, `signal` and the close from the client; stdout, stderr, the end of both, and then the exit from the master. The exit is a status, a signal, or no exit with the error that ended the master's connection, which the client gives as the cause of `ExitMissingError`.
 5. The close of the Unix connection closes the channel, and the close of the channel closes the Unix connection.
 
 So no part of the broker waits on a timer:
 
 - A test process that dies closes its Unix connections, and the master closes their channels. The server then closes each socket that a channel opened ([ADR 0002](./0002-the-connection-runs-in-the-node-process-and-no-helper-process-carries-it.md)).
-- A master process that dies closes the TCP connection. The server closes each channel, and the kernel closes each Unix connection, so each stream of a client fails.
+- A master process that dies closes the TCP connection. The server closes each channel, and the kernel closes each Unix connection. A close with no last frame is an error, so each dial stream of a client fails and each session ends with `ExitMissingError`.
 - A client holds no connection between two channels. It never keeps its process alive while it has no channel, and it never has a connection to replace.
 
 The socket gives the connection to each process that can connect to it, as OpenSSH's `ControlPath` does. The caller puts it in a directory that only its user can enter.

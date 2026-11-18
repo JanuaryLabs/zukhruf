@@ -49,6 +49,12 @@
       "types": "./dist/config.d.ts",
       "import": "./dist/config.js",
       "default": "./dist/config.js"
+    },
+    "./control": {
+      "@zukhruf/source": "./src/control.ts",
+      "types": "./dist/control.d.ts",
+      "import": "./dist/control.js",
+      "default": "./dist/control.js"
     }
   },
   "files": [

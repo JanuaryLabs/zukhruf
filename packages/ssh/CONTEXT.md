@@ -26,7 +26,7 @@ Where a TCP connection or a channel goes. For `'tcp'` it is `host:port`, with br
 _Avoid_: Destination, target, endpoint
 
 **Destination**:
-What a person gives to `ssh`: `[user@]hostname[:port]`, an `ssh://` URI, or a `Host` name of `~/.ssh/config`. `ssh -G` resolves it to a hostname, a port and a user. OpenSSH's word (ssh(1), SYNOPSIS).
+What a person gives to `ssh`: `[user@]hostname`, an `ssh://` URI (the one form that carries a port), or a `Host` name of `~/.ssh/config`. `ssh -G` resolves it to a hostname, a port and a user. OpenSSH's word (ssh(1), SYNOPSIS).
 _Avoid_: Host (OpenSSH's `Host` is a pattern in the config), address
 
 **Transport**:
@@ -80,6 +80,14 @@ _Avoid_: Heartbeat, ping, TCP keepalive (a socket option of the kernel)
 **Connect timeout**:
 The limit for the TCP connect, the banner exchange and the key exchange. It does not apply after them. OpenSSH's `ConnectTimeout` ("applied both to establishing the connection and to performing the initial SSH protocol handshake and key exchange", ssh_config(5)).
 _Avoid_: Timeout (alone), ready timeout (ssh2's `readyTimeout` also covers the authentication)
+
+**Control master**:
+The process that holds a client and serves its channels to other processes on a Unix socket: `ControlMaster.listen(client, path)`. OpenSSH's `ControlMaster`; its socket is OpenSSH's `ControlPath`.
+_Avoid_: Broker, multiplexer, proxy, daemon
+
+**Control client**:
+A process's way to open channels through a control master, one connection to its socket for each channel: `new ControlClient(path)`, with `dial` and `newSession` as on a client. OpenSSH's `ssh -S <path>`.
+_Avoid_: Mux client, shared client
 
 ### Host keys
 
