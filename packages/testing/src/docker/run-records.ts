@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import { writeFileSync } from 'node:fs';
 import { rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -11,14 +10,11 @@ export const TEST_RUN_DIRECTORY = 'ZUKHRUF_TESTING_RUN_DIR';
 /** The label that ties a container or volume to the run that created it. */
 export const TEST_RUN_LABEL = 'dev.zukhruf.testing.run';
 
-/** The run directories that hold a process record of this process. */
-const recordedRuns = new Set<string>();
-
 /**
  * The records of one `node --test` invocation with the Docker global setup,
- * in the run's directory. While a recorded process lives, the global
- * teardown keeps the run, and the recovery of a later run removes the
- * recorded paths that a killed process left.
+ * in the run's directory: the SSH forward directories of this machine, and
+ * the SSH commands that use them. While a recorded command lives, the
+ * recovery of a later run leaves the run alone.
  */
 export class RunRecords {
   readonly directory: string;
@@ -28,8 +24,8 @@ export class RunRecords {
   }
 
   /**
-   * Writes a process record for `pid`, a test process or a command it
-   * started. While a recorded process lives, the run's records stay.
+   * Writes a process record for `pid`, an SSH command that a test process
+   * started. While a recorded process lives, recovery leaves the run alone.
    * Disposing the record forgets a command that ended. The random id keeps
    * a reused pid from deleting the record of the next command that has it.
    */
@@ -37,20 +33,6 @@ export class RunRecords {
     const file = join(this.directory, `process-${pid}-${randomUUID()}.json`);
     await writeFile(file, JSON.stringify({ pid }));
     return { [Symbol.asyncDispose]: () => rm(file, { force: true }) };
-  }
-
-  /**
-   * Writes a process record for this process, one time for each run. It is
-   * synchronous, so a getter can call it before it gives the run's labels to
-   * another Docker client.
-   */
-  recordThisProcess(): void {
-    if (recordedRuns.has(this.directory)) return;
-    writeFileSync(
-      join(this.directory, `process-${process.pid}-${randomUUID()}.json`),
-      JSON.stringify({ pid: process.pid }),
-    );
-    recordedRuns.add(this.directory);
   }
 
   /**
@@ -67,7 +49,7 @@ export class RunRecords {
 
 /**
  * The run this process belongs to: its id marks what the process creates,
- * its records keep the run while the process lives.
+ * and its records name the SSH forwards of the process.
  */
 export type ProcessRun = { id: string; records: RunRecords };
 

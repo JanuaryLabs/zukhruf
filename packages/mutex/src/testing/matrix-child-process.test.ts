@@ -1,10 +1,8 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
-import { readFileSync, readdirSync } from 'node:fs';
 import { chmod } from 'node:fs/promises';
 import { type Socket, connect, createServer } from 'node:net';
-import { join } from 'node:path';
 import { type TestContext, test } from 'node:test';
 
 import { Docker } from '@zukhruf/docker';
@@ -86,16 +84,7 @@ test('a matrix child exits when its test process is killed', async (t) => {
   }
 });
 
-/** The pids of the process records in the records directory of a run. */
-const recordedPids = (directory: string) =>
-  readdirSync(directory)
-    .filter((name) => name.startsWith('process-'))
-    .map(
-      (name): number =>
-        JSON.parse(readFileSync(join(directory, name), 'utf8')).pid,
-    );
-
-test('a matrix child that opens the DockerEngineStore records itself in the run of the fixture', async (t) => {
+test('a matrix child that opens the DockerEngineStore in the run of the fixture holds the run’s reaper', async (t) => {
   // Arrange: a run of its own, with its records in a scratch directory.
   await using records = await new TemporaryFiles().directory('mutex-test-');
   const store = dockerSubject;
@@ -125,14 +114,6 @@ test('a matrix child that opens the DockerEngineStore records itself in the run 
   await child.next('started', { signal: t.signal });
 
   // Assert
-  await waitFor(
-    () =>
-      assert.ok(
-        recordedPids(records.path).includes(child.child.pid!),
-        'The run must have a process record of the matrix child once it opened the store',
-      ),
-    { signal: t.signal },
-  );
   // The disposal kills the child: a kill during its take of the hold would
   // leave the run's reaper created.
   // The matrix child must hold the run's reaper.

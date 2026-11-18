@@ -218,7 +218,7 @@ These existing parts of `@zukhruf/docker` stay, because a probe showed that each
 These changes are not necessary:
 
 - **The `cat` on a stdin pipe in `@zukhruf/testing` (`src/docker/host.ts`).** It ends an `ssh` port forward when the test process stops. The claim ends a container when its attach ends. The two have the same idea, but they use different mechanisms (an `ssh` process and an engine attach) and change for different reasons. They do not share code, so nothing moves to `@zukhruf/docker`.
-- **The run and the run cleanup of `@zukhruf/testing`.** The store does not know them. A test or a child process gets the labels of its run from `defaults()` of a `DockerTestbed`, the seam that `@zukhruf/testing` has for other container APIs. That call also records its process and holds the run's reaper, which removes resources by these labels after the run's last test process ends, also a create that the engine finished after its process stopped.
+- **The run and the run cleanup of `@zukhruf/testing`.** The store does not know them. A test or a child process gets the labels of its run from `defaults()` of a `DockerTestbed`, the seam that `@zukhruf/testing` has for other container APIs. That call also holds the run's reaper, which removes resources by these labels after the run's last test process ends, also a create that the engine finished after its process stopped.
 
 ## Evidence
 

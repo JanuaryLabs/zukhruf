@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { type ChildProcess, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
-import { chmod, mkdir, readdir } from 'node:fs/promises';
+import { chmod, mkdir } from 'node:fs/promises';
 import { type Socket, connect, createServer } from 'node:net';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
@@ -35,7 +35,6 @@ import {
   SERVER_LABEL,
   reaperName,
   reaperRequest,
-  startReaper,
 } from './reaper.ts';
 import { directoryParent } from './run-records.ts';
 
@@ -618,11 +617,23 @@ exec sleep 3600`,
 test('a reaper that no holder holds removes the run’s objects after its wait for a first holder, and exits', async (t) => {
   const run = randomUUID();
   await present('alpine:latest');
+  await present(REAPER_IMAGE);
   const ids: string[] = [];
   try {
     ids.push(await object(run));
+    // The reaper of a process that was killed between the start of its
+    // reaper and its hold: no holder ever comes.
+    const reaper = await docker.containers.create(
+      reaperRequest(
+        run,
+        { ...quick, firstHolder: 1_000 },
+        '/var/run/docker.sock',
+        directoryParent(docker.host),
+      ),
+      { name: reaperName(run) },
+    );
 
-    await startReaper(docker, run, quick);
+    await reaper.start();
 
     await gone(t, async () => {
       assert.equal(await exists(ids[0]!), false);
@@ -785,7 +796,8 @@ test('a hold on a reaper that stays closing past the readiness bound of the hold
   const readiness = 3_000;
   try {
     const id = await object(run);
-    await startReaper(docker, run, closing);
+    // A holder that ends: the reaper does its first pass and stays closing.
+    await killed(await holder(run, closing));
     // The first pass removed the run's container: the reaper is closing.
     await gone(t, async () => assert.equal(await exists(id), false));
 
@@ -865,7 +877,8 @@ test(
     const clock = createClock();
     try {
       const id = await object(run);
-      await startReaper(docker, run, closing);
+      // A holder that ends: the reaper does its first pass and stays closing.
+      await killed(await holder(run, closing));
       // The first pass removed the run's container: the reaper is closing.
       await gone(t, async () => assert.equal(await exists(id), false));
       await using stack = new AsyncDisposableStack();
@@ -952,34 +965,6 @@ test(
       await assert.rejects(taking, {
         message: `The hold of the reaper ${reaperName(run)} was not ready within its readiness bound of ${readiness} ms`,
       });
-    } finally {
-      await removeRun(run);
-    }
-  },
-);
-
-test(
-  'the start of the reaper of a dead run rejects with the hold’s named error when its readiness bound ends first',
-  { skip: proxyless },
-  async () => {
-    const run = randomUUID();
-    try {
-      // The bound can end after the engine got the create of the reaper, which
-      // then lands after the rejection. Each request goes through the proxy,
-      // whose disposal waits until the engine answered each create it
-      // forwarded and closes the rest, so the cleanup sees that reaper.
-      await using proxy = await EngineProxy.start(engine);
-      proxy.intercept('POST', '/containers/create', () => {});
-      await using client = await Docker.connect({
-        clock: globalThis,
-        environment: { DOCKER_HOST: proxy.host },
-      });
-      await assert.rejects(
-        startReaper(client, run, { ...quick, readiness: 1 }),
-        {
-          message: `The hold of the reaper ${reaperName(run)} was not ready within its readiness bound of 1 ms`,
-        },
-      );
     } finally {
       await removeRun(run);
     }
@@ -1315,26 +1300,7 @@ test('a hold of a run whose reaper ended and was never removed holds a new reape
   }
 });
 
-test('the start of the reaper of a dead run whose reaper ended and was never removed starts a new reaper, which removes the run’s objects', async (t) => {
-  const run = randomUUID();
-  await present('alpine:latest');
-  const ids: string[] = [];
-  try {
-    await staleReaper(run);
-    ids.push(await object(run));
-
-    await startReaper(docker, run, quick);
-
-    await gone(t, async () => {
-      assert.equal(await exists(ids[0]!), false);
-      assert.deepEqual(await reapers(run), []);
-    });
-  } finally {
-    await removeRun(run, ids);
-  }
-});
-
-test('defaults() in a run holds the run’s reaper, records its process, and gives the run’s labels', async (t) => {
+test('defaults() in a run holds the run’s reaper and gives the run’s labels', async (t) => {
   await using directory = await new TemporaryFiles().directory(
     'zukhruf-testing-defaults-',
   );
@@ -1344,16 +1310,9 @@ test('defaults() in a run holds the run’s reaper, records its process, and giv
     const labels: unknown = JSON.parse(await launched.line());
 
     assert.deepEqual(labels, { [RUN_LABEL]: run });
-    const { pid } = launched.child;
     const [reaper] = await reapers(run);
     assert.ok(reaper, 'defaults() holds a reaper');
     assert.equal((await holdersOf(reaper)).length, 1);
-    const files = await readdir(directory.path);
-    assert.ok(
-      files.some((file) =>
-        new RegExp(`^process-${pid}-[0-9a-f-]{36}\\.json$`).test(file),
-      ),
-    );
   } finally {
     await killed(launched.child);
     await removeRun(run);
@@ -1743,32 +1702,6 @@ test('a hold whose /var/run/docker.sock and client socket both reach the engine 
   } finally {
     await killed(launched.child);
   }
-});
-
-test('the start of the reaper of a dead run on an engine whose /var/run/docker.sock reaches another engine starts a reaper on the socket of its client, which removes the run’s objects on its engine', async (t) => {
-  const relay = shortSocket();
-  // Its /var/run/docker.sock is the socket of the engine of this process.
-  await using second = await secondEngine({
-    sockets: [relay],
-    binds: ['/var/run/docker.sock:/var/run/docker.sock'],
-    relay,
-  });
-  const run = randomUUID();
-  using removed = await removedReapers(second, run);
-  const owned = await second.client.containers.create({
-    Image: 'alpine:latest',
-    Cmd: ['sleep', '3600'],
-    Labels: { [RUN_LABEL]: run },
-  });
-  await owned.start();
-
-  await startReaper(second.client, run, quick);
-
-  await gone(t, async () => {
-    assert.deepEqual(removed.sockets, ['/var/run/docker.sock', relay]);
-    assert.equal(await second.client.containers.find(owned.id), undefined);
-    assert.deepEqual(await reaperSockets(second.client, run), []);
-  });
 });
 
 test('defaults() names /var/run/docker.sock as a socket that does not answer, when the engine’s host has a file there that no engine listens on', async () => {

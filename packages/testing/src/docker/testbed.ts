@@ -106,7 +106,6 @@ export class DockerTestbed {
   readonly #environment: Environment;
   readonly #run: ProcessRun | undefined;
   readonly #engine = pMemoize(async (): Promise<Engine> => {
-    this.#run?.records.recordThisProcess();
     const client = await Docker.connect({
       clock: globalThis,
       environment: this.#environment,
@@ -423,9 +422,8 @@ export class DockerTestbed {
     }
   }
 
-  /** The run's labels and the default resources. The read records this process in the run. */
+  /** The run's labels and the default resources. */
   #defaults(): Defaults {
-    this.#run?.records.recordThisProcess();
     return {
       Labels: this.#run ? { [TEST_RUN_LABEL]: this.#run.id } : {},
       HostConfig: { ...RESOURCES },

@@ -16,12 +16,6 @@ import { Docker } from '@zukhruf/docker';
 
 import { DockerHost } from '../docker/host.ts';
 import {
-  REAPER_DEFAULTS,
-  reaped,
-  sharedDatabases,
-  startReaper,
-} from '../docker/reaper.ts';
-import {
   TEST_RUN_DIRECTORY,
   TEST_RUN_ID,
   readRun,
@@ -57,31 +51,11 @@ async function readRunFile(directory: string): Promise<Run | undefined> {
 }
 
 /**
- * Removes what dead runs on this engine left behind: the recorded paths, and,
- * through the reaper of the run, its engine objects. The records of a run go
- * once the engine has no reaper of it and nothing that one would remove
- * (ADR 0020, item 9).
+ * Removes what dead runs on this engine left on this machine: the recorded
+ * SSH forward directories, and then the run's records. It makes no engine
+ * call: the reaper of a run removes its engine objects (ADR 0025).
  */
 async function recover(root: string, endpoint: string): Promise<void> {
-  // Connected only when a dead run used Docker.
-  await using resources = new AsyncDisposableStack();
-  let engine: Docker | undefined;
-  const connection = async (): Promise<Docker> =>
-    (engine ??= resources.use(
-      await Docker.connect({
-        clock: globalThis,
-        host: endpoint,
-        environment: process.env,
-      }),
-    ));
-  // Listed once, for all dead runs, and only when one needs it.
-  let databases: Promise<string[]> | undefined;
-  const listed = async (): Promise<string[]> =>
-    (databases ??= sharedDatabases(
-      await connection(),
-      REAPER_DEFAULTS,
-      globalThis,
-    ));
   for (const name of await readdir(root)) {
     // A claim names its runner: while it lives, the run is being recovered.
     const claimant = /^recovering-(\d+)-/.exec(name)?.[1];
@@ -90,8 +64,8 @@ async function recover(root: string, endpoint: string): Promise<void> {
     const previous = await readRunFile(directory);
     if (!previous || previous.endpoint !== endpoint || alive(previous.pid))
       continue;
-    // A killed runner leaves its test processes running. Each one can still
-    // create something.
+    // A killed runner leaves its test processes running. An SSH command of
+    // one can still use a forward directory of the run.
     let pids: number[];
     try {
       pids = processes(directory);
@@ -111,15 +85,7 @@ async function recover(root: string, endpoint: string): Promise<void> {
     }
     try {
       removeRecordedPaths(previous, claimed);
-      // A run with no process record never reached the engine.
-      if (
-        pids.length === 0 ||
-        (await reaped(await connection(), previous.id, listed))
-      )
-        rmSync(claimed, { recursive: true, force: true });
-      // Its reaper still exists, or one was killed before it removed all:
-      // the records stay for a later recovery, under this claim.
-      else await startReaper(await connection(), previous.id);
+      rmSync(claimed, { recursive: true, force: true });
     } catch (error) {
       throw new Error(
         `Could not recover Docker test resources. Retained ownership record: ${claimed}`,
@@ -178,11 +144,7 @@ export function globalTeardown(): void {
       readFileSync(join(directory, 'run.json'), 'utf8'),
     );
     removeRecordedPaths(run, directory);
-    // A run whose process reached the engine keeps its records: the
-    // teardown cannot see whether its reaper acted, and a later recovery
-    // asks the engine (ADR 0020, items 6 and 9).
-    if (processes(directory).length === 0)
-      rmSync(directory, { recursive: true, force: true });
+    rmSync(directory, { recursive: true, force: true });
   } catch (error) {
     // Node sets exit code 1 for a teardown that throws, but prints nothing.
     console.error(

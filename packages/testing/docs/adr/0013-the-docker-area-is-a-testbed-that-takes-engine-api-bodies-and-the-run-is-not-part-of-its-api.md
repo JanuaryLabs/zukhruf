@@ -1,5 +1,7 @@
 # The Docker area is a testbed that takes Engine API bodies, and the run is not part of its API
 
+Superseded in part on 2026-11-18 (#4508) by [ADR 0025](./0025-recovery-and-the-global-teardown-make-no-engine-call-and-a-test-process-has-no-process-record.md). `defaults()` and the first acquisition write no process record (items 3 and 8): the run's reaper, which `defaults()` holds, removes what another client creates with the run's labels.
+
 The Docker area had three defects (backlog #3070):
 
 - Its container options were a vocabulary of its own: `image`, `command`, `mounts`, `memory` as a string such as `1g`, and more. A private function translated them to the Engine API body. Each Engine field that a test needed was a new option first. Backlog #2831 needed an entrypoint, and the options had none.

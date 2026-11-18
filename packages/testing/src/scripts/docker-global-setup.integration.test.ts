@@ -394,22 +394,14 @@ for (const mode of [
           });
           await emptyRun(file, env);
         }
-        const root = join(
-          directory.path,
-          'state',
-          'zukhruf-testing',
-          'docker-runs',
+        // The teardown deletes the run's records with no engine call, also
+        // when the proxy is gone. After a signal, the next run deletes them.
+        assert.deepEqual(
+          await readdir(
+            join(directory.path, 'state', 'zukhruf-testing', 'docker-runs'),
+          ),
+          [],
         );
-        // The teardown keeps the records of a run that used the engine. The
-        // proxy is gone, so no later run reaches this one's engine.
-        if (proxy) assert.deepEqual(await recordedRuns(root), [state.run]);
-        // Every recorded process has ended, so once the run's reaper ended,
-        // the next run leaves nothing of it, not even a recovery's claim.
-        else
-          assert.deepEqual(
-            await afterReapers(root, () => emptyRun(file, env)),
-            [],
-          );
         assert.equal(await running(sentinel.id), true);
         assert.equal(await volumeExists(sentinelVolume.name), true);
       } finally {
@@ -517,38 +509,6 @@ test(
   },
 );
 
-test('recovery leaves a dead runner’s run alone while one of its test processes lives', async (t) => {
-  await using directory = await runsDirectory('zukhruf-testing-orphan-');
-  const statePath = join(directory.path, 'state.json');
-  const file = join(directory.path, 'worker.test.ts');
-  await writeFile(
-    file,
-    smallWorkerSource(statePath, 'await setTimeout(120_000);'),
-  );
-  const env = runEnvironment(join(directory.path, 'state'));
-  const killed = started(runnerArgs('--test-force-exit', file), env);
-  let state: SmallState | undefined;
-  let worker: number | undefined;
-  try {
-    state = await readState<SmallState>(t, statePath);
-    worker = state.pid;
-    killed.child.kill('SIGKILL');
-    await killed.exited;
-    assert.ok(alive(worker), 'the test process outlives its runner');
-
-    await emptyRun(file, env);
-
-    assert.equal(await running(state.id), true);
-    await access(join(state.record, 'run.json'));
-  } finally {
-    if (killed.child.exitCode === null && killed.child.signalCode === null)
-      killed.child.kill('SIGKILL');
-    await killed.exited.catch(() => null);
-    if (worker !== undefined && alive(worker)) process.kill(worker, 'SIGKILL');
-    if (state) await removeContainer(state.id).catch(() => {});
-  }
-});
-
 test(
   'a run whose tests never touch Docker leaves no record and makes no daemon call',
   { skip: proxyless },
@@ -631,13 +591,12 @@ async function killedRun(
   }
 }
 
-/** Both runners succeeded, and nothing of the killed run is left once its reaper ran. */
+/** Both runners succeeded, the killed run's reaper removed its objects, and its records are gone. */
 async function assertRecovered(
   t: TestContext,
   results: PromiseSettledResult<unknown>[],
   state: State,
   root: string,
-  recover: () => Promise<unknown>,
 ): Promise<void> {
   for (const result of results)
     assert.equal(
@@ -654,7 +613,7 @@ async function assertRecovered(
       assert.equal(await exists(id), false);
     assert.equal(await volumeExists(state.volume), false);
   });
-  assert.deepEqual(await afterReapers(root, recover), []);
+  assert.deepEqual(await readdir(root), []);
 }
 
 test(
@@ -667,7 +626,7 @@ test(
     try {
       const results = await Promise.allSettled([recover(), recover()]);
 
-      await assertRecovered(t, results, state, root, recover);
+      await assertRecovered(t, results, state, root);
     } finally {
       await removeLeftovers(state);
     }
@@ -675,32 +634,88 @@ test(
 );
 
 test(
-  'a run that starts while another recovers a dead run leaves the run to it',
+  'the recovery of a dead run that used Docker makes no engine call, and deletes its records',
   { skip: proxyless },
   async (t) => {
     await using directory = await runsDirectory('zukhruf-testing-recovery-');
     await using proxy = await EngineProxy.start(engine);
     const { state, recover, root } = await killedRun(t, directory.path, proxy);
-    // The create of the dead run's reaper is held until the second runner
-    // ended: that runner starts and ends while the first one is inside the
-    // dead run's recovery, with its claim on the run.
-    const create = proxy.hold('POST', '/containers/create', 1);
     try {
-      const first = recover();
-      first.catch(() => {});
-      await untilAborted(create.reached, t.signal);
-      const second = recover();
-      await second.catch(() => {});
-      create.release();
-      const results = await Promise.allSettled([first, second]);
+      assert.notDeepEqual(
+        await readdir(root),
+        [],
+        'the killed run left its records',
+      );
+      const from = proxy.requests.length;
 
-      await assertRecovered(t, results, state, root, recover);
+      await recover();
+
+      assert.deepEqual(proxy.requests.slice(from), []);
+      assert.deepEqual(await readdir(root), []);
     } finally {
-      create.release();
       await removeLeftovers(state);
     }
   },
 );
+
+test('recovery leaves a dead run alone while a live runner holds its claim', async () => {
+  await using directory = await new TemporaryFiles().directory(
+    'zukhruf-testing-claimed-',
+  );
+  const runner = started(
+    ['--eval', 'setTimeout(() => {}, 600_000)'],
+    process.env,
+  );
+  try {
+    assert.ok(runner.child.pid !== undefined);
+    // Only a recovery claims a run, by a rename: this claim is of a live
+    // runner inside the recovery of a run whose runner died.
+    const claim = join(
+      directory.path,
+      'state',
+      'zukhruf-testing',
+      'docker-runs',
+      `recovering-${runner.child.pid}-${randomUUID()}`,
+    );
+    await mkdir(claim, { recursive: true });
+    await writeFile(
+      join(claim, 'run.json'),
+      JSON.stringify({
+        id: randomUUID(),
+        endpoint: engine,
+        pid: await endedPid(),
+      }),
+    );
+    const file = join(directory.path, 'plain.test.ts');
+    await writeFile(
+      file,
+      "import { test } from 'node:test';\ntest('no Docker', () => {});\n",
+    );
+
+    // Control: the claim of a runner that died is taken and removed.
+    const abandoned = join(
+      dirname(claim),
+      `recovering-${await endedPid()}-${randomUUID()}`,
+    );
+    await mkdir(abandoned);
+    await writeFile(
+      join(abandoned, 'run.json'),
+      JSON.stringify({
+        id: randomUUID(),
+        endpoint: engine,
+        pid: await endedPid(),
+      }),
+    );
+
+    await emptyRun(file, runEnvironment(join(directory.path, 'state')));
+
+    await access(join(claim, 'run.json'));
+    assert.equal(existsSync(abandoned), false);
+  } finally {
+    runner.child.kill('SIGKILL');
+    await runner.exited.catch(() => null);
+  }
+});
 
 test('recovery keeps a dead run while a command lives whose pid an ended command of the run had', async () => {
   await using directory = await new TemporaryFiles().directory(
@@ -774,7 +789,6 @@ test('recovery leaves a dead run on another engine alone', async () => {
       pid: await endedPid(),
     }),
   );
-  await new RunRecords(record).recordProcess(await endedPid());
   const file = join(directory.path, 'plain.test.ts');
   await writeFile(
     file,
@@ -785,64 +799,6 @@ test('recovery leaves a dead run on another engine alone', async () => {
 
   await access(join(record, 'run.json'));
 });
-
-/** The ids of the runs whose records are in `root`, also under a recovery's claim. */
-async function recordedRuns(root: string): Promise<string[]> {
-  return Promise.all(
-    (await readdir(root)).map(async (name) => {
-      const { id }: { id: string } = JSON.parse(
-        await readFile(join(root, name, 'run.json'), 'utf8'),
-      );
-      return id;
-    }),
-  );
-}
-
-/** Resolves when the engine removed the reaper of `run`, or has none. */
-async function reaperGone(run: string): Promise<void> {
-  try {
-    await (
-      await docker.containers.find(reaperName(run))
-    )?.wait({
-      condition: 'removed',
-    });
-  } catch (error) {
-    if (!(error instanceof ContainerNotFoundError)) throw error;
-  }
-}
-
-/**
- * The records left in `root` after `next`, a later run, once the reaper of
- * each recorded run ended: a recovery deletes the records of a run only when
- * its reaper is gone and left nothing (ADR 0020, item 9).
- */
-async function afterReapers(
-  root: string,
-  next: () => Promise<unknown>,
-): Promise<string[]> {
-  for (const run of await recordedRuns(root)) await reaperGone(run);
-  await next();
-  return readdir(root);
-}
-
-/** Whether the shared Postgres server `server` has the database `name`. */
-async function hasDatabase(server: string, name: string): Promise<boolean> {
-  const container = await docker.containers.find(server);
-  assert.ok(container);
-  const { exitCode, stdout, output } = await container.exec({
-    Cmd: [
-      'psql',
-      '-U',
-      'postgres',
-      '-d',
-      'postgres',
-      '-Atc',
-      `SELECT COUNT(*) FROM pg_database WHERE datname = '${name}'`,
-    ],
-  });
-  assert.equal(exitCode, 0, output);
-  return stdout.trim() === '1';
-}
 
 /** A process that holds the reaper of `run`, as a test process of it does, until it is killed. */
 async function reaperHolder(t: TestContext, run: string) {
@@ -867,200 +823,6 @@ async function reaperHolder(t: TestContext, run: string) {
   });
   return holding;
 }
-
-/** What a worker created in a run: a container, a volume, and a database on a shared server. */
-interface DatabaseState {
-  container: string;
-  volume: string;
-  database: string;
-  server: string;
-  run: string;
-}
-
-/** Waits until the file `go` exists, as source text for a worker. */
-const untilGo = (go: string) =>
-  `while (!(await import('node:fs')).existsSync(${JSON.stringify(go)})) await setTimeout(50);`;
-
-for (const objects of [true, false])
-  test(
-    objects
-      ? 'a run whose reaper was killed before it acted is cleaned by the next run’s recovery: its container, volume and database go, and then its records'
-      : 'a run whose reaper was killed before it acted, and that left only a database, is cleaned by the next run’s recovery: the database goes, and then its records',
-    { timeout: 400_000 },
-    async (t) => {
-      await using directory = await runsDirectory(
-        'zukhruf-testing-killed-reaper-',
-      );
-      const scope = randomUUID();
-      const verification = `dev.zukhruf.testing.verification=${scope}`;
-      const statePath = join(directory.path, 'state.json');
-      const go = join(directory.path, 'go');
-      const file = join(directory.path, 'worker.test.ts');
-      await writeFile(
-        file,
-        `
-          import { test } from 'node:test';
-          import { writeFile } from 'node:fs/promises';
-          import { setTimeout } from 'node:timers/promises';
-          import { DockerTestbed } from ${library};
-          import { Postgres } from ${JSON.stringify(new URL('../databases/postgres.ts', import.meta.url).href)};
-          test('what a run owns', { timeout: 300000 }, async () => {
-            const docker = new DockerTestbed({ environment: process.env });
-            const container = ${objects} ? (await docker.start({ Image: 'alpine:latest', Cmd: ['sleep', '600'] })).id : undefined;
-            const volume = ${objects} ? (await docker.volume()).name : undefined;
-            const { database, containerId } = await new Postgres({ environment: process.env, labels: { 'dev.zukhruf.testing.verification': ${JSON.stringify(scope)} } }).database();
-            await writeFile(${JSON.stringify(statePath)}, JSON.stringify({ container, volume, database, server: containerId, run: process.env.ZUKHRUF_TESTING_RUN_ID }));
-            ${untilGo(go)}
-          });
-        `,
-      );
-      const env = runEnvironment(join(directory.path, 'state'));
-      const root = join(
-        directory.path,
-        'state',
-        'zukhruf-testing',
-        'docker-runs',
-      );
-      const run = started(runnerArgs(file), env);
-      let state: Partial<DatabaseState> | undefined;
-      try {
-        state = await readState<Partial<DatabaseState>>(t, statePath);
-        const { container, volume, database, server, run: id } = state;
-        assert.ok(database && server && id);
-        // A frozen reaper does no pass: it is killed before it acted, as at
-        // a restart of the engine or an out-of-memory kill.
-        const reaper = await docker.containers.find(reaperName(id));
-        assert.ok(reaper);
-        await reaper.pause();
-        await writeFile(go, '');
-        assert.equal(await run.exited, 0, run.output());
-        await reaper.remove({ force: true });
-        await reaperGone(id);
-        if (container) assert.equal(await exists(container), true);
-        if (volume) assert.equal(await volumeExists(volume), true);
-        assert.equal(await hasDatabase(server, database), true);
-
-        await emptyRun(file, env);
-
-        await reaped(t, async () => {
-          if (container) assert.equal(await exists(container), false);
-          if (volume) assert.equal(await volumeExists(volume), false);
-          assert.equal(await hasDatabase(server, database), false);
-        });
-        assert.deepEqual(
-          await afterReapers(root, () => emptyRun(file, env)),
-          [],
-        );
-      } finally {
-        if (run.child.exitCode === null && run.child.signalCode === null)
-          run.child.kill('SIGKILL');
-        await run.exited.catch(() => null);
-        for (const id of await labelled(verification))
-          await removeContainer(id).catch(() => {});
-        if (state?.container)
-          await removeContainer(state.container).catch(() => {});
-        if (state?.volume) await removeVolume(state.volume).catch(() => {});
-      }
-    },
-  );
-
-test(
-  'a run whose reaper finished keeps its records until the next run’s recovery, which deletes them and changes nothing on the engine',
-  { skip: proxyless },
-  async (t) => {
-    await using directory = await runsDirectory('zukhruf-testing-reaper-done-');
-    await using proxy = await EngineProxy.start(engine);
-    const statePath = join(directory.path, 'state.json');
-    const file = join(directory.path, 'worker.test.ts');
-    await writeFile(file, smallWorkerSource(statePath, ''));
-    const env = proxiedEnvironment(join(directory.path, 'state'), proxy);
-    const root = join(
-      directory.path,
-      'state',
-      'zukhruf-testing',
-      'docker-runs',
-    );
-    let state: SmallState | undefined;
-    try {
-      await spawn(process.execPath, runnerArgs(file), {
-        env,
-        timeout: 150_000,
-      });
-      state = await readState<SmallState>(t, statePath);
-      // The teardown cannot know that the reaper acted: it keeps the records.
-      assert.deepEqual(await recordedRuns(root), [state.run]);
-      await reaperGone(state.run);
-      assert.equal(await exists(state.id), false);
-      const from = proxy.requests.length;
-
-      await emptyRun(file, env);
-
-      assert.deepEqual(await readdir(root), []);
-      // Reads only: inspects, lists, and the lists in the shared servers.
-      assert.deepEqual(
-        proxy.requests
-          .slice(from)
-          .filter(
-            ({ method, path }) =>
-              method !== 'GET' &&
-              method !== 'HEAD' &&
-              !/^\/containers\/[^/]+\/exec$|^\/exec\/[^/]+\/start$/.test(path),
-          ),
-        [],
-      );
-    } finally {
-      if (state) await removeContainer(state.id).catch(() => {});
-    }
-  },
-);
-
-test('a dead run whose reaper still runs keeps its records at the next run’s recovery, which leaves the reaper alone, also when the run has nothing else left', async (t) => {
-  await using directory = await runsDirectory('zukhruf-testing-reaper-runs-');
-  const statePath = join(directory.path, 'state.json');
-  const go = join(directory.path, 'go');
-  const file = join(directory.path, 'worker.test.ts');
-  // The process holds the run's reaper through defaults() and creates
-  // nothing: only the reaper is of the run.
-  await writeFile(
-    file,
-    `
-      import { test } from 'node:test';
-      import { writeFile } from 'node:fs/promises';
-      import { setTimeout } from 'node:timers/promises';
-      import { DockerTestbed } from ${library};
-      test('a hold', { timeout: 150000 }, async () => {
-        await new DockerTestbed({ environment: process.env }).defaults();
-        await writeFile(${JSON.stringify(statePath)}, JSON.stringify({ run: process.env.ZUKHRUF_TESTING_RUN_ID }));
-        ${untilGo(go)}
-      });
-    `,
-  );
-  const env = runEnvironment(join(directory.path, 'state'));
-  const root = join(directory.path, 'state', 'zukhruf-testing', 'docker-runs');
-  const run = started(runnerArgs(file), env);
-  let holding: ReturnType<typeof started> | undefined;
-  try {
-    const state = await readState<{ run: string }>(t, statePath);
-    // A holder that is not a process of the run's records, such as a
-    // process of the run on another machine.
-    holding = await reaperHolder(t, state.run);
-    await writeFile(go, '');
-    assert.equal(await run.exited, 0, run.output());
-    const reaper = await docker.containers.find(reaperName(state.run));
-    assert.ok(reaper);
-
-    await emptyRun(file, env);
-
-    assert.deepEqual(await recordedRuns(root), [state.run]);
-    assert.equal(await running(reaper.id), true);
-  } finally {
-    if (run.child.exitCode === null && run.child.signalCode === null)
-      run.child.kill('SIGKILL');
-    await run.exited.catch(() => null);
-    holding?.child.kill('SIGKILL');
-    await holding?.exited.catch(() => null);
-  }
-});
 
 test('a reaper of another run that was left created, with no records, is started by the reaper of the next run on its engine, and its run’s objects go; a younger created reaper, and a running reaper of another run with its objects, stay', async (t) => {
   await using directory = await runsDirectory(
@@ -1252,11 +1014,9 @@ test('the reaper removes a container and a volume of a test process that only re
       assert.equal(await exists(ended.container), false);
       assert.equal(await volumeExists(ended.volume), false);
     });
+    // The teardown deleted the run's records.
     assert.deepEqual(
-      await afterReapers(
-        join(stateHome, 'zukhruf-testing', 'docker-runs'),
-        () => emptyRun(file, runEnvironment(stateHome)),
-      ),
+      await readdir(join(stateHome, 'zukhruf-testing', 'docker-runs')),
       [],
     );
   } finally {
@@ -1374,11 +1134,9 @@ test('the global setup and teardown of the built package clean a run', async (t)
 
     const { container } = state;
     await reaped(t, async () => assert.equal(await exists(container), false));
+    // The teardown deleted the run's records.
     assert.deepEqual(
-      await afterReapers(
-        join(stateHome, 'zukhruf-testing', 'docker-runs'),
-        () => emptyRun(file, runEnvironment(stateHome)),
-      ),
+      await readdir(join(stateHome, 'zukhruf-testing', 'docker-runs')),
       [],
     );
   } finally {

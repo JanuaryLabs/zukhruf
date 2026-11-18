@@ -32,8 +32,7 @@ interface DockerEngineLocation {
    * client from it, and the testbed reads the labels from it and holds the
    * run's reaper over a client of its own, so the store creates on the engine
    * where the testbed holds the reaper, and a store that disposes its client
-   * never cuts that hold. The read of the labels records the process in the
-   * run. Only these three: the location is in each child's source, so the
+   * never cuts that hold. Only these three: the location is in each child's source, so the
    * rest of the environment would reach argv.
    */
   environment: {
@@ -106,9 +105,9 @@ export function dockerEngineStore(location: string) {
   const { namespace, environment }: DockerEngineLocation = JSON.parse(location);
   const docker = Docker.connect({ clock: globalThis, environment });
   const store = docker.then(async (client) => {
-    // Before the first claim: the read records this process in the run and
-    // holds the run's reaper on the engine of `client`, which removes what it
-    // created after the run (@zukhruf/testing ADR 0013 and ADR 0020).
+    // Before the first claim: the read holds the run's reaper on the engine
+    // of `client`, which removes what it created after the run
+    // (@zukhruf/testing ADR 0013 and ADR 0020).
     const { Labels: labels } = await new DockerTestbed({
       environment,
     }).defaults();

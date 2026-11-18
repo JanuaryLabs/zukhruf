@@ -55,7 +55,7 @@ Node's hook that starts a run before the test processes start. It does recovery 
 _Avoid_: Wrapper
 
 **Global teardown**:
-Node's hook that runs after the test processes of a run end. It is synchronous and makes no engine call: it removes the recorded SSH forward directories and their records. It keeps the run's other records when the run has a process record, for the recovery of a later run.
+Node's hook that runs after the test processes of a run end. It is synchronous and makes no engine call: it removes the recorded SSH forward directories, and then the run's directory.
 _Avoid_: Cleanup hook
 
 **Reaper**:
@@ -66,11 +66,11 @@ _Avoid_: Ryuk, janitor
 The `node --test` process that runs the global setup, starts the test processes and runs the global teardown.
 
 **Process record**:
-A record in the run's directory that names a process that can create something for the run: a test process, another process that calls `defaults()`, or an SSH command that a test process started. A test process records itself on the first acquisition of a `DockerTestbed`, which every database fixture makes. A process also records itself when it calls `defaults()`, because another Docker client in that process can create with those labels, for example a sandbox launcher. In a run, that call also holds the run's reaper. While a recorded process lives, the run's records stay.
+A record in the run's directory that names an SSH command that a test process started, while it runs: an SSH port forward, or a shell on the host of an SSH engine. While a recorded process lives, recovery leaves the run alone, because the process can still use a forward directory of the run. A test process does not record itself: the run's reaper removes what it created on the engine (ADR 0025).
 _Avoid_: Worker record, PID file
 
 **Recovery**:
-A later run removing what an earlier run left: the recorded SSH forward directories, and, through the earlier run's reaper, its engine objects. It deletes the earlier run's records only when the engine has no reaper of that run and nothing that one would remove. Otherwise it starts that run's reaper, or leaves a running one alone, and keeps the records. Recovery waits until that run's runner and recorded processes have ended.
+A later run on the same engine removing what an earlier run left on this machine when its global teardown did not run or failed: the recorded SSH forward directories, and then the earlier run's records. It makes no engine call: the earlier run's reaper removes its engine objects (ADR 0025). Recovery waits until that run's runner and recorded processes have ended.
 _Avoid_: Garbage collection, prune
 
 **Wait**:
