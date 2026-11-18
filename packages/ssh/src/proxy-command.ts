@@ -1,4 +1,5 @@
 import { type ChildProcessByStdio, spawn } from 'node:child_process';
+import { Socket } from 'node:net';
 import { Duplex, type Readable, type Writable } from 'node:stream';
 
 import type { JumpHost } from './config.ts';
@@ -18,7 +19,7 @@ export function startProxyCommand(
   command: string,
   host: JumpHost,
   environment: Environment,
-): Duplex {
+): ProxyCommandTransport {
   const expanded = expandProxyCommand(`exec ${command}`, host);
   const shell = environment['SHELL'] || '/bin/sh';
   return new ProxyCommandTransport(
@@ -67,14 +68,17 @@ function originalHost(destination: string): string {
  * stdout ends the transport, as OpenSSH reads the end of the connection
  * (`client_process_net_input` in clientloop.c). When the client ends its side
  * or destroys the transport, the command gets SIGHUP and nothing waits for it
- * to exit (`ssh_kill_proxy_command` in sshconnect.c).
+ * to exit (`ssh_kill_proxy_command` in sshconnect.c). ref() and unref() reach
+ * the command and both of its pipes.
  */
-class ProxyCommandTransport extends Duplex {
+export class ProxyCommandTransport extends Duplex {
   readonly #child: ProxyProcess;
+  readonly #pipes: readonly Socket[];
 
   constructor(child: ProxyProcess) {
     super({ allowHalfOpen: false });
     this.#child = child;
+    this.#pipes = [pipeOf(child.stdin), pipeOf(child.stdout)];
     child.once('error', (error) => this.destroy(error));
     child.stdout.on('data', (chunk: Buffer) => {
       if (!this.push(chunk)) child.stdout.pause();
@@ -85,6 +89,16 @@ class ProxyCommandTransport extends Duplex {
     // EPIPE; the end of its stdout ends the transport.
     child.stdin.on('error', () => undefined);
     this.once('finish', () => this.destroy());
+  }
+
+  ref(): void {
+    this.#child.ref();
+    for (const pipe of this.#pipes) pipe.ref();
+  }
+
+  unref(): void {
+    this.#child.unref();
+    for (const pipe of this.#pipes) pipe.unref();
   }
 
   override _read(): void {
@@ -123,4 +137,13 @@ class ProxyCommandTransport extends Duplex {
     }
     child.unref();
   }
+}
+
+// Node makes each 'pipe' of spawn a net.Socket (createSocket in
+// lib/internal/child_process.js); the types name only a stream.
+function pipeOf(stream: Readable | Writable): Socket {
+  if (!(stream instanceof Socket)) {
+    throw new TypeError('ssh: a pipe of the ProxyCommand is not a socket');
+  }
+  return stream;
 }

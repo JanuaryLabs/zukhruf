@@ -40,6 +40,7 @@ import {
   agentForwardingOptions,
   requestAgentForwardingOnEachSession,
 } from './ssh2-agent-forwarding.ts';
+import { followKeepalive } from './ssh2-keepalive.ts';
 
 /** Go's ssh.ClientConfig. */
 export interface ClientConfig {
@@ -108,14 +109,30 @@ interface ConnectionPhase {
 const connected: ConnectionPhase = { cause: undefined };
 const closedByCaller: ConnectionPhase = { cause: undefined };
 
+/** What keeps the Node process alive until it is unref'd: a socket, a child process, a timer, a client. */
+interface Handle {
+  ref(): void;
+  unref(): void;
+}
+
+/** The stream that the handshake runs on, and the handle of it that the client owns, if it owns one. */
+interface Transport {
+  readonly stream: Duplex;
+  readonly owned: Handle | undefined;
+}
+
 const bridge: {
   restrict: (client: Client, error: Error) => void;
   closeWith: (client: Client, owned: Client) => void;
+  own: (client: Client, transport: Handle) => void;
 } = {
   restrict: () => {
     throw new Error('ssh: the Client class has not loaded');
   },
   closeWith: () => {
+    throw new Error('ssh: the Client class has not loaded');
+  },
+  own: () => {
     throw new Error('ssh: the Client class has not loaded');
   },
 };
@@ -130,9 +147,14 @@ export function restrictClient(client: Client, error: Error): void {
   bridge.restrict(client, error);
 }
 
-/** Closes `owned`, a jump host's client, after `client` closes or its connection ends (ADR 0006). Not exported from the package. */
+/** Closes `owned`, a jump host's client, after `client` closes or its connection ends (ADR 0006), and refs and unrefs it with `client`. Not exported from the package. */
 export function closeWithClient(client: Client, owned: Client): void {
   bridge.closeWith(client, owned);
+}
+
+/** Refs and unrefs `transport`, which `client` runs on and the package opened, such as the transport of a ProxyCommand, with `client`. Not exported from the package. */
+export function ownTransport(client: Client, transport: Handle): void {
+  bridge.own(client, transport);
 }
 
 /** One SSH connection and its channels. Go's ssh.Client. */
@@ -149,6 +171,7 @@ export class Client implements AsyncDisposable {
     (stream: Duplex, origin: string) => void
   >();
   readonly #agentForwarding: AgentForwarding | undefined;
+  readonly #handles: Handle[];
   #phase: ConnectionPhase = connected;
   #restriction: Error | undefined;
   #owned: Client | undefined;
@@ -160,7 +183,11 @@ export class Client implements AsyncDisposable {
     };
     bridge.closeWith = (client, owned) => {
       client.#owned = owned;
+      client.#handles.push(owned);
       if (client.#phase !== connected) void owned.close();
+    };
+    bridge.own = (client, transport) => {
+      client.#handles.push(transport);
     };
   }
 
@@ -169,9 +196,14 @@ export class Client implements AsyncDisposable {
     config: ClientConfig,
     serverVersion: string,
     agentForwarding: AgentForwarding | undefined,
+    transport: Handle | undefined,
   ) {
     this.#connection = connection;
     this.#agentForwarding = agentForwarding;
+    this.#handles = [
+      ...(transport === undefined ? [] : [transport]),
+      ...(config.keepalive === undefined ? [] : [followKeepalive(connection)]),
+    ];
     this.#sessionEnv = config.sessionEnv ?? {};
     this.user = config.user;
     this.serverVersion = serverVersion;
@@ -206,30 +238,34 @@ export class Client implements AsyncDisposable {
     options: { readonly family?: 4 | 6; readonly signal?: AbortSignal } = {},
   ): Promise<Client> {
     const { host, port } = splitHostPort(address);
-    return Client.#start(address, config, options.signal, () =>
-      connect({
+    return Client.#start(address, config, options.signal, () => {
+      const socket = connect({
         host,
         port,
         ...(options.family && { family: options.family }),
-      }),
-    );
+      });
+      return { stream: socket, owned: socket };
+    });
   }
 
-  /** Runs the handshake on a stream that the caller opened: a channel of a jump host, the pipes of a ProxyCommand. Go's ssh.NewClientConn with ssh.NewClient. */
+  /** Runs the handshake on a stream that the caller opened: a channel of a jump host, the pipes of a ProxyCommand. The stream stays the caller's: ref() and unref() leave it as it is. Go's ssh.NewClientConn with ssh.NewClient. */
   static async handshake(
     transport: Duplex,
     address: string,
     config: ClientConfig,
     options: { readonly signal?: AbortSignal } = {},
   ): Promise<Client> {
-    return Client.#start(address, config, options.signal, () => transport);
+    return Client.#start(address, config, options.signal, () => ({
+      stream: transport,
+      owned: undefined,
+    }));
   }
 
   static async #start(
     address: string,
     config: ClientConfig,
     signal: AbortSignal | undefined,
-    open: () => Duplex,
+    open: () => Transport,
   ): Promise<Client> {
     signal?.throwIfAborted();
     const { host, port } = splitHostPort(address);
@@ -243,7 +279,7 @@ export class Client implements AsyncDisposable {
     );
     const abort = signals.length === 0 ? undefined : AbortSignal.any(signals);
 
-    const transport = open();
+    const { stream: transport, owned } = open();
     const connection = new ssh2.Client();
     const started = Promise.withResolvers<Client>();
     let agentForwarding: AgentForwarding | undefined;
@@ -278,7 +314,13 @@ export class Client implements AsyncDisposable {
       if (settled) return;
       settled = true;
       started.resolve(
-        new Client(connection, config, serverVersion.value(), agentForwarding),
+        new Client(
+          connection,
+          config,
+          serverVersion.value(),
+          agentForwarding,
+          owned,
+        ),
       );
     });
 
@@ -450,6 +492,16 @@ export class Client implements AsyncDisposable {
       return;
     }
     listener(new ChannelStream(accept(), () => this.#phase.cause), origin);
+  }
+
+  /** Lets the Node process exit while the client holds it alone: the socket of Client.dial, the ProxyCommand of OpenSshConfig#dial, the keepalive timer, and the client of each jump host before it stop keeping it alive. A new client is ref'd. Node's ClientHttp2Session#unref. */
+  unref(): void {
+    for (const handle of this.#handles) handle.unref();
+  }
+
+  /** Undoes unref(): the client keeps the Node process alive again. Node's ClientHttp2Session#ref. */
+  ref(): void {
+    for (const handle of this.#handles) handle.ref();
   }
 
   /** Resolves after close(). Rejects with the error that ended the connection. Go's Conn.Wait. */

@@ -39,9 +39,10 @@ declare module 'ssh2' {
   interface Client {
     _agentFwdEnabled: boolean;
     readonly _chanMgr: { add(value: unknown): number };
-    readonly _protocol: {
-      openssh_agentForward(channel: number, wantReply: boolean): void;
-    };
+    readonly _protocol: ClientProtocol;
+  }
+  interface ClientProtocol {
+    openssh_agentForward(channel: number, wantReply: boolean): void;
   }
 }
 

@@ -7,6 +7,7 @@ import {
   Client,
   type ClientConfig,
   closeWithClient,
+  ownTransport,
   restrictClient,
 } from './client.ts';
 import type { JumpHost, Route } from './config.ts';
@@ -45,14 +46,16 @@ export async function dialHost(
         }),
       );
     case 'proxy-command':
-      return handshakeHost(host, session, context, (config) =>
-        handshakeOn(
-          startProxyCommand(route.command, host, context.environment),
-          address,
-          config,
-          signal,
-        ),
-      );
+      return handshakeHost(host, session, context, async (config) => {
+        const transport = startProxyCommand(
+          route.command,
+          host,
+          context.environment,
+        );
+        const client = await handshakeOn(transport, address, config, signal);
+        ownTransport(client, transport);
+        return client;
+      });
     case 'jump':
       return dialThroughJumpHosts(host, route, session, context);
   }
