@@ -20,7 +20,7 @@ import { engineProxy } from '../../testing/subjects/docker-engine.ts';
 import { DockerEngineStore } from './index.ts';
 
 /**
- * The first twelve tests are the design errors that the probes of
+ * The first fourteen tests are the design errors that the probes of
  * DockerEngineStore found. The name of each test says what the wrong design
  * broke. The tests after them are the contract of a lock store.
  */
@@ -236,6 +236,98 @@ test('a caller whose claim a waiter removed before the start tries again', async
     'A start that lost to a removal must send the caller back to the create',
   );
   assert.ok(outcome.value > waiter.token);
+});
+
+/**
+ * Takes the key in its own process, reports how its acquire settled, and
+ * keeps nothing else alive. `atStart` runs once, with `request` and `report`,
+ * when the store makes the request of the start of its first claim, before
+ * the request goes out.
+ */
+const startedCallerSource = (
+  namespace: string,
+  key: string,
+  atStart: string,
+) => `
+	import { execFileSync } from 'node:child_process';
+	import { subscribe } from 'node:diagnostics_channel';
+	import { Docker } from ${JSON.stringify(import.meta.resolve('@zukhruf/docker'))};
+	import { Mutex } from ${JSON.stringify(new URL('../../index.ts', import.meta.url).href)};
+	import { DockerTestbed } from ${JSON.stringify(import.meta.resolve('@zukhruf/testing/docker'))};
+	import { DockerEngineStore } from ${JSON.stringify(new URL('./index.ts', import.meta.url).href)};
+	const docker = await Docker.connect({ clock: globalThis, environment: process.env });
+	const { Labels: labels } = await new DockerTestbed({ environment: process.env }).defaults();
+	const report = { started: false };
+	subscribe('http.client.request.created', ({ request }) => {
+		if (report.started || request.method !== 'POST' || !request.path.endsWith('/start')) return;
+		report.started = true;
+		${atStart}
+	});
+	const store = new DockerEngineStore({ docker, image: ${JSON.stringify(image)}, namespace: ${JSON.stringify(namespace)}, heartbeatInterval: ${heartbeatInterval}, labels, clock: globalThis });
+	try {
+		await new Mutex(store).acquire(${JSON.stringify(key)}, async () => {});
+		process.send({ type: 'settled', ...report });
+	} catch (error) {
+		process.send({ type: 'settled', ...report, error: error.message });
+	}
+`;
+
+test('a caller whose claim a rival removed before its start takes the key with a new claim, and its process exits by itself', async (t) => {
+  // Arrange: the caller's start of its first claim reaches the engine after the removal of that claim, as a waiter removes a claim that stays created.
+  await using fixture = await engine();
+  await using caller = startWorker(
+    startedCallerSource(
+      fixture.namespace,
+      'report:daily',
+      `report.removed = request.path.split('/').at(-2);
+		execFileSync('docker', ['rm', report.removed], { env: { ...process.env, ...docker.cliEnvironment } });`,
+    ),
+    'caller',
+  );
+
+  // Act
+  const settled = await caller.next('settled', { signal: t.signal });
+  const exit = await outcomeOf(caller.closed, engineBound);
+
+  // Assert
+  assert.equal(settled.error, undefined, caller.stderr);
+  assert.equal(
+    typeof settled.removed,
+    'string',
+    'The rival must remove the first claim at its start',
+  );
+  assert.equal(
+    exit.settled,
+    'resolved',
+    `The attach of a claim whose start found no container must end, so that the process exits once it released the key.\n${caller.stderr}`,
+  );
+  assert.deepEqual(caller.exit, { code: 0, signal: null }, caller.stderr);
+});
+
+test('a caller whose start fails before it reaches the engine rejects with that failure, and its process exits by itself', async (t) => {
+  // Arrange: the request of the start of the caller's claim fails before the engine gets it, as a dropped connection fails it, so the claim never starts.
+  await using fixture = await engine();
+  await using caller = startWorker(
+    startedCallerSource(
+      fixture.namespace,
+      'report:daily',
+      `request.destroy(new Error('The connection dropped the start.'));`,
+    ),
+    'caller',
+  );
+
+  // Act
+  const settled = await caller.next('settled', { signal: t.signal });
+  const exit = await outcomeOf(caller.closed, engineBound);
+
+  // Assert
+  assert.equal(settled.error, 'The connection dropped the start.');
+  assert.equal(
+    exit.settled,
+    'resolved',
+    `The attach of a claim whose start failed must end, so that the process exits once its acquire rejected.\n${caller.stderr}`,
+  );
+  assert.deepEqual(caller.exit, { code: 0, signal: null }, caller.stderr);
 });
 
 test('a holder that lost its claim during the mint gets no token', async () => {

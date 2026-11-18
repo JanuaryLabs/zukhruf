@@ -282,22 +282,36 @@ class Claim {
 
   /** The handle of the key, or undefined when a waiter removed the claim before its start, or the claim ended during the mint. */
   async hold(): Promise<LockHandle | undefined> {
+    // The engine never ends the attach of a claim whose start never began,
+    // also not when the claim is removed (Moby 29.9.3: only the cleanup of
+    // containerStart closes the streams,
+    // https://github.com/moby/moby/blob/docker-v29.9.3/daemon/start.go#L71-L72).
+    // So each path that holds nothing ends the attach itself, as
+    // Containers.run of @zukhruf/docker does since ad5c9b4e.
+    const attachment = new AbortController();
     let attach: ContainerProcess;
     let token: FencingToken;
     try {
       // The attach comes before the start, so the claim never runs without it.
-      attach = await this.#container.attach({ stdin: true });
+      attach = await this.#container.attach({
+        stdin: true,
+        signal: attachment.signal,
+      });
       const ended = attach.exitCode;
       ended.catch(() => {});
       await this.#container.start();
       token = await this.#mint();
-      if ((await stateOf(this.#container)) === undefined) return undefined;
+      if ((await stateOf(this.#container)) === undefined) {
+        attachment.abort();
+        return undefined;
+      }
       ended.then(
         (code) =>
           this.#lose(new Error(`The claim exited with the code ${code}.`)),
         (cause: unknown) => this.#lose(cause),
       );
     } catch (error) {
+      attachment.abort();
       if (error instanceof ContainerNotFoundError) return undefined;
       await this.#container.remove({ force: true });
       throw error;
