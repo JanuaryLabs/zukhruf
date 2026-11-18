@@ -47,9 +47,32 @@ function holdsRead(context: Rule.RuleContext, node: AstNode): boolean {
   );
 }
 
+/** Whether `node` is a number that does not come from a clock: a literal, arithmetic on literals, or a variable written only with those. */
+function isConstant(context: Rule.RuleContext, node: AstNode): boolean {
+  if (isType(node, 'Literal')) return typeof node['value'] === 'number';
+  if (isType(node, 'UnaryExpression')) {
+    const argument = node['argument'];
+    return isAstNode(argument) && isConstant(context, argument);
+  }
+  if (isType(node, 'BinaryExpression')) {
+    return children(context, node).every((operand) =>
+      isConstant(context, operand),
+    );
+  }
+  if (!isType(node, 'Identifier')) return false;
+  const writes = writesOf(context, node);
+  return (
+    writes.length > 0 &&
+    writes.every(
+      (write) => !isType(write, 'Identifier') && isConstant(context, write),
+    )
+  );
+}
+
 /**
- * Whether `node` is a time that has passed: a difference with a read of the
- * clock, the same in other units, or a variable that holds one.
+ * Whether `node` is a time that has passed: an earlier time subtracted from a
+ * read of the clock, the same in other units, or a variable that holds one. A
+ * read minus a constant is a point in time, not a time that has passed.
  */
 function isElapsed(context: Rule.RuleContext, node: AstNode): boolean {
   if (isType(node, 'Identifier')) {
@@ -58,10 +81,16 @@ function isElapsed(context: Rule.RuleContext, node: AstNode): boolean {
     );
   }
   if (!isType(node, 'BinaryExpression')) return false;
-  const operands = children(context, node);
   if (node['operator'] === '-') {
-    return operands.some((operand) => holdsRead(context, operand));
+    const { left, right } = node;
+    return (
+      isAstNode(left) &&
+      isAstNode(right) &&
+      holdsRead(context, left) &&
+      !isConstant(context, right)
+    );
   }
+  const operands = children(context, node);
   return (
     (node['operator'] === '/' || node['operator'] === '*') &&
     operands.some((operand) => isElapsed(context, operand))

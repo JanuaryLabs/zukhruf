@@ -25,6 +25,16 @@ test('no-wall-clock-bound reports a loop that stops at a time, and an assertion 
       {
         code: `const releasedAt = Date.now(); const closedAt = await close(); assert.ok(releasedAt < closedAt);`,
       },
+      // A read moved by a constant is a point in time, and a stored time at or after it is a lower bound (deepagents ContextStore createdAt, #4531).
+      {
+        code: `const beforeCreate = Date.now() - 1000; const chat = await create(); assert.ok(chat.createdAt >= beforeCreate);`,
+      },
+      {
+        code: `const skewMs = 1000; const chat = await create(); assert.ok(chat.createdAt >= Date.now() - skewMs);`,
+      },
+      {
+        code: `const chat = await create(); assert.ok(Date.now() - 60 * 1000 <= chat.createdAt);`,
+      },
       // A comparison that is not about time.
       { code: `assert.ok(tries < 3);` },
       { code: `const size = rows.length; assert.ok(size <= 10);` },
@@ -79,6 +89,10 @@ test('no-wall-clock-bound reports a loop that stops at a time, and an assertion 
       {
         // packages/fs file-lock: a read assigned later.
         code: `let elapsed; const s = performance.now(); run(); elapsed = performance.now() - s; assert.ok(elapsed < 40);`,
+        errors: [{ messageId: 'assertion' }],
+      },
+      {
+        code: `const started = Date.now(); await work(); assert.ok(Date.now() - started < 25_000);`,
         errors: [{ messageId: 'assertion' }],
       },
       {
