@@ -1128,7 +1128,9 @@ test(
     await writeFile(join(directory.path, 'known_hosts'), knownHost(sshd));
     const config = await resolve(
       await writeConfig(directory.path, sshd, [
-        'ServerAliveInterval 1',
+        // An hour: a keepalive on the real clock cannot end the connection
+        // before the test times out.
+        'ServerAliveInterval 3600',
         'ServerAliveCountMax 1',
         `IdentityFile ${sshd.userKey}`,
       ]),
@@ -1139,8 +1141,12 @@ test(
 
     // Act
     sshd.kill('SIGSTOP');
-    await nextMacrotask();
-    await clock.tickAsync(2 * 1000);
+    // Data that sshd sent before the stop, such as its
+    // hostkeys-00@openssh.com request after the login, can arrive while the
+    // clock runs, and each arrival moves the next check an interval later. So
+    // the clock runs the timers of the check until the keepalive end stops
+    // the last one.
+    await clock.runAllAsync();
 
     // Assert
     await assert.rejects(client.wait(), /keepalive/i);

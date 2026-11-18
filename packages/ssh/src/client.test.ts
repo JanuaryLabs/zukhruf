@@ -453,13 +453,19 @@ test(
       auth: [{ type: 'publickey', signers: async () => [key] }],
       hostKey: () => undefined,
       clock,
-      keepalive: { interval: 100, countMax: 1 },
+      // An hour: a keepalive on the real clock cannot end the connection
+      // before the test times out.
+      keepalive: { interval: 60 * 60 * 1000, countMax: 1 },
     });
 
     // Act
     sshd.kill('SIGSTOP');
-    await nextMacrotask();
-    await clock.tickAsync(2 * 100);
+    // Data that sshd sent before the stop, such as its
+    // hostkeys-00@openssh.com request after the login, can arrive while the
+    // clock runs, and each arrival moves the next check an interval later. So
+    // the clock runs the timers of the check until the keepalive end stops
+    // the last one.
+    await clock.runAllAsync();
 
     // Assert
     await assert.rejects(client.wait(), /keepalive/i);
