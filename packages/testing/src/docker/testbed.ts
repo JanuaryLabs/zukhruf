@@ -5,6 +5,7 @@ import pMemoize from 'p-memoize';
 import {
   ConnectionFailedError,
   type Container,
+  ContainerNotFoundError,
   Docker,
   type EngineApi,
   type Environment,
@@ -31,8 +32,11 @@ export interface ServiceOptions {
   internalPort: number;
   /** Without it, the engine names a dedicated server; a shared server's name comes from its request. */
   name?: string;
-  /** Runs on every acquisition. Throw until ready, using timebox for polling. */
-  healthy?: (service: ServiceContainer) => unknown;
+  /**
+   * Runs on every acquisition. Throw until ready, using timebox for polling.
+   * `signal` aborts when the container exits first: pass it to the polling.
+   */
+  healthy?: (service: ServiceContainer, signal: AbortSignal) => unknown;
 }
 
 export interface DockerTestbedOptions {
@@ -188,9 +192,10 @@ export class DockerTestbed {
       engine.client.containers.create(published, options),
     );
     const remove = () => container.remove({ force: true, v: true });
-    await this.#startOrRemove(container);
     try {
-      return await this.#ready(engine, container, options, remove);
+      return await this.#ready(engine, container, options, remove, () =>
+        this.#startOrRemove(container),
+      );
     } catch (error) {
       const output = await container.logs().then(
         (logs) => logs.output,
@@ -248,8 +253,9 @@ export class DockerTestbed {
       throw new Error(
         `Container ${name} does not match the shared test configuration`,
       );
-    if (inspected.State?.Status !== 'running') await container.start();
-    return this.#ready(engine, container, options, undefined);
+    return this.#ready(engine, container, options, undefined, async () => {
+      if (inspected.State?.Status !== 'running') await container.start();
+    });
   }
 
   /** Runs a container to completion and gives its output and exit code. The container is removed afterwards. */
@@ -339,17 +345,65 @@ export class DockerTestbed {
     }
   }
 
+  /**
+   * Starts the container with `start` and waits until it answers. The attach
+   * comes before the start, so the exit and the output of a container that
+   * dies at once are not lost, also when AutoRemove removes it. A container
+   * that exits first ends the wait and rejects with its exit code and output.
+   */
   async #ready(
+    engine: Engine,
+    container: Container,
+    options: ServiceOptions,
+    remove: (() => Promise<void>) | undefined,
+    start: () => Promise<void>,
+  ): Promise<ServiceContainer> {
+    const watching = new AbortController();
+    const attached = await container.attach({ signal: watching.signal });
+    const exited = attached.collect().then(({ exitCode, output }) => {
+      throw new Error(
+        `Container ${container.id} exited with code ${exitCode} before it was ready:\n${output}`,
+      );
+    });
+    try {
+      return await Promise.race([
+        exited,
+        this.#answering(engine, container, options, remove, {
+          start,
+          exited,
+          signal: watching.signal,
+        }),
+      ]);
+    } finally {
+      watching.abort();
+    }
+  }
+
+  /** The service of `container` once `healthy` passes. An abort of `signal` disconnects it. */
+  async #answering(
     engine: Engine,
     container: Container,
     { internalPort, healthy }: ServiceOptions,
     remove: (() => Promise<void>) | undefined,
+    {
+      start,
+      exited,
+      signal,
+    }: {
+      start: () => Promise<void>;
+      exited: Promise<never>;
+      signal: AbortSignal;
+    },
   ): Promise<ServiceContainer> {
-    const published = await container.port(internalPort);
-    if (!published)
-      throw new Error(
-        `Container ${container.id} publishes no port for ${internalPort}`,
-      );
+    await start();
+    const published = await container
+      .port(internalPort, 'tcp', { signal })
+      .catch((error: unknown) => {
+        if (error instanceof ContainerNotFoundError) return undefined;
+        throw error;
+      });
+    // #published binds the port, so only a container that stopped has none.
+    if (published === undefined) return exited;
     const connection = await engine.host.forward(published.port);
     const service = new ServiceContainer(
       container,
@@ -358,7 +412,8 @@ export class DockerTestbed {
       remove,
     );
     try {
-      await healthy?.(service);
+      await healthy?.(service, signal);
+      signal.throwIfAborted();
       return service;
     } catch (error) {
       await service.disconnect();

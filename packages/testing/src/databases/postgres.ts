@@ -95,12 +95,17 @@ export class Postgres {
       },
       {
         internalPort: 5432,
-        healthy: (container) => this.#ready(container, database),
+        healthy: (container, signal) =>
+          this.#ready(container, database, signal),
       },
     );
   }
 
-  #ready(container: ServiceContainer, database: string): Promise<void> {
+  #ready(
+    container: ServiceContainer,
+    database: string,
+    signal: AbortSignal,
+  ): Promise<void> {
     const { user } = this.#options;
     // TCP excludes PostgreSQL's temporary, socket-only initialization server.
     return timebox(
@@ -124,7 +129,7 @@ export class Postgres {
           'SELECT 1',
         ]);
       },
-      { maxRetryTime: 60_000 },
+      { maxRetryTime: 60_000, signal },
     );
   }
 

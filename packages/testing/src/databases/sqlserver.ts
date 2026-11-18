@@ -140,8 +140,11 @@ export class SqlServer {
       },
       {
         internalPort: 1433,
-        healthy: (container) =>
-          timebox(() => this.#ping(container), { maxRetryTime: 180_000 }),
+        healthy: (container, signal) =>
+          timebox(() => this.#ping(container), {
+            maxRetryTime: 180_000,
+            signal,
+          }),
       },
     );
   }

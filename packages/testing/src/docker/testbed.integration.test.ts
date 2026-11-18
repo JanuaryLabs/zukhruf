@@ -226,12 +226,11 @@ test('a served server whose readiness fails is removed, and the failure has the 
   );
 });
 
-test('a served server whose container exits before it is ready is removed, and the failure has its output and the readiness error as its cause', async (t) => {
+test('a served server whose container exits before it is ready is removed, and the failure has its output and its exit code as its cause', async (t) => {
   // Arrange: the container lives long enough to publish its port, then exits.
   const testbed = new DockerTestbed({ environment: process.env });
   const client = await testbed.client();
   const scope = randomUUID();
-  const readiness = new Error('the server stopped');
   const served: string[] = [];
 
   // Act
@@ -250,7 +249,7 @@ test('a served server whose container exits before it is ready is removed, and t
             const { State } = await container.inspect();
             if (State?.Running) throw new Error('still running');
           });
-          throw readiness;
+          throw new Error('the server stopped');
         },
       },
     )
@@ -262,7 +261,11 @@ test('a served server whose container exits before it is ready is removed, and t
   // Assert
   assert.ok(Error.isError(failure));
   assert.match(failure.message, new RegExp(`printed-${scope}`));
-  assert.equal(failure.cause, readiness);
+  assert.ok(Error.isError(failure.cause));
+  assert.match(
+    failure.cause.message,
+    /exited with code 3 before it was ready:\n/,
+  );
   assert.equal(served.length, 1);
   await waitFor(
     async () =>

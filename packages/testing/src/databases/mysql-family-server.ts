@@ -138,11 +138,14 @@ export abstract class MysqlFamilyServer {
           MemorySwappiness: 0,
         },
       },
-      { internalPort: 3306, healthy: (container) => this.#ready(container) },
+      {
+        internalPort: 3306,
+        healthy: (container, signal) => this.#ready(container, signal),
+      },
     );
   }
 
-  #ready(container: ServiceContainer) {
+  #ready(container: ServiceContainer, signal: AbortSignal) {
     const { password } = this.#options;
     // TCP excludes the entrypoint's temporary, socket-only initialization server.
     return timebox(
@@ -156,7 +159,7 @@ export abstract class MysqlFamilyServer {
           '--execute',
           'SELECT 1',
         ]),
-      { maxRetryTime: 90_000 },
+      { maxRetryTime: 90_000, signal },
     );
   }
 

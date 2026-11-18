@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
-import { promisify } from 'node:util';
+import { inspect, promisify } from 'node:util';
 
 import { waitFor } from '../async/wait-for.ts';
 import { DockerTestbed } from '../docker/index.ts';
@@ -102,6 +102,62 @@ test('explicit SQL Server startup creates the requested database and owns cleanu
     { signal: t.signal },
   );
 });
+
+// A server whose container exits before it answers, as SQL Server 2022 aborts
+// with exit code 134 on an engine whose emulation fails it (#4579). The probe
+// never passes, so only the exit of the container can end the acquisition.
+// A container that exits at once can stop before or after its port is read,
+// so its probe may not run.
+for (const [acquisition, exit] of [
+  ['shared', 'at once'],
+  ['shared', 'after its port is published'],
+  ['dedicated', 'at once'],
+  ['dedicated', 'after its port is published'],
+] as const) {
+  test(`a ${acquisition} server whose container exits ${exit} rejects with the exit code and output of its container`, async (t) => {
+    const scope = randomUUID();
+    const startup = exit === 'at once' ? '' : 'sleep 2; ';
+    const body = {
+      Image: 'alpine:latest',
+      Entrypoint: [
+        'sh',
+        '-c',
+        `${startup}echo "launch_sqlservr.sh: 9 Aborted ${scope}" >&2; exit 134`,
+      ],
+      Labels: { 'dev.zukhruf.testing.verification': scope },
+    };
+    const probes: AbortSignal[] = [];
+    const options = {
+      internalPort: 1433,
+      healthy: (_service: unknown, signal: AbortSignal) => {
+        probes.push(signal);
+        return waitFor(
+          () => {
+            throw new Error('the server does not answer');
+          },
+          { signal: AbortSignal.any([t.signal, signal]) },
+        );
+      },
+    };
+    try {
+      await assert.rejects(
+        acquisition === 'shared'
+          ? docker.reuse(body, options)
+          : docker.serve(body, options),
+        (error: unknown) => {
+          const said = inspect(error);
+          assert.match(said, /exited with code 134/);
+          assert.match(said, new RegExp(`9 Aborted ${scope}`));
+          return true;
+        },
+      );
+      assert.ok(probes.every((signal) => signal.aborted));
+      if (exit !== 'at once') assert.equal(probes.length, 1);
+    } finally {
+      await removeScope(scope);
+    }
+  });
+}
 
 interface DatabaseHandle {
   containerId: string;

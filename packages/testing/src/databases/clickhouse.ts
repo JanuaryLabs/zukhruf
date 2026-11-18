@@ -25,7 +25,7 @@ export class ClickHouse {
       },
       {
         internalPort: 8123,
-        healthy: (service) =>
+        healthy: (service, signal) =>
           timebox(
             () =>
               succeeded(service.container, [
@@ -33,7 +33,7 @@ export class ClickHouse {
                 '--query',
                 'SELECT 1',
               ]),
-            { maxRetryTime: 60_000 },
+            { maxRetryTime: 60_000, signal },
           ),
       },
     );
