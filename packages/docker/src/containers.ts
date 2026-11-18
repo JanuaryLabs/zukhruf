@@ -999,18 +999,35 @@ export class Containers {
   /**
    * Creates the container, attaches to its output, starts it, waits for its
    * end, and removes it. A non-zero exit code is data. A failure and a cancel
-   * also remove the container.
+   * also remove the container, and end the attach.
    */
   async run(
     body: EngineApi.ContainerCreateRequest,
     options: CancelOptions & { name?: string; platform?: string } = {},
   ): Promise<ExecResult> {
     const container = await this.create(body, options);
+    // The engine never ends the attach of a start that it refuses at its
+    // checks, such as a bind source that is gone, also not when it removes
+    // the container: Moby 29.9.3 refuses the start before containerStart,
+    // whose cleanup closes the streams
+    // (https://github.com/moby/moby/blob/docker-v29.9.3/daemon/start.go#L71-L72).
+    // The run of docker/cli also ends its attach when the start fails
+    // (https://github.com/docker/cli/blob/v29.0.0/cli/command/container/run.go#L198-L205).
+    const attachment = new AbortController();
+    const { signal } = options;
     try {
-      const process = await container.attach(options);
+      const process = await container.attach({
+        ...options,
+        signal: AbortSignal.any(
+          signal === undefined
+            ? [attachment.signal]
+            : [signal, attachment.signal],
+        ),
+      });
       await container.start(options);
       return await process.collect();
     } finally {
+      attachment.abort();
       await container.remove({ force: true, v: true });
     }
   }

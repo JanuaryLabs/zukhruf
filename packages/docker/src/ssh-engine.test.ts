@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
+import { mkdir } from 'node:fs/promises';
 import { type Socket, createServer } from 'node:net';
 import { join } from 'node:path';
 import { describe, test } from 'node:test';
@@ -426,6 +427,69 @@ console.log(JSON.stringify(await attached.collect()));
           stdout: 'late\n',
           stderr: '',
           output: 'late\n',
+        });
+      } finally {
+        await removeLabeled(local, label);
+      }
+    },
+  );
+
+  test(
+    'a run whose start the engine refuses at its check of the mounts, before the start begins, rejects and leaves no connection open: the process exits by itself',
+    { skip },
+    async (t) => {
+      // Arrange: the engine checks the bind sources again at the start. The
+      // scenario removes the source when run() makes the request of the
+      // start, which is written after that, so the engine refuses it.
+      await using local = await localEngine(t.signal);
+      await using sshd = await startEngineSshd(engineVariables(ready(engine)));
+      const sshFlags = await clientFlags(sshd);
+      const source = join(sshd.directory, 'bind-source');
+      await mkdir(source);
+      const label = randomUUID();
+      const scenario = `
+import { subscribe } from 'node:diagnostics_channel';
+import { rmdirSync } from 'node:fs';
+import { Docker } from ${JSON.stringify(ENTRY)};
+const docker = await Docker.connect({
+  clock: globalThis,
+  environment: process.env,
+  host: ${JSON.stringify(SSH_HOST)},
+  sshFlags: ${JSON.stringify(sshFlags)},
+});
+let removedAtStart = false;
+subscribe('http.client.request.created', ({ request }) => {
+  if (request.method !== 'POST' || !request.path.endsWith('/start')) return;
+  rmdirSync(${JSON.stringify(source)});
+  removedAtStart = true;
+});
+try {
+  await docker.containers.run({
+    Image: ${JSON.stringify(IMAGE)},
+    Cmd: ['true'],
+    Labels: { ${JSON.stringify(TEST_LABEL)}: ${JSON.stringify(label)} },
+    HostConfig: {
+      Mounts: [{ Type: 'bind', Source: ${JSON.stringify(source)}, Target: '/source' }],
+    },
+  });
+  console.log(JSON.stringify({ rejected: false, removedAtStart }));
+} catch (error) {
+  console.log(JSON.stringify({ rejected: error.name, removedAtStart }));
+}
+`;
+      try {
+        // Act
+        const result = await runScenario(
+          scenario,
+          inheritedEnvironment(),
+          t.signal,
+        );
+
+        // Assert
+        assert.equal(result.exitCode, 0, result.stderr);
+        assert.deepEqual(lastJson(result), {
+          rejected: 'BindSourceNotFoundError',
+          removedAtStart: true,
         });
       } finally {
         await removeLabeled(local, label);
