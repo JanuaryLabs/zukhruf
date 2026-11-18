@@ -62,7 +62,8 @@
     "tailwindcss": "4.3.3",
     "typescript": "6.0.3",
     "typescript-eslint": "8.72.1",
-    "vite": "8.1.5"
+    "vite": "8.1.5",
+    "zod": "4.6.7"
   },
   "allowScripts": {
     "esbuild": true,
