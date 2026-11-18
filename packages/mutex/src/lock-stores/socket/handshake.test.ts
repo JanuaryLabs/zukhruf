@@ -225,12 +225,15 @@ describe('Socket store protocol handshake', () => {
     'a store hung up on during a failover follows the leader that took over',
     onUnixSockets,
     async (t) => {
-      // Arrange: when the store says hello, the stopping leader ends its term, another store takes it over, and only then does the stopping leader hang up.
+      // Arrange: when the store says hello, the stopping leader lets another
+      // store take over, and only then hangs up. The stand-in serves no
+      // election pipe, as a leader of a published version does, so the store
+      // cannot see it leave and waits for its answer. (A leader that the store
+      // observes ending its term is left at once, and the store then races
+      // the successor for the free term, ADR 0031.)
       await using directory = await new TemporaryFiles().directory(
         'mutex-test-',
       );
-      const term = await socketElection(directory.path, globalThis).campaign();
-      assert.ok(term, 'The stand-in must win the first term');
       await using successor = new SocketStore(directory.path, {
         clock: globalThis,
       });
@@ -240,7 +243,6 @@ describe('Socket store protocol handshake', () => {
         if (!stopping) return peer.destroy();
         stopping = false;
         void (async () => {
-          await term.resign();
           await (await successor.acquire('warm-up'))[Symbol.asyncDispose]();
           peer.destroy();
         })();
