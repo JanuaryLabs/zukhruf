@@ -95,12 +95,15 @@ As in the mutex, the server closes itself when its term is lost. A second `close
 
 ## Tests copied
 
-Three test files test the copies above. Each one is a copy of a mutex test file, so a fix to a test goes into both files too.
+Four test files test the copies above. Each one is a copy of a mutex test file, so a fix to a test goes into both files too.
 
 The test of an exhausted epoch in `coordinator/flight-coordinator.test.ts` is a copy of the test `A request whose epoch has no tokens left` in `lock-stores/remote/remote-locking.test.ts` (`fc8cf7f`). It sends a `run`, not an `acquire`, and makes its connection inline, because the mutex's `scriptedPeer` is in the mutex's own test folder.
 
 **`lock-stores/socket/socket-connection.test.ts` → `connection/socket-connection.test.ts`.**
 Only the import paths and the prefix of the Windows pipe differ.
+
+**`lock-stores/remote/connection-supervisor.test.ts` → `connection/connection-supervisor.test.ts`, four tests.**
+The three tests in the group "A process whose supervisor connects over a socket" and the test "a replacement keeps the last ref()" are here (backlog #4668). Only the import paths, the prefix of the temporary folder and the prefix of the Windows pipe differ in the three tests of the group. The fourth test makes its connections inline, because the mutex's `scriptedPeer` is in the mutex's own test folder. The other tests of the mutex file are not copied. They test the supervisor with stand-ins, and the copy of the supervisor is the same code. The test in the group "A process whose supervisor connects over its IPC channel" is not copied either: this package has no IPC connection.
 
 **`lock-stores/socket/electing-connector.test.ts` → `connection/electing-connector.test.ts`.**
 The tests use `flightElection` and `flight.sock`, and give no `connected` callback. The names say coordinator, not leader. Each `readline` interface on a peer of a stand-in server has an `error` listener, as the other tests of this package have. One test is only here: "a connect outlasts a coordinator that keeps its term and hangs up on each hello, for as long as that lasts".

@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events';
 
-import { Latch } from '@zukhruf/async';
+import { Latch, type Referable } from '@zukhruf/async';
 
 import type { Connection } from './connection.ts';
 import type { Connector } from './connector.ts';
@@ -51,16 +51,17 @@ export class ConnectionSupervisor<
   }
 
   /**
-   * Keeps the process alive through the open connection. A replacement starts
-   * with its adapter's default, so a listener that waits applies this again on
-   * `connected`.
+   * Keeps the process alive through the open connection and each one that
+   * replaces it, until `unref`. A new supervisor keeps the process alive, as a
+   * new socket does.
    */
   ref() {
-    this.#supervision.state.reference(true);
+    this.#supervision.refer(keepAlive);
   }
 
+  /** Lets the process exit while the open connection, or one that replaces it, waits. */
   unref() {
-    this.#supervision.state.reference(false);
+    this.#supervision.refer(letExit);
   }
 
   /** Closes for good, after any connect still on its way has stopped. */
@@ -69,21 +70,31 @@ export class ConnectionSupervisor<
   }
 }
 
+/** What a connection is told about the process: keep it alive, or let it exit. */
+type Reference = (connection: Referable) => void;
+
+const keepAlive: Reference = (connection) => connection.ref();
+
+const letExit: Reference = (connection) => connection.unref();
+
 interface State<Outgoing> {
   readonly status: SupervisorStatus;
   /** Runs once the state is current, so whatever it starts can check whether it still is. */
   enter(): void;
   open(): void;
   send(message: Outgoing): boolean;
-  reference(referenced: boolean): void;
+  /** Gives the open connection, if there is one, the supervision's reference. */
+  reference(): void;
   close(): Promise<void>;
 }
 
-/** What the states share: the current state, and how to move to the next. */
+/** What the states share: the current state, the last reference asked, and how to move to the next state. */
 class Supervision<Outgoing> {
   readonly connector: Connector<Outgoing>;
   readonly events: EventEmitter<SupervisorEvents>;
   state: State<Outgoing>;
+  /** The last `ref` or `unref` asked. Each new connection takes it on, whatever its adapter starts with. */
+  reference: Reference = keepAlive;
 
   constructor(
     connector: Connector<Outgoing>,
@@ -102,6 +113,11 @@ class Supervision<Outgoing> {
   become(state: State<Outgoing>) {
     this.state = state;
     state.enter();
+  }
+
+  refer(reference: Reference) {
+    this.reference = reference;
+    this.state.reference();
   }
 }
 
@@ -204,6 +220,7 @@ class Connected<Outgoing> implements State<Outgoing> {
         supervision.events.emit('message', message);
     });
     this.#connection.once('close', () => this.#lose());
+    this.reference();
     supervision.events.emit('connected');
   }
 
@@ -215,9 +232,8 @@ class Connected<Outgoing> implements State<Outgoing> {
     return this.#supervision.isCurrent(this);
   }
 
-  reference(referenced: boolean) {
-    if (referenced) this.#connection.ref();
-    else this.#connection.unref();
+  reference() {
+    this.#supervision.reference(this.#connection);
   }
 
   async close() {

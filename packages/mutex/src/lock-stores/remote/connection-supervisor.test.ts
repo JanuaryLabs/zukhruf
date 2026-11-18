@@ -1,19 +1,36 @@
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
+import type { Socket } from 'node:net';
+import { join } from 'node:path';
 import { describe, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 
 import { untilAborted } from '@zukhruf/async';
+import { TemporaryFiles } from '@zukhruf/fs';
 import { waitFor } from '@zukhruf/testing/async';
+import { startWorker } from '@zukhruf/testing/process';
 
 import { isRecord } from '../../shared/is-record.ts';
 import {
   scriptedConnector,
   scriptedPeer,
 } from '../../testing/scripted-peer.ts';
+import { standInServer } from '../../testing/stand-in-server.ts';
 import { settle } from '../../testing/timing.ts';
 import { watch } from '../../testing/watch.ts';
 import { ConnectionSupervisor } from './connection-supervisor.ts';
+import { wrap } from './envelope.ts';
+
+const supervisorUrl = new URL('./connection-supervisor.ts', import.meta.url);
+const socketConnectionUrl = new URL(
+  '../socket/socket-connection.ts',
+  import.meta.url,
+);
+const processChannelConnectionUrl = new URL(
+  '../ipc/process-channel-connection.ts',
+  import.meta.url,
+);
 
 interface Message {
   n: number;
@@ -155,6 +172,37 @@ describe('Connection supervisor', () => {
     }
   });
 
+  // Kept as a double: an adapter that starts unref'd (an IPC channel, a worker port) is handed out once and never replaced.
+  test('a replacement keeps the last ref()', async (t) => {
+    // Arrange: the open connection was unref'd and then ref'd.
+    const { supervisor, calls } = supervised();
+    const first = scriptedPeer<Message, Message>();
+    const second = scriptedPeer<Message, Message>();
+    supervisor.open();
+    calls[0]!.resolve(first.connection);
+    // The connection must be reported.
+    await untilAborted(once(supervisor, 'connected'), t.signal);
+    supervisor.unref();
+    supervisor.ref();
+
+    try {
+      // Act: the connection is lost and replaced.
+      first.drop();
+      calls[1]!.resolve(second.connection);
+      // The replacement must be reported.
+      await untilAborted(once(supervisor, 'connected'), t.signal);
+
+      // Assert
+      assert.equal(
+        second.refs.at(-1),
+        'ref',
+        'The replacement must keep the process alive, as the last ask said',
+      );
+    } finally {
+      await supervisor.close();
+    }
+  });
+
   // Kept as a double: a real connection reports its close later, never inside send().
   test('send reports false while connecting and when the connection drops during the send', async (t) => {
     // Arrange: a connection that drops on every send.
@@ -221,5 +269,171 @@ describe('Connection supervisor', () => {
     } finally {
       await supervisor.close();
     }
+  });
+});
+
+/** Where a server of the test listens: a socket file in `directory`, or a named pipe on Windows. */
+function socketPathIn(directory: string) {
+  return process.platform === 'win32'
+    ? `\\\\.\\pipe\\mutex-test-${randomUUID()}`
+    : join(directory, 'peer.sock');
+}
+
+describe('A process whose supervisor connects over a socket', () => {
+  test('an unref() asked before open reaches the first connection, so the process exits by itself', async (t) => {
+    // Arrange: a process unrefs its supervisor before it opens it, and stays alive only until the test says so.
+    await using directory = await new TemporaryFiles().directory('mutex-test-');
+    const socketPath = socketPathIn(directory.path);
+    await using _server = await standInServer(socketPath, () => {});
+    await using idle = startWorker(
+      `
+				import { connect } from 'node:net';
+				import { ConnectionSupervisor } from ${JSON.stringify(supervisorUrl.href)};
+				import { SocketConnection } from ${JSON.stringify(socketConnectionUrl.href)};
+				process.once('message', () => {});
+				const supervisor = new ConnectionSupervisor({
+					connect: (signal) => new Promise((resolve, reject) => {
+						const socket = connect({ path: ${JSON.stringify(socketPath)}, signal });
+						socket.once('connect', () => resolve(new SocketConnection(socket)));
+						socket.once('error', reject);
+					}),
+				});
+				supervisor.on('connected', () => process.send({ type: 'connected' }));
+				supervisor.unref();
+				supervisor.open();
+			`,
+      'idle',
+    );
+    await idle.next('connected', { signal: t.signal });
+
+    // Act: the process has nothing else to do.
+    // A process that exited first gets no message.
+    idle.child.send('done', () => undefined);
+
+    // Assert: the first connection keeps the unref() asked before it opened.
+    await untilAborted(idle.closed, t.signal);
+    assert.deepEqual(idle.exit, { code: 0, signal: null }, idle.stderr);
+  });
+
+  test('after unref(), the process exits by itself once its lost socket connection was replaced', async (t) => {
+    // Arrange: a process unrefs its supervisor on the first connection, and stays alive only until the test says so.
+    await using directory = await new TemporaryFiles().directory('mutex-test-');
+    const socketPath = socketPathIn(directory.path);
+    const firstPeer = Promise.withResolvers<Socket>();
+    await using _server = await standInServer(socketPath, (peer) =>
+      firstPeer.resolve(peer),
+    );
+    await using idle = startWorker(
+      `
+				import { connect } from 'node:net';
+				import { ConnectionSupervisor } from ${JSON.stringify(supervisorUrl.href)};
+				import { SocketConnection } from ${JSON.stringify(socketConnectionUrl.href)};
+				process.once('message', () => {});
+				const supervisor = new ConnectionSupervisor({
+					connect: (signal) => new Promise((resolve, reject) => {
+						const socket = connect({ path: ${JSON.stringify(socketPath)}, signal });
+						socket.once('connect', () => resolve(new SocketConnection(socket)));
+						socket.once('error', reject);
+					}),
+				});
+				supervisor.once('connected', () => {
+					supervisor.unref();
+					supervisor.on('connected', () => process.send({ type: 'replaced' }));
+					process.send({ type: 'unrefed' });
+				});
+				supervisor.open();
+			`,
+      'idle',
+    );
+    await idle.next('unrefed', { signal: t.signal });
+
+    // Act: the server drops the connection, the supervisor replaces it, and the process has nothing else to do.
+    (await untilAborted(firstPeer.promise, t.signal)).destroy();
+    await idle.next('replaced', { signal: t.signal });
+    // A process that exited first gets no message.
+    idle.child.send('done', () => undefined);
+
+    // Assert: the replacement keeps the last unref(), so it does not keep the process alive.
+    await untilAborted(idle.closed, t.signal);
+    assert.deepEqual(idle.exit, { code: 0, signal: null }, idle.stderr);
+  });
+
+  test('an unref() asked while the supervisor reconnects reaches the replacement, so the process exits by itself', async (t) => {
+    // Arrange: a process unrefs its supervisor when it hears of the loss, and stays alive only until the test says so.
+    await using directory = await new TemporaryFiles().directory('mutex-test-');
+    const socketPath = socketPathIn(directory.path);
+    const firstPeer = Promise.withResolvers<Socket>();
+    await using _server = await standInServer(socketPath, (peer) =>
+      firstPeer.resolve(peer),
+    );
+    await using idle = startWorker(
+      `
+				import { connect } from 'node:net';
+				import { ConnectionSupervisor } from ${JSON.stringify(supervisorUrl.href)};
+				import { SocketConnection } from ${JSON.stringify(socketConnectionUrl.href)};
+				process.once('message', () => {});
+				const supervisor = new ConnectionSupervisor({
+					connect: (signal) => new Promise((resolve, reject) => {
+						const socket = connect({ path: ${JSON.stringify(socketPath)}, signal });
+						socket.once('connect', () => resolve(new SocketConnection(socket)));
+						socket.once('error', reject);
+					}),
+				});
+				supervisor.once('connected', () => {
+					supervisor.on('connected', () => process.send({ type: 'replaced' }));
+					process.send({ type: 'connected' });
+				});
+				// The supervisor reports the loss once it is connecting again.
+				supervisor.once('disconnected', () => supervisor.unref());
+				supervisor.open();
+			`,
+      'idle',
+    );
+    await idle.next('connected', { signal: t.signal });
+
+    // Act: the server drops the connection, the supervisor replaces it, and the process has nothing else to do.
+    (await untilAborted(firstPeer.promise, t.signal)).destroy();
+    await idle.next('replaced', { signal: t.signal });
+    // A process that exited first gets no message.
+    idle.child.send('done', () => undefined);
+
+    // Assert: the replacement keeps the unref() asked while there was no connection.
+    await untilAborted(idle.closed, t.signal);
+    assert.deepEqual(idle.exit, { code: 0, signal: null }, idle.stderr);
+  });
+});
+
+describe('A process whose supervisor connects over its IPC channel', () => {
+  test('a ref() asked after an unref() and before open reaches the first connection, so the process stays alive to hear its parent', async (t) => {
+    // Arrange: a process unrefs and then refs its supervisor before it opens it; an IPC connection starts without listening.
+    await using waiter = startWorker(
+      `
+				import { promisify } from 'node:util';
+				import { ConnectionSupervisor } from ${JSON.stringify(supervisorUrl.href)};
+				import { ProcessChannelConnection } from ${JSON.stringify(processChannelConnectionUrl.href)};
+				const channel = new ProcessChannelConnection(promisify(process.send).bind(process));
+				const supervisor = new ConnectionSupervisor({ connect: async () => channel });
+				supervisor.on('connected', () => process.send({ type: 'connected' }));
+				supervisor.on('message', (message) => {
+					process.send({ type: 'heard', message });
+					supervisor.unref();
+				});
+				supervisor.unref();
+				supervisor.ref();
+				supervisor.open();
+			`,
+      'waiter',
+    );
+    await waiter.next('connected', { signal: t.signal });
+
+    // Act
+    // A process that exited first gets no message.
+    waiter.child.send(wrap({ n: 1 }), () => undefined);
+
+    // Assert: the process heard its parent, and exited by itself after its unref().
+    const heard = await waiter.next('heard', { signal: t.signal });
+    assert.deepEqual(heard.message, { n: 1 });
+    await untilAborted(waiter.closed, t.signal);
+    assert.deepEqual(waiter.exit, { code: 0, signal: null }, waiter.stderr);
   });
 });
