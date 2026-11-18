@@ -131,3 +131,19 @@ _Avoid_: Version, revision, git hash
 **Residue**:
 A root package that a generator of Nx adds and no project loads, for example `@swc/core` or `eslint-plugin-react`. An app generator deletes a residue package only when its own run added it.
 _Avoid_: Junk, leftovers, extra dependency
+
+**Infra project**:
+The OpenTofu project `infra/` that the `dokploy` generator writes, named `@<scope>/infra`. Its environment `production` stores the compose in Dokploy. zukhruf's `tofu-apply.yml` calls it its `stack`.
+_Avoid_: Terraform project, stack (except as the input of `tofu-apply.yml`)
+
+**Release job**:
+The job of the deploy workflow that rolls the stored compose out with `dokploy-deploy` and waits with `wait-for-health`. It runs after a new image, after an apply that changed the infra project, and while the infra project is affected since the last successful deploy.
+_Avoid_: Deploy step, rollout script
+
+**Public host**:
+The name that Traefik routes to the app: a DNS name in a Hetzner zone, or `<name>.<ipv4>.sslip.io`. OpenTofu gives it to the compose as `PUBLIC_HOST` and outputs it as `host`.
+_Avoid_: Domain (Dokploy has domain resources), URL
+
+**Pull registry**:
+The `dokploy_registry` that logs the Dokploy server in to GHCR, so a compose deploy pulls private images. `registryUser` adds it.
+_Avoid_: Image registry (GHCR is the registry), docker login

@@ -1060,3 +1060,70 @@ The tests run each generator on a virtual `Tree` with Nx 23.2.1, which zukhruf's
 After the steps of [Test the preset before a release](#test-the-preset-before-a-release), in the generated repo: run the 3 commands of [Add a backend, a web app and their pair](#add-a-backend-a-web-app-and-their-pair), then `npx nx run-many -t typecheck lint test build`, the first commit (each hook passes), `npx nx run @acme/backend:docker:build`, and a container whose `/api/healthz` reports `git rev-parse HEAD`.
 
 The decisions are in [ADR 0010](./docs/adr/0010-the-app-generators-move-here-and-call-the-generators-of-nx.md). The backlog item of the app generators is #3338.
+
+## dokploy generator
+
+`dokploy` writes the GitOps delivery of a node-app on Dokploy: an OpenTofu project in `infra/` that stores the compose in Dokploy, and the workflows that build the images, apply the stack and roll it out. text2sql (v2, authx) and whatisgoingon hold copies, and meddit is the third repo, so the shape moves here (#4603). The workflows call zukhruf's kit at `@main`: the reusable `tofu-apply.yml`, and the `dokploy-deploy` and `wait-for-health` actions.
+
+### Deliver a backend
+
+```sh
+npx nx g @zukhruf/nx:dokploy --api apps/backend --owner <github-owner>
+npx nx run @acme/infra:typecheck
+```
+
+With Postgres, a Prisma package, a private GHCR and a DNS name:
+
+```sh
+npx nx g @zukhruf/nx:dokploy --api apps/backend --owner Phi-Science \
+  --database packages/db --registryUser <github-user> --host app.example.com
+```
+
+Then add the repository secrets `TF_ENCRYPTION_PASSPHRASE`, `DOKPLOY_API_KEY` and `HCLOUD_TOKEN`, and `GHCR_PULL_TOKEN` with `--registryUser`. A push to `main` runs CI, and a green CI run deploys.
+
+### Signature of the dokploy generator
+
+```ts
+// @zukhruf/nx:dokploy
+interface DokployOptions {
+  api: string; // the project root of a node-app
+  owner: string; // the GitHub owner; the images are ghcr.io/<owner, lowercase>/<name>-<app>
+  name?: string; // the Dokploy project and the image prefix; the workspace scope
+  dokployHost?: string; // https://dokploy.limerence.sh/api
+  server?: string; // the Hetzner server that runs Dokploy: limerence-dokploy
+  host?: string; // a DNS name in a Hetzner zone; without it, <name>.<server ipv4>.sslip.io
+  zone?: string; // the Hetzner zone of host: host without its first label
+  database?: string; // the project root of a Prisma package: adds Postgres and the migrate service
+  registryUser?: string; // the GitHub user of GHCR_PULL_TOKEN: adds a Dokploy registry for private images
+}
+```
+
+### What the dokploy generator writes
+
+| File                                     | What it holds                                                                                                                                                                                                   |
+| ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `infra/project.json`                     | `@<scope>/infra`; `@zukhruf/nx/opentofu` gives its targets, and the generator lists that plugin after `@zukhruf/nx/format` in `nx.json`                                                                         |
+| `infra/compose.dokploy.yml`              | the app image on `dokploy-network` with the Traefik labels (`web` redirects, `websecure` with Let's Encrypt); with `database`, `postgres:18-alpine` and the one-shot `migrate`, which the app waits for         |
+| `infra/.env.example`, `infra/.gitignore` | the secrets of a local run, `TF_VAR_dokploy_api_key=${DOKPLOY_API_KEY}` (and `TF_VAR_ghcr_pull_token`); the plaintext backups, `.terraform/` and `tfplan`                                                       |
+| `src/environments/production/*.tf`       | `versions`, `backend` (local, the encrypted state committed), `encryption` (pbkdf2 and aes_gcm, enforced), `providers`, `dns`, `main`, `outputs` (`dokploy_api`, `compose_id`, `host`), `variables`, `registry` |
+| `.terraform.lock.hcl`                    | the providers for `linux_amd64` and `darwin_arm64`, so `typecheck` (`-lockfile=readonly`) passes on CI and a Mac                                                                                                |
+| `.github/workflows/deploy.yml`           | gate, image (a matrix: the app and `migrate`), promote to `:latest`, infra (`tofu-apply.yml`), release (`dokploy-deploy`, `wait-for-health`)                                                                    |
+| `.github/workflows/ci.yml`               | only when missing: setup-workspace, OpenTofu, nx-set-shas, `sync:check` and `prettier --check` in parallel, then `nx affected -t lint typecheck test build`                                                     |
+
+The compose reads `PUBLIC_HOST`, and with `database` `POSTGRES_PASSWORD` and `CONNECTION_STRING`, from the env that `main.tf` stores with it. Postgres 18 keeps its data under `/var/lib/postgresql/18/docker`, so the volume is mounted at `/var/lib/postgresql`. Each variable refuses an empty value, because CI renders an unset secret as `""`. The stack has no `terraform_data` deployment: the release job deploys after a new image, after an apply that changed the stack, and while the infra project is affected since the last successful deploy, and it checks the build sha only after a new image. `.prettierignore` gets `.terraform`, `tfplan` and the state.
+
+### Errors of the dokploy generator
+
+| Error                                                                           | When                                                     |
+| ------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| `apps/backend has no Dockerfile, so it is not a node-app. Run …`                | `--api` names a project that `node-app` did not write    |
+| `packages/db has no Dockerfile.migration, so it is not a Prisma package. Run …` | `--database` names a project that `prisma` did not write |
+| `The zone "example.com" needs a host in it.`                                    | `--zone` without `--host`                                |
+| `The host "app.example.org" is not a name in the zone "example.com".`           | `--host` outside `--zone`                                |
+| `The name "My App" is not a lowercase name that starts with a letter.`          | `--name`, or the scope, is not a lowercase name          |
+
+### Test the dokploy generator before a release
+
+After the steps of [Test the app generators before a release](#test-the-app-generators-before-a-release), run `prisma` and then `dokploy` with `--database`, `--registryUser` and no `--host`, then `npm install`, `npx nx sync`, `npx nx run @acme/infra:typecheck`, `actionlint .github/workflows/*.yml`, `npx nx run-many -t typecheck lint`, `npx prettier --check .`, and `docker compose -f infra/compose.dokploy.yml config`. actionlint 1.7.12 does not know the `parallel:` step of `ci.yml`, which GitHub runs. On 2026-11-18 each passed, also after a run with `--host` and no `--database` or `--registryUser`; after that, two runs with the first options passed again, and the second of them changed no file.
+
+The decisions are in [ADR 0011](./docs/adr/0011-the-dokploy-generator-writes-the-gitops-delivery-of-a-node-app.md). The backlog item of the dokploy generator is #4603.

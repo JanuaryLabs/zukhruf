@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/schema",
+  "$id": "ZukhrufNxDokploy",
+  "title": "Deliver a node-app to Dokploy",
+  "type": "object",
+  "properties": {
+    "api": {
+      "type": "string",
+      "description": "The project root of the node-app, for example apps/backend."
+    },
+    "owner": {
+      "type": "string",
+      "description": "The GitHub owner of the repo. The images are ghcr.io/<owner>/<name>-<app>, in lowercase."
+    },
+    "name": {
+      "type": "string",
+      "description": "The Dokploy project, and the prefix of the images and the Traefik routers. The workspace scope by default."
+    },
+    "dokployHost": {
+      "type": "string",
+      "description": "The Dokploy API base URL.",
+      "default": "https://dokploy.limerence.sh/api"
+    },
+    "server": {
+      "type": "string",
+      "description": "The Hetzner Cloud server that runs Dokploy.",
+      "default": "limerence-dokploy"
+    },
+    "host": {
+      "type": "string",
+      "description": "A DNS name in a Hetzner zone, for example app.example.com. Without it, the host is <name>.<server ipv4>.sslip.io."
+    },
+    "zone": {
+      "type": "string",
+      "description": "The Hetzner zone of host. The host without its first label by default."
+    },
+    "database": {
+      "type": "string",
+      "description": "The project root of a Prisma package with a Dockerfile.migration, for example packages/db. It adds Postgres and the one-shot migrate service."
+    },
+    "registryUser": {
+      "type": "string",
+      "description": "The GitHub user whose classic token with read:packages is the GHCR_PULL_TOKEN secret. It adds a Dokploy registry, so the server pulls private images."
+    }
+  },
+  "required": ["api", "owner"],
+  "additionalProperties": false
+}

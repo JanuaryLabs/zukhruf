@@ -15,7 +15,7 @@ export interface PairOptions {
 }
 
 /** PORT is the generator's line in .env.example, so it is the one line worth reading. */
-function portOf(tree: Tree, apiRoot: string): number {
+export function portOf(tree: Tree, apiRoot: string): number {
   const example = tree.read(`${apiRoot}/.env.example`, 'utf-8') ?? '';
   const match = /^PORT=(\d+)$/m.exec(example);
   return match ? Number(match[1]) : 3000;
