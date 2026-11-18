@@ -30,6 +30,10 @@ import {
   type SignalName,
   createSession,
 } from './session.ts';
+import {
+  agentForwardingOptions,
+  requestAgentForwardingOnEachSession,
+} from './ssh2-agent-forwarding.ts';
 
 /** Go's ssh.ClientConfig. */
 export interface ClientConfig {
@@ -48,6 +52,8 @@ export interface ClientConfig {
     readonly interval: number;
     readonly countMax: number;
   };
+  /** When set, every session asks for agent forwarding (auth-agent-req@openssh.com) before its command, as OpenSSH's ForwardAgent yes, and each auth-agent@openssh.com channel gets a new connection from this function. In the root import path, because the protocol library takes the agent when it connects. Go's agent.ForwardToRemote with agent.RequestAgentForwarding. */
+  readonly agentForwarding?: () => Promise<Duplex>;
   /** The env requests that each new session sends before its first other request, with no reply wanted. OpenSshConfig#dial fills it from SetEnv, and from the variables of the caller's environment that SendEnv names. OpenSSH's SetEnv and SendEnv. */
   readonly sessionEnv?: Readonly<Record<string, string>>;
 }
@@ -241,7 +247,10 @@ export class Client implements AsyncDisposable {
             keepaliveInterval: config.keepalive.interval,
             keepaliveCountMax: config.keepalive.countMax,
           }),
+      ...(config.agentForwarding &&
+        agentForwardingOptions(config.agentForwarding)),
     });
+    if (config.agentForwarding) requestAgentForwardingOnEachSession(connection);
     return started.promise;
   }
 
@@ -456,9 +465,10 @@ function listenRefused(address: string, error: Error): Error {
   });
 }
 
-// ssh2 1.17.0 sends each env first with no reply wanted, then pty-req, then
-// exec or shell (client.js:1192-1308). shell() with a window of false asks
-// for no pty.
+// With agentForwarding, auth-agent-req@openssh.com goes first, with no reply
+// wanted (ssh2-agent-forwarding.ts). Then ssh2 1.17.0 sends each env with no
+// reply wanted, then pty-req, then exec or shell (client.js:1192-1308).
+// shell() with a window of false asks for no pty.
 function openSession(
   connection: ssh2.Client,
   request: SessionRequest,
