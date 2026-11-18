@@ -1,6 +1,6 @@
 # An inference plugin gives each Prisma project its targets, with the outputs that the schema names
 
-Status: Proposed 2026-11-18 for the owner's review (backlog #3339).
+Status: Accepted 2026-11-18 by the owner (backlog #3339).
 
 Six projects copy a cached `generate` target: `@factory/db` of factory, and `v2-db`, `authx-db`, `desktop-db`, `db` and `@workspace/amail` of text2sql. Five of them also copy `migrate` and `deploy`, and four copy `reset` and `pull`. meddit adds a seventh project. The owner put the area in scope on 2026-11-18 with these words: "detect a prisma schema / prisma.config.ts; cached generate (inputs models/\*\*/\*.prisma), migrate (migrate dev), deploy (migrate deploy), reset, pull; typecheck/build dependsOn generate".
 

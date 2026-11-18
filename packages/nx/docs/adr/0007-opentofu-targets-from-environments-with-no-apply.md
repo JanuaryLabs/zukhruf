@@ -1,6 +1,6 @@
 # An inference plugin gives each OpenTofu project its targets, and no apply target
 
-Status: Proposed 2026-11-18 for the owner's review (backlog #3339).
+Status: Accepted 2026-11-18 by the owner (backlog #3339).
 
 Five projects copy the same OpenTofu targets: `infra` of whatisgoingon, and `v2-terraform`, `authx-terraform`, `desktop-terraform` and `diagnostics-terraform` of text2sql. Each one also copies `scripts/check-plan-fresh.sh`. meddit adds a sixth project. The owner put the area in scope on 2026-11-18 with these words: "targets init, format, format:check, typecheck (init -backend=false + validate, no secrets), preview, show (runs check-plan-fresh, shipped in the package), output; TF_ENCRYPTION_PASSPHRASE guard; envFile infra/.env for preview/show; deliberately no apply target".
 
