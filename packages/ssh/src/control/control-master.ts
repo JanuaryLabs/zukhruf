@@ -1,7 +1,7 @@
 import { once } from 'node:events';
 import { type Server, type Socket, createServer } from 'node:net';
 
-import type { Client } from '../client.ts';
+import { type Client, OpenChannelError, rejectionCode } from '../client.ts';
 import { type Reply, type Request, isRequest, toWire } from './messages.ts';
 import { serveDial } from './serve-dial.ts';
 import { serveSession } from './serve-session.ts';
@@ -122,11 +122,16 @@ function reply(socket: Socket, answer: Reply): void {
 // readFirstFrame paused the socket: it reads again to see the client's end,
 // and closes.
 function refuse(socket: Socket, error: unknown): void {
-  socket.end(
-    encodeJson(FrameType.reply, {
-      opened: false,
-      error: toWire(error),
-    } satisfies Reply),
-  );
+  const answer: Reply =
+    error instanceof OpenChannelError
+      ? {
+          opened: false,
+          refused: {
+            code: rejectionCode(error.reason),
+            description: error.description,
+          },
+        }
+      : { opened: false, error: toWire(error) };
+  socket.end(encodeJson(FrameType.reply, answer));
   socket.resume();
 }

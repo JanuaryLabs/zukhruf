@@ -18,7 +18,13 @@ import { untilAborted } from '@zukhruf/async';
 import { TemporaryFiles, isErrno } from '@zukhruf/fs';
 
 import { ControlClient, ControlMaster } from './control.ts';
-import { Client, ExitError, ExitMissingError, PrivateKey } from './index.ts';
+import {
+  Client,
+  ExitError,
+  ExitMissingError,
+  OpenChannelError,
+  PrivateKey,
+} from './index.ts';
 import { dial } from './testing/dial.ts';
 import { type Sshd, startSshd } from './testing/sshd.ts';
 
@@ -366,7 +372,7 @@ test(
 );
 
 test(
-  'dial to a port where nothing listens rejects with the reason of the server, as Client#dial words it',
+  'dial to a port where nothing listens rejects with the OpenChannelError of the server, as Client#dial does',
   { skip: noSshd },
   async () => {
     // Arrange
@@ -388,10 +394,12 @@ test(
     );
 
     // Assert
-    assert.ok(Error.isError(direct));
-    assert.ok(Error.isError(dialed));
+    assert.ok(direct instanceof OpenChannelError);
+    assert.ok(dialed instanceof OpenChannelError);
     assert.match(direct.message, /^ssh: the server refused the channel: \S/);
     assert.equal(dialed.message, direct.message);
+    assert.equal(dialed.reason, direct.reason);
+    assert.equal(dialed.description, direct.description);
   },
 );
 
@@ -516,7 +524,7 @@ test(
 );
 
 test(
-  'a session whose command exits without reading all of its stdin leaves the master serving: wait() resolves, stdout gives what the command wrote, and a new session runs',
+  'a session whose command exits without reading all of its stdin leaves the master serving: wait() resolves, stdout gives what the command wrote, a new session runs, and the endless writer of stdin fails with the close of the channel, as through Client',
   { skip: noSshd },
   async () => {
     // Arrange
@@ -529,18 +537,25 @@ test(
     await session.start('head -c1; sleep 1');
     const chunk = Buffer.alloc(64 * 1024, 'a');
     const written = pipeline(
-      Readable.from(Array.from({ length: 1600 }, () => chunk)),
+      Readable.from(
+        (function* () {
+          for (;;) yield chunk;
+        })(),
+      ),
       session.stdin,
     );
 
     // Act
+    const writeFailed = assert.rejects(written, {
+      message: 'ssh: the channel is closed',
+    });
     await session.wait();
 
     // Assert
     assert.equal(await read, 'a');
     const output = await shared.control.newSession().output('printf ok');
     assert.equal(output.toString(), 'ok');
-    await written;
+    await writeFailed;
   },
 );
 

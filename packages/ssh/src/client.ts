@@ -119,6 +119,15 @@ const rejectionReasons: Readonly<Record<number, RejectionReason>> = {
   4: 'resource-shortage',
 };
 
+/** The reason code that the server sent for `reason`, for the reply of the control wire. */
+export function rejectionCode(reason: RejectionReason): number {
+  if (typeof reason === 'number') return reason;
+  const code = Object.keys(rejectionReasons).find(
+    (key) => rejectionReasons[Number(key)] === reason,
+  );
+  return Number(code);
+}
+
 /** The server refused to open the channel (SSH_MSG_CHANNEL_OPEN_FAILURE). Go's OpenChannelError. */
 export class OpenChannelError extends Error {
   readonly reason: RejectionReason;

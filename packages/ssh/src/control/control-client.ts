@@ -2,6 +2,7 @@ import { once } from 'node:events';
 import { type Socket, connect } from 'node:net';
 import { type Duplex, Readable } from 'node:stream';
 
+import { OpenChannelError } from '../client.ts';
 import {
   type Session,
   type SessionChannel,
@@ -73,7 +74,11 @@ async function openChannel(path: string, request: Request): Promise<Socket> {
     if (frame.type !== FrameType.reply || !isReply(reply)) {
       throw protocolError();
     }
-    if (!reply.opened) throw fromWire(reply.error);
+    if (!reply.opened) {
+      throw 'refused' in reply
+        ? new OpenChannelError(reply.refused.code, reply.refused.description)
+        : fromWire(reply.error);
+    }
     return socket;
   } catch (error) {
     socket.destroy();
@@ -85,8 +90,6 @@ async function openChannel(path: string, request: Request): Promise<Socket> {
 // eof and no error is the death of the master.
 function dialStream(socket: Socket): Duplex {
   const stream = new ControlStream(socket, {
-    writeAfterClose: (callback) =>
-      callback(new Error('ssh: the channel is closed')),
     destroyed: () => socket.destroy(),
   });
   let eof = false;
@@ -117,10 +120,7 @@ function dialStream(socket: Socket): Duplex {
 // The session's streams end at the eof frame, or at the close of the
 // connection; the exit frame, or its absence, goes to onClose.
 function sessionChannel(socket: Socket): SessionChannel {
-  // As ssh2 drops a write to a closed channel, a write to stdin after the end
-  // of the session is dropped.
   const stream = new ControlStream(socket, {
-    writeAfterClose: (callback) => callback(),
     destroyed: () => undefined,
   });
   const stderr = new Readable({ read: () => socket.resume() });

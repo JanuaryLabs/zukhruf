@@ -17,9 +17,13 @@ export type Request =
     }
   | { readonly kind: 'session'; readonly start: SessionStart };
 
-/** The answer to a request: the channel opened, or the error of its open. */
+/** The answer to a request: the channel opened, the server refused it (OpenChannelError), or its open failed. */
 export type Reply =
   | { readonly opened: true }
+  | {
+      readonly opened: false;
+      readonly refused: { readonly code: number; readonly description: string };
+    }
   | { readonly opened: false; readonly error: WireError };
 
 /** How the channel of a session ended: with an exit, or with none and the error that ended the master's connection when one did. */
@@ -126,10 +130,15 @@ export function isRequest(value: unknown): value is Request {
 }
 
 export function isReply(value: unknown): value is Reply {
+  if (!isFields(value)) return false;
+  if (value['opened'] === true) return true;
+  const refused = value['refused'];
   return (
-    isFields(value) &&
-    (value['opened'] === true ||
-      (value['opened'] === false && isWireError(value['error'])))
+    value['opened'] === false &&
+    (isWireError(value['error']) ||
+      (isFields(refused) &&
+        isNumber(refused['code']) &&
+        isString(refused['description'])))
   );
 }
 

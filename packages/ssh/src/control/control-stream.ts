@@ -7,8 +7,6 @@ type Callback = (error?: Error | null) => void;
 
 /** What the owner of the Unix connection does for the stream. */
 export interface StreamOwner {
-  /** A write after the close of the Unix connection. */
-  writeAfterClose(callback: Callback): void;
   /** The stream was destroyed. */
   destroyed(): void;
 }
@@ -52,8 +50,13 @@ export class ControlStream extends Duplex {
     _encoding: BufferEncoding,
     callback: Callback,
   ): void {
-    if (this.#isClosed()) this.#owner.writeAfterClose(callback);
-    else this.#socket.write(encode(FrameType.data, chunk), callback);
+    // A write after the close of the Unix connection fails as a write to a
+    // closed channel of a Client does (#4597).
+    if (this.#isClosed()) {
+      callback(new Error('ssh: the channel is closed'));
+      return;
+    }
+    this.#socket.write(encode(FrameType.data, chunk), callback);
   }
 
   override _final(callback: Callback): void {
