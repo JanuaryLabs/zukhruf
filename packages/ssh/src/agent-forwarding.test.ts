@@ -13,6 +13,7 @@ import {
   PrivateKey,
   ServerConn,
 } from './index.ts';
+import { dial } from './testing/dial.ts';
 import { type SshAgent, startSshAgent } from './testing/ssh-agent.ts';
 import { startSshClientRig } from './testing/ssh-client.ts';
 import { type Sshd, startSshd } from './testing/sshd.ts';
@@ -21,20 +22,6 @@ const noSshd =
   process.platform === 'win32'
     ? 'Windows has no sshd and no ssh-agent Unix socket'
     : false;
-
-async function dial(
-  sshd: Sshd,
-  agentForwarding?: ClientConfig['agentForwarding'],
-): Promise<Client> {
-  const key = PrivateKey.parse(await readFile(sshd.userKey));
-  return Client.dial(`127.0.0.1:${sshd.port}`, {
-    user: userInfo().username,
-    auth: [{ type: 'publickey', signers: async () => [key] }],
-    hostKey: () => undefined,
-    clock: createClock(),
-    ...(agentForwarding && { agentForwarding }),
-  });
-}
 
 async function agentWithKey(): Promise<{
   readonly agent: SshAgent;
@@ -54,7 +41,9 @@ test(
     await using sshd = await startSshd();
     const { agent, fingerprint } = await agentWithKey();
     await using _agent = agent;
-    await using client = await dial(sshd, async () => connect(agent.socket));
+    await using client = await dial(sshd, {
+      agentForwarding: async () => connect(agent.socket),
+    });
 
     // Act
     const listed = await client.newSession().output('ssh-add -l');
@@ -72,7 +61,9 @@ test(
     await using sshd = await startSshd();
     const { agent, fingerprint } = await agentWithKey();
     await using _agent = agent;
-    await using client = await dial(sshd, async () => connect(agent.socket));
+    await using client = await dial(sshd, {
+      agentForwarding: async () => connect(agent.socket),
+    });
     await client.newSession().run('ssh-add -l');
 
     // Act
@@ -163,7 +154,9 @@ test(
     await using sshd = await startSshd({ config: ['AllowAgentForwarding no'] });
     const { agent } = await agentWithKey();
     await using _agent = agent;
-    await using client = await dial(sshd, async () => connect(agent.socket));
+    await using client = await dial(sshd, {
+      agentForwarding: async () => connect(agent.socket),
+    });
 
     // Act
     const ran = client.newSession().run('ssh-add -l');

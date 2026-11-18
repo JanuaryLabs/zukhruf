@@ -16,6 +16,7 @@ import { TemporaryFiles } from '@zukhruf/fs';
 import { OpenSshConfig } from './config.ts';
 import { AuthenticationError, ExitError } from './index.ts';
 import { KeyError, RevokedError } from './knownhosts.ts';
+import { startSilentServer } from './testing/silent-server.ts';
 import { type SshAgent, startSshAgent } from './testing/ssh-agent.ts';
 import { type Sshd, startSshd } from './testing/sshd.ts';
 
@@ -1188,24 +1189,4 @@ function portOf(server: Server): number {
   const address = server.address();
   assert.ok(address !== null && typeof address === 'object');
   return address.port;
-}
-
-// A TCP server that accepts each connection and never speaks.
-async function startSilentServer(): Promise<
-  AsyncDisposable & { port: number; accepted: Promise<unknown> }
-> {
-  const sockets = new Set<Socket>();
-  const server = createServer((socket) => sockets.add(socket));
-  const accepted = once(server, 'connection');
-  server.listen(0, '127.0.0.1');
-  await once(server, 'listening');
-  return {
-    port: portOf(server),
-    accepted,
-    async [Symbol.asyncDispose]() {
-      for (const socket of sockets) socket.destroy();
-      server.close();
-      await once(server, 'close');
-    },
-  };
 }

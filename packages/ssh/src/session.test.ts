@@ -8,23 +8,10 @@ import { test } from 'node:test';
 import { createClock } from '@sinonjs/fake-timers';
 
 import { Client, ExitError, ExitMissingError, PrivateKey } from './index.ts';
+import { dial } from './testing/dial.ts';
 import { type Sshd, startSshd } from './testing/sshd.ts';
 
 const noSshd = process.platform === 'win32' ? 'Windows has no sshd' : false;
-
-async function dial(
-  sshd: Sshd,
-  sessionEnv?: Readonly<Record<string, string>>,
-): Promise<Client> {
-  const key = PrivateKey.parse(await readFile(sshd.userKey));
-  return Client.dial(`127.0.0.1:${sshd.port}`, {
-    user: userInfo().username,
-    auth: [{ type: 'publickey', signers: async () => [key] }],
-    hostKey: () => undefined,
-    clock: createClock(),
-    ...(sessionEnv && { sessionEnv }),
-  });
-}
 
 test(
   'run of a command that exits with a status other than 0 rejects with ExitError, whose exit holds the status',
@@ -235,8 +222,10 @@ test(
     // Arrange
     await using sshd = await startSshd({ config: ['AcceptEnv ZUKHRUF_*'] });
     await using client = await dial(sshd, {
-      ZUKHRUF_CONFIG: 'from the config',
-      ZUKHRUF_BOTH: 'from the config',
+      sessionEnv: {
+        ZUKHRUF_CONFIG: 'from the config',
+        ZUKHRUF_BOTH: 'from the config',
+      },
     });
     const session = client.newSession();
     session.setenv('ZUKHRUF_BOTH', 'from setenv');

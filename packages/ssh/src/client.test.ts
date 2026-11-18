@@ -18,6 +18,7 @@ import {
   PrivateKey,
   PublicKey,
 } from './index.ts';
+import { startSilentServer } from './testing/silent-server.ts';
 import { startSshd } from './testing/sshd.ts';
 
 const run = promisify(execFile);
@@ -223,26 +224,6 @@ function portOf(server: Server): number {
   const address = server.address();
   assert.ok(address !== null && typeof address === 'object');
   return address.port;
-}
-
-// A TCP server that accepts each connection and never speaks.
-async function startSilentServer(): Promise<
-  AsyncDisposable & { port: number; accepted: Promise<unknown> }
-> {
-  const sockets = new Set<Socket>();
-  const server = createServer((socket) => sockets.add(socket));
-  const accepted = once(server, 'connection');
-  server.listen(0, '127.0.0.1');
-  await once(server, 'listening');
-  return {
-    port: portOf(server),
-    accepted,
-    async [Symbol.asyncDispose]() {
-      for (const socket of sockets) socket.destroy();
-      server.close();
-      await once(server, 'close');
-    },
-  };
 }
 
 test('connectTimeout rejects the dial with a TimeoutError when it passes on the clock of the config, and not before', async () => {

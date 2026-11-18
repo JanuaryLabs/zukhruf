@@ -18,19 +18,10 @@ import { TemporaryFiles, isErrno } from '@zukhruf/fs';
 
 import { ControlClient, ControlMaster } from './control.ts';
 import { Client, ExitError, ExitMissingError, PrivateKey } from './index.ts';
+import { dial } from './testing/dial.ts';
 import { type Sshd, startSshd } from './testing/sshd.ts';
 
 const noSshd = process.platform === 'win32' ? 'Windows has no sshd' : false;
-
-async function dial(sshd: Sshd): Promise<Client> {
-  const key = PrivateKey.parse(await readFile(sshd.userKey));
-  return Client.dial(`127.0.0.1:${sshd.port}`, {
-    user: userInfo().username,
-    auth: [{ type: 'publickey', signers: async () => [key] }],
-    hostKey: () => undefined,
-    clock: createClock(),
-  });
-}
 
 interface Shared extends AsyncDisposable {
   /** The client that the master serves. */
