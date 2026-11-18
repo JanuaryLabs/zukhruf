@@ -9,6 +9,7 @@ import {
   mkdir,
   readFile,
   readdir,
+  rm,
   symlink,
   writeFile,
 } from 'node:fs/promises';
@@ -40,7 +41,7 @@ import {
   reaperName,
   reaperRequest,
 } from '../docker/reaper.ts';
-import { RunRecords, directoryParent } from '../docker/run-records.ts';
+import { directoryParent, runSocketFolder } from '../docker/run-records.ts';
 import { engine, proxyless } from '../testing/current-engine.ts';
 import { docker } from '../testing/engine-client.ts';
 import { EngineProxy } from '../testing/engine-proxy.ts';
@@ -66,7 +67,6 @@ interface State {
   anonymousVolumes: string[];
   /** Of the general container, which does not. */
   generalVolumes: string[];
-  forwards: string[];
   run: string;
   record: string;
   /** Of the test process. */
@@ -80,7 +80,7 @@ interface State {
 const workerSource = (statePath: string, ending: string, timeout: number) => `
   import { test } from 'node:test';
   import { existsSync } from 'node:fs';
-  import { readFile, readdir, writeFile } from 'node:fs/promises';
+  import { writeFile } from 'node:fs/promises';
   import { setTimeout } from 'node:timers/promises';
   import { DockerTestbed } from ${library};
   test('disposable resources before interruption', { timeout: ${timeout} }, async (t) => {
@@ -94,8 +94,7 @@ const workerSource = (statePath: string, ending: string, timeout: number) => `
     const anonymousVolumes = await anonymous(container);
     const generalVolumes = await anonymous(general);
     const directory = process.env.ZUKHRUF_TESTING_RUN_DIR;
-    const forwards = await Promise.all((await readdir(directory)).filter(name => name.startsWith('forward-')).map(async name => JSON.parse(await readFile(directory + '/' + name, 'utf8')).path));
-    await writeFile(${JSON.stringify(statePath)}, JSON.stringify({ id: container.id, general: general.id, path: fixture.path, volume: volume.name, anonymousVolumes, generalVolumes, forwards, run: process.env.ZUKHRUF_TESTING_RUN_ID, record: directory, pid: process.pid }));
+    await writeFile(${JSON.stringify(statePath)}, JSON.stringify({ id: container.id, general: general.id, path: fixture.path, volume: volume.name, anonymousVolumes, generalVolumes, run: process.env.ZUKHRUF_TESTING_RUN_ID, record: directory, pid: process.pid }));
     ${ending}
   });
 `;
@@ -382,9 +381,6 @@ for (const mode of [
             BindSourceNotFoundError,
           );
         });
-        for (const path of state.forwards) {
-          await assert.rejects(readFile(join(path, 's')), { code: 'ENOENT' });
-        }
         if (mode === 'SIGINT' || mode === 'SIGTERM') {
           // The runner does not wait for a signalled test process, so the
           // teardown may keep the run's records; the next run removes them.
@@ -717,9 +713,9 @@ test('recovery leaves a dead run alone while a live runner holds its claim', asy
   }
 });
 
-test('recovery keeps a dead run while a command lives whose pid an ended command of the run had', async () => {
+test('the recovery of a dead run removes the folder of its sockets in /tmp, and then its records', async () => {
   await using directory = await new TemporaryFiles().directory(
-    'zukhruf-testing-reused-pid-',
+    'zukhruf-testing-dead-sockets-',
   );
   const id = randomUUID();
   const record = join(
@@ -730,27 +726,16 @@ test('recovery keeps a dead run while a command lives whose pid an ended command
     id,
   );
   await mkdir(record, { recursive: true });
-  // Only a global setup writes run.json: this one is of a run whose runner died.
+  // Only a global setup writes run.json and the folder of the run's sockets:
+  // these are of a run whose runner died.
   await writeFile(
     join(record, 'run.json'),
-    JSON.stringify({
-      id,
-      endpoint: engine,
-      pid: await endedPid(),
-    }),
+    JSON.stringify({ id, endpoint: engine, pid: await endedPid() }),
   );
-  const command = started(
-    ['--eval', 'setTimeout(() => {}, 600_000)'],
-    process.env,
-  );
+  const sockets = runSocketFolder(id);
+  await mkdir(sockets, { mode: 0o700 });
   try {
-    assert.ok(command.child.pid !== undefined);
-    const records = new RunRecords(record);
-    // The OS gave the pid of a command that ended to the next command
-    // before the record of the first one was removed.
-    const ended = await records.recordProcess(command.child.pid);
-    await records.recordProcess(command.child.pid);
-    await ended[Symbol.asyncDispose]();
+    await writeFile(join(sockets, 'ssh.sock'), '');
     const file = join(directory.path, 'plain.test.ts');
     await writeFile(
       file,
@@ -759,10 +744,10 @@ test('recovery keeps a dead run while a command lives whose pid an ended command
 
     await emptyRun(file, runEnvironment(join(directory.path, 'state')));
 
-    await access(join(record, 'run.json'));
+    assert.equal(existsSync(sockets), false);
+    assert.equal(existsSync(record), false);
   } finally {
-    command.child.kill('SIGKILL');
-    await command.exited.catch(() => null);
+    await rm(sockets, { recursive: true, force: true });
   }
 });
 
@@ -810,7 +795,7 @@ async function reaperHolder(t: TestContext, run: string) {
         import { Docker } from ${client};
         import { REAPER_DEFAULTS, ReaperHold } from ${JSON.stringify(new URL('../docker/reaper.ts', import.meta.url).href)};
         const docker = await Docker.connect({ clock: globalThis, environment: process.env });
-        await ReaperHold.take(docker, ${JSON.stringify(run)}, REAPER_DEFAULTS, globalThis);
+        await ReaperHold.take(docker, docker.host, ${JSON.stringify(run)}, REAPER_DEFAULTS, globalThis);
         console.log('held');
         setInterval(() => {}, 60_000);
       `,

@@ -7,20 +7,32 @@
  * engine, from any project of this user.
  */
 import { randomUUID } from 'node:crypto';
-import { readFileSync, readdirSync, rmSync } from 'node:fs';
+import { once } from 'node:events';
+import { rmSync } from 'node:fs';
 import { mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises';
+import { createServer } from 'node:net';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { pipeline } from 'node:stream/promises';
 
 import { Docker } from '@zukhruf/docker';
+import { OpenSshConfig } from '@zukhruf/ssh/config';
+import { ControlMaster } from '@zukhruf/ssh/control';
 
-import { DockerHost } from '../docker/host.ts';
+import { DockerHost, SSH_FLAGS } from '../docker/host.ts';
 import {
+  type Run,
   TEST_RUN_DIRECTORY,
   TEST_RUN_ID,
   readRun,
+  runDockerHost,
+  runSocketFolder,
+  runSockets,
 } from '../docker/run-records.ts';
-import { type Run, removeRecordedPaths } from './run-cleanup.ts';
+
+/** The command that gives the engine of the Docker CLI on the engine host, as @zukhruf/docker finds it (docker ADR 0015). */
+const ENGINE_HOST_COMMAND =
+  "docker context inspect --format '{{.Endpoints.docker.Host}}'";
 
 const codeOf = (error: unknown): unknown =>
   Error.isError(error) && 'code' in error ? error.code : undefined;
@@ -34,13 +46,6 @@ function alive(pid: number): boolean {
   }
 }
 
-/** The pids in the process records of a run's directory. */
-const processes = (directory: string): number[] =>
-  readdirSync(directory).flatMap((file) => {
-    const pid = /^process-(\d+)-[\da-f-]{36}\.json$/.exec(file)?.[1];
-    return pid === undefined ? [] : [Number(pid)];
-  });
-
 async function readRunFile(directory: string): Promise<Run | undefined> {
   try {
     return JSON.parse(await readFile(join(directory, 'run.json'), 'utf8'));
@@ -51,9 +56,9 @@ async function readRunFile(directory: string): Promise<Run | undefined> {
 }
 
 /**
- * Removes what dead runs on this engine left on this machine: the recorded
- * SSH forward directories, and then the run's records. It makes no engine
- * call: the reaper of a run removes its engine objects (ADR 0025).
+ * Removes what dead runs on this engine left on this machine: the folder of
+ * the run's sockets, and then the run's records. It makes no engine call: the
+ * reaper of a run removes its engine objects (ADR 0025).
  */
 async function recover(root: string, endpoint: string): Promise<void> {
   for (const name of await readdir(root)) {
@@ -64,17 +69,6 @@ async function recover(root: string, endpoint: string): Promise<void> {
     const previous = await readRunFile(directory);
     if (!previous || previous.endpoint !== endpoint || alive(previous.pid))
       continue;
-    // A killed runner leaves its test processes running. An SSH command of
-    // one can still use a forward directory of the run.
-    let pids: number[];
-    try {
-      pids = processes(directory);
-    } catch (error) {
-      // Another runner claimed the run between the listing and this read.
-      if (codeOf(error) === 'ENOENT') continue;
-      throw error;
-    }
-    if (pids.some(alive)) continue;
     // Runners start in parallel; the rename lets exactly one recover a run.
     const claimed = join(root, `recovering-${process.pid}-${randomUUID()}`);
     try {
@@ -84,7 +78,7 @@ async function recover(root: string, endpoint: string): Promise<void> {
       throw error;
     }
     try {
-      removeRecordedPaths(previous, claimed);
+      rmSync(runSocketFolder(previous.id), { recursive: true, force: true });
       rmSync(claimed, { recursive: true, force: true });
     } catch (error) {
       throw new Error(
@@ -110,7 +104,9 @@ export async function globalSetup(): Promise<void> {
   );
   if (!current) throw new Error('Docker selects no context');
   // Refuses an engine that the tests do not support.
-  const { endpoint } = new DockerHost(current.host, undefined, process.env);
+  const { endpoint } = new DockerHost(current.host, {
+    environment: process.env,
+  });
   await recover(root, endpoint);
 
   const run: Run = { id: randomUUID(), endpoint, pid: process.pid };
@@ -120,10 +116,60 @@ export async function globalSetup(): Promise<void> {
   await writeFile(pending, JSON.stringify(run));
   await rename(pending, join(directory, 'run.json'));
 
+  process.env.DOCKER_HOST = endpoint.startsWith('ssh://')
+    ? await serveConnection(run, directory)
+    : endpoint;
   process.env[TEST_RUN_ID] = run.id;
   process.env[TEST_RUN_DIRECTORY] = directory;
-  process.env.DOCKER_HOST = endpoint;
   delete process.env.DOCKER_CONTEXT;
+}
+
+/**
+ * Serves the SSH connection of a run on an ssh:// engine to its test
+ * processes (ADR 0024): a control master at the run's ssh.sock, and the
+ * engine at its docker.sock, where each connection is a channel to the
+ * engine's socket on the engine host. Resolves with the DOCKER_HOST of the
+ * test processes. Nothing of it keeps the runner alive: the end of the runner
+ * closes the connection, and the SSH server closes its channels.
+ */
+async function serveConnection(run: Run, directory: string): Promise<string> {
+  const sockets = runSockets(run.id);
+  if (process.platform !== 'win32')
+    await mkdir(runSocketFolder(run.id), { mode: 0o700 });
+  await using stack = new AsyncDisposableStack();
+  const config = await OpenSshConfig.resolve(run.endpoint, {
+    flags: SSH_FLAGS,
+    environment: process.env,
+  });
+  const client = stack.use(await config.dial({ clock: globalThis }));
+  const master = stack.use(await ControlMaster.listen(client, sockets.master));
+  const host = new DockerHost(run.endpoint, {
+    run: { id: run.id, directory },
+  });
+  const selected = (await host.shell(ENGINE_HOST_COMMAND)).stdout.trim();
+  if (!selected.startsWith('unix://'))
+    throw new Error(
+      `The Docker CLI on the engine host ${run.endpoint} selects the engine ${JSON.stringify(selected)}; over SSH the tests reach only a unix:// engine`,
+    );
+  const engineSocket = selected.slice('unix://'.length);
+  const server = createServer({ allowHalfOpen: true }, (socket) => {
+    socket.on('error', () => socket.destroy());
+    void client.dial('unix', engineSocket).then(
+      (channel) =>
+        Promise.allSettled([
+          pipeline(socket, channel),
+          pipeline(channel, socket),
+        ]),
+      () => socket.destroy(),
+    );
+  });
+  server.listen(sockets.docker);
+  await once(server, 'listening');
+  stack.move();
+  server.unref();
+  master.unref();
+  client.unref();
+  return runDockerHost(run.id);
 }
 
 /**
@@ -138,12 +184,9 @@ export function globalTeardown(): void {
     throw new Error(
       `The Docker global teardown runs after its global setup, which sets ${TEST_RUN_ID} and ${TEST_RUN_DIRECTORY}`,
     );
-  const { directory } = owner.records;
+  const { id, directory } = owner;
   try {
-    const run: Run = JSON.parse(
-      readFileSync(join(directory, 'run.json'), 'utf8'),
-    );
-    removeRecordedPaths(run, directory);
+    rmSync(runSocketFolder(id), { recursive: true, force: true });
     rmSync(directory, { recursive: true, force: true });
   } catch (error) {
     // Node sets exit code 1 for a teardown that throws, but prints nothing.

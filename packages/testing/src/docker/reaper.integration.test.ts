@@ -111,7 +111,7 @@ async function holder(
   const { child, line } = program(
     `
     const docker = await Docker.connect({ clock: globalThis, environment: process.env });
-    await ReaperHold.take(docker, ${JSON.stringify(run)}, ${JSON.stringify(settings)}, globalThis);
+    await ReaperHold.take(docker, docker.host, ${JSON.stringify(run)}, ${JSON.stringify(settings)}, globalThis);
     console.log('held');
     setInterval(() => {}, 60_000);
   `,
@@ -128,7 +128,7 @@ async function holder(
 function creator(run: string, settings: ReaperSettings): Program {
   return program(`
     const docker = await Docker.connect({ clock: globalThis, environment: process.env });
-    await ReaperHold.take(docker, ${JSON.stringify(run)}, ${JSON.stringify(settings)}, globalThis);
+    await ReaperHold.take(docker, docker.host, ${JSON.stringify(run)}, ${JSON.stringify(settings)}, globalThis);
     const container = await docker.containers.create({
       Image: 'alpine:latest',
       Cmd: ['sleep', '3600'],
@@ -802,7 +802,13 @@ test('a hold on a reaper that stays closing past the readiness bound of the hold
     await gone(t, async () => assert.equal(await exists(id), false));
 
     await assert.rejects(
-      ReaperHold.take(docker, run, { ...quick, readiness }, globalThis),
+      ReaperHold.take(
+        docker,
+        docker.host,
+        run,
+        { ...quick, readiness },
+        globalThis,
+      ),
       {
         message: `The hold of the reaper ${reaperName(run)} was not ready within its readiness bound of ${readiness} ms`,
       },
@@ -835,6 +841,7 @@ test(
       stack.defer(() => again.release());
       const hold = await ReaperHold.take(
         client,
+        client.host,
         run,
         { ...quick, readiness },
         clock,
@@ -899,6 +906,7 @@ test(
       void wait.left.then(() => wait.release());
       const taking = ReaperHold.take(
         client,
+        client.host,
         run,
         { ...quick, readiness },
         clock,
@@ -952,6 +960,7 @@ test(
       void create.left.then(() => create.release());
       const taking = ReaperHold.take(
         client,
+        client.host,
         run,
         { ...quick, readiness },
         clock,
@@ -1247,7 +1256,7 @@ test(
       started.catch(() => {});
       owner = program(`
         const docker = await Docker.connect({ clock: globalThis, environment: process.env });
-        await ReaperHold.take(docker, ${JSON.stringify(run)}, ${JSON.stringify(quick)}, globalThis);
+        await ReaperHold.take(docker, docker.host, ${JSON.stringify(run)}, ${JSON.stringify(quick)}, globalThis);
       `);
       const hold = await within(started, t.signal, 'the exec of the hold');
 

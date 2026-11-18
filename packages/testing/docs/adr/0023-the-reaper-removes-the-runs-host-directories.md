@@ -1,5 +1,7 @@
 # The reaper removes the run's host directories
 
+Superseded in part on 2026-11-18 (#4503 U8b) by the amendment of [ADR 0024](./0024-a-run-holds-one-ssh-connection-to-an-ssh-engine-and-its-test-processes-reach-the-engine-host-through-it.md): the forward records, the `ssh` process records and their removal are gone, and the teardown and recovery remove the folder of the run's sockets.
+
 `DockerTestbed.directory()` makes a host directory on the engine's host, for bind mounts. Before this record, a directory record in the run's directory named it (`record('directory', …)`), and the global teardown or the recovery of a later run removed it from this machine: with `rmSync` on a local engine, and with `ssh … rm -rf` on an SSH engine. Thus a killed test process left its directory until a test ran again on this machine ([ADR 0020](./0020-a-reaper-container-removes-a-runs-engine-objects-when-the-attach-that-holds-it-closes-and-recovery-keeps-the-local-records.md) item 6). Since [ADR 0022](./0022-a-reaper-starts-again-after-a-restart-of-its-engine-and-removes-itself-at-its-end.md), the run's reaper cleans its run with no later test run.
 
 The maintainer decided on 2026-11-18 (backlog #4508): "Reaper cleans folders too". The reaper deletes the tests' host directories, and this machine keeps records only for the SSH tunnels: the forward directories in its own `/tmp` and the `ssh` processes, which the reaper cannot reach.

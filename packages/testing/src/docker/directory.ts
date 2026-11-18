@@ -63,7 +63,7 @@ export class DockerDirectory implements AsyncDisposable {
     const path = this.resolve(name);
     if (this.host.remote)
       await this.host.shell(
-        `cat > ${quote(path)} && chmod ${mode.toString(8)} -- ${quote(path)}`,
+        `cat > ${quote(path)} && chmod -- ${mode.toString(8)} ${quote(path)}`,
         content,
       );
     else {
@@ -86,7 +86,7 @@ export class DockerDirectory implements AsyncDisposable {
   async chmod(name: string, mode: number): Promise<void> {
     const path = this.resolve(name);
     if (this.host.remote)
-      await this.host.shell(`chmod ${mode.toString(8)} -- ${quote(path)}`);
+      await this.host.shell(`chmod -- ${mode.toString(8)} ${quote(path)}`);
     else await chmod(path, mode);
   }
 

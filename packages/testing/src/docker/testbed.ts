@@ -1,4 +1,6 @@
 import { hash, randomUUID } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 
 import pMemoize from 'p-memoize';
 
@@ -24,7 +26,13 @@ import {
 } from './engine-lease.ts';
 import { DockerHost } from './host.ts';
 import { REAPER_DEFAULTS, ReaperHold, SERVER_LABEL } from './reaper.ts';
-import { type ProcessRun, TEST_RUN_LABEL, readRun } from './run-records.ts';
+import {
+  type ProcessRun,
+  type Run,
+  TEST_RUN_LABEL,
+  readRun,
+  runDockerHost,
+} from './run-records.ts';
 import { ServiceContainer } from './service-container.ts';
 
 export interface ServiceOptions {
@@ -119,13 +127,32 @@ export class DockerTestbed {
     try {
       return {
         client,
-        host: new DockerHost(client.host, this.#run, this.#environment),
+        host: new DockerHost(
+          await this.#endpoint(client),
+          this.#run === undefined
+            ? { environment: this.#environment }
+            : { run: this.#run },
+        ),
       };
     } catch (error) {
       await client[Symbol.asyncDispose]();
       throw error;
     }
   });
+
+  /**
+   * The engine as the run names it. A client that reaches the engine at the
+   * run's docker.sock is in a run on an ssh:// engine, whose run.json keeps
+   * the ssh:// endpoint (ADR 0024); only its global setup serves that socket.
+   */
+  async #endpoint(client: { readonly host: string }): Promise<string> {
+    if (this.#run === undefined || client.host !== runDockerHost(this.#run.id))
+      return client.host;
+    const run: Run = JSON.parse(
+      await readFile(join(this.#run.directory, 'run.json'), 'utf8'),
+    );
+    return run.endpoint;
+  }
 
   constructor({ environment }: DockerTestbedOptions) {
     this.#environment = environment;
@@ -329,6 +356,7 @@ export class DockerTestbed {
     }
     const taking = ReaperHold.take(
       engine.client,
+      engine.host.endpoint,
       run.id,
       REAPER_DEFAULTS,
       globalThis,

@@ -1,5 +1,7 @@
 # Recovery and the global teardown make no engine call, and a test process has no process record
 
+Superseded in part on 2026-11-18 (#4503 U8b) by the amendment of [ADR 0024](./0024-a-run-holds-one-ssh-connection-to-an-ssh-engine-and-its-test-processes-reach-the-engine-host-through-it.md): the forward records, the `ssh` process records and their removal are gone, and the teardown and recovery remove the folder of the run's sockets.
+
 Before this record, recovery had an engine half ([ADR 0020](./0020-a-reaper-container-removes-a-runs-engine-objects-when-the-attach-that-holds-it-closes-and-recovery-keeps-the-local-records.md) item 9). For a dead run with a process record, the global setup connected to the engine, asked whether the run still had a reaper or an object (`reaped`), and else started a new reaper of the run (`startReaper`). A run with no process record "never reached the engine", and recovery deleted its records with no engine call. Thus each test process wrote a process record for itself (`RunRecords.recordThisProcess`) on its first acquisition and in `defaults()` ([ADR 0013](./0013-the-docker-area-is-a-testbed-that-takes-engine-api-bodies-and-the-run-is-not-part-of-its-api.md) items 3 and 8). The global teardown kept the records of a run that had one, because it could not see whether the reaper acted (ADR 0020 item 6).
 
 Two changes took the reasons away:

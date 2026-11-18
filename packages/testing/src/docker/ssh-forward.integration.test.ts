@@ -2,10 +2,11 @@ import assert from 'node:assert/strict';
 import { execFile, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { mkdir, readFile, realpath, writeFile } from 'node:fs/promises';
 import { type Socket, connect, createServer } from 'node:net';
 import { userInfo } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { createInterface } from 'node:readline';
 import type { Readable } from 'node:stream';
 import { test } from 'node:test';
@@ -13,14 +14,18 @@ import { promisify } from 'node:util';
 
 import { TemporaryFiles } from '@zukhruf/fs';
 import { ExitError } from '@zukhruf/ssh';
-import { type Environment, OpenSshConfig } from '@zukhruf/ssh/config';
-import { ControlMaster } from '@zukhruf/ssh/control';
+import type { Environment } from '@zukhruf/ssh/config';
 
 import { timebox } from '../async/timebox.ts';
 import { engine } from '../testing/current-engine.ts';
+import {
+  library,
+  runEnvironment,
+  runnerArgs,
+} from '../testing/global-setup-run.ts';
 import { type Sshd, startSshd } from '../testing/sshd.ts';
 import { DockerHost, quote } from './host.ts';
-import { TEST_RUN_DIRECTORY, TEST_RUN_ID, readRun } from './run-records.ts';
+import { type ProcessRun, TEST_RUN_ID } from './run-records.ts';
 import type { ServiceContainer } from './service-container.ts';
 import { DockerTestbed } from './testbed.ts';
 
@@ -37,6 +42,15 @@ const noEngine =
 const realSsh = noSshd
   ? ''
   : (await run('sh', ['-c', 'command -v ssh'])).stdout.trim();
+
+/** The directory of the docker CLI of this machine, for the PATH of the sessions of an engine host. */
+const dockerCli = noEngine
+  ? ''
+  : dirname(
+      await realpath(
+        (await run('sh', ['-c', 'command -v docker'])).stdout.trim(),
+      ),
+    );
 
 /** The engine host of the tests: the `Host` of the ssh_config that `reaching` writes. */
 const ENGINE_HOST = 'ssh://engine';
@@ -130,11 +144,8 @@ async function openConnection(port: number): Promise<Socket> {
 }
 
 /** A run of the global setup with its directory at `directory`, as a test process reads it. */
-function runAt(directory: string) {
-  return readRun({
-    [TEST_RUN_ID]: randomUUID(),
-    [TEST_RUN_DIRECTORY]: directory,
-  });
+function runAt(directory: string): ProcessRun {
+  return { id: randomUUID(), directory };
 }
 
 /** A Node process that runs `body` with `DockerHost` in scope. */
@@ -154,7 +165,9 @@ test(
     // Arrange: a connection through the forward has had its answer.
     await using sshd = await startSshd();
     await using service = await echoService();
-    const host = new DockerHost(ENGINE_HOST, undefined, await reaching(sshd));
+    const host = new DockerHost(ENGINE_HOST, {
+      environment: await reaching(sshd),
+    });
     const forward = await host.forward(service.port);
     const socket = await openConnection(forward.port);
     const ended = once(socket, 'close');
@@ -176,11 +189,9 @@ test(
   async () => {
     // Arrange: the config names a port where nothing listens.
     await using sshd = await startSshd();
-    const host = new DockerHost(
-      ENGINE_HOST,
-      undefined,
-      await reaching(sshd, await closedPort()),
-    );
+    const host = new DockerHost(ENGINE_HOST, {
+      environment: await reaching(sshd, await closedPort()),
+    });
 
     // Act
     const forward = host.forward(80);
@@ -191,12 +202,35 @@ test(
 );
 
 test(
+  'a connection to a port where nothing listens on the engine host ends, and is no loss of the forward: close resolves',
+  { skip: noSshd },
+  async () => {
+    // Arrange: a readiness probe connects before its server listens.
+    await using sshd = await startSshd();
+    const host = new DockerHost(ENGINE_HOST, {
+      environment: await reaching(sshd),
+    });
+    const forward = await host.forward(await closedPort());
+    const socket = connect(forward.port, '127.0.0.1');
+    socket.on('error', () => {});
+
+    // Act
+    await once(socket, 'close');
+
+    // Assert
+    await forward.close();
+  },
+);
+
+test(
   'a script that exits with a status other than 0 rejects shell with what it printed on stderr',
   { skip: noSshd },
   async () => {
     // Arrange
     await using sshd = await startSshd();
-    const host = new DockerHost(ENGINE_HOST, undefined, await reaching(sshd));
+    const host = new DockerHost(ENGINE_HOST, {
+      environment: await reaching(sshd),
+    });
 
     // Act
     const shell = host.shell("echo 'no such fixture' >&2; exit 3");
@@ -222,7 +256,7 @@ test(
     const child = spawn(
       process.execPath,
       nodeWithHost(`
-        const host = new DockerHost(${JSON.stringify(ENGINE_HOST)}, undefined, ${JSON.stringify(environment)});
+        const host = new DockerHost(${JSON.stringify(ENGINE_HOST)}, { environment: ${JSON.stringify(environment)} });
         const forward = await host.forward(${service.port});
         const socket = connect(forward.port, '127.0.0.1');
         socket.write('ping');
@@ -257,7 +291,9 @@ test(
     // Arrange
     await using sshd = await startSshd();
     await using service = await echoService();
-    const host = new DockerHost(ENGINE_HOST, undefined, await reaching(sshd));
+    const host = new DockerHost(ENGINE_HOST, {
+      environment: await reaching(sshd),
+    });
     const forward = await host.forward(service.port);
     const socket = await openConnection(forward.port);
     const ended = once(socket, 'close');
@@ -280,7 +316,9 @@ test(
     // Arrange
     await using sshd = await startSshd();
     await using service = await echoService();
-    const host = new DockerHost(ENGINE_HOST, undefined, await reaching(sshd));
+    const host = new DockerHost(ENGINE_HOST, {
+      environment: await reaching(sshd),
+    });
     const forward = await host.forward(service.port);
     try {
       // Act
@@ -300,7 +338,9 @@ test(
   async () => {
     // Arrange
     await using sshd = await startSshd();
-    const host = new DockerHost(ENGINE_HOST, undefined, await reaching(sshd));
+    const host = new DockerHost(ENGINE_HOST, {
+      environment: await reaching(sshd),
+    });
 
     // Act
     const { stdout } = await host.shell('cat', 'first line\nsecond line\n');
@@ -317,7 +357,9 @@ test(
     // Arrange: the host's connection is lost while a forward carries a connection.
     await using sshd = await startSshd();
     await using service = await echoService();
-    const host = new DockerHost(ENGINE_HOST, undefined, await reaching(sshd));
+    const host = new DockerHost(ENGINE_HOST, {
+      environment: await reaching(sshd),
+    });
     const forward = await host.forward(service.port);
     const socket = await openConnection(forward.port);
     const ended = once(socket, 'close');
@@ -334,94 +376,116 @@ test(
 );
 
 test(
-  'in a run whose global setup serves the run’s SSH connection, shell goes through that control master',
-  { skip: noSshd },
-  async () => {
-    // Arrange: the run's directory holds the master, as the global setup
-    // will serve it (ADR 0024). A connection of the host's own would be
-    // refused.
-    await using sshd = await startSshd();
-    await using directory = await new TemporaryFiles().directory('run-', {
-      parent: '/tmp',
-    });
-    const config = await OpenSshConfig.resolve(ENGINE_HOST, {
-      environment: await reaching(sshd),
-    });
-    await using client = await config.dial({ clock: globalThis });
-    await using _master = await ControlMaster.listen(
-      client,
-      join(directory.path, 'ssh.sock'),
-    );
-    const host = new DockerHost(
-      ENGINE_HOST,
-      runAt(directory.path),
-      await reaching(sshd, await closedPort()),
-    );
-
-    // Act
-    const { stdout } = await host.shell('echo through the master');
-
-    // Assert
-    assert.equal(stdout, 'through the master\n');
-  },
-);
-
-test(
-  'in a run whose global setup serves the run’s SSH connection, a forward carries its connections through that control master',
+  'a run on an ssh:// engine serves its SSH connection to its test processes: the engine at the run’s docker.sock, shells and forwards through its control master, and its teardown removes the run’s sockets',
   { skip: noEngine },
   async () => {
-    // Arrange: as above; a connection of the host's own would be refused.
-    await using sshd = await startSshd();
-    await using service = await echoService();
-    await using directory = await new TemporaryFiles().directory('run-', {
-      parent: '/tmp',
+    // Arrange: an engine host whose sessions reach the local engine, and a
+    // test file that uses the engine, a directory of the engine host and a
+    // forwarded port.
+    await using sshd = await startSshd({
+      config: [`SetEnv PATH=${dockerCli}:/usr/bin:/bin DOCKER_HOST=${engine}`],
     });
-    const config = await OpenSshConfig.resolve(ENGINE_HOST, {
-      environment: await reaching(sshd),
+    await using directory = await new TemporaryFiles().directory('ssh-run-');
+    const result = join(directory.path, 'result.json');
+    const file = join(directory.path, 'engine.test.ts');
+    await writeFile(
+      file,
+      `
+      import { test } from 'node:test';
+      import { writeFile } from 'node:fs/promises';
+      import { connect } from 'node:net';
+      import { text } from 'node:stream/consumers';
+      import { timebox } from ${JSON.stringify(new URL('../async/index.ts', import.meta.url).href)};
+      import { DockerTestbed } from ${library};
+      test('the engine of the run', async () => {
+        const testbed = new DockerTestbed({ environment: process.env });
+        const fixture = await testbed.directory();
+        await fixture.writeFile('note.txt', 'through the master');
+        const note = await fixture.readFile('note.txt');
+        const service = await testbed.serve(
+          { Image: 'alpine:latest', Cmd: ['nc', '-lk', '-p', '80', '-e', 'cat'] },
+          {
+            internalPort: 80,
+            healthy: (service, signal) =>
+              timebox(async () => {
+                const socket = connect(service.port, '127.0.0.1');
+                socket.end('up');
+                if ((await text(socket)) !== 'up') throw new Error('not up yet');
+              }, { signal }),
+          },
+        );
+        await service.disconnect();
+        await writeFile(${JSON.stringify(result)}, JSON.stringify({ run: process.env.${TEST_RUN_ID}, dockerHost: process.env.DOCKER_HOST, note }));
+      });
+      `,
+    );
+    const runner = spawn(process.execPath, runnerArgs(file), {
+      env: {
+        ...runEnvironment(join(directory.path, 'state')),
+        // A selected context wins over DOCKER_HOST.
+        DOCKER_CONTEXT: undefined,
+        DOCKER_HOST: ENGINE_HOST,
+        PATH: `${(await reaching(sshd)).PATH}:${process.env.PATH}`,
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
     });
-    await using client = await config.dial({ clock: globalThis });
-    await using _master = await ControlMaster.listen(
-      client,
-      join(directory.path, 'ssh.sock'),
-    );
-    const host = new DockerHost(
-      ENGINE_HOST,
-      runAt(directory.path),
-      await reaching(sshd, await closedPort()),
-    );
-    const forward = await host.forward(service.port);
-    try {
-      // Act
-      const answer = await echo(forward.port, 'through the master');
 
-      // Assert
-      assert.equal(answer, 'through the master');
-    } finally {
-      await forward.close();
-    }
+    // Act
+    const [stdout, stderr, [code]] = await Promise.all([
+      text(runner.stdout),
+      text(runner.stderr),
+      once(runner, 'close'),
+    ]);
+
+    // Assert
+    assert.equal(code, 0, stdout + stderr);
+    const { run, dockerHost, note } = JSON.parse(
+      await readFile(result, 'utf8'),
+    );
+    assert.equal(dockerHost, `unix:///tmp/zukhruf-testing-${run}/docker.sock`);
+    assert.equal(note, 'through the master');
+    assert.equal(existsSync(`/tmp/zukhruf-testing-${run}`), false);
   },
 );
 
 test(
-  'in a run whose global setup serves no SSH connection, shell opens a connection of its own',
+  'in a run whose global setup serves no control master, shell fails with the error of the master socket',
   { skip: noSshd },
   async () => {
-    // Arrange: the run's directory has no master socket.
-    await using sshd = await startSshd();
-    await using directory = await new TemporaryFiles().directory('run-', {
-      parent: '/tmp',
+    // Arrange: a host in a run has no connection of its own.
+    await using directory = await new TemporaryFiles().directory('run-');
+    const host = new DockerHost(ENGINE_HOST, {
+      run: runAt(directory.path),
     });
-    const host = new DockerHost(
-      ENGINE_HOST,
-      runAt(directory.path),
-      await reaching(sshd),
-    );
 
     // Act
-    const { stdout } = await host.shell('echo on its own');
+    const shell = host.shell('echo on its own');
 
     // Assert
-    assert.equal(stdout, 'on its own\n');
+    await assert.rejects(shell, { code: 'ENOENT' });
+  },
+);
+
+test(
+  'in a run whose control master is gone, a connection to a forward ends, and close rejects with the error of the master socket',
+  { skip: noSshd },
+  async () => {
+    // Arrange
+    await using directory = await new TemporaryFiles().directory('run-');
+    const host = new DockerHost(ENGINE_HOST, { run: runAt(directory.path) });
+    const forward = await host.forward(80);
+    const socket = connect(forward.port, '127.0.0.1');
+    socket.on('error', () => {});
+
+    // Act
+    await once(socket, 'close');
+
+    // Assert
+    await assert.rejects(forward.close(), (error: Error) => {
+      assert.match(error.message, /^Docker SSH forwarding was lost: /);
+      assert.equal(Reflect.get(Object(error.cause), 'code'), 'ENOENT');
+      return true;
+    });
   },
 );
 
@@ -437,7 +501,7 @@ test(
     const { stdout } = await run(
       process.execPath,
       nodeWithHost(`
-        const host = new DockerHost(${JSON.stringify(ENGINE_HOST)}, undefined, ${JSON.stringify(environment)});
+        const host = new DockerHost(${JSON.stringify(ENGINE_HOST)}, { environment: ${JSON.stringify(environment)} });
         void host.shell('sleep 1; echo done').then(({ stdout }) => process.stdout.write(stdout));
       `),
       { timeout: 30_000, killSignal: 'SIGKILL' },

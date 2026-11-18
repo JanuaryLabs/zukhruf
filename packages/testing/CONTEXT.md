@@ -55,7 +55,7 @@ Node's hook that starts a run before the test processes start. It does recovery 
 _Avoid_: Wrapper
 
 **Global teardown**:
-Node's hook that runs after the test processes of a run end. It is synchronous and makes no engine call: it removes the recorded SSH forward directories, and then the run's directory.
+Node's hook that runs after the test processes of a run end. It is synchronous and makes no engine call: it removes the folder of the run's sockets in `/tmp`, and then the run's directory.
 _Avoid_: Cleanup hook
 
 **Reaper**:
@@ -65,12 +65,12 @@ _Avoid_: Ryuk, janitor
 **Runner**:
 The `node --test` process that runs the global setup, starts the test processes and runs the global teardown.
 
-**Process record**:
-A record in the run's directory that names an SSH command that a test process started, while it runs: an SSH port forward, or a shell on the host of an SSH engine. While a recorded process lives, recovery leaves the run alone, because the process can still use a forward directory of the run. A test process does not record itself: the run's reaper removes what it created on the engine (ADR 0025).
-_Avoid_: Worker record, PID file
+**Run's SSH connection**:
+The one SSH connection that the global setup holds for a run on an SSH engine and serves to the run's test processes, from the folder `/tmp/zukhruf-testing-<run id>/` (ADR 0024): `docker.sock` carries the Engine API, and `ssh.sock` is the control master for shells and forwards.
+_Avoid_: Tunnel, forward record
 
 **Recovery**:
-A later run on the same engine removing what an earlier run left on this machine when its global teardown did not run or failed: the recorded SSH forward directories, and then the earlier run's records. It makes no engine call: the earlier run's reaper removes its engine objects (ADR 0025). Recovery waits until that run's runner and recorded processes have ended.
+A later run on the same engine removing what an earlier run left on this machine when its global teardown did not run or failed: the folder of the earlier run's sockets, and then its records. It makes no engine call: the earlier run's reaper removes its engine objects (ADR 0025). Recovery waits until that run's runner has ended.
 _Avoid_: Garbage collection, prune
 
 **Wait**:

@@ -445,12 +445,11 @@ export function reaperRequest(
 /**
  * The sources of the reaper's socket on the engine's host, in the order a
  * hold tries them (ADR 0020, item 14): the socket of the engine's host, and
- * the path of the client's socket when the client reaches the engine at a
- * `unix://` host.
+ * the path of the engine's socket when `endpoint` is a `unix://` host.
  */
-function socketSources(docker: Docker): string[] {
-  if (!docker.host.startsWith('unix://')) return [SOCKET];
-  const own = new URL(docker.host).pathname;
+function socketSources(endpoint: string): string[] {
+  if (!endpoint.startsWith('unix://')) return [SOCKET];
+  const own = new URL(endpoint).pathname;
   return own === SOCKET ? [SOCKET] : [SOCKET, own];
 }
 
@@ -536,6 +535,7 @@ interface RunningReaper {
  */
 async function running(
   docker: Docker,
+  endpoint: string,
   runId: string,
   settings: ReaperSettings,
   clock: Clock,
@@ -546,7 +546,7 @@ async function running(
     runId,
     settings,
     socket,
-    directoryParent(docker.host),
+    directoryParent(endpoint),
   );
   const name = reaperName(runId);
   let reaper: Container;
@@ -663,6 +663,7 @@ const UNVERIFIED = /^unverified (.*)$/;
  */
 async function answer(
   docker: Docker,
+  endpoint: string,
   runId: string,
   settings: ReaperSettings,
   clock: Clock,
@@ -674,7 +675,7 @@ async function answer(
     const socket = sources.find((source) => !results.has(source));
     if (socket === undefined)
       throw new Error(
-        `The reaper ${reaperName(runId)} found no socket of the engine ${docker.host} that reaches that engine: ${[
+        `The reaper ${reaperName(runId)} found no socket of the engine ${endpoint} that reaches that engine: ${[
           ...results,
         ]
           .map(([source, result]) => `${source}: ${result}`)
@@ -682,7 +683,15 @@ async function answer(
       );
     let reaper;
     try {
-      reaper = await running(docker, runId, settings, clock, socket, signal);
+      reaper = await running(
+        docker,
+        endpoint,
+        runId,
+        settings,
+        clock,
+        socket,
+        signal,
+      );
     } catch (error) {
       if (!(error instanceof BindSourceNotFoundError)) throw error;
       results.set(socket, 'the engine’s host has no file at this path');
@@ -800,6 +809,8 @@ async function whileHeld(
  */
 export class ReaperHold {
   readonly #docker: Docker;
+  /** The engine as the run names it: an ssh:// engine whose client reaches it at the run's docker.sock (ADR 0024). */
+  readonly #endpoint: string;
   readonly #runId: string;
   readonly #settings: ReaperSettings;
   readonly #clock: Clock;
@@ -808,30 +819,34 @@ export class ReaperHold {
 
   private constructor(
     docker: Docker,
+    endpoint: string,
     runId: string,
     settings: ReaperSettings,
     clock: Clock,
   ) {
     this.#docker = docker;
+    this.#endpoint = endpoint;
     this.#runId = runId;
     this.#settings = settings;
     this.#clock = clock;
-    this.#sources = socketSources(docker);
+    this.#sources = socketSources(endpoint);
   }
 
   /**
    * Holds the reaper of `runId`, and creates it when the run has none on this
    * engine. A reaper that closed is waited for until the engine removed it,
    * and one that ends while the hold starts is tried again: at most
-   * `settings.retries` more times.
+   * `settings.retries` more times. `endpoint` is the engine as the run names
+   * it, which decides the reaper's socket and its host directories.
    */
   static async take(
     docker: Docker,
+    endpoint: string,
     runId: string,
     settings: ReaperSettings,
     clock: Clock,
   ): Promise<ReaperHold> {
-    const hold = new ReaperHold(docker, runId, settings, clock);
+    const hold = new ReaperHold(docker, endpoint, runId, settings, clock);
     await hold.held();
     return hold;
   }
@@ -862,6 +877,7 @@ export class ReaperHold {
       for (let attempt = 0; attempt <= retries; attempt++) {
         const reply = await answer(
           this.#docker,
+          this.#endpoint,
           this.#runId,
           this.#settings,
           this.#clock,

@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-import { rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -10,48 +8,16 @@ export const TEST_RUN_DIRECTORY = 'ZUKHRUF_TESTING_RUN_DIR';
 /** The label that ties a container or volume to the run that created it. */
 export const TEST_RUN_LABEL = 'dev.zukhruf.testing.run';
 
-/**
- * The records of one `node --test` invocation with the Docker global setup,
- * in the run's directory: the SSH forward directories of this machine, and
- * the SSH commands that use them. While a recorded command lives, the
- * recovery of a later run leaves the run alone.
- */
-export class RunRecords {
-  readonly directory: string;
-
-  constructor(directory: string) {
-    this.directory = directory;
-  }
-
-  /**
-   * Writes a process record for `pid`, an SSH command that a test process
-   * started. While a recorded process lives, recovery leaves the run alone.
-   * Disposing the record forgets a command that ended. The random id keeps
-   * a reused pid from deleting the record of the next command that has it.
-   */
-  async recordProcess(pid: number): Promise<AsyncDisposable> {
-    const file = join(this.directory, `process-${pid}-${randomUUID()}.json`);
-    await writeFile(file, JSON.stringify({ pid }));
-    return { [Symbol.asyncDispose]: () => rm(file, { force: true }) };
-  }
-
-  /**
-   * Records the directory in /tmp of this machine behind an SSH port forward,
-   * which the global teardown removes if this process dies first. Disposing
-   * the record forgets the path once the process removed it itself.
-   */
-  async recordForward(path: string): Promise<AsyncDisposable> {
-    const file = join(this.directory, `forward-${randomUUID()}.json`);
-    await writeFile(file, JSON.stringify({ path }));
-    return { [Symbol.asyncDispose]: () => rm(file, { force: true }) };
-  }
+/** What the global setup writes to run.json in the run's directory. */
+export interface Run {
+  id: string;
+  /** The engine of the run, as the context selected it: an ssh:// engine keeps its ssh:// endpoint, although its test processes reach it at the run's docker.sock. */
+  endpoint: string;
+  pid: number;
 }
 
-/**
- * The run this process belongs to: its id marks what the process creates,
- * and its records name the SSH forwards of the process.
- */
-export type ProcessRun = { id: string; records: RunRecords };
+/** The run this process belongs to: its id marks what the process creates, and its directory holds run.json. */
+export type ProcessRun = { id: string; directory: string };
 
 /**
  * The run the global setup started this process in, read from the
@@ -67,7 +33,7 @@ export function readRun(
     throw new Error(
       `The global setup sets ${TEST_RUN_ID} and ${TEST_RUN_DIRECTORY} together, but only one of them is set`,
     );
-  return { id, records: new RunRecords(directory) };
+  return { id, directory };
 }
 
 /** The name prefix of a host directory that a run's test process created. */
@@ -82,6 +48,33 @@ export const directoryPrefix = (id: string | undefined): string =>
 export const directoryParent = (endpoint: string): string =>
   endpoint.startsWith('ssh://') ? '/tmp' : tmpdir();
 
-/** The name prefix of the private directory in /tmp behind an SSH port forward. */
-export const forwardName = (id: string | undefined): string =>
-  `zukhruf-testing-forward-${id ?? 'standalone'}-`;
+/**
+ * The folder of the sockets through which the global setup serves the SSH
+ * connection of a run on an ssh:// engine (ADR 0024). A Unix socket path must
+ * fit sun_path (103 characters on macOS), which a path in the run's directory
+ * does not, so the folder is in /tmp, as ssh-agent keeps its socket.
+ */
+export const runSocketFolder = (id: string): string =>
+  `/tmp/zukhruf-testing-${id}`;
+
+/** The sockets of the run's SSH connection: the Engine API at `docker` and the control master at `master`. Named pipes on Windows. */
+export function runSockets(id: string): { docker: string; master: string } {
+  if (process.platform === 'win32')
+    return {
+      docker: `\\\\.\\pipe\\zukhruf-testing-${id}-docker`,
+      master: `\\\\.\\pipe\\zukhruf-testing-${id}-ssh`,
+    };
+  const folder = runSocketFolder(id);
+  return {
+    docker: join(folder, 'docker.sock'),
+    master: join(folder, 'ssh.sock'),
+  };
+}
+
+/** The DOCKER_HOST of the test processes of a run on an ssh:// engine: the run's docker.sock. */
+export function runDockerHost(id: string): string {
+  const { docker } = runSockets(id);
+  return process.platform === 'win32'
+    ? `npipe://${docker.replaceAll('\\', '/')}`
+    : `unix://${docker}`;
+}

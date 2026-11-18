@@ -1,17 +1,15 @@
 import { once } from 'node:events';
 import { type Socket, createServer } from 'node:net';
-import { join } from 'node:path';
 import type { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 
 import pMemoize, { pMemoizeClear } from 'p-memoize';
 
-import { isErrno } from '@zukhruf/fs';
-import type { Client } from '@zukhruf/ssh';
+import { type Client, OpenChannelError } from '@zukhruf/ssh';
 import { type Environment, OpenSshConfig } from '@zukhruf/ssh/config';
 import { ControlClient } from '@zukhruf/ssh/control';
 
-import type { ProcessRun } from './run-records.ts';
+import { type ProcessRun, runSockets } from './run-records.ts';
 
 export const quote = (value: string): string =>
   `'${value.replaceAll("'", "'\\''")}'`;
@@ -20,12 +18,13 @@ export const quote = (value: string): string =>
 const supportedEndpoints = ['unix://', 'npipe://', 'ssh://'];
 
 /**
- * The flags of the SSH connection of this process: a host that does not
- * answer fails the connect, and a connection that stops answering ends, so
- * no call waits forever. The user's config cannot override them: OpenSSH
- * takes the first value that it gets for an option.
+ * The flags of an SSH connection to the engine host, of a run or of a
+ * process: a host that does not answer fails the connect, and a connection
+ * that stops answering ends, so no call waits forever. The user's config
+ * cannot override them: OpenSSH takes the first value that it gets for an
+ * option.
  */
-const SSH_FLAGS = [
+export const SSH_FLAGS = [
   '-o',
   'ConnectTimeout=10',
   '-o',
@@ -33,9 +32,6 @@ const SSH_FLAGS = [
   '-o',
   'ServerAliveCountMax=2',
 ];
-
-/** The socket in the run's directory where the global setup serves the run's SSH connection (ADR 0024). */
-const MASTER_SOCKET = 'ssh.sock';
 
 /** What a command in the shell of the engine's host printed. */
 export interface ShellResult {
@@ -53,29 +49,31 @@ const messageOf = (error: unknown): string =>
 
 /**
  * The endpoint of an engine, for what the Engine API does not do: a shell on
- * the host of an SSH engine and port forwards from it. In a run whose global
- * setup serves the run's SSH connection, it opens each channel through that
- * control master; otherwise through one SSH connection of its own, opened on
+ * the host of an SSH engine and port forwards from it. In a run, it opens each
+ * channel through the run's control master, which the global setup serves
+ * (ADR 0024); outside a run, through one SSH connection of its own, opened on
  * first use with the settings of OpenSSH for `environment`.
  */
 export class DockerHost {
   readonly endpoint: string;
-  readonly #master: ControlClient | undefined;
-  readonly #environment: Environment;
+  /** In a run, the run's control master; outside a run, the environment of the connection of this process. */
+  readonly #channels:
+    { readonly master: ControlClient } | { readonly environment: Environment };
   /** The sessions that run on each connection of this host. */
   readonly #sessions = new WeakMap<Client, number>();
   /** The SSH connection of this process, opened on first use, and again on the use after it was lost. */
-  readonly #connect = pMemoize(async (): Promise<Client> => {
-    const client = await this.#dial();
-    const forget = (): void => pMemoizeClear(this.#connect);
-    void client.wait().then(forget, forget);
-    return client;
-  });
+  readonly #connect = pMemoize(
+    async (environment: Environment): Promise<Client> => {
+      const client = await this.#dial(environment);
+      const forget = (): void => pMemoizeClear(this.#connect);
+      void client.wait().then(forget, forget);
+      return client;
+    },
+  );
 
   constructor(
     endpoint: string,
-    run: ProcessRun | undefined,
-    environment: Environment,
+    reach: { readonly run: ProcessRun } | { readonly environment: Environment },
   ) {
     if (!supportedEndpoints.some((scheme) => endpoint.startsWith(scheme))) {
       throw new Error(
@@ -83,10 +81,10 @@ export class DockerHost {
       );
     }
     this.endpoint = endpoint;
-    this.#master = run
-      ? new ControlClient(join(run.records.directory, MASTER_SOCKET))
-      : undefined;
-    this.#environment = environment;
+    this.#channels =
+      'run' in reach
+        ? { master: new ControlClient(runSockets(reach.run.id).master) }
+        : { environment: reach.environment };
   }
 
   get remote(): boolean {
@@ -122,7 +120,8 @@ export class DockerHost {
   /**
    * A TCP port on 127.0.0.1 of this machine whose connections each reach
    * 127.0.0.1:`port` of the engine's host through a channel. A channel that
-   * the loss of its SSH connection ended makes close() reject.
+   * the loss of its SSH connection ended, or a connection that could not
+   * reach the connection or the run's master, makes close() reject.
    */
   async forward(
     port: number,
@@ -130,15 +129,21 @@ export class DockerHost {
     if (!this.remote) return { port, close: async () => {} };
     // An engine host that this process cannot reach fails the forward here,
     // not at the first connection of a database client.
-    if (!this.#master) await this.#connect();
+    if ('environment' in this.#channels)
+      await this.#connect(this.#channels.environment);
     const sockets = new Set<Socket>();
-    let lost: Error | undefined;
+    let lost: unknown;
     const carry = async (socket: Socket): Promise<void> => {
       sockets.add(socket);
       socket.once('close', () => sockets.delete(socket));
       const channel = await this.#through((channels) =>
         channels.dial('tcp', `127.0.0.1:${port}`),
-      ).catch(() => undefined);
+      ).catch((error: unknown) => {
+        // A server that refuses the channel refuses this one connection, as
+        // a port where nothing listens yet refuses a readiness probe.
+        if (!(error instanceof OpenChannelError)) lost ??= error;
+        return undefined;
+      });
       if (!channel) return void socket.destroy();
       // A channel of a lost connection fails with the error of the loss as
       // its cause (@zukhruf/ssh); a write to a channel that the far end
@@ -167,33 +172,26 @@ export class DockerHost {
         server.close();
         for (const socket of sockets) socket.destroy();
         await closed;
-        if (lost)
-          throw new Error(`Docker SSH forwarding was lost: ${lost.message}`, {
-            cause: lost,
-          });
+        if (lost !== undefined)
+          throw new Error(
+            `Docker SSH forwarding was lost: ${messageOf(lost)}`,
+            {
+              cause: lost,
+            },
+          );
       })();
       return closing;
     };
     return { port: address.port, close };
   }
 
-  /**
-   * Opens a channel through the run's control master, or through the
-   * connection of this process when no master serves the run: a master
-   * socket that does not exist (ENOENT) means that the run's global setup
-   * serves none. A master that died (ECONNREFUSED) fails the call.
-   */
+  /** Opens a channel through the run's control master, or outside a run through the connection of this process. */
   async #through<T>(
     open: (channels: Client | ControlClient) => Promise<T>,
   ): Promise<T> {
-    if (this.#master) {
-      try {
-        return await open(this.#master);
-      } catch (error) {
-        if (!isErrno(error, 'ENOENT')) throw error;
-      }
-    }
-    const client = await this.#connect();
+    const channels = this.#channels;
+    if ('master' in channels) return open(channels.master);
+    const client = await this.#connect(channels.environment);
     // The connection keeps the process alive only while a channel opens or
     // a session runs on it.
     const before = this.#sessions.get(client) ?? 0;
@@ -208,10 +206,10 @@ export class DockerHost {
     }
   }
 
-  async #dial(): Promise<Client> {
+  async #dial(environment: Environment): Promise<Client> {
     const config = await OpenSshConfig.resolve(this.endpoint, {
       flags: SSH_FLAGS,
-      environment: this.#environment,
+      environment,
     });
     const client = await config.dial({ clock: globalThis });
     client.unref();

@@ -35,3 +35,17 @@ Outside a run (a `DockerTestbed` with no global setup), `DockerHost` opens an SS
 - The global setup needs `@zukhruf/ssh`, which already sits in the base of root ADR 0001, below `@zukhruf/testing`.
 - `ssh-forward.integration.test.ts`, which drove `ssh` through a fake executable, is rewritten against an `sshd` child that bridges to the local engine, as `@zukhruf/docker`'s `ssh-transport.test.ts` does.
 - The synchronous global teardown cannot wait for the SSH connection while it blocks its thread. The connection, the two servers and the master do not keep the `node --test` process alive (`unref`), and the process's end closes them.
+
+## Amendment, 2026-11-18 (#4503 U8b)
+
+The maintainer decided two points that the record above left open:
+
+- **Where the sockets are.** A path in the run's directory does not fit a Unix socket's `sun_path` on macOS: `~/.local/state/zukhruf-testing/docker-runs/<uuid>/docker.sock` is 107 characters, the limit is 103, and `listen()` fails with `EINVAL`. `os.tmpdir()` is too long there too. So the global setup makes `/tmp/zukhruf-testing-<run id>/` (mode 0700, named from the run's random id, as `ssh-agent` keeps `/tmp/ssh-XXXX/agent.<pid>`) for `docker.sock` and `ssh.sock`; on Windows they are the named pipes `\\.\pipe\zukhruf-testing-<run id>-docker` and `-ssh`. The global teardown removes the folder with the run, and recovery removes it for a dead run from the id in `run.json`, so no record names it. ("/tmp/zukhruf-testing-<run id>/ (Recommended)")
+- **What keeps the runner alive.** `ControlMaster` had no `unref()`; `@zukhruf/ssh` got `ControlMaster.ref()` and `unref()` (Node's `Server#ref`), and the global setup unrefs the connection, the master and the `docker.sock` server. ("Add ControlMaster.ref/unref (Recommended)")
+
+What else the code needed:
+
+- The reaper's socket and its host-directory folder depend on whether the engine is remote. In a run on an SSH engine, the client's host is the local `docker.sock`, so `ReaperHold.take` gets the run's endpoint, and `DockerTestbed` reads it from `run.json`.
+- A `DockerHost` in a run reaches the engine host only through the run's master; with no master, it fails and opens no connection of its own.
+- A forward counts a connection that cannot reach the connection or the master as a loss of the forward, and a channel that the server refuses (a port where nothing listens yet) as no loss. `@zukhruf/ssh`'s control client rejects such a refusal with `OpenChannelError` since #4598.
+- The engine socket comes from `docker context inspect` on the engine host, as `@zukhruf/docker` finds it: a copy, in the ledger of copied code.
