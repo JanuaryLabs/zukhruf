@@ -55,11 +55,11 @@ Node's hook that starts a run before the test processes start. It does recovery 
 _Avoid_: Wrapper
 
 **Global teardown**:
-Node's hook that runs after the test processes of a run end. It is synchronous and makes no engine call: it removes the recorded paths and their records. It keeps the run's other records when the run has a process record, for the recovery of a later run.
+Node's hook that runs after the test processes of a run end. It is synchronous and makes no engine call: it removes the recorded SSH forward directories and their records. It keeps the run's other records when the run has a process record, for the recovery of a later run.
 _Avoid_: Cleanup hook
 
 **Reaper**:
-A container of one run on one engine (ADR 0020). It mounts a socket of the engine's host, and lets a holder in only after it finds itself through that socket. Each test process of the run holds it with one `cat` exec, and takes the hold again at once when it ends while the process lives. About 2 s after the last holder ended, it closes, so a later holder holds the next reaper of the run, and it removes the run's containers and volumes, drops the run's databases in the shared servers, checks again a few times, removes the expired shared servers, and exits.
+A container of one run on one engine (ADR 0020). It mounts a socket of the engine's host, and lets a holder in only after it finds itself through that socket. Each test process of the run holds it with one `cat` exec, and takes the hold again at once when it ends while the process lives. About 2 s after the last holder ended, it closes, so a later holder holds the next reaper of the run, and it removes the run's containers and volumes and its host directories, drops the run's databases in the shared servers, checks again a few times, removes the expired shared servers, and exits.
 _Avoid_: Ryuk, janitor
 
 **Runner**:
@@ -70,7 +70,7 @@ A record in the run's directory that names a process that can create something f
 _Avoid_: Worker record, PID file
 
 **Recovery**:
-A later run removing what an earlier run left: the recorded paths, and, through the earlier run's reaper, its engine objects. It deletes the earlier run's records only when the engine has no reaper of that run and nothing that one would remove. Otherwise it starts that run's reaper, or leaves a running one alone, and keeps the records. Recovery waits until that run's runner and recorded processes have ended.
+A later run removing what an earlier run left: the recorded SSH forward directories, and, through the earlier run's reaper, its engine objects. It deletes the earlier run's records only when the engine has no reaper of that run and nothing that one would remove. Otherwise it starts that run's reaper, or leaves a running one alone, and keeps the records. Recovery waits until that run's runner and recorded processes have ended.
 _Avoid_: Garbage collection, prune
 
 **Wait**:

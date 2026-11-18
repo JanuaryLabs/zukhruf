@@ -13,6 +13,7 @@ import { createClock } from '@sinonjs/fake-timers';
 
 import { untilAborted } from '@zukhruf/async';
 import {
+  BindSourceNotFoundError,
   type Container,
   ContainerNotFoundError,
   Docker,
@@ -36,6 +37,7 @@ import {
   reaperRequest,
   startReaper,
 } from './reaper.ts';
+import { directoryParent } from './run-records.ts';
 
 const RUN_LABEL = 'dev.zukhruf.testing.run';
 const KIND_LABEL = 'dev.zukhruf.testing.kind';
@@ -327,6 +329,7 @@ async function proxiedReaper(
     run,
     { ...settings, firstHolder: 0 },
     '/var/run/docker.sock',
+    directoryParent(docker.host),
   );
   const since = Math.floor(Date.now() / 1000) - 1;
   const reaper = await docker.containers.create(
@@ -641,6 +644,7 @@ test('a reaper whose socket does not reach its engine exits 1, and the engine do
         run,
         { ...quick, firstHolder: 0, requestTimeout: 1_000 },
         '/etc/hosts',
+        directoryParent(docker.host),
       ),
       { name: reaperName(run) },
     );
@@ -1354,6 +1358,131 @@ test('defaults() in a run holds the run’s reaper, records its process, and giv
     await killed(launched.child);
     await removeRun(run);
     await gone(t, async () => assert.deepEqual(await reapers(run), []));
+  }
+});
+
+/**
+ * A test process of the run `run` whose records are in `records`: it makes a
+ * directory with `DockerTestbed.directory()` and writes a file in it, runs
+ * `fill` with `testbed` and `directory` in scope, prints the directory's path,
+ * and lives until it is killed.
+ */
+function directoryMaker(run: string, records: string, fill = ''): Program {
+  return program(
+    `
+      const testbed = new DockerTestbed({ environment: process.env });
+      const directory = await testbed.directory();
+      await directory.writeFile('file.txt', 'owned');
+      ${fill}
+      console.log(directory.path);
+      setInterval(() => {}, 60_000);
+    `,
+    {
+      ...process.env,
+      ZUKHRUF_TESTING_RUN_ID: run,
+      ZUKHRUF_TESTING_RUN_DIR: records,
+    },
+  );
+}
+
+/** Whether the engine's host has `path`: the engine refuses a bind mount whose source its host does not have. */
+async function onEngineHost(path: string): Promise<boolean> {
+  try {
+    await docker.containers.run({
+      Image: 'alpine:latest',
+      Cmd: ['true'],
+      HostConfig: {
+        Mounts: [{ Type: 'bind', Source: path, Target: '/probe' }],
+      },
+    });
+    return true;
+  } catch (error) {
+    if (error instanceof BindSourceNotFoundError) return false;
+    throw error;
+  }
+}
+
+test('the reaper of a run removes the directory of its killed test process, with no later run', async (t) => {
+  await using records = await new TemporaryFiles().directory(
+    'zukhruf-testing-directory-',
+  );
+  const run = randomUUID();
+  await present('alpine:latest');
+  const maker = directoryMaker(run, records.path);
+  try {
+    const path = await maker.line();
+    const made = await onEngineHost(path);
+    await killed(maker.child);
+
+    assert.equal(made, true);
+    await gone(t, async () => assert.equal(await onEngineHost(path), false));
+  } finally {
+    await killed(maker.child);
+    await removeRun(run);
+  }
+});
+
+test('the reaper of a run removes a directory of its killed test process that holds a folder a container made chmod 000', async (t) => {
+  await using records = await new TemporaryFiles().directory(
+    'zukhruf-testing-directory-',
+  );
+  const run = randomUUID();
+  await present('alpine:latest');
+  const maker = directoryMaker(
+    run,
+    records.path,
+    `const locked = await testbed.run({
+      Image: 'alpine:latest',
+      Cmd: ['sh', '-c', 'mkdir -p /fixture/locked/inner && echo owned > /fixture/locked/inner/file.txt && chmod 000 /fixture/locked && stat -c %a /fixture/locked'],
+      HostConfig: { Mounts: [{ Type: 'bind', Source: directory.path, Target: '/fixture' }] },
+    });
+    if (locked.exitCode !== 0 || locked.stdout.trim() !== '0') throw new Error(\`The container did not lock the folder: \${locked.output}\`);`,
+  );
+  try {
+    const path = await maker.line();
+    const made = await onEngineHost(path);
+    await killed(maker.child);
+
+    assert.equal(made, true);
+    await gone(t, async () => assert.equal(await onEngineHost(path), false));
+  } finally {
+    await killed(maker.child);
+    await removeRun(run);
+  }
+});
+
+test('the reaper of a run keeps the run’s directories while one of its test processes lives, and removes them after the last one ended', async (t) => {
+  await using records = await new TemporaryFiles().directory(
+    'zukhruf-testing-directory-',
+  );
+  const run = randomUUID();
+  await present('alpine:latest');
+  const makers = [
+    directoryMaker(run, records.path),
+    directoryMaker(run, records.path),
+  ];
+  try {
+    const paths = [await makers[0]!.line(), await makers[1]!.line()];
+    await killed(makers[0]!.child);
+    // A fixed window, longer than the grace and each pass of the reaper of a
+    // testbed: the test proves that the reaper removed nothing while one test
+    // process lives.
+    const { grace, interval, passes } = REAPER_DEFAULTS;
+    await delay(grace + interval * passes + 2_000);
+    const keptWhileOneLives = [
+      await onEngineHost(paths[0]!),
+      await onEngineHost(paths[1]!),
+    ];
+    await killed(makers[1]!.child);
+
+    assert.deepEqual(keptWhileOneLives, [true, true]);
+    await gone(t, async () => {
+      for (const path of paths)
+        assert.equal(await onEngineHost(path), false, path);
+    });
+  } finally {
+    for (const { child } of makers) await killed(child);
+    await removeRun(run);
   }
 });
 

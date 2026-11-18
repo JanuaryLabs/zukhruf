@@ -5,7 +5,7 @@ import { posix } from 'node:path';
 import { TemporaryFiles } from '@zukhruf/fs';
 
 import { DockerHost, quote } from './host.ts';
-import { type ProcessRun, directoryPrefix } from './run-records.ts';
+import { directoryParent, directoryPrefix } from './run-records.ts';
 
 /** A disposable fixture directory on the selected daemon's host filesystem. */
 export class DockerDirectory implements AsyncDisposable {
@@ -23,28 +23,28 @@ export class DockerDirectory implements AsyncDisposable {
     this.#owned = owned;
   }
 
+  /**
+   * Makes the directory in the folder of the engine's host that the reaper of
+   * the run `runId` removes if this process dies before its disposal.
+   */
   static async create(
     host: DockerHost,
-    run: ProcessRun | undefined,
+    runId: string | undefined,
   ): Promise<DockerDirectory> {
-    // The record outlives the directory: the global teardown removes the
-    // directory if this process dies before it removed the directory itself.
-    await using resources = new AsyncDisposableStack();
     await using directory = new AsyncDisposableStack();
-    const prefix = directoryPrefix(run?.id);
+    const prefix = directoryPrefix(runId);
+    const parent = directoryParent(host.endpoint);
     const path = host.remote
-      ? `/tmp/${prefix}${randomUUID()}`
-      : directory.use(await new TemporaryFiles().directory(prefix)).path;
-    const record = await run?.records.record('directory', path);
-    if (record) resources.use(record);
+      ? posix.join(parent, `${prefix}${randomUUID()}`)
+      : directory.use(await new TemporaryFiles().directory(prefix, { parent }))
+          .path;
     if (host.remote) {
       await host.shell(`mkdir -m 700 -- ${quote(path)}`);
       directory.defer(async () => {
         await host.shell(`rm -rf -- ${quote(path)}`);
       });
     }
-    resources.use(directory.move());
-    return new DockerDirectory(path, host, resources.move());
+    return new DockerDirectory(path, host, directory.move());
   }
 
   private resolve(name: string): string {

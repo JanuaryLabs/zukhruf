@@ -40,7 +40,7 @@ import {
   reaperName,
   reaperRequest,
 } from '../docker/reaper.ts';
-import { RunRecords } from '../docker/run-records.ts';
+import { RunRecords, directoryParent } from '../docker/run-records.ts';
 import { engine, proxyless } from '../testing/current-engine.ts';
 import { docker } from '../testing/engine-client.ts';
 import { EngineProxy } from '../testing/engine-proxy.ts';
@@ -367,23 +367,24 @@ for (const mode of [
               false,
               `the run left volume ${name}: ${run.output()}`,
             );
+          // The reaper removes the directory after its first pass. Docker
+          // validates the remote path. This probe never creates the source.
+          await assert.rejects(
+            docker.containers.run({
+              Image: 'alpine:latest',
+              Cmd: ['true'],
+              HostConfig: {
+                Mounts: [
+                  { Type: 'bind', Source: ended.path, Target: '/fixture' },
+                ],
+              },
+            }),
+            BindSourceNotFoundError,
+          );
         });
         for (const path of state.forwards) {
           await assert.rejects(readFile(join(path, 's')), { code: 'ENOENT' });
         }
-        // Docker validates the remote path. This probe never creates the source.
-        await assert.rejects(
-          docker.containers.run({
-            Image: 'alpine:latest',
-            Cmd: ['true'],
-            HostConfig: {
-              Mounts: [
-                { Type: 'bind', Source: state.path, Target: '/fixture' },
-              ],
-            },
-          }),
-          BindSourceNotFoundError,
-        );
         if (mode === 'SIGINT' || mode === 'SIGTERM') {
           // The runner does not wait for a signalled test process, so the
           // teardown may keep the run's records; the next run removes them.
@@ -1101,6 +1102,7 @@ test('a reaper of another run that was left created, with no records, is started
         firstHolder: 0,
       },
       '/var/run/docker.sock',
+      directoryParent(docker.host),
     ),
     { name: reaperName(stale) },
   );
@@ -1112,6 +1114,7 @@ test('a reaper of another run that was left created, with no records, is started
       young,
       { ...REAPER_DEFAULTS, requestTimeout: 3_600_000 },
       '/var/run/docker.sock',
+      directoryParent(docker.host),
     ),
     { name: reaperName(young) },
   );
@@ -1923,6 +1926,7 @@ async function proxiedReaper(
       ...settings,
     },
     '/var/run/docker.sock',
+    directoryParent(docker.host),
   );
   const since = Math.floor(Date.now() / 1000) - 1;
   const reaper = await docker.containers.create(

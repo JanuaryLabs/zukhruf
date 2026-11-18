@@ -24,7 +24,7 @@ test('the forward directory of the run goes, and then its record', async () => {
       parent: '/tmp',
     },
   );
-  await new RunRecords(records.path).record('forward', forward.path);
+  await new RunRecords(records.path).recordForward(forward.path);
 
   removeRecordedPaths(run, records.path);
 
@@ -42,7 +42,7 @@ test('a record that names the directory below /tmp as written, not at its real p
     },
   );
   const written = join('/tmp', basename(forward.path));
-  await new RunRecords(records.path).record('forward', written);
+  await new RunRecords(records.path).recordForward(written);
 
   removeRecordedPaths(run, records.path);
 
@@ -55,7 +55,7 @@ test('a record whose `..` leads out of /tmp is refused, and the directory it nam
   await using outside = await new TemporaryFiles().directory('outside-');
   const victim = join(outside.path, `${forwardName(run.id)}x`);
   await mkdir(victim);
-  await new RunRecords(records.path).record('forward', `/tmp/..${victim}`);
+  await new RunRecords(records.path).recordForward(`/tmp/..${victim}`);
 
   assert.throws(() => removeRecordedPaths(run, records.path), {
     message: /Invalid SSH forwarding cleanup record/,
@@ -72,7 +72,7 @@ test('the forward directory of another run is refused, and it stays', async () =
       parent: '/tmp',
     },
   );
-  await new RunRecords(records.path).record('forward', other.path);
+  await new RunRecords(records.path).recordForward(other.path);
 
   assert.throws(() => removeRecordedPaths(run, records.path), {
     message: /Invalid SSH forwarding cleanup record/,

@@ -149,9 +149,11 @@ export class DockerTestbed {
     return (await this.#engine()).client;
   }
 
-  /** A fixture directory on the engine's host. */
+  /** A fixture directory on the engine's host. The reaper of its run removes it if this process dies first. */
   async directory(): Promise<DockerDirectory> {
-    return DockerDirectory.create((await this.#engine()).host, this.#run);
+    const engine = await this.#engine();
+    await this.#reaper(engine);
+    return DockerDirectory.create(engine.host, this.#run?.id);
   }
 
   /** Creates a named volume. The reaper of its run removes it if this process dies first. */

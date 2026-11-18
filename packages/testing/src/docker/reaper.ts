@@ -30,7 +30,11 @@ import {
   LEASE_LABEL,
   sweepLeaseName,
 } from './engine-lease.ts';
-import { TEST_RUN_LABEL } from './run-records.ts';
+import {
+  TEST_RUN_LABEL,
+  directoryParent,
+  directoryPrefix,
+} from './run-records.ts';
 
 /** An official Docker CLI image, pinned (ADR 0020, item 10). */
 export const REAPER_IMAGE = 'docker:28.5.2-cli';
@@ -46,6 +50,9 @@ const SOCKET_LABEL = 'dev.zukhruf.testing.reaper.socket';
 
 /** The path of the engine's socket in a reaper, where its `docker` CLI looks by default. */
 const SOCKET = '/var/run/docker.sock';
+
+/** The mount in a reaper of the folder of the engine's host that holds the host directories (ADR 0023). */
+const DIRECTORIES = '/directories';
 
 /** Marks a server that `reuse()` shares (ADR 0019). */
 export const SERVER_LABEL = 'dev.zukhruf.testing.server';
@@ -167,9 +174,9 @@ function dropBranch(collector: Collector): string {
  * The command of the reaper. Each holder is one `cat` exec that holds the
  * door shared. After the last holder ended, it waits the grace, and a holder
  * that comes back stops the countdown. Then it closes the door, removes the
- * run's containers and volumes, drops the run's databases, does the re-check
- * passes and removes the expired shared servers, with the door closed, and
- * removes itself.
+ * run's containers and volumes, removes the run's host directories, drops
+ * the run's databases, does the re-check passes and removes the expired shared
+ * servers, with the door closed, and removes itself.
  */
 function script(): string {
   return `
@@ -228,6 +235,17 @@ pass() {
     [ -n "$id" ] && drop_in "$id" "$kind"
   done
   return 0
+}
+
+# Removes the run's host directories (ADR 0023), after the first pass removed
+# the run's containers, which can write to them. chmod first: where the root
+# of a container acts as the user of the engine's host, as on the file sharing
+# of Docker Desktop, rm cannot enter a folder that a container made 000.
+directories() {
+  set -- ${DIRECTORIES}/${directoryPrefix('$REAPER_RUN')}*
+  [ -e "$1" ] || return 0
+  once chmod -R u+rwx "$@"
+  once rm -rf "$@"
 }
 
 # Resolves when the lease $1 is gone, as EngineLease.gone does; fails at $deadline.
@@ -350,6 +368,7 @@ while :; do
   # refused and holds the next reaper of the run.
   flock -n -x 9 || continue
   pass
+  directories
   checked=0
   while [ "$checked" -lt "$REAPER_PASSES" ]; do
     sleep "$(seconds "$REAPER_INTERVAL")"
@@ -371,7 +390,11 @@ done
  * The body of the reaper of the run `runId`, with its inputs in its
  * environment and the file `socket` of the engine's host as its socket. The
  * mount is a `bind` mount, so a `socket` that the engine's host does not have
- * fails the create and creates no directory there. It has no restart policy
+ * fails the create and creates no directory there. It mounts `directories`,
+ * the folder of the engine's host that holds the host directories, and the
+ * engine creates that folder when its host has none, as the host of an engine
+ * that a relay reaches does not: the run's engine objects do not wait for its
+ * directories (ADR 0023). It has no restart policy
  * and no AutoRemove: the reaper sets its policy once it verified its socket,
  * and removes itself at its end.
  */
@@ -379,6 +402,7 @@ export function reaperRequest(
   runId: string,
   settings: ReaperSettings,
   socket: string,
+  directories: string,
 ): EngineApi.ContainerCreateRequest {
   const self = randomUUID();
   return {
@@ -405,7 +429,15 @@ export function reaperRequest(
       [SOCKET_LABEL]: socket,
     },
     HostConfig: {
-      Mounts: [{ Type: 'bind', Source: socket, Target: SOCKET }],
+      Mounts: [
+        { Type: 'bind', Source: socket, Target: SOCKET },
+        {
+          Type: 'bind',
+          Source: directories,
+          Target: DIRECTORIES,
+          BindOptions: { CreateMountpoint: true },
+        },
+      ],
     },
   };
 }
@@ -423,9 +455,11 @@ function socketSources(docker: Docker): string[] {
 }
 
 /**
- * The longest that a reaper can run after it closed its door: its first pass
- * and its re-check passes, `interval` apart, its expiry pass with one sweep,
- * the start of one reaper left `created`, and its removal of itself. A pass makes four removals (the list and the removal of the
+ * The longest that a reaper can run after it closed its door: its first pass,
+ * the removal of the run's host directories (a chmod and a remove, each within
+ * `requestTimeout`), its re-check passes, `interval` apart, its expiry pass
+ * with one sweep, the start of one reaper left `created`, and its removal of
+ * itself. A pass makes four removals (the list and the removal of the
  * containers, then of the volumes), each with its first try and `retries`
  * more, `interval` apart and each within `requestTimeout`, and one list of the
  * shared servers. The expiry pass lists the servers and, for one expired
@@ -441,7 +475,15 @@ export function closingTime(settings: ReaperSettings): number {
   const pass = 4 * removal + requestTimeout;
   const expiry = 4 * requestTimeout + sweepWait;
   const revival = 4 * requestTimeout;
-  return (passes + 1) * pass + passes * interval + expiry + revival + removal;
+  const directories = 2 * requestTimeout;
+  return (
+    (passes + 1) * pass +
+    directories +
+    passes * interval +
+    expiry +
+    revival +
+    removal
+  );
 }
 
 /**
@@ -500,7 +542,12 @@ async function running(
   socket: string,
   signal: AbortSignal,
 ): Promise<RunningReaper | undefined> {
-  const request = reaperRequest(runId, settings, socket);
+  const request = reaperRequest(
+    runId,
+    settings,
+    socket,
+    directoryParent(docker.host),
+  );
   const name = reaperName(runId);
   let reaper: Container;
   try {

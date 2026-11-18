@@ -19,7 +19,7 @@ export const quote = (value: string): string =>
   `'${value.replaceAll("'", "'\\''")}'`;
 
 /** How long one command in the SSH engine's remote shell may take. */
-export const SHELL_TIMEOUT = 30_000;
+const SHELL_TIMEOUT = 30_000;
 
 /** The part of the standard error of `ssh` that an error message keeps: the last 4 KB. */
 const STDERR_LIMIT = 4096;
@@ -73,7 +73,7 @@ export class DockerHost {
     return this.endpoint.startsWith('ssh://');
   }
 
-  sshArgs(options: string[] = []): string[] {
+  #sshArgs(options: string[] = []): string[] {
     const url = new URL(this.endpoint);
     // Pass the original hostname to OpenSSH: ~/.ssh/config, jump hosts, keys,
     // agents and host-key policy continue to work exactly as for Docker.
@@ -97,7 +97,7 @@ export class DockerHost {
   shell(script: string, input?: string): Promise<Result> {
     return recorded(
       this.#run,
-      command('ssh', [...this.sshArgs(), script], {
+      command('ssh', [...this.#sshArgs(), script], {
         stdin: input === undefined ? 'ignore' : { string: input },
         timeout: SHELL_TIMEOUT,
       }),
@@ -119,8 +119,7 @@ export class DockerHost {
           parent: '/tmp',
         }),
       );
-      if (run)
-        resources.use(await run.records.record('forward', directory.path));
+      if (run) resources.use(await run.records.recordForward(directory.path));
       const path = join(directory.path, 's');
       const sockets = new Set<Socket>();
       const server = createServer((socket) => {
@@ -150,7 +149,7 @@ export class DockerHost {
       const ssh = command(
         'ssh',
         [
-          ...this.sshArgs([
+          ...this.#sshArgs([
             '-S',
             'none',
             '-o',

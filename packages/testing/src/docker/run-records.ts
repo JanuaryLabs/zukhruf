@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
 import { rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 /** Set by the global setup for the run's test processes: the run's id. */
@@ -53,14 +54,12 @@ export class RunRecords {
   }
 
   /**
-   * Records a path that the global teardown removes if this process dies first.
-   * Disposing the record forgets the path once the process removed it itself.
+   * Records the directory in /tmp of this machine behind an SSH port forward,
+   * which the global teardown removes if this process dies first. Disposing
+   * the record forgets the path once the process removed it itself.
    */
-  async record(
-    kind: 'forward' | 'directory',
-    path: string,
-  ): Promise<AsyncDisposable> {
-    const file = join(this.directory, `${kind}-${randomUUID()}.json`);
+  async recordForward(path: string): Promise<AsyncDisposable> {
+    const file = join(this.directory, `forward-${randomUUID()}.json`);
     await writeFile(file, JSON.stringify({ path }));
     return { [Symbol.asyncDispose]: () => rm(file, { force: true }) };
   }
@@ -92,6 +91,14 @@ export function readRun(
 /** The name prefix of a host directory that a run's test process created. */
 export const directoryPrefix = (id: string | undefined): string =>
   `zukhruf-testing-${id ?? 'standalone'}-`;
+
+/**
+ * The folder of the engine's host that holds the host directories: /tmp on
+ * the host of an SSH engine, else the temporary folder of this machine. The
+ * reaper of a run mounts it and removes the run's directories there.
+ */
+export const directoryParent = (endpoint: string): string =>
+  endpoint.startsWith('ssh://') ? '/tmp' : tmpdir();
 
 /** The name prefix of the private directory in /tmp behind an SSH port forward. */
 export const forwardName = (id: string | undefined): string =>

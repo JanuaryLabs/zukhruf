@@ -1,11 +1,9 @@
-import { execFileSync } from 'node:child_process';
 import { readFileSync, readdirSync, realpathSync, rmSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 
 import { isErrno } from '@zukhruf/fs';
 
-import { DockerHost, SHELL_TIMEOUT, quote } from '../docker/host.ts';
-import { directoryPrefix, forwardName } from '../docker/run-records.ts';
+import { forwardName } from '../docker/run-records.ts';
 
 /** What the global setup writes to run.json. */
 export interface Run {
@@ -34,34 +32,19 @@ const recordedPath = (file: string): string => {
 };
 
 /**
- * Removes the paths that the run's records name, and then each record: the
- * SSH forward directories and the host directories. The reaper of the run
- * removes its engine objects (ADR 0020, item 6). Synchronous, so the global
+ * Removes the SSH forward directories that the run's records name, and then
+ * each record. The reaper of the run removes its engine objects (ADR 0020,
+ * item 6) and its host directories (ADR 0023). Synchronous, so the global
  * teardown finishes under `--test-force-exit`.
  */
 export function removeRecordedPaths(run: Run, directory: string): void {
-  const host = new DockerHost(run.endpoint, undefined);
   for (const file of readdirSync(directory)) {
+    if (!file.startsWith('forward-')) continue;
     const record = join(directory, file);
-    if (file.startsWith('forward-')) {
-      const path = recordedPath(record);
-      if (!isForwardDirectory(path, run.id))
-        throw new Error(`Invalid SSH forwarding cleanup record: ${path}`);
-      rmSync(path, { recursive: true, force: true });
-    } else if (file.startsWith('directory-')) {
-      const path = recordedPath(record);
-      if (
-        !path.includes(`/${directoryPrefix(run.id)}`) ||
-        path.includes('/../')
-      )
-        throw new Error(`Invalid fixture cleanup record: ${path}`);
-      if (host.remote)
-        execFileSync('ssh', [...host.sshArgs(), `rm -rf -- ${quote(path)}`], {
-          timeout: SHELL_TIMEOUT,
-          stdio: 'ignore',
-        });
-      else rmSync(path, { recursive: true, force: true });
-    } else continue;
+    const path = recordedPath(record);
+    if (!isForwardDirectory(path, run.id))
+      throw new Error(`Invalid SSH forwarding cleanup record: ${path}`);
+    rmSync(path, { recursive: true, force: true });
     rmSync(record, { force: true });
   }
 }
