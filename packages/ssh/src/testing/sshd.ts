@@ -64,8 +64,13 @@ export async function startSshd(
 
     const children = new Set<ChildProcess>();
     const server = createServer({ pauseOnConnect: true }, (socket) => {
+      // After the login, sshd forks the child that serves the connection
+      // (privsep_postauth in OpenSSH's sshd-session.c); it holds the socket
+      // too, and outlives a signal to its parent. In its own process group,
+      // the whole connection gets each signal.
       const child = spawn(sshdPath, ['-i', '-f', config], {
         stdio: [socket, socket, 'ignore'],
+        detached: true,
       });
       // The child holds its own copy of the socket; the server's copy would
       // keep the connection open after sshd exits.
@@ -82,7 +87,7 @@ export async function startSshd(
       hostPublicKey,
       directory: directory.path,
       kill(signal) {
-        for (const child of children) child.kill(signal);
+        for (const child of children) signalGroup(child, signal);
       },
       async [Symbol.asyncDispose]() {
         const closed = once(server, 'close');
@@ -90,10 +95,10 @@ export async function startSshd(
         await Promise.all(
           [...children].map(async (child) => {
             const exited = once(child, 'exit');
-            child.kill('SIGTERM');
+            signalGroup(child, 'SIGTERM');
             // A test may have stopped it; a stopped process ends only after
             // it continues.
-            child.kill('SIGCONT');
+            signalGroup(child, 'SIGCONT');
             await exited;
           }),
         );
@@ -104,6 +109,18 @@ export async function startSshd(
   } catch (error) {
     await directory[Symbol.asyncDispose]();
     throw error;
+  }
+}
+
+// No process of the group is left to signal: ESRCH, or on macOS EPERM while
+// the leader is a zombie that Node has not reaped yet (killpg1 counts no
+// zombie, bsd/kern/kern_sig.c:1714-1718 of xnu-12377.1.9).
+function signalGroup(child: ChildProcess, signal: NodeJS.Signals): void {
+  if (child.pid === undefined) return;
+  try {
+    process.kill(-child.pid, signal);
+  } catch (error) {
+    if (!isErrno(error, 'ESRCH') && !isErrno(error, 'EPERM')) throw error;
   }
 }
 
