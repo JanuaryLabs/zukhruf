@@ -1,6 +1,6 @@
 # @zukhruf/ssh
 
-> Public from 0.8.28, as `@zukhruf/docker` moves onto it. Ezz accepted each ADR (backlog #4503).
+> Public from 0.8.29, the first version on npm, as `@zukhruf/docker` moves onto it. Ezz accepted each ADR (backlog #4503).
 
 An SSH client and server that run inside the Node process. A client connects to an SSH server, runs commands in sessions, and dials sockets and ports on the remote host. It reads the user's `~/.ssh/config` through `ssh -G`, checks host keys against the known hosts, and signs with the agent. The types follow Go's [`golang.org/x/crypto/ssh`](https://pkg.go.dev/golang.org/x/crypto/ssh) and its subpackages, and the protocol is [ssh2](https://github.com/mscdex/ssh2) ([ADR 0001](./docs/adr/0001-the-scope-and-the-name-of-gos-ssh-package.md), [ADR 0003](./docs/adr/0003-ssh2-speaks-the-protocol.md)).
 
