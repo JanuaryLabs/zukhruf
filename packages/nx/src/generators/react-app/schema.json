@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/schema",
+  "$id": "ZukhrufNxReactApp",
+  "title": "Add a React Router SPA on Vite",
+  "type": "object",
+  "properties": {
+    "directory": {
+      "type": "string",
+      "description": "The project root, relative to the workspace root, for example apps/web.",
+      "alias": "dir",
+      "$default": { "$source": "argv", "index": 0 },
+      "x-prompt": "Which directory gets the application?"
+    }
+  },
+  "required": ["directory"],
+  "additionalProperties": false
+}

@@ -1,19 +1,19 @@
 # @zukhruf/nx
 
-This package is the Nx part of the monorepo standard. Each workspace copied the same Nx configuration into each project. This package gives that configuration one time, in areas. Each area has its own import path, and the package has no root entry point. Two [generators](#generators) write the root files of a workspace. The lint rules stay in `@zukhruf/eslint`, and the Git hooks stay in `@zukhruf/git-hooks`.
+This package is the Nx part of the monorepo standard. Each workspace copied the same Nx configuration into each project. This package gives that configuration one time, in areas. Each area has its own import path, and the package has no root entry point. Two [generators](#generators) write the root files of a workspace, and four [app generators](#app-generators) add its projects. The lint rules stay in `@zukhruf/eslint`, and the Git hooks stay in `@zukhruf/git-hooks`.
 
 The words in these documents have one meaning each. See the glossary in [CONTEXT.md](./CONTEXT.md).
 
 ## Areas
 
-| Area             | Import path            | Status                                                                     |
-| ---------------- | ---------------------- | -------------------------------------------------------------------------- |
-| format           | `@zukhruf/nx/format`   | This README                                                                |
-| test             | `@zukhruf/nx/test`     | This README                                                                |
-| lint             | `@zukhruf/nx/lint`     | This README                                                                |
-| portless         | `@zukhruf/nx/portless` | Candidate (#3336): 14 projects in 3 repos                                  |
-| opentofu, prisma | `@zukhruf/nx/<area>`   | This README (#3339)                                                        |
-| generators       | `@zukhruf/nx:<name>`   | This README: `preset` and `init` (#3337); the app generators later (#3338) |
+| Area             | Import path            | Status                                                                                          |
+| ---------------- | ---------------------- | ----------------------------------------------------------------------------------------------- |
+| format           | `@zukhruf/nx/format`   | This README                                                                                     |
+| test             | `@zukhruf/nx/test`     | This README                                                                                     |
+| lint             | `@zukhruf/nx/lint`     | This README                                                                                     |
+| portless         | `@zukhruf/nx/portless` | Candidate (#3336): 14 projects in 3 repos                                                       |
+| opentofu, prisma | `@zukhruf/nx/<area>`   | This README (#3339)                                                                             |
+| generators       | `@zukhruf/nx:<name>`   | This README: `preset` and `init` (#3337); `node-app`, `react-app`, `pair`, `ui-package` (#3338) |
 
 The lint rules stay in `@zukhruf/eslint`. The `lint` area gives only the inputs of the `lint` target (#3335).
 
@@ -952,3 +952,111 @@ NX_E2E_PRESET_VERSION=file:<scratch>/zukhruf-nx-<version>.tgz \
 Then check that `npm install` passes, that `npx nx run-many -t typecheck` and `npx nx run-many -t lint` pass, and that the first `git commit` passes the hooks. Delete the folder at the end. On 2026-11-18 both paths passed: a new folder (`acme`), and a folder with only `git init` (`.`). In the new folder, a demo package also passed `typecheck` (TypeScript 7.0.2) and `lint`, and its commit passed each hook. A second run of `npx nx g @zukhruf/nx:init` in the generated repo changed no file.
 
 The decisions are in [ADR 0009](./docs/adr/0009-a-preset-and-an-init-generator-start-a-repo-from-nothing.md). The backlog item of the generators is #3337.
+
+## app generators
+
+Four generators add the projects of the standard: a backend, a web app, the pair of the two, and a UI package. factory wrote them in its private package `@factory/foundation`; whatisgoingon, text2sql and deepagents hold copies. meddit is the third repo of the same kinds, so they move here (#3338). Each runs [`init`](#add-the-standard-to-an-nx-workspace) first.
+
+### Add a backend, a web app and their pair
+
+```sh
+npx nx g @zukhruf/nx:node-app apps/backend
+npx nx g @zukhruf/nx:react-app apps/web
+npx nx g @zukhruf/nx:pair --api apps/backend --web apps/web
+npm install
+npx nx sync
+```
+
+Then `npx nx run-many -t typecheck lint test build` passes, and `npx nx run @acme/backend:docker:build` builds the image of the backend with the web build in it. The image reports its commit:
+
+```sh
+npx nx run @acme/backend:docker:run
+curl -s http://localhost:3000/api/healthz   # {"status":"ok","sha":"<git rev-parse HEAD>"}
+```
+
+### Add a UI package
+
+```sh
+npx nx g @zukhruf/nx:ui-package packages/ui --importPath @acme/ui
+```
+
+### Signature of the app generators
+
+```ts
+// @zukhruf/nx:node-app
+interface NodeAppOptions {
+  directory: string; // the project root, for example apps/backend
+  port?: number; // 3000: PORT in .env.example, portless --app-port, EXPOSE
+}
+
+// @zukhruf/nx:react-app
+interface ReactAppOptions {
+  directory: string; // the project root, for example apps/web
+}
+
+// @zukhruf/nx:pair
+interface PairOptions {
+  api: string; // the project root of a node-app
+  web: string; // the project root of a react-app
+}
+
+// @zukhruf/nx:ui-package
+interface UiPackageOptions {
+  directory: string; // under packages/, for example packages/ui
+  importPath: string; // a scoped package name, for example @acme/ui
+}
+```
+
+Each schema sets `additionalProperties: false`. The project name is the package name: `@<scope>/<last segment of directory>`, for example `@acme/backend`.
+
+### What each app generator writes
+
+| Generator    | Files of the project                                                                                                                                                                                                                                                                                                                                                                                                  | Root and nx.json                                                                                                                                                                                                                                                                                                                                  |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `node-app`   | `src/server.ts` (terminus, the `@nx-target-name: serve` header), `app.ts` (Hono on `/api`), `env.ts` (zod, `BUILD_SHA`), `logging.ts` (evlog), `startup.ts`, `routes/healthz.route.ts`, `app.test.ts`; `.env.example` (always) and `.env` (when missing); `Dockerfile`; `sdk-it.config.ts` and the client stub in `.sdk-it/`; the tsconfigs; `eslint.config.mjs` with `hono`, Modern Node and the env settings        | `@nx/node`, `@nx/esbuild`, `esbuild`, `@sdk-it/cli`; `.dockerignore` when missing; the client in `workspaces`; the `.sdk-it` lines of `.gitignore` and `.prettierignore`; the `@nx/esbuild:esbuild` default; `^sdk` in `build`, `dev`, `typecheck` and `test` (`["...", "^sdk"]`); the sdk-it exclusion of `production`; `generators["@nx/node"]` |
+| `react-app`  | `index.html`, `src/main.tsx` (React Router 8 in data mode), `src/app/app.tsx` and its test, `src/styles.css` (Tailwind with the sync markers), `vite.config.ts` (the React Compiler, Tailwind, brotli and gzip, the portless and `/api` dev proxy, the `test` block), `tsconfig.app.json` writing to `out-tsc`, `tsconfig.spec.json`, `eslint.config.mjs` with `@zukhruf/eslint/react`, `react-router` and `tailwind` | `@nx/react`, `@nx/vite`, `@nx/vitest` with `testMode: "run"`, Vite, Vitest, Testing Library, happy-dom, Tailwind, the 4 React lint plugins; `prettier-plugin-tailwindcss` in `.prettierrc`; the Tailwind sync generator in `sync` and in `build`, `dev`, `serve`; `generators["@nx/react"]`; the `test` default as it was                         |
+| `pair`       | in the web: `src/api.ts` and the client, `zod` and `fast-content-type-parse` in its manifest; in the api: `src/routes/ui.route.ts`, its mount in `app.ts`, and the Dockerfile again with the web build                                                                                                                                                                                                                | —                                                                                                                                                                                                                                                                                                                                                 |
+| `ui-package` | `package.json` with the `development` export of `src/index.ts`, `vite.config.ts` (a library with `vite-plugin-dts`), the tsconfigs, `eslint.config.mjs` with `@zukhruf/eslint/react` and `tailwind`, `tests/public-api.test.mjs`                                                                                                                                                                                      | the React root packages                                                                                                                                                                                                                                                                                                                           |
+
+The targets of a project are in the `nx` key of its `package.json`: the generators pass `useProjectJson: false` and `addPlugin: true` to Nx, so Nx 23 and 24 write the same shape. `format`, `lint`, `test` (node) and `typecheck` come from the inference plugins; `node-app` writes `build` (one ESM esbuild bundle, each npm package external, with a `require` banner), `serve` (with `NODE_ENV=development`), `portless` (`<app>.<scope>`), `docker:build` and `docker:run`, and keeps `prune-lockfile` of `@nx/node`. `react-app` writes `portless` and the `test` target of the project (`^sdk`, `NODE_ENV=test`).
+
+### The commit of an image
+
+`docker:build` runs `docker build --file <root>/Dockerfile --build-arg BUILD_SHA=$(git rev-parse HEAD) --tag <scope>-<app> .` from the workspace root. The runtime stage has `ARG BUILD_SHA` and `ENV ... BUILD_SHA=$BUILD_SHA`, `env.ts` accepts a non-empty string or nothing, and `/api/healthz` returns `{ "status": "ok", "sha": <BUILD_SHA or null> }`. So a deploy can tell the new container from the old one. An image built without the build arg gets an empty `BUILD_SHA`, and `env.ts` stops it at start. terminus answers `/healthz` (no `/api`) for the `HEALTHCHECK`.
+
+### Versions that the app generators write
+
+- The packages of the apps have exact versions in `appPackageVersions` of `src/generators/versions.ts`, the latest on 2026-11-18: Hono 4.13, `@hono/node-server` 2.1, evlog 2.35, zod 4.6, sdk-it 0.46.11, esbuild 0.28, React 19.3, React Router 8.5, Vite 8.3, Vitest 5.1, Tailwind 4.3, `@vitejs/plugin-react` 6.3, `@rolldown/plugin-babel` 0.3, `vite-plugin-dts` 5.1.
+- An app generator reads the root package names before the generator of Nx runs. After it, a package of the app that was not there gets its pin, also over the version that Nx wrote; a version that was there stays. Each root `nx` and `@nx/*` gets `nxVersion`.
+- Residue goes when the run added it: the swc toolchain, `eslint-plugin-import`, `eslint-plugin-jsx-a11y` and `eslint-plugin-react` (they cap ESLint below 10), the root `react` and `react-dom` (each project declares its own), `@vitest/ui`, and for `ui-package` `@babel/core`, `@babel/preset-react`, `ajv` and the root `vite-plugin-dts`.
+- `allowScripts`: `esbuild: true`, `@parcel/watcher: false` and `fsevents: false` from `node-app`. A decision that is there stays.
+- `overrides`: `@juristr/nx-tailwind-sync` takes the one `@nx/devkit` (#4532); `@sdk-it/cli` and `@sdk-it/hono` take the root `typescript`, because sdk-it peers on `^6.0.3` and the TypeScript 6 alias is 6.0.2.
+
+### Where the Nx plugins come from
+
+`@nx/node`, `@nx/react`, `@nx/vite` and `@nx/vitest` are optional peers. An app generator requires the plugin from `@zukhruf/nx`, and else installs it at `nxVersion` into a temporary folder with `ensurePackage` of `@nx/devkit`, as the generators of Nx do. The plugin's own generator adds it to the root `package.json`. A repo with only a backend installs no React, Vite, Vitest or Tailwind package.
+
+### Errors of the app generators
+
+| Error                                                                  | When                                                          |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------- |
+| `The root package name "acme" has no scope.`                           | The root package is not named `@<scope>/source` (from `init`) |
+| `The directory "../x" is not a folder in the workspace.`               | `directory` leaves the workspace or is empty                  |
+| `apps/backend has no sdk-it.config.ts, so it is not a node-app. Run …` | `pair --api` names a project that `node-app` did not write    |
+| `apps/web has no vite.config.ts, so it is not a react-app. Run …`      | `pair --web` names a project that `react-app` did not write   |
+| `A UI package goes under packages/, not "…".`                          | `ui-package` outside `packages/`                              |
+| `<root> already belongs to <name>.`                                    | `ui-package` on a folder of another package                   |
+
+### What stays in factory after the move
+
+The brand: the fonts, colors, theme script and favicons of `index.html`. The generated `index.html` and `styles.css` have none of them. factory switches to these generators in C1 (#4611).
+
+### Tests of the app generators
+
+The tests run each generator on a virtual `Tree` with Nx 23.2.1, which zukhruf's root installs (`src/generators/*/generator.test.ts`, helpers in `src/testing/generator-tree.ts`). They port factory's `node-app`, `react-app`, `pair` and `ui-package` tests, and add the build sha, `testMode: "run"`, `test.dependsOn` after `node-app` and `react-app`, a backend-only workspace with no React, Vite, Vitest or Tailwind package, the workspace scope in the portless domain, and no brand in the web files. They drop factory's `modern-node.test.ts` and `root-vite.test.ts`, which write to disk and read zukhruf's installed versions; the smoke test below runs lint and a strict `npm install` instead. What Nx 24.0.6 writes itself is proven by the smoke test.
+
+### Test the app generators before a release
+
+After the steps of [Test the preset before a release](#test-the-preset-before-a-release), in the generated repo: run the 3 commands of [Add a backend, a web app and their pair](#add-a-backend-a-web-app-and-their-pair), then `npx nx run-many -t typecheck lint test build`, the first commit (each hook passes), `npx nx run @acme/backend:docker:build`, and a container whose `/api/healthz` reports `git rev-parse HEAD`.
+
+The decisions are in [ADR 0010](./docs/adr/0010-the-app-generators-move-here-and-call-the-generators-of-nx.md). The backlog item of the app generators is #3338.

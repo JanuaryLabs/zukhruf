@@ -49,10 +49,10 @@ const plugins: PluginConfiguration[] = [
   '@zukhruf/nx/test',
 ];
 
-const pluginName = (entry: PluginConfiguration) =>
+export const pluginName = (entry: PluginConfiguration) =>
   typeof entry === 'string' ? entry : entry.plugin;
 
-const unique = <T>(values: T[]) => {
+export const unique = <T>(values: T[]) => {
   const seen = new Set<string>();
   return values.filter((value) => {
     const key = JSON.stringify(value);
@@ -62,10 +62,31 @@ const unique = <T>(values: T[]) => {
   });
 };
 
-type TargetDefault = Partial<TargetConfiguration>;
+type GeneratorDefaults = NonNullable<NxJsonConfiguration['generators']>;
+
+/**
+ * Adds the defaults of one collection's generators, for example `@nx/node`,
+ * option by option. An option that is there stays, also one that the plugin
+ * wrote itself a moment before.
+ */
+export function mergeGeneratorDefaults(
+  generators: GeneratorDefaults | undefined,
+  collection: string,
+  defaults: Record<string, Record<string, unknown>>,
+): GeneratorDefaults {
+  const existing: Record<string, Record<string, unknown>> = {
+    ...generators?.[collection],
+  };
+  for (const [generator, options] of Object.entries(defaults)) {
+    existing[generator] = { ...options, ...existing[generator] };
+  }
+  return { ...generators, [collection]: existing };
+}
+
+export type TargetDefault = Partial<TargetConfiguration>;
 
 /** Changes each entry of a target default: Nx 24 takes one entry or a list of entries. */
-function updateTargetDefault(
+export function updateTargetDefault(
   nxJson: NxJsonConfiguration,
   target: string,
   update: (entry: TargetDefault) => TargetDefault,

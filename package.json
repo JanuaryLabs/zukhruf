@@ -26,6 +26,10 @@
     "@nx/eslint": "23.2.1",
     "@nx/eslint-plugin": "23.2.1",
     "@nx/js": "23.2.1",
+    "@nx/node": "23.2.1",
+    "@nx/react": "23.2.1",
+    "@nx/vite": "23.2.1",
+    "@nx/vitest": "23.2.1",
     "@rolldown/plugin-babel": "0.2.3",
     "@tailwindcss/node": "4.3.3",
     "@tailwindcss/oxide": "4.3.3",
@@ -68,6 +72,12 @@
     "unrs-resolver": false,
     "fsevents": false,
     "ssh2": false,
-    "cpu-features": false
+    "cpu-features": false,
+    "@parcel/watcher": false
+  },
+  "overrides": {
+    "@nx/react": {
+      "express": "5.3.0"
+    }
   }
 }

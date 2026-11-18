@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/schema",
+  "$id": "ZukhrufNxNodeApp",
+  "title": "Add a Hono backend",
+  "type": "object",
+  "properties": {
+    "directory": {
+      "type": "string",
+      "description": "The project root, relative to the workspace root, for example apps/backend.",
+      "alias": "dir",
+      "$default": { "$source": "argv", "index": 0 },
+      "x-prompt": "Which directory gets the application?"
+    },
+    "port": {
+      "type": "number",
+      "description": "The port of the server in development: PORT in .env.example, portless --app-port and EXPOSE.",
+      "default": 3000
+    }
+  },
+  "required": ["directory"],
+  "additionalProperties": false
+}

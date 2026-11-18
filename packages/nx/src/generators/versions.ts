@@ -39,6 +39,57 @@ export const rootToolVersions: Record<string, string> = {
   'typescript-eslint': '8.73.0',
 };
 
+/**
+ * The packages of the app generators, at exact versions, each the latest on
+ * 2026-11-18 (#3338). A generator adds a missing package, and keeps a version
+ * that was there before it ran. Each `@nx/*` plugin gets `nxVersion`.
+ */
+export const appPackageVersions = {
+  // node-app: the runtime of the backend, and its build tools.
+  '@godaddy/terminus': '4.12.1',
+  '@hono/node-server': '2.1.9',
+  '@sdk-it/cli': '0.46.11',
+  '@sdk-it/hono': '0.46.11',
+  esbuild: '0.28.2',
+  // The Nx generators add these two with a range.
+  '@types/node': '26.6.6',
+  tslib: '2.9.1',
+  evlog: '2.35.1',
+  hono: '4.13.19',
+  zod: '4.6.7',
+  // pair: the generated client imports it. sdk-it writes ^3.0.0 in the client
+  // manifest, so the web app takes the latest 3.x, not 4.
+  'fast-content-type-parse': '3.0.0',
+  // react-app and ui-package: React, Vite, Tailwind and the React lint plugins
+  // that @zukhruf/eslint/react loads.
+  '@eslint-react/eslint-plugin': '5.30.4',
+  '@juristr/nx-tailwind-sync': '0.0.9',
+  '@rolldown/plugin-babel': '0.3.1',
+  '@tailwindcss/vite': '4.3.5',
+  '@types/react': '19.3.0',
+  '@types/react-dom': '19.3.0',
+  '@vitejs/plugin-react': '6.3.0',
+  'babel-plugin-react-compiler': '1.0.0',
+  'eslint-plugin-jsx-a11y-x': '0.2.0',
+  'eslint-plugin-react-hooks': '7.1.1',
+  'eslint-plugin-react-you-might-not-need-an-effect': '1.2.0',
+  'prettier-plugin-tailwindcss': '0.8.1',
+  react: '19.3.1',
+  'react-dom': '19.3.1',
+  'react-router': '8.5.1',
+  tailwindcss: '4.3.5',
+  vite: '8.3.8',
+  'vite-plugin-compression2': '2.5.4',
+  'vite-plugin-dts': '5.1.2',
+  // react-app: component tests.
+  '@testing-library/dom': '10.4.2',
+  '@testing-library/jest-dom': '7.0.1',
+  '@testing-library/react': '16.3.3',
+  '@vitest/coverage-v8': '5.1.1',
+  'happy-dom': '21.0.4',
+  vitest: '5.1.1',
+} as const satisfies Record<string, string>;
+
 /** The zukhruf packages that the root files load. */
 export const zukhrufPackages = [
   '@zukhruf/eslint',

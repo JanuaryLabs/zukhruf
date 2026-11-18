@@ -18,6 +18,7 @@ export interface RootPackageJson {
   dependencies?: Record<string, string>;
   devDependencies?: Record<string, string>;
   allowScripts?: Record<string, boolean>;
+  overrides?: Record<string, unknown>;
 }
 
 // strict-allow-scripts=true in .npmrc fails an install when a package has an
@@ -26,7 +27,16 @@ export interface RootPackageJson {
 // eslint-plugin-import-x) ships its binaries prebuilt.
 const allowScripts = { nx: false, 'unrs-resolver': false };
 
-const sortKeys = (record: Record<string, string>) =>
+/** Sets `nx` and each `@nx/*` of the record to `nxVersion`, also over a newer version (#4532). */
+export function pinNxFamily(record: Record<string, string> = {}): void {
+  for (const name of Object.keys(record)) {
+    if (name === 'nx' || name.startsWith('@nx/')) {
+      record[name] = nxVersion;
+    }
+  }
+}
+
+export const sortKeys = (record: Record<string, string>) =>
   Object.fromEntries(
     Object.entries(record).toSorted(([a], [b]) => a.localeCompare(b)),
   );
@@ -58,13 +68,8 @@ export function mergeRootPackageJson(tree: Tree): void {
         devDependencies[name] = version;
       }
     }
-    for (const record of [dependencies, devDependencies]) {
-      for (const name of Object.keys(record)) {
-        if (name === 'nx' || name.startsWith('@nx/')) {
-          record[name] = nxVersion;
-        }
-      }
-    }
+    pinNxFamily(dependencies);
+    pinNxFamily(devDependencies);
     packageJson.devDependencies = sortKeys(devDependencies);
     packageJson.allowScripts = { ...allowScripts, ...packageJson.allowScripts };
     return packageJson;

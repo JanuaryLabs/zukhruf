@@ -93,7 +93,7 @@ The target `generate` that the `prisma` area gives. It runs `prisma generate` in
 _Avoid_: Codegen target, prisma target (text2sql has a different target with that name)
 
 **Generator**:
-An Nx generator of this package, in `generators.json`. It writes files through a `Tree`, and Nx writes the changes to disk after it ends. `preset` and `init` are the two generators of #3337.
+An Nx generator of this package, in `generators.json`. It writes files through a `Tree`, and Nx writes the changes to disk after it ends. `preset` and `init` write the root files (#3337); the app generators write projects (#3338).
 _Avoid_: Schematic, template, scaffold
 
 **Preset**:
@@ -111,3 +111,23 @@ _Avoid_: Nx plugins (a plugin is one kind of `@nx/*` package), Nx packages
 **Workspace scope**:
 The scope of the root package name: `acme` for `@acme/source`. One function reads it, and it stops with an error for a name with no scope.
 _Avoid_: Org, namespace, prefix
+
+**App generator**:
+One of `node-app`, `react-app`, `pair` and `ui-package`. It runs `init`, calls the generator of Nx for its kind (`@nx/node`, `@nx/react`, `@nx/vitest`), and then writes the files and keys of the standard for that kind of project.
+_Avoid_: Project generator, scaffold, template
+
+**Pair**:
+The generator `pair`, and what it makes: a web app that imports the generated client of a backend, and a backend that serves the build of the web app and puts it in its image. The two projects have no edge in the project graph other than the client.
+_Avoid_: Link, connect, full-stack app
+
+**Generated client**:
+The package `@<scope>/<app>-client` in `<app>/.sdk-it`, which `sdk-it generate` writes from the Hono routes of a backend. Only its `package.json` and `tsconfig.json` are committed; its `sdk` target writes the rest, and `^sdk` runs it before a consumer builds, serves, typechecks or tests.
+_Avoid_: SDK (the CLI is sdk-it), API client package
+
+**Build sha**:
+The commit that an image is built from: the `BUILD_SHA` build arg of the Dockerfile, an env variable in the image, and the `sha` of `/api/healthz`. It is `null` in a process that is not an image.
+_Avoid_: Version, revision, git hash
+
+**Residue**:
+A root package that a generator of Nx adds and no project loads, for example `@swc/core` or `eslint-plugin-react`. An app generator deletes a residue package only when its own run added it.
+_Avoid_: Junk, leftovers, extra dependency

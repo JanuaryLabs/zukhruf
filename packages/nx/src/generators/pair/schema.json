@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/schema",
+  "$id": "ZukhrufNxPair",
+  "title": "Pair a react-app with a node-app",
+  "type": "object",
+  "properties": {
+    "api": {
+      "type": "string",
+      "description": "The project root of the node-app, for example apps/backend."
+    },
+    "web": {
+      "type": "string",
+      "description": "The project root of the react-app, for example apps/web."
+    }
+  },
+  "required": ["api", "web"],
+  "additionalProperties": false
+}

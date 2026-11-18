@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/schema",
+  "$id": "ZukhrufNxUiPackage",
+  "title": "Add a buildable React package",
+  "type": "object",
+  "properties": {
+    "directory": {
+      "type": "string",
+      "description": "The package folder under packages/, for example packages/ui.",
+      "alias": "dir",
+      "$default": { "$source": "argv", "index": 0 },
+      "x-prompt": "Which directory gets the package?"
+    },
+    "importPath": {
+      "type": "string",
+      "description": "The package name, for example @acme/ui.",
+      "x-prompt": "What package name do consumers import?"
+    }
+  },
+  "required": ["directory", "importPath"],
+  "additionalProperties": false
+}
