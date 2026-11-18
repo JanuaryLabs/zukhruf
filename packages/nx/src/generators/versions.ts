@@ -88,6 +88,9 @@ export const appPackageVersions = {
   '@vitest/coverage-v8': '5.1.1',
   'happy-dom': '21.0.4',
   vitest: '5.1.1',
+  // ui-package: the component test registers happy-dom's DOM in node:test.
+  // It releases with happy-dom.
+  '@happy-dom/global-registrator': '21.0.4',
   // prisma: the CLI, the client and its Postgres adapter release together and
   // must have one version. The `latest` tag of `prisma` is a release candidate
   // of 8 (8.0.0-rc.34 on 2026-11-18), so the three are pinned to the last

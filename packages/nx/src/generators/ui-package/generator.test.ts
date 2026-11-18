@@ -44,12 +44,29 @@ test('a buildable React package with a development export of its source', async 
   assert.match(eslintConfig, /\.\.\.zukhruf\.configs\['tailwind'\]/);
   assert.equal(
     tree.read('packages/ui/src/index.ts', 'utf-8'),
-    "export const packageName = '@acme/ui';\n",
+    "export { PackageName, packageName } from './package-name.tsx';\n",
+  );
+  assert.match(
+    tree.read('packages/ui/src/package-name.tsx', 'utf-8') ?? '',
+    /export function PackageName\(\)/,
   );
   assert.match(
     tree.read('packages/ui/tests/public-api.test.mjs', 'utf-8') ?? '',
     /from '@acme\/ui'/,
   );
+  const componentTest =
+    tree.read('packages/ui/tests/package-name.test.mjs', 'utf-8') ?? '';
+  assert.match(componentTest, /GlobalRegistrator\.register\(\);\n {2}try \{/);
+  assert.match(componentTest, /await import\('react-dom\/client'\)/);
+  assert.match(componentTest, /await import\('@acme\/ui'\)/);
+  assert.match(componentTest, /await GlobalRegistrator\.unregister\(\);/);
+  for (const name of ['@happy-dom/global-registrator', 'react-dom'] as const) {
+    assert.equal(
+      manifest.devDependencies[name],
+      appPackageVersions[name],
+      name,
+    );
+  }
   assert.ok(!tree.exists('packages/ui/.babelrc'));
   assert.ok(!tree.exists('packages/ui/README.md'));
   for (const residue of [
@@ -66,6 +83,7 @@ test('a buildable React package with a development export of its source', async 
     readJson(tree, 'package.json').devDependencies['eslint-plugin-react-hooks'],
     appPackageVersions['eslint-plugin-react-hooks'],
   );
+  assert.equal(readJson(tree, 'package.json').allowScripts.fsevents, false);
 });
 
 test('a second run keeps the files of the package', async () => {

@@ -22,7 +22,9 @@ import {
 } from '../root-dependencies.ts';
 import { appPackageVersions as versions } from '../versions.ts';
 import {
+  componentTest,
   libraryTsconfig,
+  packageNameComponent,
   publicApiTest,
   rootTsconfig,
   specTsconfig,
@@ -53,8 +55,8 @@ interface PackageJson {
 
 /**
  * A buildable React package: a Vite library build with types, a `development`
- * export condition that points at the source, and a node test of the public
- * export. It runs `init` first. A second run keeps the package as it is.
+ * export condition that points at the source, a node test of the public
+ * export, and a node test that renders its component in happy-dom. It runs `init` first. A second run keeps the package as it is.
  */
 export default async function uiPackageGenerator(
   tree: Tree,
@@ -129,11 +131,19 @@ export default async function uiPackageGenerator(
   );
   tree.write(
     `${projectRoot}/src/index.ts`,
-    `export const packageName = '${options.importPath}';\n`,
+    `export { PackageName, packageName } from './package-name.tsx';\n`,
+  );
+  tree.write(
+    `${projectRoot}/src/package-name.tsx`,
+    packageNameComponent(options.importPath),
   );
   tree.write(
     `${projectRoot}/tests/public-api.test.mjs`,
     publicApiTest(options.importPath),
+  );
+  tree.write(
+    `${projectRoot}/tests/package-name.test.mjs`,
+    componentTest(options.importPath),
   );
 
   updateJson(tree, packageJsonPath, (packageJson: PackageJson) => {
@@ -155,10 +165,13 @@ export default async function uiPackageGenerator(
     };
     packageJson.dependencies = { react: versions.react };
     packageJson.devDependencies = {
+      '@happy-dom/global-registrator':
+        versions['@happy-dom/global-registrator'],
       '@rolldown/plugin-babel': versions['@rolldown/plugin-babel'],
       '@tailwindcss/vite': versions['@tailwindcss/vite'],
       '@vitejs/plugin-react': versions['@vitejs/plugin-react'],
       'babel-plugin-react-compiler': versions['babel-plugin-react-compiler'],
+      'react-dom': versions['react-dom'],
       vite: versions.vite,
       'vite-plugin-dts': versions['vite-plugin-dts'],
     };
@@ -185,6 +198,8 @@ export default async function uiPackageGenerator(
       'ajv',
       'vite-plugin-dts',
     ],
+    // vite brings fsevents, which ships prebuilt, so its script does not run.
+    allowScripts: { fsevents: false },
   });
 
   await formatFiles(tree);

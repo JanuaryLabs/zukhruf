@@ -112,6 +112,53 @@ export function specTsconfig(rootOffset: string) {
   };
 }
 
+export function packageNameComponent(importPath: string): string {
+  return `export const packageName = '${importPath}';
+
+export function PackageName() {
+  return <span>{packageName}</span>;
+}
+`;
+}
+
+// React DOM checks for a DOM when it loads, so the test loads it after it
+// registers the DOM. Node cannot load .tsx, so the component comes from the
+// built package.
+export function componentTest(importPath: string): string {
+  return `import assert from 'node:assert/strict';
+import { test } from 'node:test';
+
+import { GlobalRegistrator } from '@happy-dom/global-registrator';
+
+test('PackageName renders the name of the package', async () => {
+  // Arrange
+  GlobalRegistrator.register();
+  try {
+    Reflect.set(globalThis, 'IS_REACT_ACT_ENVIRONMENT', true);
+    const { act, createElement } = await import('react');
+    const { createRoot } = await import('react-dom/client');
+    const { PackageName } = await import('${importPath}');
+    const container = document.body.appendChild(document.createElement('div'));
+    const root = createRoot(container);
+    try {
+      // Act
+      await act(async () => {
+        root.render(createElement(PackageName));
+      });
+
+      // Assert
+      assert.equal(container.textContent, '${importPath}');
+    } finally {
+      await act(async () => root.unmount());
+    }
+  } finally {
+    Reflect.deleteProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT');
+    await GlobalRegistrator.unregister();
+  }
+});
+`;
+}
+
 export function publicApiTest(importPath: string): string {
   const packageName = importPath.split('/').at(-1);
   return `import assert from 'node:assert/strict';
