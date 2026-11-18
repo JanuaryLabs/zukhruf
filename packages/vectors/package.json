@@ -1,0 +1,63 @@
+{
+  "name": "@zukhruf/vectors",
+  "version": "0.8.31",
+  "description": "Vector types, their math, and the SQL form of each vector in SQLite, sqlite-vec and SQL Server, which a program composes into its own SQL. After the vector types of pgvector and the TensorPrimitives of .NET.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JanuaryLabs/zukhruf",
+    "directory": "packages/vectors"
+  },
+  "bugs": {
+    "url": "https://github.com/JanuaryLabs/zukhruf/issues"
+  },
+  "homepage": "https://github.com/JanuaryLabs/zukhruf/tree/main/packages/vectors#readme",
+  "keywords": [
+    "vector",
+    "embedding",
+    "vector-search",
+    "cosine-similarity",
+    "sqlite",
+    "sqlite-vec",
+    "sql-server",
+    "float16"
+  ],
+  "type": "module",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "@zukhruf/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./sqlite": {
+      "@zukhruf/source": "./src/sqlite.ts",
+      "types": "./dist/sqlite.d.ts",
+      "import": "./dist/sqlite.js",
+      "default": "./dist/sqlite.js"
+    },
+    "./sqlserver": {
+      "@zukhruf/source": "./src/sqlserver.ts",
+      "types": "./dist/sqlserver.d.ts",
+      "import": "./dist/sqlserver.js",
+      "default": "./dist/sqlserver.js"
+    }
+  },
+  "files": [
+    "dist",
+    "!dist/spec/**",
+    "!**/*.tsbuildinfo",
+    "!**/*.test.*"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "@types/mssql": "^12.3.0",
+    "@zukhruf/sqlite-open": "^0.8.31",
+    "@zukhruf/testing": "^0.8.31",
+    "mssql": "^12.7.14",
+    "sqlite-vec": "^0.1.9"
+  }
+}

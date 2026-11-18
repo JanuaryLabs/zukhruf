@@ -1,6 +1,6 @@
 # @zukhruf/vectors
 
-> Design on paper: no code exists yet. Ezz accepted each ADR on 2026-11-18.
+> Ezz accepted each ADR on 2026-11-18. The first release is built and tested, and not yet on npm.
 
 A vector is a list of numbers that a model makes from a text, so that a program can find texts by meaning. Each database keeps and compares vectors in its own way. SQLite has no vector type, sqlite-vec reads float32 bytes, and SQL Server has its own `VECTOR` type. This package gives the vector types, their math, and the form of each vector in each database.
 
@@ -108,7 +108,7 @@ ORDER BY r.distance;
 // @zukhruf/vectors
 class Vector {
   static from(values: ArrayLike<number>): Vector;
-  readonly values: Float32Array;
+  readonly values: Float32Array; // a copy: a change to it does not change the vector
   readonly dimensions: number;
 }
 class HalfVector {
@@ -122,7 +122,8 @@ class Int8Vector {
   readonly dimensions: number;
 }
 class BitVector {
-  static from(bits: ArrayLike<boolean>): BitVector;
+  static from(bits: ArrayLike<boolean>): BitVector; // a multiple of 8 bits
+  readonly bits: boolean[]; // a copy
   readonly dimensions: number;
 }
 class UnitVector extends Vector {
@@ -139,6 +140,7 @@ function hammingDistance(a: BitVector, b: BitVector): number;
 
 // @zukhruf/vectors/sqlite  (plain SQLite and sqlite-vec read the same bytes)
 function install(database: DatabaseSync): void; // vec_distance_cosine, vec_distance_L2
+class SqliteVecLoadedError extends Error {}
 function toSql(vector: Vector | Int8Vector | BitVector): Uint8Array;
 function fromSql<
   T extends typeof Vector | typeof Int8Vector | typeof BitVector,
@@ -157,15 +159,15 @@ function fromSql<T extends typeof Vector | typeof HalfVector>(
 
 ## What each call does underneath
 
-| Call                            | What happens                                                                                                                                                                                   |
-| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Vector.from(values)`           | Copies the values into a new `Float32Array`. A value that is not finite is a `RangeError`                                                                                                      |
-| `UnitVector.normalize(v)`       | Divides each value by the length. A length of 0 or not finite is a `ZeroVectorError`                                                                                                           |
-| `cosineDistance(a, b)`          | 1 − dot(a, b) / (norm(a) · norm(b)), in float64. Other dimensions are a `DimensionMismatchError`                                                                                               |
-| `sqlite.toSql(v)`               | float32 values, little-endian; int8 values as bytes; bits packed least significant bit first, as sqlite-vec packs them                                                                         |
-| `sqlite.install(db)`            | `db.function('vec_distance_cosine', …)` and `vec_distance_L2`, deterministic, with the errors and the `NULL` of sqlite-vec. A database that already has sqlite-vec is a `SqliteVecLoadedError` |
-| `sqlserver.toSql(v)`            | `JSON.stringify` of each value with 9 significant digits (float32) or 5 (float16) ([ADR 0007](./docs/adr/0007-sql-server-gets-json-text-with-the-digits-that-keep-each-value.md))              |
-| `sqlserver.fromSql(type, text)` | `JSON.parse` of the text that SQL Server gives, into the type                                                                                                                                  |
+| Call                            | What happens                                                                                                                                                                                                                                                                                    |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Vector.from(values)`           | Copies the values into a new `Float32Array`. A value that is not finite is a `RangeError`                                                                                                                                                                                                       |
+| `UnitVector.normalize(v)`       | Divides each value by the length, in float64. A length of 0 is a `ZeroVectorError`                                                                                                                                                                                                              |
+| `cosineDistance(a, b)`          | 1 − dot(a, b) / (norm(a) · norm(b)), in float64. Other dimensions are a `DimensionMismatchError`                                                                                                                                                                                                |
+| `sqlite.toSql(v)`               | float32 values, little-endian; int8 values as bytes; bits packed least significant bit first, as sqlite-vec packs them                                                                                                                                                                          |
+| `sqlite.install(db)`            | `db.function('vec_distance_cosine', …)` and `vec_distance_L2`, deterministic, with the results (to float32 precision), the errors and the `NULL` of sqlite-vec ([ported from sqlite-vec](./docs/ported-from-sqlite-vec.md)). A database that already has sqlite-vec is a `SqliteVecLoadedError` |
+| `sqlserver.toSql(v)`            | `JSON.stringify` of each value with 9 significant digits (float32) or 5 (float16) ([ADR 0007](./docs/adr/0007-sql-server-gets-json-text-with-the-digits-that-keep-each-value.md))                                                                                                               |
+| `sqlserver.fromSql(type, text)` | `JSON.parse` of the text that SQL Server gives, into the type                                                                                                                                                                                                                                   |
 
 ## Errors
 
