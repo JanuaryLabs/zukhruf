@@ -414,7 +414,9 @@ export function registryTf(stack: Stack, registry: Registry): string {
 resource "dokploy_registry" "ghcr" {
   registry_name = "${stack.name}-ghcr"
   registry_type = "cloud"
-  registry_url  = "https://ghcr.io"
+  # A bare host: Dokploy refuses a URL with a scheme ("Registry URL must be a
+  # valid hostname or hostname:port"), found by meddit's first deploy.
+  registry_url  = "ghcr.io"
   image_prefix  = "ghcr.io"
   username      = "${registry.username}"
   password      = var.ghcr_pull_token

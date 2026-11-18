@@ -107,6 +107,13 @@ for (const [hostMode, hostOptions] of Object.entries(hosts)) {
         );
 
         assert.equal(tree.exists(`${production}/registry.tf`), registry);
+        if (registry) {
+          // Dokploy's registry.create refuses a URL with a scheme.
+          assert.match(
+            read(tree, `${production}/registry.tf`),
+            /registry_url {2}= "ghcr\.io"/,
+          );
+        }
         const variables = read(tree, `${production}/variables.tf`);
         assert.equal(/variable "ghcr_pull_token"/.test(variables), registry);
         const envExample = read(tree, 'infra/.env.example');
