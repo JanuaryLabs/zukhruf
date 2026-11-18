@@ -5,6 +5,8 @@ export {
   Client,
   type ClientConfig,
   type HostKeyCallback,
+  OpenChannelError,
+  type RejectionReason,
 } from './client.ts';
 export {
   PassphraseMissingError,

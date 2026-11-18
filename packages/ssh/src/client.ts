@@ -41,6 +41,10 @@ import {
   agentForwardingOptions,
   requestAgentForwardingOnEachSession,
 } from './ssh2-agent-forwarding.ts';
+import {
+  channelOpenFailure,
+  closedBeforeOpen,
+} from './ssh2-channel-open-failure.ts';
 import { sendKeepaliveRequest } from './ssh2-keepalive-request.ts';
 
 /** Go's ssh.ClientConfig. */
@@ -97,6 +101,36 @@ export class AuthenticationError extends Error {
     this.name = 'AuthenticationError';
     this.attempted = attempted;
     this.allowed = allowed;
+  }
+}
+
+/** The reason of the server for a channel open that it refused (RFC 4254 §5.1). A code outside the four of the RFC is the number. Go's RejectionReason. */
+export type RejectionReason =
+  | 'administratively-prohibited'
+  | 'connect-failed'
+  | 'unknown-channel-type'
+  | 'resource-shortage'
+  | number;
+
+const rejectionReasons: Readonly<Record<number, RejectionReason>> = {
+  1: 'administratively-prohibited',
+  2: 'connect-failed',
+  3: 'unknown-channel-type',
+  4: 'resource-shortage',
+};
+
+/** The server refused to open the channel (SSH_MSG_CHANNEL_OPEN_FAILURE). Go's OpenChannelError. */
+export class OpenChannelError extends Error {
+  readonly reason: RejectionReason;
+  /** The text of the server, such as sshd's "open failed". Go's Message. */
+  readonly description: string;
+
+  /** `code` is the reason code of the message. */
+  constructor(code: number, description: string) {
+    super(`ssh: the server refused the channel: ${description}`);
+    this.name = 'OpenChannelError';
+    this.reason = rejectionReasons[code] ?? code;
+    this.description = description;
   }
 }
 
@@ -582,16 +616,20 @@ function reply<T>(
   return answered.promise;
 }
 
-// ssh2 1.17.0 names the server's reason in the message of a channel open
-// failure, with a reason code (utils.js:7-26). Other errors, such as the loss
-// of the connection, have no code.
+// The error of a channel open: OpenChannelError for SSH_MSG_CHANNEL_OPEN_FAILURE
+// (ssh2-channel-open-failure.ts). Other errors, such as the loss of the
+// connection, pass as they are.
 function openFailure(error: Error): Error {
-  if (!('reason' in error)) return error;
-  const description = error.message.replace(
-    /^\(SSH\) Channel open failure: /,
-    '',
-  );
-  return new Error(`ssh: the server refused the channel: ${description}`);
+  const failure = channelOpenFailure(error);
+  if (failure !== undefined) {
+    return new OpenChannelError(failure.code, failure.description);
+  }
+  if (closedBeforeOpen(error)) {
+    return new Error('ssh: the server closed the channel before it opened', {
+      cause: error,
+    });
+  }
+  return error;
 }
 
 function listenRefused(address: string, error: Error): Error {
@@ -611,7 +649,7 @@ function openSession(
 ): Promise<SessionChannel> {
   const opened = Promise.withResolvers<SessionChannel>();
   const callback = (error: Error | undefined, channel: ClientChannel): void => {
-    if (error) opened.reject(error);
+    if (error) opened.reject(openFailure(error));
     else opened.resolve(adaptChannel(channel, endedBy));
   };
   const env = { ...start.env };
@@ -666,11 +704,16 @@ function adaptChannel(
       };
     },
   );
+  // The stream reads the channel from now on, so the close can come before
+  // the session listens for it.
+  const closed = new Promise<[Exit | undefined, Error | undefined]>((resolve) =>
+    channel.once('close', () => resolve([exit, endedBy()])),
+  );
   return {
-    stream: channel,
+    // A lost connection ends the stream as a close does: wait() reports it.
+    stream: new ChannelStream(channel, () => undefined),
     stderr: channel.stderr,
-    onClose: (listener) =>
-      channel.once('close', () => listener(exit, endedBy())),
+    onClose: (listener) => void closed.then((ending) => listener(...ending)),
     windowChange: (size) =>
       channel.setWindow(
         size.rows,

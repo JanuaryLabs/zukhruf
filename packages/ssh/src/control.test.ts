@@ -7,8 +7,9 @@ import { type Server, type Socket, createServer } from 'node:net';
 import { userInfo } from 'node:os';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
-import { type Duplex, finished } from 'node:stream';
+import { type Duplex, Readable, finished } from 'node:stream';
 import { text } from 'node:stream/consumers';
+import { pipeline } from 'node:stream/promises';
 import { test } from 'node:test';
 
 import { createClock } from '@sinonjs/fake-timers';
@@ -494,6 +495,35 @@ test(
     // Assert
     assert.equal(await read, 'BEFORE THE START\nAFTER THE START\n');
     await session.wait();
+  },
+);
+
+test(
+  'a session whose command exits without reading all of its stdin leaves the master serving: wait() resolves, stdout gives what the command wrote, and a new session runs',
+  { skip: noSshd },
+  async () => {
+    // Arrange
+    await using sshd = await startSshd();
+    await using shared = await share(sshd);
+    await using session = shared.control.newSession();
+    const read = text(session.stdout);
+    // After head, the shell holds stdin open and unread for a second, so the
+    // master's write to the channel waits for window when the command exits.
+    await session.start('head -c1; sleep 1');
+    const chunk = Buffer.alloc(64 * 1024, 'a');
+    const written = pipeline(
+      Readable.from(Array.from({ length: 1600 }, () => chunk)),
+      session.stdin,
+    );
+
+    // Act
+    await session.wait();
+
+    // Assert
+    assert.equal(await read, 'a');
+    const output = await shared.control.newSession().output('printf ok');
+    assert.equal(output.toString(), 'ok');
+    await written;
   },
 );
 

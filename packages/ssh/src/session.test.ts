@@ -2,12 +2,20 @@ import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { readFile } from 'node:fs/promises';
 import { userInfo } from 'node:os';
+import { Readable } from 'node:stream';
 import { text } from 'node:stream/consumers';
+import { pipeline } from 'node:stream/promises';
 import { test } from 'node:test';
 
 import { createClock } from '@sinonjs/fake-timers';
 
-import { Client, ExitError, ExitMissingError, PrivateKey } from './index.ts';
+import {
+  Client,
+  ExitError,
+  ExitMissingError,
+  OpenChannelError,
+  PrivateKey,
+} from './index.ts';
 import { dial } from './testing/dial.ts';
 import { type Sshd, startSshd } from './testing/sshd.ts';
 
@@ -28,6 +36,29 @@ test(
     await assert.rejects(ran, (error) => {
       assert.ok(error instanceof ExitError);
       assert.deepEqual(error.exit, { kind: 'status', exitStatus: 3 });
+      return true;
+    });
+  },
+);
+
+test(
+  'a session whose channel sshd refuses under MaxSessions 0 rejects with OpenChannelError, whose reason is connect-failed, as sshd sends it',
+  { skip: noSshd },
+  async () => {
+    // Arrange
+    await using sshd = await startSshd({ config: ['MaxSessions 0'] });
+    await using client = await dial(sshd);
+
+    // Act
+    const ran = client.newSession().output('true');
+
+    // Assert
+    await assert.rejects(ran, (error) => {
+      assert.ok(error instanceof OpenChannelError);
+      assert.deepEqual(
+        { reason: error.reason, description: error.description },
+        { reason: 'connect-failed', description: 'open failed' },
+      );
       return true;
     });
   },
@@ -196,6 +227,39 @@ test(
     // Assert
     assert.equal(await read, 'BEFORE THE START\nAFTER THE START\n');
     await session.wait();
+  },
+);
+
+test(
+  'a command that exits without reading all of its stdin: wait() resolves with its exit status, stdout gives what it wrote, and the writer of stdin fails with the close of the channel',
+  { skip: noSshd },
+  async () => {
+    // Arrange
+    await using sshd = await startSshd();
+    await using client = await dial(sshd);
+    await using session = client.newSession();
+    const read = text(session.stdout);
+    await session.start('head -c1');
+    // Input with no end: once the window of sshd's session channel (2 MB,
+    // CHAN_SES_WINDOW_DEFAULT in OpenSSH's channels.h) is full, a write waits
+    // for window when the command exits.
+    const chunk = Buffer.alloc(64 * 1024, 'a');
+    const input = Readable.from(
+      (function* () {
+        for (;;) yield chunk;
+      })(),
+    );
+
+    // Act
+    const written = pipeline(input, session.stdin);
+
+    // Assert
+    const writeFailed = assert.rejects(written, {
+      message: 'ssh: the channel is closed',
+    });
+    await session.wait();
+    assert.equal(await read, 'a');
+    await writeFailed;
   },
 );
 

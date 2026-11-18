@@ -13,22 +13,37 @@ interface ChannelPhase {
   close(): void;
 }
 
-function openPhase(channel: Channel): ChannelPhase {
+// ssh2 1.17.0 keeps the callback of a write that waits for window
+// (Channel.js:186-194) and calls it only at a window adjust
+// (client.js:625-637), so on the close of the channel nothing calls it: the
+// write stays in `waiting` until the stream fails it.
+function openPhase(channel: Channel, waiting: Set<Callback>): ChannelPhase {
   return {
-    write: (chunk, callback) => channel.write(chunk, callback),
+    write(chunk, callback) {
+      waiting.add(callback);
+      // At CHANNEL_CLOSE, ssh2 ends the channel before it emits close
+      // (onCHANNEL_CLOSE in utils.js). A write after that end fails and
+      // destroys the channel, so the check comes first: the write waits for
+      // the close.
+      if (channel.writableEnded) return;
+      channel.write(chunk, (error?: Error | null) => {
+        if (waiting.delete(callback)) callback(error);
+      });
+    },
     end: () => channel.end(),
     close: () => channel.close(),
   };
 }
 
 // The server or the connection closed the channel: ssh2 sends nothing more on
-// it, and a write fails as a write to a closed socket does.
-const closedPhase: ChannelPhase = {
-  write: (_chunk, callback) =>
-    callback(new Error('ssh: the channel is closed')),
-  end() {},
-  close() {},
-};
+// it. A write waits in `waiting` for the stream to fail it.
+function closedPhase(waiting: Set<Callback>): ChannelPhase {
+  return {
+    write: (_chunk, callback) => void waiting.add(callback),
+    end() {},
+    close() {},
+  };
+}
 
 // A channel of ssh2 as a Duplex with the semantics of node:stream. ssh2
 // 1.17.0's Channel replaces destroy() with end() and close(), emits no error
@@ -37,13 +52,14 @@ const closedPhase: ChannelPhase = {
 // wait forever.
 export class ChannelStream extends Duplex {
   readonly #channel: Channel;
+  readonly #waiting = new Set<Callback>();
   #phase: ChannelPhase;
 
   /** `lost` gives the error that ended the connection, when it ended the channel. */
   constructor(channel: Channel, lost: () => Error | undefined) {
     super({ allowHalfOpen: true });
     this.#channel = channel;
-    this.#phase = openPhase(channel);
+    this.#phase = openPhase(channel, this.#waiting);
     channel.on('data', (chunk: Buffer) => {
       if (!this.push(chunk)) channel.pause();
     });
@@ -52,7 +68,7 @@ export class ChannelStream extends Duplex {
     const destroyIfLost = (): boolean => {
       const cause = lost();
       if (cause === undefined) return false;
-      this.#phase = closedPhase;
+      this.#phase = closedPhase(this.#waiting);
       this.destroy(new Error('ssh: the connection was lost', { cause }));
       return true;
     };
@@ -61,10 +77,20 @@ export class ChannelStream extends Duplex {
     });
     channel.once('close', () => {
       if (destroyIfLost()) return;
-      this.#phase = closedPhase;
+      this.#phase = closedPhase(this.#waiting);
       this.push(null);
-      if (this.readableEnded) this.destroy();
-      else this.once('end', () => this.destroy());
+      // A write that fails destroys the stream, which drops what is left to
+      // read, so a write fails as a write to a closed socket does only at the
+      // end of the data.
+      const close = (): void => {
+        for (const callback of this.#waiting) {
+          this.#waiting.delete(callback);
+          callback(new Error('ssh: the channel is closed'));
+        }
+        this.destroy();
+      };
+      if (this.readableEnded) close();
+      else this.once('end', close);
     });
   }
 

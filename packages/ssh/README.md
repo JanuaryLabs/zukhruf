@@ -127,7 +127,7 @@ A close of the session does not end its command. sshd closes only the pipes of a
 
 ## Stream the input and the output of a command
 
-`start(command)` opens the channel and returns when the server accepted the command. `stdin`, `stdout` and `stderr` are Node streams. They exist from `newSession()`, and data flows after `start()`. The end of `stdin` sends `SSH_MSG_CHANNEL_EOF`, so the command reads the end of its input, and the output stays open.
+`start(command)` opens the channel and returns when the server accepted the command. `stdin`, `stdout` and `stderr` are Node streams. A write to `stdin` that the channel cannot take, because the command exited without reading it, fails `stdin` with `ssh: the channel is closed`, as `EPIPE` fails the stdin of a child process; `wait()` still gives the exit status. They exist from `newSession()`, and data flows after `start()`. The end of `stdin` sends `SSH_MSG_CHANNEL_EOF`, so the command reads the end of its input, and the output stays open.
 
 ```ts
 import { createReadStream } from 'node:fs';
@@ -188,9 +188,9 @@ request({ path: '/_ping', createConnection: () => engine }, (response) =>
 const postgres = await client.dial('tcp', '127.0.0.1:5432');
 ```
 
-The end of the stream's write side sends channel EOF, as the end of input of a Unix socket. `destroy()` closes the channel.
+The end of the stream's write side sends channel EOF, as the end of input of a Unix socket. `destroy()` closes the channel. A write that the channel did not take before the remote side closed it fails with `ssh: the channel is closed` once the stream's data is read, as a socket's write fails with `EPIPE`.
 
-A server can refuse a dial. Tailscale SSH allows a `'unix'` dial only under the user's home, `/tmp` and `/run/user/<uid>` (`ssh/tailssh/fwdmonitor.go`, `fwdAllowedSocketPath`). OpenSSH's sshd allows it by default (`AllowStreamLocalForwarding yes`). The dial then rejects with the reason that the server sent, such as `administratively prohibited`.
+A server can refuse a dial. Tailscale SSH allows a `'unix'` dial only under the user's home, `/tmp` and `/run/user/<uid>` (`ssh/tailssh/fwdmonitor.go`, `fwdAllowedSocketPath`). OpenSSH's sshd allows it by default (`AllowStreamLocalForwarding yes`). The dial then rejects with `OpenChannelError`, Go's: `reason` is the RFC 4254 §5.1 name that the server sent (`administratively-prohibited`, `connect-failed`, `unknown-channel-type`, `resource-shortage`, or the number of another code), and `description` is its text. sshd sends `administratively-prohibited` only for a TCP target that its policy denies, and `connect-failed` for each other refusal, a streamlocal one included.
 
 ## Forward a local port
 
@@ -420,6 +420,7 @@ Each class marks a different next step for the caller.
 | `AuthenticationError`    | The server refused every auth method. `attempted` lists the methods tried, and `allowed` the methods that the server still lists. The caller adds a key to the agent or to `authorized_keys`, or gives another password or other answers, and does not try again unchanged. SSH.NET's `SshAuthenticationException`; Go has no class.                                                                                                                    |
 | `PassphraseMissingError` | `PrivateKey.parse` got an encrypted key and no passphrase. `publicKey` is set when the file has it in clear. The caller asks for the passphrase or uses the agent. `@zukhruf/ssh/config` skips such an identity file, as OpenSSH does in batch mode. Go's `PassphraseMissingError`.                                                                                                                                                                     |
 | `ExitError`              | `run()`, `output()`, `combinedOutput()` and `wait()`, when the command exited with a status other than 0 (`exit.kind` is `'status'`, with `exitStatus`) or a signal ended it (`exit.kind` is `'signal'`, with `signal`, `coreDumped` and `errorMessage`). Go's `ExitError`.                                                                                                                                                                             |
+| `OpenChannelError`       | `client.dial()`, or a session's `run`, `output`, `start` or `shell`, when the server refuses the channel. `reason` is the RFC 4254 §5.1 name (or the number of another code), `description` the server's text. The caller changes the target, the server's config, or the path of a socket. Go's `OpenChannelError`. Through `@zukhruf/ssh/control`, a refusal has the same message and `code` but is an `Error`, not this class.                       |
 | `ExitMissingError`       | The same calls, when the channel closed with no `exit-status` and no `exit-signal`. The connection or the server ended the command, and the outcome is not known: do not run a command that is not idempotent again as if it failed. When a lost connection ended the channel, `cause` is the error that ended the connection. An `exit-signal` whose name is neither an RFC 4254 name nor a `name@domain` name also gives it. Go's `ExitMissingError`. |
 | The error of Node.js     | Every other failure of a dial, with its `code`: `ENOTFOUND`, `ECONNREFUSED`, `ETIMEDOUT`, `ECONNRESET`. A signal rejects with its reason, an `AbortError` by default. `connectTimeout` rejects with a `DOMException` named `TimeoutError`. The caller treats the host as absent, or tries again later.                                                                                                                                                  |
 
@@ -649,7 +650,7 @@ export class PrivateKey implements Signer {
 
 /** One command or shell on the remote host. Go's ssh.Session. */
 export class Session implements AsyncDisposable {
-  /** Its end sends SSH_MSG_CHANNEL_EOF. */
+  /** Its end sends SSH_MSG_CHANNEL_EOF. A write that the closed channel did not take fails it with `ssh: the channel is closed`, as EPIPE. */
   readonly stdin: Writable;
   readonly stdout: Readable;
   /** SSH_MSG_CHANNEL_EXTENDED_DATA, type 1. */
@@ -732,6 +733,21 @@ export class ExitError extends Error {
 }
 
 export class ExitMissingError extends Error {}
+
+/** RFC 4254 §5.1 names; a number for another code. */
+export type RejectionReason =
+  | 'administratively-prohibited'
+  | 'connect-failed'
+  | 'unknown-channel-type'
+  | 'resource-shortage'
+  | number;
+
+/** The server refused a channel open: client.dial(), or the channel of a session. Go's ssh.OpenChannelError. */
+export class OpenChannelError extends Error {
+  readonly reason: RejectionReason;
+  /** The server's text. */
+  readonly description: string;
+}
 
 export class AuthenticationError extends Error {
   readonly attempted: readonly string[];

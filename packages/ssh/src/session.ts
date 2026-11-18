@@ -203,6 +203,9 @@ export class Session implements AsyncDisposable {
       throw error;
     });
     this.#stdin.pipe(channel.stream);
+    // A write that the channel cannot take fails stdin, as EPIPE fails the
+    // stdin of a child process.
+    channel.stream.once('error', (error) => this.#stdin.destroy(error));
     channel.stream.pipe(this.#stdout);
     channel.stderr.pipe(this.#stderr);
     channel.onClose((exit, connectionError) => {

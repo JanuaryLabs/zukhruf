@@ -29,6 +29,10 @@ export function serveSession(session: Session, socket: Socket): void {
   readFrames(socket, (frame) => {
     if (!apply(session, socket, frame)) socket.destroy();
   });
+  // stdin fails when the channel closes with a write that it did not take.
+  // The client drops that write, as it drops a write after the end of the
+  // session, so the frames of the client go on.
+  session.stdin.once('error', () => socket.resume());
   relay(session.stdout, socket, FrameType.data);
   relay(session.stderr, socket, FrameType.extendedData);
   const outputEnded = Promise.allSettled([
@@ -52,7 +56,7 @@ export function serveSession(session: Session, socket: Socket): void {
 function apply(session: Session, socket: Socket, frame: Frame): boolean {
   switch (frame.type) {
     case FrameType.data:
-      if (!session.stdin.write(frame.payload)) {
+      if (!session.stdin.write(frame.payload) && !session.stdin.destroyed) {
         socket.pause();
         session.stdin.once('drain', () => socket.resume());
       }

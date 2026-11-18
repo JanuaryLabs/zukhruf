@@ -13,7 +13,7 @@ import { createClock } from '@sinonjs/fake-timers';
 
 import { isErrno } from '@zukhruf/fs';
 
-import { Client, PrivateKey } from './index.ts';
+import { Client, OpenChannelError, PrivateKey } from './index.ts';
 import { dial } from './testing/dial.ts';
 import { type Sshd, startSshd } from './testing/sshd.ts';
 
@@ -93,7 +93,7 @@ test(
 );
 
 test(
-  'dial to a port where nothing listens rejects with the reason of the server',
+  'dial to a port where nothing listens rejects with OpenChannelError, whose reason is connect-failed and whose description is the error of the connect',
   { skip: noSshd },
   async () => {
     // Arrange
@@ -107,10 +107,76 @@ test(
     const dialed = client.dial('tcp', `127.0.0.1:${port}`);
 
     // Assert
-    await assert.rejects(
-      dialed,
-      /^Error: ssh: the server refused the channel: \S/,
+    await assert.rejects(dialed, (error) => {
+      assert.ok(error instanceof OpenChannelError);
+      assert.deepEqual(
+        { reason: error.reason, description: error.description },
+        { reason: 'connect-failed', description: 'Connection refused' },
+      );
+      return true;
+    });
+  },
+);
+
+test(
+  "dial('tcp') that sshd refuses under AllowTcpForwarding no rejects with OpenChannelError, whose reason is administratively-prohibited and whose description is sshd's",
+  { skip: noSshd },
+  async () => {
+    // Arrange
+    await using sshd = await startSshd({ config: ['AllowTcpForwarding no'] });
+    await using client = await dial(sshd);
+    await using server = await listenOnce(
+      { port: 0, host: '127.0.0.1' },
+      () => '',
     );
+
+    // Act
+    const dialed = client.dial('tcp', `127.0.0.1:${portOf(server)}`);
+
+    // Assert
+    await assert.rejects(dialed, (error) => {
+      assert.ok(error instanceof OpenChannelError);
+      assert.deepEqual(
+        {
+          reason: error.reason,
+          description: error.description,
+          message: error.message,
+        },
+        {
+          reason: 'administratively-prohibited',
+          description: 'open failed',
+          message: 'ssh: the server refused the channel: open failed',
+        },
+      );
+      return true;
+    });
+  },
+);
+
+test(
+  "dial('unix') that sshd refuses under AllowStreamLocalForwarding no rejects with OpenChannelError, whose reason is connect-failed, as sshd sends it",
+  { skip: noSshd },
+  async () => {
+    // Arrange
+    await using sshd = await startSshd({
+      config: ['AllowStreamLocalForwarding no'],
+    });
+    await using client = await dial(sshd);
+    const path = join(sshd.directory, 'remote.sock');
+    await using _server = await listenOnce(path, () => '');
+
+    // Act
+    const dialed = client.dial('unix', path);
+
+    // Assert
+    await assert.rejects(dialed, (error) => {
+      assert.ok(error instanceof OpenChannelError);
+      assert.deepEqual(
+        { reason: error.reason, description: error.description },
+        { reason: 'connect-failed', description: 'open failed' },
+      );
+      return true;
+    });
   },
 );
 
@@ -218,6 +284,42 @@ test(
     const error = await failed;
     assert.ok(Error.isError(error));
     assert.equal(error.cause, await ended);
+  },
+);
+
+test(
+  'a write to a dialed stream that waits for window fails with the close of the channel when the remote server closes its socket',
+  { skip: noSshd },
+  async () => {
+    // Arrange
+    await using sshd = await startSshd();
+    await using client = await dial(sshd);
+    // The server closes the socket at the first data. Before a window adjust,
+    // ssh2 sends no more than the window of sshd's direct-tcpip channel (2 MB,
+    // CHAN_TCP_WINDOW_DEFAULT in OpenSSH's channels.h), so by then a write of
+    // 10 MB waits for window.
+    await using server = createServer((socket) => {
+      socket.on('error', () => undefined);
+      socket.once('data', () => socket.destroy());
+    });
+    server.listen(0, '127.0.0.1');
+    await once(server, 'listening');
+    const stream = await client.dial('tcp', `127.0.0.1:${portOf(server)}`);
+    const streamEnded = new Promise<unknown>((resolve) =>
+      finished(stream, (error) => resolve(error)),
+    );
+    stream.resume();
+
+    // Act
+    const written = new Promise<unknown>((resolve) =>
+      stream.write(Buffer.alloc(10 * 1024 * 1024), resolve),
+    );
+
+    // Assert
+    const error = await written;
+    assert.ok(Error.isError(error));
+    assert.equal(error.message, 'ssh: the channel is closed');
+    assert.equal(await streamEnded, error);
   },
 );
 
