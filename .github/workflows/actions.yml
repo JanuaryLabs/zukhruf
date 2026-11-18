@@ -1,23 +1,33 @@
 name: Actions
 
-# Runs the deploy actions that other repositories call against a local fake of
-# the health endpoint and of the Dokploy API: each must pass on the good answer
-# and fail on the bad one.
+# Runs the actions that other repositories call against a fake of what they
+# talk to (the health endpoint, the Dokploy API, a git history, this
+# workspace's project graph): each must pass on the good answer and fail on the
+# bad one. nx-release-publish and the ghcr actions talk to npm and GHCR, so the
+# release and the deploys that use them prove them.
 on:
   pull_request:
     branches: [main]
     paths:
+      - .github/actions/affected-projects/**
+      - .github/actions/affected-range/**
       - .github/actions/dokploy-deploy/**
+      - .github/actions/tested-commit/**
       - .github/actions/wait-for-health/**
       - .github/workflows/actions.yml
   push:
     branches: [main]
     paths:
+      - .github/actions/affected-projects/**
+      - .github/actions/affected-range/**
       - .github/actions/dokploy-deploy/**
+      - .github/actions/tested-commit/**
       - .github/actions/wait-for-health/**
       - .github/workflows/actions.yml
 
 permissions:
+  # affected-range reads this workflow's runs to find the last green commit.
+  actions: read
   contents: read
 
 jobs:
@@ -27,6 +37,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       # /healthz reports this commit. A compose.deploy adds a running
       # deployment, and the next compose.one reports it once and then reports
@@ -73,7 +85,7 @@ jobs:
           exit 1
 
       - name: Healthy at this commit
-        uses: ./.github/actions/wait-for-health
+        uses: $/.github/actions/wait-for-health
         with:
           url: http://localhost:8787/healthz
           sha: ${{ github.sha }}
@@ -81,7 +93,7 @@ jobs:
       - name: Healthy at another commit
         id: other-sha
         continue-on-error: true
-        uses: ./.github/actions/wait-for-health
+        uses: $/.github/actions/wait-for-health
         with:
           url: http://localhost:8787/healthz
           sha: '0000000'
@@ -89,7 +101,7 @@ jobs:
           delay-seconds: '1'
 
       - name: Deploy a compose whose deployment is done
-        uses: ./.github/actions/dokploy-deploy
+        uses: $/.github/actions/dokploy-deploy
         with:
           api-url: http://localhost:8787/api
           api-key: test-key
@@ -98,7 +110,7 @@ jobs:
       - name: Deploy a compose whose deployment fails
         id: broken
         continue-on-error: true
-        uses: ./.github/actions/dokploy-deploy
+        uses: $/.github/actions/dokploy-deploy
         with:
           api-url: http://localhost:8787/api
           api-key: test-key
@@ -111,3 +123,131 @@ jobs:
         run: |
           [ "$OTHER_SHA" = failure ] || { echo "wait-for-health passed for another commit" >&2; exit 1; }
           [ "$BROKEN" = failure ] || { echo "dokploy-deploy passed for a failed deployment" >&2; exit 1; }
+
+  tested-commit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: The tested commit is HEAD
+        id: same
+        uses: $/.github/actions/tested-commit
+        with:
+          sha: ${{ github.sha }}
+
+      - name: Main moved past the tested commit
+        id: other
+        uses: $/.github/actions/tested-commit
+        with:
+          sha: '0000000000000000000000000000000000000000'
+
+      # Outside a workflow_run event the default sha is empty.
+      - name: No tested commit
+        id: missing
+        continue-on-error: true
+        uses: $/.github/actions/tested-commit
+
+      - name: Each answer is right
+        env:
+          SAME: ${{ steps.same.outputs.current }}
+          OTHER: ${{ steps.other.outputs.current }}
+          MISSING: ${{ steps.missing.outcome }}
+        run: |
+          [ "$SAME" = true ] || { echo "HEAD was not current: $SAME" >&2; exit 1; }
+          [ "$OTHER" = false ] || { echo "another commit was current: $OTHER" >&2; exit 1; }
+          [ "$MISSING" = failure ] || { echo "a missing sha passed" >&2; exit 1; }
+
+  affected-range:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # A throwaway history: c1, c2 tagged release/1.0.0, c3.
+      - name: The base is the newer of the last green commit and the tag
+        env:
+          RANGE: ${{ github.workspace }}/.github/actions/affected-range/range.sh
+        run: |
+          cd "$(mktemp -d)"
+          git init -q -b main
+          git config user.name test
+          git config user.email test@example.com
+          base() { sh "$RANGE" "$1" | sed -n 's/^base=//p'; }
+          expect() { [ "$2" = "$3" ] || { echo "$1: got $2, want $3" >&2; exit 1; }; }
+          git commit -q --allow-empty -m c1
+          c1="$(git rev-parse HEAD)"
+          expect "no tag, no green commit" "$(base '')" "$(git hash-object -t tree /dev/null)"
+          expect "no tag, green c1" "$(base "$c1")" "$c1"
+          git commit -q --allow-empty -m c2
+          c2="$(git rev-parse HEAD)"
+          git tag release/1.0.0
+          git commit -q --allow-empty -m c3
+          c3="$(git rev-parse HEAD)"
+          expect "green c1 before the tag" "$(base "$c1")" "$c2"
+          expect "green c3 after the tag" "$(base "$c3")" "$c3"
+          expect "no green commit, tag" "$(base '')" "$c2"
+          expect "head" "$(sh "$RANGE" "$c3" | sed -n 's/^head=//p')" "$c3"
+
+      - name: Find what changed in this repository
+        id: range
+        uses: $/.github/actions/affected-range
+
+      - name: The action exports what it outputs
+        env:
+          BASE: ${{ steps.range.outputs.base }}
+          HEAD_SHA: ${{ steps.range.outputs.head }}
+        run: |
+          [ -n "$BASE" ] && [ "$NX_BASE" = "$BASE" ] || { echo "NX_BASE '$NX_BASE' is not base '$BASE'" >&2; exit 1; }
+          [ "$NX_HEAD" = "$HEAD_SHA" ] && [ "$HEAD_SHA" = "$(git rev-parse HEAD)" ] || { echo "NX_HEAD '$NX_HEAD' is not HEAD" >&2; exit 1; }
+
+  affected-projects:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up the workspace
+        uses: $/.github/actions/setup-workspace
+
+      # From the empty tree every project is affected; from HEAD to HEAD none is.
+      - name: Every project changed
+        run: |
+          echo "NX_BASE=$(git hash-object -t tree /dev/null)" >> "$GITHUB_ENV"
+          echo "NX_HEAD=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Find the darwin projects and async
+        id: all
+        uses: $/.github/actions/affected-projects
+        with:
+          projects: tag:platform:darwin async
+
+      - name: Nothing changed
+        run: echo "NX_BASE=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Find the darwin projects
+        id: none
+        uses: $/.github/actions/affected-projects
+        with:
+          projects: tag:platform:darwin
+
+      - name: Each answer is right
+        env:
+          ALL_AFFECTED: ${{ steps.all.outputs.affected }}
+          ALL_LIST: ${{ steps.all.outputs.list }}
+          NONE_AFFECTED: ${{ steps.none.outputs.affected }}
+          NONE_LIST: ${{ steps.none.outputs.list }}
+        run: |
+          [ "$ALL_AFFECTED" = true ] || { echo "nothing affected from the empty tree" >&2; exit 1; }
+          echo "$ALL_LIST" | jq -e 'index("launchd") and index("async")' > /dev/null || { echo "list $ALL_LIST misses launchd or async" >&2; exit 1; }
+          [ "$NONE_AFFECTED" = false ] && [ "$NONE_LIST" = '[]' ] || { echo "affected from HEAD: $NONE_LIST" >&2; exit 1; }

@@ -20,7 +20,7 @@ runs:
     # older, runs every install script and resolves peer ranges differently.
     - name: Install the latest npm
       shell: bash
-      run: npm install -g npm@latest
+      run: npm install -g npm@latest # zizmor: ignore[adhoc-packages]
 
     - name: Install dependencies
       shell: bash

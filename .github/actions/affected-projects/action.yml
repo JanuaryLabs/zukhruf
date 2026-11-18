@@ -1,0 +1,35 @@
+name: Find which of these projects changed
+description: Sets affected to 'true' when nx affected selects any of the given projects in the range of affected-range, and list to their names. Needs the workspace installed (setup-workspace) and NX_BASE/NX_HEAD (affected-range). Other repositories use it as JanuaryLabs/zukhruf/.github/actions/affected-projects@main.
+
+inputs:
+  projects:
+    description: The projects to look for, as nx --projects takes them (names, globs, tag:<tag>), separated by commas or spaces.
+    required: true
+
+outputs:
+  affected:
+    description: "'true' when at least one of the projects is affected, else 'false'."
+    value: ${{ steps.show.outputs.affected }}
+  list:
+    description: The affected projects among them, as a JSON array of names.
+    value: ${{ steps.show.outputs.list }}
+
+runs:
+  using: composite
+  steps:
+    - name: Ask Nx which of the projects are affected
+      id: show
+      shell: bash
+      env:
+        PROJECTS: ${{ inputs.projects }}
+      run: |
+        : "${NX_BASE:?NX_BASE is not set: run affected-range first}"
+        : "${NX_HEAD:?NX_HEAD is not set: run affected-range first}"
+        list="$(npx nx show projects --affected --base="$NX_BASE" --head="$NX_HEAD" --projects="$(printf '%s' "$PROJECTS" | tr -s ' ' ',')" --json)"
+        echo "Affected among $PROJECTS: $list"
+        echo "list=$list" >> "$GITHUB_OUTPUT"
+        if [ "$list" = "[]" ]; then
+          echo "affected=false" >> "$GITHUB_OUTPUT"
+        else
+          echo "affected=true" >> "$GITHUB_OUTPUT"
+        fi

@@ -1,13 +1,45 @@
-name: Find what changed since the last release
-description: Sets NX_BASE to the last release tag and NX_HEAD to HEAD for nx affected. The release commit changes every package.json and gets no CI run, so a compare with the last green commit always sees every project changed.
+name: Find what changed
+description: Sets NX_BASE and NX_HEAD for nx affected. The base is the newer of the last successful run of a workflow and the newest release/* tag; with neither, it is the empty tree, so every project is affected. The job needs actions read permission. Other repositories use it as JanuaryLabs/zukhruf/.github/actions/affected-range@main.
+
+inputs:
+  workflow-id:
+    description: The workflow file whose last successful run gives the base, such as deploy.yml. Empty means the workflow that runs this action.
+    required: false
+    default: ''
+  last-successful-event:
+    description: The event of that run. CI runs on push; a deploy that CI starts runs on workflow_run.
+    required: false
+    default: push
+
+outputs:
+  base:
+    description: The commit (or the empty tree) that nx affected compares with.
+    value: ${{ steps.range.outputs.base }}
+  head:
+    description: The commit that is checked out.
+    value: ${{ steps.range.outputs.head }}
 
 runs:
   using: composite
   steps:
-    - name: Find what changed since the last release
+    - name: Find the last successful run
+      id: green
+      uses: nrwl/nx-set-shas@v5
+      with:
+        workflow-id: ${{ inputs.workflow-id }}
+        last-successful-event: ${{ inputs.last-successful-event }}
+        set-environment-variables-for-job: 'false'
+
+    # Without a previous run, nx-set-shas falls back to HEAD~1, which would
+    # see only the last commit; range.sh then takes the tag or the empty tree.
+    - name: Choose the base
+      id: range
       shell: bash
+      env:
+        GREEN: ${{ case(steps.green.outputs.noPreviousBuild == 'true', '', steps.green.outputs.base) }}
       run: |
-        base=$(git describe --tags --abbrev=0 --match 'release/*')
-        head=$(git rev-parse HEAD)
-        echo "NX_BASE=$base" >> "$GITHUB_ENV"
-        echo "NX_HEAD=$head" >> "$GITHUB_ENV"
+        range="$(sh "$GITHUB_ACTION_PATH/range.sh" "$GREEN")"
+        echo "$range"
+        printf '%s\n' "$range" >> "$GITHUB_OUTPUT"
+        # Both values are commit hashes that git printed.
+        printf '%s\n' "$range" | sed 's/^base=/NX_BASE=/; s/^head=/NX_HEAD=/' >> "$GITHUB_ENV" # zizmor: ignore[github-env]

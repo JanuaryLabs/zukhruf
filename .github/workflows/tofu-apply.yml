@@ -66,10 +66,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     # Serialize per stack: two racing applies would fork the committed state.
-    # Queued, never cancelled: an interrupted apply is worse than a late one.
+    # Queued, never cancelled: an interrupted apply is worse than a late one,
+    # and queue: max keeps every waiting run instead of only the newest.
     concurrency:
       group: tofu-${{ inputs.stack }}-${{ inputs.environment }}
       cancel-in-progress: false
+      queue: max
+    # The apply restores and saves no cache.
+    cache-mode: none
     outputs:
       outputs: ${{ steps.stack.outputs.outputs }}
       changed: ${{ steps.plan.outputs.changes }}

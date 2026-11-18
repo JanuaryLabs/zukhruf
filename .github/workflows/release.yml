@@ -1,10 +1,10 @@
 name: Release
 
 # Releases what the conventional commits on main ask for, once CI is green for
-# that commit: nx release version versions, commits, tags and pushes, then nx
-# release publish publishes, so nothing reaches npm unless main has the release
-# commit and tag. A version already on npm is skipped. A push with nothing to
-# release changes nothing. The release commit and tag are pushed with
+# that commit: nx release version versions, commits, tags and pushes, then
+# nx-release-publish publishes, so nothing reaches npm unless main has the
+# release commit and tag. A version already on npm is skipped. A push with
+# nothing to release changes nothing. The release commit and tag are pushed with
 # GITHUB_TOKEN, which starts no further workflow run.
 on:
   workflow_run:
@@ -13,10 +13,12 @@ on:
     branches: [main]
 
 # A release is never cancelled: one stopped between the tag and the publish
-# would leave a version that no later run releases.
+# would leave a version that no later run releases. Every run waits its turn;
+# a run whose commit main moved past then stops at the tested-commit step.
 concurrency:
   group: release
   cancel-in-progress: false
+  queue: max
 
 jobs:
   release:
@@ -25,7 +27,10 @@ jobs:
     permissions:
       contents: write
       id-token: write
+    # The release restores the npm cache but never writes one.
+    cache-mode: read
     steps:
+      # The release job pushes the release commit and tag with these credentials.
       - name: Checkout
         uses: actions/checkout@v7
         with:
@@ -34,24 +39,17 @@ jobs:
 
       - name: Release only the commit that CI tested
         id: tested
-        env:
-          TESTED: ${{ github.event.workflow_run.head_sha }}
-        run: |
-          if [ "$(git rev-parse HEAD)" = "$TESTED" ]; then
-            echo "current=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "main moved past $TESTED; the CI run of the newer commit releases it"
-          fi
+        uses: $/.github/actions/tested-commit
 
       - name: Set up the workspace
         if: steps.tested.outputs.current == 'true'
-        uses: ./.github/actions/setup-workspace
+        uses: $/.github/actions/setup-workspace
         with:
           registry-url: https://registry.npmjs.org/
 
       - name: Set up Zig
         if: steps.tested.outputs.current == 'true'
-        uses: ./.github/actions/setup-zig
+        uses: $/.github/actions/setup-zig
 
       - name: Verify npm authentication
         if: steps.tested.outputs.current == 'true'
@@ -59,38 +57,15 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_ACCESS_TOKEN }}
 
-      - name: Release
+      - name: Version
         if: steps.tested.outputs.current == 'true'
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           npx nx release version
-          # A publish can fail with a Rekor 409 when sigstore retries a tlog entry
-          # that Rekor already holds (npm/cli#10078, sigstore/sigstore-js#1708),
-          # and Nx then skips the dependents (0.5.0, 0.6.3, 0.8.26). A second
-          # nx release publish cannot heal that: npm stages a publish for minutes,
-          # so it does not see what the first one published, npm answers "Cannot
-          # publish over previously staged version", which Nx 23.2.1 does not
-          # read as published (npm/cli#9889), and Nx skips the dependents again.
-          # So the retry publishes only the projects that the first run did not,
-          # in their order among each other. It runs the target directly, because
-          # nx release publish refuses a part of a fixed release group. The "-" is
-          # the script name that Nx reads from process.argv[1].
-          node --input-type=module - <<'EOF'
-          import { spawnSync } from 'node:child_process';
-          import { readFile } from 'node:fs/promises';
-          import { releasePublish } from 'nx/release';
-          const results = Object.entries(await releasePublish({}));
-          if (results.every(([, { code }]) => code === 0)) process.exit(0);
-          const published = results.filter(([, { code }]) => code === 0).map(([project]) => project);
-          const { release } = JSON.parse(await readFile('nx.json', 'utf8'));
-          const retry = spawnSync('npx', [
-            'nx', 'run-many', '-t', 'nx-release-publish', '--outputStyle=static', '--excludeTaskDependencies',
-            `--projects=${[release.projects].flat().join(',')}`,
-            ...(published.length > 0 ? [`--exclude=${published.join(',')}`] : []),
-          ], { stdio: 'inherit' });
-          process.exit(retry.status ?? 1);
-          EOF
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_ACCESS_TOKEN }}
-          NPM_CONFIG_PROVENANCE: true
+
+      - name: Publish
+        if: steps.tested.outputs.current == 'true'
+        uses: $/.github/actions/nx-release-publish
+        with:
+          token: ${{ secrets.NPM_ACCESS_TOKEN }}

@@ -1,0 +1,38 @@
+name: Move a tag to a GHCR image
+description: Points ghcr.io/<owner>/<image>:<tag> at the image of ghcr.io/<owner>/<image>:<from>. The copy happens in the registry, so no layers are pulled. Run it after every image of a commit is built, so that :latest never mixes images of two commits. The job needs packages write permission. Other repositories use it as JanuaryLabs/zukhruf/.github/actions/ghcr-promote@main.
+
+inputs:
+  image:
+    description: The image name under ghcr.io/<owner>/, such as whatisgoingon-backend.
+    required: true
+  from:
+    description: The tag that names the image to promote.
+    required: false
+    default: ${{ github.sha }}
+  tag:
+    description: The tag to move.
+    required: false
+    default: latest
+  token:
+    description: The token that logs in to ghcr.io.
+    required: false
+    default: ${{ github.token }}
+
+runs:
+  using: composite
+  steps:
+    - uses: docker/login-action@v4
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ inputs.token }}
+
+    - name: Promote ${{ inputs.image }}:${{ inputs.from }} to ${{ inputs.tag }}
+      shell: bash
+      env:
+        IMAGE: ${{ inputs.image }}
+        FROM: ${{ inputs.from }}
+        TAG: ${{ inputs.tag }}
+      run: |
+        repository="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/$IMAGE"
+        docker buildx imagetools create --tag "$repository:$TAG" "$repository:$FROM"

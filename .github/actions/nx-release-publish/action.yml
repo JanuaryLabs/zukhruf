@@ -1,0 +1,17 @@
+name: Publish the release
+description: Runs nx release publish with npm provenance and, when a project fails (a Rekor 409), publishes once more only the projects that the first run did not publish, so one failure cannot leave a version half-published. Needs the workspace installed with registry-url (setup-workspace), the commit that nx release version made, and release.projects in nx.json. The job needs id-token write permission. Other repositories use it as JanuaryLabs/zukhruf/.github/actions/nx-release-publish@main.
+
+inputs:
+  token:
+    description: The npm token that publishes, given to npm as NODE_AUTH_TOKEN.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Publish, then retry what did not publish
+      shell: bash
+      env:
+        NODE_AUTH_TOKEN: ${{ inputs.token }}
+        NPM_CONFIG_PROVENANCE: 'true'
+      run: node --input-type=module - < "$GITHUB_ACTION_PATH/publish.mjs"

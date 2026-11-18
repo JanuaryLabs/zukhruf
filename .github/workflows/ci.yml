@@ -10,10 +10,12 @@ on:
 # own run, even when it is run again: release.yml releases a commit only after
 # CI passes for it.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  group: ${{ github.workflow }}-${{ case(github.event_name == 'pull_request', github.ref, github.sha) }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
+  # affected-range reads this workflow's runs to find the last green commit.
+  actions: read
   contents: read
 
 jobs:
@@ -24,44 +26,61 @@ jobs:
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          persist-credentials: false
+
+      # sqlite-open's native target builds with zig cc (packages/sqlite/open/docs/adr/0006).
+      - name: Set up Zig
+        id: zig
+        background: true
+        uses: $/.github/actions/setup-zig
 
       - name: Set up the workspace
-        uses: ./.github/actions/setup-workspace
+        uses: $/.github/actions/setup-workspace
 
-      - name: Set up Zig
-        uses: ./.github/actions/setup-zig
+      - name: Find what changed
+        uses: $/.github/actions/affected-range
 
-      # The dokploy generator's test runs tofu fmt on the files it writes.
-      - name: Set up OpenTofu
-        uses: opentofu/setup-opentofu@v2
+      # The checks of the whole tree run beside the affected targets.
+      - name: Check Nx workspace sync
+        background: true
+        run: npx nx sync:check
+
+      - name: Check formatting
+        background: true
+        run: npx prettier --check .
+
+      # No Nx project holds these two files, so nx affected never lints them.
+      - name: Lint the root package.json and the lockfile
+        background: true
+        run: npx eslint package.json package-lock.json
+
+      - name: Check that a copy ledger records each copy in the test files
+        background: true
+        run: npx nx run copy-check:check
+
+      - name: Check that the README's Packages table is the one the package.json descriptions give
+        background: true
+        run: npx nx run readme-table:check
+
+      - name: Audit the workflows
+        background: true
+        uses: zizmorcore/zizmor-action@v0.8.1
         with:
-          tofu_wrapper: false
+          advanced-security: false
+          annotations: true
 
-      - name: Find what changed since the last release
-        uses: ./.github/actions/affected-range
+      - name: Wait for Zig
+        wait: zig
 
-      - parallel:
-          - name: Check Nx workspace sync
-            run: npx nx sync:check
-
-          - name: Check formatting
-            run: npx prettier --check .
-
-          # No Nx project holds these two files, so nx affected never lints them.
-          - name: Lint the root package.json and the lockfile
-            run: npx eslint package.json package-lock.json
-
-          - name: Check that a copy ledger records each copy in the test files
-            run: npx nx run copy-check:check
-
-          - name: Check that the README's Packages table is the one the package.json descriptions give
-            run: npx nx run readme-table:check
-
-      # The projects tagged platform:darwin run in the darwin job.
+      # The projects tagged platform:darwin run in the darwin job. The profile
+      # goes to .nx, which git ignores, so the formatting check never reads it.
       - name: Lint, type check, test and build what changed
         run: npx nx affected -t lint typecheck test test-network build --exclude='tag:platform:darwin'
         env:
-          NX_PROFILE: nx-profile.json
+          NX_PROFILE: .nx/nx-profile.json
+
+      - name: Wait for the checks of the whole tree
+        wait-all:
 
       # CI hides the output of tasks that pass, so the Nx task profile and the
       # junit file of each project are kept to find the slow tasks and tests.
@@ -69,8 +88,10 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
+          # The profile is under .nx, which the action skips unless told.
+          include-hidden-files: true
           path: |
-            nx-profile.json
+            .nx/nx-profile.json
             packages/**/test-results.xml
             apps/**/test-results.xml
 
@@ -84,26 +105,34 @@ jobs:
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
-
-      - name: Set up the workspace
-        uses: ./.github/actions/setup-workspace
+          persist-credentials: false
 
       - name: Set up Zig
-        uses: ./.github/actions/setup-zig
+        id: zig
+        background: true
+        uses: $/.github/actions/setup-zig
 
-      - name: Find what changed since the last release
-        uses: ./.github/actions/affected-range
+      - name: Set up the workspace
+        uses: $/.github/actions/setup-workspace
+
+      - name: Find what changed
+        uses: $/.github/actions/affected-range
+
+      - name: Wait for Zig
+        wait: zig
 
       - name: Lint, type check, test and build what changed
         run: npx nx affected -t lint typecheck test test-network build --exclude='*,!tag:platform:darwin'
         env:
-          NX_PROFILE: nx-profile.json
+          NX_PROFILE: .nx/nx-profile.json
 
       - name: Keep the task profile and test results
         if: always()
         uses: actions/upload-artifact@v7
         with:
+          # The profile is under .nx, which the action skips unless told.
+          include-hidden-files: true
           name: darwin
           path: |
-            nx-profile.json
+            .nx/nx-profile.json
             packages/**/test-results.xml

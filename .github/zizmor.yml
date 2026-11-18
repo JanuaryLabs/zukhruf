@@ -1,0 +1,21 @@
+# zizmor (https://docs.zizmor.sh) audits the workflows and actions in CI. Each
+# entry here is a choice, with its reason; a finding inside a composite action
+# is ignored by a comment on its line instead, because zizmor reads no
+# ignore rule for one.
+rules:
+  unpinned-uses:
+    config:
+      policies:
+        # Tags and @main, not commit hashes, until actions are pinned (#4675).
+        '*': ref-pin
+  dangerous-triggers:
+    ignore:
+      # Runs only after a successful push run of CI on main, and checks out
+      # main, never the code of the run that triggered it.
+      - release.yml
+  artipacked:
+    ignore:
+      # These jobs push with the checkout's credentials: the release commit and
+      # tag, and the reconciled state.
+      - release.yml
+      - tofu-apply.yml
