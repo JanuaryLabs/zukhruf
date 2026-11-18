@@ -1,6 +1,6 @@
 # @zukhruf/git-hooks
 
-Git hooks written in TypeScript. A pre-commit hook runs steps in order against the staged commit. The steps check the staged copy of each file with Prettier and change nothing, run `nx sync` on the staged commit and stage only the files that sync wrote, and build generated files when nx says that their projects are affected. A step reads a tree of the commit, and runs its tools in a snapshot of the commit, never in the working tree. A pre-push hook runs steps in order against the push. Its build step builds each pushed commit in a snapshot, never the working tree. A commit-msg hook runs steps in order against the message of the commit. Its scope step stops a subject that nx release reads with the wrong scope. Its breaking step stops a message that nx release reads as a breaking change. A repo adds a step of its own as a class.
+Git hooks written in TypeScript. A pre-commit hook runs steps in order against the staged commit. The steps check the staged copy of each file with Prettier and change nothing, run `nx sync` on the staged commit and stage only the files that sync wrote, and build generated files when nx says that their projects are affected. A step reads a tree of the commit, and runs its tools in a snapshot of the commit, never in the working tree. A pre-push hook runs steps in order against the push. Its build step builds each pushed commit in a snapshot, never the working tree. A commit-msg hook runs steps in order against the message of the commit. Its scope step stops a subject that nx release reads with the wrong scope. Its breaking step stops a message that nx release reads as a breaking change. Its trailer step stops a message that ends with an attribution trailer, Co-authored-by or Claude-Session. A repo adds a step of its own as a class.
 
 The words in these documents have one meaning each. See the glossary in [CONTEXT.md](./CONTEXT.md).
 
@@ -532,12 +532,17 @@ Git runs the commit-msg hook after you write the message, before git makes the c
 ```ts
 #!/usr/bin/env node
 import {
+  NoAttributionTrailer,
   NoBreakingChange,
   NxReleaseScope,
   commitMsg,
 } from '@zukhruf/git-hooks';
 
-await commitMsg([new NxReleaseScope(), new NoBreakingChange()]);
+await commitMsg([
+  new NxReleaseScope(),
+  new NoBreakingChange(),
+  new NoAttributionTrailer(),
+]);
 ```
 
 Make it executable, and commit a link to it, as for the pre-commit hook:
@@ -581,20 +586,36 @@ breaking  nx release reads this message as a breaking change and makes a major
 
 The step asks the parser of the repo's own nx (`parseGitCommit`), so it judges the message as `nx release` of the repo does. It needs `nx` in the repo. The body is the message after its first paragraph, as `git log --format=%b` gives it. A merge commit passes.
 
+## Keep attribution trailers out
+
+`NoAttributionTrailer` stops a commit whose message ends with a `Co-authored-by` or a `Claude-Session` trailer. Git reads trailer keys without case, so `co-authored-by:` stops the commit too. Other trailers, such as `Signed-off-by`, pass.
+
+```text
+trailer   This message ends with attribution trailers, which this repo keeps
+          out of its commits:
+            Co-authored-by: Claude <noreply@anthropic.com>
+          Remove these lines from the message.
+✖ commit stopped by the commit-msg hook
+```
+
+The step reads the trailers with git's own parser, `git interpret-trailers --parse --no-divider`. Only the last paragraph of the message holds trailers, so a `Co-authored-by:` line in the middle of the body passes. A `---` line does not end the message, as it does in a patch.
+
 ## Add a commit-msg step of your own
 
-A commit-msg step is a subclass of `Step<CommitMessage>`. `CommitMessage` has the `text` of the message without comment lines, and its `subject`:
+A commit-msg step is a subclass of `Step<CommitMessage>`. `CommitMessage` has the `text` of the message without comment lines, its `subject`, and its `trailers` (`{ key, value }`, in git's order, keys as written):
 
 ```ts
 import { type CommitMessage, Step } from '@zukhruf/git-hooks';
 
-export class NoTrailers extends Step<CommitMessage> {
-  readonly name = 'trailers';
+export class SignedOff extends Step<CommitMessage> {
+  readonly name = 'sign-off';
 
   async run(message: CommitMessage) {
-    return /^Co-Authored-By:/im.test(message.text)
-      ? this.fail('remove the Co-Authored-By trailer')
-      : this.pass();
+    return message.trailers.some(
+      ({ key }) => key.toLowerCase() === 'signed-off-by',
+    )
+      ? this.pass()
+      : this.fail('sign off the commit: git commit -s');
   }
 }
 ```

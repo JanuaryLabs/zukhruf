@@ -1,7 +1,7 @@
 {
   "name": "@zukhruf/git-hooks",
   "version": "0.8.27",
-  "description": "Git hooks in TypeScript, a class per step. Pre-commit checks staged files with Prettier, stages only what nx sync wrote, and builds generated files. Commit-msg checks a message as nx release reads it. Pre-push builds pushed commits in snapshots.",
+  "description": "Git hooks in TypeScript, a class per step. Pre-commit checks staged files with Prettier, stages only what nx sync wrote, and builds generated files. Commit-msg checks a scope, a breaking change and trailers. Pre-push builds pushed commits in snapshots.",
   "license": "MIT",
   "repository": {
     "type": "git",

@@ -2,9 +2,14 @@
 // The source condition runs this workspace's own package from src, so a
 // fresh clone can commit before anything is built.
 import {
+  NoAttributionTrailer,
   NoBreakingChange,
   NxReleaseScope,
   commitMsg,
 } from '@zukhruf/git-hooks';
 
-await commitMsg([new NxReleaseScope(), new NoBreakingChange()]);
+await commitMsg([
+  new NxReleaseScope(),
+  new NoBreakingChange(),
+  new NoAttributionTrailer(),
+]);

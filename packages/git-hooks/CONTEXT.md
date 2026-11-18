@@ -25,7 +25,7 @@ The content that the next commit holds: the index that git gives the hook. `Comm
 _Avoid_: Index (the word is correct, but it has other meanings), cache
 
 **Commit message**:
-The message of the commit that git is about to make, as git gives it to the commit-msg hook in a file, without the comment lines of the editor. Its subject is the first paragraph, with its lines joined by spaces, as `git log --format=%s` and nx release read it. `CommitMessage` is its type in the code.
+The message of the commit that git is about to make, as git gives it to the commit-msg hook in a file, without the comment lines of the editor. Its subject is the first paragraph, with its lines joined by spaces, as `git log --format=%s` and nx release read it. Its trailers are the lines that `git interpret-trailers --parse` reads from its last paragraph. `CommitMessage` is its type in the code.
 _Avoid_: Commit (that is the staged commit), header
 
 **Tree**:
