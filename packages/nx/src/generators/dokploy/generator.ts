@@ -29,6 +29,7 @@ import {
   registryTf,
   variablesTf,
   versionsTf,
+  zizmorYml,
 } from './files.ts';
 
 export interface DokployOptions {
@@ -256,11 +257,17 @@ export default async function dokployGenerator(
     tree.delete(`${environment}/registry.tf`);
   }
   tree.write(`${environment}/.terraform.lock.hcl`, lockHcl(stack));
-  // A repo can have tuned its CI; the deploy workflow is this generator's.
-  if (!tree.exists('.github/workflows/ci.yml')) {
-    tree.write('.github/workflows/ci.yml', ciYml(stack));
+  // Once written, the workflows are the repo's: it composes zukhruf's actions
+  // with steps of its own (ADR 0011, decision 17).
+  for (const [path, content] of [
+    ['.github/workflows/ci.yml', ciYml(stack)],
+    ['.github/workflows/deploy.yml', deployYml(stack)],
+    ['.github/zizmor.yml', zizmorYml],
+  ] as const) {
+    if (!tree.exists(path)) {
+      tree.write(path, content);
+    }
   }
-  tree.write('.github/workflows/deploy.yml', deployYml(stack));
   addOpentofuPlugin(tree);
 
   await formatFiles(tree);

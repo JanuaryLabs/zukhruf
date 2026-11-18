@@ -153,7 +153,7 @@ for (const [hostMode, hostOptions] of Object.entries(hosts)) {
   }
 }
 
-test('the deploy workflow calls the kit of zukhruf and checks the sha only after a new image', async () => {
+test('the deploy workflow is built from the actions of zukhruf and checks the sha only after a new image', async () => {
   const tree = await workspace();
 
   await dokployGenerator(tree, { api: 'apps/backend', owner: 'acme' });
@@ -185,14 +185,36 @@ test('the deploy workflow calls the kit of zukhruf and checks the sha only after
   );
   assert.match(
     deploy,
-    /sha: \$\{\{ needs\.promote\.result == 'success' && env\.SHA \|\| '' \}\}/,
+    /sha: \$\{\{ case\(needs\.promote\.result == 'success', env\.SHA, ''\) \}\}/,
   );
   assert.match(
     deploy,
     /needs\.promote\.result == 'success' \|\| needs\.infra\.outputs\.changed == 'true' \|\| needs\.gate\.outputs\.infra == 'true'/,
   );
-  assert.match(deploy, /if has @acme\/infra; then/);
-  assert.match(deploy, /BUILD_SHA=\$\{\{ env\.SHA \}\}/);
+  assert.match(
+    deploy,
+    /concurrency:\n {2}group: deploy\n {2}cancel-in-progress: false\n {2}queue: max/,
+  );
+  assert.match(
+    deploy,
+    /uses: JanuaryLabs\/zukhruf\/\.github\/actions\/tested-commit@main/,
+  );
+  assert.match(
+    deploy,
+    /uses: JanuaryLabs\/zukhruf\/\.github\/actions\/affected-range@main\n {8}with:\n {10}workflow-id: deploy\.yml\n {10}last-successful-event: workflow_run/,
+  );
+  assert.match(
+    deploy,
+    /id: infra\n {8}uses: JanuaryLabs\/zukhruf\/\.github\/actions\/affected-projects@main\n {8}with:\n {10}projects: '@acme\/infra'/,
+  );
+  assert.match(
+    deploy,
+    /uses: JanuaryLabs\/zukhruf\/\.github\/actions\/ghcr-image@main\n {8}with:\n {10}image: \$\{\{ matrix\.image \}\}\n {10}dockerfile: \$\{\{ matrix\.dockerfile \}\}\n {10}sha: \$\{\{ env\.SHA \}\}\n {10}build-args: BUILD_SHA=\$\{\{ env\.SHA \}\}/,
+  );
+  assert.match(
+    deploy,
+    /uses: JanuaryLabs\/zukhruf\/\.github\/actions\/ghcr-promote@main\n {8}with:\n {10}image: \$\{\{ matrix\.image \}\}\n {10}from: \$\{\{ env\.SHA \}\}/,
+  );
   assert.match(
     read(tree, `${production}/outputs.tf`),
     /output "compose_id"[\s\S]*output "host"/,
@@ -212,7 +234,7 @@ test('a new image follows a change of each project that the Dockerfile builds an
 
   assert.match(
     read(tree, '.github/workflows/deploy.yml'),
-    /if has @acme\/backend \|\| has @acme\/web \|\| has @acme\/db; then/,
+    /id: image\n {8}uses: JanuaryLabs\/zukhruf\/\.github\/actions\/affected-projects@main\n {8}with:\n {10}projects: '@acme\/backend @acme\/web @acme\/db'/,
   );
 });
 
@@ -405,7 +427,6 @@ test('a run without the registry removes the registry of an earlier run', async 
   await dokployGenerator(tree, { api: 'apps/backend', owner: 'acme' });
 
   assert.ok(!tree.exists(`${production}/registry.tf`));
-  assert.doesNotMatch(read(tree, '.github/workflows/deploy.yml'), /TF_ENV/);
 });
 
 test('a CI workflow that is there stays', async () => {
@@ -417,19 +438,64 @@ test('a CI workflow that is there stays', async () => {
   assert.equal(read(tree, '.github/workflows/ci.yml'), 'name: CI\n');
 });
 
-test('a new CI workflow checks the infra project with OpenTofu', async () => {
+test('a deploy workflow that is there stays', async () => {
+  const tree = await workspace();
+  tree.write('.github/workflows/deploy.yml', 'name: Deploy\n');
+
+  await dokployGenerator(tree, { api: 'apps/backend', owner: 'acme' });
+
+  assert.equal(read(tree, '.github/workflows/deploy.yml'), 'name: Deploy\n');
+});
+
+test('a new zizmor config allows tags and the deploy that CI starts', async () => {
+  const tree = await workspace();
+
+  await dokployGenerator(tree, { api: 'apps/backend', owner: 'acme' });
+
+  const zizmor = read(tree, '.github/zizmor.yml');
+  assert.match(
+    zizmor,
+    /unpinned-uses:\n {4}config:\n {6}policies:\n(?: {8}#.*\n)* {8}'\*': ref-pin/,
+  );
+  assert.match(
+    zizmor,
+    /dangerous-triggers:\n {4}ignore:\n(?: {6}#.*\n)* {6}- deploy\.yml/,
+  );
+});
+
+test('a zizmor config that is there stays', async () => {
+  const tree = await workspace();
+  tree.write('.github/zizmor.yml', 'rules: {}\n');
+
+  await dokployGenerator(tree, { api: 'apps/backend', owner: 'acme' });
+
+  assert.equal(read(tree, '.github/zizmor.yml'), 'rules: {}\n');
+});
+
+test('a new CI workflow checks the infra project with OpenTofu and audits the workflows', async () => {
   const tree = await workspace();
 
   await dokployGenerator(tree, { api: 'apps/backend', owner: 'acme' });
 
   const ci = read(tree, '.github/workflows/ci.yml');
   assert.match(ci, /^name: CI$/m);
-  assert.match(ci, /uses: opentofu\/setup-opentofu@v2/);
+  assert.match(
+    ci,
+    /id: tofu\n {8}background: true\n {8}uses: opentofu\/setup-opentofu@v2/,
+  );
   assert.match(
     ci,
     /uses: JanuaryLabs\/zukhruf\/\.github\/actions\/setup-workspace@main/,
   );
-  assert.match(ci, /npx nx affected -t lint typecheck test build/);
+  assert.match(
+    ci,
+    /uses: JanuaryLabs\/zukhruf\/\.github\/actions\/affected-range@main/,
+  );
+  assert.match(ci, /uses: zizmorcore\/zizmor-action@v0\.8\.1/);
+  assert.match(
+    ci,
+    /wait: tofu\n[\s\S]*npx nx affected -t lint typecheck test build\n/,
+  );
 });
 
 test('an api that is not a node-app stops the generator', async () => {

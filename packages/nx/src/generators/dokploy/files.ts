@@ -471,6 +471,21 @@ variable "dokploy_api_key" {
 ${registry}`;
 }
 
+export const zizmorYml = `# zizmor (https://docs.zizmor.sh) audits the workflows in CI. Each entry
+# here is a choice, with its reason.
+rules:
+  unpinned-uses:
+    config:
+      policies:
+        # Tags and @main, as zukhruf's actions are called, not commit hashes.
+        '*': ref-pin
+  dangerous-triggers:
+    ignore:
+      # Runs only after a successful push run of CI on main, and checks out
+      # main, never the code of the run that triggered it.
+      - deploy.yml
+`;
+
 export function ciYml(stack: Stack): string {
   return `name: CI
 
@@ -481,13 +496,13 @@ on:
     branches: [main]
 
 # A new push to a pull request replaces its run; every commit on main keeps
-# its own run.
+# its own run, because the deploy ships a commit only after CI passes for it.
 concurrency:
-  group: \${{ github.workflow }}-\${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  group: \${{ github.workflow }}-\${{ case(github.event_name == 'pull_request', github.ref, github.sha) }}
   cancel-in-progress: \${{ github.event_name == 'pull_request' }}
 
 permissions:
-  # nx-set-shas reads this workflow's runs to find the last green commit.
+  # affected-range reads this workflow's runs to find the last green commit.
   actions: read
   contents: read
 
@@ -499,39 +514,48 @@ jobs:
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
-
-      - name: Set up the workspace
-        uses: JanuaryLabs/zukhruf/.github/actions/setup-workspace@main
+          persist-credentials: false
 
       # ${stack.projectName}:typecheck runs tofu fmt and validate.
       - name: Set up OpenTofu
+        id: tofu
+        background: true
         uses: opentofu/setup-opentofu@v2
         with:
           tofu_version: latest
           tofu_wrapper: false
 
-      - name: Find what changed since the last green commit
-        id: shas
-        uses: nrwl/nx-set-shas@v5
+      - name: Set up the workspace
+        uses: JanuaryLabs/zukhruf/.github/actions/setup-workspace@main
 
-      - parallel:
-          - name: Check Nx workspace sync
-            run: npx nx sync:check
+      # Before the first green run, everything counts as changed.
+      - name: Find what changed
+        uses: JanuaryLabs/zukhruf/.github/actions/affected-range@main
 
-          - name: Check formatting
-            run: npx prettier --check .
+      # The checks of the whole tree run beside the affected targets.
+      - name: Check Nx workspace sync
+        background: true
+        run: npx nx sync:check
 
-      # With no green commit yet, nx-set-shas falls back to HEAD~1 and affected
-      # would see only the last commit, so the first green run checks it all.
+      - name: Check formatting
+        background: true
+        run: npx prettier --check .
+
+      - name: Audit the workflows
+        background: true
+        uses: zizmorcore/zizmor-action@v0.8.1
+        with:
+          advanced-security: false
+          annotations: true
+
+      - name: Wait for OpenTofu
+        wait: tofu
+
       - name: Lint, type check, test and build what changed
-        env:
-          NO_PREVIOUS_BUILD: \${{ steps.shas.outputs.noPreviousBuild }}
-        run: |
-          if [ "$NO_PREVIOUS_BUILD" = "true" ]; then
-            npx nx run-many -t lint typecheck test build
-          else
-            npx nx affected -t lint typecheck test build
-          fi
+        run: npx nx affected -t lint typecheck test build
+
+      - name: Wait for the checks of the whole tree
+        wait-all:
 `;
 }
 
@@ -557,9 +581,6 @@ export function deployYml(stack: Stack): string {
   const promoteMatrix = images
     .map(({ image }) => `          - image: ${image}`)
     .join('\n');
-  const imageCheck = app.imageProjects
-    .map((project) => `has ${project}`)
-    .join(' || ');
   const tfEnv = registry
     ? `
       # The Dokploy registry logs the server in to GHCR with this token.
@@ -583,15 +604,19 @@ on:
     types: [completed]
     branches: [main]
 
-# One rollout at a time, queued, never cancelled.
+# One rollout at a time: each run waits its turn and is never cancelled.
 concurrency:
   group: deploy
   cancel-in-progress: false
+  queue: max
 
 permissions:
-  # nx-set-shas reads this workflow's runs to find the last successful deploy.
+  # affected-range reads this workflow's runs to find the last successful deploy.
   actions: read
   contents: read
+
+# The deploy restores the npm cache that CI wrote and never writes one.
+cache-mode: read
 
 env:
   SHA: \${{ github.event.workflow_run.head_sha }}
@@ -601,69 +626,48 @@ jobs:
     if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
     runs-on: ubuntu-latest
     outputs:
-      current: \${{ steps.head.outputs.current }}
-      image: \${{ steps.affected.outputs.image }}
-      infra: \${{ steps.affected.outputs.infra }}
+      current: \${{ steps.tested.outputs.current }}
+      image: \${{ steps.image.outputs.affected }}
+      infra: \${{ steps.infra.outputs.affected }}
     steps:
       - name: Checkout main
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          persist-credentials: false
 
-      # A newer commit has its own CI run and deploy; shipping this one now
-      # would roll main back.
       - name: Ship only the commit CI tested
-        id: head
-        run: |
-          if [ "$(git rev-parse HEAD)" = "$SHA" ]; then
-            echo "current=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "main moved past $SHA; its own deploy ships the newer commit."
-            echo "current=false" >> "$GITHUB_OUTPUT"
-          fi
+        id: tested
+        uses: JanuaryLabs/zukhruf/.github/actions/tested-commit@main
 
       - name: Set up the workspace
-        if: steps.head.outputs.current == 'true'
+        if: steps.tested.outputs.current == 'true'
         uses: JanuaryLabs/zukhruf/.github/actions/setup-workspace@main
 
-      - name: Find the last successful deploy
-        if: steps.head.outputs.current == 'true'
-        id: shas
-        uses: nrwl/nx-set-shas@v5
+      # The base is the last successful deploy, so a change whose rollout
+      # failed stays affected until a rollout succeeds. Before the first
+      # deploy, everything counts as changed.
+      - name: Find what changed since the last deploy
+        if: steps.tested.outputs.current == 'true'
+        uses: JanuaryLabs/zukhruf/.github/actions/affected-range@main
         with:
           workflow-id: deploy.yml
           last-successful-event: workflow_run
 
       # The images hold the projects that their Dockerfiles build.
-      - name: Decide what ships
-        if: steps.head.outputs.current == 'true'
-        id: affected
-        env:
-          NO_PREVIOUS_BUILD: \${{ steps.shas.outputs.noPreviousBuild }}
-        run: |
-          if [ "$NO_PREVIOUS_BUILD" = "true" ]; then
-            echo "No successful deploy yet: shipping everything."
-            {
-              echo "image=true"
-              echo "infra=true"
-            } >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          projects="$(npx nx show projects --affected --json)"
-          echo "Affected since the last deploy: $projects"
-          has() { printf '%s' "$projects" | jq -e --arg p "$1" 'index($p) != null' >/dev/null; }
-          if ${imageCheck}; then
-            echo "image=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "image=false" >> "$GITHUB_OUTPUT"
-          fi
-          # The base is the last successful deploy, so an infra change whose
-          # rollout failed stays affected until a rollout succeeds.
-          if has ${stack.projectName}; then
-            echo "infra=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "infra=false" >> "$GITHUB_OUTPUT"
-          fi
+      - name: Find whether an image changed
+        if: steps.tested.outputs.current == 'true'
+        id: image
+        uses: JanuaryLabs/zukhruf/.github/actions/affected-projects@main
+        with:
+          projects: '${app.imageProjects.join(' ')}'
+
+      - name: Find whether the stack changed
+        if: steps.tested.outputs.current == 'true'
+        id: infra
+        uses: JanuaryLabs/zukhruf/.github/actions/affected-projects@main
+        with:
+          projects: '${stack.projectName}'
 
   # Each image is pushed under the commit first; promote moves :latest only
   # after every image of the commit exists.
@@ -683,40 +687,22 @@ ${buildMatrix}
       - uses: actions/checkout@v7
         with:
           ref: \${{ env.SHA }}
-
-      - name: Lowercase the image owner
-        run: echo "OWNER_LC=\${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_ENV"
-
-      - uses: docker/setup-buildx-action@v4
-
-      - uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: \${{ github.actor }}
-          password: \${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: false
 
       - name: Build \${{ matrix.image }}
-        uses: docker/build-push-action@v7
         timeout-minutes: 25
-        env:
-          DOCKER_BUILD_RECORD_UPLOAD: 'false'
+        uses: JanuaryLabs/zukhruf/.github/actions/ghcr-image@main
         with:
-          context: .
-          file: \${{ matrix.dockerfile }}
-          platforms: linux/amd64
-          push: true
-          build-args: |
-            BUILD_SHA=\${{ env.SHA }}
-          tags: ghcr.io/\${{ env.OWNER_LC }}/\${{ matrix.image }}:\${{ env.SHA }}
-          cache-from: type=registry,ref=ghcr.io/\${{ env.OWNER_LC }}/\${{ matrix.image }}:buildcache
-          cache-to: type=registry,ref=ghcr.io/\${{ env.OWNER_LC }}/\${{ matrix.image }}:buildcache,mode=max,image-manifest=true,oci-mediatypes=true
+          image: \${{ matrix.image }}
+          dockerfile: \${{ matrix.dockerfile }}
+          sha: \${{ env.SHA }}
+          build-args: BUILD_SHA=\${{ env.SHA }}
 
   # The compose runs :latest; the immutable :sha stays for rollbacks.
   promote:
     needs: image
     runs-on: ubuntu-latest
     permissions:
-      contents: read
       packages: write
     strategy:
       fail-fast: false
@@ -724,24 +710,11 @@ ${buildMatrix}
         include:
 ${promoteMatrix}
     steps:
-      - name: Lowercase the image owner
-        run: echo "OWNER_LC=\${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_ENV"
-
-      - uses: docker/setup-buildx-action@v4
-
-      - uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: \${{ github.actor }}
-          password: \${{ secrets.GITHUB_TOKEN }}
-
       - name: Promote \${{ matrix.image }} to latest
-        env:
-          IMAGE: \${{ matrix.image }}
-        run: |
-          docker buildx imagetools create \\
-            --tag "ghcr.io/\${OWNER_LC}/\${IMAGE}:latest" \\
-            "ghcr.io/\${OWNER_LC}/\${IMAGE}:\${SHA}"
+        uses: JanuaryLabs/zukhruf/.github/actions/ghcr-promote@main
+        with:
+          image: \${{ matrix.image }}
+          from: \${{ env.SHA }}
 
   # After new images, or with none: a failed build stops the stack, so a
   # compose that needs the new images never rolls out with the old ones.
@@ -788,6 +761,6 @@ ${promoteMatrix}
         uses: JanuaryLabs/zukhruf/.github/actions/wait-for-health@main
         with:
           url: https://\${{ fromJSON(needs.infra.outputs.outputs).host }}/api/healthz
-          sha: \${{ needs.promote.result == 'success' && env.SHA || '' }}
+          sha: \${{ case(needs.promote.result == 'success', env.SHA, '') }}
 `;
 }
