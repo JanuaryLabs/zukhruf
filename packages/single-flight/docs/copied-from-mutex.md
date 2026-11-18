@@ -210,12 +210,6 @@ The paths are in `packages/single-flight/src`.
 - Same: a joiner of a flight that landed gets `{ op: 'landed', outcome }`. A joiner of a flight that was interrupted gets `{ op: 'interrupted' }`.
 - Differs: `Flight` tells each joiner when the flight ends, and on a landing it then tells the leader `ack`. `FlightCoordinator` keeps the answer of the latest reasserted flight of each key, and `rejoin` gives it to a rejoin that comes after that flight ended.
 
-**A landing that still waits.**
-
-- Places: `close` and `#updateRef` of `FlightClient` (`client/flight-client.ts`).
-- Same: `[...this.#held.values()].some(({ landing }) => landing)`: a flight that this process leads landed, and no coordinator acknowledged the landing yet.
-- Differs: `close` waits while it is true. `#updateRef` keeps the process alive while it is true.
-
 **The message of a closed single flight.**
 
 - Places: `run` and `close` of `FlightClient` (`client/flight-client.ts`).

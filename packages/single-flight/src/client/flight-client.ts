@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import { untilAborted } from '@zukhruf/async';
+import { RefCount, untilAborted } from '@zukhruf/async';
 import { FencingToken } from '@zukhruf/fencing';
 import { LeaseController } from '@zukhruf/lease';
 
@@ -52,6 +52,8 @@ interface Pending extends Pick<
   delivery: Delivery;
   /** The flight that the coordinator said this run joined, so after a lost connection it rejoins that flight only. */
   flight: string | undefined;
+  /** Keeps the process alive while the run waits for its answer. */
+  keepAlive: Disposable;
 }
 
 /**
@@ -69,8 +71,8 @@ interface Held {
   token: FencingToken;
   lease: LeaseController;
   hold: KeyHold;
-  /** The outcome this leader landed, kept until a coordinator acknowledges it. */
-  landing: Outcome | undefined;
+  /** The outcome this leader landed, kept until a coordinator acknowledges it, and the hold that keeps the process alive until then. */
+  landing: { outcome: Outcome; keepAlive: Disposable } | undefined;
 }
 
 /**
@@ -90,6 +92,8 @@ export class FlightClient {
   readonly #landed = new Map<string, KeyHold>();
   /** Wakes `close` each time a flight this process leads is acknowledged or lost. */
   readonly #released = new Set<() => void>();
+  /** Keeps the connection ref'd while a run waits for its answer or a landing waits for its acknowledgement. */
+  readonly #refs: RefCount;
 
   constructor(
     link: ConnectionSupervisor<FlightRequest>,
@@ -98,6 +102,7 @@ export class FlightClient {
     this.#link = link;
     this.#locks = locks;
     this.#isCurrentTerm = isCurrentTerm;
+    this.#refs = new RefCount(link);
     link.on('connected', () => this.#resume());
     // A message this client cannot read answers nothing it waits for.
     link.on('message', (message) => {
@@ -126,9 +131,9 @@ export class FlightClient {
       flight: undefined,
       resolve,
       reject,
+      keepAlive: this.#refs.hold(),
     };
     this.#pending.set(id, pending);
-    this.#updateRef();
     this.#link.open();
     this.#dispatch(id, pending);
     try {
@@ -246,12 +251,11 @@ export class FlightClient {
       land: (outcome) => {
         // A lost flight is no longer this leader's to land.
         if (this.#held.get(id) !== held || held.landing) return;
-        held.landing = outcome;
+        held.landing = { outcome, keepAlive: this.#refs.hold() };
         this.#landed.set(key, hold);
         void hold.released().then(() => {
           if (this.#landed.get(key) === hold) this.#landed.delete(key);
         });
-        this.#updateRef();
         this.#link.send({ op: 'land', id, outcome });
       },
       ended: () => hold.workEnded(),
@@ -268,9 +272,10 @@ export class FlightClient {
 
   /** The flight of `id` needs nothing more from this process. */
   #release(id: string) {
-    this.#held.get(id)?.hold.flightEnded();
+    const held = this.#held.get(id);
+    held?.hold.flightEnded();
+    held?.landing?.keepAlive[Symbol.dispose]();
     this.#held.delete(id);
-    this.#updateRef();
     const waiting = [...this.#released];
     this.#released.clear();
     for (const wake of waiting) wake();
@@ -336,11 +341,11 @@ export class FlightClient {
 
   /** A new connection: reassert the flights this process leads and land them again, then send what waits. */
   #resume() {
-    // A new connection starts with its adapter's default, which may not match whether this client waits.
-    this.#updateRef();
     for (const [id, { key, token, landing }] of this.#held) {
       this.#link.send({ op: 'reassert', id, key, token: token.toString() });
-      if (landing) this.#link.send({ op: 'land', id, outcome: landing });
+      if (landing) {
+        this.#link.send({ op: 'land', id, outcome: landing.outcome });
+      }
     }
     for (const [id, pending] of this.#pending) {
       if (pending.delivery.kind === 'queued') this.#dispatch(id, pending);
@@ -371,14 +376,7 @@ export class FlightClient {
     if (!pending) return undefined;
     if (pending.delivery.kind === 'locking') pending.delivery.stop.abort();
     this.#pending.delete(id);
-    this.#updateRef();
+    pending.keepAlive[Symbol.dispose]();
     return pending;
-  }
-
-  /** A run waiting for its answer, or a landing not yet acknowledged, keeps the process alive. */
-  #updateRef() {
-    const landing = this.#held.values().some(({ landing }) => landing);
-    if (this.#pending.size > 0 || landing) this.#link.ref();
-    else this.#link.unref();
   }
 }
