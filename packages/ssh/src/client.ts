@@ -35,6 +35,7 @@ import {
   createSession,
 } from './session.ts';
 import {
+  type AgentForwarding,
   agentForwardingOptions,
   requestAgentForwardingOnEachSession,
 } from './ssh2-agent-forwarding.ts';
@@ -106,6 +107,33 @@ interface ConnectionPhase {
 const connected: ConnectionPhase = { cause: undefined };
 const closedByCaller: ConnectionPhase = { cause: undefined };
 
+const bridge: {
+  restrict: (client: Client, error: Error) => void;
+  closeWith: (client: Client, owned: Client) => void;
+} = {
+  restrict: () => {
+    throw new Error('ssh: the Client class has not loaded');
+  },
+  closeWith: () => {
+    throw new Error('ssh: the Client class has not loaded');
+  },
+};
+
+/**
+ * OpenSSH's restricted mode after a changed or revoked host key under
+ * StrictHostKeyChecking no (ADR 0005): listen rejects with `error`, and no
+ * later session asks for agent forwarding. OpenSshConfig#dial calls it before
+ * it returns the client. Not exported from the package.
+ */
+export function restrictClient(client: Client, error: Error): void {
+  bridge.restrict(client, error);
+}
+
+/** Closes `owned`, a jump host's client, after `client` closes or its connection ends (ADR 0006). Not exported from the package. */
+export function closeWithClient(client: Client, owned: Client): void {
+  bridge.closeWith(client, owned);
+}
+
 /** One SSH connection and its channels. Go's ssh.Client. */
 export class Client implements AsyncDisposable {
   readonly user: string;
@@ -119,14 +147,30 @@ export class Client implements AsyncDisposable {
     string,
     (stream: Duplex, origin: string) => void
   >();
+  readonly #agentForwarding: AgentForwarding | undefined;
   #phase: ConnectionPhase = connected;
+  #restriction: Error | undefined;
+  #owned: Client | undefined;
+
+  static {
+    bridge.restrict = (client, error) => {
+      client.#restriction = error;
+      client.#agentForwarding?.stop();
+    };
+    bridge.closeWith = (client, owned) => {
+      client.#owned = owned;
+      if (client.#phase !== connected) void owned.close();
+    };
+  }
 
   private constructor(
     connection: ssh2.Client,
     config: ClientConfig,
     serverVersion: string,
+    agentForwarding: AgentForwarding | undefined,
   ) {
     this.#connection = connection;
+    this.#agentForwarding = agentForwarding;
     this.#sessionEnv = config.sessionEnv ?? {};
     this.user = config.user;
     this.serverVersion = serverVersion;
@@ -145,6 +189,7 @@ export class Client implements AsyncDisposable {
     connection.once('close', () => {
       this.#end(new Error('ssh: the server closed the connection'));
       this.#closed.open();
+      void this.#owned?.close();
     });
   }
 
@@ -200,6 +245,7 @@ export class Client implements AsyncDisposable {
     const transport = open();
     const connection = new ssh2.Client();
     const started = Promise.withResolvers<Client>();
+    let agentForwarding: AgentForwarding | undefined;
     let refusal: { readonly error: unknown } | undefined;
     let settled = false;
     const fail = (error: unknown): void => {
@@ -230,7 +276,9 @@ export class Client implements AsyncDisposable {
       signal?.removeEventListener('abort', onAbort);
       if (settled) return;
       settled = true;
-      started.resolve(new Client(connection, config, serverVersion.value()));
+      started.resolve(
+        new Client(connection, config, serverVersion.value(), agentForwarding),
+      );
     });
 
     const authenticate = new Authentication(config, (error) => fail(error));
@@ -262,7 +310,9 @@ export class Client implements AsyncDisposable {
       ...(config.agentForwarding &&
         agentForwardingOptions(config.agentForwarding)),
     });
-    if (config.agentForwarding) requestAgentForwardingOnEachSession(connection);
+    if (config.agentForwarding) {
+      agentForwarding = requestAgentForwardingOnEachSession(connection);
+    }
     return started.promise;
   }
 
@@ -324,6 +374,7 @@ export class Client implements AsyncDisposable {
     connectionListener: (stream: Duplex, origin: string) => void,
     options: { readonly signal?: AbortSignal } = {},
   ): Promise<RemoteListener> {
+    if (this.#restriction !== undefined) throw this.#restriction;
     const forward = await reply<Forward>(
       options.signal,
       (resolve, reject) => {
@@ -405,12 +456,13 @@ export class Client implements AsyncDisposable {
     return this.#ended.wait();
   }
 
-  /** Sends SSH_MSG_DISCONNECT and closes the transport. A later call waits for the same close. */
-  close(): Promise<void> {
+  /** Sends SSH_MSG_DISCONNECT and closes the transport, then the client of each jump host before it. A later call waits for the same close. */
+  async close(): Promise<void> {
     if (this.#phase === connected) this.#phase = closedByCaller;
     this.#ended.resolve();
     this.#connection.end();
-    return this.#closed.wait();
+    await this.#closed.wait();
+    await this.#owned?.close();
   }
 
   [Symbol.asyncDispose](): Promise<void> {

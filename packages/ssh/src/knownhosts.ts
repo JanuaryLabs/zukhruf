@@ -3,6 +3,7 @@ import { appendFile, mkdir, readFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
 import { ssh2HostKeyAlgorithms } from './host-key-algorithms.ts';
+import { matchPattern } from './match-pattern.ts';
 import { PublicKey } from './public-key.ts';
 
 /** Go's knownhosts.KnownKey. */
@@ -256,7 +257,7 @@ class Patterns implements HostMatcher {
   matches(name: string): boolean {
     let matched = false;
     for (const { negated, glob } of this.#patterns) {
-      if (!globMatches(glob, name)) continue;
+      if (!matchPattern(glob, name)) continue;
       if (negated) return false;
       matched = true;
     }
@@ -266,22 +267,6 @@ class Patterns implements HostMatcher {
   toString(): string {
     return this.#text;
   }
-}
-
-function globMatches(glob: string, name: string): boolean {
-  if (glob === '') return name === '';
-  const [first] = glob;
-  if (first === '*') {
-    for (let start = 0; start <= name.length; start++) {
-      if (globMatches(glob.slice(1), name.slice(start))) return true;
-    }
-    return false;
-  }
-  if (name === '') return false;
-  return (
-    (first === '?' || first === name[0]) &&
-    globMatches(glob.slice(1), name.slice(1))
-  );
 }
 
 /** `|1|<salt>|<HMAC-SHA1 of the name>`, OpenSSH's HashKnownHosts (`host_hash` in hostfile.c). */

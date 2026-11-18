@@ -39,7 +39,7 @@ Where Go's `knownhosts` v0.59.0 and OpenSSH match a line differently, the packag
 - The restrictions for `'no'` follow OpenSSH. After a changed or a revoked key, `check_host_key` in `sshconnect.c` (lines 1365-1416 of OpenSSH 10.5p1) turns off password and keyboard-interactive auth, agent forwarding, X11 forwarding, each `LocalForward` and `RemoteForward` (`-L`, `-R`) and tunnels. It does not turn off `-W`, the stdio forward that `ProxyJump` uses. So under `'no'` with a changed or a revoked key:
   - the client connects, and sessions run;
   - `client.dial` works, as `-W` does, so a chain of jump hosts goes on;
-  - `client.listen` rejects with `KeyError`, as OpenSSH cancels `-R`;
+  - `client.listen` rejects with the host key error (`KeyError`, or `RevokedError` for a revoked key), as OpenSSH cancels `-R`;
   - agent forwarding is off: no session asks for it;
   - the client offers no password and no keyboard-interactive auth.
 - The root import path has no policy and no default. `ClientConfig.hostKey` is required, as Go's `HostKeyCallback` is.

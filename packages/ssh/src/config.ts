@@ -1,5 +1,12 @@
 /** @zukhruf/ssh/config: the settings of OpenSSH for a destination, through ssh -G. */
+import { connect } from 'node:net';
+
+import type { Clock } from '@zukhruf/async';
+
+import type { Client, ClientConfig } from './client.ts';
+import { dialHost } from './dial-route.ts';
 import { ssh2HostKeyAlgorithms } from './host-key-algorithms.ts';
+import { matchPattern } from './match-pattern.ts';
 import { type Hop, jumpHostFlags, parseProxyJump } from './proxy-jump.ts';
 import { type Environment, Settings } from './ssh-g.ts';
 
@@ -65,12 +72,16 @@ export class OpenSshConfig {
   readonly sendEnv: readonly string[];
   /** ForwardAgent as OpenSSH resolves it: no, yes (the agent at SSH_AUTH_SOCK of the environment), or a socket path (a $NAME value is read from the environment). */
   readonly forwardAgent: ForwardAgent;
+  readonly #environment: Environment;
+  /** ProxyUseFdpass yes for a ProxyCommand on the route: dial fails (ADR 0010). */
+  readonly #proxyUseFdpass: boolean;
 
   private constructor(
     host: JumpHost,
     route: Route,
     settings: Settings,
     environment: Environment,
+    proxyUseFdpass: boolean,
   ) {
     this.destination = host.destination;
     this.hostname = host.hostname;
@@ -99,6 +110,8 @@ export class OpenSshConfig {
       settings.required('forwardagent'),
       environment,
     );
+    this.#environment = environment;
+    this.#proxyUseFdpass = proxyUseFdpass;
   }
 
   /** Runs ssh -G <flags> -- <destination> with `environment`, and resolves each jump host of the route with its own ssh -G. */
@@ -117,13 +130,75 @@ export class OpenSshConfig {
       environment,
       signal,
     );
-    const resolving = { flags, environment, signal };
+    const resolving: Resolving = { flags, environment, signal, fdpass: [] };
+    const route = await resolveRoute(settings, resolving, []);
     return new OpenSshConfig(
       readHost(destination, settings, environment),
-      await resolveRoute(settings, resolving, []),
+      route,
       settings,
       environment,
+      resolving.fdpass.length > 0,
     );
+  }
+
+  /** Connects by the route, checks the host key under the policy, authenticates with the agent, then the identity files, and sets sessionEnv from setEnv and sendEnv, and agentForwarding from forwardAgent. */
+  async dial(options: {
+    readonly clock: Clock;
+    readonly signal?: AbortSignal;
+  }): Promise<Client> {
+    if (this.#proxyUseFdpass) {
+      throw new Error(
+        'ssh: ProxyUseFdpass yes is not supported: node:net cannot receive the socket that the ProxyCommand passes back',
+      );
+    }
+    const agentForwarding = this.#agentForwarding();
+    return dialHost(
+      this,
+      this.route,
+      {
+        sessionEnv: this.#sessionEnv(),
+        ...(agentForwarding && { agentForwarding }),
+      },
+      {
+        clock: options.clock,
+        signal: options.signal,
+        environment: this.#environment,
+      },
+    );
+  }
+
+  /** The variables of the environment that a SendEnv pattern names, then SetEnv, which wins for the same name: OpenSSH sends SetEnv after them (`client_session2_setup` in clientloop.c of OpenSSH 10.5p1). */
+  #sessionEnv(): Record<string, string> {
+    const env: Record<string, string> = {};
+    for (const [name, value] of Object.entries(this.#environment)) {
+      if (
+        value !== undefined &&
+        this.sendEnv.some((pattern) => matchPattern(pattern, name))
+      ) {
+        env[name] = value;
+      }
+    }
+    for (const [name, value] of this.setEnv) env[name] = value;
+    return env;
+  }
+
+  /** ForwardAgent yes with no SSH_AUTH_SOCK in the environment has no agent to forward. */
+  #agentForwarding(): ClientConfig['agentForwarding'] {
+    const path = this.#agentSocketPath();
+    if (path === undefined) return undefined;
+    return async () => connect(path);
+  }
+
+  #agentSocketPath(): string | undefined {
+    const forwardAgent = this.forwardAgent;
+    switch (forwardAgent.kind) {
+      case 'socket':
+        return forwardAgent.path;
+      case 'agent':
+        return this.#environment['SSH_AUTH_SOCK'];
+      case 'off':
+        return undefined;
+    }
   }
 
   /** ssh.c of OpenSSH 10.5p1: a `$NAME` that the environment does not set turns forwarding off. */
@@ -140,6 +215,8 @@ interface Resolving {
   readonly flags: readonly string[];
   readonly environment: Environment;
   readonly signal: AbortSignal | undefined;
+  /** The ProxyCommand routes whose host sets ProxyUseFdpass yes. */
+  readonly fdpass: Route[];
 }
 
 /**
@@ -176,7 +253,9 @@ async function resolveRoute(
   // fill_default_options of readconf.c, OpenSSH 9.6p1 and 10.5p1).
   const command = settings.get('proxycommand');
   if (command !== undefined) {
-    return { kind: 'proxy-command', command };
+    const route: Route = { kind: 'proxy-command', command };
+    if (settings.get('proxyusefdpass') === 'yes') resolving.fdpass.push(route);
+    return route;
   }
   return { kind: 'direct' };
 }

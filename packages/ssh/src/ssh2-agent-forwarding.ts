@@ -52,10 +52,15 @@ export function agentForwardingOptions(
   return { agent: new ForwardedAgent(open) };
 }
 
+/** Agent forwarding on a connection; stop() turns it off for each later session and refuses each later agent channel. */
+export interface AgentForwarding {
+  stop(): void;
+}
+
 /** Makes each session of the connection ask for agent forwarding first, with no reply wanted, and accepts the agent channels. Call it after `connect`, which creates the channel manager. */
 export function requestAgentForwardingOnEachSession(
   connection: ssh2.Client,
-): void {
+): AgentForwarding {
   connection._agentFwdEnabled = true;
   const manager = connection._chanMgr;
   const add = manager.add.bind(manager);
@@ -68,6 +73,12 @@ export function requestAgentForwardingOnEachSession(
       value(error, channel);
     };
     return add(Object.assign(opened, { type: value.type }));
+  };
+  return {
+    stop() {
+      manager.add = add;
+      connection._agentFwdEnabled = false;
+    },
   };
 }
 

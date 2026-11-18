@@ -34,5 +34,5 @@ Ezz confirmed the details below on 2026-11-17 (backlog #4503): "Confirm (Recomme
 ## Consequences
 
 - A ProxyCommand is the one process that the package runs for the life of a connection. The user's config asks for it.
-- The test that this decision needs: a child Node process connects through a ProxyCommand (`nc` to an SSH server that the test starts) and the parent sends it `SIGKILL`. Then the command's process ends, and the server has no open connection. The test also closes the server and checks that the command ends. The test lands red as `todo` until the code exists.
+- The test of this decision: a child Node process connects through a ProxyCommand (a Node relay to an SSH server that the test starts) and the parent sends it `SIGKILL`. Then the command's process ends, and the server has no open connection (`src/config-dial-route.test.ts`; the same test covers a jump host, ADR 0006).
 - When the owner dies, no one sends `SIGHUP`. A command that does not pass EOF on, or that ignores the end of its stdin, can then outlive its owner. The README names this limit. Such a command is a defect of that tool, and OpenSSH has the same limit.
