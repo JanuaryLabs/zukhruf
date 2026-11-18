@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/schema",
+  "$id": "ZukhrufNxPreset",
+  "title": "Start a repo of the monorepo standard",
+  "description": "create-nx-workspace passes each option of its command line, so the schema allows options that it does not list.",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "The folder name, from create-nx-workspace."
+    },
+    "packageManager": {
+      "type": "string",
+      "description": "The package manager. Only npm is allowed."
+    }
+  },
+  "required": ["name"]
+}

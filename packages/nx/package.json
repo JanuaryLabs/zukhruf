@@ -1,7 +1,7 @@
 {
   "name": "@zukhruf/nx",
   "version": "0.8.29",
-  "description": "The Nx part of the monorepo standard, one inference plugin per subpath: format, test, lint, opentofu and prisma give projects their Prettier, node --test, ESLint input, OpenTofu and Prisma targets.",
+  "description": "The Nx part of the monorepo standard, one inference plugin per subpath: format, test, lint, opentofu and prisma give projects their Prettier, node --test, ESLint input, OpenTofu and Prisma targets; the preset and init generators write its root files.",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -27,7 +27,9 @@
     "lint",
     "opentofu",
     "terraform",
-    "prisma"
+    "prisma",
+    "generator",
+    "preset"
   ],
   "type": "module",
   "exports": {
@@ -63,8 +65,11 @@
       "default": "./dist/prisma/plugin.js"
     }
   },
+  "generators": "./generators.json",
   "files": [
     "dist",
+    "generators.json",
+    "src/generators/*/schema.json",
     "!dist/spec/**",
     "!**/*.tsbuildinfo",
     "!**/*.test.*"

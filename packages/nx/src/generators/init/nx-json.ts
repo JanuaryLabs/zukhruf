@@ -1,0 +1,138 @@
+import {
+  type NxJsonConfiguration,
+  type PluginConfiguration,
+  type TargetConfiguration,
+  type Tree,
+  updateJson,
+} from '@nx/devkit';
+
+type InputDefinition = NonNullable<
+  NxJsonConfiguration['namedInputs']
+>[string][number];
+
+const namedInputs: Record<string, InputDefinition[]> = {
+  default: ['{projectRoot}/**/*', 'sharedGlobals'],
+  // The hash of a task does not read the environment, so NODE_ENV is an input:
+  // else a cached development build can ship to production.
+  production: [
+    'default',
+    '!{projectRoot}/eslint.config.mjs',
+    '!{projectRoot}/**/?(*.)+(spec|test).[jt]s?(x)?(.snap)',
+    '!{projectRoot}/tsconfig.test.json',
+    '!{projectRoot}/tsconfig.spec.json',
+    { env: 'NODE_ENV' },
+  ],
+  sharedGlobals: [
+    '{workspaceRoot}/eslint.config.mjs',
+    '{workspaceRoot}/tsconfig.base.json',
+  ],
+};
+
+// @zukhruf/nx/lint must come after @nx/eslint/plugin: it stops with an error
+// when no @nx/eslint/plugin entry is before it.
+const plugins: PluginConfiguration[] = [
+  {
+    plugin: '@nx/js/typescript',
+    options: {
+      typecheck: { targetName: 'typecheck' },
+      build: {
+        targetName: 'build',
+        configName: 'tsconfig.lib.json',
+        buildDepsName: 'build-deps',
+        watchDepsName: 'watch-deps',
+      },
+    },
+  },
+  { plugin: '@nx/eslint/plugin', options: { targetName: 'lint' } },
+  '@zukhruf/nx/lint',
+  '@zukhruf/nx/format',
+  '@zukhruf/nx/test',
+];
+
+const pluginName = (entry: PluginConfiguration) =>
+  typeof entry === 'string' ? entry : entry.plugin;
+
+const unique = <T>(values: T[]) => {
+  const seen = new Set<string>();
+  return values.filter((value) => {
+    const key = JSON.stringify(value);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
+
+type TargetDefault = Partial<TargetConfiguration>;
+
+/** Changes each entry of a target default: Nx 24 takes one entry or a list of entries. */
+function updateTargetDefault(
+  nxJson: NxJsonConfiguration,
+  target: string,
+  update: (entry: TargetDefault) => TargetDefault,
+): void {
+  const targetDefaults: Record<string, TargetDefault | TargetDefault[]> =
+    (nxJson.targetDefaults ??= {});
+  const current = targetDefaults[target] ?? {};
+  targetDefaults[target] = Array.isArray(current)
+    ? current.map(update)
+    : update(current);
+}
+
+/**
+ * Merges the keys that the standard owns into nx.json (monorepo standard §4)
+ * and keeps the other keys. A list gets the entries that it does not have.
+ */
+export function mergeNxJson(tree: Tree): void {
+  updateJson(tree, 'nx.json', (nxJson: NxJsonConfiguration) => {
+    nxJson.analytics = false;
+    nxJson.tui = { ...nxJson.tui, enabled: false };
+
+    nxJson.namedInputs ??= {};
+    for (const [name, inputs] of Object.entries(namedInputs)) {
+      nxJson.namedInputs[name] = unique([
+        ...(nxJson.namedInputs[name] ?? []),
+        ...inputs,
+      ]);
+    }
+
+    const entries = [...(nxJson.plugins ?? [])];
+    let previous = -1;
+    for (const plugin of plugins) {
+      const index = entries.findIndex(
+        (entry) => pluginName(entry) === pluginName(plugin),
+      );
+      if (index === -1) {
+        entries.splice(previous + 1, 0, plugin);
+        previous += 1;
+      } else {
+        previous = Math.max(previous, index);
+      }
+    }
+    nxJson.plugins = entries;
+
+    // One typecheck runs the whole gate. "..." keeps the ^typecheck of
+    // @nx/js/typescript, because a dependsOn list replaces the list of an
+    // earlier source.
+    updateTargetDefault(nxJson, 'typecheck', (entry) => ({
+      ...entry,
+      dependsOn: unique([
+        ...(entry.dependsOn ?? []),
+        'lint',
+        'format:check',
+        '...',
+      ]),
+    }));
+    // Nx 24 reports a continuous task that no task depends on as a success,
+    // whatever its exit code (handleContinuousTaskExit in
+    // packages/nx/src/tasks-runner/task-orchestrator.ts).
+    for (const target of ['dev', 'serve', 'preview', 'serve-static']) {
+      updateTargetDefault(nxJson, target, (entry) => ({
+        ...entry,
+        continuous: false,
+      }));
+    }
+
+    nxJson.sync = { ...nxJson.sync, applyChanges: true };
+    return nxJson;
+  });
+}

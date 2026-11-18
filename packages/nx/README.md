@@ -1,19 +1,19 @@
 # @zukhruf/nx
 
-This package is the Nx part of the monorepo standard. Each workspace copied the same Nx configuration into each project. This package gives that configuration one time, in areas. Each area has its own import path, and the package has no root entry point. The lint rules stay in `@zukhruf/eslint`, and the Git hooks stay in `@zukhruf/git-hooks`.
+This package is the Nx part of the monorepo standard. Each workspace copied the same Nx configuration into each project. This package gives that configuration one time, in areas. Each area has its own import path, and the package has no root entry point. Two [generators](#generators) write the root files of a workspace. The lint rules stay in `@zukhruf/eslint`, and the Git hooks stay in `@zukhruf/git-hooks`.
 
 The words in these documents have one meaning each. See the glossary in [CONTEXT.md](./CONTEXT.md).
 
 ## Areas
 
-| Area             | Import path            | Status                                                                                        |
-| ---------------- | ---------------------- | --------------------------------------------------------------------------------------------- |
-| format           | `@zukhruf/nx/format`   | This README                                                                                   |
-| test             | `@zukhruf/nx/test`     | This README                                                                                   |
-| lint             | `@zukhruf/nx/lint`     | This README                                                                                   |
-| portless         | `@zukhruf/nx/portless` | Candidate (#3336): 14 projects in 3 repos                                                     |
-| opentofu, prisma | `@zukhruf/nx/<area>`   | This README (#3339)                                                                           |
-| generators       | —                      | Candidates: the workspace generator of `@factory/foundation` (#3337); app kinds later (#3338) |
+| Area             | Import path            | Status                                                                     |
+| ---------------- | ---------------------- | -------------------------------------------------------------------------- |
+| format           | `@zukhruf/nx/format`   | This README                                                                |
+| test             | `@zukhruf/nx/test`     | This README                                                                |
+| lint             | `@zukhruf/nx/lint`     | This README                                                                |
+| portless         | `@zukhruf/nx/portless` | Candidate (#3336): 14 projects in 3 repos                                  |
+| opentofu, prisma | `@zukhruf/nx/<area>`   | This README (#3339)                                                        |
+| generators       | `@zukhruf/nx:<name>`   | This README: `preset` and `init` (#3337); the app generators later (#3338) |
 
 The lint rules stay in `@zukhruf/eslint`. The `lint` area gives only the inputs of the `lint` target (#3335).
 
@@ -716,3 +716,239 @@ text2sql also has a target `prisma` that runs the Prisma CLI with the arguments 
 | meddit    | #4607        |
 
 The backlog item of the area is #3339.
+
+## generators
+
+The root files of a workspace are the same in each repo: `package.json`, `nx.json`, the tsconfig files, `.npmrc`, the Git hooks and more (whatisgoingon `docs/monorepo-standard.md` §1–8). factory writes them with the `workspace` generator of its private package `@factory/foundation`. Other repos copy them by hand: 3 to 7 copies of each file. meddit is the third repo that starts from the standard, so the generator moves here (#3259).
+
+The package gives two Nx generators:
+
+- `preset` starts a repo. `create-nx-workspace` runs it.
+- `init` adds the root files of the standard to an Nx workspace. It is safe to run again. `nx add @zukhruf/nx` runs it.
+
+The generators write only the root files that each repo needs. The wiring of one kind of app (Hono, React, Vite, Tailwind, Vitest) comes from the app generators `node-app`, `react-app`, `pair` and `ui-package` (#3338).
+
+### Start a repo in a new folder
+
+```sh
+npx create-nx-workspace@latest <name> --preset=@zukhruf/nx --pm=npm --nxCloud=skip --aiAgents=none
+```
+
+The name is the folder name, and the scope of the workspace. `acme` gives the folder `acme` and the root package `@acme/source`.
+
+### Start a repo in an empty Git repo
+
+Give `.` as the name, in the folder of the repo:
+
+```sh
+cd ~/Desktop/mo/meddit
+npx create-nx-workspace@latest . --preset=@zukhruf/nx --pm=npm --nxCloud=skip --aiAgents=none
+```
+
+This is the path for meddit, which has only `.git`. Nx 24 supports it, and no step deletes the folder or `.git`:
+
+- `.` gives the name of the current folder, and the parent folder as the working folder (`create-nx-workspace/dist/bin/create-nx-workspace.js:612-617`, 24.0.6). The folder must exist, so the "directory exists" check does not apply (`:646-660`).
+- `nx new` then gets `skipEmptyDirCheck`, so it writes into a folder that is not empty (`create-nx-workspace/dist/src/create-empty-workspace.js:31-37`; the check is at `@nx/workspace/dist/src/generators/new/new.js:68-73`).
+- An Nx generator writes files through a `Tree`. It never removes a folder that it did not write, so `.git` stays.
+- In a folder that is already a Git work tree, create-nx-workspace runs no `git init`, no `git add` and no commit (`create-nx-workspace/dist/src/utils/git/git.js:141-149`). The first commit is yours.
+
+A smoke test on 2026-11-18 ran this command with the `@zukhruf/nx` preset in a folder with only `git init` (see [Test the preset before a release](#test-the-preset-before-a-release)). The folder and `.git` stayed, `git log` showed no commit, `git status` showed each file as new, `core.hooksPath` was `.husky`, and the first commit passed the hooks. The preset `npm` behaves differently: create-nx-workspace maps it to the template flow for an agent (`bin/create-nx-workspace.js:362-380`), and that flow amends the README and can leave an `error.log` (`create-workspace.js:269-288`).
+
+Two other seams do not work for an empty repo:
+
+- `nx g @zukhruf/nx:init` needs a workspace. With no `nx.json`, Nx prints "The current directory isn't part of an Nx workspace" and stops with exit code 1 (`nx/dist/bin/nx.js:63`, `:108-110`, `:151-167`).
+- `nx init` in a folder with no `package.json` sets up Nx for a repo that is not JavaScript: a `.nx/installation` folder and an `nx` wrapper script (`nx/dist/src/command-line/init/init-v2.js:137-141`). That is not an npm workspace.
+
+The flags:
+
+| Flag              | Why                                                                                                                                                                                                                           |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--pm=npm`        | The standard uses npm workspaces only. The preset stops with an error for another package manager.                                                                                                                            |
+| `--nxCloud=skip`  | No repo uses Nx Cloud.                                                                                                                                                                                                        |
+| `--aiAgents=none` | Without it, create-nx-workspace detects the agent and writes `AGENTS.md`, `CLAUDE.md`, `.claude/settings.json` and more before the preset runs (`@nx/workspace/dist/src/generators/new/generate-workspace-files.js:146-153`). |
+
+In a terminal, create-nx-workspace asks you to trust the third-party preset. An agent or CI run does not ask (`create-nx-workspace/dist/src/internal-utils/prompts.js:194-208`).
+
+### What create-nx-workspace runs
+
+For a preset from npm, create-nx-workspace runs these steps in order:
+
+1. It installs `nx` and `@nx/workspace` at its own version in a temporary folder (`create-nx-workspace/dist/src/create-sandbox.js:18-29`).
+2. It runs `nx new` there. `nx new` writes `package.json`, `nx.json`, `.gitignore`, `.editorconfig`, `.vscode/extensions.json` and `README.md`, adds `@zukhruf/nx` to `dependencies`, and runs `npm install` (`@nx/workspace/dist/src/generators/new/new.js:12-35`, `generate-workspace-files.js:119-176`, `generate-preset.js:271-276`). The root `package.json` gets `nx` and `@nx/workspace` at the version of create-nx-workspace, and a `packageManager` key (`generate-workspace-files.js:132-135`).
+3. It runs `nx g @zukhruf/nx:preset` in the new folder, with the options of the command line (`create-nx-workspace/dist/src/create-preset.js:8-38`).
+4. It runs `nx format --all` when the workspace has a formatter (`create-nx-workspace/dist/src/create-workspace.js:158-196`).
+5. It runs `git init` and the first commit, but only when the folder is not a Git work tree (step 4 of the list above).
+
+`NX_SKIP_FORMAT=true` is set from step 2 to step 3 (`create-workspace.js:36-41`), so the `formatFiles` of the preset does nothing there (`@nx/devkit/dist/src/generators/format-files.js:40-44`). Step 4 formats all the files with the `.prettierrc` that the preset wrote.
+
+### Add the standard to an Nx workspace
+
+```sh
+npx nx add @zukhruf/nx
+```
+
+`nx add` installs the package and runs its `init` generator (`nx/dist/src/command-line/init/configure-plugins.js:61-87`, 24.0.6). When the package is already installed, run the generator itself:
+
+```sh
+npx nx g @zukhruf/nx:init
+```
+
+Run it in a workspace that has `nx.json` and `@zukhruf/nx`. It writes each missing root file and each missing key. It keeps what is there. A second run changes nothing.
+
+### Signature of the generators
+
+```jsonc
+// packages/nx/generators.json, named by "generators" in package.json
+{
+  "generators": {
+    "preset": {
+      "implementation": "./dist/generators/preset/generator.js",
+      "schema": "./src/generators/preset/schema.json",
+      "description": "Start a repo of the monorepo standard. create-nx-workspace runs it.",
+    },
+    "init": {
+      "implementation": "./dist/generators/init/generator.js",
+      "schema": "./src/generators/init/schema.json",
+      "description": "Add the root files of the monorepo standard. Safe to run again.",
+    },
+  },
+}
+```
+
+```ts
+// @zukhruf/nx:preset
+interface PresetOptions {
+  name: string; // the folder name, from create-nx-workspace
+  packageManager?: string; // anything other than 'npm' is an error
+}
+
+// @zukhruf/nx:init
+type InitOptions = Record<string, never>;
+```
+
+- The schema of `preset` does not set `additionalProperties: false`. create-nx-workspace passes each option of its command line to the preset, for example `preset`, `defaultBase`, `workspaces` and `aiAgents` (`create-preset.js:9-17`). Nx stops with "'x' is not found in schema" only when the schema sets `additionalProperties: false` (`nx/dist/src/utils/params.js:175-185`). The preset reads `name` and `packageManager`, and ignores the others.
+- `package.json` gets `"generators": "./generators.json"`, and `files` adds `generators.json` and `src/generators/*/schema.json`. `tsc` builds only `.ts` files, so the content of each file that a generator writes is a string in a `.ts` module, not a file in a `files/` folder. Then `dist` has it, and no build step copies assets.
+- `init` takes no options, as `format` and `lint` take none. The workspace scope comes from the root package name (see [The workspace scope](#the-workspace-scope)). Each difference between the copies is the wiring of one kind of app, and the app generators own it.
+
+### What the generators write
+
+`init` writes a file in one of three ways:
+
+- **Create**: it writes the file only when it is missing, and never changes it later.
+- **Add lines**: it adds each missing line, and never removes or reorders a line.
+- **Merge keys**: it sets the keys that the standard owns, and keeps the other keys.
+
+`preset` runs just after `nx new`, so it knows that each file in the folder came from `nx new`. It replaces 4 files of `nx new` with the files of the standard, and it cleans `package.json`. It deletes `apps/.gitkeep` and `libs/.gitkeep`, which `nx g` writes into the `Tree` before it calls a generator named `preset` (`nx/dist/src/command-line/generate/generate.js:250-253`). Then it runs `init`.
+
+| File                                                   | Content                                                                                                                                                                                                                                                                                                                                                                                                                            | `init`     | `preset`                                                                                                                                                                 |
+| ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `package.json`                                         | `private: true`, `type: "module"`, `workspaces: ["apps/*", "packages/*", "tools/*"]` when missing, `scripts.prepare: "git config core.hooksPath .husky \|\| exit 0"` when missing, the root `devDependencies` (see [Versions](#versions-that-the-generators-write)), `allowScripts` for the packages it installs                                                                                                                   | merge keys | also deletes `packageManager`, the empty `dependencies` and `@nx/workspace`; moves `@zukhruf/nx` from `dependencies` to `devDependencies`; `name` stays `@<name>/source` |
+| `nx.json`                                              | `analytics: false`; `tui.enabled: false`; `namedInputs` `default`, `production` (with `{ "env": "NODE_ENV" }`, without the ESLint config, the tests and the test tsconfigs) and `sharedGlobals` (the root ESLint config, `tsconfig.base.json`); `plugins` in this order: `@nx/js/typescript`, `@nx/eslint/plugin`, `@zukhruf/nx/lint`, `@zukhruf/nx/format`, `@zukhruf/nx/test`; `targetDefaults` below; `sync.applyChanges: true` | merge keys | —                                                                                                                                                                        |
+| `tsconfig.base.json`                                   | the base for bundled apps of §3, with `noUncheckedIndexedAccess`                                                                                                                                                                                                                                                                                                                                                                   | create     | —                                                                                                                                                                        |
+| `tsconfig.json`                                        | the solution file: `extends` the base, `files: []`, `references: []`; `nx sync` writes the references                                                                                                                                                                                                                                                                                                                              | create     | —                                                                                                                                                                        |
+| `.npmrc`                                               | `legacy-peer-deps=false`, `save-exact=true`, `strict-allow-scripts=true`                                                                                                                                                                                                                                                                                                                                                           | add lines  | —                                                                                                                                                                        |
+| `.nvmrc`                                               | `lts/*`                                                                                                                                                                                                                                                                                                                                                                                                                            | create     | —                                                                                                                                                                        |
+| `.gitattributes`                                       | `* text=auto eol=lf`                                                                                                                                                                                                                                                                                                                                                                                                               | create     | —                                                                                                                                                                        |
+| `.editorconfig`                                        | utf-8, lf, a final newline, 2 spaces, trim trailing whitespace except in `*.md`                                                                                                                                                                                                                                                                                                                                                    | create     | replaces the file of `nx new`                                                                                                                                            |
+| `.gitignore`                                           | the lines of §2                                                                                                                                                                                                                                                                                                                                                                                                                    | add lines  | replaces the file of `nx new`                                                                                                                                            |
+| `.prettierrc`                                          | the config of §5, with `^@<scope>/(.*)$` in `importOrder` and no Tailwind plugin                                                                                                                                                                                                                                                                                                                                                   | create     | —                                                                                                                                                                        |
+| `.prettierignore`                                      | the lines of §2                                                                                                                                                                                                                                                                                                                                                                                                                    | add lines  | —                                                                                                                                                                        |
+| `eslint.config.mjs`                                    | `flat/base`, `flat/typescript` and `flat/javascript` of `@nx/eslint-plugin`; the build-output `ignores`; `@nx/enforce-module-boundaries`; the `base`, `tests`, `diagnostics`, `env` and `nx-project-json` configs of `@zukhruf/eslint`; `manifest.configs.recommended`; Modern Node for the config files and `.husky/*.ts`; `allowDefaultProject` for `*.config.ts` and `.husky/*.ts`                                              | create     | —                                                                                                                                                                        |
+| `.husky/pre-commit.ts`, `pre-push.ts`, `commit-msg.ts` | the hooks of §7 with the steps of `@zukhruf/git-hooks`; mode `755`                                                                                                                                                                                                                                                                                                                                                                 | create     | —                                                                                                                                                                        |
+| `.husky/pre-commit`, `pre-push`, `commit-msg`          | a link to the `.ts` file of the same name                                                                                                                                                                                                                                                                                                                                                                                          | create     | —                                                                                                                                                                        |
+| `.vscode/settings.json`                                | file nesting, watcher and search excludes for `node_modules`, `.nx`, `tmp`                                                                                                                                                                                                                                                                                                                                                         | create     | —                                                                                                                                                                        |
+| `.vscode/extensions.json`                              | `nrwl.angular-console`, `esbenp.prettier-vscode`, `dbaeumer.vscode-eslint`                                                                                                                                                                                                                                                                                                                                                         | create     | replaces the file of `nx new`                                                                                                                                            |
+| `AGENTS.md`, `CLAUDE.md`                               | `AGENTS.md` holds the commands of §13; `CLAUDE.md` is one line, `@AGENTS.md`                                                                                                                                                                                                                                                                                                                                                       | create     | —                                                                                                                                                                        |
+| `README.md`                                            | `# <name>` and a link to `AGENTS.md`                                                                                                                                                                                                                                                                                                                                                                                               | —          | replaces the file of `nx new`                                                                                                                                            |
+
+The `targetDefaults` that `init` writes:
+
+| Target                                    | Default                                                                                                        |
+| ----------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `typecheck`                               | `dependsOn: ["lint", "format:check", "..."]`; `"..."` keeps the `^typecheck` of `@nx/js/typescript`            |
+| `dev`, `serve`, `preview`, `serve-static` | `continuous: false`; Nx reports a continuous task that no task depends on as a success, whatever its exit code |
+
+It writes no `format`, `format:check`, `lint` or `test` default. The `format`, `lint` and `test` areas give those targets, and a default would replace them (see the sections above).
+
+### What only an app generator writes
+
+A root file holds no wiring of one kind of app. A pattern that matches no file is not wiring: the root `.gitignore`, `.prettierignore` and ESLint `ignores` keep `.sdk-it` and the Vite timestamp files, and the first two `importOrder` entries (`./env`, `./startup`) stay in `.prettierrc`.
+
+| Wiring                                                                                                                                   | Generator                    |
+| ---------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
+| `@nx/node` and `@nx/esbuild`; the `@nx/esbuild:esbuild` target default; `generators["@nx/node"]`                                         | `node-app` (#3338)           |
+| `^sdk` in `build`, `dev`, `typecheck` and `test`; `!{projectRoot}/sdk-it.config.*` in `production`                                       | `node-app` (#3338)           |
+| the `hono` config of `@zukhruf/eslint` and the `env` settings, in the project's own `eslint.config.mjs`                                  | `node-app` (#3338)           |
+| `Dockerfile`, `.dockerignore`, `esbuild: true` in `allowScripts`                                                                         | `node-app` (#3338)           |
+| `@nx/react`, `@nx/vite`, `@nx/vitest`, Vite, Vitest, Testing Library, happy-dom; `generators["@nx/react"]`                               | `react-app` (#3338)          |
+| `@zukhruf/eslint/react` and its 3 optional peers; the `react-router` and `tailwind` configs, in the project config                       | `react-app` (#3338)          |
+| Tailwind, `prettier-plugin-tailwindcss` in `.prettierrc` `plugins`, the Tailwind sync generator in `sync` and in `build`, `dev`, `serve` | `react-app` (#3338)          |
+| `allowDefaultProject` for `sdk-it.config.ts` and `prisma.config.ts`, in the project config                                               | `node-app`, `prisma` (#4604) |
+
+The Git hooks are the same in each repo. `Sync` stages `**/tsconfig*.json` and `**/styles.css`: it stages only a file that a sync generator wrote, so the second glob matches nothing in a repo with no Tailwind.
+
+### Versions that the generators write
+
+- **The Nx family has one exact version.** `init` sets the root `nx` and each root `@nx/*` to `nxVersion`, also when the version is already there and is another one, a newer one included. Then npm installs one `nx` (#4532). An app generator adds its `@nx/*` packages at the same `nxVersion`. A test checks that the root `nx` equals `nxVersion` after `preset`, and that no root `@nx/*` has another version.
+- **A missing `@zukhruf/*` package gets the version of `@zukhruf/nx` itself.** nx release gives each public package of zukhruf the same version, so the generator reads its own `package.json` and writes no list of versions. A version that is already there stays, for example a `file:` tarball in a smoke test.
+- **The other root tools have exact versions** from one module, `src/generators/versions.ts`, that the app generators share: TypeScript 7 as `@typescript/native: "npm:typescript@7.x"` and the TypeScript 6 API as `typescript: "npm:@typescript/typescript6@6.x"` (§1), ESLint 10, Prettier 3, `@trivago/prettier-plugin-sort-imports`, and the peers of `@zukhruf/eslint` that the root config loads. `init` adds a missing package at that version, and keeps a version that is already there.
+- **`allowScripts`** names each install script of a package that the generator installs: `nx: false` and `unrs-resolver: false`. `init` adds a missing name, and keeps a decision that is already there. The smoke test of 2026-11-18 proved the list: `npm install` with `strict-allow-scripts=true` passed.
+
+### The workspace scope
+
+The root package name is `@<scope>/source`. `nx new` writes it from the folder name (`@nx/workspace/dist/src/generators/new/files-integrated-repo/package.json__tmpl__`). One function reads the scope from that name, and each generator calls it: the `importOrder` of `.prettierrc` here, and the name of a generated client (`@<scope>/<app>-client`) and the portless domain in `node-app` (#3338). That is 3 places (#4080). The function stops with an error when the name has no scope. A generator never writes a fallback scope, so no repo gets the scope of another repo (factory falls back to `@factory`).
+
+### Install the dependencies and the hook links
+
+A generator returns its install as a callback. Nx runs the callback after it writes the files, and not in a dry run.
+
+- Both generators return `runTasksInSerial(installPackagesTask(tree), linkHooks)` (`@nx/devkit/dist/src/generators/run-tasks-in-serial.js:9-15`, `@nx/devkit/dist/src/tasks/install-packages-task.js:15-42`). `installPackagesTask` runs `npm install` only when the generator changed `package.json`, so a second run of `init` installs nothing.
+- After `preset`, `nx format --all` of create-nx-workspace finds Prettier and the sort-imports plugin installed.
+
+The `Tree` keeps a file mode, but it has no links:
+
+- **Mode.** The generator calls `tree.changePermissions('.husky/<hook>.ts', '755')` after `formatFiles`. `formatFiles` writes each file again with no options, so a mode set before it is lost (`@nx/devkit/dist/src/generators/format-files.js:119`; `nx/dist/src/generators/tree.js:45-68`). Nx applies the mode when it writes the file (`tree.js:185-211`, `:279-292`).
+- **Links.** Git runs `.husky/pre-commit`, so `.husky/pre-commit` is a link to `pre-commit.ts`. The `Tree` cannot write a link, so the callback writes each missing link with `fs.symlink`.
+
+`prepare` sets `core.hooksPath` when npm installs. In an empty Git repo, the install of the preset runs it. In a new folder, `git init` comes after the install, so the first `npm install` after create-nx-workspace sets it.
+
+### What the generators do not do
+
+- **They do not write CI, deploy or infra files.** The `dokploy` generator writes them (#4603).
+- **They do not write a NodeNext base.** The base is the one for bundled apps (§3). zukhruf and elt run code from source with NodeNext, and they do not use the generators.
+- **They do not change an ESLint config that is already there.** factory splices the configs of `@zukhruf/eslint` into an existing `eslint.config.mjs`. No consumer needs that now: the generator writes the file in a new repo, and factory and whatisgoingon already have their config.
+- **They do not commit.** create-nx-workspace commits only in a new folder. In an existing repo, you make the first commit.
+- **They do not delete a file or a folder** that the standard does not own. Only `preset` deletes, and only what `nx new` and `nx g` wrote a moment before: keys of `package.json`, `apps/.gitkeep` and `libs/.gitkeep`.
+
+### What stays in factory
+
+- The brand: the `@factory` scope fallback, the fonts, colors and favicons (#3338).
+- The mirror tests `tests/workspace-mirror.test.ts` and `tests/templates-mirror.test.ts`. They prove that factory's own root files equal the output of the generator. factory keeps them, and calls `@zukhruf/nx:init` (#4611).
+- `--test-force-exit` for each project: factory sets it in the options of `@zukhruf/nx/test`. The standard adds it only for the tag `test:docker` (§8), so `init` writes the plugin with no options.
+
+### Tests of the generators
+
+The tests use a virtual `Tree` from `createTreeWithEmptyWorkspace` of `@nx/devkit/testing`, as the tests of `@factory/foundation` do (`src/generators/init/generator.test.ts`, `src/generators/preset/generator.test.ts`). They port these tests of `tools/foundation/tests/workspace.test.ts`: the scope in `importOrder`, the full baseline, a second run that changes nothing, `targetDefaults` that are already there, and a `.prettierrc` that is already there. They drop the test of an ESLint config with a multi-line import, because `init` does not change an existing config. New tests:
+
+- `preset` on the files of `nx new`: the result has no `packageManager`, no `apps/.gitkeep` and no `libs/.gitkeep`, `@zukhruf/nx` is in `devDependencies`, and the root `nx` and each `@nx/*` equal `nxVersion` (#4532).
+- `preset` with `packageManager: 'pnpm'` stops with an error.
+- `init` on a root package name with no scope stops with an error.
+- `init` sets a newer `nx` and `@nx/*` down to `nxVersion`, and keeps the version of another root tool.
+- Each hook that `init` creates has the mode `755`.
+- The backend-neutral output: no React, Vite, Vitest or Tailwind package in `package.json`, and no app wiring in `nx.json`.
+
+### Test the preset before a release
+
+create-nx-workspace takes the version of a third-party preset from `NX_E2E_PRESET_VERSION` when it is set (`@nx/workspace/dist/src/generators/new/new.js:114-118`). So the preset runs from a tarball of the checkout, before a release:
+
+```sh
+npx nx run nx:build
+(cd packages/nx && npm pack --pack-destination <scratch>)
+mkdir <scratch>/acme && cd <scratch>/acme && git init
+NX_E2E_PRESET_VERSION=file:<scratch>/zukhruf-nx-<version>.tgz \
+  npx create-nx-workspace@latest . --preset=@zukhruf/nx --pm=npm --nxCloud=skip --aiAgents=none
+```
+
+Then check that `npm install` passes, that `npx nx run-many -t typecheck` and `npx nx run-many -t lint` pass, and that the first `git commit` passes the hooks. Delete the folder at the end. On 2026-11-18 both paths passed: a new folder (`acme`), and a folder with only `git init` (`.`). In the new folder, a demo package also passed `typecheck` (TypeScript 7.0.2) and `lint`, and its commit passed each hook. A second run of `npx nx g @zukhruf/nx:init` in the generated repo changed no file.
+
+The decisions are in [ADR 0009](./docs/adr/0009-a-preset-and-an-init-generator-start-a-repo-from-nothing.md). The backlog item of the generators is #3337.

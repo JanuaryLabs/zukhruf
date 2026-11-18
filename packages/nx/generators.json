@@ -1,0 +1,14 @@
+{
+  "generators": {
+    "preset": {
+      "implementation": "./dist/generators/preset/generator.js",
+      "schema": "./src/generators/preset/schema.json",
+      "description": "Start a repo of the monorepo standard. create-nx-workspace runs it."
+    },
+    "init": {
+      "implementation": "./dist/generators/init/generator.js",
+      "schema": "./src/generators/init/schema.json",
+      "description": "Add the root files of the monorepo standard. Safe to run again."
+    }
+  }
+}

@@ -1,6 +1,6 @@
 # Nx
 
-This package is the Nx part of the monorepo standard. Each area gives one part of the Nx configuration that the workspaces copied. The `format` area gives each project two targets: one that writes the files with Prettier, and one that only reads them. No workspace copies them. A check target never writes. The `test` area gives the test target to each project that owns test files. The `lint` area adds the lint packages to the inputs of the lint target. The `opentofu` area gives the OpenTofu targets to each project with environments. The `prisma` area gives the Prisma targets to each project with a `prisma.config.ts`.
+This package is the Nx part of the monorepo standard. Each area gives one part of the Nx configuration that the workspaces copied. The `format` area gives each project two targets: one that writes the files with Prettier, and one that only reads them. No workspace copies them. A check target never writes. The `test` area gives the test target to each project that owns test files. The `lint` area adds the lint packages to the inputs of the lint target. The `opentofu` area gives the OpenTofu targets to each project with environments. The `prisma` area gives the Prisma targets to each project with a `prisma.config.ts`. The generators `preset` and `init` write the root files of a workspace.
 
 ## Language
 
@@ -91,3 +91,23 @@ _Avoid_: Secret check, env check
 **Generate target**:
 The target `generate` that the `prisma` area gives. It runs `prisma generate` in the project root. Nx caches it on the `*.prisma` files, `prisma.config.ts` and the Prisma packages, and restores the `output` folders of the generator blocks. `typecheck` and `build` depend on it through `targetDefaults`.
 _Avoid_: Codegen target, prisma target (text2sql has a different target with that name)
+
+**Generator**:
+An Nx generator of this package, in `generators.json`. It writes files through a `Tree`, and Nx writes the changes to disk after it ends. `preset` and `init` are the two generators of #3337.
+_Avoid_: Schematic, template, scaffold
+
+**Preset**:
+The generator `preset`. create-nx-workspace runs it just after `nx new`, in a new folder or in an empty Git repo (`.`). It replaces the files of `nx new` that the standard owns, and then runs `init`.
+_Avoid_: Template (create-nx-workspace has a different template flow), starter
+
+**Root file**:
+A file at the workspace root that the monorepo standard owns, for example `nx.json`, `tsconfig.base.json`, `.npmrc` or a Git hook. `init` creates a missing root file, adds missing lines, and merges keys. It never deletes.
+_Avoid_: Config file (a project has config files too), boilerplate
+
+**Nx family**:
+The root `nx` and each root `@nx/*` package. A generator gives them one exact version, `nxVersion` of the package, also over a newer version, so npm installs one `nx`.
+_Avoid_: Nx plugins (a plugin is one kind of `@nx/*` package), Nx packages
+
+**Workspace scope**:
+The scope of the root package name: `acme` for `@acme/source`. One function reads it, and it stops with an error for a name with no scope.
+_Avoid_: Org, namespace, prefix
