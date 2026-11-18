@@ -17,7 +17,7 @@ The pgvector clients have one type for each element type (`Vector`, `HalfVector`
 
 - `Vector` holds a `Float32Array`, `HalfVector` a `Float16Array` (Node v26.13.0 has `Float16Array` and `Math.f16round`), `Int8Vector` an `Int8Array`, and `BitVector` its packed bits.
 - Each type has `from(values)`, which copies the values, and `dimensions`. A value that is not finite, or an int8 value out of range, is a `RangeError`.
-- `UnitVector` is a `Vector` of length 1, made only by `UnitVector.normalize`. A vector of length 0 or not finite is a `ZeroVectorError` (backlog #4044: elt's copy has no such check).
+- `UnitVector` is a `Vector` of length 1, made only by `UnitVector.normalize`. A vector of length 0 or not finite is a `ZeroVectorError`. elt's copy fails the row of such a vector instead (backlog #4044, done).
 - A function of the package takes only the types that the engines take for it: `fromSql` of `/sqlserver` takes no `BitVector`.
 
 ## Consequences

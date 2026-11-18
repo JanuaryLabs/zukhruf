@@ -2,7 +2,7 @@
 
 Status: accepted by Ezz on 2026-11-18 ("Accept (Recommended)").
 
-Four programs keep vectors in SQLite, and each one writes its own vector code: `@deepagents/retrieval` (`vectorToBlob`), `@zukhruf/embeddings` (`UnitVector`, `toBlob`, a cosine in JavaScript), `@eltjs/embedding` (`unitVector`, backlog #4118 and #4044) and, through `@zukhruf/embeddings`, the Context Compiler. No program keeps vectors in SQL Server yet. Node v26.13.0 has no vector module, and `node:sqlite` has no vector function.
+Four programs keep vectors in SQLite, and each one writes its own vector code: `@deepagents/retrieval` (`vectorToBlob`), `@zukhruf/embeddings` (`UnitVector`, `toBlob`, a cosine in JavaScript), `@eltjs/embedding` (`unitVector`, backlog #4118) and, through `@zukhruf/embeddings`, the Context Compiler. No program keeps vectors in SQL Server yet. Node v26.13.0 has no vector module, and `node:sqlite` has no vector function.
 
 Ezz ruled on 2026-11-18:
 
@@ -34,5 +34,5 @@ A first paper (commit f06a1fb8, `@zukhruf/vector-store`) had one collection inte
 
 ## Consequences
 
-- The four programs above drop their copies and use the package. Backlog #4118 and #4044 close.
+- The four programs above drop their copies and use the package. Backlog #4118 closes.
 - `@eltjs/embedding` and `@deepagents/retrieval` are public on npm, so this package is public.

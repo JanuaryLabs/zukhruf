@@ -214,7 +214,7 @@ The package is designed for its domain. Each program below moves onto it and dro
 | ----------------------- | ------------------------------------------------------------------ | ---------------------------------------------- |
 | `@deepagents/retrieval` | `vectorToBlob` in `stores/sqlite/sqlite.ts`                        | `sqlite.toSql`                                 |
 | `@zukhruf/embeddings`   | `UnitVector` and `toBlob` in `src/vector.ts`, cosine in JavaScript | `UnitVector`, `sqlite.toSql`, `cosineDistance` |
-| `@eltjs/embedding`      | `unitVector` in `src/embedding.ts` (#4118, #4044)                  | `UnitVector`, `sqlite.toSql`                   |
+| `@eltjs/embedding`      | `unitVector` in `src/embedding.ts` (#4118)                         | `UnitVector`, `sqlite.toSql`                   |
 | Context Compiler        | through `@zukhruf/embeddings`                                      | the same                                       |
 | datahub                 | none                                                               | `sqlserver.toSql`, `sqlType`                   |
 
