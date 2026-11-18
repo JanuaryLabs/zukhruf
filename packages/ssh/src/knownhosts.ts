@@ -2,6 +2,7 @@ import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { appendFile, mkdir, readFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
+import { ssh2HostKeyAlgorithms } from './host-key-algorithms.ts';
 import { PublicKey } from './public-key.ts';
 
 /** Go's knownhosts.KnownKey. */
@@ -39,19 +40,10 @@ export class RevokedError extends Error {
   }
 }
 
-/**
- * The host key algorithms of ssh2 1.17.0 that OpenSSH still accepts
- * (`DEFAULT_SERVER_HOST_KEY` in ssh2's lib/protocol/constants.js:64-73).
- */
-const supportedHostKeyAlgorithms = [
-  'ssh-ed25519',
-  'ecdsa-sha2-nistp256',
-  'ecdsa-sha2-nistp384',
-  'ecdsa-sha2-nistp521',
-  'rsa-sha2-512',
-  'rsa-sha2-256',
-  'ssh-rsa',
-] as const;
+// The host key algorithms of ssh2 that OpenSSH still accepts.
+const supportedHostKeyAlgorithms = ssh2HostKeyAlgorithms.filter(
+  (algorithm) => algorithm !== 'ssh-dss',
+);
 
 /** The keys of the known hosts files. Go's ssh/knownhosts. */
 export class KnownHosts {

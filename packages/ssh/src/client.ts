@@ -17,6 +17,7 @@ import { type Clock, Future, Latch, timeout } from '@zukhruf/async';
 
 import { joinHostPort, splitHostPort } from './address.ts';
 import { ChannelStream } from './channel-stream.ts';
+import { ssh2HostKeyAlgorithms } from './host-key-algorithms.ts';
 import type { Signer } from './private-key.ts';
 import type { Prompt } from './prompt.ts';
 import { PublicKey } from './public-key.ts';
@@ -740,26 +741,15 @@ function readServerVersion(transport: Duplex): { value(): string } {
   return { value: () => version ?? '' };
 }
 
-// The host key algorithms of ssh2 1.17.0 (lib/protocol/constants.js:64-76).
-// It has no *-cert-v01@openssh.com algorithm, so the offer drops those names
-// of the config. ssh2 offers its defaults for an empty list, so a config
-// that names none of them fails here.
-const ssh2HostKeyAlgorithms: readonly ServerHostKeyAlgorithm[] = [
-  'ssh-ed25519',
-  'ecdsa-sha2-nistp256',
-  'ecdsa-sha2-nistp384',
-  'ecdsa-sha2-nistp521',
-  'rsa-sha2-512',
-  'rsa-sha2-256',
-  'ssh-rsa',
-  'ssh-dss',
-];
-
+// The offer drops the names of the config that ssh2 lacks. ssh2 offers its
+// defaults for an empty list, so a config that names none of them fails here.
 function offeredHostKeyAlgorithms(
   names: readonly string[] | undefined,
 ): ServerHostKeyAlgorithm[] | undefined {
   if (names === undefined) return undefined;
-  const offered = ssh2HostKeyAlgorithms.filter((each) => names.includes(each));
+  const offered: ServerHostKeyAlgorithm[] = ssh2HostKeyAlgorithms.filter(
+    (each) => names.includes(each),
+  );
   offered.sort((a, b) => names.indexOf(a) - names.indexOf(b));
   if (offered.length === 0) {
     throw new Error(
