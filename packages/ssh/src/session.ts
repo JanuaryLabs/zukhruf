@@ -202,10 +202,25 @@ export class Session implements AsyncDisposable {
       started.opened.reject(error);
       throw error;
     });
-    this.#stdin.pipe(channel.stream);
     // A write that the channel cannot take fails stdin, as EPIPE fails the
-    // stdin of a child process.
-    channel.stream.once('error', (error) => this.#stdin.destroy(error));
+    // stdin of a child process. Not pipe(): the stream closes by destroy()
+    // at the end of its data, and pipe() drops the failure of a write after
+    // that. ssh2 1.17.0 calls back the last write at the window adjust
+    // (client.js:625-637) in the read that also holds CHANNEL_CLOSE, so the
+    // stream can close with no write waiting, and the next write of stdin
+    // comes after the destroy (#4627).
+    const failed = (error?: Error | null): void => {
+      if (!error) return;
+      this.#stdin.destroy(
+        channel.stream.errored ?? new Error('ssh: the channel is closed'),
+      );
+    };
+    this.#stdin.on('data', (chunk: Buffer) => {
+      if (!channel.stream.write(chunk, failed)) this.#stdin.pause();
+    });
+    channel.stream.on('drain', () => this.#stdin.resume());
+    this.#stdin.once('end', () => channel.stream.end());
+    channel.stream.once('error', failed);
     channel.stream.pipe(this.#stdout);
     channel.stderr.pipe(this.#stderr);
     channel.onClose((exit, connectionError) => {

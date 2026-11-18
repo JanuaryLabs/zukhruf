@@ -264,6 +264,83 @@ test(
 );
 
 test(
+  'a write to stdin after the channel closed fails the writer with the close of the channel, and is not dropped',
+  { skip: noSshd },
+  async () => {
+    // Arrange
+    await using sshd = await startSshd();
+    await using client = await dial(sshd);
+    await using session = client.newSession();
+    const read = text(session.stdout);
+    await session.start('true');
+    await session.wait();
+    // The stream of the channel closes at the end of stdout, with no write
+    // waiting.
+    assert.equal(await read, '');
+
+    // Act
+    const written = pipeline(
+      Readable.from(['after the close\n']),
+      session.stdin,
+    );
+
+    // Assert
+    await assert.rejects(written, { message: 'ssh: the channel is closed' });
+  },
+);
+
+test(
+  'stdin carries more than the window of the channel, whole, to a command that reads all of it',
+  { skip: noSshd },
+  async () => {
+    // Arrange
+    await using sshd = await startSshd();
+    await using client = await dial(sshd);
+    await using session = client.newSession();
+    const read = text(session.stdout);
+    await session.start('wc -c');
+    // 4 MiB: more than the 2 MB window of sshd's session channel, so writes
+    // wait for window and for the drain of the stream.
+    const chunk = Buffer.alloc(64 * 1024, 'a');
+    const input = Readable.from(Array.from({ length: 64 }, () => chunk));
+
+    // Act
+    await pipeline(input, session.stdin);
+    await session.wait();
+
+    // Assert
+    assert.equal((await read).trim(), String(64 * chunk.length));
+  },
+);
+
+test(
+  'stdin pushes back on a writer that writes faster than the channel takes: write() returns false, so an endless writer does not fill the memory',
+  { skip: noSshd },
+  async () => {
+    // Arrange
+    await using sshd = await startSshd();
+    await using client = await dial(sshd);
+    await using session = client.newSession();
+    await session.start('cat > /dev/null');
+    const chunk = Buffer.alloc(64 * 1024, 'a');
+    const limit = 64 * 1024 * 1024;
+
+    // Act: the writes go in one turn of the event loop, before the channel
+    // sends anything.
+    let accepted = 0;
+    while (accepted < limit && session.stdin.write(chunk)) {
+      accepted += chunk.length;
+    }
+
+    // Assert
+    assert.ok(accepted < limit);
+    // stdin still holds data, which the close of the session would fail.
+    session.stdin.end();
+    await session.wait();
+  },
+);
+
+test(
   'run discards output that nothing reads, so a command with more output than the buffers ends',
   { skip: noSshd },
   async () => {
