@@ -20,7 +20,7 @@ The clock and the environment are inputs. The package reads neither from its pro
 
 - `ClientConfig.clock` is required. Its type is `Clock` of `@zukhruf/async`. An app gives `globalThis`. A test gives `createClock()` of `@sinonjs/fake-timers`.
 - `ServerConfig` has no clock. The server waits on no timer of its own, and the signal of `ServerConn.handshake` bounds a slow handshake ([ADR 0011](./0011-the-package-has-a-server-as-go-and-rust-do.md)). Root ADR 0004 asks a clock only of code that waits.
-- `OpenSshConfig.resolve(destination, { environment })` requires the environment. `ssh -G` and a ProxyCommand run with it as their whole environment. The package reads these variables from it: `SSH_AUTH_SOCK`, `HOME`, `SHELL`, and the variables that `SendEnv` names.
+- `OpenSshConfig.resolve(destination, { environment })` requires the environment. `ssh -G` and a ProxyCommand run with it as their whole environment. The package reads these variables from it: `SSH_AUTH_SOCK`, `HOME`, `SHELL`, the variables that `SendEnv` names, and the `$NAME` of an `IdentityAgent` or `ForwardAgent` value.
 - The root import path takes no environment. A caller of `Client.dial` connects the agent socket itself and gives it to `AgentClient` of `@zukhruf/ssh/agent`, as Go's `agent.NewClient(conn)` takes a connection.
 
 ## Considered Options

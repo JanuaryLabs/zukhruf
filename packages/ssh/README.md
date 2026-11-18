@@ -55,9 +55,9 @@ await using client = await config.dial({
 });
 ```
 
-- The destination is OpenSSH's: `[user@]hostname[:port]`, an `ssh://` URI, or a `Host` name of the config.
+- The destination is OpenSSH's: `[user@]hostname`, an `ssh://` URI, or a `Host` name of the config. Only an `ssh://` URI carries a port: OpenSSH reads `box:2202` as a hostname.
 - The flags are raw flags of `ssh`. They come first, so a flag wins over the config file, as in OpenSSH.
-- `environment` is required. `ssh -G` runs with it. The package reads these variables from it: `SSH_AUTH_SOCK`, `HOME`, `SHELL`, and the variables that `SendEnv` names. The package reads no `process.env` ([ADR 0008](./docs/adr/0008-the-environment-and-the-clock-are-inputs.md)).
+- `environment` is required. `ssh -G` runs with it. The package reads these variables from it: `SSH_AUTH_SOCK`, `HOME`, `SHELL`, the variables that `SendEnv` names, and the `$NAME` of an `IdentityAgent` or `ForwardAgent` value. The package reads no `process.env` ([ADR 0008](./docs/adr/0008-the-environment-and-the-clock-are-inputs.md)).
 
 `config.dial()` connects as OpenSSH would:
 
@@ -399,7 +399,7 @@ Each class marks a different next step for the caller.
 
 A failure of the connection has no class of its own. Every error of `Client.dial`, `Client.handshake` or `OpenSshConfig#dial` that is not one of the classes above is a failure to connect, and each of them has the same next step. A handshake failure, such as no shared key exchange algorithm, is an `Error` whose message names it. The package does not give ssh2's `level` field as its API.
 
-A connection that is lost after the start ends each open channel with an error whose `cause` is the error that ended the connection, and `client.wait()` rejects with it. A failed `ssh -G` rejects `OpenSshConfig.resolve` with an `Error` whose message is the standard error of `ssh` and whose `cause` has its exit code.
+A connection that is lost after the start ends each open channel with an error whose `cause` is the error that ended the connection, and `client.wait()` rejects with it. A failed `ssh -G` rejects `OpenSshConfig.resolve` with an `Error` whose message is the standard error of `ssh` and whose `cause` is the error of `execFile`, with the exit code as its `code`. A loop of jump hosts rejects with `jumphost loop via <host>`, as OpenSSH words it.
 
 ## What the package does not do
 
@@ -953,11 +953,11 @@ export class OpenSshConfig {
   readonly hostKeyAlgorithms: readonly string[];
   /** The agent socket; undefined for IdentityAgent none, or no SSH_AUTH_SOCK. */
   readonly identityAgent: string | undefined;
-  /** With ~ expanded from HOME of the environment. */
+  /** With ~ expanded from HOME of the environment. ssh -G prints % tokens and ${VAR} here unexpanded (ssh expands them only when it loads the keys), so a file named with them is not found and its key is not offered: fewer keys, as ADR 0004 allows for a setting that the package does not read. */
   readonly identityFiles: readonly string[];
   readonly identitiesOnly: boolean;
   readonly route: Route;
-  /** ms; undefined for none. */
+  /** ms; undefined for none or 0. */
   readonly connectTimeout: number | undefined;
   /** undefined when ServerAliveInterval is 0. */
   readonly keepalive:
@@ -966,7 +966,7 @@ export class OpenSshConfig {
   readonly addressFamily: 4 | 6 | undefined;
   readonly setEnv: ReadonlyMap<string, string>;
   readonly sendEnv: readonly string[];
-  /** ForwardAgent as OpenSSH resolves it: no, yes (the agent at SSH_AUTH_SOCK of the environment), or a socket path (a $NAME value is read from the environment). dial sets ClientConfig.agentForwarding from it. */
+  /** ForwardAgent as OpenSSH resolves it: no, yes (the agent at SSH_AUTH_SOCK of the environment), or a socket path (a $NAME value is read from the environment; a $NAME that it does not set is off, as in ssh.c). dial sets ClientConfig.agentForwarding from it. */
   readonly forwardAgent:
     | { readonly kind: 'off' }
     | { readonly kind: 'agent' }

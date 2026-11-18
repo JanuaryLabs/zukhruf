@@ -13,7 +13,7 @@ Tools that connect in their own process ask OpenSSH the same way (research, step
 A probe of OpenSSH 10.5p1 on 2026-11-17 showed the form of the output:
 
 - One `key value` line for each setting, with lower-case keys. A setting with many values has many lines (`identityfile`, `sendenv`).
-- `identityfile ~/.ssh/id_rsa` keeps the `~`. `userknownhostsfile` and `identityagent` are expanded (`/Users/ezzabuzaid/.ssh/known_hosts`).
+- `identityfile ~/.ssh/id_rsa` keeps the `~`, and so does `globalknownhostsfile` (ssh expands both only after it prints). `userknownhostsfile`, `identityagent` and a `forwardagent` path are expanded, with the home of the passwd entry, not `HOME` (`tilde_expand_filename`). The package expands the `~` of the first two from `HOME` of the environment.
 - `proxycommand nc %h %p` keeps its tokens. `proxyjump alice@jump1:2200,jump2` is the list as given.
 - `connecttimeout none` when no value is set. `proxyjump`, `proxycommand` and `identityagent` are absent when not set.
 - `-o Include=…` fails: "Include directive not supported as a command-line option".
@@ -25,9 +25,9 @@ Ezz accepted this decision on 2026-11-17, together with [ADR 0003](./0003-ssh2-s
 
 `OpenSshConfig.resolve(destination, { flags, environment, signal })` of `@zukhruf/ssh/config` runs `ssh -G <flags> -- <destination>` and reads its standard output.
 
-- The destination is OpenSSH's: `[user@]hostname[:port]`, an `ssh://` URI, or a `Host` name. `@zukhruf/docker` gives its `ssh://` host as it is.
+- The destination is OpenSSH's: `[user@]hostname`, an `ssh://` URI, or a `Host` name. Only an `ssh://` URI carries a port: `ssh -G bob@box:2202` prints `hostname box:2202` and `port 22`. `@zukhruf/docker` gives its `ssh://` host as it is.
 - The flags are the caller's raw `ssh` flags. They keep the meaning that `sshFlags` has in `@zukhruf/docker`: they come first, so they win over the config file.
-- `ssh -G` runs with the caller's environment ([ADR 0008](./0008-the-environment-and-the-clock-are-inputs.md)), and the signal stops it. A non-zero exit rejects with an `Error` whose message is the standard error of `ssh` and whose `cause` has the exit code. A warning on stderr with exit 0 is ignored.
+- `ssh -G` runs with the caller's environment ([ADR 0008](./0008-the-environment-and-the-clock-are-inputs.md)), and the signal stops it. A non-zero exit rejects with an `Error` whose message is the standard error of `ssh`, and whose `cause` is the error of `execFile`, with the exit code as its `code`. A warning on stderr with exit 0 is ignored.
 - The package reads these settings:
 
   | Setting                                      | What the package does with it                                                                                                                                                                                                                                                                                                                                                           |

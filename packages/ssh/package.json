@@ -43,6 +43,12 @@
       "types": "./dist/knownhosts.d.ts",
       "import": "./dist/knownhosts.js",
       "default": "./dist/knownhosts.js"
+    },
+    "./config": {
+      "@zukhruf/source": "./src/config.ts",
+      "types": "./dist/config.d.ts",
+      "import": "./dist/config.js",
+      "default": "./dist/config.js"
     }
   },
   "files": [
