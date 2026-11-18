@@ -14,6 +14,7 @@ import { reactRouter } from './react-router/config.ts';
 import { react } from './react/config.ts';
 import { tailwind } from './tailwind/config.ts';
 import { tests } from './test-files/config.ts';
+import { tsconfig } from './tsconfig/config.ts';
 
 const concepts: Concept[] = [
   base,
@@ -28,6 +29,7 @@ const concepts: Concept[] = [
   tailwind,
   pulumi,
   nxProjectJson,
+  tsconfig,
 ];
 
 const configs: Record<string, Linter.Config[]> = {};

@@ -29,6 +29,7 @@ export const SCRIPTS = ['**/scripts/**'];
 export const CONFIG_FILES = ['**/*.config.{js,cjs,mjs,ts,mts,cts}'];
 export const PACKAGE_JSON = ['**/package.json'];
 export const PROJECT_JSON = ['**/project.json'];
+export const TSCONFIG = ['**/tsconfig*.json'];
 /** Flat config never reads .gitignore, so build output is ignored by name. */
 export const BUILD_OUTPUT = [
   '**/dist',

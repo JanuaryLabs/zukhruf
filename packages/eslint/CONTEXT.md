@@ -52,6 +52,10 @@ _Avoid_: Paths, scope globs
 The nearest folder at or above the linted file that has a `project.json` or a `package.json`, with the tags those files declare.
 _Avoid_: Package (when tags matter)
 
+**Project configuration**:
+The Nx settings of a project: its `project.json`, and the `nx` key of its `package.json`. Nx merges the two.
+_Avoid_: Project file, Nx config
+
 ### Islands
 
 **Island**:

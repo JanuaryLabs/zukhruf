@@ -164,7 +164,8 @@ test('./react leaves a package.json to manifest/recommended, also when a script 
         `...react, { plugins: { zukhruf }, extends: ['zukhruf/base'] }, { plugins: { manifest }, extends: ['manifest/recommended'] }`,
       ),
     ].join('\n'),
-    'package.json': JSON.stringify({
+    // A project's manifest: the workspace root keeps no script but prepare.
+    'apps/fx/package.json': JSON.stringify({
       name: 'fx',
       private: true,
       scripts: { start: 'npm run build && node dist/main.js' },
@@ -172,7 +173,7 @@ test('./react leaves a package.json to manifest/recommended, also when a script 
   });
 
   // Act
-  const findings = lint(workspace.root, ['package.json']);
+  const findings = lint(workspace.root, ['apps/fx/package.json']);
 
   // Assert
   assert.deepEqual(findings, []);
