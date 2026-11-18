@@ -10,7 +10,7 @@ import {
   readJsonFile,
 } from '@nx/devkit';
 
-import { projectRootFiles } from '../project-roots.ts';
+import { nearestRoot, projectRootFiles } from '../project-roots.ts';
 
 export interface TestOptions {
   timeout?: number;
@@ -105,13 +105,6 @@ export const createNodes: CreateNodes<TestOptions> = [
     );
   },
 ];
-
-function nearestRoot(roots: Set<string>, folder: string): string | undefined {
-  if (roots.has(folder)) {
-    return folder;
-  }
-  return folder === '.' ? undefined : nearestRoot(roots, dirname(folder));
-}
 
 // One glob for each top-level folder with test files, and one glob with no
 // `**` for the test files directly in the root (ADR 0004).

@@ -221,6 +221,13 @@ export default defineConfig(
     ],
     rules: { 'island/no-console': 'off' },
   },
+  // The freshness check of @zukhruf/nx/opentofu is a command line program
+  // that the `show` target runs: it tells the person why the saved plan is
+  // refused, and its exit code stops the target (packages/nx ADR 0007).
+  {
+    files: ['packages/nx/src/opentofu/check-plan-fresh.ts'],
+    rules: { 'island/no-console': 'off' },
+  },
   // @zukhruf/shutdown takes over the report of a crash from Node.js. With a
   // listener for 'uncaughtException', Node.js does not write the error, and a
   // crash after a termination signal ends the process before a host can log

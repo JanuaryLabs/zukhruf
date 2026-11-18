@@ -34,3 +34,17 @@ export function projectRootFiles(
       : !projectJsonRoots.has(dirname(file)) && isInWorkspaces(file),
   );
 }
+
+/**
+ * The project root that owns a folder: the folder itself or its nearest
+ * parent in `roots`. A file belongs to the nearest project root above it.
+ */
+export function nearestRoot(
+  roots: ReadonlySet<string>,
+  folder: string,
+): string | undefined {
+  if (roots.has(folder)) {
+    return folder;
+  }
+  return folder === '.' ? undefined : nearestRoot(roots, dirname(folder));
+}

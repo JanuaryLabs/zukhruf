@@ -1,7 +1,7 @@
 {
   "name": "@zukhruf/nx",
   "version": "0.8.28",
-  "description": "The Nx part of the monorepo standard, one area per subpath: format gives each project format and a cached format:check with Prettier, test gives node --test targets, and lint adds the packages of @zukhruf/eslint to the inputs of lint.",
+  "description": "The Nx part of the monorepo standard, one inference plugin per subpath: format, test, lint, opentofu and prisma give projects their Prettier, node --test, ESLint input, OpenTofu and Prisma targets.",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -24,7 +24,10 @@
     "node-test",
     "test",
     "eslint",
-    "lint"
+    "lint",
+    "opentofu",
+    "terraform",
+    "prisma"
   ],
   "type": "module",
   "exports": {
@@ -46,6 +49,18 @@
       "types": "./dist/lint/plugin.d.ts",
       "import": "./dist/lint/plugin.js",
       "default": "./dist/lint/plugin.js"
+    },
+    "./opentofu": {
+      "@zukhruf/source": "./src/opentofu/plugin.ts",
+      "types": "./dist/opentofu/plugin.d.ts",
+      "import": "./dist/opentofu/plugin.js",
+      "default": "./dist/opentofu/plugin.js"
+    },
+    "./prisma": {
+      "@zukhruf/source": "./src/prisma/plugin.ts",
+      "types": "./dist/prisma/plugin.d.ts",
+      "import": "./dist/prisma/plugin.js",
+      "default": "./dist/prisma/plugin.js"
     }
   },
   "files": [

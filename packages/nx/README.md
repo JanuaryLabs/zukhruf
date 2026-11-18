@@ -12,7 +12,7 @@ The words in these documents have one meaning each. See the glossary in [CONTEXT
 | test             | `@zukhruf/nx/test`     | This README                                                                                   |
 | lint             | `@zukhruf/nx/lint`     | This README                                                                                   |
 | portless         | `@zukhruf/nx/portless` | Candidate (#3336): 14 projects in 3 repos                                                     |
-| opentofu, prisma | —                      | Candidates (#3339): 5 places each                                                             |
+| opentofu, prisma | `@zukhruf/nx/<area>`   | This README (#3339)                                                                           |
 | generators       | —                      | Candidates: the workspace generator of `@factory/foundation` (#3337); app kinds later (#3338) |
 
 The lint rules stay in `@zukhruf/eslint`. The `lint` area gives only the inputs of the `lint` target (#3335).
@@ -495,3 +495,224 @@ The lockfile measured the edges on 2026-10-30. For factory, whatisgoingon, deepa
 | context-compiler | uses it (#3391)                             |
 
 The umbrella item is #3335.
+
+## opentofu
+
+> Status: shipped (#3339).
+
+Five projects in two workspaces run OpenTofu through Nx: the `infra` project of whatisgoingon, and four projects of text2sql (`v2-terraform`, `authx-terraform`, `desktop-terraform`, `diagnostics-terraform`). Each one copies the same targets and the same freshness script. The `opentofu` area is an Nx inference plugin. It gives the OpenTofu targets to each project that has environments. You list the plugin one time in `nx.json`. You do not copy the targets or the script.
+
+### Use the opentofu area
+
+You need Nx 23.2.1 or later and the `tofu` command on the `PATH`. Add the plugin to `plugins` in `nx.json`, after `@zukhruf/nx/format`:
+
+```json
+{
+  "plugins": ["@zukhruf/nx/format", "@zukhruf/nx/opentofu"]
+}
+```
+
+The order is necessary. Both plugins give `format` and `format:check`, and a later plugin wins the merge. In the other order, an OpenTofu project gets the Prettier targets.
+
+A workspace that builds this package lists the plugin by path, as zukhruf does for the other areas: `"./packages/nx/src/opentofu/plugin.ts"`.
+
+### Signature of the opentofu area
+
+```ts
+// @zukhruf/nx/opentofu
+export const createNodes: CreateNodes;
+```
+
+The plugin takes no options. The commands are the same in each of the 5 copies. The differences between the copies are of a different kind, and they stay with the project (see [Give the secrets](#give-the-secrets) and [Check that a saved plan is fresh](#check-that-a-saved-plan-is-fresh)).
+
+### Which projects get the OpenTofu targets
+
+An **environment** is a folder `src/environments/<name>` of a project root, with at least one `*.tf` file directly in it. Each environment is one OpenTofu root module, with its own state and its own saved plan. A project root gets the OpenTofu targets when it has at least one environment. The project roots are the same as for the other areas (see [ADR 0003](./docs/adr/0003-which-roots-get-targets.md)). A `*.tf` file belongs to its nearest project root.
+
+The plugin adds `**/src/environments/*/*.tf` to the files that it reads. Thus Nx runs the plugin again when an environment is added or removed.
+
+Each target that works on one environment has one configuration for each environment. The options select the **default environment**: `production` when it exists, else the first environment in name order. Select another environment with `-c`:
+
+```sh
+nx run authx-terraform:preview -c staging
+```
+
+A task dependency runs with the same configuration. Thus `preview -c staging` runs `init -c staging` first.
+
+### What each OpenTofu target runs
+
+| Target         | Command                                                                                                                                                 | `cwd`                                   | Cached | Depends on |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- | ------ | ---------- |
+| `format`       | `tofu fmt -recursive`                                                                                                                                   | `{projectRoot}/src`                     | no     | —          |
+| `format:check` | `tofu fmt -check -recursive`                                                                                                                            | `{projectRoot}/src`                     | yes    | —          |
+| `typecheck`    | for each environment: `tofu -chdir=environments/<name> init -backend=false -input=false -lockfile=readonly && tofu -chdir=environments/<name> validate` | `{projectRoot}/src`                     | yes    | —          |
+| `init`         | `tofu init -input=false`                                                                                                                                | `{projectRoot}/src/environments/<name>` | no     | —          |
+| `preview`      | `rm -f tfplan && tofu plan -out tfplan`                                                                                                                 | the environment                         | no     | `init`     |
+| `show`         | the freshness check, then `tofu show tfplan`                                                                                                            | the environment                         | no     | —          |
+| `output`       | `tofu output`                                                                                                                                           | the environment                         | no     | —          |
+
+- `format` writes. `format:check` and `typecheck` only read, as for each check ([ADR 0002](./docs/adr/0002-a-check-never-writes.md)).
+- The inputs of `format:check` and `typecheck` are `{projectRoot}/src/**/*.tf`, `{projectRoot}/src/**/*.hcl` and the output of `tofu version`. The provider lock file `.terraform.lock.hcl` is an `*.hcl` file. A new release of OpenTofu thus runs the checks again.
+- `typecheck` needs no secret. `init -backend=false` reads no state, and `validate` reads no variable value. CI can run it with no secret.
+- `typecheck` sets `TF_DATA_DIR=.terraform/validate`. Its `init` with no backend thus does not replace the working directory of the real `init`. text2sql already does this in its 4 projects.
+- `typecheck` reads the provider lock file and does not write it (`-lockfile=readonly`). When a provider is added or its version changes, `typecheck` stops: "Provider dependency changes detected". Run `nx run <project>:init`, which writes the lock file, and commit the lock file. A new hash for another platform does not stop it: OpenTofu suppresses only that write.
+- `typecheck` checks each environment. `-c` does not select one.
+- `init`, `preview`, `show` and `output` need the state passphrase (see [Give the secrets](#give-the-secrets)).
+- `preview` deletes the old plan first. A plan that fails thus leaves no plan for `show`.
+- `show` does not depend on `preview`. It shows the plan that `preview` saved, and it stops when that plan is not fresh (see [Check that a saved plan is fresh](#check-that-a-saved-plan-is-fresh)).
+- Arguments after `--` go to the last command. For example, `nx run infra:output -- -raw dokploy_api` runs `tofu output -raw dokploy_api`.
+
+The plugin gives no `apply` target, on purpose. CI applies: main is the wanted state, and the reusable workflow `tofu-apply.yml` applies it and commits the state. A person does not apply from a laptop. Two old targets also go: `plan` is the same as `preview`, and `validate` is in `typecheck`. `refresh` stays in the project that needs it, as an override. See [ADR 0007](./docs/adr/0007-opentofu-targets-from-environments-with-no-apply.md).
+
+### Give the secrets
+
+The state and the saved plans are encrypted. Each project reads the passphrase from the variable `tf_encryption_passphrase`. `init`, `preview`, `show` and `output` thus start with a guard. It stops the target when `TF_ENCRYPTION_PASSPHRASE` is empty or not set. Then the target gives the value to OpenTofu as `TF_VAR_tf_encryption_passphrase`.
+
+The plugin sets no `envFile`. Nx already loads the `.env` file of the project root for each task, and `.env.<configuration>` for a task with a configuration (`nx/dist/src/tasks-runner/task-env-paths.js`). A variable that the environment already sets wins. Thus put the secrets in `<projectRoot>/.env`, and keep that file out of Git. With no `.env` file, the target reads the environment only. An `envFile` that does not exist stops the task with an error (`nx/dist/src/executors/run-commands/running-tasks.js:553-558`).
+
+The other secrets are different in each project, so the plugin does not check them. OpenTofu reads each variable `<name>` from `TF_VAR_<name>`, and each provider reads its own token, for example `HCLOUD_TOKEN`. Give a variable with a different name in `.env`. Nx expands `${NAME}` in the file (`dotenv-expand`):
+
+```sh
+TF_ENCRYPTION_PASSPHRASE=…
+DOKPLOY_API_KEY=…
+HCLOUD_TOKEN=…
+TF_VAR_dokploy_api_key=${DOKPLOY_API_KEY}
+```
+
+When a variable has no value, OpenTofu asks for it, or stops with "No value for required variable". The copies checked each secret in the shell first. That check predicts the error that OpenTofu already gives.
+
+### Check that a saved plan is fresh
+
+`show` runs the freshness check first. The check is a Node script inside this package (`src/opentofu/check-plan-fresh.ts`). The plugin gives its path relative to the environment. The check stops `show` in two cases:
+
+- The environment has no `tfplan`. Run `preview` first.
+- A file of the project changed after `preview` wrote the plan. The message names the file.
+
+A **file of the project** is each file under the project root that Git tracks or does not ignore (`git ls-files --cached --others --exclude-standard`). A tracked file that was deleted counts as changed. A file named `tfplan` does not count. Thus the check sees each input of the plan in the project: the environment, the modules, the scripts, `project.json`, the provider lock file, the committed state, and a template such as `compose.dokploy.yml`. The `.terraform` folders, `.env` and the plans of the other environments are ignored by Git, so a new `init` does not make the plan stale.
+
+The copies listed the inputs by name, and the lists drifted: two copies did not list `src/modules`, and two listed a compose file outside the project root, `../compose.dokploy.yml`. Each project now keeps its plan inputs inside its root. Move a template that the configuration reads into the project root.
+
+The check needs Git. Outside a Git work tree, it stops with the error of Git. OpenTofu also refuses to apply a plan when the state changed after the plan. The check adds the files that OpenTofu does not compare.
+
+### Override an OpenTofu target
+
+A target in the `project.json` of a project replaces the inferred target, or merges into it. Nx applies the plugin first, then `targetDefaults`, then `project.json`. For example, a project that needs `refresh` adds it:
+
+```json
+{
+  "targets": {
+    "refresh": {
+      "command": ": \"${TF_ENCRYPTION_PASSPHRASE:?TF_ENCRYPTION_PASSPHRASE missing}\" && TF_VAR_tf_encryption_passphrase=\"$TF_ENCRYPTION_PASSPHRASE\" tofu refresh",
+      "options": { "cwd": "{projectRoot}/src/environments/production" }
+    }
+  }
+}
+```
+
+### Migrate a workspace to the opentofu area
+
+1. Add `@zukhruf/nx/opentofu` to `plugins` in `nx.json`, after `@zukhruf/nx/format`.
+2. Delete the targets that the plugin now gives from each OpenTofu project: `init`, `format`, `format:check`, `typecheck`, `preview`, `show` and `output`. Delete `plan`, `validate` and `apply`.
+3. Delete `scripts/check-plan-fresh.sh`.
+4. Move the secrets with a different name to `TF_VAR_<name>` in `<projectRoot>/.env`, for example `TF_VAR_dokploy_api_key=${DOKPLOY_API_KEY}` and, for authx, `TF_VAR_otlp_headers=${AUTHX_OTLP_HEADERS}`.
+5. Move a template that the configuration reads into the project root, for example `apps/v2/compose.dokploy.yml`.
+6. Run `nx run <project>:typecheck`. If it stops with "Provider dependency changes detected", run `nx run <project>:init` and commit the lock file.
+7. Compare `nx show project <project> --json` before and after.
+
+| Workspace     | Projects                                                                        | Changes                                                                                                                                                  |
+| ------------- | ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| whatisgoingon | `infra`                                                                         | `TF_VAR_dokploy_api_key` in `infra/.env`; `preview` no longer runs `typecheck` first, because `plan` validates the configuration                         |
+| text2sql      | `v2-terraform`, `authx-terraform`, `desktop-terraform`, `diagnostics-terraform` | `init` no longer depends on `typecheck`; the compose files of v2 and authx move into the project roots; authx keeps its 2 environments as configurations |
+
+### Who uses the opentofu area
+
+| Workspace     | Backlog item |
+| ------------- | ------------ |
+| whatisgoingon | #4612        |
+| text2sql      | #4613        |
+| meddit        | #4608        |
+
+The backlog item of the area is #3339.
+
+## prisma
+
+> Status: shipped (#3339).
+
+Six projects in two workspaces run Prisma through Nx: `@factory/db` of factory, and five projects of text2sql (`v2-db`, `authx-db`, `desktop-db`, `db` and `@workspace/amail`). Each one copies a cached `generate` target, and five also copy the migrate targets. The `prisma` area is an Nx inference plugin. It gives the Prisma targets to each project with a `prisma.config.ts`. You list the plugin one time in `nx.json`.
+
+### Use the prisma area
+
+You need Nx 23.2.1 or later, and `prisma` and `@prisma/client` in the lockfile. Add the plugin to `plugins` in `nx.json`. Then add `generate` to the `dependsOn` of `typecheck` and `build` in `targetDefaults`:
+
+```jsonc
+{
+  "plugins": ["@zukhruf/nx/prisma"],
+  "targetDefaults": {
+    "typecheck": {
+      "dependsOn": ["lint", "format:check", "generate", "..."],
+    },
+    "build": {
+      "dependsOn": ["generate", "..."],
+    },
+  },
+}
+```
+
+Keep the entries that are already in the lists. Nx skips a `dependsOn` on a target that the project does not have, so a project with no Prisma is not changed. The plugin does not change `typecheck` or `build`. Those targets belong to other plugins, as for `format:check` ([ADR 0001](./docs/adr/0001-inferred-targets-not-copied-defaults.md)). The `typecheck:generate` tag of text2sql is then not necessary. See [ADR 0008](./docs/adr/0008-prisma-targets-from-prisma-config-with-outputs-from-the-schema.md).
+
+### Signature of the prisma area
+
+```ts
+// @zukhruf/nx/prisma
+export const createNodes: CreateNodes;
+```
+
+The plugin takes no options. The commands are the same in each copy. The output folder of `generate` is different in each project, and the schema already gives it.
+
+### Which projects get the Prisma targets
+
+A project root gets the Prisma targets when it has a `prisma.config.ts` directly in it. Prisma 7 reads its config from that file. The project roots are the same as for the other areas (see [ADR 0003](./docs/adr/0003-which-roots-get-targets.md)). The plugin also reads the `*.prisma` files of the project. A `*.prisma` file belongs to its nearest project root.
+
+### What each Prisma target runs
+
+Each target runs in `{projectRoot}`.
+
+| Target     | Command                 | Cached | Depends on |
+| ---------- | ----------------------- | ------ | ---------- |
+| `generate` | `prisma generate`       | yes    | —          |
+| `migrate`  | `prisma migrate dev`    | no     | `generate` |
+| `deploy`   | `prisma migrate deploy` | no     | —          |
+| `reset`    | `prisma migrate reset`  | no     | —          |
+| `pull`     | `prisma db pull`        | no     | —          |
+
+- The inputs of `generate` are `{projectRoot}/**/*.prisma`, `{projectRoot}/prisma.config.ts`, and the packages `prisma` and `@prisma/client` (`externalDependencies`). Thus a new model file in `models/` runs `generate` again, and an update of Prisma does too. The copies had the whole `package-lock.json` as an input, so each update of any package ran `generate` again.
+- The outputs of `generate` are the `output` folders of the `generator` blocks in the `*.prisma` files of the project. A path is relative to the file of its block, as Prisma reads it. For example, `output = "src/prisma"` in `schema.prisma` gives `{projectRoot}/src/prisma`. Nx restores these folders from the cache.
+- When a `generator` block has no `output`, Prisma writes into `node_modules`. The plugin then gives `generate` with no cache, because Nx cannot restore that folder.
+- `migrate`, `reset` and `pull` change the database or the schema. Run them on purpose. No target depends on them.
+- Prisma reads the connection string. `prisma.config.ts` reads it from the environment, and Nx loads the `.env` file of the project root for each task.
+
+text2sql also has a target `prisma` that runs the Prisma CLI with the arguments that you give. It stays in each project that wants it.
+
+### Migrate a workspace to the prisma area
+
+1. Add `@zukhruf/nx/prisma` to `plugins` in `nx.json`.
+2. Add `generate` to `targetDefaults.typecheck.dependsOn` and `targetDefaults.build.dependsOn`.
+3. Delete `generate`, `migrate`, `deploy`, `reset` and `pull` from each Prisma project, and the `typecheck` entry that only adds `generate`.
+4. Delete the `typecheck:generate` tag and its `targetDefaults` filter.
+5. Compare `nx show project <project> --json` before and after.
+
+| Workspace | Projects                                      | Changes                                                                                                                       |
+| --------- | --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| factory   | `@factory/db`                                 | the project gets `reset` and `pull`; `build` gets `generate` from `targetDefaults`                                            |
+| text2sql  | `v2-db`, `authx-db`, `desktop-db`, `db`       | `migrate` depends on `generate`, not on `build`; `desktop-db` gets `deploy`; `bundle` keeps its own `dependsOn` on `generate` |
+| text2sql  | `@workspace/amail` (`tools/playground/amail`) | it has a `prisma.config.ts`, so it gets the targets too; its `generate` in `package.json` goes; the output is `prisma/client` |
+
+### Who uses the prisma area
+
+| Workspace | Backlog item |
+| --------- | ------------ |
+| factory   | #4611        |
+| text2sql  | #4613        |
+| meddit    | #4607        |
+
+The backlog item of the area is #3339.

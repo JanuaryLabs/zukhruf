@@ -1,6 +1,6 @@
 # Nx
 
-This package is the Nx part of the monorepo standard. Each area gives one part of the Nx configuration that the workspaces copied. The `format` area gives each project two targets: one that writes the files with Prettier, and one that only reads them. No workspace copies them. A check target never writes. The `test` area gives the test target to each project that owns test files. The `lint` area adds the lint packages to the inputs of the lint target.
+This package is the Nx part of the monorepo standard. Each area gives one part of the Nx configuration that the workspaces copied. The `format` area gives each project two targets: one that writes the files with Prettier, and one that only reads them. No workspace copies them. A check target never writes. The `test` area gives the test target to each project that owns test files. The `lint` area adds the lint packages to the inputs of the lint target. The `opentofu` area gives the OpenTofu targets to each project with environments. The `prisma` area gives the Prisma targets to each project with a `prisma.config.ts`.
 
 ## Language
 
@@ -71,3 +71,23 @@ _Avoid_: Lint dependency, eslint plugin (that is one kind of lint package)
 **Lockfile edge**:
 A link from a package to a name in its `dependencies`, `peerDependencies` or `optionalDependencies`, as Nx reads it from the lockfile. An input on one package hashes all the packages that its edges reach.
 _Avoid_: Transitive dependency (an edge can be a peer)
+
+**Environment**:
+A folder `src/environments/<name>` of a project root with at least one `*.tf` file directly in it. It is one OpenTofu root module, with its own state and its own saved plan. Each environment is a configuration of the OpenTofu targets that work on one environment. The default environment is `production`, else the first environment by name.
+_Avoid_: Stage, workspace (an OpenTofu workspace is a different thing), stack
+
+**Saved plan**:
+The file `tfplan` that `preview` writes in an environment, with `tofu plan -out tfplan`. `show` shows it. It is encrypted with the state passphrase.
+_Avoid_: Plan file, plan output
+
+**Freshness check**:
+The Node script of the `opentofu` area that `show` runs first. It stops when the environment has no saved plan, or when a file of the project changed after the plan. A file of the project is one that Git tracks or does not ignore.
+_Avoid_: Stale check, plan guard
+
+**Passphrase guard**:
+The start of each OpenTofu target that reads the encrypted state: it stops when `TF_ENCRYPTION_PASSPHRASE` is empty or not set, then gives the value as `TF_VAR_tf_encryption_passphrase`. The checks have no guard.
+_Avoid_: Secret check, env check
+
+**Generate target**:
+The target `generate` that the `prisma` area gives. It runs `prisma generate` in the project root. Nx caches it on the `*.prisma` files, `prisma.config.ts` and the Prisma packages, and restores the `output` folders of the generator blocks. `typecheck` and `build` depend on it through `targetDefaults`.
+_Avoid_: Codegen target, prisma target (text2sql has a different target with that name)
