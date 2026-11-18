@@ -11,8 +11,9 @@ interface BuildOptions {
   readonly targets?: readonly string[];
   // The number of tasks that nx runs at the same time.
   readonly parallel?: number;
-  // More environment variables for nx, and never for npm: with
-  // NODE_ENV=production, npm does not install the devDependencies.
+  // More environment variables for nx, over NODE_ENV=production. They never
+  // reach npm: with NODE_ENV=production, npm does not install the
+  // devDependencies.
   readonly env?: Readonly<Record<string, string>>;
 }
 
@@ -32,11 +33,12 @@ type Built =
   | { readonly kind: 'built'; readonly line: string }
   | { readonly kind: 'failed'; readonly lines: readonly string[] };
 
-// Builds each pushed commit with the production configuration of nx, in a
-// snapshot of the commit, never in the working tree: an edit that is not
-// committed is not in the push, so it cannot stop a good push or hide a
-// broken one. A commit is built one time, also when the push sends it to more
-// than one ref, and only when the remote does not have it.
+// Builds each pushed commit with the production configuration of nx and
+// NODE_ENV=production, in a snapshot of the commit, never in the working
+// tree: an edit that is not committed is not in the push, so it cannot stop a
+// good push or hide a broken one. A commit is built one time, also when the
+// push sends it to more than one ref, and only when the remote does not have
+// it.
 export class Build extends Step<Push> {
   readonly name = 'build';
   readonly #targets: readonly string[];
@@ -47,7 +49,7 @@ export class Build extends Step<Push> {
     super();
     this.#targets = targets;
     this.#parallel = parallel;
-    this.#env = env;
+    this.#env = { NODE_ENV: 'production', ...env };
   }
 
   async run(push: Push): Promise<Outcome> {

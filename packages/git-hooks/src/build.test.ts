@@ -45,6 +45,7 @@ function start(
 // error lines when the file that it reads holds BROKEN, and also when it does
 // not run with the production configuration. c's lint passes only with
 // PROBE_ENV=yes. With PROBE_RECORD, a build writes its folder there. With
+// PROBE_NODE_ENV, a build writes its NODE_ENV there, or `unset`. With
 // PROBE_FOLDERS, a build adds a line to that file: its folder, a tab, and the
 // earlier folders of the file that still exist, out of other snapshots. With
 // PROBE_GATE, b's build waits for a write to the file `<gate>.release`, and then
@@ -69,6 +70,7 @@ if (configuration !== 'production') {
   process.exit(5);
 }
 if (process.env.PROBE_RECORD) writeFileSync(process.env.PROBE_RECORD, process.cwd());
+if (process.env.PROBE_NODE_ENV) writeFileSync(process.env.PROBE_NODE_ENV, process.env.NODE_ENV ?? 'unset');
 const folders = process.env.PROBE_FOLDERS;
 if (folders) {
   const snapshotOf = (path) => path.slice(0, path.indexOf('/tree'));
@@ -478,6 +480,79 @@ await prePush([new Build({ targets: ['lint', 'build'], parallel: 1, env: { PROBE
       'm',
     ),
   );
+});
+
+test('Build without env builds with NODE_ENV=production', async () => {
+  // Arrange
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
+  const repo = await workspace(folder.path, build);
+  await repo.commit('first');
+  const record = join(repo.top, 'node-env');
+
+  // Act
+  const result = await start(
+    repo,
+    { PROBE_NODE_ENV: record },
+    '--quiet',
+    'origin',
+    'main',
+  ).exited;
+
+  // Assert
+  assert.equal(result.code, 0, result.stderr);
+  assert.equal(await readFile(record, 'utf8'), 'production');
+});
+
+test('Build with an env that has no NODE_ENV builds with NODE_ENV=production', async () => {
+  // Arrange
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
+  const repo = await workspace(
+    folder.path,
+    `import { Build, prePush } from '@zukhruf/git-hooks';
+await prePush([new Build({ env: { PROBE_ENV: 'yes' } })]);
+`,
+  );
+  await repo.commit('first');
+  const record = join(repo.top, 'node-env');
+
+  // Act
+  const result = await start(
+    repo,
+    { PROBE_NODE_ENV: record },
+    '--quiet',
+    'origin',
+    'main',
+  ).exited;
+
+  // Assert
+  assert.equal(result.code, 0, result.stderr);
+  assert.equal(await readFile(record, 'utf8'), 'production');
+});
+
+test('the NODE_ENV of env wins over NODE_ENV=production', async () => {
+  // Arrange
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
+  const repo = await workspace(
+    folder.path,
+    `import { Build, prePush } from '@zukhruf/git-hooks';
+await prePush([new Build({ env: { NODE_ENV: 'development' } })]);
+`,
+  );
+  await repo.commit('first');
+  const record = join(repo.top, 'node-env');
+
+  // Act
+  const result = await start(
+    repo,
+    { PROBE_NODE_ENV: record },
+    '--quiet',
+    'origin',
+    'main',
+  ).exited;
+
+  // Assert
+  assert.equal(result.code, 0, result.stderr);
+  assert.equal(await readFile(record, 'utf8'), 'development');
 });
 
 test('a second push gets its unchanged tasks from the nx cache of the state folder, and the .nx folder of the working tree stays absent', async () => {

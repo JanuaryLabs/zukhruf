@@ -397,7 +397,7 @@ Git gives the hook the name and the URL of the remote, and one line for each ref
 
 ## Build the pushed commits
 
-`Build` builds each pushed commit with the production configuration of nx. It does not build the working tree. Another session can edit the working tree while you push. An edit that is not committed is not in the push, so it cannot stop a good push, and it cannot hide a broken one.
+`Build` builds each pushed commit with the production configuration of nx and with `NODE_ENV=production`. It does not build the working tree. Another session can edit the working tree while you push. An edit that is not committed is not in the push, so it cannot stop a good push, and it cannot hide a broken one.
 
 ```ts
 import { Build, prePush } from '@zukhruf/git-hooks';
@@ -406,16 +406,15 @@ await prePush([
   new Build({
     targets: ['lint', 'build'],
     parallel: 1,
-    env: { NODE_ENV: 'production' },
   }),
 ]);
 ```
 
 - `targets` are the nx targets to run on all projects. The default is `['build']`.
 - `parallel` is the number of tasks that nx runs at the same time. Without it, nx uses its own default.
-- `env` holds more environment variables for nx.
+- `env` holds more environment variables for nx. nx gets `NODE_ENV=production` also when `env` does not name it. A `NODE_ENV` in `env` replaces `production`.
 
-Build runs `nx run-many` with `--configuration=production` and with `NX_DAEMON=false`. `env` goes to nx only, never to `npm ci`: with `NODE_ENV=production`, npm does not install the devDependencies. Build builds each pushed commit one time, also when the push sends it to more than one ref. Build gives one line for each pushed commit: built, skipped or failed. Each line names the commit:
+Build runs `nx run-many` with `--configuration=production`, with `NX_DAEMON=false` and with `NODE_ENV=production`. `NODE_ENV` and `env` go to nx only, never to `npm ci`: with `NODE_ENV=production`, npm does not install the devDependencies. Build builds each pushed commit one time, also when the push sends it to more than one ref. Build gives one line for each pushed commit: built, skipped or failed. Each line names the commit:
 
 ```text
 build     a1b2c3d: built 19 projects, 17 of 20 tasks from cache
