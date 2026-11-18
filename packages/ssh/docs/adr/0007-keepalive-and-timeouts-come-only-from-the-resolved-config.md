@@ -20,7 +20,7 @@ The package has no keepalive and no timeout of its own. The connect timeout and 
 
 - `ClientConfig.connectTimeout`, in milliseconds, is OpenSSH's `ConnectTimeout`. It limits the TCP connect, the banner exchange and the key exchange. It ends when the key exchange ends (ssh2's `handshake` event), so the authentication has no limit, as in OpenSSH. It runs on the clock of the config ([ADR 0008](./0008-the-environment-and-the-clock-are-inputs.md)). When it passes, the dial rejects with a `TimeoutError`, as `timeout` of `@zukhruf/async` gives it. Without a value, no limit applies.
 - The package sets `readyTimeout: 0` on ssh2, so ssh2's 20 s limit never applies.
-- `ClientConfig.keepalive`, `{ interval, countMax }` in milliseconds and a count, is OpenSSH's `ServerAliveInterval` and `ServerAliveCountMax`. The package gives it to ssh2 as `keepaliveInterval` and `keepaliveCountMax`. Without a value, the client sends no keepalive.
+- `ClientConfig.keepalive`, `{ interval, countMax }` in milliseconds and a count, is OpenSSH's `ServerAliveInterval` and `ServerAliveCountMax`. The package runs it on the clock of the config, with OpenSSH's semantics: a check is due an interval after the last data from the server (`clientloop.c`, `server_alive_check`), and it does not use ssh2's `keepaliveInterval` (changed 2026-11-18: ssh2's timer ran on the global `setInterval` and sent a request at each interval, also when data came). Without a value, the client sends no keepalive.
 - `@zukhruf/ssh/config` maps `connecttimeout` (seconds, or `none`) and `serveraliveinterval` (seconds, `0` for none) with `serveralivecountmax`. It adds nothing when the config and the flags set nothing.
 - After the start, a call has no time limit. The caller gives a signal to each call that waits.
 
@@ -34,5 +34,5 @@ The package has no keepalive and no timeout of its own. The connect timeout and 
 ## Consequences
 
 - Without a keepalive, a connection to a machine that stops answering hangs a call until its signal aborts, as with OpenSSH. Docker ADR 0010 measured this for the old transport: `docker.info()` was still pending after 90 s.
-- With a keepalive, ssh2 ends the connection about `interval × (countMax + 1)` after the last answer of the server. Each open channel then ends with an error whose `cause` is the error that ended the connection, and `client.wait()` rejects with it.
-- The keepalive timer is ssh2's own `setInterval`, not the clock of the config. [Root ADR 0004](../../../../docs/adr/0004-a-library-that-waits-takes-the-clock-as-an-input.md) puts a timer inside a third-party package outside our code. A test therefore proves the keepalive on real time, with a short interval and a paused server, and proves the connect timeout on a fake clock.
+- With a keepalive, the client ends the connection `interval × (countMax + 1)` after the last data from the server. Each open channel then ends with an error whose `cause` is the error that ended the connection, and `client.wait()` rejects with it.
+- The keepalive timer runs on the clock of the config, as root ADR 0004 asks, so a test moves it with a fake clock.

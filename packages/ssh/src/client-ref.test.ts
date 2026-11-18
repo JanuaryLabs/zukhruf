@@ -328,6 +328,35 @@ test(
 );
 
 test(
+  'over a stream of the caller, the keepalive timers that come after unref() stay unref’d: the owner exits after two more keepalive replies',
+  { skip: noSshd },
+  async (t) => {
+    // Arrange
+    await using sshd = await startSshd();
+    await using owner = await startOwner(
+      [
+        'handshake',
+        String(sshd.port),
+        sshd.userKey,
+        '--keepalive',
+        '50',
+        '--replies-after-unref',
+        '2',
+      ],
+      t.signal,
+    );
+
+    // Act
+    owner.unref();
+    const exit = await owner.exited(t.signal);
+
+    // Assert
+    assert.deepEqual(owner.reports, ['idle', 'unrefed', 'exiting']);
+    assert.deepEqual(exit, { code: 0, signal: null });
+  },
+);
+
+test(
   'with a connectTimeout, the owner exits after unref(): no timer of the connect holds the process',
   { skip: noSshd },
   async (t) => {

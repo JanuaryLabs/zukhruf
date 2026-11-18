@@ -426,22 +426,25 @@ test(
 );
 
 test(
-  'keepalive ends a connection to a server that stops answering, and wait() rejects with the keepalive error',
+  'keepalive ends a connection to a server that stops answering, on the clock of the config, and wait() rejects with the keepalive error',
   { skip: noSshd },
   async () => {
     // Arrange
     await using sshd = await startSshd();
     const key = PrivateKey.parse(await readFile(sshd.userKey));
+    const clock = createClock();
     await using client = await Client.dial(`127.0.0.1:${sshd.port}`, {
       user: userInfo().username,
       auth: [{ type: 'publickey', signers: async () => [key] }],
       hostKey: () => undefined,
-      clock: createClock(),
+      clock,
       keepalive: { interval: 100, countMax: 1 },
     });
 
     // Act
     sshd.kill('SIGSTOP');
+    await nextMacrotask();
+    await clock.tickAsync(2 * 100);
 
     // Assert
     await assert.rejects(client.wait(), /keepalive/i);

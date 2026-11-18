@@ -8,6 +8,7 @@
 //     [--connect-timeout <ms>] [--session] [--unref-then-ref]
 //     [--session-after-unref]
 //   node ref-owner.ts handshake <sshd port> <user key path> --keepalive <ms>
+//     [--replies-after-unref <count>]
 //   node ref-owner.ts config <ssh config file> <destination> <home>
 //
 // dial: Client.dial. --session runs a command before `idle`; --unref-then-ref
@@ -19,6 +20,9 @@
 // after the handshake. With no session, the server sends only its host keys
 // (hostkeys-00@openssh.com) and the replies to keepalives after it, so a
 // keepalive reply has come. At `unref` it unrefs its socket too.
+// --replies-after-unref keeps its IPC channel ref'd after client.unref() until
+// that many more chunks came, the replies to keepalives that went out after
+// unref(), before `unrefed`.
 // config: OpenSshConfig#dial, with only PATH and `home` as HOME.
 import { once } from 'node:events';
 import { readFile } from 'node:fs/promises';
@@ -38,6 +42,7 @@ const { values, positionals } = parseArgs({
     session: { type: 'boolean', default: false },
     'unref-then-ref': { type: 'boolean', default: false },
     'session-after-unref': { type: 'boolean', default: false },
+    'replies-after-unref': { type: 'string' },
   },
 });
 const [route, ...args] = positionals;
@@ -79,7 +84,11 @@ async function dial(port: string, userKey: string): Promise<Client> {
 async function handshake(
   port: string,
   userKey: string,
-): Promise<{ client: Client; socket: { unref(): void } }> {
+): Promise<{
+  client: Client;
+  socket: { unref(): void };
+  chunks: (count: number) => Promise<void>;
+}> {
   const socket = connect(Number(port), '127.0.0.1');
   await once(socket, 'connect');
   const stream = new Duplex({
@@ -97,14 +106,20 @@ async function handshake(
     `127.0.0.1:${port}`,
     await directConfig(userKey),
   );
-  const replied = Promise.withResolvers<void>();
-  let chunks = 0;
-  stream.on('data', () => {
-    chunks += 1;
-    if (chunks === 3) replied.resolve();
-  });
-  await replied.promise;
-  return { client, socket };
+  const chunks = (count: number): Promise<void> => {
+    const came = Promise.withResolvers<void>();
+    let seen = 0;
+    const onData = (): void => {
+      seen += 1;
+      if (seen < count) return;
+      stream.off('data', onData);
+      came.resolve();
+    };
+    stream.on('data', onData);
+    return came.promise;
+  };
+  await chunks(3);
+  return { client, socket, chunks };
 }
 
 async function viaConfig(
@@ -122,6 +137,7 @@ async function viaConfig(
 async function start(): Promise<{
   client: Client;
   socket?: { unref(): void };
+  chunks?: (count: number) => Promise<void>;
 }> {
   const [first, second, third] = args;
   if (first === undefined || second === undefined) {
@@ -140,13 +156,20 @@ async function start(): Promise<{
   }
 }
 
-const { client, socket } = await start();
+const { client, socket, chunks } = await start();
 async function unref(): Promise<void> {
   socket?.unref();
   client.unref();
   if (values['session-after-unref']) {
     process.channel?.ref();
     await client.newSession().run('true');
+    process.channel?.unref();
+  }
+  const replies = values['replies-after-unref'];
+  if (replies !== undefined) {
+    if (chunks === undefined) throw new Error('only handshake counts replies');
+    process.channel?.ref();
+    await chunks(Number(replies));
     process.channel?.unref();
   }
   send('unrefed');

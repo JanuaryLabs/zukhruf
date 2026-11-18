@@ -5,7 +5,7 @@ Two zukhruf rules apply to a base package:
 - A library that waits on a timer or reads the time takes the clock as a required input, with no default ([root ADR 0004](../../../../docs/adr/0004-a-library-that-waits-takes-the-clock-as-an-input.md)). The lint rule `island/no-ambient-time` of `@zukhruf/eslint` reports a direct read of the time (`packages/eslint/src/island/plugin.ts:76`).
 - An island reads no `process.env`. The host program gives its environment as an option (the rule `island/no-process-env` of `@zukhruf/eslint`). `@zukhruf/docker` takes `environment` this way ([docker ADR 0002](../../../docker/docs/adr/0002-the-engine-is-the-one-that-the-docker-cli-selects.md)).
 
-The package waits on a timer in one place of its own: the connect timeout ([ADR 0007](./0007-keepalive-and-timeouts-come-only-from-the-resolved-config.md)). It needs the environment in `@zukhruf/ssh/config`:
+The package waits on timers of its own in two places: the connect timeout and the keepalive ([ADR 0007](./0007-keepalive-and-timeouts-come-only-from-the-resolved-config.md)). It needs the environment in `@zukhruf/ssh/config`:
 
 - `ssh -G` reads `HOME`, `USER` and the variables that a `Match exec` or a `%` token uses ([ADR 0004](./0004-openssh-resolves-the-config-through-ssh-g.md)).
 - The agent socket is `SSH_AUTH_SOCK` when `IdentityAgent` is absent or names that variable. ssh2 never reads `SSH_AUTH_SOCK` itself.
@@ -32,5 +32,5 @@ The clock and the environment are inputs. The package reads neither from its pro
 ## Consequences
 
 - A test runs two clients with two agents, or two homes, in one process.
-- A test moves the connect timeout with a fake clock. The keepalive timer is ssh2's own, and it runs on real time ([ADR 0007](./0007-keepalive-and-timeouts-come-only-from-the-resolved-config.md)).
+- A test moves the connect timeout and the keepalive with a fake clock ([ADR 0007](./0007-keepalive-and-timeouts-come-only-from-the-resolved-config.md)).
 - `@zukhruf/docker` gives the environment that it already takes. When its caller gave none, docker gives an empty one, and `ssh -G` fails or finds no agent. That is docker's rule to state at its boundary.

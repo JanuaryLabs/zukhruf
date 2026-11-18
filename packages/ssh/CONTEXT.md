@@ -74,7 +74,7 @@ A process that carries a connection for its owner and can outlive it, such as an
 _Avoid_: Sidecar, child (any child), watchdog (a second process that kills the first)
 
 **Keepalive**:
-A `keepalive@openssh.com` global request that the client sends at each interval, also when data came from the server. The count of requests with no answer resets only on an answer to a keepalive, or on the success or failure of a channel request, and not on other data (ssh2 1.17.0, `client.js:646`, `:656`, `:735-742`). After `countMax` requests with no answer, the client ends the connection. OpenSSH's `ServerAliveInterval` and `ServerAliveCountMax`, but OpenSSH sends a request only after an interval with no data from the server (`client_process_net_input` in `clientloop.c`).
+A `keepalive@openssh.com` global request that the client sends after an interval with no data from the server, as OpenSSH's `ServerAliveInterval` (`server_alive_check` in OpenSSH's `clientloop.c`). Any data from the server resets the count of requests with no answer; when the count passes `countMax`, the connection ends. It runs on the clock of the client config.
 _Avoid_: Heartbeat, ping, TCP keepalive (a socket option of the kernel)
 
 **Connect timeout**:

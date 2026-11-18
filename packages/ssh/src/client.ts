@@ -25,6 +25,7 @@ import {
   type RemoteListener,
   createRemoteListener,
 } from './remote-listener.ts';
+import { ServerAliveCheck } from './server-alive-check.ts';
 import {
   type Exit,
   type Pty,
@@ -40,7 +41,7 @@ import {
   agentForwardingOptions,
   requestAgentForwardingOnEachSession,
 } from './ssh2-agent-forwarding.ts';
-import { followKeepalive } from './ssh2-keepalive.ts';
+import { sendKeepaliveRequest } from './ssh2-keepalive-request.ts';
 
 /** Go's ssh.ClientConfig. */
 export interface ClientConfig {
@@ -172,6 +173,7 @@ export class Client implements AsyncDisposable {
   >();
   readonly #agentForwarding: AgentForwarding | undefined;
   readonly #handles: Handle[];
+  readonly #serverAlive: ServerAliveCheck | undefined;
   #phase: ConnectionPhase = connected;
   #restriction: Error | undefined;
   #owned: Client | undefined;
@@ -196,13 +198,31 @@ export class Client implements AsyncDisposable {
     config: ClientConfig,
     serverVersion: string,
     agentForwarding: AgentForwarding | undefined,
-    transport: Handle | undefined,
+    address: string,
+    transport: Transport,
   ) {
     this.#connection = connection;
     this.#agentForwarding = agentForwarding;
+    this.#serverAlive =
+      config.keepalive === undefined
+        ? undefined
+        : new ServerAliveCheck(
+            config.clock,
+            config.keepalive,
+            transport.stream,
+            () => sendKeepaliveRequest(connection),
+            () => {
+              this.#end(
+                new Error(
+                  `ssh: keepalive timeout, server ${address} not responding`,
+                ),
+              );
+              transport.stream.destroy();
+            },
+          );
     this.#handles = [
-      ...(transport === undefined ? [] : [transport]),
-      ...(config.keepalive === undefined ? [] : [followKeepalive(connection)]),
+      ...(transport.owned === undefined ? [] : [transport.owned]),
+      ...(this.#serverAlive === undefined ? [] : [this.#serverAlive]),
     ];
     this.#sessionEnv = config.sessionEnv ?? {};
     this.user = config.user;
@@ -227,6 +247,7 @@ export class Client implements AsyncDisposable {
   }
 
   #end(cause: Error): void {
+    this.#serverAlive?.stop();
     if (this.#phase === connected) this.#phase = { cause };
     this.#ended.reject(cause);
   }
@@ -279,7 +300,8 @@ export class Client implements AsyncDisposable {
     );
     const abort = signals.length === 0 ? undefined : AbortSignal.any(signals);
 
-    const { stream: transport, owned } = open();
+    const opened = open();
+    const transport = opened.stream;
     const connection = new ssh2.Client();
     const started = Promise.withResolvers<Client>();
     let agentForwarding: AgentForwarding | undefined;
@@ -319,7 +341,8 @@ export class Client implements AsyncDisposable {
           config,
           serverVersion.value(),
           agentForwarding,
-          owned,
+          address,
+          opened,
         ),
       );
     });
@@ -344,12 +367,6 @@ export class Client implements AsyncDisposable {
         authenticate.next(methodsLeft, next),
       readyTimeout: 0,
       strictVendor: false,
-      ...(config.keepalive === undefined
-        ? {}
-        : {
-            keepaliveInterval: config.keepalive.interval,
-            keepaliveCountMax: config.keepalive.countMax,
-          }),
       ...(config.agentForwarding &&
         agentForwardingOptions(config.agentForwarding)),
     });
@@ -512,6 +529,7 @@ export class Client implements AsyncDisposable {
   /** Sends SSH_MSG_DISCONNECT and closes the transport, then the client of each jump host before it. A later call waits for the same close. */
   async close(): Promise<void> {
     if (this.#phase === connected) this.#phase = closedByCaller;
+    this.#serverAlive?.stop();
     this.#ended.resolve();
     this.#connection.end();
     await this.#closed.wait();

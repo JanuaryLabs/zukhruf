@@ -1117,7 +1117,7 @@ test(
 );
 
 test(
-  'ServerAliveInterval ends a connection to a server that stops answering, and wait() rejects with the keepalive error',
+  'ServerAliveInterval ends a connection to a server that stops answering, on the clock of the dial, and wait() rejects with the keepalive error',
   { skip: noSsh },
   async (t) => {
     // Arrange
@@ -1134,13 +1134,13 @@ test(
       ]),
       { PATH: '/usr/bin:/bin', HOME: directory.path },
     );
-    await using client = await config.dial({
-      clock: createClock(),
-      signal: t.signal,
-    });
+    const clock = createClock();
+    await using client = await config.dial({ clock, signal: t.signal });
 
     // Act
     sshd.kill('SIGSTOP');
+    await nextMacrotask();
+    await clock.tickAsync(2 * 1000);
 
     // Assert
     await assert.rejects(client.wait(), /keepalive/i);

@@ -21,7 +21,7 @@ ssh2 is the library of docker-modem, so dockerode and Testcontainers for Node.js
 - A transport that the caller gives: the `sock` option (`client.js:290`). A jump host and a ProxyCommand need it.
 - Agent auth from a socket path or an agent object (`client.js:219-222`). ssh2 never reads `SSH_AUTH_SOCK` itself.
 - A host key callback, `hostVerifier`, with an asynchronous form (`client.js:273-288`).
-- Keepalive through `keepaliveInterval` and `keepaliveCountMax` (`client.js:133-140`; `sendKA` at `client.js:716-734`, its `setInterval` at `:740`), and `readyTimeout` (`client.js:141-144`, `:1112-1118`).
+- The keepalive request (`_protocol.ping()`, `client.js:501-508`; the package runs the timer itself on its clock, ADR 0007), and `readyTimeout` (`client.js:141-144`, `:1112-1118`).
 - A server: `Server` (`server.js:217`), and `injectSocket` for a transport that the caller accepted (`server.js:361`).
 - Its types are `@types/ssh2` 1.15.6 on DefinitelyTyped.
 
