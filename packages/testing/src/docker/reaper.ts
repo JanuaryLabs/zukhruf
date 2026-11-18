@@ -394,9 +394,9 @@ done
  * the folder of the engine's host that holds the host directories, and the
  * engine creates that folder when its host has none, as the host of an engine
  * that a relay reaches does not: the run's engine objects do not wait for its
- * directories (ADR 0023). It has no restart policy
- * and no AutoRemove: the reaper sets its policy once it verified its socket,
- * and removes itself at its end.
+ * directories (ADR 0023). It has no restart policy and no AutoRemove: the
+ * reaper sets its policy once it verified its socket, and removes itself at
+ * its end.
  */
 export function reaperRequest(
   runId: string,
