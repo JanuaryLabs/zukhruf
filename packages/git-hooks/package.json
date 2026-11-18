@@ -73,6 +73,7 @@
     "@zukhruf/testing": "^0.8.31",
     "eslint": "^10.12.0",
     "jsonc-eslint-parser": "^3.3.0",
-    "prettier": "^3.9.9"
+    "prettier": "^3.9.9",
+    "yaml-eslint-parser": "^2.1.0"
   }
 }

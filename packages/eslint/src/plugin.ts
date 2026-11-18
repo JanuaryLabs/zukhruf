@@ -6,6 +6,7 @@ import { betterAuth } from './better-auth/config.ts';
 import type { Concept } from './concept.ts';
 import { diagnostics } from './diagnostics/config.ts';
 import { env } from './environment/config.ts';
+import { githubActions } from './github-actions/config.ts';
 import { hono } from './hono/config.ts';
 import { nxProjectJson } from './nx-project/config.ts';
 import { packagedApp } from './packaged-app/config.ts';
@@ -30,6 +31,7 @@ const concepts: Concept[] = [
   pulumi,
   nxProjectJson,
   tsconfig,
+  githubActions,
 ];
 
 const configs: Record<string, Linter.Config[]> = {};

@@ -87,6 +87,7 @@ export default defineConfig(
       'zukhruf/diagnostics',
       'zukhruf/nx-project-json',
       'zukhruf/tsconfig',
+      'zukhruf/github-actions',
       'island/recommended',
       'manifest/recommended',
     ],
@@ -147,6 +148,12 @@ export default defineConfig(
         },
       ],
     },
+  },
+  // The setup-workspace action is the one place that installs the workspace
+  // with actions/setup-node and `npm ci`: every other job calls it.
+  {
+    files: ['.github/actions/setup-workspace/action.yml'],
+    rules: { 'zukhruf/no-manual-workspace-install': 'off' },
   },
   // No project holds the lockfile, so CI lints it in its own step.
   {

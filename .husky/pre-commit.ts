@@ -11,6 +11,7 @@ import {
   NpmrcPolicy,
   OneRuntimeCopy,
   Sync,
+  WorkflowChecks,
   preCommit,
 } from '@zukhruf/git-hooks';
 
@@ -33,5 +34,6 @@ await preCommit([
   new InstallScriptsReviewed(),
   new DockerfileInstallsFromLockfile(),
   new DependencyChecks(),
+  new WorkflowChecks(),
   new ReadmeTable(),
 ]);

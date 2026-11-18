@@ -49,10 +49,10 @@ jobs:
         background: true
         run: npx prettier --check .
 
-      # No Nx project holds these two files, so nx affected never lints them.
-      - name: Lint the root package.json and the lockfile
+      # No Nx project holds these files, so nx affected never lints them.
+      - name: Lint the root package.json, the lockfile and the workflows
         background: true
-        run: npx eslint package.json package-lock.json
+        run: npx eslint package.json package-lock.json .github
 
       - name: Check that the README's Packages table is the one the package.json descriptions give
         background: true

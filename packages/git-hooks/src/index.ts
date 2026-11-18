@@ -29,3 +29,4 @@ export type {
 export { type Outcome, Step } from './step.ts';
 export { Sync } from './sync.ts';
 export type { DiffEntry, Tree, TreeEntry } from './tree.ts';
+export { WorkflowChecks } from './workflow-checks.ts';

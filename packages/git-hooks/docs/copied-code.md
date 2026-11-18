@@ -18,3 +18,14 @@ The Rule of Three counts places, not packages. Code that a second place needs is
 
 - Places: `src/no-numeric-pins.ts` and `src/dockerfile-installs.ts`.
 - Same: a file whose name is `Dockerfile`, or holds it as a part between dots, in any case, such as `Dockerfile.migration`, `api.Dockerfile` or `dockerfile.api`.
+
+**The lint of staged files with the commit's ESLint.**
+
+- Places: `src/dependency-checks.ts` and `src/workflow-checks.ts`.
+- Same: `LintResult` and `isLintResults`, the run of `eslint --format json --no-warn-ignored` in the snapshot, the failure on exit code 2, and the report of each error as `<path>:<line>  <message>  <rule>` with the `npx eslint` command to run.
+- Different: `DependencyChecks` lints the `package.json` of each touched project, a deletion included; `WorkflowChecks` lints each staged file under `.github` and skips a deletion.
+
+**A workflow file of `.github`.**
+
+- Places: `src/no-numeric-pins.ts` (`isWorkflow`) and `src/workflow-checks.ts` (`WORKFLOWS`).
+- Same: a `.yml` or `.yaml` file under `.github/`.

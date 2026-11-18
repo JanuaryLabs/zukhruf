@@ -63,6 +63,7 @@
     "typescript": "6.0.3",
     "typescript-eslint": "8.72.1",
     "vite": "8.1.5",
+    "yaml-eslint-parser": "2.1.0",
     "zod": "4.6.7"
   },
   "allowScripts": {

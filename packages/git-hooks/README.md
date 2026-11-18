@@ -176,6 +176,16 @@ import { DependencyChecks, Format, preCommit } from '@zukhruf/git-hooks';
 await preCommit([new Format(), new DependencyChecks()]);
 ```
 
+## Lint the staged workflows
+
+`WorkflowChecks` lints each staged workflow and action under `.github` (`.yml` and `.yaml`), with the ESLint and the ESLint config of the commit. It runs ESLint in the snapshot of the staged commit, with the commit's packages. No project holds `.github`, so a lint of the projects never reads these files, and a workflow that breaks a rule, such as `zukhruf/no-manual-workspace-install` of `@zukhruf/eslint`, passes the commit and fails CI after the push. A deleted workflow is not linted. The step changes nothing. It needs `eslint` in the repo, and a config that lints `.github`:
+
+```ts
+import { Format, WorkflowChecks, preCommit } from '@zukhruf/git-hooks';
+
+await preCommit([new Format(), new WorkflowChecks()]);
+```
+
 ## Build generated files
 
 `Codegen` runs nx targets that write generated files in a snapshot of the staged commit. It stages each file that the targets changed there and that `stage` matches. `stage` holds globs. With `when`, it builds only when nx says that the changes of the commit affect one of those projects:
