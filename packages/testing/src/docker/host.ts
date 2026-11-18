@@ -5,6 +5,7 @@ import { pipeline } from 'node:stream/promises';
 
 import pMemoize, { pMemoizeClear } from 'p-memoize';
 
+import { RefCount } from '@zukhruf/async';
 import { type Client, OpenChannelError } from '@zukhruf/ssh';
 import { type Environment, OpenSshConfig } from '@zukhruf/ssh/config';
 import { ControlClient } from '@zukhruf/ssh/control';
@@ -57,15 +58,19 @@ export class DockerHost {
   /** In a run, the run's control master; outside a run, the environment of the connection of this process. */
   readonly #channels:
     { readonly master: ControlClient } | { readonly environment: Environment };
-  /** The sessions that run on each connection of this host. */
-  readonly #sessions = new WeakMap<Client, number>();
-  /** The SSH connection of this process, opened on first use, and again on the use after it was lost. */
+  /**
+   * The SSH connection of this process, opened on first use, and again on
+   * the use after it was lost, with the count that keeps it ref'd only while
+   * a channel opens or a session runs on it.
+   */
   readonly #connect = pMemoize(
-    async (environment: Environment): Promise<Client> => {
+    async (
+      environment: Environment,
+    ): Promise<{ client: Client; refs: RefCount }> => {
       const client = await this.#dial(environment);
       const forget = (): void => pMemoizeClear(this.#connect);
       void client.wait().then(forget, forget);
-      return client;
+      return { client, refs: new RefCount(client) };
     },
   );
 
@@ -189,19 +194,9 @@ export class DockerHost {
   ): Promise<T> {
     const channels = this.#channels;
     if ('master' in channels) return open(channels.master);
-    const client = await this.#connect(channels.environment);
-    // The connection keeps the process alive only while a channel opens or
-    // a session runs on it.
-    const before = this.#sessions.get(client) ?? 0;
-    this.#sessions.set(client, before + 1);
-    if (before === 0) client.ref();
-    try {
-      return await open(client);
-    } finally {
-      const after = (this.#sessions.get(client) ?? 1) - 1;
-      this.#sessions.set(client, after);
-      if (after === 0) client.unref();
-    }
+    const { client, refs } = await this.#connect(channels.environment);
+    using _channel = refs.hold();
+    return await open(client);
   }
 
   async #dial(environment: Environment): Promise<Client> {
