@@ -4,6 +4,7 @@ import { type Concept, enable } from '../concept.ts';
 import { PACKAGE_JSON, PROJECT_JSON } from '../files.ts';
 import noDependsOnProject from './no-depends-on-project.ts';
 import noDuplicateNxKey from './no-duplicate-nx-key.ts';
+import noGeneratePackageJson from './no-generate-package-json.ts';
 import noMissingAssetInput from './no-missing-asset-input.ts';
 import noMissingCommandExecutor from './no-missing-command-executor.ts';
 import noMissingDependencyBuild from './no-missing-dependency-build.ts';
@@ -12,6 +13,7 @@ import noMissingDependencyBuild from './no-missing-dependency-build.ts';
 const targetRules = {
   'no-missing-command-executor': noMissingCommandExecutor,
   'no-depends-on-project': noDependsOnProject,
+  'no-generate-package-json': noGeneratePackageJson,
 };
 
 const rules = {

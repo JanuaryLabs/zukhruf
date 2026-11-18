@@ -3,6 +3,7 @@ import * as jsonc from 'jsonc-eslint-parser';
 
 import { PACKAGE_JSON } from '../files.ts';
 import dependencyChecks from './dependency-checks.ts';
+import noGlobstarWorkspace from './no-globstar-workspace.ts';
 import noRootScript from './no-root-script.ts';
 import noTruncatedDescription from './no-truncated-description.ts';
 import nxFamilyPinned from './nx-family-pinned.ts';
@@ -17,12 +18,13 @@ const configs: Record<string, Linter.Config[]> = {};
  * `island/dependency-checks`. A manifest that npm can publish keeps its
  * description inside what the npm registry stores. Only the workspace root
  * installs the nx family, at one exact version, and runs no npm script but
- * `prepare`.
+ * `prepare`. A `workspaces` glob has no `**`.
  */
 const plugin = {
   meta: { name: '@zukhruf/eslint/nx/manifest', namespace: 'manifest' },
   rules: {
     'dependency-checks': dependencyChecks,
+    'no-globstar-workspace': noGlobstarWorkspace,
     'no-root-script': noRootScript,
     'no-truncated-description': noTruncatedDescription,
     'nx-family-pinned': nxFamilyPinned,
@@ -38,6 +40,7 @@ configs['recommended'] = [
     languageOptions: { parser: jsonc },
     rules: {
       'manifest/dependency-checks': 'error',
+      'manifest/no-globstar-workspace': 'error',
       'manifest/no-root-script': 'error',
       'manifest/no-truncated-description': 'error',
       'manifest/nx-family-pinned': 'error',

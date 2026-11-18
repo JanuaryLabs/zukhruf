@@ -56,6 +56,10 @@ _Avoid_: Package (when tags matter)
 The Nx settings of a project: its `project.json`, and the `nx` key of its `package.json`. Nx merges the two.
 _Avoid_: Project file, Nx config
 
+**TS solution workspace**:
+A workspace root with package-manager workspaces, a `tsconfig.json` that extends `./tsconfig.base.json` and includes no file, and a `composite` `tsconfig.base.json`, as `isUsingTsSolutionSetup()` of `@nx/js` decides.
+_Avoid_: Project references setup
+
 ### Islands
 
 **Island**:
