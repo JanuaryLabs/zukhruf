@@ -5,6 +5,7 @@ import { type Server, createServer } from 'node:net';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 
+import { untilAborted } from '@zukhruf/async';
 import { TemporaryFiles, isErrno } from '@zukhruf/fs';
 
 const sshdPath = '/usr/sbin/sshd';
@@ -21,6 +22,8 @@ export interface Sshd extends AsyncDisposable {
   readonly directory: string;
   /** Sends the signal to the `sshd -i` of each open connection. */
   kill(signal: NodeJS.Signals): void;
+  /** Resolves when the `sshd -i` of each connection so far has exited. It is the privsep monitor, which exits only after it reaps the child that served the connection (mm_request_receive and mm_reap in OpenSSH's monitor_wrap.c), so no sshd process of the connection is left. */
+  connectionsEnded(options: { readonly signal: AbortSignal }): Promise<void>;
 }
 
 /**
@@ -63,6 +66,7 @@ export async function startSshd(
     const hostPublicKey = (await readFile(`${hostKey}.pub`, 'utf8')).trim();
 
     const children = new Set<ChildProcess>();
+    const exits: Promise<unknown>[] = [];
     const server = createServer({ pauseOnConnect: true }, (socket) => {
       // After the login, sshd forks the child that serves the connection
       // (privsep_postauth in OpenSSH's sshd-session.c); it holds the socket
@@ -76,6 +80,7 @@ export async function startSshd(
       // keep the connection open after sshd exits.
       socket.destroy();
       children.add(child);
+      exits.push(once(child, 'exit'));
       child.once('exit', () => children.delete(child));
     });
     server.listen(0, '127.0.0.1');
@@ -88,6 +93,9 @@ export async function startSshd(
       directory: directory.path,
       kill(signal) {
         for (const child of children) signalGroup(child, signal);
+      },
+      async connectionsEnded({ signal }) {
+        await untilAborted(Promise.all(exits), signal);
       },
       async [Symbol.asyncDispose]() {
         const closed = once(server, 'close');
