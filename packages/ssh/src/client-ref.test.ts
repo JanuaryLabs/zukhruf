@@ -236,6 +236,67 @@ test(
 );
 
 test(
+  'a listening control master keeps the process alive: with its client unref’d, the owner exits only after the master.unref() that the test asks for',
+  { skip: noSshd },
+  async (t) => {
+    // Arrange
+    await using sshd = await startSshd();
+    await using directory = await new TemporaryFiles().directory(
+      'master-ref-',
+      { parent: '/tmp' },
+    );
+    await using owner = await startOwner(
+      [
+        'master',
+        String(sshd.port),
+        sshd.userKey,
+        join(directory.path, 'ssh.sock'),
+      ],
+      t.signal,
+    );
+
+    // Act
+    owner.unref();
+    const exit = await owner.exited(t.signal);
+
+    // Assert
+    assert.deepEqual(owner.reports, ['idle', 'unrefed', 'exiting']);
+    assert.deepEqual(exit, { code: 0, signal: null });
+  },
+);
+
+test(
+  'ref() after unref() of a control master keeps the process alive again: the owner exits only after the next master.unref()',
+  { skip: noSshd },
+  async (t) => {
+    // Arrange
+    await using sshd = await startSshd();
+    await using directory = await new TemporaryFiles().directory(
+      'master-ref-',
+      { parent: '/tmp' },
+    );
+    await using owner = await startOwner(
+      [
+        'master',
+        String(sshd.port),
+        sshd.userKey,
+        join(directory.path, 'ssh.sock'),
+        '--unref-then-ref',
+      ],
+      t.signal,
+    );
+
+    // Act
+    owner.unref();
+    const exit = await owner.exited(t.signal);
+
+    // Assert
+    assert.deepEqual(owner.reports, ['idle', 'unrefed', 'exiting']);
+    assert.deepEqual(exit, { code: 0, signal: null });
+  },
+);
+
+test(
   'with a keepalive, the owner exits after unref(): the keepalive timer is unref’d with the client',
   { skip: noSshd },
   async (t) => {

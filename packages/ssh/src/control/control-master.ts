@@ -38,6 +38,16 @@ export class ControlMaster implements AsyncDisposable {
     return new ControlMaster(path, server, connections);
   }
 
+  /** The listener no longer keeps the Node process alive; the master still serves. Node's Server#unref. */
+  unref(): void {
+    this.#server.unref();
+  }
+
+  /** Undoes unref(): the listener keeps the Node process alive again. Node's Server#ref. */
+  ref(): void {
+    this.#server.ref();
+  }
+
   /** node:net removes the socket file when the server closes. */
   async [Symbol.asyncDispose](): Promise<void> {
     const closed = once(this.#server, 'close');

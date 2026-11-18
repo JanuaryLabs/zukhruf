@@ -265,7 +265,7 @@ const listing = await shared.newSession().output('ls /srv/app');
 const database = await shared.dial('tcp', '127.0.0.1:5432');
 ```
 
-Each channel is one connection to the socket, and the close of one closes the other. So a client process that dies closes its channels, and a master process that dies ends every stream of its clients with an error. A master that is killed leaves its socket file, and `listen` on an existing file fails with `EADDRINUSE`: give each run a new directory. Nothing waits on a timer, and a `ControlClient` keeps no connection between two channels. The socket gives the connection to each process that can reach it: put it in a directory that only your user can enter. Node.js cannot pass file descriptors, so the protocol is the package's own, not OpenSSH's `PROTOCOL.mux`, and `ssh -S` cannot use the master.
+Each channel is one connection to the socket, and the close of one closes the other. So a client process that dies closes its channels, and a master process that dies ends every stream of its clients with an error. A master that is killed leaves its socket file, and `listen` on an existing file fails with `EADDRINUSE`: give each run a new directory. Nothing waits on a timer, and a `ControlClient` keeps no connection between two channels. `master.unref()` lets the process exit while the master listens, as Node's `Server#unref`: the master still serves, and `ref()` undoes it. A test runner that serves its run's connection unrefs the master and the client, so the runner exits after its last test. The socket gives the connection to each process that can reach it: put it in a directory that only your user can enter. Node.js cannot pass file descriptors, so the protocol is the package's own, not OpenSSH's `PROTOCOL.mux`, and `ssh -S` cannot use the master.
 
 ## Check the host key
 
@@ -438,7 +438,6 @@ A connection that is lost after the start ends each open channel with an error w
 - **No security keys and no ML-DSA keys.** ssh2 1.17.0 cannot parse `sk-ssh-ed25519@openssh.com`, `sk-ecdsa-sha2-nistp256@openssh.com` or `ssh-mldsa*` keys, so they work neither as identity files nor through the agent. `@zukhruf/ssh/config` skips such an identity file, and `AgentClient#list` leaves such a key out.
 - **No post-quantum key exchange.** ssh2's best is `curve25519-sha256`. OpenSSH 10.0 made `mlkem768x25519-sha256` its default ([ADR 0003](./docs/adr/0003-ssh2-speaks-the-protocol.md)).
 - **No parser of `ssh_config`.** OpenSSH resolves the config through `ssh -G` ([ADR 0004](./docs/adr/0004-openssh-resolves-the-config-through-ssh-g.md)).
-- **No connection sharing (`ControlMaster`).** The master is a process that outlives its clients. A program shares one `Client` by holding it.
 - **No `KnownHostsCommand`, `VerifyHostKeyDNS`, `CheckHostIP` or `UpdateHostKeys`.** Without them, the client trusts only the known hosts files: it accepts fewer keys, never more ([ADR 0004](./docs/adr/0004-openssh-resolves-the-config-through-ssh-g.md)).
 - **No keepalive and no timeout of its own** ([ADR 0007](./docs/adr/0007-keepalive-and-timeouts-come-only-from-the-resolved-config.md)).
 - **No agent server.** Go's `agent.NewKeyring` and `agent.ServeAgent` hold private keys in the program's memory, which an agent such as `ssh-agent`, 1Password or Secretive exists to avoid. The package is a client of such an agent.
@@ -941,6 +940,10 @@ export class ControlMaster implements AsyncDisposable {
   /** Listens on `path`. Disposal stops the listener and closes each channel that the master serves; it does not close `client`. */
   static listen(client: Client, path: string): Promise<ControlMaster>;
   readonly path: string;
+  /** The listener no longer keeps the Node process alive; the master still serves. Node's Server#unref. */
+  unref(): void;
+  /** Undoes unref(). Node's Server#ref. */
+  ref(): void;
   [Symbol.asyncDispose](): Promise<void>;
 }
 

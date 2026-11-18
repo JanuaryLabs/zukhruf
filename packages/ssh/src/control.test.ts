@@ -442,6 +442,23 @@ test(
 );
 
 test(
+  'an unref’d master still serves: a control client runs a command through it',
+  { skip: noSshd },
+  async () => {
+    // Arrange
+    await using sshd = await startSshd();
+    await using shared = await share(sshd);
+    shared.master.unref();
+
+    // Act
+    const output = await shared.control.newSession().output('echo served');
+
+    // Assert
+    assert.equal(output.toString(), 'served\n');
+  },
+);
+
+test(
   'output gives the stdout of the command and not its stderr',
   { skip: noSshd },
   async () => {

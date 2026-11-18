@@ -10,6 +10,8 @@
 //   node ref-owner.ts handshake <sshd port> <user key path> --keepalive <ms>
 //     [--replies-after-unref <count>]
 //   node ref-owner.ts config <ssh config file> <destination> <home>
+//   node ref-owner.ts master <sshd port> <user key path> <socket path>
+//     [--unref-then-ref]
 //
 // dial: Client.dial. --session runs a command before `idle`; --unref-then-ref
 // calls client.unref() and client.ref() before `idle`; --session-after-unref
@@ -24,6 +26,10 @@
 // that many more chunks came, the replies to keepalives that went out after
 // unref(), before `unrefed`.
 // config: OpenSshConfig#dial, with only PATH and `home` as HOME.
+// master: Client.dial and client.unref(), then a ControlMaster on <socket
+// path>, so only the master's listener keeps the process alive; at `unref` it
+// calls master.unref() too. --unref-then-ref calls master.unref() and
+// master.ref() before `idle`.
 import { once } from 'node:events';
 import { readFile } from 'node:fs/promises';
 import { connect } from 'node:net';
@@ -32,6 +38,7 @@ import { Duplex } from 'node:stream';
 import { parseArgs } from 'node:util';
 
 import { OpenSshConfig } from '../config.ts';
+import { ControlMaster } from '../control.ts';
 import { Client, type ClientConfig, PrivateKey } from '../index.ts';
 
 const { values, positionals } = parseArgs({
@@ -134,10 +141,29 @@ async function viaConfig(
   return config.dial({ clock: globalThis });
 }
 
+async function served(
+  port: string,
+  userKey: string,
+  path: string,
+): Promise<{ client: Client; master: ControlMaster }> {
+  const client = await Client.dial(
+    `127.0.0.1:${port}`,
+    await directConfig(userKey),
+  );
+  client.unref();
+  const master = await ControlMaster.listen(client, path);
+  if (values['unref-then-ref']) {
+    master.unref();
+    master.ref();
+  }
+  return { client, master };
+}
+
 async function start(): Promise<{
   client: Client;
   socket?: { unref(): void };
   chunks?: (count: number) => Promise<void>;
+  master?: ControlMaster;
 }> {
   const [first, second, third] = args;
   if (first === undefined || second === undefined) {
@@ -151,15 +177,19 @@ async function start(): Promise<{
     case 'config':
       if (third === undefined) throw new Error('config needs <home>');
       return { client: await viaConfig(first, second, third) };
+    case 'master':
+      if (third === undefined) throw new Error('master needs <socket path>');
+      return served(first, second, third);
     default:
       throw new Error(`unknown route ${String(route)}`);
   }
 }
 
-const { client, socket, chunks } = await start();
+const { client, socket, chunks, master } = await start();
 async function unref(): Promise<void> {
   socket?.unref();
   client.unref();
+  master?.unref();
   if (values['session-after-unref']) {
     process.channel?.ref();
     await client.newSession().run('true');
