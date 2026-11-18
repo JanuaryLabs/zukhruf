@@ -128,6 +128,44 @@ import {
 await preCommit([new NoNumericPins(), new DockerfileInstallsFromLockfile()]);
 ```
 
+## Keep one copy of each runtime package
+
+`OneRuntimeCopy` runs when a commit changes `package-lock.json`. It reads the staged lockfile, which lists each folder that `npm ci` installs, nested folders too, such as `node_modules/a/node_modules/react`. The commit stops when a runtime package has more than one folder, and the hook names each folder with its version. Two copies of `react` fail with "Invalid hook call", and two copies of `zod` put both in a bundle. Two folders of the same version count as two copies, because each is its own module. A workspace link is not a copy.
+
+The packages are `react`, `react-dom` and `zod`. `packages` replaces the list. Tooling that pins an older major, such as `zod` 3 for `@expo/cli`, gets its own copy when the root declares the runtime major: npm hoists the root's and nests the tool's. Name that folder in `allowed`, with the reason. The commit stops when an allowed folder is no longer in the lockfile, so remove it then.
+
+```ts
+import { LockfileSync, OneRuntimeCopy, preCommit } from '@zukhruf/git-hooks';
+
+await preCommit([
+  new LockfileSync(),
+  new OneRuntimeCopy({
+    allowed: {
+      'node_modules/@expo/cli/node_modules/zod':
+        '@expo/cli pins zod 3, and no bundle loads it',
+    },
+  }),
+]);
+```
+
+## Decide each install script
+
+`InstallScriptsReviewed` runs when a commit changes `package-lock.json` or the root `package.json`. The commit stops when a package of the staged lockfile has an install script and no key of `allowScripts` in the root `package.json` names it, with `true` or `false`. The hook names each such package, its folders, and the platform that each folder fits.
+
+The lockfile lists the packages of every platform, but npm checks `allowScripts` only for the packages that fit the machine that installs. A package that fits only Linux never stops an install on macOS, and then stops `npm ci` in CI or in a Docker image. The step reads every platform at once, so the commit needs no install on Linux to find it.
+
+A key names a package by its name, or by its name with exact versions joined by `||` that hold the locked version, as npm reads the key. The step skips a bundled package, which never runs its scripts, and leaves a package from git or a tarball to npm, because a key of its source names it, not its name. The step proves that each script has a decision, not that the decision is right: read the script before you name it, and an install on Linux, such as the image build, still proves that an approved script works there. See [ADR 0005](./docs/adr/0005-install-rules-are-read-from-the-staged-lockfile.md).
+
+```ts
+import {
+  InstallScriptsReviewed,
+  NpmrcPolicy,
+  preCommit,
+} from '@zukhruf/git-hooks';
+
+await preCommit([new NpmrcPolicy(), new InstallScriptsReviewed()]);
+```
+
 ## Lint the package.json of each touched project
 
 `DependencyChecks` lints the staged `package.json` of each project that the commit touches, with the ESLint and the ESLint config of the commit. It runs ESLint in the snapshot of the staged commit, with the commit's packages. The project of a changed path is the nearest folder above it that has a `package.json` in the staged tree. A deleted path touches its project too. A dependency rule, such as Nx's `dependency-checks`, reports on `package.json`, so a lint of the staged source files alone never runs it. Without this step, an import of an undeclared package passes the commit and fails CI after the push. The step changes nothing. It needs `eslint` in the repo:

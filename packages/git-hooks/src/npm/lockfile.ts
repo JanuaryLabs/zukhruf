@@ -1,9 +1,24 @@
 // A package of a node_modules folder that the lockfile records, and that is
 // not a link: a dependency from the registry, git or a tarball.
 export interface ThirdPartyPackage {
+  // The name of its folder, which `import` resolves.
+  readonly folder: string;
+  // The name of the package in the registry: the `name` of an alias entry,
+  // else the name of its folder.
+  readonly name: string;
   readonly version: string | undefined;
   // npm skips an optional package that does not fit the platform.
   readonly optional: boolean;
+  // A package that another package bundles in its tarball. npm never runs
+  // its install scripts.
+  readonly inBundle: boolean;
+  readonly hasInstallScript: boolean;
+  // Whether npm reads it as a package of a registry: its `resolved` is a
+  // registry tarball, or the lockfile has no `resolved`, as npm does
+  // (arborist lib/install-scripts.js). A package from git or a tarball is not.
+  readonly fromRegistry: boolean;
+  // The `os`, `cpu` and `libc` that the package fits; empty for each one.
+  readonly platform: Readonly<Record<'os' | 'cpu' | 'libc', readonly string[]>>;
 }
 
 // The `packages` of an npm lockfile (lockfileVersion 2 or 3), keyed by the
@@ -54,10 +69,27 @@ export class Lockfile {
   thirdParty(): Map<string, ThirdPartyPackage> {
     const packages = new Map<string, ThirdPartyPackage>();
     for (const [key, value] of this.#thirdParty()) {
+      const folder = key.slice(
+        key.lastIndexOf('node_modules/') + 'node_modules/'.length,
+      );
+      const name = field(value, 'name');
       const version = field(value, 'version');
+      const resolved = field(value, 'resolved');
       packages.set(key, {
+        folder,
+        name: typeof name === 'string' ? name : folder,
         version: typeof version === 'string' ? version : undefined,
         optional: field(value, 'optional') === true,
+        inBundle: field(value, 'inBundle') === true,
+        hasInstallScript: field(value, 'hasInstallScript') === true,
+        fromRegistry:
+          typeof resolved !== 'string' ||
+          /^https?:\/\/[^/]+\/.+\/-\/[^/]+-\d/.test(resolved),
+        platform: {
+          os: strings(field(value, 'os')),
+          cpu: strings(field(value, 'cpu')),
+          libc: strings(field(value, 'libc')),
+        },
       });
     }
     return packages;
@@ -132,6 +164,12 @@ export function dependencySpecs(manifest: unknown): DependencySpecs {
 
 function inNodeModules(key: string): boolean {
   return key.split('/').includes('node_modules');
+}
+
+function strings(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item) => typeof item === 'string')
+    : [];
 }
 
 function field(value: unknown, name: string): unknown {

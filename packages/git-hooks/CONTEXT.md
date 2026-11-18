@@ -88,6 +88,14 @@ _Avoid_: Cache, node_modules
 The installed packages do not match the `package-lock.json` of the commit of a snapshot: a package that the lockfile names is missing or has a different version, or a package is installed that the lockfile does not name. Workspace links are not compared. The hook finds it from npm's hidden lockfile, `node_modules/.package-lock.json`. On install drift, the snapshot uses an install of the commit's lockfile in the state folder.
 _Avoid_: Stale install, dependency mismatch
 
+**Runtime copy**:
+One folder of `package-lock.json` that installs a runtime package, such as `node_modules/react` or `node_modules/a/node_modules/react`. The folder name is the name that `import` resolves. Two folders are two copies, also at the same version, because each is its own module. A link is a workspace or a `file:` dependency, not a copy. `OneRuntimeCopy` allows one copy of each runtime package.
+_Avoid_: Version (two copies can share one), duplicate dependency
+
+**Install script decision**:
+A key of `allowScripts` in the root `package.json` that names a package with an install script, with `true` (run it) or `false` (skip it). npm 12 with `strict-allow-scripts=true` stops an install at a package without one, but only at a package that fits the machine that installs. `InstallScriptsReviewed` reads the packages of every platform from the lockfile.
+_Avoid_: Approval (`false` is a decision too), allowlist
+
 **State folder**:
 The folder `git-hooks` in the common git folder of the repo (`git rev-parse --git-common-dir`). Both hooks keep the installs and the nx cache there. The pre-push hook holds `build.lock` there from its first snapshot to its end. A hook holds `installs.lock` while it installs or prunes. The folder is outside the working tree, and linked worktrees use the same one.
 _Avoid_: Cache folder (it holds more than the nx cache), `.nx`
