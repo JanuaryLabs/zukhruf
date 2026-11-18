@@ -17,6 +17,7 @@ import {
   reactRootPackages,
 } from '../react.ts';
 import {
+  fseventsScript,
   rootDependencyNames,
   settleRootDependencies,
 } from '../root-dependencies.ts';
@@ -198,8 +199,7 @@ export default async function uiPackageGenerator(
       'ajv',
       'vite-plugin-dts',
     ],
-    // vite brings fsevents, which ships prebuilt, so its script does not run.
-    allowScripts: { fsevents: false },
+    allowScripts: fseventsScript,
   });
 
   await formatFiles(tree);

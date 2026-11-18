@@ -25,6 +25,7 @@ import {
   tailwindSyncOverrides,
 } from '../react.ts';
 import {
+  fseventsScript,
   rootDependencyNames,
   settleRootDependencies,
 } from '../root-dependencies.ts';
@@ -142,6 +143,7 @@ export default async function reactAppGenerator(
     },
     // The UI of Vitest: no target runs it.
     residue: [...reactResidue, '@vitest/ui'],
+    allowScripts: fseventsScript,
     overrides: tailwindSyncOverrides,
   });
 

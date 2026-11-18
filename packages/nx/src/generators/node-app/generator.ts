@@ -19,6 +19,7 @@ import {
 } from '../init/nx-json.ts';
 import { nxPlugin } from '../nx-plugin.ts';
 import {
+  fseventsScript,
   rootDependencyNames,
   settleRootDependencies,
 } from '../root-dependencies.ts';
@@ -151,10 +152,13 @@ export default async function nodeAppGenerator(
     // bundles and typescript-eslint parses.
     residue: ['@swc/cli', '@swc/core', '@swc/helpers'],
     // esbuild's postinstall puts the native binary in place of its JS
-    // wrapper. @nx/node brings @parcel/watcher and fsevents through @nx/jest:
-    // the first builds from source only when asked, and the second ships
-    // prebuilt, so neither runs.
-    allowScripts: { esbuild: true, '@parcel/watcher': false, fsevents: false },
+    // wrapper. @nx/node brings @parcel/watcher through @nx/jest, and it
+    // builds from source only when asked, so its script does not run.
+    allowScripts: {
+      esbuild: true,
+      '@parcel/watcher': false,
+      ...fseventsScript,
+    },
     // sdk-it peers on typescript ^6.0.3, and the TypeScript 6 API alias of
     // the root is 6.0.2, the last @typescript/typescript6. Each edge takes
     // the root typescript.

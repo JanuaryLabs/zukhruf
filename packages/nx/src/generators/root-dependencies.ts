@@ -19,6 +19,14 @@ export function rootDependencyNames(tree: Tree): Set<string> {
   ]);
 }
 
+/**
+ * The install-script decision for fsevents, which vite brings to react-app and
+ * ui-package and @nx/jest brings to node-app. It ships prebuilt for macOS, so
+ * its script does not run, and strict-allow-scripts stops an install that has
+ * no decision for it.
+ */
+export const fseventsScript = { fsevents: false };
+
 export interface RootDependencies {
   /** The packages of the app. A package that was there before keeps its version. */
   devDependencies: Record<string, string>;

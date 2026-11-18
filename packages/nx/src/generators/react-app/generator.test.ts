@@ -193,6 +193,15 @@ test('a web app alone gets no test target default', async () => {
   assert.equal(readJson(tree, 'nx.json').targetDefaults.test, undefined);
 });
 
+test('a web app alone denies the install script of the fsevents that vite brings', async () => {
+  const tree = generatorTree();
+
+  await reactAppGenerator(tree, { directory: 'apps/web' });
+
+  // strict-allow-scripts stops npm install on a package with no decision.
+  assert.equal(readJson(tree, 'package.json').allowScripts?.fsevents, false);
+});
+
 test('Tailwind is wired in nx.json, .prettierrc and the root packages', async () => {
   const tree = generatorTree();
 
