@@ -1,6 +1,6 @@
 # @zukhruf/ssh
 
-> In the build: private until `@zukhruf/docker` moves onto it. Ezz accepted each ADR (backlog #4503).
+> Public from 0.8.28, as `@zukhruf/docker` moves onto it. Ezz accepted each ADR (backlog #4503).
 
 An SSH client and server that run inside the Node process. A client connects to an SSH server, runs commands in sessions, and dials sockets and ports on the remote host. It reads the user's `~/.ssh/config` through `ssh -G`, checks host keys against the known hosts, and signs with the agent. The types follow Go's [`golang.org/x/crypto/ssh`](https://pkg.go.dev/golang.org/x/crypto/ssh) and its subpackages, and the protocol is [ssh2](https://github.com/mscdex/ssh2) ([ADR 0001](./docs/adr/0001-the-scope-and-the-name-of-gos-ssh-package.md), [ADR 0003](./docs/adr/0003-ssh2-speaks-the-protocol.md)).
 
@@ -13,6 +13,8 @@ The words in these documents have one meaning each. See the glossary in [CONTEXT
 ```sh
 npm install @zukhruf/ssh
 ```
+
+With npm's `strict-allow-scripts`, add `"ssh2": false` and `"cpu-features": false` to `allowScripts`: ssh2's optional native parts stay unbuilt, and ssh2 runs in JavaScript ([Why not an npm package](#why-not-an-npm-package)).
 
 ```ts
 import { OpenSshConfig } from '@zukhruf/ssh/config';
@@ -1067,7 +1069,7 @@ The package depends on ssh2 for the protocol, and adds the rest: the known hosts
 | `sshpk` 1.18.0               | 2023-10-19   | 21.8M            | 10       | Parses keys and certificates; no known_hosts parser; stale                                                                         |
 | `known_hosts` 1.0.3          | 2016-03-31   | 10               | 0        | Only `\|1\|` entries, no markers; dead                                                                                             |
 
-ssh2's footprint is 8 packages. Its optional native parts, `sshcrypto.node` and `cpu-features`, stay unbuilt. zukhruf's `.npmrc` sets `strict-allow-scripts=true`, so an install fails when a dependency has an install script that `allowScripts` does not name. The root `allowScripts` does not list `ssh2` and `cpu-features` yet: the first code commit adds `"ssh2": false` and `"cpu-features": false`. ssh2 falls back to JavaScript when they are missing (`protocol/crypto.js:30-33`, `protocol/constants.js:5-8`). A test run measures that fallback before the first release, which answers the Electron concern of [docker ADR 0001](../docker/docs/adr/0001-the-client-speaks-the-engine-api-not-the-docker-cli.md).
+ssh2's footprint is 8 packages. Its optional native parts, `sshcrypto.node` and `cpu-features`, stay unbuilt. zukhruf's `.npmrc` sets `strict-allow-scripts=true`, so an install fails when a dependency has an install script that `allowScripts` does not name. The root `allowScripts` lists `"ssh2": false` and `"cpu-features": false`, and a consumer with `strict-allow-scripts` adds the same two lines. ssh2 falls back to JavaScript when they are missing (`protocol/crypto.js:30-33`, `protocol/constants.js:5-8`); `src/ssh2-javascript-crypto.test.ts` proves a handshake with the native parts absent, which answers the Electron concern of [docker ADR 0001](../docker/docs/adr/0001-the-client-speaks-the-engine-api-not-the-docker-cli.md).
 
 ## What each repository changes
 

@@ -1,7 +1,6 @@
 {
   "name": "@zukhruf/ssh",
-  "version": "0.8.25",
-  "private": true,
+  "version": "0.8.28",
   "description": "An SSH client and server that run inside the Node process: a client connects to an SSH server, runs commands in sessions, and dials sockets and ports on the remote host. After Go's `golang.org/x/crypto/ssh`, on ssh2.",
   "license": "MIT",
   "repository": {
@@ -63,13 +62,16 @@
     "!**/*.tsbuildinfo",
     "!**/*.test.*"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "dependencies": {
-    "@zukhruf/async": "*",
+    "@zukhruf/async": "^0.8.28",
     "ssh2": "1.17.0"
   },
   "devDependencies": {
     "@sinonjs/fake-timers": "15.4.0",
     "@types/ssh2": "^1.15.6",
-    "@zukhruf/fs": "*"
+    "@zukhruf/fs": "^0.8.28"
   }
 }
