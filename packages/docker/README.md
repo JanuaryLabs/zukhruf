@@ -585,6 +585,32 @@ Host box
 
 OpenSSH's connection sharing (`ControlMaster`) does not apply: each client has its own SSH connection. The tests of a run share one, through `@zukhruf/testing`.
 
+## Parse a host
+
+A program that opens its own SSH connection to an engine host needs the host in two parts. `ssh` takes the destination, and OpenSSH refuses a path in an `ssh://` destination. The engine socket is the path. `parseHost(host)` splits the host as the client and the connection helper of the Docker CLI split it (`src/host.ts`, 71eed15b). `@zukhruf/testing` uses it to give `ssh -G` the destination of an `ssh://` host (`src/docker/host.ts`, `src/scripts/docker-global-setup.ts`).
+
+The result is a `ParsedHost`. Its `kind` is `'unix'`, `'npipe'` or `'ssh'`. An `ssh://` host gives an `SshHost`, whose `socketPath` is `undefined` when the host has no path: then the Docker CLI on the server selects the engine socket. A host that is not `unix://`, `npipe://` or `ssh://`, such as `tcp://`, throws `UnsupportedHostError` (`src/errors.ts`):
+
+```ts
+import { UnsupportedHostError, parseHost } from '@zukhruf/docker';
+
+parseHost('ssh://deploy@build-box/var/run/docker.sock');
+// { kind: 'ssh', host: 'ssh://deploy@build-box/var/run/docker.sock',
+//   destination: 'ssh://deploy@build-box', socketPath: '/var/run/docker.sock' }
+parseHost('ssh://deploy@build-box');
+// { kind: 'ssh', host: 'ssh://deploy@build-box',
+//   destination: 'ssh://deploy@build-box', socketPath: undefined }
+parseHost('unix:///var/run/docker.sock');
+// { kind: 'unix', host: 'unix:///var/run/docker.sock', socketPath: '/var/run/docker.sock' }
+try {
+  parseHost('tcp://build-box:2375');
+} catch (error) {
+  if (!(error instanceof UnsupportedHostError)) throw error;
+  console.log(error.message);
+  // The host "tcp://build-box:2375" is not supported: use a unix://, npipe:// or ssh:// host.
+}
+```
+
 ## The API version
 
 The path of each request starts with the API version, as in `/v1.51/containers/json`. `Docker.connect()` reads the highest version of the engine from `GET /_ping`. The client then uses the lower of that version and its own highest version. It refuses an engine that is older than its own lowest version with `UnsupportedEngineError`. `docker.apiVersion` gives the version that the client uses.

@@ -13,8 +13,11 @@ The HTTP API of the engine, as the [Engine API reference](https://docs.docker.co
 _Avoid_: Docker API, REST API
 
 **Host**:
-The address of an engine, as a URL: `unix:///var/run/docker.sock`, `npipe:////./pipe/docker_engine`, or `ssh://user@machine`. Docker uses the same word in `DOCKER_HOST` and in the `Host` field of a context.
+The address of an engine, as a URL: `unix:///var/run/docker.sock`, `npipe:////./pipe/docker_engine`, `ssh://user@machine`, or `ssh://user@machine/var/run/docker.sock`. A path in an `ssh://` host names the engine socket on the SSH server, as in the connection helper of the Docker CLI (`parseHost` in `src/host.ts`, #4845). Docker uses the same word in `DOCKER_HOST` and in the `Host` field of a context.
 _Avoid_: Endpoint (a context groups a host with its TLS settings into an endpoint), socket (one kind of host)
+
+**Engine socket**:
+The unix socket of the engine on the SSH server, to which each SSH channel goes. A path in the `ssh://` host names it. With no path, `Docker.connect` asks the Docker CLI on the server for it: a session runs `docker context inspect` there ([ADR 0002](./docs/adr/0002-the-engine-is-the-one-that-the-docker-cli-selects.md)). `SshHost.socketPath` holds the path of the host, or `undefined` (#4845).
 
 **Context**:
 A name for a host, as `docker context` keeps it. The `default` context is not in the context store: its host is `DOCKER_HOST`, or the default host of the platform.
