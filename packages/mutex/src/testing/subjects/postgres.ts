@@ -4,7 +4,11 @@ import pg from 'pg';
 
 import type { Clock } from '@zukhruf/async';
 import { waitFor } from '@zukhruf/testing/async';
-import { type DatabaseOptions, Postgres } from '@zukhruf/testing/postgres';
+import {
+  type DatabaseOptions,
+  Postgres,
+  postgresPool,
+} from '@zukhruf/testing/postgres';
 
 import {
   type PostgresSession,
@@ -73,34 +77,6 @@ export const postgresPoolConfig = (
   keepAliveInitialDelayMillis: 10_000,
   allowExitOnIdle,
 });
-
-/**
- * A pool whose disposal resolves once the server has no session of it, and
- * whose type has no `end`, so the disposal is the only way to end it.
- * `pool.end()` resolves before the sockets of its clients close, so a
- * `DROP DATABASE … WITH (FORCE)` right after it can end a session the pool
- * still owns, and the pool's unhandled 'error' fails the running test (#3305).
- * A pool emits 'remove' when the socket of a client has closed, and the
- * server's backend has left by then.
- */
-export function postgresPool(config: pg.PoolConfig): AsyncDisposable & {
-  pool: Pick<pg.Pool, 'connect'>;
-} {
-  const pool = new pg.Pool(config);
-  const sessions = new Set<pg.PoolClient>();
-  pool.on('connect', (client) => sessions.add(client));
-  pool.on('remove', (client) => sessions.delete(client));
-  return {
-    pool,
-    [Symbol.asyncDispose]: async () => {
-      // No client connects once pool.end() resolves.
-      await pool.end();
-      while (sessions.size > 0) {
-        await new Promise((removed) => pool.once('remove', removed));
-      }
-    },
-  };
-}
 
 /** The store of a child process or a worker thread over `location`. */
 export const openInProcess = (location: string) =>

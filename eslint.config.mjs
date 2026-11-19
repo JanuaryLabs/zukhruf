@@ -268,7 +268,8 @@ export default defineConfig(
   },
   // pg-pool's end() resolves before the sockets of its clients close, so the
   // FORCE drop of a test database can end a session the pool still owns
-  // (#3305). postgresPool waits for every socket, and its type has no end.
+  // (#3305). A pool of a Postgres handle of @zukhruf/testing, or of its
+  // postgresPool, waits for every socket (testing ADR 0026).
   {
     files: ['packages/mutex/src/**/*.test.ts'],
     rules: {
@@ -278,13 +279,13 @@ export default defineConfig(
           selector:
             "NewExpression[callee.object.name='pg'][callee.property.name='Pool']",
           message:
-            'Use postgresPool of src/testing/subjects/postgres.ts with `await using`: it ends once the server has no session of the pool, so the database can be dropped (#3305).',
+            'Take the pool from the database handle, `database.pool()`, or from postgresPool of @zukhruf/testing/postgres with `await using`: it ends once the server has no session of the pool, so the database can be dropped (#3305).',
         },
         {
           selector:
             "ImportDeclaration[source.value='pg'] > ImportSpecifier[imported.name='Pool']",
           message:
-            'Use postgresPool of src/testing/subjects/postgres.ts with `await using` instead of a Pool of pg: it ends once the server has no session of the pool, so the database can be dropped (#3305).',
+            'Take the pool from the database handle, `database.pool()`, or from postgresPool of @zukhruf/testing/postgres with `await using`, instead of a Pool of pg: it ends once the server has no session of the pool, so the database can be dropped (#3305).',
         },
       ],
     },

@@ -214,6 +214,59 @@ The handle has `connectionString`, `host`, `port`, `user`, `password`, `database
 
 `BigQuery` creates a dataset in the project you name. Disposal deletes it with its tables and views. You provide the credentials.
 
+### Take a pool from the database
+
+A handle of `Postgres` gives `pool(options)`, from `database()` and from `start()`. The pool is a `pg.Pool`, and the handle owns it. The disposal of the handle ends every pool of the handle, and then drops the database ([ADR 0026](./docs/adr/0026-a-database-handle-owns-its-pools-and-its-disposal-ends-them-before-it-drops-the-database.md)). Give the pool to the store under test, not the connection string.
+
+```ts
+import { Postgres } from '@zukhruf/testing/postgres';
+
+const postgres = new Postgres({ environment: process.env });
+
+test('counts the items', async (t) => {
+  await using database = await postgres.database();
+  const pool = database.pool({ max: 2 });
+  await pool.query('CREATE TABLE item (id int)');
+  const { rows } = await pool.query('SELECT count(*)::int AS n FROM item');
+  t.assert.equal(rows[0].n, 0);
+});
+```
+
+The handle sets the database, the user and the password of the pool. The options are the `pg.PoolConfig` without `connectionString`, `database`, `user` and `password`, so a pool of a handle is always a pool of its database. The options set the rest, for example the size of the pool, the timeouts, or the host and the port.
+
+To send a pool through a proxy, give the host and the port of the proxy in the options. In the example, `proxyTo` is the TCP proxy of the test. Declare the proxy after the database. Its disposal then comes first, and the closed sockets end the clients that wait for an answer:
+
+```ts
+await using database = await postgres.database();
+await using proxy = await proxyTo({ host: database.host, port: database.port });
+const pool = database.pool({ host: proxy.host, port: proxy.port });
+```
+
+The disposal of a handle does these steps. `cleanup()` does the same.
+
+1. `pool()` throws from now on.
+2. For each pool, at the same time:
+   1. It ends the pool, unless the test ended it already. The idle clients close.
+   2. It destroys each client that is checked out now.
+   3. It waits until the socket of each client has closed: the pool sends `remove` for each client.
+3. It drops the database. The disposal of a `start()` handle removes the container.
+4. If step 2.2 destroyed a client, the disposal rejects with the number of clients that it destroyed.
+
+The disposal does not wait for a client that is checked out. When the disposal of a handle starts, each scope that the test opened after the handle has closed, because `await using` disposes in reverse order. A client that is still checked out then is a leak: a broken store, or work that the test did not await. Thus a broken store fails at its claim's limit, the test's signal, and its teardown adds no wait.
+
+A test that has no handle, for example one that connects as another role, takes a pool from `postgresPool(config)`. Its disposal does step 2 for its one pool, and rejects when it destroyed a client:
+
+```ts
+import { postgresPool } from '@zukhruf/testing/postgres';
+
+await using app = postgresPool({ connectionString: asRole });
+await app.pool.query('SELECT 1');
+```
+
+A child process or a worker thread cannot take a pool of the handle. Give it `connectionString`, and let its pool end with its process. Declare the handle of the child after the database, so the child ends before the drop.
+
+Install `pg` next to this package. It is an optional peer dependency of the `postgres` area. `Mysql`, `Mariadb` and `SqlServer` get `pool(options)` in the next steps of ADR 0026.
+
 ## HTTP servers and streams
 
 `new HttpServer().start(handler)` listens on `127.0.0.1` on a free port and resolves once it listens. The handle has `origin` and the native `server`. Disposal closes active connections and waits for the server to close.
