@@ -1,6 +1,6 @@
 # The embedding cache decorates the model, and lives outside this package
 
-Status: superseded on 2026-11-19 by [ADR 0009](./0009-the-embedding-cache-is-a-middleware-of-the-ai-sdk-model-in-the-subpath-embedding-cache.md): Ezz chose "a sub path of the new package". The cache stays a decorator of the model, as this ADR found.
+Status: accepted by Ezz on 2026-11-18 ("Accept (Recommended)"). On 2026-11-19 he first chose a subpath of this package, then, once the cache kept the model's numbers exactly and used no `Vector`, its own package: "It does seem like it's completely different" from the vectors. The package is `@zukhruf/embedding-cache`.
 
 Three places call the model only for text that they did not embed before, under a content key: `@deepagents/retrieval` (`stores/cid.ts`, the sha256 of the text), `@zukhruf/embeddings` (the sha256 of `[provider, modelId, text]`, its ADR 0002) and `@zukhruf/vector-decisions` (`src/reader/vector-cache.ts`, the same key, backlog #4375). Backlog #3134 waits to extract it. The cache uses no vector math and no SQL form: it maps a text to the vector that a model made.
 
