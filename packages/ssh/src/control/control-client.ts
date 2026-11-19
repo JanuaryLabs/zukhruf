@@ -25,6 +25,7 @@ import {
   encodeJson,
   readFirstFrame,
   readFrames,
+  readHello,
 } from './wire.ts';
 
 /** Opens channels through the master at `path`, one connection to the socket for each channel. */
@@ -61,12 +62,49 @@ function protocolError(): Error {
   return new Error('ssh: the control master broke the protocol');
 }
 
-/** Connects, sends the request, and resolves with the socket when the master opened the channel. */
+/** Connects and sends the request, and resolves with the socket when the master opened the channel. */
 async function openChannel(path: string, request: Request): Promise<Socket> {
-  const socket = connect({ path });
+  return sendRequest(await greet(path), request);
+}
+
+/** The peer at the socket closed, or spoke another protocol, before a hello: no request reached a master. */
+export class NoHelloError extends Error {
+  override name = 'NoHelloError';
+}
+
+/**
+ * Connects to the master at `path` and reads its hello. It rejects with the
+ * error of the connect (ENOENT when nothing is at the path, ECONNREFUSED when
+ * nothing listens there), or with NoHelloError. The signal closes the
+ * socket, and the wait for the hello then rejects with NoHelloError.
+ */
+export async function greet(
+  path: string,
+  signal?: AbortSignal,
+): Promise<Socket> {
+  const socket = connect(signal === undefined ? { path } : { path, signal });
   await once(socket, 'connect');
   // An error of the socket is followed by its close, which ends the channel.
   socket.on('error', () => socket.destroy());
+  try {
+    await readHello(
+      socket,
+      new NoHelloError(
+        'ssh: the peer at the control socket sent no hello: it closed first, or it speaks another protocol',
+      ),
+    );
+    return socket;
+  } catch (error) {
+    socket.destroy();
+    throw error;
+  }
+}
+
+/** Sends the request on a socket that greet() gave, and resolves with the socket when the master opened the channel. */
+export async function sendRequest(
+  socket: Socket,
+  request: Request,
+): Promise<Socket> {
   socket.write(encodeJson(FrameType.request, request));
   try {
     const frame = await readFirstFrame(socket, masterClosed());
@@ -88,7 +126,7 @@ async function openChannel(path: string, request: Request): Promise<Socket> {
 
 // The master sends an error frame when the channel failed. A close with no
 // eof and no error is the death of the master.
-function dialStream(socket: Socket): Duplex {
+export function dialStream(socket: Socket): Duplex {
   const stream = new ControlStream(socket, {
     destroyed: () => socket.destroy(),
   });
@@ -119,7 +157,7 @@ function dialStream(socket: Socket): Duplex {
 
 // The session's streams end at the eof frame, or at the close of the
 // connection; the exit frame, or its absence, goes to onClose.
-function sessionChannel(socket: Socket): SessionChannel {
+export function sessionChannel(socket: Socket): SessionChannel {
   const stream = new ControlStream(socket, {
     destroyed: () => undefined,
   });

@@ -9,6 +9,7 @@ import {
   type Frame,
   FrameType,
   decodeJson,
+  encode,
   encodeJson,
   readFirstFrame,
 } from './wire.ts';
@@ -31,7 +32,7 @@ export class ControlMaster implements AsyncDisposable {
     const server = createServer((socket) => {
       connections.add(socket);
       socket.once('close', () => connections.delete(socket));
-      accept(client, socket);
+      serveConnection(client, socket);
     });
     server.listen(path);
     await once(server, 'listening');
@@ -57,9 +58,10 @@ export class ControlMaster implements AsyncDisposable {
   }
 }
 
-// A client that died leaves a write to fail; its close ends the channel.
-function accept(client: Client, socket: Socket): void {
+/** Serves one connection of a control client: the hello, then the channel or the hold of its request. A client that died leaves a write to fail; its close ends the channel. */
+export function serveConnection(client: Client, socket: Socket): void {
   socket.on('error', () => socket.destroy());
+  socket.write(encode(FrameType.hello));
   void readFirstFrame(
     socket,
     new Error('ssh: the control client closed the connection'),
@@ -77,6 +79,13 @@ async function open(
   const request = requestOf(frame);
   if (request === undefined) {
     refuse(socket, new Error('ssh: the control client sent no valid request'));
+    return;
+  }
+  if (request.kind === 'hold') {
+    reply(socket, { opened: true });
+    // readFirstFrame paused the socket: it reads again to see the close that
+    // ends the hold.
+    socket.resume();
     return;
   }
   try {

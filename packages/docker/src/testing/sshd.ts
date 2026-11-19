@@ -20,6 +20,8 @@ export interface Sshd extends AsyncDisposable {
   readonly hostPublicKey: string;
   /** The temporary directory that holds the keys and the config. */
   readonly directory: string;
+  /** How many connections the server has accepted so far, each with its own `sshd -i`. */
+  connections(): number;
   /** Sends the signal to the `sshd -i` of each open connection. */
   kill(signal: NodeJS.Signals): void;
   /** Resolves when the `sshd -i` of each connection so far has exited. It is the privsep monitor, which exits only after it reaps the child that served the connection (mm_request_receive and mm_reap in OpenSSH's monitor_wrap.c), so no sshd process of the connection is left. */
@@ -91,6 +93,9 @@ export async function startSshd(
       userKey,
       hostPublicKey,
       directory: directory.path,
+      connections() {
+        return exits.length;
+      },
       kill(signal) {
         for (const child of children) signalGroup(child, signal);
       },

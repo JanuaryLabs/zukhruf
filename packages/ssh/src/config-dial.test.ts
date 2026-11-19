@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { once } from 'node:events';
-import { appendFile, readFile, writeFile } from 'node:fs/promises';
+import { appendFile, readFile, stat, writeFile } from 'node:fs/promises';
 import { type Server, type Socket, createServer } from 'node:net';
 import { userInfo } from 'node:os';
 import { join } from 'node:path';
@@ -1196,3 +1196,316 @@ function portOf(server: Server): number {
   assert.ok(address !== null && typeof address === 'object');
   return address.port;
 }
+
+test(
+  'under ControlMaster auto, a second share() of the host joins the first: the server sees one connection, and each runs a command',
+  { skip: noSsh },
+  async (t) => {
+    // Arrange
+    await using directory = await new TemporaryFiles().directory('ssh-', {
+      parent: '/tmp',
+    });
+    await using sshd = await startSshd();
+    await writeFile(join(directory.path, 'known_hosts'), knownHost(sshd));
+    const config = await resolve(
+      await writeConfig(directory.path, sshd, [
+        `IdentityFile ${sshd.userKey}`,
+        'ControlMaster auto',
+        `ControlPath ${join(directory.path, 'cm')}`,
+      ]),
+      { PATH: '/usr/bin:/bin', HOME: directory.path },
+    );
+    await using first = await config.share({
+      clock: createClock(),
+      signal: t.signal,
+    });
+
+    // Act
+    await using second = await config.share({
+      clock: createClock(),
+      signal: t.signal,
+    });
+    const outputs = await Promise.all(
+      [first, second].map(async (shared) =>
+        String(await shared.newSession().output('echo ran')),
+      ),
+    );
+
+    // Assert
+    assert.deepEqual(outputs, ['ran\n', 'ran\n']);
+    assert.equal(sshd.connections(), 1);
+  },
+);
+
+/** The config of `box` with `lines` and a ControlPath in `directory`, resolved as OpenSSH would. */
+async function sharing(
+  directory: string,
+  sshd: Sshd,
+  lines: readonly string[],
+): Promise<OpenSshConfig> {
+  return resolve(
+    await writeConfig(directory, sshd, [
+      `IdentityFile ${sshd.userKey}`,
+      `ControlPath ${join(directory, 'cm')}`,
+      ...lines,
+    ]),
+    { PATH: '/usr/bin:/bin', HOME: directory },
+  );
+}
+
+/** A Unix socket server at `path` that answers each connection with `greeting`, or with nothing. */
+async function listenAt(path: string, greeting?: Buffer): Promise<Server> {
+  const server = createServer((socket) => {
+    socket.on('error', () => socket.destroy());
+    if (greeting !== undefined) socket.write(greeting);
+  });
+  server.listen(path);
+  await once(server, 'listening');
+  return server;
+}
+
+test(
+  'under ControlMaster auto, a peer at the socket that speaks another protocol gives a connection of this process that works, and keeps its socket',
+  { skip: noSsh },
+  async (t) => {
+    // Arrange: OpenSSH's MUX_MSG_HELLO, version 4 (PROTOCOL.mux).
+    await using directory = await new TemporaryFiles().directory('ssh-', {
+      parent: '/tmp',
+    });
+    await using sshd = await startSshd();
+    await writeFile(join(directory.path, 'known_hosts'), knownHost(sshd));
+    const config = await sharing(directory.path, sshd, ['ControlMaster auto']);
+    const peer = await listenAt(
+      join(directory.path, 'cm.zukhruf'),
+      Buffer.from([0, 0, 0, 8, 0, 0, 0, 1, 0, 0, 0, 4]),
+    );
+    try {
+      // Act
+      await using shared = await config.share({
+        clock: createClock(),
+        signal: t.signal,
+      });
+
+      // Assert
+      assert.equal(
+        String(await shared.newSession().output('echo ran')),
+        'ran\n',
+      );
+      assert.equal(sshd.connections(), 1);
+      assert.ok(peer.listening);
+    } finally {
+      peer.close();
+    }
+  },
+);
+
+test(
+  'under ControlMaster auto, a peer at the socket that sends no hello for ConnectTimeout gives a connection of this process',
+  { skip: noSsh },
+  async (t) => {
+    // Arrange
+    await using directory = await new TemporaryFiles().directory('ssh-', {
+      parent: '/tmp',
+    });
+    await using sshd = await startSshd();
+    await writeFile(join(directory.path, 'known_hosts'), knownHost(sshd));
+    const config = await sharing(directory.path, sshd, [
+      'ControlMaster auto',
+      'ConnectTimeout 5',
+    ]);
+    const peer = await listenAt(join(directory.path, 'cm.zukhruf'));
+    const clock = createClock();
+    try {
+      const sharingStarted = config.share({ clock, signal: t.signal });
+
+      // Act
+      await clock.tickAsync(5000);
+      await using shared = await sharingStarted;
+
+      // Assert
+      assert.equal(
+        String(await shared.newSession().output('echo ran')),
+        'ran\n',
+      );
+      assert.equal(sshd.connections(), 1);
+    } finally {
+      peer.close();
+    }
+  },
+);
+
+test(
+  'under ControlMaster yes, a socket that a master already holds gives a connection of this process, and the master still serves the next share()',
+  { skip: noSsh },
+  async (t) => {
+    // Arrange
+    await using directory = await new TemporaryFiles().directory('ssh-', {
+      parent: '/tmp',
+    });
+    await using sshd = await startSshd();
+    await writeFile(join(directory.path, 'known_hosts'), knownHost(sshd));
+    const auto = await sharing(directory.path, sshd, ['ControlMaster auto']);
+    await using master = await auto.share({
+      clock: createClock(),
+      signal: t.signal,
+    });
+    const yes = await sharing(directory.path, sshd, ['ControlMaster yes']);
+
+    // Act
+    await using own = await yes.share({
+      clock: createClock(),
+      signal: t.signal,
+    });
+    await using joined = await auto.share({
+      clock: createClock(),
+      signal: t.signal,
+    });
+
+    // Assert
+    const outputs = await Promise.all(
+      [master, own, joined].map(async (shared) =>
+        String(await shared.newSession().output('echo ran')),
+      ),
+    );
+    assert.deepEqual(outputs, ['ran\n', 'ran\n', 'ran\n']);
+    assert.equal(sshd.connections(), 2);
+  },
+);
+
+test(
+  'under ControlMaster no, share() joins a master at the socket, and with none there it is a connection of this process that makes no socket',
+  { skip: noSsh },
+  async (t) => {
+    // Arrange
+    await using directory = await new TemporaryFiles().directory('ssh-', {
+      parent: '/tmp',
+    });
+    await using sshd = await startSshd();
+    await writeFile(join(directory.path, 'known_hosts'), knownHost(sshd));
+    const no = await sharing(directory.path, sshd, ['ControlMaster no']);
+    const auto = await sharing(directory.path, sshd, ['ControlMaster auto']);
+
+    // Act
+    const alone = await no.share({ clock: createClock(), signal: t.signal });
+    const aloneMadeSocket = await stat(join(directory.path, 'cm.zukhruf')).then(
+      () => true,
+      () => false,
+    );
+    await alone.close();
+    await using master = await auto.share({
+      clock: createClock(),
+      signal: t.signal,
+    });
+    await using joined = await no.share({
+      clock: createClock(),
+      signal: t.signal,
+    });
+
+    // Assert
+    assert.equal(aloneMadeSocket, false);
+    assert.equal(String(await joined.newSession().output('echo ran')), 'ran\n');
+    assert.equal(sshd.connections(), 2);
+  },
+);
+
+for (const setting of ['ask', 'autoask']) {
+  test(
+    `under ControlMaster ${setting}, share() rejects with an error that names the setting, before any connection`,
+    { skip: noSsh },
+    async (t) => {
+      // Arrange
+      await using directory = await new TemporaryFiles().directory('ssh-', {
+        parent: '/tmp',
+      });
+      await using sshd = await startSshd();
+      await writeFile(join(directory.path, 'known_hosts'), knownHost(sshd));
+      const config = await sharing(directory.path, sshd, [
+        `ControlMaster ${setting}`,
+      ]);
+
+      // Act
+      const shared = config.share({ clock: createClock(), signal: t.signal });
+
+      // Assert
+      await assert.rejects(shared, {
+        message: `ssh: ControlMaster ${setting} is not supported: it confirms each use of the master through ssh-askpass`,
+      });
+      assert.equal(sshd.connections(), 0);
+    },
+  );
+}
+
+test(
+  'with ControlPath none, share() is a connection of this process alone: a second share() makes a second connection',
+  { skip: noSsh },
+  async (t) => {
+    // Arrange
+    await using directory = await new TemporaryFiles().directory('ssh-', {
+      parent: '/tmp',
+    });
+    await using sshd = await startSshd();
+    await writeFile(join(directory.path, 'known_hosts'), knownHost(sshd));
+    const config = await resolve(
+      await writeConfig(directory.path, sshd, [
+        `IdentityFile ${sshd.userKey}`,
+        'ControlMaster auto',
+        'ControlPath none',
+      ]),
+      { PATH: '/usr/bin:/bin', HOME: directory.path },
+    );
+
+    // Act
+    await using first = await config.share({
+      clock: createClock(),
+      signal: t.signal,
+    });
+    await using second = await config.share({
+      clock: createClock(),
+      signal: t.signal,
+    });
+
+    // Assert
+    const outputs = await Promise.all(
+      [first, second].map(async (shared) =>
+        String(await shared.newSession().output('echo ran')),
+      ),
+    );
+    assert.deepEqual(outputs, ['ran\n', 'ran\n']);
+    assert.equal(sshd.connections(), 2);
+  },
+);
+
+test(
+  'under ControlMaster auto, a master that closes while another share() holds it serves that one on, and once it closes, the server sees the connection end and the socket is gone',
+  { skip: noSsh },
+  async (t) => {
+    // Arrange
+    await using directory = await new TemporaryFiles().directory('ssh-', {
+      parent: '/tmp',
+    });
+    await using sshd = await startSshd();
+    await writeFile(join(directory.path, 'known_hosts'), knownHost(sshd));
+    const config = await sharing(directory.path, sshd, ['ControlMaster auto']);
+    const master = await config.share({
+      clock: createClock(),
+      signal: t.signal,
+    });
+    const joined = await config.share({
+      clock: createClock(),
+      signal: t.signal,
+    });
+
+    // Act
+    await master.close();
+    const output = String(await joined.newSession().output('echo ran'));
+    await joined.close();
+
+    // Assert
+    assert.equal(output, 'ran\n');
+    await sshd.connectionsEnded({ signal: t.signal });
+    await assert.rejects(stat(join(directory.path, 'cm.zukhruf')), {
+      code: 'ENOENT',
+    });
+    assert.equal(sshd.connections(), 1);
+  },
+);

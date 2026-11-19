@@ -248,7 +248,25 @@ No process carries the connection to a jump host. When the owner dies, the kerne
 
 ## Share one connection between processes
 
-`ControlMaster.listen(client, path)` serves the channels of a client on a Unix socket, as OpenSSH's `ControlMaster` and `ControlPath` do. A `ControlClient` in another process dials and runs sessions through it, with the calls of `Client` ([ADR 0012](./docs/adr/0012-a-control-master-serves-the-channels-of-one-connection-to-other-processes.md)):
+`config.share()` gives a connection that the processes of the user share, by the `ControlMaster` and `ControlPath` of the config, as OpenSSH shares one ([ADR 0013](./docs/adr/0013-processes-share-a-connection-by-controlmaster-and-controlpath-as-openssh-shares-one.md)). Turn sharing on in `~/.ssh/config`, or with flags:
+
+```ts
+import { OpenSshConfig } from '@zukhruf/ssh/config';
+
+const config = await OpenSshConfig.resolve('build-box', {
+  flags: ['-o', 'ControlMaster=auto', '-o', 'ControlPath=~/.ssh/cm-%C'],
+  environment: process.env,
+});
+// The first process becomes the master; each later one joins it.
+await using shared = await config.share({ clock: globalThis });
+const listing = await shared.newSession().output('ls /srv/app');
+```
+
+Under `ControlMaster auto`, `share()` joins the master at the socket. With no master there, or with a stale socket that a killed master left, it connects and becomes the master. When another process becomes the master first, it keeps a connection of its own. `no` only joins, `yes` only becomes the master, and `ask` or `autoask` rejects. The socket is `ControlPath` with `.zukhruf` after it, so it never meets the socket of an OpenSSH master. The wait for a master's hello lasts at most `ConnectTimeout`.
+
+A master serves while its process uses the connection, or while another process uses it. So a master's process does not exit while another process holds the connection: do not run it under `node --test --test-force-exit`. After `close()`, a master serves until the last process lets go, then it closes the connection. A joined connection keeps its process alive only while ref'd, as a `Client` does: `unref()` lets the process exit, also with an idle channel open.
+
+To choose the owner yourself, use the control master directly. `ControlMaster.listen(client, path)` serves the channels of a client on a Unix socket, as OpenSSH's `ControlMaster` and `ControlPath` do. A `ControlClient` in another process dials and runs sessions through it, with the calls of `Client` ([ADR 0012](./docs/adr/0012-a-control-master-serves-the-channels-of-one-connection-to-other-processes.md)):
 
 ```ts
 import { ControlClient, ControlMaster } from '@zukhruf/ssh/control';
@@ -498,6 +516,7 @@ The RFC sections are of RFC 4252 (authentication), RFC 4253 (transport) and RFC 
 | `ControlMaster.listen(client, path)`      | Nothing; a `node:net` server on the Unix socket. Each connection to it carries one request, one reply, then frames of one channel                                                                                                                                                                                                                                          | None                                                                                                                                                                                                                                                                                                                                                                                                   |
 | `controlClient.dial()`, `.newSession()`   | The master opens the channel on its own connection, as `client.dial()` or `client.newSession()` would                                                                                                                                                                                                                                                                      | The calls of the master's `Client`                                                                                                                                                                                                                                                                                                                                                                     |
 | A `ControlClient` process dies            | Nothing more: the kernel closes its Unix connections, and the master closes each of their channels                                                                                                                                                                                                                                                                         | None                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `config.share()`                          | `ssh -G` (already done by `resolve`), then a connect to the Unix socket of ControlPath; with no master there, the connection of `dial()` and a `node:net` server linked to the socket                                                                                                                                                                                      |
 | `KnownHosts`                              | Nothing                                                                                                                                                                                                                                                                                                                                                                    | None                                                                                                                                                                                                                                                                                                                                                                                                   |
 | `ServerConn.handshake()`                  | The server side of RFC 4253 and RFC 4252                                                                                                                                                                                                                                                                                                                                   | `new Server({ hostKeys }).injectSocket(transport)` (`server.js:217`, `:361`)                                                                                                                                                                                                                                                                                                                           |
 | `serverConn.forward()`                    | `SSH_MSG_CHANNEL_OPEN` `forwarded-tcpip` or `forwarded-streamlocal@openssh.com`                                                                                                                                                                                                                                                                                            | `forwardOut`, `openssh_forwardOutStreamLocal` of the server's client (`server.js:1295`, `:1301`)                                                                                                                                                                                                                                                                                                       |
@@ -1055,6 +1074,20 @@ export class OpenSshConfig {
     readonly clock: Clock;
     readonly signal?: AbortSignal;
   }): Promise<Client>;
+  /** A connection that the processes of the user share by ControlMaster and ControlPath, as OpenSSH shares one: auto joins the master at ControlPath or becomes it, no only joins one, yes becomes it. With ControlPath none it is a connection of this process alone, as dial() always is. */
+  share(options: {
+    readonly clock: Clock;
+    readonly signal?: AbortSignal;
+  }): Promise<SharedConnection>;
+}
+
+/** One SSH connection to a host that the processes of the user share. It has the two calls of Client that open a channel. A new one keeps the process alive until unref(), as a Client does. close() ends this process's use: the connection closes once no process uses it. */
+export interface SharedConnection extends AsyncDisposable {
+  dial(network: 'tcp' | 'unix', address: string): Promise<Duplex>;
+  newSession(): Session;
+  ref(): void;
+  unref(): void;
+  close(): Promise<void>;
 }
 
 /** How dial reaches the host. OpenSSH uses one of the three: ProxyJump and ProxyCommand exclude each other. */
@@ -1125,3 +1158,5 @@ The package leads. Each repository below changes to fit it, with no adapter, and
 - [ADR 0009](./docs/adr/0009-the-caller-forwards-a-local-port-with-node-net-and-client-dial.md): the caller forwards a local port with node:net and client.dial.
 - [ADR 0010](./docs/adr/0010-a-proxycommand-runs-as-the-transport-of-the-connection.md): a ProxyCommand runs as the transport of the connection.
 - [ADR 0011](./docs/adr/0011-the-package-has-a-server-as-go-and-rust-do.md): the package has a server, as Go and Rust do.
+- [ADR 0012](./docs/adr/0012-a-control-master-serves-the-channels-of-one-connection-to-other-processes.md): a control master serves the channels of one connection to other processes.
+- [ADR 0013](./docs/adr/0013-processes-share-a-connection-by-controlmaster-and-controlpath-as-openssh-shares-one.md): processes share a connection by ControlMaster and ControlPath, as OpenSSH shares one.

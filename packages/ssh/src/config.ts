@@ -4,6 +4,11 @@ import { connect } from 'node:net';
 import type { Clock } from '@zukhruf/async';
 
 import type { Client, ClientConfig } from './client.ts';
+import {
+  type SharedConnection,
+  type Sharing,
+  shareConnection,
+} from './control/shared-connection.ts';
 import { dialHost } from './dial-route.ts';
 import { ssh2HostKeyAlgorithms } from './host-key-algorithms.ts';
 import { matchPattern } from './match-pattern.ts';
@@ -11,6 +16,7 @@ import { type Hop, jumpHostFlags, parseProxyJump } from './proxy-jump.ts';
 import { type Environment, Settings } from './ssh-g.ts';
 
 export type { Environment } from './ssh-g.ts';
+export type { SharedConnection } from './control/shared-connection.ts';
 
 /** How dial reaches the host. OpenSSH uses one of the three: ProxyJump and ProxyCommand exclude each other. */
 export type Route =
@@ -26,7 +32,7 @@ export type Route =
 /** The resolved settings of a jump host, by its own ssh -G, with no route: OpenSSH reaches a jump host after the first through the one before it, and reads no ProxyJump or ProxyCommand of its config. A jump host opens no session, so it has no session env and no agent forwarding. */
 export type JumpHost = Omit<
   OpenSshConfig,
-  'route' | 'setEnv' | 'sendEnv' | 'forwardAgent' | 'dial'
+  'route' | 'setEnv' | 'sendEnv' | 'forwardAgent' | 'dial' | 'share'
 >;
 
 /** The first jump host: the one jump host that follows its own ProxyJump or ProxyCommand. */
@@ -75,6 +81,8 @@ export class OpenSshConfig {
   readonly #environment: Environment;
   /** ProxyUseFdpass yes for a ProxyCommand on the route: dial fails (ADR 0010). */
   readonly #proxyUseFdpass: boolean;
+  /** ControlMaster and ControlPath, for share(). */
+  readonly #sharing: Sharing;
 
   private constructor(
     host: JumpHost,
@@ -112,6 +120,7 @@ export class OpenSshConfig {
     );
     this.#environment = environment;
     this.#proxyUseFdpass = proxyUseFdpass;
+    this.#sharing = OpenSshConfig.#sharingOf(settings);
   }
 
   /** Runs ssh -G <flags> -- <destination> with `environment`, and resolves each jump host of the route with its own ssh -G. */
@@ -167,6 +176,24 @@ export class OpenSshConfig {
     );
   }
 
+  /**
+   * A connection that the processes of the user share by ControlMaster and
+   * ControlPath, as OpenSSH shares one: auto joins the master at ControlPath
+   * or becomes it, no only joins one, yes becomes it. With ControlPath none it
+   * is a connection of this process alone, as dial() always is.
+   */
+  async share(options: {
+    readonly clock: Clock;
+    readonly signal?: AbortSignal;
+  }): Promise<SharedConnection> {
+    return shareConnection(this.#sharing, {
+      dial: () => this.dial(options),
+      clock: options.clock,
+      signal: options.signal,
+      connectTimeout: this.connectTimeout,
+    });
+  }
+
   /** The variables of the environment that a SendEnv pattern names, then SetEnv, which wins for the same name: OpenSSH sends SetEnv after them (`client_session2_setup` in clientloop.c of OpenSSH 10.5p1). */
   #sessionEnv(): Record<string, string> {
     const env: Record<string, string> = {};
@@ -198,6 +225,26 @@ export class OpenSshConfig {
         return this.#environment['SSH_AUTH_SOCK'];
       case 'off':
         return undefined;
+    }
+  }
+
+  /** ControlMaster and ControlPath as ssh -G prints them: ControlMaster no, yes, auto, ask and autoask are false, true, auto, ask and autoask, and ControlPath none prints no controlpath. */
+  static #sharingOf(settings: Settings): Sharing {
+    const path = settings.get('controlpath');
+    if (path === undefined) return { kind: 'off' };
+    const master = settings.required('controlmaster');
+    switch (master) {
+      case 'false':
+        return { kind: 'join', path };
+      case 'true':
+        return { kind: 'master', path };
+      case 'auto':
+        return { kind: 'auto', path };
+      case 'ask':
+      case 'autoask':
+        return { kind: 'confirm', setting: master };
+      default:
+        throw new Error(`ssh -G printed controlmaster ${master}`);
     }
   }
 

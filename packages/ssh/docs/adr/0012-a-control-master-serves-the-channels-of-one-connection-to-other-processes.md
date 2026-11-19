@@ -45,3 +45,10 @@ The socket gives the connection to each process that can connect to it, as OpenS
 - A master serves only the processes that can reach its socket. A run on another computer needs its own connection.
 - The protocol is the package's own, and only `ControlClient` speaks it. `ssh -S <path>` cannot use the master.
 - The master runs the requests of every client as its own user on the server. A client gets nothing that the master's connection cannot do.
+
+## Amendment, 2026-11-19 (ADR 0013)
+
+[ADR 0013](./0013-processes-share-a-connection-by-controlmaster-and-controlpath-as-openssh-shares-one.md) lets the processes elect the master, as OpenSSH's `ControlMaster auto` does. Two parts of the protocol changed for it:
+
+- **The master speaks first.** On each connection, the master sends a hello frame before it reads the request, as OpenSSH's master sends `MUX_MSG_HELLO`. So step 1 above starts after the hello. A client that gets no hello knows that no request reached a master, and it can fall back safely. A client fails at the first byte that is not the hello's, so a peer that speaks another protocol, such as an OpenSSH master, fails at once.
+- **A hold.** The request `{ kind: 'hold' }` keeps the master serving while its connection is open, as an OpenSSH mux client's connection does (`channel_still_open` counts `SSH_CHANNEL_MUX_CLIENT`). A joined connection of `OpenSshConfig#share()` holds one from its start to its close.

@@ -10,6 +10,7 @@
 //   node ref-owner.ts handshake <sshd port> <user key path> --keepalive <ms>
 //     [--replies-after-unref <count>]
 //   node ref-owner.ts config <ssh config file> <destination> <home>
+//   node ref-owner.ts share <ssh config file> <destination> <home>
 //   node ref-owner.ts master <sshd port> <user key path> <socket path>
 //     [--unref-then-ref]
 //
@@ -26,6 +27,10 @@
 // that many more chunks came, the replies to keepalives that went out after
 // unref(), before `unrefed`.
 // config: OpenSshConfig#dial, with only PATH and `home` as HOME.
+// share: OpenSshConfig#share, as config: it joins the master of ControlPath
+// or becomes it; at `unref` it calls unref() of the shared connection.
+// --hold-dial <port> opens a channel to 127.0.0.1:<port> before `idle` and
+// keeps it open, idle, as an HTTP agent keeps a connection in its pool.
 // master: Client.dial and client.unref(), then a ControlMaster on <socket
 // path>, so only the master's listener keeps the process alive; at `unref` it
 // calls master.unref() too. --unref-then-ref calls master.unref() and
@@ -37,7 +42,7 @@ import { userInfo } from 'node:os';
 import { Duplex } from 'node:stream';
 import { parseArgs } from 'node:util';
 
-import { OpenSshConfig } from '../config.ts';
+import { OpenSshConfig, type SharedConnection } from '../config.ts';
 import { ControlMaster } from '../control.ts';
 import { Client, type ClientConfig, PrivateKey } from '../index.ts';
 
@@ -50,6 +55,7 @@ const { values, positionals } = parseArgs({
     'unref-then-ref': { type: 'boolean', default: false },
     'session-after-unref': { type: 'boolean', default: false },
     'replies-after-unref': { type: 'string' },
+    'hold-dial': { type: 'string' },
   },
 });
 const [route, ...args] = positionals;
@@ -129,16 +135,24 @@ async function handshake(
   return { client, socket, chunks };
 }
 
-async function viaConfig(
+async function resolveConfig(
   file: string,
   destination: string,
   home: string,
-): Promise<Client> {
-  const config = await OpenSshConfig.resolve(destination, {
+): Promise<OpenSshConfig> {
+  return OpenSshConfig.resolve(destination, {
     flags: ['-F', file],
     environment: { PATH: '/usr/bin:/bin', HOME: home },
   });
-  return config.dial({ clock: globalThis });
+}
+
+async function shared(
+  config: OpenSshConfig,
+): Promise<{ client: SharedConnection; channel?: Duplex }> {
+  const client = await config.share({ clock: globalThis });
+  const port = values['hold-dial'];
+  if (port === undefined) return { client };
+  return { client, channel: await client.dial('tcp', `127.0.0.1:${port}`) };
 }
 
 async function served(
@@ -160,7 +174,7 @@ async function served(
 }
 
 async function start(): Promise<{
-  client: Client;
+  client: Client | SharedConnection;
   socket?: { unref(): void };
   chunks?: (count: number) => Promise<void>;
   master?: ControlMaster;
@@ -176,7 +190,14 @@ async function start(): Promise<{
       return handshake(first, second);
     case 'config':
       if (third === undefined) throw new Error('config needs <home>');
-      return { client: await viaConfig(first, second, third) };
+      return {
+        client: await (
+          await resolveConfig(first, second, third)
+        ).dial({ clock: globalThis }),
+      };
+    case 'share':
+      if (third === undefined) throw new Error('share needs <home>');
+      return shared(await resolveConfig(first, second, third));
     case 'master':
       if (third === undefined) throw new Error('master needs <socket path>');
       return served(first, second, third);

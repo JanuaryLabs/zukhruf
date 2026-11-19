@@ -5,6 +5,7 @@ import { connect } from 'node:net';
 import { AgentClient } from './agent.ts';
 import type { AuthMethod } from './client.ts';
 import type { JumpHost } from './config.ts';
+import { isErrno } from './errno.ts';
 import {
   PassphraseMissingError,
   PrivateKey,
@@ -103,8 +104,4 @@ async function readIdentityFile(
     }
     return undefined;
   }
-}
-
-function isErrno(error: unknown, code: string): boolean {
-  return Error.isError(error) && 'code' in error && error.code === code;
 }

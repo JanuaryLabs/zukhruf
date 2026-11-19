@@ -25,6 +25,8 @@ export const FrameType = {
   exit: 8,
   /** master → client, the last frame of a dial that failed: JSON WireError. */
   error: 9,
+  /** master → client, the first frame of each connection, before the client sends its request: a client that gets no hello knows that no request reached the master, as OpenSSH's MUX_MSG_HELLO (PROTOCOL.mux). Empty. */
+  hello: 10,
 } as const;
 
 export interface Frame {
@@ -81,6 +83,9 @@ function takeFrame(
  * first.
  */
 export function readFirstFrame(socket: Socket, closed: Error): Promise<Frame> {
+  // A paused socket stays paused for a new data listener: the frame before
+  // this one, such as the hello, left it paused.
+  socket.resume();
   const first = Promise.withResolvers<Frame>();
   let buffered: Buffer = Buffer.alloc(0);
   const onClose = (): void => first.reject(closed);
@@ -117,4 +122,41 @@ export function readFrames(
     }
   });
   socket.resume();
+}
+
+/**
+ * The hello of a master: the five bytes of a hello frame. It rejects with
+ * `notHello` when the socket closes first, or at the first byte that is not
+ * the hello's, so a peer that speaks another protocol, such as an OpenSSH
+ * master (PROTOCOL.mux starts with a length), fails at once. The socket is
+ * paused after it, with the bytes after the hello put back.
+ */
+export function readHello(socket: Socket, notHello: Error): Promise<void> {
+  const hello = encode(FrameType.hello);
+  const read = Promise.withResolvers<void>();
+  let buffered: Buffer = Buffer.alloc(0);
+  const stop = (): void => {
+    socket.off('data', onData);
+    socket.off('close', onClose);
+    socket.pause();
+  };
+  const onClose = (): void => read.reject(notHello);
+  const onData = (chunk: Buffer): void => {
+    buffered = Buffer.concat([buffered, chunk]);
+    const length = Math.min(buffered.length, hello.length);
+    if (!buffered.subarray(0, length).equals(hello.subarray(0, length))) {
+      stop();
+      read.reject(notHello);
+      return;
+    }
+    if (buffered.length < hello.length) return;
+    stop();
+    const rest = buffered.subarray(hello.length);
+    if (rest.length > 0) socket.unshift(rest);
+    read.resolve();
+  };
+  socket.resume();
+  socket.on('data', onData);
+  socket.once('close', onClose);
+  return read.promise;
 }

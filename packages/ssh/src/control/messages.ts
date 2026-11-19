@@ -15,7 +15,9 @@ export type Request =
       readonly network: 'tcp' | 'unix';
       readonly address: string;
     }
-  | { readonly kind: 'session'; readonly start: SessionStart };
+  | { readonly kind: 'session'; readonly start: SessionStart }
+  /** Keeps the master serving while the connection is open, as an OpenSSH mux client does (channel_still_open counts SSH_CHANNEL_MUX_CLIENT). */
+  | { readonly kind: 'hold' };
 
 /** The answer to a request: the channel opened, the server refused it (OpenChannelError), or its open failed. */
 export type Reply =
@@ -126,6 +128,7 @@ export function isRequest(value: unknown): value is Request {
       isString(value['address'])
     );
   }
+  if (value['kind'] === 'hold') return true;
   return value['kind'] === 'session' && isStart(value['start']);
 }
 

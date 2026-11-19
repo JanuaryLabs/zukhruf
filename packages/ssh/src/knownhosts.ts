@@ -2,6 +2,7 @@ import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { appendFile, mkdir, readFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
+import { isErrno } from './errno.ts';
 import { ssh2HostKeyAlgorithms } from './host-key-algorithms.ts';
 import { matchPattern } from './match-pattern.ts';
 import { PublicKey } from './public-key.ts';
@@ -163,9 +164,7 @@ async function readIfPresent(file: string): Promise<string> {
   try {
     return await readFile(file, 'utf8');
   } catch (error) {
-    if (Error.isError(error) && 'code' in error && error.code === 'ENOENT') {
-      return '';
-    }
+    if (isErrno(error, 'ENOENT')) return '';
     throw error;
   }
 }
