@@ -1,6 +1,6 @@
 {
   "name": "@zukhruf/authentication",
-  "version": "0.8.40",
+  "version": "0.8.41",
   "description": "The better-auth session at the edges of an app: a Hono middleware that refuses a request without a session or without two-factor, and a React Router loader guard that sends a visitor to sign in and back on a safe return path.",
   "license": "MIT",
   "repository": {
