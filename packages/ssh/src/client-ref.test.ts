@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { writeFile } from 'node:fs/promises';
+import { chmod, unlink, writeFile } from 'node:fs/promises';
 import { type Server, type Socket, createServer } from 'node:net';
 import { userInfo } from 'node:os';
 import { join } from 'node:path';
@@ -719,5 +719,271 @@ test(
     );
     assert.deepEqual(outputs, ['ran\n', 'ran\n']);
     assert.equal(sshd.connections(), 2);
+  },
+);
+
+test(
+  'a connection that joined a master whose process is killed with SIGKILL elects again for its next session: it becomes the master, the session runs, and a later share() joins it',
+  { skip: noSshd },
+  async (t) => {
+    // Arrange: the owner is the master, this process joins it, and then the
+    // owner dies.
+    await using directory = await new TemporaryFiles().directory('ssh-', {
+      parent: '/tmp',
+    });
+    await using sshd = await startSshd();
+    const file = await writeSharingConfig(directory.path, sshd);
+    const owner = await startOwner(
+      ['share', file, 'box', directory.path],
+      t.signal,
+    );
+    const config = await OpenSshConfig.resolve('box', {
+      flags: ['-F', file],
+      environment: { PATH: '/usr/bin:/bin', HOME: directory.path },
+    });
+    await using joined = await config.share({ clock: globalThis });
+    await owner[Symbol.asyncDispose]();
+
+    // Act
+    const output = String(await joined.newSession().output('echo ran'));
+    await using next = await config.share({ clock: globalThis });
+
+    // Assert
+    assert.equal(output, 'ran\n');
+    assert.equal(String(await next.newSession().output('echo ran')), 'ran\n');
+    assert.equal(sshd.connections(), 2);
+  },
+);
+
+test(
+  'a connection that joined a master whose process is killed with SIGKILL holds the master that another process became since: it dials through it with no connection of its own, and keeps it serving after that process closes its use',
+  { skip: noSshd },
+  async (t) => {
+    // Arrange: the first owner is the master and this process joins it,
+    // unref'd, so it elects at its next channel; the first owner dies, and
+    // the second becomes the master.
+    await using directory = await new TemporaryFiles().directory('ssh-', {
+      parent: '/tmp',
+    });
+    await using sshd = await startSshd();
+    const file = await writeSharingConfig(directory.path, sshd);
+    const first = await startOwner(
+      ['share', file, 'box', directory.path],
+      t.signal,
+    );
+    const config = await OpenSshConfig.resolve('box', {
+      flags: ['-F', file],
+      environment: { PATH: '/usr/bin:/bin', HOME: directory.path },
+    });
+    await using joined = await config.share({ clock: globalThis });
+    joined.unref();
+    await first[Symbol.asyncDispose]();
+    await using second = await startOwner(
+      ['share', file, 'box', directory.path],
+      t.signal,
+    );
+    const target = createServer((socket) => socket.end('served'));
+    target.listen(0, '127.0.0.1');
+    await once(target, 'listening');
+    const served = async (): Promise<string> => {
+      const channel = await joined.dial('tcp', `127.0.0.1:${portOf(target)}`);
+      const received = Buffer.concat(await channel.toArray()).toString();
+      channel.destroy();
+      return received;
+    };
+    try {
+      // Act
+      const before = await served();
+      second.close();
+      await second.reported('closed', t.signal);
+      const after = await served();
+
+      // Assert
+      assert.deepEqual([before, after], ['served', 'served']);
+      assert.equal(sshd.connections(), 2);
+    } finally {
+      target.close();
+    }
+  },
+);
+
+test(
+  'under ControlMaster no, a connection that joined a master whose process is killed with SIGKILL connects on its own for its next session, as ssh does, and takes no socket: a later share() under auto makes a connection of its own',
+  { skip: noSshd },
+  async (t) => {
+    // Arrange: the owner is the master, this process joins it under
+    // ControlMaster no, and then the owner dies.
+    await using directory = await new TemporaryFiles().directory('ssh-', {
+      parent: '/tmp',
+    });
+    await using sshd = await startSshd();
+    const file = await writeSharingConfig(directory.path, sshd);
+    const owner = await startOwner(
+      ['share', file, 'box', directory.path],
+      t.signal,
+    );
+    const environment = { PATH: '/usr/bin:/bin', HOME: directory.path };
+    const joining = await OpenSshConfig.resolve('box', {
+      flags: ['-F', file, '-o', 'ControlMaster=no'],
+      environment,
+    });
+    await using joined = await joining.share({ clock: globalThis });
+    await owner[Symbol.asyncDispose]();
+
+    // Act
+    const output = String(await joined.newSession().output('echo ran'));
+    const auto = await OpenSshConfig.resolve('box', {
+      flags: ['-F', file],
+      environment,
+    });
+    await using master = await auto.share({ clock: globalThis });
+
+    // Assert
+    assert.equal(output, 'ran\n');
+    assert.equal(String(await master.newSession().output('echo ran')), 'ran\n');
+    assert.equal(sshd.connections(), 3);
+  },
+);
+
+test(
+  'a process that joined a master whose process is killed with SIGKILL stays alive while its connection is ref’d, and after unref() and a session it exits by itself: the connection of its election stays unref’d',
+  { skip: noSshd },
+  async (t) => {
+    // Arrange: the first owner is the master, the second joins it, and then
+    // the first dies.
+    await using directory = await new TemporaryFiles().directory('ssh-', {
+      parent: '/tmp',
+    });
+    await using sshd = await startSshd();
+    const file = await writeSharingConfig(directory.path, sshd);
+    const master = await startOwner(
+      ['share', file, 'box', directory.path],
+      t.signal,
+    );
+    await using joined = await startOwner(
+      ['share', file, 'box', directory.path, '--session-after-unref'],
+      t.signal,
+    );
+    await master[Symbol.asyncDispose]();
+
+    // Act
+    joined.unref();
+
+    // Assert
+    assert.deepEqual(await joined.exited(t.signal), { code: 0, signal: null });
+    assert.deepEqual(joined.reports, ['idle', 'unrefed', 'exiting']);
+    assert.equal(sshd.connections(), 2);
+  },
+);
+
+test(
+  'an election that fails after the master is killed with SIGKILL rejects that session, and the next session elects again',
+  { skip: noSshd },
+  async (t) => {
+    // Arrange: this process joins the owner's master, unref'd, so it elects
+    // at its next channel, and the owner dies. The folder of the socket then
+    // refuses the removal of the socket that the owner left: platform setup,
+    // as no operation of the package makes the removal fail.
+    await using directory = await new TemporaryFiles().directory('ssh-', {
+      parent: '/tmp',
+    });
+    await using sshd = await startSshd();
+    const file = await writeSharingConfig(directory.path, sshd);
+    const owner = await startOwner(
+      ['share', file, 'box', directory.path],
+      t.signal,
+    );
+    const config = await OpenSshConfig.resolve('box', {
+      flags: ['-F', file],
+      environment: { PATH: '/usr/bin:/bin', HOME: directory.path },
+    });
+    await using joined = await config.share({ clock: globalThis });
+    joined.unref();
+    await owner[Symbol.asyncDispose]();
+    await chmod(directory.path, 0o500);
+    try {
+      await assert.rejects(joined.newSession().output('echo ran'), {
+        code: 'EACCES',
+      });
+    } finally {
+      await chmod(directory.path, 0o700);
+    }
+
+    // Act
+    const output = String(await joined.newSession().output('echo ran'));
+
+    // Assert
+    assert.equal(output, 'ran\n');
+    assert.equal(sshd.connections(), 2);
+  },
+);
+
+test(
+  'a connection whose master’s socket was removed, as a cleaner of /tmp removes one, elects again for its next session: it becomes the master, and its hold on the old master ends, so that master’s process exits by itself',
+  { skip: noSshd },
+  async (t) => {
+    // Arrange: the owner is the master, unref'd, so only the hold of this
+    // process keeps it alive. Its socket is then removed: platform setup, as
+    // no operation of the package removes the socket of a live master.
+    await using directory = await new TemporaryFiles().directory('ssh-', {
+      parent: '/tmp',
+    });
+    await using sshd = await startSshd();
+    const file = await writeSharingConfig(directory.path, sshd);
+    await using owner = await startOwner(
+      ['share', file, 'box', directory.path],
+      t.signal,
+    );
+    const config = await OpenSshConfig.resolve('box', {
+      flags: ['-F', file],
+      environment: { PATH: '/usr/bin:/bin', HOME: directory.path },
+    });
+    await using joined = await config.share({ clock: globalThis });
+    owner.unref();
+    await owner.reported('unrefed', t.signal);
+    await unlink(join(directory.path, 'cm.zukhruf'));
+
+    // Act
+    const output = String(await joined.newSession().output('echo ran'));
+
+    // Assert
+    assert.equal(output, 'ran\n');
+    assert.deepEqual(await owner.exited(t.signal), { code: 0, signal: null });
+    assert.equal(sshd.connections(), 2);
+  },
+);
+
+test(
+  'a master that closed its use and serves only a joined connection ends cleanly when its socket was removed and that connection elects again: its shutdown finds no socket to remove, as OpenSSH ignores the error of that unlink',
+  { skip: noSshd },
+  async (t) => {
+    // Arrange: the owner is the master and this process joins it; the owner
+    // closes its use, so it serves only the hold of this process. Its socket
+    // is then removed: platform setup, as no operation of the package removes
+    // the socket of a live master.
+    await using directory = await new TemporaryFiles().directory('ssh-', {
+      parent: '/tmp',
+    });
+    await using sshd = await startSshd();
+    const file = await writeSharingConfig(directory.path, sshd);
+    await using owner = await startOwner(
+      ['share', file, 'box', directory.path],
+      t.signal,
+    );
+    const config = await OpenSshConfig.resolve('box', {
+      flags: ['-F', file],
+      environment: { PATH: '/usr/bin:/bin', HOME: directory.path },
+    });
+    await using joined = await config.share({ clock: globalThis });
+    owner.close();
+    await owner.reported('closed', t.signal);
+    await unlink(join(directory.path, 'cm.zukhruf'));
+
+    // Act
+    const output = String(await joined.newSession().output('echo ran'));
+
+    // Assert
+    assert.equal(output, 'ran\n');
+    assert.deepEqual(await owner.exited(t.signal), { code: 0, signal: null });
   },
 );

@@ -266,6 +266,8 @@ Under `ControlMaster auto`, `share()` joins the master at the socket. With no ma
 
 A master serves while its process uses the connection, or while another process uses it. So a master's process does not exit while another process holds the connection: do not run it under `node --test --test-force-exit`. After `close()`, a master serves until the last process lets go, then it closes the connection. A joined connection keeps its process alive only while ref'd, as a `Client` does: `unref()` lets the process exit, also with an idle channel open.
 
+A master can go away while other processes use it: its process ends, crashes or is killed, or a cleaner of `/tmp` removes its socket. The processes that joined it lose only the channels in flight. Each runs the election again, as the next `ssh` does: it joins the master that another process became, becomes the master under `auto`, or connects alone under `no`. A ref'd connection elects at once, so it keeps its process alive; an unref'd one elects at its next channel ([ADR 0013](./docs/adr/0013-processes-share-a-connection-by-controlmaster-and-controlpath-as-openssh-shares-one.md)).
+
 To choose the owner yourself, use the control master directly. `ControlMaster.listen(client, path)` serves the channels of a client on a Unix socket, as OpenSSH's `ControlMaster` and `ControlPath` do. A `ControlClient` in another process dials and runs sessions through it, with the calls of `Client` ([ADR 0012](./docs/adr/0012-a-control-master-serves-the-channels-of-one-connection-to-other-processes.md)):
 
 ```ts

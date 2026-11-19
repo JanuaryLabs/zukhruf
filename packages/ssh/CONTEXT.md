@@ -90,12 +90,16 @@ A process's way to open channels through a control master, one connection to its
 _Avoid_: Mux client, shared client
 
 **Shared connection**:
-A connection that the processes of the user share by ControlMaster and ControlPath: `config.share()`. The first process becomes the control master; each later one joins it and holds a connection to its socket until `close()`. OpenSSH's `ControlMaster auto`.
+A connection that the processes of the user share by ControlMaster and ControlPath: `config.share()`. The first process becomes the control master; each later one joins it and holds a connection to its socket until `close()`, or until its master goes away, when it runs the election again. OpenSSH's `ControlMaster auto`.
 _Avoid_: Pooled connection, multiplexed connection
 
 **Hold**:
-The one connection that a joined shared connection keeps to its control master, from the join to `close()`. While a hold is open, the master serves. OpenSSH counts a mux client's connection the same way.
+The one connection that a joined shared connection keeps to its control master, from the join to `close()` or to the loss of the master. While a hold is open, the master serves. OpenSSH counts a mux client's connection the same way.
 _Avoid_: Lease, lock, keepalive
+
+**Election**:
+The steps by which a shared connection joins the master at the socket, becomes the master, or connects alone: OpenSSH's `muxclient` and `muxserver_listen`, with the socket file as the only arbiter. `share()` runs it, and a joined connection runs it again after the loss of its master.
+_Avoid_: Leader election (`@zukhruf/election`'s term), reconnect
 
 ### Host keys
 

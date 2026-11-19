@@ -187,7 +187,8 @@ export class OpenSshConfig {
     readonly signal?: AbortSignal;
   }): Promise<SharedConnection> {
     return shareConnection(this.#sharing, {
-      dial: () => this.dial(options),
+      dial: (signal) =>
+        this.dial({ clock: options.clock, ...(signal && { signal }) }),
       clock: options.clock,
       signal: options.signal,
       connectTimeout: this.connectTimeout,

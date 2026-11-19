@@ -169,6 +169,7 @@ const bridge: {
   restrict: (client: Client, error: Error) => void;
   closeWith: (client: Client, owned: Client) => void;
   own: (client: Client, transport: Handle) => void;
+  openSession: (client: Client, start: SessionStart) => Promise<SessionChannel>;
 } = {
   restrict: () => {
     throw new Error('ssh: the Client class has not loaded');
@@ -177,6 +178,9 @@ const bridge: {
     throw new Error('ssh: the Client class has not loaded');
   },
   own: () => {
+    throw new Error('ssh: the Client class has not loaded');
+  },
+  openSession: () => {
     throw new Error('ssh: the Client class has not loaded');
   },
 };
@@ -199,6 +203,14 @@ export function closeWithClient(client: Client, owned: Client): void {
 /** Refs and unrefs `transport`, which `client` runs on and the package opened, such as the transport of a ProxyCommand, with `client`. Not exported from the package. */
 export function ownTransport(client: Client, transport: Handle): void {
   bridge.own(client, transport);
+}
+
+/** Opens the channel of a session of `client`, as a Session of its newSession() opens it, for a shared connection that is the master of `client` or has it alone. Not exported from the package. */
+export function openClientSession(
+  client: Client,
+  start: SessionStart,
+): Promise<SessionChannel> {
+  return bridge.openSession(client, start);
 }
 
 /** One SSH connection and its channels. Go's ssh.Client. */
@@ -234,6 +246,7 @@ export class Client implements AsyncDisposable {
     bridge.own = (client, transport) => {
       client.#handles.push(transport);
     };
+    bridge.openSession = (client, start) => client.#openSession(start);
   }
 
   private constructor(
@@ -421,12 +434,14 @@ export class Client implements AsyncDisposable {
 
   /** A session. Its channel opens at start(), run(), output(), combinedOutput() or shell(). Go's Client.NewSession. */
   newSession(): Session {
-    return createSession((start) =>
-      openSession(
-        this.#connection,
-        { ...start, env: { ...this.#sessionEnv, ...start.env } },
-        () => this.#phase.cause,
-      ),
+    return createSession((start) => this.#openSession(start));
+  }
+
+  #openSession(start: SessionStart): Promise<SessionChannel> {
+    return openSession(
+      this.#connection,
+      { ...start, env: { ...this.#sessionEnv, ...start.env } },
+      () => this.#phase.cause,
     );
   }
 
