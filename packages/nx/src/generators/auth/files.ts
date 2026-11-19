@@ -195,3 +195,28 @@ export function signedInLoader(
 export const allowedOriginsComment = `# better-auth trusts these origins in every environment. In development they
 # are the origins of the web app: the Vite dev server and portless.
 `;
+
+/**
+ * The lines that the env map of module "stack" in the main.tf of the dokploy
+ * generator gets above its marker. The comment line keeps tofu fmt from
+ * aligning them with the host's own keys.
+ */
+export const authStackEnv = `# better-auth signs the session cookies with the secret, and builds its links on the URL.
+    BETTER_AUTH_SECRET = random_password.better_auth.result
+    BETTER_AUTH_URL    = "https://\${local.host}"
+    `;
+
+/** The secret of better-auth in production, next to the main.tf of the dokploy generator. */
+export const authTf = `# BETTER_AUTH_SECRET of the env of module "stack" in main.tf. better-auth signs
+# the session cookies and encrypts its stored data with it, so a new value signs
+# every user out and leaves that data unreadable (text2sql #398): the secret is
+# never replaced.
+resource "random_password" "better_auth" {
+  length  = 64
+  special = false
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+`;

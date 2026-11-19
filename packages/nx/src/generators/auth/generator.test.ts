@@ -1,9 +1,17 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { cp, mkdir, writeFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import { test } from 'node:test';
+import { fileURLToPath } from 'node:url';
 
-import { readJson } from '@nx/devkit';
+import { type Tree, readJson } from '@nx/devkit';
+
+import { TemporaryFiles } from '@zukhruf/fs';
 
 import { changes, generatorTree } from '../../testing/generator-tree.ts';
+import { stackModuleSource } from '../dokploy/files.ts';
+import dokployGenerator from '../dokploy/generator.ts';
 import nodeAppGenerator from '../node-app/generator.ts';
 import pairGenerator from '../pair/generator.ts';
 import prismaGenerator from '../prisma/generator.ts';
@@ -518,3 +526,163 @@ test('in development, better-auth builds its links on the host of an allowed ori
     /advanced: \{ trustedProxyHeaders: typeof options\.baseURL !== 'string' \}/,
   );
 });
+
+const production = 'infra/src/environments/production';
+
+/** A backend wired to a db package and delivered by the dokploy generator. */
+async function deliveredWorkspace(): Promise<Tree> {
+  const tree = generatorTree();
+  await nodeAppGenerator(tree, { directory: 'apps/backend' });
+  await prismaGenerator(tree, {
+    directory: 'packages/db',
+    backend: 'apps/backend',
+  });
+  await dokployGenerator(tree, {
+    api: 'apps/backend',
+    owner: 'acme',
+    database: 'packages/db',
+  });
+  return tree;
+}
+
+test('with the infra of the dokploy generator, the module call gets the secret and the URL above the marker of its env, and auth.tf the secret', async () => {
+  const tree = await deliveredWorkspace();
+
+  await authGenerator(tree, options);
+
+  assert.match(
+    tree.read(`${production}/main.tf`, 'utf-8') ?? '',
+    /\n {2}env = \{\n {4}PUBLIC_HOST = local\.host\n {4}# better-auth signs the session cookies with the secret, and builds its links on the URL\.\n {4}BETTER_AUTH_SECRET = random_password\.better_auth\.result\n {4}BETTER_AUTH_URL {4}= "https:\/\/\$\{local\.host\}"\n {4}# Generators add env keys above this line\.\n {2}\}\n\}\n/,
+  );
+  assert.match(
+    tree.read(`${production}/auth.tf`, 'utf-8') ?? '',
+    /^resource "random_password" "better_auth" \{\n {2}length {2}= 64\n {2}special = false\n\n {2}lifecycle \{\n {4}prevent_destroy = true\n {2}\}\n\}\n/m,
+  );
+});
+
+test('a second run changes no file of infra/, and keeps an auth.tf that the repo edited', async () => {
+  const tree = await deliveredWorkspace();
+  await authGenerator(tree, options);
+  tree.write(
+    `${production}/auth.tf`,
+    (tree.read(`${production}/auth.tf`, 'utf-8') ?? '').replace(
+      'length  = 64',
+      'length  = 48',
+    ),
+  );
+  const infra = () =>
+    [...changes(tree)].filter(([path]) => path.startsWith('infra/'));
+  const first = infra();
+
+  await authGenerator(tree, options);
+
+  assert.deepEqual(infra(), first);
+  assert.match(
+    tree.read(`${production}/auth.tf`, 'utf-8') ?? '',
+    /length {2}= 48/,
+  );
+});
+
+test('a module call whose env lost the marker stops the generator with the two lines to add', async () => {
+  const tree = await deliveredWorkspace();
+  tree.write(
+    `${production}/main.tf`,
+    (tree.read(`${production}/main.tf`, 'utf-8') ?? '').replace(
+      '    # Generators add env keys above this line.\n',
+      '',
+    ),
+  );
+
+  await assert.rejects(authGenerator(tree, options), {
+    message:
+      'infra/src/environments/production/main.tf calls module "stack" but its env has no "# Generators add env keys above this line.", so the generator cannot add BETTER_AUTH_SECRET = random_password.better_auth.result and BETTER_AUTH_URL = "https://${local.host}". Add the two lines to env, or put the marker back as the last line of env.',
+  });
+});
+
+test('a repo without the infra of the dokploy generator gets no file in infra/', async () => {
+  const tree = generatorTree();
+  await nodeAppGenerator(tree, { directory: 'apps/backend' });
+  await prismaGenerator(tree, {
+    directory: 'packages/db',
+    backend: 'apps/backend',
+  });
+
+  await authGenerator(tree, options);
+
+  assert.deepEqual(
+    [...changes(tree).keys()].filter((path) => path.startsWith('infra/')),
+    [],
+  );
+});
+
+test('a main.tf that does not call module "stack" stays as it is, and gets no auth.tf beside it', async () => {
+  const tree = generatorTree();
+  await nodeAppGenerator(tree, { directory: 'apps/backend' });
+  await prismaGenerator(tree, {
+    directory: 'packages/db',
+    backend: 'apps/backend',
+  });
+  const main =
+    'resource "dokploy_compose" "backend" {\n  env = <<-EOT\n    PUBLIC_HOST=example.com\n  EOT\n}\n';
+  tree.write(`${production}/main.tf`, main);
+
+  await authGenerator(tree, options);
+
+  assert.equal(tree.read(`${production}/main.tf`, 'utf-8'), main);
+  assert.equal(tree.exists(`${production}/auth.tf`), false);
+});
+
+// The host's format:check runs tofu fmt -check and its typecheck tofu validate,
+// so the lines that auth adds must pass both beside the dokploy generator's.
+// The module call points at the module of the checkout, as in the dokploy
+// tests. Copy of the dokploy generator test (strike 2, #4733).
+const tofuOnPath =
+  spawnSync('tofu', ['version'], { stdio: 'ignore' }).status === 0;
+
+test(
+  'the infra with the auth lines is formatted and validates against the dokploy-stack module of the checkout',
+  { skip: tofuOnPath ? false : 'tofu is not on PATH' },
+  async () => {
+    const tree = await deliveredWorkspace();
+    await authGenerator(tree, options);
+    await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
+    await cp(
+      fileURLToPath(
+        new URL('../../../opentofu/dokploy-stack', import.meta.url),
+      ),
+      join(folder.path, 'dokploy-stack'),
+      { recursive: true, filter: (source) => !source.includes('.terraform') },
+    );
+    for (const change of tree.listChanges()) {
+      if (change.type === 'DELETE' || !change.path.startsWith('infra/')) {
+        continue;
+      }
+      const path = join(folder.path, change.path);
+      await mkdir(dirname(path), { recursive: true });
+      await writeFile(
+        path,
+        (change.content?.toString() ?? '').replace(
+          stackModuleSource,
+          '../../../../dokploy-stack',
+        ),
+      );
+    }
+
+    for (const args of [
+      ['fmt', '-check', '-diff', '-recursive'],
+      ['init', '-backend=false', '-input=false', '-lockfile=readonly'],
+      ['validate', '-no-color'],
+    ]) {
+      const run = spawnSync('tofu', args, {
+        cwd: join(folder.path, production),
+        encoding: 'utf8',
+      });
+
+      assert.equal(
+        run.status,
+        0,
+        `tofu ${args.join(' ')}\n${run.stdout}${run.stderr}`,
+      );
+    }
+  },
+);

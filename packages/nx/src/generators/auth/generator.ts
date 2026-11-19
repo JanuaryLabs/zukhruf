@@ -13,6 +13,7 @@ import {
 } from '@nx/devkit';
 
 import { appDirectory, projectNameOf } from '../app-directory.ts';
+import { envMarker, infraRoot } from '../dokploy/files.ts';
 import initGenerator from '../init/generator.ts';
 import { portOf } from '../pair/generator.ts';
 import {
@@ -28,6 +29,8 @@ import {
   authMount,
   authPrisma,
   authRouteTs,
+  authStackEnv,
+  authTf,
   authTs,
   backendSessionTs,
   startupAuthTs,
@@ -120,6 +123,7 @@ export default async function authGenerator(
   wireStartup(tree, startupPath, dbPackageName);
   mountRoutes(tree, `${backendRoot}/src/app.ts`);
   wireEnvironment(tree, backendRoot);
+  wireInfra(tree);
   if (webRoot !== undefined) wireWeb(tree, backendRoot, webRoot);
   updateJson(
     tree,
@@ -245,6 +249,30 @@ function wireEnvironment(tree: Tree, backendRoot: string): void {
     );
     addEnvEntry(tree, envFilePath, 'BETTER_AUTH_URL', url);
   }
+}
+
+/**
+ * When the dokploy generator wrote the infra, the module call in its main.tf
+ * gets the secret and the URL above the marker of its env map, and auth.tf the
+ * secret (ADR 0015 decision 6). A repo without the module call gets nothing.
+ */
+function wireInfra(tree: Tree): void {
+  const production = `${infraRoot}/src/environments/production`;
+  const mainPath = `${production}/main.tf`;
+  const main = tree.read(mainPath, 'utf-8');
+  if (main === null || !/^module "stack" \{$/m.test(main)) return;
+  if (!/^\s*BETTER_AUTH_SECRET\s*=/m.test(main)) {
+    if (!main.includes(envMarker)) {
+      throw new Error(
+        `${mainPath} calls module "stack" but its env has no ${JSON.stringify(envMarker)}, so the generator cannot add BETTER_AUTH_SECRET = random_password.better_auth.result and BETTER_AUTH_URL = "https://\${local.host}". Add the two lines to env, or put the marker back as the last line of env.`,
+      );
+    }
+    tree.write(
+      mainPath,
+      main.replace(envMarker, `${authStackEnv}${envMarker}`),
+    );
+  }
+  writeIfMissing(tree, `${production}/auth.tf`, authTf);
 }
 
 /**
