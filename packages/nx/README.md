@@ -1260,6 +1260,40 @@ npx nx g @zukhruf/nx:auth --backend apps/backend --db packages/db --web apps/web
 
 Pair the web with the backend first. `apps/web/src/auth-client.ts` then exports `authClient`, which calls `/api/auth` on the page origin: the Vite proxy in development, the backend in production. The backend trusts the two origins that the browser sends in development: `http://localhost:5173` (`nx run @acme/web:dev`) and `https://web.acme.localhost` (`nx run @acme/web:portless`). If your portless proxy uses another TLD or a prefix, add that origin to `ALLOWED_ORIGINS` in `apps/backend/.env`; better-auth answers any other origin with 403 `INVALID_ORIGIN`.
 
+In development, better-auth builds its links (email verification, password reset) on the host of the page that asked for them when that host is in `ALLOWED_ORIGINS`, so a link opened from the Vite dev server or from portless signs in that same page. A request from any other host, and production, get `BETTER_AUTH_URL`.
+
+### Require a session
+
+The generator protects no route; your route modules and router choose. On the backend, list `signedIn` from `src/session.ts`. A request without a session gets 401 (`UnauthenticatedError` of [`@zukhruf/authentication`](../authentication/README.md)), and the route reads the session on `c.var.session`:
+
+```ts
+// apps/backend/src/routes/me.route.ts, added to the route list of app.ts
+import type { Hono } from 'hono';
+
+import { signedIn } from '../session.ts';
+
+export default function (app: Hono): void {
+  app.get('/me', signedIn, (c) => c.json(c.var.session.user));
+}
+```
+
+`signedIn` loads `startup.ts` on the first request, so `app.test.ts` still runs without a database. In the web, give each page behind sign-in the loader from `src/session.ts`, with the path of your sign-in page:
+
+```ts
+// apps/web/src/main.tsx
+import { signedInLoader } from './session.ts';
+
+const router = createBrowserRouter([
+  {
+    path: '/cases',
+    loader: signedInLoader({ signIn: '/sign-in' }),
+    Component: Cases,
+  },
+]);
+```
+
+A visitor without a session lands on `/sign-in?redirectTo=%2Fcases`. After you add better-auth's two-factor plugin, pass `{ twoFactor: true }` to `requireSession` in the backend's `src/session.ts`, and `twoFactorSetup` to `signedInLoader`; both are type errors before the plugin is there.
+
 ### Signature of the auth generator
 
 ```ts
@@ -1273,20 +1307,22 @@ interface AuthOptions {
 
 ### What the auth generator writes
 
-| File                                 | Content                                                                                                                                                                         |
-| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `<backend>/src/auth.ts`              | `createAuth({ prisma, secret, baseURL, trustedOrigins })`: better-auth on `prismaAdapter` with `emailAndPassword`; it reads no environment; only when missing                   |
-| `<backend>/src/auth.cli.ts`          | `export const auth` for the better-auth CLI, on `createPrisma` with no connection and placeholder secret and URL; it imports no `env.ts` and no `startup.ts`; only when missing |
-| `<backend>/src/routes/auth.route.ts` | `GET` and `POST` `/api/auth/*` to `auth.handler`; the handler loads `startup.ts` on the first request, so `app.test.ts` needs no database; only when missing                    |
-| `<backend>/src/app.ts`               | the mount of the auth route, before the UI mount of pair and before `notFound`                                                                                                  |
-| `<backend>/src/startup.ts`           | `export const auth = createAuth(...)` on the app's client, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL` and `ALLOWED_ORIGINS`                                                        |
-| `<backend>/src/env.ts`               | `BETTER_AUTH_SECRET: z.string().min(32)` and `BETTER_AUTH_URL: z.url()`                                                                                                         |
-| `<backend>/.env.example`, `.env`     | `BETTER_AUTH_SECRET=` and `BETTER_AUTH_URL=http://localhost:<PORT>`; `.env` gets a random 43-character secret; a key that is there keeps its value                              |
-| `<backend>/package.json`             | `better-auth` in `dependencies`; the `auth:generate` and `auth:check` targets                                                                                                   |
-| `<web>/src/auth-client.ts`           | with `--web`: `export const authClient = createAuthClient()` from `better-auth/react`, with no `baseURL`; only when missing                                                     |
-| `<web>/package.json`                 | with `--web`: `better-auth` in `dependencies`                                                                                                                                   |
-| `<backend>/.env.example`, `.env`     | with `--web`: `http://localhost:5173` and `https://<portless name>.localhost` added to `ALLOWED_ORIGINS`, after the origins that are there                                      |
-| `<db>/models/auth.prisma`            | a one-line placeholder, which the CLI fills; without it the CLI writes a second generator and datasource, and `prisma generate` fails with P1012; only when missing             |
+| File                                 | Content                                                                                                                                                                                                           |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `<backend>/src/auth.ts`              | `createAuth({ prisma, secret, baseURL, trustedOrigins })`: better-auth on `prismaAdapter` with `emailAndPassword`; `baseURL` is a URL or `{ fallback, allowedHosts }`; it reads no environment; only when missing |
+| `<backend>/src/session.ts`           | `export const signedIn = requireSession(sessions)` from `@zukhruf/authentication/hono`; `sessions` loads `startup.ts` on the first request and has the type of the app's session; only when missing               |
+| `<backend>/src/auth.cli.ts`          | `export const auth` for the better-auth CLI, on `createPrisma` with no connection and placeholder secret and URL; it imports no `env.ts` and no `startup.ts`; only when missing                                   |
+| `<backend>/src/routes/auth.route.ts` | `GET` and `POST` `/api/auth/*` to `auth.handler`; the handler loads `startup.ts` on the first request, so `app.test.ts` needs no database; only when missing                                                      |
+| `<backend>/src/app.ts`               | the mount of the auth route, before the UI mount of pair and before `notFound`                                                                                                                                    |
+| `<backend>/src/startup.ts`           | `export const auth = createAuth(...)` on the app's client, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL` and `ALLOWED_ORIGINS`; in development, `baseURL` is the host of an allowed origin, else `BETTER_AUTH_URL`      |
+| `<backend>/src/env.ts`               | `BETTER_AUTH_SECRET: z.string().min(32)` and `BETTER_AUTH_URL: z.url()`                                                                                                                                           |
+| `<backend>/.env.example`, `.env`     | `BETTER_AUTH_SECRET=` and `BETTER_AUTH_URL=http://localhost:<PORT>`; `.env` gets a random 43-character secret; a key that is there keeps its value                                                                |
+| `<backend>/package.json`             | `better-auth` and `@zukhruf/authentication` in `dependencies`; the `auth:generate` and `auth:check` targets                                                                                                       |
+| `<web>/src/auth-client.ts`           | with `--web`: `export const authClient = createAuthClient()` from `better-auth/react`, with no `baseURL`; only when missing                                                                                       |
+| `<web>/src/session.ts`               | with `--web`: `signedInLoader(options)`, a loader that calls `requireSession(authClient, request, options)` of `@zukhruf/authentication/react-router`; only when missing                                          |
+| `<web>/package.json`                 | with `--web`: `better-auth` and `@zukhruf/authentication` in `dependencies`; a `react-router` below 8.5.2 becomes 8.5.2, the peer range of `@zukhruf/authentication`                                              |
+| `<backend>/.env.example`, `.env`     | with `--web`: `http://localhost:5173` and `https://<portless name>.localhost` added to `ALLOWED_ORIGINS`, after the origins that are there                                                                        |
+| `<db>/models/auth.prisma`            | a one-line placeholder, which the CLI fills; without it the CLI writes a second generator and datasource, and `prisma generate` fails with P1012; only when missing                                               |
 
 At the root: the CLI `auth` in `devDependencies`. The generator writes no migration. A second run adds nothing twice.
 
@@ -1299,7 +1335,7 @@ Both run in the backend root with `NODE_OPTIONS=--conditions=development`, so ji
 
 ### Versions that the auth generator writes
 
-`better-auth` and `auth` have one exact version, 1.7.26, in `appPackageVersions`, and a test checks that they are equal.
+`better-auth` and `auth` have one exact version, 1.7.26, in `appPackageVersions`, and a test checks that they are equal. `@zukhruf/authentication` gets the version of this package, as every zukhruf package has the same version.
 
 ### Errors of the auth generator
 
@@ -1315,6 +1351,8 @@ Both run in the backend root with `NODE_OPTIONS=--conditions=development`, so ji
 After the steps of [Test the prisma generator before a release](#test-the-prisma-generator-before-a-release) up to `run-many`: run `auth --backend apps/backend --db packages/db`, then check that `auth:check` exits 0, that `run-many -t typecheck lint build test` passes, and that a second run changes no file. On 2026-11-19 each step passed. The production bundle on a `postgres:18-alpine`, with the schema from `prisma migrate diff`, answered `POST /api/auth/sign-up/email` with 200.
 
 For `--web`, also run `react-app apps/web` and `pair` before prisma, and `auth` with `--web apps/web`. Start `serve` of the backend and `dev` of the web, then send `POST http://localhost:5173/api/auth/sign-up/email` with `Origin: http://localhost:5173`: it answers 200, and with another origin 403. Repeat on `https://web.acme.localhost` under the `portless` target. On 2026-11-19 each step passed, and `authClient.signUp.email` in Chromium answered 200.
+
+For the guards, add a route that lists `signedIn`: `GET` it without a cookie (401), then after sign-in (200). Until `@zukhruf/authentication` is on npm, install it from a tarball with an `overrides` entry (`file:<tgz>`), not with `npm link`: a link brings a second `hono`, and the app answers the refusal with 500. On 2026-11-19 both answers were right, through the Vite dev server, and a verification link opened through the Vite dev server and through portless signed in the page on that origin.
 
 The decisions are in [ADR 0014](./docs/adr/0014-the-auth-generator-adds-better-auth-to-a-backend-and-its-db-package.md). The backlog item is #4719.
 

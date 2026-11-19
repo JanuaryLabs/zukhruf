@@ -12,8 +12,11 @@ export interface AuthOptions {
   prisma: PrismaClient;
   /** Signs the session cookies; 32 characters or more. */
   secret: string;
-  /** The URL of this server, where better-auth builds its links. */
-  baseURL: string;
+  /**
+   * Where better-auth builds its links: the URL of this server, or, in
+   * development, the host of the request when it is one of \`allowedHosts\`.
+   */
+  baseURL: string | { fallback: string; allowedHosts: string[] };
   /** The browser origins that may call the auth routes. */
   trustedOrigins: string[];
 }
@@ -29,6 +32,9 @@ export function createAuth(options: AuthOptions) {
     database: prismaAdapter(options.prisma, { provider: 'postgresql' }),
     secret: options.secret,
     baseURL: options.baseURL,
+    // A baseURL from the request takes the protocol of the page from
+    // x-forwarded-proto, which portless sends.
+    advanced: { trustedProxyHeaders: typeof options.baseURL !== 'string' },
     trustedOrigins: options.trustedOrigins,
     emailAndPassword: { enabled: true },
   });
@@ -86,13 +92,25 @@ export const authEnvTs = `  // better-auth signs the session cookies with the se
 /** The lines that startup.ts gets: the auth, on the app's client and validated environment. */
 export const startupAuthTs = `
 // The auth of the app, on the client above. src/routes/auth.route.ts serves it.
+const allowedOrigins = process.env.ALLOWED_ORIGINS.split(',')
+  .map((origin) => origin.trim())
+  .filter((origin) => origin !== '');
 export const auth = createAuth({
   prisma,
   secret: process.env.BETTER_AUTH_SECRET,
-  baseURL: process.env.BETTER_AUTH_URL,
-  trustedOrigins: process.env.ALLOWED_ORIGINS.split(',')
-    .map((origin) => origin.trim())
-    .filter((origin) => origin !== ''),
+  // In development, a link of better-auth (email verification, password
+  // reset) opens on the host of the page that asked for it, when that is the
+  // host of an allowed origin: the Vite dev server and portless proxy /api to
+  // this server, so the cookie that the link sets reaches the page. Any other
+  // host, and production, get BETTER_AUTH_URL.
+  baseURL:
+    process.env.NODE_ENV === 'development'
+      ? {
+          fallback: process.env.BETTER_AUTH_URL,
+          allowedHosts: allowedOrigins.map((origin) => new URL(origin).host),
+        }
+      : process.env.BETTER_AUTH_URL,
+  trustedOrigins: allowedOrigins,
 });
 `;
 
@@ -116,6 +134,61 @@ export const authClientTs = `import { createAuthClient } from 'better-auth/react
 // dev server proxies /api to the backend, and in production the backend serves
 // this app from its own origin (pair).
 export const authClient = createAuthClient();
+`;
+
+/**
+ * The middleware that a route module of the backend lists to require a
+ * session. Its session source loads startup.ts on the first request, as
+ * auth.route.ts does, so app.test.ts still needs no database, and it takes its
+ * type from the app's auth, so `c.var.session.user` has the app's own fields.
+ */
+export const backendSessionTs = `import { requireSession } from '@zukhruf/authentication/hono';
+
+import type { auth } from './startup.ts';
+
+// The session source of requireSession. It loads startup.ts on the first
+// request, not at import, as routes/auth.route.ts does: a test that imports
+// app.ts needs no database and no auth environment.
+const sessions = {
+  api: {
+    async getSession(context: {
+      headers: Headers;
+    }): Promise<typeof auth.$Infer.Session | null> {
+      const startup = await import('./startup.ts');
+      return startup.auth.api.getSession(context);
+    },
+  },
+};
+
+/**
+ * Refuses a request without a session with 401. A route that lists it reads
+ * the session, with the app's own user fields, on c.var.session.
+ */
+export const signedIn = requireSession(sessions);
+`;
+
+/**
+ * The loader guard of the web app, on its better-auth client. The host's
+ * router passes the paths of its own pages; the generator writes no page.
+ */
+export const webSessionTs = `import {
+  type RequireSessionOptions,
+  requireSession,
+} from '@zukhruf/authentication/react-router';
+import type { LoaderFunctionArgs } from 'react-router';
+
+import { authClient } from './auth-client.ts';
+
+/**
+ * The loader of a page behind sign-in. A visitor without a session goes to
+ * \`signIn\`, with the page as the return path. The loader data is the session.
+ */
+export function signedInLoader(
+  options: RequireSessionOptions<typeof authClient.$Infer.Session>,
+) {
+  return ({ request }: LoaderFunctionArgs) =>
+    requireSession(authClient, request, options);
+}
 `;
 
 /** The comment that auth puts above ALLOWED_ORIGINS when it adds the origins of the web app. */

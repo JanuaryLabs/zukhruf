@@ -76,7 +76,9 @@ export const appPackageVersions = {
   'prettier-plugin-tailwindcss': '0.8.1',
   react: '19.3.1',
   'react-dom': '19.3.1',
-  'react-router': '8.5.1',
+  // @zukhruf/authentication peers on ^8.5.2, and npm refuses a lower one
+  // (ERESOLVE), so auth --web raises a lower version to this one.
+  'react-router': '8.5.2',
   tailwindcss: '4.3.5',
   vite: '8.3.8',
   'vite-plugin-compression2': '2.5.4',

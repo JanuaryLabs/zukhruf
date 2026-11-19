@@ -19,7 +19,7 @@ import {
   rootDependencyNames,
   settleRootDependencies,
 } from '../root-dependencies.ts';
-import { appPackageVersions as versions } from '../versions.ts';
+import { appPackageVersions as versions, zukhrufVersion } from '../versions.ts';
 import {
   allowedOriginsComment,
   authCliTs,
@@ -29,7 +29,9 @@ import {
   authPrisma,
   authRouteTs,
   authTs,
+  backendSessionTs,
   startupAuthTs,
+  webSessionTs,
 } from './files.ts';
 
 export interface AuthOptions {
@@ -113,6 +115,7 @@ export default async function authGenerator(
   writeIfMissing(tree, `${backendRoot}/src/auth.ts`, authTs(dbPackageName));
   writeIfMissing(tree, `${backendRoot}/${cliConfig}`, authCliTs(dbPackageName));
   writeIfMissing(tree, `${backendRoot}/src/routes/auth.route.ts`, authRouteTs);
+  writeIfMissing(tree, `${backendRoot}/src/session.ts`, backendSessionTs);
   writeIfMissing(tree, `${dbRoot}/models/auth.prisma`, authPrisma);
   wireStartup(tree, startupPath, dbPackageName);
   mountRoutes(tree, `${backendRoot}/src/app.ts`);
@@ -125,6 +128,7 @@ export default async function authGenerator(
       packageJson.dependencies = {
         ...packageJson.dependencies,
         'better-auth': versions['better-auth'],
+        '@zukhruf/authentication': zukhrufVersion,
       };
       packageJson.nx = {
         ...packageJson.nx,
@@ -251,10 +255,20 @@ function wireEnvironment(tree: Tree, backendRoot: string): void {
  */
 function wireWeb(tree: Tree, backendRoot: string, webRoot: string): void {
   writeIfMissing(tree, `${webRoot}/src/auth-client.ts`, authClientTs);
+  writeIfMissing(tree, `${webRoot}/src/session.ts`, webSessionTs);
   updateJson(tree, `${webRoot}/package.json`, (packageJson: PackageJson) => {
+    const reactRouter = packageJson.dependencies?.['react-router'];
     packageJson.dependencies = {
       ...packageJson.dependencies,
       'better-auth': versions['better-auth'],
+      '@zukhruf/authentication': zukhrufVersion,
+      // npm refuses a react-router below the peer range of
+      // @zukhruf/authentication (ERESOLVE). A newer one stays.
+      'react-router':
+        reactRouter !== undefined &&
+        !isBelow(reactRouter, versions['react-router'])
+          ? reactRouter
+          : versions['react-router'],
     };
     return packageJson;
   });
@@ -265,6 +279,19 @@ function wireWeb(tree: Tree, backendRoot: string, webRoot: string): void {
     const path = `${backendRoot}/${file}`;
     if (tree.exists(path)) addAllowedOrigins(tree, path, origins);
   }
+}
+
+/**
+ * Whether the version that a range like `8.5.1` or `^8.5.1` starts at is below
+ * `version`. A range that names no version is below.
+ */
+function isBelow(range: string, version: string): boolean {
+  const parts = (text: string) =>
+    /(\d+)\.(\d+)\.(\d+)/.exec(text)?.slice(1).map(Number);
+  const [from, to] = [parts(range), parts(version)];
+  if (from === undefined || to === undefined) return true;
+  const index = from.findIndex((part, i) => part !== to[i]);
+  return index !== -1 && (from[index] ?? 0) < (to[index] ?? 0);
 }
 
 /**

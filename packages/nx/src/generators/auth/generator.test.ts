@@ -8,7 +8,7 @@ import nodeAppGenerator from '../node-app/generator.ts';
 import pairGenerator from '../pair/generator.ts';
 import prismaGenerator from '../prisma/generator.ts';
 import reactAppGenerator from '../react-app/generator.ts';
-import { appPackageVersions } from '../versions.ts';
+import { appPackageVersions, zukhrufVersion } from '../versions.ts';
 import authGenerator from './generator.ts';
 
 const options = { backend: 'apps/backend', db: 'packages/db' };
@@ -62,6 +62,7 @@ test('a second run adds nothing twice and keeps the secret of .env', async () =>
     'apps/backend/src/app.ts',
     'apps/backend/src/env.ts',
     'apps/backend/src/startup.ts',
+    'apps/backend/src/session.ts',
     'apps/backend/.env',
     'apps/backend/.env.example',
     'apps/backend/package.json',
@@ -144,7 +145,7 @@ test('startup.ts builds the auth on the app client, and app.ts serves it before 
   assert.match(startup, /import \{ createAuth \} from '\.\/auth\.ts';/);
   assert.match(
     startup,
-    /export const prisma = createPrisma[\s\S]*export const auth = createAuth\(\{\n\s+prisma,\n\s+secret: process\.env\.BETTER_AUTH_SECRET,\n\s+baseURL: process\.env\.BETTER_AUTH_URL,\n\s+trustedOrigins: process\.env\.ALLOWED_ORIGINS\.split\(','\)/,
+    /export const prisma = createPrisma[\s\S]*const allowedOrigins = process\.env\.ALLOWED_ORIGINS\.split\(','\)[\s\S]*export const auth = createAuth\(\{\n\s+prisma,\n\s+secret: process\.env\.BETTER_AUTH_SECRET,[\s\S]*trustedOrigins: allowedOrigins,\n\}\);/,
   );
   const route =
     tree.read('apps/backend/src/routes/auth.route.ts', 'utf-8') ?? '';
@@ -365,6 +366,7 @@ test('a second run with a web adds nothing twice', async () => {
     'apps/backend/.env.example',
     'apps/web/package.json',
     'apps/web/src/auth-client.ts',
+    'apps/web/src/session.ts',
   ];
   const first = files.map((path) => tree.read(path, 'utf-8'));
 
@@ -373,5 +375,146 @@ test('a second run with a web adds nothing twice', async () => {
   assert.deepEqual(
     files.map((path) => tree.read(path, 'utf-8')),
     first,
+  );
+});
+
+test('the backend gets a session middleware that loads startup.ts only on a request', async () => {
+  const tree = generatorTree();
+  await nodeAppGenerator(tree, { directory: 'apps/backend' });
+  await prismaGenerator(tree, {
+    directory: 'packages/db',
+    backend: 'apps/backend',
+  });
+
+  await authGenerator(tree, options);
+
+  const session = tree.read('apps/backend/src/session.ts', 'utf-8') ?? '';
+  assert.match(
+    session,
+    /^import \{ requireSession \} from '@zukhruf\/authentication\/hono';$/m,
+  );
+  assert.match(session, /^import type \{ auth \} from '\.\/startup\.ts';$/m);
+  assert.doesNotMatch(session, /^import (?!type).*startup/m);
+  assert.match(
+    session,
+    /async getSession\(context: \{\n\s+headers: Headers;\n\s+\}\): Promise<typeof auth\.\$Infer\.Session \| null> \{\n\s+const startup = await import\('\.\/startup\.ts'\);\n\s+return startup\.auth\.api\.getSession\(context\);/,
+  );
+  assert.match(
+    session,
+    /^export const signedIn = requireSession\(sessions\);$/m,
+  );
+  assert.equal(
+    readJson(tree, 'apps/backend/package.json').dependencies[
+      '@zukhruf/authentication'
+    ],
+    zukhrufVersion,
+  );
+});
+
+test('the web gets a loader guard on its client, with the paths left to the host', async () => {
+  const tree = generatorTree();
+  await nodeAppGenerator(tree, { directory: 'apps/backend' });
+  await reactAppGenerator(tree, { directory: 'apps/web' });
+  await pairGenerator(tree, { api: 'apps/backend', web: 'apps/web' });
+  await prismaGenerator(tree, {
+    directory: 'packages/db',
+    backend: 'apps/backend',
+  });
+
+  await authGenerator(tree, { ...options, web: 'apps/web' });
+
+  const session = tree.read('apps/web/src/session.ts', 'utf-8') ?? '';
+  assert.match(session, /from '@zukhruf\/authentication\/react-router';/);
+  assert.match(
+    session,
+    /^import \{ authClient \} from '\.\/auth-client\.ts';$/m,
+  );
+  assert.match(
+    session,
+    /export function signedInLoader\(\n\s+options: RequireSessionOptions<typeof authClient\.\$Infer\.Session>,\n\) \{\n\s+return \(\{ request \}: LoaderFunctionArgs\) =>\n\s+requireSession\(authClient, request, options\);/,
+  );
+  assert.doesNotMatch(session, /twoFactorSetup|'\/sign-in'/);
+  assert.equal(
+    readJson(tree, 'apps/web/package.json').dependencies[
+      '@zukhruf/authentication'
+    ],
+    zukhrufVersion,
+  );
+});
+
+test('the web gets the react-router that @zukhruf/authentication peers on, and keeps a newer one', async () => {
+  const tree = generatorTree();
+  await nodeAppGenerator(tree, { directory: 'apps/backend' });
+  await reactAppGenerator(tree, { directory: 'apps/web' });
+  await pairGenerator(tree, { api: 'apps/backend', web: 'apps/web' });
+  await prismaGenerator(tree, {
+    directory: 'packages/db',
+    backend: 'apps/backend',
+  });
+  const withReactRouter = (version: string) => {
+    const manifest = readJson(tree, 'apps/web/package.json');
+    manifest.dependencies['react-router'] = version;
+    tree.write('apps/web/package.json', JSON.stringify(manifest));
+  };
+  const reactRouter = () =>
+    readJson(tree, 'apps/web/package.json').dependencies['react-router'];
+
+  withReactRouter('8.5.1');
+  await authGenerator(tree, { ...options, web: 'apps/web' });
+  const raised = reactRouter();
+  withReactRouter('8.10.0');
+  await authGenerator(tree, { ...options, web: 'apps/web' });
+
+  assert.deepEqual([raised, reactRouter()], ['8.5.2', '8.10.0']);
+  assert.equal(appPackageVersions['react-router'], '8.5.2');
+});
+
+test('a session module that the host changed stays as it is', async () => {
+  const tree = generatorTree();
+  await nodeAppGenerator(tree, { directory: 'apps/backend' });
+  await reactAppGenerator(tree, { directory: 'apps/web' });
+  await pairGenerator(tree, { api: 'apps/backend', web: 'apps/web' });
+  await prismaGenerator(tree, {
+    directory: 'packages/db',
+    backend: 'apps/backend',
+  });
+  await authGenerator(tree, { ...options, web: 'apps/web' });
+  const mine = 'export const mine = 1;\n';
+  tree.write('apps/backend/src/session.ts', mine);
+  tree.write('apps/web/src/session.ts', mine);
+
+  await authGenerator(tree, { ...options, web: 'apps/web' });
+
+  assert.deepEqual(
+    [
+      tree.read('apps/backend/src/session.ts', 'utf-8'),
+      tree.read('apps/web/src/session.ts', 'utf-8'),
+    ],
+    [mine, mine],
+  );
+});
+
+test('in development, better-auth builds its links on the host of an allowed origin, and in production on BETTER_AUTH_URL', async () => {
+  const tree = generatorTree();
+  await nodeAppGenerator(tree, { directory: 'apps/backend' });
+  await prismaGenerator(tree, {
+    directory: 'packages/db',
+    backend: 'apps/backend',
+  });
+
+  await authGenerator(tree, options);
+
+  assert.match(
+    tree.read('apps/backend/src/startup.ts', 'utf-8') ?? '',
+    /baseURL:\n\s+process\.env\.NODE_ENV === 'development'\n\s+\? \{\n\s+fallback: process\.env\.BETTER_AUTH_URL,\n\s+allowedHosts: allowedOrigins\.map\(\(origin\) => new URL\(origin\)\.host\),\n\s+\}\n\s+: process\.env\.BETTER_AUTH_URL,/,
+  );
+  const auth = tree.read('apps/backend/src/auth.ts', 'utf-8') ?? '';
+  assert.match(
+    auth,
+    /baseURL: string \| \{ fallback: string; allowedHosts: string\[\] \};/,
+  );
+  assert.match(
+    auth,
+    /advanced: \{ trustedProxyHeaders: typeof options\.baseURL !== 'string' \}/,
   );
 });
