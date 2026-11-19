@@ -89,11 +89,11 @@ class SqlServerEmbeddingCacheStore implements EmbeddingCacheStore {
 | Write  | one `store.set` with the new vectors, as the model gave them                                                                                                                           |
 | Answer | the vectors in the order of the texts; `usage` counts the tokens of the miss call only, so a full hit reports 0                                                                        |
 
-| Store                          | Where a vector lives                                                                                                                                                                                                    |
-| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `MemoryEmbeddingCacheStore`    | a `Map` in the process                                                                                                                                                                                                  |
-| `SqliteEmbeddingCacheStore`    | `key TEXT PRIMARY KEY, vector BLOB`: the float64 values, little-endian                                                                                                                                                  |
-| `SqlServerEmbeddingCacheStore` | `[key] CHAR(64) PRIMARY KEY, vector VARBINARY(MAX)`: the same bytes. Not the `VECTOR` type, which keeps float32 or float16 and would round ([ADR 0004](./docs/adr/0004-a-hit-gives-the-numbers-that-the-model-gave.md)) |
+| Store                          | Where a vector lives                                                                                                                                                                                                       |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `MemoryEmbeddingCacheStore`    | a `Map` in the process                                                                                                                                                                                                     |
+| `SqliteEmbeddingCacheStore`    | `key TEXT PRIMARY KEY, vector BLOB`: the float64 values, little-endian                                                                                                                                                     |
+| `SqlServerEmbeddingCacheStore` | `[key] VARCHAR(64) PRIMARY KEY, vector VARBINARY(MAX)`: the same bytes. Not the `VECTOR` type, which keeps float32 or float16 and would round ([ADR 0004](./docs/adr/0004-a-hit-gives-the-numbers-that-the-model-gave.md)) |
 
 ## Errors
 

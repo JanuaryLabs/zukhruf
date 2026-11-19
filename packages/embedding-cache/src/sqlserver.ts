@@ -23,7 +23,7 @@ const invalidObjectName = 208;
 const objectExists = 2714;
 
 /**
- * Keeps each vector in a SQL Server table, `[key] CHAR(64) PRIMARY KEY,
+ * Keeps each vector in a SQL Server table, `[key] VARCHAR(64) PRIMARY KEY,
  * vector VARBINARY(MAX)`, as the bytes of its float64 values. Not the
  * `VECTOR` type, which keeps float32 or float16 and would round. A read or
  * write that finds no table creates it and runs again. Each parameter and
@@ -52,7 +52,7 @@ export class SqlServerEmbeddingCacheStore implements EmbeddingCacheStore {
     const rows = await this.#creatingTable(() =>
       this.#session.query(
         `SELECT [key], CONVERT(VARCHAR(MAX), vector, 2) AS vector FROM ${this.#table}
-         WHERE [key] IN (SELECT [key] FROM OPENJSON(@keys) WITH ([key] CHAR(64) '$'))`,
+         WHERE [key] IN (SELECT [key] FROM OPENJSON(@keys) WITH ([key] VARCHAR(MAX) '$'))`,
         { keys: JSON.stringify(keys) },
       ),
     );
@@ -67,7 +67,7 @@ export class SqlServerEmbeddingCacheStore implements EmbeddingCacheStore {
         `MERGE ${this.#table} WITH (HOLDLOCK) AS target
          USING (
            SELECT [key], CONVERT(VARBINARY(MAX), vector, 2) AS vector
-           FROM OPENJSON(@entries) WITH ([key] CHAR(64) '$[0]', vector VARCHAR(MAX) '$[1]')
+           FROM OPENJSON(@entries) WITH ([key] VARCHAR(MAX) '$[0]', vector VARCHAR(MAX) '$[1]')
          ) AS source
          ON target.[key] = source.[key]
          WHEN NOT MATCHED THEN INSERT ([key], vector) VALUES (source.[key], source.vector);`,
@@ -92,7 +92,7 @@ export class SqlServerEmbeddingCacheStore implements EmbeddingCacheStore {
       if (errorNumber(error) !== invalidObjectName) throw error;
       try {
         await this.#session.query(
-          `CREATE TABLE ${this.#table} ([key] CHAR(64) NOT NULL PRIMARY KEY, vector VARBINARY(MAX) NOT NULL)`,
+          `CREATE TABLE ${this.#table} ([key] VARCHAR(64) NOT NULL PRIMARY KEY, vector VARBINARY(MAX) NOT NULL)`,
           {},
         );
       } catch (createError) {

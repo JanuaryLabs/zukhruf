@@ -121,7 +121,7 @@ test('the SQL Server store creates its table when it is missing', async () => {
       WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'embedding_cache'
       ORDER BY ORDINAL_POSITION`);
     assert.deepEqual(columns.recordset, [
-      { name: 'key', type: 'char', length: 64 },
+      { name: 'key', type: 'varchar', length: 64 },
       { name: 'vector', type: 'varbinary', length: -1 },
     ]);
   } finally {
@@ -139,7 +139,7 @@ test('the SQL Server store keeps an existing table with another column and its r
   ).connect();
   try {
     await pool.request().query(`
-      CREATE TABLE dbo.embedding_cache ([key] CHAR(64) NOT NULL PRIMARY KEY, vector VARBINARY(MAX) NOT NULL, note NVARCHAR(100) NULL);
+      CREATE TABLE dbo.embedding_cache ([key] VARCHAR(64) NOT NULL PRIMARY KEY, vector VARBINARY(MAX) NOT NULL, note NVARCHAR(100) NULL);
       INSERT INTO dbo.embedding_cache ([key], vector, note) VALUES ('host', 0x, N'kept');`);
     const fake = model({ a: [1, 0] });
     const cached = wrapEmbeddingModel({
@@ -259,7 +259,7 @@ test('two SQL Server stores that write at once to a missing table both succeed, 
         session: session(pool),
         table: 'dbo.embedding_cache',
       });
-    // A key of the middleware is a sha256 in hex, 64 characters, as the CHAR(64) column holds it.
+    // A key of the middleware is a sha256 in hex, 64 characters.
     const k1 = '1'.repeat(64);
     const k2 = '2'.repeat(64);
     const first = store();
@@ -297,7 +297,7 @@ test('the SQL Server store keeps the first vector that it got for a key', async 
       session: session(pool),
       table: 'dbo.embedding_cache',
     });
-    // A key of the middleware is a sha256 in hex, 64 characters, as the CHAR(64) column holds it.
+    // A key of the middleware is a sha256 in hex, 64 characters.
     const k = 'f'.repeat(64);
     await store.set(new Map([[k, [1, 0]]]));
 
@@ -328,4 +328,29 @@ test('the SQL Server store takes a schema and a name, and refuses a table name t
   assert.ok(accepted instanceof SqlServerEmbeddingCacheStore);
   assert.throws(create('1cache'), refused);
   assert.throws(create('cache; DROP TABLE x'), refused);
+});
+
+test('a short key round-trips through the SQL Server store and is found by the same key', async () => {
+  // Arrange
+  await using database = await new SqlServer({
+    environment: process.env,
+  }).database();
+  const pool = await new mssql.ConnectionPool(
+    database.connectionString,
+  ).connect();
+  try {
+    const store = new SqlServerEmbeddingCacheStore({
+      session: session(pool),
+      table: 'dbo.embedding_cache',
+    });
+    await store.set(new Map([['k', [1, 0]]]));
+
+    // Act
+    const found = await store.get(['k']);
+
+    // Assert
+    assert.deepEqual(found, new Map([['k', [1, 0]]]));
+  } finally {
+    await pool.close();
+  }
 });
