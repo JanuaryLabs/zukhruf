@@ -498,9 +498,11 @@ test('CORS allows only the origins of ALLOWED_ORIGINS, and reflects no other', a
   await nodeAppGenerator(tree, { directory: 'apps/backend' });
 
   const app = tree.read('apps/backend/src/app.ts', 'utf-8') ?? '';
+  // A request with no Origin returns before ALLOWED_ORIGINS is read: CI runs
+  // the app test with no .env, where it is unset (meddit a79dc5c).
   assert.match(
     app,
-    /cors\(\{\n\s+origin: \(origin\) => \{\n\s+const allowed = process\.env\.ALLOWED_ORIGINS\.split\(','\);\n\s+const listed = allowed\.map\(\(entry\) => entry\.trim\(\)\)\.includes\(origin\);\n\s+return origin !== '' && listed \? origin : '';\n\s+\},\n\s+credentials: true,/,
+    /cors\(\{\n\s+origin: \(origin\) => \{\n(?:\s+\/\/.*\n)*\s+if \(!origin\) return '';\n\s+const allowed = process\.env\.ALLOWED_ORIGINS\.split\(','\);\n\s+return allowed\.map\(\(entry\) => entry\.trim\(\)\)\.includes\(origin\)\n\s+\? origin\n\s+: '';\n\s+\},\n\s+credentials: true,/,
   );
   assert.doesNotMatch(app, /return origin;/);
 });

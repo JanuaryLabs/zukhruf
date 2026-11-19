@@ -50,9 +50,13 @@ app.use(
   // setup.
   cors({
     origin: (origin) => {
+      // A request with no Origin header (a health check, a server call) needs
+      // no CORS and never reads ALLOWED_ORIGINS.
+      if (!origin) return '';
       const allowed = process.env.ALLOWED_ORIGINS.split(',');
-      const listed = allowed.map((entry) => entry.trim()).includes(origin);
-      return origin !== '' && listed ? origin : '';
+      return allowed.map((entry) => entry.trim()).includes(origin)
+        ? origin
+        : '';
     },
     credentials: true,
   }),
