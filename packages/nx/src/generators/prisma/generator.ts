@@ -24,10 +24,13 @@ import {
 import { appPackageVersions as versions, zukhrufVersion } from '../versions.ts';
 import { workspaceScope } from '../workspace-scope.ts';
 import {
+  type LocalDatabase,
+  composeDevYml,
   databaseTestTs,
   envExample,
   eslintConfig,
   indexTs,
+  localConnectionString,
   migrationDockerfile,
   migrationLockToml,
   prismaConfigTs,
@@ -41,13 +44,19 @@ export interface PrismaOptions {
   directory: string;
   /** The project root of a node-app that connects to the database before it serves, for example `apps/backend`. */
   backend?: string;
+  /** The host port of the local Postgres in compose.dev.yml. Two repos whose stacks run at once need two ports. */
+  port?: number;
 }
 
 interface PackageJson {
   name?: string;
   dependencies?: Record<string, string>;
   devDependencies?: Record<string, string>;
-  nx?: { projectType?: string; tags?: string[] };
+  nx?: {
+    projectType?: string;
+    tags?: string[];
+    targets?: Record<string, { dependsOn?: unknown[] }>;
+  };
 }
 
 /**
@@ -85,6 +94,7 @@ export default async function prismaGenerator(
   const scope = workspaceScope(tree);
   const { projectRoot, name, rootOffset } = appDirectory(options.directory);
   const packageName = `@${scope}/${name}`;
+  const database: LocalDatabase = { port: options.port ?? 5432, name: scope };
   const backendRoot =
     options.backend === undefined
       ? undefined
@@ -110,7 +120,10 @@ export default async function prismaGenerator(
       );
     }
   } else {
-    writePackage(tree, { projectRoot, rootOffset, packageName });
+    writePackage(tree, { projectRoot, rootOffset, packageName, database });
+  }
+  if (!tree.exists('compose.dev.yml')) {
+    tree.write('compose.dev.yml', composeDevYml(database, packageName));
   }
   addWorkspace(tree, projectRoot);
   addLines(tree, '.gitignore', `${projectRoot}/src/prisma\n`);
@@ -120,7 +133,7 @@ export default async function prismaGenerator(
   }
   mergePrismaNxJson(tree);
   if (backendRoot !== undefined) {
-    wireBackend(tree, backendRoot, packageName);
+    wireBackend(tree, backendRoot, packageName, database);
   }
 
   settleRootDependencies(tree, before, {
@@ -146,10 +159,12 @@ interface PackageIdentity {
   projectRoot: string;
   rootOffset: string;
   packageName: string;
+  database: LocalDatabase;
 }
 
 function writePackage(tree: Tree, identity: PackageIdentity): void {
-  const { projectRoot, rootOffset, packageName } = identity;
+  const { projectRoot, rootOffset, packageName, database } = identity;
+  const compose = `docker compose --file ${rootOffset}compose.dev.yml`;
   writeJson(tree, `${projectRoot}/package.json`, {
     name: packageName,
     version: '0.0.1',
@@ -169,7 +184,30 @@ function writePackage(tree: Tree, identity: PackageIdentity): void {
       '@types/pg': versions['@types/pg'],
       prisma: versions.prisma,
     },
-    nx: { tags: ['test:docker'] },
+    nx: {
+      tags: ['test:docker'],
+      // The local Postgres of compose.dev.yml. up starts it, waits for its
+      // healthcheck and applies the migrations; its env names the local
+      // database, so a CONNECTION_STRING in the shell never gets them.
+      targets: {
+        up: {
+          executor: 'nx:run-commands',
+          options: {
+            commands: [
+              `${compose} up --detach --wait database`,
+              'prisma migrate deploy',
+            ],
+            parallel: false,
+            cwd: '{projectRoot}',
+            env: { CONNECTION_STRING: localConnectionString(database) },
+          },
+        },
+        down: {
+          command: `${compose} down`,
+          options: { cwd: '{projectRoot}' },
+        },
+      },
+    },
   });
   const base = `${rootOffset}tsconfig.base.json`;
   writeJson(tree, `${projectRoot}/tsconfig.json`, {
@@ -225,9 +263,9 @@ function writePackage(tree: Tree, identity: PackageIdentity): void {
     `${projectRoot}/src/index.test.ts`,
     databaseTestTs({ client: './index.ts', testing: './testing.ts' }),
   );
-  tree.write(`${projectRoot}/.env.example`, envExample);
+  tree.write(`${projectRoot}/.env.example`, envExample(database));
   if (!tree.exists(`${projectRoot}/.env`)) {
-    tree.write(`${projectRoot}/.env`, envExample);
+    tree.write(`${projectRoot}/.env`, envExample(database));
   }
   tree.write(
     `${projectRoot}/Dockerfile.migration`,
@@ -271,11 +309,17 @@ function mergePrismaNxJson(tree: Tree): void {
   });
 }
 
-/** Adds `KEY=` to an env file that has no line for the key. */
-function addEnvKey(tree: Tree, path: string, key: string): void {
+/** Adds `KEY=value` to an env file that has no line for the key. Copy in auth (ADR 0014 decision 12). */
+function addEnvEntry(
+  tree: Tree,
+  path: string,
+  key: string,
+  value: string,
+): void {
   const content = tree.read(path, 'utf-8') ?? '';
   if (new RegExp(`^${key}=`, 'm').test(content)) return;
-  addLines(tree, path, `${key}=\n`);
+  const separator = content === '' || content.endsWith('\n') ? '' : '\n';
+  tree.write(path, `${content}${separator}${key}=${value}\n`);
 }
 
 /** Replaces `marker` in a file of the backend, or stops when the file has no marker. */
@@ -296,10 +340,16 @@ function insert(
 
 /**
  * The backend declares CONNECTION_STRING, connects the client in startup.ts
- * before it serves, and disconnects it when terminus gets SIGTERM. Each step
- * is skipped when the backend already has it.
+ * before it serves, and disconnects it when terminus gets SIGTERM. Its serve
+ * runs the up target of the db package first. Each step is skipped when the
+ * backend already has it.
  */
-function wireBackend(tree: Tree, backendRoot: string, packageName: string) {
+function wireBackend(
+  tree: Tree,
+  backendRoot: string,
+  packageName: string,
+  database: LocalDatabase,
+) {
   const envPath = `${backendRoot}/src/env.ts`;
   if (!tree.read(envPath, 'utf-8')?.includes('CONNECTION_STRING:')) {
     insert(
@@ -309,9 +359,20 @@ function wireBackend(tree: Tree, backendRoot: string, packageName: string) {
       `const env = z.object({\n  // The Postgres database of ${packageName}.\n  CONNECTION_STRING: z.string().min(1),\n`,
     );
   }
-  addEnvKey(tree, `${backendRoot}/.env.example`, 'CONNECTION_STRING');
+  const connectionString = localConnectionString(database);
+  addEnvEntry(
+    tree,
+    `${backendRoot}/.env.example`,
+    'CONNECTION_STRING',
+    connectionString,
+  );
   if (tree.exists(`${backendRoot}/.env`)) {
-    addEnvKey(tree, `${backendRoot}/.env`, 'CONNECTION_STRING');
+    addEnvEntry(
+      tree,
+      `${backendRoot}/.env`,
+      'CONNECTION_STRING',
+      connectionString,
+    );
   }
 
   const startupPath = `${backendRoot}/src/startup.ts`;
@@ -352,9 +413,23 @@ function wireBackend(tree: Tree, backendRoot: string, packageName: string) {
         ...packageJson.dependencies,
         ...packageDependencies,
       };
+      // serve starts the local Postgres and migrates it first, so the
+      // backend and its portless target start on a machine with no database.
+      const targets = packageJson.nx?.targets ?? {};
+      const serve = targets['serve'] ?? {};
       packageJson.nx = {
         ...packageJson.nx,
         tags: unique([...(packageJson.nx?.tags ?? []), 'test:docker']),
+        targets: {
+          ...targets,
+          serve: {
+            ...serve,
+            dependsOn: unique([
+              ...(serve.dependsOn ?? []),
+              { projects: [packageName], target: 'up' },
+            ]),
+          },
+        },
       };
       return packageJson;
     },

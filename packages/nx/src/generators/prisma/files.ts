@@ -1,5 +1,6 @@
 // The content of each file that prisma writes. Each is a string in a .ts
 // module, so tsc puts it in dist with no copy step (ADR 0009).
+import { postgresImage } from '../dokploy/files.ts';
 
 export const schemaPrisma = `// The models go in models/*.prisma. The generate target writes the client into
 // src/prisma, which is not committed.
@@ -143,12 +144,61 @@ export default [
 `;
 }
 
-export const envExample = `# Copy to \`.env\` (gitignored). Nx loads it into each task of this project, so
-# \`nx run <project>:migrate\` and \`deploy\` need no dotenv.
-CONNECTION_STRING=
+/** The local Postgres of compose.dev.yml: what the db package and a wired backend connect to in development. */
+export interface LocalDatabase {
+  /** The host port, on 127.0.0.1. */
+  port: number;
+  /** The database, named after the workspace scope. */
+  name: string;
+}
+
+export function localConnectionString(database: LocalDatabase): string {
+  return `postgresql://postgres:postgres@127.0.0.1:${database.port}/${database.name}`;
+}
+
+export function envExample(database: LocalDatabase): string {
+  return `# Copy to \`.env\` (gitignored). Nx loads it into each task of this project, so
+# \`nx run <project>:migrate\` and \`deploy\` need no dotenv. The URL is the local
+# Postgres of compose.dev.yml, which the up target starts.
+CONNECTION_STRING=${localConnectionString(database)}
 # Optional: the shadow database of \`prisma migrate dev\`.
 SHADOW_CONNECTION_STRING=
 `;
+}
+
+export function composeDevYml(
+  database: LocalDatabase,
+  packageName: string,
+): string {
+  return `# The local Postgres of development, which @zukhruf/nx:prisma writes. \`nx run
+# ${packageName}:up\` starts it and applies the migrations, and the serve
+# target of a wired backend runs up first. It listens on 127.0.0.1 only; the
+# deployed stack runs its own Postgres, of the same image.
+services:
+  database:
+    image: ${postgresImage}
+    ports:
+      - '127.0.0.1:${database.port}:5432'
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ${database.name}
+    # Postgres 18 keeps its data in a folder of its major version under
+    # /var/lib/postgresql, so the volume holds the parent folder.
+    volumes:
+      - database:/var/lib/postgresql
+    # up waits for this check before it applies the migrations.
+    healthcheck:
+      test: ['CMD', 'pg_isready', '-U', 'postgres', '-d', '${database.name}']
+      interval: 2s
+      timeout: 5s
+      retries: 15
+    restart: unless-stopped
+
+volumes:
+  database:
+`;
+}
 
 export interface MigrationDockerfileOptions {
   projectRoot: string;

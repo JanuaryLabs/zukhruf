@@ -19,6 +19,12 @@ export const stackModuleSource =
 /** The last line of the env map of the module call: the auth generator adds its keys above it. */
 export const envMarker = '# Generators add env keys above this line.';
 
+/**
+ * The Postgres of the deployed stack. The prisma generator's compose.dev.yml
+ * runs the same image, so development and production run one major version.
+ */
+export const postgresImage = 'postgres:18-alpine';
+
 // The module requires random even without a database, so the lock always has it.
 const providers: Provider[] = [dokployProvider, hcloudProvider, randomProvider];
 
@@ -125,7 +131,7 @@ export function composeYml(stack: Stack): string {
 # They hold the compiled app, never a secret; those come from the environment.`;
   const postgres = database
     ? `  postgres:
-    image: postgres:18-alpine
+    image: ${postgresImage}
 ${logging}    environment:
       POSTGRES_DB: ${database.role}
       POSTGRES_USER: ${database.role}

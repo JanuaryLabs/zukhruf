@@ -86,7 +86,65 @@ test('the manifest exports the client and the test helper, and writes no Prisma 
     '@types/pg',
     'prisma',
   ]);
-  assert.deepEqual(manifest.nx, { tags: ['test:docker'] });
+  assert.deepEqual(manifest.nx.tags, ['test:docker']);
+  assert.deepEqual(Object.keys(manifest.nx.targets), ['up', 'down']);
+});
+
+test('compose.dev.yml runs the image of the deployed stack on 127.0.0.1, at the port option, with a database of the scope', async () => {
+  const tree = generatorTree('@meddit/source');
+
+  await prismaGenerator(tree, { directory: 'packages/db', port: 5435 });
+
+  const compose = tree.read('compose.dev.yml', 'utf-8') ?? '';
+  assert.match(compose, /^ {4}image: postgres:18-alpine$/m);
+  assert.match(compose, /^ {6}- '127\.0\.0\.1:5435:5432'$/m);
+  assert.match(compose, /^ {6}POSTGRES_DB: meddit$/m);
+  assert.match(compose, /^ {6}- database:\/var\/lib\/postgresql$/m);
+  assert.match(compose, /pg_isready/);
+  const url = 'postgresql://postgres:postgres@127.0.0.1:5435/meddit';
+  for (const path of ['packages/db/.env.example', 'packages/db/.env']) {
+    assert.match(
+      tree.read(path, 'utf-8') ?? '',
+      new RegExp(`^CONNECTION_STRING=${url}$`, 'm'),
+    );
+  }
+});
+
+test('the up target starts the local Postgres, waits for it, and migrates only it', async () => {
+  const tree = generatorTree('@meddit/source');
+
+  await prismaGenerator(tree, { directory: 'packages/db', port: 5435 });
+
+  const { up, down } = readJson(tree, 'packages/db/package.json').nx.targets;
+  assert.deepEqual(up, {
+    executor: 'nx:run-commands',
+    options: {
+      commands: [
+        'docker compose --file ../../compose.dev.yml up --detach --wait database',
+        'prisma migrate deploy',
+      ],
+      parallel: false,
+      cwd: '{projectRoot}',
+      env: {
+        CONNECTION_STRING:
+          'postgresql://postgres:postgres@127.0.0.1:5435/meddit',
+      },
+    },
+  });
+  assert.deepEqual(down, {
+    command: 'docker compose --file ../../compose.dev.yml down',
+    options: { cwd: '{projectRoot}' },
+  });
+});
+
+test('a compose.dev.yml that is there stays', async () => {
+  const tree = generatorTree();
+  const compose = 'services:\n  redis:\n    image: redis:8-alpine\n';
+  tree.write('compose.dev.yml', compose);
+
+  await prismaGenerator(tree, { directory: 'packages/db' });
+
+  assert.equal(tree.read('compose.dev.yml', 'utf-8'), compose);
 });
 
 test('the Prisma CLI, client and adapter have one exact stable version', async () => {
@@ -214,14 +272,12 @@ test('a backend connects to the database before it serves and disconnects on SIG
     tree.read('apps/backend/src/env.ts', 'utf-8') ?? '',
     /CONNECTION_STRING: z\.string\(\)\.min\(1\),/,
   );
-  assert.match(
-    tree.read('apps/backend/.env.example', 'utf-8') ?? '',
-    /^CONNECTION_STRING=$/m,
-  );
-  assert.match(
-    tree.read('apps/backend/.env', 'utf-8') ?? '',
-    /^CONNECTION_STRING=$/m,
-  );
+  for (const path of ['apps/backend/.env.example', 'apps/backend/.env']) {
+    assert.match(
+      tree.read(path, 'utf-8') ?? '',
+      /^CONNECTION_STRING=postgresql:\/\/postgres:postgres@127\.0\.0\.1:5432\/acme$/m,
+    );
+  }
   const startup = tree.read('apps/backend/src/startup.ts', 'utf-8') ?? '';
   assert.match(startup, /^import '\.\/env\.ts';/);
   assert.match(startup, /import \{ createPrisma \} from '@acme\/db';/);
@@ -256,6 +312,24 @@ test('a backend connects to the database before it serves and disconnects on SIG
   assert.match(
     tree.read('apps/backend/src/routes/healthz.route.ts', 'utf-8') ?? '',
     /c\.json\(\{ status: 'ok', sha: process\.env\.BUILD_SHA \?\? null \}\)/,
+  );
+});
+
+test("the backend's serve runs the up target of the db package first", async () => {
+  const tree = generatorTree();
+  await nodeAppGenerator(tree, { directory: 'apps/backend' });
+
+  await prismaGenerator(tree, {
+    directory: 'packages/db',
+    backend: 'apps/backend',
+  });
+
+  assert.deepEqual(
+    readJson(tree, 'apps/backend/package.json').nx.targets.serve,
+    {
+      dependsOn: ['^build', { projects: ['@acme/db'], target: 'up' }],
+      options: { env: { NODE_ENV: 'development' } },
+    },
   );
 });
 

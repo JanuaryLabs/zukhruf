@@ -1167,7 +1167,7 @@ The decisions are in [ADR 0010](./docs/adr/0010-the-app-generators-move-here-and
 
 ## prisma generator
 
-`prisma` writes a Postgres db package on Prisma 7 and `@prisma/adapter-pg`, and can connect a node-app to it. text2sql holds 5 copies of the package and factory 1, and meddit is the next one, so the shape moves here (#4604). The targets come from the [prisma area](#prisma): the generator writes none.
+`prisma` writes a Postgres db package on Prisma 7 and `@prisma/adapter-pg`, and can connect a node-app to it. text2sql holds 5 copies of the package and factory 1, and meddit is the next one, so the shape moves here (#4604). The Prisma targets come from the [prisma area](#prisma). The generator writes only `up` and `down`, for the local Postgres of `compose.dev.yml` (ADR 0012, decisions 16 and 17).
 
 ### Add a db package
 
@@ -1178,7 +1178,7 @@ npx nx sync
 npx nx run @acme/db:generate
 ```
 
-Then `npx nx run-many -t typecheck lint test build` passes, and the tests of `@acme/db` and `@acme/backend` run against a Postgres of `@zukhruf/testing`. Leave out `--backend` for a package that no backend uses yet.
+Then `npx nx run-many -t typecheck lint test build` passes, and the tests of `@acme/db` and `@acme/backend` run against a Postgres of `@zukhruf/testing`. Leave out `--backend` for a package that no backend uses yet. `npx nx run @acme/backend:serve` starts the local Postgres of `compose.dev.yml` first and applies the migrations to it. Give each repo whose stack runs beside another a port of its own with `--port`, for example `--port 5435`.
 
 ### Signature of the prisma generator
 
@@ -1187,6 +1187,7 @@ Then `npx nx run-many -t typecheck lint test build` passes, and the tests of `@a
 interface PrismaOptions {
   directory: string; // the project root, for example packages/db
   backend?: string; // the project root of a node-app, for example apps/backend
+  port?: number; // 5432: the host port of the local Postgres in compose.dev.yml
 }
 ```
 
@@ -1194,27 +1195,29 @@ The schema sets `additionalProperties: false`. The package name is `@<scope>/<la
 
 ### What the prisma generator writes
 
-| File                                  | Content                                                                                                                                                                                                  |
-| ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `schema.prisma`                       | the `prisma-client` generator with `output = "src/prisma"` and `importFileExtension = "ts"`, and the `postgresql` datasource; the models go in `models/*.prisma`                                         |
-| `prisma.config.ts`                    | `schema: '.'`, `migrations.path: 'migrations'`, `url` from `CONNECTION_STRING` and `shadowDatabaseUrl` from `SHADOW_CONNECTION_STRING`, each read only when set, so `generate` runs with none; no dotenv |
-| `migrations/migration_lock.toml`      | `provider = "postgresql"`                                                                                                                                                                                |
-| `models/.gitkeep`                     | the image copies `models/`, so the folder is in Git before the first model                                                                                                                               |
-| `src/index.ts`                        | `createPrisma({ connectionString })` on the Postgres adapter, and each export of the generated client; it reads no environment                                                                           |
-| `src/testing.ts`                      | `applySchema(connectionString)`: runs each `migrations/*/migration.sql` in order with `pg`, with no `_prisma_migrations` record, for a test database that is thrown away                                 |
-| `src/index.test.ts`                   | a query on a database of `@zukhruf/testing/postgres` after `applySchema`; the project has the tag `test:docker`                                                                                          |
-| `package.json`                        | the `.` and `./testing` exports (`development` the source, `import` `dist`); `@prisma/client`, `@prisma/adapter-pg`, `pg` and `tslib` in `dependencies`; `prisma` and `@types/pg` in `devDependencies`   |
-| `tsconfig.lib.json`                   | the build: JavaScript and declarations into `dist`, with `rewriteRelativeImportExtensions`, because the generated client imports `.ts` files                                                             |
-| `tsconfig.json`, `tsconfig.test.json` | the solution file and the tests, as in node-app                                                                                                                                                          |
-| `eslint.config.mjs`                   | ignores `src/prisma`; Modern Node; `allowDefaultProject` for `prisma.config.ts`                                                                                                                          |
-| `.env.example`, `.env`                | `CONNECTION_STRING=` and `SHADOW_CONNECTION_STRING=`; `.env` only when missing                                                                                                                           |
-| `Dockerfile.migration`                | `npm ci --workspace=<package>` installs the CLI from the lockfile, and `CMD npx prisma migrate deploy` applies the migrations to the `CONNECTION_STRING` of the container                                |
+| File                                  | Content                                                                                                                                                                                                                   |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `schema.prisma`                       | the `prisma-client` generator with `output = "src/prisma"` and `importFileExtension = "ts"`, and the `postgresql` datasource; the models go in `models/*.prisma`                                                          |
+| `prisma.config.ts`                    | `schema: '.'`, `migrations.path: 'migrations'`, `url` from `CONNECTION_STRING` and `shadowDatabaseUrl` from `SHADOW_CONNECTION_STRING`, each read only when set, so `generate` runs with none; no dotenv                  |
+| `migrations/migration_lock.toml`      | `provider = "postgresql"`                                                                                                                                                                                                 |
+| `models/.gitkeep`                     | the image copies `models/`, so the folder is in Git before the first model                                                                                                                                                |
+| `src/index.ts`                        | `createPrisma({ connectionString })` on the Postgres adapter, and each export of the generated client; it reads no environment                                                                                            |
+| `src/testing.ts`                      | `applySchema(connectionString)`: runs each `migrations/*/migration.sql` in order with `pg`, with no `_prisma_migrations` record, for a test database that is thrown away                                                  |
+| `src/index.test.ts`                   | a query on a database of `@zukhruf/testing/postgres` after `applySchema`; the project has the tag `test:docker`                                                                                                           |
+| `package.json`                        | the `.` and `./testing` exports (`development` the source, `import` `dist`); `@prisma/client`, `@prisma/adapter-pg`, `pg` and `tslib` in `dependencies`; `prisma` and `@types/pg` in `devDependencies`                    |
+| `tsconfig.lib.json`                   | the build: JavaScript and declarations into `dist`, with `rewriteRelativeImportExtensions`, because the generated client imports `.ts` files                                                                              |
+| `tsconfig.json`, `tsconfig.test.json` | the solution file and the tests, as in node-app                                                                                                                                                                           |
+| `eslint.config.mjs`                   | ignores `src/prisma`; Modern Node; `allowDefaultProject` for `prisma.config.ts`                                                                                                                                           |
+| `.env.example`, `.env`                | `CONNECTION_STRING=postgresql://postgres:postgres@127.0.0.1:<port>/<scope>`, the local Postgres, and `SHADOW_CONNECTION_STRING=`; `.env` only when missing                                                                |
+| `package.json` `nx.targets`           | `up`: `docker compose --file <root>/compose.dev.yml up --detach --wait database`, then `prisma migrate deploy`, with `CONNECTION_STRING` pinned to the local URL; `down`: `docker compose … down`, which keeps the volume |
+| `Dockerfile.migration`                | `npm ci --workspace=<package>` installs the CLI from the lockfile, and `CMD npx prisma migrate deploy` applies the migrations to the `CONNECTION_STRING` of the container                                                 |
 
-At the root: `@zukhruf/nx/prisma` in `plugins`; `generate` in the `dependsOn` of the `typecheck` and `build` defaults, with `...`; `<root>/src/prisma` in `.gitignore` and `.prettierignore`; `.dockerignore` when missing; the package root in `workspaces` when no `<parent>/*` glob holds it; `@zukhruf/testing`; and `@prisma/engines: true`, `prisma: false`, `ssh2: false`, `cpu-features: false` in `allowScripts`. A second run keeps the files of the package and adds no line or key twice.
+At the root: `compose.dev.yml` when missing, with one `database` service (the `postgres:18-alpine` of the deployed stack on `127.0.0.1:<port>`, the database `<scope>`, a named volume at `/var/lib/postgresql`, a `pg_isready` healthcheck); `@zukhruf/nx/prisma` in `plugins`; `generate` in the `dependsOn` of the `typecheck` and `build` defaults, with `...`; `<root>/src/prisma` in `.gitignore` and `.prettierignore`; `.dockerignore` when missing; the package root in `workspaces` when no `<parent>/*` glob holds it; `@zukhruf/testing`; and `@prisma/engines: true`, `prisma: false`, `ssh2: false`, `cpu-features: false` in `allowScripts`. A second run keeps the files of the package and adds no line or key twice.
 
 With `--backend`, the node-app gets:
 
-- `CONNECTION_STRING: z.string().min(1)` in `src/env.ts`, and the key in `.env.example` and in a `.env` that has none.
+- `CONNECTION_STRING: z.string().min(1)` in `src/env.ts`, and the local URL in `.env.example` and in a `.env` that has no such key.
+- `{ "projects": ["@<scope>/<db>"], "target": "up" }` in the `dependsOn` of `serve`, so `serve` and `portless` start on a machine with no database.
 - In `src/startup.ts`, the client and one `SELECT 1` before the app serves, so a database that refuses the connection stops the boot. `$connect()` alone opens no connection on a driver adapter.
 - `await prisma.$disconnect()` in the terminus `onSignal` of `src/server.ts`.
 - `src/database.test.ts`, which imports the package through its exports, and the tag `test:docker`.

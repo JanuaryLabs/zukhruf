@@ -14,6 +14,11 @@
     "backend": {
       "type": "string",
       "description": "The project root of a node-app that connects to the database before it serves, for example apps/backend."
+    },
+    "port": {
+      "type": "number",
+      "description": "The host port of the local Postgres in compose.dev.yml. Two repos whose stacks run at once need two ports.",
+      "default": 5432
     }
   },
   "required": ["directory"],
