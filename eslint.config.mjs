@@ -461,6 +461,8 @@ export default defineConfig(
       'zukhruf/no-will-change': 'off',
       'zukhruf/no-arbitrary-z-index': 'off',
       'functional/no-let': 'off',
+      // shadcn 4.23's use-highlighted-code cancels with `let cancelled`.
+      'zukhruf/no-phase-flag': 'off',
     },
   },
 );

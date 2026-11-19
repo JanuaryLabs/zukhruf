@@ -11,6 +11,7 @@
     "prefix": ""
   },
   "iconLibrary": "lucide",
+  "rtl": true,
   "aliases": {
     "components": "#components",
     "ui": "#components",

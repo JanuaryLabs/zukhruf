@@ -29,7 +29,7 @@ The files that the shadcn CLI writes: `src/components`, `src/hooks`, `src/lib`, 
 _Avoid_: Vendored code (a person updates vendored code by hand), copy (each app kept a copy before this package)
 
 **Sync**:
-The run of `nx run shadcn:sync`. It writes the generated source again from the registry, with `shadcn@4.21.5`. A person reads the diff before a commit.
+The run of `nx run shadcn:sync`. It writes the generated source again from the registry, with `shadcn@4.23.0`. A person reads the diff before a commit.
 _Avoid_: Update (npm updates dependencies), build (the build compiles the generated source), regenerate
 
 **Patch**:

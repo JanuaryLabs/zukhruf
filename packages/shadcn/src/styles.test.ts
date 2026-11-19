@@ -85,7 +85,29 @@ describe('the stylesheet of @zukhruf/shadcn', () => {
     );
   });
 
-  test('in a right-to-left page the native select pads its start and places its chevron on the left, in the layer of the utilities it mirrors', async () => {
+  test('the components place their ends by logical side, so a right-to-left page mirrors them', async () => {
+    // Act
+    const css = await buildAppStylesheet();
+
+    // Assert
+    assert.match(
+      css,
+      /\.pe-8\s*\{\s*padding-inline-end:\s*calc\(var\(--spacing\) \* 8\);?\s*\}/,
+      'The native select pads the end that holds its chevron with pe-8, written by the RTL mode of the shadcn CLI',
+    );
+    assert.match(
+      css,
+      /\.end-2\\\.5\s*\{\s*inset-inline-end:\s*calc\(var\(--spacing\) \* 2\.5\);?\s*\}/,
+      'The chevron of the native select sits at end-2.5, not at right-2.5',
+    );
+    assert.doesNotMatch(
+      css,
+      /\.right-2\\\.5\s*\{/,
+      'A component with right-2.5 would keep its chevron on the right in Arabic',
+    );
+  });
+
+  test('a menu shortcut takes its direction from its own text, in a layer that app utilities override', async () => {
     // Act
     const css = await buildAppStylesheet();
 
@@ -93,17 +115,10 @@ describe('the stylesheet of @zukhruf/shadcn', () => {
     assert.equal(
       layerOf(
         css,
-        /\[data-slot=['"]?native-select['"]?\]:dir\(rtl\)\s*\{\s*padding-right:\s*calc\(var\(--spacing\) \* 2\.5\);\s*padding-left:\s*calc\(var\(--spacing\) \* 8\);?\s*\}/,
+        /\[data-slot=['"]?dropdown-menu-shortcut['"]?\]\s*\{\s*unicode-bidi:\s*plaintext;?\s*\}/,
       ),
-      'utilities',
-      'pr-8 pl-2.5 are utilities, so only a rule in @layer utilities wins over them',
-    );
-    assert.equal(
-      layerOf(
-        css,
-        /\[data-slot=['"]?native-select['"]?\]:dir\(rtl\)\s*~\s*\[data-slot=['"]?native-select-icon['"]?\]\s*\{\s*right:\s*auto;\s*left:\s*calc\(var\(--spacing\) \* 2\.5\);?\s*\}/,
-      ),
-      'utilities',
+      'components',
+      'direction: ltr would turn its ms-auto into a left margin in Arabic and move the shortcut next to the label',
     );
   });
 

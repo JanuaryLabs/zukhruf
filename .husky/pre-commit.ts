@@ -23,14 +23,7 @@ await preCommit([
   new NoNumericPins(),
   new NpmrcPolicy(),
   new LockfileSync(),
-  new OneRuntimeCopy({
-    allowed: {
-      'node_modules/shadcn/node_modules/zod':
-        'the shadcn CLI pins zod 3; @zukhruf/shadcn runs it only to write source, and no bundle loads it',
-      'node_modules/@shadcn/registry/node_modules/zod':
-        '@shadcn/registry, a dependency of the shadcn CLI, pins zod 3; no bundle loads it',
-    },
-  }),
+  new OneRuntimeCopy(),
   new InstallScriptsReviewed(),
   new DockerfileInstallsFromLockfile(),
   new DependencyChecks(),
