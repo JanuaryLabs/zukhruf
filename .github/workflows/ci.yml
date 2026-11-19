@@ -6,12 +6,13 @@ on:
   push:
     branches: [main]
 
-# A new push to a pull request replaces its run. On main every commit keeps its
-# own run, even when it is run again: release.yml releases a commit only after
-# CI passes for it.
+# A new push replaces the older run of its branch, on main as on a pull request.
+# Each push holds the code of the pushes before it, so the newest run checks all
+# of it, and when it passes, release.yml releases main. Run again only the
+# newest run of main: a run again of an older commit replaces the newest one.
 concurrency:
-  group: ${{ github.workflow }}-${{ case(github.event_name == 'pull_request', github.ref, github.sha) }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   # affected-range reads this workflow's runs to find the last green commit.
