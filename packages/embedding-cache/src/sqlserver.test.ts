@@ -54,7 +54,17 @@ test('a hit from the SQL Server store gives exactly the numbers that the model g
     database.connectionString,
   ).connect();
   try {
-    const numbers = [0.1, 1 / 3, -1e-300, 123456.789];
+    const numbers = [
+      0.1,
+      1 / 3,
+      -1e-300,
+      123456.789,
+      -0,
+      Infinity,
+      -Infinity,
+      5e-324,
+      NaN,
+    ];
     const fake = model({ a: numbers });
     const cached = wrapEmbeddingModel({
       model: fake,
@@ -201,4 +211,121 @@ test('a new SQL Server store on the same database reads the entries of an earlie
   } finally {
     await pool.close();
   }
+});
+
+test('a reserved word such as order works as the table name of the SQL Server store', async () => {
+  // Arrange
+  await using database = await new SqlServer({
+    environment: process.env,
+  }).database();
+  const pool = await new mssql.ConnectionPool(
+    database.connectionString,
+  ).connect();
+  try {
+    const fake = model({ a: [1, 0] });
+    const cached = wrapEmbeddingModel({
+      model: fake,
+      middleware: embeddingCacheMiddleware({
+        store: new SqlServerEmbeddingCacheStore({
+          session: session(pool),
+          table: 'order',
+        }),
+      }),
+    });
+    await embedMany({ model: cached, values: ['a'] });
+
+    // Act
+    const { embeddings } = await embedMany({ model: cached, values: ['a'] });
+
+    // Assert
+    assert.deepEqual(embeddings, [[1, 0]]);
+    assert.equal(fake.doEmbedCalls.length, 1);
+  } finally {
+    await pool.close();
+  }
+});
+
+test('two SQL Server stores that write at once to a missing table both succeed, and both entries are readable', async () => {
+  // Arrange
+  await using database = await new SqlServer({
+    environment: process.env,
+  }).database();
+  const pool = await new mssql.ConnectionPool(
+    database.connectionString,
+  ).connect();
+  try {
+    const store = () =>
+      new SqlServerEmbeddingCacheStore({
+        session: session(pool),
+        table: 'dbo.embedding_cache',
+      });
+    // A key of the middleware is a sha256 in hex, 64 characters, as the CHAR(64) column holds it.
+    const k1 = '1'.repeat(64);
+    const k2 = '2'.repeat(64);
+    const first = store();
+    const second = store();
+
+    // Act
+    await Promise.all([
+      first.set(new Map([[k1, [1, 0]]])),
+      second.set(new Map([[k2, [0, 1]]])),
+    ]);
+
+    // Assert
+    assert.deepEqual(
+      await first.get([k1, k2]),
+      new Map([
+        [k1, [1, 0]],
+        [k2, [0, 1]],
+      ]),
+    );
+  } finally {
+    await pool.close();
+  }
+});
+
+test('the SQL Server store keeps the first vector that it got for a key', async () => {
+  // Arrange
+  await using database = await new SqlServer({
+    environment: process.env,
+  }).database();
+  const pool = await new mssql.ConnectionPool(
+    database.connectionString,
+  ).connect();
+  try {
+    const store = new SqlServerEmbeddingCacheStore({
+      session: session(pool),
+      table: 'dbo.embedding_cache',
+    });
+    // A key of the middleware is a sha256 in hex, 64 characters, as the CHAR(64) column holds it.
+    const k = 'f'.repeat(64);
+    await store.set(new Map([[k, [1, 0]]]));
+
+    // Act
+    await store.set(new Map([[k, [0, 1]]]));
+
+    // Assert
+    assert.deepEqual(await store.get([k]), new Map([[k, [1, 0]]]));
+  } finally {
+    await pool.close();
+  }
+});
+
+test('the SQL Server store takes a schema and a name, and refuses a table name that is not an identifier', () => {
+  // Arrange
+  const unused: SqlServerSession = {
+    query: () => Promise.reject(new Error('The test runs no SQL')),
+  };
+  const create = (table: string) => () =>
+    new SqlServerEmbeddingCacheStore({ session: unused, table });
+  const refused = (error: unknown) =>
+    Error.isError(error) && error instanceof TypeError;
+
+  // Act
+  const accepted = create('dbo.embedding_cache')();
+
+  // Assert
+  assert.ok(accepted instanceof SqlServerEmbeddingCacheStore);
+  assert.throws(create('1cache'), refused);
+  assert.throws(create('cache; DROP TABLE x'), refused);
 });

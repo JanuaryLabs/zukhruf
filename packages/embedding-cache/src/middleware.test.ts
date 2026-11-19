@@ -109,7 +109,17 @@ test('the answer follows the order of the texts, duplicates included', async () 
 
 test('a hit from the memory store gives exactly the numbers that the model gave', async () => {
   // Arrange
-  const numbers = [0.1, 1 / 3, -1e-300, 123456.789];
+  const numbers = [
+    0.1,
+    1 / 3,
+    -1e-300,
+    123456.789,
+    -0,
+    Infinity,
+    -Infinity,
+    5e-324,
+    NaN,
+  ];
   const fake = model({ a: numbers });
   const cached = wrapEmbeddingModel({
     model: fake,
@@ -323,4 +333,49 @@ test('an error of store.set reaches the caller', async () => {
 
   // Assert
   await assert.rejects(call, (error) => error === failure);
+});
+
+test('a model that answers another number of vectors than the misses is refused, and the store gets no write', async () => {
+  // Arrange
+  const memory = new MemoryEmbeddingCacheStore();
+  const writes: ReadonlyMap<string, readonly number[]>[] = [];
+  const cached = wrapEmbeddingModel({
+    model: new MockEmbeddingModelV4({
+      maxEmbeddingsPerCall: 100,
+      doEmbed: async () => ({ embeddings: [[1, 0]], warnings: [] }),
+    }),
+    middleware: embeddingCacheMiddleware({
+      store: {
+        get: (keys) => memory.get(keys),
+        set: (entries) => {
+          writes.push(entries);
+          return memory.set(entries);
+        },
+      },
+    }),
+  });
+
+  // Act
+  const call = embedMany({ model: cached, values: ['a', 'b'] });
+
+  // Assert
+  await assert.rejects(
+    call,
+    (error) =>
+      Error.isError(error) &&
+      error.message === 'The model gave 1 vectors for 2 texts.',
+  );
+  assert.deepEqual(writes, []);
+});
+
+test('the memory store keeps the first vector that it got for a key', async () => {
+  // Arrange
+  const store = new MemoryEmbeddingCacheStore();
+  await store.set(new Map([['k', [1, 0]]]));
+
+  // Act
+  await store.set(new Map([['k', [0, 1]]]));
+
+  // Assert
+  assert.deepEqual(await store.get(['k']), new Map([['k', [1, 0]]]));
 });

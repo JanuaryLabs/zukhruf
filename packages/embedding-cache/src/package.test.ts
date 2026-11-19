@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
+import { readFile, readdir } from 'node:fs/promises';
+import { join } from 'node:path';
 import { test } from 'node:test';
 import { promisify } from 'node:util';
 
@@ -39,4 +41,30 @@ test('a consumer imports each subpath by its package name, and the package has n
     sqlserver: 'function',
     dependencies: ['@ai-sdk/provider'],
   });
+});
+
+test('the built package imports only node built-ins and its own files at run time', async () => {
+  // Arrange
+  const dist = join(import.meta.dirname, '..', 'dist');
+  const files = (await readdir(dist)).filter((file) => file.endsWith('.js'));
+
+  // Act
+  const specifiers = new Set<string>();
+  for (const file of files) {
+    const source = await readFile(join(dist, file), 'utf8');
+    for (const match of source.matchAll(
+      /\b(?:from|import)\s*\(?\s*['"]([^'"]+)['"]/g,
+    ))
+      specifiers.add(match[1] ?? '');
+  }
+
+  // Assert
+  assert.ok(specifiers.has('node:crypto'), 'the scan found no imports');
+  assert.deepEqual(
+    [...specifiers].filter(
+      (specifier) =>
+        !specifier.startsWith('node:') && !specifier.startsWith('./'),
+    ),
+    [],
+  );
 });

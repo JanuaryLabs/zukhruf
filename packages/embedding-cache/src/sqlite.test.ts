@@ -32,7 +32,17 @@ function model(
 test('a hit from the SQLite store gives exactly the numbers that the model gave', async () => {
   // Arrange
   using database = open(':memory:');
-  const numbers = [0.1, 1 / 3, -1e-300, 123456.789];
+  const numbers = [
+    0.1,
+    1 / 3,
+    -1e-300,
+    123456.789,
+    -0,
+    Infinity,
+    -Infinity,
+    5e-324,
+    NaN,
+  ];
   const fake = model({ a: numbers });
   const cached = wrapEmbeddingModel({
     model: fake,
@@ -159,20 +169,55 @@ test('a new SQLite store on the same database reads the entries of an earlier on
   assert.equal(later.doEmbedCalls.length, 0);
 });
 
-test('a table name that is not an identifier is refused before it reaches the SQL', () => {
+test('the SQLite store takes a schema and a name, and refuses a table name that is not an identifier', () => {
   // Arrange
   using database = open(':memory:');
+  const create = (table: string) => () =>
+    new SqliteEmbeddingCacheStore({ database, table });
+  const refused = (error: unknown) =>
+    Error.isError(error) && error instanceof TypeError;
 
   // Act
-  const create = () =>
-    new SqliteEmbeddingCacheStore({
-      database,
-      table: 'embedding_cache; DROP TABLE users',
-    });
+  const accepted = create('dbo.embedding_cache')();
 
   // Assert
-  assert.throws(
-    create,
-    (error) => Error.isError(error) && error instanceof TypeError,
-  );
+  assert.ok(accepted instanceof SqliteEmbeddingCacheStore);
+  assert.throws(create('1cache'), refused);
+  assert.throws(create('cache; DROP TABLE x'), refused);
+});
+
+test('a reserved word such as order works as the table name of the SQLite store', async () => {
+  // Arrange
+  using database = open(':memory:');
+  const fake = model({ a: [1, 0] });
+  const cached = wrapEmbeddingModel({
+    model: fake,
+    middleware: embeddingCacheMiddleware({
+      store: new SqliteEmbeddingCacheStore({ database, table: 'order' }),
+    }),
+  });
+  await embedMany({ model: cached, values: ['a'] });
+
+  // Act
+  const { embeddings } = await embedMany({ model: cached, values: ['a'] });
+
+  // Assert
+  assert.deepEqual(embeddings, [[1, 0]]);
+  assert.equal(fake.doEmbedCalls.length, 1);
+});
+
+test('the SQLite store keeps the first vector that it got for a key', async () => {
+  // Arrange
+  using database = open(':memory:');
+  const store = new SqliteEmbeddingCacheStore({
+    database,
+    table: 'embedding_cache',
+  });
+  await store.set(new Map([['k', [1, 0]]]));
+
+  // Act
+  await store.set(new Map([['k', [0, 1]]]));
+
+  // Assert
+  assert.deepEqual(await store.get(['k']), new Map([['k', [1, 0]]]));
 });

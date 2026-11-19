@@ -46,6 +46,8 @@ const store = new SqlServerEmbeddingCacheStore({
       const request = pool.request();
       for (const [name, value] of Object.entries(parameters))
         request.input(name, value);
+      // Let the driver's error through as it is: the store reads its `number`
+      // (208: no table yet, so it creates one).
       return (await request.query(sql)).recordset;
     },
   },
@@ -95,7 +97,7 @@ class SqlServerEmbeddingCacheStore implements EmbeddingCacheStore {
 
 ## Errors
 
-An error of the model, of `store.get` or of `store.set` reaches the caller as it is. A failed model call writes nothing.
+An error of the model, of `store.get` or of `store.set` reaches the caller as it is. A failed model call writes nothing, and so does a model that answers another number of vectors than the texts it got. A SQL store answers one error itself: a read or write that finds no table creates the table and runs once more.
 
 ## The same concepts in other systems
 

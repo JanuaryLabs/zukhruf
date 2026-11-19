@@ -52,11 +52,14 @@ export function embeddingCacheMiddleware({
         ...params,
         values: [...misses.values()],
       });
+      const missKeys = [...misses.keys()];
+      if (result.embeddings.length !== missKeys.length)
+        throw new Error(
+          `The model gave ${result.embeddings.length} vectors for ${missKeys.length} texts.`,
+        );
+      // The check above gives each vector of the model one key of a miss.
       const fresh = new Map(
-        [...misses.keys()].map((key, index) => [
-          key,
-          result.embeddings[index]!,
-        ]),
+        result.embeddings.map((vector, index) => [missKeys[index]!, vector]),
       );
       await store.set(fresh);
 
