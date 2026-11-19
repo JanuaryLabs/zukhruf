@@ -77,7 +77,11 @@ describe('container.attach()', () => {
     try {
       const container = await docker.containers.create({
         Image: IMAGE,
-        Cmd: ['sh', '-c', 'echo early; sleep 5; echo late; exit 4'],
+        Cmd: [
+          'sh',
+          '-c',
+          'mkfifo /tmp/late; echo early; read line < /tmp/late; echo late; exit 4',
+        ],
         Labels: { [TEST_LABEL]: run },
       });
       await container.start();
@@ -87,8 +91,12 @@ describe('container.attach()', () => {
         break;
       }
 
-      // Act
+      // Act: the engine subscribes an attach to the output before it answers
+      // it (AttachStreams before GetStreams in moby's daemon/attach.go, v25 to
+      // v29), so "late", which the write to the FIFO releases, comes after the
+      // attach is in place.
       const attached = await container.attach();
+      await container.exec({ Cmd: ['sh', '-c', 'echo > /tmp/late'] });
       const result = await attached.collect();
 
       // Assert
