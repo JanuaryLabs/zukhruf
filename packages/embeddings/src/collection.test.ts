@@ -552,19 +552,6 @@ describe('Collection', () => {
     assert.throws(() => collection.fetch(['b']), UnknownDocumentError);
   });
 
-  test('an upsert after a delete embeds the text again', async () => {
-    using database = open(':memory:');
-    const fake = model({ a: [1, 0] });
-    const collection = new Collection({ database, model: fake });
-    await collection.upsert([{ id: 'a', text: 'a', publishedAt: day(1) }]);
-    collection.delete(['a']);
-
-    await collection.upsert([{ id: 'a', text: 'a', publishedAt: day(1) }]);
-
-    assert.deepEqual(embedded(fake), ['a', 'a']);
-    assert.equal(collection.count(), 1);
-  });
-
   test('count gives the number of stored documents, and an upsert of a stored id does not add one', async () => {
     using database = open(':memory:');
     const collection = new Collection({

@@ -41,6 +41,7 @@
     "access": "public"
   },
   "dependencies": {
+    "@zukhruf/embedding-cache": "^0.8.34",
     "@zukhruf/sqlite-drift": "^0.8.34",
     "@zukhruf/sqlite-transaction": "^0.8.34",
     "@zukhruf/vectors": "^0.8.34",

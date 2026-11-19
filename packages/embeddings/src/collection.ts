@@ -1,8 +1,9 @@
-import { hash } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 
-import { type EmbeddingModel, embedMany } from 'ai';
+import { embedMany, wrapEmbeddingModel } from 'ai';
 
+import { embeddingCacheMiddleware } from '@zukhruf/embedding-cache';
+import { SqliteEmbeddingCacheStore } from '@zukhruf/embedding-cache/sqlite';
 import { transaction } from '@zukhruf/sqlite-transaction';
 import { DimensionMismatchError, UnitVector, Vector } from '@zukhruf/vectors';
 import { fromSql, toSql } from '@zukhruf/vectors/sqlite';
@@ -23,20 +24,30 @@ export type CollectionOptions = {
   // The caller opens and closes the database.
   readonly database: DatabaseSync;
   // A model object. A model id string goes through the global default
-  // provider, so the collection cannot name its provider (docs/adr/0002).
-  readonly model: Exclude<EmbeddingModel, string>;
+  // provider, so the cache cannot name its provider (docs/adr/0002).
+  readonly model: Parameters<typeof wrapEmbeddingModel>[0]['model'];
 };
 
 // The embeddings of documents, one vector for each document, in a SQLite
 // database. The collection searches its table through a VectorSearch.
 export class Collection {
   readonly #database: DatabaseSync;
-  readonly #model: Exclude<EmbeddingModel, string>;
+  readonly #model: ReturnType<typeof wrapEmbeddingModel>;
   readonly #search: VectorSearch;
 
   constructor(options: CollectionOptions) {
     this.#database = options.database;
-    this.#model = options.model;
+    // The cache in the same database calls the model only for a text that
+    // this model did not embed before (docs/adr/0002).
+    this.#model = wrapEmbeddingModel({
+      model: options.model,
+      middleware: embeddingCacheMiddleware({
+        store: new SqliteEmbeddingCacheStore({
+          database: this.#database,
+          table: 'embedding_cache',
+        }),
+      }),
+    });
     collectionSchema.apply(this.#database);
     this.#search = new VectorSearch({
       database: this.#database,
@@ -44,52 +55,33 @@ export class Collection {
     });
   }
 
-  // Embeds the documents whose text or model changed since their last upsert,
-  // and stores the publish date of each document.
+  // Embeds the text of each document through the cache, and stores its
+  // vector and publish date.
   async upsert(documents: readonly Document[]): Promise<void> {
-    const stored = this.#database.prepare(
-      'SELECT "hash" FROM "embedding_document" WHERE "id" = ?',
-    );
-    const hashed = documents.map((document) => ({
-      document,
-      hash: this.#hash(document.text),
-    }));
-    const { changed = [], unchanged = [] } = Object.groupBy(
-      hashed,
-      ({ document, hash }) =>
-        stored.get(document.id)?.hash === hash ? 'unchanged' : 'changed',
-    );
-    const vectors = await this.#embed(
-      changed.map(({ document }) => document.text),
+    const { embeddings } = await embedMany({
+      model: this.#model,
+      values: documents.map(({ text }) => text),
+    });
+    const vectors = embeddings.map((embedding) =>
+      UnitVector.normalize(Vector.from(embedding)),
     );
 
     transaction(
       this.#database,
       () => {
         const write = this.#database.prepare(
-          `INSERT INTO "embedding_document" ("id", "hash", "published_at", "vector") VALUES (?, ?, ?, ?)
-          ON CONFLICT ("id") DO UPDATE SET "hash" = excluded."hash", "published_at" = excluded."published_at", "vector" = excluded."vector"`,
+          `INSERT INTO "embedding_document" ("id", "published_at", "vector") VALUES (?, ?, ?)
+          ON CONFLICT ("id") DO UPDATE SET "published_at" = excluded."published_at", "vector" = excluded."vector"`,
         );
-        for (const [index, { document, hash }] of changed.entries()) {
-          const vector = vectors[index];
-          if (vector === undefined)
-            throw new Error(
-              `The model gave ${vectors.length} embeddings for ${changed.length} texts.`,
-            );
+        // embedMany gives one embedding for each text, in their order.
+        for (const [index, document] of documents.entries())
           write.run(
             document.id,
-            hash,
             document.publishedAt.getTime(),
-            toSql(vector),
+            toSql(vectors[index]!),
           );
-        }
-        const move = this.#database.prepare(
-          'UPDATE "embedding_document" SET "published_at" = ? WHERE "id" = ?',
-        );
-        for (const { document } of unchanged)
-          move.run(document.publishedAt.getTime(), document.id);
         this.#checkDimension(
-          changed.map(({ document }) => document.id),
+          documents.map(({ id }) => id),
           vectors,
         );
       },
@@ -161,26 +153,6 @@ export class Collection {
       .prepare('SELECT count(*) AS "count" FROM "embedding_document"')
       .get();
     return Number(row?.count);
-  }
-
-  // No texts make no call to the model.
-  async #embed(texts: string[]): Promise<Vector[]> {
-    if (texts.length === 0) return [];
-    const { embeddings } = await embedMany({
-      model: this.#model,
-      values: texts,
-    });
-    return embeddings.map((embedding) =>
-      UnitVector.normalize(Vector.from(embedding)),
-    );
-  }
-
-  // The model is part of the hash, so a new model embeds the text again.
-  #hash(text: string): string {
-    return hash(
-      'sha256',
-      JSON.stringify([this.#model.provider, this.#model.modelId, text]),
-    );
   }
 
   // Before the upsert, each stored vector has one dimension. The new vectors

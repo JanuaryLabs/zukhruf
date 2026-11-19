@@ -3,7 +3,9 @@ import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
-import { type EmbeddingModel, cosineSimilarity, embed } from 'ai';
+import { cosineSimilarity, embed } from 'ai';
+
+import type { CollectionOptions } from '@zukhruf/embeddings';
 
 import type { Design } from '../src/index.ts';
 import { CACHE_FOLDER } from './texts/text-source.ts';
@@ -23,7 +25,7 @@ function endpointVariable(model: string): string {
 export async function embeddingModel(
   design: Pick<Design, 'embeddingModel'>,
   environment: Readonly<Record<string, string | undefined>>,
-): Promise<Exclude<EmbeddingModel, string>> {
+): Promise<CollectionOptions['model']> {
   const variable = endpointVariable(design.embeddingModel);
   const baseURL = environment[variable];
   if (baseURL === undefined)

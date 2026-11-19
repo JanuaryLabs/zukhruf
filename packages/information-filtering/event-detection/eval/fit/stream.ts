@@ -1,8 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 
-import type { EmbeddingModel } from 'ai';
-
-import { Collection } from '@zukhruf/embeddings';
+import { Collection, type CollectionOptions } from '@zukhruf/embeddings';
 import { open } from '@zukhruf/sqlite-open';
 
 import { DAY_MS } from '../../src/day.ts';
@@ -41,7 +39,7 @@ export class Stream {
     fold: Fold,
     sets: readonly string[],
     design: Pick<Design, 'embeddingModel' | 'lead' | 'vectorText'>,
-    model: Exclude<EmbeddingModel, string>,
+    model: CollectionOptions['model'],
   ): Stream {
     const database = open(':memory:');
     const vectors = new Collection({ database, model });
@@ -52,8 +50,8 @@ export class Stream {
         .run(vectorCache(design, set));
       database
         .prepare(
-          `INSERT INTO "embedding_document" ("id", "hash", "published_at", "vector")
-          SELECT "id", "hash", "published_at", "vector" FROM "cache"."embedding_document"
+          `INSERT INTO "embedding_document" ("id", "published_at", "vector")
+          SELECT "id", "published_at", "vector" FROM "cache"."embedding_document"
           WHERE "id" IN (SELECT "value" FROM json_each(?))`,
         )
         .run(ids);

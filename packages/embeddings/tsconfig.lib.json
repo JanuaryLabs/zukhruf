@@ -25,6 +25,9 @@
     },
     {
       "path": "../vectors/tsconfig.lib.json"
+    },
+    {
+      "path": "../embedding-cache/tsconfig.lib.json"
     }
   ]
 }

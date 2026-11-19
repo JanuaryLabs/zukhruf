@@ -22,7 +22,7 @@ The vector must have the dimension of the stored vectors (ADR 0003). Another dim
 
 **`fetch(ids)`** gives a `Map` from each id to its stored unit vector, as a `Float32Array`, in the order of the ids. The vector is a copy, so a change to it does not change the collection. One id that the collection does not store fails the whole call with an `UnknownDocumentError`. This is the rule of `nearest` and `similarity`. Pinecone and Chroma leave out an unknown id instead. Here a caller that asks for an id expects its vector, as a caller of `similarity` does. A silent gap moves the error to a later line.
 
-**`delete(ids)`** removes the documents. An id that the collection does not store is not an error. Thus a second delete of the same ids does nothing, and a retry is safe. Pinecone and Chroma do the same. After a delete, an upsert of the same id and text calls the model again, because the stored hash is gone.
+**`delete(ids)`** removes the documents. An id that the collection does not store is not an error. Thus a second delete of the same ids does nothing, and a retry is safe. Pinecone and Chroma do the same. After a delete, an upsert of the same id and text stores the document again; the cache gives its vector, so it calls no model (ADR 0002).
 
 **`count()`** gives the number of stored documents.
 

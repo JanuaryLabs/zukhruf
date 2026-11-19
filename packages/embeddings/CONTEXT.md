@@ -32,10 +32,6 @@ _Avoid_: Embedding (for the stored value), tensor
 The number of values in a vector.
 _Avoid_: Size, length (length is the norm of a vector)
 
-**Hash**:
-The sha256 of the provider, the model id and the text. When the hash of a document did not change, an upsert does not call the model.
-_Avoid_: Content id, cid, checksum
-
 **Similarity**:
 The cosine of the angle between two vectors, from -1 to 1. For unit vectors, it is their dot product.
 _Avoid_: Distance, score

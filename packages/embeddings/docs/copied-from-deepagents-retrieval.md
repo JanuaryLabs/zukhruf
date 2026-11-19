@@ -8,13 +8,8 @@ Paths on the left are in `deepagents/packages/retrieval/src/lib`. Paths on the r
 
 ## Copied with changes
 
-**`stores/cid.ts` (`cid`) → `collection.ts` (`Collection.#hash`).**
-Both give the sha256 of the text, as hex. This copy hashes the JSON array `[provider, modelId, text]`, not the text alone.
-Why: the vector depends on the model too. A model change must embed the text again ([ADR 0002](./adr/0002-the-hash-includes-the-model.md)).
-
 **`stores/sqlite/sqlite.ts` (`SQLiteStore.upsertDoc` and `index`) → `collection.ts` (`Collection.upsert`).**
-Both compare the stored hash with the new hash, and embed only when it differs. deepagents compares in the `WHERE` of its `ON CONFLICT` update, and reads the changed row count. This copy reads the stored hash before it calls the model, so it calls `embedMany` one time for all changed documents.
-Why: one model call for a batch is faster than one call for each document.
+deepagents compares the stored hash (`stores/cid.ts`, `cid`) with the new hash in the `WHERE` of its `ON CONFLICT` update. This copy keeps no hash: it embeds every text through a model wrapped with `@zukhruf/embedding-cache`, which calls the model only for the texts it did not embed before, in one `embedMany` call ([ADR 0002](./adr/0002-the-hash-includes-the-model.md), amendment of 2026-11-19).
 Other changes:
 
 - One vector for each document, not one vector for each chunk. There is no chunker. The caller chooses the text. One vector for each chunk (MaxP) waits for a consumer that needs it.
@@ -31,7 +26,7 @@ deepagents searches a `vec0` virtual table of sqlite-vec with a query text, and 
 Why: an exact search in a small window needs no extension ([ADR 0001](./adr/0001-search-compares-each-document-in-the-window.md)). The first consumer compares stored documents with each other, not with a query.
 Other changes:
 
-- The table is `rows: 'replace'`, as `vec_chunks` is. deepagents also deletes its sources when it replaces `vec_chunks`, so its hash check embeds again. This copy keeps the hash in the same row as the vector, so a replaced table has no hash.
+- The table is `rows: 'replace'`, as `vec_chunks` is. deepagents also deletes its sources when it replaces `vec_chunks`, so its hash check embeds again. Here the cache keeps its own table, so a replaced table is filled again from the cache.
 - The collection refuses a vector whose dimension differs from the stored vectors ([ADR 0003](./adr/0003-all-vectors-of-a-collection-have-one-dimension.md)). deepagents makes `vec_chunks` again for a new dimension.
 
 ## Not copied

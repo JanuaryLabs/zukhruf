@@ -2,9 +2,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 
-import type { EmbeddingModel } from 'ai';
-
-import { Collection } from '@zukhruf/embeddings';
+import { Collection, type CollectionOptions } from '@zukhruf/embeddings';
 import { open } from '@zukhruf/sqlite-open';
 
 import { DAY_MS } from '../src/day.ts';
@@ -60,7 +58,7 @@ if (entry === undefined)
 const reference = entry.pin.design;
 
 // The checked model of each embedding model of the rule.
-const models = new Map<string, Exclude<EmbeddingModel, string>>();
+const models = new Map<string, CollectionOptions['model']>();
 for (const design of [
   ...rule.candidates.map((candidate) => candidate.recipe),
   reference,
