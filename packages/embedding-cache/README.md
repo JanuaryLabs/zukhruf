@@ -74,6 +74,14 @@ class SqliteEmbeddingCacheStore implements EmbeddingCacheStore {
 }
 
 // @zukhruf/embedding-cache/sqlserver
+interface SqlServerSession {
+  // Rejects with the driver's error as it is: the store reads its `number`
+  // (208: no table, 2714: the table exists).
+  query(
+    sql: string,
+    parameters: Record<string, unknown>,
+  ): Promise<Record<string, unknown>[]>;
+}
 class SqlServerEmbeddingCacheStore implements EmbeddingCacheStore {
   constructor(options: { session: SqlServerSession; table: string });
 }
@@ -95,9 +103,15 @@ class SqlServerEmbeddingCacheStore implements EmbeddingCacheStore {
 | `SqliteEmbeddingCacheStore`    | `key TEXT PRIMARY KEY, vector BLOB`: the float64 values, little-endian                                                                                                                                                     |
 | `SqlServerEmbeddingCacheStore` | `[key] VARCHAR(64) PRIMARY KEY, vector VARBINARY(MAX)`: the same bytes. Not the `VECTOR` type, which keeps float32 or float16 and would round ([ADR 0004](./docs/adr/0004-a-hit-gives-the-numbers-that-the-model-gave.md)) |
 
+Each store keeps the first vector that it got for a key. A `set` with a key that the store holds does not change its vector (`src/middleware.test.ts`, `src/sqlite.test.ts`, `src/sqlserver.test.ts`).
+
 ## Errors
 
-An error of the model, of `store.get` or of `store.set` reaches the caller as it is. A failed model call writes nothing, and so does a model that answers another number of vectors than the texts it got. A SQL store answers one error itself: a read or write that finds no table creates the table and runs once more.
+An error of the model, of `store.get` or of `store.set` reaches the caller as it is. A failed model call writes nothing, and so does a model that answers another number of vectors than the texts it got. A SQL store answers one error itself: a read or write that finds no table creates the table and runs once more. When a concurrent store created the table first, the session rejects the create with 2714, and the store runs the read or write once more.
+
+| Error       | When                                                                                                                                                                                                                                          |
+| ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TypeError` | `new SqliteEmbeddingCacheStore` or `new SqlServerEmbeddingCacheStore` gets a table name that is not an identifier: only letters, digits and underscores, with an optional schema before a dot (`src/sqlite.test.ts`, `src/sqlserver.test.ts`) |
 
 ## The same concepts in other systems
 

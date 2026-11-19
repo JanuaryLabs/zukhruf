@@ -28,6 +28,10 @@ _Avoid_: Uncached text
 Where the cache keeps each key and its vector: memory, a SQLite table or a SQL Server table. A store has `get` and `set`.
 _Avoid_: Backend, repository, cache (for the store alone)
 
+**Session**:
+The one connection to SQL Server that the host gives the SQL Server store, as a `SqlServerSession`. The host writes it over its own driver, so the package imports no driver. It has only `query(sql, parameters)`, which resolves to the rows of one batch and rejects with the error of the driver as it is (`src/sqlserver.ts`).
+_Avoid_: Driver, client, pool (the objects of the host's driver)
+
 **Vector**:
 The numbers that the model gave for one text, kept exactly.
 _Avoid_: Embedding (for the stored value), float32 vector
