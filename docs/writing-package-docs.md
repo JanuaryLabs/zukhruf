@@ -1,6 +1,6 @@
 # How to write the docs of a package
 
-Each `@zukhruf/*` package keeps its docs beside its code. This guide gives the kinds of doc, the shape of each kind, the style, and the commit. People and agents follow it. The `/update-docs` skill follows it with no person present, so each rule is one that a reader can check in the file. Each shape names one file that already has it.
+Each `@zukhruf/*` package keeps its docs beside its code. This guide gives the kinds of doc, the shape of each kind, the style, and the commit. People and agents follow it. The `/coding:update-docs` skill follows it with no person present, so each rule is one that a reader can check in the file. Each shape names one file that already has it.
 
 ## The kinds of doc
 
@@ -141,6 +141,7 @@ The rules:
 4. When you change the program, run it again, and paste the new output.
 5. Write `## What the output shows` when the lesson is in the numbers. Write `## Why it works` when the lesson is the mechanism.
 6. A program that needs a server first gives its start command in a ```sh block before the program ([filter-a-feed-with-a-taught-profile.md](../packages/information-filtering/relevance-filtering/docs/recipes/filter-a-feed-with-a-taught-profile.md)).
+7. Run the program from a folder outside the packages, with the workspace's `node_modules` linked into it, as `node --conditions=@zukhruf/source <file>.ts`. The condition makes each `@zukhruf/*` import read the package's source, so the program needs no build.
 
 The allowed variants:
 
@@ -198,7 +199,7 @@ The style is the one of the `wait-what` skill: "give me a little bit of context,
 - Write [ASD-STE100](https://www.asd-ste100.org/) Simplified Technical English. Use short sentences and the active voice. Write one instruction in each sentence. Give each word one meaning.
 - Use the words of the package's `CONTEXT.md`. Do not use its `_Avoid_` words.
 - Write the titles of task sections, recipes and ADRs as sentences. A concept, a reference page or a fixed section can have a name as its title ("Reach", "Errors").
-- Cite the evidence for each claim: an issue (`#3527`), a commit, a man page and its lines, an upstream doc with a link, or a test file.
+- Cite the evidence for each claim: an issue (`#3527`), a commit, a man page and its lines, an upstream doc with a link, or a test file. An issue is an agent-backlog item: `agent-backlog show 3527` prints it.
 - Use the term of the industry, with its source. When no term fits and you make one, say so in the same sentence.
 
 ## Commit
