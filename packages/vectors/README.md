@@ -171,11 +171,11 @@ function fromSql<T extends typeof Vector | typeof HalfVector>(
 
 ## Errors
 
-| Error                    | When                                                                   | The caller's next step                                   |
-| ------------------------ | ---------------------------------------------------------------------- | -------------------------------------------------------- |
-| `DimensionMismatchError` | Two vectors of one call have other dimensions. `expected` and `actual` | Use one model for both vectors                           |
-| `ZeroVectorError`        | A vector with no length is normalized                                  | Skip the vector, or fail its record                      |
-| `SqliteVecLoadedError`   | `install` on a database that loaded sqlite-vec                         | Use the functions of sqlite-vec, which are already there |
+| Error                              | When                                                                   | The caller's next step                                   |
+| ---------------------------------- | ---------------------------------------------------------------------- | -------------------------------------------------------- |
+| `DimensionMismatchError`           | Two vectors of one call have other dimensions. `expected` and `actual` | Use one model for both vectors                           |
+| `ZeroVectorError` (a `RangeError`) | A vector with no length is normalized                                  | Skip the vector, or fail its record                      |
+| `SqliteVecLoadedError`             | `install` on a database that loaded sqlite-vec                         | Use the functions of sqlite-vec, which are already there |
 
 ## SQL Server: what the probes found
 

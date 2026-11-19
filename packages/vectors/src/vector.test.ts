@@ -85,12 +85,13 @@ test('BitVector.from keeps each bit, and its dimensions are the number of bits',
   assert.deepEqual([...vector.bits], bits);
 });
 
-test('UnitVector.normalize refuses a vector of length 0', () => {
+test('UnitVector.normalize refuses a vector of length 0 with a ZeroVectorError, which is a RangeError', () => {
   // Arrange
   const zero = Vector.from([0, 0, 0]);
 
-  // Act and Assert
+  // Act and Assert: a host that catches RangeError for an invalid value catches this one too.
   assert.throws(() => UnitVector.normalize(zero), ZeroVectorError);
+  assert.throws(() => UnitVector.normalize(zero), RangeError);
 });
 
 test('UnitVector.normalize gives a vector of length 1 in the same direction', () => {
