@@ -1358,7 +1358,29 @@ The decisions are in [ADR 0014](./docs/adr/0014-the-auth-generator-adds-better-a
 
 ## dokploy generator
 
-`dokploy` writes the GitOps delivery of a node-app on Dokploy: an OpenTofu project in `infra/` that stores the compose in Dokploy, and the workflows that build the images, apply the stack and roll it out. text2sql (v2, authx) and whatisgoingon hold copies, and meddit is the third repo, so the shape moves here (#4603). The workflows call zukhruf's kit at `@main`: the reusable `tofu-apply.yml`, and the `dokploy-deploy` and `wait-for-health` actions.
+`dokploy` writes the GitOps delivery of a node-app on Dokploy: an OpenTofu project in `infra/` whose `main.tf` calls zukhruf's [`dokploy-stack` module](./opentofu/dokploy-stack/README.md) to store the compose in Dokploy, and the workflows that build the images, apply the stack and roll it out. text2sql (v2, authx) and whatisgoingon hold copies, and meddit is the third repo, so the shape moves here (#4603). The workflows call zukhruf's kit at `@main`: the reusable `tofu-apply.yml`, and the `dokploy-deploy` and `wait-for-health` actions. The module call follows `main` too.
+
+The generator writes each file only when it is missing, and never deletes one: after the first run, every file is the repo's (ADR 0015). A rerun adds the lines of `.prettierignore`, `.nxignore` and the `nx.json` plugin entry that are missing, and changes nothing else.
+
+```hcl
+module "stack" {
+  source = "git::https://github.com/JanuaryLabs/zukhruf.git//packages/nx/opentofu/dokploy-stack?ref=main"
+
+  name         = "acme"
+  description  = "acme at acme.<server ipv4>.sslip.io - managed by OpenTofu"
+  app          = "backend"
+  compose_file = file("${path.module}/../../../compose.dokploy.yml")
+  database     = { role = "acme" }
+  registry     = { username = "octocat", password = var.ghcr_pull_token }
+
+  env = {
+    PUBLIC_HOST = local.host
+    # Generators add env keys above this line.
+  }
+}
+```
+
+A key that the app needs goes into `env`; the app reads it through `env_file: .env`. A secret is a sensitive variable in `variables.tf`, fed by `TF_ENV` in `deploy.yml` and by `infra/.env` for a local preview.
 
 ### Deliver a backend
 
@@ -1395,19 +1417,19 @@ interface DokployOptions {
 
 ### What the dokploy generator writes
 
-| File                                     | What it holds                                                                                                                                                                                                                                                                 |
-| ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `infra/project.json`                     | `@<scope>/infra`; `@zukhruf/nx/opentofu` gives its targets, and the generator lists that plugin after `@zukhruf/nx/format` in `nx.json`                                                                                                                                       |
-| `infra/compose.dokploy.yml`              | the app image on `dokploy-network` with the Traefik labels (`web` redirects, `websecure` with Let's Encrypt); with `database`, `postgres:18-alpine` and the one-shot `migrate`, which the app waits for                                                                       |
-| `infra/.env.example`, `infra/.gitignore` | the secrets of a local run, `TF_VAR_dokploy_api_key=${DOKPLOY_API_KEY}` (and `TF_VAR_ghcr_pull_token`); the plaintext backups, `.terraform/` and `tfplan`                                                                                                                     |
-| `src/environments/production/*.tf`       | `versions`, `backend` (local, the encrypted state committed), `encryption` (pbkdf2 and aes_gcm, enforced), `providers`, `dns`, `main`, `outputs` (`dokploy_api`, `compose_id`, `host`), `variables`, `registry`                                                               |
-| `.terraform.lock.hcl`                    | the providers for `linux_amd64` and `darwin_arm64`, so `typecheck` (`-lockfile=readonly`) passes on CI and a Mac                                                                                                                                                              |
-| `.prettierignore`, `.nxignore`           | lines added when missing: `.terraform`, `tfplan` and the state for Prettier; the state for Nx, so the state commit of an apply makes no project affected                                                                                                                      |
-| `.github/workflows/deploy.yml`           | only when missing: gate (`tested-commit`, `affected-range` since the last deploy, `affected-projects`), image (`ghcr-image`, a matrix: the app and `migrate`), promote to `:latest` (`ghcr-promote`), infra (`tofu-apply.yml`), release (`dokploy-deploy`, `wait-for-health`) |
-| `.github/workflows/ci.yml`               | only when missing: setup-workspace, OpenTofu in the background, `affected-range`, then `nx affected -t lint typecheck test build` beside `sync:check`, `prettier --check` and zizmor                                                                                          |
-| `.github/zizmor.yml`                     | only when missing: tags and `@main` allowed (`ref-pin`), and the `workflow_run` of `deploy.yml`                                                                                                                                                                               |
+| File                                     | What it holds                                                                                                                                                                                                                                              |
+| ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `infra/project.json`                     | `@<scope>/infra`; `@zukhruf/nx/opentofu` gives its targets, and the generator lists that plugin after `@zukhruf/nx/format` in `nx.json`                                                                                                                    |
+| `infra/compose.dokploy.yml`              | the app image with `env_file: .env` on `dokploy-network` with the Traefik labels (`web` redirects, `websecure` with Let's Encrypt); with `database`, `postgres:18-alpine` and the one-shot `migrate`, which the app waits for                              |
+| `infra/.env.example`, `infra/.gitignore` | the secrets of a local run, `TF_VAR_dokploy_api_key=${DOKPLOY_API_KEY}` (and `TF_VAR_ghcr_pull_token`); the plaintext backups, `.terraform/` and `tfplan`                                                                                                  |
+| `src/environments/production/*.tf`       | `versions`, `backend` (local, the encrypted state committed), `encryption` (pbkdf2 and aes_gcm, enforced), `providers`, `dns`, `main` (the module call; `registry` is its input), `outputs` (`dokploy_api`, `compose_id`, `host`), `variables`             |
+| `.terraform.lock.hcl`                    | the providers for `linux_amd64` and `darwin_arm64`, `hashicorp/random` always, because the module requires it, so `typecheck` (`-lockfile=readonly`) passes on CI and a Mac                                                                                |
+| `.prettierignore`, `.nxignore`           | lines added when missing: `.terraform`, `tfplan` and the state for Prettier; the state for Nx, so the state commit of an apply makes no project affected                                                                                                   |
+| `.github/workflows/deploy.yml`           | gate (`tested-commit`, `affected-range` since the last deploy, `affected-projects`), image (`ghcr-image`, a matrix: the app and `migrate`), promote to `:latest` (`ghcr-promote`), infra (`tofu-apply.yml`), release (`dokploy-deploy`, `wait-for-health`) |
+| `.github/workflows/ci.yml`               | setup-workspace, OpenTofu in the background, `affected-range`, then `nx affected -t lint typecheck test build` beside `sync:check`, `prettier --check` and zizmor                                                                                          |
+| `.github/zizmor.yml`                     | tags and `@main` allowed (`ref-pin`), and the `workflow_run` of `deploy.yml`                                                                                                                                                                               |
 
-The compose reads `PUBLIC_HOST`, and with `database` `POSTGRES_PASSWORD` and `CONNECTION_STRING`, from the env that `main.tf` stores with it. Postgres 18 keeps its data under `/var/lib/postgresql/18/docker`, so the volume is mounted at `/var/lib/postgresql`. Each variable refuses an empty value, because CI renders an unset secret as `""`. The stack has no `terraform_data` deployment: the release job deploys after a new image, after an apply that changed the stack, and while the infra project is affected since the last successful deploy, and it checks the build sha only after a new image. `.prettierignore` gets `.terraform`, `tfplan` and the state.
+The compose reads `PUBLIC_HOST` in its labels, Postgres reads `POSTGRES_PASSWORD` and `migrate` reads `CONNECTION_STRING`, from the env that the module stores with it; a plan refuses a `${NAME}` that the env does not have. Postgres 18 keeps its data under `/var/lib/postgresql/18/docker`, so the volume is mounted at `/var/lib/postgresql`. Each variable refuses an empty value, because CI renders an unset secret as `""`. The stack has no `terraform_data` deployment: the release job deploys after a new image, after an apply that changed the stack, and while the infra project is affected since the last successful deploy, and it checks the build sha only after a new image. `.prettierignore` gets `.terraform`, `tfplan` and the state.
 
 ### Errors of the dokploy generator
 
@@ -1421,6 +1443,6 @@ The compose reads `PUBLIC_HOST`, and with `database` `POSTGRES_PASSWORD` and `CO
 
 ### Test the dokploy generator before a release
 
-After the steps of [Test the app generators before a release](#test-the-app-generators-before-a-release), run `prisma` and then `dokploy` with `--database`, `--registryUser` and no `--host`, then `npm install`, `npx nx sync`, `npx nx run @acme/infra:typecheck`, `actionlint .github/workflows/*.yml`, `npx nx run-many -t typecheck lint`, `npx prettier --check .`, and `docker compose -f infra/compose.dokploy.yml config`. actionlint 1.7.12 does not know the `parallel:` step of `ci.yml`, which GitHub runs. On 2026-11-18 each passed, also after a run with `--host` and no `--database` or `--registryUser`; after that, two runs with the first options passed again, and the second of them changed no file.
+After the steps of [Test the app generators before a release](#test-the-app-generators-before-a-release), run `prisma` and then `dokploy` with `--database`, `--registryUser` and no `--host`, then `npm install`, `npx nx sync`, `npx nx run @acme/infra:typecheck`, `actionlint .github/workflows/*.yml`, `npx nx run-many -t typecheck lint`, `npx prettier --check .`, and `docker compose -f infra/compose.dokploy.yml config` (with an `infra/.env`, which the app's `env_file` names). actionlint 1.7.12 does not know the `parallel:` step of `ci.yml`, which GitHub runs. On 2026-11-18 each passed, also after a run with `--host` and no `--database` or `--registryUser`; after that, two runs with the first options passed again, and the second of them changed no file.
 
-The decisions are in [ADR 0011](./docs/adr/0011-the-dokploy-generator-writes-the-gitops-delivery-of-a-node-app.md). The backlog item of the dokploy generator is #4603.
+The decisions are in [ADR 0011](./docs/adr/0011-the-dokploy-generator-writes-the-gitops-delivery-of-a-node-app.md) and [ADR 0015](./docs/adr/0015-an-opentofu-module-of-zukhruf-holds-the-dokploy-delivery-and-the-dokploy-generator-writes-infra-once.md). The backlog items of the dokploy generator are #4603 and #4733.
