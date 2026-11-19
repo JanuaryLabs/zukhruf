@@ -10,6 +10,7 @@ import { type Tree, readJson } from '@nx/devkit';
 import { TemporaryFiles } from '@zukhruf/fs';
 
 import { changes, generatorTree } from '../../testing/generator-tree.ts';
+import { lintManifests } from '../../testing/lint-manifests.ts';
 import { stackModuleSource } from '../dokploy/files.ts';
 import dokployGenerator from '../dokploy/generator.ts';
 import nodeAppGenerator from '../node-app/generator.ts';
@@ -686,3 +687,18 @@ test(
     }
   },
 );
+
+test('what auth writes lints clean under @zukhruf/eslint', async () => {
+  const tree = generatorTree();
+  await nodeAppGenerator(tree, { directory: 'apps/backend' });
+  await reactAppGenerator(tree, { directory: 'apps/web' });
+  await pairGenerator(tree, { api: 'apps/backend', web: 'apps/web' });
+  await prismaGenerator(tree, {
+    directory: 'packages/db',
+    backend: 'apps/backend',
+  });
+
+  await authGenerator(tree, { ...options, web: 'apps/web' });
+
+  assert.deepEqual(await lintManifests(tree), []);
+});

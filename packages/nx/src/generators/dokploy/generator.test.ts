@@ -15,8 +15,10 @@ import {
 import { TemporaryFiles } from '@zukhruf/fs';
 
 import { changes, generatorTree } from '../../testing/generator-tree.ts';
+import { lintManifests } from '../../testing/lint-manifests.ts';
 import nodeAppGenerator from '../node-app/generator.ts';
 import pairGenerator from '../pair/generator.ts';
+import prismaGenerator from '../prisma/generator.ts';
 import reactAppGenerator from '../react-app/generator.ts';
 import { stackModuleSource } from './files.ts';
 import dokployGenerator, { type DokployOptions } from './generator.ts';
@@ -749,4 +751,21 @@ test('a zone without a host, or a host outside its zone, stops the generator', a
     }),
     /The host "app\.example\.org" is not a name in the zone "example\.com"\./,
   );
+});
+
+test('what dokploy writes lints clean under @zukhruf/eslint', async () => {
+  const tree = generatorTree();
+  await nodeAppGenerator(tree, { directory: 'apps/backend' });
+  await prismaGenerator(tree, {
+    directory: 'packages/db',
+    backend: 'apps/backend',
+  });
+
+  await dokployGenerator(tree, {
+    api: 'apps/backend',
+    owner: 'acme',
+    database: 'packages/db',
+  });
+
+  assert.deepEqual(await lintManifests(tree), []);
 });

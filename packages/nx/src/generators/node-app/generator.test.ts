@@ -7,6 +7,7 @@ import {
   generatorTree,
   rootPackageNames,
 } from '../../testing/generator-tree.ts';
+import { lintManifests } from '../../testing/lint-manifests.ts';
 import { appPackageVersions, nxVersion } from '../versions.ts';
 import { clientManifest, clientTsconfig } from './files.ts';
 import nodeAppGenerator, { createRequireBanner } from './generator.ts';
@@ -454,4 +455,12 @@ test('a generator default that is there keeps its value and its place', async ()
     ['docker', true],
     ['linter', 'none'],
   ]);
+});
+
+test('what node-app writes lints clean under @zukhruf/eslint', async () => {
+  const tree = generatorTree();
+
+  await nodeAppGenerator(tree, { directory: 'apps/backend' });
+
+  assert.deepEqual(await lintManifests(tree), []);
 });

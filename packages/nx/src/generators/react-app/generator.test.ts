@@ -7,6 +7,7 @@ import {
   generatorTree,
   rootPackageNames,
 } from '../../testing/generator-tree.ts';
+import { lintManifests } from '../../testing/lint-manifests.ts';
 import nodeAppGenerator from '../node-app/generator.ts';
 import { appPackageVersions, nxVersion } from '../versions.ts';
 import reactAppGenerator from './generator.ts';
@@ -260,4 +261,12 @@ test('the Vitest config gives each test the 300 s test limit of zukhruf', async 
 
   const viteConfig = tree.read('apps/web/vite.config.ts', 'utf-8') ?? '';
   assert.match(viteConfig, /testTimeout: 300_000,/);
+});
+
+test('what react-app writes lints clean under @zukhruf/eslint', async () => {
+  const tree = generatorTree();
+
+  await reactAppGenerator(tree, { directory: 'apps/web' });
+
+  assert.deepEqual(await lintManifests(tree), []);
 });

@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import { readJson, writeJson } from '@nx/devkit';
 
 import { changes, generatorTree } from '../../testing/generator-tree.ts';
+import { lintManifests } from '../../testing/lint-manifests.ts';
 import nodeAppGenerator from '../node-app/generator.ts';
 import reactAppGenerator from '../react-app/generator.ts';
 import { appPackageVersions } from '../versions.ts';
@@ -93,4 +94,14 @@ test('the port of the api goes into the image', async () => {
   const dockerfile = tree.read('apps/backend/Dockerfile', 'utf-8') ?? '';
   assert.match(dockerfile, /^EXPOSE 8080$/m);
   assert.match(dockerfile, /PORT=8080 BUILD_SHA=\$BUILD_SHA$/m);
+});
+
+test('what pair writes lints clean under @zukhruf/eslint', async () => {
+  const tree = generatorTree();
+  await nodeAppGenerator(tree, { directory: 'apps/backend' });
+  await reactAppGenerator(tree, { directory: 'apps/web' });
+
+  await pairGenerator(tree, { api: 'apps/backend', web: 'apps/web' });
+
+  assert.deepEqual(await lintManifests(tree), []);
 });

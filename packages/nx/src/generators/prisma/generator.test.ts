@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import { readJson, writeJson } from '@nx/devkit';
 
 import { changes, generatorTree } from '../../testing/generator-tree.ts';
+import { lintManifests } from '../../testing/lint-manifests.ts';
 import nodeAppGenerator from '../node-app/generator.ts';
 import { appPackageVersions, zukhrufVersion } from '../versions.ts';
 import prismaGenerator from './generator.ts';
@@ -444,4 +445,16 @@ test('a backend that is not a node-app stops the generator', async () => {
         'apps/api has no sdk-it.config.ts, so it is not a node-app. Run @zukhruf/nx:node-app apps/api first.',
     },
   );
+});
+
+test('what prisma writes lints clean under @zukhruf/eslint', async () => {
+  const tree = generatorTree();
+  await nodeAppGenerator(tree, { directory: 'apps/backend' });
+
+  await prismaGenerator(tree, {
+    directory: 'packages/db',
+    backend: 'apps/backend',
+  });
+
+  assert.deepEqual(await lintManifests(tree), []);
 });

@@ -8,6 +8,7 @@ import {
   generatorTree,
   rootPackageNames,
 } from '../../testing/generator-tree.ts';
+import { lintManifests } from '../../testing/lint-manifests.ts';
 import { appPackageVersions } from '../versions.ts';
 import uiPackageGenerator from './generator.ts';
 
@@ -105,4 +106,12 @@ test('a folder outside packages/ stops the generator', async () => {
     }),
     /goes under packages\//,
   );
+});
+
+test('what ui-package writes lints clean under @zukhruf/eslint', async () => {
+  const tree = generatorTree();
+
+  await uiPackageGenerator(tree, options);
+
+  assert.deepEqual(await lintManifests(tree), []);
 });
