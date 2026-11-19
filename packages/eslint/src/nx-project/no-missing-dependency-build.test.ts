@@ -95,6 +95,9 @@ test('a target that runs a file importing a built workspace package must depend 
         }),
         development: runs('node --conditions=development scripts/main.ts'),
         typed: runs('node scripts/typed.ts'),
+        reexport: runs('node scripts/reexport.ts'),
+        'type-reexport': runs('node scripts/type-reexport.ts'),
+        lazy: runs('node scripts/lazy.ts'),
         inline: runs(
           `node -e "import('@fx/greet')" scripts/main.ts && echo done`,
         ),
@@ -110,6 +113,9 @@ test('a target that runs a file importing a built workspace package must depend 
     'apps/cli/scripts/plain.mjs': `import '@fx/plain';\n`,
     'apps/cli/scripts/via-shout.ts': `import { shout } from '@fx/shout';\nconsole.log(shout());\n`,
     'apps/cli/scripts/typed.ts': `import type { Greet } from '@fx/greet';\nexport const named: Greet = () => 'typed';\n`,
+    'apps/cli/scripts/reexport.ts': `export { greet } from '@fx/greet';\n`,
+    'apps/cli/scripts/type-reexport.ts': `export type { Greet } from '@fx/greet';\n`,
+    'apps/cli/scripts/lazy.ts': `const { greet } = await import('@fx/greet');\ngreet();\n`,
     'apps/cli/scripts/tests/greet.test.ts': `import { greet } from '@fx/greet';\ngreet();\n`,
   });
   buildProjectGraph(workspace.root);
@@ -124,7 +130,9 @@ test('a target that runs a file importing a built workspace package must depend 
     ({ message }) => /^Target "([^"]+)"/.exec(message)?.[1],
   );
   assert.deepEqual(reported.toSorted(), [
+    'lazy',
     'plain',
+    'reexport',
     'script',
     'seed',
     'shout',

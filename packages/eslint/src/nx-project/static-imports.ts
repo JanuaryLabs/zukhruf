@@ -1,10 +1,8 @@
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 
-import tseslint from 'typescript-eslint';
-
-import { isAstNode, isType } from '../authoring/ast.ts';
-import { isRecord } from '../unknown-values.ts';
+import { isNodeFlagSet } from 'ts-api-utils';
+import * as ts from 'typescript';
 
 interface Parsed {
   readonly mtimeMs: number;
@@ -15,43 +13,41 @@ interface Parsed {
 // process (an editor) sees an edit.
 const parsedByFile = new Map<string, Parsed>();
 
-function literalString(node: unknown): string | undefined {
-  return isType(node, 'Literal') && typeof node['value'] === 'string'
-    ? node['value']
-    : undefined;
+function stringText(node: ts.Node | undefined): string | undefined {
+  return node && ts.isStringLiteral(node) ? node.text : undefined;
 }
 
 // A value import, a re-export or an `import()` of a literal loads the module
 // when the file runs; `import type` and `export type` are erased first.
-function loadedSpecifier(node: Record<string, unknown>): string | undefined {
-  switch (node['type']) {
-    case 'ImportDeclaration':
-      return node['importKind'] === 'type'
-        ? undefined
-        : literalString(node['source']);
-    case 'ExportNamedDeclaration':
-    case 'ExportAllDeclaration':
-      return node['exportKind'] === 'type'
-        ? undefined
-        : literalString(node['source']);
-    case 'ImportExpression':
-      return literalString(node['source']);
-    default:
-      return undefined;
+function loadedSpecifier(node: ts.Node): string | undefined {
+  if (ts.isImportDeclaration(node)) {
+    return node.importClause &&
+      ts.isTypeOnlyImportDeclaration(node.importClause)
+      ? undefined
+      : stringText(node.moduleSpecifier);
   }
+  if (ts.isExportDeclaration(node)) {
+    return node.isTypeOnly ? undefined : stringText(node.moduleSpecifier);
+  }
+  if (
+    ts.isCallExpression(node) &&
+    node.expression.kind === ts.SyntaxKind.ImportKeyword
+  ) {
+    return stringText(node.arguments[0]);
+  }
+  return undefined;
 }
 
-function collect(node: unknown, into: string[]): void {
-  if (Array.isArray(node)) {
-    for (const child of node) collect(child, into);
-    return;
-  }
-  if (!isAstNode(node)) return;
+// False when a node carries a parse error: a file Node cannot parse fails on
+// its own, not on a missing build.
+function collect(node: ts.Node, into: string[]): boolean {
+  if (isNodeFlagSet(node, ts.NodeFlags.ThisNodeHasError)) return false;
   const specifier = loadedSpecifier(node);
   if (specifier !== undefined) into.push(specifier);
-  for (const [key, child] of Object.entries(node)) {
-    if (key !== 'parent' && isRecord(child)) collect(child, into);
-  }
+  const brokenChild = ts.forEachChild(node, (child) =>
+    collect(child, into) ? undefined : child,
+  );
+  return brokenChild === undefined;
 }
 
 /** The module specifiers that `file` loads when Node runs it; none when it does not parse. */
@@ -59,19 +55,17 @@ export function loadedSpecifiers(file: string): readonly string[] {
   const { mtimeMs } = statSync(file);
   const cached = parsedByFile.get(file);
   if (cached?.mtimeMs === mtimeMs) return cached.specifiers;
-  const specifiers: string[] = [];
-  try {
-    collect(
-      tseslint.parser.parseForESLint(readFileSync(file, 'utf8')).ast,
-      specifiers,
-    );
-  } catch (error) {
-    // typescript-estree throws a TSError with a lineNumber on a syntax
-    // error; a file Node cannot parse fails on its own, not on a missing build.
-    if (!(isRecord(error) && typeof error['lineNumber'] === 'number')) {
-      throw error;
-    }
-  }
+  // The TypeScript parser alone: an ESLint parse (ESTree, tokens, scopes)
+  // costs nine times as much and none of it names a module.
+  const source = ts.createSourceFile(
+    file,
+    readFileSync(file, 'utf8'),
+    ts.ScriptTarget.Latest,
+    false,
+    ts.ScriptKind.TS,
+  );
+  const found: string[] = [];
+  const specifiers = collect(source, found) ? found : [];
   parsedByFile.set(file, { mtimeMs, specifiers });
   return specifiers;
 }
