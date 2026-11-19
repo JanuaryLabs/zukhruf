@@ -294,7 +294,12 @@ function addWorkspace(tree: Tree, projectRoot: string): void {
  * The plugin gives the Prisma targets, and `generate` runs before each
  * typecheck and build, because the client is not committed (ADR 0008). Nx
  * skips a dependency on a target that the project does not have, and `...`
- * keeps the dependencies that the plugins infer.
+ * keeps the dependencies and inputs that the plugins infer.
+ *
+ * The client is also an input of both. Nx hashes no gitignored file, and the
+ * inputs that `@nx/js/typescript` infers take only the `.d.ts` of dependent
+ * tasks, so a changed schema left the build's hash as it was and Nx restored
+ * the old dist (meddit, 2026-11-19).
  */
 function mergePrismaNxJson(tree: Tree): void {
   updateJson(tree, 'nx.json', (nxJson: NxJsonConfiguration) => {
@@ -306,6 +311,11 @@ function mergePrismaNxJson(tree: Tree): void {
       updateTargetDefault(nxJson, target, (entry) => ({
         ...entry,
         dependsOn: unique([...(entry.dependsOn ?? []), 'generate', '...']),
+        inputs: unique([
+          ...(entry.inputs ?? []),
+          '...',
+          { dependentTasksOutputFiles: '**/*.ts' },
+        ]),
       }));
     }
     return nxJson;

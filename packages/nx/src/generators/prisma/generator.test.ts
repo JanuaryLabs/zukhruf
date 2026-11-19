@@ -234,6 +234,12 @@ test('nx.json lists the prisma plugin, and generate runs before typecheck and bu
     'generate',
   ]);
   assert.deepEqual(targetDefaults.build.dependsOn, ['generate', '...']);
+  for (const target of ['typecheck', 'build']) {
+    assert.deepEqual(targetDefaults[target].inputs, [
+      '...',
+      { dependentTasksOutputFiles: '**/*.ts' },
+    ]);
+  }
 });
 
 test('the build default of a backend keeps ^sdk and gets generate', async () => {
