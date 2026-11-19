@@ -4,6 +4,7 @@ import * as jsonc from 'jsonc-eslint-parser';
 import { PACKAGE_JSON } from '../files.ts';
 import dependencyChecks from './dependency-checks.ts';
 import noGlobstarWorkspace from './no-globstar-workspace.ts';
+import noOtherTestRunner from './no-other-test-runner.ts';
 import noRootScript from './no-root-script.ts';
 import noTruncatedDescription from './no-truncated-description.ts';
 import nxFamilyPinned from './nx-family-pinned.ts';
@@ -20,13 +21,15 @@ const configs: Record<string, Linter.Config[]> = {};
  * description inside what the npm registry stores, and names the
  * `repository` that npm provenance checks. Only the workspace root
  * installs the nx family, at one exact version, and runs no npm script but
- * `prepare`. A `workspaces` glob has no `**`.
+ * `prepare`. A `workspaces` glob has no `**`. No manifest installs a test
+ * runner other than node:test and Vitest.
  */
 const plugin = {
   meta: { name: '@zukhruf/eslint/nx/manifest', namespace: 'manifest' },
   rules: {
     'dependency-checks': dependencyChecks,
     'no-globstar-workspace': noGlobstarWorkspace,
+    'no-other-test-runner': noOtherTestRunner,
     'no-root-script': noRootScript,
     'no-truncated-description': noTruncatedDescription,
     'nx-family-pinned': nxFamilyPinned,
@@ -44,6 +47,7 @@ configs['recommended'] = [
     rules: {
       'manifest/dependency-checks': 'error',
       'manifest/no-globstar-workspace': 'error',
+      'manifest/no-other-test-runner': 'error',
       'manifest/no-root-script': 'error',
       'manifest/no-truncated-description': 'error',
       'manifest/nx-family-pinned': 'error',
