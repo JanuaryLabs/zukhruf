@@ -1,8 +1,31 @@
 # @zukhruf/async
 
-Helpers for code that waits for promises: `untilAborted` cancels a wait, `Latch` holds callers until something happened, `Future` gives callers the value or the failure of work that ends once, `Lock` lets one caller at a time do a thing, `Semaphore` lets a number of callers at a time do it, `WaitGroup` waits until the work in flight is done, `RefCount` keeps the process alive only while work holds a handle, `Cond` wakes every caller that waits now, `delay` waits a fixed time on a clock, `timeout` stops a wait after a time on a clock, `poll` calls an attempt again until it gives a value, `Backoff` gives a longer wait before each retry, and `ChangeWatcher` reads gauges again and again and tells which values changed. `@zukhruf/mutex`, `@zukhruf/single-flight` and `@zukhruf/election` use them.
+Helpers for code that waits for promises: `untilAborted` cancels a wait, `Latch` holds callers until something happened, `Future` gives callers the value or the failure of work that ends once, `Lock` lets one caller at a time do a thing, `Semaphore` lets a number of callers at a time do it, `WaitGroup` waits until the work in flight is done, `RefCount` keeps the process alive only while work holds a handle, `Cond` wakes every caller that waits now, `delay` waits a fixed time on a clock, `timeout` stops a wait after a time on a clock, `poll` calls an attempt again until it gives a value, `Backoff` gives a longer wait before each retry, and `ChangeWatcher` reads gauges again and again and tells which values changed. Many packages of this workspace use them, for example `@zukhruf/mutex`, `@zukhruf/pool`, `@zukhruf/ssh` and `@zukhruf/testing`.
 
 The words in these documents have one meaning each. See the glossary in [CONTEXT.md](./CONTEXT.md).
+
+## Use it
+
+```sh
+npm install @zukhruf/async
+```
+
+```ts
+import { Lock, timeout } from '@zukhruf/async';
+
+const writes = new Lock();
+using limit = timeout(5_000, { clock: globalThis });
+
+const order: number[] = [];
+await Promise.all(
+  [1, 2, 3].map((n) =>
+    writes.run(async () => order.push(n), { signal: limit.signal }),
+  ),
+);
+console.log(order); // [ 1, 2, 3 ]
+```
+
+The lock runs the three works one at a time, in the order of the calls. The timeout stops each wait for the lock after 5 seconds.
 
 ## Cancel a wait
 
@@ -488,3 +511,211 @@ stamp('passed', globalThis);
 The wall time can jump, for example when a time server sets it. `performance.now()` does not jump. Thus a deadline uses `performance.now()`, and never the wall time. On macOS, `performance.now()` and the timers of Node.js count the time of a system sleep; a `timeout` does not, see [Stop a wait after a time](#stop-a-wait-after-a-time).
 
 See [ADR 0005](./docs/adr/0005-a-wait-runs-on-the-clock-that-the-caller-gives.md).
+
+## Errors
+
+| Error                                       | When                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `signal.reason`                             | `untilAborted`, `delay`, `acquire` and `run` of a lock, `acquire` of a semaphore, and `wait` of a wait group or a cond reject with it when the signal aborts, also before the call. `poll` rejects with it when the signal aborts during a wait between two attempts. `watch` of a change watcher does not reject: its loop ends with no error.                                                                                     |
+| `DOMException` whose name is `TimeoutError` | The reason of the signal of `timeout` when its time ends. A wait that takes this signal rejects with it. A read of a gauge that takes longer than the `timeout` of a change watcher fails with it, and the outcome of the gauge is `failed`.                                                                                                                                                                                        |
+| `RangeError`                                | The constructor of `Semaphore` gets a count of permits that is not a positive integer. The constructor of `Backoff` gets options out of range, or `duration` gets a count of retries that is not an integer of 0 or more. The constructor of `ChangeWatcher` gets an `interval` or a `timeout`, or the constructor of `Period` gets a period, that is not a positive, finite number of milliseconds (`src/change-watcher.test.ts`). |
+
+## API
+
+```ts
+function untilAborted<T>(
+  promise: Promise<T>,
+  signal: AbortSignal | undefined,
+): Promise<T>;
+
+class Latch<T = void> {
+  open(value: T extends PromiseLike<unknown> ? never : T): void;
+  wait(): Promise<T>;
+}
+
+class Future<T> {
+  static run<T>(work: () => Promise<T>): Future<T>;
+  resolve(value: T extends PromiseLike<unknown> ? never : T): void;
+  reject(reason: unknown): void;
+  wait(): Promise<T>;
+}
+
+interface AcquireOptions {
+  signal: AbortSignal | undefined;
+}
+
+class Lock {
+  acquire(options: AcquireOptions): Promise<Disposable>;
+  tryAcquire(): Disposable | undefined;
+  run<T>(work: () => Promise<T>, options: AcquireOptions): Promise<T>;
+}
+
+class Semaphore {
+  constructor(permits: number); // RangeError: not a positive integer
+  acquire(options: AcquireOptions): Promise<Disposable>;
+  tryAcquire(): Disposable | undefined;
+}
+
+interface WaitOptions {
+  signal: AbortSignal | undefined;
+}
+
+class WaitGroup {
+  add(): Disposable;
+  wait(options: WaitOptions): Promise<void>;
+}
+
+class Cond {
+  wait(options: WaitOptions): Promise<void>;
+  broadcast(): void;
+}
+
+interface Referable {
+  ref(): unknown;
+  unref(): unknown;
+}
+
+class RefCount {
+  constructor(handle: Referable);
+  hold(): Disposable;
+}
+
+interface Clock {
+  setTimeout(callback: () => void, ms: number): unknown;
+  clearTimeout(timer: unknown): void;
+  performance: { now(): number };
+}
+
+interface WallClock extends Clock {
+  Date: { now(): number };
+}
+
+interface DelayOptions {
+  clock: Clock;
+  signal: AbortSignal | undefined;
+  ref?: boolean | undefined;
+}
+
+function delay(ms: number, options: DelayOptions): Promise<void>;
+
+interface TimeoutOptions {
+  clock: Clock;
+  ref?: boolean | undefined;
+}
+
+interface Timeout extends Disposable {
+  readonly signal: AbortSignal; // aborts with a DOMException named TimeoutError
+}
+
+function timeout(ms: number, options: TimeoutOptions): Timeout;
+
+interface PollOptions {
+  interval: number;
+  signal: AbortSignal | undefined;
+  clock: Clock;
+  deadline?: number | undefined; // a clock.performance.now() time
+  ref?: boolean;
+}
+
+function poll<T>(
+  attempt: () => Promise<T | undefined>,
+  options: PollOptions & { deadline: number },
+): Promise<T | undefined>;
+function poll<T>(
+  attempt: () => Promise<T | undefined>,
+  options: PollOptions & { deadline?: undefined },
+): Promise<T>;
+
+type Jitter =
+  | { kind: 'none' }
+  | { kind: 'ratio'; ratio: number }
+  | { kind: 'full' }
+  | { kind: 'equal' };
+
+interface BackoffOptions {
+  initial: number;
+  multiplier: number;
+  max: number;
+  jitter: Jitter;
+  random?: (() => number) | undefined; // default Math.random
+}
+
+class Backoff {
+  constructor(options: BackoffOptions); // RangeError: an option out of range
+  duration(retries: number): number; // RangeError: not an integer of 0 or more
+}
+
+type Primitive = string | number | bigint | boolean | null | undefined;
+type Value = Primitive | readonly Value[];
+
+interface Check {
+  readonly watchStarted: number;
+  readonly now: number;
+  readonly signal: AbortSignal;
+} // exported as a type: the change watcher makes each check
+
+abstract class Gauge<V extends Value = Value> {
+  value(check: Check): Promise<V>;
+  protected abstract read(check: Check): Promise<V>;
+}
+
+type Sample = Exclude<Primitive, undefined>;
+
+abstract class Collector<K> {
+  protected abstract collect(check: Check): Promise<ReadonlyMap<K, Sample>>;
+  gauge(key: K): Gauge<Primitive>;
+}
+
+class Group extends Gauge<readonly Value[]> {
+  constructor(members: readonly Gauge[]);
+}
+
+class Period extends Gauge<number> {
+  constructor(ms: number); // RangeError: not a positive, finite number
+}
+
+type Outcome =
+  | { readonly state: 'changed' }
+  | { readonly state: 'unchanged' }
+  | { readonly state: 'failed'; readonly error: unknown };
+
+interface ChangeWatcherOptions {
+  interval: number;
+  timeout: number;
+  clock: WallClock;
+}
+
+class ChangeWatcher<G extends Gauge> {
+  constructor(gauges: Iterable<G>, options: ChangeWatcherOptions); // RangeError: interval or timeout not a positive, finite number
+  watch(
+    signal: AbortSignal,
+  ): AsyncGenerator<ReadonlyMap<G, Outcome>, void, undefined>;
+}
+```
+
+## Documentation
+
+**Recipes**
+
+- [Keep the writes to one file in order](./docs/recipes/keep-the-writes-to-one-file-in-order.md)
+- [Wait for the work in flight before shutdown](./docs/recipes/wait-for-the-work-in-flight-before-shutdown.md)
+
+**Decisions**
+
+- [ADR 0001](./docs/adr/0001-a-wait-listens-for-the-abort-through-addabortlistener.md): a wait listens for the abort through `addAbortListener`.
+- [ADR 0002](./docs/adr/0002-a-latch-carries-a-value-never-a-failure.md): a latch carries a value, never a failure.
+- [ADR 0003](./docs/adr/0003-the-election-and-the-file-lock-stores-poll-through-one-function.md): the election and the file lock stores poll through one function.
+- [ADR 0004](./docs/adr/0004-a-change-watcher-yields-each-check-with-the-keys-that-changed.md): a change watcher yields each check with the keys that changed.
+- [ADR 0005](./docs/adr/0005-a-wait-runs-on-the-clock-that-the-caller-gives.md): a wait runs on the clock that the caller gives.
+- [ADR 0006](./docs/adr/0006-a-timeout-is-a-signal-on-the-clock-that-the-caller-gives.md): a timeout is a signal on the clock that the caller gives.
+- [ADR 0007](./docs/adr/0007-a-check-is-one-read-that-gives-the-value-of-each-key.md): a check is one read that gives the value of each key (superseded by ADR 0008).
+- [ADR 0008](./docs/adr/0008-a-change-watcher-reads-gauges.md): a change watcher reads gauges.
+- [ADR 0009](./docs/adr/0009-a-wait-longer-than-one-timer-runs-on-a-chain-of-timers.md): a wait longer than one timer runs on a chain of timers.
+- [ADR 0010](./docs/adr/0010-a-timeout-counts-its-time-in-parts.md): a timeout counts its time in parts.
+- [ADR 0011](./docs/adr/0011-a-back-off-gives-the-wait-before-a-retry-and-keeps-no-state.md): a back-off gives the wait before a retry and keeps no state.
+- [ADR 0012](./docs/adr/0012-a-timeout-keeps-the-process-alive-only-when-the-caller-says-so.md): a timeout keeps the process alive only when the caller says so.
+- [ADR 0013](./docs/adr/0013-a-lock-is-a-semaphore-of-one-that-grants-in-order-and-a-cancel-leaves-the-line.md): a lock is a semaphore of one that grants in order, and a cancel leaves the line.
+- [ADR 0014](./docs/adr/0014-a-future-keeps-its-failure-as-data-and-only-a-wait-rejects.md): a future keeps its failure as data, and only a wait rejects.
+- [ADR 0015](./docs/adr/0015-a-wait-group-counts-disposable-tokens-and-may-count-up-again-after-zero.md): a wait group counts disposable tokens, and may count up again after zero.
+- [ADR 0016](./docs/adr/0016-a-cond-wakes-the-waits-that-started-before-a-broadcast-and-keeps-nothing-for-a-later-wait.md): a cond wakes the waits that started before a broadcast, and keeps nothing for a later wait.
+- [ADR 0017](./docs/adr/0017-a-ref-count-holds-a-handle-ref-d-while-work-holds-a-token.md): a ref count holds a handle ref'd while work holds a token.

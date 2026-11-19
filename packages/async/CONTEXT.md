@@ -12,6 +12,10 @@ _Avoid_: Await (the keyword), block
 The operation that a promise stands for. The promise settles when the work ends.
 _Avoid_: Task (the mutex runs a task while a caller holds a key), job
 
+**Step**:
+The synchronous run of code before the next `await`. Other code runs only between two steps. Thus a wait that starts in the same step as a check of a state sees the same state. The word is one that this package makes: JavaScript runs each step to completion.
+_Avoid_: Tick (a tick of a timer), turn (the turn of a caller in the line), microtask (a microtask runs between two steps)
+
 **Cancel**:
 A caller stops its own wait with a signal. The wait rejects with the reason of the signal. A cancel stops only the wait: the work continues.
 _Avoid_: Abort (the signal aborts; the caller cancels), abandon (in single flight, a flight that all its callers left is abandoned), give up
@@ -60,6 +64,10 @@ _Avoid_: Permit (a permit is a right to go on; a token only counts), ticket, lea
 `Cond`. It wakes the callers that wait for a change of a state. A broadcast ends each wait that started before it, also a wait that started in the same step, and keeps nothing for a later wait. A cond carries no value: a woken caller checks its state again. The name is the one of Go `sync.Cond`, without its lock.
 _Avoid_: Notify (tokio `Notify` keeps a permit for a later wait), event (an event stays set), condition variable with a lock (Python `asyncio.Condition` and Java `Condition` hold a lock), signal (a signal is an `AbortSignal`)
 
+**Broadcast**:
+`broadcast()` of a cond. It ends each wait on the cond that started before it, also a wait that started in the same step. It keeps nothing: a broadcast with no wait changes nothing, and a wait that starts after it waits for the next broadcast.
+_Avoid_: Notify (tokio `Notify` keeps a permit for a later wait), signal (a signal is an `AbortSignal`), wake one (a broadcast ends each wait)
+
 **Attempt**:
 One call that tries to get a value now, and does not wait. It gives the value, or `undefined` when there is no value yet.
 _Avoid_: Try (the keyword), check (a check reads values to find a change), probe
@@ -67,6 +75,10 @@ _Avoid_: Try (the keyword), check (a check reads values to find a change), probe
 **Poll**:
 A caller calls an attempt again and again, with a wait between two attempts, until the attempt gives a value. An error from the attempt stops the poll.
 _Avoid_: Retry (`patiently` of `@zukhruf/fs` tries an operation again after an error), spin (a spin does not wait), busy wait
+
+**Interval**:
+`interval`. The number of milliseconds of the wait between two attempts of a poll, or between two checks of a change watcher. A poll waits it after an attempt that gave no value. A change watcher waits it after a check, from when the consumer asks for the next check.
+_Avoid_: Period (a period is a gauge), back-off (the wait of a back-off grows), frequency
 
 **Clock**:
 The source of the timers and of the time of a wait. The caller gives it: production gives `globalThis`, and a test gives a fake clock that the test moves. It has only the members that the wait calls.
