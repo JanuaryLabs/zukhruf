@@ -1,10 +1,27 @@
 import assert from 'node:assert/strict';
+import { execFileSync, spawn } from 'node:child_process';
+import { once } from 'node:events';
 import { access } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 
+import { TemporaryFiles } from '@zukhruf/fs';
+
+import { waitFor } from '../async/wait-for.ts';
 import { Sqlite } from './sqlite.ts';
+
+function isAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    if (Error.isError(error) && 'code' in error && error.code === 'ESRCH') {
+      return false;
+    }
+    throw error;
+  }
+}
 
 test('concurrent SQLite acquisitions isolate data and dispose independently', async () => {
   const sqlite = new Sqlite();
@@ -134,4 +151,55 @@ test('SQLite write locks surface startup failure without waiting for readiness',
     () => database.connection.exec('INSERT INTO records VALUES (1)'),
     /database is locked/,
   );
+});
+
+test('a SQLite write lock ends with its holder when the process that took it dies', async (t) => {
+  // Arrange: a parent process takes a lock for 10 minutes, then is killed.
+  await using folder = await new TemporaryFiles().directory(
+    'zukhruf-testing-write-lock-parent-',
+  );
+  const path = join(folder.path, 'locked.db');
+  new DatabaseSync(path).close();
+  const sqlite = new URL('./sqlite.ts', import.meta.url).href;
+  const parent = spawn(
+    process.execPath,
+    [
+      '--input-type=module',
+      '--eval',
+      `
+        import { Sqlite } from ${JSON.stringify(sqlite)};
+        await new Sqlite().writeLock(process.argv[1], 600_000);
+        process.stdout.write('locked');
+        setInterval(() => {}, 1_000_000);
+      `,
+      path,
+    ],
+    { stdio: ['ignore', 'pipe', 'inherit'] },
+  );
+  let holder: number | undefined;
+  try {
+    const [chunk] = await once(parent.stdout, 'data');
+    assert.equal(String(chunk), 'locked');
+    holder = Number(
+      execFileSync('pgrep', ['-P', String(parent.pid)], { encoding: 'utf8' }),
+    );
+    assert.ok(isAlive(holder));
+
+    // Act
+    parent.kill('SIGKILL');
+    await once(parent, 'exit');
+
+    // Assert: the holder exits, so the database takes a write again.
+    const exited = holder;
+    await waitFor(() => assert.equal(isAlive(exited), false), {
+      signal: t.signal,
+    });
+    using database = new DatabaseSync(path, { timeout: 0 });
+    database.exec('BEGIN IMMEDIATE');
+    database.exec('ROLLBACK');
+  } finally {
+    parent.kill('SIGKILL');
+    if (holder !== undefined && isAlive(holder))
+      process.kill(holder, 'SIGKILL');
+  }
 });
