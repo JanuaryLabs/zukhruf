@@ -233,10 +233,12 @@ class MasterConnection implements SharedConnection {
   /** This process uses the connection, and serves the others. */
   #serving(): MasterState {
     return {
+      // Unref'd, the client would let the process exit before the close that
+      // it awaits ends; only the processes that it serves keep it alive after.
       close: async () => {
         this.#state = this.#draining();
+        if (this.#served.size === 0) return this.#shutDown();
         this.#client.unref();
-        if (this.#served.size === 0) await this.#shutDown();
       },
       served: () => undefined,
     };

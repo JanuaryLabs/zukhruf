@@ -28,6 +28,7 @@ interface Owner extends AsyncDisposable {
   /** The reports of the owner so far, in order. */
   readonly reports: readonly string[];
   unref(): void;
+  close(): void;
   /** Resolves when the owner has sent `report`, such as `unrefed`. */
   reported(report: string, signal: AbortSignal): Promise<void>;
   /** Resolves when the owner has exited and its IPC channel has closed. */
@@ -68,6 +69,7 @@ async function startOwner(
     reports,
     // An owner that exited before the command gets no command.
     unref: () => child.send('unref', () => undefined),
+    close: () => child.send('close', () => undefined),
     reported: (report, abort) => untilAborted(awaited(report).promise, abort),
     exited: (abort) => untilAborted(closed, abort),
     async [Symbol.asyncDispose]() {
@@ -657,6 +659,31 @@ test(
     } finally {
       target.close();
     }
+  },
+);
+
+test(
+  'a master that serves no other process ends its connection at close(): the close resolves before the process exits, and the server sees the connection end',
+  { skip: noSshd },
+  async (t) => {
+    // Arrange: the owner is the only process that shares the connection.
+    await using directory = await new TemporaryFiles().directory('ssh-', {
+      parent: '/tmp',
+    });
+    await using sshd = await startSshd();
+    const file = await writeSharingConfig(directory.path, sshd);
+    await using owner = await startOwner(
+      ['share', file, 'box', directory.path],
+      t.signal,
+    );
+
+    // Act
+    owner.close();
+
+    // Assert
+    assert.deepEqual(await owner.exited(t.signal), { code: 0, signal: null });
+    assert.deepEqual(owner.reports, ['idle', 'closed', 'exiting']);
+    await sshd.connectionsEnded({ signal: t.signal });
   },
 );
 

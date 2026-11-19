@@ -1,6 +1,7 @@
 // A process that holds one client of the package and nothing else that keeps
-// it alive. Over IPC it reports `idle` once the client is set up, and at the
-// command `unref` it calls client.unref() and reports `unrefed`. Its IPC
+// it alive. Over IPC it reports `idle` once the client is set up, at the
+// command `unref` it calls client.unref() and reports `unrefed`, and at the
+// command `close` it awaits client.close() and reports `closed`. Its IPC
 // channel is unref'd, so once nothing holds it, it reports `exiting` (Node's
 // beforeExit) and exits.
 //
@@ -226,11 +227,22 @@ async function unref(): Promise<void> {
   send('unrefed');
 }
 
+async function close(): Promise<void> {
+  await client.close();
+  send('closed');
+}
+
 process.on('message', (command) => {
-  if (command !== 'unref') {
-    throw new Error(`unknown command ${String(command)}`);
+  switch (command) {
+    case 'unref':
+      void unref();
+      return;
+    case 'close':
+      void close();
+      return;
+    default:
+      throw new Error(`unknown command ${String(command)}`);
   }
-  void unref();
 });
 process.once('beforeExit', () => send('exiting'));
 process.channel?.unref();
