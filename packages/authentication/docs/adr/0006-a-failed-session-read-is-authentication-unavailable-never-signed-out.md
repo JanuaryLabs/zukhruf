@@ -8,6 +8,7 @@ text2sql #1906: with its identity provider offline, the v2 app showed React Rout
 
 - React Router's `requireSession` calls `client.getSession()` once. A rejection, or a result with an `error`, throws `AuthenticationUnavailableError` with the rejection or the error as its `cause`.
 - Only `data: null` with no `error` means "no session" and redirects to sign-in.
+- The read takes the loader's `request.signal` (`getSession({ fetchOptions: { signal } })`), so a navigation away cancels it (#4745, found by blackboard's migration, whose own guard passed the signal). An aborted read is neither "no session" nor `AuthenticationUnavailableError`: the guard rethrows the abort as it is, and React Router ignores what a request it aborted throws.
 - The package renders nothing. The host's route error element tells `AuthenticationUnavailableError` apart with `instanceof` and offers a retry.
 
 ## Considered Options

@@ -7,7 +7,9 @@ import { replace } from 'react-router';
  * session itself and is not one.
  */
 export interface SessionClient<S> {
-  getSession(): Promise<{ data: S | null; error: { status: number } | null }>;
+  getSession(options?: {
+    fetchOptions?: { signal?: AbortSignal };
+  }): Promise<{ data: S | null; error: { status: number } | null }>;
 }
 
 /**
@@ -47,6 +49,8 @@ export class AuthenticationUnavailableError extends Error {
  * `signIn` with the page as the return path, and, with `twoFactorSetup`, a
  * user who never turned two-factor on is sent there. Both throw React
  * Router's `replace()`, so the back button skips the page that redirected.
+ * The read follows `request.signal`: when React Router aborts the request,
+ * the abort is thrown as it is, neither "no session" nor unavailable.
  */
 export async function requireSession<S extends { user: object }>(
   client: SessionClient<S>,
@@ -55,8 +59,12 @@ export async function requireSession<S extends { user: object }>(
 ): Promise<S> {
   let result: Awaited<ReturnType<SessionClient<S>['getSession']>>;
   try {
-    result = await client.getSession();
+    result = await client.getSession({
+      fetchOptions: { signal: request.signal },
+    });
   } catch (cause) {
+    // React Router ignores what a request it aborted throws.
+    if (request.signal.aborted) throw cause;
     throw new AuthenticationUnavailableError({ cause });
   }
   if (result.error !== null)

@@ -1,10 +1,13 @@
 import assert from 'node:assert/strict';
+import { once } from 'node:events';
+import { type IncomingMessage, createServer } from 'node:http';
 import { test } from 'node:test';
 
 import { betterAuth } from 'better-auth';
 import { memoryAdapter } from 'better-auth/adapters/memory';
 import { createAuthClient } from 'better-auth/client';
 import { twoFactorClient } from 'better-auth/client/plugins';
+import { toNodeHandler } from 'better-auth/node';
 import { testUtils, twoFactor } from 'better-auth/plugins';
 
 import {
@@ -251,6 +254,83 @@ for (const status of [500, 403]) {
     assert.deepEqual(thrown.cause, { status, statusText: '' });
   });
 }
+
+// A real better-auth instance behind a real HTTP server, read with the real
+// fetch, so an aborted signal cancels the read the way it does in a browser.
+// `onRequest` sees each request before better-auth answers it.
+async function servedAuth(onRequest: (request: IncomingMessage) => void) {
+  const server = createServer();
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const address = server.address();
+  assert.ok(typeof address === 'object' && address !== null);
+  const baseURL = `http://127.0.0.1:${address.port}`;
+  const handler = toNodeHandler(
+    betterAuth({
+      baseURL,
+      secret: 'a-test-secret-that-is-long-enough-for-better-auth',
+      database: memoryAdapter({}),
+      logger: { disabled: true },
+      telemetry: { enabled: false },
+    }),
+  );
+  server.on('request', (request: IncomingMessage, response) => {
+    onRequest(request);
+    void handler(request, response);
+  });
+  return {
+    client: createAuthClient({ baseURL }),
+    baseURL,
+    [Symbol.asyncDispose]: async () => {
+      server.closeAllConnections();
+      server.close();
+      await once(server, 'close');
+    },
+  };
+}
+
+test('a request aborted before the session read rejects with the abort, not a redirect and not AuthenticationUnavailableError', async () => {
+  // Arrange
+  const reads: string[] = [];
+  await using served = await servedAuth((request) => {
+    reads.push(request.url ?? '');
+  });
+  const controller = new AbortController();
+  controller.abort();
+
+  // Act
+  const thrown = await thrownBy(
+    requireSession(
+      served.client,
+      new Request(`${served.baseURL}/cases`, { signal: controller.signal }),
+      { signIn: '/sign-in' },
+    ),
+  );
+
+  // Assert
+  assert.equal(thrown, controller.signal.reason);
+  assert.deepEqual(reads, []);
+});
+
+test('a request aborted while the session read is in flight rejects with the abort, not a redirect and not AuthenticationUnavailableError', async () => {
+  // Arrange: the navigation leaves once better-auth has the read.
+  const controller = new AbortController();
+  await using served = await servedAuth(() => {
+    controller.abort();
+  });
+
+  // Act
+  const thrown = await thrownBy(
+    requireSession(
+      served.client,
+      new Request(`${served.baseURL}/cases`, { signal: controller.signal }),
+      { signIn: '/sign-in' },
+    ),
+  );
+
+  // Assert
+  assert.equal(thrown, controller.signal.reason);
+});
 
 test('a guest on an auth page whose own return path names an auth page is sent to sign in with no return path', async () => {
   // Arrange
