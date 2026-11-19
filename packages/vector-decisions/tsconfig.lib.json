@@ -12,16 +12,13 @@
       "path": "../async/tsconfig.lib.json"
     },
     {
+      "path": "../embedding-cache/tsconfig.lib.json"
+    },
+    {
       "path": "../fs/tsconfig.lib.json"
     },
     {
-      "path": "../sqlite/drift/tsconfig.lib.json"
-    },
-    {
       "path": "../sqlite/open/tsconfig.lib.json"
-    },
-    {
-      "path": "../sqlite/transaction/tsconfig.lib.json"
     },
     {
       "path": "../testing/tsconfig.lib.json"

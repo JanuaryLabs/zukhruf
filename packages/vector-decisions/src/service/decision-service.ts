@@ -5,6 +5,9 @@ import { isDeepStrictEqual } from 'node:util';
 
 import { wrapEmbeddingModel } from 'ai';
 
+import { embeddingCacheMiddleware } from '@zukhruf/embedding-cache';
+import { SqliteEmbeddingCacheStore } from '@zukhruf/embedding-cache/sqlite';
+
 import {
   type CalibrationKind,
   Calibrations,
@@ -16,7 +19,7 @@ import { PreparedQuestion } from '../head/prepared-question.ts';
 import { InvalidModelArtifactError } from '../model-bundle/invalid-model-artifact-error.ts';
 import { modelDirectory } from '../model-bundle/model-directory.ts';
 import { embeddingGemmaPrompt } from '../reader/embedding-gemma-prompt.ts';
-import { vectorCache } from '../reader/vector-cache.ts';
+import { vennUnitVectors } from '../reader/venn-unit-vectors.ts';
 import { loadWeights } from '../safetensors/load-weights.ts';
 import { CheckedQuestion } from './checked-question.ts';
 import { ContractError } from './contract-error.ts';
@@ -100,7 +103,13 @@ export class DecisionService {
       model: options.model,
       middleware: [
         embeddingGemmaPrompt('Classification'),
-        vectorCache({ database: options.database }),
+        embeddingCacheMiddleware({
+          store: new SqliteEmbeddingCacheStore({
+            database: options.database,
+            table: 'embedding_cache',
+          }),
+        }),
+        vennUnitVectors(),
       ],
     });
     return new DecisionService(

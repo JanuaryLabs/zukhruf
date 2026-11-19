@@ -12,7 +12,7 @@ export {
   embeddingGemmaPrompt,
 } from './reader/embedding-gemma-prompt.ts';
 export { InvalidEmbeddingError } from './reader/invalid-embedding-error.ts';
-export { vectorCache } from './reader/vector-cache.ts';
+export { vennUnitVectors } from './reader/venn-unit-vectors.ts';
 export { type Tensor, loadWeights } from './safetensors/load-weights.ts';
 export { SafetensorError } from './safetensors/safetensor-error.ts';
 export {

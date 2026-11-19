@@ -6,13 +6,15 @@ import { test } from 'node:test';
 import { embedMany, wrapEmbeddingModel } from 'ai';
 import { MockEmbeddingModelV4 } from 'ai/test';
 
+import { embeddingCacheMiddleware } from '@zukhruf/embedding-cache';
+import { SqliteEmbeddingCacheStore } from '@zukhruf/embedding-cache/sqlite';
 import { TemporaryFiles } from '@zukhruf/fs';
 import { open } from '@zukhruf/sqlite-open';
 
 import {
   type ReaderPrompt,
   embeddingGemmaPrompt,
-  vectorCache,
+  vennUnitVectors,
 } from '../index.ts';
 
 type Embed = MockEmbeddingModelV4['doEmbed'];
@@ -56,8 +58,8 @@ function lengths(): MockEmbeddingModelV4 {
   }));
 }
 
-// The reader as a caller composes it: the prompt outside, the cache inside,
-// around the model. Disposing it closes the database.
+// The reader as a caller composes it: the prompt outside, then the cache, and
+// Venn's unit vectors around the model, so the cache keeps Venn's vectors. Disposing it closes the database.
 function reader(
   model: MockEmbeddingModelV4,
   path: string,
@@ -67,7 +69,16 @@ function reader(
   return {
     model: wrapEmbeddingModel({
       model,
-      middleware: [embeddingGemmaPrompt(prompt), vectorCache({ database })],
+      middleware: [
+        embeddingGemmaPrompt(prompt),
+        embeddingCacheMiddleware({
+          store: new SqliteEmbeddingCacheStore({
+            database,
+            table: 'embedding_cache',
+          }),
+        }),
+        vennUnitVectors(),
+      ],
     }),
     [Symbol.dispose]: () => database.close(),
   };
@@ -209,6 +220,33 @@ test('the vectors equal the vectors of Venn: unit in float64, then float16, then
           `vector ${row}, value ${index}: ${got} against Venn's ${value}`,
         );
       }
+});
+
+test("a hit gives the miss's Venn vectors bit for bit and calls no model", async () => {
+  await using directory = await new TemporaryFiles().directory(
+    'vector-decisions-',
+  );
+  const rows = new Map(
+    venn.texts.map((text, index) => [text, venn.raw[index] ?? []]),
+  );
+  const prefix = 'task: classification | query: ';
+  const embedding = model(async ({ values }) => ({
+    embeddings: values.map(
+      (value) => rows.get(value.slice(prefix.length)) ?? [],
+    ),
+    warnings: [],
+  }));
+  using stack = reader(embedding, join(directory.path, 'cache.sqlite'));
+  const misses = await embedMany({
+    model: stack.model,
+    values: [...venn.texts],
+  });
+
+  const hits = await embedMany({ model: stack.model, values: [...venn.texts] });
+
+  assert.equal(embedding.doEmbedCalls.length, 1);
+  assert.deepEqual(hits.embeddings, misses.embeddings);
+  assert.notDeepEqual(misses.embeddings, venn.raw);
 });
 
 test('the same text from another model or under another prompt goes to the model', async () => {

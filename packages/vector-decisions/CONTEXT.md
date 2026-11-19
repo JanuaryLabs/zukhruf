@@ -107,7 +107,7 @@ The task of the reader for a text, which the reader puts before it as a prefix: 
 _Avoid_: instruction (for a prompt), template
 
 **Vector cache**:
-The table that keeps the vector of each text that the reader embedded, by the model and the text, so that the model embeds each text one time.
+The embedding cache of `@zukhruf/embedding-cache` in the reader, which keeps Venn's vector of each text that the reader embedded, by the model and the text, so that the model embeds each text one time.
 _Avoid_: store, index (for the cache)
 
 **Answer**:

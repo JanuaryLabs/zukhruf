@@ -118,15 +118,26 @@ The package does not port Venn's `ContextAbstention`, an older head that Venn re
 ```ts
 import { embedMany, wrapEmbeddingModel } from 'ai';
 
+import { embeddingCacheMiddleware } from '@zukhruf/embedding-cache';
+import { SqliteEmbeddingCacheStore } from '@zukhruf/embedding-cache/sqlite';
 import { open } from '@zukhruf/sqlite-open';
-import { embeddingGemmaPrompt, vectorCache } from '@zukhruf/vector-decisions';
+import {
+  embeddingGemmaPrompt,
+  vennUnitVectors,
+} from '@zukhruf/vector-decisions';
 
 using database = open('vectors.sqlite');
 const reader = wrapEmbeddingModel({
   model, // any AI SDK embedding model of EmbeddingGemma 2, for example a llama.cpp server
   middleware: [
     embeddingGemmaPrompt('Classification'),
-    vectorCache({ database }),
+    embeddingCacheMiddleware({
+      store: new SqliteEmbeddingCacheStore({
+        database,
+        table: 'embedding_cache',
+      }),
+    }),
+    vennUnitVectors(),
   ],
 });
 const { embeddings } = await embedMany({
@@ -135,12 +146,11 @@ const { embeddings } = await embedMany({
 });
 ```
 
-The reader is an AI SDK embedding model, so any code of the AI SDK can use it. Its two middlewares port the embed path of Venn's `DecisionService.embed` (`venn/server.py:135`):
+The reader is an AI SDK embedding model, so any code of the AI SDK can use it. Its middlewares port the embed path of Venn's `DecisionService.embed` (`venn/server.py:135`). The first middleware is the outermost one:
 
 - `embeddingGemmaPrompt(prompt)` puts the prefix of the prompt before each text, as EmbeddingGemma 2 defines it: `Classification` (`task: classification | query: `), `SentenceSimilarity` or `Clustering`. The venn-1 head reads vectors of the `Classification` prompt.
-- `vectorCache({ database })` keeps the vector of each text in the table `vector_cache` of a SQLite database that the caller opens and closes. It asks the model only for the texts that the table lacks, each one time. It normalizes each new vector in float64 and stores it as float16, as Venn does, and it gives float32 unit vectors. A vector that is not finite, or a result that does not give one vector of the same length for each text, throws an `InvalidEmbeddingError` and stores nothing.
-
-The prompt middleware comes first, so the cache keeps the text with its prefix, and each prompt has its own vectors. The key is the SHA-256 of the provider and the id of the model and the text. Venn's key names its one pinned reader instead. Here the model is the caller's, so the key names the model that makes the vector.
+- `embeddingCacheMiddleware` of `@zukhruf/embedding-cache` asks the model only for the texts that it did not embed before, and gives back the numbers that it stored exactly. It sees the text with its prefix, so each prompt has its own vectors.
+- `vennUnitVectors()` normalizes each vector of the model in float64 and rounds it to float16, as Venn stores it, then gives the float32 unit vector of that. It runs next to the model, so the cache keeps Venn's vectors. A vector that is not finite, or a result that does not give one vector of the same length for each text, throws an `InvalidEmbeddingError`, and the cache stores nothing.
 
 The tests compare the vectors with the vectors of Venn's own `DecisionService.embed` for the same raw vectors (`src/reader/fixtures/generate.py`). They differ by at most 2 units in the last place of float32: Venn's norm is the float32 `sdot` of BLAS, whose order depends on the platform, and the package computes the norm in float64 and rounds it to float32, which is the same on every platform (ADR 0007).
 
