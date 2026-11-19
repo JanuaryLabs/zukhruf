@@ -2,7 +2,10 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
 import { Docker } from './index.ts';
-import { localEngineSocket } from './testing/local-engine.ts';
+import {
+  localEngineSocket,
+  skipWithoutLocalEngine,
+} from './testing/local-engine.ts';
 import { ENTRY, lastJson, runScenario } from './testing/scenario.ts';
 
 const engineSocket = await localEngineSocket(process.env);
@@ -34,12 +37,7 @@ describe('the engine that the environment of the test run selects', () => {
 describe('the local engine of this machine on its Unix socket', () => {
   test(
     '20 requests in sequence on one kept connection give no MaxListenersExceededWarning',
-    {
-      skip:
-        engineSocket === undefined
-          ? 'the current context of config.json is not a local unix:// engine'
-          : false,
-    },
+    { skip: skipWithoutLocalEngine(engineSocket) },
     async (t) => {
       // Arrange
       const scenario = `

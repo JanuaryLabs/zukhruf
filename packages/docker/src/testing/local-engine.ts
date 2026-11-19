@@ -1,26 +1,24 @@
-import { Docker, type DockerContext, type Environment } from '../index.ts';
+import { selectEngine } from '../context-store.ts';
+import type { Environment } from '../index.ts';
 
 /**
- * The socket of the local engine: the host of the context that the
- * environment selects (DOCKER_HOST, then DOCKER_CONTEXT, then config.json),
- * when it is a unix:// host, so a test reaches the engine that `connect()` of
- * the run reaches. When the selected engine is not a unix:// host, as on a
- * run on an SSH engine, it is the host of the context that config.json makes
- * current, so such a run still finds the engine of this machine. Undefined
- * when neither is a unix:// host.
+ * The socket of the engine that the run selects, as `Docker.connect` selects
+ * it (DOCKER_HOST, then DOCKER_CONTEXT, then config.json), when that engine
+ * is a local unix:// host. Undefined when it is not, as on a run on an SSH
+ * engine: a test that needs the local engine skips there.
  */
 export async function localEngineSocket(
   environment: Environment,
 ): Promise<string | undefined> {
-  return (
-    unixSocketOfCurrent(await Docker.contexts({ environment })) ??
-    unixSocketOfCurrent(await Docker.contexts())
-  );
+  const { host } = await selectEngine({ environment });
+  return host.startsWith('unix://') ? host.slice('unix://'.length) : undefined;
 }
 
-function unixSocketOfCurrent(contexts: DockerContext[]): string | undefined {
-  const current = contexts.find((context) => context.current);
-  return current?.host.startsWith('unix://')
-    ? current.host.slice('unix://'.length)
-    : undefined;
+/** The `skip` option of a test that needs the local engine of the run. */
+export function skipWithoutLocalEngine(
+  engineSocket: string | undefined,
+): string | false {
+  return engineSocket === undefined
+    ? 'the engine of the run is not a local unix:// engine'
+    : false;
 }

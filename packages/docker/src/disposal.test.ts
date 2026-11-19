@@ -17,7 +17,10 @@ import {
 } from './testing/engine-sshd.ts';
 import { IMAGE, TEST_LABEL, removeLabeled } from './testing/engine.ts';
 import { fakeEngine } from './testing/fake-engine.ts';
-import { localEngineSocket } from './testing/local-engine.ts';
+import {
+  localEngineSocket,
+  skipWithoutLocalEngine,
+} from './testing/local-engine.ts';
 import {
   ENTRY,
   inheritedEnvironment,
@@ -28,10 +31,7 @@ import {
 const DISPOSED = /client was disposed/;
 
 const engineSocket = await localEngineSocket(process.env);
-const needsLocalEngine =
-  engineSocket === undefined
-    ? 'the current context of config.json is not a local unix:// engine'
-    : false;
+const needsLocalEngine = skipWithoutLocalEngine(engineSocket);
 const sshEngine = await engineForSshd();
 
 /**
