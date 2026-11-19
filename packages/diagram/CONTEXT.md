@@ -78,6 +78,10 @@ _Avoid_: Swimlane (a swimlane is a band of an activity diagram), column, actor (
 `Diagram.Signal`. A horizontal arrow from one lane to another lane. A boxed signal puts its label in a box on the line, and splits the line into two stubs around the box.
 _Avoid_: Message (the UML word), call, event
 
+**Stub**:
+One of the two parts of the line of a boxed signal, on each side of the box. The stub at the source has no arrowhead, and the stub at the target has the arrowhead. The `stub` prop of `Diagram.Signal` is the gap between the line of the lane and the edge of the box, for a box at the `'source'` or the `'target'`. The default is 12 (`DEFAULT_BOXED_STUB` in `src/lib/layouts/timeline/timeline-layout.ts`). When a stub has no length left, the layout throws.
+_Avoid_: Segment, tail
+
 **Frame**:
 `Diagram.Frame`. A labeled rectangle around some signals of a timeline, for example a loop or an alternative. A timeline has one frame at most.
 _Avoid_: Fragment (React uses this word), box. Also, do not use frame for the chrome or for the `frame` prop of a node, which sets the border style of the node.
@@ -103,6 +107,10 @@ _Avoid_: Slot. Do not mix it with a node port.
 **Node port**:
 One named point on a side of a node or a group, from the `ports` prop (type `DiagramNodePort`). An edge can attach to it.
 _Avoid_: Port (that is the primitive), socket, handle
+
+**Caption**:
+Text next to a node, from the `caption` prop. `captionSide` puts it at the `top`, `bottom`, `left` or `right` of the node. The default is `bottom`. `captionFrame` draws a border around it, and `captionColor` sets its color. The measure calculates the caption box in `src/lib/layouts/graph/measure.ts`, and the router goes around it.
+_Avoid_: Label (that is a primitive), note (that is a primitive), subtitle
 
 **Label**:
 `Diagram.Label`. A node with no frame: only text at a grid position, for example a section title.
@@ -152,6 +160,10 @@ _Avoid_: Text, comment, tooltip
 The thin line with no arrowhead from a note to its target. The router selects its path, as for an edge.
 _Avoid_: Edge (an edge is a primitive), pointer
 
+**Badge**:
+A small box on the path of an edge, with an icon, a short text, or both: the `badgeIcon` and `badgeLabel` props of the edge. The edge label is beside the path; the badge is on it. The router selects the position of the badge. When the route has no free position for it, the router throws.
+_Avoid_: Marker (that is a node primitive), tag, chip
+
 ### Primitives for both layouts
 
 **Line**:
@@ -199,6 +211,10 @@ _Avoid_: Time, playhead (the playhead is the controlled value of the effects)
 **Effects**:
 The `effects` prop of `SvgGraphDiagram`. It draws pulses that move along the edges, with WebGPU on a canvas above the SVG. The value `'flow'` animates by itself. The value `{ flow }` gives a `MotionValue`, the playhead, that the caller controls.
 _Avoid_: Animation (the mode is the animation of the drawing), particles, shader
+
+**Playhead**:
+The `flow` value of `effects={{ flow }}`: a `MotionValue<number>` that the caller controls. From 0 to 1, a pulse goes along the first edge. From 1 to 2, a pulse goes along the second edge, and so on, in the order of the edges in the tree. An integer value clears the pulses. The `DiagramEffects` type is in `src/lib/renderers/types.ts`.
+_Avoid_: Progress (the mode drives the progress), timer, cursor
 
 **Viewport**:
 The `viewport` prop: how the drawing fits its container. `fit` is `width`, `contain` or `natural`, and `zoom` scales it.

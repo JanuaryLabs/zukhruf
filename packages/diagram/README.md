@@ -203,8 +203,11 @@ A node that keeps its own size goes at the center of its area.
 Other props of a node:
 
 - `tone`, `texture` and `accent` set its colors. `frame` sets its border.
+- `textColor` (`accent`, `neutral`, `dim`) sets the color of its text: the title, and the `description` and `items` of a card.
+- `icon` puts an icon before the title, for example `server` or `user`.
 - `description` and `items` add text under the title of a card.
-- `caption` puts text next to the node, on the side that `captionSide` sets.
+- `caption` puts text next to the node, on the side that `captionSide` sets. `captionFrame` draws a border with round ends around the caption. `captionColor` (`accent`, `neutral`, `dim`) sets the color of the caption.
+- `hidden` keeps the node in the grid, but no renderer draws it. The measure step gives a hidden `Diagram.Node` the size 0 × 0. A hidden `Diagram.Junction` keeps its size.
 - `ports` gives node ports: named points on a side, where an edge can attach. When a side has ports, each edge to that side must name a port.
 - `stack` draws copies of the frame behind the node, for a set of equal items. `stackDirection` sets where the copies go.
 - `appliancePorts` and `antenna` change the drawing of an appliance.
