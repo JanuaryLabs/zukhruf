@@ -155,19 +155,29 @@ export function mergeNxJson(tree: Tree): void {
       }));
     }
 
-    // Every setup runs under production (ADR 0016). A project target's own
-    // env replaces this one, so the web keeps its development and test.
-    for (const target of ['test', 'serve']) {
-      updateTargetDefault(nxJson, target, (entry) => ({
-        ...entry,
-        options: {
-          ...entry.options,
-          env: addMissingKeys(entry.options?.env, { NODE_ENV: 'production' }),
-        },
-      }));
-    }
+    addProductionNodeEnvDefaults(nxJson);
 
     nxJson.sync = { ...nxJson.sync, applyChanges: true };
     return nxJson;
   });
+}
+
+/**
+ * Every setup runs under production (ADR 0016): the test and serve defaults
+ * set NODE_ENV=production, and a NODE_ENV that is there stays. A project
+ * target's own env replaces this one, so the web keeps its development and
+ * test. init and the node-env-production migration call it.
+ */
+export function addProductionNodeEnvDefaults(
+  nxJson: NxJsonConfiguration,
+): void {
+  for (const target of ['test', 'serve']) {
+    updateTargetDefault(nxJson, target, (entry) => ({
+      ...entry,
+      options: {
+        ...entry.options,
+        env: addMissingKeys(entry.options?.env, { NODE_ENV: 'production' }),
+      },
+    }));
+  }
 }

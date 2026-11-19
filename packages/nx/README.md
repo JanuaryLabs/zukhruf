@@ -14,6 +14,7 @@ The words in these documents have one meaning each. See the glossary in [CONTEXT
 | portless         | `@zukhruf/nx/portless` | Candidate (#3336): 14 projects in 3 repos                                                                                            |
 | opentofu, prisma | `@zukhruf/nx/<area>`   | This README (#3339)                                                                                                                  |
 | generators       | `@zukhruf/nx:<name>`   | This README: `preset` and `init` (#3337); `node-app`, `react-app`, `pair`, `ui-package` (#3338); `dokploy` (#4603); `prisma` (#4604) |
+| migrations       | `nx migrate`           | This README (#4818)                                                                                                                  |
 
 The lint rules stay in `@zukhruf/eslint`. The `lint` area gives only the inputs of the `lint` target (#3335).
 
@@ -810,6 +811,23 @@ text2sql also has a target `prisma` that runs the Prisma CLI with the arguments 
 | meddit    | #4607        |
 
 The backlog item of the area is #3339.
+
+## migrations
+
+A change to what a generator writes reaches a repo that ran the generator before through an Nx migration, when someone runs:
+
+```sh
+npx nx migrate @zukhruf/nx@latest
+npx nx migrate --run-migrations
+```
+
+`nx migrate` moves every published @zukhruf package with `@zukhruf/nx` (`packageGroup`), and nothing runs the migrations otherwise. Each one adds only what is missing, writes what the generators write now, and logs the step to take by hand where a file lost the shape that the generator wrote. [ADR 0017](./docs/adr/0017-nx-migrations-bring-a-change-of-generated-output-to-the-repos-that-ran-the-generator-before.md) has the rules.
+
+| Migration                | Version | Brings                                                                                                                                                                                    |
+| ------------------------ | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `add-portless-proxy-env` | 0.8.40  | `PORTLESS_UNPRIVILEGED=1` and `PORTLESS_HTTPS=1` in `targetDefaults.portless` (#4768)                                                                                                     |
+| `add-local-postgres`     | 0.8.40  | the root `compose.dev.yml`, `up` and `down` of each db package, the local `CONNECTION_STRING`, and `^up` in its backend serve (ADR 0012 decisions 16 and 17)                              |
+| `node-env-production`    | 0.8.40  | the NODE_ENV configuration of ADR 0016 (nx.json defaults, target env, the web exceptions, `.env.example`, the workflow env, `ALLOWED_ORIGINS`), and a log of each NODE_ENV read in source |
 
 ## generators
 

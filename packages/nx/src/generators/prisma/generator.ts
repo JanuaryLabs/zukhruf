@@ -14,6 +14,7 @@ import {
 
 import { addLines } from '../add-lines.ts';
 import { appDirectory } from '../app-directory.ts';
+import { addEnvEntry } from '../env-file.ts';
 import initGenerator from '../init/generator.ts';
 import { pluginName, unique, updateTargetDefault } from '../init/nx-json.ts';
 import { dockerignore, startupTs } from '../node-app/files.ts';
@@ -155,6 +156,41 @@ export default async function prismaGenerator(
   return runTasksInSerial(initTask, () => installPackagesTask(tree));
 }
 
+/**
+ * The targets of the local Postgres of compose.dev.yml. up starts it, waits
+ * for its healthcheck and applies the migrations; its env names the local
+ * database, so a CONNECTION_STRING in the shell never gets them. down stops
+ * it and keeps the volume. `rootOffset` leads from the db package to the
+ * workspace root. The add-local-postgres migration writes the same targets.
+ */
+export function localDatabaseTargets(
+  rootOffset: string,
+  database: LocalDatabase,
+) {
+  const compose = `docker compose --file ${rootOffset}compose.dev.yml`;
+  return {
+    up: {
+      executor: 'nx:run-commands',
+      options: {
+        commands: [
+          `${compose} up --detach --wait database`,
+          'prisma migrate deploy',
+        ],
+        parallel: false,
+        cwd: '{projectRoot}',
+        env: {
+          NODE_ENV: 'production',
+          CONNECTION_STRING: localConnectionString(database),
+        },
+      },
+    },
+    down: {
+      command: `${compose} down`,
+      options: { cwd: '{projectRoot}' },
+    },
+  };
+}
+
 interface PackageIdentity {
   projectRoot: string;
   rootOffset: string;
@@ -164,7 +200,6 @@ interface PackageIdentity {
 
 function writePackage(tree: Tree, identity: PackageIdentity): void {
   const { projectRoot, rootOffset, packageName, database } = identity;
-  const compose = `docker compose --file ${rootOffset}compose.dev.yml`;
   writeJson(tree, `${projectRoot}/package.json`, {
     name: packageName,
     version: '0.0.1',
@@ -186,30 +221,7 @@ function writePackage(tree: Tree, identity: PackageIdentity): void {
     },
     nx: {
       tags: ['test:docker'],
-      // The local Postgres of compose.dev.yml. up starts it, waits for its
-      // healthcheck and applies the migrations; its env names the local
-      // database, so a CONNECTION_STRING in the shell never gets them.
-      targets: {
-        up: {
-          executor: 'nx:run-commands',
-          options: {
-            commands: [
-              `${compose} up --detach --wait database`,
-              'prisma migrate deploy',
-            ],
-            parallel: false,
-            cwd: '{projectRoot}',
-            env: {
-              NODE_ENV: 'production',
-              CONNECTION_STRING: localConnectionString(database),
-            },
-          },
-        },
-        down: {
-          command: `${compose} down`,
-          options: { cwd: '{projectRoot}' },
-        },
-      },
+      targets: localDatabaseTargets(rootOffset, database),
     },
   });
   const base = `${rootOffset}tsconfig.base.json`;
@@ -320,19 +332,6 @@ function mergePrismaNxJson(tree: Tree): void {
     }
     return nxJson;
   });
-}
-
-/** Adds `KEY=value` to an env file that has no line for the key. Copy in auth (ADR 0014 decision 12). */
-function addEnvEntry(
-  tree: Tree,
-  path: string,
-  key: string,
-  value: string,
-): void {
-  const content = tree.read(path, 'utf-8') ?? '';
-  if (new RegExp(`^${key}=`, 'm').test(content)) return;
-  const separator = content === '' || content.endsWith('\n') ? '' : '\n';
-  tree.write(path, `${content}${separator}${key}=${value}\n`);
 }
 
 /** Replaces `marker` in a file of the backend, or stops when the file has no marker. */

@@ -9,7 +9,6 @@ import {
   updateJson,
 } from '@nx/devkit';
 
-import { addMissingKeys } from '../add-keys.ts';
 import { appDirectory, projectNameOf } from '../app-directory.ts';
 import initGenerator from '../init/generator.ts';
 import {
@@ -19,6 +18,7 @@ import {
   updateTargetDefault,
 } from '../init/nx-json.ts';
 import { nxPlugin } from '../nx-plugin.ts';
+import { addPortlessProxyEnv } from '../portless-env.ts';
 import {
   reactEslintConfig,
   reactResidue,
@@ -313,23 +313,7 @@ function mergeReactNxJson(tree: Tree): void {
         ]),
       }));
     }
-    // One portless proxy serves every app on the machine, and the target that
-    // starts it sets its mode. PORTLESS_UNPRIVILEGED starts it without sudo,
-    // so an agent with no TTY can. PORTLESS_HTTPS keeps it on HTTPS: a
-    // stopped unprivileged proxy otherwise restarts on plain HTTP, and the HMR
-    // of vite.config.ts dials wss on 443. No PORTLESS_TLD: localhost is the
-    // default, and a set TLD replaces the TLDs that another repo's proxy
-    // saved. Copy in node-app (docs/copied-code.md).
-    updateTargetDefault(nxJson, 'portless', (entry) => ({
-      ...entry,
-      options: {
-        ...entry.options,
-        env: addMissingKeys(entry.options?.env, {
-          PORTLESS_UNPRIVILEGED: '1',
-          PORTLESS_HTTPS: '1',
-        }),
-      },
-    }));
+    addPortlessProxyEnv(nxJson);
     nxJson.generators = mergeGeneratorDefaults(nxJson.generators, '@nx/react', {
       application: {
         style: 'css',

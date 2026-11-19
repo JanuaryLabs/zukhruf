@@ -14,6 +14,7 @@ import {
 
 import { appDirectory, projectNameOf } from '../app-directory.ts';
 import { envMarker, infraRoot } from '../dokploy/files.ts';
+import { addEnvEntry } from '../env-file.ts';
 import initGenerator from '../init/generator.ts';
 import { uiMountComment, uiRouteImport } from '../pair/files.ts';
 import { portOf } from '../pair/generator.ts';
@@ -177,19 +178,6 @@ function insert(
     );
   }
   tree.write(path, content.replace(marker, replacement));
-}
-
-/** Adds `KEY=value` to an env file that has no line for the key. */
-function addEnvEntry(
-  tree: Tree,
-  path: string,
-  key: string,
-  value: string,
-): void {
-  const content = tree.read(path, 'utf-8') ?? '';
-  if (new RegExp(`^${key}=`, 'm').test(content)) return;
-  const separator = content === '' || content.endsWith('\n') ? '' : '\n';
-  tree.write(path, `${content}${separator}${key}=${value}\n`);
 }
 
 /** startup.ts creates the auth from the client that the prisma generator wired. */

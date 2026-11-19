@@ -1,0 +1,19 @@
+{
+  "generators": {
+    "add-portless-proxy-env": {
+      "version": "0.8.40",
+      "description": "The portless proxy starts unprivileged on HTTPS: targetDefaults.portless gets PORTLESS_UNPRIVILEGED=1 and PORTLESS_HTTPS=1 (#4768).",
+      "implementation": "./dist/migrations/update-0-8-40/add-portless-proxy-env.js"
+    },
+    "add-local-postgres": {
+      "version": "0.8.40",
+      "description": "A db package gets the local Postgres of a root compose.dev.yml, its up and down targets, the local CONNECTION_STRING, and ^up in its backend's serve (ADR 0012 decisions 16 and 17).",
+      "implementation": "./dist/migrations/update-0-8-40/add-local-postgres.js"
+    },
+    "node-env-production": {
+      "version": "0.8.40",
+      "description": "NODE_ENV is production in every setup and code never reads it: the configuration of ADR 0016, and a log of each NODE_ENV read in source.",
+      "implementation": "./dist/migrations/update-0-8-40/node-env-production.js"
+    }
+  }
+}
