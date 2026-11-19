@@ -15,6 +15,7 @@ import {
 import { appDirectory, projectNameOf } from '../app-directory.ts';
 import { envMarker, infraRoot } from '../dokploy/files.ts';
 import initGenerator from '../init/generator.ts';
+import { uiMountComment, uiRouteImport } from '../pair/files.ts';
 import { portOf } from '../pair/generator.ts';
 import {
   rootDependencyNames,
@@ -211,10 +212,11 @@ function wireStartup(tree: Tree, path: string, dbPackageName: string): void {
 function mountRoutes(tree: Tree, path: string): void {
   const app = tree.read(path, 'utf-8') ?? '';
   if (app.includes(authMount)) return;
-  const uiMount = `(await import('./routes/ui.route.ts')).default(app);`;
-  const marker = app.includes(uiMount)
-    ? `\n// pair fixed the path of the web build`
-    : '\napp.notFound((c) =>';
+  const marker = !app.includes(uiRouteImport)
+    ? '\napp.notFound((c) =>'
+    : app.includes(uiMountComment)
+      ? `\n${uiMountComment}`
+      : '\n// pair fixed the path of the web build';
   insert(
     tree,
     path,
@@ -375,10 +377,11 @@ interface TargetOptions {
 /**
  * The CLI imports the db package through its development export, which
  * imports the generated client, so the client is generated first. NODE_OPTIONS
- * gives jiti the development condition. NODE_ENV is development also where the
- * shell sets production, because the CLI refuses the placeholder secret in
- * production. auth:check only reads: it compares the
- * generated client with the plugins of the config, and exits 1 on a mismatch.
+ * gives jiti the development condition. NODE_ENV is production, as in every
+ * setup: auth.cli.ts passes a secret of its own, so better-auth never meets
+ * its default secret, which it refuses under production. auth:check only reads: it
+ * compares the generated client with the plugins of the config, and exits 1 on
+ * a mismatch.
  */
 function authTargets(options: TargetOptions) {
   const { backendRoot, dbRoot, dbName } = options;
@@ -389,7 +392,7 @@ function authTargets(options: TargetOptions) {
     cwd: '{projectRoot}',
     env: {
       NODE_OPTIONS: '--conditions=development',
-      NODE_ENV: 'development',
+      NODE_ENV: 'production',
     },
   };
   return {

@@ -15,7 +15,7 @@ type InputDefinition = NonNullable<
 const namedInputs: Record<string, InputDefinition[]> = {
   default: ['{projectRoot}/**/*', 'sharedGlobals'],
   // The hash of a task does not read the environment, so NODE_ENV is an input:
-  // else a cached development build can ship to production.
+  // a build under another value is never served from the cache.
   production: [
     'default',
     '!{projectRoot}/eslint.config.mjs',
@@ -152,6 +152,18 @@ export function mergeNxJson(tree: Tree): void {
       updateTargetDefault(nxJson, target, (entry) => ({
         ...entry,
         continuous: false,
+      }));
+    }
+
+    // Every setup runs under production (ADR 0016). A project target's own
+    // env replaces this one, so the web keeps its development and test.
+    for (const target of ['test', 'serve']) {
+      updateTargetDefault(nxJson, target, (entry) => ({
+        ...entry,
+        options: {
+          ...entry.options,
+          env: addMissingKeys(entry.options?.env, { NODE_ENV: 'production' }),
+        },
       }));
     }
 

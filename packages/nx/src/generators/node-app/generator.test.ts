@@ -8,6 +8,7 @@ import {
   rootPackageNames,
 } from '../../testing/generator-tree.ts';
 import { lintManifests } from '../../testing/lint-manifests.ts';
+import { lintNodeEnv } from '../../testing/lint-node-env.ts';
 import { appPackageVersions, nxVersion } from '../versions.ts';
 import { clientManifest, clientTsconfig } from './files.ts';
 import nodeAppGenerator, { createRequireBanner } from './generator.ts';
@@ -33,7 +34,6 @@ test('writes the Hono boot files and removes the scaffolding of @nx/node', async
   assert.match(app, /import\('\.\/routes\/healthz\.route\.ts'\)/);
   assert.doesNotMatch(app, /ui\.route\.ts/);
   const logging = tree.read('apps/backend/src/logging.ts', 'utf-8') ?? '';
-  assert.match(logging, /dir: '\.evlog\/logs\/backend'/);
   assert.match(logging, /service: 'backend'/);
   assert.ok(!tree.exists('apps/backend/src/main.ts'), 'main.ts of @nx/node');
   assert.ok(!tree.exists('apps/backend/src/assets/.gitkeep'));
@@ -106,7 +106,7 @@ test('the build is one ESM esbuild bundle with each npm package external', async
   assert.equal(targets.build.configurations.development.skipTypeCheck, true);
   assert.deepEqual(targets.serve, {
     dependsOn: ['^build'],
-    options: { env: { NODE_ENV: 'development' } },
+    options: { env: { NODE_ENV: 'production' } },
   });
   assert.ok(targets['prune-lockfile'], 'prune-lockfile stays');
   assert.equal(targets['copy-workspace-modules'], undefined);
@@ -251,7 +251,9 @@ test('the .env.example is the generator’s, and a .env that is there stays', as
   assert.match(example, /^PORT=3000$/m);
   assert.match(example, /^HOST=127\.0\.0\.1$/m);
   assert.match(example, /^ALLOWED_ORIGINS=$/m);
-  assert.doesNotMatch(example, /NODE_ENV=/);
+  assert.match(example, /^LOG_DIR=\.evlog\/logs\/backend$/m);
+  assert.match(example, /^LOG_PRETTY=true$/m);
+  assert.match(example, /^# .+\nNODE_ENV=production$/m);
   assert.equal(tree.read('apps/backend/.env', 'utf-8'), 'PORT=1\n');
 });
 
@@ -386,7 +388,10 @@ test('nx.json gets the esbuild default, ^sdk, and test.dependsOn ["...", "^sdk"]
   await nodeAppGenerator(tree, { directory: 'apps/backend' });
 
   const { targetDefaults, namedInputs, generators } = readJson(tree, 'nx.json');
-  assert.deepEqual(targetDefaults.test, { dependsOn: ['...', '^sdk'] });
+  assert.deepEqual(targetDefaults.test, {
+    options: { env: { NODE_ENV: 'production' } },
+    dependsOn: ['...', '^sdk'],
+  });
   assert.ok(targetDefaults.build.dependsOn.includes('^sdk'));
   assert.ok(targetDefaults.dev.dependsOn.includes('^sdk'));
   assert.ok(targetDefaults.typecheck.dependsOn.includes('^sdk'));
@@ -463,4 +468,114 @@ test('what node-app writes lints clean under @zukhruf/eslint', async () => {
   await nodeAppGenerator(tree, { directory: 'apps/backend' });
 
   assert.deepEqual(await lintManifests(tree), []);
+});
+
+test('the server binds HOST, which env.ts requires, with no default in code', async () => {
+  const tree = generatorTree();
+
+  await nodeAppGenerator(tree, { directory: 'apps/backend' });
+
+  assert.match(
+    tree.read('apps/backend/src/env.ts', 'utf-8') ?? '',
+    /^ {2}HOST: z\.string\(\)\.min\(1\),$/m,
+  );
+  const server = tree.read('apps/backend/src/server.ts', 'utf-8') ?? '';
+  assert.match(server, /^const hostname = process\.env\.HOST;$/m);
+  assert.match(server, /serve\(\{ fetch: app\.fetch, port, hostname \}/);
+  assert.match(
+    tree.read('apps/backend/.env', 'utf-8') ?? '',
+    /^HOST=127\.0\.0\.1$/m,
+  );
+  assert.match(
+    tree.read('apps/backend/Dockerfile', 'utf-8') ?? '',
+    / HOST=0\.0\.0\.0 /,
+  );
+});
+
+test('CORS allows only the origins of ALLOWED_ORIGINS, and reflects no other', async () => {
+  const tree = generatorTree();
+
+  await nodeAppGenerator(tree, { directory: 'apps/backend' });
+
+  const app = tree.read('apps/backend/src/app.ts', 'utf-8') ?? '';
+  assert.match(
+    app,
+    /cors\(\{\n\s+origin: \(origin\) => \{\n\s+const allowed = process\.env\.ALLOWED_ORIGINS\.split\(','\);\n\s+const listed = allowed\.map\(\(entry\) => entry\.trim\(\)\)\.includes\(origin\);\n\s+return origin !== '' && listed \? origin : '';\n\s+\},\n\s+credentials: true,/,
+  );
+  assert.doesNotMatch(app, /return origin;/);
+});
+
+test('a 500 answers with a fixed body, and the error goes only to the log', async () => {
+  const tree = generatorTree();
+
+  await nodeAppGenerator(tree, { directory: 'apps/backend' });
+
+  const app = tree.read('apps/backend/src/app.ts', 'utf-8') ?? '';
+  const fallback = app.slice(app.lastIndexOf("c.get('log')?.error(error);"));
+  assert.match(
+    fallback,
+    /^c\.get\('log'\)\?\.error\(error\);\n\s+return c\.json\(\n\s+\{\n\s+error: 'Internal Server Error',\n\s+cause: \{ code: 'api\/internal', detail: 'Unexpected error' \},\n\s+\},\n\s+500,\n\s+\);/,
+  );
+  assert.doesNotMatch(app, /String\(error\)/);
+});
+
+test('the log files go to LOG_DIR, and pretty output follows LOG_PRETTY, with no environment label', async () => {
+  const tree = generatorTree();
+
+  await nodeAppGenerator(tree, { directory: 'apps/backend' });
+
+  const logging = tree.read('apps/backend/src/logging.ts', 'utf-8') ?? '';
+  assert.match(logging, /^const logDir = process\.env\.LOG_DIR;$/m);
+  assert.match(
+    logging,
+    /const fileDrain =\n\s+logDir === undefined\n\s+\? undefined\n\s+: createDrainPipeline<DrainContext>\(\{ batch: \{ size: 1 \} \}\)\(\n\s+createFsDrain\(\{\n\s+dir: logDir,/,
+  );
+  assert.match(logging, /^ {2}pretty: process\.env\.LOG_PRETTY === 'true',$/m);
+  assert.doesNotMatch(logging, /environment:|NODE_ENV/);
+  const env = tree.read('apps/backend/src/env.ts', 'utf-8') ?? '';
+  assert.match(env, /^ {2}LOG_DIR: z\.string\(\)\.min\(1\)\.optional\(\),$/m);
+  assert.match(
+    env,
+    /^ {2}LOG_PRETTY: z\.enum\(\['true', 'false'\]\)\.optional\(\),$/m,
+  );
+});
+
+test('env.ts declares no NODE_ENV, and a backend alone serves no UI', async () => {
+  const tree = generatorTree();
+
+  await nodeAppGenerator(tree, { directory: 'apps/backend' });
+
+  const env = tree.read('apps/backend/src/env.ts', 'utf-8') ?? '';
+  assert.doesNotMatch(env, /NODE_ENV|UI_ROOT/);
+  assert.doesNotMatch(
+    tree.read('apps/backend/src/app.ts', 'utf-8') ?? '',
+    /UI_ROOT|ui\.route/,
+  );
+  assert.doesNotMatch(
+    tree.read('apps/backend/Dockerfile', 'utf-8') ?? '',
+    /UI_ROOT/,
+  );
+});
+
+test('the code that node-app writes reads no NODE_ENV', async () => {
+  const tree = generatorTree();
+
+  await nodeAppGenerator(tree, { directory: 'apps/backend' });
+
+  assert.deepEqual(await lintNodeEnv(tree), []);
+});
+
+test('the .env written from the example sets NODE_ENV=production, and the sdk target runs under production', async () => {
+  const tree = generatorTree();
+
+  await nodeAppGenerator(tree, { directory: 'apps/backend' });
+
+  assert.match(
+    tree.read('apps/backend/.env', 'utf-8') ?? '',
+    /^NODE_ENV=production$/m,
+  );
+  assert.deepEqual(
+    readJson(tree, 'apps/backend/.sdk-it/package.json').nx.targets.sdk.options,
+    { cwd: '{projectRoot}', env: { NODE_ENV: 'production' } },
+  );
 });

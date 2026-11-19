@@ -127,6 +127,7 @@ test('the up target starts the local Postgres, waits for it, and migrates only i
       parallel: false,
       cwd: '{projectRoot}',
       env: {
+        NODE_ENV: 'production',
         CONNECTION_STRING:
           'postgresql://postgres:postgres@127.0.0.1:5435/meddit',
       },
@@ -329,7 +330,7 @@ test("the backend's serve runs the up target of the db package it imports first"
     readJson(tree, 'apps/backend/package.json').nx.targets.serve,
     {
       dependsOn: ['^build', '^up'],
-      options: { env: { NODE_ENV: 'development' } },
+      options: { env: { NODE_ENV: 'production' } },
     },
   );
 });
@@ -457,4 +458,18 @@ test('what prisma writes lints clean under @zukhruf/eslint', async () => {
   });
 
   assert.deepEqual(await lintManifests(tree), []);
+});
+
+test('the .env.example of the db package, and the .env written from it, set NODE_ENV=production', async () => {
+  const tree = generatorTree();
+
+  await prismaGenerator(tree, { directory: 'packages/db' });
+
+  for (const path of ['packages/db/.env.example', 'packages/db/.env']) {
+    assert.match(
+      tree.read(path, 'utf-8') ?? '',
+      /^# .+\nNODE_ENV=production$/m,
+      path,
+    );
+  }
 });

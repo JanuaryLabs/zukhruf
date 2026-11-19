@@ -13,10 +13,10 @@ export interface AuthOptions {
   /** Signs the session cookies; 32 characters or more. */
   secret: string;
   /**
-   * Where better-auth builds its links: the URL of this server, or, in
-   * development, the host of the request when it is one of \`allowedHosts\`.
+   * Where better-auth builds its links: the host of the request when it is
+   * one of \`allowedHosts\`, else \`fallback\`, the URL of this server.
    */
-  baseURL: string | { fallback: string; allowedHosts: string[] };
+  baseURL: { fallback: string; allowedHosts: string[] };
   /** The browser origins that may call the auth routes. */
   trustedOrigins: string[];
 }
@@ -33,8 +33,8 @@ export function createAuth(options: AuthOptions) {
     secret: options.secret,
     baseURL: options.baseURL,
     // A baseURL from the request takes the protocol of the page from
-    // x-forwarded-proto, which portless sends.
-    advanced: { trustedProxyHeaders: typeof options.baseURL !== 'string' },
+    // x-forwarded-proto, which portless and the proxy in production send.
+    advanced: { trustedProxyHeaders: true },
     trustedOrigins: options.trustedOrigins,
     emailAndPassword: { enabled: true },
   });
@@ -58,8 +58,9 @@ export const auth = createAuth({
   prisma: createPrisma({
     connectionString: process.env.CONNECTION_STRING ?? '',
   }),
+  // A throwaway secret of 32+ characters: the CLI only reads the schema.
   secret: 'the-better-auth-cli-reads-no-secret-from-here',
-  baseURL: 'http://localhost',
+  baseURL: { fallback: 'http://localhost', allowedHosts: ['localhost'] },
   trustedOrigins: [],
 });
 `;
@@ -98,18 +99,17 @@ const allowedOrigins = process.env.ALLOWED_ORIGINS.split(',')
 export const auth = createAuth({
   prisma,
   secret: process.env.BETTER_AUTH_SECRET,
-  // In development, a link of better-auth (email verification, password
-  // reset) opens on the host of the page that asked for it, when that is the
-  // host of an allowed origin: the Vite dev server and portless proxy /api to
-  // this server, so the cookie that the link sets reaches the page. Any other
-  // host, and production, get BETTER_AUTH_URL.
-  baseURL:
-    process.env.NODE_ENV === 'development'
-      ? {
-          fallback: process.env.BETTER_AUTH_URL,
-          allowedHosts: allowedOrigins.map((origin) => new URL(origin).host),
-        }
-      : process.env.BETTER_AUTH_URL,
+  // A link of better-auth (email verification, password reset) opens on the
+  // host of the page that asked for it, when that is the host of an allowed
+  // origin, in every setup: the Vite dev server and portless proxy /api to
+  // this server, and in production the backend serves the page, so the
+  // cookie that the link sets reaches the page. Any other host gets
+  // BETTER_AUTH_URL. better-auth refuses an empty allowedHosts, so
+  // ALLOWED_ORIGINS names at least one origin.
+  baseURL: {
+    fallback: process.env.BETTER_AUTH_URL,
+    allowedHosts: allowedOrigins.map((origin) => new URL(origin).host),
+  },
   trustedOrigins: allowedOrigins,
 });
 `;
@@ -192,8 +192,9 @@ export function signedInLoader(
 `;
 
 /** The comment that auth puts above ALLOWED_ORIGINS when it adds the origins of the web app. */
-export const allowedOriginsComment = `# better-auth trusts these origins in every environment. In development they
-# are the origins of the web app: the Vite dev server and portless.
+export const allowedOriginsComment = `# CORS and better-auth trust these origins in every setup, and better-auth
+# builds its links on their hosts. Here they are the origins of the web app:
+# the Vite dev server and portless.
 `;
 
 /**

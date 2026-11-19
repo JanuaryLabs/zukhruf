@@ -237,8 +237,8 @@ await preCommit([
 `,
   '.husky/pre-push.ts': `#!/usr/bin/env node
 // .husky/pre-push is a link to this file. Build builds each pushed commit in
-// its own snapshot, never the working tree. NODE_ENV is set because Vite sets
-// production only when NODE_ENV is not set.
+// its own snapshot, never the working tree. NODE_ENV is set for the tools, so a
+// shell that sets another value builds the same.
 import { Build, prePush } from '@zukhruf/git-hooks';
 
 await prePush([new Build({ env: { NODE_ENV: 'production' } })]);

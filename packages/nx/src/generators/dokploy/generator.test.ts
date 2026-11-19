@@ -102,7 +102,12 @@ for (const [hostMode, hostOptions] of Object.entries(hosts)) {
 
         const main = read(tree, `${production}/main.tf`);
         assert.match(main, /^module "stack" \{$/m);
-        assert.match(main, /PUBLIC_HOST = local\.host/);
+        assert.match(main, /PUBLIC_HOST {5}= local\.host/);
+        // CORS and better-auth trust the public origin in production.
+        assert.match(
+          main,
+          /^ {4}ALLOWED_ORIGINS = "https:\/\/\$\{local\.host\}"$/m,
+        );
         assert.equal(
           /^ {2}database {5}= \{ role = "acme" \}$/m.test(main),
           postgres,
@@ -486,7 +491,7 @@ test('a first run writes main.tf as a call of the dokploy-stack module at ref=ma
 
   assert.match(
     read(tree, `${production}/main.tf`),
-    /^module "stack" \{\n {2}source = "git::https:\/\/github\.com\/JanuaryLabs\/zukhruf\.git\/\/packages\/nx\/opentofu\/dokploy-stack\?ref=main"\n[\s\S]*\n {2}env = \{\n {4}PUBLIC_HOST = local\.host\n {4}# Generators add env keys above this line\.\n {2}\}\n\}\n/m,
+    /^module "stack" \{\n {2}source = "git::https:\/\/github\.com\/JanuaryLabs\/zukhruf\.git\/\/packages\/nx\/opentofu\/dokploy-stack\?ref=main"\n[\s\S]*\n {2}env = \{\n {4}PUBLIC_HOST {5}= local\.host\n {4}ALLOWED_ORIGINS = "https:\/\/\$\{local\.host\}"\n {4}# Generators add env keys above this line\.\n {2}\}\n\}\n/m,
   );
   assert.match(
     read(tree, `${production}/outputs.tf`),
@@ -768,4 +773,25 @@ test('what dokploy writes lints clean under @zukhruf/eslint', async () => {
   });
 
   assert.deepEqual(await lintManifests(tree), []);
+});
+
+test('the workflows run under production, and the .env.example of infra sets NODE_ENV=production', async () => {
+  const tree = await workspace();
+
+  await dokployGenerator(tree, { api: 'apps/backend', owner: 'acme' });
+
+  for (const path of [
+    '.github/workflows/ci.yml',
+    '.github/workflows/deploy.yml',
+  ]) {
+    assert.match(
+      read(tree, path),
+      /^env:\n(?: {2}.*\n)*? {2}NODE_ENV: production\n/m,
+      path,
+    );
+  }
+  assert.match(
+    read(tree, 'infra/.env.example'),
+    /^# .+\nNODE_ENV=production$/m,
+  );
 });

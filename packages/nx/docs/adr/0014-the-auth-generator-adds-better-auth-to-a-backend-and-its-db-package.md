@@ -2,6 +2,8 @@
 
 Status: Proposed 2026-11-19 (backlog #4719, parts A, B and C). Part B, the Dokploy environment, is decision 18 (backlog #4733).
 
+Superseded in part by [ADR 0016](./0016-the-generated-code-reads-explicit-settings-and-never-nodeenv.md): decision 7 (the targets set `NODE_ENV=production`, and `auth.cli.ts` passes its own secret) and decision 17 (the dynamic `baseURL` in every setup).
+
 meddit needs sign-in on its node-app and db package (plan step 4). text2sql, thing and blackboard each set up better-auth by hand. Spike #4716 (2026-11-19) proved how the better-auth CLI works on the layout that the node-app and prisma generators write.
 
 Facts read on 2026-11-19 (spike #4716 and the smoke test below):

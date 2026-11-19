@@ -187,6 +187,11 @@ function writeProjectPackageJson(tree: Tree, app: ProjectIdentity): void {
           portless: {
             command: `portless --name ${app.name}.${app.scope} -- nx run ${app.projectName}:dev --output-style=stream-without-prefixes`,
           },
+          // Vite under NODE_ENV=production turns React Fast Refresh off in the
+          // dev server, so the two dev servers of the web get development, on
+          // this project only (ADR 0016).
+          dev: { options: { env: { NODE_ENV: 'development' } } },
+          serve: { options: { env: { NODE_ENV: 'development' } } },
         },
       };
       return packageJson;
@@ -239,8 +244,9 @@ async function addComponentTests(
 
   // The project target, not a target default: a default with a list entry
   // replaces the cwd, cache and inputs of the inferred target (Nx 24). It
-  // builds the generated client first. Vitest sets NODE_ENV only when it is
-  // unset, and production loads the React build that has no act().
+  // builds the generated client first. Production loads the React build that
+  // has no act(), so the component tests get test, on this project only
+  // (ADR 0016).
   updateJson(
     tree,
     `${projectRoot}/package.json`,

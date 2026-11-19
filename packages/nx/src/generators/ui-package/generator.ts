@@ -181,7 +181,9 @@ export default async function uiPackageGenerator(
       ...packageJson.nx,
       targets: {
         ...packageJson.nx?.targets,
-        // The test imports the package through its export, which is dist.
+        // The test imports the package through its export, which is dist. It
+        // renders with flushSync, which production React has, so it runs
+        // under the production of targetDefaults.test (ADR 0016).
         test: { dependsOn: ['...', 'build'] },
       },
     };

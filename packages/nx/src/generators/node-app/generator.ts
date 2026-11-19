@@ -128,9 +128,9 @@ export default async function nodeAppGenerator(
   tree.write(`${projectRoot}/src/server.ts`, serverTs);
   tree.write(`${projectRoot}/src/startup.ts`, startupTs);
   // .env.example is the generator's; .env is the developer's copy.
-  tree.write(`${projectRoot}/.env.example`, envExample(port));
+  tree.write(`${projectRoot}/.env.example`, envExample(port, name));
   if (!tree.exists(`${projectRoot}/.env`)) {
-    tree.write(`${projectRoot}/.env`, envExample(port));
+    tree.write(`${projectRoot}/.env`, envExample(port, name));
   }
   wireSdk(tree, { projectRoot, name, projectName, rootOffset, scope });
   tree.write(
@@ -273,11 +273,11 @@ function writeProjectPackageJson(tree: Tree, app: ProjectIdentity): void {
           build: buildTarget(app.projectRoot),
           // @nx/js/tsx infers the command from the header of src/server.ts.
           // @nx/node writes serve as continuous, and a project value wins
-          // over the discrete target default. The app turns on its
-          // development log drain only when NODE_ENV is development.
+          // over the discrete target default. NODE_ENV is production, as in
+          // every setup; the app reads its own settings from its .env.
           serve: {
             dependsOn: ['^build'],
-            options: { env: { NODE_ENV: 'development' } },
+            options: { env: { NODE_ENV: 'production' } },
           },
           portless: {
             command: `portless --name ${app.name}.${app.scope} --app-port ${app.port} -- nx run ${app.projectName}:serve --output-style=stream-without-prefixes`,

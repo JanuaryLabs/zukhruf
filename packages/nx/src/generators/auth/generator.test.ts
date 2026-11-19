@@ -11,9 +11,11 @@ import { TemporaryFiles } from '@zukhruf/fs';
 
 import { changes, generatorTree } from '../../testing/generator-tree.ts';
 import { lintManifests } from '../../testing/lint-manifests.ts';
+import { lintNodeEnv } from '../../testing/lint-node-env.ts';
 import { stackModuleSource } from '../dokploy/files.ts';
 import dokployGenerator from '../dokploy/generator.ts';
 import nodeAppGenerator from '../node-app/generator.ts';
+import { legacyUiMount, uiMount } from '../pair/files.ts';
 import pairGenerator from '../pair/generator.ts';
 import prismaGenerator from '../prisma/generator.ts';
 import reactAppGenerator from '../react-app/generator.ts';
@@ -133,20 +135,46 @@ test('the factory and the CLI config load no env.ts and no startup.ts', async ()
   assert.doesNotMatch(cli, /env\.ts'|startup\.ts'/);
 });
 
+for (const [mount, version] of [
+  [uiMount, 'the UI_ROOT mount'],
+  [legacyUiMount, 'the mount before UI_ROOT'],
+] as const) {
+  test(`app.ts serves the auth routes before ${version} of pair`, async () => {
+    const tree = generatorTree();
+    await nodeAppGenerator(tree, { directory: 'apps/backend' });
+    await prismaGenerator(tree, {
+      directory: 'packages/db',
+      backend: 'apps/backend',
+    });
+    tree.write(
+      'apps/backend/src/app.ts',
+      (tree.read('apps/backend/src/app.ts', 'utf-8') ?? '').replace(
+        '\napp.notFound((c) =>',
+        `\n${mount}\n\napp.notFound((c) =>`,
+      ),
+    );
+
+    await authGenerator(tree, options);
+
+    const app = tree.read('apps/backend/src/app.ts', 'utf-8') ?? '';
+    assert.ok(
+      app.includes(
+        `// better-auth answers under /api/auth.\n(await import('./routes/auth.route.ts')).default(app);\n\n${mount}\n`,
+      ),
+      app,
+    );
+  });
+}
+
 test('startup.ts builds the auth on the app client, and app.ts serves it before the UI and notFound', async () => {
   const tree = generatorTree();
   await nodeAppGenerator(tree, { directory: 'apps/backend' });
+  await reactAppGenerator(tree, { directory: 'apps/web' });
+  await pairGenerator(tree, { api: 'apps/backend', web: 'apps/web' });
   await prismaGenerator(tree, {
     directory: 'packages/db',
     backend: 'apps/backend',
   });
-  tree.write(
-    'apps/backend/src/app.ts',
-    (tree.read('apps/backend/src/app.ts', 'utf-8') ?? '').replace(
-      '\napp.notFound((c) =>',
-      "\n// pair fixed the path of the web build; development enters through the Vite proxy.\n(await import('./routes/ui.route.ts')).default(app);\n\napp.notFound((c) =>",
-    ),
-  );
 
   await authGenerator(tree, options);
 
@@ -270,7 +298,7 @@ test('auth:generate and auth:check run the CLI on a generated client, with the d
       cwd: '{projectRoot}',
       env: {
         NODE_OPTIONS: '--conditions=development',
-        NODE_ENV: 'development',
+        NODE_ENV: 'production',
       },
       commands: [
         'npx auth generate --adapter prisma --config src/auth.cli.ts --output ../../packages/db/models/auth.prisma --yes',
@@ -286,7 +314,7 @@ test('auth:generate and auth:check run the CLI on a generated client, with the d
       cwd: '{projectRoot}',
       env: {
         NODE_OPTIONS: '--conditions=development',
-        NODE_ENV: 'development',
+        NODE_ENV: 'production',
       },
       command: 'npx auth check schema --config src/auth.cli.ts',
     },
@@ -503,7 +531,7 @@ test('a session module that the host changed stays as it is', async () => {
   );
 });
 
-test('in development, better-auth builds its links on the host of an allowed origin, and in production on BETTER_AUTH_URL', async () => {
+test('in every setup, better-auth builds its links on the host of an allowed origin, and on BETTER_AUTH_URL for any other host', async () => {
   const tree = generatorTree();
   await nodeAppGenerator(tree, { directory: 'apps/backend' });
   await prismaGenerator(tree, {
@@ -513,18 +541,38 @@ test('in development, better-auth builds its links on the host of an allowed ori
 
   await authGenerator(tree, options);
 
+  const startup = tree.read('apps/backend/src/startup.ts', 'utf-8') ?? '';
   assert.match(
-    tree.read('apps/backend/src/startup.ts', 'utf-8') ?? '',
-    /baseURL:\n\s+process\.env\.NODE_ENV === 'development'\n\s+\? \{\n\s+fallback: process\.env\.BETTER_AUTH_URL,\n\s+allowedHosts: allowedOrigins\.map\(\(origin\) => new URL\(origin\)\.host\),\n\s+\}\n\s+: process\.env\.BETTER_AUTH_URL,/,
+    startup,
+    /^ {2}baseURL: \{\n {4}fallback: process\.env\.BETTER_AUTH_URL,\n {4}allowedHosts: allowedOrigins\.map\(\(origin\) => new URL\(origin\)\.host\),\n {2}\},$/m,
   );
+  assert.doesNotMatch(startup, /NODE_ENV/);
   const auth = tree.read('apps/backend/src/auth.ts', 'utf-8') ?? '';
   assert.match(
     auth,
-    /baseURL: string \| \{ fallback: string; allowedHosts: string\[\] \};/,
+    /baseURL: \{ fallback: string; allowedHosts: string\[\] \};/,
+  );
+  assert.match(auth, /advanced: \{ trustedProxyHeaders: true \}/);
+});
+
+test('the CLI config passes a throwaway secret of 32 characters or more', async () => {
+  const tree = generatorTree();
+  await nodeAppGenerator(tree, { directory: 'apps/backend' });
+  await prismaGenerator(tree, {
+    directory: 'packages/db',
+    backend: 'apps/backend',
+  });
+
+  await authGenerator(tree, options);
+
+  const cli = tree.read('apps/backend/src/auth.cli.ts', 'utf-8') ?? '';
+  assert.match(
+    cli,
+    /^ {2}\/\/ A throwaway secret of 32\+ characters: the CLI only reads the schema\.\n {2}secret: '[^']{32,}',$/m,
   );
   assert.match(
-    auth,
-    /advanced: \{ trustedProxyHeaders: typeof options\.baseURL !== 'string' \}/,
+    cli,
+    /baseURL: \{ fallback: 'http:\/\/localhost', allowedHosts: \['localhost'\] \},/,
   );
 });
 
@@ -553,7 +601,7 @@ test('with the infra of the dokploy generator, the module call gets the secret a
 
   assert.match(
     tree.read(`${production}/main.tf`, 'utf-8') ?? '',
-    /\n {2}env = \{\n {4}PUBLIC_HOST = local\.host\n {4}# better-auth signs the session cookies with the secret, and builds its links on the URL\.\n {4}BETTER_AUTH_SECRET = random_password\.better_auth\.result\n {4}BETTER_AUTH_URL {4}= "https:\/\/\$\{local\.host\}"\n {4}# Generators add env keys above this line\.\n {2}\}\n\}\n/,
+    /\n {2}env = \{\n {4}PUBLIC_HOST {5}= local\.host\n {4}ALLOWED_ORIGINS = "https:\/\/\$\{local\.host\}"\n {4}# better-auth signs the session cookies with the secret, and builds its links on the URL\.\n {4}BETTER_AUTH_SECRET = random_password\.better_auth\.result\n {4}BETTER_AUTH_URL {4}= "https:\/\/\$\{local\.host\}"\n {4}# Generators add env keys above this line\.\n {2}\}\n\}\n/,
   );
   assert.match(
     tree.read(`${production}/auth.tf`, 'utf-8') ?? '',
@@ -701,4 +749,19 @@ test('what auth writes lints clean under @zukhruf/eslint', async () => {
   await authGenerator(tree, { ...options, web: 'apps/web' });
 
   assert.deepEqual(await lintManifests(tree), []);
+});
+
+test('the code that auth writes reads no NODE_ENV', async () => {
+  const tree = generatorTree();
+  await nodeAppGenerator(tree, { directory: 'apps/backend' });
+  await reactAppGenerator(tree, { directory: 'apps/web' });
+  await pairGenerator(tree, { api: 'apps/backend', web: 'apps/web' });
+  await prismaGenerator(tree, {
+    directory: 'packages/db',
+    backend: 'apps/backend',
+  });
+
+  await authGenerator(tree, { ...options, web: 'apps/web' });
+
+  assert.deepEqual(await lintNodeEnv(tree), []);
 });

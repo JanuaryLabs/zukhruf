@@ -99,6 +99,9 @@ TF_VAR_ghcr_pull_token=\${GHCR_PULL_TOKEN}
 # targets (init, preview, show, output) read it. CI reads the same names from
 # repository secrets; applies run only in CI (.github/workflows/deploy.yml).
 
+# Every setup runs under production; no code reads NODE_ENV (ADR 0016).
+NODE_ENV=production
+
 # Dokploy panel API key (sent as x-api-key). The stack reads it as
 # var.dokploy_api_key; Nx expands the reference below.
 DOKPLOY_API_KEY=
@@ -365,6 +368,7 @@ export function mainTf(stack: Stack): string {
 # replaces the environment.
 #
 # Each key of env reaches the ${app.name} through env_file: .env of the compose.
+# ALLOWED_ORIGINS is the public origin: CORS and better-auth trust it.
 module "stack" {
   source = "${stackModuleSource}"
 
@@ -374,7 +378,8 @@ module "stack" {
   compose_file = file("\${path.module}/../../../compose.dokploy.yml")
 ${databaseInput}${registryInput}
   env = {
-    PUBLIC_HOST = local.host
+    PUBLIC_HOST     = local.host
+    ALLOWED_ORIGINS = "https://\${local.host}"
     ${envMarker}
   }
 }
@@ -468,6 +473,10 @@ permissions:
   # affected-range reads this workflow's runs to find the last green commit.
   actions: read
   contents: read
+
+# Every setup runs under production, CI too (ADR 0016 of @zukhruf/nx).
+env:
+  NODE_ENV: production
 
 jobs:
   ci:
@@ -582,6 +591,8 @@ permissions:
 cache-mode: read
 
 env:
+  # Every setup runs under production (ADR 0016 of @zukhruf/nx).
+  NODE_ENV: production
   SHA: \${{ github.event.workflow_run.head_sha }}
 
 jobs:

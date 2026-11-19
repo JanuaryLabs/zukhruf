@@ -160,6 +160,8 @@ export function envExample(database: LocalDatabase): string {
   return `# Copy to \`.env\` (gitignored). Nx loads it into each task of this project, so
 # \`nx run <project>:migrate\` and \`deploy\` need no dotenv. The URL is the local
 # Postgres of compose.dev.yml, which the up target starts.
+# Every setup runs under production; no code reads NODE_ENV (ADR 0016).
+NODE_ENV=production
 CONNECTION_STRING=${localConnectionString(database)}
 # Optional: the shadow database of \`prisma migrate dev\`.
 SHADOW_CONNECTION_STRING=

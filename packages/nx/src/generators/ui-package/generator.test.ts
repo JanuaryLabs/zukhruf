@@ -34,7 +34,9 @@ test('a buildable React package with a development export of its source', async 
     manifest.devDependencies['vite-plugin-dts'],
     appPackageVersions['vite-plugin-dts'],
   );
-  assert.deepEqual(manifest.nx.targets.test.dependsOn, ['...', 'build']);
+  // No env of its own: the component test runs under the production of
+  // targetDefaults.test, and renders with flushSync, not act().
+  assert.deepEqual(manifest.nx.targets.test, { dependsOn: ['...', 'build'] });
   const viteConfig = tree.read('packages/ui/vite.config.ts', 'utf-8') ?? '';
   assert.match(viteConfig, /dts\(/);
   assert.match(viteConfig, /name: '@acme\/ui'/);
@@ -59,6 +61,9 @@ test('a buildable React package with a development export of its source', async 
     tree.read('packages/ui/tests/package-name.test.mjs', 'utf-8') ?? '';
   assert.match(componentTest, /GlobalRegistrator\.register\(\);\n {2}try \{/);
   assert.match(componentTest, /await import\('react-dom\/client'\)/);
+  // Production React has no act(); flushSync renders synchronously.
+  assert.match(componentTest, /flushSync\(\(\) => root\.render\(/);
+  assert.doesNotMatch(componentTest, /\bact\b/);
   assert.match(componentTest, /await import\('@acme\/ui'\)/);
   assert.match(componentTest, /await GlobalRegistrator\.unregister\(\);/);
   for (const name of ['@happy-dom/global-registrator', 'react-dom'] as const) {

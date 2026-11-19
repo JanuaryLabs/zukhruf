@@ -46,12 +46,13 @@ app.use(
   evlog(evlogMiddlewareOptions),
   evlogRequestContext(),
   timing(),
+  // A browser origin gets CORS only when ALLOWED_ORIGINS lists it, in every
+  // setup.
   cors({
     origin: (origin) => {
-      if (process.env.NODE_ENV === 'development') return origin;
-      if (!origin) return '';
-      const allowed = process.env.ALLOWED_ORIGINS.split(',').map((o) => o.trim());
-      return allowed.includes(origin) ? origin : '';
+      const allowed = process.env.ALLOWED_ORIGINS.split(',');
+      const listed = allowed.map((entry) => entry.trim()).includes(origin);
+      return origin !== '' && listed ? origin : '';
     },
     credentials: true,
   }),
@@ -91,17 +92,12 @@ app.onError((error, c) => {
     }
     return c.json({ error: error.message, cause: error.cause }, error.status);
   }
+  // The log has the error; the response never carries it.
   c.get('log')?.error(error);
   return c.json(
     {
       error: 'Internal Server Error',
-      cause: {
-        code: 'api/internal',
-        detail:
-          process.env.NODE_ENV === 'development'
-            ? String(error)
-            : 'Unexpected error',
-      },
+      cause: { code: 'api/internal', detail: 'Unexpected error' },
     },
     500,
   );
@@ -137,11 +133,9 @@ export function envTs(port: number): string {
 import { logError } from './logging.ts';
 
 const env = z.object({
-  NODE_ENV: z
-    .enum(['development', 'test', 'production'])
-    .default('development'),
   PORT: z.string().optional().default('${port}'),
-  HOST: z.string().optional(),
+  // The bind address: 127.0.0.1 in .env, 0.0.0.0 in the image.
+  HOST: z.string().min(1),
   // Kept a string: process.env stays string-valued so the ProcessEnv
   // augmentation below remains compatible with every Node API typed against
   // it (child_process env, etc.). Parse lists at the use site.
@@ -150,6 +144,10 @@ const env = z.object({
   // Dockerfile). /api/healthz reports it, so a deploy can tell the new
   // container from the old one. A process that is not an image has none.
   BUILD_SHA: z.string().min(1).optional(),
+  // logging.ts reads these two before this check runs. The folder of the log
+  // files (unset: no file), and \`true\` for readable logs (unset: JSON lines).
+  LOG_DIR: z.string().min(1).optional(),
+  LOG_PRETTY: z.enum(['true', 'false']).optional(),
 });
 
 const parsed = env.safeParse(process.env);
@@ -203,18 +201,19 @@ declare module 'hono' {
 }
 
 // This module is imported by env.ts (to report validation failures), so it
-// runs before the environment is validated and reads the raw variable.
-const environment = process.env.NODE_ENV ?? 'development';
+// runs before the environment is validated and reads the raw variables. The
+// log files go to LOG_DIR when it is set.
+const logDir = process.env.LOG_DIR;
 const fileDrain =
-  process.env.NODE_ENV === 'development'
-    ? createDrainPipeline<DrainContext>({ batch: { size: 1 } })(
+  logDir === undefined
+    ? undefined
+    : createDrainPipeline<DrainContext>({ batch: { size: 1 } })(
         createFsDrain({
-          dir: '.evlog/logs/${name}',
+          dir: logDir,
           maxFiles: 7,
           maxSizePerFile: 10 * 1024 * 1024,
         }),
-      )
-    : undefined;
+      );
 
 // evlog derives no level from the response status, so a handler that
 // *returns* a 5xx (rather than throwing) would log at info. Enrichment runs
@@ -227,7 +226,8 @@ function promoteServerErrors(context: EnrichContext): void {
 
 const config = defineEvlog({
   service: '${name}',
-  environment,
+  // Readable logs when LOG_PRETTY is true, JSON lines otherwise.
+  pretty: process.env.LOG_PRETTY === 'true',
   redact: {
     paths: [
       'authorization',
@@ -328,11 +328,10 @@ import app from './app.ts';
 import { flushLogs, logError } from './logging.ts';
 
 const port = Number.parseInt(process.env.PORT ?? '3000', 10);
-// In development claim 127.0.0.1 explicitly: the dual-stack wildcard leaves
-// the IPv4 address free for a stray local server to capture proxy traffic.
-const hostname =
-  process.env.HOST ??
-  (process.env.NODE_ENV === 'development' ? '127.0.0.1' : undefined);
+// HOST is required (env.ts). .env binds 127.0.0.1: the dual-stack wildcard
+// leaves the IPv4 address free for a stray local server to capture proxy
+// traffic. The image binds 0.0.0.0.
+const hostname = process.env.HOST;
 
 const server = serve({ fetch: app.fetch, port, hostname }, (info) => {
   log.info({
@@ -371,17 +370,22 @@ export const startupTs = `import './env.ts';
 export {};
 `;
 
-export function envExample(port: number): string {
+export function envExample(port: number, name: string): string {
   return `# Copy to \`.env\` (gitignored). Nx loads this project's \`.env\`, \`.env.<target>\`
 # and \`.env.<target>.<configuration>\` into every task it runs here, so
-# \`nx run <project>:serve\` needs no dotenv. NODE_ENV is deliberately absent:
-# the serve target sets it to development, and the Dockerfile to production.
+# \`nx run <project>:serve\` needs no dotenv.
+# Every setup runs under production; no code reads NODE_ENV (ADR 0016).
+NODE_ENV=production
 PORT=${port}
-# Bind address. Unset binds the dual-stack wildcard; development defaults to
-# 127.0.0.1 so portless and the web dev proxy can always reach the server.
+# Bind address, required. 127.0.0.1, so portless and the web dev proxy always
+# reach the server; the image binds 0.0.0.0.
 HOST=127.0.0.1
-# Comma-separated browser origins allowed outside development (CORS).
+# Comma-separated browser origins allowed to call the API (CORS).
 ALLOWED_ORIGINS=
+# The folder of the log files. Unset writes no log file.
+LOG_DIR=.evlog/logs/${name}
+# true prints readable logs; unset prints JSON lines.
+LOG_PRETTY=true
 `;
 }
 
@@ -399,6 +403,8 @@ export function dockerfile(options: DockerfileOptions): string {
   const spaCopy = spa
     ? `COPY --from=build /workspace/${spa.projectRoot}/dist ./${spa.projectRoot}/dist\n`
     : '';
+  // The backend serves the web build that UI_ROOT names (pair).
+  const uiRoot = spa ? ` UI_ROOT=/app/${spa.projectRoot}/dist` : '';
   return `# syntax=docker/dockerfile:1
 # @zukhruf/nx:node-app writes this file, and @zukhruf/nx:pair writes it again.
 # Build from the workspace root: \`nx run ${projectName}:docker:build\`.
@@ -421,7 +427,7 @@ FROM node:lts-alpine AS runtime
 # The commit this image is built from; /api/healthz reports it. docker:build
 # passes it, and an image built without it does not start (env.ts).
 ARG BUILD_SHA
-ENV NODE_ENV=production HOST=0.0.0.0 PORT=${port} BUILD_SHA=$BUILD_SHA
+ENV NODE_ENV=production HOST=0.0.0.0 PORT=${port} BUILD_SHA=$BUILD_SHA${uiRoot}
 RUN npm install -g npm@latest
 WORKDIR /app
 # prune-lockfile writes the runtime manifest (type: module, runtime deps only)
@@ -503,7 +509,10 @@ export function clientManifest(name: string, apiProjectName: string): string {
         sdk: {
           // Config discovery walks up from cwd to the api's sdk-it.config.ts.
           command: 'sdk-it generate',
-          options: { cwd: '{projectRoot}' },
+          options: {
+            cwd: '{projectRoot}',
+            env: { NODE_ENV: 'production' },
+          },
           cache: true,
           inputs: [
             { projects: [apiProjectName], input: 'production' },

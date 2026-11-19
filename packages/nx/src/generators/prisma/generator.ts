@@ -199,7 +199,10 @@ function writePackage(tree: Tree, identity: PackageIdentity): void {
             ],
             parallel: false,
             cwd: '{projectRoot}',
-            env: { CONNECTION_STRING: localConnectionString(database) },
+            env: {
+              NODE_ENV: 'production',
+              CONNECTION_STRING: localConnectionString(database),
+            },
           },
         },
         down: {

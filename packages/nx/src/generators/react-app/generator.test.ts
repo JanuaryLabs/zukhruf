@@ -8,6 +8,7 @@ import {
   rootPackageNames,
 } from '../../testing/generator-tree.ts';
 import { lintManifests } from '../../testing/lint-manifests.ts';
+import { lintNodeEnv } from '../../testing/lint-node-env.ts';
 import nodeAppGenerator from '../node-app/generator.ts';
 import { appPackageVersions, nxVersion } from '../versions.ts';
 import reactAppGenerator from './generator.ts';
@@ -182,6 +183,7 @@ test('after node-app, test.dependsOn stays ["...", "^sdk"] with no ^build of @nx
   await reactAppGenerator(tree, { directory: 'apps/web' });
 
   assert.deepEqual(readJson(tree, 'nx.json').targetDefaults.test, {
+    options: { env: { NODE_ENV: 'production' } },
     dependsOn: ['...', '^sdk'],
   });
 });
@@ -196,12 +198,14 @@ test('a web app alone starts the portless proxy unprivileged on HTTPS, with no T
   });
 });
 
-test('a web app alone gets no test target default', async () => {
+test('a web app alone gets only the NODE_ENV of init in the test target default', async () => {
   const tree = generatorTree();
 
   await reactAppGenerator(tree, { directory: 'apps/web' });
 
-  assert.equal(readJson(tree, 'nx.json').targetDefaults.test, undefined);
+  assert.deepEqual(readJson(tree, 'nx.json').targetDefaults.test, {
+    options: { env: { NODE_ENV: 'production' } },
+  });
 });
 
 test('a web app alone denies the install script of the fsevents that vite brings', async () => {
@@ -269,4 +273,41 @@ test('what react-app writes lints clean under @zukhruf/eslint', async () => {
   await reactAppGenerator(tree, { directory: 'apps/web' });
 
   assert.deepEqual(await lintManifests(tree), []);
+});
+
+test('the web dev servers run under development and its component tests under test, on the web project only', async () => {
+  const tree = generatorTree();
+  await nodeAppGenerator(tree, { directory: 'apps/backend' });
+
+  await reactAppGenerator(tree, { directory: 'apps/web' });
+
+  const { targets } = readJson(tree, 'apps/web/package.json').nx;
+  assert.deepEqual(
+    [targets.dev, targets.serve, targets.test.options],
+    [
+      { options: { env: { NODE_ENV: 'development' } } },
+      { options: { env: { NODE_ENV: 'development' } } },
+      { env: { NODE_ENV: 'test' } },
+    ],
+  );
+  // The env of a project target replaces the env of the target default (Nx
+  // 24 merges a plain object by replacing it), so these win over the
+  // production of targetDefaults.test and .serve, which the backend gets.
+  const { targetDefaults } = readJson(tree, 'nx.json');
+  assert.deepEqual(
+    [targetDefaults.test.options.env, targetDefaults.serve.options.env],
+    [{ NODE_ENV: 'production' }, { NODE_ENV: 'production' }],
+  );
+  assert.deepEqual(
+    readJson(tree, 'apps/backend/package.json').nx.targets.serve.options.env,
+    { NODE_ENV: 'production' },
+  );
+});
+
+test('the code that react-app writes reads no NODE_ENV', async () => {
+  const tree = generatorTree();
+
+  await reactAppGenerator(tree, { directory: 'apps/web' });
+
+  assert.deepEqual(await lintNodeEnv(tree), []);
 });

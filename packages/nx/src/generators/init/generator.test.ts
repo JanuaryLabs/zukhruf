@@ -301,6 +301,7 @@ test('the target defaults and lines that are there stay', async () => {
   assert.deepEqual(nxJson.targetDefaults.serve, {
     continuous: false,
     cache: false,
+    options: { env: { NODE_ENV: 'production' } },
   });
   assert.equal(nxJson.targetDefaults.lint, undefined);
   assert.deepEqual(nxJson.namedInputs.production.slice(0, 2), [
@@ -338,4 +339,25 @@ test('a prettier config that is there stays', async () => {
   await initGenerator(tree);
 
   assert.deepEqual(readJson(tree, '.prettierrc'), { singleQuote: false });
+});
+
+test('the test and serve target defaults run under production, and a NODE_ENV that is there stays', async () => {
+  const tree = workspace();
+  writeJson(tree, 'nx.json', {
+    targetDefaults: {
+      serve: { options: { env: { NODE_ENV: 'staging', PORT: '1' } } },
+    },
+  });
+
+  await initGenerator(tree);
+
+  const { targetDefaults } = readJson(tree, 'nx.json');
+  assert.deepEqual(targetDefaults.test, {
+    options: { env: { NODE_ENV: 'production' } },
+  });
+  assert.deepEqual(targetDefaults.serve.options.env, {
+    NODE_ENV: 'staging',
+    PORT: '1',
+  });
+  assert.equal(targetDefaults.build, undefined);
 });

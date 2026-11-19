@@ -1,11 +1,16 @@
-import { posix } from 'node:path';
-
 import { type Tree, formatFiles, readJson, updateJson } from '@nx/devkit';
 
 import { appDirectory, projectNameOf } from '../app-directory.ts';
 import { dockerfile } from '../node-app/files.ts';
 import { appPackageVersions as versions } from '../versions.ts';
-import { apiTs, uiRouteTs } from './files.ts';
+import {
+  apiTs,
+  legacyUiMount,
+  uiMount,
+  uiRootEnvTs,
+  uiRouteImport,
+  uiRouteTs,
+} from './files.ts';
 
 export interface PairOptions {
   /** The project root of a node-app, for example `apps/backend`. */
@@ -21,32 +26,37 @@ export function portOf(tree: Tree, apiRoot: string): number {
   return match ? Number(match[1]) : 3000;
 }
 
-function mountUi(tree: Tree, apiRoot: string, webRoot: string): void {
+/**
+ * app.ts mounts the UI route only when UI_ROOT is set, and env.ts declares it.
+ * The mount that pair wrote before UI_ROOT is replaced.
+ */
+function mountUi(tree: Tree, apiRoot: string): void {
   const appPath = `${apiRoot}/src/app.ts`;
   const app = tree.read(appPath, 'utf-8');
   if (app === null) {
     throw new Error(`${appPath} does not exist.`);
   }
-  const mount = `(await import('./routes/ui.route.ts')).default(app);`;
-  if (!app.includes(mount)) {
+  if (app.includes(legacyUiMount)) {
+    tree.write(appPath, app.replace(legacyUiMount, uiMount));
+  } else if (!app.includes(uiRouteImport)) {
     const marker = '\napp.notFound((c) =>';
     if (!app.includes(marker)) {
       throw new Error(`${appPath} has no app.notFound registration.`);
     }
-    tree.write(
-      appPath,
-      app.replace(
-        marker,
-        `\n// pair fixed the path of the web build; development enters through the Vite proxy.\n${mount}\n${marker}`,
-      ),
-    );
+    tree.write(appPath, app.replace(marker, `\n${uiMount}\n${marker}`));
   }
-  tree.write(
-    `${apiRoot}/src/routes/ui.route.ts`,
-    uiRouteTs(
-      posix.relative(posix.join(apiRoot, 'dist'), posix.join(webRoot, 'dist')),
-    ),
-  );
+  const envPath = `${apiRoot}/src/env.ts`;
+  const env = tree.read(envPath, 'utf-8') ?? '';
+  if (!env.includes('UI_ROOT:')) {
+    const marker = 'const env = z.object({\n';
+    if (!env.includes(marker)) {
+      throw new Error(
+        `${envPath} has no ${JSON.stringify(marker)}, so the generator cannot declare UI_ROOT in it.`,
+      );
+    }
+    tree.write(envPath, env.replace(marker, `${marker}${uiRootEnvTs}`));
+  }
+  tree.write(`${apiRoot}/src/routes/ui.route.ts`, uiRouteTs);
 }
 
 /**
@@ -96,7 +106,7 @@ export default async function pairGenerator(
     },
   );
   tree.write(`${webRoot}/src/api.ts`, apiTs(client.name));
-  mountUi(tree, apiRoot, webRoot);
+  mountUi(tree, apiRoot);
   tree.write(
     `${apiRoot}/Dockerfile`,
     dockerfile({
