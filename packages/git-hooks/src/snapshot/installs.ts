@@ -190,13 +190,17 @@ async function npm(
 
 async function prune(installs: string): Promise<void> {
   const used = await Promise.all(
-    (await readdir(installs)).map(async (name) => ({
-      name,
-      at: await stat(join(installs, name, marker)).then(
-        ({ mtimeMs }) => mtimeMs,
-        () => -1,
-      ),
-    })),
+    // Only folders are installs: a stray file such as the .DS_Store of
+    // macOS stays where it is.
+    (await readdir(installs, { withFileTypes: true }))
+      .filter((entry) => entry.isDirectory())
+      .map(async ({ name }) => ({
+        name,
+        at: await stat(join(installs, name, marker)).then(
+          ({ mtimeMs }) => mtimeMs,
+          () => -1,
+        ),
+      })),
   );
   used.sort((left, right) => right.at - left.at);
   for (const [index, { name, at }] of used.entries())

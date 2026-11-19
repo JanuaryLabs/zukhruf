@@ -301,6 +301,36 @@ test('a push with a lockfile that was installed before uses that install, and th
   );
 });
 
+test('a stray file in the installs folder, such as the .DS_Store of macOS, stays in place, and the prune still deletes an expired install (#4747)', async () => {
+  // Arrange
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
+  const repo = await workspace(folder.path, inspect);
+  const installs = join(repo.root, '.git/git-hooks/installs');
+  const pushWith = async (
+    dependencies: Record<string, string>,
+    note: string,
+  ) => {
+    await repo.install(dependencies);
+    await repo.write('notes.txt', `${note}\n`);
+    await repo.commit(note);
+    await rm(join(repo.root, 'node_modules'), { recursive: true });
+    return repo.push('--quiet', 'origin', 'main');
+  };
+  const first = await pushWith({ 'probe-dep': repo.tarball.probe1 }, 'one');
+  assert.equal(first.code, 0, first.stderr);
+  await writeFile(join(installs, '.DS_Store'), '');
+  // An install that never finished has no marker, so the prune deletes it.
+  await mkdir(join(installs, 'unfinished'));
+
+  // Act
+  const result = await pushWith({ 'probe-dep': repo.tarball.probe2 }, 'two');
+
+  // Assert
+  assert.equal(result.code, 0, result.stderr);
+  assert.ok(existsSync(join(installs, '.DS_Store')));
+  assert.ok(!existsSync(join(installs, 'unfinished')));
+});
+
 // A pre-push step that opens the snapshot of the head with packages, writes
 // `<repo>/../gate.started`, waits for a write to `<repo>/../gate.release`,
 // and then reads the version of probe-dep from the node_modules of the
