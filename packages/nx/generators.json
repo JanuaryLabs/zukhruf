@@ -39,6 +39,11 @@
       "implementation": "./dist/generators/dokploy/generator.js",
       "schema": "./src/generators/dokploy/schema.json",
       "description": "Deliver a node-app to Dokploy by GitOps: an OpenTofu project in infra/ with the compose, optional Postgres and a private registry, and the CI and deploy workflows that call zukhruf's tofu-apply, dokploy-deploy and wait-for-health."
+    },
+    "auth": {
+      "implementation": "./dist/generators/auth/generator.js",
+      "schema": "./src/generators/auth/schema.json",
+      "description": "Add better-auth to a node-app and the db package it is wired to: an auth factory, the routes under /api/auth, the environment, the models of better-auth, and auth:generate and auth:check targets."
     }
   }
 }

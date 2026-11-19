@@ -1240,6 +1240,69 @@ After the steps of [Test the preset before a release](#test-the-preset-before-a-
 
 The decisions are in [ADR 0012](./docs/adr/0012-the-prisma-generator-writes-a-postgres-db-package-and-wires-a-backend.md). The backlog item is #4604.
 
+## auth generator
+
+`auth` adds better-auth 1.7.26 to a node-app and to the db package that the prisma generator wired into it. meddit needs sign-in, and text2sql, thing and blackboard each set better-auth up by hand (#4719).
+
+### Add sign-in to a backend
+
+```sh
+npx nx g @zukhruf/nx:auth --backend apps/backend --db packages/db
+```
+
+After the install, the generator runs `nx run @acme/backend:auth:generate`, which writes the models of better-auth into `packages/db/models/auth.prisma`. Then write the first migration (see [Migrations](#migrations)) and run `npx nx run @acme/backend:auth:check`.
+
+### Signature of the auth generator
+
+```ts
+// @zukhruf/nx:auth
+interface AuthOptions {
+  backend: string; // the project root of a node-app, for example apps/backend
+  db: string; // the project root of a db package, for example packages/db
+}
+```
+
+### What the auth generator writes
+
+| File                                 | Content                                                                                                                                                                         |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `<backend>/src/auth.ts`              | `createAuth({ prisma, secret, baseURL, trustedOrigins })`: better-auth on `prismaAdapter` with `emailAndPassword`; it reads no environment; only when missing                   |
+| `<backend>/src/auth.cli.ts`          | `export const auth` for the better-auth CLI, on `createPrisma` with no connection and placeholder secret and URL; it imports no `env.ts` and no `startup.ts`; only when missing |
+| `<backend>/src/routes/auth.route.ts` | `GET` and `POST` `/api/auth/*` to `auth.handler`; the handler loads `startup.ts` on the first request, so `app.test.ts` needs no database; only when missing                    |
+| `<backend>/src/app.ts`               | the mount of the auth route, before the UI mount of pair and before `notFound`                                                                                                  |
+| `<backend>/src/startup.ts`           | `export const auth = createAuth(...)` on the app's client, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL` and `ALLOWED_ORIGINS`                                                        |
+| `<backend>/src/env.ts`               | `BETTER_AUTH_SECRET: z.string().min(32)` and `BETTER_AUTH_URL: z.url()`                                                                                                         |
+| `<backend>/.env.example`, `.env`     | `BETTER_AUTH_SECRET=` and `BETTER_AUTH_URL=http://localhost:<PORT>`; `.env` gets a random 43-character secret; a key that is there keeps its value                              |
+| `<backend>/package.json`             | `better-auth` in `dependencies`; the `auth:generate` and `auth:check` targets                                                                                                   |
+| `<db>/models/auth.prisma`            | a one-line placeholder, which the CLI fills; without it the CLI writes a second generator and datasource, and `prisma generate` fails with P1012; only when missing             |
+
+At the root: the CLI `auth` in `devDependencies`. The generator writes no migration. A second run adds nothing twice.
+
+### What the auth targets run
+
+Both run in the backend root with `NODE_OPTIONS=--conditions=development`, so jiti loads the source of the db package, and with `NODE_ENV=development`, because the CLI refuses the placeholder secret in production, and both depend on `^generate`, because that source imports the generated client.
+
+- `auth:generate`: `npx auth generate --adapter prisma --config src/auth.cli.ts --output <db>/models/auth.prisma --yes`, then `nx run <db>:generate`. Run it after you add a plugin to `createAuth`.
+- `auth:check`: `npx auth check schema --config src/auth.cli.ts`. It only reads. It exits 1 when the generated client misses a table or column of the plugins, and 2 when it cannot load the config.
+
+### Versions that the auth generator writes
+
+`better-auth` and `auth` have one exact version, 1.7.26, in `appPackageVersions`, and a test checks that they are equal.
+
+### Errors of the auth generator
+
+| Error                                                                                          | When                                                       |
+| ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| `apps/api has no sdk-it.config.ts, so it is not a node-app. Run …`                             | `--backend` names a project that `node-app` did not write  |
+| `packages/db has no prisma.config.ts and createPrisma, so it is not a db package. Run …`       | `--db` names a project that `prisma` did not write         |
+| `apps/backend/src/startup.ts does not create the client of @acme/db. Run @zukhruf/nx:prisma …` | the prisma generator did not wire the db into this backend |
+
+### Test the auth generator before a release
+
+After the steps of [Test the prisma generator before a release](#test-the-prisma-generator-before-a-release) up to `run-many`: run `auth --backend apps/backend --db packages/db`, then check that `auth:check` exits 0, that `run-many -t typecheck lint build test` passes, and that a second run changes no file. On 2026-11-19 each step passed. The production bundle on a `postgres:18-alpine`, with the schema from `prisma migrate diff`, answered `POST /api/auth/sign-up/email` with 200.
+
+The decisions are in [ADR 0014](./docs/adr/0014-the-auth-generator-adds-better-auth-to-a-backend-and-its-db-package.md). The backlog item is #4719.
+
 ## dokploy generator
 
 `dokploy` writes the GitOps delivery of a node-app on Dokploy: an OpenTofu project in `infra/` that stores the compose in Dokploy, and the workflows that build the images, apply the stack and roll it out. text2sql (v2, authx) and whatisgoingon hold copies, and meddit is the third repo, so the shape moves here (#4603). The workflows call zukhruf's kit at `@main`: the reusable `tofu-apply.yml`, and the `dokploy-deploy` and `wait-for-health` actions.

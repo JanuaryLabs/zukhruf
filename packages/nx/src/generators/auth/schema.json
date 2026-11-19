@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/schema",
+  "$id": "ZukhrufNxAuth",
+  "title": "Add better-auth to a node-app and its db package",
+  "type": "object",
+  "properties": {
+    "backend": {
+      "type": "string",
+      "description": "The project root of a node-app that the prisma generator wired to the db package, for example apps/backend."
+    },
+    "db": {
+      "type": "string",
+      "description": "The project root of the db package of the prisma generator, for example packages/db."
+    }
+  },
+  "required": ["backend", "db"],
+  "additionalProperties": false
+}

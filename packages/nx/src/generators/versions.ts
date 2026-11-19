@@ -101,6 +101,10 @@ export const appPackageVersions = {
   // The test helper of a db package replays the migrations with pg.
   pg: '8.23.1',
   '@types/pg': '8.23.1',
+  // auth: better-auth and its CLI release together and must have one version.
+  // The CLI writes the models of the plugins of one better-auth.
+  'better-auth': '1.7.26',
+  auth: '1.7.26',
 } as const satisfies Record<string, string>;
 
 /** The zukhruf packages that the root files load. */
