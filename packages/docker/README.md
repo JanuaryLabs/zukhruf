@@ -514,11 +514,11 @@ await spawn(
 For an `ssh://` host, the client speaks SSH inside the Node process with `@zukhruf/ssh` ([ADR 0015](./docs/adr/0015-an-ssh-engine-is-reached-through-zukhruf-ssh-in-the-node-process.md)):
 
 1. `ssh -G <sshFlags> -o ConnectTimeout=30 -- <host>` resolves the host with `~/.ssh/config`, as the `ssh` command would: jump hosts, `ProxyCommand`, identity files, the agent, known hosts and `StrictHostKeyChecking`.
-2. The client opens one SSH connection to it.
-3. A session runs `docker context inspect --format '{{.Endpoints.docker.Host}}'` on the engine host: the engine is the one that its Docker CLI selects. It must be a `unix://` engine.
+2. The client opens one SSH connection to it, or joins the connection that the processes of the user share by `ControlMaster` and `ControlPath` ([Share one SSH connection between processes](#share-one-ssh-connection-between-processes)).
+3. A path in the host names the engine socket ([Name the engine socket in the host](#name-the-engine-socket-in-the-host)). Without one, a session runs `docker context inspect --format '{{.Endpoints.docker.Host}}'` on the engine host: the engine is the one that its Docker CLI selects. It must be a `unix://` engine.
 4. Each connection of the HTTP client is a channel of the SSH connection to that socket (`direct-streamlocal@openssh.com`), not a process.
 
-An attach, an exec, followed logs and events each use their own channel. The client keeps idle channels for the next request. Disposal closes the SSH connection. While no request is in flight and no stream is held, the connection does not keep the process alive. When the process dies, also by `SIGKILL`, the kernel closes its connection, and the SSH server closes every channel and the engine sockets they opened: nothing is left on either machine.
+An attach, an exec, followed logs and events each use their own channel. The client keeps idle channels for the next request. Disposal closes the SSH connection, or ends this process's use of a shared one. While no request is in flight and no stream is held, the connection does not keep the process alive. When the process dies, also by `SIGKILL`, the kernel closes its connection, and the SSH server closes every channel and the engine sockets they opened: nothing is left on either machine.
 
 An `ssh://` engine needs the `environment` option, such as `process.env`: `ssh -G` runs with it, and the client reads `SSH_AUTH_SOCK` and `HOME` from it. Without it, `Docker.connect` rejects at once with a `ConnectionFailedError` that says so.
 

@@ -26,7 +26,7 @@ The directory where the Docker CLI keeps its contexts: `contexts/meta/<sha256 of
 The context that the Docker CLI selects when a command names none: `DOCKER_CONTEXT`, else `currentContext` in `config.json`, else `default`. When `DOCKER_HOST` is set, the CLI uses the `default` context with that host, whatever the current context is.
 
 **SSH channel**:
-What carries an HTTP connection to an SSH engine: a `direct-streamlocal@openssh.com` channel of the client's one SSH connection to the engine socket, which `@zukhruf/ssh` opens inside the Node process (ADR 0015). The Docker CLI uses a connection helper instead: an `ssh` process that starts `docker system dial-stdio` on the remote machine.
+What carries an HTTP connection to an SSH engine: a `direct-streamlocal@openssh.com` channel of the client's SSH connection (its own, or the one that the processes of the user share by ControlMaster) to the engine socket, which `@zukhruf/ssh` opens inside the Node process (ADR 0015). The Docker CLI uses a connection helper instead: an `ssh` process that starts `docker system dial-stdio` on the remote machine.
 _Avoid_: Connection helper (the old transport), tunnel, port forward (`@zukhruf/testing` forwards a container's port, which is another thing)
 
 **API version**:
