@@ -10,11 +10,10 @@ import { mariadb as collector } from './mysql-family-collector.ts';
 import {
   type MysqlFamilyDatabase,
   MysqlFamilyServer,
-  type OwnedPool,
   type PoolAccount,
   type PoolServer,
-  leak,
 } from './mysql-family-server.ts';
+import { type OwnedPool, disposablePool } from './owned-pools.ts';
 
 export type { Database, DatabaseOptions } from './database.ts';
 
@@ -100,14 +99,7 @@ function owned(config: PoolConfig): OwnedPool<MariadbPool> {
 export function mariadbPool(
   config: PoolConfig,
 ): AsyncDisposable & { readonly pool: MariadbPool } {
-  const { pool, end } = owned(config);
-  return {
-    pool,
-    async [Symbol.asyncDispose]() {
-      const leaked = await end();
-      if (leaked > 0) throw leak(leaked, 'a pool');
-    },
-  };
+  return disposablePool(owned(config), 'connection');
 }
 
 export class Mariadb extends MysqlFamilyServer<

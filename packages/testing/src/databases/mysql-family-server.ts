@@ -5,6 +5,7 @@ import { DockerTestbed } from '../docker/testbed.ts';
 import { KIND_LABEL, databaseName, dropDatabase } from './collector.ts';
 import type { Database, DatabaseOptions } from './database.ts';
 import { type MysqlFamilyCollector, user } from './mysql-family-collector.ts';
+import { type OwnedPool, OwnedPools } from './owned-pools.ts';
 import { succeeded } from './succeeded.ts';
 
 /** A handle of a database of the MySQL family that owns the pools it gives. */
@@ -26,17 +27,6 @@ export interface PoolAccount {
   user: string;
   password: string;
 }
-
-/** A pool and its end, which resolves with the number of connections that were still checked out. */
-export interface OwnedPool<Pool> {
-  readonly pool: Pool;
-  end(): Promise<number>;
-}
-
-export const leak = (count: number, of: string) =>
-  new Error(
-    `The disposal destroyed ${count} connection${count === 1 ? '' : 's'} of ${of} that ${count === 1 ? 'was' : 'were'} still checked out.`,
-  );
 
 /**
  * A template method for servers that speak MySQL's protocol and client flags:
@@ -206,16 +196,8 @@ export abstract class MysqlFamilyServer<Pool, PoolOptions> {
   ): MysqlFamilyDatabase<Pool, PoolOptions> {
     const { image, password } = this.#options;
     const { host, port } = container;
-    const pools: OwnedPool<Pool>[] = [];
-    let disposing = false;
-    const cleanup = async () => {
-      disposing = true;
-      const ending = pools.splice(0);
-      const leaked = await Promise.all(ending.map((pool) => pool.end()));
-      await release();
-      const count = leaked.reduce((sum, n) => sum + n, 0);
-      if (count > 0) throw leak(count, 'a pool of this database');
-    };
+    const pools = new OwnedPools<Pool>('connection');
+    const cleanup = () => pools.dispose(release);
     return {
       connectionString: `${this.scheme}://${user}:${password}@${host}:${port}/${database}`,
       image,
@@ -226,17 +208,10 @@ export abstract class MysqlFamilyServer<Pool, PoolOptions> {
       host,
       port,
       query: (sql) => this.#query(container, database, sql),
-      pool: (options) => {
-        if (disposing)
-          throw new Error('The disposal of this database has started.');
-        const pool = this.ownedPool({ host, port }, options, {
-          database,
-          user,
-          password,
-        });
-        pools.push(pool);
-        return pool.pool;
-      },
+      pool: (options) =>
+        pools.add(() =>
+          this.ownedPool({ host, port }, options, { database, user, password }),
+        ),
       cleanup,
       [Symbol.asyncDispose]: cleanup,
     };

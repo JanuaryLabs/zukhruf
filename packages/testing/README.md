@@ -216,7 +216,7 @@ The handle has `connectionString`, `host`, `port`, `user`, `password`, `database
 
 ### Take a pool from the database
 
-A handle of `Postgres`, `Mysql` or `Mariadb` gives `pool(options)`, from `database()` and from `start()`. The handle owns the pool: a `pg.Pool`, a `MysqlPool` (a pool of `mysql2/promise`) or a `MariadbPool` (a pool of `mariadb`). The disposal of the handle ends every pool of the handle, and then drops the database ([ADR 0026](./docs/adr/0026-a-database-handle-owns-its-pools-and-its-disposal-ends-them-before-it-drops-the-database.md)). Give the pool to the store under test, not the connection string.
+A handle of `Postgres`, `Mysql`, `Mariadb` or `SqlServer` gives `pool(options)`, from `database()` and from `start()`. The handle owns the pool: a `pg.Pool`, a `MysqlPool` (a pool of `mysql2/promise`), a `MariadbPool` (a pool of `mariadb`) or a connected `ConnectionPool` of `mssql`. The disposal of the handle ends every pool of the handle, and then drops the database ([ADR 0026](./docs/adr/0026-a-database-handle-owns-its-pools-and-its-disposal-ends-them-before-it-drops-the-database.md)). Give the pool to the store under test, not the connection string.
 
 ```ts
 import { Postgres } from '@zukhruf/testing/postgres';
@@ -290,7 +290,29 @@ Step 2 of the disposal differs for each driver:
 
 A connection that the test destroyed itself is not a leak. A test that has no handle takes a pool from `mysqlPool(options)` or `mariadbPool(config)`, which give `{ pool }` and its disposal, as `postgresPool` does.
 
-Install the driver of the area next to this package: `pg` for `postgres`, `mysql2` for `mysql`, and `mariadb` for `mariadb`. Each is an optional peer dependency. `SqlServer` gets `pool(options)` in the next step of ADR 0026.
+#### SQL Server
+
+`pool()` of `SqlServer` returns a promise of a connected `ConnectionPool`: mssql makes the tarn pool, whose events the disposal reads, only in `connect()`. The pool is the driver's class, so a store that takes a `ConnectionPool` and tests `instanceof` takes it, and `await using pool = await database.pool()` does not compile. The options are the `config` of `mssql` without `server` (optional again, for a proxy), `database`, `user`, `password`, `domain` and `authentication`, and their tedious `options` cannot name the database. The handle sets `encrypt: false` and `trustServerCertificate: true`, which the options can change. `pool()` rejects once the disposal started.
+
+```ts
+import { SqlServer } from '@zukhruf/testing/sqlserver';
+
+const sqlServer = new SqlServer({ environment: process.env });
+
+test('counts the items', async (t) => {
+  await using database = await sqlServer.database();
+  const pool = await database.pool({ pool: { max: 2 } });
+  await pool.request().batch('CREATE TABLE item (id int)');
+  const { recordset } = await pool
+    .request()
+    .query('SELECT COUNT(*) AS n FROM item');
+  t.assert.equal(recordset[0].n, 0);
+});
+```
+
+Step 2 of the disposal: it closes each connection that is checked out now (tedious `close()`, then waits for its `end`), gives it back to the pool, and then closes the pool. tarn reports a connection that it gives out only after mssql validated it, so the disposal also closes each connection that tarn reports while the pool closes. `close()` of mssql resolves once the socket of each connection has closed, but it waits with no limit for a connection that is checked out, so those close first. A test may close a pool itself: a second `close()` joins a close that runs, and resolves at once after one. SQL Server has no helper for a pool without a handle: no test of the three repositories needs one.
+
+Install the driver of the area next to this package: `pg` for `postgres`, `mysql2` for `mysql`, `mariadb` for `mariadb`, and `mssql` for `sqlserver`. Each is an optional peer dependency.
 
 ## HTTP servers and streams
 

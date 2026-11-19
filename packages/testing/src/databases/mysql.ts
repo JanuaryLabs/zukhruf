@@ -6,11 +6,10 @@ import { mysql as collector } from './mysql-family-collector.ts';
 import {
   type MysqlFamilyDatabase,
   MysqlFamilyServer,
-  type OwnedPool,
   type PoolAccount,
   type PoolServer,
-  leak,
 } from './mysql-family-server.ts';
+import { type OwnedPool, disposablePool } from './owned-pools.ts';
 
 export type { Database, DatabaseOptions } from './database.ts';
 
@@ -82,14 +81,7 @@ function owned(options: mysql.PoolOptions): OwnedPool<MysqlPool> {
 export function mysqlPool(
   options: mysql.PoolOptions,
 ): AsyncDisposable & { readonly pool: MysqlPool } {
-  const { pool, end } = owned(options);
-  return {
-    pool,
-    async [Symbol.asyncDispose]() {
-      const leaked = await end();
-      if (leaked > 0) throw leak(leaked, 'a pool');
-    },
-  };
+  return disposablePool(owned(options), 'connection');
 }
 
 export class Mysql extends MysqlFamilyServer<MysqlPool, MysqlPoolOptions> {

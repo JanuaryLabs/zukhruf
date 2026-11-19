@@ -1,6 +1,6 @@
 # A database handle owns its pools, and its disposal ends them before it drops the database
 
-Status: Accepted 2026-11-19 (Ezz). Built for `Postgres` (backlog #3759, step 1), and for `Mysql` and `Mariadb` (step 2, decision 8). `SqlServer` is the next step, and is not built.
+Status: Accepted 2026-11-19 (Ezz). Built for `Postgres` (backlog #3759, step 1), for `Mysql` and `Mariadb` (step 2, decision 8), and for `SqlServer` (step 3, decision 9). The list of pools and the order of the disposal are one module, `owned-pools.ts` (decision 10).
 
 A test makes a database with `database()` of `Postgres`, `Mysql`, `Mariadb` or `SqlServer`, and builds a pool of the driver from the handle's `connectionString`. The test ends the pool, and then the handle's disposal drops the database. Two things go wrong:
 
@@ -115,24 +115,36 @@ A test can end a pool itself. pg-pool sets `ending` when `end()` starts and `end
       - mariadb: `destroy()` of a connection with a command in flight sends `KILL` on a second connection and gives no sign when its socket closes (`lib/connection.js:731-800`). So the disposal kills each checked-out session itself, with `KILL CONNECTION <threadId>` on a connection of the same config, tolerates only `ER_NO_SUCH_THREAD` (1094, a session that ended meanwhile), and waits for each connection's `end`, which comes 1 to 2 ms after the KILL. Then it ends the pool, which no longer waits: no connection is active. The idle connections close in `end()`: mariadb destroys the socket right after COM_QUIT (`lib/connection.js:697-709`, `lib/cmd/quit.js`), so the client cannot see when the server ends those sessions; the drop needs no wait for them, because MySQL and MariaDB do not end a session at the drop.
    3. **A connection that the test destroyed is not a leak.** The leak count takes the checked-out connections whose mysql2 `state` is not `'disconnected'`, or whose mariadb `isValid()` is true. mysql2 still waits for the `end` of a destroyed connection. mariadb's destroy of a busy connection sends its own KILL, which the disposal does not wait for.
 
-   The leak error says "connection", the word of both drivers. The list of pools and the order of the disposal are copied from `postgres.ts` into `mysql-family-server.ts` (the copy ledger, #4874); the third copy, `SqlServer`, extracts them.
+   The leak error says "connection", the word of both drivers. Step 2 copied the list of pools and the order of the disposal from `postgres.ts` into `mysql-family-server.ts` (#4874); step 3 extracted them (decision 10).
 
-### Next step: SQL Server
+9. **SQL Server (step 3) follows decisions 1 to 7, with two differences.**
 
-It is not built. It follows the shape of decision 8: `pool(options)`, a disposal that cannot meet a pool that the test ended, the forced close and the socket-closed signal of the table above, and the drop after the last pool.
+   ```ts
+   // @zukhruf/testing/sqlserver (mssql)
+   export type SqlServerPoolOptions = Omit<
+     sql.config,
+     | 'server'
+     | 'database'
+     | 'user'
+     | 'password'
+     | 'domain'
+     | 'authentication'
+     | 'options'
+   > & { server?: string; options?: Omit<sql.IOptions, 'database'> };
+   export interface SqlServerDatabase extends Database {
+     pool(options?: SqlServerPoolOptions): Promise<sql.ConnectionPool>;
+   }
+   // SqlServer#database(): Promise<SqlServerDatabase>; SqlServer#start(): Promise<SqlServerDatabase>
+   ```
 
-```ts
-// @zukhruf/testing/sqlserver (mssql)
-export type SqlServerPoolOptions = Omit<
-  sql.config,
-  'server' | 'database' | 'user' | 'password' | 'authentication'
-> & { server?: string };
-export interface SqlServerDatabase extends Database {
-  pool(options?: SqlServerPoolOptions): Promise<sql.ConnectionPool>;
-}
-```
+   1. **`pool()` returns a promise, which resolves once the pool is connected.** mssql makes the tarn pool, whose events the disposal reads, only in `connect()` (`mssql/lib/base/connection-pool.js:521`), and it rejects `close()` while it connects ("Cannot close a pool while it is connecting", `:604-608`). The handle keeps the pool before it connects, so a disposal that starts during `connect()` waits for it, and a pool that did not connect has nothing to close. Once the disposal started, the promise rejects. The tedious `options` cannot name the database either: mssql takes `options.database` before `database` (`mssql/lib/tedious/connection-pool.js:40`). The handle sets `encrypt: false` and `trustServerCertificate: true`, as its connection string does.
+   2. **The type is the driver's class, as in decision 1, not a type without `close`.** The disposal can meet a pool that the test closed: `close()` resolves at once when the pool has no tarn pool any more, and joins the running close when it has one (`_closeStack`, `connection-pool.js:610-617`). Probed on 2026-11-19 on `DOCKER_CONTEXT=mac-mini`: two concurrent `close()` calls and a third after them all resolve. deepagents' `SqlServerContextStore` takes `config | string | ConnectionPool` and leaves a pool alone when it is `instanceof mssql.ConnectionPool` (`packages/context/src/lib/store/sqlserver.store.ts:159`, `:191-196`), so a type without `close` would not reach it. `ConnectionPool` has no `[Symbol.asyncDispose]`, so `await using pool = await database.pool()` does not compile. Open question 4 is answered: mssql needs no "already ending" sign.
 
-`pool()` of `SqlServer` resolves once the pool is connected, as `new ConnectionPool(config).connect()` of mssql does, because the tarn pool, whose events the disposal reads, exists only then.
+   The forced close is the one of the table: for each connection that tarn gave out (`acquireSuccess`) and did not get back (`release`), tedious `close()`, then a wait for its `end`, then `release(connection)` on the tarn pool, and then `close()` of the pool. The same probe: a pool with a begun transaction did not close in 2 s, and closed once its connection was closed and given back; the transaction's later `rollback()` fails with "Requests can only be made in the LoggedIn state, not the Final state". tedious emits `end` once, in `cleanupConnection`, only when the connection is not closed (`tedious/lib/connection.js:1195-1201`), so the disposal waits for `end` only of a connection that is still open, and gives back a closed one at once. tarn puts a connection into its used list before mssql validates it (`tarn/dist/Pool.js:284-287`; mssql validates with `SELECT 1` unless `validateConnection` is false, `mssql/lib/base/connection-pool.js:73`), and emits `acquireSuccess` only after the validation. So a connection that a test asks for just before the disposal is used but not yet reported, and a disposal that closed only the connections it knew when it started let `close()` wait for it forever: the first run of the leak test hung to the runner's 240 s limit, with its `WAITFOR` still running on the server (reproduced in a probe: `borrowed` was 2 while `acquireSuccess` had fired once, and fired 24 ms later). Thus once the disposal started, the disposal also closes each connection that tarn reports from then on, before `close()` can get past it (tarn's `destroy()` waits for the validations, then for the used connections, `:206-209`). Every connection that the disposal closed while it was checked out counts as a leak: unlike mysql2's `destroy()`, tarn has no call by which a test gives up a connection without its release. A test that closes a pool and connects it again gets a new tarn pool, which the disposal still closes, but whose checked-out connections it does not see.
+
+   The tests run on `DOCKER_CONTEXT=mac-mini` (Apple M1, SQL Server 2022 under QEMU): on this machine's M4 Pro, SQL Server 2022 aborts at its start under both Rosetta and QEMU (#4579, part 1).
+
+10. **One module holds the pools of a handle.** `OwnedPools<Pool>` of `src/databases/owned-pools.ts` is the shared part of the three copies (`postgres.ts`, `mysql-family-server.ts`, `sqlserver.ts`): `add(build)` keeps the pool that `build` makes, and throws once the disposal started; `dispose(release)` ends every pool at the same time, then runs `release` (the drop, or the removal of the container), then throws the leak count. Its constructor takes the word of the driver, `'client'` (pg) or `'connection'`. `disposablePool(owned, member)` is the disposal of `postgresPool`, `mysqlPool` and `mariadbPool`, the same knowledge in three places. Each driver's `OwnedPool` (its tracking, forced close and signal) stays in its area. The module imports no driver.
 
 ## Considered Options
 
@@ -155,11 +167,11 @@ export interface SqlServerDatabase extends Database {
 - A project that imports `@zukhruf/testing/postgres` installs `pg`; one that imports `mysql` installs `mysql2`, and one that imports `mariadb` installs `mariadb`.
 - A string still reaches `new pg.Pool` in a test's own process, and no type stops that. The lint ban on `new pg.Pool` in mutex's tests (`eslint.config.mjs`) stays, and points at `postgresPool` and `database.pool()`.
 - MySQL and MariaDB do not end a session when its database is dropped (the drop has no FORCE: [mysql-family-collector.ts](../../src/databases/mysql-family-collector.ts)), so they have no 57P01. Their risk is a session that outlives its pool: a drop that waits for its metadata lock, or a waiter in `GET_LOCK` that stays on the server. The tests of step 2 prove the wait by the server's `PROCESSLIST` after the disposal: through a proxy that forwards a client's bytes 1 s late, a disposal that does not wait leaves the sessions of the pool on the server. SQL Server ends the other sessions with `ROLLBACK IMMEDIATE` ([sqlserver-collector.ts](../../src/databases/sqlserver-collector.ts)). mssql's `close()` already waits for each socket of an idle connection, so its risk is only the checked-out connection, which makes `close()` wait with no limit.
-- Then, in this order (#3759): SQL Server, then a release. deepagents #3369 then moves its `pool: <db>.connectionString` places to `pool: <db>.pool()`, factory #3370 moves, and #3305 closes.
+- Then, in this order (#3759): a release. deepagents #3369 then moves its `pool: <db>.connectionString` places to `pool: <db>.pool()`, factory #3370 moves, and #3305 closes.
 
 ## Open questions for the next steps
 
 1. **Single connections.** A test also builds a `pg.Client`, a connection of `mysql.createConnection` or `mariadb.createConnection`, or a tedious `Connection`, for an admin session, an observer, or a store that opens one connection for each session. mutex's `SqlServerStore` subject builds no pool: it opens one tedious `Connection` for each session (`packages/mutex/src/testing/subjects/sqlserver.ts:33-74`). Does the handle own these connections too, for example with `connection(options)`?
 2. **The forced close of mysql2.** Answered in decision 8: MySQL ends a session in `GET_LOCK` within about 1 s of the client's FIN, so `destroy()` is the forced close.
 3. **The flavor of mysql2.** Only `mysql2/promise`, which mutex uses; no consumer needs the callback pool, and `MysqlPool` hides it.
-4. **A pool that the test ended itself.** mysql2 has no public signal, so decision 8 removes `end` from the types of both MySQL-family pools. For mssql, find the signal before its step.
+4. **A pool that the test ended itself.** mysql2 has no public signal, so decision 8 removes `end` from the types of both MySQL-family pools. mssql needs none: a second `close()` is safe (decision 9).

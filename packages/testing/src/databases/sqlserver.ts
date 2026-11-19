@@ -1,3 +1,5 @@
+import { once } from 'node:events';
+
 import sql from 'mssql';
 
 import { timebox } from '../async/timebox.ts';
@@ -6,6 +8,7 @@ import type { ServiceContainer } from '../docker/service-container.ts';
 import { DockerTestbed } from '../docker/testbed.ts';
 import { KIND_LABEL, databaseName, dropDatabase } from './collector.ts';
 import type { Database, DatabaseOptions } from './database.ts';
+import { type OwnedPool, OwnedPools } from './owned-pools.ts';
 import {
   type SqlServerServer,
   connectionString,
@@ -16,6 +19,93 @@ export type { Database, DatabaseOptions } from './database.ts';
 
 export const SQL_SERVER_FULL_IMAGE =
   'mcr.microsoft.com/mssql/server:2022-latest';
+
+/**
+ * The options of a pool of a handle: the handle names the database and the
+ * user. The options name the rest, also the server and the port, so a test
+ * can route a pool through a proxy.
+ */
+export type SqlServerPoolOptions = Omit<
+  sql.config,
+  | 'server'
+  | 'database'
+  | 'user'
+  | 'password'
+  | 'domain'
+  | 'authentication'
+  | 'options'
+> & {
+  server?: string;
+  options?: Omit<sql.IOptions, 'database'>;
+};
+
+/** A handle of a SQL Server database that owns the pools it gives. */
+export interface SqlServerDatabase extends Database {
+  /**
+   * A connected pool of this database; the disposal of the handle closes it
+   * before the drop. It resolves once the pool is connected: mssql makes the
+   * tarn pool, whose events the disposal reads, only in `connect()`.
+   */
+  pool(options?: SqlServerPoolOptions): Promise<sql.ConnectionPool>;
+}
+
+/** A tedious connection of a pool, as tarn gives it. */
+type PoolConnection = Parameters<sql.ConnectionPool['pool']['release']>[0];
+
+/**
+ * Closes the pool fully, and resolves with the number of connections that it
+ * closed while they were checked out. `close()` resolves once each idle
+ * connection's socket has closed (tedious `end`), but it waits for a
+ * checked-out connection with no limit; so each of those is closed first and
+ * given back to tarn. tarn counts a connection as used while mssql validates
+ * it, and reports it (`acquireSuccess`) only after that, so a connection that
+ * tarn gives out during the disposal is closed when tarn reports it.
+ * `close()` can run again after the test closed the pool: it joins a close
+ * that is running, and resolves at once after one.
+ */
+function owned(config: sql.config): OwnedPool<Promise<sql.ConnectionPool>> {
+  const pool = new sql.ConnectionPool(config);
+  const ending = new AbortController();
+  const checkedOut = new Set<PoolConnection>();
+  const forced: Promise<void>[] = [];
+  const forceClose = (
+    tarn: sql.ConnectionPool['pool'],
+    connection: PoolConnection,
+  ) =>
+    forced.push(
+      (async () => {
+        // tedious emits `end` once, when it closes the connection.
+        if (!connection.closed) {
+          const ended = once(connection, 'end');
+          connection.close();
+          await ended;
+        }
+        tarn.release(connection);
+      })(),
+    );
+  const connected = pool.connect().then(() => {
+    const tarn = pool.pool;
+    tarn.on('acquireSuccess', (_id, connection) => {
+      if (ending.signal.aborted) forceClose(tarn, connection);
+      else checkedOut.add(connection);
+    });
+    tarn.on('release', (connection) => checkedOut.delete(connection));
+    return tarn;
+  });
+  return {
+    pool: connected.then(() => pool),
+    async end() {
+      const tarn = await connected.catch(() => undefined);
+      // A pool that did not connect has no connection to close.
+      if (tarn === undefined) return 0;
+      ending.abort();
+      for (const connection of [...checkedOut]) forceClose(tarn, connection);
+      await pool.close();
+      await Promise.all(forced);
+      return forced.length;
+    },
+  };
+}
 
 /**
  * SQL Server test configuration. The full image is the default on every
@@ -40,7 +130,7 @@ export class SqlServer {
   }
 
   /** Create an isolated database on the persistent shared server. */
-  async database(): Promise<Database> {
+  async database(): Promise<SqlServerDatabase> {
     const { image } = this.#options;
     const container = await this.#acquire(image, 'reuse');
     const database = databaseName(this.#runId);
@@ -67,7 +157,7 @@ export class SqlServer {
   }
 
   /** Start a dedicated server; the returned handle owns its container. */
-  async start(): Promise<Database> {
+  async start(): Promise<SqlServerDatabase> {
     const { image, database } = this.#options;
     const container = await this.#acquire(image, 'serve');
     try {
@@ -153,18 +243,40 @@ export class SqlServer {
     container: ServiceContainer,
     image: string,
     database: string,
-    cleanup: () => Promise<void>,
-  ): Database {
+    release: () => Promise<void>,
+  ): SqlServerDatabase {
     const { password } = this.#options;
+    const { host, port } = container;
+    const user = 'sa';
+    const pools = new OwnedPools<Promise<sql.ConnectionPool>>('connection');
+    const cleanup = () => pools.dispose(release);
     return {
       connectionString: this.#connectionString(container, database),
       image,
-      user: 'sa',
+      user,
       password,
       database,
       containerId: container.container.id,
-      host: container.host,
-      port: container.port,
+      host,
+      port,
+      // async: once the disposal started, the promise rejects.
+      pool: async (options) =>
+        pools.add(() =>
+          owned({
+            server: host,
+            port,
+            ...options,
+            options: {
+              encrypt: false,
+              trustServerCertificate: true,
+              ...options?.options,
+              database,
+            },
+            database,
+            user,
+            password,
+          }),
+        ),
       cleanup,
       [Symbol.asyncDispose]: cleanup,
     };

@@ -6,6 +6,7 @@ import type { ServiceContainer } from '../docker/service-container.ts';
 import { DockerTestbed } from '../docker/testbed.ts';
 import { KIND_LABEL, databaseName, dropDatabase } from './collector.ts';
 import type { Database, DatabaseOptions } from './database.ts';
+import { type OwnedPool, OwnedPools, disposablePool } from './owned-pools.ts';
 import { postgres } from './postgres-collector.ts';
 import { succeeded } from './succeeded.ts';
 
@@ -27,20 +28,12 @@ export interface PostgresDatabase extends Database {
   pool(options?: PostgresPoolOptions): pg.Pool;
 }
 
-const leak = (count: number, of: string) =>
-  new Error(
-    `The disposal destroyed ${count} client${count === 1 ? '' : 's'} of ${of} that ${count === 1 ? 'was' : 'were'} still checked out.`,
-  );
-
 /**
  * Ends `pool` fully and resolves with the number of clients that were still
  * checked out. `pool.end()` resolves before the sockets of its clients close
  * (#3305); a pool sends 'remove' once a client's socket has closed.
  */
-function owned(config: pg.PoolConfig): {
-  pool: pg.Pool;
-  end(): Promise<number>;
-} {
+function owned(config: pg.PoolConfig): OwnedPool<pg.Pool> {
   const pool = new pg.Pool(config);
   const open = new Set<pg.PoolClient>();
   const checkedOut = new Set<pg.PoolClient>();
@@ -71,14 +64,7 @@ function owned(config: pg.PoolConfig): {
 export function postgresPool(
   config: pg.PoolConfig,
 ): AsyncDisposable & { readonly pool: pg.Pool } {
-  const { pool, end } = owned(config);
-  return {
-    pool,
-    async [Symbol.asyncDispose]() {
-      const leaked = await end();
-      if (leaked > 0) throw leak(leaked, 'a pool');
-    },
-  };
+  return disposablePool(owned(config), 'client');
 }
 
 /** PostgreSQL test configuration. Each acquisition returns an independent handle. */
@@ -208,16 +194,8 @@ export class Postgres {
   ): PostgresDatabase {
     const { image, user, password } = this.#options;
     const { host, port } = container;
-    const pools: ReturnType<typeof owned>[] = [];
-    let disposing = false;
-    const cleanup = async () => {
-      disposing = true;
-      const ending = pools.splice(0);
-      const leaked = await Promise.all(ending.map((pool) => pool.end()));
-      await release();
-      const count = leaked.reduce((sum, n) => sum + n, 0);
-      if (count > 0) throw leak(count, 'a pool of this database');
-    };
+    const pools = new OwnedPools<pg.Pool>('client');
+    const cleanup = () => pools.dispose(release);
     return {
       connectionString: `postgresql://${user}:${password}@${host}:${port}/${database}`,
       image,
@@ -227,21 +205,11 @@ export class Postgres {
       containerId: container.container.id,
       host,
       port,
-      pool(options) {
-        if (disposing)
-          throw new Error('The disposal of this database has started.');
+      pool: (options) =>
         // A connection string would override the options' host and port.
-        const pool = owned({
-          host,
-          port,
-          ...options,
-          database,
-          user,
-          password,
-        });
-        pools.push(pool);
-        return pool.pool;
-      },
+        pools.add(() =>
+          owned({ host, port, ...options, database, user, password }),
+        ),
       cleanup,
       [Symbol.asyncDispose]: cleanup,
     };
