@@ -33,6 +33,7 @@ import noEnum from '../language/no-enum.ts';
 import noTsBesideDts from '../language/no-ts-beside-dts.ts';
 import noIngredientsName from '../naming/no-ingredients-name.ts';
 import noReflectGetChain from '../payloads/no-reflect-get-chain.ts';
+import noProcessGlobalWrite from '../process-state/no-process-global-write.ts';
 import { workspaceRootOf } from '../workspace/workspace-root.ts';
 import noAddIssueString from '../zod/no-add-issue-string.ts';
 import { noFloatingPromises, noLet, noUnassignedImport } from './options.ts';
@@ -58,6 +59,7 @@ const rules = {
   'no-ts-beside-dts': noTsBesideDts,
   'no-ingredients-name': noIngredientsName,
   'no-reflect-get-chain': noReflectGetChain,
+  'no-process-global-write': noProcessGlobalWrite,
   'no-add-issue-string': noAddIssueString,
   ...importBans,
 };
@@ -217,6 +219,14 @@ export const base: Concept = {
         name: 'zukhruf/base/payloads',
         files: SOURCE,
         rules: { 'zukhruf/no-reflect-get-chain': 'error' },
+      },
+      {
+        // A process-wide global (console) patched in one module changes every
+        // other module, in shipped code and in tests alike, and no call site
+        // shows the patch.
+        name: 'zukhruf/base/process-state',
+        files: SOURCE,
+        rules: { 'zukhruf/no-process-global-write': 'error' },
       },
       {
         // A module-scope `let` is a global, and the functions that read it

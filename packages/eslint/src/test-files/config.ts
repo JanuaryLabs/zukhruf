@@ -4,6 +4,7 @@ import noAssertInRetryUntilReady from './no-assert-in-retry-until-ready.ts';
 import noCatchAllMswHandler from './no-catch-all-msw-handler.ts';
 import noDirectMswServer from './no-direct-msw-server.ts';
 import noGlobalTestMock from './no-global-test-mock.ts';
+import noOwnModuleMock from './no-own-module-mock.ts';
 import noOwnWaitLimit from './no-own-wait-limit.ts';
 import noProcessEnvWrite from './no-process-env-write.ts';
 import noShortTestTimeout from './no-short-test-timeout.ts';
@@ -11,6 +12,7 @@ import noSleepPollLoop from './no-sleep-poll-loop.ts';
 import noTestLifecycleHooks from './no-test-lifecycle-hooks.ts';
 import noTimerRace from './no-timer-race.ts';
 import noWallClockBound from './no-wall-clock-bound.ts';
+import oneTestRunner from './one-test-runner.ts';
 
 const rules = {
   'no-test-lifecycle-hooks': noTestLifecycleHooks,
@@ -24,6 +26,8 @@ const rules = {
   'no-own-wait-limit': noOwnWaitLimit,
   'no-global-test-mock': noGlobalTestMock,
   'no-assert-in-retry-until-ready': noAssertInRetryUntilReady,
+  'no-own-module-mock': noOwnModuleMock,
+  'one-test-runner': oneTestRunner,
 };
 
 export const tests: Concept = {
