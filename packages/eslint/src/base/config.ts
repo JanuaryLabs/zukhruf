@@ -10,6 +10,7 @@ import noPromiseField from '../async-values/no-promise-field.ts';
 import noPhaseFlag from '../class-state/no-phase-flag.ts';
 import noCapturedAssignment from '../closure-state/no-captured-assignment.ts';
 import { type Concept, enable } from '../concept.ts';
+import noNodeEnv from '../environment/no-node-env.ts';
 import {
   BUILD_OUTPUT,
   COMMONJS,
@@ -45,6 +46,7 @@ const rules = {
   'no-phase-flag': noPhaseFlag,
   'no-collect-loop': noCollectLoop,
   'no-captured-assignment': noCapturedAssignment,
+  'no-node-env': noNodeEnv,
   ...importBans,
 };
 
@@ -180,6 +182,13 @@ export const base: Concept = {
         name: 'zukhruf/base/async-values',
         files: SOURCE,
         rules: { 'zukhruf/no-collect-loop': 'error' },
+      },
+      {
+        // NODE_ENV is production on a laptop, in CI and in production, so code
+        // that branches on it never switches. Tools still read it.
+        name: 'zukhruf/base/node-env',
+        files: SOURCE,
+        rules: { 'zukhruf/no-node-env': 'error' },
       },
       {
         // A module-scope `let` is a global, and the functions that read it
