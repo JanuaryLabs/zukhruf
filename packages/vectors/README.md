@@ -90,6 +90,23 @@ await pool.request().input('q', mssql.NVarChar(mssql.MAX), toSql(query)).query(`
     ORDER BY distance`);
 ```
 
+A program declares a column before its first row, so it has only the vector type and the dimensions. `sqlType(type, dimensions)` gives the column type:
+
+```ts
+import { HalfVector, Vector } from '@zukhruf/vectors';
+import { sqlType } from '@zukhruf/vectors/sqlserver';
+
+sqlType(Vector, 1536); // 'VECTOR(1536)'
+sqlType(HalfVector, 3072); // 'VECTOR(3072, float16)'
+await pool
+  .request()
+  .query(
+    `CREATE TABLE chunks (id INT PRIMARY KEY, embedding ${sqlType(Vector, 1536)} NOT NULL)`,
+  );
+```
+
+A number of dimensions that is not a positive integer is a `RangeError`. The program refuses more dimensions than its server keeps.
+
 The approximate search of Azure SQL is the program's own SQL too:
 
 ```sql
@@ -167,6 +184,10 @@ function fromSql<
 // @zukhruf/vectors/sqlserver
 function toSql(vector: Vector | HalfVector): string; // JSON text with 9 or 5 significant digits
 function sqlType(vector: Vector | HalfVector): string; // 'VECTOR(384)' or 'VECTOR(384, float16)'
+function sqlType(
+  type: typeof Vector | typeof HalfVector,
+  dimensions: number,
+): string; // the column type before the first row
 function fromSql<T extends typeof Vector | typeof HalfVector>(
   type: T,
   text: string,

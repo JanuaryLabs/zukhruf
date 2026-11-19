@@ -40,6 +40,10 @@ _Avoid_: Backend, adapter, store, driver
 The value of a vector that an engine reads and writes: bytes for SQLite, JSON text for SQL Server. `toSql` makes it and `fromSql` reads it.
 _Avoid_: Serialization, encoding, wire format
 
+**SQL type**:
+The type that SQL Server gives a vector: `VECTOR(n)` for a vector, `VECTOR(n, float16)` for a half vector. `sqlType` makes it from a vector, or from a vector type and a number of dimensions, for a column that has no row yet.
+_Avoid_: Column type, data type
+
 **Host**:
 The program that writes the SQL, runs it with its own driver, and puts the values of this package into it.
 _Avoid_: Consumer, client, caller (for the program as a whole)

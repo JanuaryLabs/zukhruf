@@ -14,10 +14,31 @@ export function toSql(vector: Vector | HalfVector): string {
 }
 
 /** The type of a `CAST`: `VECTOR(n)` for a `Vector`, `VECTOR(n, float16)` for a `HalfVector`. */
-export function sqlType(vector: Vector | HalfVector): string {
-  return vector instanceof HalfVector
-    ? `VECTOR(${vector.dimensions}, float16)`
-    : `VECTOR(${vector.dimensions})`;
+export function sqlType(vector: Vector | HalfVector): string;
+/**
+ * The type of a column that holds vectors of this type and number of
+ * dimensions: `sqlType(HalfVector, 3072)` is `'VECTOR(3072, float16)'`. A
+ * number of dimensions that is not a positive integer is a `RangeError`.
+ */
+export function sqlType(
+  type: typeof Vector | typeof HalfVector,
+  dimensions: number,
+): string;
+export function sqlType(
+  ...args:
+    | [vector: Vector | HalfVector]
+    | [type: typeof Vector | typeof HalfVector, dimensions: number]
+): string {
+  const [half, dimensions] =
+    args.length === 1
+      ? [args[0] instanceof HalfVector, args[0].dimensions]
+      : [args[0] === HalfVector, args[1]];
+  if (!Number.isInteger(dimensions) || dimensions < 1) {
+    throw new RangeError(
+      `A vector has a positive integer number of dimensions, not ${dimensions}`,
+    );
+  }
+  return half ? `VECTOR(${dimensions}, float16)` : `VECTOR(${dimensions})`;
 }
 
 /**

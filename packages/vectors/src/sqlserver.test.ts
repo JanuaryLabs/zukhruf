@@ -220,3 +220,75 @@ test('fromSql refuses text that is not a JSON array of numbers', () => {
     assert.throws(() => fromSql(Vector, text), RangeError, text);
   }
 });
+
+test('a table declared from sqlType of a type and dimensions, before its first row, has a column of that element type and those dimensions', async () => {
+  // Arrange
+  await using database = await new SqlServer({
+    environment: process.env,
+    image,
+  }).database();
+  const pool = await new mssql.ConnectionPool(
+    database.connectionString,
+  ).connect();
+  try {
+    // Platform setup that no operation of the package exposes: SQL Server 2025
+    // keeps float16 vectors behind PREVIEW_FEATURES; Azure SQL has them by default.
+    await pool
+      .request()
+      .query('ALTER DATABASE SCOPED CONFIGURATION SET PREVIEW_FEATURES = ON');
+    const vector = Vector.from([0.5, -1.25, 3]);
+    const half = HalfVector.from([0.5, -1.25, 3, 0.75]);
+
+    // Act
+    await pool
+      .request()
+      .query(
+        `CREATE TABLE chunks (id INT PRIMARY KEY, full_embedding ${sqlType(Vector, 3)} NOT NULL, half_embedding ${sqlType(HalfVector, 4)} NOT NULL)`,
+      );
+    await pool
+      .request()
+      .input('full', mssql.NVarChar(mssql.MAX), toSql(vector))
+      .input('half', mssql.NVarChar(mssql.MAX), toSql(half))
+      .query(
+        `INSERT INTO chunks VALUES (1, CAST(@full AS ${sqlType(vector)}), CAST(@half AS ${sqlType(half)}))`,
+      );
+    const columns = await pool.request().query(
+      `SELECT name, vector_dimensions, vector_base_type_desc FROM sys.columns
+         WHERE object_id = OBJECT_ID('chunks') AND name LIKE '%embedding' ORDER BY name`,
+    );
+    const rows = await pool.request().query('SELECT COUNT(*) AS n FROM chunks');
+
+    // Assert
+    assert.deepEqual(
+      columns.recordset.map((column) => [
+        column['name'],
+        column['vector_dimensions'],
+        column['vector_base_type_desc'],
+      ]),
+      [
+        ['full_embedding', 3, 'float32'],
+        ['half_embedding', 4, 'float16'],
+      ],
+    );
+    assert.equal(rows.recordset[0]?.['n'], 1);
+  } finally {
+    await pool.close();
+  }
+});
+
+test('sqlType refuses a number of dimensions that is not a positive integer', () => {
+  // Arrange
+  const counts = [0, -3, 1.5, Number.NaN, Number.POSITIVE_INFINITY];
+
+  for (const type of [Vector, HalfVector]) {
+    for (const dimensions of counts) {
+      // Act and Assert
+      assert.throws(
+        () => sqlType(type, dimensions),
+        RangeError,
+        `${type.name} ${dimensions}`,
+      );
+    }
+  }
+  assert.throws(() => sqlType(Vector.from([])), RangeError, 'an empty vector');
+});
