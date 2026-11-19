@@ -648,10 +648,11 @@ describe('an ssh:// host that names the engine socket', () => {
     { skip },
     async (t) => {
       // Arrange: the sessions of this sshd find no docker CLI, so a lookup of
-      // the engine socket on the host fails.
+      // the engine socket on the host fails. Their PATH is a directory that
+      // does not exist: /usr/bin holds the docker CLI on a Linux runner.
       const { engineSocket } = ready(engine);
       await using sshd = await startEngineSshd({
-        PATH: '/usr/bin:/bin',
+        PATH: '/nonexistent',
         DOCKER_HOST: `unix://${engineSocket}`,
       });
       const sshFlags = await clientFlags(sshd);
