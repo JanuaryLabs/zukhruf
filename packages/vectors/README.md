@@ -120,6 +120,28 @@ await client.query('SELECT id FROM items ORDER BY embedding <=> $1 LIMIT 10', [
 ]);
 ```
 
+### Cache embeddings
+
+Wrap the AI SDK model once. Each `embed` and `embedMany` call through it calls the model only for text it did not embed before ([ADR 0009](./docs/adr/0009-the-embedding-cache-is-a-middleware-of-the-ai-sdk-model-in-the-subpath-embedding-cache.md)). This subpath needs `ai`; the others need nothing.
+
+```ts
+import { embedMany, wrapEmbeddingModel } from 'ai';
+
+import { embeddingCacheMiddleware } from '@zukhruf/vectors/embedding-cache';
+import { SqliteEmbeddingCacheStore } from '@zukhruf/vectors/sqlite';
+
+const model = wrapEmbeddingModel({
+  model: openai.embedding('text-embedding-3-small'),
+  middleware: embeddingCacheMiddleware({
+    store: new SqliteEmbeddingCacheStore({
+      database,
+      table: 'embedding_cache',
+    }),
+  }),
+});
+const { embeddings } = await embedMany({ model, values: texts }); // misses only reach OpenAI
+```
+
 ## API
 
 ```ts
@@ -238,7 +260,7 @@ The package is designed for its domain. Each program below moves onto it and dro
 | Context Compiler        | through `@zukhruf/embeddings`                                      | the same                                       |
 | datahub                 | none                                                               | `sqlserver.toSql`, `sqlType`                   |
 
-The cache that embeds only changed text is not in this package ([ADR 0008](./docs/adr/0008-the-embedding-cache-decorates-the-model-and-lives-outside-this-package.md)).
+The cache that embeds only new text is the subpath `/embedding-cache` ([ADR 0009](./docs/adr/0009-the-embedding-cache-is-a-middleware-of-the-ai-sdk-model-in-the-subpath-embedding-cache.md)); `vector-decisions` and `@zukhruf/embeddings` move onto it.
 
 ## Later
 
