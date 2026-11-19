@@ -112,6 +112,12 @@ export default defineConfig(
     plugins: { zukhruf },
     extends: ['zukhruf/react', 'zukhruf/tailwind'],
   },
+  // The loader guard throws React Router's replace(), as a loader does.
+  {
+    files: ['packages/authentication/src/react-router*.ts'],
+    plugins: { zukhruf },
+    extends: ['zukhruf/react-router'],
+  },
   // Modern Node is for code that runs on Node, and these packages run in
   // browsers (packages/eslint/docs/adr/0008).
   {

@@ -1,0 +1,65 @@
+{
+  "name": "@zukhruf/authentication",
+  "version": "0.8.34",
+  "description": "The better-auth session at the edges of an app: a Hono middleware that refuses a request without a session or without two-factor, and a React Router loader guard that sends a visitor to sign in and back on a safe return path.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JanuaryLabs/zukhruf",
+    "directory": "packages/authentication"
+  },
+  "bugs": {
+    "url": "https://github.com/JanuaryLabs/zukhruf/issues"
+  },
+  "homepage": "https://github.com/JanuaryLabs/zukhruf/tree/main/packages/authentication#readme",
+  "keywords": [
+    "authentication",
+    "better-auth",
+    "hono",
+    "react-router",
+    "session",
+    "two-factor"
+  ],
+  "type": "module",
+  "exports": {
+    "./package.json": "./package.json",
+    "./hono": {
+      "@zukhruf/source": "./src/hono.ts",
+      "types": "./dist/hono.d.ts",
+      "import": "./dist/hono.js",
+      "default": "./dist/hono.js"
+    },
+    "./react-router": {
+      "@zukhruf/source": "./src/react-router.ts",
+      "types": "./dist/react-router.d.ts",
+      "import": "./dist/react-router.js",
+      "default": "./dist/react-router.js"
+    }
+  },
+  "files": [
+    "dist",
+    "!dist/spec/**",
+    "!**/*.tsbuildinfo",
+    "!**/*.test.*"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "peerDependencies": {
+    "hono": "^4.13.19",
+    "react-router": "^8.5.2"
+  },
+  "peerDependenciesMeta": {
+    "hono": {
+      "optional": true
+    },
+    "react-router": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "better-auth": "1.7.26",
+    "hono": "^4.13.19",
+    "react-router": "^8.5.2"
+  }
+}

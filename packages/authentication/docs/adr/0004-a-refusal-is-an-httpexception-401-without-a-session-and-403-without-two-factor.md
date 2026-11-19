@@ -1,6 +1,6 @@
 # A refusal is an HTTPException: 401 without a session, 403 without two-factor
 
-Status: proposed, for review (#4717).
+Status: accepted by Ezz on 2026-11-19.
 
 The copies throw `new HTTPException(401, { message: 'Authentication required', cause: { code: 'api/unauthenticated', detail } })` (thing, pm, iworked, text2sql v1). An `@zukhruf/nx:node-app` backend answers every `HTTPException` in its `onError` with `{ error: message, cause }` and its status. `@hono/auth-js`, `hono/jwt`, `hono/basic-auth` and `hono/bearer-auth` also throw `HTTPException(401)`. A cookie session sends no `WWW-Authenticate` header, as in `@hono/auth-js`.
 

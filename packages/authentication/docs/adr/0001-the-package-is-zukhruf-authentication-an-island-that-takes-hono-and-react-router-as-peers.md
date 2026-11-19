@@ -1,6 +1,6 @@
 # The package is @zukhruf/authentication, an island that takes Hono and React Router as peers
 
-Status: proposed, for review (#4717).
+Status: accepted by Ezz on 2026-11-19.
 
 Six repositories run better-auth behind Hono: text2sql (v1 and authx), thing, blackboard, iworked and pm. Each one mounts the handler, reads the session in a middleware of its own, and turns a missing session into a 401 (text2sql v1, thing, iworked and pm). Three browser apps guard their pages with a loader that reads the session and redirects to sign-in (text2sql v1, blackboard, thing with two copies). That is strike four for the middleware and strike four for the guard (root [ADR 0001](../../../../docs/adr/0001-zukhruf-is-a-layered-standard-library.md), rule 2). Ezz chose on 2026-11-19 to move them into zukhruf and to make the new Meddit app the first host, with only the active repositories migrating.
 

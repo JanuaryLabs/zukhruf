@@ -1,6 +1,6 @@
 # A failed session read is AuthenticationUnavailableError, never "signed out"
 
-Status: proposed, for review (#4717).
+Status: accepted by Ezz on 2026-11-19.
 
 text2sql #1906: with its identity provider offline, the v2 app showed React Router's "Unexpected Application Error!", a stack trace and no way to recover on every page, because `requiresAuth` let the failed fetch through and the router had no error element. Treating the failure as "no session" is no better: it sends a signed-in user to the sign-in page, and the sign-in page fails the same way.
 

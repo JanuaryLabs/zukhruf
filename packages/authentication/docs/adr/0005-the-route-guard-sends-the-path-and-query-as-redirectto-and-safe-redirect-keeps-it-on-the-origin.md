@@ -1,6 +1,6 @@
 # The route guard sends the path and query as redirectTo, and safeRedirect keeps it on the origin
 
-Status: proposed, for review (#4717).
+Status: accepted by Ezz on 2026-11-19.
 
 The three copies disagree. text2sql v1 sends `redirectTo` with the path and query, caps it at 2,048 characters, checks it with a same-origin URL parse, and never sends a visitor back to an auth page (`redirect-to.ts`). blackboard sends `redirect`, and checks only that it starts with `/` and not `//`. thing sends nothing. The leaders disagree too: Remix's stacks use `redirectTo` and keep the path only, React Router's v6 example uses `from` with no check, ASP.NET uses `ReturnUrl` with `Url.IsLocalUrl` (a leading `/`, not `//`, not `/\`), and Auth.js uses `callbackUrl`. Remix's `safeRedirect` misses `/\`, which a browser reads as `//`.
 
