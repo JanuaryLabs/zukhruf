@@ -18,6 +18,12 @@ permissions:
   actions: read
   contents: read
 
+# nx.json runs 6 tasks at once for the 14-core Mac that the sessions push from.
+# A runner has 4 CPUs (macOS 3), so every nx call here keeps Nx's default of 3:
+# NX_PARALLEL wins over nx.json.
+env:
+  NX_PARALLEL: 3
+
 jobs:
   ci:
     runs-on: ubuntu-latest

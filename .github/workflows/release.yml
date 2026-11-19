@@ -20,6 +20,11 @@ concurrency:
   cancel-in-progress: false
   queue: max
 
+# nx.json runs 6 tasks at once for the 14-core Mac that the sessions push from;
+# the runner keeps Nx's default of 3, as NX_PARALLEL wins over nx.json.
+env:
+  NX_PARALLEL: 3
+
 jobs:
   release:
     if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
