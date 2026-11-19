@@ -1,19 +1,15 @@
 import { closeSync, openSync } from 'node:fs';
 
+import {
+  SQLITE_CANTOPEN,
+  SQLITE_READONLY_DIRECTORY,
+  sqliteResultCode,
+} from './result-code.ts';
+
 // The file system codes for a file, or a folder on its path, that is not there.
 const missingCodes = new Set(['ENOENT', 'ENOTDIR']);
 // The file system codes for a file that the system keeps from this process.
 const deniedCodes = new Set(['EACCES', 'EPERM']);
-
-// SQLite's CANTOPEN (14). A missing or denied file fails the open() syscall,
-// and SQLite reports that as CANTOPEN, a privacy denial of macOS too (probed:
-// a missing file or folder, chmod 000, a symlink loop and a TCC denial all
-// give exactly 14).
-const SQLITE_CANTOPEN = 14;
-// SQLite's READONLY_DIRECTORY (1544): the folder denies the write that makes
-// the journal, for example for an owner in a folder it cannot write. A plain
-// READONLY (8), a reader that tries to write, is not unavailable.
-const SQLITE_READONLY_DIRECTORY = 1544;
 
 /** The database file is missing, or this process has no access to it. */
 export class UnavailableError extends Error {
@@ -35,11 +31,16 @@ export class UnavailableError extends Error {
    */
   static from(path: string, error: unknown): UnavailableError | undefined {
     if (!Error.isError(error)) return undefined;
-    if ('errcode' in error && typeof error.errcode === 'number') {
-      if (error.errcode === SQLITE_READONLY_DIRECTORY)
-        return new DeniedError(path, error);
-      if (error.errcode === SQLITE_CANTOPEN) return ofCantOpen(path, error);
-    }
+    const extendedCode = sqliteResultCode(error)?.extendedCode;
+    // The folder denies the write that makes the journal, for example for an
+    // owner in a folder it cannot write. A plain READONLY (8), a reader that
+    // tries to write, is not unavailable.
+    if (extendedCode === SQLITE_READONLY_DIRECTORY)
+      return new DeniedError(path, error);
+    // A missing or denied file fails the open() syscall, and SQLite reports
+    // that as exactly CANTOPEN, a privacy denial of macOS too (probed: a
+    // missing file or folder, chmod 000, a symlink loop and a TCC denial).
+    if (extendedCode === SQLITE_CANTOPEN) return ofCantOpen(path, error);
     if ('code' in error && typeof error.code === 'string')
       return ofFileSystemCode(path, error.code, error);
     return undefined;

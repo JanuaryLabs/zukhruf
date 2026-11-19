@@ -104,6 +104,21 @@ A write-ahead log syncs the `-wal` file to the disk before each checkpoint, not 
 | `Error`             | SQLite did not change the journal to a write-ahead log. The message gives the journal that SQLite kept.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | The error of SQLite | All other failures, for example a file that is not a database.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 
+### Result codes
+
+`sqliteResultCode(error)` reads the result code of an error that `node:sqlite` threw, in the two parts that go-sqlite3 names: `code` is the primary code, the same for each variant, and `extendedCode` names the variant. It is `undefined` for any other value. `node:sqlite` puts only the extended code on the error's `errcode`, and Node names none of the codes, so this package exports the ones that zukhruf reads, by their names in [SQLite](https://www.sqlite.org/rescode.html): `SQLITE_ERROR`, `SQLITE_BUSY`, `SQLITE_CANTOPEN`, `SQLITE_NOTADB`, `SQLITE_CONSTRAINT_FOREIGNKEY`, `SQLITE_CONSTRAINT_NOTNULL`, `SQLITE_CONSTRAINT_UNIQUE` and `SQLITE_READONLY_DIRECTORY`.
+
+```ts
+import {
+  SQLITE_BUSY,
+  SQLITE_CONSTRAINT_NOTNULL,
+  sqliteResultCode,
+} from '@zukhruf/sqlite-open';
+
+sqliteResultCode(error)?.code === SQLITE_BUSY; // each BUSY variant
+sqliteResultCode(error)?.extendedCode === SQLITE_CONSTRAINT_NOTNULL; // this variant only
+```
+
 ## Platforms
 
 The native library is in `lib/<platform>-<arch>/` of the package, for `darwin-arm64`, `darwin-x64`, `linux-arm64`, `linux-x64` (glibc and musl), `win32-x64` and `win32-arm64`. Only `PersistentWriteAheadLog` loads it, at its first open.

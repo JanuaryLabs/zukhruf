@@ -51,7 +51,8 @@
     "@zukhruf/fencing": "^0.8.39",
     "@zukhruf/fs": "^0.8.39",
     "@zukhruf/lease": "^0.8.39",
-    "@zukhruf/pipes": "^0.8.39"
+    "@zukhruf/pipes": "^0.8.39",
+    "@zukhruf/sqlite-open": "^0.8.39"
   },
   "peerDependencies": {
     "@zukhruf/docker": "^0.8.39"
@@ -65,7 +66,6 @@
     "@sinonjs/fake-timers": "15.4.0",
     "@types/pg": "^8.23.1",
     "@zukhruf/docker": "^0.8.39",
-    "@zukhruf/sqlite-open": "^0.8.39",
     "@zukhruf/testing": "^0.8.39",
     "hono": "^4.13.13",
     "mariadb": "^3.5.4",

@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { type Clock, poll } from '@zukhruf/async';
 import { FileTokenSource, type TokenSource } from '@zukhruf/fencing';
 import { FileLock, assertLocalDirectory, safeFileName } from '@zukhruf/fs';
+import { SQLITE_NOTADB, sqliteResultCode } from '@zukhruf/sqlite-open';
 
 import { type LockHandle, leaseFor } from '../../mutex/lease.ts';
 import type { AcquireOptions, LockStore } from '../../mutex/lock-store.ts';
@@ -123,7 +124,7 @@ function claim(reclaim: FileLock, path: string): boolean {
   try {
     return reclaim.tryLock();
   } catch (error) {
-    if (isNotADatabase(error)) {
+    if (sqliteResultCode(error)?.code === SQLITE_NOTADB) {
       throw new Error(
         `The reclaim file ${JSON.stringify(path)} was left by an older version of @zukhruf/mutex. Stop the processes that run that version, then delete the file.`,
         { cause: error },
@@ -131,16 +132,4 @@ function claim(reclaim: FileLock, path: string): boolean {
     }
     throw error;
   }
-}
-
-const SQLITE_NOTADB = 26;
-
-/** Whether `error` means the file is not a SQLite database, for example a file that an older version wrote. */
-function isNotADatabase(error: unknown): boolean {
-  return (
-    Error.isError(error) &&
-    'errcode' in error &&
-    typeof error.errcode === 'number' &&
-    (error.errcode & 0xff) === SQLITE_NOTADB
-  );
 }

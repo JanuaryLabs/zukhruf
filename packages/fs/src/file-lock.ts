@@ -1,8 +1,12 @@
 import type { DatabaseSync } from 'node:sqlite';
 
-import { MissingError, UnchangedJournal, open } from '@zukhruf/sqlite-open';
-
-const SQLITE_BUSY = 5;
+import {
+  MissingError,
+  SQLITE_BUSY,
+  UnchangedJournal,
+  open,
+  sqliteResultCode,
+} from '@zukhruf/sqlite-open';
 
 /** Garbage collection closes a connection that nobody references, and a lock that it holds goes with it. */
 const held = new Set<DatabaseSync>();
@@ -58,7 +62,7 @@ export class FileLock implements Disposable {
       database.prepare('SELECT count(*) FROM sqlite_schema').get();
       return 'unlocked';
     } catch (error) {
-      if (hasResultCode(error, SQLITE_BUSY)) return 'locked';
+      if (sqliteResultCode(error)?.code === SQLITE_BUSY) return 'locked';
       throw error;
     } finally {
       database.close();
@@ -78,7 +82,7 @@ export class FileLock implements Disposable {
       this.#database.exec('PRAGMA journal_mode = MEMORY');
       this.#database.exec('BEGIN EXCLUSIVE');
     } catch (error) {
-      if (hasResultCode(error, SQLITE_BUSY)) return false;
+      if (sqliteResultCode(error)?.code === SQLITE_BUSY) return false;
       throw error;
     }
     held.add(this.#database);
@@ -101,14 +105,4 @@ export class FileLock implements Disposable {
     held.delete(this.#database);
     this.#database[Symbol.dispose]();
   }
-}
-
-/** The low byte of SQLite's extended result code is the primary code, so this covers each variant of `code`. */
-function hasResultCode(error: unknown, code: number): boolean {
-  return (
-    Error.isError(error) &&
-    'errcode' in error &&
-    typeof error.errcode === 'number' &&
-    (error.errcode & 0xff) === code
-  );
 }
