@@ -451,11 +451,11 @@ test(
 
     // Act
     await session.windowChange({ rows: 33, columns: 101 });
-    session.stdin.write('stty size; exit\n');
+    session.stdin.write('printf "size:%s:\\n" "$(stty size)"; exit\n');
     const output = await text(session.stdout);
 
     // Assert
-    assert.match(output, /\b33 101\r\n/);
+    assert.match(output, /size:33 101:/);
   },
 );
 
