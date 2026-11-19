@@ -1,6 +1,6 @@
 # A database handle owns its pools, and its disposal ends them before it drops the database
 
-Status: Accepted 2026-11-19 (Ezz). Built for `Postgres` (backlog #3759, step 1). `Mysql`, `Mariadb` and `SqlServer` are the next steps, and are not built.
+Status: Accepted 2026-11-19 (Ezz). Built for `Postgres` (backlog #3759, step 1), and for `Mysql` and `Mariadb` (step 2, decision 8). `SqlServer` is the next step, and is not built.
 
 A test makes a database with `database()` of `Postgres`, `Mysql`, `Mariadb` or `SqlServer`, and builds a pool of the driver from the handle's `connectionString`. The test ends the pool, and then the handle's disposal drops the database. Two things go wrong:
 
@@ -33,8 +33,8 @@ The versions are the ones in `node_modules` on 2026-11-19. The disposal uses onl
 The pool events that the disposal reads:
 
 - pg: `connect`, `acquire`, `release`, `remove` (`@types/pg/index.d.ts:238-242`; emitted at `pg-pool/index.js:337`, `:340`, `:389`, `:182`). The README of pg-pool documents only `error`, `connect` and `acquire` (`pg-pool/README.md:220-300`).
-- mysql2: `connection`, `acquire`, `release` (`mysql2/promise.d.ts:97-99`).
-- mariadb: `connection`, `acquire`, `release` (`mariadb/types/index.d.ts:278-281`; relayed at `lib/pool-promise.js:18-28`).
+- mysql2: `connection`, `acquire`, `release` on the callback pool `pool.pool` (`typings/mysql/lib/Pool.d.ts:66-69`; emitted at `lib/base/pool.js:81`, `:102-103`, `:185`). The promise pool relays the same events with the same callback `PoolConnection` (`lib/promise/inherit_events.js`), although `promise.d.ts:97-99` types it as the promise `PoolConnection`, so the disposal listens on `pool.pool`, whose types are right. Each connection emits `end` and `error` (`lib/base/connection.js:158-161`), and its `state` is `'disconnected'` once `destroy()` ran (`typings/mysql/lib/Connection.d.ts:375`, `lib/base/connection.js:521-530`). `release` is emitted only when a connection goes back to the free list, not when a waiter takes it at once (`lib/base/pool.js:174-186`), and `destroy()` emits nothing.
+- mariadb: `acquire`, `release` (`mariadb/types/index.d.ts:278-281`; relayed at `lib/pool-promise.js:18-28`), with the inner connection, which has `isValid()`, `threadId` and the `end` event (`types/index.d.ts:53`, `:127`, `:186`). A connection emits `end` only when its socket closed unexpectedly (`lib/connection.js:1573-1640`): for example when the server ended its session.
 - mssql: tarn's `acquireSuccess`, `release` and `destroySuccess` (`tarn/README.md:130-145`), on `ConnectionPool.pool`, which exists only after `connect()` (`mssql/lib/base/connection-pool.js:521`).
 
 A test can end a pool itself. pg-pool sets `ending` when `end()` starts and `ended` when its last client is gone (`@types/pg/index.d.ts:197-198`), and it rejects a second `end()` with "Called end on pool more than once" (`pg-pool/index.js:489-493`). A connection string overrides the `host` and the `port` of a pg config (`pg/lib/connection-parameters.js:57-61`), so a pool that goes through a proxy gets the handle's fields, not its connection string.
@@ -75,31 +75,53 @@ A test can end a pool itself. pg-pool sets `ending` when `end()` starts and `end
 
 6. **`connectionString` stays on the handle**, with `host`, `port`, `user` and `password`. A child process or a worker thread opens its own pool from it, and never ends that pool: the pool ends with its process. The test declares the handle of the child after the database, so the child ends before the drop. A test of a store's own string path gives the store the string, and the store ends its own pool.
 
-7. **The driver is an optional peer dependency of its area, with a static import**, as `mssql` already is of `sqlserver`: `pg` of `postgres`. A project that imports the `postgres` area installs `pg`.
+7. **The driver is an optional peer dependency of its area, with a static import**, as `mssql` already is of `sqlserver`: `pg` of `postgres`, `mysql2` of `mysql`, `mariadb` of `mariadb`. A project that imports an area installs its driver.
 
-### Next steps: MySQL, MariaDB and SQL Server
+8. **MySQL and MariaDB (step 2) follow decisions 1 to 7, with three differences.** Their handles come from the template `MysqlFamilyServer`, which owns the list of pools and the order of the disposal; each subclass builds the pool of its driver.
 
-These are not built. Each one follows the Postgres shape: `pool(options)` typed as the driver's pool class, a disposal that tolerates a pool that the test ended already, the forced close and the socket-closed signal of the table above, and the drop after the last pool. The order is MySQL and MariaDB, then SQL Server.
+   ```ts
+   // @zukhruf/testing/mysql (mysql2/promise)
+   export type MysqlPoolOptions = Omit<
+     mysql.PoolOptions,
+     'uri' | 'database' | 'user' | 'password'
+   >;
+   export type MysqlPool = Omit<
+     mysql.Pool,
+     'end' | 'pool' | typeof Symbol.asyncDispose
+   >;
+   export type MysqlDatabase = MysqlFamilyDatabase<MysqlPool, MysqlPoolOptions>;
+   export function mysqlPool(
+     options: mysql.PoolOptions,
+   ): AsyncDisposable & { readonly pool: MysqlPool };
+
+   // @zukhruf/testing/mariadb (mariadb)
+   export type MariadbPoolOptions = Omit<
+     PoolConfig,
+     'database' | 'user' | 'password'
+   >;
+   export type MariadbPool = Omit<Pool, 'end' | typeof Symbol.asyncDispose>;
+   export type MariadbDatabase = MysqlFamilyDatabase<
+     MariadbPool,
+     MariadbPoolOptions
+   >;
+   export function mariadbPool(
+     config: PoolConfig,
+   ): AsyncDisposable & { readonly pool: MariadbPool };
+   ```
+
+   1. **The pool type has no end.** Unlike pg (decision 1), neither driver can take a pool that the test ended: mysql2 has no public sign that a pool is ending (its own `[Symbol.asyncDispose]` reads the private `_closed`, `lib/promise/pool.js:95-99`), and a second `end()` rejects with "Can't add new command when connection is in closed state" once it has connections; mariadb's second `end()` rejects with "pool is already closed" (`lib/pool.js:811-813`), and its first one removes every listener of the pool (`:851`) and waits up to 10 s for a checked-out connection (`:852-866`). So `MysqlPool` omits `end`, `[Symbol.asyncDispose]` and the callback `pool`, and `MariadbPool` omits `end` and `[Symbol.asyncDispose]`: `await using pool = database.pool()` and `pool.end()` do not compile. No product of the three repositories tests `instanceof` on these pools; mutex's stores take a `connect` function. `Omit` keeps the polymorphic `this` of the driver's `on()`, so `pool.on(…).end()` still compiles; that end then fails loudly in the disposal.
+   2. **The forced close and the signal differ by driver.**
+      - mysql2: the disposal destroys each checked-out connection first, then ends the pool, then waits for the `end` (or `error`) of every connection that the pool created. `destroy()` must come before `end()`: after `end()`, a destroyed connection stays in the pool's list (`lib/pool_connection.js:62-65`), and `end()` queues its Quit behind the running statement, so it waits for a `GET_LOCK` without end (the mutation proof of the order hung). `destroy()` ends the socket with a FIN. Open question 2 is answered: MySQL 8.4 (`mysql:lts`) ends a session that waits in `GET_LOCK(name, 600)` 0.4 to 1.0 s after the FIN (six runs), and one in `SLEEP(600)` within 5 s, so the FIN is the forced close and the disposal runs no KILL. A statement that never looks at its connection runs to its end before the server closes the session.
+      - mariadb: `destroy()` of a connection with a command in flight sends `KILL` on a second connection and gives no sign when its socket closes (`lib/connection.js:731-800`). So the disposal kills each checked-out session itself, with `KILL CONNECTION <threadId>` on a connection of the same config, tolerates only `ER_NO_SUCH_THREAD` (1094, a session that ended meanwhile), and waits for each connection's `end`, which comes 1 to 2 ms after the KILL. Then it ends the pool, which no longer waits: no connection is active. The idle connections close in `end()`: mariadb destroys the socket right after COM_QUIT (`lib/connection.js:697-709`, `lib/cmd/quit.js`), so the client cannot see when the server ends those sessions; the drop needs no wait for them, because MySQL and MariaDB do not end a session at the drop.
+   3. **A connection that the test destroyed is not a leak.** The leak count takes the checked-out connections whose mysql2 `state` is not `'disconnected'`, or whose mariadb `isValid()` is true. mysql2 still waits for the `end` of a destroyed connection. mariadb's destroy of a busy connection sends its own KILL, which the disposal does not wait for.
+
+   The leak error says "connection", the word of both drivers. The list of pools and the order of the disposal are copied from `postgres.ts` into `mysql-family-server.ts` (the copy ledger, #4874); the third copy, `SqlServer`, extracts them.
+
+### Next step: SQL Server
+
+It is not built. It follows the shape of decision 8: `pool(options)`, a disposal that cannot meet a pool that the test ended, the forced close and the socket-closed signal of the table above, and the drop after the last pool.
 
 ```ts
-// @zukhruf/testing/mysql (mysql2/promise)
-export type MysqlPoolOptions = Omit<
-  mysql.PoolOptions,
-  'uri' | 'database' | 'user' | 'password'
->;
-export interface MysqlDatabase extends MysqlFamilyDatabase {
-  pool(options?: MysqlPoolOptions): mysql.Pool;
-}
-
-// @zukhruf/testing/mariadb (mariadb)
-export type MariadbPoolOptions = Omit<
-  mariadb.PoolConfig,
-  'database' | 'user' | 'password'
->;
-export interface MariadbDatabase extends MysqlFamilyDatabase {
-  pool(options?: MariadbPoolOptions): mariadb.Pool;
-}
-
 // @zukhruf/testing/sqlserver (mssql)
 export type SqlServerPoolOptions = Omit<
   sql.config,
@@ -110,7 +132,7 @@ export interface SqlServerDatabase extends Database {
 }
 ```
 
-`pool()` of `SqlServer` resolves once the pool is connected, as `new ConnectionPool(config).connect()` of mssql does, because the tarn pool, whose events the disposal reads, exists only then. `mysql2` and `mariadb` become optional peer dependencies of their areas.
+`pool()` of `SqlServer` resolves once the pool is connected, as `new ConnectionPool(config).connect()` of mssql does, because the tarn pool, whose events the disposal reads, exists only then.
 
 ## Considered Options
 
@@ -130,14 +152,14 @@ export interface SqlServerDatabase extends Database {
 - A broken store that keeps a client fails at the claim's limit, and its teardown no longer hangs to the runner's limit (#3737 P1).
 - A test that leaks a client now fails, also when its own assertions pass. When the test body threw too, the error of the test is the `suppressed` of a `SuppressedError`.
 - After a forced close, a later `release()` of that client by the broken store throws "Release called on client which has already been released to the pool." in pg (`pg-pool/index.js:26-27`, `:373-375`).
-- A project that imports `@zukhruf/testing/postgres` installs `pg`.
+- A project that imports `@zukhruf/testing/postgres` installs `pg`; one that imports `mysql` installs `mysql2`, and one that imports `mariadb` installs `mariadb`.
 - A string still reaches `new pg.Pool` in a test's own process, and no type stops that. The lint ban on `new pg.Pool` in mutex's tests (`eslint.config.mjs`) stays, and points at `postgresPool` and `database.pool()`.
-- MySQL and MariaDB do not end a session when its database is dropped (the drop has no FORCE: [mysql-family-collector.ts](../../src/databases/mysql-family-collector.ts)), so they have no 57P01. Their risk is a drop that waits for a session that has not closed. SQL Server ends the other sessions with `ROLLBACK IMMEDIATE` ([sqlserver-collector.ts](../../src/databases/sqlserver-collector.ts)). mssql's `close()` already waits for each socket of an idle connection, so its risk is only the checked-out connection, which makes `close()` wait with no limit.
-- Then, in this order (#3759): MySQL and MariaDB, then SQL Server, then a release. deepagents #3369 then moves its `pool: <db>.connectionString` places to `pool: <db>.pool()`, factory #3370 moves, and #3305 closes.
+- MySQL and MariaDB do not end a session when its database is dropped (the drop has no FORCE: [mysql-family-collector.ts](../../src/databases/mysql-family-collector.ts)), so they have no 57P01. Their risk is a session that outlives its pool: a drop that waits for its metadata lock, or a waiter in `GET_LOCK` that stays on the server. The tests of step 2 prove the wait by the server's `PROCESSLIST` after the disposal: through a proxy that forwards a client's bytes 1 s late, a disposal that does not wait leaves the sessions of the pool on the server. SQL Server ends the other sessions with `ROLLBACK IMMEDIATE` ([sqlserver-collector.ts](../../src/databases/sqlserver-collector.ts)). mssql's `close()` already waits for each socket of an idle connection, so its risk is only the checked-out connection, which makes `close()` wait with no limit.
+- Then, in this order (#3759): SQL Server, then a release. deepagents #3369 then moves its `pool: <db>.connectionString` places to `pool: <db>.pool()`, factory #3370 moves, and #3305 closes.
 
 ## Open questions for the next steps
 
 1. **Single connections.** A test also builds a `pg.Client`, a connection of `mysql.createConnection` or `mariadb.createConnection`, or a tedious `Connection`, for an admin session, an observer, or a store that opens one connection for each session. mutex's `SqlServerStore` subject builds no pool: it opens one tedious `Connection` for each session (`packages/mutex/src/testing/subjects/sqlserver.ts:33-74`). Does the handle own these connections too, for example with `connection(options)`?
-2. **The forced close of mysql2.** `destroy()` ends the socket with a FIN (`lib/base/connection.js:1015-1026`), and the `end` event needs the server's FIN. Does MySQL close a session that waits in `GET_LOCK` when its client sends FIN? Reproduce it before the code. If it does not, the forced close runs `KILL CONNECTION <threadId>` through the client in the server's image, as the collector runs its SQL.
-3. **The flavor of mysql2.** The proposal types the pool of `mysql2/promise`, which mutex uses. Is the callback pool of `mysql2` needed too?
-4. **A pool that the test ended itself, for mysql2, mariadb and mssql.** pg exposes `ending`. Find the public signal of each other driver before its step.
+2. **The forced close of mysql2.** Answered in decision 8: MySQL ends a session in `GET_LOCK` within about 1 s of the client's FIN, so `destroy()` is the forced close.
+3. **The flavor of mysql2.** Only `mysql2/promise`, which mutex uses; no consumer needs the callback pool, and `MysqlPool` hides it.
+4. **A pool that the test ended itself.** mysql2 has no public signal, so decision 8 removes `end` from the types of both MySQL-family pools. For mssql, find the signal before its step.

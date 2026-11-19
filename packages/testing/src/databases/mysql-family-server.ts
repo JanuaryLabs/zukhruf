@@ -7,18 +7,45 @@ import type { Database, DatabaseOptions } from './database.ts';
 import { type MysqlFamilyCollector, user } from './mysql-family-collector.ts';
 import { succeeded } from './succeeded.ts';
 
-export interface MysqlFamilyDatabase extends Database {
+/** A handle of a database of the MySQL family that owns the pools it gives. */
+export interface MysqlFamilyDatabase<Pool, PoolOptions> extends Database {
   query: (sql: string) => Promise<Record<string, string | null>[]>;
+  /** A pool of this database; the disposal of the handle ends it before the drop. */
+  pool(options?: PoolOptions): Pool;
 }
+
+/** The server of a handle; the options of a pool can route it through a proxy. */
+export interface PoolServer {
+  host: string;
+  port: number;
+}
+
+/** The database and the user of a handle, which the options of a pool cannot change. */
+export interface PoolAccount {
+  database: string;
+  user: string;
+  password: string;
+}
+
+/** A pool and its end, which resolves with the number of connections that were still checked out. */
+export interface OwnedPool<Pool> {
+  readonly pool: Pool;
+  end(): Promise<number>;
+}
+
+export const leak = (count: number, of: string) =>
+  new Error(
+    `The disposal destroyed ${count} connection${count === 1 ? '' : 's'} of ${of} that ${count === 1 ? 'was' : 'were'} still checked out.`,
+  );
 
 /**
  * A template method for servers that speak MySQL's protocol and client flags:
- * acquisitions, readiness, queries and the batch parser stay the same. A
- * subclass names its collector (its kind and the client in its image), the
- * connection string's scheme and the environment, and passes its default
- * image to this constructor.
+ * acquisitions, readiness, queries, the batch parser and the order of the
+ * disposal stay the same. A subclass names its collector (its kind and the
+ * client in its image), the connection string's scheme, the environment and
+ * the pool of its driver, and passes its default image to this constructor.
  */
-export abstract class MysqlFamilyServer {
+export abstract class MysqlFamilyServer<Pool, PoolOptions> {
   readonly #docker: DockerTestbed;
   readonly #runId: string | undefined;
   readonly #options;
@@ -29,6 +56,15 @@ export abstract class MysqlFamilyServer {
     password: string,
     database: string,
   ): Record<string, string>;
+  /**
+   * A pool of the driver, which its owner ends with `end`. The options
+   * override the server, and the account overrides the options.
+   */
+  protected abstract ownedPool(
+    server: PoolServer,
+    options: PoolOptions | undefined,
+    account: PoolAccount,
+  ): OwnedPool<Pool>;
 
   constructor({
     environment,
@@ -43,7 +79,7 @@ export abstract class MysqlFamilyServer {
   }
 
   /** Create an isolated database on the persistent shared server. */
-  async database(): Promise<MysqlFamilyDatabase> {
+  async database(): Promise<MysqlFamilyDatabase<Pool, PoolOptions>> {
     const container = await this.#acquire('app', 'reuse');
     const database = databaseName(this.#runId);
     try {
@@ -66,7 +102,7 @@ export abstract class MysqlFamilyServer {
   }
 
   /** Start a dedicated server; the returned handle owns its container. */
-  async start(): Promise<MysqlFamilyDatabase> {
+  async start(): Promise<MysqlFamilyDatabase<Pool, PoolOptions>> {
     const { database } = this.#options;
     const container = await this.#acquire(database, 'serve');
     return this.#handle(container, database, () => container.cleanup());
@@ -166,19 +202,41 @@ export abstract class MysqlFamilyServer {
   #handle(
     container: ServiceContainer,
     database: string,
-    cleanup: () => Promise<void>,
-  ): MysqlFamilyDatabase {
+    release: () => Promise<void>,
+  ): MysqlFamilyDatabase<Pool, PoolOptions> {
     const { image, password } = this.#options;
+    const { host, port } = container;
+    const pools: OwnedPool<Pool>[] = [];
+    let disposing = false;
+    const cleanup = async () => {
+      disposing = true;
+      const ending = pools.splice(0);
+      const leaked = await Promise.all(ending.map((pool) => pool.end()));
+      await release();
+      const count = leaked.reduce((sum, n) => sum + n, 0);
+      if (count > 0) throw leak(count, 'a pool of this database');
+    };
     return {
-      connectionString: `${this.scheme}://${user}:${password}@${container.host}:${container.port}/${database}`,
+      connectionString: `${this.scheme}://${user}:${password}@${host}:${port}/${database}`,
       image,
       user,
       password,
       database,
       containerId: container.container.id,
-      host: container.host,
-      port: container.port,
+      host,
+      port,
       query: (sql) => this.#query(container, database, sql),
+      pool: (options) => {
+        if (disposing)
+          throw new Error('The disposal of this database has started.');
+        const pool = this.ownedPool({ host, port }, options, {
+          database,
+          user,
+          password,
+        });
+        pools.push(pool);
+        return pool.pool;
+      },
       cleanup,
       [Symbol.asyncDispose]: cleanup,
     };

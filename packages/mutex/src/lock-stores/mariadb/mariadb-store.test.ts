@@ -3,9 +3,14 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 
-import mariadb, { type Pool, type PoolConfig } from 'mariadb';
+import mariadb from 'mariadb';
 
-import { Mariadb, type MariadbDatabase } from '@zukhruf/testing/mariadb';
+import {
+  Mariadb,
+  type MariadbDatabase,
+  type MariadbPool,
+  mariadbPool,
+} from '@zukhruf/testing/mariadb';
 
 import { Mutex } from '../../index.ts';
 import { uniqueKey } from '../../testing/contract/keys.ts';
@@ -40,10 +45,7 @@ async function mariadbDatabase() {
   return database;
 }
 
-const poolOf = (database: MariadbDatabase, options: PoolConfig = {}) =>
-  mariadb.createPool({ ...connectionOf(database), ...options });
-
-const storeOver = (pool: Pool) =>
+const storeOver = (pool: Pick<MariadbPool, 'getConnection'>) =>
   new MariadbStore({
     connect: () => pool.getConnection(),
     sequence,
@@ -54,58 +56,49 @@ const storeOver = (pool: Pool) =>
 test('a wait outlasts the max_statement_time of its session', async () => {
   // Arrange: the app's sessions stop each SELECT after 300 ms.
   await using database = await mariadbDatabase();
-  const holderPool = poolOf(database);
-  const waiterPool = poolOf(database);
+  const holderPool = database.pool();
+  const waiterPool = database.pool();
   const key = uniqueKey();
-  try {
-    const holder = await hold(new Mutex(storeOver(holderPool)), key);
-    const waiter = new MariadbStore({
-      connect: async () => {
-        const session = await waiterPool.getConnection();
-        await session.query('SET SESSION max_statement_time = 0.3');
-        return session;
-      },
-      sequence,
-      heartbeatInterval,
-      clock: globalThis,
-    });
-    const waiting = new Mutex(waiter).acquire(key, async () => 'ran');
+  const holder = await hold(new Mutex(storeOver(holderPool)), key);
+  const waiter = new MariadbStore({
+    connect: async () => {
+      const session = await waiterPool.getConnection();
+      await session.query('SET SESSION max_statement_time = 0.3');
+      return session;
+    },
+    sequence,
+    heartbeatInterval,
+    clock: globalThis,
+  });
+  const waiting = new Mutex(waiter).acquire(key, async () => 'ran');
 
-    // Act: the holder keeps the key longer than the time limit.
-    await delay(1000);
-    await holder.release();
+  // Act: the holder keeps the key longer than the time limit.
+  await delay(1000);
+  await holder.release();
 
-    // Assert
-    assert.equal(
-      await waiting,
-      'ran',
-      'The wait for the key must not end at the time limit of a statement',
-    );
-  } finally {
-    await holderPool.end();
-    await waiterPool.end();
-  }
+  // Assert
+  assert.equal(
+    await waiting,
+    'ran',
+    'The wait for the key must not end at the time limit of a statement',
+  );
 });
 
 test('a key longer than 192 characters is a lock', async () => {
   // Arrange
   await using database = await mariadbDatabase();
-  const pool = poolOf(database);
+  const pool = database.pool();
   const key = `${'report:'.repeat(40)}${randomUUID()}`;
+  const store = storeOver(pool);
+  const holder = await hold(new Mutex(store), key);
   try {
-    const store = storeOver(pool);
-    const holder = await hold(new Mutex(store), key);
-    try {
-      // Act
-      const held = await storeOver(pool).isHeld(key);
+    // Act
+    const held = await storeOver(pool).isHeld(key);
 
-      // Assert
-      assert.equal(held, true, 'A long key must be held like a short key');
-    } finally {
-      await holder.release();
-    }
+    // Assert
+    assert.equal(held, true, 'A long key must be held like a short key');
   } finally {
-    await pool.end();
+    await holder.release();
   }
 });
 
@@ -120,10 +113,14 @@ test('a user with only SELECT and INSERT on the sequence can acquire', async () 
       `GRANT SELECT, INSERT ON \`${database.database}\`.${sequence} TO '${user}'@'%'`,
     );
 
-    await using pool = poolOf(database, { user, password: 'app' });
+    await using app = mariadbPool({
+      ...connectionOf(database),
+      user,
+      password: 'app',
+    });
 
     // Act
-    const token = await new Mutex(storeOver(pool)).acquire(
+    const token = await new Mutex(storeOver(app.pool)).acquire(
       uniqueKey(),
       async (lease) => lease.token,
     );

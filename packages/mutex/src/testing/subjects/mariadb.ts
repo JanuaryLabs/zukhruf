@@ -1,10 +1,14 @@
 import assert from 'node:assert/strict';
 
-import mariadb, { type Pool, type PoolConnection } from 'mariadb';
+import mariadb, {
+  type Pool,
+  type PoolConfig,
+  type PoolConnection,
+} from 'mariadb';
 
 import type { Clock } from '@zukhruf/async';
 import { waitFor } from '@zukhruf/testing/async';
-import { Mariadb } from '@zukhruf/testing/mariadb';
+import { Mariadb, mariadbPool } from '@zukhruf/testing/mariadb';
 import type { DatabaseOptions } from '@zukhruf/testing/postgres';
 
 import {
@@ -40,18 +44,20 @@ export async function mariadbFixture(
 }
 
 /**
- * A store over a pool that is configured as the MariadbStore page tells an
- * app to. A child or a thread never ends its pool, so its pool closes each
- * idle connection after one second and keeps none, which lets it exit.
+ * A pool that is configured as the MariadbStore page tells an app to. A child
+ * or a thread never ends its pool, so its pool closes each idle connection
+ * after one second and keeps none, which lets it exit.
  */
-export const mariadbPool = (location: string, exitOnIdle: boolean) =>
-  mariadb.createPool({
-    ...serverAt(location),
-    keepAliveDelay: 10_000,
-    ...(exitOnIdle && { minimumIdle: 0, idleTimeout: 1 }),
-  });
+export const mariadbPoolConfig = (
+  location: string,
+  exitOnIdle: boolean,
+): PoolConfig => ({
+  ...serverAt(location),
+  keepAliveDelay: 10_000,
+  ...(exitOnIdle && { minimumIdle: 0, idleTimeout: 1 }),
+});
 
-export const mariadbStore = (pool: Pool) =>
+export const mariadbStore = (pool: Pick<Pool, 'getConnection'>) =>
   new MariadbStore({
     connect: () => pool.getConnection(),
     sequence: 'mutex_tokens',
@@ -61,7 +67,7 @@ export const mariadbStore = (pool: Pool) =>
 
 /** The store of a child process or a worker thread over `location`: its pool keeps no idle connection, so the process can exit. */
 export const openInProcess = (location: string) =>
-  mariadbStore(mariadbPool(location, true));
+  mariadbStore(mariadb.createPool(mariadbPoolConfig(location, true)));
 
 const module: StoreModule = {
   url: new URL(import.meta.url),
@@ -72,10 +78,10 @@ export const subject: Subject<Host> = {
   name: 'MariadbStore',
   fixture: mariadbFixture,
   open: (location) => {
-    const pool = mariadbPool(location, false);
+    const host = mariadbPool(mariadbPoolConfig(location, false));
     return {
-      store: mariadbStore(pool),
-      [Symbol.asyncDispose]: () => pool.end(),
+      store: mariadbStore(host.pool),
+      [Symbol.asyncDispose]: () => host[Symbol.asyncDispose](),
     };
   },
   process: { module, admit() {} },
@@ -103,17 +109,18 @@ export const partitionable: Partitionable = {
   async partitionable(location, clock) {
     const server = serverAt(location);
     const proxy = await proxyTo(server);
-    const pool = mariadb.createPool({
-      ...server,
-      host: proxy.host,
-      port: proxy.port,
-    });
     const stack = new AsyncDisposableStack();
-    stack.defer(() => pool.end());
+    const host = stack.use(
+      mariadbPool({ ...server, host: proxy.host, port: proxy.port }),
+    );
     // Closed first: the closed sockets end the sessions, so the pool can end.
     stack.use(proxy);
     return {
-      store: storeOn(() => pool.getConnection(), this.heartbeatInterval, clock),
+      store: storeOn(
+        () => host.pool.getConnection(),
+        this.heartbeatInterval,
+        clock,
+      ),
       partition: () => proxy.partition(),
       [Symbol.asyncDispose]: () => stack.disposeAsync(),
     };
@@ -172,13 +179,13 @@ async function silentlyReconnectingSession(server: Server) {
 export const sessionControl: SessionControl = {
   async watched(location, heartbeatInterval) {
     const server = serverAt(location);
-    const pool = mariadb.createPool(server);
+    const host = mariadbPool(server);
     const sessions: PoolConnection[] = [];
     const admin = await mariadb.createConnection(server);
     return {
       store: storeOn(
         async () => {
-          const session = await pool.getConnection();
+          const session = await host.pool.getConnection();
           sessions.push(session);
           return session;
         },
@@ -192,7 +199,7 @@ export const sessionControl: SessionControl = {
       },
       async [Symbol.asyncDispose]() {
         await admin.end();
-        await pool.end();
+        await host[Symbol.asyncDispose]();
       },
     };
   },
@@ -238,14 +245,11 @@ export const sessionControl: SessionControl = {
 
 export const poolControl: PoolControl = {
   pooled(location, size) {
-    const pool = mariadb.createPool({
-      ...serverAt(location),
-      connectionLimit: size,
-    });
+    const host = mariadbPool({ ...serverAt(location), connectionLimit: size });
     return {
-      store: storeOn(() => pool.getConnection(), 200, globalThis),
+      store: storeOn(() => host.pool.getConnection(), 200, globalThis),
       async nextBorrowerHoldsALock() {
-        const borrower = await pool.getConnection();
+        const borrower = await host.pool.getConnection();
         try {
           const rows = await borrower.query<{ locks: number }[]>(
             'SELECT RELEASE_ALL_LOCKS() AS locks',
@@ -255,7 +259,7 @@ export const poolControl: PoolControl = {
           await borrower.release();
         }
       },
-      [Symbol.asyncDispose]: () => pool.end(),
+      [Symbol.asyncDispose]: () => host[Symbol.asyncDispose](),
     };
   },
 };

@@ -8,24 +8,24 @@ The words in these documents have one meaning each. See the glossary in [CONTEXT
 
 Each area has its own import path, so a test loads only the drivers it uses. The four drivers are optional peer dependencies: install the one an area names.
 
-| Import                        | Gives                                                  | Needs                    |
-| ----------------------------- | ------------------------------------------------------ | ------------------------ |
-| `@zukhruf/testing/node`       | Native `test`, `it`, `suite`, `describe` with `.each`  |                          |
-| `@zukhruf/testing/async`      | `waitFor`, `timebox`                                   |                          |
-| `@zukhruf/testing/process`    | `startWorker`                                          |                          |
-| `@zukhruf/testing/docker`     | `DockerTestbed`, `ServiceContainer`, `DockerDirectory` | a Docker engine          |
-| `@zukhruf/testing/postgres`   | `Postgres`                                             | a Docker engine          |
-| `@zukhruf/testing/mysql`      | `Mysql`                                                | a Docker engine          |
-| `@zukhruf/testing/mariadb`    | `Mariadb`                                              | a Docker engine          |
-| `@zukhruf/testing/sqlserver`  | `SqlServer`, `SQL_SERVER_FULL_IMAGE`                   | a Docker engine, `mssql` |
-| `@zukhruf/testing/clickhouse` | `ClickHouse`                                           | a Docker engine          |
-| `@zukhruf/testing/sqlite`     | `Sqlite`                                               |                          |
-| `@zukhruf/testing/duckdb`     | `DuckDB`                                               | `@duckdb/node-api`       |
-| `@zukhruf/testing/bigquery`   | `BigQuery`                                             | `@google-cloud/bigquery` |
-| `@zukhruf/testing/http`       | `HttpServer`                                           |                          |
-| `@zukhruf/testing/streams`    | `StreamHarness`                                        |                          |
-| `@zukhruf/testing/msw`        | `Msw`                                                  | `msw`                    |
-| `@zukhruf/testing/preload`    | `notInstalled`                                         |                          |
+| Import                        | Gives                                                  | Needs                      |
+| ----------------------------- | ------------------------------------------------------ | -------------------------- |
+| `@zukhruf/testing/node`       | Native `test`, `it`, `suite`, `describe` with `.each`  |                            |
+| `@zukhruf/testing/async`      | `waitFor`, `timebox`                                   |                            |
+| `@zukhruf/testing/process`    | `startWorker`                                          |                            |
+| `@zukhruf/testing/docker`     | `DockerTestbed`, `ServiceContainer`, `DockerDirectory` | a Docker engine            |
+| `@zukhruf/testing/postgres`   | `Postgres`, `postgresPool`                             | a Docker engine, `pg`      |
+| `@zukhruf/testing/mysql`      | `Mysql`, `mysqlPool`                                   | a Docker engine, `mysql2`  |
+| `@zukhruf/testing/mariadb`    | `Mariadb`, `mariadbPool`                               | a Docker engine, `mariadb` |
+| `@zukhruf/testing/sqlserver`  | `SqlServer`, `SQL_SERVER_FULL_IMAGE`                   | a Docker engine, `mssql`   |
+| `@zukhruf/testing/clickhouse` | `ClickHouse`                                           | a Docker engine            |
+| `@zukhruf/testing/sqlite`     | `Sqlite`                                               |                            |
+| `@zukhruf/testing/duckdb`     | `DuckDB`                                               | `@duckdb/node-api`         |
+| `@zukhruf/testing/bigquery`   | `BigQuery`                                             | `@google-cloud/bigquery`   |
+| `@zukhruf/testing/http`       | `HttpServer`                                           |                            |
+| `@zukhruf/testing/streams`    | `StreamHarness`                                        |                            |
+| `@zukhruf/testing/msw`        | `Msw`                                                  | `msw`                      |
+| `@zukhruf/testing/preload`    | `notInstalled`                                         |                            |
 
 ## Parameterized tests
 
@@ -216,7 +216,7 @@ The handle has `connectionString`, `host`, `port`, `user`, `password`, `database
 
 ### Take a pool from the database
 
-A handle of `Postgres` gives `pool(options)`, from `database()` and from `start()`. The pool is a `pg.Pool`, and the handle owns it. The disposal of the handle ends every pool of the handle, and then drops the database ([ADR 0026](./docs/adr/0026-a-database-handle-owns-its-pools-and-its-disposal-ends-them-before-it-drops-the-database.md)). Give the pool to the store under test, not the connection string.
+A handle of `Postgres`, `Mysql` or `Mariadb` gives `pool(options)`, from `database()` and from `start()`. The handle owns the pool: a `pg.Pool`, a `MysqlPool` (a pool of `mysql2/promise`) or a `MariadbPool` (a pool of `mariadb`). The disposal of the handle ends every pool of the handle, and then drops the database ([ADR 0026](./docs/adr/0026-a-database-handle-owns-its-pools-and-its-disposal-ends-them-before-it-drops-the-database.md)). Give the pool to the store under test, not the connection string.
 
 ```ts
 import { Postgres } from '@zukhruf/testing/postgres';
@@ -265,7 +265,32 @@ await app.pool.query('SELECT 1');
 
 A child process or a worker thread cannot take a pool of the handle. Give it `connectionString`, and let its pool end with its process. Declare the handle of the child after the database, so the child ends before the drop.
 
-Install `pg` next to this package. It is an optional peer dependency of the `postgres` area. `Mysql`, `Mariadb` and `SqlServer` get `pool(options)` in the next steps of ADR 0026.
+#### MySQL and MariaDB
+
+The options of a `Mysql` pool are the `mysql.PoolOptions` without `uri`, `database`, `user` and `password`; the options of a `Mariadb` pool are the `PoolConfig` of `mariadb` without `database`, `user` and `password`. A `MysqlPool` has no `end`, no `[Symbol.asyncDispose]` and no callback `pool`, and a `MariadbPool` has no `end` and no `[Symbol.asyncDispose]`: only the disposal of the handle ends the pool, and `await using pool = database.pool()` does not compile. Neither driver tells when a pool is ending, a second `end()` rejects in both, and the `end()` of `mariadb` removes the listeners of the pool and waits up to 10 s for a checked-out connection.
+
+```ts
+import { Mysql } from '@zukhruf/testing/mysql';
+
+const mysql = new Mysql({ environment: process.env });
+
+test('counts the items', async (t) => {
+  await using database = await mysql.database();
+  const pool = database.pool({ connectionLimit: 2 });
+  await pool.query('CREATE TABLE item (id int)');
+  const [[row]] = await pool.query('SELECT COUNT(*) AS n FROM item');
+  t.assert.equal(row.n, 0);
+});
+```
+
+Step 2 of the disposal differs for each driver:
+
+- `Mysql`: it destroys each connection that is checked out now, then ends the pool, and waits until the server has closed the socket of each connection (`end`). `destroy()` comes first, because an ended pool of mysql2 keeps a destroyed connection and waits behind its running statement. MySQL ends a session that waits in `GET_LOCK` within about 1 s of the client's goodbye, and one in `SLEEP()` within 5 s.
+- `Mariadb`: it ends the session of each connection that is checked out now with `KILL CONNECTION`, on a connection of its own, and waits until each of them has seen the server close its socket (`end`). Then it ends the pool, which destroys the socket of each idle connection before it resolves.
+
+A connection that the test destroyed itself is not a leak. A test that has no handle takes a pool from `mysqlPool(options)` or `mariadbPool(config)`, which give `{ pool }` and its disposal, as `postgresPool` does.
+
+Install the driver of the area next to this package: `pg` for `postgres`, `mysql2` for `mysql`, and `mariadb` for `mariadb`. Each is an optional peer dependency. `SqlServer` gets `pool(options)` in the next step of ADR 0026.
 
 ## HTTP servers and streams
 

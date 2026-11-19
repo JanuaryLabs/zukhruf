@@ -5,7 +5,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 
 import mysql from 'mysql2/promise';
 
-import { Mysql, type MysqlDatabase } from '@zukhruf/testing/mysql';
+import { Mysql, type MysqlPool, mysqlPool } from '@zukhruf/testing/mysql';
 
 import { Mutex } from '../../index.ts';
 import { uniqueKey } from '../../testing/contract/keys.ts';
@@ -33,17 +33,7 @@ async function mysqlDatabase() {
   return database;
 }
 
-const poolOf = (database: MysqlDatabase, options: mysql.PoolOptions = {}) =>
-  mysql.createPool({
-    host: database.host,
-    port: database.port,
-    user: database.user,
-    password: database.password,
-    database: database.database,
-    ...options,
-  });
-
-const storeOver = (pool: mysql.Pool) =>
+const storeOver = (pool: Pick<MysqlPool, 'getConnection'>) =>
   new MysqlStore({
     connect: () => pool.getConnection(),
     table,
@@ -54,90 +44,77 @@ const storeOver = (pool: mysql.Pool) =>
 test('a wait outlasts the max_execution_time of its session', async () => {
   // Arrange: the app's sessions stop each SELECT after 300 ms.
   await using database = await mysqlDatabase();
-  const holderPool = poolOf(database);
-  const waiterPool = poolOf(database);
+  const holderPool = database.pool();
+  const waiterPool = database.pool();
   const key = uniqueKey();
-  try {
-    const holder = await hold(new Mutex(storeOver(holderPool)), key);
-    const waiter = new MysqlStore({
-      connect: async () => {
-        const session = await waiterPool.getConnection();
-        await session.query('SET SESSION max_execution_time = 300');
-        return session;
-      },
-      table,
-      heartbeatInterval,
-      clock: globalThis,
-    });
-    const waiting = new Mutex(waiter).acquire(key, async () => 'ran');
+  const holder = await hold(new Mutex(storeOver(holderPool)), key);
+  const waiter = new MysqlStore({
+    connect: async () => {
+      const session = await waiterPool.getConnection();
+      await session.query('SET SESSION max_execution_time = 300');
+      return session;
+    },
+    table,
+    heartbeatInterval,
+    clock: globalThis,
+  });
+  const waiting = new Mutex(waiter).acquire(key, async () => 'ran');
 
-    // Act: the holder keeps the key longer than the time limit.
-    await delay(1000);
-    await holder.release();
+  // Act: the holder keeps the key longer than the time limit.
+  await delay(1000);
+  await holder.release();
 
-    // Assert
-    assert.equal(
-      await waiting,
-      'ran',
-      'The wait for the key must not end at the time limit of a statement',
-    );
-  } finally {
-    await holderPool.end();
-    await waiterPool.end();
-  }
+  // Assert
+  assert.equal(
+    await waiting,
+    'ran',
+    'The wait for the key must not end at the time limit of a statement',
+  );
 });
 
 test('a key longer than 64 characters is a lock', async () => {
   // Arrange
   await using database = await mysqlDatabase();
-  const pool = poolOf(database);
+  const pool = database.pool();
   const key = `${'report:'.repeat(20)}${randomUUID()}`;
+  const store = storeOver(pool);
+  const holder = await hold(new Mutex(store), key);
   try {
-    const store = storeOver(pool);
-    const holder = await hold(new Mutex(store), key);
-    try {
-      // Act
-      const held = await storeOver(pool).isHeld(key);
+    // Act
+    const held = await storeOver(pool).isHeld(key);
 
-      // Assert
-      assert.equal(held, true, 'A long key must be held like a short key');
-    } finally {
-      await holder.release();
-    }
+    // Assert
+    assert.equal(held, true, 'A long key must be held like a short key');
   } finally {
-    await pool.end();
+    await holder.release();
   }
 });
 
 test('a token table without its row fails the acquire instead of repeating a token', async () => {
   // Arrange: the row of the token table is gone, and the session already gave a token.
   await using database = await mysqlDatabase();
-  const pool = poolOf(database, { connectionLimit: 1 });
+  const pool = database.pool({ connectionLimit: 1 });
   const mutex = new Mutex(storeOver(pool));
   const key = uniqueKey();
-  try {
-    await mutex.acquire(key, async () => {});
-    const owner = await mysql.createConnection(database.connectionString);
-    await owner.query(`DELETE FROM ${table}`);
-    await owner.end();
+  await mutex.acquire(key, async () => {});
+  const owner = await mysql.createConnection(database.connectionString);
+  await owner.query(`DELETE FROM ${table}`);
+  await owner.end();
 
-    // Act
-    const acquired = mutex.acquire(key, async (lease) => lease.token);
+  // Act
+  const acquired = mutex.acquire(key, async (lease) => lease.token);
 
-    // Assert
-    await assert.rejects(
-      acquired,
-      /exactly one row/,
-      'A token table with no row must not give the token of the last grant again',
-    );
-    assert.equal(
-      await storeOver(pool).isHeld(key),
-      false,
-      'A failed token must release the key',
-    );
-  } finally {
-    await pool.end();
-  }
+  // Assert
+  await assert.rejects(
+    acquired,
+    /exactly one row/,
+    'A token table with no row must not give the token of the last grant again',
+  );
+  assert.equal(
+    await storeOver(pool).isHeld(key),
+    false,
+    'A failed token must release the key',
+  );
 });
 
 test('a user with only SELECT and UPDATE on the token table can acquire', async () => {
@@ -151,10 +128,16 @@ test('a user with only SELECT and UPDATE on the token table can acquire', async 
       `GRANT SELECT, UPDATE ON \`${database.database}\`.${table} TO '${user}'@'%'`,
     );
 
-    await using pool = poolOf(database, { user, password: 'app' });
+    await using app = mysqlPool({
+      host: database.host,
+      port: database.port,
+      database: database.database,
+      user,
+      password: 'app',
+    });
 
     // Act
-    const token = await new Mutex(storeOver(pool)).acquire(
+    const token = await new Mutex(storeOver(app.pool)).acquire(
       uniqueKey(),
       async (lease) => lease.token,
     );

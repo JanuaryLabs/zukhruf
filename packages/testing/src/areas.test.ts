@@ -6,10 +6,9 @@ import spawn, { SubprocessError } from 'nano-spawn';
 import { notInstalled } from './preload/index.ts';
 
 /**
- * A consumer installs only the drivers of the areas it imports: the four
- * drivers are optional peers, and the mariadb and mysql2 drivers of this
- * package's own tests are no dependency at all. The child sees each hidden
- * driver as not installed, the way a consumer without it sees the package.
+ * A consumer installs only the drivers of the areas it imports: each driver
+ * is an optional peer. The child sees each hidden driver as not installed,
+ * the way a consumer without it sees the package.
  */
 const importArea = (area: string, hidden: [string, ...string[]]) =>
   spawn(process.execPath, [
@@ -26,6 +25,7 @@ const drivers: [string, ...string[]] = [
   '@google-cloud/bigquery',
   'mariadb',
   'mysql2',
+  'pg',
   'msw',
 ];
 
@@ -35,9 +35,6 @@ test('every area without a driver imports when no driver is installed', async ()
     'async',
     'process',
     'docker',
-    'postgres',
-    'mysql',
-    'mariadb',
     'clickhouse',
     'sqlite',
     'http',
@@ -51,6 +48,9 @@ test('every area without a driver imports when no driver is installed', async ()
 test('an area with a driver needs only its own driver', async () => {
   for (const [area, driver] of [
     ['sqlserver', 'mssql'],
+    ['postgres', 'pg'],
+    ['mysql', 'mysql2'],
+    ['mariadb', 'mariadb'],
     ['duckdb', '@duckdb/node-api'],
     ['bigquery', '@google-cloud/bigquery'],
     ['msw', 'msw'],

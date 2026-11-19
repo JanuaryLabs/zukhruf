@@ -4,7 +4,7 @@ import mysql from 'mysql2/promise';
 
 import type { Clock } from '@zukhruf/async';
 import { waitFor } from '@zukhruf/testing/async';
-import { Mysql } from '@zukhruf/testing/mysql';
+import { Mysql, mysqlPool } from '@zukhruf/testing/mysql';
 import type { DatabaseOptions } from '@zukhruf/testing/postgres';
 
 import {
@@ -74,14 +74,14 @@ export const subject: Subject<Host> = {
   name: 'MysqlStore',
   fixture: mysqlFixture,
   open: (location) => {
-    const pool = mysql.createPool({
+    const host = mysqlPool({
       ...serverAt(location),
       enableKeepAlive: true,
       keepAliveInitialDelay: 10_000,
     });
     return {
-      store: mysqlStore(() => pool.getConnection()),
-      [Symbol.asyncDispose]: () => pool.end(),
+      store: mysqlStore(() => host.pool.getConnection()),
+      [Symbol.asyncDispose]: () => host[Symbol.asyncDispose](),
     };
   },
   process: { module, admit() {} },
@@ -91,9 +91,6 @@ export const subject: Subject<Host> = {
 export const sharing = sharesWithProcesses(subject.process);
 
 export const threadSharing = sharesWithThreads<Host>({ module, admit() {} });
-
-const poolTo = (server: Server, options: mysql.PoolOptions = {}) =>
-  mysql.createPool({ ...server, ...options });
 
 const storeOn = (
   connect: MysqlStoreOptions['connect'],
@@ -107,13 +104,18 @@ export const partitionable: Partitionable = {
   async partitionable(location, clock) {
     const server = serverAt(location);
     const proxy = await proxyTo(server);
-    const pool = poolTo(server, { host: proxy.host, port: proxy.port });
     const stack = new AsyncDisposableStack();
-    stack.defer(() => pool.end());
+    const host = stack.use(
+      mysqlPool({ ...server, host: proxy.host, port: proxy.port }),
+    );
     // Closed first: the closed sockets end the sessions, so the pool can end.
     stack.use(proxy);
     return {
-      store: storeOn(() => pool.getConnection(), this.heartbeatInterval, clock),
+      store: storeOn(
+        () => host.pool.getConnection(),
+        this.heartbeatInterval,
+        clock,
+      ),
       partition: () => proxy.partition(),
       [Symbol.asyncDispose]: () => stack.disposeAsync(),
     };
@@ -172,13 +174,13 @@ async function silentlyReconnectingSession(server: Server) {
 export const sessionControl: SessionControl = {
   async watched(location, heartbeatInterval) {
     const server = serverAt(location);
-    const pool = poolTo(server);
+    const host = mysqlPool(server);
     const sessions: mysql.PoolConnection[] = [];
     const admin = await mysql.createConnection(server);
     return {
       store: storeOn(
         async () => {
-          const session = await pool.getConnection();
+          const session = await host.pool.getConnection();
           sessions.push(session);
           return session;
         },
@@ -192,7 +194,7 @@ export const sessionControl: SessionControl = {
       },
       async [Symbol.asyncDispose]() {
         await admin.end();
-        await pool.end();
+        await host[Symbol.asyncDispose]();
       },
     };
   },
@@ -238,11 +240,11 @@ export const sessionControl: SessionControl = {
 
 export const poolControl: PoolControl = {
   pooled(location, size) {
-    const pool = poolTo(serverAt(location), { connectionLimit: size });
+    const host = mysqlPool({ ...serverAt(location), connectionLimit: size });
     return {
-      store: storeOn(() => pool.getConnection(), 200, globalThis),
+      store: storeOn(() => host.pool.getConnection(), 200, globalThis),
       async nextBorrowerHoldsALock() {
-        const borrower = await pool.getConnection();
+        const borrower = await host.pool.getConnection();
         try {
           const [rows] = await borrower.query<mysql.RowDataPacket[]>(
             'SELECT RELEASE_ALL_LOCKS() AS locks',
@@ -252,7 +254,7 @@ export const poolControl: PoolControl = {
           borrower.release();
         }
       },
-      [Symbol.asyncDispose]: () => pool.end(),
+      [Symbol.asyncDispose]: () => host[Symbol.asyncDispose](),
     };
   },
 };
