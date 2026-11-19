@@ -76,11 +76,15 @@ class ChannelConnection extends Duplex implements Connection {
       if (!this.push(chunk)) channel.pause();
     });
     // The engine ended its side, as it does when the output of an attach
-    // ends: end ours too, as a Node socket with allowHalfOpen false does.
-    // sshd closes a channel only once both sides sent EOF, so an attach whose
-    // input stays open would keep the channel, and the process, alive (#4670).
-    channel.once('end', () => {
-      this.push(null);
+    // ends: end ours too once the reader has read to that end, as a Node
+    // socket with allowHalfOpen false does (on its readable 'end'). sshd
+    // closes a channel only once both sides sent EOF, so an attach whose input
+    // stays open would keep the channel, and the process, alive (#4670). An
+    // end before the reader got the output would make a write in between a
+    // write after the end, which destroys the connection and its unread
+    // output (#4835).
+    channel.once('end', () => this.push(null));
+    this.once('end', () => {
       if (!this.writableEnded) this.end();
     });
     channel.once('error', (error) => this.destroy(new ChannelError(error)));
