@@ -641,3 +641,37 @@ describe('one SSH connection that clients share', () => {
     },
   );
 });
+
+describe('an ssh:// host that names the engine socket', () => {
+  test(
+    'a path in the ssh:// host is the engine socket on the host, as in the Docker CLI: connect() reaches the engine with no docker CLI on the host, and the same host without the path cannot',
+    { skip },
+    async (t) => {
+      // Arrange: the sessions of this sshd find no docker CLI, so a lookup of
+      // the engine socket on the host fails.
+      const { engineSocket } = ready(engine);
+      await using sshd = await startEngineSshd({
+        PATH: '/usr/bin:/bin',
+        DOCKER_HOST: `unix://${engineSocket}`,
+      });
+      const sshFlags = await clientFlags(sshd);
+      const connect = async (host: string): Promise<Docker> =>
+        Docker.connect({
+          clock: globalThis,
+          environment: process.env,
+          host,
+          sshFlags,
+          signal: t.signal,
+        });
+
+      // Act
+      await using named = await connect(`${SSH_HOST}${engineSocket}`);
+      const info = await named.info({ signal: t.signal });
+      const unnamed = connect(SSH_HOST);
+
+      // Assert
+      assert.equal(typeof info.ServerVersion, 'string');
+      await assert.rejects(unnamed, ConnectionFailedError);
+    },
+  );
+});

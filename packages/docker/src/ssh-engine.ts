@@ -195,9 +195,10 @@ export class SshDialer implements Dialer {
       });
     }
     const cancel = signal === undefined ? {} : { signal };
+    const { destination, namedSocket } = splitSocket(host);
     let client: SharedConnection;
     try {
-      const config = await OpenSshConfig.resolve(host, {
+      const config = await OpenSshConfig.resolve(destination, {
         flags: [...sshFlags, '-o', 'ConnectTimeout=30'],
         environment,
         ...cancel,
@@ -208,7 +209,8 @@ export class SshDialer implements Dialer {
       throw new ConnectionFailedError(host, { cause: error });
     }
     try {
-      const socketPath = await engineSocket(client, host, signal);
+      const socketPath =
+        namedSocket ?? (await engineSocket(client, host, signal));
       return new SshDialer(client, host, socketPath);
     } catch (error) {
       await client.close();
@@ -260,6 +262,26 @@ export class SshDialer implements Dialer {
 }
 
 /** The path of the engine socket of the Docker CLI on the SSH server: its context's unix:// endpoint. */
+/**
+ * The destination for ssh -G, and the engine socket that a path of the host
+ * names. As in the Docker CLI's connection helper, a path in an ssh:// host is
+ * the engine socket on the SSH server (`docker --host=unix://<path> system
+ * dial-stdio`, cli/connhelper/connhelper.go), so no command on the server
+ * looks it up. OpenSSH takes no path in an ssh:// destination.
+ */
+function splitSocket(host: string): {
+  readonly destination: string;
+  readonly namedSocket: string | undefined;
+} {
+  const url = new URL(host);
+  const path = decodeURIComponent(url.pathname);
+  if (path.replaceAll('/', '') === '') {
+    return { destination: host, namedSocket: undefined };
+  }
+  url.pathname = '';
+  return { destination: url.href, namedSocket: path };
+}
+
 async function engineSocket(
   client: SharedConnection,
   host: string,

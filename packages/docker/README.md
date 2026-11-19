@@ -555,6 +555,20 @@ await using docker = await Docker.connect({
 
 The disposal then ends this process's use of the connection. A process that is the master does not exit while another process uses its connection, so do not run such clients under `node --test --test-force-exit`: it kills the master's process when its file ends, and the streams of the other files fail.
 
+### Name the engine socket in the host
+
+Without a path, each `Docker.connect` asks the Docker CLI on the SSH server for its engine socket: a session runs `docker context inspect` there ([ADR 0002](./docs/adr/0002-the-engine-is-the-one-that-the-docker-cli-selects.md)). A path in the `ssh://` host names the socket, and no command runs on the server, as in the connection helper of the Docker CLI (`docker --host=unix://<path> system dial-stdio`):
+
+```ts
+await using docker = await Docker.connect({
+  clock: globalThis,
+  environment: process.env,
+  host: 'ssh://deploy@build-box/var/run/docker.sock',
+});
+```
+
+A context or `DOCKER_HOST` can hold the same host. The path must be the socket of the engine on the server: when that socket moves, the host must change with it. On `DOCKER_CONTEXT=mac-mini` (Docker Desktop, with a shared connection), `docker:test` took 40–44 s with the lookup and 28 s with the socket named in the host (measured 2026-11-19).
+
 ### End a dead connection
 
 `ConnectTimeout` is a limit for the start of the connection only: the connect, the SSH handshake and the key exchange. No call has a time limit after that.
