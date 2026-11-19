@@ -215,6 +215,89 @@ The socket lock store of `@zukhruf/mutex` uses `SqliteElection`, with the claim 
 | `LeaseLostError`        | The reason of `term.signal` when the backend took the claim away. Its `subject` is `'leadership'`, and its `cause` is the backend's reason. It is the class of `@zukhruf/lease`, and this package exports it too. |
 | `signal.reason`         | A campaign rejects with it when its signal aborts.                                                                                                                                                                |
 
+## API
+
+```ts
+interface CampaignOptions {
+  timeout?: number | undefined; // default: one try; Infinity: until it wins or signal aborts
+  signal?: AbortSignal | undefined;
+}
+
+abstract class LeaderElection<Claim> {
+  protected readonly clock: Clock;
+  protected constructor(clock: Clock);
+  campaign(options?: CampaignOptions): Promise<Term | undefined>;
+  protected abstract open(signal: AbortSignal | undefined): Promise<Claim>;
+  protected abstract tryClaim(
+    claim: Claim,
+    signal: AbortSignal | undefined,
+  ): Promise<Pick<Term, 'epoch' | 'afterCleanShutdown'> | undefined>;
+  protected abstract waitForChange(
+    claim: Claim,
+    signal: AbortSignal,
+  ): Promise<void>;
+  protected abstract watch(
+    claim: Claim,
+    lose: (reason: Error) => void,
+  ): Disposable;
+  protected abstract recordCleanShutdown(
+    claim: Claim,
+    epoch: bigint,
+  ): Promise<void>;
+  protected abstract release(claim: Claim): Promise<void>;
+  protected abstract close(claim: Claim): Promise<void>;
+}
+
+interface ResignOptions {
+  clean: boolean;
+}
+
+// The steps of the backend for the claim that a term won.
+interface TermSteps {
+  watch(lose: (reason: Error) => void): Disposable;
+  recordCleanShutdown(): Promise<void>; // only for a term that was not lost, before release
+  release(): Promise<void>; // only for a term that was not lost
+  close(): Promise<void>; // at each end
+}
+
+class Term implements Lease, AsyncDisposable {
+  constructor(
+    { epoch, afterCleanShutdown }: Pick<Term, 'epoch' | 'afterCleanShutdown'>,
+    steps: TermSteps,
+  );
+  readonly epoch: bigint;
+  readonly afterCleanShutdown: boolean;
+  get signal(): AbortSignal; // aborts with LeaseLostError when the term is lost
+  resign(options?: ResignOptions): Promise<void>;
+  [Symbol.asyncDispose](): Promise<void>; // resign()
+}
+
+interface SqliteElectionOptions {
+  directory: string;
+  claimFile: string;
+  epochFile: string;
+  leaseDuration?: number | undefined; // default: 15000
+  heartbeatInterval?: number | undefined; // default: leaseDuration / 3
+  clock: Clock;
+}
+
+class SqliteElection extends LeaderElection<SqliteAttempt> {
+  constructor(options: SqliteElectionOptions); // RangeError: unless 0 < heartbeatInterval < leaseDuration
+  lastEpoch(): Promise<bigint>;
+  observe(): LeaderObserver;
+}
+
+class LeaderObserver implements Disposable {
+  get left(): Promise<'closed' | 'ended' | 'absent'>;
+  [Symbol.dispose](): void;
+}
+
+export { NetworkDirectoryError } from '@zukhruf/fs';
+export { LeaseLostError } from '@zukhruf/lease';
+```
+
+`campaign` builds the `Term` of a claim that it won, and gives it the backend's steps for that claim as `TermSteps` ([src/leader-election.ts](./src/leader-election.ts)). The term calls `watch` when it begins. When the leader resigns, it calls `recordCleanShutdown` (only with `clean: true`), `release` and `close`. After a loss, it calls only `close` ([src/term.ts](./src/term.ts)). `LeaderObserver` is exported as a type: `observe()` makes one.
+
 ## Documentation
 
 - [How SqliteElection elects a leader](./docs/concepts/leader-election.md)

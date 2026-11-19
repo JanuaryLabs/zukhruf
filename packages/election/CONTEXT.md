@@ -16,6 +16,10 @@ _Avoid_: Vote, poll
 The one thing that only one candidate can hold at a time. The backend decides what it is.
 _Avoid_: Lock (a claim can be a row in a database), lease (the term is the lease, not the claim), token
 
+**Attempt**:
+The resources that a backend prepares in `open` for a campaign, for example a connection or a file lock. The campaign calls `tryClaim` on one attempt again and again, and `close` frees it after each end: a won term, a lost term, a failure, or no win before the time is up. When the claim is lost before its term begins, the campaign opens a new attempt (`src/leader-election.ts`). `SqliteAttempt` is the attempt of `SqliteElection`: its file lock, and its pipe after a win.
+_Avoid_: Try (one call of `tryClaim`), session, connection (an attempt can hold one)
+
 **Leader**:
 The candidate that holds the claim. A group has at most one leader at a time.
 _Avoid_: Master, primary, coordinator (a coordinator is what some packages build on a leader)
