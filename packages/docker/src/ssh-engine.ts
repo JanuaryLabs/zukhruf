@@ -1,8 +1,8 @@
 import { Duplex, type Readable } from 'node:stream';
 
 import { RefCount, type WallClock, untilAborted } from '@zukhruf/async';
-import { type Client, OpenChannelError } from '@zukhruf/ssh';
-import { OpenSshConfig } from '@zukhruf/ssh/config';
+import { OpenChannelError } from '@zukhruf/ssh';
+import { OpenSshConfig, type SharedConnection } from '@zukhruf/ssh/config';
 
 import type { Environment } from './context-store.ts';
 import { ConnectionFailedError } from './errors.ts';
@@ -152,13 +152,17 @@ async function text(stream: Readable): Promise<string> {
  * connection to the engine.
  */
 export class SshDialer implements Dialer {
-  readonly #client: Client;
+  readonly #client: SharedConnection;
   readonly #host: string;
   readonly #socketPath: string;
   /** Keeps the client ref'd while a channel is in use (the client is ref'd until the first channel, the ping of connect(), is released). */
   readonly #refs: RefCount;
 
-  private constructor(client: Client, host: string, socketPath: string) {
+  private constructor(
+    client: SharedConnection,
+    host: string,
+    socketPath: string,
+  ) {
     this.#client = client;
     this.#host = host;
     this.#socketPath = socketPath;
@@ -169,8 +173,10 @@ export class SshDialer implements Dialer {
    * Connects as OpenSSH would with the flags of the caller, and with the
    * ConnectTimeout of the connection helper of docker/cli, 30 s, which a
    * ConnectTimeout in the flags replaces: OpenSSH takes the first value that
-   * it gets for an option. Then it finds the engine socket of the Docker CLI
-   * on the SSH server. The ping of Docker.connect opens the first channel to
+   * it gets for an option. The processes of the user share the connection by
+   * the ControlMaster and ControlPath of the config, as OpenSSH shares one
+   * (@zukhruf/ssh ADR 0013). Then it finds the engine socket of the Docker
+   * CLI on the SSH server. The ping of Docker.connect opens the first channel to
    * the socket, so a server that refuses the socket fails there.
    */
   static async connect(
@@ -189,14 +195,14 @@ export class SshDialer implements Dialer {
       });
     }
     const cancel = signal === undefined ? {} : { signal };
-    let client: Client;
+    let client: SharedConnection;
     try {
       const config = await OpenSshConfig.resolve(host, {
         flags: [...sshFlags, '-o', 'ConnectTimeout=30'],
         environment,
         ...cancel,
       });
-      client = await config.dial({ clock, ...cancel });
+      client = await config.share({ clock, ...cancel });
     } catch (error) {
       signal?.throwIfAborted();
       throw new ConnectionFailedError(host, { cause: error });
@@ -255,7 +261,7 @@ export class SshDialer implements Dialer {
 
 /** The path of the engine socket of the Docker CLI on the SSH server: its context's unix:// endpoint. */
 async function engineSocket(
-  client: Client,
+  client: SharedConnection,
   host: string,
   signal: AbortSignal | undefined,
 ): Promise<string> {

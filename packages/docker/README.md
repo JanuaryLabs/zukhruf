@@ -541,6 +541,20 @@ await using remote = await Docker.connect({
 
 The flags go to `ssh -G` before the config file, and `-o ConnectTimeout=30` after them. OpenSSH uses the first value that it gets for each option, so a flag of the caller wins over `~/.ssh/config`, and both win over the 30 s of the Docker CLI. A flag that changes the config works (`-o`, `-i`, `-J`, `-F`, `-p`, `-l`); a flag that only changes the run of `ssh`, such as `-v`, does nothing.
 
+### Share one SSH connection between processes
+
+Each `Docker.connect` to an `ssh://` engine opens an SSH connection, and a handshake costs 0.2–2 s. With `ControlMaster` and `ControlPath`, the processes of the user share one connection to the host, as OpenSSH shares one for the Docker CLI. The first process becomes the master, and each later one joins it (`@zukhruf/ssh` [ADR 0013](../ssh/docs/adr/0013-processes-share-a-connection-by-controlmaster-and-controlpath-as-openssh-shares-one.md)). Turn it on in `~/.ssh/config`, as Docker's docs advise for the Docker CLI, or in `sshFlags`:
+
+```ts
+await using docker = await Docker.connect({
+  clock: globalThis,
+  environment: process.env,
+  sshFlags: ['-o', 'ControlMaster=auto', '-o', 'ControlPath=~/.ssh/cm-%C'],
+});
+```
+
+The disposal then ends this process's use of the connection. A process that is the master does not exit while another process uses its connection, so do not run such clients under `node --test --test-force-exit`: it kills the master's process when its file ends, and the streams of the other files fail.
+
 ### End a dead connection
 
 `ConnectTimeout` is a limit for the start of the connection only: the connect, the SSH handshake and the key exchange. No call has a time limit after that.

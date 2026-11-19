@@ -601,3 +601,43 @@ describe('the input of an exec over an ssh:// host', () => {
     },
   );
 });
+
+describe('one SSH connection that clients share', () => {
+  test(
+    'two clients whose sshFlags give ControlMaster auto and a ControlPath share one SSH connection, and each reaches the engine',
+    { skip },
+    async (t) => {
+      // Arrange
+      await using sshd = await startEngineSshd(engineVariables(ready(engine)));
+      const sshFlags = [
+        ...(await clientFlags(sshd)),
+        '-o',
+        'ControlMaster=auto',
+        '-o',
+        `ControlPath=${join(sshd.directory, 'cm')}`,
+      ];
+      const connect = async (): Promise<Docker> =>
+        Docker.connect({
+          clock: globalThis,
+          environment: process.env,
+          host: SSH_HOST,
+          sshFlags,
+          signal: t.signal,
+        });
+      await using first = await connect();
+
+      // Act
+      await using second = await connect();
+      const versions = await Promise.all(
+        [first, second].map(
+          async (docker) =>
+            (await docker.info({ signal: t.signal })).ServerVersion,
+        ),
+      );
+
+      // Assert
+      assert.equal(versions[0], versions[1]);
+      assert.equal(sshd.connections(), 1);
+    },
+  );
+});
