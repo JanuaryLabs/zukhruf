@@ -41,6 +41,7 @@
   },
   "dependencies": {
     "@zukhruf/statistics": "^0.8.32",
+    "@zukhruf/vectors": "^0.8.32",
     "ai": "^7.0.154"
   },
   "devDependencies": {

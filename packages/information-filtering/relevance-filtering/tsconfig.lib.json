@@ -22,6 +22,9 @@
     },
     {
       "path": "../../random/tsconfig.lib.json"
+    },
+    {
+      "path": "../../vectors/tsconfig.lib.json"
     }
   ]
 }

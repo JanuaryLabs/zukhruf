@@ -1,3 +1,5 @@
+import { UnitVector, Vector, dot } from '@zukhruf/vectors';
+
 import { binormal } from './binormal.ts';
 import { withKeywordEvidence } from './evidence.ts';
 import { type Keyword, matchesAny } from './keyword.ts';
@@ -87,18 +89,14 @@ export class SimilarityScorer implements Scorer {
   // of the stored unit vector and the description made a unit vector.
   #taughtScores() {
     const { relevant, notRelevant } = this.#answers;
-    const description = this.#descriptionVector;
-    const length = Math.hypot(...description);
+    const description = UnitVector.normalize(
+      Vector.from(this.#descriptionVector),
+    );
     const stored = this.#vectors.fetch(
       [...relevant, ...notRelevant].map(({ id }) => id),
     );
-    const score = ({ id }: { readonly id: string }) => {
-      const vector = stored.get(id) ?? [];
-      let total = 0;
-      for (let index = 0; index < description.length; index++)
-        total += (vector[index] ?? 0) * ((description[index] ?? 0) / length);
-      return total;
-    };
+    const score = ({ id }: { readonly id: string }) =>
+      dot(Vector.from(stored.get(id) ?? []), description);
     return {
       relevant: relevant.map(score),
       notRelevant: notRelevant.map(score),
