@@ -632,6 +632,9 @@ jobs:
   gate:
     if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
     runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
     outputs:
       current: \${{ steps.tested.outputs.current }}
       image: \${{ steps.image.outputs.affected }}
@@ -640,12 +643,21 @@ jobs:
       - name: Checkout main
         uses: actions/checkout@v7
         with:
+          ref: main
           fetch-depth: 0
           persist-credentials: false
 
       - name: Ship only the commit CI tested
         id: tested
         uses: JanuaryLabs/zukhruf/.github/actions/tested-commit@main
+
+      # A green run that shipped nothing would become affected-range's base and drop the changes it skipped.
+      - name: Cancel a run that main moved past
+        if: steps.tested.outputs.current == 'false'
+        env:
+          GH_TOKEN: \${{ github.token }}
+          RUN_ID: \${{ github.run_id }}
+        run: gh run cancel "$RUN_ID"
 
       - name: Set up the workspace
         if: steps.tested.outputs.current == 'true'

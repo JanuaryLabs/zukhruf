@@ -221,6 +221,33 @@ test('the deploy workflow is built from the actions of zukhruf and checks the sh
   );
 });
 
+test('the deploy gate compares the tested commit with main as it is when the run starts', async () => {
+  const tree = await workspace();
+
+  await dokployGenerator(tree, { api: 'apps/backend', owner: 'acme' });
+
+  assert.match(
+    read(tree, '.github/workflows/deploy.yml'),
+    /- name: Checkout main\n {8}uses: actions\/checkout@v7\n {8}with:\n {10}ref: main\n/,
+  );
+});
+
+test('a deploy run that main moved past cancels itself, so it is never the base of the next deploy', async () => {
+  const tree = await workspace();
+
+  await dokployGenerator(tree, { api: 'apps/backend', owner: 'acme' });
+
+  const deploy = read(tree, '.github/workflows/deploy.yml');
+  assert.match(
+    deploy,
+    /id: tested\n {8}uses: JanuaryLabs\/zukhruf\/\.github\/actions\/tested-commit@main\n\n(?: {6}#.*\n)* {6}- name: .*\n {8}if: steps\.tested\.outputs\.current == 'false'\n {8}env:\n {10}GH_TOKEN: \$\{\{ github\.token \}\}\n {10}RUN_ID: \$\{\{ github\.run_id \}\}\n {8}run: gh run cancel "\$RUN_ID"\n/,
+  );
+  assert.match(
+    deploy,
+    /\n {2}gate:\n(?: {4}.*\n)*? {4}permissions:\n {6}actions: write\n {6}contents: read\n/,
+  );
+});
+
 test('a new image follows a change of each project that the Dockerfile builds and of the Prisma package', async () => {
   const tree = await workspace('packages/db');
   await reactAppGenerator(tree, { directory: 'apps/web' });
