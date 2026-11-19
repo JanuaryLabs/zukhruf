@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { cp, mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
+import { fileURLToPath } from 'node:url';
 
 import {
   type NxJsonConfiguration,
@@ -17,9 +18,13 @@ import { changes, generatorTree } from '../../testing/generator-tree.ts';
 import nodeAppGenerator from '../node-app/generator.ts';
 import pairGenerator from '../pair/generator.ts';
 import reactAppGenerator from '../react-app/generator.ts';
+import { stackModuleSource } from './files.ts';
 import dokployGenerator, { type DokployOptions } from './generator.ts';
 
 const production = 'infra/src/environments/production';
+const stackModule = fileURLToPath(
+  new URL('../../../opentofu/dokploy-stack', import.meta.url),
+);
 
 /** A workspace with a node-app in apps/backend and, given `database`, a Prisma package there. */
 async function workspace(database?: string): Promise<Tree> {
@@ -61,8 +66,12 @@ for (const [hostMode, hostOptions] of Object.entries(hosts)) {
           /source {2}= "registry\.terraform\.io\/ahmedali6\/dokploy"/,
         );
         assert.match(versions, /source {2}= "hetznercloud\/hcloud"/);
-        assert.equal(/hashicorp\/random/.test(versions), postgres);
-        assert.equal(/hashicorp\/random/.test(lock), postgres);
+        // The module requires random even without a database.
+        assert.match(versions, /source {2}= "hashicorp\/random"/);
+        assert.match(
+          lock,
+          /provider "registry\.opentofu\.org\/hashicorp\/random"/,
+        );
         assert.match(
           lock,
           /provider "registry\.terraform\.io\/ahmedali6\/dokploy"/,
@@ -84,18 +93,25 @@ for (const [hostMode, hostOptions] of Object.entries(hosts)) {
           postgres,
         );
         assert.match(compose, /Host\(`\$\{PUBLIC_HOST\}`\)/);
+        assert.match(
+          compose,
+          /^ {2}backend:\n(?: {4}.*\n)*? {4}env_file: \.env\n/m,
+        );
 
         const main = read(tree, `${production}/main.tf`);
-        assert.match(main, /PUBLIC_HOST=\$\{local\.host\}/);
+        assert.match(main, /^module "stack" \{$/m);
+        assert.match(main, /PUBLIC_HOST = local\.host/);
         assert.equal(
-          /CONNECTION_STRING=postgresql:\/\/acme:/.test(main),
+          /^ {2}database {5}= \{ role = "acme" \}$/m.test(main),
           postgres,
         );
         assert.equal(
-          /resource "random_password" "postgres"/.test(main),
-          postgres,
+          /^ {2}registry {5}= \{ username = "octocat", password = var\.ghcr_pull_token \}$/m.test(
+            main,
+          ),
+          registry,
         );
-        assert.doesNotMatch(main, /terraform_data/);
+        assert.doesNotMatch(main, /^resource /m);
 
         const dns = read(tree, `${production}/dns.tf`);
         const providers = read(tree, `${production}/providers.tf`);
@@ -111,14 +127,7 @@ for (const [hostMode, hostOptions] of Object.entries(hosts)) {
             : /host {9}= "acme\.\$\{data\.hcloud_server\.dokploy\.ipv4_address\}\.sslip\.io"/,
         );
 
-        assert.equal(tree.exists(`${production}/registry.tf`), registry);
-        if (registry) {
-          // Dokploy's registry.create refuses a URL with a scheme.
-          assert.match(
-            read(tree, `${production}/registry.tf`),
-            /registry_url {2}= "ghcr\.io"/,
-          );
-        }
+        assert.ok(!tree.exists(`${production}/registry.tf`));
         const variables = read(tree, `${production}/variables.tf`);
         assert.equal(/variable "ghcr_pull_token"/.test(variables), registry);
         const envExample = read(tree, 'infra/.env.example');
@@ -285,13 +294,16 @@ test('Postgres 18 keeps its data under /var/lib/postgresql and answers its healt
     compose,
     /networks:\n {6}default: \{\}\n {6}dokploy-network: \{\}/,
   );
+  assert.match(compose, /^ {6}CONNECTION_STRING: \$\{CONNECTION_STRING\}$/m);
   assert.match(
     read(tree, `${production}/main.tf`),
-    /CONNECTION_STRING=postgresql:\/\/my_app:\$\{random_password\.postgres\.result\}@postgres:5432\/my_app/,
+    /^ {2}database {5}= \{ role = "my_app" \}$/m,
   );
 });
 
-test('each $ of the raw compose is a ${VAR} of the Dokploy environment or an escaped $$', async () => {
+// The module refuses a plan whose compose names a key that the env file does
+// not have; this catches the generator's compose before any host plans it.
+test('each $ of the raw compose is a ${VAR} of the env of the module call, a key of the database, or an escaped $$', async () => {
   const tree = await workspace('packages/db');
 
   await dokployGenerator(tree, {
@@ -308,13 +320,16 @@ test('each $ of the raw compose is a ${VAR} of the Dokploy environment or an esc
   for (const [match, name] of placeholders) {
     assert.ok(name !== undefined, `a bare ${match} in the compose`);
   }
-  const env = read(tree, `${production}/main.tf`);
+  const env = /^ {2}env = \{\n([\s\S]*?)^ {2}\}/m.exec(
+    read(tree, `${production}/main.tf`),
+  )?.[1];
+  const keys = new Set([
+    ...(env ?? '').matchAll(/^ {4}([A-Z_]+) +=/gm).map(([, key]) => key),
+    'POSTGRES_PASSWORD',
+    'CONNECTION_STRING',
+  ]);
   for (const name of new Set(compose.match(/(?<=\$\{)[A-Z_]+(?=\})/g))) {
-    assert.match(
-      env,
-      new RegExp(`^ {4}${name}=`, 'm'),
-      `${name} is not in the env`,
-    );
+    assert.ok(keys.has(name), `${name} is not a key of the env file`);
   }
 });
 
@@ -389,10 +404,7 @@ test('the dokploy host, the server and the name are options', async () => {
     /dokploy_host = "https:\/\/panel\.example\.com\/api"/,
   );
   assert.match(read(tree, `${production}/dns.tf`), /name = "box-1"/);
-  assert.match(
-    read(tree, `${production}/main.tf`),
-    /resource "dokploy_project" "shop" \{\n {2}name = "shop"/,
-  );
+  assert.match(read(tree, `${production}/main.tf`), /^ {2}name {9}= "shop"$/m);
   assert.match(
     read(tree, 'infra/compose.dokploy.yml'),
     /image: ghcr\.io\/acme\/shop-backend:latest[\s\S]*traefik\.http\.routers\.shop-websecure/,
@@ -465,17 +477,46 @@ test('a second run changes nothing', async () => {
   assert.deepEqual(changes(tree), firstRun);
 });
 
-test('a run without the registry removes the registry of an earlier run', async () => {
+test('a first run writes main.tf as a call of the dokploy-stack module at ref=main, with the marker as the last line of env', async () => {
   const tree = await workspace();
-  await dokployGenerator(tree, {
-    api: 'apps/backend',
-    owner: 'acme',
-    registryUser: 'octocat',
-  });
 
   await dokployGenerator(tree, { api: 'apps/backend', owner: 'acme' });
 
-  assert.ok(!tree.exists(`${production}/registry.tf`));
+  assert.match(
+    read(tree, `${production}/main.tf`),
+    /^module "stack" \{\n {2}source = "git::https:\/\/github\.com\/JanuaryLabs\/zukhruf\.git\/\/packages\/nx\/opentofu\/dokploy-stack\?ref=main"\n[\s\S]*\n {2}env = \{\n {4}PUBLIC_HOST = local\.host\n {4}# Generators add env keys above this line\.\n {2}\}\n\}\n/m,
+  );
+  assert.match(
+    read(tree, `${production}/outputs.tf`),
+    /value {7}= module\.stack\.compose_id/,
+  );
+  assert.ok(!tree.exists(`${production}/moved.tf`));
+});
+
+test('a second run keeps each file of infra/ that the repo edited, and deletes none', async () => {
+  const tree = await workspace();
+  const options: DokployOptions = {
+    api: 'apps/backend',
+    owner: 'acme',
+    registryUser: 'octocat',
+  };
+  await dokployGenerator(tree, options);
+  const edited = {
+    [`${production}/main.tf`]: 'module "stack" {}\n',
+    [`${production}/variables.tf`]: 'variable "resend_api_key" {}\n',
+    [`${production}/registry.tf`]: '# the repo kept a file of an older run\n',
+    'infra/compose.dokploy.yml': 'services: {}\n',
+    'infra/project.json': '{ "name": "@acme/delivery" }\n',
+  };
+  for (const [path, content] of Object.entries(edited)) {
+    tree.write(path, content);
+  }
+
+  await dokployGenerator(tree, { api: 'apps/backend', owner: 'acme' });
+
+  for (const [path, content] of Object.entries(edited)) {
+    assert.equal(read(tree, path), content, `${path} was rewritten`);
+  }
 });
 
 test('a CI workflow that is there stays', async () => {
@@ -616,6 +657,72 @@ test(
             0,
             `host ${hostMode}, postgres ${postgres}, registry ${registry}: tofu fmt would rewrite\n${fmt.stdout}${fmt.stderr}`,
           );
+        }
+      }
+    }
+  },
+);
+
+// The generated main.tf calls the module at ref=main; this points the call at
+// the module of the checkout, so an input that the generator writes and the
+// module does not have fails here, before a host's tofu init fetches main.
+// -lockfile=readonly, as the typecheck target runs it, also proves that the
+// written lock file has each provider that the module requires.
+test(
+  'the generated infra validates against the dokploy-stack module of the checkout',
+  { skip: tofuOnPath ? false : 'tofu is not on PATH' },
+  async () => {
+    await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
+    const pluginCache = join(folder.path, 'plugin-cache');
+    await mkdir(pluginCache);
+    for (const [hostMode, hostOptions] of Object.entries(hosts)) {
+      for (const postgres of [true, false]) {
+        for (const registry of [true, false]) {
+          const tree = await workspace(postgres ? 'packages/db' : undefined);
+          await dokployGenerator(tree, {
+            api: 'apps/backend',
+            owner: 'Acme-Org',
+            ...hostOptions,
+            ...(postgres ? { database: 'packages/db' } : {}),
+            ...(registry ? { registryUser: 'octocat' } : {}),
+          });
+          const root = join(folder.path, `${hostMode}-${postgres}-${registry}`);
+          await cp(stackModule, join(root, 'dokploy-stack'), {
+            recursive: true,
+            filter: (source) => !source.includes('.terraform'),
+          });
+          for (const change of tree.listChanges()) {
+            if (change.type === 'DELETE' || !change.path.startsWith('infra/')) {
+              continue;
+            }
+            const path = join(root, change.path);
+            await mkdir(dirname(path), { recursive: true });
+            await writeFile(
+              path,
+              (change.content?.toString() ?? '').replace(
+                stackModuleSource,
+                '../../../../dokploy-stack',
+              ),
+            );
+          }
+          const environment = join(root, production);
+
+          for (const args of [
+            ['init', '-backend=false', '-input=false', '-lockfile=readonly'],
+            ['validate', '-no-color'],
+          ]) {
+            const run = spawnSync('tofu', args, {
+              cwd: environment,
+              encoding: 'utf8',
+              env: { ...process.env, TF_PLUGIN_CACHE_DIR: pluginCache },
+            });
+
+            assert.equal(
+              run.status,
+              0,
+              `host ${hostMode}, postgres ${postgres}, registry ${registry}: tofu ${args.join(' ')}\n${run.stdout}${run.stderr}`,
+            );
+          }
         }
       }
     }

@@ -76,6 +76,14 @@ _Avoid_: Transitive dependency (an edge can be a peer)
 A folder `src/environments/<name>` of a project root with at least one `*.tf` file directly in it. It is one OpenTofu root module, with its own state and its own saved plan. Each environment is a configuration of the OpenTofu targets that work on one environment. The default environment is `production`, else the first environment by name.
 _Avoid_: Stage, workspace (an OpenTofu workspace is a different thing), stack
 
+**OpenTofu module**:
+A folder of `*.tf` files of this package that an environment of a host calls, such as `opentofu/dokploy-stack`. It has inputs, outputs and its own `tofu test` files, and configures no provider.
+_Avoid_: Terraform module, area (an area is a part of the package's TypeScript)
+
+**Module call**:
+The `module "stack"` block in a host's `main.tf`, with a git `source` at `ref=main`. Its inputs are the host's needs, such as the keys of `env`. The dokploy generator writes it once, and the repo owns it.
+_Avoid_: Module instance, module usage
+
 **Saved plan**:
 The file `tfplan` that `preview` writes in an environment, with `tofu plan -out tfplan`. `show` shows it. It is encrypted with the state passphrase.
 _Avoid_: Plan file, plan output

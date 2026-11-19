@@ -1,7 +1,7 @@
 // The content of each file that dokploy writes. Each is a string in a .ts
 // module, so tsc puts it in dist with no copy step (ADR 0009). A `${...}` of
 // OpenTofu, Compose or GitHub Actions is escaped as `\${...}`.
-import type { Registry, Stack } from './generator.ts';
+import type { Stack } from './generator.ts';
 import {
   type Provider,
   dokployProvider,
@@ -12,13 +12,15 @@ import {
 /** The root of the OpenTofu project. */
 export const infraRoot = 'infra';
 
-function providersOf(stack: Stack): Provider[] {
-  return [
-    dokployProvider,
-    hcloudProvider,
-    ...(stack.database ? [randomProvider] : []),
-  ];
-}
+/** The module that holds the Dokploy delivery, at the ref of zukhruf's actions (ADR 0015). */
+export const stackModuleSource =
+  'git::https://github.com/JanuaryLabs/zukhruf.git//packages/nx/opentofu/dokploy-stack?ref=main';
+
+/** The last line of the env map of the module call: the auth generator adds its keys above it. */
+export const envMarker = '# Generators add env keys above this line.';
+
+// The module requires random even without a database, so the lock always has it.
+const providers: Provider[] = [dokployProvider, hcloudProvider, randomProvider];
 
 const image = (stack: Stack, name: string) =>
   `ghcr.io/${stack.owner}/${stack.name}-${name}:latest`;
@@ -155,9 +157,7 @@ ${logging}    environment:
 `
     : '';
   const backendDatabase = database
-    ? `    environment:
-      CONNECTION_STRING: \${CONNECTION_STRING}
-    depends_on:
+    ? `    depends_on:
       postgres:
         condition: service_healthy
       migrate:
@@ -181,9 +181,12 @@ volumes:
   return `# ${name} Dokploy compose template (raw), production only: the ${app.name}
 # image${database ? ', Postgres and the one-shot migrate service' : ''}.
 #
-# OpenTofu owns this compose and its environment (infra/src/environments/
-# production). Do not edit them in the Dokploy panel. Its placeholders resolve
-# from that environment; write a literal dollar sign as $$.
+# The repo owns this compose. OpenTofu stores it in Dokploy with its env, the
+# env map of module "stack" in infra/src/environments/production/main.tf. Do
+# not edit them in the Dokploy panel. Dokploy writes the env to .env next to
+# the compose: the ${app.name} reads every key of it through env_file, and each
+# placeholder must be a key of it (the module refuses a plan otherwise). Write
+# a literal dollar sign as $$.
 #
 ${pull}
 
@@ -193,7 +196,8 @@ ${postgres}  ${app.name}:
     # A compose deploy reuses the cached image unless told to pull.
     pull_policy: always
     restart: unless-stopped
-${logging}${backendDatabase}${networks}    labels:
+${logging}    env_file: .env
+${backendDatabase}${networks}    labels:
       - 'traefik.enable=true'
       - 'traefik.docker.network=dokploy-network'
       - 'traefik.http.routers.${name}-web.rule=Host(\`\${PUBLIC_HOST}\`)'
@@ -212,36 +216,31 @@ networks:
 ${volumes}`;
 }
 
-export function versionsTf(stack: Stack): string {
-  const providers = providersOf(stack)
-    .map(
-      (provider) => `    ${provider.name} = {
-      source  = "${provider.source}"
-      version = "${provider.version}"
-    }`,
-    )
-    .join('\n');
-  return `terraform {
+export const versionsTf = `terraform {
   required_version = ">= 1.12.3"
 
   required_providers {
-${providers}
+${providers
+  .map(
+    (provider) => `    ${provider.name} = {
+      source  = "${provider.source}"
+      version = "${provider.version}"
+    }`,
+  )
+  .join('\n')}
   }
 }
 `;
-}
 
 /** The lock blocks, in the order of their source addresses, as \`tofu init\` writes them. */
-export function lockHcl(stack: Stack): string {
-  const blocks = providersOf(stack)
-    .map((provider) => provider.lock)
-    .toSorted((a, b) => a.localeCompare(b));
-  return `# This file is maintained automatically by "tofu init".
+export const lockHcl = `# This file is maintained automatically by "tofu init".
 # Manual edits may be lost in future updates.
 
-${blocks.join('\n\n')}
+${providers
+  .map((provider) => provider.lock)
+  .toSorted((a, b) => a.localeCompare(b))
+  .join('\n\n')}
 `;
-}
 
 export const backendTf = `terraform {
   # Git is the state store: the encrypted state is committed at
@@ -343,91 +342,42 @@ resource "hcloud_zone_rrset" "${stack.name}" {
 }
 
 export function mainTf(stack: Stack): string {
-  const { name, app, database } = stack;
-  const password = database
-    ? `
-resource "random_password" "postgres" {
-  length  = 32
-  special = false
-}
-`
+  const { name, app, database, registry } = stack;
+  const databaseInput = database
+    ? `  database     = { role = "${database.role}" }\n`
     : '';
-  const databaseEnv = database
-    ? `
-    POSTGRES_PASSWORD=\${random_password.postgres.result}
-    CONNECTION_STRING=postgresql://${database.role}:\${random_password.postgres.result}@postgres:5432/${database.role}`
+  const registryInput = registry
+    ? `  registry     = { username = "${registry.username}", password = var.ghcr_pull_token }\n`
     : '';
-  return `resource "dokploy_project" "${name}" {
-  name = "${name}"
-  # Required in practice: the provider writes the API's description into state
-  # even when it is unset, and the attribute is not computed. Keep it stable:
-  # the environment's project_id requires replacement.
-  description = "${name} at ${hostDescription(stack)} - managed by OpenTofu"
+  return `# zukhruf's dokploy-stack module stores the stack in Dokploy: the project, its
+# adopted production environment and the raw compose with its env, and, when
+# given, the Postgres password and the GHCR registry. It follows zukhruf's
+# main, as the actions of the workflows do.
+#
+# The description is required in practice: the provider writes the API's
+# description into state even when it is unset. Keep it stable: a change
+# replaces the environment.
+#
+# Each key of env reaches the ${app.name} through env_file: .env of the compose.
+module "stack" {
+  source = "${stackModuleSource}"
 
-  lifecycle {
-    prevent_destroy = true
+  name         = "${name}"
+  description  = "${name} at ${hostDescription(stack)} - managed by OpenTofu"
+  app          = "${app.name}"
+  compose_file = file("\${path.module}/../../../compose.dokploy.yml")
+${databaseInput}${registryInput}
+  env = {
+    PUBLIC_HOST = local.host
+    ${envMarker}
   }
 }
 
-# Dokploy creates this protected default environment with every project and
-# refuses to create another named "production"; provider 0.8 adopts it on
-# create, so a single apply provisions the stack.
-resource "dokploy_environment" "production" {
-  name        = "production"
-  description = "Production environment"
-  project_id  = dokploy_project.${name}.id
-
-  lifecycle {
-    prevent_destroy = true
-    ignore_changes  = [name, description]
-  }
-}
-${password}
-resource "dokploy_compose" "${app.name}" {
-  environment_id = dokploy_environment.production.id
-  name           = "${app.name}"
-
-  source_type          = "raw"
-  compose_file_content = file("\${path.module}/../../../compose.dokploy.yml")
-
-  env = <<-EOT
-    PUBLIC_HOST=\${local.host}${databaseEnv}
-  EOT
-
-  # Deploys go through the API (compose.deploy), never the refresh-token
-  # webhook, so auto_deploy stays off. deploy_on_create stays off so creating
-  # the compose never launches a deployment that no job observes.
-  auto_deploy      = false
-  deploy_on_create = false
-
-  lifecycle {
-    prevent_destroy = true
-  }
-}
-
-# Updating dokploy_compose only stores the compose. The stack does not deploy:
-# the release job of the deploy workflow runs zukhruf's dokploy-deploy and
-# wait-for-health actions after a new image, after an apply that changed the
-# stack (tofu-apply's \`changed\`), and after any infra change since the last
+# Updating the compose only stores it. The stack does not deploy: the release
+# job of the deploy workflow runs zukhruf's dokploy-deploy and wait-for-health
+# actions after a new image, after an apply that changed the stack
+# (tofu-apply's \`changed\`), and after any infra change since the last
 # successful deploy, so a failed rollout is retried by the next run.
-`;
-}
-
-export function registryTf(stack: Stack, registry: Registry): string {
-  return `# Dokploy runs \`docker login\` on the server when it stores a registry, and a
-# compose deploy pulls with that login, so the server pulls the private images.
-# The login is the server's docker login for ghcr.io: each stack on the server
-# that stores a GHCR registry replaces it. The URL is a bare host: Dokploy
-# refuses one with a scheme ("Registry URL must be a valid hostname or
-# hostname:port").
-resource "dokploy_registry" "ghcr" {
-  registry_name = "${stack.name}-ghcr"
-  registry_type = "cloud"
-  registry_url  = "ghcr.io"
-  image_prefix  = "ghcr.io"
-  username      = "${registry.username}"
-  password      = var.ghcr_pull_token
-}
 `;
 }
 
@@ -439,7 +389,7 @@ export function outputsTf(stack: Stack): string {
 
 output "compose_id" {
   description = "Dokploy compose ID of the stack, for API calls such as compose.one and compose.deploy."
-  value       = dokploy_compose.${stack.app.name}.id
+  value       = module.stack.compose_id
 }
 
 output "host" {

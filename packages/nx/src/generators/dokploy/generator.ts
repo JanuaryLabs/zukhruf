@@ -27,7 +27,6 @@ import {
   outputsTf,
   prettierignore,
   providersTf,
-  registryTf,
   variablesTf,
   versionsTf,
   zizmorYml,
@@ -222,11 +221,11 @@ function addOpentofuPlugin(tree: Tree): void {
 
 /**
  * The GitOps delivery of a node-app on Dokploy: an OpenTofu project in
- * `infra/` that stores the compose in Dokploy, and the CI and deploy
- * workflows that build the images, apply the stack through zukhruf's
- * tofu-apply workflow and roll it out with its dokploy-deploy and
- * wait-for-health actions. A second run with the same options changes
- * nothing.
+ * `infra/` whose main.tf calls zukhruf's dokploy-stack module to store the
+ * compose in Dokploy, and the CI and deploy workflows that build the images,
+ * apply the stack through zukhruf's tofu-apply workflow and roll it out with
+ * its dokploy-deploy and wait-for-health actions. Each file is written once:
+ * a second run changes nothing and keeps the repo's edits.
  */
 export default async function dokployGenerator(
   tree: Tree,
@@ -234,34 +233,29 @@ export default async function dokployGenerator(
 ): Promise<void> {
   const stack = stackOf(tree, options);
 
-  writeJson(tree, `${infraRoot}/project.json`, {
-    name: stack.projectName,
-    $schema: '../node_modules/nx/schemas/project-schema.json',
-    sourceRoot: `${infraRoot}/src`,
-    projectType: 'application',
-  });
-  tree.write(`${infraRoot}/.gitignore`, gitignore);
-  addLines(tree, '.prettierignore', prettierignore);
-  addLines(tree, '.nxignore', nxignore);
-  tree.write(`${infraRoot}/.env.example`, envExample(stack));
-  tree.write(`${infraRoot}/compose.dokploy.yml`, composeYml(stack));
-  tree.write(`${environment}/versions.tf`, versionsTf(stack));
-  tree.write(`${environment}/backend.tf`, backendTf);
-  tree.write(`${environment}/encryption.tf`, encryptionTf(stack));
-  tree.write(`${environment}/providers.tf`, providersTf(stack));
-  tree.write(`${environment}/dns.tf`, dnsTf(stack));
-  tree.write(`${environment}/main.tf`, mainTf(stack));
-  tree.write(`${environment}/outputs.tf`, outputsTf(stack));
-  tree.write(`${environment}/variables.tf`, variablesTf(stack));
-  if (stack.registry) {
-    tree.write(`${environment}/registry.tf`, registryTf(stack, stack.registry));
-  } else if (tree.exists(`${environment}/registry.tf`)) {
-    tree.delete(`${environment}/registry.tf`);
+  // Once written, each file of infra/ and each workflow is the repo's: a run
+  // writes a file only when it is missing, and never deletes one (ADR 0015).
+  if (!tree.exists(`${infraRoot}/project.json`)) {
+    writeJson(tree, `${infraRoot}/project.json`, {
+      name: stack.projectName,
+      $schema: '../node_modules/nx/schemas/project-schema.json',
+      sourceRoot: `${infraRoot}/src`,
+      projectType: 'application',
+    });
   }
-  tree.write(`${environment}/.terraform.lock.hcl`, lockHcl(stack));
-  // Once written, the workflows are the repo's: it composes zukhruf's actions
-  // with steps of its own (ADR 0011, decision 17).
   for (const [path, content] of [
+    [`${infraRoot}/.gitignore`, gitignore],
+    [`${infraRoot}/.env.example`, envExample(stack)],
+    [`${infraRoot}/compose.dokploy.yml`, composeYml(stack)],
+    [`${environment}/versions.tf`, versionsTf],
+    [`${environment}/backend.tf`, backendTf],
+    [`${environment}/encryption.tf`, encryptionTf(stack)],
+    [`${environment}/providers.tf`, providersTf(stack)],
+    [`${environment}/dns.tf`, dnsTf(stack)],
+    [`${environment}/main.tf`, mainTf(stack)],
+    [`${environment}/outputs.tf`, outputsTf(stack)],
+    [`${environment}/variables.tf`, variablesTf(stack)],
+    [`${environment}/.terraform.lock.hcl`, lockHcl],
     ['.github/workflows/ci.yml', ciYml(stack)],
     ['.github/workflows/deploy.yml', deployYml(stack)],
     ['.github/zizmor.yml', zizmorYml],
@@ -270,6 +264,8 @@ export default async function dokployGenerator(
       tree.write(path, content);
     }
   }
+  addLines(tree, '.prettierignore', prettierignore);
+  addLines(tree, '.nxignore', nxignore);
   addOpentofuPlugin(tree);
 
   await formatFiles(tree);

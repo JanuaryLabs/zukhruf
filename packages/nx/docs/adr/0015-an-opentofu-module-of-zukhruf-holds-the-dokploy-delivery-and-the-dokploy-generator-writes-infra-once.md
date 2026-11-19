@@ -1,6 +1,6 @@
 # An OpenTofu module of zukhruf holds the Dokploy delivery, and the dokploy generator writes infra once
 
-Status: Proposed 2026-11-19 (backlog #4733, step 1), for review before any code. It supersedes the ownership rule of [ADR 0011](./0011-the-dokploy-generator-writes-the-gitops-delivery-of-a-node-app.md) decision 17 for the files of `infra/`. The other decisions of ADR 0011 stay.
+Status: Accepted 2026-11-19 by Ezz (backlog #4733), with one change to the proposal: the module call follows `ref=main`, as the actions do, not a release tag (decision 1). It supersedes the ownership rule of [ADR 0011](./0011-the-dokploy-generator-writes-the-gitops-delivery-of-a-node-app.md) decision 17 for the files of `infra/`. The other decisions of ADR 0011 stay.
 
 ADR 0011 decision 17 says that the dokploy generator owns every file of `infra/` and writes them again on each run. A host therefore cannot add a key to the env of `dokploy_compose` in `main.tf` or to the compose by hand: the next run deletes it. Two places need that now. The auth generator must give the backend `BETTER_AUTH_SECRET` and `BETTER_AUTH_URL` ([ADR 0014](./0014-the-auth-generator-adds-better-auth-to-a-backend-and-its-db-package.md), part B, #4719). meddit's mailer needs `RESEND_API_KEY` and `MAIL_FROM`, and meddit's backend does not boot without them since 030176e, so meddit's deploy is blocked (#4725).
 
@@ -29,15 +29,15 @@ Facts read on 2026-11-19:
 
 ## Decision
 
-1. **The module is `packages/nx/opentofu/dokploy-stack`, and a host calls it with a git source pinned to a release tag.**
+1. **The module is `packages/nx/opentofu/dokploy-stack`, and a host calls it with a git source at `ref=main`, as the workflows call zukhruf's actions.**
 
    ```hcl
-   source = "git::https://github.com/JanuaryLabs/zukhruf.git//packages/nx/opentofu/dokploy-stack?ref=release/0.8.36&depth=1"
+   source = "git::https://github.com/JanuaryLabs/zukhruf.git//packages/nx/opentofu/dokploy-stack?ref=main"
    ```
 
-   The folder is inside the `nx` project, so a commit to the module is a commit of `@zukhruf/nx`, and the next release tags it. The generator writes the ref `release/<its own version>`, read from the `package.json` of `@zukhruf/nx`, as `init` reads it (ADR 0009, decision 4). The module and the generator that writes its call then have one version. A host moves to a new module by editing the ref in its `main.tf`, in a commit whose plan it can read.
+   The folder is inside the `nx` project, so `nx:test` runs the module's tests, and a change to the module makes `@zukhruf/nx` affected. The owner ruled the ref on 2026-11-19: the module follows `@main`, like the actions. The actions and the module then have one ref policy, and #4675 decides it for both: when #4675 pins the actions, the ref of each module call is pinned with them. The generator writes `ref=main`, so it reads no version.
 
-   The actions stay at `@main`; #4675 defers their pinning until an identity can push the relocks. A module is pinned now, for 4 reasons. A module changes production resources, and at `@main` a push to zukhruf would change each host on its next deploy with no commit in the host. The host's gate would not see it, because the infra project did not change. The `typecheck` cache keys on the `.tf` files, so it would hide a change of the module. And the lock file records no module, so the lockfiles of #4675 would not cover it either. The tag is the lock. When #4675 builds its scheduled bump, the ref of each module call joins it.
+   The cost is the one that the proposal named, and the owner accepted it. A push to zukhruf's `main` that changes the module reaches each host on its next deploy run, with no commit in the host: `tofu-apply` runs `tofu init` and `plan` on each deploy, and an apply that changed the stack rolls the compose out. The host's gate does not see it, because the infra project did not change. The `typecheck` cache keys on the host's `.tf` files, so it can hide a change of the module. The lock file records no module, so nothing in the host records which commit of the module it ran. A change to the module is therefore a change to production on every host: it needs the module's tests in zukhruf's CI (decision 5) and a plan that changes nothing for an input that a host already gives.
 
    The npm package does not ship the folder: no host reads it from `node_modules`.
 
@@ -108,7 +108,7 @@ Facts read on 2026-11-19:
 
    The generator's tests on a virtual `Tree`:
 
-   - A first run writes `main.tf` with the module call at `ref=release/<version of @zukhruf/nx>`, the compose with `env_file: .env` on the app, and no `registry.tf`.
+   - A first run writes `main.tf` with the module call at `ref=main`, the compose with `env_file: .env` on the app, and no `registry.tf`.
    - A second run with the same options changes nothing.
    - A second run keeps a `main.tf`, a compose and a `variables.tf` that the repo edited. This replaces "a run without the registry removes the registry of an earlier run".
    - With `tofu` on the PATH, the generated `infra/` validates with the source of the module call pointed at the module in the checkout, for each host mode with and without Postgres and the registry. That catches an input that the generator writes and the module does not have. The fmt test stays.
@@ -123,12 +123,13 @@ Facts read on 2026-11-19:
 
 ## Considered Options
 
-- **The module from `node_modules/@zukhruf/nx/...`.** REJECTED. `tofu-apply.yml` runs no `npm ci` before `tofu init`, so CI would need Node, an install and its cache in the apply job, and `typecheck` would depend on an install. Its one strength is that the package lock pins the module with the generator; the release tag does the same.
+- **The module from `node_modules/@zukhruf/nx/...`.** REJECTED. `tofu-apply.yml` runs no `npm ci` before `tofu init`, so CI would need Node, an install and its cache in the apply job, and `typecheck` would depend on an install. Its one strength is that the package lock pins the module with the generator.
 - **The OpenTofu registry.** REJECTED. A registry module needs its own repository named `terraform-<provider>-<name>` and its own tags. It splits the module from the generator that writes its call.
-- **The ref `@main`, as the actions.** REJECTED, for the 4 reasons of decision 1.
-- **The ref as a commit hash.** Not selected. A hash cannot be moved, but the zizmor config of the hosts already chose tags and `@main` over hashes (`ref-pin`), and a hash does not say which release it is.
+- **The ref `release/<version>`, the release tag of `@zukhruf/nx`, written by the generator from its own version.** The proposal; REJECTED by the owner on 2026-11-19 in favour of `@main`. Its strengths were real: a host would change only in a commit of its own, whose plan it reads; the host's gate and the `typecheck` cache would see each bump; and the module and the generator that writes its call would have one version. Its cost was a second ref policy beside the actions', and a commit in each host for each fix of the delivery until #4675 schedules the bumps.
+- **The ref `@main`, as the actions.** Chosen; see decision 1 for its cost.
+- **The ref as a commit hash.** Not selected. A hash cannot be moved, but the zizmor config of the hosts already chose tags and `@main` over hashes (`ref-pin`), a hash does not say which release it is, and each fix would need a commit in each host.
 - **The module at the root of the repo, as `.github/actions` is.** REJECTED. No Nx project would hold it, so its commits would not trigger a release or a tag, and no test target would run its tests.
-- **Three modules: the stack, the registry and the Postgres password.** Not selected. Each host would bump three refs in step, and the registry and the password are never used without the compose. Its gain is that whatisgoingon would not need `hashicorp/random` in its lock file.
+- **Three modules: the stack, the registry and the Postgres password.** Not selected. Each host would call three modules that change in step, and the registry and the password are never used without the compose. Its gain is that whatisgoingon would not need `hashicorp/random` in its lock file.
 - **The Postgres password and `CONNECTION_STRING` in the host root.** Not selected. They are the same knowledge in each host with a database, and text2sql v2 has the same shape. The cost is a contract: the compose names its Postgres service `postgres` on port 5432, with the role as user and database. The generator writes such a compose, and the module's README states the contract.
 - **The module adds `PUBLIC_HOST` itself.** Not selected. whatisgoingon would get a new key, and the move would no longer plan zero changes.
 - **Explicit keys in the compose (`RESEND_API_KEY: ${RESEND_API_KEY}`).** Not selected. Each key would be in two files of the repo, a key that is missing from the compose reaches no one and fails only at boot, and the auth generator would have to edit YAML that the repo owns. `env_file` gives the app every key of the env file, also `POSTGRES_PASSWORD` (already in `CONNECTION_STRING`), `APP_NAME`, `COMPOSE_PROJECT_NAME` and `DOCKER_CONFIG`.
@@ -141,7 +142,7 @@ Facts read on 2026-11-19:
 ## Consequences
 
 - meddit unblocks #4725 with the second commit of decision 4, and the auth generator's part B has a place for its keys.
-- A fix of the delivery reaches a host only when the host bumps its ref. Until #4675 schedules the bumps, that is a commit by hand in each host.
+- A fix of the delivery reaches each host on its next deploy, with no commit in the host. So does a break: the module's tests in zukhruf's CI are the only gate before production. A local `tofu init` keeps the checkout of the module it fetched first; `tofu init -upgrade` fetches `main` again.
 - `tofu init` and `typecheck` clone 79 MB of zukhruf for each working directory, so `typecheck` downloads it a second time into `.terraform/validate`. Both need GitHub to answer.
 - A generator fix to a file of `infra/` no longer reaches a host that ran the generator. The file is the repo's; the release notes say what to change.
 - The app sees each key of the env file. Dokploy writes the file only while "create env file" is on; the provider never sends that flag, and the default is on. A change of it in the panel is drift that no plan shows.
