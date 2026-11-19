@@ -142,6 +142,9 @@
     },
     {
       "path": "./packages/vectors"
+    },
+    {
+      "path": "./packages/embedding-cache"
     }
   ]
 }

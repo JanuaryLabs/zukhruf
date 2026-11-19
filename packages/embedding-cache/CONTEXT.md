@@ -13,7 +13,7 @@ The object that `wrapEmbeddingModel` of the AI SDK takes. This package gives one
 _Avoid_: Decorator, wrapper, plugin
 
 **Key**:
-The sha256 of the JSON array of the provider, the model id, the provider options of the call and the text. Another text, model, prompt wrapper or option gives another key.
+The sha256 of the JSON array of the provider, the model id, the provider options and the dimensions of the call, and the text. Another text, model, prompt wrapper or option gives another key.
 _Avoid_: Hash, content key, cid
 
 **Hit**:

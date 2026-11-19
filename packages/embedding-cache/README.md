@@ -1,6 +1,6 @@
 # @zukhruf/embedding-cache
 
-> Design on paper, for review: no code exists yet. Ezz chose the package, its name, the key, caching every call, the exact numbers and the three stores on 2026-11-19.
+> Ezz accepted each ADR on 2026-11-19. Built and tested, not yet on npm.
 
 A model call is the slow and paid part of an embedding. This package wraps an AI SDK embedding model so that each `embed` and `embedMany` call through it calls the model only for text that it did not embed before. A hit gives back exactly the numbers that the model gave the first time.
 
@@ -79,13 +79,13 @@ class SqlServerEmbeddingCacheStore implements EmbeddingCacheStore {
 
 ## What a call does underneath
 
-| Step   | What happens                                                                                                                                                             |
-| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Key    | sha256 of the JSON array `[model.provider, model.modelId, params.providerOptions ?? null, text]`, for each text                                                          |
-| Read   | one `store.get` with the keys of the call                                                                                                                                |
-| Embed  | one `model.doEmbed` with the misses only, each text once, with the `abortSignal`, `headers` and `providerOptions` of the call. A call whose texts all hit calls no model |
-| Write  | one `store.set` with the new vectors, as the model gave them                                                                                                             |
-| Answer | the vectors in the order of the texts; `usage` counts the tokens of the miss call only, so a full hit reports 0                                                          |
+| Step   | What happens                                                                                                                                                                           |
+| ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Key    | sha256 of the JSON array `[model.provider, model.modelId, params.providerOptions ?? null, params.dimensions ?? null, text]`, for each text                                             |
+| Read   | one `store.get` with the keys of the call                                                                                                                                              |
+| Embed  | one `model.doEmbed` with the misses only, each text once, with the `abortSignal`, `headers`, `providerOptions` and `dimensions` of the call. A call whose texts all hit calls no model |
+| Write  | one `store.set` with the new vectors, as the model gave them                                                                                                                           |
+| Answer | the vectors in the order of the texts; `usage` counts the tokens of the miss call only, so a full hit reports 0                                                                        |
 
 | Store                          | Where a vector lives                                                                                                                                                                                                    |
 | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

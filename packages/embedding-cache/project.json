@@ -1,0 +1,7 @@
+{
+  "name": "embedding-cache",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/embedding-cache/src",
+  "projectType": "library",
+  "tags": ["layer:island", "std:base", "test:docker"]
+}

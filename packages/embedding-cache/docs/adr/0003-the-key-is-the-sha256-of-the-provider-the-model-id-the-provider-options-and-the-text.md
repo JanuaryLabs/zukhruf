@@ -8,8 +8,9 @@ Two cases need more than the text: a model wrapped twice with other prompts (Emb
 
 ## Decision
 
-- The key is the sha256, in hex, of `JSON.stringify([model.provider, model.modelId, params.providerOptions ?? null, text])`.
-- A wrapped model with its own `modelId` keeps its keys apart. Two calls with other provider options keep theirs apart.
+- The key is the sha256, in hex, of `JSON.stringify([model.provider, model.modelId, params.providerOptions ?? null, params.dimensions ?? null, text])`.
+- Added while building, 2026-11-19: `ai` 7 passes `dimensions` to `doEmbed` beside `providerOptions`, not inside it, so the key holds it too. Without it, a call with other `dimensions` would get a vector of the wrong length.
+- A wrapped model with its own `modelId` keeps its keys apart. Two calls with other provider options or other dimensions keep theirs apart.
 - `JSON.stringify` keeps the key order of the options as the caller wrote them; two equal options in another key order give two keys, which costs a miss and never gives a wrong vector.
 
 ## Consequences

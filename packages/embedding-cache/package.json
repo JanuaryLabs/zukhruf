@@ -1,0 +1,64 @@
+{
+  "name": "@zukhruf/embedding-cache",
+  "version": "0.8.34",
+  "description": "An AI SDK embedding middleware that calls the model only for new text and gives back exactly the numbers it gave, kept in memory, SQLite or SQL Server. After .NET's CachingEmbeddingGenerator.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JanuaryLabs/zukhruf",
+    "directory": "packages/embedding-cache"
+  },
+  "bugs": {
+    "url": "https://github.com/JanuaryLabs/zukhruf/issues"
+  },
+  "homepage": "https://github.com/JanuaryLabs/zukhruf/tree/main/packages/embedding-cache#readme",
+  "keywords": [
+    "embedding",
+    "cache",
+    "ai-sdk",
+    "middleware",
+    "sqlite",
+    "sql-server"
+  ],
+  "type": "module",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "@zukhruf/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./sqlite": {
+      "@zukhruf/source": "./src/sqlite.ts",
+      "types": "./dist/sqlite.d.ts",
+      "import": "./dist/sqlite.js",
+      "default": "./dist/sqlite.js"
+    },
+    "./sqlserver": {
+      "@zukhruf/source": "./src/sqlserver.ts",
+      "types": "./dist/sqlserver.d.ts",
+      "import": "./dist/sqlserver.js",
+      "default": "./dist/sqlserver.js"
+    }
+  },
+  "files": [
+    "dist",
+    "!dist/spec/**",
+    "!**/*.tsbuildinfo",
+    "!**/*.test.*"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@ai-sdk/provider": "^4.0.34"
+  },
+  "devDependencies": {
+    "@types/mssql": "^12.3.0",
+    "@zukhruf/sqlite-open": "^0.8.34",
+    "@zukhruf/testing": "^0.8.34",
+    "ai": "^7.0.154",
+    "mssql": "^12.7.14"
+  }
+}
