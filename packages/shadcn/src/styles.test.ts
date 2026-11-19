@@ -85,6 +85,28 @@ describe('the stylesheet of @zukhruf/shadcn', () => {
     );
   });
 
+  test('in a right-to-left page the native select pads its start and places its chevron on the left, in the layer of the utilities it mirrors', async () => {
+    // Act
+    const css = await buildAppStylesheet();
+
+    // Assert
+    assert.equal(
+      layerOf(
+        css,
+        /\[data-slot=['"]?native-select['"]?\]:dir\(rtl\)\s*\{\s*padding-right:\s*calc\(var\(--spacing\) \* 2\.5\);\s*padding-left:\s*calc\(var\(--spacing\) \* 8\);?\s*\}/,
+      ),
+      'utilities',
+      'pr-8 pl-2.5 are utilities, so only a rule in @layer utilities wins over them',
+    );
+    assert.equal(
+      layerOf(
+        css,
+        /\[data-slot=['"]?native-select['"]?\]:dir\(rtl\)\s*~\s*\[data-slot=['"]?native-select-icon['"]?\]\s*\{\s*right:\s*auto;\s*left:\s*calc\(var\(--spacing\) \* 2\.5\);?\s*\}/,
+      ),
+      'utilities',
+    );
+  });
+
   // happy-dom 20 drops each rule in a @layer block from getComputedStyle, so
   // these tests check the cascade inputs: the layer and the order of each rule.
   test('a host theme in @layer base that loads after the stylesheet wins over the default theme', async () => {
