@@ -11,6 +11,10 @@
     "db": {
       "type": "string",
       "description": "The project root of the db package of the prisma generator, for example packages/db."
+    },
+    "web": {
+      "type": "string",
+      "description": "The project root of a react-app that reaches the backend through /api, for example apps/web. It gets the better-auth client, and the backend trusts its development origins."
     }
   },
   "required": ["backend", "db"],

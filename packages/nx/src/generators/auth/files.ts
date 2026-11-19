@@ -103,3 +103,22 @@ export const auth = createAuth({
  */
 export const authPrisma = `// The models of better-auth. The auth:generate target of the backend writes them.
 `;
+
+/**
+ * The better-auth client of the web app. It has no baseURL: a paired web app
+ * reaches the API on its own origin, through the Vite proxy of `/api` in
+ * development, so the client's default, the page origin plus `/api/auth`, is
+ * the backend's auth.
+ */
+export const authClientTs = `import { createAuthClient } from 'better-auth/react';
+
+// better-auth in the browser. It calls /api/auth on the page origin: the Vite
+// dev server proxies /api to the backend, and in production the backend serves
+// this app from its own origin (pair).
+export const authClient = createAuthClient();
+`;
+
+/** The comment that auth puts above ALLOWED_ORIGINS when it adds the origins of the web app. */
+export const allowedOriginsComment = `# better-auth trusts these origins in every environment. In development they
+# are the origins of the web app: the Vite dev server and portless.
+`;

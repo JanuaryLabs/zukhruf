@@ -21,7 +21,9 @@ import {
 } from '../root-dependencies.ts';
 import { appPackageVersions as versions } from '../versions.ts';
 import {
+  allowedOriginsComment,
   authCliTs,
+  authClientTs,
   authEnvTs,
   authMount,
   authPrisma,
@@ -35,6 +37,8 @@ export interface AuthOptions {
   backend: string;
   /** The project root of the db package of the prisma generator, for example `packages/db`. */
   db: string;
+  /** The project root of a react-app that reaches this backend through `/api`, for example `apps/web`. */
+  web?: string;
 }
 
 interface PackageJson {
@@ -42,6 +46,9 @@ interface PackageJson {
   dependencies?: Record<string, string>;
   nx?: { targets?: Record<string, unknown> };
 }
+
+/** The origin of the Vite dev server of a react-app (its vite.config.ts). */
+const viteOrigin = 'http://localhost:5173';
 
 /** The module that the better-auth CLI loads, relative to the backend root. */
 const cliConfig = 'src/auth.cli.ts';
@@ -90,6 +97,15 @@ export default async function authGenerator(
       `${startupPath} does not create the client of ${dbPackageName}. Run @zukhruf/nx:prisma ${dbRoot} --backend ${backendRoot} first.`,
     );
   }
+  const webRoot =
+    options.web === undefined
+      ? undefined
+      : appDirectory(options.web).projectRoot;
+  if (webRoot !== undefined && !tree.exists(`${webRoot}/vite.config.ts`)) {
+    throw new Error(
+      `${webRoot} has no vite.config.ts, so it is not a react-app. Run @zukhruf/nx:react-app ${webRoot} first.`,
+    );
+  }
   const backendName = projectNameOf(tree, backendRoot);
   const dbName = projectNameOf(tree, dbRoot);
   const before = rootDependencyNames(tree);
@@ -101,6 +117,7 @@ export default async function authGenerator(
   wireStartup(tree, startupPath, dbPackageName);
   mountRoutes(tree, `${backendRoot}/src/app.ts`);
   wireEnvironment(tree, backendRoot);
+  if (webRoot !== undefined) wireWeb(tree, backendRoot, webRoot);
   updateJson(
     tree,
     `${backendRoot}/package.json`,
@@ -224,6 +241,74 @@ function wireEnvironment(tree: Tree, backendRoot: string): void {
     );
     addEnvEntry(tree, envFilePath, 'BETTER_AUTH_URL', url);
   }
+}
+
+/**
+ * The web app gets the client, and the backend trusts the origins that the
+ * browser sends in development. The Vite proxy keeps the Origin of the page
+ * (changeOrigin: false), so better-auth sees the origin of the web app, not
+ * BETTER_AUTH_URL.
+ */
+function wireWeb(tree: Tree, backendRoot: string, webRoot: string): void {
+  writeIfMissing(tree, `${webRoot}/src/auth-client.ts`, authClientTs);
+  updateJson(tree, `${webRoot}/package.json`, (packageJson: PackageJson) => {
+    packageJson.dependencies = {
+      ...packageJson.dependencies,
+      'better-auth': versions['better-auth'],
+    };
+    return packageJson;
+  });
+  const origins = [viteOrigin];
+  const portless = portlessOrigin(tree, webRoot);
+  if (portless !== undefined) origins.push(portless);
+  for (const file of ['.env.example', '.env']) {
+    const path = `${backendRoot}/${file}`;
+    if (tree.exists(path)) addAllowedOrigins(tree, path, origins);
+  }
+}
+
+/**
+ * The origin of the portless target of the web app: portless serves
+ * `--name <name>` at https://<name>.localhost by default.
+ */
+function portlessOrigin(tree: Tree, webRoot: string): string | undefined {
+  const { nx } = readJson<{
+    nx?: { targets?: { portless?: { command?: string } } };
+  }>(tree, `${webRoot}/package.json`);
+  const command = nx?.targets?.portless?.command ?? '';
+  const name = /--name (\S+)/.exec(command)?.[1];
+  return name === undefined ? undefined : `https://${name}.localhost`;
+}
+
+/** Adds each missing origin to the ALLOWED_ORIGINS list of an env file. */
+function addAllowedOrigins(tree: Tree, path: string, origins: string[]): void {
+  const content = tree.read(path, 'utf-8') ?? '';
+  const line = /^ALLOWED_ORIGINS=(.*)$/m.exec(content);
+  if (line === null) {
+    const separator = content === '' || content.endsWith('\n') ? '' : '\n';
+    tree.write(
+      path,
+      `${content}${separator}${allowedOriginsComment}ALLOWED_ORIGINS=${origins.join(',')}\n`,
+    );
+    return;
+  }
+  const [whole, list = ''] = line;
+  const listed = list
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter((origin) => origin !== '');
+  const missing = origins.filter((origin) => !listed.includes(origin));
+  if (missing.length === 0) return;
+  const comment = content.includes(allowedOriginsComment)
+    ? ''
+    : allowedOriginsComment;
+  tree.write(
+    path,
+    content.replace(
+      whole,
+      `${comment}ALLOWED_ORIGINS=${[...listed, ...missing].join(',')}`,
+    ),
+  );
 }
 
 interface TargetOptions {

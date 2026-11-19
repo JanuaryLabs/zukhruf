@@ -5,7 +5,9 @@ import { readJson } from '@nx/devkit';
 
 import { changes, generatorTree } from '../../testing/generator-tree.ts';
 import nodeAppGenerator from '../node-app/generator.ts';
+import pairGenerator from '../pair/generator.ts';
 import prismaGenerator from '../prisma/generator.ts';
+import reactAppGenerator from '../react-app/generator.ts';
 import { appPackageVersions } from '../versions.ts';
 import authGenerator from './generator.ts';
 
@@ -279,4 +281,97 @@ test('auth:generate and auth:check run the CLI on a generated client, with the d
       command: 'npx auth check schema --config src/auth.cli.ts',
     },
   });
+});
+
+test('a web that is not a react-app stops the generator', async () => {
+  const tree = generatorTree();
+  await nodeAppGenerator(tree, { directory: 'apps/backend' });
+  await prismaGenerator(tree, {
+    directory: 'packages/db',
+    backend: 'apps/backend',
+  });
+
+  await assert.rejects(authGenerator(tree, { ...options, web: 'apps/web' }), {
+    message:
+      'apps/web has no vite.config.ts, so it is not a react-app. Run @zukhruf/nx:react-app apps/web first.',
+  });
+});
+
+test('the web gets a client on its own origin and an exact better-auth', async () => {
+  const tree = generatorTree();
+  await nodeAppGenerator(tree, { directory: 'apps/backend' });
+  await reactAppGenerator(tree, { directory: 'apps/web' });
+  await pairGenerator(tree, { api: 'apps/backend', web: 'apps/web' });
+  await prismaGenerator(tree, {
+    directory: 'packages/db',
+    backend: 'apps/backend',
+  });
+
+  await authGenerator(tree, { ...options, web: 'apps/web' });
+
+  const client = tree.read('apps/web/src/auth-client.ts', 'utf-8') ?? '';
+  assert.match(
+    client,
+    /^import \{ createAuthClient \} from 'better-auth\/react';$/m,
+  );
+  assert.match(client, /^export const authClient = createAuthClient\(\);$/m);
+  assert.equal(
+    readJson(tree, 'apps/web/package.json').dependencies['better-auth'],
+    appPackageVersions['better-auth'],
+  );
+});
+
+test('the backend trusts the origins of the Vite dev server and portless, and keeps its own', async () => {
+  const tree = generatorTree();
+  await nodeAppGenerator(tree, { directory: 'apps/backend' });
+  await reactAppGenerator(tree, { directory: 'apps/web' });
+  await pairGenerator(tree, { api: 'apps/backend', web: 'apps/web' });
+  await prismaGenerator(tree, {
+    directory: 'packages/db',
+    backend: 'apps/backend',
+  });
+  tree.write(
+    'apps/backend/.env',
+    `${tree.read('apps/backend/.env', 'utf-8')}`.replace(
+      /^ALLOWED_ORIGINS=.*$/m,
+      'ALLOWED_ORIGINS=https://admin.example.com',
+    ),
+  );
+
+  await authGenerator(tree, { ...options, web: 'apps/web' });
+
+  assert.match(
+    tree.read('apps/backend/.env.example', 'utf-8') ?? '',
+    /^ALLOWED_ORIGINS=http:\/\/localhost:5173,https:\/\/web\.acme\.localhost$/m,
+  );
+  assert.match(
+    tree.read('apps/backend/.env', 'utf-8') ?? '',
+    /^ALLOWED_ORIGINS=https:\/\/admin\.example\.com,http:\/\/localhost:5173,https:\/\/web\.acme\.localhost$/m,
+  );
+});
+
+test('a second run with a web adds nothing twice', async () => {
+  const tree = generatorTree();
+  await nodeAppGenerator(tree, { directory: 'apps/backend' });
+  await reactAppGenerator(tree, { directory: 'apps/web' });
+  await pairGenerator(tree, { api: 'apps/backend', web: 'apps/web' });
+  await prismaGenerator(tree, {
+    directory: 'packages/db',
+    backend: 'apps/backend',
+  });
+  await authGenerator(tree, { ...options, web: 'apps/web' });
+  const files = [
+    'apps/backend/.env',
+    'apps/backend/.env.example',
+    'apps/web/package.json',
+    'apps/web/src/auth-client.ts',
+  ];
+  const first = files.map((path) => tree.read(path, 'utf-8'));
+
+  await authGenerator(tree, { ...options, web: 'apps/web' });
+
+  assert.deepEqual(
+    files.map((path) => tree.read(path, 'utf-8')),
+    first,
+  );
 });

@@ -1252,6 +1252,14 @@ npx nx g @zukhruf/nx:auth --backend apps/backend --db packages/db
 
 After the install, the generator runs `nx run @acme/backend:auth:generate`, which writes the models of better-auth into `packages/db/models/auth.prisma`. Then write the first migration (see [Migrations](#migrations)) and run `npx nx run @acme/backend:auth:check`.
 
+### Add sign-in to a paired web app
+
+```sh
+npx nx g @zukhruf/nx:auth --backend apps/backend --db packages/db --web apps/web
+```
+
+Pair the web with the backend first. `apps/web/src/auth-client.ts` then exports `authClient`, which calls `/api/auth` on the page origin: the Vite proxy in development, the backend in production. The backend trusts the two origins that the browser sends in development: `http://localhost:5173` (`nx run @acme/web:dev`) and `https://web.acme.localhost` (`nx run @acme/web:portless`). If your portless proxy uses another TLD or a prefix, add that origin to `ALLOWED_ORIGINS` in `apps/backend/.env`; better-auth answers any other origin with 403 `INVALID_ORIGIN`.
+
 ### Signature of the auth generator
 
 ```ts
@@ -1259,6 +1267,7 @@ After the install, the generator runs `nx run @acme/backend:auth:generate`, whic
 interface AuthOptions {
   backend: string; // the project root of a node-app, for example apps/backend
   db: string; // the project root of a db package, for example packages/db
+  web?: string; // the project root of a react-app, for example apps/web
 }
 ```
 
@@ -1274,6 +1283,9 @@ interface AuthOptions {
 | `<backend>/src/env.ts`               | `BETTER_AUTH_SECRET: z.string().min(32)` and `BETTER_AUTH_URL: z.url()`                                                                                                         |
 | `<backend>/.env.example`, `.env`     | `BETTER_AUTH_SECRET=` and `BETTER_AUTH_URL=http://localhost:<PORT>`; `.env` gets a random 43-character secret; a key that is there keeps its value                              |
 | `<backend>/package.json`             | `better-auth` in `dependencies`; the `auth:generate` and `auth:check` targets                                                                                                   |
+| `<web>/src/auth-client.ts`           | with `--web`: `export const authClient = createAuthClient()` from `better-auth/react`, with no `baseURL`; only when missing                                                     |
+| `<web>/package.json`                 | with `--web`: `better-auth` in `dependencies`                                                                                                                                   |
+| `<backend>/.env.example`, `.env`     | with `--web`: `http://localhost:5173` and `https://<portless name>.localhost` added to `ALLOWED_ORIGINS`, after the origins that are there                                      |
 | `<db>/models/auth.prisma`            | a one-line placeholder, which the CLI fills; without it the CLI writes a second generator and datasource, and `prisma generate` fails with P1012; only when missing             |
 
 At the root: the CLI `auth` in `devDependencies`. The generator writes no migration. A second run adds nothing twice.
@@ -1296,10 +1308,13 @@ Both run in the backend root with `NODE_OPTIONS=--conditions=development`, so ji
 | `apps/api has no sdk-it.config.ts, so it is not a node-app. Run …`                             | `--backend` names a project that `node-app` did not write  |
 | `packages/db has no prisma.config.ts and createPrisma, so it is not a db package. Run …`       | `--db` names a project that `prisma` did not write         |
 | `apps/backend/src/startup.ts does not create the client of @acme/db. Run @zukhruf/nx:prisma …` | the prisma generator did not wire the db into this backend |
+| `apps/web has no vite.config.ts, so it is not a react-app. Run …`                              | `--web` names a project that `react-app` did not write     |
 
 ### Test the auth generator before a release
 
 After the steps of [Test the prisma generator before a release](#test-the-prisma-generator-before-a-release) up to `run-many`: run `auth --backend apps/backend --db packages/db`, then check that `auth:check` exits 0, that `run-many -t typecheck lint build test` passes, and that a second run changes no file. On 2026-11-19 each step passed. The production bundle on a `postgres:18-alpine`, with the schema from `prisma migrate diff`, answered `POST /api/auth/sign-up/email` with 200.
+
+For `--web`, also run `react-app apps/web` and `pair` before prisma, and `auth` with `--web apps/web`. Start `serve` of the backend and `dev` of the web, then send `POST http://localhost:5173/api/auth/sign-up/email` with `Origin: http://localhost:5173`: it answers 200, and with another origin 403. Repeat on `https://web.acme.localhost` under the `portless` target. On 2026-11-19 each step passed, and `authClient.signUp.email` in Chromium answered 200.
 
 The decisions are in [ADR 0014](./docs/adr/0014-the-auth-generator-adds-better-auth-to-a-backend-and-its-db-package.md). The backlog item is #4719.
 
