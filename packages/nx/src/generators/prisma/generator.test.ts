@@ -315,7 +315,7 @@ test('a backend connects to the database before it serves and disconnects on SIG
   );
 });
 
-test("the backend's serve runs the up target of the db package first", async () => {
+test("the backend's serve runs the up target of the db package it imports first", async () => {
   const tree = generatorTree();
   await nodeAppGenerator(tree, { directory: 'apps/backend' });
 
@@ -327,7 +327,7 @@ test("the backend's serve runs the up target of the db package first", async () 
   assert.deepEqual(
     readJson(tree, 'apps/backend/package.json').nx.targets.serve,
     {
-      dependsOn: ['^build', { projects: ['@acme/db'], target: 'up' }],
+      dependsOn: ['^build', '^up'],
       options: { env: { NODE_ENV: 'development' } },
     },
   );

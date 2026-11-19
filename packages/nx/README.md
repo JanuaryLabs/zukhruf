@@ -1217,7 +1217,7 @@ At the root: `compose.dev.yml` when missing, with one `database` service (the `p
 With `--backend`, the node-app gets:
 
 - `CONNECTION_STRING: z.string().min(1)` in `src/env.ts`, and the local URL in `.env.example` and in a `.env` that has no such key.
-- `{ "projects": ["@<scope>/<db>"], "target": "up" }` in the `dependsOn` of `serve`, so `serve` and `portless` start on a machine with no database.
+- `^up` in the `dependsOn` of `serve`: the backend imports the db package, so `serve` and `portless` start on a machine with no database.
 - In `src/startup.ts`, the client and one `SELECT 1` before the app serves, so a database that refuses the connection stops the boot. `$connect()` alone opens no connection on a driver adapter.
 - `await prisma.$disconnect()` in the terminus `onSignal` of `src/server.ts`.
 - `src/database.test.ts`, which imports the package through its exports, and the tag `test:docker`.

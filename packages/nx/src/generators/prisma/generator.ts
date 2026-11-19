@@ -415,6 +415,8 @@ function wireBackend(
       };
       // serve starts the local Postgres and migrates it first, so the
       // backend and its portless target start on a machine with no database.
+      // ^up reaches the db package through the import graph
+      // (zukhruf/no-depends-on-project refuses a named project).
       const targets = packageJson.nx?.targets ?? {};
       const serve = targets['serve'] ?? {};
       packageJson.nx = {
@@ -424,10 +426,7 @@ function wireBackend(
           ...targets,
           serve: {
             ...serve,
-            dependsOn: unique([
-              ...(serve.dependsOn ?? []),
-              { projects: [packageName], target: 'up' },
-            ]),
+            dependsOn: unique([...(serve.dependsOn ?? []), '^up']),
           },
         },
       };
