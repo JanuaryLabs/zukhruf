@@ -195,3 +195,18 @@ Node has no session or authentication API (a search of the exports of every buil
 | blackboard (#4728)              | `requireIdentity` and `redirectDestination` in `apps/web/src/auth.ts`; the `userId` middleware in `apps/api/src/app.ts`                             | React Router `requireSession` and `safeRedirect`; its `redirect` query parameter becomes `redirectTo`                             |
 | text2sql authx, v2, desktop     | an identity provider and its JWT clients                                                                                                            | stay; the JWT is the "later" column                                                                                               |
 | iworked, pm, Kortext regression | dormant or a client's repo                                                                                                                          | left out (Ezz, 2026-11-19)                                                                                                        |
+
+## Documentation
+
+**Recipes**
+
+- [Send a visitor back to the page they asked for after sign-in](./docs/recipes/send-a-visitor-back-after-sign-in.md)
+
+**Decisions**
+
+- [ADR 0001](./docs/adr/0001-the-package-is-zukhruf-authentication-an-island-that-takes-hono-and-react-router-as-peers.md): the package is @zukhruf/authentication, an island that takes Hono and React Router as peers.
+- [ADR 0002](./docs/adr/0002-the-package-only-requires-a-session-and-better-auths-getsession-reads-one.md): the package only requires a session, and better-auth's getSession reads one.
+- [ADR 0003](./docs/adr/0003-the-session-lands-on-the-context-as-better-auths-own-session-typed-by-a-generic-env.md): the session lands on the context as better-auth's own session, typed by a generic Env.
+- [ADR 0004](./docs/adr/0004-a-refusal-is-an-httpexception-401-without-a-session-and-403-without-two-factor.md): a refusal is an HTTPException: 401 without a session, 403 without two-factor.
+- [ADR 0005](./docs/adr/0005-the-route-guard-sends-the-path-and-query-as-redirectto-and-safe-redirect-keeps-it-on-the-origin.md): the route guard sends the path and query as redirectTo, and safeRedirect keeps it on the origin.
+- [ADR 0006](./docs/adr/0006-a-failed-session-read-is-authentication-unavailable-never-signed-out.md): a failed session read is AuthenticationUnavailableError, never "signed out".

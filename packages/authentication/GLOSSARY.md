@@ -43,3 +43,7 @@ _Avoid_: Auth surface, login route
 **Unavailable**:
 The state in which the browser could not read the session at all: the network failed or better-auth answered with an error. It is not "signed out".
 _Avoid_: Offline, logged out, expired
+
+**Abort**:
+The outcome of a session read that React Router stopped through the loader's `request.signal`, because the visitor navigated away. An abort is neither "no session" nor unavailable: `requireSession` throws it as it is, and React Router ignores it (#4745, [ADR 0006](./docs/adr/0006-a-failed-session-read-is-authentication-unavailable-never-signed-out.md)).
+_Avoid_: Timeout, failure (an abort is not a failed read)
