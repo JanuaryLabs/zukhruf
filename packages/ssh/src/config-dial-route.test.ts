@@ -16,6 +16,7 @@ import { TemporaryFiles, isErrno } from '@zukhruf/fs';
 import { OpenSshConfig } from './config.ts';
 import { KeyError } from './knownhosts.ts';
 import { startSilentServer } from './testing/silent-server.ts';
+import { hermeticLines } from './testing/ssh-config.ts';
 import { type Sshd, startSshd } from './testing/sshd.ts';
 
 const noSsh =
@@ -30,24 +31,15 @@ function withoutComment(key: string): string {
   return key.split(' ').slice(0, 2).join(' ');
 }
 
-/** The lines of a `Host *` block that keep ssh -G to the files of the test, with the host key policy `yes` and no agent. */
-function defaults(directory: string): string[] {
-  return [
-    'Host *',
-    `  User ${userInfo().username}`,
-    `  UserKnownHostsFile ${join(directory, 'known_hosts')}`,
-    '  GlobalKnownHostsFile /dev/null',
-    '  IdentityAgent none',
-    '  StrictHostKeyChecking yes',
-  ];
-}
-
 async function writeConfig(
   directory: string,
   lines: readonly string[],
 ): Promise<string> {
   const file = join(directory, 'ssh_config');
-  await writeFile(file, [...lines, ...defaults(directory), ''].join('\n'));
+  await writeFile(
+    file,
+    [...lines, 'Host *', ...hermeticLines(directory), ''].join('\n'),
+  );
   return file;
 }
 

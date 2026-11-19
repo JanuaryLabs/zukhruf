@@ -18,6 +18,7 @@ import { AuthenticationError, ExitError } from './index.ts';
 import { KeyError, RevokedError } from './knownhosts.ts';
 import { startSilentServer } from './testing/silent-server.ts';
 import { type SshAgent, startSshAgent } from './testing/ssh-agent.ts';
+import { hermeticLines } from './testing/ssh-config.ts';
 import { type Sshd, startSshd } from './testing/sshd.ts';
 
 const noSsh =
@@ -46,11 +47,7 @@ async function writeConfig(
       ...lines.map((line) => `  ${line}`),
       '  HostName 127.0.0.1',
       `  Port ${sshd.port}`,
-      `  User ${userInfo().username}`,
-      `  UserKnownHostsFile ${join(directory, 'known_hosts')}`,
-      '  GlobalKnownHostsFile /dev/null',
-      '  IdentityAgent none',
-      '  StrictHostKeyChecking yes',
+      ...hermeticLines(directory),
       '',
     ].join('\n'),
   );

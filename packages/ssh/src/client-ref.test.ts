@@ -11,6 +11,7 @@ import { untilAborted } from '@zukhruf/async';
 import { TemporaryFiles } from '@zukhruf/fs';
 
 import { OpenSshConfig } from './config.ts';
+import { hermeticLines } from './testing/ssh-config.ts';
 import { type Sshd, startSshd } from './testing/sshd.ts';
 
 const noSshd = process.platform === 'win32' ? 'Windows has no sshd' : false;
@@ -102,14 +103,7 @@ function knownHost(sshd: Sshd): string {
 
 /** The lines of a `Host *` block that keep ssh -G to the files of the test, with the host key policy `yes` and no agent. */
 function hermetic(directory: string): string[] {
-  return [
-    'Host *',
-    `  User ${userInfo().username}`,
-    `  UserKnownHostsFile ${join(directory, 'known_hosts')}`,
-    '  GlobalKnownHostsFile /dev/null',
-    '  IdentityAgent none',
-    '  StrictHostKeyChecking yes',
-  ];
+  return ['Host *', ...hermeticLines(directory)];
 }
 
 /**
