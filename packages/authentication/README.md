@@ -1,6 +1,6 @@
 # @zukhruf/authentication
 
-> Accepted ADRs 0001, 0004–0006 on 2026-11-19; 0002–0003 under review. Built and tested, not yet on npm.
+> Ezz accepted each ADR on 2026-11-19. Built and tested, not yet on npm.
 
 An app that signs its users in with [better-auth](https://www.better-auth.com) asks the same two questions on every request: who sent it, and may it pass. This package answers both at the edges of the app. On the server, a Hono middleware reads the better-auth session from the request and refuses a request without one. In the browser, a React Router loader sends a visitor without a session to the sign-in page, and brings them back to the page they asked for, never to another site.
 
@@ -37,7 +37,7 @@ app
   .get('/api/me', (c) => c.json(c.var.session.user)); // not null here
 ```
 
-A middleware that only resolves the session, for a page that a guest may read too, is under review ([ADR 0002](./docs/adr/0002-resolving-a-session-and-requiring-one-are-two-middlewares.md)).
+A route that a guest may read too calls `auth.api.getSession({ headers: c.req.raw.headers })` itself: better-auth already reads the session, so the package only requires one ([ADR 0002](./docs/adr/0002-the-package-only-requires-a-session-and-better-auths-getsession-reads-one.md)).
 
 A request without a session gets `UnauthenticatedError` (401). A signed-in user without two-factor gets `TwoFactorRequiredError` (403). Both are `HTTPException`s, so the app's `onError` answers them as it answers every other `HTTPException` ([ADR 0004](./docs/adr/0004-a-refusal-is-an-httpexception-401-without-a-session-and-403-without-two-factor.md)).
 
@@ -176,12 +176,12 @@ Node has no session or authentication API (a search of the exports of every buil
 
 ## Now, later, never
 
-| Now                                                    | Later (two places today; waits for a third)                                | Never                                                                      |
-| ------------------------------------------------------ | -------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| a better-auth session on Hono: resolve and require     | a bearer JWT from a better-auth JWKS (text2sql v2 and desktop `authxPass`) | the sign-in methods, pages and emails                                      |
-| two-factor required                                    | an API key (thing `authenticateApiKey`, text2sql v1)                       | users, roles, organizations: authorization is its own concept              |
-| the React Router loader guard and the safe return path | a session younger than `freshAge`                                          | the tables and their migrations (better-auth's CLI and `@zukhruf/nx:auth`) |
-|                                                        | React Router middleware (`context.set`), when a host uses it               | an identity provider                                                       |
+| Now                                                    | Later (two places today; waits for a third)                                                               | Never                                                                      |
+| ------------------------------------------------------ | --------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| a better-auth session on Hono: resolve and require     | a bearer JWT from a better-auth JWKS (text2sql v2 and desktop `authxPass`)                                | the sign-in methods, pages and emails                                      |
+| two-factor required                                    | an API key (thing `authenticateApiKey`, text2sql v1)                                                      | users, roles, organizations: authorization is its own concept              |
+| the React Router loader guard and the safe return path | a session younger than `freshAge`; a middleware that only reads the session (one place today: blackboard) | the tables and their migrations (better-auth's CLI and `@zukhruf/nx:auth`) |
+|                                                        | React Router middleware (`context.set`), when a host uses it                                              | an identity provider                                                       |
 
 ## Who moves onto it
 

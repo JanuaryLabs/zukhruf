@@ -1,6 +1,6 @@
 # The session lands on the context as better-auth's own session, typed by a generic Env
 
-Status: proposed, for review (#4717).
+Status: accepted by Ezz on 2026-11-19 ("c.var.session (Recommended)").
 
 The copies set two variables, `session` and `subject` (the user), and type them with `InferSession<typeof auth>` and `InferUser<typeof auth>`, or `typeof auth.$Infer.Session.*`. better-auth's Hono guide sets one variable, `session`, whose value is `getSession`'s own result, `{ user, session }`, typed `typeof auth.$Infer.Session | null` through `createMiddleware<Env>`.
 
@@ -9,7 +9,7 @@ Hono's own packages export a variables type for a generic `Env` (`JwtVariables<T
 ## Decision
 
 - One variable, `session`, holding `getSession`'s result as it is. `c.var.session.user` is the user and `c.var.session.session` is the session row, as in better-auth's guide.
-- The middlewares return `MiddlewareHandler<{ Variables: { session: S | null } }>` and `MiddlewareHandler<{ Variables: { session: S } }>`. Hono merges the `Env` of each middleware into the routes after it, so a route behind `requireSession` sees `S`.
+- `requireSession` returns `MiddlewareHandler<{ Variables: { session: S } }>`. Hono merges the `Env` of a middleware into the routes chained after it, so such a route sees `S`, never `null`.
 - `S` is inferred from the instance's `api.getSession`. The package declares no `ContextVariableMap` augmentation.
 
 ## Considered Options
