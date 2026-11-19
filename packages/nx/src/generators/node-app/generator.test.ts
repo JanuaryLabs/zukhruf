@@ -9,6 +9,7 @@ import {
 } from '../../testing/generator-tree.ts';
 import { lintManifests } from '../../testing/lint-manifests.ts';
 import { lintNodeEnv } from '../../testing/lint-node-env.ts';
+import prismaGenerator from '../prisma/generator.ts';
 import { appPackageVersions, nxVersion } from '../versions.ts';
 import { clientManifest, clientTsconfig } from './files.ts';
 import nodeAppGenerator, { createRequireBanner } from './generator.ts';
@@ -579,5 +580,24 @@ test('the .env written from the example sets NODE_ENV=production, and the sdk ta
   assert.deepEqual(
     readJson(tree, 'apps/backend/.sdk-it/package.json').nx.targets.sdk.options,
     { cwd: '{projectRoot}', env: { NODE_ENV: 'production' } },
+  );
+});
+
+test('node-app run again on a backend that prisma wired keeps the ^up of its serve', async () => {
+  const tree = generatorTree();
+  await nodeAppGenerator(tree, { directory: 'apps/backend' });
+  await prismaGenerator(tree, {
+    directory: 'packages/db',
+    backend: 'apps/backend',
+  });
+
+  await nodeAppGenerator(tree, { directory: 'apps/backend' });
+
+  assert.deepEqual(
+    readJson(tree, 'apps/backend/package.json').nx.targets.serve,
+    {
+      dependsOn: ['^build', '^up'],
+      options: { env: { NODE_ENV: 'production' } },
+    },
   );
 });

@@ -4,11 +4,13 @@ import {
   type Tree,
   formatFiles,
   installPackagesTask,
+  readJson,
   runTasksInSerial,
   updateJson,
   writeJson,
 } from '@nx/devkit';
 
+import { addMissingKeys } from '../add-keys.ts';
 import { addLines } from '../add-lines.ts';
 import { appDirectory, projectNameOf } from '../app-directory.ts';
 import initGenerator from '../init/generator.ts';
@@ -57,8 +59,17 @@ interface ProjectPackageJson {
   scripts?: Record<string, string>;
   dependencies?: Record<string, string>;
   devDependencies?: Record<string, string>;
-  nx?: { projectType?: string; targets?: Record<string, unknown> };
+  nx?: { projectType?: string; targets?: ProjectTargets };
 }
+
+/** The targets of a project, with the fields of `serve` that node-app reads. */
+type ProjectTargets = Record<string, unknown> & {
+  serve?: {
+    executor?: string;
+    dependsOn?: string[];
+    options?: { env?: Record<string, string> };
+  };
+};
 
 export const createRequireBanner =
   "import { createRequire as nodeCreateRequire } from 'node:module'; const require = nodeCreateRequire(import.meta.url);";
@@ -86,6 +97,11 @@ export default async function nodeAppGenerator(
   const { applicationGenerator } = nxPlugin('@nx/node');
   // @nx/node adds a VS Code launch configuration; the one that was there stays.
   const launchJson = tree.read('.vscode/launch.json');
+  // @nx/node writes its own serve over the one that is there (#4868).
+  const previousServe = tree.exists(`${projectRoot}/package.json`)
+    ? readJson<ProjectPackageJson>(tree, `${projectRoot}/package.json`).nx
+        ?.targets?.serve
+    : undefined;
   const appTask = await applicationGenerator(tree, {
     directory: projectRoot,
     framework: 'none',
@@ -109,13 +125,11 @@ export default async function nodeAppGenerator(
   tree.delete(`${projectRoot}/src/main.ts`);
   tree.delete(`${projectRoot}/src/assets/.gitkeep`);
   writeTsconfigs(tree, projectRoot, rootOffset);
-  writeProjectPackageJson(tree, {
-    projectRoot,
-    name,
-    projectName,
-    port,
-    scope,
-  });
+  writeProjectPackageJson(
+    tree,
+    { projectRoot, name, projectName, port, scope },
+    previousServe,
+  );
   tree.write(
     `${projectRoot}/eslint.config.mjs`,
     eslintConfig(projectRoot, rootOffset),
@@ -236,11 +250,35 @@ interface ProjectIdentity {
 }
 
 /**
+ * The serve of a backend. @nx/js/tsx infers its command from the header of
+ * src/server.ts, and @nx/node writes serve as continuous, which a project
+ * value overrides over the discrete target default. NODE_ENV is production,
+ * as in every setup (ADR 0016). A serve that node-app wrote before has no
+ * executor, and keeps what other generators added to it, such as the `^up`
+ * of prisma (#4868). The serve of @nx/node, with its executor, is replaced.
+ */
+function serveTarget(previous: ProjectTargets['serve']) {
+  const own = previous?.executor === undefined ? previous : undefined;
+  return {
+    ...own,
+    dependsOn: unique([...(own?.dependsOn ?? []), '^build']),
+    options: {
+      ...own?.options,
+      env: addMissingKeys(own?.options?.env, { NODE_ENV: 'production' }),
+    },
+  };
+}
+
+/**
  * The app manifest is its deploy manifest: `prune-lockfile` copies its
  * dependencies into dist/package.json, and @nx/dependency-checks keeps them
  * right, because the bundle leaves each npm package external.
  */
-function writeProjectPackageJson(tree: Tree, app: ProjectIdentity): void {
+function writeProjectPackageJson(
+  tree: Tree,
+  app: ProjectIdentity,
+  previousServe: ProjectTargets['serve'],
+): void {
   const imageTag = imageTagFor(app.projectName);
   updateJson(
     tree,
@@ -271,14 +309,7 @@ function writeProjectPackageJson(tree: Tree, app: ProjectIdentity): void {
         targets: {
           ...targets,
           build: buildTarget(app.projectRoot),
-          // @nx/js/tsx infers the command from the header of src/server.ts.
-          // @nx/node writes serve as continuous, and a project value wins
-          // over the discrete target default. NODE_ENV is production, as in
-          // every setup; the app reads its own settings from its .env.
-          serve: {
-            dependsOn: ['^build'],
-            options: { env: { NODE_ENV: 'production' } },
-          },
+          serve: serveTarget(previousServe),
           portless: {
             command: `portless --name ${app.name}.${app.scope} --app-port ${app.port} -- nx run ${app.projectName}:serve --output-style=stream-without-prefixes`,
           },
