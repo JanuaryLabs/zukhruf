@@ -400,6 +400,43 @@ test('nx.json gets the esbuild default, ^sdk, and test.dependsOn ["...", "^sdk"]
   assert.equal(generators['@nx/node'].application.unitTestRunner, 'none');
 });
 
+test('the portless target starts the proxy unprivileged on HTTPS, with no TLD', async () => {
+  const tree = generatorTree();
+
+  await nodeAppGenerator(tree, { directory: 'apps/backend' });
+
+  assert.deepEqual(readJson(tree, 'nx.json').targetDefaults.portless, {
+    options: { env: { PORTLESS_UNPRIVILEGED: '1', PORTLESS_HTTPS: '1' } },
+  });
+});
+
+test('a portless proxy env that is there keeps its values', async () => {
+  const tree = generatorTree();
+  writeJson(tree, 'nx.json', {
+    targetDefaults: {
+      portless: {
+        options: {
+          env: {
+            PORTLESS_TLD: 'dev.example.com,localhost',
+            PORTLESS_HTTPS: '0',
+          },
+        },
+      },
+    },
+  });
+
+  await nodeAppGenerator(tree, { directory: 'apps/backend' });
+
+  assert.deepEqual(
+    readJson(tree, 'nx.json').targetDefaults.portless.options.env,
+    {
+      PORTLESS_TLD: 'dev.example.com,localhost',
+      PORTLESS_HTTPS: '0',
+      PORTLESS_UNPRIVILEGED: '1',
+    },
+  );
+});
+
 test('a generator default that is there keeps its value and its place', async () => {
   const tree = generatorTree();
   writeJson(tree, 'nx.json', {

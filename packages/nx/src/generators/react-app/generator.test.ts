@@ -185,6 +185,16 @@ test('after node-app, test.dependsOn stays ["...", "^sdk"] with no ^build of @nx
   });
 });
 
+test('a web app alone starts the portless proxy unprivileged on HTTPS, with no TLD', async () => {
+  const tree = generatorTree();
+
+  await reactAppGenerator(tree, { directory: 'apps/web' });
+
+  assert.deepEqual(readJson(tree, 'nx.json').targetDefaults.portless, {
+    options: { env: { PORTLESS_UNPRIVILEGED: '1', PORTLESS_HTTPS: '1' } },
+  });
+});
+
 test('a web app alone gets no test target default', async () => {
   const tree = generatorTree();
 

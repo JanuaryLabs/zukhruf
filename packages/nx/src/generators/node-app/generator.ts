@@ -9,6 +9,7 @@ import {
   writeJson,
 } from '@nx/devkit';
 
+import { addMissingKeys } from '../add-keys.ts';
 import { addLines } from '../add-lines.ts';
 import { appDirectory, projectNameOf } from '../app-directory.ts';
 import initGenerator from '../init/generator.ts';
@@ -402,6 +403,23 @@ function mergeNodeNxJson(tree: Tree): void {
         dependsOn: unique([...inferred, ...(entry.dependsOn ?? []), '^sdk']),
       }));
     }
+    // One portless proxy serves every app on the machine, and the target that
+    // starts it sets its mode. PORTLESS_UNPRIVILEGED starts it without sudo,
+    // so an agent with no TTY can. PORTLESS_HTTPS keeps it on HTTPS: a
+    // stopped unprivileged proxy otherwise restarts on plain HTTP, and the
+    // portless origin in ALLOWED_ORIGINS and the HMR of the web are https. No
+    // PORTLESS_TLD: localhost is the default, and a set TLD replaces the TLDs
+    // that another repo's proxy saved. Copy in react-app (docs/copied-code.md).
+    updateTargetDefault(nxJson, 'portless', (entry) => ({
+      ...entry,
+      options: {
+        ...entry.options,
+        env: addMissingKeys(entry.options?.env, {
+          PORTLESS_UNPRIVILEGED: '1',
+          PORTLESS_HTTPS: '1',
+        }),
+      },
+    }));
     // sdk-it.config.ts imports the root CLI. Outside production, its closure
     // stays out of the pruned runtime lockfile of the app.
     nxJson.namedInputs ??= {};
