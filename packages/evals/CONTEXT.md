@@ -6,6 +6,12 @@ An eval sends inputs to a harness and scores each answer against its label. This
 
 ### The core
 
+**Harness**:
+The program that sends the input of one test to a model and gives the answer, such as the own promptfoo provider of an app (ADR 0005). A caller can run one harness two times on the same tests, with two models (ADR 0004). The package does not run a harness.
+
+**Runner**:
+The program that runs the tests through a harness, loads the dataset, stores the results, shows them and adds the ratios of many answers. promptfoo is the runner today (ADR 0001). The package has no runner: `./promptfoo` is an adapter for one, and the core does not know any runner (ADR 0004 of `./structured`).
+
 **Answer**:
 What the harness gave for one test, such as a record, a label or a ranked list.
 _Avoid_: output, response, prediction (runner words)
@@ -112,6 +118,9 @@ The bootstrap of two runs on the same tests: each resample draws the tests with 
 **Paired difference**:
 For one name, the ratio of sums over the change run minus the ratio of sums over the baseline run, on the same tests (Koehn 2004). When each whole and each weight is 1, it is the mean of the differences of the tests.
 
+**Difference interval**:
+The confidence interval of the paired difference over the resamples, with the observed paired difference: `DifferenceInterval` of @zukhruf/statistics. The verdict is better when the whole interval is on the better side of 0, by the direction of the name, worse when it is on the worse side, and inconclusive when it holds 0 (ADR 0004).
+
 **Verdict**:
 The result of a paired bootstrap for one name: better, worse or inconclusive, with the paired difference, its difference interval, a p-value and the counts of the tests. The words better, worse and inconclusive are mteb's `ChangeVerdict.result`. The p-value has no correction: a caller that tests many names corrects it, such as with Holm.
 
@@ -154,6 +163,9 @@ Each answer and each case has one label of many classes.
 
 **Multilabel**:
 Each answer and each case has a set of zero or more labels.
+
+**Label indicator matrix**:
+Multilabel labels as a matrix of 0 and 1: a row for each answer and a column for each class. A 1 says that the answer has the class of its column. scikit-learn's `type_of_target` calls this layout `multilabel-indicator`. `ClassCounts.ofIndicators` reads an expected matrix and a stated matrix. Each column is a class, also when no answer has it. A row of another length or with a value that is not 0 or 1 gives a `RangeError` (`src/classification/class-counts.ts`; `class-counts.test.ts` checks the value).
 
 **Class**:
 One label that the counts follow, such as `program` of the page kinds.

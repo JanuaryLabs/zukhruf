@@ -8,7 +8,7 @@ The answers of evals have different shapes: a structured record, a label, a rank
 
 | Import path                         | Job                                                                                                                    |
 | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `@zukhruf/evals`                    | The core: scorers, ratios, gates, scorer sets, scorecards, totals and bootstrap intervals.                             |
+| `@zukhruf/evals`                    | The core: scorers, ratios, gates, scorer sets, scorecards, totals, bootstrap intervals, runs and paired bootstraps.    |
 | `@zukhruf/evals/promptfoo`          | The adapter that makes a scorer or a scorer set a promptfoo assertion.                                                 |
 | `@zukhruf/evals/structured`         | Compares a structured value with the value that a person labelled.                                                     |
 | `@zukhruf/evals/classification`     | Compares the stated labels of an answer with its expected labels, as scikit-learn's `sklearn.metrics` does (ADR 0003). |
@@ -17,7 +17,7 @@ The answers of evals have different shapes: a structured record, a label, a rank
 
 A subpath imports only the core. It never imports another subpath.
 
-The core holds the parts that all families share: the ratios, the scorers, the penalties, `Comparer`, `Grouped`, `ScorerSet`, `Totals` and `Bootstrap`. A part that reads an input has a type parameter for that input. So a scorer of one family cannot read the input of another family (ADR 0002). `./promptfoo` holds `ScorerAssertion`. The families are `./structured` and `./classification`.
+The core holds the parts that all families share: the ratios, the scorers, the penalties, `Comparer`, `Grouped`, `ScorerSet`, `Totals`, `Bootstrap`, `Run` and `PairedBootstrap`. A part that reads an input has a type parameter for that input. So a scorer of one family cannot read the input of another family (ADR 0002). `./promptfoo` holds `ScorerAssertion`. The families are `./structured` and `./classification`.
 
 ## Score one answer
 
@@ -412,6 +412,28 @@ A hook cannot write `namedScoreWeights`, so promptfoo gives each score of the ho
 
 A failure of the run, such as a 401, is not a failed call: each call would fail. Throw it. The result then stays an error result, and `promptfoo retry <evalId>` runs it again.
 
+## Errors
+
+The package throws the built-in error classes. A `RangeError` is a value outside the rules of a part. An `Error` is a name that no scorecard gives, or a case field that a case reader cannot read. A `TypeError` is a value of the wrong type.
+
+| Error        | When                                                                                                                                                                                                                                                                        |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `RangeError` | `run.add` gets another weight for a test id that the run has.                                                                                                                                                                                                               |
+| `RangeError` | `paired.verdict` gets a test id that is in one run only, or a test whose weight differs between the two runs.                                                                                                                                                               |
+| `RangeError` | A penalty of `Penalized` gives a factor outside [0, 1].                                                                                                                                                                                                                     |
+| `RangeError` | `ShortfallPenalty` gets a target or a power that is not more than 0.                                                                                                                                                                                                        |
+| `RangeError` | `BinaryAverage` reads multilabel counts, a class set of more than two classes, or a positive label outside the class set.                                                                                                                                                   |
+| `RangeError` | `ProbabilityComparer` gets a case that does not have exactly one expected label, or a probability outside [0, 1].                                                                                                                                                           |
+| `RangeError` | `ClassCounts` gets a row of a label indicator matrix that does not hold one 0 or 1 for each column, sides and weights of different lengths, or a multiclass answer with no label or more than one label on a side. `confusionMatrix()` of multilabel counts also throws it. |
+| `RangeError` | `brierScore.mean` gets weights of another length, or an answer with no probability of the label that it reads.                                                                                                                                                              |
+| `Error`      | `totals.get(name)` gets a name that no scorecard gave.                                                                                                                                                                                                                      |
+| `Error`      | `bootstrap.interval` gets a name that a scorecard does not give.                                                                                                                                                                                                            |
+| `Error`      | `paired.verdict` gets a name that no scorecard of the baseline run or of the change run gives.                                                                                                                                                                              |
+| `Error`      | `LabelVarsCase` or `LabelConfigCase` reads an expected value that is not a label or a list of labels. `LabelVarsCase` reads a `vars.weight` that is not a number.                                                                                                           |
+| `TypeError`  | `BrierScore` without a `positiveLabel` sorts the labels of an answer, and they mix a number and a string, which scikit-learn refuses.                                                                                                                                       |
+| `TypeError`  | `LabelComparer` gets a stated answer that is not a label, a list of labels or text, such as a `Map` or a `Set`.                                                                                                                                                             |
+| `TypeError`  | `ProbabilityComparer` gets a stated answer that is not a `Map`, a plain object or the JSON text of an object.                                                                                                                                                               |
+
 ## What the package does not do
 
 - It does not run a harness, load a dataset, store results or show them. promptfoo does that.
@@ -579,6 +601,11 @@ export class Totals {
   get(name: string): RatioOfSums;
   names(): IterableIterator<string>;
 }
+/** One scorecard and its weight: a row of a Bootstrap. */
+export type WeightedScorecard = {
+  readonly scorecard: Scorecard;
+  readonly weight: number;
+};
 /** The interval of one name over weighted scorecards (@zukhruf/statistics). */
 export class Bootstrap {
   constructor(options: {
@@ -594,6 +621,19 @@ export class Bootstrap {
 
 // @zukhruf/evals/promptfoo
 
+/** The part of promptfoo's GradingResult that the assertion gives. */
+export type GradingResult = {
+  readonly pass: boolean;
+  readonly score: number;
+  readonly reason: string;
+  readonly namedScores?: Readonly<Record<string, number>>;
+  readonly namedScoreWeights?: Readonly<Record<string, number>>;
+  readonly componentResults?: readonly GradingResult[];
+};
+/** The part of the context that promptfoo gives a javascript assertion: the config of the assertion holds the case. */
+export type AssertionContext = {
+  readonly config?: Readonly<Record<string, unknown>>;
+};
 export class PromptfooAssertion<Case extends Weighted> {
   constructor(scorer: ScorecardScorer<Case>, cases: CaseReader<Case>);
   readonly grade: (
@@ -647,6 +687,20 @@ export class AssertionModule<Name extends string> {
   readonly functions: Readonly<Record<string, ModuleAssertion['value']>>;
   assert(...names: Name[]): FileAssertion[];
 }
+/** A model call that failed for its one test, also after its retries: the answer null (ADR 0005). */
+export class FailedCall {
+  static readonly answer = 'null';
+  constructor(reason: string);
+  readonly reason: string;
+  /** promptfoo's ProviderResponse: the answer null, with the reason in metadata.failed. */
+  response(metadata?: Readonly<Record<string, unknown>>): FailedCallResponse;
+}
+export type FailedCallResponse = {
+  readonly output: typeof FailedCall.answer;
+  readonly metadata: Readonly<Record<string, unknown>> & {
+    readonly failed: string;
+  };
+};
 
 // @zukhruf/evals/classification
 
@@ -793,6 +847,13 @@ The consumers below come from the search of 2026-11-06 (eight evals in four repo
 The package was built in two items: mutex #3888 (the core, `./promptfoo` and the move of `./structured`) and mutex #3889 (the generic core, the F-measure form and `./classification`).
 
 ## Documentation
+
+**Recipes**
+
+- [Compare a change with a baseline run](docs/recipes/compare-a-change-with-a-baseline-run.md)
+- [Score a whole promptfoo run in an afterAll hook](docs/recipes/score-a-whole-promptfoo-run-in-an-afterall-hook.md)
+
+**Decisions**
 
 - [ADR 0001: one package, with a subpath for each shape of answer](docs/adr/0001-one-package-with-a-subpath-for-each-shape-of-answer.md)
 - [ADR 0002: the core is generic over the answer](docs/adr/0002-the-core-is-generic-over-the-answer.md)
