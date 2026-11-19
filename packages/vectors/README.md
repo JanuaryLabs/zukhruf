@@ -230,13 +230,14 @@ Checked on 2026-11-18:
 
 The package is designed for its domain. Each program below moves onto it and drops its own copy.
 
-| Program                 | Its copy today                                                     | After                                          |
-| ----------------------- | ------------------------------------------------------------------ | ---------------------------------------------- |
-| `@deepagents/retrieval` | `vectorToBlob` in `stores/sqlite/sqlite.ts`                        | `sqlite.toSql`                                 |
-| `@zukhruf/embeddings`   | `UnitVector` and `toBlob` in `src/vector.ts`, cosine in JavaScript | `UnitVector`, `sqlite.toSql`, `cosineDistance` |
-| `@eltjs/embedding`      | `unitVector` in `src/embedding.ts` (#4118)                         | `UnitVector`, `sqlite.toSql`                   |
-| Context Compiler        | through `@zukhruf/embeddings`                                      | the same                                       |
-| datahub                 | none                                                               | `sqlserver.toSql`, `sqlType`                   |
+| Program                        | Its copy today                                                     | After                                          |
+| ------------------------------ | ------------------------------------------------------------------ | ---------------------------------------------- |
+| `@deepagents/retrieval`        | `vectorToBlob` in `stores/sqlite/sqlite.ts`                        | `sqlite.toSql`                                 |
+| `@zukhruf/embeddings`          | `UnitVector` and `toBlob` in `src/vector.ts`, cosine in JavaScript | `UnitVector`, `sqlite.toSql`, `cosineDistance` |
+| `@eltjs/embedding`             | `unitVector` in `src/embedding.ts` (#4118)                         | `UnitVector`, `sqlite.toSql`                   |
+| Context Compiler               | through `@zukhruf/embeddings`                                      | the same                                       |
+| `@zukhruf/relevance-filtering` | a hand-written cosine in `src/similarity-scorer.ts`                | `UnitVector`, `dot`                            |
+| datahub                        | none                                                               | `sqlserver.toSql`, `sqlType`                   |
 
 The cache that embeds only new text is its own package, `@zukhruf/embedding-cache` ([ADR 0008](./docs/adr/0008-the-embedding-cache-decorates-the-model-and-lives-outside-this-package.md)).
 
