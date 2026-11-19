@@ -1,5 +1,5 @@
 import { type Concept, enable } from '../concept.ts';
-import { TESTS, TEST_SUPPORT } from '../files.ts';
+import { CONFIG_FILES, TESTS, TEST_SUPPORT } from '../files.ts';
 import noAssertInRetryUntilReady from './no-assert-in-retry-until-ready.ts';
 import noCatchAllMswHandler from './no-catch-all-msw-handler.ts';
 import noDirectMswServer from './no-direct-msw-server.ts';
@@ -11,10 +11,11 @@ import noShortTestTimeout from './no-short-test-timeout.ts';
 import noSleepPollLoop from './no-sleep-poll-loop.ts';
 import noTestLifecycleHooks from './no-test-lifecycle-hooks.ts';
 import noTimerRace from './no-timer-race.ts';
+import noVitestGlobals from './no-vitest-globals.ts';
 import noWallClockBound from './no-wall-clock-bound.ts';
 import oneTestRunner from './one-test-runner.ts';
 
-const rules = {
+const testFileRules = {
   'no-test-lifecycle-hooks': noTestLifecycleHooks,
   'no-process-env-write': noProcessEnvWrite,
   'no-direct-msw-server': noDirectMswServer,
@@ -30,6 +31,8 @@ const rules = {
   'one-test-runner': oneTestRunner,
 };
 
+const rules = { ...testFileRules, 'no-vitest-globals': noVitestGlobals };
+
 export const tests: Concept = {
   name: 'tests',
   rules,
@@ -38,7 +41,13 @@ export const tests: Concept = {
     {
       name: 'zukhruf/tests',
       files: [...TESTS, ...TEST_SUPPORT],
-      rules: enable(rules),
+      rules: enable(testFileRules),
+    },
+    {
+      // Vitest reads its test options from a Vite or Vitest config.
+      name: 'zukhruf/tests/vitest-config',
+      files: CONFIG_FILES,
+      rules: { 'zukhruf/no-vitest-globals': 'error' },
     },
   ],
 };
