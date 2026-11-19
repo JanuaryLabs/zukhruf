@@ -96,11 +96,11 @@ function metaDirectory(environment: Environment): string {
   return join(configDirectory(environment), 'contexts', 'meta');
 }
 
-/** Endpoints.docker.Host of meta.json, or undefined when the context has no docker endpoint. */
-function hostOfMeta(meta: unknown): string | undefined {
-  const endpoints: unknown = Reflect.get(Object(meta), 'Endpoints');
-  const docker: unknown = Reflect.get(Object(endpoints), 'docker');
-  return stringField(docker, 'Host');
+/** meta.json of a stored context, as the Docker CLI writes it. */
+interface ContextMeta {
+  readonly Name: string;
+  /** The Docker CLI omits Endpoints when a context has none (omitempty), and a context made for another orchestrator has no docker endpoint. */
+  readonly Endpoints?: { readonly docker?: { readonly Host: string } };
 }
 
 /** The host of a context of the context store. */
@@ -110,10 +110,10 @@ async function storedHost(
 ): Promise<string> {
   const id = hash('sha256', name);
   try {
-    const meta: unknown = JSON.parse(
+    const meta: ContextMeta = JSON.parse(
       await readFile(join(metaDirectory(environment), id, 'meta.json'), 'utf8'),
     );
-    const host = hostOfMeta(meta);
+    const host = meta.Endpoints?.docker?.Host;
     if (host === undefined) throw new ContextNotFoundError(name);
     return host;
   } catch (error) {
@@ -169,7 +169,7 @@ async function storedContexts(
   });
   const contexts = await Promise.all(
     ids.map(async (id) => {
-      const meta: unknown = JSON.parse(
+      const meta: ContextMeta | null = JSON.parse(
         await readFile(join(directory, id, 'meta.json'), 'utf8').catch(
           (error: unknown) => {
             if (isMissingFile(error)) return 'null';
@@ -177,11 +177,10 @@ async function storedContexts(
           },
         ),
       );
-      const name = stringField(meta, 'Name');
-      const host = hostOfMeta(meta);
-      return name === undefined || host === undefined
+      const host = meta?.Endpoints?.docker?.Host;
+      return meta === null || host === undefined
         ? undefined
-        : { name, host };
+        : { name: meta.Name, host };
     }),
   );
   return contexts.filter((context) => context !== undefined);

@@ -21,14 +21,20 @@ import {
   TEST_SUPPORT,
   TYPESCRIPT,
 } from '../files.ts';
+import noNock from '../imports/no-nock.ts';
 import noOtherTestRunner from '../imports/no-other-test-runner.ts';
 import noPlaywrightTest from '../imports/no-playwright-test.ts';
 import noRawDatabaseSync from '../imports/no-raw-database-sync.ts';
 import noRawTempDirectory from '../imports/no-raw-temp-directory.ts';
 import noStateManagers from '../imports/no-state-managers.ts';
 import noTestFileImport from '../imports/no-test-file-import.ts';
+import noZodToJsonSchema from '../imports/no-zod-to-json-schema.ts';
 import noEnum from '../language/no-enum.ts';
+import noTsBesideDts from '../language/no-ts-beside-dts.ts';
+import noIngredientsName from '../naming/no-ingredients-name.ts';
+import noReflectGetChain from '../payloads/no-reflect-get-chain.ts';
 import { workspaceRootOf } from '../workspace/workspace-root.ts';
+import noAddIssueString from '../zod/no-add-issue-string.ts';
 import { noFloatingPromises, noLet, noUnassignedImport } from './options.ts';
 
 const importBans = {
@@ -38,6 +44,8 @@ const importBans = {
   'no-test-file-import': noTestFileImport,
   'no-raw-database-sync': noRawDatabaseSync,
   'no-raw-temp-directory': noRawTempDirectory,
+  'no-zod-to-json-schema': noZodToJsonSchema,
+  'no-nock': noNock,
 };
 
 const rules = {
@@ -47,6 +55,10 @@ const rules = {
   'no-collect-loop': noCollectLoop,
   'no-captured-assignment': noCapturedAssignment,
   'no-node-env': noNodeEnv,
+  'no-ts-beside-dts': noTsBesideDts,
+  'no-ingredients-name': noIngredientsName,
+  'no-reflect-get-chain': noReflectGetChain,
+  'no-add-issue-string': noAddIssueString,
   ...importBans,
 };
 
@@ -126,6 +138,9 @@ export const base: Concept = {
             { allowDeclarations: true },
           ],
           'zukhruf/no-enum': 'error',
+          // TypeScript reads `x.d.ts` as the declaration file of a sibling
+          // `x.ts`, so its globals vanish and the error lands in a consumer.
+          'zukhruf/no-ts-beside-dts': 'error',
           // An interface that extends one type is an augmentation point, such
           // as ProcessEnv in env.ts. typescript-eslint replaced
           // no-empty-interface, which Nx's TypeScript preset still turns on,
@@ -189,6 +204,19 @@ export const base: Concept = {
         name: 'zukhruf/base/node-env',
         files: SOURCE,
         rules: { 'zukhruf/no-node-env': 'error' },
+      },
+      {
+        // A name says what a thing is in engineering terms, not a metaphor.
+        name: 'zukhruf/base/naming',
+        files: SOURCE,
+        rules: { 'zukhruf/no-ingredients-name': 'error' },
+      },
+      {
+        // A payload walked with Reflect.get one field at a time guesses its
+        // shape at each step; type it from the real data and parse it once.
+        name: 'zukhruf/base/payloads',
+        files: SOURCE,
+        rules: { 'zukhruf/no-reflect-get-chain': 'error' },
       },
       {
         // A module-scope `let` is a global, and the functions that read it
@@ -255,6 +283,8 @@ export const base: Concept = {
           '@typescript-eslint/no-deprecated': 'error',
           'zukhruf/no-promise-field': 'error',
           'zukhruf/no-phase-flag': 'error',
+          // zod 4 aborts every parent schema's checks on a string issue.
+          'zukhruf/no-add-issue-string': 'error',
         },
       },
     ),
