@@ -6,6 +6,7 @@ import { pipeline } from 'node:stream/promises';
 import pMemoize, { pMemoizeClear } from 'p-memoize';
 
 import { RefCount } from '@zukhruf/async';
+import { parseHost } from '@zukhruf/docker';
 import { type Client, OpenChannelError } from '@zukhruf/ssh';
 import { type Environment, OpenSshConfig } from '@zukhruf/ssh/config';
 import { ControlClient } from '@zukhruf/ssh/control';
@@ -199,8 +200,16 @@ export class DockerHost {
     return await open(client);
   }
 
+  // OpenSSH takes no path in an ssh:// destination; a path of the endpoint
+  // names the engine socket (docker ADR 0002 amendment).
   async #dial(environment: Environment): Promise<Client> {
-    const config = await OpenSshConfig.resolve(this.endpoint, {
+    const engine = parseHost(this.endpoint);
+    if (engine.kind !== 'ssh') {
+      throw new Error(
+        `The host of the engine ${this.endpoint} is this machine: it has no SSH connection to open`,
+      );
+    }
+    const config = await OpenSshConfig.resolve(engine.destination, {
       flags: SSH_FLAGS,
       environment,
     });

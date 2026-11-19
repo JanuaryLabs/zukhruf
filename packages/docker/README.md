@@ -623,6 +623,17 @@ The lowest version is 1.44. From that version on, "`POST /networks/create` with 
 ## API
 
 ```ts
+/** Parses a unix://, npipe:// or ssh:// host. Each other host is an UnsupportedHostError. An ssh:// host splits as the Docker CLI splits it: the destination for ssh, and the engine socket that a path of the host names. */
+export function parseHost(host: string): ParsedHost;
+export type ParsedHost =
+  { kind: 'unix' | 'npipe'; host: string; socketPath: string } | SshHost;
+export interface SshHost {
+  kind: 'ssh';
+  host: string;
+  destination: string;
+  socketPath: string | undefined;
+}
+
 export class Docker implements AsyncDisposable {
   /** Selects the engine in the order of the Docker CLI, pings it and negotiates the API version. */
   static connect(options: ConnectOptions): Promise<Docker>;

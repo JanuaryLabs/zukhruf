@@ -6,6 +6,7 @@ import { OpenSshConfig, type SharedConnection } from '@zukhruf/ssh/config';
 
 import type { Environment } from './context-store.ts';
 import { ConnectionFailedError } from './errors.ts';
+import type { SshHost } from './host.ts';
 import type { CancelOptions } from './options.ts';
 import { type Connection, type Dialer, isSocketFailure } from './transport.ts';
 
@@ -180,13 +181,14 @@ export class SshDialer implements Dialer {
    * the socket, so a server that refuses the socket fails there.
    */
   static async connect(
-    host: string,
+    engine: SshHost,
     options: CancelOptions & {
       readonly sshFlags?: readonly string[] | undefined;
       readonly environment?: Environment | undefined;
       readonly clock: WallClock;
     },
   ): Promise<SshDialer> {
+    const { host, destination, socketPath: namedSocket } = engine;
     const { sshFlags = [], environment, clock, signal } = options;
     if (environment === undefined) {
       throw new ConnectionFailedError(host, {
@@ -195,7 +197,6 @@ export class SshDialer implements Dialer {
       });
     }
     const cancel = signal === undefined ? {} : { signal };
-    const { destination, namedSocket } = splitSocket(host);
     let client: SharedConnection;
     try {
       const config = await OpenSshConfig.resolve(destination, {
@@ -262,26 +263,6 @@ export class SshDialer implements Dialer {
 }
 
 /** The path of the engine socket of the Docker CLI on the SSH server: its context's unix:// endpoint. */
-/**
- * The destination for ssh -G, and the engine socket that a path of the host
- * names. As in the Docker CLI's connection helper, a path in an ssh:// host is
- * the engine socket on the SSH server (`docker --host=unix://<path> system
- * dial-stdio`, cli/connhelper/connhelper.go), so no command on the server
- * looks it up. OpenSSH takes no path in an ssh:// destination.
- */
-function splitSocket(host: string): {
-  readonly destination: string;
-  readonly namedSocket: string | undefined;
-} {
-  const url = new URL(host);
-  const path = decodeURIComponent(url.pathname);
-  if (path.replaceAll('/', '') === '') {
-    return { destination: host, namedSocket: undefined };
-  }
-  url.pathname = '';
-  return { destination: url.href, namedSocket: path };
-}
-
 async function engineSocket(
   client: SharedConnection,
   host: string,

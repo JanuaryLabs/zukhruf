@@ -15,7 +15,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 
-import { Docker } from '@zukhruf/docker';
+import { Docker, type SshHost, parseHost } from '@zukhruf/docker';
 import { OpenSshConfig } from '@zukhruf/ssh/config';
 import { ControlMaster } from '@zukhruf/ssh/control';
 
@@ -116,9 +116,9 @@ export async function globalSetup(): Promise<void> {
   await writeFile(pending, JSON.stringify(run));
   await rename(pending, join(directory, 'run.json'));
 
-  process.env.DOCKER_HOST = endpoint.startsWith('ssh://')
-    ? await serveConnection(run)
-    : endpoint;
+  const engine = parseHost(endpoint);
+  process.env.DOCKER_HOST =
+    engine.kind === 'ssh' ? await serveConnection(run, engine) : endpoint;
   process.env[TEST_RUN_ID] = run.id;
   process.env[TEST_RUN_DIRECTORY] = directory;
   delete process.env.DOCKER_CONTEXT;
@@ -130,26 +130,27 @@ export async function globalSetup(): Promise<void> {
  * engine at its docker.sock, where each connection is a channel to the
  * engine's socket on the engine host. Resolves with the DOCKER_HOST of the
  * test processes. Nothing of it keeps the runner alive: the end of the runner
- * closes the connection, and the SSH server closes its channels.
+ * closes the connection, and the SSH server closes its channels. A path in the
+ * endpoint names the engine socket, as @zukhruf/docker reads it (docker ADR
+ * 0002 amendment); without one, the Docker CLI on the engine host selects it.
  */
-async function serveConnection(run: Run): Promise<string> {
+async function serveConnection(run: Run, engine: SshHost): Promise<string> {
   const sockets = runSockets(run.id);
   await mkdir(runSocketFolder(run.id), { mode: 0o700 });
   await writeFile(sockets.endpoint, run.endpoint, { mode: 0o600 });
   await using stack = new AsyncDisposableStack();
-  const config = await OpenSshConfig.resolve(run.endpoint, {
+  const config = await OpenSshConfig.resolve(engine.destination, {
     flags: SSH_FLAGS,
     environment: process.env,
   });
   const client = stack.use(await config.dial({ clock: globalThis }));
   const master = stack.use(await ControlMaster.listen(client, sockets.master));
-  const host = new DockerHost(run.endpoint, { master: sockets.master });
-  const selected = (await host.shell(ENGINE_HOST_COMMAND)).stdout.trim();
-  if (!selected.startsWith('unix://'))
-    throw new Error(
-      `The Docker CLI on the engine host ${run.endpoint} selects the engine ${JSON.stringify(selected)}; over SSH the tests reach only a unix:// engine`,
-    );
-  const engineSocket = selected.slice('unix://'.length);
+  const engineSocket =
+    engine.socketPath ??
+    (await selectedSocket(
+      new DockerHost(run.endpoint, { master: sockets.master }),
+      run.endpoint,
+    ));
   const server = createServer({ allowHalfOpen: true }, (socket) => {
     socket.on('error', () => socket.destroy());
     void client.dial('unix', engineSocket).then(
@@ -194,4 +195,17 @@ export function globalTeardown(): void {
     );
     process.exitCode = 1;
   }
+}
+
+/** The engine socket that the Docker CLI on the engine host selects: only a unix:// engine, which a channel can reach. */
+async function selectedSocket(
+  host: DockerHost,
+  endpoint: string,
+): Promise<string> {
+  const selected = (await host.shell(ENGINE_HOST_COMMAND)).stdout.trim();
+  if (!selected.startsWith('unix://'))
+    throw new Error(
+      `The Docker CLI on the engine host ${endpoint} selects the engine ${JSON.stringify(selected)}; over SSH the tests reach only a unix:// engine`,
+    );
+  return selected.slice('unix://'.length);
 }

@@ -508,3 +508,21 @@ test(
     assert.equal(stdout, 'done\n');
   },
 );
+
+test(
+  'a DockerHost of an ssh:// endpoint whose path names the engine socket opens its SSH connection to the host without the path, and its shell runs there',
+  { skip: noSshd },
+  async () => {
+    // Arrange: OpenSSH takes no path in an ssh:// destination.
+    await using sshd = await startSshd();
+    const host = new DockerHost(`${ENGINE_HOST}/var/run/docker.sock`, {
+      environment: await reaching(sshd),
+    });
+
+    // Act
+    const { stdout } = await host.shell('echo ran');
+
+    // Assert
+    assert.equal(stdout, 'ran\n');
+  },
+);

@@ -10,6 +10,7 @@ export {
 } from './containers.ts';
 export type { DockerContext, Environment } from './context-store.ts';
 export { type ConnectOptions, Docker } from './docker.ts';
+export { type ParsedHost, type SshHost, parseHost } from './host.ts';
 export {
   BindSourceNotFoundError,
   ConnectionFailedError,

@@ -77,7 +77,7 @@ export class Docker implements AsyncDisposable {
     const parsed = parseHost(engine.host);
     const transport = new Transport(
       parsed.kind === 'ssh'
-        ? await SshDialer.connect(engine.host, options)
+        ? await SshDialer.connect(parsed, options)
         : new SocketDialer(parsed.kind, parsed.socketPath),
     );
     try {

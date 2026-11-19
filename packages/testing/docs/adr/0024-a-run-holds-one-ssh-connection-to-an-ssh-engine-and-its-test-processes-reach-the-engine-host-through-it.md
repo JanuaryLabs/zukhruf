@@ -49,3 +49,7 @@ What else the code needed:
 - A `DockerHost` takes the path of a master or an environment: with a master it reaches the engine host only through it, and fails when the master is gone.
 - A forward counts a connection that cannot reach the connection or the master as a loss of the forward, and a channel that the server refuses (a port where nothing listens yet) as no loss. `@zukhruf/ssh`'s control client rejects such a refusal with `OpenChannelError` since #4598.
 - The engine socket comes from `docker context inspect` on the engine host, as `@zukhruf/docker` finds it: a copy, in the ledger of copied code.
+
+## Amendment, 2026-11-19 (docker ADR 0002 amendment)
+
+A path in an `ssh://` endpoint names the engine socket on the engine host, as in the Docker CLI's connection helper (`ssh://user@host/<path>` runs `docker --host=unix://<path> system dial-stdio`). The global setup reads the endpoint with `parseHost` of `@zukhruf/docker`: `ssh -G` gets the destination without the path, since OpenSSH takes no path in an `ssh://` destination, and step 2 above runs only when the endpoint names no socket. `DockerHost` dials the same destination. A context such as `ssh://ezzabuzaid@mac-mini/Users/ezzabuzaid/.docker/run/docker.sock` then serves a run with no `docker context inspect` on the host (embedding-cache:test on mac-mini passed 31/31 so, 2026-11-19).
