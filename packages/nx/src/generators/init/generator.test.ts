@@ -130,6 +130,10 @@ test('a fresh workspace gets each root file of the standard', async () => {
     /new LockfileSync\(\),\n {2}new OneRuntimeCopy\(\),\n {2}new InstallScriptsReviewed\(\),\n/,
   );
   assert.match(
+    preCommit,
+    /new DependencyChecks\(\),\n {2}new WorkflowChecks\(\),\n\]\);/,
+  );
+  assert.match(
     tree.read('.husky/pre-push.ts', 'utf-8') ?? '',
     /prePush\(\[new Build\(\{ env: \{ NODE_ENV: 'production' \} \}\)\]\)/,
   );

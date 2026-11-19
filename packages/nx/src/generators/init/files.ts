@@ -173,6 +173,7 @@ export default [
   ...zukhruf.configs['diagnostics'],
   ...zukhruf.configs['env'],
   ...zukhruf.configs['nx-project-json'],
+  ...zukhruf.configs['github-actions'],
   ...manifest.configs.recommended,
   // The files that this config lints itself, and the config files of each
   // project: all of them run on Node.
@@ -205,8 +206,8 @@ export const hooks: Record<string, string> = {
 // install policy, a package-lock.json that does not record each staged
 // package.json, a lockfile that installs react, react-dom or zod twice, a
 // package with an install script that allowScripts does not decide, a
-// Dockerfile that installs without the lockfile, and a package.json that
-// breaks the lint.
+// Dockerfile that installs without the lockfile, a package.json that breaks
+// the lint, and a workflow or action under .github that breaks the lint.
 import {
   DependencyChecks,
   DockerfileInstallsFromLockfile,
@@ -217,6 +218,7 @@ import {
   NpmrcPolicy,
   OneRuntimeCopy,
   Sync,
+  WorkflowChecks,
   preCommit,
 } from '@zukhruf/git-hooks';
 
@@ -230,6 +232,7 @@ await preCommit([
   new InstallScriptsReviewed(),
   new DockerfileInstallsFromLockfile(),
   new DependencyChecks(),
+  new WorkflowChecks(),
 ]);
 `,
   '.husky/pre-push.ts': `#!/usr/bin/env node
