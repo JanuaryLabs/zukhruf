@@ -20,6 +20,10 @@ _Avoid_: Index, retriever
 An id, a text and a publish date that the caller gives. The collection stores the vector of the text, not the text. In a vector table, a document is a row.
 _Avoid_: Article, chunk, record
 
+**Publish date**:
+The date of a document that the caller gives as `publishedAt` (a `Date`). A vector table keeps it in the column `published_at`, in milliseconds since the Unix epoch. A window and a date range select documents by their publish date (`src/collection.ts`, `src/vector-search.ts`).
+_Avoid_: Timestamp, created date
+
 **Model**:
 The AI SDK embedding model that makes a vector from a text. A provider and a model id name it.
 _Avoid_: Embedder, encoder
@@ -27,6 +31,10 @@ _Avoid_: Embedder, encoder
 **Vector**:
 The list of numbers that the model gives for a text. The collection stores it with a length of 1 (a unit vector), as float32 values.
 _Avoid_: Embedding (for the stored value), tensor
+
+**Embedding cache**:
+The cache of `@zukhruf/embedding-cache` that the collection embeds through. It keeps the vector of each text that the model embedded in the table `embedding_cache` of the database of the collection, so an upsert calls the model only for a new or changed text. A delete does not remove a vector from the embedding cache, so an upsert of the same text after a delete calls no model (#3134, commit ba803520, `src/collection.ts`, [ADR 0002](docs/adr/0002-the-hash-includes-the-model.md)).
+_Avoid_: Collection, vector table (the embedding cache keeps the vectors of texts, not of documents), hash
 
 **Dimension**:
 The number of values in a vector.
@@ -39,6 +47,10 @@ _Avoid_: Distance, score
 **Window**:
 The documents whose publish date is at most a number of days before or after the publish date of a document.
 _Avoid_: Range, period
+
+**Date range**:
+The documents whose publish date is from a date `from` to a date `to`, both included. The caller gives it as `{ from, to }` to a query and to a neighbour graph. A window is around the publish date of one document; a date range is the same for all documents of a call (`src/collection.ts`, `src/vector-search.ts`).
+_Avoid_: Window, period
 
 **Neighbour**:
 A document in the window of a document, with its similarity to that document. The document is not its own neighbour.
