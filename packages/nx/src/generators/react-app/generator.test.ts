@@ -242,3 +242,12 @@ test('Tailwind is wired in nx.json, .prettierrc and the root packages', async ()
     }
   }
 });
+
+test('the Vitest config gives each test the 300 s test limit of zukhruf', async () => {
+  const tree = generatorTree();
+
+  await reactAppGenerator(tree, { directory: 'apps/web' });
+
+  const viteConfig = tree.read('apps/web/vite.config.ts', 'utf-8') ?? '';
+  assert.match(viteConfig, /testTimeout: 300_000,/);
+});

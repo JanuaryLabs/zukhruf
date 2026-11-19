@@ -181,6 +181,8 @@ export default defineConfig(({ mode }) => {
       globals: false,
       environment: 'happy-dom',
       pool: 'forks',
+      // 300 s is zukhruf's test limit (zukhruf/no-short-test-timeout).
+      testTimeout: 300_000,
       execArgv: ['--no-experimental-webstorage'],
       include: ['{src,tests}/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
       setupFiles: ['@testing-library/jest-dom/vitest'],
