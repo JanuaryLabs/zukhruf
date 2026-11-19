@@ -102,6 +102,24 @@ WHERE t.source = 'docs'
 ORDER BY r.distance;
 ```
 
+### Search in Postgres
+
+Postgres has its own client package, [pgvector](https://github.com/pgvector/pgvector-node), whose `toSql` and `fromSql` gave this package its names. Use it for the SQL form, and this package for the vector and its math ([ADR 0001](./docs/adr/0001-the-scope-and-the-name-come-from-the-vector-types-of-pgvector-and-the-math-of-dotnet.md), amendment):
+
+```ts
+import pgvector from 'pgvector';
+
+import { UnitVector, Vector } from '@zukhruf/vectors';
+
+const unit = UnitVector.normalize(Vector.from(embedding));
+await client.query('INSERT INTO items (embedding) VALUES ($1)', [
+  pgvector.toSql(Array.from(unit.values)),
+]);
+await client.query('SELECT id FROM items ORDER BY embedding <=> $1 LIMIT 10', [
+  pgvector.toSql(Array.from(Vector.from(query).values)),
+]);
+```
+
 ## API
 
 ```ts
@@ -202,7 +220,7 @@ Checked on 2026-11-18:
 
 | Package                                             | Why it does not do the job                                                                                       |
 | --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `pgvector` 0.3.1 (MIT, no dependencies, 1 M a week) | Postgres only. It is the model for this package's names, and the candidate for Postgres later                    |
+| `pgvector` 0.3.1 (MIT, no dependencies, 1 M a week) | Postgres only. It is the model for this package's names, and the package for Postgres (Search in Postgres)       |
 | `sqlite-vec` 0.1.9                                  | It loads the extension (`getLoadablePath`, `load`) and gives no bytes and no functions for a database without it |
 | `@mastra/core`, `@langchain/core`                   | One store interface that hides each engine; no SQL Server vectors                                                |
 | `@memberjunction/ai-vectors-sqlserver`              | BUSL-1.1, and it works only inside MemberJunction                                                                |
@@ -224,7 +242,5 @@ The cache that embeds only changed text is not in this package ([ADR 0008](./doc
 
 ## Later
 
-- Postgres: adopt `pgvector`, or a `/postgres` subpath, after SQLite and SQL Server are done.
-- `SparseVector`, with Postgres.
 - Hamming in plain SQLite, which needs the `vec_bit` subtype of sqlite-vec.
 - Native vectors over TDS, when tedious supports them (pull request #1841).

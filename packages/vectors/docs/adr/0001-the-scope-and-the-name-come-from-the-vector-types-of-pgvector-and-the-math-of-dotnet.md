@@ -32,6 +32,10 @@ A first paper (commit f06a1fb8, `@zukhruf/vector-store`) had one collection inte
 - Later: Postgres and `SparseVector`; hamming in plain SQLite; native vectors over TDS.
 - Never: tables, collections, filters, migrations, connections, text splitting, and the embedding cache ([ADR 0008](./0008-the-embedding-cache-decorates-the-model-and-lives-outside-this-package.md)).
 
+## Amendment: Postgres (2026-11-19)
+
+With SQLite and SQL Server done, Ezz chose "Adopt pgvector (Recommended)": the package has no `/postgres` subpath. The npm package `pgvector` (MIT, no dependencies, about one million downloads a week) already gives the SQL form of Postgres (`toSql`, `fromSql`, and helpers for pg, Kysely, Knex and others). A host uses it with the vectors and the math of this package. `SparseVector` stays with pgvector too.
+
 ## Consequences
 
 - The four programs above drop their copies and use the package. Backlog #4118 closes.
