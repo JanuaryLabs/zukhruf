@@ -1,6 +1,6 @@
 {
   "name": "@zukhruf/sqlite-notify",
-  "version": "0.8.38",
+  "version": "0.8.39",
   "description": "Postgres's LISTEN and NOTIFY for one SQLite file: a notification is a row written in the sender's transaction, and each listening program of the computer gets it after the commit, woken over its own Unix socket or named pipe.",
   "license": "MIT",
   "repository": {
@@ -41,16 +41,16 @@
     "access": "public"
   },
   "dependencies": {
-    "@zukhruf/async": "^0.8.38",
-    "@zukhruf/pipes": "^0.8.38",
-    "@zukhruf/sqlite-drift": "^0.8.38",
-    "@zukhruf/sqlite-open": "^0.8.38",
-    "@zukhruf/sqlite-transaction": "^0.8.38"
+    "@zukhruf/async": "^0.8.39",
+    "@zukhruf/pipes": "^0.8.39",
+    "@zukhruf/sqlite-drift": "^0.8.39",
+    "@zukhruf/sqlite-open": "^0.8.39",
+    "@zukhruf/sqlite-transaction": "^0.8.39"
   },
   "devDependencies": {
     "@sinonjs/fake-timers": "15.4.0",
-    "@zukhruf/fs": "^0.8.38",
-    "@zukhruf/testing": "^0.8.38",
+    "@zukhruf/fs": "^0.8.39",
+    "@zukhruf/testing": "^0.8.39",
     "esbuild": "0.28.2"
   }
 }
