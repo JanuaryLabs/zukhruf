@@ -14,6 +14,11 @@
       "version": "0.8.40",
       "description": "NODE_ENV is production in every setup and code never reads it: the configuration of ADR 0016, and a log of each NODE_ENV read in source.",
       "implementation": "./dist/migrations/update-0-8-40/node-env-production.js"
+    },
+    "add-prisma-client-inputs": {
+      "version": "0.8.40",
+      "description": "A repo with @zukhruf/nx/prisma hashes the generated Prisma client: targetDefaults.typecheck and .build get the inputs \"...\" and { \"dependentTasksOutputFiles\": \"**/*.ts\" } (#4826, ADR 0012 decision 6).",
+      "implementation": "./dist/migrations/update-0-8-40/add-prisma-client-inputs.js"
     }
   }
 }

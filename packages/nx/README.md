@@ -823,11 +823,12 @@ npx nx migrate --run-migrations
 
 `nx migrate` moves every published @zukhruf package with `@zukhruf/nx` (`packageGroup`), and nothing runs the migrations otherwise. Each one adds only what is missing, writes what the generators write now, and logs the step to take by hand where a file lost the shape that the generator wrote. [ADR 0017](./docs/adr/0017-nx-migrations-bring-a-change-of-generated-output-to-the-repos-that-ran-the-generator-before.md) has the rules.
 
-| Migration                | Version | Brings                                                                                                                                                                                    |
-| ------------------------ | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `add-portless-proxy-env` | 0.8.40  | `PORTLESS_UNPRIVILEGED=1` and `PORTLESS_HTTPS=1` in `targetDefaults.portless` (#4768)                                                                                                     |
-| `add-local-postgres`     | 0.8.40  | the root `compose.dev.yml`, `up` and `down` of each db package, the local `CONNECTION_STRING`, and `^up` in its backend serve (ADR 0012 decisions 16 and 17)                              |
-| `node-env-production`    | 0.8.40  | the NODE_ENV configuration of ADR 0016 (nx.json defaults, target env, the web exceptions, `.env.example`, the workflow env, `ALLOWED_ORIGINS`), and a log of each NODE_ENV read in source |
+| Migration                  | Version | Brings                                                                                                                                                                                                    |
+| -------------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `add-portless-proxy-env`   | 0.8.40  | `PORTLESS_UNPRIVILEGED=1` and `PORTLESS_HTTPS=1` in `targetDefaults.portless` (#4768)                                                                                                                     |
+| `add-local-postgres`       | 0.8.40  | the root `compose.dev.yml`, `up` and `down` of each db package, the local `CONNECTION_STRING`, and `^up` in its backend serve (ADR 0012 decisions 16 and 17)                                              |
+| `node-env-production`      | 0.8.40  | the NODE_ENV configuration of ADR 0016 (nx.json defaults, target env, the web exceptions, `.env.example`, the workflow env, `ALLOWED_ORIGINS`), and a log of each NODE_ENV read in source                 |
+| `add-prisma-client-inputs` | 0.8.40  | `...` and `{ "dependentTasksOutputFiles": "**/*.ts" }` in the `inputs` of `targetDefaults.typecheck` and `.build` of a repo with `@zukhruf/nx/prisma`, so a schema change rebuilds the db package (#4826) |
 
 ## generators
 

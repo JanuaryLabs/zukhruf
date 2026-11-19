@@ -319,19 +319,28 @@ function mergePrismaNxJson(tree: Tree): void {
     if (!plugins.some((entry) => pluginName(entry) === '@zukhruf/nx/prisma')) {
       nxJson.plugins = [...plugins, '@zukhruf/nx/prisma'];
     }
-    for (const target of ['typecheck', 'build']) {
-      updateTargetDefault(nxJson, target, (entry) => ({
-        ...entry,
-        dependsOn: unique([...(entry.dependsOn ?? []), 'generate', '...']),
-        inputs: unique([
-          ...(entry.inputs ?? []),
-          '...',
-          { dependentTasksOutputFiles: '**/*.ts' },
-        ]),
-      }));
-    }
+    addPrismaTargetDefaults(nxJson);
     return nxJson;
   });
+}
+
+/**
+ * `generate` and the client in `targetDefaults.typecheck` and `.build`; an
+ * entry that is there stays. The generator and the add-prisma-client-inputs
+ * migration call it (#4826).
+ */
+export function addPrismaTargetDefaults(nxJson: NxJsonConfiguration): void {
+  for (const target of ['typecheck', 'build']) {
+    updateTargetDefault(nxJson, target, (entry) => ({
+      ...entry,
+      dependsOn: unique([...(entry.dependsOn ?? []), 'generate', '...']),
+      inputs: unique([
+        ...(entry.inputs ?? []),
+        '...',
+        { dependentTasksOutputFiles: '**/*.ts' },
+      ]),
+    }));
+  }
 }
 
 /** Replaces `marker` in a file of the backend, or stops when the file has no marker. */
