@@ -775,7 +775,7 @@ test('what dokploy writes lints clean under @zukhruf/eslint', async () => {
   assert.deepEqual(await lintManifests(tree), []);
 });
 
-test('the workflows run under production, and the .env.example of infra sets NODE_ENV=production', async () => {
+test('the workflows run under production with the devDependencies installed, and the .env.example of infra sets NODE_ENV=production', async () => {
   const tree = await workspace();
 
   await dokployGenerator(tree, { api: 'apps/backend', owner: 'acme' });
@@ -787,6 +787,13 @@ test('the workflows run under production, and the .env.example of infra sets NOD
     assert.match(
       read(tree, path),
       /^env:\n(?: {2}.*\n)*? {2}NODE_ENV: production\n/m,
+      path,
+    );
+    // npm omits devDependencies under NODE_ENV=production (meddit 2399cf1
+    // failed CI on it); npm_config_include=dev keeps them.
+    assert.match(
+      read(tree, path),
+      /^env:\n(?: {2}.*\n)*? {2}npm_config_include: dev\n/m,
       path,
     );
   }

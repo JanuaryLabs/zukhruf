@@ -477,6 +477,8 @@ permissions:
 # Every setup runs under production, CI too (ADR 0016 of @zukhruf/nx).
 env:
   NODE_ENV: production
+  # npm omits devDependencies under NODE_ENV=production; CI needs them.
+  npm_config_include: dev
 
 jobs:
   ci:
@@ -593,6 +595,8 @@ cache-mode: read
 env:
   # Every setup runs under production (ADR 0016 of @zukhruf/nx).
   NODE_ENV: production
+  # npm omits devDependencies under NODE_ENV=production; the deploy needs them.
+  npm_config_include: dev
   SHA: \${{ github.event.workflow_run.head_sha }}
 
 jobs:
