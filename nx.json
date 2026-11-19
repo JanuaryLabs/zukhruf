@@ -23,12 +23,7 @@
     },
     "./packages/nx/src/lint/plugin.ts",
     "./packages/nx/src/format/plugin.ts",
-    {
-      "plugin": "./packages/nx/src/test/plugin.ts",
-      "options": {
-        "flags": ["--test-force-exit"]
-      }
-    }
+    "./packages/nx/src/test/plugin.ts"
   ],
   "targetDefaults": {
     "typecheck": {
