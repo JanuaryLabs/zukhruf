@@ -1,5 +1,5 @@
 name: Ship only the commit that CI tested
-description: Sets current to 'true' when HEAD is the commit that the CI run behind this workflow_run tested, and to 'false' when main moved past it, because the newer commit's own run ships it. Other repositories use it as JanuaryLabs/zukhruf/.github/actions/tested-commit@main.
+description: Sets current to 'true' when HEAD is the commit that the CI run behind this workflow_run tested, or the release commit that nx release version made on top of it, and to 'false' when main moved past it, because the newer commit's own run ships it. Other repositories use it as JanuaryLabs/zukhruf/.github/actions/tested-commit@main.
 
 inputs:
   sha:
@@ -9,21 +9,30 @@ inputs:
 
 outputs:
   current:
-    description: "'true' when HEAD is the tested commit, 'false' when a newer commit is on main."
+    description: "'true' when HEAD is the tested commit or its release commit, 'false' when a newer commit is on main."
     value: ${{ steps.head.outputs.current }}
 
 runs:
   using: composite
   steps:
     # Shipping an older commit after a newer one would roll main back.
+    # A release commit on top of the tested commit is not newer work: it is
+    # what a run made before a later step failed, so a re-run goes on to
+    # publish the version that npm does not have yet (#4692).
     - name: Compare HEAD with the tested commit
       id: head
       shell: bash
       env:
         TESTED: ${{ inputs.sha }}
+        RELEASER: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
       run: |
         : "${TESTED:?no tested commit: give sha, or run from a workflow_run event}"
         if [ "$(git rev-parse HEAD)" = "$TESTED" ]; then
+          echo "current=true" >> "$GITHUB_OUTPUT"
+        elif [ "$(git rev-parse --verify --quiet HEAD^1)" = "$TESTED" ] &&
+          [ "$(git log -1 --format='%an <%ae>' HEAD)" = "$RELEASER" ] &&
+          git log -1 --format=%s HEAD | grep -q '^chore(release): publish '; then
+          echo "HEAD is the release commit of $TESTED, so the run goes on to publish."
           echo "current=true" >> "$GITHUB_OUTPUT"
         else
           echo "main moved past $TESTED; the run of the newer commit ships it."
