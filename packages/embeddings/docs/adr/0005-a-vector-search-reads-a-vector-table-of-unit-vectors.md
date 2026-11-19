@@ -21,5 +21,9 @@ FAISS has the same rule. Its flat inner-product index (`IndexFlatIP`) gives the 
 - A collection gives the same results as before.
 - A program that writes a vector table normalizes each vector, and stores it as float32 values, little-endian, as a collection does with `toSql` of `@zukhruf/vectors/sqlite`. The search reads each BLOB with `fromSql` of the same module. Little-endian is the byte order of each platform that Node runs on, so a table written in the byte order of the platform before this change reads the same.
 - A vector that is not a unit vector gives an incorrect similarity, and the search does not tell it.
-- All vectors of one vector table must have one dimension (ADR 0003). The search does not examine the dimension before it compares, but `dot` of `@zukhruf/vectors` throws its own `DimensionMismatchError` for two vectors of other dimensions.
+- All vectors of one vector table must have one dimension (ADR 0003). The search does not examine the dimension before it compares, but `dot` of `@zukhruf/vectors` throws the `DimensionMismatchError` of that package for two vectors of other dimensions. A collection throws the same class.
 - The search prepares its statements on each call. Thus the table or the view can come after the `VectorSearch`. A name that SQLite cannot find gives the SQLite error of that call.
+
+## Amendment (#4694)
+
+A collection makes each vector a unit vector with `UnitVector.normalize` of `@zukhruf/vectors`. It rounds the values of the model to float32 and divides them by their length in float64, as pgvector does (ADR 0003 of `@zukhruf/vectors`). Before, the collection divided the values in float64 and rounded once. Thus a vector that a collection stores now can differ in the last bit from the vector it stored before for the same text. The two stay comparable, to about one float32 step, and no document must be embedded again. The search still does not normalize a vector that it reads, so its result for a given vector table does not change.

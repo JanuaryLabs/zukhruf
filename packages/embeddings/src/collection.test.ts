@@ -6,12 +6,9 @@ import { MockEmbeddingModelV4 } from 'ai/test';
 
 import { TemporaryFiles } from '@zukhruf/fs';
 import { open } from '@zukhruf/sqlite-open';
+import { DimensionMismatchError } from '@zukhruf/vectors';
 
-import {
-  Collection,
-  DimensionMismatchError,
-  UnknownDocumentError,
-} from './index.ts';
+import { Collection, UnknownDocumentError } from './index.ts';
 
 // A real embedding model cannot run in CI. The AI SDK's own mock model stands
 // in for it: it gives the vector that the test names for each text, and

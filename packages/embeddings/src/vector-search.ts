@@ -1,11 +1,15 @@
 import type { DatabaseSync } from 'node:sqlite';
 
-import { Vector, dot } from '@zukhruf/vectors';
+import {
+  DimensionMismatchError,
+  UnitVector,
+  Vector,
+  dot,
+} from '@zukhruf/vectors';
 import { fromSql } from '@zukhruf/vectors/sqlite';
 
-import { DimensionMismatchError } from './dimension-mismatch-error.ts';
 import { UnknownDocumentError } from './unknown-document-error.ts';
-import { blob, normalize } from './vector.ts';
+import { blob } from './vector.ts';
 
 const DAY_MS = 86_400_000;
 
@@ -107,7 +111,7 @@ export class VectorSearch {
     vector: readonly number[],
     range?: { readonly from: Date; readonly to: Date },
   ): Neighbour[] {
-    const query = normalize(vector);
+    const query = UnitVector.normalize(Vector.from(vector));
     const stored = this.#database
       .prepare(`SELECT length("vector") AS "bytes" FROM ${this.#table} LIMIT 1`)
       .get();

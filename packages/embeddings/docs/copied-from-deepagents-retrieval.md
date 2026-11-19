@@ -22,8 +22,8 @@ Other changes:
 - The model is an AI SDK `EmbeddingModel`. deepagents uses its own `Embedder` function type (`stores/store.ts`), which gives embeddings and their dimension.
 - A publish date in each row, with an index.
 
-**`stores/sqlite/sqlite.ts` (`vectorToBlob`) → `vector.ts` (`normalize`), then `toSql` of `@zukhruf/vectors/sqlite`.**
-Both store float32 values as a BLOB. deepagents copies the vector into a new `Float32Array`, and sqlite-vec normalizes it in SQL (`vec_normalize`). This package normalizes in JavaScript and stores the unit vector. The BLOB form (`toSql`, `fromSql`, float32 little-endian) and the dot product (`dot`) come from `@zukhruf/vectors` (backlog #4683), so they are no longer copies here. `normalize` stays here: `UnitVector.normalize` of `@zukhruf/vectors` throws `ZeroVectorError` where a collection throws `RangeError`, and rounds each value to float32 before it divides.
+**`stores/sqlite/sqlite.ts` (`vectorToBlob`) → `UnitVector.normalize` of `@zukhruf/vectors`, then `toSql` of `@zukhruf/vectors/sqlite`.**
+Both store float32 values as a BLOB. deepagents copies the vector into a new `Float32Array`, and sqlite-vec normalizes it in SQL (`vec_normalize`). This package normalizes in JavaScript and stores the unit vector. The BLOB form (`toSql`, `fromSql`, float32 little-endian), the dot product (`dot`, backlog #4683), the unit vector (`UnitVector.normalize`) and `DimensionMismatchError` (backlog #4694) come from `@zukhruf/vectors`, so they are no longer copies here.
 Why: there is no sqlite-vec here.
 
 **`stores/sqlite/sqlite.ts` (`search`) and `stores/sqlite/ddl.sqlite.ts` (`vec_chunks`) → `collection.ts` (`Collection.nearest`) and `schema.ts`.**

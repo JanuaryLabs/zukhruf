@@ -4,14 +4,13 @@ import type { DatabaseSync } from 'node:sqlite';
 import { type EmbeddingModel, embedMany } from 'ai';
 
 import { transaction } from '@zukhruf/sqlite-transaction';
-import { Vector } from '@zukhruf/vectors';
+import { DimensionMismatchError, UnitVector, Vector } from '@zukhruf/vectors';
 import { fromSql, toSql } from '@zukhruf/vectors/sqlite';
 
-import { DimensionMismatchError } from './dimension-mismatch-error.ts';
 import { collectionSchema } from './schema.ts';
 import { UnknownDocumentError } from './unknown-document-error.ts';
 import { type Neighbour, VectorSearch } from './vector-search.ts';
-import { blob, normalize } from './vector.ts';
+import { blob } from './vector.ts';
 
 export type Document = {
   readonly id: string;
@@ -171,7 +170,9 @@ export class Collection {
       model: this.#model,
       values: texts,
     });
-    return embeddings.map((embedding) => normalize(embedding));
+    return embeddings.map((embedding) =>
+      UnitVector.normalize(Vector.from(embedding)),
+    );
   }
 
   // The model is part of the hash, so a new model embeds the text again.

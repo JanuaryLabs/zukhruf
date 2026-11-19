@@ -96,7 +96,8 @@ To search a table with other column names, make a view that renames the columns,
 ## Errors
 
 - `UnknownDocumentError`: `nearest`, `similarity` or `fetch` got an id that the vector table does not contain. `fetch` gives no vector then.
-- `DimensionMismatchError`: a vector has a dimension that is not the dimension of the stored vectors. In an upsert, the model gave the vector, and the upsert stores none of its documents. To change to a model with another dimension, upsert all documents in one call. In a query, the caller gave the vector. Give a vector of the model of the stored vectors.
+- `DimensionMismatchError` of `@zukhruf/vectors`: a vector has a dimension that is not the dimension of the stored vectors. `expected` is the stored dimension and `actual` the dimension of the vector. In an upsert, the model gave the vector, and the upsert stores none of its documents. To change to a model with another dimension, upsert all documents in one call. In a query, the caller gave the vector. Give a vector of the model of the stored vectors.
+- `RangeError`: a vector of length 0 (the `ZeroVectorError` of `@zukhruf/vectors`) or with a value that is not finite in float32. A collection makes each vector a unit vector with `UnitVector.normalize` of `@zukhruf/vectors`, which divides the float32 values by their length in float64, as pgvector does. In an upsert, the upsert stores none of its documents.
 
 ## Limits
 

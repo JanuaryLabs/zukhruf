@@ -18,7 +18,7 @@ A host also needs to read a stored vector, remove a document, and know the size 
 
 **`query(vector, { from, to })`** gives the similarity of the vector to each document published from `from` to `to`, with the two edges in the range. The call makes the vector a unit vector first, so a vector of any length gives the cosine. The result has every document of the range, with the highest similarity first. Equal similarities sort by id, as in `nearest`. The vector stores give the nearest first too. A caller that needs the k nearest takes the first k entries. A caller that needs the similarity of each document, as relevance filtering does, reads all entries.
 
-The vector must have the dimension of the stored vectors (ADR 0003). Another dimension is a `DimensionMismatchError`, with the stored dimension as `expected` and the dimension of the vector as `actual`. A collection with no document gives an empty result. `VectorSearch` also has `query`, with the same rules, because a query is a search of a vector table (ADR 0005).
+The vector must have the dimension of the stored vectors (ADR 0003). Another dimension is the `DimensionMismatchError` of `@zukhruf/vectors`, with the stored dimension as `expected` and the dimension of the vector as `actual`. A collection with no document gives an empty result. `VectorSearch` also has `query`, with the same rules, because a query is a search of a vector table (ADR 0005).
 
 **`fetch(ids)`** gives a `Map` from each id to its stored unit vector, as a `Float32Array`, in the order of the ids. The vector is a copy, so a change to it does not change the collection. One id that the collection does not store fails the whole call with an `UnknownDocumentError`. This is the rule of `nearest` and `similarity`. Pinecone and Chroma leave out an unknown id instead. Here a caller that asks for an id expects its vector, as a caller of `similarity` does. A silent gap moves the error to a later line.
 
@@ -37,4 +37,4 @@ The vector must have the dimension of the stored vectors (ADR 0003). Another dim
 
 - A host can search by a text that is not a document: it embeds the text with its model and calls `query`. The package does not embed the query text, because the text of a query often needs another prompt than the text of a document (EmbeddingGemma uses `task: search result | query: …`).
 - `query` reads and decodes each vector of the range, with no index (ADR 0001).
-- `DimensionMismatchError` now also comes from `query`. Its message names both causes.
+- `DimensionMismatchError` now also comes from `query`.

@@ -2,7 +2,7 @@
 
 The similarity of two vectors needs the same dimension. Two models can give different dimensions, for example 768 and 1024. A collection with vectors of two dimensions gives no correct similarity.
 
-Thus an upsert compares the dimension of each new vector with the dimension of one stored vector that the upsert does not replace. When the dimensions differ, the upsert throws `DimensionMismatchError`, and the transaction stores none of its documents. When the upsert replaces all documents, it can change the dimension.
+Thus an upsert compares the dimension of each new vector with the dimension of one stored vector that the upsert does not replace. When the dimensions differ, the upsert throws the `DimensionMismatchError` of `@zukhruf/vectors`, with the stored dimension as `expected` and the new one as `actual`, and the transaction stores none of its documents. When the upsert replaces all documents, it can change the dimension.
 
 The collection does not store the dimension apart from the vectors. The length of a stored BLOB gives the dimension.
 
