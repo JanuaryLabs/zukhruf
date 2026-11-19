@@ -10,6 +10,13 @@ const LEFT_PAD =
 const RIGHT_PAD =
   'sha512-bYBjgxmkvTAfgIYy328fmkwhp39v8lwVgWhhrzxPV3yHtcSqyYKe9/XOhvW48UFjATg3VuJbpsp5822ACNvkmw==';
 
+/** The `repository` of a published fixture manifest in `directory`, which `manifest/provenance-repository` requires. */
+const repository = (directory: string) => ({
+  type: 'git',
+  url: 'https://github.com/fx/fx',
+  directory,
+});
+
 type App = (
   | {
       /** The app's build target in project.json. */
@@ -100,6 +107,7 @@ function workspaceFiles({
     const manifest = {
       name: `@fx/${name}`,
       version: '0.0.0',
+      repository: repository(`apps/${name}`),
       dependencies: {},
     };
     const source = [
@@ -155,6 +163,7 @@ function workspaceFiles({
     'libs/greet/package.json': JSON.stringify({
       name: '@fx/greet',
       version: '0.0.0',
+      repository: repository('libs/greet'),
       exports: { '.': './src/index.ts' },
       dependencies: greetDependencies,
       ...greetManifest,
@@ -176,6 +185,7 @@ function workspaceFiles({
     'libs/shout/package.json': JSON.stringify({
       name: '@fx/shout',
       version: '0.0.0',
+      repository: repository('libs/shout'),
       exports: { '.': './src/index.ts' },
     }),
     'libs/shout/project.json': JSON.stringify({

@@ -7,6 +7,7 @@ import noGlobstarWorkspace from './no-globstar-workspace.ts';
 import noRootScript from './no-root-script.ts';
 import noTruncatedDescription from './no-truncated-description.ts';
 import nxFamilyPinned from './nx-family-pinned.ts';
+import provenanceRepository from './provenance-repository.ts';
 
 const configs: Record<string, Linter.Config[]> = {};
 
@@ -16,7 +17,8 @@ const configs: Record<string, Linter.Config[]> = {};
  * declares the whole closure its workspace imports pull in, an unbundled
  * project only its own imports. Islands are checked by
  * `island/dependency-checks`. A manifest that npm can publish keeps its
- * description inside what the npm registry stores. Only the workspace root
+ * description inside what the npm registry stores, and names the
+ * `repository` that npm provenance checks. Only the workspace root
  * installs the nx family, at one exact version, and runs no npm script but
  * `prepare`. A `workspaces` glob has no `**`.
  */
@@ -28,6 +30,7 @@ const plugin = {
     'no-root-script': noRootScript,
     'no-truncated-description': noTruncatedDescription,
     'nx-family-pinned': nxFamilyPinned,
+    'provenance-repository': provenanceRepository,
   },
   configs,
 } satisfies ESLint.Plugin;
@@ -44,6 +47,7 @@ configs['recommended'] = [
       'manifest/no-root-script': 'error',
       'manifest/no-truncated-description': 'error',
       'manifest/nx-family-pinned': 'error',
+      'manifest/provenance-repository': 'error',
     },
   },
 ];
