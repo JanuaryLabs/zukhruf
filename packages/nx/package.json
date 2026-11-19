@@ -35,6 +35,7 @@
   "type": "module",
   "exports": {
     "./package.json": "./package.json",
+    "./release.json": "./release.json",
     "./format": {
       "@zukhruf/source": "./src/format/plugin.ts",
       "types": "./dist/format/plugin.d.ts",
@@ -115,6 +116,7 @@
     "dist",
     "generators.json",
     "migrations.json",
+    "release.json",
     "src/generators/*/schema.json",
     "!dist/spec/**",
     "!**/*.tsbuildinfo",

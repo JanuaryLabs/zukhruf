@@ -1,5 +1,6 @@
 {
   "$schema": "./node_modules/nx/schemas/nx-schema.json",
+  "extends": "@zukhruf/nx/release.json",
   "analytics": false,
   "parallel": 6,
   "plugins": [
@@ -31,34 +32,6 @@
     },
     "test": {
       "dependsOn": ["...", "build"]
-    }
-  },
-  "release": {
-    "projects": ["tag:npm:public"],
-    "conventionalCommits": {
-      "types": {
-        "refactor": {
-          "semverBump": "patch"
-        }
-      }
-    },
-    "changelog": {
-      "workspaceChangelog": {
-        "file": false
-      }
-    },
-    "version": {
-      "preVersionCommand": "nx run-many -t build --projects=tag:npm:public",
-      "conventionalCommits": true,
-      "preserveMatchingDependencyRanges": false,
-      "git": {
-        "commit": true,
-        "tag": true,
-        "push": true
-      }
-    },
-    "releaseTag": {
-      "pattern": "release/{version}"
     }
   },
   "sync": {

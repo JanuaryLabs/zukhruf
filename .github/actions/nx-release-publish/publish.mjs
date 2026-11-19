@@ -16,17 +16,13 @@
 // nx/release resolves from the workspace's node_modules, and Nx reads the
 // script name "-" from process.argv[1].
 import { spawnSync } from 'node:child_process';
-import { readFile } from 'node:fs/promises';
 
 import { releasePublish } from 'nx/release';
 
-const { release } = JSON.parse(await readFile('nx.json', 'utf8'));
-if (!release?.projects) {
-  console.error(
-    'nx.json must list release.projects: the retry publishes those that the first run did not.',
-  );
-  process.exit(1);
-}
+// The release projects that @zukhruf/nx/release.json names. Every repository
+// that publishes through this action extends that preset, and Nx does not
+// report the projects it skips, so the retry names them from the same tag.
+const releaseProjects = 'tag:npm:public';
 
 const results = Object.entries(await releasePublish({}));
 if (results.every(([, { code }]) => code === 0)) process.exit(0);
@@ -42,7 +38,7 @@ const retry = spawnSync(
     'nx-release-publish',
     '--outputStyle=static',
     '--excludeTaskDependencies',
-    `--projects=${[release.projects].flat().join(',')}`,
+    `--projects=${releaseProjects}`,
     ...(published.length > 0 ? [`--exclude=${published.join(',')}`] : []),
   ],
   { stdio: 'inherit' },
