@@ -38,6 +38,14 @@ _Avoid_: Env file
 A function that returns a rule's complete options, with a repo's entries added to the shared ones. Examples are `noLet()`, `reactRouterOnlyThrowError()`, `dependencyPolicy()` and `moduleBoundaries()`.
 _Avoid_: Options helper, builder
 
+**Typed lint**:
+The block `zukhruf/base/typed` of `base`, which sets `parserOptions.projectService`. It gives each TypeScript file the types of its nearest `tsconfig.json`. `zukhruf/no-promise-field`, `zukhruf/no-phase-flag`, the `recommended-type-checked` rules of `@zukhruf/eslint/react` and `unicorn/prefer-dispose` of `modern-node/recommended` need it, so a repo uses those configs together with `base`. Each linted TypeScript file must be in a tsconfig.
+_Avoid_: Type-aware mode, type checking
+
+**Lazy memo**:
+A field or `let` whose every write is `x ??= …`, so its value never becomes empty again. `zukhruf/no-phase-flag` does not report a lazy memo whose every read is the value of a `??=` or comes after a top-level `x ??= …;` of the same function body; one that nothing reads is a flag (#3510, commit 03d15bd5). `zukhruf/no-captured-assignment` does not report a `??=` write. `||=` and `&&=` are not a lazy memo, because they can set the value again.
+_Avoid_: Cache, lazy init
+
 ### Where a rule applies
 
 **Workspace root**:
@@ -95,6 +103,10 @@ _Avoid_: Inline project
 **Unbundled project**:
 Every project that is not bundled: libraries, an app that compiles with tsc, an `nx:noop` shell, esbuild with `bundle: false`, esbuild that names a workspace package it imports in `external`. Its manifest declares what its own code imports, but not the workspace packages that its build inlines.
 _Avoid_: Library (when shape is meant)
+
+**Test file**:
+A file whose name ends in `.test.` or `.spec.` followed by a test extension, such as `lock.test.ts`. `isTestFile()` matches only this name. The configs also count each file in `src/testing` as a test file, because the build does not ship it: `tests` lints it, and a config that skips test files skips it too (commit 9dc4f0a0). Test support is a different term: it is about the imports of a manifest, in any `testing/` folder that the manifest does not publish.
+_Avoid_: Spec file, test module
 
 **Test support**:
 The code in a `testing/` folder that the project's manifest does not publish through `exports` or `files`. Tests import it, and the project does not ship it. Its imports are not dependencies.
