@@ -7,7 +7,7 @@ import { type TestContext, test } from 'node:test';
 
 import { Docker } from '@zukhruf/docker';
 import { TemporaryFiles } from '@zukhruf/fs';
-import { timebox, waitFor } from '@zukhruf/testing/async';
+import { retryUntilReady, waitFor } from '@zukhruf/testing/async';
 import { DockerTestbed } from '@zukhruf/testing/docker';
 import { startWorker } from '@zukhruf/testing/process';
 
@@ -151,7 +151,7 @@ async function secondEngine(relay: string): Promise<SecondEngine> {
       {
         internalPort: 2375,
         healthy: ({ port }) =>
-          timebox(
+          retryUntilReady(
             async () => {
               const ping = await fetch(`http://127.0.0.1:${port}/_ping`);
               if (!ping.ok) throw new Error(`The ping answered ${ping.status}`);

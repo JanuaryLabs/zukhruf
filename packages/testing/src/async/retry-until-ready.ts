@@ -1,12 +1,12 @@
 import pRetry, { type Options } from 'p-retry';
 
 /**
- * Options for {@link timebox} — p-retry's full option surface: `retries`
+ * Options for {@link retryUntilReady} — p-retry's full option surface: `retries`
  * (attempt-count bound), `maxRetryTime` (wall-clock budget, monotonic clock),
  * `minTimeout` / `factor` / `maxTimeout` (interval & backoff), `randomize`,
  * `signal` (external abort), `onFailedAttempt`, `shouldRetry`, `unref`.
  */
-export type TimeboxOptions = Options;
+export type RetryUntilReadyOptions = Options;
 
 const READINESS_DEFAULTS = {
   retries: Number.POSITIVE_INFINITY,
@@ -17,7 +17,7 @@ const READINESS_DEFAULTS = {
 
 /**
  * Retry `fn` until it stops throwing or the budget runs out — the readiness
- * idiom on top of p-retry. The probe throws while the service is down; timebox
+ * idiom on top of p-retry. The probe throws while the service is down; it
  * keeps re-running it until it doesn't, then resolves with its value.
  *
  * Defaults are tuned for polling a service into existence: a fixed 250ms
@@ -28,6 +28,10 @@ const READINESS_DEFAULTS = {
  * retry a non-network `TypeError`, so a bug in the probe aborts immediately
  * instead of looping out the budget.
  *
+ * It is for readiness where no test context exists, such as the `healthy`
+ * check of a container. A test that polls an assertion uses
+ * `waitFor(check, { signal: t.signal })`, which ends at the test's limit.
+ *
  * Override any p-retry option to reshape the budget:
  * - `{ maxRetryTime: 60_000 }` — a longer wall-clock window
  * - `{ retries: 120, maxRetryTime: Infinity }` — bound by attempt count instead
@@ -37,7 +41,7 @@ const READINESS_DEFAULTS = {
  * @example
  * ```typescript
  * // Wait up to 60s for Postgres to accept queries:
- * await timebox(
+ * await retryUntilReady(
  *   async () => {
  *     await exec(['pg_isready', '-U', user]);
  *     await exec(['psql', '-U', user, '-c', 'SELECT 1']);
@@ -46,9 +50,9 @@ const READINESS_DEFAULTS = {
  * );
  * ```
  */
-export function timebox<T>(
+export function retryUntilReady<T>(
   fn: (attemptNumber: number) => PromiseLike<T> | T,
-  options: TimeboxOptions = {},
+  options: RetryUntilReadyOptions = {},
 ): Promise<T> {
   return pRetry(fn, { ...READINESS_DEFAULTS, ...options });
 }

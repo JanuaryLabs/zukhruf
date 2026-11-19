@@ -2,7 +2,7 @@ import { once } from 'node:events';
 
 import sql from 'mssql';
 
-import { timebox } from '../async/timebox.ts';
+import { retryUntilReady } from '../async/retry-until-ready.ts';
 import { readRun } from '../docker/run-records.ts';
 import type { ServiceContainer } from '../docker/service-container.ts';
 import { DockerTestbed } from '../docker/testbed.ts';
@@ -231,7 +231,7 @@ export class SqlServer {
       {
         internalPort: 1433,
         healthy: (container, signal) =>
-          timebox(() => this.#ping(container), {
+          retryUntilReady(() => this.#ping(container), {
             maxRetryTime: 180_000,
             signal,
           }),

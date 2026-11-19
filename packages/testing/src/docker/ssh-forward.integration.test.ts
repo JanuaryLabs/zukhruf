@@ -16,7 +16,7 @@ import { TemporaryFiles } from '@zukhruf/fs';
 import { ExitError } from '@zukhruf/ssh';
 import type { Environment } from '@zukhruf/ssh/config';
 
-import { timebox } from '../async/timebox.ts';
+import { waitFor } from '../async/wait-for.ts';
 import { engine } from '../testing/current-engine.ts';
 import {
   library,
@@ -119,16 +119,19 @@ async function echo(port: number, message: string): Promise<string> {
   return text(socket);
 }
 
-/** A container on the local engine whose port 80 echoes each connection: busybox nc runs cat for each one. */
-function echoService(): Promise<ServiceContainer> {
+/**
+ * A container on the local engine whose port 80 echoes each connection: busybox nc runs cat for each one.
+ * Its readiness wait ends at `signal`, the limit of the test, or when the container exits.
+ */
+function echoService(signal: AbortSignal): Promise<ServiceContainer> {
   return testbed.serve(
     { Image: 'alpine:latest', Cmd: ['nc', '-lk', '-p', '80', '-e', 'cat'] },
     {
       internalPort: 80,
-      healthy: (service, signal) =>
-        timebox(
+      healthy: (service, exited) =>
+        waitFor(
           async () => assert.equal(await echo(service.port, 'up'), 'up'),
-          { signal },
+          { signal: AbortSignal.any([signal, exited]) },
         ),
     },
   );
@@ -156,10 +159,10 @@ function nodeWithHost(body: string) {
 test(
   'a lost SSH connection ends the open connections of a forward, and close rejects with the loss',
   { skip: noEngine },
-  async () => {
+  async (t) => {
     // Arrange: a connection through the forward has had its answer.
     await using sshd = await startSshd();
-    await using service = await echoService();
+    await using service = await echoService(t.signal);
     const host = new DockerHost(ENGINE_HOST, {
       environment: await reaching(sshd),
     });
@@ -246,7 +249,7 @@ test(
   async (t) => {
     // Arrange: a process holds a forward with a connection through it.
     await using sshd = await startSshd();
-    await using service = await echoService();
+    await using service = await echoService(t.signal);
     const environment = await reaching(sshd);
     const child = spawn(
       process.execPath,
@@ -282,10 +285,10 @@ test(
 test(
   'close of a forward closes its port and the connections that it carries',
   { skip: noEngine },
-  async () => {
+  async (t) => {
     // Arrange
     await using sshd = await startSshd();
-    await using service = await echoService();
+    await using service = await echoService(t.signal);
     const host = new DockerHost(ENGINE_HOST, {
       environment: await reaching(sshd),
     });
@@ -307,10 +310,10 @@ test(
 test(
   'a forward carries a connection to the port of the engine host, both ways',
   { skip: noEngine },
-  async () => {
+  async (t) => {
     // Arrange
     await using sshd = await startSshd();
-    await using service = await echoService();
+    await using service = await echoService(t.signal);
     const host = new DockerHost(ENGINE_HOST, {
       environment: await reaching(sshd),
     });
@@ -348,10 +351,10 @@ test(
 test(
   'after its SSH connection was lost, the next shell of the host opens a new one',
   { skip: noEngine },
-  async () => {
+  async (t) => {
     // Arrange: the host's connection is lost while a forward carries a connection.
     await using sshd = await startSshd();
-    await using service = await echoService();
+    await using service = await echoService(t.signal);
     const host = new DockerHost(ENGINE_HOST, {
       environment: await reaching(sshd),
     });
@@ -390,7 +393,7 @@ test(
       import { writeFile } from 'node:fs/promises';
       import { connect } from 'node:net';
       import { text } from 'node:stream/consumers';
-      import { timebox } from ${JSON.stringify(new URL('../async/index.ts', import.meta.url).href)};
+      import { retryUntilReady } from ${JSON.stringify(new URL('../async/index.ts', import.meta.url).href)};
       import { DockerTestbed } from ${library};
       test('the engine of the run', async () => {
         const testbed = new DockerTestbed({ environment: process.env });
@@ -402,7 +405,7 @@ test(
           {
             internalPort: 80,
             healthy: (service, signal) =>
-              timebox(async () => {
+              retryUntilReady(async () => {
                 const socket = connect(service.port, '127.0.0.1');
                 socket.end('up');
                 if ((await text(socket)) !== 'up') throw new Error('not up yet');

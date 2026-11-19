@@ -1,4 +1,4 @@
-import { timebox } from '../async/timebox.ts';
+import { retryUntilReady } from '../async/retry-until-ready.ts';
 import type { ServiceContainer } from '../docker/service-container.ts';
 import { DockerTestbed, type DockerTestbedOptions } from '../docker/testbed.ts';
 import { succeeded } from './succeeded.ts';
@@ -26,7 +26,7 @@ export class ClickHouse {
       {
         internalPort: 8123,
         healthy: (service, signal) =>
-          timebox(
+          retryUntilReady(
             () =>
               succeeded(service.container, [
                 'clickhouse-client',

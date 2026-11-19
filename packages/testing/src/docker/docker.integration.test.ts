@@ -4,7 +4,7 @@ import { test } from 'node:test';
 
 import type { Docker } from '@zukhruf/docker';
 
-import { timebox } from '../async/index.ts';
+import { retryUntilReady } from '../async/index.ts';
 import { waitFor } from '../async/wait-for.ts';
 import { DockerTestbed } from './index.ts';
 
@@ -113,7 +113,7 @@ test('Docker identity preserves configuration, ownership, and unfinished creatio
     await using healthy = await testbed.reuse(body, {
       ...options,
       healthy: ({ container }) =>
-        timebox(
+        retryUntilReady(
           async () => {
             const { exitCode, output } = await container.exec({
               Cmd: [

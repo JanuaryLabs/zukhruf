@@ -98,6 +98,7 @@ test('zukhruf/env with settings.env.startupFile reports an undeclared key agains
         ruleId: RULE,
         message:
           'Declare SECRET in src/env.ts before using process.env.SECRET.',
+        line: 2,
       },
     ],
   );

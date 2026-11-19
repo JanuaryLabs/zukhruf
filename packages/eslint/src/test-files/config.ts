@@ -1,5 +1,6 @@
 import { type Concept, enable } from '../concept.ts';
 import { TESTS, TEST_SUPPORT } from '../files.ts';
+import noAssertInRetryUntilReady from './no-assert-in-retry-until-ready.ts';
 import noCatchAllMswHandler from './no-catch-all-msw-handler.ts';
 import noDirectMswServer from './no-direct-msw-server.ts';
 import noGlobalTestMock from './no-global-test-mock.ts';
@@ -22,6 +23,7 @@ const rules = {
   'no-short-test-timeout': noShortTestTimeout,
   'no-own-wait-limit': noOwnWaitLimit,
   'no-global-test-mock': noGlobalTestMock,
+  'no-assert-in-retry-until-ready': noAssertInRetryUntilReady,
 };
 
 export const tests: Concept = {

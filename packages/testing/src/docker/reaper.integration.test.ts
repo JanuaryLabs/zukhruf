@@ -20,7 +20,7 @@ import {
 } from '@zukhruf/docker';
 import { TemporaryFiles } from '@zukhruf/fs';
 
-import { timebox } from '../async/timebox.ts';
+import { retryUntilReady } from '../async/retry-until-ready.ts';
 import { waitFor } from '../async/wait-for.ts';
 import { engine, proxyless } from '../testing/current-engine.ts';
 import { docker } from '../testing/engine-client.ts';
@@ -516,7 +516,7 @@ async function secondEngine({
       {
         internalPort: 2375,
         healthy: ({ port }) =>
-          timebox(
+          retryUntilReady(
             async () => {
               const ping = await fetch(`http://127.0.0.1:${port}/_ping`);
               if (!ping.ok) throw new Error(`The ping answered ${ping.status}`);

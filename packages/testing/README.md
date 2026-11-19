@@ -11,7 +11,7 @@ Each area has its own import path, so a test loads only the drivers it uses. The
 | Import                        | Gives                                                  | Needs                      |
 | ----------------------------- | ------------------------------------------------------ | -------------------------- |
 | `@zukhruf/testing/node`       | Native `test`, `it`, `suite`, `describe` with `.each`  |                            |
-| `@zukhruf/testing/async`      | `waitFor`, `timebox`                                   |                            |
+| `@zukhruf/testing/async`      | `waitFor`, `retryUntilReady`                           |                            |
 | `@zukhruf/testing/process`    | `startWorker`                                          |                            |
 | `@zukhruf/testing/docker`     | `DockerTestbed`, `ServiceContainer`, `DockerDirectory` | a Docker engine            |
 | `@zukhruf/testing/postgres`   | `Postgres`, `postgresPool`                             | a Docker engine, `pg`      |
@@ -112,7 +112,7 @@ The `body` is the body of a container create in the Engine API: `EngineApi.Conta
 - `HostConfig.Memory` of 1 GiB and `HostConfig.NanoCpus` of 1 CPU, when the body does not set them. These limits protect a shared engine from a test container, for example an SSH engine that also runs real applications.
 - For `serve` and `reuse`: `internalPort`, published on `127.0.0.1` of the engine's host.
 
-Without `name`, the engine gives the container a name. `reuse` without `name` uses the name `zukhruf-testing-<fingerprint>` (see [Shared servers](#shared-servers)). `healthy` is a function that throws until the server is ready; it runs on every acquisition. Use `timebox` for polling inside it, and pass it the `signal` that `healthy` gets as its second argument: the signal aborts when the container exits first. When the engine does not have the image, the acquisition pulls it, as `docker run` does.
+Without `name`, the engine gives the container a name. `reuse` without `name` uses the name `zukhruf-testing-<fingerprint>` (see [Shared servers](#shared-servers)). `healthy` is a function that throws until the server is ready; it runs on every acquisition. Use `retryUntilReady` for polling inside it, and pass it the `signal` that `healthy` gets as its second argument: the signal aborts when the container exits first. When the engine does not have the image, the acquisition pulls it, as `docker run` does.
 
 `OwnedContainer`, `OwnedVolume`, `ExecResult` and `Docker` are types of `@zukhruf/docker`. A container has `id`, `exec({ Cmd })`, `logs()`, `kill(signal)` and `inspect()`. `exec` gives `exitCode`, `stdout`, `stderr` and `output`, and it does not throw for a non-zero exit code. The text keeps its last newline. Disposal removes the container with its anonymous volumes.
 
@@ -334,7 +334,7 @@ Wait for an event when one exists; `waitFor` is for a fact that only a read show
 
 A wait for an event in a test is `untilAborted(promise, t.signal)` of `@zukhruf/async`, and an operation that accepts an `AbortSignal` gets `t.signal`. A test sets no number of its own. `AbortSignal.timeout(ms)` sets one, and `zukhruf/no-own-wait-limit` of `@zukhruf/eslint` reports it in a test, as it reports `t.waitFor`. `t.signal` aborts only when the runner has a test limit, so a direct `node --test` run needs `--test-timeout=<ms>` (the nx test target sets 300000). Then a hung wait ends.
 
-`timebox(fn, options)` retries `fn` until it stops throwing, every 250 ms for at most 30 seconds by default. It takes every p-retry option.
+`retryUntilReady(fn, options)` retries `fn` until it stops throwing, every 250 ms for at most 30 seconds by default. It takes every p-retry option. It is for readiness where no test context exists, such as the `healthy` check of a container. A test that polls an assertion uses `waitFor(check, { signal: t.signal })`, and `zukhruf/no-assert-in-retry-until-ready` of `@zukhruf/eslint` reports a `retryUntilReady` call that polls one.
 
 ## Worker processes
 

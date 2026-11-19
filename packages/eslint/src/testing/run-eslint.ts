@@ -14,6 +14,7 @@ export interface Finding {
   readonly file: string;
   readonly ruleId: string | null;
   readonly message: string;
+  readonly line: number;
 }
 
 function eslint(cwd: string, args: string[]): string {
@@ -44,6 +45,7 @@ export function lint(cwd: string, paths: string[]): Finding[] {
       file,
       ruleId: typeof message['ruleId'] === 'string' ? message['ruleId'] : null,
       message: String(message['message']),
+      line: Number(message['line']),
     }));
   });
 }

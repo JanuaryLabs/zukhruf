@@ -1,4 +1,4 @@
-import { timebox } from '../async/timebox.ts';
+import { retryUntilReady } from '../async/retry-until-ready.ts';
 import { readRun } from '../docker/run-records.ts';
 import type { ServiceContainer } from '../docker/service-container.ts';
 import { DockerTestbed } from '../docker/testbed.ts';
@@ -174,7 +174,7 @@ export abstract class MysqlFamilyServer<Pool, PoolOptions> {
   #ready(container: ServiceContainer, signal: AbortSignal) {
     const { password } = this.#options;
     // TCP excludes the entrypoint's temporary, socket-only initialization server.
-    return timebox(
+    return retryUntilReady(
       () =>
         succeeded(container.container, [
           this.collector.client,

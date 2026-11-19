@@ -38,7 +38,7 @@ export interface ServiceOptions {
   /** Without it, the engine names a dedicated server; a shared server's name comes from its request. */
   name?: string;
   /**
-   * Runs on every acquisition. Throw until ready, using timebox for polling.
+   * Runs on every acquisition. Throw until ready, using retryUntilReady for polling.
    * `signal` aborts when the container exits first: pass it to the polling.
    */
   healthy?: (service: ServiceContainer, signal: AbortSignal) => unknown;

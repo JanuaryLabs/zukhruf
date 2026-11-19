@@ -12,7 +12,7 @@ import pg from 'pg';
 import { ConnectionFailedError, Docker } from '@zukhruf/docker';
 import { TemporaryFiles } from '@zukhruf/fs';
 
-import { timebox } from '../async/index.ts';
+import { retryUntilReady } from '../async/index.ts';
 import { waitFor } from '../async/wait-for.ts';
 import { engine, proxyless } from '../testing/current-engine.ts';
 import { EngineProxy } from '../testing/engine-proxy.ts';
@@ -53,7 +53,7 @@ test('a served database answers on 127.0.0.1 of this machine, and the engine pub
     {
       internalPort: 5432,
       healthy: ({ container }) =>
-        timebox(
+        retryUntilReady(
           async () => {
             const { exitCode, output } = await container.exec({
               Cmd: ['pg_isready', '-h', '127.0.0.1', '-U', 'postgres'],
@@ -245,7 +245,7 @@ test('a served server whose container exits before it is ready is removed, and t
         internalPort: 8080,
         healthy: async ({ container }) => {
           served.push(container.id);
-          await timebox(async () => {
+          await retryUntilReady(async () => {
             const { State } = await container.inspect();
             if (State?.Running) throw new Error('still running');
           });
