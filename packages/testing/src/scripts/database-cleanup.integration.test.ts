@@ -5,7 +5,7 @@ import { once } from 'node:events';
 import { existsSync } from 'node:fs';
 import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { type TestContext, test } from 'node:test';
+import { type TestContext, describe, test } from 'node:test';
 
 import { TemporaryFiles } from '@zukhruf/fs';
 
@@ -172,25 +172,80 @@ async function removeScope(scope: string): Promise<void> {
     await (await docker.containers.find(Id))?.remove({ force: true, v: true });
 }
 
-for (const kind of kinds) {
+// Each test below scopes its servers with a label of its own (VERIFICATION), so each gets servers of its own, and they run four at a time.
+describe('the databases of a run', { concurrency: 4 }, () => {
+  for (const kind of kinds) {
+    test(
+      `a database whose test process was killed is dropped by the reaper after the run ends (${kind.name})`,
+      { skip: signals, timeout: 600_000 },
+      async (t) => {
+        await using directory = await new TemporaryFiles().directory(
+          'zukhruf-testing-database-cleanup-',
+        );
+        const scope = randomUUID();
+        try {
+          // The test's own database on the same server: the cleanup of the
+          // nested run leaves it.
+          await using own = await kind.create(process.env, scope);
+          const statePath = join(directory.path, 'state.json');
+          const file = join(directory.path, 'worker.test.ts');
+          await writeFile(
+            file,
+            workerSource(
+              kind,
+              scope,
+              statePath,
+              "process.kill(process.pid, 'SIGKILL');",
+            ),
+          );
+
+          const run = await runFile(
+            file,
+            runEnvironment(join(directory.path, 'state')),
+          );
+
+          assert.notEqual(run.code, 0, run.output);
+          assert.doesNotMatch(run.output, /retained ownership record/);
+          const { database } = await readState(t, statePath);
+          // The reaper drops it about 2 s after the run's last test process.
+          await waitFor(
+            async () =>
+              assert.equal(await kind.exists(own, database), false, run.output),
+            { signal: t.signal, interval: 200 },
+          );
+          assert.equal(await kind.exists(own, own.database), true);
+        } finally {
+          await removeScope(scope);
+        }
+      },
+    );
+  }
+
   test(
-    `a database whose test process was killed is dropped by the reaper after the run ends (${kind.name})`,
-    { skip: signals, timeout: 600_000 },
+    "the run's cleanup leaves the databases of another run on the same server",
+    { skip: signals, timeout: 300_000 },
     async (t) => {
       await using directory = await new TemporaryFiles().directory(
         'zukhruf-testing-database-cleanup-',
       );
       const scope = randomUUID();
       try {
-        // The test's own database on the same server: the cleanup of the
-        // nested run leaves it.
-        await using own = await kind.create(process.env, scope);
+        await using own = await postgres.create(process.env, scope);
+        // A database of another run on the same server.
+        await using other = await postgres.create(
+          {
+            ...process.env,
+            ZUKHRUF_TESTING_RUN_ID: randomUUID(),
+            ZUKHRUF_TESTING_RUN_DIR: directory.path,
+          },
+          scope,
+        );
         const statePath = join(directory.path, 'state.json');
         const file = join(directory.path, 'worker.test.ts');
         await writeFile(
           file,
           workerSource(
-            kind,
+            postgres,
             scope,
             statePath,
             "process.kill(process.pid, 'SIGKILL');",
@@ -203,106 +258,64 @@ for (const kind of kinds) {
         );
 
         assert.notEqual(run.code, 0, run.output);
-        assert.doesNotMatch(run.output, /retained ownership record/);
         const { database } = await readState(t, statePath);
         // The reaper drops it about 2 s after the run's last test process.
         await waitFor(
           async () =>
-            assert.equal(await kind.exists(own, database), false, run.output),
+            assert.equal(
+              await postgres.exists(own, database),
+              false,
+              run.output,
+            ),
           { signal: t.signal, interval: 200 },
         );
-        assert.equal(await kind.exists(own, own.database), true);
+        assert.equal(await postgres.exists(own, other.database), true);
       } finally {
         await removeScope(scope);
       }
     },
   );
-}
 
-test(
-  "the run's cleanup leaves the databases of another run on the same server",
-  { skip: signals, timeout: 300_000 },
-  async (t) => {
-    await using directory = await new TemporaryFiles().directory(
-      'zukhruf-testing-database-cleanup-',
-    );
-    const scope = randomUUID();
-    try {
-      await using own = await postgres.create(process.env, scope);
-      // A database of another run on the same server.
-      await using other = await postgres.create(
-        {
-          ...process.env,
-          ZUKHRUF_TESTING_RUN_ID: randomUUID(),
-          ZUKHRUF_TESTING_RUN_DIR: directory.path,
-        },
-        scope,
+  test(
+    'a run whose test process only took a database is cleaned when it ends',
+    { timeout: 300_000 },
+    async (t) => {
+      await using directory = await new TemporaryFiles().directory(
+        'zukhruf-testing-database-cleanup-',
       );
-      const statePath = join(directory.path, 'state.json');
-      const file = join(directory.path, 'worker.test.ts');
-      await writeFile(
-        file,
-        workerSource(
-          postgres,
-          scope,
-          statePath,
-          "process.kill(process.pid, 'SIGKILL');",
-        ),
-      );
+      const scope = randomUUID();
+      try {
+        await using own = await postgres.create(process.env, scope);
+        const statePath = join(directory.path, 'state.json');
+        const file = join(directory.path, 'worker.test.ts');
+        // The test never disposes its database.
+        await writeFile(file, workerSource(postgres, scope, statePath, ''));
 
-      const run = await runFile(
-        file,
-        runEnvironment(join(directory.path, 'state')),
-      );
+        const run = await runFile(
+          file,
+          runEnvironment(join(directory.path, 'state')),
+        );
 
-      assert.notEqual(run.code, 0, run.output);
-      const { database } = await readState(t, statePath);
-      // The reaper drops it about 2 s after the run's last test process.
-      await waitFor(
-        async () =>
-          assert.equal(await postgres.exists(own, database), false, run.output),
-        { signal: t.signal, interval: 200 },
-      );
-      assert.equal(await postgres.exists(own, other.database), true);
-    } finally {
-      await removeScope(scope);
-    }
-  },
-);
+        assert.equal(run.code, 0, run.output);
+        const { database } = await readState(t, statePath);
+        // The reaper drops it about 2 s after the run's last test process.
+        await waitFor(
+          async () =>
+            assert.equal(
+              await postgres.exists(own, database),
+              false,
+              run.output,
+            ),
+          { signal: t.signal, interval: 200 },
+        );
+      } finally {
+        await removeScope(scope);
+      }
+    },
+  );
+});
 
-test(
-  'a run whose test process only took a database is cleaned when it ends',
-  { timeout: 300_000 },
-  async (t) => {
-    await using directory = await new TemporaryFiles().directory(
-      'zukhruf-testing-database-cleanup-',
-    );
-    const scope = randomUUID();
-    try {
-      await using own = await postgres.create(process.env, scope);
-      const statePath = join(directory.path, 'state.json');
-      const file = join(directory.path, 'worker.test.ts');
-      // The test never disposes its database.
-      await writeFile(file, workerSource(postgres, scope, statePath, ''));
-
-      const run = await runFile(
-        file,
-        runEnvironment(join(directory.path, 'state')),
-      );
-
-      assert.equal(run.code, 0, run.output);
-      const { database } = await readState(t, statePath);
-      // The reaper drops it about 2 s after the run's last test process.
-      await waitFor(
-        async () =>
-          assert.equal(await postgres.exists(own, database), false, run.output),
-        { signal: t.signal, interval: 200 },
-      );
-    } finally {
-      await removeScope(scope);
-    }
-  },
-);
+// This test keeps a server that never answers, which slows the pass of every other reaper: it runs alone, after them.
 
 test(
   'a run ends cleanly while another process still starts a shared server',
