@@ -57,7 +57,7 @@
     "@types/mssql": "^12.3.0",
     "@zukhruf/sqlite-open": "^0.8.51",
     "@zukhruf/testing": "^0.8.51",
-    "mssql": "^12.7.14",
+    "mssql": "^12.8.0",
     "sqlite-vec": "^0.1.9"
   }
 }

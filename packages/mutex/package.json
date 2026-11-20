@@ -63,14 +63,14 @@
     }
   },
   "devDependencies": {
-    "@sinonjs/fake-timers": "15.4.0",
+    "@sinonjs/fake-timers": "15.5.0",
     "@types/pg": "^8.23.1",
     "@zukhruf/docker": "^0.8.51",
     "@zukhruf/testing": "^0.8.51",
     "hono": "^4.13.13",
-    "mariadb": "^3.5.4",
-    "mysql2": "^3.24.5",
+    "mariadb": "^3.5.5",
+    "mysql2": "^3.24.6",
     "pg": "^8.23.1",
-    "tedious": "^20.3.3"
+    "tedious": "^20.3.9"
   }
 }

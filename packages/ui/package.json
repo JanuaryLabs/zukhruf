@@ -45,11 +45,11 @@
     "access": "public"
   },
   "dependencies": {
-    "cn": "^0.4.0",
-    "lucide-react": "^1.57.0"
+    "cn": "^0.5.2",
+    "lucide-react": "^1.77.0"
   },
   "devDependencies": {
-    "@sinonjs/fake-timers": "15.4.0"
+    "@sinonjs/fake-timers": "15.5.0"
   },
   "peerDependencies": {
     "@zukhruf/shadcn": "^0.8.51",

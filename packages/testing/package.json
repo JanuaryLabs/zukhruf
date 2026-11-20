@@ -139,15 +139,15 @@
     "access": "public"
   },
   "devDependencies": {
-    "@duckdb/node-api": "^1.5.5-r.3",
-    "@google-cloud/bigquery": "^8.3.1",
-    "@sinonjs/fake-timers": "15.4.0",
+    "@duckdb/node-api": "^2.0.1-r.1",
+    "@google-cloud/bigquery": "^9.6.1",
+    "@sinonjs/fake-timers": "15.5.0",
     "@types/mssql": "^12.3.0",
     "@types/pg": "^8.23.1",
-    "mariadb": "^3.5.4",
-    "mssql": "^12.7.4",
-    "msw": "^3.0.3",
-    "mysql2": "^3.24.5",
+    "mariadb": "^3.5.5",
+    "mssql": "^12.8.0",
+    "msw": "^3.0.7",
+    "mysql2": "^3.24.6",
     "pg": "^8.23.1"
   },
   "dependencies": {
@@ -155,13 +155,13 @@
     "@zukhruf/docker": "^0.8.51",
     "@zukhruf/fs": "^0.8.51",
     "@zukhruf/ssh": "^0.8.51",
-    "nano-spawn": "^2.1.0",
-    "p-memoize": "^8.0.0",
-    "p-retry": "^8.0.1"
+    "nano-spawn": "^3.0.0",
+    "p-memoize": "^9.0.0",
+    "p-retry": "^9.0.0"
   },
   "peerDependencies": {
-    "@duckdb/node-api": "^1.5.5-r.3",
-    "@google-cloud/bigquery": "^8.3.1",
+    "@duckdb/node-api": "^2.0.1-r.1",
+    "@google-cloud/bigquery": "^9.6.1",
     "mariadb": "^3.5.4",
     "mssql": "^12.7.0",
     "msw": "^3.0.3",

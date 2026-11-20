@@ -52,13 +52,13 @@
     "access": "public"
   },
   "dependencies": {
-    "@ai-sdk/provider": "^4.0.34"
+    "@ai-sdk/provider": "^4.0.39"
   },
   "devDependencies": {
     "@types/mssql": "^12.3.0",
     "@zukhruf/sqlite-open": "^0.8.51",
     "@zukhruf/testing": "^0.8.51",
-    "ai": "^7.0.154",
-    "mssql": "^12.7.14"
+    "ai": "^7.0.178",
+    "mssql": "^12.8.0"
   }
 }

@@ -57,10 +57,10 @@
     "@zukhruf/python": "*",
     "@zukhruf/random": "*",
     "@zukhruf/statistics": "*",
-    "ai": "^7.0.154",
+    "ai": "^7.0.178",
     "cephes": "^3.3.4",
     "heap": "^0.2.7",
-    "hyparquet": "^1.32.0",
+    "hyparquet": "^1.33.1",
     "ml-matrix": "^6.15.1",
     "python-random": "1.0.0",
     "rapidfuzz-js": "^0.13.0",
@@ -68,8 +68,8 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@ai-sdk/openai-compatible": "3.0.79",
-    "@ai-sdk/provider": "^4.0.34",
+    "@ai-sdk/openai-compatible": "3.0.94",
+    "@ai-sdk/provider": "^4.0.39",
     "@types/heap": "^0.2.35",
     "@zukhruf/fs": "*",
     "@zukhruf/testing": "*"

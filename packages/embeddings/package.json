@@ -45,7 +45,7 @@
     "@zukhruf/sqlite-drift": "^0.8.51",
     "@zukhruf/sqlite-transaction": "^0.8.51",
     "@zukhruf/vectors": "^0.8.51",
-    "ai": "^7.0.154"
+    "ai": "^7.0.178"
   },
   "devDependencies": {
     "@zukhruf/fs": "^0.8.51",

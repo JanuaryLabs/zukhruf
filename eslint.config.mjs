@@ -484,6 +484,9 @@ export default defineConfig(
       'zukhruf/no-native-select': 'off',
       // The kit styles its own parts through their data-slot.
       'zukhruf/no-data-slot-restyle': 'off',
+      // shadcn's chart (registry, 2026-11-20) reads the Legend's
+      // verticalAlign, which recharts 3.11 deprecates for position.
+      '@typescript-eslint/no-deprecated': 'off',
     },
   },
 );

@@ -274,7 +274,7 @@ export class JsonSchema {
   }
 
   // A copy of a 2020-12 meta-schema whose `$dynamicRef: "#meta"` is a $ref to
-  // the meta-schema. cfworker 4.1.4 has no $dynamicRef, and with no other
+  // the meta-schema. cfworker 4.1.6 has no $dynamicRef, and with no other
   // `$dynamicAnchor: "meta"` in reach, the dynamic reference of each
   // vocabulary resolves to the 2020-12 meta-schema (core section 8.2.3.2).
   static #static(schema: Schema): Schema {

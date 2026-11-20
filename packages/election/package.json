@@ -46,7 +46,7 @@
     "@zukhruf/pipes": "^0.8.51"
   },
   "devDependencies": {
-    "@sinonjs/fake-timers": "15.4.0",
+    "@sinonjs/fake-timers": "15.5.0",
     "@zukhruf/testing": "^0.8.51"
   }
 }

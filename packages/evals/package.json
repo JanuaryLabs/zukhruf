@@ -67,7 +67,7 @@
     "@zukhruf/statistics": "^0.8.51"
   },
   "peerDependencies": {
-    "@cfworker/json-schema": "4.1.4",
+    "@cfworker/json-schema": "4.1.6",
     "munkres": "^2.1.1"
   },
   "peerDependenciesMeta": {
@@ -79,12 +79,12 @@
     }
   },
   "devDependencies": {
-    "@cfworker/json-schema": "4.1.4",
+    "@cfworker/json-schema": "4.1.6",
     "@zukhruf/fs": "^0.8.51",
     "@zukhruf/random": "*",
     "@zukhruf/testing": "^0.8.51",
     "munkres": "^2.1.1",
-    "promptfoo": "0.125.1",
+    "promptfoo": "0.126.0",
     "python-random": "1.0.0"
   }
 }

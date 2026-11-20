@@ -46,13 +46,13 @@
     "@zukhruf/sqlite-notify": "^0.8.51",
     "@zukhruf/sqlite-open": "^0.8.51",
     "@zukhruf/sqlite-transaction": "^0.8.51",
-    "cron-parser": "^5.10.1",
-    "pg-boss": "12.35.1",
-    "rrule-temporal": "^2.2.7",
-    "serialize-error": "^13.0.2"
+    "cron-parser": "^5.10.6",
+    "pg-boss": "12.38.2",
+    "rrule-temporal": "^2.3.0",
+    "serialize-error": "^13.1.0"
   },
   "devDependencies": {
-    "@electric-sql/pglite": "0.5.8",
+    "@electric-sql/pglite": "0.5.17",
     "@zukhruf/fs": "^0.8.51",
     "@zukhruf/testing": "^0.8.51",
     "esbuild": "0.28.2"
