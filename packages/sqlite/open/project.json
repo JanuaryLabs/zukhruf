@@ -8,7 +8,12 @@
     "native": {
       "executor": "nx:run-commands",
       "cache": true,
-      "inputs": ["{projectRoot}/src/native/**"],
+      "inputs": [
+        "{projectRoot}/src/native/**",
+        {
+          "runtime": "zig version"
+        }
+      ],
       "outputs": ["{projectRoot}/lib"],
       "options": {
         "command": "node src/native/build.ts",

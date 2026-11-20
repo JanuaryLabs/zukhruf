@@ -2,15 +2,16 @@
 
 The native library ([ADR 0003](./0003-persistent-wal-through-a-native-library.md)) is code for one platform. The package must work on macOS, Linux and Windows: zukhruf keeps Windows support, the CI of zukhruf runs on Linux, and text2sql ships a desktop app for the three systems. The CI and the release of zukhruf are one job on `ubuntu-latest`, with no macOS or Windows job, by the decision of the maintainer of this repository.
 
-`zig cc` compiles C for each platform from one machine. Probes on 2026-11-06 with zig 0.16.0 built the library for `darwin-arm64`, `darwin-x64`, `linux-arm64`, `linux-x64`, `win32-x64` and `win32-arm64`. The `darwin-arm64` library has the ad-hoc signature that Apple Silicon requires, and `node:sqlite` loads it. The `linux-arm64` library works in the `node:26-slim` container.
+`zig cc` compiles C for each platform from one machine. Probes on 2026-11-06 with zig 0.16.0 built the library for `darwin-arm64`, `darwin-x64`, `linux-arm64`, `linux-x64`, `win32-x64` and `win32-arm64`. The `darwin-arm64` library has the ad-hoc signature that Apple Silicon requires, and `node:sqlite` loads it. The `linux-arm64` library works in the `node:26-slim` container. On 2026-11-20, zig 0.17.1 built the six libraries again: the `darwin-arm64` library has the ad-hoc signature, and `node:sqlite` loads it and opens a write-ahead log.
 
 ## Decision
 
 - The target `native` runs `src/native/build.ts`, which runs `zig cc` once for each platform. It writes `lib/<platform>-<arch>/persist_wal.<dylib|so|dll>` at the root of the package. `build` depends on `native`.
+- The `native` target has the input `{ "runtime": "zig version" }`, so a new zig builds the libraries again instead of reusing a cached build of the old one.
 - The library is at the root of the package, not in `dist` or `src`. The tests run the files in `src`, and the package runs the files in `dist`. Both find `../lib`.
 - The package has the official headers of SQLite 3.54.0, the version that `node:sqlite` 26.13 has, in `src/native/`. Linux has no macOS SDK, and the header of the macOS SDK turns off the macros of an extension.
 - The Linux library is built with `-nostdlib`. It calls no function of the C library, so one file can load with glibc and with musl. A test in the `node:26-slim` and `node:26-alpine` containers proves the load before the consumers use the release.
-- CI and the release install zig 0.16.0 with a published setup action, in a step after `setup-workspace`. Since #3274 (2026-11-07), `setup-workspace` is shared with other repositories that do not build native libraries, so zig is not in it.
+- CI and the release install zig 0.17.1 with a published setup action, in a step after `setup-workspace`. Since #3274 (2026-11-07), `setup-workspace` is shared with other repositories that do not build native libraries, so zig is not in it.
 
 ## Considered Options
 
