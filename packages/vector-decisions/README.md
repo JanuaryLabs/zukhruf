@@ -417,3 +417,225 @@ The differences from Venn are in [ADR 0005](docs/adr/0005-a-criterion-without-a-
 - Until the service has a port of Venn's `DecisionService.vector` (#4389), the label of each option is the text of its description. So a criterion whose description is "none", or two criteria with one description, throw the AI SDK's `InvalidArgumentError`. Venn asks its own labels and answers.
 
 The tests compare the answers of `experimental_decide` with the answers of Venn's own `venn.decisions.decide` and the real venn-1 head, for the same raw vectors (`src/decision-model/fixtures/generate.py`). They differ by at most 5.2e-8. These tests run in the `test-network` target.
+
+## Errors
+
+| Error                       | When                                                                                                                                                                                                                                                                           |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `SafetensorError`           | `loadWeights` reads a file that breaks a rule of the safetensors format, or that holds a tensor that is not float32 (see "Read the weights of a head").                                                                                                                        |
+| `InvalidModelArtifactError` | `modelDirectory` finds a file whose bytes do not match the digest of its manifest, a name that is not a file of the directory, or a `manifest.json` that is not valid. `DecisionService.load` also throws it for a `config.json` of another reader. `artifact` names the file. |
+| `InvalidHeadWeightsError`   | `CosineAbstention.fromWeights` does not find a tensor of the head, or the shapes of the tensors do not fit together. `tensor` names the tensor.                                                                                                                                |
+| `DimensionMismatchError`    | A question, an option or a state of `PreparedQuestion` has another number of values than the head reads.                                                                                                                                                                       |
+| `InvalidEmbeddingError`     | The model of the reader gives a vector that is not finite, or not one vector of the same length for each text. `vennUnitVectors` throws it, and the vector cache stores nothing.                                                                                               |
+| `ContractError`             | A request to `decide`, `registerQuestion`, `registerCalibration`, `registerIndex`, `index` or `streamIndex` breaks a rule of Venn. `code` is the rule, and `status` is 422, 404 or 413, as Venn gives it (see the table in "Decide").                                          |
+
+## API
+
+```ts
+function loadWeights(path: string): Promise<Map<string, Tensor>>;
+type Tensor = {
+  readonly shape: readonly number[];
+  readonly values: Float32Array;
+};
+
+function downloadHead(options: {
+  readonly cacheDir?: string;
+  readonly clock: Clock; // of @zukhruf/async
+}): Promise<string>;
+function modelDirectory(path: string): Promise<string>;
+
+class CosineAbstention {
+  static fromWeights(weights: ReadonlyMap<string, Tensor>): CosineAbstention;
+  readonly width: number;
+  readonly hidden: number;
+  readonly temperature: number;
+  readonly noneIntercept: number;
+  readonly firstWeight: Float32Array;
+  readonly firstBias: Float32Array;
+  readonly secondWeight: Float32Array;
+  readonly secondBias: number;
+}
+
+class PreparedQuestion {
+  constructor(
+    head: CosineAbstention,
+    question: Float32Array,
+    options: readonly Float32Array[],
+  );
+  logits(states: readonly Float32Array[]): Float64Array[];
+}
+
+type ReaderPrompt = 'Classification' | 'SentenceSimilarity' | 'Clustering';
+function embeddingGemmaPrompt(prompt: ReaderPrompt): EmbeddingModelMiddleware;
+function vennUnitVectors(): EmbeddingModelMiddleware;
+
+class DecisionService {
+  static load(options: {
+    readonly model: Parameters<typeof wrapEmbeddingModel>[0]['model'];
+    readonly database: DatabaseSync;
+    readonly directory: string;
+    readonly registryPath: string;
+  }): Promise<DecisionService>;
+  decide(request: DecisionRequest): Promise<Decision>;
+  registerQuestion(
+    question: OptionQuestion & { readonly threshold?: never },
+  ): Promise<string>;
+  registerCalibration(
+    family: string,
+    logits: readonly (readonly number[])[],
+    targets: readonly number[],
+    kind?: CalibrationKind, // default: 'Choice'
+  ): number;
+  deleteCalibration(family: string, kind?: CalibrationKind): void;
+  registerIndex(
+    vectors: readonly (readonly number[])[],
+    ids: readonly IndexValue[],
+    outcomes?: readonly IndexValue[],
+  ): string;
+  index(handle: string): Index | LabelledIndex;
+  streamIndex(
+    handle: string,
+    question: IndexApplyQuestion | StreamedRef,
+  ): Promise<Generator<IndexBatch, void, undefined>>;
+}
+
+type CalibrationKind = 'Choice' | 'Score' | 'Noul' | 'NearestReference';
+
+// A state has one kind only: a string, { text }, { vector }, { texts },
+// { vectors } or { indexRef }.
+type State =
+  | string
+  | { readonly text: string }
+  | { readonly vector: readonly number[] }
+  | { readonly texts: readonly string[] }
+  | { readonly vectors: readonly (readonly number[])[] }
+  | { readonly indexRef: string };
+type IndexValue = string | number;
+type Option =
+  string | { readonly label: string; readonly vector?: readonly number[] };
+
+// instructions or instructionsVec, not both.
+type ChoiceQuestion = {
+  readonly type?: 'Choice';
+  readonly instructions?: string;
+  readonly instructionsVec?: readonly number[];
+  readonly options: readonly Option[];
+  readonly threshold?: number;
+  readonly family?: string;
+};
+type ScoreQuestion = Omit<ChoiceQuestion, 'type'> & {
+  readonly type: 'Score';
+  readonly scores?: readonly number[];
+};
+type NoulQuestion = Omit<ChoiceQuestion, 'type'> & { readonly type: 'Noul' };
+type IndexApplyQuestion = Omit<ChoiceQuestion, 'type'> & {
+  readonly type: 'IndexApply';
+  readonly rowCap?: number;
+  readonly batchSize?: number;
+};
+type NearestReferenceQuestion = {
+  readonly type: 'NearestReference';
+  readonly indexRef: string;
+  readonly k?: number;
+  readonly threshold?: number;
+  readonly family?: string;
+};
+type OptionQuestion =
+  ChoiceQuestion | ScoreQuestion | NoulQuestion | IndexApplyQuestion;
+type Question = OptionQuestion | NearestReferenceQuestion;
+type QuestionRef = {
+  readonly questionRef: string;
+  readonly threshold?: number;
+  readonly rowCap?: number;
+  readonly batchSize?: number;
+};
+type StreamedRef = QuestionRef & { readonly family?: string };
+
+type DecisionRequest = {
+  readonly state: State;
+  readonly family?: string;
+  readonly questions: Readonly<Record<string, Question | QuestionRef>>;
+};
+
+type ChoiceAnswer = {
+  readonly answer: string;
+  readonly probabilities: Readonly<Record<string, number>>;
+  readonly confidence: number;
+  readonly calibrated: false;
+};
+type ScoreAnswer = ChoiceAnswer & {
+  readonly expectedScore: number | null;
+  readonly scoreConditionedOnNotNone: true;
+};
+type NoulAnswer = Omit<ChoiceAnswer, 'answer'> & {
+  readonly answer: 'none' | 'in_scope';
+};
+type RowAnswer = ChoiceAnswer & { readonly id: IndexValue };
+type IndexApplyAnswer = {
+  readonly rows: readonly RowAnswer[];
+  readonly batches: number;
+};
+type IndexBatch = {
+  readonly offset: number;
+  readonly rows: readonly RowAnswer[];
+};
+type NearestReferenceAnswer = {
+  readonly answer: string;
+  readonly probabilities: Readonly<Record<string, number>>;
+  readonly confidence: number;
+  readonly calibrated: false;
+  readonly evidenceIds: readonly IndexValue[];
+  readonly margin: number;
+  readonly noneSemantics: 'cannot affirm nearest outcome; not calibrated corpus-wide OOD';
+};
+type Answer =
+  | ChoiceAnswer
+  | ScoreAnswer
+  | NoulAnswer
+  | IndexApplyAnswer
+  | NearestReferenceAnswer;
+type Decision = {
+  readonly answers: Readonly<Record<string, Answer>>;
+  readonly vector: readonly number[] | readonly (readonly number[])[] | null;
+};
+
+type Index = {
+  readonly vectors: readonly Float32Array[];
+  readonly ids: readonly IndexValue[];
+};
+type LabelledIndex = Index & { readonly outcomes: readonly IndexValue[] };
+
+// An Experimental_DecisionModelV4 of the AI SDK.
+class DecisionServiceModel implements DecisionModelV4 {
+  constructor(service: DecisionService);
+  readonly specificationVersion: 'v4';
+  readonly provider: 'vector-decisions.decision';
+  readonly modelId: 'venn-1';
+  readonly supportedQuestionTypes: ['choice', 'score', 'boolean'];
+  doDecide(options: DecisionCallOptions): Promise<DecisionResult>;
+}
+
+class SafetensorError extends Error {}
+class InvalidModelArtifactError extends Error {
+  readonly artifact: string;
+}
+class InvalidHeadWeightsError extends Error {
+  readonly tensor: string;
+}
+class DimensionMismatchError extends Error {}
+class InvalidEmbeddingError extends Error {}
+class ContractError extends Error {
+  readonly code: ContractErrorCode; // the codes of the table in "Decide"
+  readonly status: number;
+}
+```
+
+## Documentation
+
+- [ADR 0001](docs/adr/0001-port-the-library-core-of-venn-at-one-commit-one-unit-at-a-time.md): port the library core of Venn at one commit, in one private package, one unit at a time (superseded in part by ADR 0006).
+- [ADR 0002](docs/adr/0002-write-the-gradients-of-the-heads-by-hand-with-adamw-as-pytorch-computes-it.md): write the gradients of the heads by hand, with AdamW as PyTorch computes it.
+- [ADR 0003](docs/adr/0003-decide-leaves-out-the-fields-of-venns-own-reader-and-keeps-venns-rules-of-an-answer.md): decide leaves out the fields of Venn's own reader, and keeps Venn's rules of an answer.
+- [ADR 0004](docs/adr/0004-register-question-takes-no-name-and-its-handle-is-the-sha-256-of-the-rfc-8785-json-of-the-question.md): registerQuestion takes no name, and its handle is the SHA-256 of the RFC 8785 JSON of the question.
+- [ADR 0005](docs/adr/0005-a-criterion-without-a-description-is-the-abstention-and-json-is-the-text-that-venn-writes.md): a criterion without a description is the abstention, and JSON is the text that Venn writes.
+- [ADR 0006](docs/adr/0006-a-calibration-fits-the-temperature-with-pytorchs-lbfgs-and-keeps-it-in-venns-calibrations-json.md): a calibration fits the temperature with PyTorch's LBFGS, and keeps it in Venn's calibrations.json.
+- [ADR 0007](docs/adr/0007-a-registered-index-keeps-unit-float32-rows-under-venns-handle-and-streamindex-gives-a-generator.md): a registered index keeps unit float32 rows under Venn's handle, and streamIndex gives a generator.

@@ -14,6 +14,10 @@ _Avoid_: encoder, embedder
 The 768 numbers that the reader gives for one text: its place on the map.
 _Avoid_: embedding (for the value; use it only for the act), point
 
+**Unit vector**:
+A vector divided by its norm, as float32 numbers, so that its norm is 1. The head and an index read unit vectors: `vennUnitVectors()` gives them next to the reader, as Venn's `DecisionService.embed` does (venn/server.py:135, 163). A norm smaller than 1e-12 is divided as 1e-12 (venn/reader.py `unit`), so a zero vector stays zero.
+_Avoid_: normalized vector, normalized embedding
+
 **State**:
 The thing that a question is about: a text, or its vector. A plural state is several texts or several vectors.
 _Avoid_: input, item, document
