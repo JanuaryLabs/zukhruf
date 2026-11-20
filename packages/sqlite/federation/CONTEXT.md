@@ -19,6 +19,10 @@ _Avoid_: Resolve, look up, map
 **Main**:
 The primary database, opened read-only for the lifetime of the handle. Give its path or `{ name }` to find it through `locate`; `':memory:'` gives an empty primary database. An unknown name fails construction. Main does not count toward the attachment limit.
 
+**Additional database**:
+A database other than main that a statement names. The statement finds its path through `locate`, attaches it read-only for its own run, and detaches it when it ends, also when it fails. Each additional database counts toward the limit.
+_Avoid_: Secondary database, attached database (it stays attached only for one statement)
+
 **Handle**:
 `sql` for tagged statements, and `query(sql)` for one SQL string. Both discover additional databases from the statement through `locate`.
 _Avoid_: Connection (the handle has one connection, but the connection is not the handle), client, session

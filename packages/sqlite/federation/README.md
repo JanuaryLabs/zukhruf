@@ -142,6 +142,57 @@ const result = database.query(
 | `q` (harelba/q)           | It attaches databases up to the limit, and copies the tables of the others into a temporary database.                                                                                 |
 | PostgreSQL `postgres_fdw` | A foreign table reads a table of another server, and one query can join it with local tables.                                                                                         |
 
+## API
+
+```ts
+// The read-only handle a statement runs on. It names each database as a schema.
+type Query = Pick<SQLTagStore, 'all' | 'get'>; // of node:sqlite
+
+type QueryResult = {
+  readonly columns: readonly string[];
+  readonly rows: readonly Readonly<Record<number, SQLOutputValue>>[];
+};
+
+// The path of the SQLite file a name stands for, or undefined when the host
+// has no database by that name.
+type Locate = (name: string) => string | undefined;
+
+type FederationOptions = Pick<
+  DatabaseSyncOptions,
+  'timeout' | 'readBigInts'
+> & {
+  readonly main: string | { readonly name: string };
+  readonly locate: Locate;
+};
+
+class Federation implements Disposable {
+  constructor({ main, locate, ...options }: FederationOptions);
+  readonly sql: Query;
+  readonly function: DatabaseSync['function']; // of node:sqlite
+  exec(sql: string): void;
+  query(sql: string): QueryResult; // exactly one SQL statement
+  [Symbol.dispose](): void; // closes the connection
+}
+
+class TooManyDatabasesError extends Error {
+  readonly names: readonly string[];
+  constructor(limit: number, names: readonly string[]);
+}
+
+// The classes of @zukhruf/sqlite-open, which the package exports.
+class UnavailableError extends Error {
+  readonly path: string;
+  constructor(path: string, cause: unknown);
+  static from(path: string, error: unknown): UnavailableError | undefined;
+}
+class MissingError extends UnavailableError {
+  constructor(path: string, cause: unknown);
+}
+class DeniedError extends UnavailableError {
+  constructor(path: string, cause: unknown);
+}
+```
+
 ## Documentation
 
 - [0001 Each statement attaches what it names](./docs/adr/0001-each-statement-attaches-what-it-names.md)
