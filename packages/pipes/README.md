@@ -236,6 +236,12 @@ async function reach(endpoint: PipeEndpoint): Promise<Socket | undefined> {
 
 ## Documentation
 
+**Recipes**
+
+- [Publish a pipe's address and connect to it from another program](./docs/recipes/publish-an-address-and-connect-from-another-program.md)
+
+**Decisions**
+
 - [0001 The scope and the name of .NET's System.IO.Pipes](./docs/adr/0001-the-scope-and-the-name-of-dotnet-system-io-pipes.md)
 - [0002 The default folder belongs to one user](./docs/adr/0002-the-default-folder-belongs-to-one-user.md)
 - [0003 Listen removes the file at the path, and close removes it again](./docs/adr/0003-listen-removes-the-file-at-the-path-and-close-removes-it-again.md)
