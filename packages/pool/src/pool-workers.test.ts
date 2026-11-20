@@ -1228,9 +1228,13 @@ describe(
 // worker adds no jobs a second; Gradient on two units and 10 ms of the job's
 // own, where a job takes 60 ms with two workers, 75 ms (1.25 times) with
 // three, and 100 ms (1.67 times) with four.
+// The tests run one after another: each drives its clock 10 ms at a time,
+// all of it work on the one thread of the test file, so tests that run at
+// the same time each take as long as all of them. On CI's 4 vCPUs they took
+// 145 to 300 s each, and the longest passed the 300 s limit (#5027).
 void describe(
   'an owner whose sizing keeps learning',
-  { concurrency: true },
+  { concurrency: false },
   () => {
     void test.each(
       [
