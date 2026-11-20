@@ -7,7 +7,7 @@ A host needs looks that nova does not have. Meddit's prototype has 40px controls
 A host cannot edit the generated source: the next sync writes over it ([ADR 0001](./0001-the-shadcn-cli-writes-the-source-and-the-commit-pins-it.md)). Thus a look comes to a host in one of two ways, and never by a `className` restyle:
 
 - **A theme token** for a look that holds for the whole app or for a subtree, for example the height of the controls. The token is a CSS variable. A patch of the stylesheet reads it, with nova's value as the fallback. A host that sets no token gets stock nova.
-- **A data-attribute patch** for a named look of one instance, for example a segmented `ToggleGroup`. The host writes `data-variant` or `data-size` on the component, and a rule of the stylesheet is keyed on `data-slot` and that attribute. Every component passes `data-*` through to its element, also the components that render with Base UI's `useRender`.
+- **A data-attribute patch** for a named look of one instance that two or more apps share. The host writes `data-variant` or `data-size` on the component, and a rule of the stylesheet is keyed on `data-slot` and that attribute. Every component passes `data-*` through to its element, also the components that render with Base UI's `useRender`. A look that one app has stays in that app's stylesheet, and shadcn's own variant comes first where one exists.
 
 ## The tokens
 
@@ -49,7 +49,8 @@ A second value on a subtree gives that subtree a second density. Meddit's auth p
 Ezz decided these on 2026-11-20 (zukhruf backlog #4994, from the plan for #5015):
 
 - App-wide density and tone are CSS variables that the stylesheet reads, with nova's value as the fallback.
-- A named look of one instance is a stylesheet rule keyed on `data-slot` and a `data-variant` or `data-size` that the host writes. A typo in such a name is caught by a guardrail, not by the types: the kit exports the names (`KIT_DATA_VARIANTS`, a hand-written module), a styles test checks each name, and a rule of `@zukhruf/eslint` checks the host's call sites. The approved names are `data-variant="segmented"` (`ToggleGroup`), `pill` (`TabsList`), `chip` (a `Button` look that any trigger takes through `render`), `warning` (`Badge`), and `data-size="lg"` (`Badge`, `InputOTP`). These come in later steps.
+- A named look of one instance is a stylesheet rule keyed on `data-slot` and a `data-variant` or `data-size` that the host writes. A typo in such a name is caught by a guardrail, not by the types: the kit exports the names (`KIT_DATA_VARIANTS`, a hand-written module), a styles test checks each name, and a rule of `@zukhruf/eslint` checks the host's call sites. The guardrail comes with the first such look.
+- The same day Ezz narrowed which looks enter the kit: shadcn's own variant comes first (a segmented control is `<ToggleGroup variant="outline" spacing={0}>`), and a named look enters the kit only when a second app needs it (the Rule of Three). Meddit's segmented track, pill tabs, chip trigger, warning and large `Badge`, and large `InputOTP` are Meddit's looks, so they live in Meddit's stylesheet until another app shares one. The kit has no data-attribute look yet.
 - The 40px height of Meddit's controls is `--control-height`, not a `data-size="lg"`.
 - `--control-height` reaches `Button` too: the prototype has one density for fields and buttons.
 - The text of an input stays nova's `text-base md:text-sm`: 16px on a phone, 14px from 768px. iOS zooms into a focused field whose text is smaller than 16px. This is a recorded divergence from Meddit's prototype, which has 14px.
@@ -68,7 +69,7 @@ Ezz decided these on 2026-11-20 (zukhruf backlog #4994, from the plan for #5015)
 
 ## Consequences
 
-- An app changes its look through the theme, which now covers the colors, the radius and the density of the controls, and through the data-attribute looks that the kit names.
+- An app changes its look through the theme, which now covers the colors, the radius and the density of the controls, and through its own stylesheet for a look that only it has. A look that two apps share becomes a data-attribute look that the kit names.
 - A host drops its `className` restyles of the controls. Meddit's web app drops `h-10`, `bg-card`, `text-sm` and `data-[size=default]:h-10` on its controls and buttons, and the `[&_[data-slot=…]]` rules of its auth layout.
 - A host class that tailwind-merge does not see as a conflict, for example `md:h-12` next to nova's `h-8`, loses to a patch. Write the token instead.
 - In light mode a host's `bg-*` class on an `InputGroup` wins over `--control-background`; in dark mode nova's `dark:bg-input/30` wins over that class, as in stock nova, and the patch replaces only nova's value.
