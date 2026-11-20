@@ -42,6 +42,10 @@ _Avoid_: Options helper, builder
 The block `zukhruf/base/typed` of `base`, which sets `parserOptions.projectService`. It gives each TypeScript file the types of its nearest `tsconfig.json`. `zukhruf/no-promise-field`, `zukhruf/no-phase-flag`, the `recommended-type-checked` rules of `@zukhruf/eslint/react` and `unicorn/prefer-dispose` of `modern-node/recommended` need it, so a repo uses those configs together with `base`. Each linted TypeScript file must be in a tsconfig.
 _Avoid_: Type-aware mode, type checking
 
+**Phase flag**:
+A class field that is a boolean, or that can be `undefined` or `null`, when code outside the constructor sets it. A `let` of the same types is one too, when a function that its function returns sets it. Its value records a phase, so every reader must know which phase holds. `zukhruf/no-phase-flag` reports it (commit 07bbd39e, #2489). A lazy memo is not a phase flag.
+_Avoid_: Status flag, mode field
+
 **Lazy memo**:
 A field or `let` whose every write is `x ??= …`, so its value never becomes empty again. `zukhruf/no-phase-flag` does not report a lazy memo whose every read is the value of a `??=` or comes after a top-level `x ??= …;` of the same function body; one that nothing reads is a flag (#3510, commit 03d15bd5). `zukhruf/no-captured-assignment` does not report a `??=` write. `||=` and `&&=` are not a lazy memo, because they can set the value again.
 _Avoid_: Cache, lazy init
@@ -51,6 +55,10 @@ _Avoid_: Cache, lazy init
 **Workspace root**:
 The nearest folder at or above the linted file that has `nx.json`, `pnpm-workspace.yaml`, or a `package.json` that declares `workspaces`.
 _Avoid_: Repo root, cwd
+
+**Workspace package**:
+A package whose folder the `workspaces` globs of the root `package.json` match. A project imports it by the `name` in its own `package.json`. A bundled project inlines the workspace packages that it imports, and its manifest does not declare them.
+_Avoid_: Local package, internal package
 
 **Roots**:
 A rule option: folders relative to the workspace root where the rule applies. An empty list means everywhere.
