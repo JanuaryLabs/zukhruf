@@ -184,4 +184,4 @@ Output of `node --test real-path.test.ts`:
 - **Let the clock give all the time of a job.** The clock moves at each turn of the event loop. A job that also waits for a real answer of its helper gets more time on the clock while it waits, so the sizing measures the load of the computer.
 - **Prove each test with a mutation.** Break the source on purpose, in a copy, the way the test says it guards against, and see the test fail. A test that passes while the code is broken proves nothing.
 - **Give inputs, not mocks.** The pool takes the clock and the computer as inputs, so a test replaces nothing that the whole process reads. To show other processes that take the memory, let the `availableMemory` of the computer return a variable, and change the variable.
-- **The pool tests of this package are examples.** See the suite `a pool whose sizing keeps learning` in [src/pool.test.ts](../../src/pool.test.ts).
+- **The pool tests of this package are examples.** See the suite `an owner whose sizing keeps learning` in [src/pool-workers.test.ts](../../src/pool-workers.test.ts).

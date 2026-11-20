@@ -7,8 +7,9 @@ import type { TestContext } from 'node:test';
 import { setTimeout } from 'node:timers/promises';
 
 import { createClock } from '@sinonjs/fake-timers';
+import PQueue from 'p-queue';
 
-import { Latch, untilAborted } from '@zukhruf/async';
+import { Latch, type WallClock, delay, untilAborted } from '@zukhruf/async';
 import { TemporaryFiles } from '@zukhruf/fs';
 import {
   SqliteJobQueue,
@@ -20,6 +21,8 @@ import { describe, test } from '@zukhruf/testing/node';
 import {
   type Eviction,
   Fixed,
+  Gradient,
+  HillClimbing,
   LeaderFirst,
   NoEviction,
   OnDemand,
@@ -1121,6 +1124,806 @@ describe('PoolWorkers lends its workers', { concurrency: true }, () => {
   });
 });
 
+// Real worker processes on a fake clock: each job waits on the clock, so a
+// window of two seconds takes no real time, and the time of each job is
+// exact. Each sizing reads a plain computer, not the process, so the tests
+// run at the same time.
+describe(
+  'PoolWorkers sizes its workers on a fake clock',
+  { concurrency: true },
+  () => {
+    test('a hill-climbing owner grows past its first two workers while a backlog of slow jobs waits', async (t) => {
+      await using folder = await new TemporaryFiles().directory('pool-');
+      const store = join(folder.path, 'store.sqlite');
+      const clock = createClock(Date.now());
+      let ended = 0;
+      const created: EchoWorker[] = [];
+      await using workers = lendingOn(clock, store, {
+        // Room for four workers: four CPUs, and memory for many more.
+        size: new HillClimbing({
+          memoryPerWorker: 1,
+          computer: {
+            availableParallelism: () => 4,
+            availableMemory: () => 2 ** 40,
+          },
+        }),
+        startup: new Parallel(),
+        eviction: new NoEviction(),
+        create: () => {
+          // Each job takes 20 ms on the clock, so every worker added adds as
+          // much.
+          const worker = new Working(async () => {
+            await delay(20, { clock, signal: undefined });
+            ended++;
+          });
+          worker.release();
+          created.push(worker);
+          return worker;
+        },
+      });
+      await using sending = await sender(store, clock);
+      await workers.ready();
+      assert.equal(created.length, 2);
+
+      await Array.fromAsync({ length: 1500 }, () => sent(sending.jobs, 'job'));
+      await drive(clock, [workers], () => ended === 1500, 60_000);
+      assert.ok(
+        created.length > 2,
+        `the owner started ${created.length} workers`,
+      );
+      // The step that tried a third worker kept it: a worker that a step tries
+      // and closes would also count above.
+      await untilExited(t, workers, created);
+      assert.equal(
+        created[2]!.dead,
+        false,
+        'the owner closed the third worker, which paid',
+      );
+    });
+  },
+);
+
+// These tests run real pools of real worker processes on a fake clock: each
+// job waits on the clock, so a window of two seconds takes no real time, and
+// the time of each job is exact. Each sizing reads a plain computer, not the
+// process, so the tests run at the same time. The test after them runs six
+// pools at once, so it runs alone.
+//
+// In each test the jobs share an engine of a few units, as Vision workers
+// share the Neural Engine: a job past the units waits for one, while the other
+// jobs do their own part. Each sizing settles at three workers, so the tests
+// fit a computer with four CPUs: HillClimbing on three units, where a fourth
+// worker adds no jobs a second; Gradient on two units and 10 ms of the job's
+// own, where a job takes 60 ms with two workers, 75 ms (1.25 times) with
+// three, and 100 ms (1.67 times) with four.
+void describe(
+  'an owner whose sizing keeps learning',
+  { concurrency: true },
+  () => {
+    void test.each(
+      [
+        { Learning: HillClimbing, units: 3, own: 0 },
+        { Learning: Gradient, units: 2, own: 10 },
+      ],
+      ({ Learning, units, own }) =>
+        test(`a ${Learning.name} owner that settled grows again when the work changes so that one more worker pays`, async (t) => {
+          const clock = createClock(Date.now());
+          await using folder = await new TemporaryFiles().directory('pool-');
+          const store = join(folder.path, 'store.sqlite');
+          await using sending = await sender(store, clock);
+          const engine = new PQueue({ concurrency: units });
+          const created: EchoWorker[] = [];
+          const load = closedLoad(sending.jobs, 16);
+          const job = async () => {
+            await delay(own, { clock, signal: undefined });
+            await engine.add(() => delay(50, { clock, signal: undefined }));
+          };
+          await using owner = lendingOn(clock, store, {
+            // Four CPUs, and memory for many more workers.
+            size: new Learning({
+              memoryPerWorker: 1,
+              computer: {
+                availableParallelism: () => 4,
+                availableMemory: () => 2 ** 40,
+              },
+            }),
+            startup: new Parallel(),
+            eviction: new NoEviction(),
+            create: () => {
+              const worker = new Working(load.work(job));
+              worker.release();
+              created.push(worker);
+              return worker;
+            },
+          });
+          await owner.ready();
+          await load.start();
+          try {
+            // The pool closes the worker of a step that did not pay: it settled.
+            await untilDropped(t, clock, owner, created, 60_000);
+            const known = created.length;
+
+            // Four units: a fourth worker pays for both sizings.
+            engine.concurrency = 4;
+
+            // A step with one more worker starts it. The pool keeps the
+            // worker when it pays, and closes it after the step when it does
+            // not.
+            await drive(clock, [owner], () => created.length > known, 60_000);
+            const added = created[known]!;
+            await driveFor(clock, [owner], 15_000);
+            await untilExited(t, owner, created);
+            assert.equal(
+              added.dead,
+              false,
+              'the pool kept the worker that paid',
+            );
+          } finally {
+            load.stop();
+            await drive(clock, [owner], load.drained, 60_000);
+          }
+        }),
+    );
+
+    void test.each(
+      [
+        { Learning: HillClimbing, units: 3, own: 0 },
+        { Learning: Gradient, units: 2, own: 10 },
+      ],
+      ({ Learning, units, own }) =>
+        test(`a ${Learning.name} owner shrinks only after fewer workers did as well in two steps in a row`, async (t) => {
+          const clock = createClock(Date.now());
+          await using folder = await new TemporaryFiles().directory('pool-');
+          const store = join(folder.path, 'store.sqlite');
+          await using sending = await sender(store, clock);
+          const engine = new PQueue({ concurrency: units });
+          let thrashing = false;
+          const created: EchoWorker[] = [];
+          const load = closedLoad(sending.jobs, 16);
+          const job = async () => {
+            await delay(own, { clock, signal: undefined });
+            await engine.add(() =>
+              delay(thrashing ? 30 * engine.pending ** 2 : 50, {
+                clock,
+                signal: undefined,
+              }),
+            );
+          };
+          await using owner = lendingOn(clock, store, {
+            // Four CPUs, and memory for many more workers.
+            size: new Learning({
+              memoryPerWorker: 1,
+              computer: {
+                availableParallelism: () => 4,
+                availableMemory: () => 2 ** 40,
+              },
+            }),
+            startup: new Parallel(),
+            eviction: new NoEviction(),
+            create: () => {
+              const worker = new Working(load.work(job));
+              worker.release();
+              created.push(worker);
+              return worker;
+            },
+          });
+          await owner.ready();
+          await load.start();
+          const timeline: { at: number; lent: number; idle: number }[] = [];
+          const sampler = clock.setInterval(() => {
+            const { lent, idle } = owner.stats;
+            timeline.push({ at: clock.now, lent, idle });
+          }, 20);
+          try {
+            // The pool closes the worker of a step that did not pay: it settled.
+            await untilDropped(t, clock, owner, created, 60_000);
+            const settled = created.filter((worker) => !worker.dead);
+
+            // The engine thrashes: a job takes longer the more jobs share it,
+            // so fewer workers do as well for both sizings.
+            thrashing = true;
+            engine.concurrency = Infinity;
+
+            await untilDropped(t, clock, owner, settled, 120_000);
+            const shrank = timeline.length;
+            // A step with fewer workers runs fewer for a whole window and
+            // keeps the others alive and idle. A step with one more lends one
+            // more, so the steps with fewer after it were in a row.
+            let steps = 0;
+            let since: number | undefined;
+            for (const { at, lent, idle } of timeline.slice(0, shrank)) {
+              if (lent > settled.length) {
+                steps = 0;
+                since = undefined;
+              } else if (
+                lent < settled.length &&
+                lent + idle === settled.length
+              )
+                since ??= at;
+              else {
+                if (since !== undefined && at - since >= 1_000) steps++;
+                since = undefined;
+              }
+            }
+            assert.equal(steps, 2, `the pool shrank after ${steps} such steps`);
+
+            // The work gets light again: the size the pool left pays again.
+            thrashing = false;
+            engine.concurrency = units;
+            const known = created.length;
+
+            await drive(clock, [owner], () => created.length > known, 90_000);
+            const added = created[known]!;
+            await driveFor(clock, [owner], 15_000);
+            await untilExited(t, owner, created);
+            assert.equal(
+              added.dead,
+              false,
+              'the pool kept the worker that paid',
+            );
+          } finally {
+            clock.clearInterval(sampler);
+            load.stop();
+            await drive(clock, [owner], load.drained, 60_000);
+          }
+        }),
+    );
+
+    void test.each(
+      [
+        { Learning: HillClimbing, units: 3, own: 0 },
+        { Learning: Gradient, units: 2, own: 10 },
+      ],
+      ({ Learning, units, own }) =>
+        test(`a ${Learning.name} owner under steady work starts a worker to try less and less often`, async (t) => {
+          const clock = createClock(Date.now());
+          await using folder = await new TemporaryFiles().directory('pool-');
+          const store = join(folder.path, 'store.sqlite');
+          await using sending = await sender(store, clock);
+          const engine = new PQueue({ concurrency: units });
+          const created: EchoWorker[] = [];
+          const born = new Map<EchoWorker, number>();
+          const died = new Map<EchoWorker, number>();
+          const load = closedLoad(sending.jobs, 16);
+          const job = async () => {
+            await delay(own, { clock, signal: undefined });
+            await engine.add(() => delay(50, { clock, signal: undefined }));
+          };
+          await using owner = lendingOn(clock, store, {
+            // Four CPUs, and memory for many more workers.
+            size: new Learning({
+              memoryPerWorker: 1,
+              computer: {
+                availableParallelism: () => 4,
+                availableMemory: () => 2 ** 40,
+              },
+            }),
+            startup: new Parallel(),
+            eviction: new NoEviction(),
+            create: () => {
+              const worker = new Working(load.work(job));
+              worker.release();
+              created.push(worker);
+              born.set(worker, clock.now);
+              void worker.exited().then(() => died.set(worker, clock.now));
+              return worker;
+            },
+          });
+          await owner.ready();
+          await load.start();
+          try {
+            // The pool closes the worker of a step that did not pay: it settled.
+            await untilDropped(t, clock, owner, created, 60_000);
+            const settled = created.filter((worker) => !worker.dead);
+            const known = created.length;
+
+            // Each worker that a step tries warms up for nothing: a step back
+            // to back would start one about every 12 seconds.
+            await driveFor(clock, [owner], 60_000);
+
+            const now = clock.now;
+            const tried = created.slice(known);
+            assert.ok(
+              tried.length <= 2,
+              `the pool started ${tried.length} workers to try`,
+            );
+            // A step that does not pay closes the worker it tried when the
+            // step ends, about two windows after it started the worker.
+            for (const worker of tried) {
+              const start = born.get(worker)!;
+              if (now - start < 10_000) continue;
+              const lived = (died.get(worker) ?? now) - start;
+              assert.ok(
+                lived < 10_000,
+                `a worker that a step tried lived ${Math.round(lived)} ms`,
+              );
+            }
+            // No step closed a worker the pool settled on, and each returned
+            // to it.
+            assert.ok(settled.every((worker) => !worker.dead));
+            await drive(
+              clock,
+              [owner],
+              () => owner.stats.lent === settled.length,
+              60_000,
+            );
+          } finally {
+            load.stop();
+            await drive(clock, [owner], load.drained, 60_000);
+          }
+        }),
+    );
+
+    test('a hill-climbing owner keeps one more worker that pays in a later step, also while the work gets slower across that step', async (t) => {
+      const clock = createClock(Date.now());
+      await using folder = await new TemporaryFiles().directory('pool-');
+      const store = join(folder.path, 'store.sqlite');
+      await using sending = await sender(store, clock);
+      // Eight units: each worker up to four adds a third of the jobs of three.
+      const engine = new PQueue({ concurrency: 8 });
+      const created: EchoWorker[] = [];
+      const load = closedLoad(sending.jobs, 16);
+      // A job takes a third longer each two seconds of the clock since the
+      // test began, as photos follow stickers (ADR 0002): a step that tries
+      // four workers measures the jobs of three faster before it and slower
+      // after it.
+      const began = clock.now;
+      const job = () =>
+        engine.add(() =>
+          delay(50 * (4 / 3) ** ((clock.now - began) / 2_000), {
+            clock,
+            signal: undefined,
+          }),
+        );
+      await using owner = lendingOn(clock, store, {
+        // Four CPUs, and memory for many more workers.
+        size: new HillClimbing({
+          memoryPerWorker: 1,
+          computer: {
+            availableParallelism: () => 4,
+            availableMemory: () => 2 ** 40,
+          },
+        }),
+        startup: new Parallel(),
+        eviction: new NoEviction(),
+        create: () => {
+          const worker = new Working(load.work(job));
+          worker.release();
+          created.push(worker);
+          return worker;
+        },
+      });
+      await owner.ready();
+      await load.start();
+      try {
+        // The first step keeps a third worker, and the next step at once
+        // tries a fourth.
+        await drive(clock, [owner], () => created.length >= 4, 60_000);
+        const fourth = created[3]!;
+
+        // The step measures three again after it tried four, and decides.
+        await driveFor(clock, [owner], 8_000);
+        await untilExited(t, owner, created);
+
+        assert.equal(
+          fourth.dead,
+          false,
+          'the pool closed a fourth worker that paid',
+        );
+      } finally {
+        load.stop();
+        await drive(clock, [owner], load.drained, 120_000);
+      }
+    });
+
+    test('a hill-climbing owner under steady work stops doubling the pause between two steps at sixteen windows', async () => {
+      const clock = createClock(Date.now());
+      await using folder = await new TemporaryFiles().directory('pool-');
+      const store = join(folder.path, 'store.sqlite');
+      await using sending = await sender(store, clock);
+      // Two units: a third worker adds no jobs, and one worker fewer does
+      // worse, so no step changes the size.
+      const engine = new PQueue({ concurrency: 2 });
+      const tried: number[] = [];
+      const load = closedLoad(sending.jobs, 16);
+      const job = () =>
+        engine.add(() => delay(50, { clock, signal: undefined }));
+      await using owner = lendingOn(clock, store, {
+        // Four CPUs, and memory for many more workers.
+        size: new HillClimbing({
+          memoryPerWorker: 1,
+          computer: {
+            availableParallelism: () => 4,
+            availableMemory: () => 2 ** 40,
+          },
+        }),
+        startup: new Parallel(),
+        eviction: new NoEviction(),
+        create: () => {
+          const worker = new Working(load.work(job));
+          worker.release();
+          tried.push(clock.now);
+          return worker;
+        },
+      });
+      await owner.ready();
+      await load.start();
+      try {
+        // The first two workers, then a worker for each step with one more.
+        // The pause after the n-th step that changes nothing is 2^(n-1)
+        // windows of two seconds, at most 16, times 0.5 to 1.5. A step with
+        // one more and a step with fewer alternate, so two pauses and two
+        // steps of three windows lie between two workers tried.
+        await drive(clock, [owner], () => tried.length >= 2 + 9, 1_200_000);
+
+        // From the fifth pause on, each pause is capped: 16 to 48 seconds. The
+        // third gap and each one after it hold two capped pauses and six
+        // windows of a little more than two seconds: more than 44 seconds and
+        // less than 110. A cap of 8 windows gives 28 to 62 seconds, and a cap
+        // of 32 gives 76 to 206.
+        const gaps = tried
+          .slice(2)
+          .map((at, index, starts) =>
+            index === 0 ? undefined : at - starts[index - 1]!,
+          )
+          .filter((gap) => gap !== undefined);
+        const capped = gaps.slice(2);
+        assert.ok(
+          capped.every((gap) => gap > 44_000 && gap < 110_000),
+          `the gaps between two tried workers were ${gaps.map(Math.round).join(', ')} ms`,
+        );
+      } finally {
+        load.stop();
+        await drive(clock, [owner], load.drained, 120_000);
+      }
+    });
+
+    void test.each(
+      [
+        { Learning: HillClimbing, units: 3, own: 0 },
+        { Learning: Gradient, units: 2, own: 10 },
+      ],
+      ({ Learning, units, own }) =>
+        test(`a ${Learning.name} owner takes no step while no job waits`, async (t) => {
+          const clock = createClock(Date.now());
+          await using folder = await new TemporaryFiles().directory('pool-');
+          const store = join(folder.path, 'store.sqlite');
+          await using sending = await sender(store, clock);
+          const engine = new PQueue({ concurrency: units });
+          const created: EchoWorker[] = [];
+          const busy = closedLoad(sending.jobs, 16);
+          const work = busy.work(async () => {
+            await delay(own, { clock, signal: undefined });
+            await engine.add(() => delay(50, { clock, signal: undefined }));
+          });
+          // One job at a time: no job waits, so no window says how many pay.
+          // It starts once the busy load ran all of its jobs, so each run
+          // after that is one of its jobs.
+          const trickle = closedLoad(sending.jobs, 1);
+          const trickling = trickle.work(() =>
+            delay(50, { clock, signal: undefined }),
+          );
+          let quiet = false;
+          await using owner = lendingOn(clock, store, {
+            // Four CPUs, and memory for many more workers.
+            size: new Learning({
+              memoryPerWorker: 1,
+              computer: {
+                availableParallelism: () => 4,
+                availableMemory: () => 2 ** 40,
+              },
+            }),
+            startup: new Parallel(),
+            eviction: new NoEviction(),
+            create: () => {
+              const worker = new Working(() => (quiet ? trickling() : work()));
+              worker.release();
+              created.push(worker);
+              return worker;
+            },
+          });
+          await owner.ready();
+          await busy.start();
+          try {
+            // The pool closes the worker of a step that did not pay: it settled.
+            await untilDropped(t, clock, owner, created, 60_000);
+            busy.stop();
+            await drive(clock, [owner], busy.drained, 60_000);
+            const settled = created.filter((worker) => !worker.dead);
+            const known = created.length;
+
+            quiet = true;
+            await trickle.start();
+            await driveFor(clock, [owner], 30_000);
+            trickle.stop();
+            await drive(clock, [owner], trickle.drained, 60_000);
+
+            assert.equal(created.length, known, 'no step started a worker');
+            assert.ok(
+              settled.every((worker) => !worker.dead),
+              'no step closed a worker',
+            );
+          } finally {
+            busy.stop();
+            trickle.stop();
+            await drive(
+              clock,
+              [owner],
+              () => busy.drained() && trickle.drained(),
+              60_000,
+            );
+          }
+        }),
+    );
+
+    void test.each(
+      [
+        { Learning: HillClimbing, units: 3, own: 0 },
+        { Learning: Gradient, units: 2, own: 10 },
+      ],
+      ({ Learning, units, own }) =>
+        test(`a ${Learning.name} owner runs fewer workers when the memory they need is no longer free`, async (t) => {
+          const clock = createClock(Date.now());
+          await using folder = await new TemporaryFiles().directory('pool-');
+          const store = join(folder.path, 'store.sqlite');
+          await using sending = await sender(store, clock);
+          const engine = new PQueue({ concurrency: units });
+          const created: EchoWorker[] = [];
+          // Free memory for eight workers, until other processes take it.
+          const memoryPerWorker = 2 ** 30;
+          let free = 8 * memoryPerWorker;
+          const computer = {
+            availableParallelism: () => 4,
+            availableMemory: () => free,
+          };
+          const load = closedLoad(sending.jobs, 16);
+          const job = async () => {
+            await delay(own, { clock, signal: undefined });
+            await engine.add(() => delay(50, { clock, signal: undefined }));
+          };
+          await using owner = lendingOn(clock, store, {
+            size: new Learning({ memoryPerWorker, computer }),
+            startup: new Parallel(),
+            eviction: new NoEviction(),
+            create: () => {
+              const worker = new Working(load.work(job));
+              worker.release();
+              created.push(worker);
+              return worker;
+            },
+          });
+          await owner.ready();
+          await load.start();
+          try {
+            // The pool closes the worker of a step that did not pay: it settled.
+            await untilDropped(t, clock, owner, created, 60_000);
+            const settled = created.filter((worker) => !worker.dead);
+            assert.ok(
+              settled.length > 2,
+              `the pool settled at ${settled.length}`,
+            );
+
+            // Other processes take the memory: two workers still find theirs free.
+            free = 2.5 * memoryPerWorker;
+
+            await drive(
+              clock,
+              [owner],
+              () =>
+                settled.filter((worker) => !worker.dead).length === 2 &&
+                owner.stats.lent <= 2,
+              60_000,
+            );
+          } finally {
+            load.stop();
+            await drive(clock, [owner], load.drained, 60_000);
+          }
+        }),
+    );
+
+    void test.each([HillClimbing, Gradient], (Learning) =>
+      test(`a ${Learning.name} owner never runs more workers than the computer affords, also when more would pay`, async (t) => {
+        const clock = createClock(Date.now());
+        await using folder = await new TemporaryFiles().directory('pool-');
+        const store = join(folder.path, 'store.sqlite');
+        await using sending = await sender(store, clock);
+        // Eight units: every worker up to eight adds as much as the one before.
+        const engine = new PQueue({ concurrency: 8 });
+        const created: EchoWorker[] = [];
+        // Free memory for three and a half workers.
+        const memoryPerWorker = 2 ** 30;
+        const computer = {
+          availableParallelism: () => 4,
+          availableMemory: () => 3.5 * memoryPerWorker,
+        };
+        const load = closedLoad(sending.jobs, 16);
+        const job = () =>
+          engine.add(() => delay(50, { clock, signal: undefined }));
+        await using owner = lendingOn(clock, store, {
+          size: new Learning({ memoryPerWorker, computer }),
+          startup: new Parallel(),
+          eviction: new NoEviction(),
+          create: () => {
+            const worker = new Working(load.work(job));
+            worker.release();
+            created.push(worker);
+            return worker;
+          },
+        });
+        await owner.ready();
+        await load.start();
+        let most = 0;
+        const sampler = clock.setInterval(() => {
+          most = Math.max(
+            most,
+            created.filter((worker) => !worker.dead).length,
+          );
+        }, 20);
+        try {
+          await drive(clock, [owner], () => owner.stats.lent === 3, 60_000);
+
+          // Steps keep trying sizes while the work runs.
+          await driveFor(clock, [owner], 40_000);
+
+          assert.equal(most, 3);
+        } finally {
+          clock.clearInterval(sampler);
+          load.stop();
+          await drive(clock, [owner], load.drained, 60_000);
+        }
+      }),
+    );
+
+    test('a Gradient owner measures the time of a job with two workers again, so it shrinks when the work gets heavier for every size', async (t) => {
+      // Four units and 10 ms of the job's own: a job takes 60 ms with up to four
+      // workers, so the pool grows to the four that the memory affords.
+      const clock = createClock(Date.now());
+      await using folder = await new TemporaryFiles().directory('pool-');
+      const store = join(folder.path, 'store.sqlite');
+      await using sending = await sender(store, clock);
+      const engine = new PQueue({ concurrency: 4 });
+      const created: EchoWorker[] = [];
+      const memoryPerWorker = 2 ** 30;
+      const computer = {
+        availableParallelism: () => 4,
+        availableMemory: () => 4.5 * memoryPerWorker,
+      };
+      const load = closedLoad(sending.jobs, 16);
+      const job = async () => {
+        await delay(10, { clock, signal: undefined });
+        await engine.add(() => delay(50, { clock, signal: undefined }));
+      };
+      await using owner = lendingOn(clock, store, {
+        size: new Gradient({ memoryPerWorker, computer }),
+        startup: new Parallel(),
+        eviction: new NoEviction(),
+        create: () => {
+          const worker = new Working(load.work(job));
+          worker.release();
+          created.push(worker);
+          return worker;
+        },
+      });
+      await owner.ready();
+      await load.start();
+      try {
+        await drive(clock, [owner], () => owner.stats.lent === 4, 60_000);
+        const settled = created.filter((worker) => !worker.dead);
+
+        // Two units: a job takes 75 ms with three workers and 100 ms with four,
+        // 1.67 times its 60 ms with two. Only a window at two workers shows it,
+        // because the time with two that the pool measured before is stale.
+        engine.concurrency = 2;
+
+        await untilDropped(t, clock, owner, settled, 120_000);
+      } finally {
+        load.stop();
+        await drive(clock, [owner], load.drained, 60_000);
+      }
+    });
+  },
+);
+
+// Six owners on one clock, as six processes read one time, so they run alone.
+describe('PoolWorkers of six owners on one clock', () => {
+  void test.each(
+    [
+      { Learning: HillClimbing, units: 3, own: 0 },
+      { Learning: Gradient, units: 2, own: 10 },
+    ],
+    ({ Learning, units, own }) =>
+      test(`${Learning.name} owners under the same work do not try one more worker at the same moments`, async () => {
+        const clock = createClock(Date.now());
+        // Each owner has its own store and its own engine.
+        await using stack = new AsyncDisposableStack();
+        const runs = await Array.fromAsync({ length: 6 }, async () => {
+          const folder = stack.use(
+            await new TemporaryFiles().directory('pool-'),
+          );
+          const store = join(folder.path, 'store.sqlite');
+          const sending = stack.use(await sender(store, clock));
+          const engine = new PQueue({ concurrency: units });
+          const created: { worker: EchoWorker; at: number }[] = [];
+          const load = closedLoad(sending.jobs, 16);
+          const job = async () => {
+            await delay(own, { clock, signal: undefined });
+            await engine.add(() => delay(50, { clock, signal: undefined }));
+          };
+          const owner = stack.use(
+            lendingOn(clock, store, {
+              // Four CPUs, and memory for many more workers.
+              size: new Learning({
+                memoryPerWorker: 1,
+                computer: {
+                  availableParallelism: () => 4,
+                  availableMemory: () => 2 ** 40,
+                },
+              }),
+              startup: new Parallel(),
+              eviction: new NoEviction(),
+              create: () => {
+                const worker = new Working(load.work(job));
+                worker.release();
+                created.push({ worker, at: clock.now });
+                return worker;
+              },
+            }),
+          );
+          return { created, load, owner };
+        });
+        const all = runs.map(({ owner }) => owner);
+        await Promise.all(all.map((owner) => owner.ready()));
+        for (const { load } of runs) await load.start();
+        try {
+          // Each owner lets the worker of a step that did not pay go: it
+          // settled, and holds one worker fewer at once, before that worker
+          // exits. Then it tries one more worker.
+          const settled = new Map<number, { at: number; known: number }>();
+          const last = all.map((owner) => holds(owner));
+          await drive(
+            clock,
+            all,
+            () => {
+              for (const [index, { created, owner }] of runs.entries()) {
+                const now = holds(owner);
+                if (!settled.has(index) && now < last[index]!)
+                  settled.set(index, { at: clock.now, known: created.length });
+                last[index] = now;
+              }
+              return runs.every(({ created }, index) => {
+                const known = settled.get(index)?.known;
+                return known !== undefined && created.length > known;
+              });
+            },
+            120_000,
+          );
+          const delays = runs.map(({ created }, index) => {
+            const { at, known } = settled.get(index)!;
+            return created[known]!.at - at;
+          });
+
+          // Owners that probe in step measure each other's probes, as .NET
+          // randomizes its hill climbing for other processes that run it. On
+          // one clock, owners with no jitter try one more worker the same
+          // time after they settle, to the 10 ms that the clock moves at once.
+          const spread = Math.max(...delays) - Math.min(...delays);
+          assert.ok(
+            spread >= 100,
+            `the owners tried one more worker ${delays.join(', ')} ms after they settled`,
+          );
+        } finally {
+          for (const { load } of runs) load.stop();
+          await drive(
+            clock,
+            all,
+            () => runs.every(({ load }) => load.drained()),
+            60_000,
+          );
+        }
+      }),
+  );
+});
+
 describe('PoolWorkers on a fake clock', { concurrency: true }, () => {
   test('a running job that the store cancels loses its worker at the next touch, and the other running job keeps its own', async (t) => {
     await using folder = await new TemporaryFiles().directory('pool-');
@@ -1572,6 +2375,15 @@ class Steered implements Sizing {
 /** PoolWorkers of the "echo" kind, whose input and output are a line, on the real clock. */
 function lending(
   store: string,
+  options: Parameters<typeof lendingOn>[2],
+): PoolWorkers<string, string> {
+  return lendingOn(globalThis, store, options);
+}
+
+/** PoolWorkers of the "echo" kind, whose input and output are a line, on `clock`. */
+function lendingOn(
+  clock: WallClock,
+  store: string,
   options: {
     size: Sizing;
     startup: Startup;
@@ -1588,9 +2400,140 @@ function lending(
       expireInSeconds: 60,
     }),
     store,
-    clock: globalThis,
+    clock,
     ...options,
   });
+}
+
+/**
+ * A worker of a real process, which warms up as EchoWorker does, and whose
+ * run does `work` on the test's clock in place of a line to the process, as a
+ * job of Pool.use did its work beside the worker.
+ */
+class Working extends EchoWorker {
+  readonly #work: () => Promise<void>;
+
+  constructor(work: () => Promise<void>) {
+    super();
+    this.#work = work;
+  }
+
+  override async run(text: string): Promise<string> {
+    await this.#work();
+    return text;
+  }
+}
+
+/**
+ * Moves the fake clock of the owners 10 ms at a time until `done` holds, and
+ * lets the event loop turn between two moves, so that the real worker
+ * processes report on time and the store settles each job between two moves.
+ * While a worker of an owner starts, the clock waits, so a warm-up takes no
+ * time on the clock, as an owner measures no job until its workers are ready.
+ * Fails when `limit` ms of the clock pass first.
+ */
+async function drive(
+  clock: FakeClock,
+  owners: readonly PoolWorkers<string, string>[],
+  done: () => boolean,
+  limit: number,
+): Promise<void> {
+  const end = clock.now + limit;
+  while (!done()) {
+    if (clock.now >= end)
+      throw new Error(`Not done after ${limit} ms on the clock`);
+    if (owners.every((owner) => owner.stats.starting === 0))
+      await clock.tickAsync(10);
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+}
+
+/**
+ * A closed load of `clients` clients, as loops over Pool.use made: it sends
+ * one job for each client, and the run of each job sends the next one at its
+ * end until the load stops, so as many jobs as there are clients are always
+ * sent or running. A send is a write to the store, so it takes no time on
+ * the clock.
+ */
+function closedLoad(jobs: SqliteJobQueue, clients: number) {
+  const stopped = new AbortController();
+  let sentJobs = 0;
+  let ranJobs = 0;
+  const send = async (): Promise<void> => {
+    sentJobs++;
+    await sent(jobs, 'job');
+  };
+  return {
+    start: async (): Promise<void> => {
+      await Array.fromAsync({ length: clients }, send);
+    },
+    /** The work of a run: the job, then the next job of its client. */
+    work: (job: () => Promise<unknown>) => async (): Promise<void> => {
+      await job();
+      ranJobs++;
+      if (!stopped.signal.aborted) await send();
+    },
+    stop: (): void => stopped.abort(),
+    /** Whether each job that the load sent ran. */
+    drained: (): boolean => ranJobs === sentJobs,
+  };
+}
+
+/** Moves the fake clock of the owners `ms` milliseconds, as drive does. */
+async function driveFor(
+  clock: FakeClock,
+  owners: readonly PoolWorkers<string, string>[],
+  ms: number,
+): Promise<void> {
+  const end = clock.now + ms;
+  await drive(clock, owners, () => clock.now >= end, ms + 10);
+}
+
+/**
+ * Moves the fake clock of an owner, as drive does, until the owner lets one
+ * of `workers` go: it holds fewer than they are, and all of them ran when
+ * this began. Then it waits for that worker's real exit with the clock still,
+ * so that the owner takes no next step on the clock meanwhile. It does not
+ * compare `alive(workers)` with what the owner holds: a worker counts as
+ * alive only until its real exit, so that holds for a moment, and a busy
+ * machine can miss it.
+ */
+async function untilDropped(
+  t: TestContext,
+  clock: FakeClock,
+  owner: PoolWorkers<string, string>,
+  workers: readonly EchoWorker[],
+  limit: number,
+): Promise<void> {
+  await drive(clock, [owner], () => holds(owner) < workers.length, limit);
+  await untilExited(t, owner, workers);
+}
+
+/**
+ * Waits in real time, with the clock still, until each of `workers` that the
+ * owner let go has exited: no more of them run than the owner holds. A worker
+ * exits some milliseconds of real time after the owner closes it.
+ */
+async function untilExited(
+  t: TestContext,
+  owner: PoolWorkers<string, string>,
+  workers: readonly EchoWorker[],
+): Promise<void> {
+  await waitFor(() => assert.ok(alive(workers) <= holds(owner)), {
+    signal: t.signal,
+    interval: 5,
+  });
+}
+
+/** The workers that have not exited. */
+function alive(workers: readonly EchoWorker[]): number {
+  return workers.filter((worker) => !worker.dead).length;
+}
+
+/** The workers that the owner holds: those that start, idle or are lent. */
+function holds(owner: PoolWorkers<string, string>): number {
+  const { starting, idle, lent } = owner.stats;
+  return starting + idle + lent;
 }
 
 /**
