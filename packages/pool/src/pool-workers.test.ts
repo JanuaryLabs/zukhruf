@@ -2813,6 +2813,304 @@ describe('PoolWorkers evicts on a fake clock', { concurrency: true }, () => {
   });
 });
 
+// Which slot an owner lends to a job. A worker of these tests answers the
+// line "pid" with its process id, so a test sees which worker ran the job.
+describe('PoolWorkers lends in order', { concurrency: true }, () => {
+  test('a job takes an idle worker before it starts or waits for one in a lower slot', async (t) => {
+    await t.test(
+      'an empty slot, whose worker the eviction let go',
+      async (st) => {
+        await using folder = await new TemporaryFiles().directory('pool-');
+        const store = join(folder.path, 'store.sqlite');
+        const clock = createClock(Date.now());
+        const created: EchoWorker[] = [];
+        const first = new Latch();
+        const second = new Latch();
+        const holds: Record<string, Latch> = { first, second };
+        await using owner = lendingOn(clock, store, {
+          size: new Fixed(2),
+          startup: new Parallel(),
+          eviction: new IdleTimeout({ after: 30_000 }),
+          create: () => {
+            const worker = new Pid(holds);
+            worker.release();
+            created.push(worker);
+            return worker;
+          },
+        });
+        await using sending = await sender(store, clock);
+        await owner.ready();
+        // Two jobs hold both workers. The first job ends, and the eviction lets
+        // its idle worker go while the second job holds the other one.
+        // A job of the kind runs at most 60 s, so the idle timeout lasts 30 s.
+        const ids = await Array.fromAsync(['first', 'second'], (text) =>
+          sent(sending.jobs, text),
+        );
+        await driveFor(clock, [owner], 1_000);
+        await waitFor(() => assert.equal(owner.stats.lent, 2), {
+          signal: st.signal,
+          interval: 5,
+        });
+        first.open();
+        await outputOf(st, sending.jobs, ids[0]!);
+        await clock.tickAsync(30_000);
+        await created[0]!.exited();
+        second.open();
+        await outputOf(st, sending.jobs, ids[1]!);
+
+        assert.equal(
+          await ranOn(st, clock, owner, sending.jobs, 'pid'),
+          String(created[1]!.pid),
+        );
+        assert.equal(created.length, 2);
+      },
+    );
+
+    await t.test('a slot whose worker ended', async (st) => {
+      await using folder = await new TemporaryFiles().directory('pool-');
+      const store = join(folder.path, 'store.sqlite');
+      const created: EchoWorker[] = [];
+      await using owner = lending(store, {
+        size: new Fixed(2),
+        startup: new OnDemand(),
+        eviction: new NoEviction(),
+        create: () => {
+          const worker = new Pid({});
+          worker.release();
+          created.push(worker);
+          return worker;
+        },
+      });
+      await using sending = await sender(store);
+      assert.deepEqual(
+        await Promise.all([
+          ran(st, sending.jobs, 'a'),
+          ran(st, sending.jobs, 'b'),
+        ]),
+        ['a', 'b'],
+      );
+      created[0]!.kill();
+      await created[0]!.exited();
+
+      assert.equal(await ran(st, sending.jobs, 'pid'), String(created[1]!.pid));
+      assert.equal(created.length, 2);
+    });
+
+    await t.test('a slot in a back-off', async (st) => {
+      await using folder = await new TemporaryFiles().directory('pool-');
+      const store = join(folder.path, 'store.sqlite');
+      const clock = createClock(Date.now());
+      const created: EchoWorker[] = [];
+      await using owner = lendingOn(clock, store, {
+        size: new Fixed(2),
+        startup: new Parallel(),
+        eviction: new NoEviction(),
+        create: () => {
+          const worker = new Pid({});
+          worker.release();
+          created.push(worker);
+          return worker;
+        },
+      });
+      await using sending = await sender(store, clock);
+      await owner.ready();
+      // Two early exits put slot 0 in a back-off of 2 s, longer than the
+      // owner's backstop of 1 s, at which it fetches the job.
+      created[0]!.kill();
+      await created[0]!.exited();
+      await clock.tickAsync(1_000);
+      await waitFor(() => assert.equal(owner.stats.idle, 2), {
+        signal: st.signal,
+        interval: 5,
+      });
+      created[2]!.kill();
+      await created[2]!.exited();
+
+      assert.equal(
+        await ranOn(st, clock, owner, sending.jobs, 'pid'),
+        String(created[1]!.pid),
+      );
+      assert.equal(created.length, 3);
+    });
+
+    await t.test('a slot whose worker still warms up', async (st) => {
+      await using folder = await new TemporaryFiles().directory('pool-');
+      const store = join(folder.path, 'store.sqlite');
+      const created: EchoWorker[] = [];
+      await using owner = lending(store, {
+        size: new Fixed(2),
+        startup: new Parallel(),
+        eviction: new NoEviction(),
+        create: () => {
+          const worker = new Pid({});
+          if (created.length > 0) worker.release();
+          created.push(worker);
+          return worker;
+        },
+      });
+      await using sending = await sender(store);
+      try {
+        await waitFor(() => assert.ok(owner.stats.idle > 0), {
+          signal: st.signal,
+          interval: 10,
+        });
+
+        assert.equal(
+          await ran(st, sending.jobs, 'pid'),
+          String(created[1]!.pid),
+        );
+        assert.equal(created.length, 2);
+      } finally {
+        created[0]!.release();
+      }
+    });
+  });
+
+  test('jobs one at a time stay on the lowest idle worker, so the owner evicts the higher idle workers', async (t) => {
+    await using folder = await new TemporaryFiles().directory('pool-');
+    const store = join(folder.path, 'store.sqlite');
+    const clock = createClock(Date.now());
+    const created: EchoWorker[] = [];
+    // The owner fetches each job at its backstop of 1 s, so the idle timeout
+    // lasts 5 s and the jobs come every 2 to 3 s.
+    await using owner = lendingOn(clock, store, {
+      size: new Fixed(3),
+      startup: new Parallel(),
+      eviction: new IdleTimeout({ after: 5_000 }),
+      create: () => {
+        const worker = new Pid({});
+        worker.release();
+        created.push(worker);
+        return worker;
+      },
+    });
+    await using sending = await sender(store, clock);
+    await owner.ready();
+
+    for (let job = 0; job < 4; job++) {
+      await clock.tickAsync(2_000);
+      assert.equal(
+        await ranOn(t, clock, owner, sending.jobs, 'pid'),
+        String(created[0]!.pid),
+      );
+    }
+    await Promise.all([created[1]!.exited(), created[2]!.exited()]);
+    assert.deepEqual(owner.stats, {
+      starting: 0,
+      idle: 1,
+      lent: 0,
+      waiting: 0,
+    });
+    assert.equal(created[0]!.dead, false);
+    assert.equal(created.length, 3);
+  });
+
+  test('an eager owner replaces a worker that exits during a job once the job ends, after the back-off of an early exit', async (t) => {
+    await using folder = await new TemporaryFiles().directory('pool-');
+    const store = join(folder.path, 'store.sqlite');
+    const clock = createClock(Date.now());
+    const created: EchoWorker[] = [];
+    let started = false;
+    const ends: number[] = [];
+    // The job kills its own worker, as a job with its own time limit does.
+    class SelfEnding extends EchoWorker {
+      override async run(text: string): Promise<string> {
+        started = true;
+        this.kill();
+        await this.exited();
+        ends.push(clock.now);
+        return text;
+      }
+    }
+    await using owner = lendingOn(clock, store, {
+      size: new Fixed(1),
+      startup: new Parallel(),
+      eviction: new NoEviction(),
+      create: () => {
+        const worker = new SelfEnding();
+        worker.release();
+        created.push(worker);
+        return worker;
+      },
+    });
+    await using sending = await sender(store, clock);
+    await owner.ready();
+
+    // The clock moves until the owner fetches the job, and then stands still.
+    const id = await sent(sending.jobs, 'done');
+    await drive(clock, [owner], () => started, 2_000);
+    assert.equal(await outputOf(t, sending.jobs, id), 'done');
+    await clock.tickAsync(ends[0]! + 999 - clock.now);
+    assert.deepEqual(owner.stats, {
+      starting: 0,
+      idle: 0,
+      lent: 0,
+      waiting: 0,
+    });
+    await clock.tickAsync(1);
+    assert.equal(owner.stats.starting, 1, 'the owner starts at 1 s');
+    // The worker is created a microtask after its slot starts.
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(created.length, 2);
+  });
+
+  test('a job takes an empty slot before a slot in back-off', async (t) => {
+    await using folder = await new TemporaryFiles().directory('pool-');
+    const store = join(folder.path, 'store.sqlite');
+    const clock = createClock(Date.now());
+    const created: EchoWorker[] = [];
+    let started = false;
+    class Starting extends EchoWorker {
+      override run(text: string): Promise<string> {
+        started = true;
+        return super.run(text);
+      }
+    }
+    // A job of the kind runs at most 60 s, so the eviction lets an idle worker
+    // go after 30 s.
+    await using owner = lendingOn(clock, store, {
+      size: new Fixed(2),
+      startup: new Parallel(),
+      eviction: new IdleTimeout({ after: 30_000 }),
+      create: () => {
+        const worker = new Starting();
+        worker.release();
+        created.push(worker);
+        return worker;
+      },
+    });
+    await using sending = await sender(store, clock);
+    await owner.ready();
+    // An early exit of the first worker first, so that the one after it puts
+    // the first slot in a back-off of 2 s, longer than the owner's backstop
+    // of 1 s, at which it fetches the job.
+    created[0]!.kill();
+    await created[0]!.exited();
+    await clock.tickAsync(1_000);
+    await waitFor(() => assert.equal(owner.stats.idle, 2), {
+      signal: t.signal,
+      interval: 5,
+    });
+    // A job holds the first slot's worker while the eviction lets the idle
+    // second one go, which leaves its slot empty.
+    const held = await sent(sending.jobs, 'hang');
+    await drive(clock, [owner], () => started, 2_000);
+    await clock.tickAsync(30_000);
+    await created[1]!.exited();
+    // An early exit during the job puts the first slot in a back-off once the
+    // job ends.
+    created[2]!.kill();
+    await assert.rejects(outputOf(t, sending.jobs, held), /Echo worker exited/);
+
+    assert.equal(await ranOn(t, clock, owner, sending.jobs, 'empty'), 'empty');
+    assert.equal(created.length, 4);
+    await clock.tickAsync(2_000);
+    // The worker is created a microtask after its slot starts.
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(created.length, 5, 'the back-off starts its own worker');
+  });
+});
+
 describe('PoolWorkers on a fake clock', { concurrency: true }, () => {
   test('a running job that the store cancels loses its worker at the next touch, and the other running job keeps its own', async (t) => {
     await using folder = await new TemporaryFiles().directory('pool-');
@@ -3310,6 +3608,24 @@ class Working extends EchoWorker {
   override async run(text: string): Promise<string> {
     await this.#work();
     return text;
+  }
+}
+
+/**
+ * An EchoWorker that answers the line "pid" with its process id, and whose
+ * run of a line in `holds` waits for that latch first.
+ */
+class Pid extends EchoWorker {
+  readonly #holds: Record<string, Latch>;
+
+  constructor(holds: Record<string, Latch>) {
+    super();
+    this.#holds = holds;
+  }
+
+  override async run(text: string): Promise<string> {
+    await this.#holds[text]?.wait();
+    return text === 'pid' ? String(this.pid) : super.run(text);
   }
 }
 
