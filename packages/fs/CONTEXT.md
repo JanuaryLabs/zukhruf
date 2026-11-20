@@ -44,6 +44,10 @@ _Avoid_: Truncated name, short name
 A lock on a file that the kernel holds for one handle at a time. The kernel frees it when the process of the holder stops, however it stops. It is an exclusive SQLite transaction on the file.
 _Avoid_: Claim (the election uses a file lock as its claim), presence (the mutex uses a file lock as a presence), lock file (a file whose presence is the lock, which stays when its holder dies)
 
+**Handle**:
+An open `FileLock` of a path. It takes the file lock with `tryLock()` and lets it go with `unlock()`, and it stays open for the next `tryLock()`. Two handles in one process exclude each other too (`src/file-lock.test.ts`).
+_Avoid_: Connection (the SQLite database in the handle), descriptor (a file descriptor of the kernel; a close of another descriptor of the file drops the lock)
+
 **File stamp**:
 What the file system says about the file at a path: its device, its inode, its size, and the times of its last write and its last change, to the nanosecond. A write or a new file at the path changes it. A missing file has a stamp of its own.
 _Avoid_: Fingerprint (a hash of the content), version (`@zukhruf/sqlite-data-version` gives a different number), checksum, mtime (one part of the stamp)
