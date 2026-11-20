@@ -81,7 +81,7 @@ FencingToken.parse('0x22'); // null
 
 ## One key, one token source
 
-A token has no name of its key and no name of its token source. Two tokens of different keys, or of different token sources, cannot be compared. A counter in memory and a counter in a file can both give token 7 to two different holders.
+A token has no name of its key and no name of its token source. Two tokens of different keys, or of different token sources, cannot be compared. A token source in memory and a token source in a file can both give token 7 to two different holders.
 
 Thus a fenced resource compares the tokens of one key, from one token source. Give each protected row, file, or object its own key. Give all issuers of that key the same token source.
 
@@ -120,7 +120,7 @@ const token = await tokens.next('product:42');
 
 A counter file can hold text that is not decimal digits. An example is the empty file that `@zukhruf/mutex` 0.2.0 or earlier can leave after a power loss, because those versions did not sync the file to the disk. Then `next` rejects with a `SyntaxError` that names the file, and the file stays as it is. Thus the tokens of a key never start again at 1, and the fenced resource never accepts the writes of a stale holder.
 
-`EpochTokenSource` puts the epoch in the high 32 bits and the counter in the low 32 bits, as ZooKeeper does in its `zxid`. Each token of a newer epoch is higher than each token of an older epoch. A new leader thus outranks all grants of the leader before it. The epoch must be from 0 to 2^31 − 1, so that each token fits a signed 64-bit integer. One epoch gives at most 2^32 − 1 tokens. After that, `next` throws an `EpochExhaustedError`, which is a `RangeError` with the `epoch`. Only a new term, with a higher epoch, gives more tokens. Thus a leader that gets this error must end its term.
+`EpochTokenSource` puts the epoch in the high 32 bits and the counter in the low 32 bits, as ZooKeeper does in its `zxid`. Each token of a newer epoch is higher than each token of an older epoch. A new leader thus outranks all grants of the leader before it. The epoch must be from 0 to 2^31 − 1, so that each token fits a signed 64-bit integer. One epoch gives at most 2^32 − 1 tokens. After that, `next` rejects with an `EpochExhaustedError`, which is a `RangeError` with the `epoch`. Only a new term, with a higher epoch, gives more tokens. Thus a leader that gets this error must end its term.
 
 ## A fenced lease
 
@@ -201,3 +201,12 @@ class EpochExhaustedError extends RangeError {
 ```
 
 `Lease` is the type of `@zukhruf/lease`, and `Clock` is the type of `@zukhruf/async`.
+
+## Documentation
+
+**Decisions**
+
+- [ADR 0001](./docs/adr/0001-a-fencing-token-is-a-number-the-resource-checks.md): a fencing token is a number that the resource checks.
+- [ADR 0002](./docs/adr/0002-a-token-source-reads-the-clock-that-the-caller-gives.md): a token source reads the clock that the caller gives.
+
+**Copied code**: [Code copied in this package](./docs/copied-code.md) records each copy of code in this package, as the Rule of Three asks.
