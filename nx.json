@@ -31,7 +31,9 @@
       "dependsOn": ["lint", "format:check", "..."]
     },
     "test": {
-      "dependsOn": ["...", "build"]
+      "dependsOn": ["...", "build"],
+      "cache": true,
+      "inputs": ["default", "^default", { "runtime": "node --version" }]
     }
   },
   "sync": {

@@ -22,8 +22,14 @@ permissions:
 # nx.json runs 6 tasks at once for the 14-core Mac that the sessions push from.
 # A runner has 4 CPUs (macOS 3), so every nx call here keeps Nx's default of 3:
 # NX_PARALLEL wins over nx.json.
+#
+# Each saved Nx cache holds every task result that Nx keeps, and the repo has
+# 10 GB of Actions cache. Nx drops a result unused for 7 days and, past this
+# size, the least recently used ones; without it the limit is a tenth of the
+# disk (nx/src/native/cache/cache.rs). On the Mac, 349 results take 39 MB.
 env:
   NX_PARALLEL: 3
+  NX_MAX_CACHE_SIZE: 500MB
 
 jobs:
   ci:
@@ -52,11 +58,33 @@ jobs:
           tofu_version: 1.12.3
           tofu_wrapper: false
 
+      # Nx keeps its cache and the database that indexes it in ~/.nx/<workspace>/,
+      # and it reads only the database named after the machine ID
+      # (nx/src/native/db/mod.rs), which a runner image bakes in. The key holds
+      # the ID, so a new image starts a new cache instead of carrying results
+      # that no database indexes.
+      - name: Find the machine ID that names the Nx database
+        id: nx-machine
+        run: echo "id=$(cat /var/lib/dbus/machine-id /etc/machine-id 2> /dev/null | head -n 1 | sha256sum | cut -c 1-16)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore the Nx cache
+        id: nx-cache
+        background: true
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/.nx
+          key: nx-${{ runner.os }}-${{ steps.nx-machine.outputs.id }}-${{ github.sha }}
+          restore-keys: nx-${{ runner.os }}-${{ steps.nx-machine.outputs.id }}-
+
       - name: Set up the workspace
         uses: $/.github/actions/setup-workspace
 
       - name: Find what changed
         uses: $/.github/actions/affected-range
+
+      # Before the first nx command, which opens the database the restore writes.
+      - name: Wait for the Nx cache
+        wait: nx-cache
 
       # The checks of the whole tree run beside the affected targets.
       - name: Check Nx workspace sync
@@ -118,6 +146,17 @@ jobs:
             packages/**/test-results.xml
             apps/**/test-results.xml
 
+      # After the wait for the checks, since readme-table:check is an nx task too.
+      # Only main saves, and a failed or cancelled run saves the results it has:
+      # Nx caches only the tasks that passed (task-orchestrator.js shouldCacheTaskResult).
+      # A run again of the same commit finds its key taken: a cache key is immutable.
+      - name: Save the Nx cache
+        if: always() && github.event_name == 'push' && steps.nx-cache.outputs.cache-primary-key != '' && steps.nx-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ~/.nx
+          key: ${{ steps.nx-cache.outputs.cache-primary-key }}
+
   # A project that drives a facility of macOS, such as launchd, runs all its
   # targets on a macOS runner (docs/adr/0005). The pattern selects every project
   # and then takes the platform:darwin ones back out of the exclusion.
@@ -135,6 +174,22 @@ jobs:
         background: true
         uses: $/.github/actions/setup-zig
 
+      # The same Nx cache restore and save as the ci job, with the Mac's machine
+      # ID: a fix to these steps goes into both jobs (strike 2, #4975).
+      # The database of a Mac is named after its hardware UUID, as ioreg prints it.
+      - name: Find the machine ID that names the Nx database
+        id: nx-machine
+        run: echo "id=$(ioreg -rd1 -c IOPlatformExpertDevice | awk -F '"' '/IOPlatformUUID/ { print $4 }' | shasum -a 256 | cut -c 1-16)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore the Nx cache
+        id: nx-cache
+        background: true
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/.nx
+          key: nx-${{ runner.os }}-${{ steps.nx-machine.outputs.id }}-${{ github.sha }}
+          restore-keys: nx-${{ runner.os }}-${{ steps.nx-machine.outputs.id }}-
+
       - name: Set up the workspace
         uses: $/.github/actions/setup-workspace
 
@@ -143,6 +198,9 @@ jobs:
 
       - name: Wait for Zig
         wait: zig
+
+      - name: Wait for the Nx cache
+        wait: nx-cache
 
       - name: Lint, type check, test and build what changed
         run: npx nx affected -t lint typecheck test test-network build --exclude='*,!tag:platform:darwin'
@@ -159,3 +217,10 @@ jobs:
           path: |
             .nx/nx-profile.json
             packages/**/test-results.xml
+
+      - name: Save the Nx cache
+        if: always() && github.event_name == 'push' && steps.nx-cache.outputs.cache-primary-key != '' && steps.nx-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ~/.nx
+          key: ${{ steps.nx-cache.outputs.cache-primary-key }}
