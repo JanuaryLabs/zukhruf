@@ -168,6 +168,124 @@ This package needed four changes in other packages. All four are done:
 3. `@zukhruf/snapshot-differential` fingerprints bytes (`Uint8Array`, `Buffer`) in a record and in a key. Thus a `BLOB` column can be in `after` and in a key.
 4. `@zukhruf/sqlite-open` opens the read-only connection and throws `UnavailableError`. This package exports the same `UnavailableError` class as `@zukhruf/sqlite-snapshot` and `@zukhruf/sqlite-data-version` (repository ADR 0001, rule 6).
 
+## API
+
+`KeyValue` and `SnapshotState` are the types of `@zukhruf/snapshot-differential`, and `WallClock` is the type of `@zukhruf/async`. The package does not export `WalProgress`, but `Position` and `PositionUpdate` use it.
+
+```ts
+type Key = Readonly<Record<string, KeyValue>>; // the values of the key columns, by column
+type Row = Readonly<Record<string, SQLOutputValue>>; // a row as node:sqlite gives it
+
+type ChangeEvent =
+  | {
+      readonly table: string;
+      readonly op: 'read' | 'insert';
+      readonly key: Key;
+      readonly after: Row;
+    }
+  | {
+      readonly table: string;
+      readonly op: 'update';
+      readonly key: Key;
+      readonly after: Row;
+      readonly changed: readonly [string, ...string[]]; // never empty
+    }
+  | { readonly table: string; readonly op: 'delete'; readonly key: Key }
+  | { readonly table: string; readonly op: 'truncate' };
+
+class Batch implements Iterable<ChangeEvent> {
+  constructor(events: readonly ChangeEvent[]);
+  readonly events: readonly ChangeEvent[];
+  [Symbol.iterator](): Iterator<ChangeEvent>;
+}
+
+class SequencedBatch extends Batch {
+  constructor(events: readonly ChangeEvent[], sequence: number);
+  readonly sequence: number; // the number of the save that keeps the batch
+}
+
+type WatchOptions = {
+  readonly interval: number; // milliseconds between two polls of the data version
+  readonly signal: AbortSignal; // the loop then rejects with signal.reason
+  readonly clock: WallClock; // globalThis in production
+};
+
+type ChangefeedOptions<B extends Batch = Batch> = {
+  readonly position: Position<B>; // the feed owns it, and disposes it
+  readonly start: Start; // until the position is saved once
+};
+
+class Changefeed<B extends Batch = Batch> implements Disposable {
+  constructor(databasePath: string, options: ChangefeedOptions<B>); // UnavailableError, JournalModeError
+  watch(options: WatchOptions): AsyncGenerator<B, void, undefined>; // saves a batch at the next request
+  [Symbol.dispose](): void;
+}
+
+type WalProgress = { readonly salt: string; readonly frames: number }; // not exported
+
+type TablePosition = {
+  readonly keyColumns: readonly string[];
+  readonly columns: readonly string[]; // the columns that the fingerprints hash, in order
+  readonly state: SnapshotState;
+};
+
+type PositionUpdate = {
+  readonly tables: ReadonlyMap<string, TablePosition>;
+  readonly dropped: readonly string[];
+  readonly wal: WalProgress | null; // null: the pass had no WAL
+};
+
+interface Position<B extends Batch = Batch> extends Disposable {
+  batch(events: readonly ChangeEvent[]): B;
+  started(): boolean; // whether a pass saved this position before
+  keyColumns(): ReadonlyMap<string, readonly string[]>;
+  wal(): WalProgress | null;
+  table(table: string): TablePosition;
+  save(update: PositionUpdate): void; // all of it or none of it
+}
+
+class PositionFile implements Position<SequencedBatch> {
+  constructor(path: string); // a missing or empty file: no pass saved it
+}
+
+class PositionInMemory implements Position {}
+
+type KeyedRow = { readonly key: Key; readonly after: Row };
+
+type Table = {
+  readonly name: string;
+  readonly keyColumns: readonly string[];
+  readonly columns: readonly string[]; // the columns of a row's after, in order
+  rows(): Iterable<KeyedRow>;
+};
+
+type TableChanges = {
+  readonly events: ChangeEvent[];
+  readonly state: SnapshotState;
+};
+
+interface Start {
+  table(table: Table): Promise<TableChanges>; // the first pass of one table
+}
+
+class ReadEveryRow implements Start {} // a read for each row
+class Baseline implements Start {} // fingerprints, and no events
+
+class JournalModeError extends Error {
+  constructor(path: string, journalMode: string);
+  readonly path: string;
+  readonly journalMode: string;
+}
+
+// From @zukhruf/sqlite-open:
+class UnavailableError extends Error {
+  constructor(path: string, cause: unknown);
+  readonly path: string;
+}
+class MissingError extends UnavailableError {}
+class DeniedError extends UnavailableError {}
+```
+
 ## Documentation
 
 - [0001 Capture by snapshot differential](./docs/adr/0001-capture-by-snapshot-differential.md)

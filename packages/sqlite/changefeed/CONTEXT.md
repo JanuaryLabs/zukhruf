@@ -20,6 +20,10 @@ _Avoid_: Stream, collection, query
 The values that identify a row of a table: the identity that SQLite makes unique and not `NULL`. It is the declared primary key of a `WITHOUT ROWID` table, and the primary key of a rowid table when it is an `INTEGER PRIMARY KEY` or all its columns are `NOT NULL`. Each other table has the key `{ rowid }`.
 _Avoid_: ID (an ID is one column), rowid (only one kind of key)
 
+**Fingerprint**:
+The hashes of the columns of one row: one hash for each column, in the order of the columns of the table. Each hash is the first 8 bytes of a SHA-256 of the value. The position keeps one fingerprint for each key of each table, and does not keep the row. Two fingerprints of a row tell which columns an update changed.
+_Avoid_: Checksum, digest, row hash (a fingerprint has one hash for each column)
+
 **Shadow table**:
 A table that `PRAGMA table_list` gives with type `shadow`: it holds the data of a virtual table, for example `notes_fts_data` of an FTS5 table. It is internal to the module of the virtual table, and the feed does not read it.
 _Avoid_: Backing table, index table
@@ -39,6 +43,10 @@ _Avoid_: Initial scan, snapshot (a snapshot holds one moment of the database)
 **Pass**:
 One read of all tables in one snapshot. A pass compares the rows of each table with the position, and gives one batch.
 _Avoid_: Scan (the word of `@zukhruf/snapshot-differential` for the rows of one table), sync, poll (a poll reads only the data version)
+
+**Poll**:
+One read of the data version of the database (`DataVersion` of `@zukhruf/sqlite-data-version`). `watch` polls each `interval` milliseconds, and makes a pass only when the data version changed. A poll reads no rows.
+_Avoid_: Pass (a pass reads all tables), scan, tick
 
 **Batch**:
 The change events of one pass (`Batch`). The feed saves the position of a batch when the host asks for the next batch.
