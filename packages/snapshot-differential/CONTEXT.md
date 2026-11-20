@@ -13,11 +13,11 @@ One item of a scan. Its key identifies it.
 _Avoid_: Row (a row is in a destination), document
 
 **Key**:
-The JSON array of the primary key values of a record, in the order of the primary key fields. A key value is a string, a number, a boolean, or bytes. The JSON holds bytes as `{"bytes": "<base64url>"}`.
+The JSON array of the primary key values of a record, in the order of the primary key fields. A key value is a string, a number, a `bigint`, a boolean, or bytes. The JSON holds bytes as `{"bytes": "<base64url>"}` and a `bigint` as `{"bigint": "<digits>"}`.
 _Avoid_: ID (an ID is one primary key field)
 
 **Fingerprint**:
-The SHA-256 of the canonical form of a record: its JSON with sorted object keys, and each bytes value as `#` and its base64url. Equal records have equal fingerprints.
+The SHA-256 of the canonical form of a record: its JSON with sorted object keys, each bytes value as `#` and its base64url, and each `bigint` as its digits and `n`. Equal records have equal fingerprints. The caller can give its own fingerprint with the `fingerprint` option.
 _Avoid_: Hash (a hash can be of anything), version
 
 **Snapshot**:
