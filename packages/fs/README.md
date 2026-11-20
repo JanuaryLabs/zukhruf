@@ -1,8 +1,18 @@
 # @zukhruf/fs
 
-Helpers that write files, a lock on a file that the kernel frees when its holder dies, and a stamp that tells that a file changed. A reader never sees a part of a write. `@zukhruf/mutex` uses them for its lock files, `@zukhruf/fencing` for its fencing counters, and `@zukhruf/election` for the claim and the epoch of each election. `@zukhruf/single-flight` keeps no lock files of its own: its election claims a `FileLock` through `@zukhruf/election`.
+Helpers that write files, a lock on a file that the kernel frees when its holder dies, and a stamp that tells that a file changed. A reader never sees a part of a write. `@zukhruf/mutex` uses them for its lock files, `@zukhruf/fencing` for its fencing counters, and `@zukhruf/election` for the claim and the epoch of each election. `@zukhruf/single-flight` claims a `FileLock` through `@zukhruf/election` for its election. It also holds a `FileLock` of its own for each key, in the file `execution-locks/<SHA-256 of the key>.lock`, and it never deletes these files ([key-locks.ts](../single-flight/src/key-lock/key-locks.ts)).
 
 The words in these documents have one meaning each. See the glossary in [CONTEXT.md](./CONTEXT.md).
+
+## Use it
+
+```sh
+npm install @zukhruf/fs
+```
+
+```ts
+import { FileLock, atomicWrite, durableWrite } from '@zukhruf/fs';
+```
 
 ## Replace a file in one step
 
@@ -47,7 +57,7 @@ durableWrite(path: string, content: string | Uint8Array, options: { clock: Clock
 
 The content is a string or bytes. A `Buffer` is a `Uint8Array`, so a `Buffer` is bytes too. The write puts the bytes at the path with no change.
 
-`mode` sets the POSIX file mode of the new file, for example `0o600` for a file that only its owner can read. The process umask applies to `mode`, as it does for `writeFile`. The write sets `mode` when it creates the draft, because the rename keeps the mode of the draft. Thus the file at the path never has a different mode, not even for a moment. When you do not give `mode`, the file gets the mode that `writeFile` gives a new file. A write never keeps the mode of the file that it replaces.
+`mode` sets the POSIX file mode of the new file, for example `0o600` for a file that only its owner can read. The file gets that mode, whatever the process umask takes away: the write sets `mode` on the draft with `chmod` too, as write-file-atomic 5.0.1 does (#4444, `src/replace-in-one-step.test.ts`). The write sets `mode` on the draft before the rename, because the rename keeps the mode of the draft. Thus the file at the path never has a different mode, not even for a moment. When you do not give `mode`, the file gets the mode that `writeFile` gives a new file, and the umask applies. A write never keeps the mode of the file that it replaces.
 
 ```ts
 import { randomBytes } from 'node:crypto';
@@ -260,3 +270,110 @@ try {
   if (!isErrno(error, 'ENOENT')) throw error;
 }
 ```
+
+## Errors
+
+| Error                   | When                                                                                                                                                                                                                                                                                                                                                                                                       |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `NetworkDirectoryError` | `assertLocalDirectory` rejects with it when the directory is on a network file system. Its `directory` is the directory that you gave, and its `fileSystem` names the file system, for example `'NFS'`.                                                                                                                                                                                                    |
+| `SuppressedError`       | `createExclusive` rejects with it when the create fails and the removal of its draft fails too. Its `suppressed` is the failure of the create, and its `error` is the failure of the removal (`src/create-exclusive.test.ts`).                                                                                                                                                                             |
+| `ENAMETOOLONG`          | A write rejects with this error code when the name of its draft is too long for the file system (see "Keep room for the name of the draft", `src/draft.test.ts`). The removal of a draft that fails with `ENAMETOOLONG`, or with `ENOTDIR` for a parent that is a file, means that no draft is there. Thus `createExclusive` rejects with the error of its write, not with a `SuppressedError` (4494d9be). |
+
+## API
+
+```ts
+type Clock = import('@zukhruf/async').Clock;
+
+function atomicWrite(
+  path: string,
+  content: string | Uint8Array,
+  options: { clock: Clock; mode?: number },
+): Promise<void>;
+function durableWrite(
+  path: string,
+  content: string | Uint8Array,
+  options: { clock: Clock; mode?: number },
+): Promise<void>;
+function createExclusive(
+  path: string,
+  content: string,
+  options: { clock: Clock },
+): Promise<boolean>;
+const draftSuffixLength: number;
+function safeFileName(key: string, longestSuffix: number): string;
+function patiently<T>(
+  operation: () => Promise<T>,
+  options: { clock: Clock },
+): Promise<T>;
+function isErrno(error: unknown, code: string): boolean;
+function assertLocalDirectory(directory: string): Promise<void>;
+
+class NetworkDirectoryError extends Error {
+  readonly directory: string;
+  readonly fileSystem: string;
+}
+
+class FileLock implements Disposable {
+  static open(path: string): FileLock;
+  static check(path: string): 'locked' | 'unlocked' | 'missing';
+  tryLock(): boolean;
+  unlock(): void;
+  [Symbol.dispose](): void;
+}
+
+class FileStamp {
+  readonly path: string;
+  readonly modifiedAt: Date | undefined;
+  static read(path: string): Promise<FileStamp>;
+  static readSync(path: string): FileStamp;
+  equals(other: FileStamp): boolean;
+  toString(): string;
+}
+
+class FileStamps {
+  readonly stamps: readonly FileStamp[];
+  get modifiedAt(): Date | undefined;
+  static read(paths: readonly string[]): Promise<FileStamps>;
+  static readSync(paths: readonly string[]): FileStamps;
+  equals(other: FileStamps): boolean;
+  toString(): string;
+}
+
+interface TemporaryDirectory extends AsyncDisposable {
+  path: string;
+  cleanup: () => Promise<void>;
+}
+interface TemporaryDirectorySync extends Disposable {
+  path: string;
+  cleanup: () => void;
+}
+interface TemporaryDirectoryOptions {
+  parent?: string; // default: os.tmpdir()
+}
+class TemporaryFiles {
+  directory(
+    prefix: string,
+    options?: TemporaryDirectoryOptions,
+  ): Promise<TemporaryDirectory>;
+  directorySync(
+    prefix: string,
+    options?: TemporaryDirectoryOptions,
+  ): TemporaryDirectorySync;
+}
+```
+
+## Documentation
+
+**Recipes**
+
+- [Keep a state file that a crash never corrupts](./docs/recipes/keep-a-state-file-that-a-crash-never-corrupts.md)
+- [Give each test its own temporary directory](./docs/recipes/give-each-test-its-own-temporary-directory.md)
+
+**Decisions**
+
+- [ADR 0001](./docs/adr/0001-the-writes-through-a-draft-are-one-package.md): the writes through a draft are one package.
+- [ADR 0002](./docs/adr/0002-a-file-lock-is-an-exclusive-sqlite-transaction.md): a file lock is an exclusive SQLite transaction.
+- [ADR 0003](./docs/adr/0003-the-content-is-bytes-and-the-caller-sets-the-file-mode-of-the-draft.md): the content is bytes, and the caller sets the file mode of the draft.
+- [ADR 0004](./docs/adr/0004-a-file-stamp-is-the-stat-data-that-git-compares.md): a file stamp is the stat data that git compares.
+- [ADR 0005](./docs/adr/0005-a-write-waits-on-the-clock-that-the-caller-gives.md): a write waits on the clock that the caller gives.
+- [ADR 0006](./docs/adr/0006-a-temporary-directory-retries-its-removal-and-gives-its-real-path.md): a temporary directory retries its removal and gives its real path (superseded in part by [root ADR 0006](../../docs/adr/0006-production-code-and-tests-make-a-temporary-directory-with-temporaryfiles-of-zukhruf-fs.md)).
