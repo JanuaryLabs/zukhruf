@@ -54,7 +54,11 @@ _Avoid_: Listener (sqlite-notify's word for its own object), host, `net.Server` 
 
 **Client**:
 A `net.Socket` that `address.connect` connected. .NET's `NamedPipeClientStream`.
-_Avoid_: Peer, connection
+_Avoid_: Peer
+
+**Connection**:
+A `net.Socket` that a server accepted: `endpoint.listen` gives each one to its `connectionListener`. `server.close()` does not end the connections that are open; the caller ends them. Node's word (the [`'connection'` event](https://nodejs.org/api/net.html#event-connection) of `net.Server`).
+_Avoid_: Client (the socket that `address.connect` connected), session, stream
 
 **Leftover file**:
 A socket file whose server crashed. A connect to it gives `ECONNREFUSED`. `endpoint.listen` removes it. .NET's word ("anything left over").
