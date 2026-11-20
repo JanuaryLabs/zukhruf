@@ -8,7 +8,14 @@ export { NoEviction } from './no-eviction.ts';
 export { OnDemand } from './on-demand.ts';
 export { OrderedReady } from './ordered-ready.ts';
 export { Parallel } from './parallel.ts';
-export { Pool } from './pool.ts';
+export {
+  DisposedError,
+  type Failure,
+  JobCancelledError,
+  JobFailedError,
+  JobNotFoundError,
+} from './errors.ts';
+export { type JobCounts, type JobHandle, Pool } from './pool.ts';
 export { PoolWorkers } from './pool-workers.ts';
 export type { PoolStats } from './pool-stats.ts';
 export { Resources } from './resources.ts';

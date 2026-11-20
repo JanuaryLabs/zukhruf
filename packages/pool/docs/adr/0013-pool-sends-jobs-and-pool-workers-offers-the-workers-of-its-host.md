@@ -1,6 +1,6 @@
 # Pool sends jobs, and PoolWorkers offers the workers of its host
 
-Status: Accepted 2026-11-20 (backlog #3527). Partly built: `PoolWorkers` with `kind`, `store`, `clock`, `create`, `size`, `startup` and `eviction`, and its disposal (2026-11-16), and its `stats` and `ready()` (2026-11-20). `Pool` is not built yet. The clock is a `WallClock`: the store keeps the wall time of each job.
+Status: Accepted 2026-11-20 (backlog #3527). Built: `PoolWorkers` with `kind`, `store`, `clock`, `create`, `size`, `startup` and `eviction`, and its disposal (2026-11-16), its `stats` and `ready()`, and `Pool` with `start`, `handle`, `run` and `stats` (2026-11-20). The clock is a `WallClock`: the store keeps the wall time of each job.
 
 A host has one of two roles, or both. Every host may send jobs. A host that has the worker program may also offer workers, and then it can own them. A context-compiler host on Linux asks for Vision reads but cannot run a Vision helper. Every leading system lets the host choose the role, and most give each role its own object (map tickets 05 and 09):
 

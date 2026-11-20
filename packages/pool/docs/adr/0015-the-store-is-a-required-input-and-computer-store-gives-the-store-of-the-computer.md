@@ -1,6 +1,6 @@
 # The store is a required input, and computerStore gives the store of the computer
 
-Status: Accepted 2026-11-20 (backlog #3527). `computerStore` is built (2026-11-16), with the ledger in `docs/copied-code.md`. `PoolWorkers` takes the path of a SQLite file and opens it, with its folder; a `postgres://` address throws a `TypeError` until [ADR 0025](./0025-many-computers-share-one-postgres-store-and-each-computer-keeps-its-own-owner.md) is built. `Pool` does not take a store yet.
+Status: Accepted 2026-11-20 (backlog #3527). `computerStore` is built (2026-11-16), with the ledger in `docs/copied-code.md`. `PoolWorkers` takes the path of a SQLite file and opens it, with its folder; a `postgres://` address throws a `TypeError` until [ADR 0025](./0025-many-computers-share-one-postgres-store-and-each-computer-keeps-its-own-owner.md) is built. `Pool` takes the same path (2026-11-20), and refuses a `postgres://` address the same way.
 
 Map tickets 04, 05 and 08 said that a pool with no setting finds the store of the computer by itself, in the user's data folder. Map ticket 18 found what that does to a test. A test in elt or context-compiler that builds the `vision` pool sends its jobs to the user's real owner, or becomes the owner of the user's real jobs. A name that only the test uses keeps the jobs apart, but the test still writes to the user's store file.
 

@@ -1,6 +1,6 @@
 # Pool and PoolWorkers take one worker kind
 
-Status: Accepted 2026-11-20 (backlog #3527). `WorkerKind` is built (2026-11-16): its name, revision and rules, the check of its channels and its queue name. `PoolWorkers` takes it, and creates the queue of its revision with its rules. `Pool` does not take it yet.
+Status: Accepted 2026-11-20 (backlog #3527). `WorkerKind` is built (2026-11-16): its name, revision and rules, the check of its channels and its queue name. `PoolWorkers` takes it, and creates the queue of its revision with its rules. `Pool` takes it too (2026-11-20), and identical inputs of an exclusive kind share one job.
 
 A host that only sends must know four things about the jobs (map ticket 16):
 

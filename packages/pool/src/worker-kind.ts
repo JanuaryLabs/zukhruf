@@ -1,9 +1,10 @@
 // Postgres and @zukhruf/sqlite-notify take a channel name shorter than
 // NAMEDATALEN (64) bytes.
 const NAMEDATALEN = 64;
-// The longer of the two channels of a pool (ADR 0018), "<name>.new-job" and
-// "<name>.output", so a name that fits it fits both.
-const LONGER_CHANNEL = 'new-job';
+// The two channels of a pool end in these (ADR 0018). "new-job" is the longer,
+// so a name whose new-job channel fits fits both.
+const NEW_JOB = 'new-job';
+const OUTPUT = 'output';
 
 /** The name, the revision and the job rules of a pool, with the types of its input and its output. */
 export class WorkerKind<Input, Output> {
@@ -25,7 +26,7 @@ export class WorkerKind<Input, Output> {
     retryLimit: number;
     expireInSeconds: number;
   }) {
-    const channel = `${options.name}.${LONGER_CHANNEL}`;
+    const channel = `${options.name}.${NEW_JOB}`;
     if (Buffer.byteLength(channel) >= NAMEDATALEN)
       throw new RangeError(
         `worker kind name too long: its channel "${channel}" must be shorter than ${NAMEDATALEN} bytes`,
@@ -37,4 +38,18 @@ export class WorkerKind<Input, Output> {
     this.expireInSeconds = options.expireInSeconds;
     this.queue = `${options.name}.r${options.revision}`;
   }
+}
+
+/** The channel on which the owner hears of a new job of the kind, with its revision (ADR 0018). */
+export function newJobChannel<Input, Output>(
+  kind: WorkerKind<Input, Output>,
+): string {
+  return `${kind.name}.${NEW_JOB}`;
+}
+
+/** The channel on which each waiting Pool hears of an output of the kind, with the job's id (ADR 0018). */
+export function outputChannel<Input, Output>(
+  kind: WorkerKind<Input, Output>,
+): string {
+  return `${kind.name}.${OUTPUT}`;
 }

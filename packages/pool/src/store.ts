@@ -69,6 +69,19 @@ export class Store implements AsyncDisposable {
     });
   }
 
+  /**
+   * Tells the hosts on the store of news, after its write committed. A wake
+   * only says "read the store", so a notify that fails is a lost wake, which
+   * the backstop finds (ADR 0018): a warning, not a failure of the caller.
+   */
+  tell(channel: string, payload: string): void {
+    try {
+      this.notifications.notify(channel, payload);
+    } catch (error) {
+      warn(error);
+    }
+  }
+
   async [Symbol.asyncDispose](): Promise<void> {
     await this.notifications[Symbol.asyncDispose]();
     await this.queue.stop();
@@ -106,4 +119,15 @@ class Interval {
   clear(): void {
     this.#clock.clearTimeout(this.#timer);
   }
+}
+
+/**
+ * A failure of the store that no caller waits for, as a process warning: the
+ * host goes on, and the next pass, fetch, touch or backstop tries again, as
+ * pg-boss emits the failure of a pass and keeps polling.
+ */
+export function warn(error: unknown): void {
+  process.emitWarning(
+    Error.isError(error) ? error : new Error(String(error), { cause: error }),
+  );
 }

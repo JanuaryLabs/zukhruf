@@ -1,6 +1,6 @@
 # A cancel of a shared job is a leave, and of any other job a drop or a kill
 
-Status: Accepted 2026-11-20 (backlog #3527). Not built.
+Status: Accepted 2026-11-20 (backlog #3527). Built (2026-11-20): the abort of a `run` and `cancel()` of a handle; a leave for a shared job, a drop of a waiting job, and the kill of a running job's worker at the owner's next touch. The cancel of a caller that is gone waits for ADR 0021.
 
 Map ticket 07 decided that a caller's abort cancels its own job: a waiting job is dropped, and the worker of a running job is killed. A worker that serves the whole computer then dies for one caller. For Vision, the next job pays a warm start: about 1.2 s with a compile cache, 60 to 120 s after a helper rebuild (map, Revision 2026-11-13).
 

@@ -1,6 +1,6 @@
 # A job is data, and the worker kind runs it
 
-Status: Accepted 2026-11-20 (backlog #3527). Partly built (2026-11-16): `Worker` has `run(input)`, and `PoolWorkers` runs each job on it with the input of the job's envelope, `{ input }`. `pool.run` is not built yet.
+Status: Accepted 2026-11-20 (backlog #3527). Built: `Worker` has `run(input)`, and `PoolWorkers` runs each job on it with the input of the job's envelope, `{ input }` (2026-11-16); `pool.run` sends the input as a job and resolves with the output that the owner stored (2026-11-20).
 
 `use((worker) => …)` gives the job a function. A function cannot go to another program, so a pool that serves several hosts cannot take one ([ADR 0011](./0011-every-pool-is-a-pool-for-the-computer-and-one-owner-pulls-its-jobs-from-a-store-that-every-host-writes-to.md)).
 

@@ -6,8 +6,12 @@ import type { PoolStats } from './pool-stats.ts';
 import type { Sizing } from './sizing.ts';
 import { type Slot, Slots } from './slots.ts';
 import type { Startup } from './startup.ts';
-import { Store, TOUCH_INTERVAL } from './store.ts';
-import type { WorkerKind } from './worker-kind.ts';
+import { Store, TOUCH_INTERVAL, warn } from './store.ts';
+import {
+  type WorkerKind,
+  newJobChannel,
+  outputChannel,
+} from './worker-kind.ts';
 import type { Worker } from './worker.ts';
 
 // The read of the store that finds the jobs that no wake told of (ADR 0018).
@@ -58,6 +62,13 @@ export class PoolWorkers<Input, Output> implements AsyncDisposable {
   readonly #store: Store;
   readonly #election: SqliteElection;
   readonly #disposed = new AbortController();
+  // Broadcasts when a run ends, the sizing changes, the backstop ends, or a
+  // host tells of a new job of the kind (ADR 0018).
+  readonly #changed = new Cond();
+  // Counts the news of a new job. News that comes while a fetch reads the
+  // store finds no wait on the cond, so the owner compares the count from
+  // before the fetch, as pg-boss's worker checks beenNotified.
+  #heard = 0;
   // Settles when the host stops offering its workers, and fails with the
   // failure that stopped it, if one did.
   readonly #ended: Future<void>;
@@ -86,6 +97,12 @@ export class PoolWorkers<Input, Output> implements AsyncDisposable {
     this.#store = new Store(options.store, options.clock);
     this.#store.queue.on('error', warn);
     this.#store.notifications.on('error', warn);
+    const newJob = newJobChannel(options.kind);
+    this.#store.notifications.on('notification', ({ channel }) => {
+      if (channel !== newJob) return;
+      this.#heard++;
+      this.#changed.broadcast();
+    });
     this.#election = new SqliteElection({
       directory: this.#store.folder,
       claimFile: `${options.kind.name}.claim`,
@@ -119,6 +136,8 @@ export class PoolWorkers<Input, Output> implements AsyncDisposable {
     const stop = this.#disposed.signal;
     try {
       await this.#store.start(this.#kind);
+      // Listens before its first fetch, so a job sent in between is not lost.
+      await this.#store.notifications.listen(newJobChannel(this.#kind));
       while (!stop.aborted) {
         const term = await this.#election.campaign({
           timeout: Infinity,
@@ -138,15 +157,13 @@ export class PoolWorkers<Input, Output> implements AsyncDisposable {
   async #own(term: Term, stop: AbortSignal): Promise<void> {
     const owning = AbortSignal.any([stop, term.signal]);
     const running = new Set<Promise<void>>();
-    // Broadcasts when a run ends, the sizing changes or the backstop ends.
-    const changed = new Cond();
     const slots = new Slots<Worker<Input, Output>>({
       size: this.#size,
       startup: this.#startup,
       eviction: this.#eviction,
       create: this.#create,
       clock: this.#clock,
-      resized: () => changed.broadcast(),
+      resized: () => this.#changed.broadcast(),
     });
     // The jobs that wait for this host's workers wait in the store, so no
     // job waits in the host itself.
@@ -160,6 +177,7 @@ export class PoolWorkers<Input, Output> implements AsyncDisposable {
     try {
       while (!owning.aborted) {
         const free = this.#size.current - running.size;
+        const heard = this.#heard;
         if (free > 0) {
           // A fetch that fails waits for the backstop, as pg-boss's worker
           // polls again after a failed fetch.
@@ -177,15 +195,20 @@ export class PoolWorkers<Input, Output> implements AsyncDisposable {
               .catch(warn)
               .finally(() => {
                 running.delete(run);
-                changed.broadcast();
+                this.#changed.broadcast();
               });
             running.add(run);
           }
         }
-        // A run that ended or a resize during the fetch broadcast before the
-        // rest began to wait, so check its free slots again in the same step.
-        if (this.#size.current - running.size > 0 && backlog) continue;
-        await this.#rest(changed, owning);
+        // A run that ended, a resize or news of a new job during the fetch
+        // broadcast before the rest began to wait, so check the free slots
+        // again in the same step.
+        if (
+          this.#size.current - running.size > 0 &&
+          (backlog || this.#heard !== heard)
+        )
+          continue;
+        await this.#rest(owning);
       }
     } finally {
       await Promise.all(running);
@@ -199,13 +222,13 @@ export class PoolWorkers<Input, Output> implements AsyncDisposable {
   // Waits for the next broadcast, or the end of the ownership. The backstop
   // broadcasts too, so each rest is one wait that a broadcast ends, and no
   // cancelled wait stays on the cond.
-  async #rest(changed: Cond, owning: AbortSignal): Promise<void> {
+  async #rest(owning: AbortSignal): Promise<void> {
     const backstop = this.#clock.setTimeout(
-      () => changed.broadcast(),
+      () => this.#changed.broadcast(),
       BACKSTOP,
     );
     try {
-      await changed.wait({ signal: owning });
+      await this.#changed.wait({ signal: owning });
     } catch (error) {
       if (error !== owning.reason) throw error;
     } finally {
@@ -256,6 +279,9 @@ export class PoolWorkers<Input, Output> implements AsyncDisposable {
             ),
           ),
         );
+      // The store took a job that is gone back itself, so no output waits.
+      if (!('gone' in outcome))
+        this.#store.tell(outputChannel(this.#kind), job.id);
     } finally {
       ended.abort();
       slots.release(slot);
@@ -341,15 +367,4 @@ function failure(error: unknown): { name: string; message: string } {
   return Error.isError(error)
     ? { name: error.name, message: error.message }
     : { name: 'Error', message: String(error) };
-}
-
-/**
- * A failure of the store that no caller waits for, as a process warning: the
- * owner goes on, and the next pass, fetch or touch tries again, as pg-boss
- * emits the failure of a pass and keeps polling.
- */
-function warn(error: unknown): void {
-  process.emitWarning(
-    Error.isError(error) ? error : new Error(String(error), { cause: error }),
-  );
 }

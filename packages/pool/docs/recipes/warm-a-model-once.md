@@ -8,14 +8,21 @@
 
 1. Give the worker a `ready()` that warms the helper up and settles when the model is in memory.
 2. Choose `startup: new LeaderFirst()`.
-3. Wait for `pool.ready()` when the host must know that all workers are warm. A job does not have to wait for it: a job takes a worker that starts.
+3. Wait for `workers.ready()` of the `PoolWorkers` when the host must know that all workers are warm. A job does not have to wait for it: a job takes a worker that starts.
 
 ## The program
 
-A helper compiles the model in 2 seconds when the cache is empty, and loads it in 200 ms when the cache has it. The program warms four workers twice, each time with an empty cache: with `Parallel` and with `LeaderFirst`.
+A helper compiles the model in 2 seconds when the cache is empty, and loads it in 200 ms when the cache has it. The program offers four workers twice, each time with an empty cache and a store of its own: with `Parallel` and with `LeaderFirst`. It waits until the host owns and the four workers are warm.
 
 ```ts title="warm-once.ts"
-import { appendFile, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import {
+  appendFile,
+  mkdtemp,
+  mkdtempDisposable,
+  readFile,
+  rm,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
@@ -27,10 +34,19 @@ import {
   LeaderFirst,
   NoEviction,
   Parallel,
-  Pool,
+  PoolWorkers,
   type Startup,
   type Worker,
+  WorkerKind,
 } from '@zukhruf/pool';
+
+const model = new WorkerKind<unknown, unknown>({
+  name: 'model',
+  revision: 1,
+  policy: 'standard',
+  retryLimit: 0,
+  expireInSeconds: 60,
+});
 
 const [role, cache] = process.argv.slice(2);
 
@@ -85,14 +101,18 @@ if (role === 'helper') {
     const cache = await mkdtemp(join(tmpdir(), 'model-cache-'));
     const start = performance.now();
     {
-      await using pool = new Pool({
+      // A store of its own; a host of the computer gives computerStore(process.env).
+      await using folder = await mkdtempDisposable(join(tmpdir(), 'pool-'));
+      await using workers = new PoolWorkers({
+        kind: model,
+        store: join(folder.path, 'store.sqlite'),
+        clock: globalThis,
         size: new Fixed(4),
         startup,
         eviction: new NoEviction(),
-        clock: globalThis,
         create: () => new ModelWorker(cache),
       });
-      await pool.ready();
+      await workers.ready();
     }
     const seconds = ((performance.now() - start) / 1000).toFixed(1);
     const compiles = (await readFile(join(cache, 'compiles.log'), 'utf8'))
@@ -112,8 +132,8 @@ if (role === 'helper') {
 Output:
 
 ```
-Parallel: 4 of 4 helpers compiled the model, all ready after 2.3 s
-LeaderFirst: 1 of 4 helpers compiled the model, all ready after 2.6 s
+Parallel: 4 of 4 helpers compiled the model, all ready after 2.6 s
+LeaderFirst: 1 of 4 helpers compiled the model, all ready after 2.9 s
 ```
 
 ## What the output shows
@@ -123,7 +143,8 @@ LeaderFirst: 1 of 4 helpers compiled the model, all ready after 2.6 s
 
 ## Things to know
 
-- **The others start when the first worker settles, also when its warm-up fails.** Then each of them may compile the model. The pool starts the first slot again after the back-off ([ADR 0010](../adr/0010-an-eager-pool-starts-a-worker-again-after-its-warm-up-fails.md)).
-- **A worker that the pool starts later does not wait.** A replacement after an exit, or a worker that a sizing that learns tries, starts at once: the first worker settled long before.
-- **Set a time limit for the warm-up in the worker.** The pool waits for `ready()` with no time limit. See [Hold workers only while there is work](./hold-workers-only-while-there-is-work.md).
+- **The others start when the first worker settles, also when its warm-up fails.** Then each of them may compile the model. The owner starts the first slot again after the back-off ([ADR 0010](../adr/0010-an-eager-pool-starts-a-worker-again-after-its-warm-up-fails.md)).
+- **A worker that the owner starts later does not wait.** A replacement after an exit, or a worker that a sizing that learns tries, starts at once: the first worker settled long before.
+- **Set a time limit for the warm-up in the worker.** The owner waits for `ready()` with no time limit. See [Hold workers only while there is work](./hold-workers-only-while-there-is-work.md).
+- **The startup runs when a host owns.** A standby starts no worker, so only the owner's first worker compiles the model on the computer ([ADR 0023](../adr/0023-ownership-moves-only-by-the-owners-own-act-or-its-end-and-a-standby-stays-cold.md)).
 - **Startups**: `OnDemand` starts a worker only when a job needs one, `Parallel` starts all workers together, and `OrderedReady` starts them one after the other. See [Choose when the workers start](../../README.md#choose-when-the-workers-start).

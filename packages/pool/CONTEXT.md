@@ -1,16 +1,16 @@
 # Pool
 
-A pool lends workers to jobs. The pool decides when workers start, how many run, when a worker is replaced, and when an idle worker is evicted.
+One pool of workers for each computer. Every host sends its jobs to the store of the computer, and the owner lends its workers to them. The owner decides when workers start, how many run, when a worker is replaced, and when an idle worker is evicted.
 
 ## Language
+
+**Job**:
+Data: the input of one worker kind, which a caller sends to the store, and the output that the owner writes back. The owner lends one worker to the job until the job ends.
+_Avoid_: Task, request, message
 
 **Worker**:
 A long-lived resource that does one job at a time, such as a coprocess that keeps a model loaded.
 _Avoid_: Process (a worker can be a process, but the pool does not need one), resource, connection
-
-**Job**:
-The work that a caller gives the pool. The pool lends one worker to the job until the job ends.
-_Avoid_: Task (in p-queue a task is a queued function), request
 
 **Lend**:
 The pool gives a worker to one job. Only that job uses the worker until the job ends. The pool lends an idle worker first, from the lowest slot.
@@ -73,16 +73,8 @@ A ready worker that no job has.
 _Avoid_: Free, available
 
 **Stats**:
-The counts of the workers that start, the idle workers, the lent workers, and the jobs that wait for a worker, at the moment of one read.
+The counts of the owner's workers that start, the idle workers, the lent workers, and the jobs that the owner took and that wait for a worker that starts, at the moment of one read. `pool.stats()` counts the jobs of the kind in the store instead.
 _Avoid_: Metrics (a metric is measured over time), status (one value)
-
-## The pool for the computer
-
-Design accepted 2026-11-20, partly built (backlog #3527): `WorkerKind`, `computerStore` and `PoolWorkers` are built, and `Pool` is not. The words above tell what the package does today. The words below are the words of the design in the README section "One pool for the computer" and ADRs 0011 to 0026. When the design is built, they join the list above.
-
-**Job** (in the design):
-Data: the input of one worker kind, which a caller sends to the store, and the output that the owner writes back. The pool still lends one worker to the job until the job ends.
-_Avoid_: Task, request, message
 
 **Host**:
 One running copy of a program that builds the pool. Several hosts on one computer build the same pool.
@@ -113,7 +105,7 @@ The JSON data that a job takes and gives. A file goes by reference, never as byt
 _Avoid_: Payload, arguments, result
 
 **Caller**:
-A host whose `run` waits for a job. The job of a caller is cancelled when the caller's host is gone. A host that only holds a job handle is not a caller.
+A host whose `run` waits for a job. The job of a caller will be cancelled when the caller's host is gone (not built yet, ADR 0021). A host that only holds a job handle is not a caller.
 _Avoid_: Client, sender, requester
 
 **Job handle**:

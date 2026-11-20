@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { type ChildProcess, spawn } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
@@ -20,16 +21,21 @@ import { waitFor } from '@zukhruf/testing/async';
 import { describe, test } from '@zukhruf/testing/node';
 
 import {
+  DisposedError,
   type Eviction,
   Fixed,
   Gradient,
   HillClimbing,
   IdleTimeout,
+  JobCancelledError,
+  JobFailedError,
+  JobNotFoundError,
   LeaderFirst,
   NoEviction,
   OnDemand,
   OrderedReady,
   Parallel,
+  Pool,
   PoolWorkers,
   Resources,
   type Sample,
@@ -185,6 +191,22 @@ class Host implements AsyncDisposable {
   }
 }
 
+/** The kind that each host builds, as the host program does, for a Pool of the test. */
+function hostKind(settings: {
+  retryLimit: number;
+}): WorkerKind<
+  { id: string; ms?: number; fail?: string; hangIn?: number },
+  { host: number; id: string }
+> {
+  return new WorkerKind({
+    name: 'echo',
+    revision: 1,
+    policy: 'standard',
+    retryLimit: settings.retryLimit,
+    expireInSeconds: 60,
+  });
+}
+
 /**
  * The test's own connection to the store, as a host that only sends. On a
  * fake clock it stamps its jobs with the time of the owner's clock.
@@ -253,18 +275,20 @@ describe('PoolWorkers', { concurrency: true }, () => {
     await owner.report(owns, { signal: t.signal });
     await using standby = new Host(store, { workers: 2, retryLimit: 0 });
     await standby.report(constructed, { signal: t.signal });
-    await using sending = await sender(store);
+    await using pool = new Pool({
+      kind: hostKind({ retryLimit: 0 }),
+      store,
+      clock: globalThis,
+    });
+    const ids = ['a', 'b', 'c', 'd', 'e', 'f'];
 
-    for (const id of ['a', 'b', 'c', 'd', 'e', 'f'])
-      await sending.jobs.send(queue, { input: { id, ms: 200 } });
+    const outputs = await Promise.all(
+      ids.map((id) => pool.run({ id, ms: 200 })),
+    );
 
-    const jobs = await settled(t, sending.jobs, 6);
     assert.deepEqual(
-      jobs.map((job) => [job.state, job.output]),
-      jobs.map(({ data }) => [
-        'completed',
-        { output: { host: owner.pid, id: inputOf(data).id } },
-      ]),
+      outputs,
+      ids.map((id) => ({ host: owner.pid, id })),
     );
     assert.deepEqual(standby.reports, [{ constructed: true }]);
   });
@@ -303,21 +327,24 @@ describe('PoolWorkers', { concurrency: true }, () => {
     await using _successor = succeedLastOwner(store);
     await using owner = new Host(store, { workers: 2, retryLimit: 0 });
     await owner.report(owns, { signal: t.signal });
-    await using sending = await sender(store);
+    await using pool = new Pool({
+      kind: hostKind({ retryLimit: 0 }),
+      store,
+      clock: globalThis,
+    });
 
-    await sending.jobs.send(queue, { input: { id: 'done' } });
-    await sending.jobs.send(queue, { input: { id: 'broken', fail: 'boom' } });
+    const [done, broken] = await Promise.allSettled([
+      pool.run({ id: 'done' }),
+      pool.run({ id: 'broken', fail: 'boom' }),
+    ]);
 
-    const jobs = await settled(t, sending.jobs, 2);
-    assert.deepEqual(
-      Object.fromEntries(
-        jobs.map((job) => [inputOf(job.data).id, [job.state, job.output]]),
-      ),
-      {
-        done: ['completed', { output: { host: owner.pid, id: 'done' } }],
-        broken: ['failed', { name: 'Error', message: 'boom' }],
-      },
-    );
+    assert.deepEqual(done, {
+      status: 'fulfilled',
+      value: { host: owner.pid, id: 'done' },
+    });
+    assert.equal(broken.status, 'rejected');
+    assert.ok(broken.reason instanceof JobFailedError);
+    assert.deepEqual(broken.reason.failure, { name: 'Error', message: 'boom' });
   });
 
   test('with Fixed(2), the store never holds more than 2 active jobs, and holds 2 at once', async (t) => {
@@ -327,19 +354,27 @@ describe('PoolWorkers', { concurrency: true }, () => {
     await using _successor = succeedLastOwner(store);
     await using owner = new Host(store, { workers: 2, retryLimit: 0 });
     await owner.report(owns, { signal: t.signal });
+    await using pool = new Pool({
+      kind: hostKind({ retryLimit: 0 }),
+      store,
+      clock: globalThis,
+    });
     await using sending = await sender(store);
 
-    // Each job runs longer than the backstop, so the owner fetches again
-    // while both workers are busy. The second job runs longer than the
-    // first, so one worker becomes free while the other still runs.
-    for (const [id, ms] of [
-      ['a', 1_500],
-      ['b', 2_200],
-      ['c', 1_500],
-      ['d', 1_500],
-      ['e', 1_500],
-    ] as const)
-      await sending.jobs.send(queue, { input: { id, ms } });
+    // The owner hears of each job while both workers are busy, and runs
+    // longer than its backstop. The second job runs longer than the first,
+    // so one worker becomes free while the other still runs.
+    await Promise.all(
+      (
+        [
+          ['a', 1_500],
+          ['b', 2_200],
+          ['c', 1_500],
+          ['d', 1_500],
+          ['e', 1_500],
+        ] as const
+      ).map(([id, ms]) => pool.run({ id, ms })),
+    );
 
     const jobs = await settled(t, sending.jobs, 5);
     // A fetched job is active from its startedOn until its completedOn.
@@ -363,10 +398,12 @@ describe('PoolWorkers', { concurrency: true }, () => {
     await owner.report(owns, { signal: t.signal });
     await using standby = new Host(store, { workers: 1, retryLimit: 1 });
     await standby.report(constructed, { signal: t.signal });
-    await using sending = await sender(store);
-    await sending.jobs.send(queue, {
-      input: { id: 'held', hangIn: owner.pid },
+    await using pool = new Pool({
+      kind: hostKind({ retryLimit: 1 }),
+      store,
+      clock: globalThis,
     });
+    const held = await pool.start({ id: 'held', hangIn: owner.pid });
     await owner.report((report) => 'started' in report, { signal: t.signal });
 
     owner.kill();
@@ -374,11 +411,7 @@ describe('PoolWorkers', { concurrency: true }, () => {
 
     // The job comes back by its heartbeat of 10 s, found by a supervise and
     // monitor pass each second: the defaults of 60 s miss this bound.
-    const [job] = await settled(t, sending.jobs, 1);
-    assert.deepEqual(
-      [job?.state, job?.output],
-      ['completed', { output: { host: standby.pid, id: 'held' } }],
-    );
+    assert.deepEqual(await held.result(), { host: standby.pid, id: 'held' });
   });
 
   test('an owner that disposes finishes its running job, then resigns while its process lives', async (t) => {
@@ -394,24 +427,25 @@ describe('PoolWorkers', { concurrency: true }, () => {
     await owner.report(owns, { signal: t.signal });
     await using standby = new Host(store, { workers: 1, retryLimit: 0 });
     await standby.report(constructed, { signal: t.signal });
-    await using sending = await sender(store);
-    await sending.jobs.send(queue, { input: { id: 'running', ms: 1_000 } });
+    await using pool = new Pool({
+      kind: hostKind({ retryLimit: 0 }),
+      store,
+      clock: globalThis,
+    });
+    const running = await pool.start({ id: 'running', ms: 1_000 });
     await owner.report((report) => 'started' in report, { signal: t.signal });
 
     owner.send('dispose');
     await owner.report((report) => 'disposed' in report, { signal: t.signal });
-    await sending.jobs.send(queue, { input: { id: 'next' } });
 
-    const jobs = await settled(t, sending.jobs, 2);
-    assert.deepEqual(
-      Object.fromEntries(
-        jobs.map((job) => [inputOf(job.data).id, [job.state, job.output]]),
-      ),
-      {
-        running: ['completed', { output: { host: owner.pid, id: 'running' } }],
-        next: ['completed', { output: { host: standby.pid, id: 'next' } }],
-      },
-    );
+    assert.deepEqual(await pool.run({ id: 'next' }), {
+      host: standby.pid,
+      id: 'next',
+    });
+    assert.deepEqual(await running.result(), {
+      host: owner.pid,
+      id: 'running',
+    });
     assert.equal(owner.running, true);
   });
 
@@ -428,26 +462,28 @@ describe('PoolWorkers', { concurrency: true }, () => {
     await owner.report(owns, { signal: t.signal });
     await using standby = new Host(store, { workers: 1, retryLimit: 0 });
     await standby.report(constructed, { signal: t.signal });
+    await using pool = new Pool({
+      kind: hostKind({ retryLimit: 0 }),
+      store,
+      clock: globalThis,
+    });
     await using sending = await sender(store);
-    await sending.jobs.send(queue, { input: { id: 'running', ms: 500 } });
+    const running = await pool.start({ id: 'running', ms: 500 });
     await owner.report((report) => 'started' in report, { signal: t.signal });
 
     owner.send('dispose');
     await standby.report(owns, { signal: t.signal });
-    const [whenOwned] = await sending.jobs.findJobs(queue);
+    const [whenOwned] = await sending.jobs.findJobs(queue, { id: running.id });
     assert.equal(whenOwned?.state, 'completed');
-    await sending.jobs.send(queue, { input: { id: 'next' } });
 
-    const jobs = await settled(t, sending.jobs, 2);
-    assert.deepEqual(
-      Object.fromEntries(
-        jobs.map((job) => [inputOf(job.data).id, [job.state, job.output]]),
-      ),
-      {
-        running: ['completed', { output: { host: owner.pid, id: 'running' } }],
-        next: ['completed', { output: { host: standby.pid, id: 'next' } }],
-      },
-    );
+    assert.deepEqual(await pool.run({ id: 'next' }), {
+      host: standby.pid,
+      id: 'next',
+    });
+    assert.deepEqual(await running.result(), {
+      host: owner.pid,
+      id: 'running',
+    });
     assert.equal(
       owner.reports.some((report) => 'disposed' in report),
       false,
@@ -467,8 +503,7 @@ describe('PoolWorkers', { concurrency: true }, () => {
 });
 
 // The owner in the test process, with real worker processes on the real
-// clock. Until Pool sends jobs (ADR 0019), the test sends them to the store
-// itself, and the owner fetches a new job at its backstop.
+// clock, and a Pool that sends the jobs.
 describe('PoolWorkers lends its workers', { concurrency: true }, () => {
   test('an on-demand owner starts no worker until a job needs one, then reuses it', async (t) => {
     await using folder = await new TemporaryFiles().directory('pool-');
@@ -485,20 +520,16 @@ describe('PoolWorkers lends its workers', { concurrency: true }, () => {
         return worker;
       },
     });
-    await using sending = await sender(store);
+    await using pool = new Pool({ kind: echo(), store, clock: globalThis });
     await workers.ready();
     assert.equal(created.length, 0);
 
-    assert.equal(await ran(t, sending.jobs, 'one'), 'one');
-    assert.equal(await ran(t, sending.jobs, 'two'), 'two');
+    assert.equal(await pool.run('one'), 'one');
+    assert.equal(await pool.run('two'), 'two');
     assert.equal(created.length, 1);
 
     assert.deepEqual(
-      await Promise.all([
-        ran(t, sending.jobs, 'a'),
-        ran(t, sending.jobs, 'b'),
-        ran(t, sending.jobs, 'c'),
-      ]),
+      await Promise.all([pool.run('a'), pool.run('b'), pool.run('c')]),
       ['a', 'b', 'c'],
     );
     assert.equal(created.length, 2);
@@ -579,12 +610,12 @@ describe('PoolWorkers lends its workers', { concurrency: true }, () => {
         return worker;
       },
     });
-    await using sending = await sender(store);
+    await using pool = new Pool({ kind: echo(), store, clock: globalThis });
     await waitFor(() => assert.equal(created.length, 1), {
       signal: t.signal,
       interval: 10,
     });
-    const job = ran(t, sending.jobs, 'during warm-up');
+    const job = pool.run('during warm-up');
     await setTimeout(200);
     assert.equal(created.length, 1, 'no worker may start beside the leader');
 
@@ -596,9 +627,7 @@ describe('PoolWorkers lends its workers', { concurrency: true }, () => {
     process.kill(created[1]!.pid, 'SIGKILL');
     await created[1]!.exited();
     const results = await Promise.all(
-      Array.from({ length: 3 }, (_, index) =>
-        ran(t, sending.jobs, String(index)),
-      ),
+      Array.from({ length: 3 }, (_, index) => pool.run(String(index))),
     );
     assert.deepEqual(results, ['0', '1', '2']);
     assert.equal(created.length, 4);
@@ -620,10 +649,10 @@ describe('PoolWorkers lends its workers', { concurrency: true }, () => {
         return worker;
       },
     });
-    await using sending = await sender(store);
+    await using pool = new Pool({ kind: echo(), store, clock: globalThis });
 
-    await assert.rejects(ran(t, sending.jobs, 'first'), /Echo worker exited/);
-    assert.equal(await ran(t, sending.jobs, 'second'), 'second');
+    await assert.rejects(pool.run('first'), /Echo worker exited/);
+    assert.equal(await pool.run('second'), 'second');
     assert.equal(created.length, 2);
   });
 
@@ -673,9 +702,9 @@ describe('PoolWorkers lends its workers', { concurrency: true }, () => {
         return worker;
       },
     });
-    await using sending = await sender(store);
+    await using pool = new Pool({ kind: echo(), store, clock: globalThis });
     await workers.ready();
-    const run = (text: string) => ran(t, sending.jobs, text);
+    const run = (text: string) => pool.run(text);
     assert.deepEqual(await Promise.all([run('a'), run('b')]), ['a', 'b']);
 
     sizing.current = 1;
@@ -717,15 +746,15 @@ describe('PoolWorkers lends its workers', { concurrency: true }, () => {
         return worker;
       },
     });
-    await using sending = await sender(store);
+    await using pool = new Pool({ kind: echo(), store, clock: globalThis });
     await waitFor(() => assert.equal(created.length, 2), {
       signal: t.signal,
       interval: 10,
     });
     // One at a time, so the store gives the slow and the fast job first.
-    const ids = await Array.fromAsync(
+    const handles = await Array.fromAsync(
       ['sleep 400', 'sleep 50', 'sleep 10', 'sleep 10', 'sleep 10'],
-      (text) => sent(sending.jobs, text),
+      (text) => pool.start(text),
     );
     // The owner fetched the slow and the fast job for its two workers, which
     // warm up until the test releases them, so both jobs start together.
@@ -736,7 +765,7 @@ describe('PoolWorkers lends its workers', { concurrency: true }, () => {
     });
     for (const worker of created) worker.release();
 
-    await Promise.all(ids.map((id) => outputOf(t, sending.jobs, id)));
+    await Promise.all(handles.map((handle) => handle.result()));
     const [, beforeResize, afterResize] = sizing.samples;
     assert.equal(beforeResize!.measurable, false);
     assert.equal(afterResize!.measurable, true);
@@ -757,7 +786,7 @@ describe('PoolWorkers lends its workers', { concurrency: true }, () => {
         return worker;
       },
     });
-    await using sending = await sender(store);
+    await using pool = new Pool({ kind: echo(), store, clock: globalThis });
     await workers.ready();
 
     process.kill(created[0]!.pid, 'SIGKILL');
@@ -767,10 +796,10 @@ describe('PoolWorkers lends its workers', { concurrency: true }, () => {
     });
     await created[2]!.ready();
 
-    assert.deepEqual(
-      await Promise.all([ran(t, sending.jobs, 'a'), ran(t, sending.jobs, 'b')]),
-      ['a', 'b'],
-    );
+    assert.deepEqual(await Promise.all([pool.run('a'), pool.run('b')]), [
+      'a',
+      'b',
+    ]);
     assert.equal(created.length, 3);
   });
 
@@ -796,6 +825,7 @@ describe('PoolWorkers lends its workers', { concurrency: true }, () => {
         return worker;
       },
     });
+    await using pool = new Pool({ kind: echo(), store, clock: globalThis });
     await using sending = await sender(store);
     const until = (stats: object) =>
       waitFor(() => assert.deepEqual(workers.stats, stats), {
@@ -806,10 +836,10 @@ describe('PoolWorkers lends its workers', { concurrency: true }, () => {
 
     // The owner takes two jobs for the workers that start; the third waits in
     // the store, not in the owner.
-    const ids = await Array.fromAsync(['a', 'b', 'c'], (text) =>
-      sent(sending.jobs, text),
+    const handles = await Array.fromAsync(['a', 'b', 'c'], (text) =>
+      pool.start(text),
     );
-    const jobs = ids.map((id) => outputOf(t, sending.jobs, id));
+    const jobs = handles.map((handle) => handle.result());
     try {
       await until({ starting: 2, idle: 0, lent: 0, waiting: 2 });
       assert.deepEqual(
@@ -865,9 +895,9 @@ describe('PoolWorkers lends its workers', { concurrency: true }, () => {
         return worker;
       },
     });
-    await using sending = await sender(store);
+    await using pool = new Pool({ kind: echo(), store, clock: globalThis });
     await workers.ready();
-    const job = ran(t, sending.jobs, 'late');
+    const job = pool.run('late');
     try {
       await waitFor(
         () =>
@@ -916,8 +946,8 @@ describe('PoolWorkers lends its workers', { concurrency: true }, () => {
         return worker;
       },
     });
-    await using sending = await sender(store);
-    assert.equal(await ran(t, sending.jobs, 'one'), 'one');
+    await using pool = new Pool({ kind: echo(), store, clock: globalThis });
+    assert.equal(await pool.run('one'), 'one');
     assert.deepEqual(workers.stats, {
       starting: 0,
       idle: 1,
@@ -1163,11 +1193,11 @@ describe(
           return worker;
         },
       });
-      await using sending = await sender(store, clock);
+      await using pool = new Pool({ kind: echo(), store, clock });
       await workers.ready();
       assert.equal(created.length, 2);
 
-      await Array.fromAsync({ length: 1500 }, () => sent(sending.jobs, 'job'));
+      await Array.fromAsync({ length: 1500 }, () => pool.start('job'));
       await drive(clock, [workers], () => ended === 1500, 60_000);
       assert.ok(
         created.length > 2,
@@ -1212,10 +1242,10 @@ void describe(
           const clock = createClock(Date.now());
           await using folder = await new TemporaryFiles().directory('pool-');
           const store = join(folder.path, 'store.sqlite');
-          await using sending = await sender(store, clock);
+          await using pool = new Pool({ kind: echo(), store, clock });
           const engine = new PQueue({ concurrency: units });
           const created: EchoWorker[] = [];
-          const load = closedLoad(sending.jobs, 16);
+          const load = closedLoad(pool, 16);
           const job = async () => {
             await delay(own, { clock, signal: undefined });
             await engine.add(() => delay(50, { clock, signal: undefined }));
@@ -1277,11 +1307,11 @@ void describe(
           const clock = createClock(Date.now());
           await using folder = await new TemporaryFiles().directory('pool-');
           const store = join(folder.path, 'store.sqlite');
-          await using sending = await sender(store, clock);
+          await using pool = new Pool({ kind: echo(), store, clock });
           const engine = new PQueue({ concurrency: units });
           let thrashing = false;
           const created: EchoWorker[] = [];
-          const load = closedLoad(sending.jobs, 16);
+          const load = closedLoad(pool, 16);
           const job = async () => {
             await delay(own, { clock, signal: undefined });
             await engine.add(() =>
@@ -1381,12 +1411,12 @@ void describe(
           const clock = createClock(Date.now());
           await using folder = await new TemporaryFiles().directory('pool-');
           const store = join(folder.path, 'store.sqlite');
-          await using sending = await sender(store, clock);
+          await using pool = new Pool({ kind: echo(), store, clock });
           const engine = new PQueue({ concurrency: units });
           const created: EchoWorker[] = [];
           const born = new Map<EchoWorker, number>();
           const died = new Map<EchoWorker, number>();
-          const load = closedLoad(sending.jobs, 16);
+          const load = closedLoad(pool, 16);
           const job = async () => {
             await delay(own, { clock, signal: undefined });
             await engine.add(() => delay(50, { clock, signal: undefined }));
@@ -1460,11 +1490,11 @@ void describe(
       const clock = createClock(Date.now());
       await using folder = await new TemporaryFiles().directory('pool-');
       const store = join(folder.path, 'store.sqlite');
-      await using sending = await sender(store, clock);
+      await using pool = new Pool({ kind: echo(), store, clock });
       // Eight units: each worker up to four adds a third of the jobs of three.
       const engine = new PQueue({ concurrency: 8 });
       const created: EchoWorker[] = [];
-      const load = closedLoad(sending.jobs, 16);
+      const load = closedLoad(pool, 16);
       // A job takes a third longer each two seconds of the clock since the
       // test began, as photos follow stickers (ADR 0002): a step that tries
       // four workers measures the jobs of three faster before it and slower
@@ -1522,12 +1552,12 @@ void describe(
       const clock = createClock(Date.now());
       await using folder = await new TemporaryFiles().directory('pool-');
       const store = join(folder.path, 'store.sqlite');
-      await using sending = await sender(store, clock);
+      await using pool = new Pool({ kind: echo(), store, clock });
       // Two units: a third worker adds no jobs, and one worker fewer does
       // worse, so no step changes the size.
       const engine = new PQueue({ concurrency: 2 });
       const tried: number[] = [];
-      const load = closedLoad(sending.jobs, 16);
+      const load = closedLoad(pool, 16);
       const job = () =>
         engine.add(() => delay(50, { clock, signal: undefined }));
       await using owner = lendingOn(clock, store, {
@@ -1590,10 +1620,10 @@ void describe(
           const clock = createClock(Date.now());
           await using folder = await new TemporaryFiles().directory('pool-');
           const store = join(folder.path, 'store.sqlite');
-          await using sending = await sender(store, clock);
+          await using pool = new Pool({ kind: echo(), store, clock });
           const engine = new PQueue({ concurrency: units });
           const created: EchoWorker[] = [];
-          const busy = closedLoad(sending.jobs, 16);
+          const busy = closedLoad(pool, 16);
           const work = busy.work(async () => {
             await delay(own, { clock, signal: undefined });
             await engine.add(() => delay(50, { clock, signal: undefined }));
@@ -1601,7 +1631,7 @@ void describe(
           // One job at a time: no job waits, so no window says how many pay.
           // It starts once the busy load ran all of its jobs, so each run
           // after that is one of its jobs.
-          const trickle = closedLoad(sending.jobs, 1);
+          const trickle = closedLoad(pool, 1);
           const trickling = trickle.work(() =>
             delay(50, { clock, signal: undefined }),
           );
@@ -1668,7 +1698,7 @@ void describe(
           const clock = createClock(Date.now());
           await using folder = await new TemporaryFiles().directory('pool-');
           const store = join(folder.path, 'store.sqlite');
-          await using sending = await sender(store, clock);
+          await using pool = new Pool({ kind: echo(), store, clock });
           const engine = new PQueue({ concurrency: units });
           const created: EchoWorker[] = [];
           // Free memory for eight workers, until other processes take it.
@@ -1678,7 +1708,7 @@ void describe(
             availableParallelism: () => 4,
             availableMemory: () => free,
           };
-          const load = closedLoad(sending.jobs, 16);
+          const load = closedLoad(pool, 16);
           const job = async () => {
             await delay(own, { clock, signal: undefined });
             await engine.add(() => delay(50, { clock, signal: undefined }));
@@ -1728,7 +1758,7 @@ void describe(
         const clock = createClock(Date.now());
         await using folder = await new TemporaryFiles().directory('pool-');
         const store = join(folder.path, 'store.sqlite');
-        await using sending = await sender(store, clock);
+        await using pool = new Pool({ kind: echo(), store, clock });
         // Eight units: every worker up to eight adds as much as the one before.
         const engine = new PQueue({ concurrency: 8 });
         const created: EchoWorker[] = [];
@@ -1738,7 +1768,7 @@ void describe(
           availableParallelism: () => 4,
           availableMemory: () => 3.5 * memoryPerWorker,
         };
-        const load = closedLoad(sending.jobs, 16);
+        const load = closedLoad(pool, 16);
         const job = () =>
           engine.add(() => delay(50, { clock, signal: undefined }));
         await using owner = lendingOn(clock, store, {
@@ -1782,7 +1812,7 @@ void describe(
       const clock = createClock(Date.now());
       await using folder = await new TemporaryFiles().directory('pool-');
       const store = join(folder.path, 'store.sqlite');
-      await using sending = await sender(store, clock);
+      await using pool = new Pool({ kind: echo(), store, clock });
       const engine = new PQueue({ concurrency: 4 });
       const created: EchoWorker[] = [];
       const memoryPerWorker = 2 ** 30;
@@ -1790,7 +1820,7 @@ void describe(
         availableParallelism: () => 4,
         availableMemory: () => 4.5 * memoryPerWorker,
       };
-      const load = closedLoad(sending.jobs, 16);
+      const load = closedLoad(pool, 16);
       const job = async () => {
         await delay(10, { clock, signal: undefined });
         await engine.add(() => delay(50, { clock, signal: undefined }));
@@ -1843,10 +1873,10 @@ describe('PoolWorkers of six owners on one clock', () => {
             await new TemporaryFiles().directory('pool-'),
           );
           const store = join(folder.path, 'store.sqlite');
-          const sending = stack.use(await sender(store, clock));
+          const pool = stack.use(new Pool({ kind: echo(), store, clock }));
           const engine = new PQueue({ concurrency: units });
           const created: { worker: EchoWorker; at: number }[] = [];
-          const load = closedLoad(sending.jobs, 16);
+          const load = closedLoad(pool, 16);
           const job = async () => {
             await delay(own, { clock, signal: undefined });
             await engine.add(() => delay(50, { clock, signal: undefined }));
@@ -1929,8 +1959,9 @@ describe('PoolWorkers of six owners on one clock', () => {
 // The owner on a fake clock replaces the workers that exit, and backs off
 // after an early exit or a failed warm-up. A minute cannot pass in a test:
 // the test moves the timers instead. The clock also runs the owner's
-// backstop, the store's passes and the election, so the tests count the
-// timers of a back-off against a quiet moment.
+// backstop, the passes of the owner's and the Pool's stores, a result's
+// backstop and the election, so the tests count the timers of a back-off
+// against a quiet moment in which no result waits.
 describe('PoolWorkers backs off on a fake clock', { concurrency: true }, () => {
   test('an eager owner waits before it replaces a worker that exits early: 1 s, doubled for each early exit in a row, up to 60 s', async (t) => {
     await using folder = await new TemporaryFiles().directory('pool-');
@@ -1948,7 +1979,7 @@ describe('PoolWorkers backs off on a fake clock', { concurrency: true }, () => {
         return worker;
       },
     });
-    await using sending = await sender(store, clock);
+    await using pool = new Pool({ kind: echo(), store, clock });
     await owner.ready();
 
     for (const wait of [1_000, 2_000, 4_000, 8_000, 16_000, 32_000, 60_000]) {
@@ -1961,9 +1992,11 @@ describe('PoolWorkers backs off on a fake clock', { concurrency: true }, () => {
         { starting: 0, idle: 0, lent: 0, waiting: 0 },
         `the owner still waits at ${wait - 1} ms`,
       );
+      // The passes of the Pool's store end on the clock at the same moment,
+      // and the event loop turns between them, so the worker may be warm.
       await clock.tickAsync(1);
-      assert.equal(owner.stats.starting, 1, `the owner starts at ${wait} ms`);
-      assert.equal(await ranOn(t, clock, owner, sending.jobs, 'up'), 'up');
+      assert.equal(holds(owner), 1, `the owner starts at ${wait} ms`);
+      assert.equal(await pool.run('up'), 'up');
     }
     assert.equal(created.length, 8);
   });
@@ -2057,71 +2090,57 @@ describe('PoolWorkers backs off on a fake clock', { concurrency: true }, () => {
     const store = join(folder.path, 'store.sqlite');
     const clock = createClock(Date.now());
     const created: EchoWorker[] = [];
-    const born: number[] = [];
     await using owner = lendingOn(clock, store, {
       size: new Fixed(1),
       startup: new Parallel(),
       eviction: new NoEviction(),
       create: () => {
         const worker = new EchoWorker();
-        if (created.length === 2) worker.fail();
+        if (created.length === 1) worker.fail();
         else worker.release();
         created.push(worker);
-        born.push(clock.now);
         return worker;
       },
     });
-    await using sending = await sender(store, clock);
+    await using pool = new Pool({ kind: echo(), store, clock });
     await owner.ready();
-    // The owner rests on its backstop once the event loop turns.
+    // The Pool listens once its store started, and the owner rests on its
+    // backstop once the event loop turns.
+    await pool.stats();
     await new Promise((resolve) => setImmediate(resolve));
     const quiet = clock.countTimers();
-    // Two early exits put the slot in a back-off of 2 s, longer than the
-    // owner's backstop of 1 s, at which it fetches the job.
+    // An early exit puts the slot in a back-off of 1 s.
     created[0]!.kill();
     await created[0]!.exited();
-    await clock.tickAsync(1_000);
-    await waitFor(() => assert.equal(owner.stats.idle, 1), {
-      signal: t.signal,
-      interval: 5,
-    });
-    created[1]!.kill();
-    await created[1]!.exited();
-    const backedOff = clock.now;
 
     // The job does not wait out the back-off: it starts a worker now, whose
-    // warm-up fails.
-    await assert.rejects(
-      ranOn(t, clock, owner, sending.jobs, 'now'),
-      /Echo worker exited/,
-    );
-    assert.ok(born[2]! - backedOff < 2_000, 'the job waited out the back-off');
-    assert.equal(created.length, 3);
+    // warm-up fails. A job that waits anyway fails at the limit of the test,
+    // t.signal, since the clock never moves.
+    await assert.rejects(pool.run('now'), /Echo worker exited/);
+    assert.equal(created.length, 2);
     // The owner fails the job in the store, then rests on its backstop again.
     await waitFor(
       () =>
         assert.equal(
           clock.countTimers(),
           quiet + 1,
-          'only the back-off of the third early exit waits',
+          'only the back-off of 2 s waits',
         ),
       { signal: t.signal, interval: 5 },
     );
 
-    // The warm-up failed as soon as it began: the clock waits while a worker
-    // starts. The third early exit in a row waits 4 s.
-    await clock.tickAsync(born[2]! + 3_999 - clock.now);
+    await clock.tickAsync(1_999);
     assert.deepEqual(
       owner.stats,
       { starting: 0, idle: 0, lent: 0, waiting: 0 },
-      'the third early exit in a row waits 4 s',
+      'the second early exit in a row waits 2 s',
     );
     await clock.tickAsync(1);
     await waitFor(() => assert.equal(owner.stats.idle, 1), {
       signal: t.signal,
       interval: 5,
     });
-    assert.equal(created.length, 4);
+    assert.equal(created.length, 3);
   });
 
   test('a job that needs a slot in back-off after a failed warm-up starts its worker at once, and the back-off starts no other', async (t) => {
@@ -2129,46 +2148,43 @@ describe('PoolWorkers backs off on a fake clock', { concurrency: true }, () => {
     const store = join(folder.path, 'store.sqlite');
     const clock = createClock(Date.now());
     const created: EchoWorker[] = [];
-    const born: number[] = [];
     await using owner = lendingOn(clock, store, {
       size: new Fixed(1),
       startup: new Parallel(),
       eviction: new NoEviction(),
       create: () => {
         const worker = new EchoWorker();
-        if (created.length < 2) worker.fail();
+        if (created.length === 0) worker.fail();
         else worker.release();
         created.push(worker);
-        born.push(clock.now);
         return worker;
       },
     });
-    await using sending = await sender(store, clock);
+    await using pool = new Pool({ kind: echo(), store, clock });
     await assert.rejects(owner.ready(), /Echo worker exited/);
-    // Two failed warm-ups put the slot in a back-off of 2 s, longer than the
-    // owner's backstop of 1 s, at which it fetches the job.
+    // A failed warm-up puts the slot in a back-off of 1 s. The Pool listens
+    // once its store started, and the owner rests on its backstop.
+    await pool.stats();
     await waitFor(() => assert.equal(owner.stats.starting, 0), {
       signal: t.signal,
       interval: 5,
     });
+    await new Promise((resolve) => setImmediate(resolve));
     const quiet = clock.countTimers() - 1;
-    await clock.tickAsync(1_000);
-    await created[1]!.exited();
+
+    // The timers do not move, so the job cannot wait out the back-off.
+    assert.equal(await pool.run('now'), 'now');
     await waitFor(
-      () => assert.equal(clock.countTimers(), quiet + 1, 'the back-off waits'),
+      () =>
+        assert.equal(
+          clock.countTimers(),
+          quiet,
+          'the job ended the wait of the back-off',
+        ),
       { signal: t.signal, interval: 5 },
     );
-    const backedOff = clock.now;
-
-    assert.equal(await ranOn(t, clock, owner, sending.jobs, 'now'), 'now');
-    assert.ok(born[2]! - backedOff < 2_000, 'the job waited out the back-off');
-    assert.equal(
-      clock.countTimers(),
-      quiet,
-      'the job ended the wait of the back-off',
-    );
     await clock.tickAsync(60_000);
-    assert.equal(created.length, 3);
+    assert.equal(created.length, 2);
     assert.deepEqual(owner.stats, {
       starting: 0,
       idle: 1,
@@ -2221,18 +2237,12 @@ describe('PoolWorkers backs off on a fake clock', { concurrency: true }, () => {
         return worker;
       },
     });
-    await using sending = await sender(store, clock);
-    await assert.rejects(
-      ranOn(t, clock, owner, sending.jobs, 'first'),
-      /Echo worker exited/,
-    );
+    await using pool = new Pool({ kind: echo(), store, clock });
+    await assert.rejects(pool.run('first'), /Echo worker exited/);
 
     await clock.tickAsync(60_000);
     assert.equal(created.length, 1, 'no worker starts by itself');
-    assert.equal(
-      await ranOn(t, clock, owner, sending.jobs, 'second'),
-      'second',
-    );
+    assert.equal(await pool.run('second'), 'second');
     assert.equal(created.length, 2);
   });
 
@@ -2241,7 +2251,6 @@ describe('PoolWorkers backs off on a fake clock', { concurrency: true }, () => {
     const store = join(folder.path, 'store.sqlite');
     const clock = createClock(Date.now());
     const created: EchoWorker[] = [];
-    const born: number[] = [];
     await using owner = lendingOn(clock, store, {
       size: new Fixed(1),
       startup: new Parallel(),
@@ -2250,24 +2259,13 @@ describe('PoolWorkers backs off on a fake clock', { concurrency: true }, () => {
         const worker = new EchoWorker();
         worker.release();
         created.push(worker);
-        born.push(clock.now);
         return worker;
       },
     });
-    await using sending = await sender(store, clock);
+    await using pool = new Pool({ kind: echo(), store, clock });
     await owner.ready();
-    // Two early exits put the slot in a back-off of 2 s, longer than the
-    // owner's backstop of 1 s, at which it fetches the job.
     created[0]!.kill();
     await created[0]!.exited();
-    await clock.tickAsync(1_000);
-    await waitFor(() => assert.equal(owner.stats.idle, 1), {
-      signal: t.signal,
-      interval: 5,
-    });
-    created[1]!.kill();
-    await created[1]!.exited();
-    const backedOff = clock.now;
     assert.deepEqual(owner.stats, {
       starting: 0,
       idle: 0,
@@ -2275,10 +2273,11 @@ describe('PoolWorkers backs off on a fake clock', { concurrency: true }, () => {
       waiting: 0,
     });
 
-    assert.equal(await ranOn(t, clock, owner, sending.jobs, 'now'), 'now');
-    assert.ok(born[2]! - backedOff < 2_000, 'the job waited out the back-off');
+    // The timers do not move, so the job cannot wait out the back-off. A job
+    // that waits anyway fails at the limit of the test, t.signal.
+    assert.equal(await pool.run('now'), 'now');
     await clock.tickAsync(60_000);
-    assert.equal(created.length, 3);
+    assert.equal(created.length, 2);
     assert.deepEqual(owner.stats, {
       starting: 0,
       idle: 1,
@@ -2336,12 +2335,12 @@ describe('PoolWorkers backs off on a fake clock', { concurrency: true }, () => {
         return worker;
       },
     });
-    await using sending = await sender(store, clock);
+    await using pool = new Pool({ kind: echo(), store, clock });
     await owner.ready();
     created[0]!.kill();
     await created[0]!.exited();
     await clock.tickAsync(1_000);
-    assert.equal(await ranOn(t, clock, owner, sending.jobs, 'up'), 'up');
+    assert.equal(await pool.run('up'), 'up');
 
     // The worker runs ten minutes on the clock.
     await clock.tickAsync(600_000);
@@ -2367,26 +2366,11 @@ describe('PoolWorkers backs off on a fake clock', { concurrency: true }, () => {
         return worker;
       },
     });
-    await using sending = await sender(store, clock);
+    await using pool = new Pool({ kind: echo(), store, clock });
     await owner.ready();
-    const run = (text: string) => ranOn(t, clock, owner, sending.jobs, text);
-    // Three early exits put slot 1 in a back-off of 4 s, longer than the
-    // three runs below, which take up to the owner's backstop of 1 s each,
-    // so the sizing runs the slot again before the back-off would end.
-    for (const [index, wait] of [
-      [1, 1_000],
-      [2, 2_000],
-    ] as const) {
-      created[index]!.kill();
-      await created[index]!.exited();
-      await clock.tickAsync(wait);
-      await waitFor(() => assert.equal(owner.stats.idle, 2), {
-        signal: t.signal,
-        interval: 5,
-      });
-    }
-    created[3]!.kill();
-    await created[3]!.exited();
+    const run = (text: string) => pool.run(text);
+    created[1]!.kill();
+    await created[1]!.exited();
     // Slot 1 backs off: its worker is gone and no new one starts yet.
     assert.deepEqual(owner.stats, {
       starting: 0,
@@ -2402,7 +2386,7 @@ describe('PoolWorkers backs off on a fake clock', { concurrency: true }, () => {
     sizing.kept = 2;
     assert.equal(await run('b'), 'b');
     assert.deepEqual(await Promise.all([run('c'), run('d')]), ['c', 'd']);
-    assert.equal(created.length, 5);
+    assert.equal(created.length, 3);
 
     await clock.tickAsync(60_000);
     assert.deepEqual(owner.stats, {
@@ -2413,13 +2397,13 @@ describe('PoolWorkers backs off on a fake clock', { concurrency: true }, () => {
     });
     // A stray worker would be created a microtask after its slot starts.
     await new Promise((resolve) => setImmediate(resolve));
-    assert.equal(created.length, 5);
+    assert.equal(created.length, 3);
   });
 });
 
 // The owner on a fake clock closes an idle worker that its eviction lets go.
-// It fetches a job at its backstop of 1 s, so the idle timeouts last 5 s,
-// and a job comes before its worker's idle timeout ends.
+// A Pool on the same clock sends the jobs, and the owner hears of each at
+// once, so a job runs while the clock stands still.
 describe('PoolWorkers evicts on a fake clock', { concurrency: true }, () => {
   test('an idle worker closes once its idle timeout passes, and not 1 ms sooner, and the stats then count it nowhere', async () => {
     await using folder = await new TemporaryFiles().directory('pool-');
@@ -2430,7 +2414,7 @@ describe('PoolWorkers evicts on a fake clock', { concurrency: true }, () => {
     await using owner = lendingOn(clock, join(folder.path, 'store.sqlite'), {
       size: new Fixed(1),
       startup: new Parallel(),
-      eviction: new IdleTimeout({ after: 5_000 }),
+      eviction: new IdleTimeout({ after: 1_000 }),
       create: () => {
         const worker = new EchoWorker();
         worker.release();
@@ -2440,7 +2424,7 @@ describe('PoolWorkers evicts on a fake clock', { concurrency: true }, () => {
     });
     await owner.ready();
 
-    await clock.tickAsync(4_999);
+    await clock.tickAsync(999);
     assert.deepEqual(owner.stats, {
       starting: 0,
       idle: 1,
@@ -2469,7 +2453,7 @@ describe('PoolWorkers evicts on a fake clock', { concurrency: true }, () => {
     await using owner = lendingOn(clock, store, {
       size: new Fixed(1),
       startup: new Parallel(),
-      eviction: new IdleTimeout({ after: 5_000 }),
+      eviction: new IdleTimeout({ after: 1_000 }),
       create: () => {
         const worker = new Held(() => Promise.resolve(), clock, ends);
         worker.release();
@@ -2477,16 +2461,17 @@ describe('PoolWorkers evicts on a fake clock', { concurrency: true }, () => {
         return worker;
       },
     });
-    await using sending = await sender(store, clock);
+    await using pool = new Pool({ kind: echo(), store, clock });
     await owner.ready();
-    const first = clock.now + 5_000;
-    // The owner rests on its backstop once the event loop turns.
+    const first = clock.now + 1_000;
+    // The Pool listens once its store started, and the owner rests on its
+    // backstop once the event loop turns.
+    await pool.stats();
     await new Promise((resolve) => setImmediate(resolve));
     const quiet = clock.countTimers();
 
-    // The job comes at the owner's next backstop, before 5 s.
-    await clock.tickAsync(3_999);
-    assert.equal(await ranOn(t, clock, owner, sending.jobs, 'busy'), 'busy');
+    await clock.tickAsync(999);
+    assert.equal(await pool.run('busy'), 'busy');
     // The worker idles again before the first idle timeout would end. As many
     // timers wait as before the job: the job stopped the first idle timeout,
     // and its end started one in its place.
@@ -2507,8 +2492,8 @@ describe('PoolWorkers evicts on a fake clock', { concurrency: true }, () => {
       'the first idle timeout evicted the worker',
     );
 
-    // The end of the job started a new idle timeout of 5 s.
-    await clock.tickAsync(ends[0]! + 4_999 - clock.now);
+    // The end of the job started a new idle timeout of 1 s.
+    await clock.tickAsync(ends[0]! + 999 - clock.now);
     assert.deepEqual(owner.stats, {
       starting: 0,
       idle: 1,
@@ -2537,7 +2522,7 @@ describe('PoolWorkers evicts on a fake clock', { concurrency: true }, () => {
     await using owner = lendingOn(clock, store, {
       size: new Fixed(1),
       startup: new Parallel(),
-      eviction: new IdleTimeout({ after: 5_000 }),
+      eviction: new IdleTimeout({ after: 1_000 }),
       create: () => {
         const worker = new Held(() => gate.wait(), clock, ends);
         worker.release();
@@ -2545,12 +2530,11 @@ describe('PoolWorkers evicts on a fake clock', { concurrency: true }, () => {
         return worker;
       },
     });
-    await using sending = await sender(store, clock);
+    await using pool = new Pool({ kind: echo(), store, clock });
     await owner.ready();
-    const deadline = clock.now + 5_000;
-    const id = await sent(sending.jobs, 'held');
+    const deadline = clock.now + 1_000;
+    const held = await pool.start('held');
     try {
-      await driveFor(clock, [owner], 1_000);
       await waitFor(() => assert.equal(owner.stats.lent, 1), {
         signal: t.signal,
         interval: 5,
@@ -2565,10 +2549,10 @@ describe('PoolWorkers evicts on a fake clock', { concurrency: true }, () => {
       });
     } finally {
       gate.open();
-      assert.equal(await outputOf(t, sending.jobs, id), 'held');
+      assert.equal(await held.result(), 'held');
     }
 
-    await clock.tickAsync(ends[0]! + 4_999 - clock.now);
+    await clock.tickAsync(ends[0]! + 999 - clock.now);
     assert.deepEqual(owner.stats, {
       starting: 0,
       idle: 1,
@@ -2594,7 +2578,7 @@ describe('PoolWorkers evicts on a fake clock', { concurrency: true }, () => {
       await using owner = lendingOn(clock, store, {
         size: new Fixed(2),
         startup,
-        eviction: new IdleTimeout({ after: 5_000 }),
+        eviction: new IdleTimeout({ after: 1_000 }),
         create: () => {
           const worker = new EchoWorker();
           worker.release();
@@ -2602,10 +2586,10 @@ describe('PoolWorkers evicts on a fake clock', { concurrency: true }, () => {
           return worker;
         },
       });
-      await using sending = await sender(store, clock);
+      await using pool = new Pool({ kind: echo(), store, clock });
       await owner.ready();
 
-      await clock.tickAsync(5_000);
+      await clock.tickAsync(1_000);
       await Promise.all(created.map((worker) => worker.exited()));
       await clock.tickAsync(60_000);
       assert.equal(created.length, 2, `${startup.constructor.name} replaced`);
@@ -2616,7 +2600,9 @@ describe('PoolWorkers evicts on a fake clock', { concurrency: true }, () => {
         waiting: 0,
       });
 
-      assert.equal(await ranOn(t, clock, owner, sending.jobs, 'now'), 'now');
+      // The timers do not move, so a job that waits for a back-off fails at
+      // the limit of the test, t.signal.
+      assert.equal(await pool.run('now'), 'now');
       assert.equal(created.length, 3);
     }
   });
@@ -2679,7 +2665,7 @@ describe('PoolWorkers evicts on a fake clock', { concurrency: true }, () => {
     await using owner = lendingOn(clock, store, {
       size: sizing,
       startup: new Parallel(),
-      eviction: new IdleTimeout({ after: 5_000 }),
+      eviction: new IdleTimeout({ after: 1_000 }),
       create: () => {
         const worker = new Held(
           (text) => (text === 'held' ? gate.wait() : Promise.resolve()),
@@ -2691,30 +2677,29 @@ describe('PoolWorkers evicts on a fake clock', { concurrency: true }, () => {
         return worker;
       },
     });
-    await using sending = await sender(store, clock);
+    await using pool = new Pool({ kind: echo(), store, clock });
     await owner.ready();
-    const run = (text: string) => ranOn(t, clock, owner, sending.jobs, text);
+    const run = (text: string) => pool.run(text);
 
     sizing.current = 1;
     assert.equal(await run('a'), 'a');
     // A job holds the worker the owner runs, so only the kept one is idle.
-    const id = await sent(sending.jobs, 'held');
+    const held = await pool.start('held');
     try {
-      await driveFor(clock, [owner], 1_000);
       await waitFor(() => assert.equal(owner.stats.lent, 1), {
         signal: t.signal,
         interval: 5,
       });
-      await clock.tickAsync(10_000);
+      await clock.tickAsync(5_000);
       assert.equal(created[1]!.dead, false, 'the kept worker was evicted');
     } finally {
       gate.open();
-      assert.equal(await outputOf(t, sending.jobs, id), 'held');
+      assert.equal(await held.result(), 'held');
     }
 
     sizing.current = 2;
     assert.equal(await run('b'), 'b');
-    await clock.tickAsync(ends.at(-1)! + 4_999 - clock.now);
+    await clock.tickAsync(ends.at(-1)! + 999 - clock.now);
     assert.deepEqual(owner.stats, {
       starting: 0,
       idle: 2,
@@ -2758,12 +2743,12 @@ describe('PoolWorkers evicts on a fake clock', { concurrency: true }, () => {
         return worker;
       },
     });
-    await using sending = await sender(store);
+    await using pool = new Pool({ kind: echo(), store, clock: globalThis });
     await owner.ready();
     assert.equal(signals.length, 1);
     assert.equal(signals[0]!.aborted, false);
 
-    assert.equal(await ran(t, sending.jobs, 'busy'), 'busy');
+    assert.equal(await pool.run('busy'), 'busy');
     assert.deepEqual(taken, [true], 'a job took the worker');
     assert.equal(signals.length, 2);
     assert.equal(signals[1]!.aborted, false);
@@ -2790,7 +2775,7 @@ describe('PoolWorkers evicts on a fake clock', { concurrency: true }, () => {
         return worker;
       },
     });
-    await using sending = await sender(store, clock);
+    await using pool = new Pool({ kind: echo(), store, clock });
     await owner.ready();
     // An early exit starts the back-off.
     created[0]!.kill();
@@ -2803,7 +2788,7 @@ describe('PoolWorkers evicts on a fake clock', { concurrency: true }, () => {
 
     await clock.tickAsync(660_000);
     await created[1]!.exited();
-    assert.equal(await ranOn(t, clock, owner, sending.jobs, 'again'), 'again');
+    assert.equal(await pool.run('again'), 'again');
 
     created[2]!.kill();
     await created[2]!.exited();
@@ -2839,30 +2824,26 @@ describe('PoolWorkers lends in order', { concurrency: true }, () => {
             return worker;
           },
         });
-        await using sending = await sender(store, clock);
+        await using pool = new Pool({ kind: echo(), store, clock });
         await owner.ready();
         // Two jobs hold both workers. The first job ends, and the eviction lets
         // its idle worker go while the second job holds the other one.
         // A job of the kind runs at most 60 s, so the idle timeout lasts 30 s.
-        const ids = await Array.fromAsync(['first', 'second'], (text) =>
-          sent(sending.jobs, text),
+        const jobs = await Array.fromAsync(['first', 'second'], (text) =>
+          pool.start(text),
         );
-        await driveFor(clock, [owner], 1_000);
         await waitFor(() => assert.equal(owner.stats.lent, 2), {
           signal: st.signal,
           interval: 5,
         });
         first.open();
-        await outputOf(st, sending.jobs, ids[0]!);
+        await jobs[0]!.result();
         await clock.tickAsync(30_000);
         await created[0]!.exited();
         second.open();
-        await outputOf(st, sending.jobs, ids[1]!);
+        await jobs[1]!.result();
 
-        assert.equal(
-          await ranOn(st, clock, owner, sending.jobs, 'pid'),
-          String(created[1]!.pid),
-        );
+        assert.equal(await pool.run('pid'), String(created[1]!.pid));
         assert.equal(created.length, 2);
       },
     );
@@ -2882,18 +2863,15 @@ describe('PoolWorkers lends in order', { concurrency: true }, () => {
           return worker;
         },
       });
-      await using sending = await sender(store);
-      assert.deepEqual(
-        await Promise.all([
-          ran(st, sending.jobs, 'a'),
-          ran(st, sending.jobs, 'b'),
-        ]),
-        ['a', 'b'],
-      );
+      await using pool = new Pool({ kind: echo(), store, clock: globalThis });
+      assert.deepEqual(await Promise.all([pool.run('a'), pool.run('b')]), [
+        'a',
+        'b',
+      ]);
       created[0]!.kill();
       await created[0]!.exited();
 
-      assert.equal(await ran(st, sending.jobs, 'pid'), String(created[1]!.pid));
+      assert.equal(await pool.run('pid'), String(created[1]!.pid));
       assert.equal(created.length, 2);
     });
 
@@ -2913,25 +2891,13 @@ describe('PoolWorkers lends in order', { concurrency: true }, () => {
           return worker;
         },
       });
-      await using sending = await sender(store, clock);
+      await using pool = new Pool({ kind: echo(), store, clock });
       await owner.ready();
-      // Two early exits put slot 0 in a back-off of 2 s, longer than the
-      // owner's backstop of 1 s, at which it fetches the job.
       created[0]!.kill();
       await created[0]!.exited();
-      await clock.tickAsync(1_000);
-      await waitFor(() => assert.equal(owner.stats.idle, 2), {
-        signal: st.signal,
-        interval: 5,
-      });
-      created[2]!.kill();
-      await created[2]!.exited();
 
-      assert.equal(
-        await ranOn(st, clock, owner, sending.jobs, 'pid'),
-        String(created[1]!.pid),
-      );
-      assert.equal(created.length, 3);
+      assert.equal(await pool.run('pid'), String(created[1]!.pid));
+      assert.equal(created.length, 2);
     });
 
     await t.test('a slot whose worker still warms up', async (st) => {
@@ -2949,17 +2915,14 @@ describe('PoolWorkers lends in order', { concurrency: true }, () => {
           return worker;
         },
       });
-      await using sending = await sender(store);
+      await using pool = new Pool({ kind: echo(), store, clock: globalThis });
       try {
         await waitFor(() => assert.ok(owner.stats.idle > 0), {
           signal: st.signal,
           interval: 10,
         });
 
-        assert.equal(
-          await ran(st, sending.jobs, 'pid'),
-          String(created[1]!.pid),
-        );
+        assert.equal(await pool.run('pid'), String(created[1]!.pid));
         assert.equal(created.length, 2);
       } finally {
         created[0]!.release();
@@ -2972,12 +2935,10 @@ describe('PoolWorkers lends in order', { concurrency: true }, () => {
     const store = join(folder.path, 'store.sqlite');
     const clock = createClock(Date.now());
     const created: EchoWorker[] = [];
-    // The owner fetches each job at its backstop of 1 s, so the idle timeout
-    // lasts 5 s and the jobs come every 2 to 3 s.
     await using owner = lendingOn(clock, store, {
       size: new Fixed(3),
       startup: new Parallel(),
-      eviction: new IdleTimeout({ after: 5_000 }),
+      eviction: new IdleTimeout({ after: 1_000 }),
       create: () => {
         const worker = new Pid({});
         worker.release();
@@ -2985,15 +2946,12 @@ describe('PoolWorkers lends in order', { concurrency: true }, () => {
         return worker;
       },
     });
-    await using sending = await sender(store, clock);
+    await using pool = new Pool({ kind: echo(), store, clock });
     await owner.ready();
 
     for (let job = 0; job < 4; job++) {
-      await clock.tickAsync(2_000);
-      assert.equal(
-        await ranOn(t, clock, owner, sending.jobs, 'pid'),
-        String(created[0]!.pid),
-      );
+      await clock.tickAsync(500);
+      assert.equal(await pool.run('pid'), String(created[0]!.pid));
     }
     await Promise.all([created[1]!.exited(), created[2]!.exited()]);
     assert.deepEqual(owner.stats, {
@@ -3011,15 +2969,11 @@ describe('PoolWorkers lends in order', { concurrency: true }, () => {
     const store = join(folder.path, 'store.sqlite');
     const clock = createClock(Date.now());
     const created: EchoWorker[] = [];
-    let started = false;
-    const ends: number[] = [];
     // The job kills its own worker, as a job with its own time limit does.
     class SelfEnding extends EchoWorker {
       override async run(text: string): Promise<string> {
-        started = true;
         this.kill();
         await this.exited();
-        ends.push(clock.now);
         return text;
       }
     }
@@ -3034,22 +2988,21 @@ describe('PoolWorkers lends in order', { concurrency: true }, () => {
         return worker;
       },
     });
-    await using sending = await sender(store, clock);
+    await using pool = new Pool({ kind: echo(), store, clock });
     await owner.ready();
 
-    // The clock moves until the owner fetches the job, and then stands still.
-    const id = await sent(sending.jobs, 'done');
-    await drive(clock, [owner], () => started, 2_000);
-    assert.equal(await outputOf(t, sending.jobs, id), 'done');
-    await clock.tickAsync(ends[0]! + 999 - clock.now);
+    assert.equal(await pool.run('done'), 'done');
+    await clock.tickAsync(999);
     assert.deepEqual(owner.stats, {
       starting: 0,
       idle: 0,
       lent: 0,
       waiting: 0,
     });
+    // The passes of the Pool's store end on the clock at the same moment,
+    // and the event loop turns between them, so the worker may be warm.
     await clock.tickAsync(1);
-    assert.equal(owner.stats.starting, 1, 'the owner starts at 1 s');
+    assert.equal(holds(owner), 1, 'the owner starts at 1 s');
     // The worker is created a microtask after its slot starts.
     await new Promise((resolve) => setImmediate(resolve));
     assert.equal(created.length, 2);
@@ -3080,35 +3033,28 @@ describe('PoolWorkers lends in order', { concurrency: true }, () => {
         return worker;
       },
     });
-    await using sending = await sender(store, clock);
+    await using pool = new Pool({ kind: echo(), store, clock });
     await owner.ready();
-    // An early exit of the first worker first, so that the one after it puts
-    // the first slot in a back-off of 2 s, longer than the owner's backstop
-    // of 1 s, at which it fetches the job.
-    created[0]!.kill();
-    await created[0]!.exited();
-    await clock.tickAsync(1_000);
-    await waitFor(() => assert.equal(owner.stats.idle, 2), {
+    // A job holds the first worker while the eviction lets the idle second
+    // one go, which leaves its slot empty.
+    const held = await pool.start('hang');
+    await waitFor(() => assert.ok(started, 'the job runs'), {
       signal: t.signal,
       interval: 5,
     });
-    // A job holds the first slot's worker while the eviction lets the idle
-    // second one go, which leaves its slot empty.
-    const held = await sent(sending.jobs, 'hang');
-    await drive(clock, [owner], () => started, 2_000);
     await clock.tickAsync(30_000);
     await created[1]!.exited();
-    // An early exit during the job puts the first slot in a back-off once the
-    // job ends.
-    created[2]!.kill();
-    await assert.rejects(outputOf(t, sending.jobs, held), /Echo worker exited/);
+    // An early exit during the job puts the first slot in a back-off of 1 s
+    // once the job ends.
+    created[0]!.kill();
+    await assert.rejects(held.result(), /Echo worker exited/);
 
-    assert.equal(await ranOn(t, clock, owner, sending.jobs, 'empty'), 'empty');
-    assert.equal(created.length, 4);
-    await clock.tickAsync(2_000);
+    assert.equal(await pool.run('empty'), 'empty');
+    assert.equal(created.length, 3);
+    await clock.tickAsync(1_000);
     // The worker is created a microtask after its slot starts.
     await new Promise((resolve) => setImmediate(resolve));
-    assert.equal(created.length, 5, 'the back-off starts its own worker');
+    assert.equal(created.length, 4, 'the back-off starts its own worker');
   });
 });
 
@@ -3131,7 +3077,6 @@ describe('PoolWorkers when its store fails', () => {
         return worker;
       },
     });
-    await using sending = await sender(store);
     await owner.ready();
     const warnings: Error[] = [];
     const warned = Promise.withResolvers<void>();
@@ -3147,7 +3092,9 @@ describe('PoolWorkers when its store fails', () => {
       await untilAborted(warned.promise, t.signal);
       holder.exec('ROLLBACK');
 
-      assert.equal(await ran(t, sending.jobs, 'after'), 'after');
+      // Built once the lock ends, so only the owner's store meets the lock.
+      await using pool = new Pool({ kind: echo(), store, clock: globalThis });
+      assert.equal(await pool.run('after'), 'after');
       assert.ok(warnings.length > 0);
     } finally {
       if (holder.isTransaction) holder.exec('ROLLBACK');
@@ -3180,9 +3127,14 @@ describe('PoolWorkers when its store fails', () => {
         return worker;
       },
     });
-    await using sending = await sender(store);
     await owner.ready();
-    const id = await sent(sending.jobs, 'kept');
+    // The sender ends before the lock, as a program that started the job and
+    // exited, so only the owner's store meets the lock.
+    let kept: string;
+    {
+      await using pool = new Pool({ kind: echo(), store, clock: globalThis });
+      ({ id: kept } = await pool.start('kept'));
+    }
     await waitFor(() => assert.ok(started > 0, 'the job runs'), {
       signal: t.signal,
       interval: 10,
@@ -3210,8 +3162,9 @@ describe('PoolWorkers when its store fails', () => {
       // fail the job before its worker answers, as pg-boss does when a
       // heartbeat lapses. Either way the worker stays, and runs the next job.
       gate.open();
-      await Promise.allSettled([outputOf(t, sending.jobs, id)]);
-      assert.equal(await ran(t, sending.jobs, 'next'), 'next');
+      await using pool = new Pool({ kind: echo(), store, clock: globalThis });
+      await Promise.allSettled([pool.handle(kept).result()]);
+      assert.equal(await pool.run('next'), 'next');
       assert.equal(created.length, 1, 'the owner killed the worker of the job');
     } finally {
       gate.open();
@@ -3245,9 +3198,9 @@ describe('PoolWorkers when its store fails', () => {
         return worker;
       },
     });
-    await using sending = await sender(store);
+    await using pool = new Pool({ kind: echo(), store, clock: globalThis });
     await owner.ready();
-    const id = await sent(sending.jobs, 'lapsed');
+    const lapsed = await pool.start('lapsed');
     await waitFor(() => assert.equal(owner.stats.lent, 1), {
       signal: t.signal,
       interval: 10,
@@ -3270,8 +3223,15 @@ describe('PoolWorkers when its store fails', () => {
 
       // No owner touches the job any more, so its heartbeat of 10 s lapses
       // and the store fails it, as the kind runs a job only once.
-      await assert.rejects(outputOf(t, sending.jobs, id));
-      assert.equal(await ran(t, sending.jobs, 'next'), 'next');
+      await assert.rejects(lapsed.result(), (error) => {
+        assert.ok(error instanceof JobFailedError);
+        assert.deepEqual(error.failure, {
+          name: 'Error',
+          message: 'job heartbeat timeout',
+        });
+        return true;
+      });
+      assert.equal(await pool.run('next'), 'next');
     } finally {
       gate.open();
       if (holder.isTransaction) holder.exec('ROLLBACK');
@@ -3279,6 +3239,683 @@ describe('PoolWorkers when its store fails', () => {
     }
   });
 });
+
+// The Pool that sends the jobs, beside the PoolWorkers that run them.
+describe(
+  'Pool sends jobs and waits for their outputs',
+  { concurrency: true },
+  () => {
+    test('a run aborted while its job runs kills only its worker at the next touch, and the next job takes the idle worker', async (t) => {
+      await using folder = await new TemporaryFiles().directory('pool-');
+      const store = join(folder.path, 'store.sqlite');
+      const created: EchoWorker[] = [];
+      await using owner = lending(store, {
+        size: new Fixed(2),
+        startup: new Parallel(),
+        eviction: new NoEviction(),
+        create: () => {
+          const worker = new EchoWorker();
+          worker.release();
+          created.push(worker);
+          return worker;
+        },
+      });
+      await using pool = new Pool({ kind: echo(), store, clock: globalThis });
+      await owner.ready();
+      const stop = new AbortController();
+      const reason = new Error('Stop this job');
+      const hung = pool.run('hang', { signal: stop.signal });
+      // The other job ends on the other worker while the first one runs.
+      assert.equal(await pool.run('other'), 'other');
+      assert.deepEqual(owner.stats, {
+        starting: 0,
+        idle: 1,
+        lent: 1,
+        waiting: 0,
+      });
+
+      stop.abort(reason);
+      await assert.rejects(hung, (error) => error === reason);
+      // The owner learns of the cancel at its next touch, 5 s on.
+      await waitFor(
+        () =>
+          assert.equal(
+            created.filter((worker) => worker.dead).length,
+            1,
+            'the owner kills the worker of the cancelled job',
+          ),
+        { signal: t.signal, interval: 50 },
+      );
+      assert.equal(created[0]!.dead, true);
+      assert.equal(created[1]!.dead, false);
+
+      assert.equal(await pool.run('next'), 'next');
+      assert.equal(created.length, 2);
+    });
+
+    test('a run aborted before its turn never runs', async (t) => {
+      await using folder = await new TemporaryFiles().directory('pool-');
+      const store = join(folder.path, 'store.sqlite');
+      const first = new Latch();
+      const ran: string[] = [];
+      class Recording extends EchoWorker {
+        override async run(text: string): Promise<string> {
+          ran.push(text);
+          if (text === 'busy') await first.wait();
+          return super.run(text);
+        }
+      }
+      await using owner = lending(store, {
+        size: new Fixed(1),
+        startup: new Parallel(),
+        eviction: new NoEviction(),
+        create: () => {
+          const worker = new Recording();
+          worker.release();
+          return worker;
+        },
+      });
+      await using pool = new Pool({ kind: echo(), store, clock: globalThis });
+      await owner.ready();
+      const busy = pool.run('busy');
+      await waitFor(() => assert.deepEqual(ran, ['busy']), {
+        signal: t.signal,
+        interval: 10,
+      });
+      const stop = new AbortController();
+      const queued = pool.run('queued', { signal: stop.signal });
+
+      stop.abort();
+      await assert.rejects(queued, { name: 'AbortError' });
+      first.open();
+      assert.equal(await busy, 'busy');
+      assert.equal(await pool.run('after'), 'after');
+      assert.deepEqual(ran, ['busy', 'after']);
+    });
+
+    test('a run aborted while its worker warms up leaves the warm-up running for later jobs', async (t) => {
+      await using folder = await new TemporaryFiles().directory('pool-');
+      const store = join(folder.path, 'store.sqlite');
+      const created: EchoWorker[] = [];
+      await using owner = lending(store, {
+        size: new Fixed(1),
+        startup: new LeaderFirst(),
+        eviction: new NoEviction(),
+        create: () => {
+          const worker = new EchoWorker();
+          created.push(worker);
+          return worker;
+        },
+      });
+      await using pool = new Pool({ kind: echo(), store, clock: globalThis });
+      // The owner starts its worker once it owns.
+      await waitFor(() => assert.equal(created.length, 1), {
+        signal: t.signal,
+        interval: 10,
+      });
+      const stop = new AbortController();
+      const waiting = pool.run('never', { signal: stop.signal });
+
+      stop.abort();
+      await assert.rejects(waiting, { name: 'AbortError' });
+      assert.equal(created[0]!.dead, false);
+
+      created[0]!.release();
+      await owner.ready();
+      assert.equal(await pool.run('later'), 'later');
+      assert.equal(created.length, 1);
+    });
+
+    test('disposing a Pool ends its waiting runs with DisposedError, cancels their jobs, and refuses later jobs', async (t) => {
+      await using folder = await new TemporaryFiles().directory('pool-');
+      const store = join(folder.path, 'store.sqlite');
+      const gate = new Latch();
+      class Gated extends EchoWorker {
+        override async run(text: string): Promise<string> {
+          await gate.wait();
+          return super.run(text);
+        }
+      }
+      await using owner = lending(store, {
+        size: new Fixed(1),
+        startup: new Parallel(),
+        eviction: new NoEviction(),
+        create: () => {
+          const worker = new Gated();
+          worker.release();
+          return worker;
+        },
+      });
+      const pool = new Pool({ kind: echo(), store, clock: globalThis });
+      await using sending = await sender(store);
+      await owner.ready();
+      const runs = Promise.allSettled(
+        ['x', 'y', 'z'].map((text) => pool.run(text)),
+      );
+      await waitFor(
+        async () =>
+          assert.equal((await sending.jobs.findJobs(queue)).length, 3),
+        { signal: t.signal, interval: 10 },
+      );
+
+      await pool[Symbol.asyncDispose]();
+      try {
+        for (const outcome of await runs) {
+          assert.equal(outcome.status, 'rejected');
+          assert.ok(outcome.reason instanceof DisposedError);
+        }
+        assert.deepEqual(
+          (await sending.jobs.findJobs(queue)).map(({ state }) => state),
+          ['cancelled', 'cancelled', 'cancelled'],
+        );
+        await assert.rejects(pool.run('after'), DisposedError);
+      } finally {
+        gate.open();
+      }
+    });
+
+    test('a job joins a worker that starts before it starts one in an empty slot', async (t) => {
+      await using folder = await new TemporaryFiles().directory('pool-');
+      const store = join(folder.path, 'store.sqlite');
+      const clock = createClock(Date.now());
+      const created: EchoWorker[] = [];
+      await using owner = lendingOn(clock, store, {
+        size: new Fixed(2),
+        startup: new Parallel(),
+        eviction: new IdleTimeout({ after: 30_000 }),
+        create: () => {
+          const worker = new EchoWorker();
+          // The worker that the back-off starts waits for the test.
+          if (created.length !== 2) worker.release();
+          created.push(worker);
+          return worker;
+        },
+      });
+      await using pool = new Pool({ kind: echo(), store, clock });
+      await owner.ready();
+      // An early exit puts slot 0 in a back-off, after which it starts a worker
+      // that warms up while no job has it. The eviction lets the idle worker of
+      // slot 1 go, which leaves its slot empty.
+      created[0]!.kill();
+      await created[0]!.exited();
+      await clock.tickAsync(1_000);
+      await waitFor(() => assert.equal(created.length, 3), {
+        signal: t.signal,
+        interval: 5,
+      });
+      await clock.tickAsync(30_000);
+      await created[1]!.exited();
+      assert.deepEqual(owner.stats, {
+        starting: 1,
+        idle: 0,
+        lent: 0,
+        waiting: 0,
+      });
+
+      const job = pool.run('joined');
+      try {
+        await waitFor(() => assert.equal(owner.stats.waiting, 1), {
+          signal: t.signal,
+          interval: 10,
+        });
+        created[2]!.release();
+        assert.equal(await job, 'joined');
+        assert.equal(created.length, 3);
+      } finally {
+        created[2]!.release();
+        await Promise.allSettled([job]);
+      }
+    });
+
+    test('a Pool whose store is a postgres:// address is refused with a TypeError and opens no file', async () => {
+      await using folder = await new TemporaryFiles().directory('pool-');
+
+      assert.throws(
+        () =>
+          new Pool({
+            kind: echo(),
+            store: 'postgres://localhost/pool',
+            clock: globalThis,
+          }),
+        TypeError,
+      );
+      assert.deepEqual(await readdir(folder.path, { recursive: true }), []);
+    });
+
+    test("a Pool whose kind's expireInSeconds the store refuses rejects start with the store's failure", async () => {
+      await using folder = await new TemporaryFiles().directory('pool-');
+      await using pool = new Pool({
+        kind: new WorkerKind<string, string>({
+          name: 'echo',
+          revision: 1,
+          policy: 'standard',
+          retryLimit: 0,
+          expireInSeconds: 25 * 60 * 60,
+        }),
+        store: join(folder.path, 'store.sqlite'),
+        clock: globalThis,
+      });
+
+      await assert.rejects(
+        pool.start('never'),
+        /expiration cannot exceed 24 hours/,
+      );
+    });
+
+    test('a job that one Pool starts gives its output to the handle of another Pool on the store', async () => {
+      await using folder = await new TemporaryFiles().directory('pool-');
+      const store = join(folder.path, 'store.sqlite');
+      await using owner = lending(store, {
+        size: new Fixed(1),
+        startup: new Parallel(),
+        eviction: new NoEviction(),
+        create: () => {
+          const worker = new EchoWorker();
+          worker.release();
+          return worker;
+        },
+      });
+      await using first = new Pool({ kind: echo(), store, clock: globalThis });
+      await using second = new Pool({ kind: echo(), store, clock: globalThis });
+      await owner.ready();
+
+      const started = await first.start('shared');
+      assert.equal(await second.handle(started.id).result(), 'shared');
+      assert.equal(await started.result(), 'shared');
+    });
+
+    test('a failed job rejects its result with JobFailedError, which carries the name and the message of the failure', async () => {
+      await using folder = await new TemporaryFiles().directory('pool-');
+      const store = join(folder.path, 'store.sqlite');
+      class Failing extends EchoWorker {
+        override run(text: string): Promise<string> {
+          return Promise.reject(new RangeError(`no ${text}`));
+        }
+      }
+      await using owner = lending(store, {
+        size: new Fixed(1),
+        startup: new Parallel(),
+        eviction: new NoEviction(),
+        create: () => {
+          const worker = new Failing();
+          worker.release();
+          return worker;
+        },
+      });
+      await using pool = new Pool({ kind: echo(), store, clock: globalThis });
+      await owner.ready();
+
+      await assert.rejects(pool.run('line'), (error) => {
+        assert.ok(error instanceof JobFailedError);
+        assert.deepEqual(error.failure, {
+          name: 'RangeError',
+          message: 'no line',
+        });
+        return true;
+      });
+    });
+
+    test('the handle of an id that the store does not have rejects its result with JobNotFoundError', async () => {
+      await using folder = await new TemporaryFiles().directory('pool-');
+      await using pool = new Pool({
+        kind: echo(),
+        store: join(folder.path, 'store.sqlite'),
+        clock: globalThis,
+      });
+
+      await assert.rejects(
+        pool.handle(randomUUID()).result(),
+        JobNotFoundError,
+      );
+    });
+
+    test('a cancelled job that waits never runs, and its result rejects with JobCancelledError', async () => {
+      await using folder = await new TemporaryFiles().directory('pool-');
+      const store = join(folder.path, 'store.sqlite');
+      await using pool = new Pool({ kind: echo(), store, clock: globalThis });
+      // No owner yet, so the job waits in the store.
+      const dropped = await pool.start('dropped');
+
+      await dropped.cancel();
+
+      await assert.rejects(dropped.result(), JobCancelledError);
+      const ran: string[] = [];
+      class Recording extends EchoWorker {
+        override run(text: string): Promise<string> {
+          ran.push(text);
+          return super.run(text);
+        }
+      }
+      await using owner = lending(store, {
+        size: new Fixed(1),
+        startup: new Parallel(),
+        eviction: new NoEviction(),
+        create: () => {
+          const worker = new Recording();
+          worker.release();
+          return worker;
+        },
+      });
+      await owner.ready();
+      assert.equal(await pool.run('later'), 'later');
+      assert.deepEqual(ran, ['later']);
+    });
+
+    test('identical inputs of an exclusive kind share one job, and the cancel of one handle is a leave', async () => {
+      await using folder = await new TemporaryFiles().directory('pool-');
+      const store = join(folder.path, 'store.sqlite');
+      const once = () =>
+        new WorkerKind<string, string>({
+          name: 'once',
+          revision: 1,
+          policy: 'exclusive',
+          retryLimit: 0,
+          expireInSeconds: 60,
+        });
+      const gate = new Latch();
+      const ran: string[] = [];
+      class Gated extends EchoWorker {
+        override async run(text: string): Promise<string> {
+          ran.push(text);
+          await gate.wait();
+          return super.run(text);
+        }
+      }
+      await using owner = new PoolWorkers({
+        kind: once(),
+        store,
+        clock: globalThis,
+        size: new Fixed(2),
+        startup: new Parallel(),
+        eviction: new NoEviction(),
+        create: () => {
+          const worker = new Gated();
+          worker.release();
+          return worker;
+        },
+      });
+      await using pool = new Pool({ kind: once(), store, clock: globalThis });
+      await owner.ready();
+
+      const left = await pool.start('x');
+      const kept = await pool.start('x');
+      assert.equal(kept.id, left.id);
+      await left.cancel();
+      gate.open();
+
+      assert.equal(await kept.result(), 'x');
+      assert.equal(await left.result(), 'x');
+      assert.deepEqual(ran, ['x']);
+    });
+
+    test('stats count the jobs of the kind that wait and that run', async (t) => {
+      await using folder = await new TemporaryFiles().directory('pool-');
+      const store = join(folder.path, 'store.sqlite');
+      const gate = new Latch();
+      class Gated extends EchoWorker {
+        override async run(text: string): Promise<string> {
+          await gate.wait();
+          return super.run(text);
+        }
+      }
+      await using owner = lending(store, {
+        size: new Fixed(1),
+        startup: new Parallel(),
+        eviction: new NoEviction(),
+        create: () => {
+          const worker = new Gated();
+          worker.release();
+          return worker;
+        },
+      });
+      await using pool = new Pool({ kind: echo(), store, clock: globalThis });
+      await owner.ready();
+      const handles = await Array.fromAsync(['a', 'b', 'c'], (text) =>
+        pool.start(text),
+      );
+      try {
+        // The counts lag up to one pass of the store's monitor, a second.
+        await waitFor(
+          async () =>
+            assert.deepEqual(await pool.stats(), { waiting: 2, running: 1 }),
+          { signal: t.signal, interval: 100 },
+        );
+        gate.open();
+        await Promise.all(handles.map((handle) => handle.result()));
+        await waitFor(
+          async () =>
+            assert.deepEqual(await pool.stats(), { waiting: 0, running: 0 }),
+          { signal: t.signal, interval: 100 },
+        );
+      } finally {
+        gate.open();
+      }
+    });
+
+    test('a job runs and its output arrives on a clock that stands still: the wakes carry the news, not the backstops', async () => {
+      await using folder = await new TemporaryFiles().directory('pool-');
+      const store = join(folder.path, 'store.sqlite');
+      const clock = createClock(Date.now());
+      await using owner = lendingOn(clock, store, {
+        size: new Fixed(1),
+        startup: new Parallel(),
+        eviction: new NoEviction(),
+        create: () => {
+          const worker = new EchoWorker();
+          worker.release();
+          return worker;
+        },
+      });
+      await using pool = new Pool({ kind: echo(), store, clock });
+      await owner.ready();
+      const began = clock.now;
+
+      assert.equal(await pool.run('woken'), 'woken');
+      assert.equal(clock.now, began);
+    });
+
+    test('a job that a Pool starts runs on a clock that stands still before any caller waits for its output', async (t) => {
+      await using folder = await new TemporaryFiles().directory('pool-');
+      const store = join(folder.path, 'store.sqlite');
+      const clock = createClock(Date.now());
+      await using owner = lendingOn(clock, store, {
+        size: new Fixed(1),
+        startup: new Parallel(),
+        eviction: new NoEviction(),
+        create: () => {
+          const worker = new EchoWorker();
+          worker.release();
+          return worker;
+        },
+      });
+      await using pool = new Pool({ kind: echo(), store, clock });
+      await using reading = await sender(store, clock);
+      await owner.ready();
+
+      const started = await pool.start('early');
+
+      // No result waits, so only the wake of the start tells the owner.
+      await waitFor(
+        async () => {
+          const [job] = await reading.jobs.findJobs(queue, { id: started.id });
+          assert.equal(job?.state, 'completed');
+        },
+        { signal: t.signal, interval: 10 },
+      );
+      assert.equal(await started.result(), 'early');
+    });
+
+    test('a job that a Pool starts while the owner reads the store starts on a free worker, on a clock that stands still', async (t) => {
+      await using folder = await new TemporaryFiles().directory('pool-');
+      const store = join(folder.path, 'store.sqlite');
+      const clock = createClock(Date.now());
+      const held = new Latch();
+      const ran: string[] = [];
+      class Holding extends EchoWorker {
+        override async run(text: string): Promise<string> {
+          ran.push(text);
+          if (text === 'a') await held.wait();
+          return super.run(text);
+        }
+      }
+      await using owner = lendingOn(clock, store, {
+        size: new Fixed(2),
+        startup: new Parallel(),
+        eviction: new NoEviction(),
+        create: () => {
+          const worker = new Holding();
+          worker.release();
+          return worker;
+        },
+      });
+      await using pool = new Pool({ kind: echo(), store, clock });
+      await owner.ready();
+      // The owner's first fetch that finds a job gives it back only when the
+      // test lets it, as a store on a slow disk does.
+      const reading = new Latch();
+      const answer = new Latch();
+      let holding = true;
+      const fetch = SqliteJobQueue.prototype.fetch;
+      t.mock.method(
+        SqliteJobQueue.prototype,
+        'fetch',
+        async function (
+          this: SqliteJobQueue,
+          ...args: Parameters<SqliteJobQueue['fetch']>
+        ) {
+          const jobs = await fetch.apply(this, args);
+          if (holding && jobs.length > 0) {
+            holding = false;
+            reading.open();
+            await answer.wait();
+          }
+          return jobs;
+        },
+      );
+      try {
+        await pool.start('a');
+        await untilAborted(reading.wait(), t.signal);
+
+        // The news of b reaches the owner while its fetch of a is out.
+        await pool.start('b');
+        await setTimeout(100);
+        answer.open();
+
+        await waitFor(() => assert.deepEqual(ran, ['a', 'b']), {
+          signal: t.signal,
+          interval: 10,
+        });
+      } finally {
+        answer.open();
+        held.open();
+      }
+    });
+
+    test('a result that reads its job before the output still gets the output told during its read, on a clock that stands still', async (t) => {
+      await using folder = await new TemporaryFiles().directory('pool-');
+      const store = join(folder.path, 'store.sqlite');
+      const clock = createClock(Date.now());
+      const gate = new Latch();
+      class Gated extends EchoWorker {
+        override async run(text: string): Promise<string> {
+          await gate.wait();
+          return super.run(text);
+        }
+      }
+      await using owner = lendingOn(clock, store, {
+        size: new Fixed(1),
+        startup: new Parallel(),
+        eviction: new NoEviction(),
+        create: () => {
+          const worker = new Gated();
+          worker.release();
+          return worker;
+        },
+      });
+      await using pool = new Pool({ kind: echo(), store, clock });
+      await using sending = await sender(store, clock);
+      await owner.ready();
+      const started = await pool.start('told');
+      await waitFor(() => assert.equal(owner.stats.lent, 1), {
+        signal: t.signal,
+        interval: 10,
+      });
+      // The result's first read of the job gives the job back only when the
+      // test lets it, as a store on a slow disk does.
+      const reading = new Latch();
+      const answer = new Latch();
+      let holding = true;
+      const findJobs = SqliteJobQueue.prototype.findJobs;
+      t.mock.method(
+        SqliteJobQueue.prototype,
+        'findJobs',
+        async function (
+          this: SqliteJobQueue,
+          ...args: Parameters<SqliteJobQueue['findJobs']>
+        ) {
+          const jobs = await findJobs.apply(this, args);
+          if (holding && args[1]?.id === started.id) {
+            holding = false;
+            reading.open();
+            await answer.wait();
+          }
+          return jobs;
+        },
+      );
+      try {
+        const output = started.result();
+        await untilAborted(reading.wait(), t.signal);
+
+        // The output is told while the result's read of the running job is
+        // out.
+        gate.open();
+        await waitFor(
+          async () => {
+            const [job] = await sending.jobs.findJobs(queue, {
+              id: started.id,
+            });
+            assert.equal(job?.state, 'completed');
+          },
+          { signal: t.signal, interval: 10 },
+        );
+        await setTimeout(100);
+        answer.open();
+
+        assert.equal(await output, 'told');
+      } finally {
+        answer.open();
+        gate.open();
+      }
+    });
+
+    test('a Pool tells the owners of its waiting job again, so an owner that missed the wake runs it', async () => {
+      await using folder = await new TemporaryFiles().directory('pool-');
+      const store = join(folder.path, 'store.sqlite');
+      // The owner's clock stands still, so its own backstop never reads the
+      // store.
+      const clock = createClock(Date.now());
+      await using owner = lendingOn(clock, store, {
+        size: new Fixed(1),
+        startup: new Parallel(),
+        eviction: new NoEviction(),
+        create: () => {
+          const worker = new EchoWorker();
+          worker.release();
+          return worker;
+        },
+      });
+      await owner.ready();
+      // The job reaches the store with no wake, as when its sender ends
+      // between the send and the notify.
+      await using sending = await sender(store, clock);
+      const id = await sending.jobs.send(queue, { input: 'missed' });
+      assert.ok(id, 'the store took the job');
+      await using pool = new Pool({ kind: echo(), store, clock: globalThis });
+
+      assert.equal(await pool.handle(id).result(), 'missed');
+    });
+  },
+);
 
 describe('PoolWorkers on a fake clock', { concurrency: true }, () => {
   test('a running job that the store cancels loses its worker at the next touch, and the other running job keeps its own', async (t) => {
@@ -3289,28 +3926,30 @@ describe('PoolWorkers on a fake clock', { concurrency: true }, () => {
       workers: 2,
       expireInSeconds: 60,
     });
-    await using sending = await sender(owner.store, clock);
-    const cancelled = await sending.jobs.send(queue, { input: { id: 'a' } });
-    await sending.jobs.send(queue, { input: { id: 'b' } });
-    await fetched(t, clock, workers, 'a', 'b');
+    await using pool = new Pool({
+      kind: owner.kind,
+      store: owner.store,
+      clock,
+    });
+    const a = await pool.start({ id: 'a' });
+    const b = await pool.start({ id: 'b' });
+    await untilRunning(t, workers, 'a', 'b');
 
-    await sending.jobs.cancel(queue, cancelled!);
+    await a.cancel();
     await runFor(clock, 5_000);
 
     assert.equal(workers.killed('a'), true);
     assert.equal(workers.killed('b'), false);
     // The killed worker's slot takes the next job on a new worker, while b
     // still runs.
-    await sending.jobs.send(queue, { input: { id: 'c' } });
-    await fetched(t, clock, workers, 'c');
+    const c = await pool.start({ id: 'c' });
+    await untilRunning(t, workers, 'c');
     assert.notEqual(workers.of('c'), workers.of('a'));
     workers.answer('b');
     workers.answer('c');
-    const jobs = await settled(t, sending.jobs, 3);
-    assert.deepEqual(
-      Object.fromEntries(jobs.map((job) => [inputOf(job.data).id, job.state])),
-      { a: 'cancelled', b: 'completed', c: 'completed' },
-    );
+    await assert.rejects(a.result(), JobCancelledError);
+    assert.deepEqual(await b.result(), { id: 'b' });
+    assert.deepEqual(await c.result(), { id: 'c' });
   });
 
   test('two jobs that end together free both slots for the next two jobs, with no wait for the backstop', async (t) => {
@@ -3321,10 +3960,17 @@ describe('PoolWorkers on a fake clock', { concurrency: true }, () => {
       workers: 2,
       expireInSeconds: 60,
     });
+    await using pool = new Pool({
+      kind: owner.kind,
+      store: owner.store,
+      clock,
+    });
     await using sending = await sender(owner.store, clock);
-    await sending.jobs.send(queue, { input: { id: 'a' } });
-    await sending.jobs.send(queue, { input: { id: 'b' } });
-    await fetched(t, clock, workers, 'a', 'b');
+    await pool.start({ id: 'a' });
+    await pool.start({ id: 'b' });
+    await untilRunning(t, workers, 'a', 'b');
+    // c and d reach the store with no wake, so a fetch of them can only come
+    // from the ends of a and b.
     await sending.jobs.send(queue, { input: { id: 'c' } });
     await sending.jobs.send(queue, { input: { id: 'd' } });
 
@@ -3349,10 +3995,17 @@ describe('PoolWorkers on a fake clock', { concurrency: true }, () => {
       workers: 1,
       expireInSeconds: 7,
     });
+    await using pool = new Pool({
+      kind: owner.kind,
+      store: owner.store,
+      clock,
+    });
     await using sending = await sender(owner.store, clock);
-    await sending.jobs.send(queue, { input: { id: 'hung' } });
-    await fetched(t, clock, workers, 'hung');
-    const limit = (await fetchedAt(sending.jobs)) + 7_000;
+    const hung = await pool.start({ id: 'hung' });
+    await untilRunning(t, workers, 'hung');
+    // The owner fetched the job at once, with the clock still, so its time
+    // limit counts from now.
+    const limit = clock.now + 7_000;
 
     await runFor(clock, limit - 10 - clock.now);
     const [early] = await sending.jobs.findJobs(queue);
@@ -3360,17 +4013,20 @@ describe('PoolWorkers on a fake clock', { concurrency: true }, () => {
     await runFor(clock, 20);
 
     assert.equal(workers.killed('hung'), true);
-    const [job] = await settled(t, sending.jobs, 1);
-    assert.deepEqual(
-      [job?.state, job?.output],
-      ['failed', { name: 'Error', message: 'handler execution exceeded 7s' }],
-    );
+    await assert.rejects(hung.result(), (error) => {
+      assert.ok(error instanceof JobFailedError);
+      assert.deepEqual(error.failure, {
+        name: 'Error',
+        message: 'handler execution exceeded 7s',
+      });
+      return true;
+    });
     // The slot of the killed worker runs the next job on a new worker.
-    await sending.jobs.send(queue, { input: { id: 'next' } });
-    await fetched(t, clock, workers, 'next');
+    const next = await pool.start({ id: 'next' });
+    await untilRunning(t, workers, 'next');
     assert.notEqual(workers.of('next'), workers.of('hung'));
     workers.answer('next');
-    await settled(t, sending.jobs, 2);
+    assert.deepEqual(await next.result(), { id: 'next' });
   });
 
   test('the owner touches each running job every 5 s, so jobs that run past their heartbeat of 10 s stay active and complete', async (t) => {
@@ -3381,10 +4037,14 @@ describe('PoolWorkers on a fake clock', { concurrency: true }, () => {
       workers: 2,
       expireInSeconds: 60,
     });
+    await using pool = new Pool({
+      kind: owner.kind,
+      store: owner.store,
+      clock,
+    });
     await using sending = await sender(owner.store, clock);
-    await sending.jobs.send(queue, { input: { id: 'a' } });
-    await sending.jobs.send(queue, { input: { id: 'b' } });
-    await fetched(t, clock, workers, 'a', 'b');
+    const jobs = [await pool.start({ id: 'a' }), await pool.start({ id: 'b' })];
+    await untilRunning(t, workers, 'a', 'b');
 
     await runFor(clock, 6_000);
     const touched = await sending.jobs.findJobs(queue);
@@ -3402,11 +4062,10 @@ describe('PoolWorkers on a fake clock', { concurrency: true }, () => {
     workers.answer('a');
     workers.answer('b');
 
-    const jobs = await settled(t, sending.jobs, 2);
-    assert.deepEqual(
-      jobs.map((job) => job.state),
-      ['completed', 'completed'],
-    );
+    assert.deepEqual(await Promise.all(jobs.map((job) => job.result())), [
+      { id: 'a' },
+      { id: 'b' },
+    ]);
   });
 
   test("an owner that disposes while its worker hangs ends its disposal at the kind's expireInSeconds and fails the job", async (t) => {
@@ -3417,11 +4076,16 @@ describe('PoolWorkers on a fake clock', { concurrency: true }, () => {
       workers: 1,
       expireInSeconds: 7,
     });
-    await using sending = await sender(owner.store, clock);
-    await sending.jobs.send(queue, { input: { id: 'hung' } });
-    await fetched(t, clock, workers, 'hung');
-
-    const limit = (await fetchedAt(sending.jobs)) + 7_000;
+    await using pool = new Pool({
+      kind: owner.kind,
+      store: owner.store,
+      clock,
+    });
+    const hung = await pool.start({ id: 'hung' });
+    await untilRunning(t, workers, 'hung');
+    // The owner fetched the job at once, with the clock still, so its time
+    // limit counts from now.
+    const limit = clock.now + 7_000;
 
     let disposed = false;
     const disposal = owner.dispose().finally(() => {
@@ -3433,11 +4097,14 @@ describe('PoolWorkers on a fake clock', { concurrency: true }, () => {
     await untilAborted(disposal, t.signal);
 
     assert.equal(workers.killed('hung'), true);
-    const [job] = await sending.jobs.findJobs(queue);
-    assert.deepEqual(
-      [job?.state, job?.output],
-      ['failed', { name: 'Error', message: 'handler execution exceeded 7s' }],
-    );
+    await assert.rejects(hung.result(), (error) => {
+      assert.ok(error instanceof JobFailedError);
+      assert.deepEqual(error.failure, {
+        name: 'Error',
+        message: 'handler execution exceeded 7s',
+      });
+      return true;
+    });
   });
 });
 
@@ -3532,14 +4199,15 @@ async function ownerOn(
 ) {
   const store = join(folder, 'store.sqlite');
   let created = 0;
+  const kind = new WorkerKind<{ id: string }, { id: string }>({
+    name: 'echo',
+    revision: 1,
+    policy: 'standard',
+    retryLimit: 0,
+    expireInSeconds: settings.expireInSeconds,
+  });
   const owner = new PoolWorkers({
-    kind: new WorkerKind<{ id: string }, { id: string }>({
-      name: 'echo',
-      revision: 1,
-      policy: 'standard',
-      retryLimit: 0,
-      expireInSeconds: settings.expireInSeconds,
-    }),
+    kind,
     store,
     clock,
     create: () => {
@@ -3556,6 +4224,7 @@ async function ownerOn(
   });
   return {
     store,
+    kind,
     /** Disposes the owner: its running jobs end by themselves or at the time limit. */
     dispose: () => owner[Symbol.asyncDispose](),
     /** Answers every held job first, so a failed test does not wait for a time limit on a clock that stands still. */
@@ -3579,30 +4248,21 @@ async function runFor(clock: FakeClock, ms: number): Promise<void> {
 }
 
 /**
- * Moves the fake clock past the owner's backstop, which fetches the jobs that
- * wait, then waits in real time, with the clock still, until each job of `ids`
- * runs on a worker: a worker's start and the election take real I/O.
+ * Waits in real time, with the clock still, until each job of `ids` runs on a
+ * worker: the owner hears of each job at once, and a worker's start and the
+ * election take real I/O.
  */
-async function fetched(
+async function untilRunning(
   t: TestContext,
-  clock: FakeClock,
   workers: HeldWorkers,
   ...ids: string[]
 ): Promise<void> {
-  await runFor(clock, 1_000);
   await waitFor(
     () => {
       for (const id of ids) assert.ok(workers.running(id), `job ${id} runs`);
     },
     { signal: t.signal, interval: 5 },
   );
-}
-
-/** The fake-clock time at which the owner fetched the one job of the queue. */
-async function fetchedAt(jobs: SqliteJobQueue): Promise<number> {
-  const [job] = await jobs.findJobs(queue);
-  assert.ok(job?.startedOn, 'the job was fetched');
-  return job.startedOn.getTime();
 }
 
 /** pg-boss's clock, which the queue takes, on the fake clock. */
@@ -3747,17 +4407,17 @@ function lendingOn(
     create: () => Worker<string, string>;
   },
 ): PoolWorkers<string, string> {
-  return new PoolWorkers({
-    kind: new WorkerKind<string, string>({
-      name: 'echo',
-      revision: 1,
-      policy: 'standard',
-      retryLimit: 0,
-      expireInSeconds: 60,
-    }),
-    store,
-    clock,
-    ...options,
+  return new PoolWorkers({ kind: echo(), store, clock, ...options });
+}
+
+/** The "echo" kind, whose input and output are a line, run once, for at most 60 s. */
+function echo(): WorkerKind<string, string> {
+  return new WorkerKind<string, string>({
+    name: 'echo',
+    revision: 1,
+    policy: 'standard',
+    retryLimit: 0,
+    expireInSeconds: 60,
   });
 }
 
@@ -3852,19 +4512,19 @@ async function drive(
 }
 
 /**
- * A closed load of `clients` clients, as loops over Pool.use made: it sends
- * one job for each client, and the run of each job sends the next one at its
+ * A closed load of `clients` clients, as loops over Pool.run make: it starts
+ * one job for each client, and the run of each job starts the next one at its
  * end until the load stops, so as many jobs as there are clients are always
- * sent or running. A send is a write to the store, so it takes no time on
+ * waiting or running. A start is a write to the store, so it takes no time on
  * the clock.
  */
-function closedLoad(jobs: SqliteJobQueue, clients: number) {
+function closedLoad(pool: Pool<string, string>, clients: number) {
   const stopped = new AbortController();
   let sentJobs = 0;
   let ranJobs = 0;
   const send = async (): Promise<void> => {
     sentJobs++;
-    await sent(jobs, 'job');
+    await pool.start('job');
   };
   return {
     start: async (): Promise<void> => {
@@ -3959,78 +4619,4 @@ function succeedLastOwner(store: string): AsyncDisposable {
       await successor.ready();
     },
   };
-}
-
-/**
- * Sends one job of the "echo" kind, and resolves with its output once the
- * owner completes it, or rejects with its failure, as `Pool.run` will
- * (ADR 0019).
- */
-async function ran(
-  t: TestContext,
-  jobs: SqliteJobQueue,
-  input: string,
-): Promise<string> {
-  return outputOf(t, jobs, await sent(jobs, input));
-}
-
-/**
- * Sends one job of the "echo" kind, moves the fake clock, as drive does, past
- * the owner's backstop of one second, at which it fetches the job, and then
- * waits in real time, with the clock still, until the owner settles the job.
- * Resolves with its output, or rejects with its failure.
- */
-async function ranOn(
-  t: TestContext,
-  clock: FakeClock,
-  owner: PoolWorkers<string, string>,
-  jobs: SqliteJobQueue,
-  input: string,
-): Promise<string> {
-  const id = await sent(jobs, input);
-  await driveFor(clock, [owner], 1_000);
-  return outputOf(t, jobs, id);
-}
-
-/** Sends one job of the "echo" kind in the pool's envelope, and gives its id. */
-async function sent(jobs: SqliteJobQueue, input: string): Promise<string> {
-  const id = await jobs.send(queue, { input });
-  assert.ok(id, 'the store took the job');
-  return id;
-}
-
-/** Resolves with the output of the job once it completes, or rejects with its failure. */
-async function outputOf(
-  t: TestContext,
-  jobs: SqliteJobQueue,
-  id: string,
-): Promise<string> {
-  const job = await waitFor(
-    async () => {
-      const [found] = await jobs.findJobs(queue, { id });
-      assert.ok(found, 'the store keeps the job');
-      assert.match(found.state, /^(completed|failed)$/);
-      return found;
-    },
-    { signal: t.signal, interval: 10 },
-  );
-  const { output } = job;
-  assert.ok(typeof output === 'object' && output !== null);
-  if (job.state === 'failed') {
-    assert.ok('message' in output && 'name' in output);
-    throw Object.assign(new Error(String(output.message)), {
-      name: String(output.name),
-    });
-  }
-  assert.ok('output' in output && typeof output.output === 'string');
-  return output.output;
-}
-
-/** The input in the pool's envelope of a job's data. */
-function inputOf(data: unknown): { id: string } {
-  assert.ok(typeof data === 'object' && data !== null && 'input' in data);
-  const { input } = data;
-  assert.ok(typeof input === 'object' && input !== null && 'id' in input);
-  assert.equal(typeof input.id, 'string');
-  return { id: String(input.id) };
 }

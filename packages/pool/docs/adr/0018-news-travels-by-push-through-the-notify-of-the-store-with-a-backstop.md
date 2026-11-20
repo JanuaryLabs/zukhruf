@@ -1,6 +1,6 @@
 # News travels by push through the notify of the store, with a backstop
 
-Status: Accepted 2026-11-20 (backlog #3527). Not built.
+Status: Accepted 2026-11-20 (backlog #3527). Built on one computer (2026-11-20): the owner listens on "a new job" and tells "an output" after each settle; each `Pool` listens on "an output" before it sends, tells "a new job" after each send and again while its job waits, and reads the store at each wake and at its backstop of 1 s. News that comes while the owner's fetch or a result's read of the store is out is counted, so it is not lost (`docs/copied-code.md`). Postgres `LISTEN` / `NOTIFY` waits for ADR 0025.
 
 Two kinds of news travel between the hosts of a pool (map tickets 10 and 11):
 

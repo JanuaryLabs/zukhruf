@@ -1,6 +1,6 @@
 # @zukhruf/pool
 
-Lends long-lived workers to jobs, one job for each worker at a time. A worker is costly to start: a native helper that loads a model, or a command-line agent that keeps a session. The pool starts workers, lends them, replaces a worker that exits, and stops all of them when you dispose it. You choose three things from standard classes: when the workers start (a startup), how many run (a sizing), and when an idle worker closes (an eviction).
+One pool of long-lived workers for each computer. A worker is costly to start: a native helper that loads a model, or a command-line agent that keeps a session. Every program that needs a worker sends its jobs to one store on the computer, and one of them, the owner, runs the jobs on its workers. The owner starts the workers, lends each one to one job at a time, replaces a worker that exits, and closes an idle worker. You choose three things from standard classes: when the workers start (a startup), how many run (a sizing), and when an idle worker closes (an eviction).
 
 The words in these documents have one meaning each. See the glossary in [CONTEXT.md](./CONTEXT.md).
 
@@ -11,7 +11,27 @@ npm install @zukhruf/pool
 ```
 
 ```ts
-import { Fixed, NoEviction, Parallel, Pool, type Worker } from '@zukhruf/pool';
+import { mkdtempDisposable } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import {
+  Fixed,
+  NoEviction,
+  Parallel,
+  Pool,
+  PoolWorkers,
+  type Worker,
+  WorkerKind,
+} from '@zukhruf/pool';
+
+const upper = new WorkerKind<string, string>({
+  name: 'upper',
+  revision: 1,
+  policy: 'standard',
+  retryLimit: 0,
+  expireInSeconds: 60,
+});
 
 class Upper implements Worker<string, string> {
   readonly #exit = Promise.withResolvers<void>();
@@ -25,48 +45,121 @@ class Upper implements Worker<string, string> {
     this.#exit.resolve();
   }
   async close(): Promise<void> {
-    await this.#exit.promise;
+    this.#exit.resolve();
   }
 }
 
-await using pool = new Pool({
+// A store of its own; a host of the computer gives computerStore(process.env).
+await using folder = await mkdtempDisposable(join(tmpdir(), 'pool-'));
+const store = join(folder.path, 'store.sqlite');
+
+await using workers = new PoolWorkers({
+  kind: upper,
+  store,
+  clock: globalThis,
   size: new Fixed(2),
   startup: new Parallel(),
   eviction: new NoEviction(),
-  clock: globalThis,
   create: () => new Upper(),
 });
+await using pool = new Pool({ kind: upper, store, clock: globalThis });
+
 const words = await Promise.all(
-  ['one', 'two', 'three'].map((word) => pool.use((worker) => worker.run(word))),
+  ['one', 'two', 'three'].map((word) => pool.run(word)),
 );
-console.log(words, pool.stats);
+await workers.ready();
+console.log(words, workers.stats);
 // [ 'ONE', 'TWO', 'THREE' ] { starting: 0, idle: 2, lent: 0, waiting: 0 }
 ```
 
-The pool starts two workers and lends them to three jobs, one job for each worker at a time. After the jobs, both workers are idle. The disposal at the end of the program stops them.
+The program offers two workers, owns them, and sends three jobs. The owner runs the jobs on its workers, one job for each worker at a time. After the jobs, both workers are idle. The disposals at the end of the program stop sending, hand the workers over, and close them.
 
-## Lend a worker to a job
+## Define the worker kind
+
+A worker kind names the pool and holds its job rules. Export it from a module with no native code, so a host that cannot run the worker program can import it too:
 
 ```ts
-import { Fixed, IdleTimeout, Parallel, Pool } from '@zukhruf/pool';
+import { WorkerKind } from '@zukhruf/pool';
 
-await using pool = new Pool({
-  size: new Fixed(2),
-  startup: new Parallel(),
-  eviction: new IdleTimeout({ after: 300_000 }),
+export const vision = new WorkerKind<{ path: string }, { text: string }>({
+  name: 'vision',
+  revision: 1, // raise it when run changes in a way that matters
+  policy: 'exclusive', // identical inputs share one job
+  retryLimit: 2,
+  expireInSeconds: 120,
+});
+```
+
+The rule names are pg-boss's queue options, with pg-boss's meaning. Each one is required. See [ADR 0014](./docs/adr/0014-pool-and-pool-workers-take-one-worker-kind.md).
+
+## Send jobs, and offer workers
+
+A host that can run the worker program sends jobs and offers its workers:
+
+```ts
+import { availableParallelism } from 'node:os';
+
+import {
+  HillClimbing,
+  IdleTimeout,
+  LeaderFirst,
+  Pool,
+  PoolWorkers,
+  computerStore,
+} from '@zukhruf/pool';
+
+const store = computerStore(process.env);
+const { availableMemory } = process;
+
+await using ocr = new Pool({ kind: vision, store, clock: globalThis });
+await using workers = new PoolWorkers({
+  kind: vision,
+  store,
   clock: globalThis,
   create: () => new VisionWorker('/path/to/vision-worker'),
+  size: new HillClimbing({
+    memoryPerWorker: 2 * 1024 ** 3,
+    computer: { availableParallelism, availableMemory },
+  }),
+  startup: new LeaderFirst(),
+  eviction: new IdleTimeout({ after: 300_000 }),
 });
-const text = await pool.use((worker) => worker.run('/tmp/receipt.png'));
+
+const { text } = await ocr.run({ path: '/tmp/receipt.png' }, { signal });
 ```
+
+Each host on the computer that builds a `PoolWorkers` of the kind offers its workers, and the election picks one of them as the owner. The others are standbys: they start no workers until they own. A host that cannot run the worker program builds only the `Pool`.
 
 A worker gives `run(input)`, `exited()`, `kill()`, `close()`, and optionally `ready()`. `run` does one job and resolves with its output ([ADR 0012](./docs/adr/0012-a-job-is-data-and-the-worker-kind-runs-it.md)). A `Coprocess` of `@zukhruf/coprocess` has all of them except `run`, so a worker class keeps the `Coprocess` and gives its `request` as `run`.
 
+A test gives a store of its own, so it never joins the user's pool:
+
+```ts
+await using scratch = await mkdtempDisposable(join(tmpdir(), 'pool-'));
+const store = join(scratch.path, 'store.sqlite');
+```
+
+## Read an output later
+
+A host that answers at once starts the job, and reads its output later, from this host or another:
+
+```ts
+const { id } = await ocr.start({ path: '/tmp/receipt.png' });
+// later, in any host with a Pool of the same kind and revision
+const { text } = await ocr.handle(id).result({ signal });
+```
+
+The job outlives the host that started it. A handle reads the job until the store's retention ends: 7 days after the job settled. The abort of `signal` ends only the wait of `result`. `cancel()` of the handle ends the job ([ADR 0026](./docs/adr/0026-start-accepts-a-job-now-and-a-job-handle-reads-its-output-later-from-any-host.md)).
+
+## Cancel a job
+
+The abort of the signal of `run` cancels its job, and `run` rejects with the signal's reason. `cancel()` of a handle does the same. A job that waits is dropped. The owner kills the worker of a job that runs at its next touch, at most 5 s on, and the next job starts a worker in that slot after the back-off of an early exit. The cancel of a job of an `exclusive` kind is a leave: the job runs to its end for the other callers that gave the same input ([ADR 0020](./docs/adr/0020-a-cancel-of-a-shared-job-is-a-leave-and-of-any-other-job-a-drop-or-a-kill.md)).
+
+## How the owner lends its workers
+
 A job takes an idle worker first. When no worker is idle, the job takes a worker that starts. Only when no worker starts does the job start a new worker. Of the idle workers, a job takes the one in the lowest slot. Thus jobs one at a time use one worker, and the other idle workers stay idle until their eviction lets them go.
 
-When a signal aborts a job that runs, the pool kills its worker. When a signal aborts a job whose worker still warms up, the warm-up continues for the next job.
-
-The pool waits for `ready()` with no time limit. Thus, if the warm-up of a worker can wait forever, the worker sets its own time limit, and `ready()` rejects when that limit ends. The pool then kills and closes the worker, and the job that waits for it fails. An eager startup starts a worker in that slot again after a back-off (see [Replace a worker that exits](#replace-a-worker-that-exits)). With `OnDemand`, the next job starts a new worker.
+The owner waits for `ready()` with no time limit. Thus, if the warm-up of a worker can wait forever, the worker sets its own time limit, and `ready()` rejects when that limit ends. The owner then kills and closes the worker, and the job that waits for it fails. An eager startup starts a worker in that slot again after a back-off (see [Replace a worker that exits](#replace-a-worker-that-exits)). With `OnDemand`, the next job starts a new worker.
 
 ## Choose when the workers start
 
@@ -124,10 +217,10 @@ A host that runs several pools on one computer can give each pool a part of the 
 
 ## Choose when idle workers close
 
-| Eviction                 | Evicts                                                       |
-| ------------------------ | ------------------------------------------------------------ |
-| `NoEviction`             | no worker. Each idle worker stays until you dispose the pool |
-| `IdleTimeout({ after })` | a worker that stays idle for `after` milliseconds            |
+| Eviction                 | Evicts                                                                       |
+| ------------------------ | ---------------------------------------------------------------------------- |
+| `NoEviction`             | no worker. Each idle worker stays until the owner disposes its `PoolWorkers` |
+| `IdleTimeout({ after })` | a worker that stays idle for `after` milliseconds                            |
 
 A job that takes the worker before `after` ends keeps it. When the job ends, a new `after` starts. `after` is a number of milliseconds above 0 and at most 2,147,483,647. Another value throws a `RangeError`, because Node runs a timer with a larger delay after 1 ms.
 
@@ -137,21 +230,23 @@ The pool evicts only a worker in a slot that the sizing runs. A worker that the 
 
 ## Read the stats
 
-A host can ask the pool how its workers are, for example in a health check:
+`workers.stats` counts the slots of this host, for example in a health check:
 
 ```ts
-const { starting, idle, lent, waiting } = pool.stats;
-const healthy = waiting === 0 || starting + idle + lent > 0;
+const { starting, idle, lent, waiting } = workers.stats;
+const { waiting: queued, running } = await pool.stats();
 ```
 
-| Count      | Is                                                                         |
-| ---------- | -------------------------------------------------------------------------- |
-| `starting` | the workers that start and are not ready yet                               |
-| `idle`     | the ready workers that no job has                                          |
-| `lent`     | the ready workers that a job has                                           |
-| `waiting`  | the jobs that wait for a worker: in the queue, or for a worker that starts |
+| Count      | Is                                                                  |
+| ---------- | ------------------------------------------------------------------- |
+| `starting` | the workers that start and are not ready yet                        |
+| `idle`     | the ready workers that no job has                                   |
+| `lent`     | the ready workers that a job has                                    |
+| `waiting`  | the jobs that the owner took and that wait for a worker that starts |
 
-A worker that exited is in no count, and a slot whose worker the pool evicted is in no count. Thus a pool with an eviction can show zero in each count and be healthy: the next job starts a worker. Each read makes a new object, so the counts of one read agree with each other. See [ADR 0004](./docs/adr/0004-a-pool-reports-its-stats-as-one-snapshot-of-counts.md).
+Each count is zero while the host does not own. A worker that exited is in no count, and a slot whose worker the owner evicted is in no count. Each read makes a new object, so the counts of one read agree with each other. See [ADR 0004](./docs/adr/0004-a-pool-reports-its-stats-as-one-snapshot-of-counts.md).
+
+`pool.stats()` gives the jobs of the kind in the store, the same from every host: `waiting`, the jobs that wait for a worker or for a retry, and `running`, the jobs that a worker runs. It lags up to one pass of the store's monitor, a second ([ADR 0013](./docs/adr/0013-pool-sends-jobs-and-pool-workers-offers-the-workers-of-its-host.md)).
 
 ## Replace a worker that exits
 
@@ -161,190 +256,13 @@ A worker whose warm-up fails is an early exit too. An eager startup starts that 
 
 ## Run the pool on a clock
 
-The pool measures the time of each job, waits before it replaces a worker that exited early, and gives the eviction the clock for its waits. All of these run on the `clock` that you give. Give `globalThis` in production. A test gives `createClock()` of `@sinonjs/fake-timers` and moves it with `await clock.tickAsync(ms)`, so a back-off of 60 seconds or a sizing window of 2 seconds takes no real time ([`@zukhruf/async`](../async/README.md#run-a-wait-on-a-clock)).
+The owner measures the time of each job, waits before it replaces a worker that exited early, and gives the eviction the clock for its waits. All of these run on the `clock` that you give. Give `globalThis` in production. A test gives `createClock()` of `@sinonjs/fake-timers` and moves it with `await clock.tickAsync(ms)`, so a back-off of 60 seconds or a sizing window of 2 seconds takes no real time ([`@zukhruf/async`](../async/README.md#run-a-wait-on-a-clock)).
 
-An eviction of your own gets the clock of the pool as the third argument of `idle(busy, evict, clock)`, so the pool and its eviction always run on one clock. See [ADR 0008](./docs/adr/0008-the-pool-measures-and-waits-on-the-clock-that-the-caller-gives.md).
+An eviction of your own gets the clock of the pool as the third argument of `idle(busy, evict, clock)`, so the owner and its eviction always run on one clock. See [ADR 0008](./docs/adr/0008-the-pool-measures-and-waits-on-the-clock-that-the-caller-gives.md).
 
-## One pool for the computer
+The store keeps the wall time of each job, so `Pool` and `PoolWorkers` take a `WallClock` of [`@zukhruf/async`](../async/README.md). The backstops of the owner and of each `Pool` run on it too, so a test that never moves its clock still runs each job: the wakes of the store carry the news.
 
-Design accepted 2026-11-20, partly built (backlog #3527). `WorkerKind`, `computerStore` and `PoolWorkers` are built. `PoolWorkers` touches each running job every 5 s. It kills the worker of a job at the kind's time limit, and when the store took the job back. Its `stats` count the slots of this host, and each count is zero while the host does not own. Its `ready()` resolves when the host owns and the workers that its startup starts are ready. It does not yet wake on the "new job" notification. `Pool` with `start`, `handle` and `run` is not built yet, and `use` stays until it is. The text above tells what the package does today. [ADR 0011](./docs/adr/0011-every-pool-is-a-pool-for-the-computer-and-one-owner-pulls-its-jobs-from-a-store-that-every-host-writes-to.md) to [ADR 0026](./docs/adr/0026-start-accepts-a-job-now-and-a-job-handle-reads-its-output-later-from-any-host.md) record the design. The tickets and the research named here are in the pool map, `.scratch/one-pool-for-the-computer/` at the workspace root, which git does not track.
-
-Today each host builds its own pool, so several hosts on one computer run several full pools, and they compete for one Neural Engine (#2896, #3868). In the design, every pool is a pool for the computer. On each computer, one host owns the workers of a pool. Every host writes its jobs to one store, and only the owner takes them. A job is data, so it can go from one host to another. The pool for the computer replaces the pool of today: `use((worker) => …)` goes away.
-
-The words of the design are in [CONTEXT.md](./CONTEXT.md), section "The pool for the computer".
-
-### Define the worker kind
-
-A worker kind names the pool and holds its job rules. Export it from a module with no native code, so a host that cannot run the worker program can import it too:
-
-```ts
-import { WorkerKind } from '@zukhruf/pool';
-
-export const vision = new WorkerKind<{ path: string }, { text: string }>({
-  name: 'vision',
-  revision: 1, // raise it when run changes in a way that matters
-  policy: 'exclusive', // identical inputs share one job
-  retryLimit: 2,
-  expireInSeconds: 120,
-});
-```
-
-The rule names are pg-boss's queue options, with pg-boss's meaning. Each one is required. See [ADR 0014](./docs/adr/0014-pool-and-pool-workers-take-one-worker-kind.md).
-
-### Send jobs, and offer workers
-
-A host that can run the worker program sends jobs and offers its workers:
-
-```ts
-import { availableParallelism } from 'node:os';
-
-import {
-  HillClimbing,
-  IdleTimeout,
-  LeaderFirst,
-  Pool,
-  PoolWorkers,
-  computerStore,
-} from '@zukhruf/pool';
-
-const store = computerStore(process.env);
-const { availableMemory } = process;
-
-await using ocr = new Pool({ kind: vision, store, clock: globalThis });
-await using workers = new PoolWorkers({
-  kind: vision,
-  store,
-  clock: globalThis,
-  create: () => new VisionWorker('/path/to/vision-worker'),
-  size: new HillClimbing({
-    memoryPerWorker: 2 * 1024 ** 3,
-    computer: { availableParallelism, availableMemory },
-  }),
-  startup: new LeaderFirst(),
-  eviction: new IdleTimeout({ after: 300_000 }),
-});
-
-const { text } = await ocr.run({ path: '/tmp/receipt.png' }, { signal });
-```
-
-A host that answers at once starts the job, and reads its output later, from this host or another:
-
-```ts
-const { id } = await ocr.start({ path: '/tmp/receipt.png' });
-// later, in any host with a Pool of the same kind
-const { text } = await ocr.handle(id).result({ signal });
-```
-
-A host that cannot run the worker program only sends. To reach the workers of another computer, it gives a shared Postgres store:
-
-```ts
-await using ocr = new Pool({
-  kind: vision,
-  store: 'postgres://…',
-  clock: globalThis,
-});
-```
-
-A test gives a store of its own, so it never joins the user's pool:
-
-```ts
-await using scratch = await mkdtempDisposable(join(tmpdir(), 'pool-'));
-const store = join(scratch.path, 'store.sqlite');
-```
-
-### The API
-
-```ts
-import type { WallClock } from '@zukhruf/async';
-
-export class WorkerKind<Input, Output> {
-  constructor(options: {
-    name: string;
-    revision: number;
-    policy: 'standard' | 'exclusive';
-    retryLimit: number;
-    expireInSeconds: number;
-  });
-  readonly name: string;
-  readonly revision: number;
-  readonly policy: 'standard' | 'exclusive';
-  readonly retryLimit: number;
-  readonly expireInSeconds: number;
-  /** The queue of this revision in the store: `<name>.r<revision>`. */
-  readonly queue: string;
-}
-
-/** Sends jobs of one kind to the store, and waits for their outputs. */
-export class Pool<Input, Output> implements AsyncDisposable {
-  constructor(options: {
-    kind: WorkerKind<Input, Output>;
-    store: string;
-    clock: WallClock;
-  });
-  /** Sends the job, and resolves when the store has it. */
-  start(input: Input): Promise<JobHandle<Output>>;
-  /** The handle of a job of this kind and revision that any host started. */
-  handle(id: string): JobHandle<Output>;
-  /** start, then result. The abort of signal cancels the job. */
-  run(input: Input, options?: { signal?: AbortSignal }): Promise<Output>;
-  /** The jobs of the kind in the store, the same from every host. */
-  stats(): Promise<JobCounts>;
-  [Symbol.asyncDispose](): Promise<void>;
-}
-
-/** Offers this host's workers. Owns them while this host leads. */
-export class PoolWorkers<Input, Output> implements AsyncDisposable {
-  constructor(options: {
-    kind: WorkerKind<Input, Output>;
-    store: string;
-    clock: WallClock;
-    create: () => Worker<Input, Output>;
-    size: Sizing;
-    startup: Startup;
-    eviction: Eviction;
-  });
-  /** This host's slots: zero in each count while it does not own. */
-  readonly stats: PoolStats;
-  /** Resolves when this host owns and its startup workers are ready. */
-  ready(): Promise<void>;
-  [Symbol.asyncDispose](): Promise<void>;
-}
-
-export interface Worker<Input, Output> {
-  run(input: Input): Promise<Output>;
-  ready?(): Promise<unknown>;
-  exited(): Promise<unknown>;
-  kill(): void;
-  close(): Promise<void>;
-}
-
-/** A job in the store, by its id. */
-export interface JobHandle<Output> {
-  readonly id: string;
-  /** Waits for the output. The abort of signal ends only this wait. */
-  result(options?: { signal?: AbortSignal }): Promise<Output>;
-  /** A leave for a shared job; a drop or a kill for any other job. */
-  cancel(): Promise<void>;
-}
-
-export interface JobCounts {
-  readonly waiting: number;
-  readonly running: number;
-}
-
-/** The store of this computer, for the user of env: zukhruf-pool/store.sqlite in the user's state folder for process.platform. */
-export function computerStore(env: Record<string, string | undefined>): string;
-
-export class JobFailedError extends Error {
-  readonly failure: { readonly name: string; readonly message: string };
-}
-export class JobCancelledError extends Error {}
-export class JobNotFoundError extends Error {}
-export class DeprecatedRevisionError extends Error {}
-export class DisposedError extends Error {}
-```
-
-### The rules
+## The rules
 
 - **One owner.** On each computer, one host owns the workers of a pool. `PoolWorkers` campaigns in a `SqliteElection` of [`@zukhruf/election`](../election/README.md), with the claim files in the folder of the store. The other hosts with a `PoolWorkers` are standbys ([ADR 0011](./docs/adr/0011-every-pool-is-a-pool-for-the-computer-and-one-owner-pulls-its-jobs-from-a-store-that-every-host-writes-to.md)).
 - **The two roles.** `Pool` sends. `PoolWorkers` offers workers and has no `run`. They meet only through the worker kind and the store, as BullMQ's `Queue` and `Worker` meet through the queue name ([ADR 0013](./docs/adr/0013-pool-sends-jobs-and-pool-workers-offers-the-workers-of-its-host.md)).
@@ -358,124 +276,41 @@ export class DisposedError extends Error {}
 - **News travels by push.** Two channels for each pool: "a new job", with the revision, which the owner hears, and "an output", with the job id, which each waiting `Pool` hears. On one computer they go through [`@zukhruf/sqlite-notify`](../sqlite/notify/README.md), across computers through Postgres `LISTEN` / `NOTIFY`. The store is the truth, and a wake only says "read the store". A backstop each second on one computer finds a lost wake, and a job that the store's monitor failed ([ADR 0018](./docs/adr/0018-news-travels-by-push-through-the-notify-of-the-store-with-a-backstop.md)).
 - **`run` waits** for the output. The kind's `retryLimit` decides how often a job runs again, its `expireInSeconds` limits one run, and the caller's `signal` limits only the caller's wait. With no owner anywhere, the job waits in the store. `run` is `start`, then `result` ([ADR 0019](./docs/adr/0019-run-waits-and-a-failed-job-rejects-with-the-pools-error.md)).
 - **Accept now, read later.** `start(input)` resolves with a `JobHandle { id, result({ signal }), cancel() }`, and `handle(id)` gives the handle of a job from any host, as Temporal's `start` and `getHandle`. The job outlives the host that started it. A handle reads the job until the store's retention ends: 7 days after the job settled ([ADR 0026](./docs/adr/0026-start-accepts-a-job-now-and-a-job-handle-reads-its-output-later-from-any-host.md)).
-- **A cancel.** The caller's abort of a shared job is a leave: its `run` rejects, and the job runs to its end for the other callers. The abort of any other job drops it when it waits, and kills its worker when it runs. `cancel()` of a handle does the same ([ADR 0020](./docs/adr/0020-a-cancel-of-a-shared-job-is-a-leave-and-of-any-other-job-a-drop-or-a-kill.md); Ezz, 2026-11-14: "we need to follow top perfoerms").
-- **A caller that is gone.** Each job of a `run` carries its caller's address: a pipe of [`@zukhruf/pipes`](../pipes/README.md) that the waiting `Pool` serves. A job of `start` carries none. The owner connects to it before it starts the job, and keeps the connection while the job runs. A refused connect or a close is a cancel of that caller ([ADR 0021](./docs/adr/0021-a-caller-whose-host-is-gone-cancels-its-jobs-and-the-owner-learns-it-from-a-closed-connection.md)).
-- **Revisions.** Each revision has its own queue, `<name>.r<revision>`, so an older owner never fetches a job of a newer revision, as Temporal routes a task by its build id. An owner refuses a job of an older revision with `DeprecatedRevisionError`. An owner that hears a wake of a newer revision finishes its running jobs and resigns ([ADR 0022](./docs/adr/0022-the-newest-revision-takes-over-and-an-owner-refuses-a-job-of-an-older-revision.md)).
+- **A cancel.** The caller's abort of a shared job is a leave: its `run` rejects, and the job runs to its end for the other callers. The abort of any other job drops it when it waits, and the owner kills its worker at its next touch, at most 5 s on, when it runs. `cancel()` of a handle does the same ([ADR 0020](./docs/adr/0020-a-cancel-of-a-shared-job-is-a-leave-and-of-any-other-job-a-drop-or-a-kill.md); Ezz, 2026-11-14: "we need to follow top perfoerms").
+- **A caller that is gone** (not built yet). Each job of a `run` will carry its caller's address: a pipe of [`@zukhruf/pipes`](../pipes/README.md) that the waiting `Pool` serves. A job of `start` carries none. The owner will connect to it before it starts the job, and keep the connection while the job runs. A refused connect or a close will be a cancel of that caller ([ADR 0021](./docs/adr/0021-a-caller-whose-host-is-gone-cancels-its-jobs-and-the-owner-learns-it-from-a-closed-connection.md)).
+- **Revisions.** Each revision has its own queue, `<name>.r<revision>`, so an older owner never fetches a job of a newer revision, as Temporal routes a task by its build id. Not built yet: an owner that refuses a job of an older revision with `DeprecatedRevisionError`, and an owner that hears a wake of a newer revision, finishes its running jobs and resigns ([ADR 0022](./docs/adr/0022-the-newest-revision-takes-over-and-an-owner-refuses-a-job-of-an-older-revision.md)).
 - **Ownership moves** only by the owner's own act or its end. A standby starts no workers until it owns. A clean owner finishes its jobs and resigns. The jobs of a dead owner come back by their heartbeat. `ready()` never resolves on a standby ([ADR 0023](./docs/adr/0023-ownership-moves-only-by-the-owners-own-act-or-its-end-and-a-standby-stays-cold.md)).
 - **A hung owner** is ended by the election: a standby that hears no heartbeat on the leader's pipe for 15 s kills the leader's process. A late `complete` of the old owner affects 0 rows ([ADR 0024](./docs/adr/0024-a-hung-owner-is-ended-by-the-election-and-its-late-acts-are-fenced.md)).
-- **Many computers** share one Postgres store, and each computer elects its own owner. It is built only when a second computer is real ([ADR 0025](./docs/adr/0025-many-computers-share-one-postgres-store-and-each-computer-keeps-its-own-owner.md)).
+- **Many computers** will share one Postgres store, and each computer will elect its own owner. It is built only when a second computer is real; today a `postgres://` store throws a `TypeError` ([ADR 0025](./docs/adr/0025-many-computers-share-one-postgres-store-and-each-computer-keeps-its-own-owner.md)).
 
-### Errors
+## Not built yet
 
-| Error                     | When `run` or `result` rejects with it                                                                                                                         |
-| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `JobFailedError`          | The job failed its last run. `failure` has the name and the message that the owner stored, for example the worker's error or "handler execution exceeded 60s". |
-| `DeprecatedRevisionError` | The owner runs a newer revision of the kind, and refused this job. Update the host.                                                                            |
-| `JobCancelledError`       | The job was cancelled, by `cancel()` of a handle or by the abort of a `run`.                                                                                   |
-| `JobNotFoundError`        | The store has no job with the id: it was deleted after the retention, it belongs to another revision, or it never existed.                                     |
-| `DisposedError`           | The host disposed its `Pool` while the `run` or the `result` waited.                                                                                           |
-| The reason of `signal`    | The caller's signal aborted.                                                                                                                                   |
-
-### The gaps that come first
-
-Each gap that the design found goes to the package that must have it, and is built before the pool (Ezz, 2026-11-13: "Anything that is missing then goes to the appropriate package").
-
-| Gap                                                                | Home                     | State                                               |
-| ------------------------------------------------------------------ | ------------------------ | --------------------------------------------------- |
-| The socket address of a program of one computer                    | `@zukhruf/pipes`         | Built (#2496)                                       |
-| A claim that is not atomic across connections                      | `@zukhruf/sqlite-queue`  | Built (#3700)                                       |
-| pg-boss's `fetch` and `complete`                                   | `@zukhruf/sqlite-queue`  | Built (#4313)                                       |
-| pg-boss's `touch`                                                  | `@zukhruf/sqlite-queue`  | Built (#4370)                                       |
-| No `LISTEN` / `NOTIFY` on a SQLite file                            | `@zukhruf/sqlite-notify` | Built (#4333)                                       |
-| `useListenNotify` across instances on one file                     | `@zukhruf/sqlite-queue`  | Built (#4334). The pool does not use it (ADR 0018). |
-| A standby that polls, and a hung leader that nobody ends           | `@zukhruf/election`      | Built (#4371)                                       |
-| An older release that rebuilds a newer file                        | `@zukhruf/sqlite-queue`  | Built (#4369)                                       |
-| A count of the jobs of a queue by state, pg-boss's `getQueueStats` | `@zukhruf/sqlite-queue`  | Built (#2888). `pool.stats()` needs it.             |
-| A job from `findJobs` carries a `signal`, and pg-boss's does not   | `@zukhruf/sqlite-queue`  | Fixed (#4331)                                       |
-| A write that waits more than the busy timeout of 5 s fails         | `@zukhruf/sqlite-queue`  | Open risk (#4355)                                   |
-| A synced commit on macOS is a plain `fsync`                        | `@zukhruf/sqlite-queue`  | Open risk (#4351)                                   |
-| Nothing ran on Windows                                             | each package             | Deferred (#4340)                                    |
-
-### Decided
-
-The three open features, and the three items that the records did not decide, were decided on 2026-11-16 (backlog #3527, "DECISIONS 2026-11-16").
-
-1. **Accept a job now, and read its output later: yes, in Temporal's shape.** Ezz: "learn from memoroies what is my style and pick". His recorded rule for a standard package: put a capability in or out for a reason of its domain, never because no consumer needs it yet. Every leading job system has it: Temporal's `start` and `getHandle`, Celery's `AsyncResult`, BullMQ's `Job.fromId` and `waitUntilFinished`, pg-boss's `send` id and `findJobs`, and Azure Asynchronous Request-Reply. Temporal's shape maps one-to-one onto pg-boss ([ADR 0026](./docs/adr/0026-start-accepts-a-job-now-and-a-job-handle-reads-its-output-later-from-any-host.md)).
-2. **A result cache: no cache in the pool.** Ezz: "No cache in the pool (Recommended)". A host that wants one keeps it above the pool, keyed by content, as Bazel keeps its action cache above its workers.
-3. **Cancel a running job with no kill: kill only for now.** Ezz: "Kill only for now (Recommended)". A cancel signal on the worker's `run` comes later, as Bazel sends `cancel: true` to a worker that declares `supports-worker-cancellation`. The trigger is a costly kind that cannot be shared, with a worker that can cancel ([ADR 0020](./docs/adr/0020-a-cancel-of-a-shared-job-is-a-leave-and-of-any-other-job-a-drop-or-a-kill.md)).
-
-Decided by the leaders (Ezz: "I trust your recommendation ... follow the top performers"):
-
-4. **The address on each job** is a pipe of `@zukhruf/pipes` that each waiting `Pool` serves, as gRPC learns of a gone client from the caller's own stream. `@zukhruf/sqlite-notify` does not change ([ADR 0021](./docs/adr/0021-a-caller-whose-host-is-gone-cancels-its-jobs-and-the-owner-learns-it-from-a-closed-connection.md)).
-5. **A queue for each worker revision**, so an older owner never fetches a job of a newer revision, as Temporal worker versioning routes a task by its build id and Amazon SWF by the version ([ADR 0022](./docs/adr/0022-the-newest-revision-takes-over-and-an-owner-refuses-a-job-of-an-older-revision.md)).
-6. **`computerStore(env)` reads `process.platform`**, and takes `env` as its input, as Go's `os.UserConfigDir` reads `runtime.GOOS` ([ADR 0015](./docs/adr/0015-the-store-is-a-required-input-and-computer-store-gives-the-store-of-the-computer.md)).
-
-### Moving the hosts
-
-A plan, not code. The hosts that move are elt and context-compiler (map, Revision 2026-11-13). trashbot is not in use, stays on `@zukhruf/pool` 0.6.15, and does not move.
-
-1. **zukhruf, before the pool**: Ezz accepted ADR 0011 to ADR 0026 as built (2026-11-20). `@zukhruf/sqlite-queue` has pg-boss's `getQueueStats(name)` with its parity tests, which `pool.stats()` needs (#2888). #4331 is fixed.
-2. **zukhruf, the pool**: `WorkerKind`, `Pool` with `start`, `handle` and `run`, `PoolWorkers` and `computerStore`, with tests of several real hosts on one computer: each test with its own store file, real worker processes and the real clock. `use` and its tests go. The recipes change to the new API, and this section becomes the README. Then a release.
-3. **elt**: a `vision` kind (`exclusive`, with retries) and a `transcription` kind (`standard`) in modules with no native code. The worker classes implement `run`. `ImageFormat` takes a `Pool` of the `vision` kind, in place of `Pool<VisionWorker>` (`image-format.ts:56`). `local-transcription-model.ts:85` gives the path of its wav to `run`.
-4. **context-compiler**: the server (`apps/server/src/startup.ts:11`) and the CLI (`apps/cli/src/parsing.ts:61`) build a `Pool` and a `PoolWorkers` of the `vision` kind with `computerStore(process.env)`. `packages/connectors/connector/src/transcription.ts:96` does the same for transcription. Each host disposes them at a termination signal, through `@zukhruf/shutdown`.
-5. **elt and context-compiler** move to the new release of `@zukhruf` in one step, and release together.
-6. **A measure**: the contention benchmark of 2026-11-02 runs again with two hosts on one store. One owner's sizing then caps the computer.
-
-Many computers come after map ticket 14, when a second computer is real.
+- A caller that is gone cancels its jobs ([ADR 0021](./docs/adr/0021-a-caller-whose-host-is-gone-cancels-its-jobs-and-the-owner-learns-it-from-a-closed-connection.md)).
+- An owner refuses a job of an older revision with `DeprecatedRevisionError`, and an owner of an older revision gives way to a newer one ([ADR 0022](./docs/adr/0022-the-newest-revision-takes-over-and-an-owner-refuses-a-job-of-an-older-revision.md)).
+- Many computers on one Postgres store ([ADR 0025](./docs/adr/0025-many-computers-share-one-postgres-store-and-each-computer-keeps-its-own-owner.md)).
+- The hosts elt and context-compiler move to this pool, so their Vision workers become one pool for each computer (backlog #3527).
 
 ## Errors
 
-These are the errors that the package throws today. The errors of the design are in the section "One pool for the computer".
-
-| Error                    | When                                                                                                                                                                                                                                                                                                                    |
-| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `RangeError`             | `new WorkerKind` gets a name whose channel `<name>.new-job` has 64 bytes or more ([src/worker-kind.test.ts](./src/worker-kind.test.ts)).                                                                                                                                                                                |
-| `RangeError`             | `new IdleTimeout({ after })` gets an `after` that is not above 0 and at most 2,147,483,647 ([src/pool.test.ts](./src/pool.test.ts)).                                                                                                                                                                                    |
-| `TypeError`              | `new PoolWorkers` gets a `postgres://` store. Only the store of one computer, the path of a SQLite file, is built ([src/pool-workers.test.ts](./src/pool-workers.test.ts)).                                                                                                                                             |
-| `Error`                  | `computerStore(env)` finds no `$HOME` on macOS, no `$HOME` and no `$XDG_STATE_HOME` on Linux, or no `%LOCALAPPDATA%` on Windows ([src/computer-store.test.ts](./src/computer-store.test.ts)).                                                                                                                           |
-| The failure of the store | The disposal of `PoolWorkers` rejects with the failure of the store's start, for example an `expireInSeconds` that the store refuses ([src/pool-workers.test.ts](./src/pool-workers.test.ts)). A later failure of the store is a process warning.                                                                       |
-| The error of the warm-up | `workers.ready()` of `PoolWorkers` rejects with it when a worker that the startup of the owner starts fails its `ready()` ([src/pool-workers.test.ts](./src/pool-workers.test.ts)).                                                                                                                                     |
-| `AbortError`             | `workers.ready()` of `PoolWorkers` rejects with it when you dispose `PoolWorkers` before its host owns ([src/pool-workers.test.ts](./src/pool-workers.test.ts)).                                                                                                                                                        |
-| `signal.reason`          | `pool.use` rejects with it when its signal aborts.                                                                                                                                                                                                                                                                      |
-| `AbortError`             | `pool.use` rejects with it when you dispose the pool, also for a job that waits ([src/pool.test.ts](./src/pool.test.ts)).                                                                                                                                                                                               |
-| The error of the job     | `pool.use` rejects with what `job` throws, for example the error of a worker that exited while the job ran.                                                                                                                                                                                                             |
-| The error of the warm-up | `pool.ready()` rejects with it when a worker that the startup starts with the pool fails its `ready()`. When you dispose the pool while such a worker warms up, the pool kills the worker, and `pool.ready()` rejects with the reason that the `ready()` of that worker gives ([src/pool.test.ts](./src/pool.test.ts)). |
+| Error                    | When                                                                                                                                                                                                                                                                                                    |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `JobFailedError`         | `run` or `result` rejects with it when the job failed its last run. `failure` has the name and the message that the owner stored, for example the worker's error, or "handler execution exceeded 60s", or the store's "job heartbeat timeout" ([src/pool-workers.test.ts](./src/pool-workers.test.ts)). |
+| `JobCancelledError`      | `run` or `result` rejects with it when the job was cancelled, by `cancel()` of a handle or by the abort of a `run` of another caller.                                                                                                                                                                   |
+| `JobNotFoundError`       | `result` rejects with it when the store has no job with the id: it was deleted after the retention, it belongs to another revision, or it never existed.                                                                                                                                                |
+| `DisposedError`          | `run`, `result`, `start` or `cancel()` rejects with it when the host disposed its `Pool`, also while it waited.                                                                                                                                                                                         |
+| The reason of `signal`   | `run` or `result` rejects with it when the caller's signal aborted.                                                                                                                                                                                                                                     |
+| `RangeError`             | `new WorkerKind` gets a name whose channel `<name>.new-job` has 64 bytes or more ([src/worker-kind.test.ts](./src/worker-kind.test.ts)).                                                                                                                                                                |
+| `RangeError`             | `new IdleTimeout({ after })` gets an `after` that is not above 0 and at most 2,147,483,647 ([src/pool.test.ts](./src/pool.test.ts)).                                                                                                                                                                    |
+| `TypeError`              | `new Pool` or `new PoolWorkers` gets a `postgres://` store. Only the store of one computer, the path of a SQLite file, is built ([src/pool-workers.test.ts](./src/pool-workers.test.ts)).                                                                                                               |
+| `Error`                  | `computerStore(env)` finds no `$HOME` on macOS, no `$HOME` and no `$XDG_STATE_HOME` on Linux, or no `%LOCALAPPDATA%` on Windows ([src/computer-store.test.ts](./src/computer-store.test.ts)).                                                                                                           |
+| The failure of the store | The disposal of `PoolWorkers`, and `start` of a `Pool`, reject with the failure of the store's start, for example an `expireInSeconds` that the store refuses ([src/pool-workers.test.ts](./src/pool-workers.test.ts)). A later failure of the store is a process warning.                              |
+| The error of the warm-up | `workers.ready()` rejects with it when a worker that the startup of the owner starts fails its `ready()` ([src/pool-workers.test.ts](./src/pool-workers.test.ts)).                                                                                                                                      |
+| `AbortError`             | `workers.ready()` rejects with it when you dispose `PoolWorkers` before its host owns ([src/pool-workers.test.ts](./src/pool-workers.test.ts)).                                                                                                                                                         |
 
 ## API
 
-The exports of today. The section "One pool for the computer" gives the design, which is not all built.
-
 ```ts
 import type { Clock, WallClock } from '@zukhruf/async';
-
-class Pool<T extends Worker<never, unknown>> implements AsyncDisposable {
-  constructor(options: {
-    size: Sizing;
-    startup: Startup;
-    eviction: Eviction;
-    create: () => T;
-    clock: Clock; // globalThis in production, a fake clock in a test
-  });
-  ready(): Promise<void>; // the workers that the startup starts with the pool are ready
-  get stats(): PoolStats; // a new snapshot at each read
-  use<R>(job: (worker: T) => Promise<R>, signal?: AbortSignal): Promise<R>;
-  [Symbol.asyncDispose](): Promise<void>; // stops every worker
-}
-
-class PoolWorkers<Input, Output> implements AsyncDisposable {
-  constructor(options: {
-    kind: WorkerKind<Input, Output>;
-    store: string; // the path of the store's SQLite file, such as computerStore(process.env)
-    clock: WallClock;
-    create: () => Worker<Input, Output>;
-    size: Sizing;
-    startup: Startup;
-    eviction: Eviction;
-  }); // TypeError: a postgres:// store
-  readonly stats: PoolStats; // this host's slots; each count 0 while it does not own
-  ready(): Promise<void>; // the host owns and its startup's workers are ready
-  [Symbol.asyncDispose](): Promise<void>; // rejects with the failure of the store's start
-}
 
 class WorkerKind<Input, Output> {
   constructor(options: {
@@ -493,6 +328,45 @@ class WorkerKind<Input, Output> {
   readonly queue: string; // `<name>.r<revision>`
 }
 
+class Pool<Input, Output> implements AsyncDisposable {
+  constructor(options: {
+    kind: WorkerKind<Input, Output>;
+    store: string; // the path of the store's SQLite file, such as computerStore(process.env)
+    clock: WallClock;
+  }); // TypeError: a postgres:// store
+  start(input: Input): Promise<JobHandle<Output>>; // resolves when the store has the job
+  handle(id: string): JobHandle<Output>; // reads nothing
+  run(input: Input, options?: { signal?: AbortSignal }): Promise<Output>; // start, then result; the abort of signal cancels the job
+  stats(): Promise<JobCounts>; // the jobs of the kind in the store
+  [Symbol.asyncDispose](): Promise<void>; // ends the waits with DisposedError, cancels the jobs of waiting runs
+}
+
+interface JobHandle<Output> {
+  readonly id: string;
+  result(options?: { signal?: AbortSignal }): Promise<Output>; // the abort of signal ends only this wait
+  cancel(): Promise<void>; // a leave for a shared job; a drop or a kill for any other job
+}
+
+interface JobCounts {
+  readonly waiting: number;
+  readonly running: number;
+}
+
+class PoolWorkers<Input, Output> implements AsyncDisposable {
+  constructor(options: {
+    kind: WorkerKind<Input, Output>;
+    store: string;
+    clock: WallClock;
+    create: () => Worker<Input, Output>;
+    size: Sizing;
+    startup: Startup;
+    eviction: Eviction;
+  }); // TypeError: a postgres:// store
+  readonly stats: PoolStats; // this host's slots; each count 0 while it does not own
+  ready(): Promise<void>; // the host owns and its startup's workers are ready
+  [Symbol.asyncDispose](): Promise<void>; // a hand-over; rejects with the failure of the store's start
+}
+
 function computerStore(env: Record<string, string | undefined>): string;
 
 interface Worker<Input, Output> {
@@ -503,8 +377,20 @@ interface Worker<Input, Output> {
   close(): Promise<void>;
 }
 
+class JobFailedError extends Error {
+  readonly failure: Failure;
+}
+class JobCancelledError extends Error {}
+class JobNotFoundError extends Error {}
+class DisposedError extends Error {}
+
+interface Failure {
+  readonly name: string;
+  readonly message: string;
+}
+
 interface Sizing {
-  readonly ceiling: number; // the most workers it may run, decided when the pool is built
+  readonly ceiling: number; // the most workers it may run, decided when the owner builds its slots
   readonly current: number; // the workers it runs now
   readonly kept: number; // the workers it keeps alive, at least current
   record(sample: Sample): void;
@@ -582,19 +468,19 @@ class IdleTimeout implements Eviction {
 - [ADR 0008](./docs/adr/0008-the-pool-measures-and-waits-on-the-clock-that-the-caller-gives.md): the pool measures and waits on the clock that the caller gives.
 - [ADR 0009](./docs/adr/0009-a-sizing-reads-the-capacity-from-the-computer-that-the-caller-gives.md): a sizing reads the capacity from the computer that the caller gives.
 - [ADR 0010](./docs/adr/0010-an-eager-pool-starts-a-worker-again-after-its-warm-up-fails.md): an eager pool starts a worker again after its warm-up fails.
-- [ADR 0011](./docs/adr/0011-every-pool-is-a-pool-for-the-computer-and-one-owner-pulls-its-jobs-from-a-store-that-every-host-writes-to.md): every pool is a pool for the computer, and one owner pulls its jobs from a store that every host writes to (proposed).
-- [ADR 0012](./docs/adr/0012-a-job-is-data-and-the-worker-kind-runs-it.md): a job is data, and the worker kind runs it (proposed).
-- [ADR 0013](./docs/adr/0013-pool-sends-jobs-and-pool-workers-offers-the-workers-of-its-host.md): `Pool` sends jobs, and `PoolWorkers` offers the workers of its host (proposed).
-- [ADR 0014](./docs/adr/0014-pool-and-pool-workers-take-one-worker-kind.md): `Pool` and `PoolWorkers` take one worker kind (proposed).
-- [ADR 0015](./docs/adr/0015-the-store-is-a-required-input-and-computer-store-gives-the-store-of-the-computer.md): the store is a required input, and `computerStore` gives the store of the computer (proposed).
-- [ADR 0016](./docs/adr/0016-the-owners-sizing-caps-the-jobs-of-its-computer.md): the owner's sizing caps the jobs of its computer (proposed).
-- [ADR 0017](./docs/adr/0017-the-owner-asks-then-takes-as-many-jobs-as-it-has-free-workers.md): the owner asks, then takes as many jobs as it has free workers (proposed).
-- [ADR 0018](./docs/adr/0018-news-travels-by-push-through-the-notify-of-the-store-with-a-backstop.md): news travels by push through the notify of the store, with a backstop (proposed).
-- [ADR 0019](./docs/adr/0019-run-waits-and-a-failed-job-rejects-with-the-pools-error.md): `run` waits, and a failed job rejects with the pool's error (proposed).
-- [ADR 0020](./docs/adr/0020-a-cancel-of-a-shared-job-is-a-leave-and-of-any-other-job-a-drop-or-a-kill.md): a cancel of a shared job is a leave, and of any other job a drop or a kill (proposed).
-- [ADR 0021](./docs/adr/0021-a-caller-whose-host-is-gone-cancels-its-jobs-and-the-owner-learns-it-from-a-closed-connection.md): a caller whose host is gone cancels its jobs, and the owner learns it from a closed connection (proposed).
-- [ADR 0022](./docs/adr/0022-the-newest-revision-takes-over-and-an-owner-refuses-a-job-of-an-older-revision.md): the newest revision takes over, and an owner refuses a job of an older revision (proposed).
-- [ADR 0023](./docs/adr/0023-ownership-moves-only-by-the-owners-own-act-or-its-end-and-a-standby-stays-cold.md): ownership moves only by the owner's own act or its end, and a standby stays cold (proposed).
-- [ADR 0024](./docs/adr/0024-a-hung-owner-is-ended-by-the-election-and-its-late-acts-are-fenced.md): a hung owner is ended by the election, and its late acts are fenced (proposed).
-- [ADR 0025](./docs/adr/0025-many-computers-share-one-postgres-store-and-each-computer-keeps-its-own-owner.md): many computers share one Postgres store, and each computer keeps its own owner (proposed).
-- [ADR 0026](./docs/adr/0026-start-accepts-a-job-now-and-a-job-handle-reads-its-output-later-from-any-host.md): `start` accepts a job now, and a `JobHandle` reads its output later from any host (proposed).
+- [ADR 0011](./docs/adr/0011-every-pool-is-a-pool-for-the-computer-and-one-owner-pulls-its-jobs-from-a-store-that-every-host-writes-to.md): every pool is a pool for the computer, and one owner pulls its jobs from a store that every host writes to.
+- [ADR 0012](./docs/adr/0012-a-job-is-data-and-the-worker-kind-runs-it.md): a job is data, and the worker kind runs it.
+- [ADR 0013](./docs/adr/0013-pool-sends-jobs-and-pool-workers-offers-the-workers-of-its-host.md): `Pool` sends jobs, and `PoolWorkers` offers the workers of its host.
+- [ADR 0014](./docs/adr/0014-pool-and-pool-workers-take-one-worker-kind.md): `Pool` and `PoolWorkers` take one worker kind.
+- [ADR 0015](./docs/adr/0015-the-store-is-a-required-input-and-computer-store-gives-the-store-of-the-computer.md): the store is a required input, and `computerStore` gives the store of the computer.
+- [ADR 0016](./docs/adr/0016-the-owners-sizing-caps-the-jobs-of-its-computer.md): the owner's sizing caps the jobs of its computer.
+- [ADR 0017](./docs/adr/0017-the-owner-asks-then-takes-as-many-jobs-as-it-has-free-workers.md): the owner asks, then takes as many jobs as it has free workers.
+- [ADR 0018](./docs/adr/0018-news-travels-by-push-through-the-notify-of-the-store-with-a-backstop.md): news travels by push through the notify of the store, with a backstop.
+- [ADR 0019](./docs/adr/0019-run-waits-and-a-failed-job-rejects-with-the-pools-error.md): `run` waits, and a failed job rejects with the pool's error.
+- [ADR 0020](./docs/adr/0020-a-cancel-of-a-shared-job-is-a-leave-and-of-any-other-job-a-drop-or-a-kill.md): a cancel of a shared job is a leave, and of any other job a drop or a kill.
+- [ADR 0021](./docs/adr/0021-a-caller-whose-host-is-gone-cancels-its-jobs-and-the-owner-learns-it-from-a-closed-connection.md): a caller whose host is gone cancels its jobs, and the owner learns it from a closed connection.
+- [ADR 0022](./docs/adr/0022-the-newest-revision-takes-over-and-an-owner-refuses-a-job-of-an-older-revision.md): the newest revision takes over, and an owner refuses a job of an older revision.
+- [ADR 0023](./docs/adr/0023-ownership-moves-only-by-the-owners-own-act-or-its-end-and-a-standby-stays-cold.md): ownership moves only by the owner's own act or its end, and a standby stays cold.
+- [ADR 0024](./docs/adr/0024-a-hung-owner-is-ended-by-the-election-and-its-late-acts-are-fenced.md): a hung owner is ended by the election, and its late acts are fenced.
+- [ADR 0025](./docs/adr/0025-many-computers-share-one-postgres-store-and-each-computer-keeps-its-own-owner.md): many computers share one Postgres store, and each computer keeps its own owner.
+- [ADR 0026](./docs/adr/0026-start-accepts-a-job-now-and-a-job-handle-reads-its-output-later-from-any-host.md): `start` accepts a job now, and a `JobHandle` reads its output later from any host.
