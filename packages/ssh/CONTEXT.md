@@ -127,6 +127,10 @@ _Avoid_: Blocked key, banned key
 What the client does with a key that the known hosts do not list, or list with another key. OpenSSH's `StrictHostKeyChecking`: `yes`, `ask`, `accept-new` or `no`. `ssh -G` prints `yes` as `true` and `no` as `false` ([ADR 0005](./docs/adr/0005-host-keys-are-checked-as-gos-knownhosts-checks-them-under-openssh-stricthostkeychecking.md)).
 _Avoid_: Trust mode, TOFU (only one of the values)
 
+**Restricted mode**:
+How a client runs after the host key policy `no` let a changed or a revoked key through. Sessions run and `dial` works, as OpenSSH's `-W` does. `listen` rejects with the host key error (`KeyError` or `RevokedError`). No session asks for agent forwarding, and the client offers no password and no keyboard-interactive auth. OpenSSH's restrictions (`check_host_key` in `sshconnect.c`, lines 1365-1416 of 10.5p1; [ADR 0005](./docs/adr/0005-host-keys-are-checked-as-gos-knownhosts-checks-them-under-openssh-stricthostkeychecking.md)). The test "under StrictHostKeyChecking no, a changed host key connects in the restricted mode" in `src/config-dial.test.ts` shows it.
+_Avoid_: Unsafe mode, safe mode, degraded mode
+
 ### Authentication
 
 **Auth method**:
@@ -180,3 +184,15 @@ _Avoid_: Server options
 **Incoming channel**:
 A channel that the client asks the server to open: a session, a `direct-tcpip` stream or a `direct-streamlocal@openssh.com` stream. The server accepts or rejects it. Go's `ssh.NewChannel`.
 _Avoid_: Channel request (RFC 4254 uses "request" for messages on an open channel)
+
+**Server session**:
+A session channel that the server accepted: `accept()` of a `'session'` incoming channel gives a `ServerSession`. Its `stdin`, `stdout` and `stderr` are the data of the channel. `requests()` gives its session requests, and `exit()` sends the exit status, or `exit-signal`, and closes the channel. Go has no type for it: Go's `NewChannel.Accept` gives an `ssh.Channel` and its requests.
+_Avoid_: Session (alone: the client's `Session`), shell, process
+
+**Global request**:
+A request on the connection, not on a channel (RFC 4254 §4): `tcpip-forward` and `cancel-tcpip-forward` (RFC 4254 §7.1), or `streamlocal-forward@openssh.com` and `cancel-streamlocal-forward@openssh.com`. `ServerConn#requests()` gives them as `GlobalRequest`, and the server accepts or rejects each. Go's `*ssh.Request` on the request channel of `ssh.NewServerConn`.
+_Avoid_: Connection request, forward (the channel that `forward()` opens for an accepted request)
+
+**Session request**:
+A request on an open server session (RFC 4254 §6): `env`, `pty-req`, `window-change`, `signal`, `exec`, `shell` or `auth-agent-req@openssh.com`. `ServerSession#requests()` gives them as `SessionRequest`. The server accepts or rejects each, except `window-change` and `signal`, which take no reply. Go's `*ssh.Request` on the request channel of an accepted channel.
+_Avoid_: Command (only `exec` and `shell` start one), channel request (see Incoming channel)
