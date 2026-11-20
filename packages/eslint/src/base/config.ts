@@ -31,7 +31,6 @@ import noTestFileImport from '../imports/no-test-file-import.ts';
 import noZodToJsonSchema from '../imports/no-zod-to-json-schema.ts';
 import noEnum from '../language/no-enum.ts';
 import noTsBesideDts from '../language/no-ts-beside-dts.ts';
-import noIngredientsName from '../naming/no-ingredients-name.ts';
 import noReflectGetChain from '../payloads/no-reflect-get-chain.ts';
 import noProcessGlobalWrite from '../process-state/no-process-global-write.ts';
 import { workspaceRootOf } from '../workspace/workspace-root.ts';
@@ -57,7 +56,6 @@ const rules = {
   'no-captured-assignment': noCapturedAssignment,
   'no-node-env': noNodeEnv,
   'no-ts-beside-dts': noTsBesideDts,
-  'no-ingredients-name': noIngredientsName,
   'no-reflect-get-chain': noReflectGetChain,
   'no-process-global-write': noProcessGlobalWrite,
   'no-add-issue-string': noAddIssueString,
@@ -206,12 +204,6 @@ export const base: Concept = {
         name: 'zukhruf/base/node-env',
         files: SOURCE,
         rules: { 'zukhruf/no-node-env': 'error' },
-      },
-      {
-        // A name says what a thing is in engineering terms, not a metaphor.
-        name: 'zukhruf/base/naming',
-        files: SOURCE,
-        rules: { 'zukhruf/no-ingredients-name': 'error' },
       },
       {
         // A payload walked with Reflect.get one field at a time guesses its
