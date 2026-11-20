@@ -142,6 +142,14 @@ Backlog #2899 is about this code. A third dialect with a pool is the time to mov
 
 Three more test helpers of the mutex are also in other packages. `mountAs` and `LosableElection` are in three places, and [the ledger of the election](../../election/docs/copied-code.md#test-helpers-in-more-than-two-places) records them. `listening` is in two places, and [the note of the single flight](../../single-flight/docs/copied-from-mutex.md#tests-copied) records it.
 
+**The codes of a Windows refusal.**
+
+- Places: `isRefusedForNow` in `packages/fs/src/patiently.ts` (not exported), and `isRefusedByWindows` in `sqlite/holder-record.ts`.
+- Same: the error is a refusal only on `win32`, with the code `EPERM`, `EACCES` or `EBUSY`, read with `isErrno` (ADR 0011 of `@zukhruf/fs`).
+- Differs: `patiently` retries the refused operation for a while; `#clearEarlierHolders` leaves the refused delete for the next holder, so the grant never fails on it.
+
+Backlog #4919 extracts the predicate at a third place.
+
 ## In more than two places
 
 The Rule of Three asks to extract the code below. It is not extracted yet. Until it is, a fix to one place goes into each place, and the commit names each file.

@@ -13,7 +13,11 @@ export interface ConnectionEvents {
  * while nobody listens is not kept.
  */
 export interface Connection<Outgoing> extends EventEmitter<ConnectionEvents> {
-  /** Rejects when the message cannot be delivered because the peer is gone. */
+  /**
+   * Rejects when the message cannot be delivered because the peer is gone.
+   * The adapters that a coordinator answers through reject with
+   * `ConnectionClosedError` then.
+   */
   send(message: Outgoing): Promise<void>;
   /** Keeps the process alive while its owner waits for a message. */
   ref(): void;

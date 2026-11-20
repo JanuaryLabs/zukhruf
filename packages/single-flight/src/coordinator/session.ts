@@ -1,5 +1,6 @@
 import { EpochExhaustedError, FencingToken } from '@zukhruf/fencing';
 
+import { ConnectionClosedError } from '../connection/connection-closed-error.ts';
 import type { Connection } from '../connection/connection.ts';
 import {
   type FlightRequest,
@@ -129,8 +130,10 @@ class Serving implements SessionPhase {
   }
 
   reply(response: FlightResponse) {
-    // A failed send means the client is gone; `close` then withdraws its parties.
-    this.#connection.send(response).catch(() => {});
+    this.#connection.send(response).catch((error: unknown) => {
+      // The client is gone; `close` then withdraws its parties.
+      if (!(error instanceof ConnectionClosedError)) throw error;
+    });
   }
 
   close() {

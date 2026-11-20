@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 
 import { untilAborted } from '@zukhruf/async';
-import { TemporaryFiles } from '@zukhruf/fs';
+import { TemporaryFiles, isErrno } from '@zukhruf/fs';
 
 import { OpenSshConfig } from './config.ts';
 import { hermeticLines } from './testing/ssh-config.ts';
@@ -159,8 +159,9 @@ async function startReports(): Promise<Reports> {
       if (pid > 0) {
         try {
           process.kill(pid, 'SIGKILL');
-        } catch {
+        } catch (error) {
           // It has exited.
+          if (!isErrno(error, 'ESRCH')) throw error;
         }
       }
       for (const socket of sockets) socket.destroy();

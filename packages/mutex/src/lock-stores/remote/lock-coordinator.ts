@@ -8,6 +8,7 @@ import {
 import type { LockHandle } from '../../mutex/lease.ts';
 import type { AcquireOptions, LockStore } from '../../mutex/lock-store.ts';
 import { MemoryStore } from '../memory/memory-store.ts';
+import { ConnectionClosedError } from './connection-closed-error.ts';
 import type { Connection } from './connection.ts';
 import {
   type LockRequest,
@@ -359,8 +360,12 @@ class Serving implements SessionPhase {
   }
 
   async reply(response: LockResponse) {
-    // A failed send means the peer is gone; `close` then releases its leases.
-    await this.#connection.send(response).catch(() => {});
+    try {
+      await this.#connection.send(response);
+    } catch (error) {
+      // The peer is gone; `close` then releases its leases.
+      if (!(error instanceof ConnectionClosedError)) throw error;
+    }
   }
 
   async grant(lease: LockHandle, id: string) {

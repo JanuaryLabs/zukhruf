@@ -1,6 +1,9 @@
 import type { ChildProcess, Serializable } from 'node:child_process';
 import { promisify } from 'node:util';
 
+import { isErrno } from '@zukhruf/fs';
+
+import { ConnectionClosedError } from '../remote/connection-closed-error.ts';
 import { wrap } from '../remote/envelope.ts';
 import type { LockResponse } from '../remote/protocol.ts';
 import { SharedChannelConnection } from '../remote/shared-channel-connection.ts';
@@ -19,8 +22,16 @@ export class ChildProcessConnection extends SharedChannelConnection<LockResponse
     this.listen();
   }
 
-  send(response: LockResponse): Promise<void> {
-    return this.#send(wrap(response));
+  async send(response: LockResponse): Promise<void> {
+    try {
+      await this.#send(wrap(response));
+    } catch (error) {
+      // A send to a child that died fails with EPIPE, and one after the channel closed with ERR_IPC_CHANNEL_CLOSED.
+      if (isErrno(error, 'EPIPE') || isErrno(error, 'ERR_IPC_CHANNEL_CLOSED')) {
+        throw new ConnectionClosedError({ cause: error });
+      }
+      throw error;
+    }
   }
 
   /** The running child already keeps the parent alive. */

@@ -8,6 +8,7 @@ import { describe, test } from 'node:test';
 import { untilAborted } from '@zukhruf/async';
 import { TemporaryFiles } from '@zukhruf/fs';
 
+import { ConnectionClosedError } from './connection-closed-error.ts';
 import { SocketConnection } from './socket-connection.ts';
 
 describe('Socket connection', () => {
@@ -35,7 +36,11 @@ describe('Socket connection', () => {
     try {
       // Act: keep writing until the dead peer makes a write fail.
       for (let n = 0; n < 1000 && !closed; n++) {
-        await connection.send({ n }).catch(() => {});
+        try {
+          await connection.send({ n });
+        } catch (error) {
+          if (!(error instanceof ConnectionClosedError)) throw error;
+        }
       }
 
       // Assert: the loss arrives as `close`, and the process did not crash.

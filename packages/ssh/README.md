@@ -200,10 +200,16 @@ The package has no forwarder class, as in Go and Rust ([ADR 0009](./docs/adr/000
 import { type Socket, createServer } from 'node:net';
 import { pipeline } from 'node:stream/promises';
 
+import { OpenChannelError } from '@zukhruf/ssh';
+
 async function carry(socket: Socket): Promise<void> {
   const remote = await client
     .dial('tcp', '127.0.0.1:5432')
-    .catch(() => undefined);
+    .catch((error: unknown) => {
+      // The server refused the channel, for example because nothing listens there.
+      if (error instanceof OpenChannelError) return undefined;
+      throw error;
+    });
   if (!remote) return void socket.destroy();
   await Promise.allSettled([
     pipeline(socket, remote),

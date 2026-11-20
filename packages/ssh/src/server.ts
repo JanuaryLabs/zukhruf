@@ -16,6 +16,7 @@ import ssh2, {
 import { Future, Latch } from '@zukhruf/async';
 
 import { splitHostPort } from './address.ts';
+import { isErrno } from './errno.ts';
 import { type PrivateKey, protocolKeyOf } from './private-key.ts';
 import type { Prompt } from './prompt.ts';
 import { PublicKey } from './public-key.ts';
@@ -475,8 +476,9 @@ class Inbox<T> {
   end(): void {
     try {
       this.#controller.current?.close();
-    } catch {
-      // The reader cancelled the queue.
+    } catch (error) {
+      // The reader cancelled the queue, or it ended already.
+      if (!isErrno(error, 'ERR_INVALID_STATE')) throw error;
     }
   }
 }
@@ -536,6 +538,7 @@ export class ServerSession {
     this.stdin = stdin;
     this.stdout = this.#output((channel) => channel);
     this.stderr = this.#output((channel) => channel.stderr);
+    let closedWithoutCommand: Error | undefined;
     // EOF follows the end of both stdout and stderr, as sshd sends it: no
     // extended data may follow EOF.
     void Promise.all([
@@ -547,15 +550,17 @@ export class ServerSession {
         channel.eof();
         this.#outputsEnded.open();
       },
-      () => {},
+      (error: unknown) => {
+        // A session that closed before it accepted a command has no EOF to send.
+        if (error !== closedWithoutCommand) throw error;
+      },
     );
     const close = (): void => {
       this.#requests.end();
-      this.#command.reject(
-        new Error(
-          'ssh: exit() needs an exec or shell request that the server accepted',
-        ),
+      closedWithoutCommand ??= new Error(
+        'ssh: exit() needs an exec or shell request that the server accepted',
       );
+      this.#command.reject(closedWithoutCommand);
       stdin.end();
       this.#closed.open();
     };

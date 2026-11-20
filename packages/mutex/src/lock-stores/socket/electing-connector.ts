@@ -2,6 +2,7 @@ import type { Socket } from 'node:net';
 
 import { Backoff, type Clock, delay, untilAborted } from '@zukhruf/async';
 import type { LeaderObserver, SqliteElection, Term } from '@zukhruf/election';
+import { isErrno } from '@zukhruf/fs';
 import type { PipeAddress } from '@zukhruf/pipes';
 
 import type { ClientConnection, ClientConnector } from '../remote/connector.ts';
@@ -262,9 +263,26 @@ async function reachUnlessAborted(
   return socket;
 }
 
-/** Resolves `undefined` when nothing listens yet (no file, or a dead leader's file). */
+/**
+ * Resolves `undefined` when nothing answers yet: no file (ENOENT), a dead
+ * leader's file (ECONNREFUSED), something else at the path (ENOTSOCK on
+ * macOS), which the campaign's own listen then reports, or a full backlog
+ * (EAGAIN on Linux), after which the lost campaign waits and reaches again.
+ */
 async function reach(address: PipeAddress): Promise<Socket | undefined> {
-  return address.connect().catch(() => undefined);
+  try {
+    return await address.connect();
+  } catch (error) {
+    if (
+      isErrno(error, 'ENOENT') ||
+      isErrno(error, 'ECONNREFUSED') ||
+      isErrno(error, 'ENOTSOCK') ||
+      isErrno(error, 'EAGAIN')
+    ) {
+      return undefined;
+    }
+    throw error;
+  }
 }
 
 /** Greets the leader on `socket`; a store that closes meanwhile gives the socket up. */

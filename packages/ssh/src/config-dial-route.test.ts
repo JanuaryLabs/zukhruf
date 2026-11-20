@@ -43,6 +43,24 @@ async function writeConfig(
   return file;
 }
 
+/** Dials through a ProxyCommand that speaks no SSH, so ssh2 ends the dial before the handshake. */
+async function dialWithoutServer(
+  config: OpenSshConfig,
+  signal: AbortSignal,
+): Promise<void> {
+  try {
+    await config.dial({ clock: createClock(), signal });
+  } catch (error) {
+    if (
+      Error.isError(error) &&
+      error.message === 'Connection lost before handshake'
+    ) {
+      return;
+    }
+    throw error;
+  }
+}
+
 /**
  * A ProxyCommand for the tests, run by Node: it connects its stdin and
  * stdout to a TCP port, and ignores the end of its stdin. It reports to a
@@ -505,9 +523,7 @@ test(
       });
 
       // Act
-      await config
-        .dial({ clock: createClock(), signal: t.signal })
-        .catch(() => undefined);
+      await dialWithoutServer(config, t.signal);
 
       ran.push({ openSsh, dial: await readFile(record, 'utf8') });
     }
@@ -547,9 +563,7 @@ test(
     });
 
     // Act
-    await config
-      .dial({ clock: createClock(), signal: t.signal })
-      .catch(() => undefined);
+    await dialWithoutServer(config, t.signal);
 
     // Assert
     assert.equal(openSsh, true);
@@ -619,9 +633,7 @@ test(
     });
 
     // Act
-    await config
-      .dial({ clock: createClock(), signal: t.signal })
-      .catch(() => undefined);
+    await dialWithoutServer(config, t.signal);
 
     // Assert
     assert.equal(await readFile(record, 'utf8'), 'from the config|unset');

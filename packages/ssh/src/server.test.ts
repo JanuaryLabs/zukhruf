@@ -345,7 +345,16 @@ test(
       const conn = await ServerConn.handshake(socket, {
         hostKeys: [rig.hostKey],
         password: (user, password) => user === 'test' && password === 'open',
-      }).catch(() => undefined);
+      }).catch((error: unknown) => {
+        // A client that fails to log in closes the connection.
+        if (
+          Error.isError(error) &&
+          error.message === 'ssh: the client closed the connection'
+        ) {
+          return undefined;
+        }
+        throw error;
+      });
       if (conn === undefined) return;
       await using _conn = conn;
       await eachSession(conn, (session) => command(session, async () => 0));

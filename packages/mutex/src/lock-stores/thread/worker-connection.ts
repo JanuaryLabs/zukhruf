@@ -1,5 +1,6 @@
 import type { Worker } from 'node:worker_threads';
 
+import { ConnectionClosedError } from '../remote/connection-closed-error.ts';
 import { wrap } from '../remote/envelope.ts';
 import type { LockResponse } from '../remote/protocol.ts';
 import { SharedChannelConnection } from '../remote/shared-channel-connection.ts';
@@ -21,7 +22,9 @@ export class WorkerConnection extends SharedChannelConnection<LockResponse> {
   async send(response: LockResponse): Promise<void> {
     // A stopped worker drops messages without an error; its thread id is -1 from then on.
     if (this.#worker.threadId === -1) {
-      throw new Error('The worker thread has exited.');
+      throw new ConnectionClosedError({
+        cause: new Error('The worker thread has exited.'),
+      });
     }
     this.#worker.postMessage(wrap(response));
   }

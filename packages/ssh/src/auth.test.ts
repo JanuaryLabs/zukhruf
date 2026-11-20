@@ -26,7 +26,16 @@ async function startServer(
     const conn = await ServerConn.handshake(socket, {
       ...config,
       hostKeys: [rig.hostKey],
-    }).catch(() => undefined);
+    }).catch((error: unknown) => {
+      // A client that fails to log in closes the connection.
+      if (
+        Error.isError(error) &&
+        error.message === 'ssh: the client closed the connection'
+      ) {
+        return undefined;
+      }
+      throw error;
+    });
     if (conn === undefined) return;
     await using _conn = conn;
     for await (const channel of conn.channels()) channel.reject();

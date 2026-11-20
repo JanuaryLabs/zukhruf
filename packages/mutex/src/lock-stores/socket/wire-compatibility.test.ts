@@ -537,11 +537,12 @@ describe('What a socket store shares with other versions on Windows', () => {
       { nodeOptions: asOnWindows },
     );
     // A hello, a role or an exit; the assertion below says which.
-    await follower
-      .next(({ type }) => type === 'hello' || type === 'role', {
+    await Promise.race([
+      follower.next(({ type }) => type === 'hello' || type === 'role', {
         signal: t.signal,
-      })
-      .catch(() => {});
+      }),
+      follower.closed,
+    ]);
 
     // Assert
     assert.equal(
@@ -580,11 +581,12 @@ describe('What a socket store shares with other versions on Windows', () => {
       { nodeOptions: asOnWindows },
     );
     // An answer, a failure or an exit; the assertions below say which.
-    await leader
-      .next(({ type }) => type === 'answer' || type === 'failed', {
+    await Promise.race([
+      leader.next(({ type }) => type === 'answer' || type === 'failed', {
         signal: t.signal,
-      })
-      .catch(() => {});
+      }),
+      leader.closed,
+    ]);
 
     // Assert
     assert.equal(leader.find('role')?.role, 'leader');

@@ -209,10 +209,9 @@ describe('A SQLite election across processes', () => {
       epochFile: 'term.epoch',
     })
       .campaign({ timeout: Infinity, signal: stop.signal })
-      .then(
-        (term) => (successor = term),
-        () => {},
-      );
+      .then((term) => (successor = term));
+    // The act awaits it; until then, the abort of the cleanup must not crash the run.
+    settled.catch(() => undefined);
     // Its one timer is the deadline of the heartbeat: it holds the pipe.
     await waitFor(() => assert.equal(clock.countTimers(), 1), {
       signal: t.signal,

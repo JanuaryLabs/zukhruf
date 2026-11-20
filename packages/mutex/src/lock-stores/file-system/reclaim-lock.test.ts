@@ -158,10 +158,7 @@ describe('A waiter that dies while it evicts a dead holder', () => {
 
       // Assert: the dead holder is evicted after all, and the key goes to one waiter at a time.
       // A dead evicter must not keep the dead holder in place.
-      await untilAborted(
-        Promise.race([firstAcquire, secondAcquire]).catch(() => {}),
-        t.signal,
-      );
+      await untilAborted(Promise.race([firstAcquire, secondAcquire]), t.signal);
       const [winner, loser, loserAcquire] =
         firstLease.now.status !== 'pending'
           ? [firstLease, secondLease, secondAcquire]

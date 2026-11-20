@@ -337,7 +337,11 @@ test(
     const carry = async (socket: Socket): Promise<void> => {
       const stream = await client
         .dial('tcp', `127.0.0.1:${portOf(remote)}`)
-        .catch(() => undefined);
+        .catch((error: unknown) => {
+          // The server refused the channel, for example because nothing listens there.
+          if (error instanceof OpenChannelError) return undefined;
+          throw error;
+        });
       if (!stream) return void socket.destroy();
       await Promise.allSettled([
         pipeline(socket, stream),

@@ -6,7 +6,7 @@ import {
 } from 'node:stream';
 import { finished } from 'node:stream/promises';
 
-import { Future } from '@zukhruf/async';
+import { Future, Latch } from '@zukhruf/async';
 
 /** The channel of a session, as the client opens it. */
 export interface SessionChannel {
@@ -57,22 +57,40 @@ interface Phase {
   configure(): void;
   /** The channel. Rejects before the start, and when the server refused the start. */
   channel(): Promise<SessionChannel>;
+  /** The channel that close() closes: none before the start, and none when the start failed, whose caller got that failure. */
+  closable(): Promise<SessionChannel | undefined>;
 }
 
 const unstarted: Phase = {
   configure() {},
   channel: () => Promise.reject(new Error('ssh: the session has not started')),
+  closable: async () => undefined,
 };
 
 class Started implements Phase {
-  readonly opened = new Future<SessionChannel>();
+  readonly #opened = new Future<SessionChannel>();
+  readonly #closable = new Latch<SessionChannel | undefined>();
 
   configure(): void {
     throw new Error('ssh: the session has already started');
   }
 
   channel(): Promise<SessionChannel> {
-    return this.opened.wait();
+    return this.#opened.wait();
+  }
+
+  closable(): Promise<SessionChannel | undefined> {
+    return this.#closable.wait();
+  }
+
+  open(channel: SessionChannel): void {
+    this.#opened.resolve(channel);
+    this.#closable.open(channel);
+  }
+
+  fail(error: unknown): void {
+    this.#opened.reject(error);
+    this.#closable.open(undefined);
   }
 }
 
@@ -160,7 +178,7 @@ export class Session implements AsyncDisposable {
 
   /** SSH_MSG_CHANNEL_CLOSE. sshd does not end a command without a pty on a close. It resolves when the message is sent, as Go's Session.Close returns: sshd answers the close only after the command ended. */
   async close(): Promise<void> {
-    const channel = await this.#phase.channel().catch(() => undefined);
+    const channel = await this.#phase.closable();
     if (channel === undefined) return;
     this.#discardUnread();
     channel.close();
@@ -199,7 +217,7 @@ export class Session implements AsyncDisposable {
     const channel = await Promise.try(() =>
       this.#open({ command, env: this.#env, pty: this.#ptys.at(-1) }),
     ).catch((error: unknown) => {
-      started.opened.reject(error);
+      started.fail(error);
       throw error;
     });
     // A write that the channel cannot take fails stdin, as EPIPE fails the
@@ -234,7 +252,7 @@ export class Session implements AsyncDisposable {
         this.#exit.reject(new ExitError(exit));
       }
     });
-    started.opened.resolve(channel);
+    started.open(channel);
   }
 }
 

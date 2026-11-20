@@ -24,11 +24,12 @@ The election is no longer a copy. `@zukhruf/election` holds it, made into one ca
 
 ## Copied without a change
 
-| Mutex                                         | Single flight                         |
-| --------------------------------------------- | ------------------------------------- |
-| `shared/is-record.ts`                         | `shared/is-record.ts`                 |
-| `lock-stores/socket/leave-errors-to-close.ts` | `connection/leave-errors-to-close.ts` |
-| `lock-stores/socket/json-line.ts`             | `connection/json-line.ts`             |
+| Mutex                                           | Single flight                           |
+| ----------------------------------------------- | --------------------------------------- |
+| `shared/is-record.ts`                           | `shared/is-record.ts`                   |
+| `lock-stores/socket/leave-errors-to-close.ts`   | `connection/leave-errors-to-close.ts`   |
+| `lock-stores/socket/json-line.ts`               | `connection/json-line.ts`               |
+| `lock-stores/remote/connection-closed-error.ts` | `connection/connection-closed-error.ts` |
 
 The supervisor's `Unavailable` state cannot occur in this package: `ElectingConnector.connect` never gives `undefined`, and `FlightClient` has no `unavailable` listener. In the mutex, the IPC and thread connectors use it. The state stays, so the two copies stay the same until the extraction (backlog #2520).
 

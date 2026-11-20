@@ -2,7 +2,7 @@ import { mkdir, readdir, unlink } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 
 import type { Clock } from '@zukhruf/async';
-import { atomicWrite, patiently } from '@zukhruf/fs';
+import { atomicWrite, isErrno, patiently } from '@zukhruf/fs';
 
 import { Caller } from '../file-system/caller.ts';
 import { Presence } from '../file-system/presence.ts';
@@ -39,13 +39,15 @@ export class HolderRecord {
     );
     await atomicWrite(this.#path, me.serialize(), { clock: this.#clock });
     announcing.move();
+    // A clearing that fails takes this caller's record and presence back, so no look finds a holder that let the lock go.
+    await using announced = new AsyncDisposableStack();
+    announced.defer(() =>
+      presence.releaseAfter(() =>
+        patiently(() => unlink(this.#path), { clock: this.#clock }),
+      ),
+    );
     await this.#clearEarlierHolders(me);
-    return {
-      [Symbol.asyncDispose]: () =>
-        presence.releaseAfter(() =>
-          patiently(() => unlink(this.#path), { clock: this.#clock }),
-        ),
-    };
+    return announced.move();
   }
 
   /** Whether the holder that the record names still runs. Writes nothing. */
@@ -56,7 +58,8 @@ export class HolderRecord {
   /**
    * Every other file in the folder was left by an earlier holder that stopped
    * before it removed its own. Such a file locks nothing, so a delete that
-   * fails leaves it for the next holder and never fails this grant.
+   * Windows refuses (ADR 0011), for example while a virus scanner holds the
+   * file, leaves it for the next holder and never fails this grant.
    */
   async #clearEarlierHolders(me: Caller) {
     const mine = new Set([
@@ -67,7 +70,13 @@ export class HolderRecord {
     await Promise.all(
       names
         .filter((name) => !mine.has(name))
-        .map((name) => unlink(join(this.#folder, name)).catch(() => {})),
+        .map(async (name) => {
+          try {
+            await unlink(join(this.#folder, name));
+          } catch (error) {
+            if (!isRefusedByWindows(error)) throw error;
+          }
+        }),
     );
   }
 
@@ -83,4 +92,12 @@ export class HolderRecord {
       throw error;
     }
   }
+}
+
+/** The codes of a Windows refusal, as `patiently` of `@zukhruf/fs` reads them (ADR 0011). */
+function isRefusedByWindows(error: unknown): boolean {
+  return (
+    process.platform === 'win32' &&
+    ['EPERM', 'EACCES', 'EBUSY'].some((code) => isErrno(error, code))
+  );
 }

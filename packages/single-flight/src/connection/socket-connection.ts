@@ -3,6 +3,9 @@ import type { Socket } from 'node:net';
 import { createInterface } from 'node:readline';
 import { promisify } from 'node:util';
 
+import { isErrno } from '@zukhruf/fs';
+
+import { ConnectionClosedError } from './connection-closed-error.ts';
 import type { Connection, ConnectionEvents } from './connection.ts';
 import { jsonLine } from './json-line.ts';
 import { leaveErrorsToClose } from './leave-errors-to-close.ts';
@@ -42,8 +45,16 @@ export class SocketConnection<Outgoing>
     socket.once('close', () => this.emit('close'));
   }
 
-  send(message: Outgoing): Promise<void> {
-    return this.#write(jsonLine(message));
+  async send(message: Outgoing): Promise<void> {
+    try {
+      await this.#write(jsonLine(message));
+    } catch (error) {
+      // The write that meets the closed peer fails with EPIPE, and each write after it with ERR_STREAM_DESTROYED.
+      if (isErrno(error, 'EPIPE') || isErrno(error, 'ERR_STREAM_DESTROYED')) {
+        throw new ConnectionClosedError({ cause: error });
+      }
+      throw error;
+    }
   }
 
   ref() {

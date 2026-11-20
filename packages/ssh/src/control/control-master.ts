@@ -62,12 +62,13 @@ export class ControlMaster implements AsyncDisposable {
 export function serveConnection(client: Client, socket: Socket): void {
   socket.on('error', () => socket.destroy());
   socket.write(encode(FrameType.hello));
-  void readFirstFrame(
-    socket,
-    new Error('ssh: the control client closed the connection'),
-  ).then(
+  const closed = new Error('ssh: the control client closed the connection');
+  void readFirstFrame(socket, closed).then(
     (frame) => open(client, socket, frame),
-    () => undefined,
+    (error: unknown) => {
+      // A client that closes before its request needs no answer.
+      if (error !== closed) throw error;
+    },
   );
 }
 
