@@ -45,7 +45,7 @@ const value = await untilAborted(report, AbortSignal.timeout(5_000));
 
 ## A cancel stops the wait, not the work
 
-`untilAborted` cannot stop the work. In the example, `buildReport` continues after the cancel. Thus a caller that cancels must deal with the work that continues. For example, a caller of `MemoryStore` that cancels keeps its place in the line, and its place passes the key on when its turn comes.
+`untilAborted` cannot stop the work. In the example, `buildReport` continues after the cancel. Thus a caller that cancels must deal with the work that continues. For example, a caller of `TicketQueueFileStore` of `@zukhruf/mutex` that cancels keeps its place in the line, and the next caller removes its ticket at its next poll ([acquire modes](../mutex/docs/concepts/acquire-modes.md)). A caller of `MemoryStore` that cancels leaves the line, because `MemoryStore` keeps a `Lock` for each key (694ed538, `packages/mutex/src/lock-stores/memory/memory-store-cancel.test.ts`).
 
 To stop the work too, give the signal to the work, for example `fetch(url, { signal })`.
 
@@ -469,6 +469,7 @@ import { test } from 'node:test';
 import { createClock } from '@sinonjs/fake-timers';
 
 import { poll } from '@zukhruf/async';
+import { waitFor } from '@zukhruf/testing/async';
 
 test('a job that comes during the second wait', async (t) => {
   const clock = createClock();
@@ -480,7 +481,9 @@ test('a job that comes during the second wait', async (t) => {
   });
 
   // The first attempt gave no job, so the poll waits on the clock.
-  await t.waitFor(() => assert.equal(clock.countTimers(), 1));
+  await waitFor(() => assert.equal(clock.countTimers(), 1), {
+    signal: t.signal,
+  });
   jobs.push('build');
   await clock.tickAsync(1_000);
 
@@ -489,7 +492,7 @@ test('a job that comes during the second wait', async (t) => {
 ```
 
 - `await clock.tickAsync(ms)` moves the time, and fires each timer that is due, in the order of their times.
-- `t.waitFor(() => assert.equal(clock.countTimers(), 1))` waits until the code waits on the clock again. Use it after work that is real, for example a read of a file, before you move the time.
+- `waitFor(() => assert.equal(clock.countTimers(), 1), { signal: t.signal })` of `@zukhruf/testing/async` waits until the code waits on the clock again. Use it after work that is real, for example a read of a file, before you move the time. Its waits run on real time, so the fake clock does not move them. The wait ends at the limit of the test, `t.signal`. Do not use `t.waitFor` of Node.js: it takes no signal, and `zukhruf/no-own-wait-limit` of `@zukhruf/eslint` reports it in a test (88191b93, `packages/eslint/src/test-files/no-own-wait-limit.test.ts`). See [Waiting](../testing/README.md#waiting).
 - `clock.setSystemTime(time)` moves the wall clock and does not move `performance.now()`. A deadline does not move with the wall clock.
 - `createClock()` does not replace a global, so tests that run at the same time do not see each other's clock.
 - The type of the option is `Clock`. It has only the members that the wait calls: `setTimeout`, `clearTimeout` and `performance.now()`. `globalThis` and `createClock()` both have them.
@@ -519,6 +522,20 @@ See [ADR 0005](./docs/adr/0005-a-wait-runs-on-the-clock-that-the-caller-gives.md
 | `signal.reason`                             | `untilAborted`, `delay`, `acquire` and `run` of a lock, `acquire` of a semaphore, and `wait` of a wait group or a cond reject with it when the signal aborts, also before the call. `poll` rejects with it when the signal aborts during a wait between two attempts. `watch` of a change watcher does not reject: its loop ends with no error.                                                                                     |
 | `DOMException` whose name is `TimeoutError` | The reason of the signal of `timeout` when its time ends. A wait that takes this signal rejects with it. A read of a gauge that takes longer than the `timeout` of a change watcher fails with it, and the outcome of the gauge is `failed`.                                                                                                                                                                                        |
 | `RangeError`                                | The constructor of `Semaphore` gets a count of permits that is not a positive integer. The constructor of `Backoff` gets options out of range, or `duration` gets a count of retries that is not an integer of 0 or more. The constructor of `ChangeWatcher` gets an `interval` or a `timeout`, or the constructor of `Period` gets a period, that is not a positive, finite number of milliseconds (`src/change-watcher.test.ts`). |
+
+## The same concepts in other systems
+
+| Concept    | Other systems                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Future     | Java [`CompletableFuture`](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/CompletableFuture.html), Scala `Promise` and `Future`, Rust futures. .NET names it `TaskCompletionSource`, and Kotlin `CompletableDeferred` ([ADR 0014](./docs/adr/0014-a-future-keeps-its-failure-as-data-and-only-a-wait-rejects.md))                                                                                   |
+| Wait group | Go [`sync.WaitGroup`](https://pkg.go.dev/sync#WaitGroup). Java `CountDownLatch` and .NET `CountdownEvent` cannot count up after zero ([ADR 0015](./docs/adr/0015-a-wait-group-counts-disposable-tokens-and-may-count-up-again-after-zero.md))                                                                                                                                                                                          |
+| Token      | `TaskTrackerToken` of tokio_util ([ADR 0015](./docs/adr/0015-a-wait-group-counts-disposable-tokens-and-may-count-up-again-after-zero.md))                                                                                                                                                                                                                                                                                              |
+| Cond       | Go [`sync.Cond`](https://pkg.go.dev/sync#Cond), without its lock. tokio `Notify` keeps a permit for a later wait, and Python `asyncio.Condition` and Java `Condition` hold a lock ([ADR 0016](./docs/adr/0016-a-cond-wakes-the-waits-that-started-before-a-broadcast-and-keeps-nothing-for-a-later-wait.md))                                                                                                                           |
+| Ref count  | `uv_ref` and `uv_unref` of libuv (`src/uv-common.h`), a flag and not a count; `Control#refCounted` and `#unrefCounted` of Node.js for the IPC channel of a child process (`lib/internal/child_process.js`) ([ADR 0017](./docs/adr/0017-a-ref-count-holds-a-handle-ref-d-while-work-holds-a-token.md))                                                                                                                                  |
+| Jitter     | The ratio jitter of [cenkalti/backoff](https://github.com/cenkalti/backoff) and of the [gRPC connection backoff](https://github.com/grpc/grpc/blob/master/doc/connection-backoff.md); the full and the equal jitter of [AWS, "Exponential Backoff And Jitter"](https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/) ([ADR 0011](./docs/adr/0011-a-back-off-gives-the-wait-before-a-retry-and-keeps-no-state.md)) |
+| Timeout    | [`AbortSignal.timeout`](https://developer.mozilla.org/en-US/docs/Web/API/AbortSignal/timeout_static), on the real clock only                                                                                                                                                                                                                                                                                                           |
+| Delay      | `setTimeout` of [`node:timers/promises`](https://nodejs.org/api/timers.html), on the real clock only                                                                                                                                                                                                                                                                                                                                   |
+| Clock      | [`TimeProvider`](https://learn.microsoft.com/en-us/dotnet/api/system.timeprovider) of .NET                                                                                                                                                                                                                                                                                                                                             |
 
 ## API
 

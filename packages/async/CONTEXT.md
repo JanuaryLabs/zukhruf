@@ -85,7 +85,7 @@ The source of the timers and of the time of a wait. The caller gives it: product
 _Avoid_: TimeProvider (the name in .NET), scheduler, timer (a timer is one wait that the clock starts)
 
 **Wall clock**:
-A clock that also gives the wall time, from `Date.now()`. The wall time is the time of the calendar. It can jump, for example when the computer sleeps, but `performance.now()` does not jump. A caller that writes a date, for example the date of a result or the time of a file, takes a wall clock.
+A clock that also gives the wall time, from `Date.now()`. The wall time is the time of the calendar. It can jump, for example when a time server sets it, but `performance.now()` does not jump. On macOS, `performance.now()` and the timers of Node.js also count the time of a system sleep ([ADR 0010](./docs/adr/0010-a-timeout-counts-its-time-in-parts.md)). A caller that writes a date, for example the date of a result or the time of a file, takes a wall clock.
 _Avoid_: System clock (`globalThis` is the system clock), real-time clock (a hardware clock), calendar
 
 **Delay**:
