@@ -1924,6 +1924,497 @@ describe('PoolWorkers of six owners on one clock', () => {
   );
 });
 
+// The owner on a fake clock replaces the workers that exit, and backs off
+// after an early exit or a failed warm-up. A minute cannot pass in a test:
+// the test moves the timers instead. The clock also runs the owner's
+// backstop, the store's passes and the election, so the tests count the
+// timers of a back-off against a quiet moment.
+describe('PoolWorkers backs off on a fake clock', { concurrency: true }, () => {
+  test('an eager owner waits before it replaces a worker that exits early: 1 s, doubled for each early exit in a row, up to 60 s', async (t) => {
+    await using folder = await new TemporaryFiles().directory('pool-');
+    const store = join(folder.path, 'store.sqlite');
+    const clock = createClock(Date.now());
+    const created: EchoWorker[] = [];
+    await using owner = lendingOn(clock, store, {
+      size: new Fixed(1),
+      startup: new Parallel(),
+      eviction: new NoEviction(),
+      create: () => {
+        const worker = new EchoWorker();
+        worker.release();
+        created.push(worker);
+        return worker;
+      },
+    });
+    await using sending = await sender(store, clock);
+    await owner.ready();
+
+    for (const wait of [1_000, 2_000, 4_000, 8_000, 16_000, 32_000, 60_000]) {
+      const worker = created.at(-1)!;
+      worker.kill();
+      await worker.exited();
+      await clock.tickAsync(wait - 1);
+      assert.deepEqual(
+        owner.stats,
+        { starting: 0, idle: 0, lent: 0, waiting: 0 },
+        `the owner still waits at ${wait - 1} ms`,
+      );
+      await clock.tickAsync(1);
+      assert.equal(owner.stats.starting, 1, `the owner starts at ${wait} ms`);
+      assert.equal(await ranOn(t, clock, owner, sending.jobs, 'up'), 'up');
+    }
+    assert.equal(created.length, 8);
+  });
+
+  test('an eager owner starts a worker again after its warm-up fails: 1 s, doubled for each failure in a row, up to 60 s, so a warm worker waits before any job', async (t) => {
+    await using folder = await new TemporaryFiles().directory('pool-');
+    const clock = createClock(Date.now());
+    const created: EchoWorker[] = [];
+    const waits = [1_000, 2_000, 4_000, 8_000, 16_000, 32_000, 60_000, 60_000];
+    await using owner = lendingOn(clock, join(folder.path, 'store.sqlite'), {
+      size: new Fixed(1),
+      startup: new Parallel(),
+      eviction: new NoEviction(),
+      create: () => {
+        const worker = new EchoWorker();
+        if (created.length < waits.length) worker.fail();
+        else worker.release();
+        created.push(worker);
+        return worker;
+      },
+    });
+    await assert.rejects(owner.ready(), /Echo worker exited/);
+
+    for (const wait of waits) {
+      await created.at(-1)!.exited();
+      await waitFor(() => assert.equal(owner.stats.starting, 0), {
+        signal: t.signal,
+        interval: 5,
+      });
+      await clock.tickAsync(wait - 1);
+      assert.deepEqual(
+        owner.stats,
+        { starting: 0, idle: 0, lent: 0, waiting: 0 },
+        `the owner still waits at ${wait - 1} ms`,
+      );
+      await clock.tickAsync(1);
+      assert.equal(owner.stats.starting, 1, `the owner starts at ${wait} ms`);
+    }
+
+    await waitFor(() => assert.equal(owner.stats.idle, 1), {
+      signal: t.signal,
+      interval: 5,
+    });
+    assert.equal(created.length, waits.length + 1);
+  });
+
+  test('a leader-first owner whose leader fails its warm-up starts the others, then the slot of the leader again after the back-off, so every worker is warm before the first job', async (t) => {
+    await using folder = await new TemporaryFiles().directory('pool-');
+    const clock = createClock(Date.now());
+    const created: EchoWorker[] = [];
+    await using owner = lendingOn(clock, join(folder.path, 'store.sqlite'), {
+      size: new Fixed(2),
+      startup: new LeaderFirst(),
+      eviction: new NoEviction(),
+      create: () => {
+        const worker = new EchoWorker();
+        if (created.length === 0) worker.fail();
+        else worker.release();
+        created.push(worker);
+        return worker;
+      },
+    });
+    await assert.rejects(owner.ready(), /Echo worker exited/);
+    await waitFor(() => assert.equal(owner.stats.idle, 1), {
+      signal: t.signal,
+      interval: 5,
+    });
+    assert.equal(
+      created.length,
+      2,
+      'the other worker starts once the leader failed',
+    );
+
+    await clock.tickAsync(1_000);
+    await waitFor(() => assert.equal(owner.stats.idle, 2), {
+      signal: t.signal,
+      interval: 5,
+    });
+    await clock.tickAsync(60_000);
+    assert.equal(created.length, 3, 'no worker starts twice');
+    assert.deepEqual(owner.stats, {
+      starting: 0,
+      idle: 2,
+      lent: 0,
+      waiting: 0,
+    });
+  });
+
+  test('a worker that a job starts in an eager owner and whose warm-up fails fails the job, and its slot backs off for the early exits in a row and starts again', async (t) => {
+    await using folder = await new TemporaryFiles().directory('pool-');
+    const store = join(folder.path, 'store.sqlite');
+    const clock = createClock(Date.now());
+    const created: EchoWorker[] = [];
+    const born: number[] = [];
+    await using owner = lendingOn(clock, store, {
+      size: new Fixed(1),
+      startup: new Parallel(),
+      eviction: new NoEviction(),
+      create: () => {
+        const worker = new EchoWorker();
+        if (created.length === 2) worker.fail();
+        else worker.release();
+        created.push(worker);
+        born.push(clock.now);
+        return worker;
+      },
+    });
+    await using sending = await sender(store, clock);
+    await owner.ready();
+    // The owner rests on its backstop once the event loop turns.
+    await new Promise((resolve) => setImmediate(resolve));
+    const quiet = clock.countTimers();
+    // Two early exits put the slot in a back-off of 2 s, longer than the
+    // owner's backstop of 1 s, at which it fetches the job.
+    created[0]!.kill();
+    await created[0]!.exited();
+    await clock.tickAsync(1_000);
+    await waitFor(() => assert.equal(owner.stats.idle, 1), {
+      signal: t.signal,
+      interval: 5,
+    });
+    created[1]!.kill();
+    await created[1]!.exited();
+    const backedOff = clock.now;
+
+    // The job does not wait out the back-off: it starts a worker now, whose
+    // warm-up fails.
+    await assert.rejects(
+      ranOn(t, clock, owner, sending.jobs, 'now'),
+      /Echo worker exited/,
+    );
+    assert.ok(born[2]! - backedOff < 2_000, 'the job waited out the back-off');
+    assert.equal(created.length, 3);
+    // The owner fails the job in the store, then rests on its backstop again.
+    await waitFor(
+      () =>
+        assert.equal(
+          clock.countTimers(),
+          quiet + 1,
+          'only the back-off of the third early exit waits',
+        ),
+      { signal: t.signal, interval: 5 },
+    );
+
+    // The warm-up failed as soon as it began: the clock waits while a worker
+    // starts. The third early exit in a row waits 4 s.
+    await clock.tickAsync(born[2]! + 3_999 - clock.now);
+    assert.deepEqual(
+      owner.stats,
+      { starting: 0, idle: 0, lent: 0, waiting: 0 },
+      'the third early exit in a row waits 4 s',
+    );
+    await clock.tickAsync(1);
+    await waitFor(() => assert.equal(owner.stats.idle, 1), {
+      signal: t.signal,
+      interval: 5,
+    });
+    assert.equal(created.length, 4);
+  });
+
+  test('a job that needs a slot in back-off after a failed warm-up starts its worker at once, and the back-off starts no other', async (t) => {
+    await using folder = await new TemporaryFiles().directory('pool-');
+    const store = join(folder.path, 'store.sqlite');
+    const clock = createClock(Date.now());
+    const created: EchoWorker[] = [];
+    const born: number[] = [];
+    await using owner = lendingOn(clock, store, {
+      size: new Fixed(1),
+      startup: new Parallel(),
+      eviction: new NoEviction(),
+      create: () => {
+        const worker = new EchoWorker();
+        if (created.length < 2) worker.fail();
+        else worker.release();
+        created.push(worker);
+        born.push(clock.now);
+        return worker;
+      },
+    });
+    await using sending = await sender(store, clock);
+    await assert.rejects(owner.ready(), /Echo worker exited/);
+    // Two failed warm-ups put the slot in a back-off of 2 s, longer than the
+    // owner's backstop of 1 s, at which it fetches the job.
+    await waitFor(() => assert.equal(owner.stats.starting, 0), {
+      signal: t.signal,
+      interval: 5,
+    });
+    const quiet = clock.countTimers() - 1;
+    await clock.tickAsync(1_000);
+    await created[1]!.exited();
+    await waitFor(
+      () => assert.equal(clock.countTimers(), quiet + 1, 'the back-off waits'),
+      { signal: t.signal, interval: 5 },
+    );
+    const backedOff = clock.now;
+
+    assert.equal(await ranOn(t, clock, owner, sending.jobs, 'now'), 'now');
+    assert.ok(born[2]! - backedOff < 2_000, 'the job waited out the back-off');
+    assert.equal(
+      clock.countTimers(),
+      quiet,
+      'the job ended the wait of the back-off',
+    );
+    await clock.tickAsync(60_000);
+    assert.equal(created.length, 3);
+    assert.deepEqual(owner.stats, {
+      starting: 0,
+      idle: 1,
+      lent: 0,
+      waiting: 0,
+    });
+  });
+
+  test('disposing an owner in the back-off after a failed warm-up leaves no timer on its clock and starts no worker', async (t) => {
+    await using folder = await new TemporaryFiles().directory('pool-');
+    const clock = createClock(Date.now());
+    const created: EchoWorker[] = [];
+    const owner = lendingOn(clock, join(folder.path, 'store.sqlite'), {
+      size: new Fixed(1),
+      startup: new Parallel(),
+      eviction: new NoEviction(),
+      create: () => {
+        const worker = new EchoWorker();
+        worker.fail();
+        created.push(worker);
+        return worker;
+      },
+    });
+    await assert.rejects(owner.ready(), /Echo worker exited/);
+    await waitFor(() => assert.equal(owner.stats.starting, 0), {
+      signal: t.signal,
+      interval: 5,
+    });
+
+    await owner[Symbol.asyncDispose]();
+    assert.equal(clock.countTimers(), 0);
+    await clock.tickAsync(60_000);
+    assert.equal(created.length, 1);
+  });
+
+  test('an on-demand owner starts no worker after a failed warm-up until a job needs one, and that job starts one at once', async (t) => {
+    await using folder = await new TemporaryFiles().directory('pool-');
+    const store = join(folder.path, 'store.sqlite');
+    const clock = createClock(Date.now());
+    const created: EchoWorker[] = [];
+    await using owner = lendingOn(clock, store, {
+      size: new Fixed(1),
+      startup: new OnDemand(),
+      eviction: new NoEviction(),
+      create: () => {
+        const worker = new EchoWorker();
+        if (created.length === 0) worker.fail();
+        else worker.release();
+        created.push(worker);
+        return worker;
+      },
+    });
+    await using sending = await sender(store, clock);
+    await assert.rejects(
+      ranOn(t, clock, owner, sending.jobs, 'first'),
+      /Echo worker exited/,
+    );
+
+    await clock.tickAsync(60_000);
+    assert.equal(created.length, 1, 'no worker starts by itself');
+    assert.equal(
+      await ranOn(t, clock, owner, sending.jobs, 'second'),
+      'second',
+    );
+    assert.equal(created.length, 2);
+  });
+
+  test('a job that needs a slot in back-off starts its worker at once, and the back-off starts no other', async (t) => {
+    await using folder = await new TemporaryFiles().directory('pool-');
+    const store = join(folder.path, 'store.sqlite');
+    const clock = createClock(Date.now());
+    const created: EchoWorker[] = [];
+    const born: number[] = [];
+    await using owner = lendingOn(clock, store, {
+      size: new Fixed(1),
+      startup: new Parallel(),
+      eviction: new NoEviction(),
+      create: () => {
+        const worker = new EchoWorker();
+        worker.release();
+        created.push(worker);
+        born.push(clock.now);
+        return worker;
+      },
+    });
+    await using sending = await sender(store, clock);
+    await owner.ready();
+    // Two early exits put the slot in a back-off of 2 s, longer than the
+    // owner's backstop of 1 s, at which it fetches the job.
+    created[0]!.kill();
+    await created[0]!.exited();
+    await clock.tickAsync(1_000);
+    await waitFor(() => assert.equal(owner.stats.idle, 1), {
+      signal: t.signal,
+      interval: 5,
+    });
+    created[1]!.kill();
+    await created[1]!.exited();
+    const backedOff = clock.now;
+    assert.deepEqual(owner.stats, {
+      starting: 0,
+      idle: 0,
+      lent: 0,
+      waiting: 0,
+    });
+
+    assert.equal(await ranOn(t, clock, owner, sending.jobs, 'now'), 'now');
+    assert.ok(born[2]! - backedOff < 2_000, 'the job waited out the back-off');
+    await clock.tickAsync(60_000);
+    assert.equal(created.length, 3);
+    assert.deepEqual(owner.stats, {
+      starting: 0,
+      idle: 1,
+      lent: 0,
+      waiting: 0,
+    });
+  });
+
+  test('disposing an owner in back-off leaves no timer on its clock', async (t) => {
+    await using folder = await new TemporaryFiles().directory('pool-');
+    const clock = createClock(Date.now());
+    const created: EchoWorker[] = [];
+    const owner = lendingOn(clock, join(folder.path, 'store.sqlite'), {
+      size: new Fixed(1),
+      startup: new Parallel(),
+      eviction: new NoEviction(),
+      create: () => {
+        const worker = new EchoWorker();
+        worker.release();
+        created.push(worker);
+        return worker;
+      },
+    });
+    await owner.ready();
+    const before = clock.countTimers();
+    created[0]!.kill();
+    await created[0]!.exited();
+    await waitFor(
+      () =>
+        assert.equal(
+          clock.countTimers(),
+          before + 1,
+          'the back-off waits on a timer',
+        ),
+      { signal: t.signal, interval: 5 },
+    );
+
+    await owner[Symbol.asyncDispose]();
+    assert.equal(clock.countTimers(), 0);
+  });
+
+  test('a worker that ran 10 minutes is replaced at once, and ends the back-off', async (t) => {
+    await using folder = await new TemporaryFiles().directory('pool-');
+    const store = join(folder.path, 'store.sqlite');
+    const clock = createClock(Date.now());
+    const created: EchoWorker[] = [];
+    await using owner = lendingOn(clock, store, {
+      size: new Fixed(1),
+      startup: new Parallel(),
+      eviction: new NoEviction(),
+      create: () => {
+        const worker = new EchoWorker();
+        worker.release();
+        created.push(worker);
+        return worker;
+      },
+    });
+    await using sending = await sender(store, clock);
+    await owner.ready();
+    created[0]!.kill();
+    await created[0]!.exited();
+    await clock.tickAsync(1_000);
+    assert.equal(await ranOn(t, clock, owner, sending.jobs, 'up'), 'up');
+
+    // The worker runs ten minutes on the clock.
+    await clock.tickAsync(600_000);
+    created[1]!.kill();
+    await created[1]!.exited();
+    assert.equal(owner.stats.starting, 1);
+  });
+
+  test('a slot that the sizing stops keeping during its back-off starts no stray worker once the sizing runs it again', async (t) => {
+    await using folder = await new TemporaryFiles().directory('pool-');
+    const store = join(folder.path, 'store.sqlite');
+    const clock = createClock(Date.now());
+    const created: EchoWorker[] = [];
+    const sizing = new Steered();
+    await using owner = lendingOn(clock, store, {
+      size: sizing,
+      startup: new Parallel(),
+      eviction: new NoEviction(),
+      create: () => {
+        const worker = new EchoWorker();
+        worker.release();
+        created.push(worker);
+        return worker;
+      },
+    });
+    await using sending = await sender(store, clock);
+    await owner.ready();
+    const run = (text: string) => ranOn(t, clock, owner, sending.jobs, text);
+    // Three early exits put slot 1 in a back-off of 4 s, longer than the
+    // three runs below, which take up to the owner's backstop of 1 s each,
+    // so the sizing runs the slot again before the back-off would end.
+    for (const [index, wait] of [
+      [1, 1_000],
+      [2, 2_000],
+    ] as const) {
+      created[index]!.kill();
+      await created[index]!.exited();
+      await clock.tickAsync(wait);
+      await waitFor(() => assert.equal(owner.stats.idle, 2), {
+        signal: t.signal,
+        interval: 5,
+      });
+    }
+    created[3]!.kill();
+    await created[3]!.exited();
+    // Slot 1 backs off: its worker is gone and no new one starts yet.
+    assert.deepEqual(owner.stats, {
+      starting: 0,
+      idle: 1,
+      lent: 0,
+      waiting: 0,
+    });
+
+    sizing.current = 1;
+    sizing.kept = 1;
+    assert.equal(await run('a'), 'a');
+    sizing.current = 2;
+    sizing.kept = 2;
+    assert.equal(await run('b'), 'b');
+    assert.deepEqual(await Promise.all([run('c'), run('d')]), ['c', 'd']);
+    assert.equal(created.length, 5);
+
+    await clock.tickAsync(60_000);
+    assert.deepEqual(owner.stats, {
+      starting: 0,
+      idle: 2,
+      lent: 0,
+      waiting: 0,
+    });
+    // A stray worker would be created a microtask after its slot starts.
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(created.length, 5);
+  });
+});
+
 describe('PoolWorkers on a fake clock', { concurrency: true }, () => {
   test('a running job that the store cancels loses its worker at the next touch, and the other running job keeps its own', async (t) => {
     await using folder = await new TemporaryFiles().directory('pool-');
@@ -2569,6 +3060,24 @@ async function ran(
   input: string,
 ): Promise<string> {
   return outputOf(t, jobs, await sent(jobs, input));
+}
+
+/**
+ * Sends one job of the "echo" kind, moves the fake clock, as drive does, past
+ * the owner's backstop of one second, at which it fetches the job, and then
+ * waits in real time, with the clock still, until the owner settles the job.
+ * Resolves with its output, or rejects with its failure.
+ */
+async function ranOn(
+  t: TestContext,
+  clock: FakeClock,
+  owner: PoolWorkers<string, string>,
+  jobs: SqliteJobQueue,
+  input: string,
+): Promise<string> {
+  const id = await sent(jobs, input);
+  await driveFor(clock, [owner], 1_000);
+  return outputOf(t, jobs, id);
 }
 
 /** Sends one job of the "echo" kind in the pool's envelope, and gives its id. */
