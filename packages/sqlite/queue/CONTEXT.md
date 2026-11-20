@@ -52,6 +52,14 @@ _Avoid_: Consumer, processor, thread
 The pass that runs every `superviseIntervalSeconds`: it refreshes the counts of the queues, warns about large queues, fails expired jobs and jobs that lost their heartbeat, and deletes the jobs that the queues do not keep.
 _Avoid_: Maintenance job, cron, janitor
 
+**Monitor**:
+The part of the supervisor pass that runs for a queue once in each `monitorIntervalSeconds`, 60 seconds by default. It counts the jobs of the queue by state and keeps the counts in the queue file, which `getQueueStats` reads. Then it warns about a large queue and fails the expired jobs and the jobs that lost their heartbeat. pg-boss's word (`boss.js:293-381`).
+_Avoid_: Stats job, health check, cron monitor (`cronMonitorIntervalSeconds` is the interval of the cron pass)
+
+**Heartbeat**:
+The time at which an active job was last touched, for a job with `heartbeatSeconds` (an integer of 10 or more). The fetch sets it, and `touch` sets it again. A worker touches its active jobs every `heartbeatRefreshSeconds`, or half the shortest `heartbeatSeconds` of its batch. When a heartbeat is older than `heartbeatSeconds`, the monitor fails the job with `job heartbeat timeout` (`src/several-processes.test.ts`). pg-boss's word (`manager.js:520-565`, `plans.js:2379-2386`).
+_Avoid_: Keep-alive, ping, lease
+
 **Schedule**:
 A cron or rrule rule with a key, which sends a job to its queue at each time that the rule gives.
 _Avoid_: Timer, recurring job, cron job

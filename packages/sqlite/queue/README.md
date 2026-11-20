@@ -139,7 +139,158 @@ Code that runs on both engines examines `code`, not the class. On Postgres, the 
 | [Oban](https://hexdocs.pm/oban) and its Lite engine | A job queue for Elixir. Its engine is a part apart from its API: the Basic engine uses Postgres, and the Lite engine uses SQLite. The API does not change with the engine. |
 | [Solid Queue](https://github.com/rails/solid_queue) | The job queue of Rails 8. It keeps the jobs in the database of the app: Postgres, MySQL or SQLite.                                                                         |
 
+## API
+
+The types that come from `pg-boss` (`Queue`, `SendOptions`, `Job`, `PgBossEventMap` and the others) are the types of pg-boss 12.35.1, as `src/job-queue.ts` and `src/index.ts` import them.
+
+```ts
+// The subset of PgBoss, in the types of pg-boss. A PgBoss satisfies it as is.
+interface JobQueue {
+  on(event: 'error', listener: (error: Error) => void): this;
+  start(): Promise<this>;
+  stop(options?: StopOptions): Promise<void>;
+  offWork(name: string, options?: OffWorkOptions): Promise<void>;
+  createQueue(name: string, options?: Omit<Queue, 'name'>): Promise<void>;
+  updateQueue(name: string, options?: UpdateQueueOptions): Promise<void>;
+  deleteQueue(name: string): Promise<void>;
+  // Only `force` is read: the history options need persistQueueStats.
+  getQueueStats(
+    name: string,
+    options?: QueueStatsOptions,
+  ): Promise<QueueStats[]>;
+  send(request: Request): Promise<string | null>;
+  send(
+    name: string,
+    data?: object | null,
+    options?: SendOptions,
+  ): Promise<string | null>; // null: a singleton or a throttle refused the job
+  work(name: string, handler: WorkHandler<unknown>): Promise<string>;
+  work(
+    name: string,
+    options: WorkOptions,
+    handler: WorkHandler<unknown>,
+  ): Promise<string>;
+  fetch(
+    name: string,
+    options: FetchOptions & { includeMetadata: true },
+  ): Promise<JobWithMetadata<unknown>[]>;
+  fetch(name: string, options?: FetchOptions): Promise<Job<unknown>[]>;
+  findJobs(
+    name: string,
+    options?: FindJobsOptions,
+  ): Promise<FoundJob<unknown>[]>;
+  cancel(
+    name: string,
+    id: string | string[] | JobAttempt | JobAttempt[],
+  ): Promise<CommandResponse>;
+  complete(
+    name: string,
+    id: string | string[] | JobAttempt | JobAttempt[],
+    data?: object | null,
+    options?: CompleteOptions,
+  ): Promise<CommandResponse>;
+  touch(
+    name: string,
+    id: string | string[] | JobAttempt | JobAttempt[],
+  ): Promise<CommandResponse>;
+  fail(
+    name: string,
+    id: string | string[] | JobAttempt | JobAttempt[],
+    data?: object | null,
+  ): Promise<CommandResponse>;
+  schedule(
+    name: string,
+    cron: string,
+    data?: object | null,
+    options?: ScheduleOptions,
+  ): Promise<void>;
+  unschedule(name: string, key?: string): Promise<void>;
+}
+
+// JobWithMetadata of pg-boss, with the fields that findJobs gives as null.
+type FoundJob<T> = Omit<
+  JobWithMetadata<T>,
+  'startedOn' | 'deadLetter' | 'retryDelayMax' | 'output' | 'policy' | 'signal'
+> & {
+  policy: QueuePolicy | null; // null for a dead letter copy
+  startedOn: Date | null;
+  deadLetter: string | null;
+  retryDelayMax?: number | null;
+  output: object | null;
+};
+
+interface SqliteJobQueueOptions
+  extends
+    Pick<
+      MaintenanceOptions,
+      | 'supervise'
+      | 'superviseIntervalSeconds'
+      | 'monitorIntervalSeconds'
+      | 'maintenanceIntervalSeconds'
+      | 'queueCacheIntervalSeconds'
+      | 'warningQueueSize'
+    >,
+    Pick<
+      SchedulingOptions,
+      | 'schedule'
+      | 'cronMonitorIntervalSeconds'
+      | 'cronWorkerIntervalSeconds'
+      | 'clockMonitorIntervalSeconds'
+    > {
+  path?: string; // the queue file; default: ':memory:'
+  database?: DatabaseSync; // a connection that the caller opened and closes
+  clock?: Clock; // default: systemClock of pg-boss
+  useListenNotify?: boolean; // default: false
+}
+
+// The events are error, warning, wip and stopped, with the payloads of pg-boss.
+class SqliteJobQueue
+  extends EventEmitter<
+    Pick<PgBossEventMap, 'error' | 'warning' | 'wip' | 'stopped'>
+  >
+  implements JobQueue
+{
+  // A string is the path of the queue file: new SqliteJobQueue(path) is
+  // new SqliteJobQueue({ path }). No argument keeps the jobs in memory.
+  constructor(options?: string | SqliteJobQueueOptions);
+  send<TData extends object>(
+    name: string,
+    data?: TData | null,
+    options?: SendOptions,
+  ): Promise<string | null>;
+  schedule<TData extends object>(
+    name: string,
+    cron: string,
+    data?: TData | null,
+    options?: ScheduleOptions,
+  ): Promise<void>;
+  // The other methods of JobQueue, with the same signatures.
+}
+
+// The refusal that Postgres gives pg-boss: `code` is the SQLSTATE.
+class DatabaseError extends Error {
+  name: string; // 'error', the name that node-postgres and PGlite give
+  readonly code: string;
+  constructor(message: string, code: string);
+}
+
+// A startAfter string outside the forms that this package resolves.
+class UnsupportedStartAfterError extends Error {
+  name: string; // 'UnsupportedStartAfterError'
+  readonly startAfter: string;
+  constructor(startAfter: string);
+}
+```
+
+`src/several-processes.test.ts` opens the queue file with the string form, `new SqliteJobQueue(path)`.
+
 ## Documentation
+
+**Recipes**
+
+- [Run a cron schedule on a queue file that survives a restart](./docs/recipes/run-a-schedule-on-a-queue-file.md)
+
+**Decisions**
 
 - [0001 pg-boss's API on SQLite](./docs/adr/0001-pg-boss-api-on-sqlite.md)
 - [0002 The parity suite is the contract](./docs/adr/0002-the-parity-suite-is-the-contract.md)
