@@ -41,7 +41,7 @@ A Tailwind class that names a side by the direction of the text, not by left or 
 _Avoid_: RTL class (the class works in both directions), directional class
 
 **Patch**:
-A CSS rule in `styles.css`, in a layer, that changes what stock shadcn/ui does. There are five patches: the pointer cursor on buttons, the cap on the height of a dialog, the width of the mobile sidebar, the direction of a menu shortcut, and the height of a tabs list that wraps. A utility class of an app still wins over the cursor, the cap and the shortcut. The width patch and the tabs patch are in `@layer utilities`, because each must win over a utility class of the component.
+A CSS rule in `styles.css`, in a layer, that changes what stock shadcn/ui does. There are six patches: the pointer cursor on buttons, the cap on the height of a dialog, the width of the mobile sidebar, the direction of a menu shortcut, the height of a tabs list that wraps, and the inline padding of a select popup. A utility class of an app still wins over the cursor, the cap, the shortcut and the select popup. The width patch and the tabs patch are in `@layer utilities`, because each must win over a utility class of the component.
 _Avoid_: Override, hack
 
 **Private import**:
