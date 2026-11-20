@@ -199,23 +199,48 @@ fits
 
 ## The same concepts in other systems
 
-| System                               | What it does                                                                                                                                                                                                                                                          |
-| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Röthlisberger's SQLite migrator      | It makes the declaration in memory and compares `sqlite_schema`. It changes a stale table with the 12 steps of SQLite and keeps the rows.                                                                                                                             |
-| SQLite's 12 steps                    | "Making Other Kinds Of Table Schema Changes" in [the ALTER TABLE page](https://www.sqlite.org/lang_altertable.html): make a new table, copy the rows, drop the old table, rename the new one. `rows: 'keep'` renames the old table first instead. ADR 0003 tells why. |
-| sqlite-utils `table.transform()`     | It rebuilds a table with the 12 steps and keeps the rows. A caller gives a map of renamed columns. `rows: 'keep'` has no such map.                                                                                                                                    |
-| Airbyte destinations                 | Each sync compares the final table with the stream (`existingSchemaMatchesStreamConfig`), and a soft reset makes a stale table again.                                                                                                                                 |
-| Drizzle Kit `push`, Prisma `db push` | They compare a declaration in TypeScript or in the Prisma language with the database, and change the database.                                                                                                                                                        |
-| Android Room                         | It keeps a version number for migrations, and a hash of the declaration that finds a number that a person forgot to raise.                                                                                                                                            |
-| Kubernetes controllers               | Each loop compares the desired state with the state that exists, and changes what is different.                                                                                                                                                                       |
+| Concept                                                 | Other systems                                                                                                                                                                                                                                                                                                                                                     |
+| ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Compare the stored text with a copy in the dev database | Röthlisberger's SQLite migrator: it makes the declaration in memory and compares `sqlite_schema`.                                                                                                                                                                                                                                                                 |
+| Rebuild a table and keep its rows                       | "Making Other Kinds Of Table Schema Changes" in [the ALTER TABLE page of SQLite](https://www.sqlite.org/lang_altertable.html): 12 steps that make a new table, copy the rows, drop the old table and rename the new one. `rows: 'keep'` renames the old table first instead ([ADR 0003](./docs/adr/0003-keep-rows-rebuilds-a-table-and-keeps-its-references.md)). |
+| Rebuild with a map of renamed columns                   | sqlite-utils `table.transform()`: it rebuilds a table with the 12 steps, keeps the rows, and takes a map of renamed columns. `rows: 'keep'` has no such map ([ADR 0003](./docs/adr/0003-keep-rows-rebuilds-a-table-and-keeps-its-references.md)).                                                                                                                 |
+| Replace a stale table                                   | Airbyte destinations: each sync compares the final table with the stream (`existingSchemaMatchesStreamConfig`), and a soft reset makes a stale table again.                                                                                                                                                                                                       |
+| Apply a declaration with no version number              | Drizzle Kit `push` and Prisma `db push`: they compare a declaration in TypeScript or in the Prisma language with the database, and change the database.                                                                                                                                                                                                           |
+| Find a declaration that changed                         | Android Room (`RoomConnectionManager.kt`): Room keeps a version number, and a hash of the declaration finds a number that a person forgot to raise ([ADR 0001](./docs/adr/0001-compare-the-text-that-sqlite-stores.md)).                                                                                                                                          |
+| Compare the desired state with the state that exists    | Kubernetes controllers: each loop compares the desired state with the state that exists, and changes what is different.                                                                                                                                                                                                                                           |
+
+## API
+
+```ts
+// How a database stores the objects of a declaration: none of them, each one
+// as declared, or anything else.
+type Drift = 'missing' | 'stale' | 'fits';
+
+// What apply does with the rows of a stale table: drop them with the whole
+// declaration, or keep them in a table made again from its declaration.
+type Rows = 'replace' | 'keep';
+
+class Declaration {
+  // devDatabase opens the empty database in memory. The declaration closes it.
+  constructor(
+    statements: readonly string[],
+    options: {
+      readonly rows: Rows;
+      readonly devDatabase?: () => DatabaseSync;
+    },
+  );
+  drift(database: DatabaseSync): Drift;
+  apply(database: DatabaseSync): void;
+}
+```
 
 ## Documentation
 
-- [0001 Compare the text that SQLite stores](./docs/adr/0001-compare-the-text-that-sqlite-stores.md)
-- [0002 A stale object replaces the whole declaration](./docs/adr/0002-a-stale-object-replaces-the-whole-declaration.md)
-- [0003 Keep rows rebuilds a table and keeps its references](./docs/adr/0003-keep-rows-rebuilds-a-table-and-keeps-its-references.md)
-- [0004 A statement owns the objects its CREATE makes](./docs/adr/0004-a-statement-owns-the-objects-its-create-makes.md)
-- [0005 The caller can give the dev database](./docs/adr/0005-the-caller-can-give-the-dev-database.md)
+- [ADR 0001](./docs/adr/0001-compare-the-text-that-sqlite-stores.md): compare the text that SQLite stores.
+- [ADR 0002](./docs/adr/0002-a-stale-object-replaces-the-whole-declaration.md): a stale object replaces the whole declaration.
+- [ADR 0003](./docs/adr/0003-keep-rows-rebuilds-a-table-and-keeps-its-references.md): keep rows rebuilds a table and keeps its references.
+- [ADR 0004](./docs/adr/0004-a-statement-owns-the-objects-its-create-makes.md): a statement owns the objects its CREATE makes.
+- [ADR 0005](./docs/adr/0005-the-caller-can-give-the-dev-database.md): the caller can give the dev database.
 
 ## Development
 
