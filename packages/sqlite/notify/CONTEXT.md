@@ -28,6 +28,10 @@ _Avoid_: Publisher, producer, notifier
 One `Notifications` that listens on at least one channel. It serves one socket, has one row in the listener table, and reads the notification queue on its own connection. Postgres says "listening session"; `async.c` says listener.
 _Avoid_: Subscriber, consumer, watcher
 
+**Listener id**:
+16 random bytes in hex that a first `listen` gives a new listener (`randomBytes(16)` in `src/listening.ts`). It is the key of the listener row and the name of the listener's socket. The next first `listen` gives a new listener id.
+_Avoid_: Listener key, socket name, session id
+
 **Notification queue**:
 The table `zukhruf_notify_queue`. Each row is one notification, written in the sender's transaction. Postgres's name for its own queue (`async.c`). It is the truth: a listener gives its caller only what it read here.
 _Avoid_: Log, outbox, board (a word of the research), messages table
@@ -55,6 +59,10 @@ _Avoid_: Pending wake, queued wake, retry
 **Backstop**:
 The read of `PRAGMA data_version` that each listener does every second, and the read of the queue when it changed. It finds a row whose wake was lost. pg-boss keeps a poll for the same purpose; the word is ours, not an industry term.
 _Avoid_: Poll (the backstop is one poll; the wake is not a poll), fallback, heartbeat
+
+**Highest id**:
+The highest id that the notification queue ever gave a row: the `seq` of `zukhruf_notify_queue` in `sqlite_sequence` (`HIGHEST_ID` in `src/schema.ts`). It stays right when the trim removed every row, because `AUTOINCREMENT` never gives an id again. The registration reads it as the position, and a channel delivers only the rows above the highest id at the commit of its `listen`.
+_Avoid_: Max id (`max(id)` falls when the trim removes the last rows), tail, head
 
 **Position**:
 The highest id that a listener has read, as the listener row keeps it. The listener writes it at most once a backstop interval, so it can be behind the listener's last id. Postgres's word (`QueuePosition`).
