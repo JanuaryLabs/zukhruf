@@ -607,3 +607,376 @@ The table of all scores also shows how long `evaluate` took for each model, as i
 ```sh
 npx nx run mteb:report
 ```
+
+## Errors
+
+| Error             | When                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ValidationError` | `new TaskMetadata(input)` or `new ModelMeta(input)` gets a field that is missing or not valid, such as a dataset without a revision or a model name without an organization. `errors` gives the location (`loc`) and the reason (`msg`) of each field, as pydantic's `ValidationError` does. It extends `Error`: MTEB's is a `ValueError`. `{ validate: false }` takes the input as it is ([src/abstasks/task-metadata.test.ts](./src/abstasks/task-metadata.test.ts), [src/models/model-meta.test.ts](./src/models/model-meta.test.ts)). |
+| `Error`           | `evaluate` gets an `overwriteStrategy` that is not in `OVERWRITE_STRATEGIES`, with MTEB's message ([src/evaluate.ts](./src/evaluate.ts)). `evaluate` also throws an `Error` when `overwriteStrategy` is `'only-cache'` and the result cache has no result of the task, when it is `'never'` or `'only-cache'` and the cached result does not have all the splits and subsets, and when the model does not support the modalities of a task.                                                                                               |
+| `TypeError`       | `co2Tracker` is `true` and another run holds `.codecarbon.lock`. The task runs, and the result cache keeps its result with `kgCo2Emissions` `null`. Then `evaluate` throws MTEB's message `'EmissionsTracker' object has no attribute 'final_emissions'`. Its `cause` names the file ([src/evaluate.test.ts](./src/evaluate.test.ts)).                                                                                                                                                                                                    |
+| `RangeError`      | `pairedBootstrapTest` gets a baseline and a change with different queries; the message names the queries that are not in both ([src/significance/paired-bootstrap.golden.test.ts](./src/significance/paired-bootstrap.golden.test.ts)). `perQueryScores` gets a score that has no value for each query, such as MRR.                                                                                                                                                                                                                      |
+
+With `raiseError: false`, `evaluate` does not throw an error from the run of a task. The `exceptions` of the `ModelResult` give the task name and the message of the error as a `TaskError`, and `evaluate` goes on with the next task ([src/evaluate.test.ts](./src/evaluate.test.ts)). Only the run of the task is in the `try` that `raiseError: false` adds, so these errors throw also with `raiseError: false`: the invalid `overwriteStrategy` and the modalities of the model, which `evaluate` checks before the first task, and the errors of the result cache (`'only-cache'` with no cached result, and `'never'` or `'only-cache'` with missing splits or subsets), which `evaluate` checks for each task before its run ([src/evaluate.ts](./src/evaluate.ts)).
+
+## API
+
+The block gives the signatures of `evaluate`, the errors and the comparison of a change with its baseline. Then it lists the other exports of `@zukhruf/mteb` and `@zukhruf/mteb/report` by group. [src/index.ts](./src/index.ts) and [src/report/index.ts](./src/report/index.ts) are the lists.
+
+```ts
+// @zukhruf/mteb
+const OVERWRITE_STRATEGIES: readonly [
+  'always',
+  'never',
+  'only-missing',
+  'only-cache',
+];
+type OverwriteStrategy = (typeof OVERWRITE_STRATEGIES)[number];
+
+type EvaluateOptions = {
+  readonly encodeKwargs?: EncodeKwargs; // default: { batchSize: 32 }
+  readonly raiseError?: boolean; // default: true; false: the result lists the error of a task
+  readonly cache?: ResultCache | null; // default: new ResultCache() (~/.cache/mteb); null: no cache
+  readonly overwriteStrategy?: OverwriteStrategy; // default: 'only-missing'
+  readonly predictionFolder?: string | null; // keeps <task name>_predictions.json
+  readonly co2Tracker?: boolean; // default: false
+  readonly clock: WallClock; // globalThis in a program, a fake clock in a test
+};
+
+function evaluate(
+  model: MTEBModels,
+  tasks: AbsTask | Iterable<AbsTask>,
+  options: EvaluateOptions,
+): Promise<ModelResult>;
+
+class ModelResult implements Iterable<TaskResult> {
+  readonly modelName: string;
+  readonly modelRevision: string | null;
+  readonly taskResults: readonly TaskResult[];
+  readonly exceptions: readonly TaskError[] | null; // the tasks whose evaluation failed
+  readonly experimentName: string | null;
+  readonly modelMeta: ModelMeta | null;
+}
+
+type TaskError = { readonly taskName: string; readonly exception: string };
+
+class ValidationError extends Error {
+  readonly name: 'ValidationError';
+  readonly errors: readonly { readonly loc: string; readonly msg: string }[];
+  constructor(
+    title: string,
+    errors: readonly { readonly loc: string; readonly msg: string }[],
+  );
+}
+
+class TaskMetadata {
+  constructor(
+    input: TaskMetadataInput,
+    options?: { readonly validate?: boolean }, // ValidationError: unless validate is false
+  );
+}
+
+function perQueryScores(
+  task: AbsTaskRetrieval,
+  predictionFolder: string,
+  options?: {
+    readonly split?: string; // default: the first eval split
+    readonly subset?: string; // default: 'default'
+    readonly score?: string; // default: the main score of the task
+  },
+): Promise<Map<string, number>>;
+
+type ChangeVerdict = {
+  readonly result: 'better' | 'worse' | 'inconclusive';
+  readonly observed: number;
+  readonly low: number;
+  readonly high: number;
+  readonly p: number;
+  readonly queries: number;
+  readonly replicates: number;
+  readonly seed: number;
+};
+
+function pairedBootstrapTest(
+  baseline: ReadonlyMap<string, number>,
+  change: ReadonlyMap<string, number>,
+  options?: { readonly replicates?: number; readonly seed?: number }, // default: 2000, 31957
+): ChangeVerdict;
+
+function holm(pValues: readonly number[]): number[];
+
+// The other exports of @zukhruf/mteb.
+export {
+  AbsTask,
+  type EvaluateTaskOptions,
+  type MTEBModels,
+  AbsTaskRetrieval,
+  type RetrievalSplitData,
+  AbsTaskPairClassification,
+  type PairClassificationMetrics,
+  AbsTaskSTS,
+  type STSMetrics,
+  AbsTaskClustering,
+  AbsTaskClusteringLegacy,
+  AbsTaskClassification,
+  type ClassificationMetrics,
+  type Undersampling,
+  AbsTaskMultilabelClassification,
+  type MultilabelClassificationMetrics,
+  type MultilabelClassifierModel,
+  type MultilabelUndersampling,
+  AbsTaskRegression,
+  type RegressionMetrics,
+  RetrievalDatasetLoader,
+}; // tasks
+export {
+  TASK_SUBTYPES,
+  type TaskSubtype,
+  TASK_DOMAINS,
+  type TaskDomain,
+  SAMPLE_CREATION_METHODS,
+  type SampleCreationMethod,
+  TASK_TYPES,
+  type TaskType,
+  TASK_CATEGORIES,
+  type TaskCategory,
+  ANNOTATOR_TYPES,
+  type AnnotatorType,
+  SIMPLIFIED_TASK_TYPES,
+  type SimplifiedTaskType,
+  TASK_TYPE_TO_SIMPLIFIED_TASK_TYPE,
+  validateModel,
+  strDate,
+  strUrl,
+  PROGRAMMING_LANGS,
+  checkLanguageCode,
+  type MetadataDatasetDict,
+  type PromptDict,
+  type TaskMetadataInput,
+  type TaskMetadataFields,
+}; // task metadata
+export {
+  DEFAULT_DATASET_CACHE,
+  type Dataset,
+  type DatasetDict,
+  type DatasetRow,
+  type DatasetValue,
+  type HubOptions,
+  loadDataset,
+  renameColumn,
+}; // datasets
+export {
+  type PairClassificationDistances,
+  type STSEvaluatorScores,
+  type ClassifierModel,
+  type RegressorModel,
+  type ClassLabel,
+  type LabelIndicator,
+}; // evaluators
+export { LoadExperimentEnum, type LoadExperimentName, ResultCache }; // result cache
+export {
+  AbsEncoder,
+  type InstructionTemplate,
+  type PromptSource,
+  AiSdkEncoder,
+  type AiSdkEncoderOptions,
+  AiSdkTextEncoder,
+  AiSdkReranker,
+  type AiSdkRerankerOptions,
+  AiSdkTextReranker,
+  InstructAiSdkEncoder,
+  CrossEncoderWrapper,
+  crossEncoderWrapperLoader,
+  SearchCrossEncoderWrapper,
+  SearchEncoderWrapper,
+}; // encoders and cross-encoders
+export {
+  type CacheBackend,
+  type CacheBackendProtocol,
+  NumpyCache,
+  CachedEmbeddingWrapper,
+}; // embedding cache
+export {
+  type FusionFunction,
+  type FusionStrategy,
+  HybridSearch,
+  type HybridSearchOptions,
+  fuseDbsf,
+  fuseRelativeScoreFusion,
+  fuseRrf,
+}; // hybrid search
+export {
+  BM25Search,
+  BM25Tokenizer,
+  type BM25Kwargs,
+  type BM25TokenizerOptions,
+  type CustomTokenizer,
+  type StopwordsKey,
+  bm25Loader,
+  bm25S,
+  bm25SSubword,
+  NoRerankingBaseline,
+  type NoRerankingKwargs,
+  noRerankingBaseline,
+}; // search models and baselines
+export {
+  EMBEDDING_GEMMA_2_TASK_INSTRUCTIONS,
+  EmbeddingGemma2Encoder,
+  embeddingGemma2,
+  qwen3InstructionTemplate,
+  qwen3Embedding0B6,
+  qwen3Embedding4B,
+  qwen3Embedding8B,
+  Qwen3RerankerWrapper,
+  qwen3Reranker0B6,
+  qwen3Reranker4B,
+  qwen3Reranker8B,
+  BGEReranker,
+  JinaReranker,
+  bgeRerankerV2M3,
+  jinaRerankerMultilingual,
+  msMarcoMinilmL12V2,
+  msMarcoMinilmL2V2,
+  msMarcoMinilmL4V2,
+  msMarcoMinilmL6V2,
+  msMarcoTinybertL2V2,
+}; // ported models
+export {
+  FRAMEWORKS,
+  type Framework,
+  MODEL_TYPES,
+  type ModelType,
+  OPEN_LICENSES,
+  ScoringFunction,
+  type ScoringFunctionName,
+  OUTPUT_DTYPES,
+  type OutputDType,
+  type LoadKwargs,
+  type EncoderKwargs,
+  type CrossEncoderKwargs,
+  type LoaderContext,
+  type LoaderOptions,
+  type ModelLoader,
+  type ModelMetaInput,
+  type ModelMetaFields,
+  ModelMeta,
+  serializeExperimentKwargsToName,
+  mergePrecisionIntoExperimentKwargs,
+}; // model metadata
+export {
+  type CrossEncoderProtocol,
+  type EncodeOptions,
+  type EncoderProtocol,
+  type IndexOptions,
+  type PredictOptions,
+  type SearchOptions,
+  type SearchProtocol,
+}; // model protocols
+export {
+  type AggregationFn,
+  type Cell,
+  type ColumnLabel,
+  DataFrame,
+  type AggregatedScores,
+  BenchmarkResults,
+  type AggregationLevel,
+  type ToDataFrameOptions,
+  TaskResult,
+}; // results and tables
+export { cosSim, dotScore, type PhaseTiming, TimingStack }; // similarity functions and timings
+export {
+  ArguAna,
+  SCIDOCS,
+  SprintDuplicateQuestionsPC,
+  STSBenchmarkSTS,
+  BiorxivClusteringS2S,
+  BiorxivClusteringS2SFast,
+  Banking77Classification,
+  Banking77ClassificationV2,
+  RuSciBenchCitedCountRegression,
+  RuSciBenchYearPublRegression,
+  KorHateSpeechMLClassification,
+}; // ported tasks
+export {
+  type HFSubset,
+  type SplitName,
+  type Score,
+  type ScoresDict,
+  type RetrievalEvaluationResult,
+  type EncodeKwargs,
+  type Embeddings,
+  type PromptType,
+  type ConversationTurn,
+  type Conversation,
+  type TextInput,
+  type CorpusInput,
+  type QueryInput,
+  type BatchedInput,
+  type CorpusRow,
+  type QueryRow,
+  type CorpusDatasetType,
+  type QueryDatasetType,
+  type RelevantDocumentsType,
+  type TopRankedDocumentsType,
+  type RetrievalOutputType,
+  type ISOLanguageScript,
+  type ISOLanguage,
+  type ISOScript,
+  type Languages,
+  type Licenses,
+  type ModelName,
+  type Revision,
+  type Modalities,
+  LICENSES,
+  MODALITIES,
+}; // types
+
+// @zukhruf/mteb/report
+type ReportOptions = {
+  readonly task: AbsTaskRetrieval;
+  readonly models: readonly MTEBModels[]; // the models that evaluate scored on the task
+  readonly cache: ResultCache;
+  readonly predictionFolder: (model: MTEBModels) => string;
+  readonly baseline: MTEBModels; // one of models
+  readonly comparisons?: readonly Comparison[]; // default: each model against the baseline
+  readonly primary?: PrimaryComparison;
+  readonly tested?: readonly [string, ...string[]]; // default: the query score
+};
+
+class Report {
+  static from(options: ReportOptions): Promise<Report>;
+  readonly scores: DataFrame; // a row for each model and split
+  readonly verdicts: DataFrame; // a row for each split, tested score and comparison
+  toHtml(): string;
+  toMarkdown(): string;
+}
+
+type Comparison = readonly [baseline: MTEBModels, change: MTEBModels];
+type PrimaryComparison = {
+  readonly baseline: MTEBModels;
+  readonly change: MTEBModels;
+  readonly score: string;
+};
+type Verdict = Omit<ChangeVerdict, 'result'> & {
+  readonly baseline: MTEBModels;
+  readonly change: MTEBModels;
+  readonly score: string;
+  readonly primary: boolean;
+  readonly decidingP: number; // p of the primary comparison, else the Holm-corrected p
+  readonly result: ChangeVerdict['result'];
+};
+
+const decide: (p: number, observed: number) => ChangeVerdict['result'];
+
+function verdicts(options: {
+  readonly task: AbsTaskRetrieval;
+  readonly split: string;
+  readonly subset?: string;
+  readonly comparisons: readonly Comparison[];
+  readonly scores: readonly string[];
+  readonly primary?: PrimaryComparison;
+  readonly predictionFolder: (model: MTEBModels) => string;
+}): Promise<Verdict[]>;
+
+export { type ModelScores, type ReportData, type SplitReport };
+```

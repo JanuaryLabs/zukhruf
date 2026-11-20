@@ -56,6 +56,10 @@ _Avoid_: Embedder, model (for the wrapper)
 The model wrapper that gives one score for each pair of a query and a document, from the two texts together. A cross-encoder runs only on a reranking task: it scores the top ranked documents of each query. `AiSdkReranker` is a cross-encoder over an AI SDK reranking model.
 _Avoid_: Reranker (for the wrapper)
 
+**Search model**:
+The model that indexes a corpus and gives the score of each document that it finds for each query (`SearchProtocol`, MTEB's search protocol). MTEB's BM25 baseline `mteb/baseline-bm25s` is a search model with no embedding model. `SearchEncoderWrapper` makes an encoder a search model, and `SearchCrossEncoderWrapper` makes a cross-encoder a search model for reranking.
+_Avoid_: Retriever, search engine
+
 **CO₂ emissions**:
 The kg CO₂eq of the electricity that the machine used for one task run, as codecarbon estimates it: the energy of the RAM and the CPU (and the GPU of an Apple chip) multiplied by the carbon intensity of the grid. `kgCo2Emissions` of a task result holds it.
 _Avoid_: Carbon footprint, energy (the energy is in kWh)
@@ -79,6 +83,22 @@ _Avoid_: Partition, fold
 **Table**:
 The scores of one or more models in rows and columns, made by `toDataFrame`. By default, a table has a row for each task and a column for each model, and it shows the main score. A table can show other scores side by side. The class of a table is `DataFrame`, as in pandas. A table can be written as Markdown, CSV or LaTeX.
 _Avoid_: Leaderboard (MTEB's web page), report
+
+**Experiment**:
+A model with experiment arguments: the keyword arguments that change its settings, such as `k1` of BM25 or the weights of a hybrid. `experimentKwargs` of `ModelMeta` holds them, as MTEB's `experiment_kwargs` does. `experimentName` makes them a folder name, so the result cache keeps the results of an experiment in `experiments/<experimentName>`, apart from the results of the model with its defaults.
+_Avoid_: Ablation (one kind of experiment), configuration
+
+**Baseline**:
+The model that a change must beat, such as BM25 or a model with its defaults. In a report, the baseline is one of the models (`baseline` of `ReportOptions`), and by default each other model is a change against it. Not from MTEB.
+_Avoid_: Control, reference model
+
+**Change**:
+The model that a comparison tests against its baseline, such as an experiment of the model or another model. A `Comparison` is the pair `[baseline, change]`. Not from MTEB.
+_Avoid_: Candidate (a document of top ranked), treatment
+
+**Verdict**:
+The answer of a paired bootstrap test on a change and its baseline for one score: `better`, `worse` or `inconclusive`, with the mean difference over the queries, its 95% interval and the p-value. `pairedBootstrapTest` gives a `ChangeVerdict`. A `Verdict` of a report adds the baseline, the change, the score and the p-value that decides the result. A difference counts when that p-value is below 0.05. Not from MTEB.
+_Avoid_: Decision, outcome, significance
 
 **Report**:
 The results of one task for each split, with the verdict of each comparison and the score of each query: one page and two tables (scores and verdicts), made by `Report.from`. Not from MTEB.
