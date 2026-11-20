@@ -129,6 +129,31 @@ test('a dedicated server ends the pools of its handle before it removes its cont
   );
 });
 
+test('a server takes more WAL than its disk holds, since it checkpoints before the WAL fills the disk', async () => {
+  // Arrange: a dedicated server, so a full disk cannot stop the shared one.
+  await using server = await postgres.start();
+  const pool = server.pool();
+  await pool.query('CREATE EXTENSION pg_trgm');
+  await pool.query(
+    'CREATE TABLE code (id int PRIMARY KEY, name text NOT NULL)',
+  );
+  await pool.query('CREATE INDEX ON code USING gin (name gin_trgm_ops)');
+
+  // Act: three loads of 74,879 rows, as many as ICD-10-CM has, write about 660 MB of WAL, more than the 512 MB disk.
+  for (let load = 0; load < 3; load++) {
+    await pool.query(
+      `INSERT INTO code
+       SELECT i, md5(i::text) || ' ' || md5((i * 7)::text)
+       FROM generate_series($1::int, $1::int + 74878) AS i`,
+      [load * 74_879],
+    );
+  }
+
+  // Assert: the loads resolved, so no write failed with "No space left on device".
+  const { rows } = await pool.query('SELECT count(*)::int AS n FROM code');
+  assert.equal(rows[0].n, 3 * 74_879);
+});
+
 test("postgresPool's disposal resolves once every client of its pool has closed", async () => {
   // Arrange: three idle clients.
   await using database = await postgres.database();

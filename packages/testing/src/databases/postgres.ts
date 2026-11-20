@@ -12,6 +12,19 @@ import { succeeded } from './succeeded.ts';
 
 export type { Database, DatabaseOptions } from './database.ts';
 
+/** The size of the tmpfs that holds the data directory, its WAL included. */
+const DISK_MB = 512;
+
+/**
+ * WAL may take a quarter of the disk, so the databases keep the rest. The
+ * 1 GB default is twice the disk: a load filled it before a checkpoint (#4940).
+ * max_wal_size "is never a hard limit", so the rest is also its headroom; no
+ * archiving, slot or wal_keep_size (default 0) keeps WAL past it, and the
+ * min_wal_size default of 80 MB is under it
+ * (https://www.postgresql.org/docs/current/wal-configuration.html).
+ */
+const MAX_WAL_MB = DISK_MB / 4;
+
 export interface PostgresOptions extends DatabaseOptions {
   user?: string;
 }
@@ -140,8 +153,9 @@ export class Postgres {
           `POSTGRES_DB=${database}`,
           `POSTGRES_USER=${user}`,
         ],
+        Cmd: ['-c', `max_wal_size=${MAX_WAL_MB}MB`],
         HostConfig: {
-          Tmpfs: { '/var/lib/postgresql': 'rw,size=512m' },
+          Tmpfs: { '/var/lib/postgresql': `rw,size=${DISK_MB}m` },
           MemorySwappiness: 0,
         },
       },
