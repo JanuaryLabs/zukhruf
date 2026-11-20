@@ -1,6 +1,6 @@
 {
   "name": "@zukhruf/pool",
-  "version": "0.8.42",
+  "version": "0.8.43",
   "description": "Lends long-lived workers, such as native helper processes, to one job at a time: startups decide when workers start, sizings decide how many run, evictions decide when an idle worker closes, and a worker that exits is replaced.",
   "license": "MIT",
   "repository": {
@@ -41,16 +41,16 @@
     "access": "public"
   },
   "dependencies": {
-    "@zukhruf/async": "^0.8.42",
-    "@zukhruf/election": "^0.8.42",
-    "@zukhruf/sqlite-notify": "^0.8.42",
-    "@zukhruf/sqlite-open": "^0.8.42",
-    "@zukhruf/sqlite-queue": "^0.8.42",
+    "@zukhruf/async": "^0.8.43",
+    "@zukhruf/election": "^0.8.43",
+    "@zukhruf/sqlite-notify": "^0.8.43",
+    "@zukhruf/sqlite-open": "^0.8.43",
+    "@zukhruf/sqlite-queue": "^0.8.43",
     "p-queue": "10.0.0"
   },
   "devDependencies": {
     "@sinonjs/fake-timers": "15.4.0",
-    "@zukhruf/fs": "^0.8.42",
-    "@zukhruf/testing": "^0.8.42"
+    "@zukhruf/fs": "^0.8.43",
+    "@zukhruf/testing": "^0.8.43"
   }
 }
