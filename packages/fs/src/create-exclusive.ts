@@ -51,7 +51,11 @@ async function removeDraft(draft: string, clock: Clock) {
   try {
     await patiently(() => unlink(draft), { clock });
   } catch (error) {
-    // A write that failed before it opened the draft left none to remove.
-    if (!isErrno(error, 'ENOENT')) throw error;
+    // No draft is there to remove: a write that failed before it opened the
+    // draft left none (ENOENT), and a path that cannot name a file (a name too
+    // long, a parent that is a file) never held one.
+    if (!NO_DRAFT.some((code) => isErrno(error, code))) throw error;
   }
 }
+
+const NO_DRAFT = ['ENOENT', 'ENAMETOOLONG', 'ENOTDIR'];
