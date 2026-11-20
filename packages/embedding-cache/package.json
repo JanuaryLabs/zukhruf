@@ -1,6 +1,6 @@
 {
   "name": "@zukhruf/embedding-cache",
-  "version": "0.8.46",
+  "version": "0.8.47",
   "description": "An AI SDK embedding middleware that calls the model only for new text and gives back exactly the numbers it gave, kept in memory, SQLite or SQL Server. After .NET's CachingEmbeddingGenerator.",
   "license": "MIT",
   "repository": {
@@ -56,8 +56,8 @@
   },
   "devDependencies": {
     "@types/mssql": "^12.3.0",
-    "@zukhruf/sqlite-open": "^0.8.46",
-    "@zukhruf/testing": "^0.8.46",
+    "@zukhruf/sqlite-open": "^0.8.47",
+    "@zukhruf/testing": "^0.8.47",
     "ai": "^7.0.154",
     "mssql": "^12.7.14"
   }
