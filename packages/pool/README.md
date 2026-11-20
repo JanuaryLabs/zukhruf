@@ -288,7 +288,6 @@ The store keeps the wall time of each job, so `Pool` and `PoolWorkers` take a `W
 - A caller that is gone cancels its jobs ([ADR 0021](./docs/adr/0021-a-caller-whose-host-is-gone-cancels-its-jobs-and-the-owner-learns-it-from-a-closed-connection.md)).
 - An owner refuses a job of an older revision with `DeprecatedRevisionError`, and an owner of an older revision gives way to a newer one ([ADR 0022](./docs/adr/0022-the-newest-revision-takes-over-and-an-owner-refuses-a-job-of-an-older-revision.md)).
 - Many computers on one Postgres store ([ADR 0025](./docs/adr/0025-many-computers-share-one-postgres-store-and-each-computer-keeps-its-own-owner.md)).
-- The hosts elt and context-compiler move to this pool, so their Vision workers become one pool for each computer (backlog #3527).
 
 ## Errors
 
