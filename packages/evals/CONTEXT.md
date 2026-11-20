@@ -78,6 +78,9 @@ An object that scores one answer against its case and gives a scorecard. It keep
 **Scorecard**:
 The result of a scorecard scorer for one answer: passed, reason, checks and named ratios.
 
+**Check**:
+One part of a scorecard that passes or fails on its own: a name, passed, a score and a reason (`Check` in `src/scoring/scorecard.ts`). A scorer set gives one check for each of its gates, under the label of the gate, and the scorecard passes when each check passes (`src/scoring/scorer-set.ts`). `./promptfoo` gives each check to the runner as one component result.
+
 **Metric**:
 A value over many answers, such as a mean of `Totals`, an interval of `Bootstrap` or a macro average of `ClassCounts`.
 
