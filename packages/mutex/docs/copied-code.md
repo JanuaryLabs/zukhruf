@@ -154,11 +154,11 @@ Backlog #4919 extracts the predicate at a third place.
 
 The Rule of Three asks to extract the code below. It is not extracted yet. Until it is, a fix to one place goes into each place, and the commit names each file.
 
-**The warning of a failure that no caller hears.** Nine places, kept by the maintainer (#3619, backlog #4938).
+**The warning of a failure that no caller hears.** Ten places, kept by the maintainer (#3619, backlog #4938).
 
-- Places: `#freeLost` of `Term` (`packages/election/src/term.ts`), `giveBack` (`packages/mutex/src/mutex/mutex.ts`), `#removeLost` of the docker lock store (`docker/docker-engine-store.ts`), `ref` of the shared connection (`packages/ssh/src/control/shared-connection.ts`), the draft removal of `createExclusive` (`packages/fs/src/create-exclusive.ts`), the scheduled measurement and the exit handler of the CO₂ tracker (`packages/mteb/src/dependencies/codecarbon.ts`), and the unheard error events of the SQLite queue (`packages/sqlite/queue/src/index.ts`, `timekeeper.ts`).
+- Places: `#freeLost` of `Term` (`packages/election/src/term.ts`), `giveBack` (`packages/mutex/src/mutex/mutex.ts`), `#removeLost` of the docker lock store (`docker/docker-engine-store.ts`), `ref` of the shared connection (`packages/ssh/src/control/shared-connection.ts`), the draft removal of `createExclusive` (`packages/fs/src/create-exclusive.ts`), the scheduled measurement and the exit handler of the CO₂ tracker (`packages/mteb/src/dependencies/codecarbon.ts`), the unheard error events of the SQLite queue (`packages/sqlite/queue/src/index.ts`, `timekeeper.ts`), and `warn` of `PoolWorkers` for a background failure of its store (`packages/pool/src/pool-workers.ts`).
 - Same: `process.emitWarning(Error.isError(error) ? error : new Error(String(error), { cause: error }))`: the failure goes to the process, which keeps running.
-- Differs: the exit handler of the CO₂ tracker uses `process.emit('warning', …)`, because the next tick of `emitWarning` never runs at exit.
+- Differs: the exit handler of the CO₂ tracker uses `process.emit('warning', …)`, because the next tick of `emitWarning` never runs at exit; `PoolWorkers` names the expression `warn(error)`, a function of its own file.
 
 The maintainer chose the copies over a shared helper on 2026-11-20. A fix to the expression goes into each place.
 
