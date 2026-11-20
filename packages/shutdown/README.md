@@ -159,6 +159,19 @@ export class Shutdown implements Disposable {
 | `'exit'` after a crash              | `process.exitCode \|\|= 1`: exit code 1, unless the program set a failure code                                                                                                                            |
 | `[Symbol.dispose]()`                | With no stop request: `process.off()` for each listener of the package, `'exit'` too, then `abort()`. After a stop request: nothing                                                                       |
 
+## Documentation
+
+**Recipes**
+
+1. [Stop an HTTP server at a termination signal](./docs/recipes/stop-an-http-server-at-a-termination-signal.md)
+2. [Stop the work at a termination signal or at a failure of the program](./docs/recipes/stop-the-work-when-the-program-fails-too.md)
+
+**Decisions**
+
+- [ADR 0001](./docs/adr/0001-the-process-dies-by-its-termination-signal-after-the-cleanup.md): the process dies by its termination signal after the cleanup.
+- [ADR 0002](./docs/adr/0002-only-the-first-stop-request-starts-a-shutdown.md): only the first stop request starts a shutdown.
+- [ADR 0003](./docs/adr/0003-a-crash-starts-a-shutdown.md): a crash starts a shutdown.
+
 ## Who uses each part
 
 The consumers below come from the search of 2026-11-02. None of them dies by the termination signal today. The package itself is backlog mutex #3579.
