@@ -141,7 +141,9 @@ class DirectoryLockStore extends FileLockStore {
 }
 
 const directory = await mkdtemp(join(tmpdir(), 'directory-lock-'));
-const mutex = new Mutex(new DirectoryLockStore(directory));
+const mutex = new Mutex(
+  new DirectoryLockStore(directory, { clock: globalThis }),
+);
 let active = 0;
 let mostActive = 0;
 await Promise.all(
@@ -178,7 +180,7 @@ import { pollInterval } from '../timing.ts';
 import { sharedByDirectory } from './directory.ts';
 
 export const openInProcess = (directory: string) =>
-  new DirectoryLockStore(directory, { pollInterval });
+  new DirectoryLockStore(directory, { clock: globalThis, pollInterval });
 
 export const { subject, sharing, threadSharing, disk } = sharedByDirectory(
   'DirectoryLockStore',

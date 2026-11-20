@@ -28,7 +28,7 @@ _Avoid_: Unlock, free
 
 **Lease**:
 The proof that a caller holds a key. The lease of a mutex is a fenced lease: it has a fencing token and a signal. Its subject is the key. The signal aborts when the lock store may grant the key to another holder. See the glossary of [`@zukhruf/lease`](../lease/CONTEXT.md) and of [`@zukhruf/fencing`](../fencing/CONTEXT.md).
-_Avoid_: Ticket
+_Avoid_: Ticket (the line of a waiter in a queue file)
 
 **Lock handle**:
 What a lock store gives the mutex for a granted key: the lease and the release. Only the mutex has the lock handle. The task gets only the lease.
@@ -112,6 +112,14 @@ _Avoid_: Ping, keep-alive (TCP keep-alive is a different mechanism), presence
 The kernel lock that a holder or a waiter of a file lock store keeps while it runs. A waiter that can take the presence of another caller knows that the caller stopped.
 _Avoid_: Liveness check, heartbeat, process check
 
+**Ticket**:
+The line that a waiter of `TicketQueueFileStore` appends to the queue file of its key: one line of JSON with a process ID, a host name and a unique ID. The waiter whose ticket is first holds the key. The holder removes its ticket when it releases the key (`src/lock-stores/file-system/ticket-queue-file-store.ts`).
+_Avoid_: Lease (the proof that a caller holds a key), entry
+
+**Reclaim**:
+A waiter of a file lock store removes a holder that stopped, so that a waiter can get the key. Before it removes the holder, the waiter takes the reclaim lock, a kernel lock on `<key>.lock.reclaim`. Only one waiter at a time has it, and the kernel ends it when that waiter stops. Without it, two waiters could each remove a lock that the other had just taken (`withReclaimLock` in `src/lock-stores/file-system/file-lock-store.ts`, `src/lock-stores/file-system/reclaim-lock.test.ts`).
+_Avoid_: Reassert (a holder of a socket lock store tells a new leader its keys), steal
+
 **Namespace**:
 The first part of the name of each claim and each rung of a Docker engine lock store, and the value of the label `zukhruf.mutex.namespace` on them. Docker engine lock stores with one namespace on one engine share their locks (`namespace` of `DockerEngineStoreOptions`).
 _Avoid_: Prefix, scope
@@ -156,7 +164,11 @@ _Avoid_: Stolen lock, broken lock
 
 **Coordinator**:
 A process that keeps the locks in its memory and grants keys to other processes.
-_Avoid_: Lock server, broker, master
+_Avoid_: Lock server (the server that serves the coordinator), broker, master
+
+**Lock server**:
+The server that the leader of a socket lock store starts for its term. It serves the coordinator on a Unix socket, and its fencing tokens carry the epoch of the term. When the term is lost, the lock server closes itself (`LockServer` in `src/lock-stores/socket/lock-server.ts`, `src/lock-stores/socket/lock-server.test.ts`).
+_Avoid_: Coordinator (the coordinator keeps the locks; the lock server serves it), broker
 
 **Candidate**:
 A process that can become the leader.
@@ -192,7 +204,7 @@ _Avoid_: Cooldown, quiet period
 
 **Reassert**:
 After a failover, a holder tells the new leader which keys it holds.
-_Avoid_: Reclaim, re-acquire
+_Avoid_: Reclaim (a waiter of a file lock store removes a holder that stopped), re-acquire
 
 **Protocol version**:
 The number of the message format between the processes of a socket lock store and their leader. Each process sends it in its `hello` before its first request. A leader refuses a process with another protocol version, and the acquire fails with `ProtocolVersionError`. See [ADR 0014](docs/adr/0014-a-process-says-its-protocol-version-before-its-first-request.md).

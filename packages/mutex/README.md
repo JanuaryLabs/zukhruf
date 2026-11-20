@@ -1,6 +1,6 @@
 # @zukhruf/mutex
 
-A mutex for Node.js with interchangeable lock stores. You select who shares the locks: one object, the threads of one process, a parent process and its children, all processes on one host, or all machines that reach one Postgres database. The code that uses the mutex stays the same. Each lease has a fencing token, so a resource can refuse the late writes of a holder that lost its key.
+A mutex for Node.js with interchangeable lock stores. You select who shares the locks: one object, the threads of one process, a parent process and its children, all processes on one host, or all machines that reach one server: a Postgres, SQL Server, MySQL or MariaDB database, or a Docker engine. The code that uses the mutex stays the same. Each lease has a fencing token, so a resource can refuse the late writes of a holder that lost its key.
 
 The words in these documents have one meaning each. See the glossary in [CONTEXT.md](./CONTEXT.md).
 
@@ -19,7 +19,7 @@ import { SqliteStore } from '@zukhruf/mutex/sqlite';
 
 The root `@zukhruf/mutex` gives the core. Each family of lock stores has its own import path: `@zukhruf/mutex/memory`, `/thread`, `/ipc`, `/file-system`, `/sqlite`, `/socket`, `/postgres`, `/sqlserver`, `/mysql`, `/mariadb` and `/docker`. The table in [Select a lock store](#select-a-lock-store) gives the path of each lock store.
 
-## The problem
+## Let one holder at a time run code for a key
 
 Two requests ask for the last item at the same time. Each request reads the stock, waits for the database, and then writes the stock. Both requests read `1`, so both sell the item.
 
@@ -78,7 +78,7 @@ If you are not sure:
 - **Many machines that already use MariaDB:** use `MariadbStore`.
 - **Many machines that already use one Docker engine, with no database:** use `DockerEngineStore`.
 
-## Acquire modes
+## Wait or skip while a key is busy
 
 A key is exclusive for every caller. The acquire mode decides only what one caller does while the key is busy: wait (the default), or skip.
 
@@ -100,7 +100,7 @@ A mode that can skip returns `{ acquired: true, value } | { acquired: false }`, 
 
 To stop a wait, give a signal to the call: `mutex.acquire(key, task, { signal })`. When the signal aborts, the call rejects with `signal.reason`, and the task does not run. See [Acquire modes](./docs/concepts/acquire-modes.md).
 
-## Holder check
+## Check if a key has a holder
 
 A status view must show if a task runs, but it must not make the key busy. `isHeld` tells if a key has a holder now, and it never acquires the key:
 
@@ -110,7 +110,7 @@ const running = await report.isHeld(); // or: await mutex.isHeld('report:daily')
 
 A caller that skips if busy is never refused because of a holder check. The holder can change before the answer arrives, so show the answer, but do not acquire a key because of it: an acquire mode decides that. See [ADR 0015](./docs/adr/0015-a-holder-check-never-acquires-the-key.md).
 
-## Fencing tokens
+## Refuse the writes of a stale holder
 
 A holder can lose its key and not know it, for example when its process freezes. Each lease has a fencing token that increases with each grant. Send the token with each write, and let the resource refuse lower tokens:
 
@@ -151,6 +151,17 @@ See [Fencing tokens](./docs/concepts/fencing-tokens.md) and the recipe [Protect 
 | `ProtocolVersionError`        | The leader of a `SocketStore` speaks another protocol version. The request did not run. `ours` is the protocol version of this process, and `theirs` is the protocol version of the leader. `@zukhruf/mutex/socket` exports it ([ADR 0014](./docs/adr/0014-a-process-says-its-protocol-version-before-its-first-request.md)).      |
 | `NetworkDirectoryError`       | The lock directory of a `TicketQueueFileStore`, `LockFileStore`, `SqliteStore` or `SocketStore` is on a network file system. `directory` and `fileSystem` name it. It is the class of `@zukhruf/fs`, and `@zukhruf/mutex/file-system`, `/sqlite` and `/socket` export it (`src/lock-stores/network-directory.test.ts`).            |
 | `signal.reason`               | A call rejects with it when its signal aborts while it waits for the key. The task does not run ([ADR 0008](./docs/adr/0008-a-caller-cancels-an-acquire-mode-gives-up.md)).                                                                                                                                                        |
+
+## Who uses it
+
+| Consumer                                    | How                                                                                                                                                                                                                                                                                          | Record                     |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------- |
+| `@eltjs/elt-sqlite` (elt)                   | `SQLiteCheckpointStore` holds one key of `SqliteStore` for each copy `id`, in a `<path>.locks` folder, with `Modes.skipIfBusy()`. A copy that already runs fails fast. It replaces one `BEGIN IMMEDIATE` transaction on the file for the full run.                                           | its ADR 0005, elt 229349b2 |
+| `@eltjs/elt-sqlserver` (elt)                | `SqlServerCheckpointStore` holds one key of `SqlServerStore` for each copy `id`, with `Modes.skipIfBusy()`, as `SQLiteCheckpointStore` does. It is in place of raw `sp_getapplock` calls.                                                                                                    | its ADR 0009, elt a6d215a6 |
+| `@eltjs/source-google-search-console` (elt) | `SearchConsoleScan` keeps a `Mutex` of `MemoryStore`, and its inspection streams of one property run one at a time with `acquire(siteUrl, …)`, so no URL is inspected twice.                                                                                                                 | elt 000da177               |
+| `@sdk-it/vite` (sdk-it)                     | `OutputFolder` holds a key of `SqliteStore` for each output folder, so a dev server and a build on one host never write the folder at the same time.                                                                                                                                         | sdk-it 09a5f9a3            |
+| `@deepagents/experimental` (deepagents)     | The Claude and ChatGPT credential refresh holds the key `'claude'` or `'chatgpt'` of `SqliteStore` in `<home>/.deepagents-locks`. The conversation status projector serializes its steps for each key with a `Mutex` of `MemoryStore`. It replaces `proper-lockfile` and `createKeyedQueue`. | deepagents e561e551        |
+| `@workspace/backend` (text2sql)             | One index run at a time for each data source: `indexing.acquire(dataSourceId, …)` on a `Mutex` of `MemoryStore`. It replaces `SpaceIndexLock`.                                                                                                                                               | text2sql ef8bbfb7          |
 
 ## API
 
