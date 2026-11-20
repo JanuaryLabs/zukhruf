@@ -15,6 +15,12 @@
       "path": "../election/tsconfig.lib.json"
     },
     {
+      "path": "../fs/tsconfig.lib.json"
+    },
+    {
+      "path": "../pipes/tsconfig.lib.json"
+    },
+    {
       "path": "../sqlite/notify/tsconfig.lib.json"
     },
     {
@@ -25,9 +31,6 @@
     },
     {
       "path": "../testing/tsconfig.lib.json"
-    },
-    {
-      "path": "../fs/tsconfig.lib.json"
     }
   ]
 }

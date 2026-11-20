@@ -1,6 +1,8 @@
-import { hash } from 'node:crypto';
+import { hash, randomUUID } from 'node:crypto';
+import type { Socket } from 'node:net';
 
 import { Cond, Future, type WallClock, delay } from '@zukhruf/async';
+import { PipeEndpoint, type PipeServer } from '@zukhruf/pipes';
 
 import {
   DisposedError,
@@ -67,6 +69,13 @@ export class Pool<Input, Output> implements AsyncDisposable {
   readonly #wakes = new Map<string, Wake>();
   // The jobs of the runs that wait: their disposal cancels them (ADR 0013).
   readonly #runs = new Set<string>();
+  // The pipe at which the owner connects to the caller of each run, from the
+  // construction to the disposal, and the connections it took: a closed one
+  // tells the owner that the caller is gone (ADR 0021). A job of an exclusive
+  // kind may be shared, and a caller of a shared job that is gone only leaves
+  // it, so a Pool of an exclusive kind serves no pipe.
+  readonly #callerPipe: Future<PipeServer> | null;
+  readonly #owners = new Set<Socket>();
 
   constructor(options: {
     kind: WorkerKind<Input, Output>;
@@ -92,10 +101,33 @@ export class Pool<Input, Output> implements AsyncDisposable {
       await this.#store.start(options.kind);
       await this.#store.notifications.listen(output);
     });
+    // The pipe does not keep the program alive.
+    this.#callerPipe =
+      options.kind.policy === 'standard'
+        ? Future.run(async () => {
+            const server = await new PipeEndpoint(randomUUID(), {
+              prefix: 'zukhruf-pool',
+            }).listen((socket) => {
+              socket.unref();
+              this.#owners.add(socket);
+              socket.on('error', warn);
+              socket.once('close', () => this.#owners.delete(socket));
+            });
+            return server.unref();
+          })
+        : null;
   }
 
-  /** Sends the job, and resolves with its handle once the store has it. */
-  async start(input: Input): Promise<JobHandle<Output>> {
+  /** Sends the job, and resolves with its handle once the store has it. A started job has no caller: it runs to its end or its cancel (ADR 0026). */
+  start(input: Input): Promise<JobHandle<Output>> {
+    return this.#send({ input });
+  }
+
+  async #send(envelope: {
+    input: Input;
+    caller?: string;
+  }): Promise<JobHandle<Output>> {
+    const { input } = envelope;
     this.#disposed.signal.throwIfAborted();
     await this.#started.wait();
     // Callers that give identical inputs of an exclusive kind share one job
@@ -106,7 +138,7 @@ export class Pool<Input, Output> implements AsyncDisposable {
       id =
         (await this.#store.queue.send(
           this.#kind.queue,
-          { input },
+          envelope,
           key === null ? {} : { singletonKey: key },
         )) ?? (await this.#shared(key!));
     }
@@ -130,7 +162,12 @@ export class Pool<Input, Output> implements AsyncDisposable {
   async run(input: Input, options?: { signal?: AbortSignal }): Promise<Output> {
     const signal = options?.signal;
     signal?.throwIfAborted();
-    const handle = await this.start(input);
+    const pipe = this.#callerPipe;
+    const handle = await this.#send(
+      pipe === null
+        ? { input }
+        : { input, caller: (await pipe.wait()).endpoint.address.path },
+    );
     this.#runs.add(handle.id);
     try {
       return await handle.result(options);
@@ -270,6 +307,10 @@ export class Pool<Input, Output> implements AsyncDisposable {
     try {
       for (const id of runs) await this.#drop(id);
     } finally {
+      // The owner hears each closed connection as a caller that is gone.
+      for (const socket of this.#owners) socket.destroy();
+      const [pipe] = await Promise.allSettled([this.#callerPipe?.wait()]);
+      if (pipe.status === 'fulfilled') await pipe.value?.close();
       await this.#store[Symbol.asyncDispose]();
     }
   }

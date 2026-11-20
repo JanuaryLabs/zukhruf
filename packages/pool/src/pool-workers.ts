@@ -1,5 +1,8 @@
+import type { Socket } from 'node:net';
+
 import { Cond, Future, type WallClock, delay } from '@zukhruf/async';
 import { SqliteElection, type Term } from '@zukhruf/election';
+import { PipeAddress } from '@zukhruf/pipes';
 
 import type { Eviction } from './eviction.ts';
 import type { PoolStats } from './pool-stats.ts';
@@ -17,10 +20,18 @@ import type { Worker } from './worker.ts';
 // The read of the store that finds the jobs that no wake told of (ADR 0018).
 const BACKSTOP = 1_000;
 
-/** A job's data in the store: the pool's envelope around the input (ADR 0012). */
+/**
+ * A job's data in the store: the pool's envelope around the input (ADR 0012),
+ * and the pipe of the caller of a run, which waits for the output (ADR 0021).
+ */
 interface Envelope<Input> {
   readonly input: Input;
+  readonly caller?: string;
 }
+
+// The codes of a connection to a caller whose program is gone: nothing listens
+// at its pipe, its pipe file is gone, or the connection broke.
+const GONE = new Set(['ECONNREFUSED', 'ENOENT', 'ECONNRESET', 'EPIPE']);
 
 /** The end of one run of a job on a worker. */
 type Outcome<Output> =
@@ -30,7 +41,9 @@ type Outcome<Output> =
   | { readonly expired: true }
   // A touch did not find the job under the owner's claim: the store took it
   // back, for example by a cancel or by a heartbeat that lapsed.
-  | { readonly gone: true };
+  | { readonly gone: true }
+  // The caller of the run is gone, so nobody waits for the output (ADR 0021).
+  | { readonly left: true };
 
 /** What this host is to its pool: an owner reads its slots, a standby has none. */
 interface Role {
@@ -250,12 +263,30 @@ export class PoolWorkers<Input, Output> implements AsyncDisposable {
     const attempt = { id: job.id, retryCount: job.retryCount };
     const slot = slots.lend();
     const ended = new AbortController();
+    let connection: Socket | undefined;
     try {
+      // A job of an exclusive kind may be shared, and a caller of a shared job
+      // that is gone only leaves it (ADR 0020).
+      const caller =
+        this.#kind.policy === 'standard' ? callerOf(job.data) : undefined;
+      if (caller !== undefined) {
+        try {
+          connection = await new PipeAddress(caller).connect();
+        } catch (error) {
+          if (!isGone(error)) throw error;
+          // The caller is gone before its job starts: the job never runs.
+          await this.#store.queue.cancel(this.#kind.queue, job.id);
+          return;
+        }
+      }
       const outcome = await Promise.race([
         this.#work(slots, slot, job.data, backlog, ended.signal),
         this.#watch(attempt, ended.signal),
+        ...(connection === undefined ? [] : [left(connection)]),
       ]);
       ended.abort();
+      if ('left' in outcome)
+        await this.#store.queue.cancel(this.#kind.queue, job.id);
       // A settle that affects no row finds the job under another claim: the
       // store fenced it, and the output is dropped (ADR 0017).
       if ('output' in outcome)
@@ -279,11 +310,13 @@ export class PoolWorkers<Input, Output> implements AsyncDisposable {
             ),
           ),
         );
-      // The store took a job that is gone back itself, so no output waits.
-      if (!('gone' in outcome))
+      // The store took a job that is gone back itself, and nobody waits for
+      // the output of a caller that left.
+      if (!('gone' in outcome) && !('left' in outcome))
         this.#store.tell(outputChannel(this.#kind), job.id);
     } finally {
       ended.abort();
+      connection?.destroy();
       slots.release(slot);
     }
   }
@@ -360,6 +393,33 @@ export class PoolWorkers<Input, Output> implements AsyncDisposable {
 // revision run the same code (ADR 0014).
 function isEnvelope<Input>(data: unknown): data is Envelope<Input> {
   return typeof data === 'object' && data !== null && 'input' in data;
+}
+
+// The pipe of the caller that a run wrote on its job, if any.
+function callerOf(data: unknown): string | undefined {
+  return isEnvelope(data) && typeof data.caller === 'string'
+    ? data.caller
+    : undefined;
+}
+
+function isGone(error: unknown): boolean {
+  return (
+    Error.isError(error) &&
+    'code' in error &&
+    typeof error.code === 'string' &&
+    GONE.has(error.code)
+  );
+}
+
+// Resolves when the connection to the caller closes: its program is gone, or
+// its Pool was disposed. A break of the connection only ends it.
+function left<Output>(connection: Socket): Promise<Outcome<Output>> {
+  connection.on('error', (error) => {
+    if (!isGone(error)) warn(error);
+  });
+  return new Promise((resolve) => {
+    connection.once('close', () => resolve({ left: true }));
+  });
 }
 
 /** A failure as data: its name and its message (ADR 0019). */

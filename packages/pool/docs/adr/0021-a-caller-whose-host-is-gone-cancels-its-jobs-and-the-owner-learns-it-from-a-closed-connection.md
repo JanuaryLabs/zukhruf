@@ -1,6 +1,6 @@
 # A caller whose host is gone cancels its jobs, and the owner learns it from a closed connection
 
-Status: Accepted 2026-11-20 (backlog #3527). Not built.
+Status: Accepted 2026-11-20 (backlog #3527). Built (2026-11-20), on one computer: each `Pool` of a standard kind serves its pipe from its construction to its disposal, rather than only while a `run` waits, so the pipe needs no state that a lazy start would add; a pipe across computers waits for ADR 0025.
 
 A caller's abort cancels its job ([ADR 0020](./0020-a-cancel-of-a-shared-job-is-a-leave-and-of-any-other-job-a-drop-or-a-kill.md)). A host can also end with no abort: a crash, a `SIGKILL`, or a chat server that ends when its chat closes. Its jobs stay in the store, the owner runs them, and nobody reads the output (map ticket 15):
 
@@ -33,7 +33,7 @@ From map ticket 15, resolved 2026-11-14 by the session from precedent. The addre
 
 ## Consequences
 
-- A `Pool` with a waiting `run` keeps one more socket: `/tmp/zukhruf-pool-<uid>/<id>` on macOS and Linux, through the default folder of `@zukhruf/pipes`. The `<id>` is random for each `Pool`. The prefix `zukhruf-pool` is a name of this package, after `zukhruf-testing`.
+- A `Pool` of a standard kind keeps one more socket, from its construction to its disposal: `/tmp/zukhruf-pool-<uid>/<id>` on macOS and Linux, through the default folder of `@zukhruf/pipes`. The `<id>` is random for each `Pool`. The prefix `zukhruf-pool` is a name of this package, after `zukhruf-testing`.
 - Disposal of a `Pool` closes its pipe and its connections. The owner sees each close as a cancel, which is the cancel of disposal ([ADR 0013](./0013-pool-sends-jobs-and-pool-workers-offers-the-workers-of-its-host.md)).
 - Across computers a pipe is not an address that another computer can reach. That part waits for a second computer ([ADR 0025](./0025-many-computers-share-one-postgres-store-and-each-computer-keeps-its-own-owner.md)).
 - With a crash of a host, the transcription of its temporary wav is cancelled. An abort cancels it before the file goes ([ADR 0020](./0020-a-cancel-of-a-shared-job-is-a-leave-and-of-any-other-job-a-drop-or-a-kill.md)).

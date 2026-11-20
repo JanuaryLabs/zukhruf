@@ -54,13 +54,27 @@ const queue = 'echo.r1';
 // host's pid after input.ms, throws input.fail, and never answers in the host
 // whose pid is input.hangIn. A worker of a host with closeHangs never ends
 // its close. "dispose" disposes the PoolWorkers; a lingering host then stays
-// alive.
+// alive. A host with settings.call is a caller instead: it builds a Pool of
+// the kind, runs that input (or only starts it, with settings.start), and
+// reports once it sent the job.
 const host = `
 import { setTimeout as sleep } from 'node:timers/promises';
-import { Fixed, NoEviction, Parallel, PoolWorkers, WorkerKind } from ${JSON.stringify(new URL('./index.ts', import.meta.url).href)};
+import { Fixed, NoEviction, Parallel, Pool, PoolWorkers, WorkerKind } from ${JSON.stringify(new URL('./index.ts', import.meta.url).href)};
 
 const [store, json] = process.argv.slice(1);
 const settings = JSON.parse(json);
+
+if (settings.call) {
+  const pool = new Pool({
+    kind: new WorkerKind({ name: 'echo', revision: 1, policy: settings.policy ?? 'standard', retryLimit: settings.retryLimit, expireInSeconds: 60 }),
+    store,
+    clock: globalThis,
+  });
+  if (settings.start) await pool.start(settings.call);
+  else void pool.run(settings.call).catch(() => {});
+  process.send({ called: true });
+  setInterval(() => {}, 60_000);
+} else {
 
 class HostWorker {
   #exit = Promise.withResolvers();
@@ -103,6 +117,7 @@ process.once('message', async () => {
   if (settings.linger) setInterval(() => {}, 60_000);
   process.send({ disposed: true });
 });
+}
 `;
 
 type Report =
@@ -110,7 +125,8 @@ type Report =
   | { constructed: true }
   | { started: string }
   | { refused: string }
-  | { disposed: true };
+  | { disposed: true }
+  | { called: true };
 
 /** A host process; its disposal kills it when it still runs. */
 class Host implements AsyncDisposable {
@@ -126,6 +142,8 @@ class Host implements AsyncDisposable {
       policy?: 'standard' | 'exclusive';
       linger?: boolean;
       closeHangs?: boolean;
+      call?: { id: string };
+      start?: boolean;
     },
     cwd?: string,
   ) {
@@ -3927,6 +3945,241 @@ describe(
       await using pool = new Pool({ kind: echo(), store, clock: globalThis });
 
       assert.equal(await pool.handle(id).result(), 'missed');
+    });
+  },
+);
+
+// A caller whose program is gone cancels its jobs (ADR 0021). The owner runs
+// in the test process with HeldWorkers, on the real clock, since each caller
+// is another program, a Host with settings.call.
+describe(
+  'Pool and a caller whose program is gone',
+  { concurrency: true },
+  () => {
+    const heldOwner = (
+      store: string,
+      workers: HeldWorkers,
+      policy: 'standard' | 'exclusive',
+    ) =>
+      new PoolWorkers({
+        kind: new WorkerKind<{ id: string }, { id: string }>({
+          name: 'echo',
+          revision: 1,
+          policy,
+          retryLimit: 0,
+          expireInSeconds: 60,
+        }),
+        store,
+        clock: globalThis,
+        create: workers.create,
+        size: new Fixed(1),
+        startup: new Parallel(),
+        eviction: new NoEviction(),
+      });
+
+    test('a standard job whose caller program dies while the job runs loses its worker at once, and the store cancels it', async (t) => {
+      await using folder = await new TemporaryFiles().directory('pool-');
+      const store = join(folder.path, 'store.sqlite');
+      const workers = new HeldWorkers();
+      const owner = heldOwner(store, workers, 'standard');
+      try {
+        await owner.ready();
+        await using caller = new Host(store, {
+          workers: 0,
+          retryLimit: 0,
+          call: { id: 'gone' },
+        });
+        await untilRunning(t, workers, 'gone');
+
+        caller.kill();
+        await caller.closed();
+
+        await waitFor(() => assert.equal(workers.killed('gone'), true), {
+          signal: t.signal,
+          interval: 5,
+        });
+        await using sending = await sender(store);
+        await waitFor(
+          async () => {
+            const [job] = await sending.jobs.findJobs(queue);
+            assert.equal(job?.state, 'cancelled');
+          },
+          { signal: t.signal, interval: 10 },
+        );
+      } finally {
+        workers.answerAll();
+        await owner[Symbol.asyncDispose]();
+      }
+    });
+
+    test('a standard run whose caller program is gone before the owner starts its job never runs', async (t) => {
+      await using folder = await new TemporaryFiles().directory('pool-');
+      const store = join(folder.path, 'store.sqlite');
+      const workers = new HeldWorkers();
+      const owner = heldOwner(store, workers, 'standard');
+      try {
+        await owner.ready();
+        await using pool = new Pool({
+          kind: new WorkerKind<{ id: string }, { id: string }>({
+            name: 'echo',
+            revision: 1,
+            policy: 'standard',
+            retryLimit: 0,
+            expireInSeconds: 60,
+          }),
+          store,
+          clock: globalThis,
+        });
+        await using sending = await sender(store);
+        const busy = await pool.start({ id: 'busy' });
+        await untilRunning(t, workers, 'busy');
+        await using caller = new Host(store, {
+          workers: 0,
+          retryLimit: 0,
+          call: { id: 'late' },
+        });
+        // The job of the run waits in the store while the only worker is busy.
+        await waitFor(
+          async () =>
+            assert.equal((await sending.jobs.findJobs(queue)).length, 2),
+          { signal: t.signal, interval: 10 },
+        );
+
+        caller.kill();
+        await caller.closed();
+        workers.answer('busy');
+
+        assert.deepEqual(await busy.result(), { id: 'busy' });
+        await waitFor(
+          async () =>
+            assert.deepEqual(
+              (await sending.jobs.findJobs(queue))
+                .map(({ state }) => state)
+                .toSorted(),
+              ['cancelled', 'completed'],
+            ),
+          { signal: t.signal, interval: 10 },
+        );
+        assert.equal(workers.running('late'), false);
+      } finally {
+        workers.answerAll();
+        await owner[Symbol.asyncDispose]();
+      }
+    });
+
+    test('an exclusive job whose caller program dies runs to its end, as the caller only left a job that others may share', async (t) => {
+      await using folder = await new TemporaryFiles().directory('pool-');
+      const store = join(folder.path, 'store.sqlite');
+      const workers = new HeldWorkers();
+      const owner = heldOwner(store, workers, 'exclusive');
+      try {
+        await owner.ready();
+        await using caller = new Host(store, {
+          workers: 0,
+          retryLimit: 0,
+          policy: 'exclusive',
+          call: { id: 'shared' },
+        });
+        await untilRunning(t, workers, 'shared');
+
+        caller.kill();
+        await caller.closed();
+        workers.answer('shared');
+
+        await using sending = await sender(store);
+        await waitFor(
+          async () => {
+            const [job] = await sending.jobs.findJobs(queue);
+            assert.equal(job?.state, 'completed');
+          },
+          { signal: t.signal, interval: 10 },
+        );
+        assert.equal(workers.killed('shared'), false);
+      } finally {
+        workers.answerAll();
+        await owner[Symbol.asyncDispose]();
+      }
+    });
+
+    test("disposing a Pool while its run's job runs kills that job's worker at once, on a clock that stands still", async (t) => {
+      await using folder = await new TemporaryFiles().directory('pool-');
+      const store = join(folder.path, 'store.sqlite');
+      const clock = createClock(Date.now());
+      const gate = new Latch();
+      const created: EchoWorker[] = [];
+      class Gated extends EchoWorker {
+        override async run(text: string): Promise<string> {
+          await gate.wait();
+          return super.run(text);
+        }
+      }
+      await using owner = lendingOn(clock, store, {
+        size: new Fixed(1),
+        startup: new Parallel(),
+        eviction: new NoEviction(),
+        create: () => {
+          const worker = new Gated();
+          worker.release();
+          created.push(worker);
+          return worker;
+        },
+      });
+      const pool = new Pool({ kind: echo(), store, clock });
+      await owner.ready();
+      // The disposal rejects the run with DisposedError.
+      const run = Promise.allSettled([pool.run('held')]);
+      try {
+        await waitFor(() => assert.equal(owner.stats.lent, 1), {
+          signal: t.signal,
+          interval: 5,
+        });
+
+        // No touch comes on this clock, so only the closed connection to the
+        // caller tells the owner.
+        await pool[Symbol.asyncDispose]();
+
+        await waitFor(() => assert.equal(created[0]!.dead, true), {
+          signal: t.signal,
+          interval: 5,
+        });
+      } finally {
+        gate.open();
+        await run;
+      }
+    });
+
+    test('a job that start sent runs to its end after the program that started it dies', async (t) => {
+      await using folder = await new TemporaryFiles().directory('pool-');
+      const store = join(folder.path, 'store.sqlite');
+      const workers = new HeldWorkers();
+      const owner = heldOwner(store, workers, 'standard');
+      try {
+        await owner.ready();
+        await using starter = new Host(store, {
+          workers: 0,
+          retryLimit: 0,
+          call: { id: 'started' },
+          start: true,
+        });
+        await untilRunning(t, workers, 'started');
+
+        starter.kill();
+        await starter.closed();
+        workers.answer('started');
+
+        await using sending = await sender(store);
+        await waitFor(
+          async () => {
+            const [job] = await sending.jobs.findJobs(queue);
+            assert.equal(job?.state, 'completed');
+          },
+          { signal: t.signal, interval: 10 },
+        );
+        assert.equal(workers.killed('started'), false);
+      } finally {
+        workers.answerAll();
+        await owner[Symbol.asyncDispose]();
+      }
     });
   },
 );
