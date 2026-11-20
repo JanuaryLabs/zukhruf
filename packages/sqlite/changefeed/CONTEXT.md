@@ -9,11 +9,11 @@ The other process that owns the database and writes it. The owner keeps the file
 _Avoid_: App, source, writer, upstream
 
 **Changefeed**:
-The sequence of change events of one database, and the object that gives it (`Changefeed`). It reads each table, and it keeps its own position.
+The sequence of change events of one database, and the object that gives it (`Changefeed`). Each pass reads the tables that changed, and the feed keeps its own position.
 _Avoid_: Stream, subscription, CDC (use "change data capture" only for the method)
 
 **Table**:
-An entry of `PRAGMA table_list` with type `table` whose name does not start with `sqlite_`. A view, a virtual table and a shadow table are not tables of the feed. The feed reads each table in full.
+An entry of `PRAGMA table_list` with type `table` whose name does not start with `sqlite_`. A view, a virtual table and a shadow table are not tables of the feed. When the feed reads a table, it reads all its rows.
 _Avoid_: Stream, collection, query
 
 **Key**:
@@ -41,12 +41,16 @@ A first pass that keeps the fingerprint of each row of each table, and gives no 
 _Avoid_: Initial scan, snapshot (a snapshot holds one moment of the database)
 
 **Pass**:
-One read of all tables in one snapshot. A pass compares the rows of each table with the position, and gives one batch.
+One read of the tables in one snapshot. A pass reads each table that the owner's WAL frames wrote since the last pass, and each table that the position does not have. When it cannot tell which tables the frames wrote, it is a full pass. A pass compares the rows of each table that it reads with the position, and gives one batch (`src/pass.ts`). See [ADR 0011](docs/adr/0011-a-pass-reads-the-tables-that-the-wal-frames-wrote.md).
 _Avoid_: Scan (the word of `@zukhruf/snapshot-differential` for the rows of one table), sync, poll (a poll reads only the data version)
+
+**Full pass**:
+A pass that reads each table, because it cannot tell which tables changed: the first pass, a pass when the owner has no WAL, after a reset of the WAL, when the WAL holds fewer frames than the WAL progress, or when a frame wrote a page of the schema. Its cost grows with the size of the database, also when the owner changed one row. See [ADR 0011](docs/adr/0011-a-pass-reads-the-tables-that-the-wal-frames-wrote.md).
+_Avoid_: Full scan, resync
 
 **Poll**:
 One read of the data version of the database (`DataVersion` of `@zukhruf/sqlite-data-version`). `watch` polls each `interval` milliseconds, and makes a pass only when the data version changed. A poll reads no rows.
-_Avoid_: Pass (a pass reads all tables), scan, tick
+_Avoid_: Pass (a pass reads the rows of tables), scan, tick
 
 **Batch**:
 The change events of one pass (`Batch`). The feed saves the position of a batch when the host asks for the next batch.

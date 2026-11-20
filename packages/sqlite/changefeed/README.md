@@ -19,7 +19,7 @@ This project is an experiment. It uses only `node:sqlite`.
 npm install @zukhruf/sqlite-changefeed
 ```
 
-The owner is a notes app. It keeps its database in WAL mode. The reader copies each table into its own store:
+In this example, the owner keeps notes in its database, in WAL mode. The reader copies each table into its own store:
 
 ```ts
 import {
@@ -129,6 +129,7 @@ The table `tags` has no primary key, so its key is the `rowid`. The owner droppe
 - You see only the net change between two passes. A row that the owner inserts and deletes between two passes gives no event. A row that the owner changes two times gives one `update`.
 - A pass reads only the tables whose b-tree pages the owner's WAL frames wrote since the last pass, when the WAL still holds all those frames. It finds the table of each page from the interior pages of the b-trees only, which it reads from the file and the WAL. Else it reads each table in full: at the first pass, after a reset of the WAL, when a frame wrote a page of the schema, or when the owner has no WAL. An owner that checkpoints its WAL when it closes its last connection, such as elt's SQLite destination at the end of each pass, leaves no frames, so its passes read each table. [ADR 0011](./docs/adr/0011-a-pass-reads-the-tables-that-the-wal-frames-wrote.md) tells why.
 - A full pass reads each table in full. Its cost grows with the size of the database, also when the commit changed one row.
+- A pass reads the database with the synchronous API of `node:sqlite`, on the thread that runs `watch()`. The event loop of that thread waits until the pass ends. On a Mac with Node 26.13, a `Baseline` pass over a WhatsApp import of 131 MB stopped the event loop of Context Compiler's Ambient for 6.4 s (context-compiler #3942).
 - The position keeps one 8-byte hash for each column of each row of each table. It grows with the number of rows and columns. A `PositionFile` keeps it on disk. A `PositionInMemory` keeps it in memory.
 - A feed with a `PositionInMemory` does not see the changes that the owner made while no feed ran.
 - A batch holds all the change events of one pass, with the full rows. A first run with `ReadEveryRow`, a new table, or a new primary key of a large table gives a large batch. A `Baseline` keeps no rows, only the fingerprints.
@@ -141,6 +142,12 @@ The table `tags` has no primary key, so its key is the `rowid`. The owner droppe
 | `UnavailableError`  | SQLite cannot open the database: the file is missing, or the system denies access, a privacy denial too. `new Changefeed` throws it, and a pass throws it. `path` is the path. `cause` is the error of SQLite. It is a `MissingError` when the file or a folder on its path is not there, and a `DeniedError` when the system denies access. The package exports both, and both are an `UnavailableError`. |
 | `JournalModeError`  | The database is not in WAL mode. `new Changefeed` throws it, and a pass throws it. `path` is the path, and `journalMode` is the mode that `PRAGMA journal_mode` gave, for example `delete`.                                                                                                                                                                                                                |
 | The error of SQLite | All other failures, for example a position file that the feed cannot write.                                                                                                                                                                                                                                                                                                                                |
+
+## Who uses it
+
+| Consumer                                    | How                                                                                                                                                                                                                                                                                                                                                                                                      | Record                            |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
+| Context Compiler's Ambient (`apps/ambient`) | `followWarehouse` makes one `new Changefeed(<import>, { position: new PositionFile(<path>), start: new Baseline() })` for each selected import, and reads `watch({ interval: 1000, signal, clock: globalThis })`. It drops the events of elt's reserved tables from `batch.events`, and its journal takes each `ChangeEvent`. Ambient used the feed from its first commit, so the feed replaced no code. | context-compiler 673c1ae, 1d27435 |
 
 ## The same concepts in other systems
 
@@ -288,17 +295,17 @@ class DeniedError extends UnavailableError {}
 
 ## Documentation
 
-- [0001 Capture by snapshot differential](./docs/adr/0001-capture-by-snapshot-differential.md)
-- [0002 WAL is required](./docs/adr/0002-wal-is-required.md)
-- [0003 The change event](./docs/adr/0003-the-change-event.md)
-- [0004 The feed owns its position](./docs/adr/0004-the-feed-owns-its-position.md)
-- [0005 One snapshot for each pass](./docs/adr/0005-one-snapshot-for-each-pass.md)
-- [0006 Every table, keyed by its primary key](./docs/adr/0006-every-table-keyed-by-its-primary-key.md)
-- [0007 The host gives the position and the start](./docs/adr/0007-the-host-gives-the-position-and-the-start.md)
-- [0008 Every integer is a bigint](./docs/adr/0008-every-integer-is-a-bigint.md)
-- [0009 An update names its changed columns](./docs/adr/0009-an-update-names-its-changed-columns.md)
-- [0010 A batch of a durable position has a sequence](./docs/adr/0010-a-batch-of-a-durable-position-has-a-sequence.md)
-- [0011 A pass reads the tables that the WAL frames wrote](./docs/adr/0011-a-pass-reads-the-tables-that-the-wal-frames-wrote.md)
+- [ADR 0001](./docs/adr/0001-capture-by-snapshot-differential.md): capture by snapshot differential.
+- [ADR 0002](./docs/adr/0002-wal-is-required.md): WAL is required.
+- [ADR 0003](./docs/adr/0003-the-change-event.md): the change event.
+- [ADR 0004](./docs/adr/0004-the-feed-owns-its-position.md): the feed owns its position.
+- [ADR 0005](./docs/adr/0005-one-snapshot-for-each-pass.md): one snapshot for each pass.
+- [ADR 0006](./docs/adr/0006-every-table-keyed-by-its-primary-key.md): every table, keyed by its primary key.
+- [ADR 0007](./docs/adr/0007-the-host-gives-the-position-and-the-start.md): the host gives the position and the start.
+- [ADR 0008](./docs/adr/0008-every-integer-is-a-bigint.md): every integer is a bigint.
+- [ADR 0009](./docs/adr/0009-an-update-names-its-changed-columns.md): an update names its changed columns.
+- [ADR 0010](./docs/adr/0010-a-batch-of-a-durable-position-has-a-sequence.md): a batch of a durable position has a sequence.
+- [ADR 0011](./docs/adr/0011-a-pass-reads-the-tables-that-the-wal-frames-wrote.md): a pass reads the tables that the WAL frames wrote.
 
 ## Development
 
