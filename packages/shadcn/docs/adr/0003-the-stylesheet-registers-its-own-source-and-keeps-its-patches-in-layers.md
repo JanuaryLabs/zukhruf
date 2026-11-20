@@ -15,11 +15,13 @@ Tailwind CSS 4.3.3 gives this evidence:
 - Tailwind CSS scans a base under `node_modules` as External, and it does not obey `.gitignore` there (changelog 4.1.0, #17255, and 4.3.1, #20214).
 - `./styles.css` is in the `exports` of `package.json`. Vite stops with an error for a subpath that `exports` does not list.
 
-The stylesheet also holds three patches: the pointer cursor on enabled buttons, the cap on the height of a dialog, and the width of the mobile sidebar. The base-nova button has no `cursor-pointer` class. The base-nova dialog has `data-slot="dialog-content"`, but no `max-h` or `overflow` class. On a small screen, the sidebar is in a `Sheet`, and the class `data-[side=left]:w-3/4` of the `Sheet` wins over the class `w-(--sidebar-width)` of the sidebar. Each patch is in a layer:
+The stylesheet also holds five patches: the pointer cursor on enabled buttons, the cap on the height of a dialog, the width of the mobile sidebar, the height of a tabs list that wraps, and the reading direction of a menu shortcut. The base-nova button has no `cursor-pointer` class. The base-nova dialog has `data-slot="dialog-content"`, but no `max-h` or `overflow` class. On a small screen, the sidebar is in a `Sheet`, and the class `data-[side=left]:w-3/4` of the `Sheet` wins over the class `w-(--sidebar-width)` of the sidebar. The tabs list has `group-data-horizontal/tabs:h-8`, which Tailwind CSS emits after an app's `h-auto`, so a list that the app lets wrap keeps 32px and its second row overlaps what follows (#4982, found in Meddit). A shortcut such as ⌘P must read left to right also in a right-to-left menu. Each patch is in a layer:
 
 - The cursor is in `@layer base`.
 - The cap is in `@layer components`.
 - The width is in `@layer utilities`, with the selector `[data-slot="sidebar"][data-mobile="true"][data-side]`.
+- The wrapping tabs list is in `@layer utilities`, with the selector `[data-slot="tabs-list"][data-orientation="horizontal"].flex-wrap`. It needs the app's `flex-wrap` class: on a list without it, `height: auto` would change what the triggers' `h-[calc(100%-1px)]` resolves against and move every single-row list by a pixel.
+- The shortcut is in `@layer components`, with `unicode-bidi: plaintext`.
 
 A rule outside of a layer wins over each rule in a layer (MDN, `@layer`). Tailwind CSS puts its utility classes in `@layer utilities`. Thus a patch outside of a layer would win over each utility class of the app. In `base` and `components`, a patch comes before `utilities`, and a utility class of the app still wins.
 
