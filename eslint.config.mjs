@@ -466,6 +466,9 @@ export default defineConfig(
       // shadcn 4.23's code-block drops a clipboard rejection and
       // use-highlighted-code a highlighter rejection (#3619).
       'zukhruf/no-silent-catch': 'off',
+      // shadcn 4.23's native-select wraps the <select> that the rule keeps
+      // out of app code.
+      'zukhruf/no-native-select': 'off',
     },
   },
 );
