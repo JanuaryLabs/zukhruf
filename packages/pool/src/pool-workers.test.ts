@@ -2026,14 +2026,24 @@ describe('PoolWorkers backs off on a fake clock', { concurrency: true }, () => {
         signal: t.signal,
         interval: 5,
       });
+      const started = created.length;
       await clock.tickAsync(wait - 1);
       assert.deepEqual(
         owner.stats,
         { starting: 0, idle: 0, lent: 0, waiting: 0 },
         `the owner still waits at ${wait - 1} ms`,
       );
+      // The passes of the store end on the clock at the same moment, and the
+      // event loop turns between them, so the new worker may already have
+      // failed its warm-up: the test counts the workers the owner created.
       await clock.tickAsync(1);
-      assert.equal(owner.stats.starting, 1, `the owner starts at ${wait} ms`);
+      // The worker is created a microtask after its slot starts.
+      await new Promise((resolve) => setImmediate(resolve));
+      assert.equal(
+        created.length,
+        started + 1,
+        `the owner starts at ${wait} ms`,
+      );
     }
 
     await waitFor(() => assert.equal(owner.stats.idle, 1), {
