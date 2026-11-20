@@ -115,30 +115,29 @@ const scores = await scorer.score(newArticles, { signal });
 scores.ranked({ from: dayStart, to: dayEnd }).slice(0, 5);
 ```
 
-## API
+## Score a stream for one interest
+
+Each scorer scores a stream for the one interest that it was made for.
 
 - A `Scorer` has `score(stream, { signal })`, which gives a `Promise` of `Scores`. A scorer is made for one interest ([ADR 0006](./docs/adr/0006-a-scorer-is-made-for-one-interest-and-its-inputs-rule-out-illegal-states.md)). The `stream` is a map from article id to `{ publishedAt, text }`; `text` is, for example, the title and the lead. It can be empty.
 - The `signal` is an `AbortSignal`, and it is required ([ADR 0007](./docs/adr/0007-a-score-takes-a-signal.md)). When it aborts, the score rejects with the reason of the signal. Give the signal of the request or of the host's stop. A host that cannot stop a score gives `new AbortController().signal`.
+
+## Ask a decision model about each article
+
 - `new DecisionScorer({ model, description })` takes an AI SDK decision model and the description. For each article, it asks the model "Is the main subject of this article: <description>?" about `text`. It keeps up to 8 calls in flight, two times the 4 slots that a llama.cpp server makes by default ([ADR 0008](./docs/adr/0008-a-decision-scorer-keeps-eight-calls-in-flight-and-a-coalescing-model-asks-one-article-once.md)). It gives the signal to each call, so a stop aborts the calls that run, and no question starts after the stop. When a call fails, the scorer aborts the other calls. The ranking does not depend on the order in which the answers arrive.
 - `new CoalescingDecisionModel(model)` wraps an AI SDK decision model, and is a decision model too. The calls that reach it before the next macrotask, about the same text and with equal options, go to the wrapped model as one call with all their questions (request coalescing, as in DataLoader). Each caller gets only its own answers. Wrap the model once, make one `DecisionScorer` for each interest with it, and score the interests with `Promise.all`. A call that is alone, has a state with a part that is not text, or has other options goes to the wrapped model without a change. A caller that aborts rejects at once; the merged call aborts only when all its callers abort. An error of the wrapped model rejects each caller of that call, and a refused question fails only its caller. Only the first caller of a merged call gets the usage, so a sum over the callers is the real usage.
+- The decision scorer calls the model once for each article of the stream. With a `CoalescingDecisionModel`, the scorers of all interests that score together share one call for each article. The host decides when to score and if it keeps the scores.
+
+## Teach the similarity scorer with answers
+
 - `new SimilarityScorer({ vectors, descriptionVector, answers, keywords })` is the frozen design for an interest with at least one yes answer.
   - `vectors` is the port to the vectors of the articles: `query(vector, { from, to })` and `fetch(ids)`. The `Collection` of `@zukhruf/embeddings` has this shape. The stream and the taught articles must be in it, and `publishedAt` must be the date that the vectors store for the article.
   - `descriptionVector` is the vector of the description from the model of the stored vectors, made with the prompt that the model uses for a query.
   - `answers` is a `TaughtAnswers`. `keywords` holds strings and regular expressions, and can be empty. A string matches at the start of a word, in any case: `secur` matches "Security" and "securing", but not "cybersecurity". A regular expression matches as it is ([ADR 0003](./docs/adr/0003-a-keyword-is-a-word-start-or-a-regular-expression.md)).
   - It ranks by the calibrated probability, then by similarity, then by id. When neither the binormal fit nor Platt's method can hold, it ranks the keyword matches first, the newest first, and then the other articles by similarity, with the probability 1 for a match and 0 for the others.
 - `TaughtAnswers.parse(answers)` takes the reader's answers as a map from article id to `{ relevant, text }`, and gives `undefined` when no answer is a yes.
-- `new KeywordScorer({ vectors, descriptionVector, keywords })` is the cold start: `keywords` has at least one keyword. It ranks the matches first, the newest first, and then the other articles by similarity. Its probability is 1 for a match and 0 for the others, and it is not calibrated.
-- `Scores` gives `ranked(range?)`: the ids of the stream, the best first. With `{ from, to }`, only the articles published in that range, in the same order. The best N of a day are `ranked({ from, to }).slice(0, n)` ([ADR 0004](./docs/adr/0004-the-reader-ranks-and-does-not-decide-yes-or-no.md)). It also gives `probability(id)`, and `accepted(threshold)`: the articles that the threshold accepts, in the order of `ranked()`.
-- A `Threshold` has `cut(scores)`, which gives the lowest probability to accept (`Infinity` accepts nothing).
-  - `new UtilityThreshold({ falseAlarm, miss })` accepts when p >= falseAlarm / (falseAlarm + miss), the Bayes decision rule for calibrated probabilities. The two costs are finite, 0 or more, and not both 0.
-  - `new ExpectedFThreshold({ beta })` accepts the m most probable articles, where m maximises the expected F-beta of the stream. With beta 0.5 it is the threshold of the frozen design.
-- To add a method, implement `Scorer` or `Threshold`. A scorer gives `new Scores(ranked)`, with `ranked` a map from article id to `{ publishedAt, probability }` in its order.
 
-## Rank, then decide for each action
-
-Show the ranking, and decide yes or no only for an action that needs it. Research round 9 tested the yes/no decisions of the frozen design on July to September 2025, and every design lost to the typed keyword: the threshold that a few taught answers set is weak. The ranking was strong, so the user chose a ranked reader on 2026-10-29 ([ADR 0004](./docs/adr/0004-the-reader-ranks-and-does-not-decide-yes-or-no.md)). The probabilities of the decision model were calibrated on January to March 2025 (Brier skill +0.726), but the calibration changed with the answer key (+0.356 with a second key, round 14). Choose a threshold for each action from what a miss and a false alarm cost. See [the research record](../../../docs/research/relevance-filtering.md) and [ADR 0005](./docs/adr/0005-a-scorer-and-a-threshold-are-ports.md).
-
-## How the similarity scorer ranks
+The similarity scorer ranks in five steps:
 
 1. **Similarity.** The similarity of each article is the cosine of its vector and the description vector. The answers do not change the similarity.
 2. **Binormal model.** The scorer standardises the similarities of the stream by their mean and standard deviation. It fits a relevant normal distribution and an other normal distribution by semi-supervised EM. The taught similarities stay in the component of their answer. The probability of an article is its posterior of the relevant component.
@@ -146,15 +145,35 @@ Show the ranking, and decide yes or no only for an action that needs it. Researc
 4. **Keyword evidence.** When there are keywords, naive Bayes adds the log likelihood ratio of a match, or of no match, to the log odds of each article.
 5. **Order.** The scorer ranks the stream by the probability, then by the similarity, then by id.
 
-## Errors
+The binormal fit depends on the stream and on the answers:
 
-- `MissingVectorError`: the vectors have no article of the stream with its publish date.
-- `UnknownArticleError`: `probability` got an id that is not in the stream.
-- `RangeError`: the costs of a `UtilityThreshold` give no threshold.
-- The error of the vectors port, for example the `UnknownDocumentError` of `@zukhruf/embeddings`: a taught article is not in the vectors.
-- The errors of the AI SDK, for example `Experimental_DecisionRefusalError` when the decision model refuses a question. The decision scorer gives no probability in place of a refused or failed call.
+- The binormal model is fitted on the stream. A stream of a few articles gives a weak fit. The research streams held 1,600 to 1,700 articles.
+- When the answers are only the most similar articles of a large pool, the taught relevant similarities are far above the relevant articles of the stream. Then the probabilities of the similarity scorer are too low, and a threshold accepts too few articles. The order stays good.
+- With one yes answer, the relevant standard deviation sits at its floor, and the keyword evidence sets most of the order.
 
-## Result
+## Start an interest with keywords
+
+- `new KeywordScorer({ vectors, descriptionVector, keywords })` is the cold start: `keywords` has at least one keyword. It ranks the matches first, the newest first, and then the other articles by similarity. Its probability is 1 for a match and 0 for the others, and it is not calibrated.
+- A keyword string matches at the start of a word only. Type each part that you want: `cyber` and `secur` for "cybersecurity".
+- The similarity and keyword scorers read the vectors of the whole publish range of the stream. A stream that spans a long time reads many vectors.
+
+## Read the ranking and the probabilities
+
+- `Scores` gives `ranked(range?)`: the ids of the stream, the best first. With `{ from, to }`, only the articles published in that range, in the same order. The best N of a day are `ranked({ from, to }).slice(0, n)` ([ADR 0004](./docs/adr/0004-the-reader-ranks-and-does-not-decide-yes-or-no.md)). It also gives `probability(id)`, and `accepted(threshold)`: the articles that the threshold accepts, in the order of `ranked()`.
+
+## Rank, then decide for each action
+
+Show the ranking, and decide yes or no only for an action that needs it. Research round 9 tested the yes/no decisions of the frozen design on July to September 2025, and every design lost to the typed keyword: the threshold that a few taught answers set is weak. The ranking was strong, so the user chose a ranked reader on 2026-10-29 ([ADR 0004](./docs/adr/0004-the-reader-ranks-and-does-not-decide-yes-or-no.md)). The probabilities of the decision model were calibrated on January to March 2025 (Brier skill +0.726), but the calibration changed with the answer key (+0.356 with a second key, round 14). Choose a threshold for each action from what a miss and a false alarm cost. See [the research record](../../../docs/research/relevance-filtering.md) and [ADR 0005](./docs/adr/0005-a-scorer-and-a-threshold-are-ports.md).
+
+- A `Threshold` has `cut(scores)`, which gives the lowest probability to accept (`Infinity` accepts nothing).
+  - `new UtilityThreshold({ falseAlarm, miss })` accepts when p >= falseAlarm / (falseAlarm + miss), the Bayes decision rule for calibrated probabilities. The two costs are finite, 0 or more, and not both 0.
+  - `new ExpectedFThreshold({ beta })` accepts the m most probable articles, where m maximises the expected F-beta of the stream. With beta 0.5 it is the threshold of the frozen design.
+
+## Add a method
+
+- To add a method, implement `Scorer` or `Threshold`. A scorer gives `new Scores(ranked)`, with `ranked` a map from article id to `{ publishedAt, probability }` in its order.
+
+## Choose a scorer
 
 Rounds 13 and 14 ranked January to March 2025 (1,370 articles) for each research profile. The score is MAP over the profiles with at least 20 strict relevant articles:
 
@@ -174,17 +193,160 @@ Round 10 ranked July to September 2025 (1,617 articles) after product teaching: 
 
 A keyword list puts the matches first, the newest first. The 95% interval of (similarity scorer - keyword list) is [+0.082, +0.296] and [+0.215, +0.374]. `nx run relevance-filtering:eval -- ranking` gives these numbers through the package, to 1e-15 ([eval/README.md](./eval/README.md)).
 
-## Limits
+The measurements have these limits:
 
 - The decision scorer was measured only with d1-2B (Q8_0), the question of round 13, and the title and the lead as the text. Another model or another question needs a new research round.
-- The decision scorer calls the model once for each article of the stream. With a `CoalescingDecisionModel`, the scorers of all interests that score together share one call for each article. The host decides when to score and if it keeps the scores.
 - The answer keys of rounds 13 and 14 come from language models. No person labelled that slice (limitation 16 of the research record).
 - The similarity design is valid only with EmbeddingGemma 2, the vector text of event detection (`title: <title> | text: <title>\n<lead>`) for the articles and the query prompt for the description. Another model gives another similarity scale.
-- The binormal model is fitted on the stream. A stream of a few articles gives a weak fit. The research streams held 1,600 to 1,700 articles.
-- When the answers are only the most similar articles of a large pool, the taught relevant similarities are far above the relevant articles of the stream. Then the probabilities of the similarity scorer are too low, and a threshold accepts too few articles. The order stays good.
-- With one yes answer, the relevant standard deviation sits at its floor, and the keyword evidence sets most of the order.
-- A keyword string matches at the start of a word only. Type each part that you want: `cyber` and `secur` for "cybersecurity".
-- The similarity and keyword scorers read the vectors of the whole publish range of the stream. A stream that spans a long time reads many vectors.
+
+## Errors
+
+A score, `probability` and `new UtilityThreshold` reject or throw with these errors. The decision scorer gives no probability in place of a refused or failed call (`src/decision-scorer.test.ts`).
+
+| Error                                                                                          | When                                                                                                                    |
+| ---------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `MissingVectorError`                                                                           | The vectors have no article of the stream with its publish date. Its `id` names the article.                            |
+| `UnknownArticleError`                                                                          | `probability` got an id that is not in the stream. Its `id` is that id.                                                 |
+| `RangeError`                                                                                   | The costs of a `UtilityThreshold` give no threshold.                                                                    |
+| The error of the vectors port, for example the `UnknownDocumentError` of `@zukhruf/embeddings` | A taught article is not in the vectors.                                                                                 |
+| The reason of the signal                                                                       | The signal aborts before the score ends ([ADR 0007](./docs/adr/0007-a-score-takes-a-signal.md)).                        |
+| `Experimental_DecisionRefusalError` of `ai`                                                    | The decision model refuses a question.                                                                                  |
+| `APICallError` of `ai`                                                                         | A call to the model server fails, and the AI SDK does not retry it.                                                     |
+| `RetryError` of `ai`                                                                           | The AI SDK retried a failed call to the model server, and a retry failed too. Its `errors` holds the error of each try. |
+
+The AI SDK retries an `APICallError` that is retryable, and gives a `RetryError` when a retry fails too (`retryWithExponentialBackoff` of `@ai-sdk/provider-utils`, at ai 7.0.154). A host that has no other ranking catches the three errors of the AI SDK and shows no ranking, for example `apps/what-is-going-on/src/decisions.ts` of context-compiler.
+
+## API
+
+```ts
+import type { Experimental_DecisionModel } from 'ai';
+
+// An article of the stream: its publish date and its text.
+type Article = { readonly publishedAt: Date; readonly text: string };
+// The articles to score, by id. It can be empty.
+type Stream = ReadonlyMap<string, Article>;
+
+interface Scorer {
+  score(
+    stream: Stream,
+    options: { readonly signal: AbortSignal }, // the score rejects with the reason of the signal
+  ): Promise<Scores>;
+}
+
+type PublishRange = { readonly from: Date; readonly to: Date }; // the edges included
+type ScoredArticle = {
+  readonly publishedAt: Date;
+  readonly probability: number;
+};
+
+class Scores {
+  constructor(ranked: ReadonlyMap<string, ScoredArticle>); // the best first
+  probability(id: string): number; // UnknownArticleError: the id is not in the stream
+  ranked(range?: PublishRange): string[];
+  accepted(threshold: Threshold): string[]; // in the order of ranked()
+}
+
+class DecisionScorer implements Scorer {
+  constructor(options: {
+    readonly model: Experimental_DecisionModel;
+    readonly description: string;
+  });
+  score(
+    stream: Stream,
+    options: { readonly signal: AbortSignal },
+  ): Promise<Scores>;
+}
+
+// DecisionModel is the decision model of the provider interface:
+// Extract<Experimental_DecisionModel, { doDecide: unknown }>.
+class CoalescingDecisionModel implements DecisionModel {
+  readonly specificationVersion = 'v4';
+  readonly provider: string;
+  readonly modelId: string;
+  readonly supportedQuestionTypes: DecisionModel['supportedQuestionTypes'];
+  constructor(inner: DecisionModel);
+  doDecide(
+    options: Parameters<DecisionModel['doDecide']>[0],
+  ): PromiseLike<Awaited<ReturnType<DecisionModel['doDecide']>>>;
+}
+
+type Similarity = { readonly id: string; readonly similarity: number };
+
+// The port to the vectors of the articles. The Collection of
+// @zukhruf/embeddings has this shape.
+interface Vectors {
+  query(
+    vector: readonly number[],
+    options: { readonly from: Date; readonly to: Date }, // the edges included
+  ): readonly Similarity[];
+  fetch(ids: readonly string[]): ReadonlyMap<string, ArrayLike<number>>; // an unknown id fails the call
+}
+
+// A string matches at the start of a word, in any case. A RegExp matches as it is.
+type Keyword = string | RegExp;
+
+type Answer = { readonly relevant: boolean; readonly text: string };
+type Taught = { readonly id: string; readonly text: string };
+
+class TaughtAnswers {
+  readonly relevant: readonly [Taught, ...Taught[]];
+  readonly notRelevant: readonly Taught[];
+  private constructor(
+    relevant: readonly [Taught, ...Taught[]],
+    notRelevant: readonly Taught[],
+  );
+  static parse(answers: ReadonlyMap<string, Answer>): TaughtAnswers | undefined; // undefined: no answer is a yes
+}
+
+class SimilarityScorer implements Scorer {
+  constructor(options: {
+    readonly vectors: Vectors;
+    readonly descriptionVector: readonly number[];
+    readonly answers: TaughtAnswers;
+    readonly keywords: readonly Keyword[];
+  });
+  score(
+    stream: Stream,
+    options: { readonly signal: AbortSignal },
+  ): Promise<Scores>; // MissingVectorError
+}
+
+class KeywordScorer implements Scorer {
+  constructor(options: {
+    readonly vectors: Vectors;
+    readonly descriptionVector: readonly number[];
+    readonly keywords: readonly [Keyword, ...Keyword[]];
+  });
+  score(
+    stream: Stream,
+    options: { readonly signal: AbortSignal },
+  ): Promise<Scores>; // MissingVectorError
+}
+
+interface Threshold {
+  cut(scores: Scores): number; // the lowest probability to accept; Infinity accepts nothing
+}
+
+class UtilityThreshold implements Threshold {
+  constructor(options: { readonly falseAlarm: number; readonly miss: number }); // RangeError: the costs give no threshold
+  cut(): number;
+}
+
+class ExpectedFThreshold implements Threshold {
+  constructor(options: { readonly beta: number });
+  cut(scores: Scores): number;
+}
+
+class MissingVectorError extends Error {
+  constructor(id: string);
+  readonly id: string; // the article of the stream that the vectors do not hold
+}
+
+class UnknownArticleError extends Error {
+  constructor(id: string);
+  readonly id: string; // the id that is not in the stream
+}
+```
 
 ## Decisions
 

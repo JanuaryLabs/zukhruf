@@ -32,9 +32,17 @@ _Avoid_: Batcher, router, cache
 The vector of the description from the embedding model of the stored articles, made with the prompt that the model uses for a query. The host makes it for the similarity scorer and the keyword scorer.
 _Avoid_: Query embedding, profile vector
 
+**Vectors**:
+The port to the vectors of the articles (`Vectors`). It gives the similarity of a vector to each article published in a publish range (`query`), and the stored unit vector of each id (`fetch`). The similarity scorer and the keyword scorer read it. The `Collection` of `@zukhruf/embeddings` has this shape.
+_Avoid_: Vector store, index, collection (for the port)
+
 **Keyword**:
 A word or a part of a word that the reader types. It matches at the start of a word, in any case. A regular expression can also be a keyword.
 _Avoid_: Tag, term
+
+**Cold start**:
+The ranking of an interest that has no yes answer yet, which the keyword scorer gives: the articles that match a keyword come first, the newest first, and then the other articles by similarity (ADR 0002).
+_Avoid_: Fallback, bootstrap
 
 **Answer**:
 The yes (relevant) or no (not relevant) of the reader for one article that the reader saw, with the text of that article.
@@ -44,9 +52,17 @@ _Avoid_: Label (for the reader's answer), feedback, rating
 The answers of an interest with at least one yes, which the similarity scorer learns from. `TaughtAnswers.parse` gives none when no answer is a yes.
 _Avoid_: Training set, examples
 
+**Taught article**:
+An article of the taught answers, with its id and its text (`Taught`). The similarity scorer reads the vector of each taught article from the vectors, so each taught article must be in them.
+_Avoid_: Training example, labelled article
+
 **Stream**:
 The articles that a scorer scores, by id, for example the new articles of the feed since the last time. It can be empty. The similarity scorer fits its calibration on the similarities of the stream.
 _Avoid_: Feed (for the articles to score), batch, corpus
+
+**Publish range**:
+A range of publish dates, from `from` to `to`, the edges included, for example one day (`PublishRange`). The similarity scorer and the keyword scorer query the vectors for the publish range of the stream, and `Scores.ranked` gives only the articles of a publish range.
+_Avoid_: Date range, window, period
 
 **Similarity**:
 The cosine of the vector of an article and the description vector.
