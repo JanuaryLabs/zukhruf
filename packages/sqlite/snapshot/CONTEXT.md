@@ -16,6 +16,14 @@ _Avoid_: Copy, backup, app database
 The transaction that the snapshot starts with `BEGIN` and a first read. It holds the moment, and it stops the checkpoint of the owner until the snapshot is disposed.
 _Avoid_: Lock, session
 
+**Checkpoint**:
+The step in which SQLite moves the pages of the WAL back into the database, as "Write-Ahead Logging" in the SQLite documentation (https://www.sqlite.org/wal.html) defines it. A checkpoint stops at the end mark of each open read transaction, so the WAL of the owner grows while a snapshot is open.
+_Avoid_: Flush, sync, commit (a commit writes to the WAL, a checkpoint writes from it)
+
+**Layout**:
+The tables of the database of the owner and the columns of each table, as `pragma_table_info` gives them. The owner can change its layout from one version to the next.
+_Avoid_: Schema (`sqlite_schema` holds the full `CREATE` statements, not only the columns), format
+
 **Required columns**:
 The columns that a reader needs, by table. When one is missing, the owner changed its layout, and a read would put fields in the wrong place.
 _Avoid_: Schema version, migration
@@ -35,6 +43,10 @@ _Avoid_: Locked database, busy database (busy is the error code, not the owner)
 **Owner copy**:
 A clone of the database and the rollback journal of an exclusive owner, in a private folder, at one moment. The file stamps of both files were the same before and after the copy. The snapshot rolls back a hot journal in it, so it holds the last commit of the owner.
 _Avoid_: Backup (the SQLite backup API is a different thing), snapshot (the snapshot reads the owner copy)
+
+**File stamp**:
+What the file system says about the file at a path, as `FileStamps` of `@zukhruf/fs` reads it: its device, its inode, its size and the times of its last write and its last change. A write to the file changes its stamp. A missing file has a stamp of its own, so a rollback journal that appears or disappears changes the stamps too.
+_Avoid_: Fingerprint (a hash of the content), checksum, mtime (one part of the stamp)
 
 **Hot journal**:
 A rollback journal that holds the pages of a transaction that the owner did not commit. SQLite rolls back a hot journal at the next read through a connection that can write.

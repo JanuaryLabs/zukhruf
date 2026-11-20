@@ -115,7 +115,67 @@ try {
 | Chromium `sql::Database`     | It opens each database with the exclusive locking mode, as `exclusive_locking_ = true` in `sql/database.h`. No other process can read the database while the browser runs.                               |
 | yt-dlp `_open_database_copy` | It copies the cookie database of a running Chromium and reads the copy. It copies the database file only, with no check.                                                                                 |
 
+## API
+
+```ts
+// The columns a reader depends on, by table.
+type SnapshotColumns = Readonly<Record<string, readonly string[]>>;
+
+class Snapshot implements Disposable {
+  readonly path: string;
+  // Opens path read-only, and runs BEGIN and a first read at once. The second
+  // parameter, an OwnerCopy, is for ofExclusiveOwner: the package does not
+  // export its class.
+  constructor(path: string, copy?: OwnerCopy);
+  // Reads a private copy at the last commit of an exclusive owner.
+  static ofExclusiveOwner(path: string): Promise<Snapshot>;
+  // Disposes the snapshot and throws MissingColumnsError for a missing column.
+  requireColumns(columns: SnapshotColumns): void;
+  // The missing columns, as table.column. The snapshot stays open.
+  missingColumns(columns: SnapshotColumns): string[];
+  all(
+    sql: string,
+    ...parameters: SQLInputValue[]
+  ): Record<string, SQLOutputValue>[];
+  iterate(
+    sql: string,
+    ...parameters: SQLInputValue[]
+  ): IteratorObject<Record<string, SQLOutputValue>, undefined>;
+  // A statement with the options of node:sqlite, such as readBigInts.
+  prepare(sql: string, options?: PrepareOptions): StatementSync;
+  // Commits the read transaction, closes the connection, deletes the copy.
+  [Symbol.dispose](): void;
+}
+
+class MissingColumnsError extends Error {
+  readonly path: string;
+  readonly missing: readonly string[]; // each as table.column
+  constructor(path: string, missing: readonly string[]);
+}
+
+class DatabaseChangingError extends Error {
+  readonly path: string;
+  readonly attempts: number; // the number of copies
+  constructor(path: string, attempts: number);
+}
+
+// The classes of @zukhruf/sqlite-open, exported as they are.
+class UnavailableError extends Error {
+  readonly path: string;
+  constructor(path: string, cause: unknown);
+  static from(path: string, error: unknown): UnavailableError | undefined;
+}
+class MissingError extends UnavailableError {}
+class DeniedError extends UnavailableError {}
+```
+
 ## Documentation
+
+**Recipes**
+
+- [Check the columns of each read on a shared snapshot](./docs/recipes/check-the-columns-of-each-read-on-a-shared-snapshot.md)
+
+**Decisions**
 
 - [0001 Never immutable, and held only while reading](./docs/adr/0001-never-immutable-and-held-only-while-reading.md)
 - [0002 The package throws its own errors](./docs/adr/0002-the-package-throws-its-own-errors.md)
