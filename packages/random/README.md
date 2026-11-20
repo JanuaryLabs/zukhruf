@@ -111,4 +111,10 @@ uv run --no-project --with numpy==2.5.4 python -I packages/random/src/fixtures/g
 
 ## Documentation
 
+**Recipes**
+
+- [Give a bootstrap the draws of a NumPy program](./docs/recipes/bootstrap-with-the-draws-of-numpy.md)
+
+**Decisions**
+
 - [ADR 0001: one package for the generators of numpy.random, reached through a workspace path](docs/adr/0001-one-package-for-the-generators-of-numpy-random.md)

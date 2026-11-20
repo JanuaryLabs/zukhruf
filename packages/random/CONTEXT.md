@@ -17,6 +17,9 @@ The numbers that one generator gives, in order, from one seed. Two generators wi
 One call that takes numbers from a stream, such as `integers(0, 10, 5)`. Each draw takes the next numbers. So the order of the draws changes the results.
 _Avoid_: sample (a sample is the result of a draw from a population)
 
+**Population**:
+The items that one `choice` draw takes from: the items of the array `a`, or the integers 0 … `a` − 1 when `a` is a number, as NumPy's [`Generator.choice`](https://numpy.org/doc/stable/reference/random/generated/numpy.random.Generator.choice.html) takes them from `np.arange(a)`. Its size is the length of `a`, or `a` itself (`popSize` in `src/generator/generator.ts` and `src/generator/random-state.ts`). `Generator.choice` and `RandomState.choice` both take a population.
+
 **Seed sequence**:
 The rule that mixes a seed into the first state of a bit generator, as NumPy's `SeedSequence` does. A small seed and a large seed both give a full state.
 
