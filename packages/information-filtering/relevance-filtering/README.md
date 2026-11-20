@@ -81,7 +81,7 @@ const model = createOpenAICompatible({
 using database = new DatabaseSync('feed.sqlite');
 const collection = new Collection({ database, model });
 // The host upserts each article with the document prompt of the model:
-// title: <title> | text: <title> <lead>.
+// title: <title> | text: <title>\n<lead>.
 
 const description =
   'Cybersecurity: attacks, breaches and the tools that stop them.';
@@ -215,6 +215,12 @@ A score, `probability` and `new UtilityThreshold` reject or throw with these err
 | `RetryError` of `ai`                                                                           | The AI SDK retried a failed call to the model server, and a retry failed too. Its `errors` holds the error of each try. |
 
 The AI SDK retries an `APICallError` that is retryable, and gives a `RetryError` when a retry fails too (`retryWithExponentialBackoff` of `@ai-sdk/provider-utils`, at ai 7.0.154). A host that has no other ranking catches the three errors of the AI SDK and shows no ranking, for example `apps/what-is-going-on/src/decisions.ts` of context-compiler.
+
+## Who uses it
+
+| Consumer                                    | How                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | Record        |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
+| `apps/what-is-going-on` of context-compiler | `src/decisions.ts` wraps d1-2B (`LiquidAI/d1-2B-GGUF:Q8_0`, `src/decision-model.ts`) once in a `CoalescingDecisionModel`, behind a table that keeps each answer by article text and question. `score` makes a `new DecisionScorer({ model, description })` for each interest, and `src/ranking.ts` ranks the interests with `Promise.all`. When the model does not answer (`APICallError`, `RetryError` or `Experimental_DecisionRefusalError`), the interest shows no ranking. It replaced the `SimilarityScorer` of 541b325 and the interest's keywords (9f40fce). | backlog #3430 |
 
 ## API
 
