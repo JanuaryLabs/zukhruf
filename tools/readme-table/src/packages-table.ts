@@ -74,13 +74,14 @@ export async function indexFiles(workspace: string): Promise<Files> {
     cwd: workspace,
     maxBuffer: 64 * 1024 * 1024,
   });
-  const paths = stdout.split('\0').filter((path) => path !== '');
+  const paths = new Set(stdout.split('\0').filter((path) => path !== ''));
   return {
     entries: (globs) =>
-      paths
+      [...paths]
         .filter((path) => globs.some((glob) => matchesGlob(path, glob)))
         .map((path) => ({ path })),
-    read: (path) => indexed(workspace, path).catch(() => undefined),
+    read: async (path) =>
+      paths.has(path) ? indexed(workspace, path) : undefined,
   };
 }
 

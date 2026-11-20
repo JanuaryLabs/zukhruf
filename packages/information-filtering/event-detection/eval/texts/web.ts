@@ -25,6 +25,10 @@ export class WebPages extends TextSource {
     const byHost = Map.groupBy(rows, (row) => new URL(row.source).host);
     for (const [host, hostRows] of byHost) {
       const rules = await robots(new URL(hostRows[0]?.source ?? '').origin);
+      if ('missing' in rules) {
+        for (const row of hostRows) results.set(row.id, rules);
+        continue;
+      }
       let blocked: string | null = null;
       for (const row of hostRows) {
         if (blocked !== null) {
@@ -72,13 +76,26 @@ async function reportText(
 
 type Rules = readonly { readonly allow: boolean; readonly path: string }[];
 
-// The Allow and Disallow lines of the group for all user agents.
-async function robots(origin: string): Promise<Rules> {
-  const response = await fetch(`${origin}/robots.txt`, {
-    headers: { 'user-agent': USER_AGENT },
-    signal: AbortSignal.timeout(30_000),
-  }).catch(() => null);
-  if (response === null || !response.ok) return [];
+// The Allow and Disallow lines of the group for all user agents, or why
+// robots.txt could not be fetched, which RFC 9309 reads as a disallow of the
+// whole host. fetch rejects with a TypeError when the host cannot be reached,
+// and with a TimeoutError when it does not answer.
+async function robots(origin: string): Promise<Rules | Missing> {
+  let response: Response;
+  try {
+    response = await fetch(`${origin}/robots.txt`, {
+      headers: { 'user-agent': USER_AGENT },
+      signal: AbortSignal.timeout(30_000),
+    });
+  } catch (error) {
+    if (
+      error instanceof TypeError ||
+      (error instanceof DOMException && error.name === 'TimeoutError')
+    )
+      return { missing: `robots.txt of ${origin} failed: ${String(error)}` };
+    throw error;
+  }
+  if (!response.ok) return [];
   const rules: { allow: boolean; path: string }[] = [];
   let inGroup = false;
   let groupHasRules = false;

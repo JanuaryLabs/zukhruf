@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import type { Stats } from 'node:fs';
 import {
   chmod,
   copyFile,
@@ -181,8 +182,20 @@ export class Commit {
   // undefined when there is none.
   async #workingObject(path: string): Promise<string | undefined> {
     const file = join(this.#root, path);
-    const stats = await lstat(file).catch(() => undefined);
-    if (stats === undefined) return undefined;
+    let stats: Stats;
+    try {
+      stats = await lstat(file);
+    } catch (error) {
+      // ENOENT: no file at the path; ENOTDIR: a file where a folder of the
+      // path should be.
+      if (
+        Error.isError(error) &&
+        'code' in error &&
+        (error.code === 'ENOENT' || error.code === 'ENOTDIR')
+      )
+        return undefined;
+      throw error;
+    }
     if (stats.isSymbolicLink())
       return (
         await gitWithInput(
