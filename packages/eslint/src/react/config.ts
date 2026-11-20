@@ -3,11 +3,13 @@ import { JSX } from '../files.ts';
 import noAsChild from './no-as-child.ts';
 import noDataSlotRestyle from './no-data-slot-restyle.ts';
 import noNativeSelect from './no-native-select.ts';
+import requireCommandGroup from './require-command-group.ts';
 import requireSelectGroup from './require-select-group.ts';
 
 const enabled = {
   'no-as-child': noAsChild,
   'no-native-select': noNativeSelect,
+  'require-command-group': requireCommandGroup,
   'require-select-group': requireSelectGroup,
 };
 
