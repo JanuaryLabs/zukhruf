@@ -216,7 +216,7 @@ test('the migration image installs the CLI from the lockfile and runs migrate de
   assert.ok(tree.exists('.dockerignore'));
 });
 
-test('nx.json lists the prisma plugin, and generate runs before typecheck and build', async () => {
+test('nx.json lists the prisma plugin, generate runs before typecheck and build, and migrate:check before typecheck', async () => {
   const tree = generatorTree();
 
   await prismaGenerator(tree, { directory: 'packages/db' });
@@ -232,6 +232,7 @@ test('nx.json lists the prisma plugin, and generate runs before typecheck and bu
     'format:check',
     '...',
     'generate',
+    'migrate:check',
   ]);
   assert.deepEqual(targetDefaults.build.dependsOn, ['generate', '...']);
   for (const target of ['typecheck', 'build']) {

@@ -52,7 +52,7 @@ const schema = (output?: string) =>
   `generator client {\n  provider = "prisma-client"\n${output === undefined ? '' : `  output   = "${output}"\n`}}\n\ndatasource db {\n  provider = "postgresql"\n}\n`;
 const model = 'model User {\n  id Int @id\n}\n';
 
-test('a project with prisma.config.ts gets generate, migrate, deploy, reset and pull', async () => {
+test('a project with prisma.config.ts gets generate, migrate, migrate:check, migrate:create, deploy, reset and pull', async () => {
   await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
   const probe = await workspace(folder.path, {
     'packages/db/project.json': projectJson('db'),
@@ -79,10 +79,30 @@ test('a project with prisma.config.ts gets generate, migrate, deploy, reset and 
       options: { command: 'prisma migrate dev', cwd },
       dependsOn: ['generate'],
     },
+    'migrate:check': {
+      options: { cwd },
+      cache: true,
+      inputs: [
+        '{projectRoot}/**/*.prisma',
+        '{projectRoot}/prisma.config.ts',
+        '{projectRoot}/migrations/**/*',
+        { externalDependencies: ['prisma'] },
+      ],
+    },
+    'migrate:create': { options: { cwd } },
     deploy: { options: { command: 'prisma migrate deploy', cwd } },
     reset: { options: { command: 'prisma migrate reset', cwd } },
     pull: { options: { command: 'prisma db pull', cwd } },
   });
+  // The diff script of this package, from the project root.
+  assert.match(
+    targets['migrate:check']?.options.command ?? '',
+    /^node "(\.\.\/)+.*\/prisma\/migrate-diff\.[jt]s" check$/,
+  );
+  assert.match(
+    targets['migrate:create']?.options.command ?? '',
+    /^node "(\.\.\/)+.*\/prisma\/migrate-diff\.[jt]s" create$/,
+  );
   assert.equal(targets['typecheck'], undefined);
   assert.equal(targets['build'], undefined);
 });

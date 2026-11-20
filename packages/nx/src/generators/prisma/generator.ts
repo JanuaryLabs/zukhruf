@@ -304,7 +304,8 @@ function addWorkspace(tree: Tree, projectRoot: string): void {
 
 /**
  * The plugin gives the Prisma targets, and `generate` runs before each
- * typecheck and build, because the client is not committed (ADR 0008). Nx
+ * typecheck and build, because the client is not committed (ADR 0008).
+ * `migrate:check` runs before each typecheck (ADR 0018). Nx
  * skips a dependency on a target that the project does not have, and `...`
  * keeps the dependencies and inputs that the plugins infer.
  *
@@ -320,6 +321,7 @@ function mergePrismaNxJson(tree: Tree): void {
       nxJson.plugins = [...plugins, '@zukhruf/nx/prisma'];
     }
     addPrismaTargetDefaults(nxJson);
+    addMigrateCheck(nxJson);
     return nxJson;
   });
 }
@@ -341,6 +343,18 @@ export function addPrismaTargetDefaults(nxJson: NxJsonConfiguration): void {
       ]),
     }));
   }
+}
+
+/**
+ * `migrate:check` in `targetDefaults.typecheck`, as `format:check` is, so a
+ * schema change without its migration fails the typecheck of the db package
+ * (ADR 0018). The generator and the add-migrate-check migration call it.
+ */
+export function addMigrateCheck(nxJson: NxJsonConfiguration): void {
+  updateTargetDefault(nxJson, 'typecheck', (entry) => ({
+    ...entry,
+    dependsOn: unique([...(entry.dependsOn ?? []), 'migrate:check', '...']),
+  }));
 }
 
 /** Replaces `marker` in a file of the backend, or stops when the file has no marker. */

@@ -13,5 +13,5 @@ export default selectorRule({
     `ExportNamedDeclaration${shadcn} > ExportSpecifier[local.name=${nativeSelectExport}]`,
   ],
   message:
-    'Do not use `<select>` or `NativeSelect`. Use `Select` from `@zukhruf/shadcn` with `SelectTrigger`, `SelectValue`, `SelectContent`, `SelectGroup` and `SelectItem`. The root takes `name`, `required`, `multiple` and `defaultValue` and submits a hidden input, so `FormData` keeps working. Pass `items` (value to label) to the root, so the trigger shows the label, not the value: `<Select name="unit" items={unitLabels}>`.',
+    'Do not use `<select>` or `NativeSelect`. Use `Select` from `@zukhruf/shadcn` with `SelectTrigger`, `SelectValue`, `SelectContent` and `SelectItem`. The root takes `name`, `required`, `multiple` and `defaultValue` and submits a hidden input, so `FormData` keeps working. Pass `items` (value to label) to the root, so the trigger shows the label, not the value: `<Select name="unit" items={unitLabels}>`.',
 });

@@ -242,6 +242,19 @@ export default defineConfig(
     files: ['packages/nx/src/opentofu/check-plan-fresh.ts'],
     rules: { 'island/no-console': 'off' },
   },
+  // The migration diff of @zukhruf/nx/prisma is a command line program that
+  // the migrate:check and migrate:create targets run: it gives its
+  // environment to Docker and to Prisma, names a new migration by the time,
+  // as `prisma migrate dev` does, and tells the person what failed or what it
+  // wrote (packages/nx ADR 0018).
+  {
+    files: ['packages/nx/src/prisma/migrate-diff.ts'],
+    rules: {
+      'island/no-console': 'off',
+      'island/no-process-env': 'off',
+      'island/no-ambient-time': 'off',
+    },
+  },
   // @zukhruf/shutdown takes over the report of a crash from Node.js. With a
   // listener for 'uncaughtException', Node.js does not write the error, and a
   // crash after a termination signal ends the process before a host can log

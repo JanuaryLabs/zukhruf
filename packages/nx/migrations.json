@@ -19,6 +19,11 @@
       "version": "0.8.40",
       "description": "A repo with @zukhruf/nx/prisma hashes the generated Prisma client: targetDefaults.typecheck and .build get the inputs \"...\" and { \"dependentTasksOutputFiles\": \"**/*.ts\" } (#4826, ADR 0012 decision 6).",
       "implementation": "./dist/migrations/update-0-8-40/add-prisma-client-inputs.js"
+    },
+    "add-migrate-check": {
+      "version": "0.8.44",
+      "description": "The typecheck of a db package runs migrate:check, which fails when the migrations do not build the schema: targetDefaults.typecheck.dependsOn gets \"migrate:check\" in a repo with @zukhruf/nx/prisma (#4937, ADR 0018).",
+      "implementation": "./dist/migrations/update-0-8-44/add-migrate-check.js"
     }
   }
 }

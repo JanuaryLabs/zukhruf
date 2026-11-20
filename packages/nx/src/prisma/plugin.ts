@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { basename, dirname, join, relative } from 'node:path';
+import { basename, dirname, extname, join, relative } from 'node:path';
 
 import {
   type CreateNodes,
@@ -9,6 +9,13 @@ import {
 
 import { nearestRoot, projectRootFiles } from '../project-roots.ts';
 
+// The migration diff ships beside this file: `.ts` in the source that zukhruf
+// runs, `.js` in the build that npm installs.
+const migrateDiff = join(
+  import.meta.dirname,
+  `migrate-diff${extname(import.meta.filename)}`,
+);
+
 const generatorBlock = /^\s*generator\s+\w+\s*\{([^}]*)\}/gm;
 const outputLine = /^\s*output\s*=\s*"([^"]+)"/m;
 
@@ -16,7 +23,8 @@ const outputLine = /^\s*output\s*=\s*"([^"]+)"/m;
  * Gives the Prisma targets to each project root with a `prisma.config.ts`.
  * `generate` is cached: its inputs are the schema files, the config and the
  * Prisma packages, and its outputs are the `output` folders of the generator
- * blocks. It does not change `typecheck` or `build` (ADR 0001).
+ * blocks. `migrate:check` is cached on the schema files and the migrations.
+ * It does not change `typecheck` or `build` (ADR 0001).
  */
 export const createNodes: CreateNodes = [
   '{package.json,**/package.json,project.json,**/project.json,prisma.config.ts,**/prisma.config.ts,**/*.prisma}',
@@ -49,6 +57,7 @@ export const createNodes: CreateNodes = [
                 [root]: {
                   targets: targets(
                     root,
+                    relative(join(context.workspaceRoot, root), migrateDiff),
                     generatorOutputs(
                       context.workspaceRoot,
                       schemas.get(root) ?? [],
@@ -84,6 +93,7 @@ function generatorOutputs(workspaceRoot: string, schemas: string[]) {
 
 function targets(
   root: string,
+  script: string,
   outputs: (string | undefined)[],
 ): Record<string, TargetConfiguration> {
   const command = (line: string, dependsOn: string[] = []) => ({
@@ -112,6 +122,19 @@ function targets(
         : { cache: false }),
     },
     migrate: command('prisma migrate dev', ['generate']),
+    // Both diff the migrations on a shadow database that the script makes
+    // (ADR 0018). The check only reads, so it is cached.
+    'migrate:check': {
+      ...command(`node "${script}" check`),
+      cache: true,
+      inputs: [
+        '{projectRoot}/**/*.prisma',
+        '{projectRoot}/prisma.config.ts',
+        '{projectRoot}/migrations/**/*',
+        { externalDependencies: ['prisma'] },
+      ],
+    },
+    'migrate:create': command(`node "${script}" create`),
     deploy: command('prisma migrate deploy'),
     reset: command('prisma migrate reset'),
     pull: command('prisma db pull'),

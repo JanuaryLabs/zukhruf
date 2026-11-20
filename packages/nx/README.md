@@ -745,7 +745,7 @@ You need Nx 23.2.1 or later, and `prisma` and `@prisma/client` in the lockfile. 
   "plugins": ["@zukhruf/nx/prisma"],
   "targetDefaults": {
     "typecheck": {
-      "dependsOn": ["lint", "format:check", "generate", "..."],
+      "dependsOn": ["lint", "format:check", "generate", "migrate:check", "..."],
     },
     "build": {
       "dependsOn": ["generate", "..."],
@@ -754,7 +754,7 @@ You need Nx 23.2.1 or later, and `prisma` and `@prisma/client` in the lockfile. 
 }
 ```
 
-Keep the entries that are already in the lists. Nx skips a `dependsOn` on a target that the project does not have, so a project with no Prisma is not changed. The plugin does not change `typecheck` or `build`. Those targets belong to other plugins, as for `format:check` ([ADR 0001](./docs/adr/0001-inferred-targets-not-copied-defaults.md)). The `typecheck:generate` tag of text2sql is then not necessary. See [ADR 0008](./docs/adr/0008-prisma-targets-from-prisma-config-with-outputs-from-the-schema.md).
+Keep the entries that are already in the lists. Nx skips a `dependsOn` on a target that the project does not have, so a project with no Prisma is not changed. `migrate:check` needs Docker and `@zukhruf/testing` (see [Check the migrations](#check-the-migrations)). The plugin does not change `typecheck` or `build`. Those targets belong to other plugins, as for `format:check` ([ADR 0001](./docs/adr/0001-inferred-targets-not-copied-defaults.md)). The `typecheck:generate` tag of text2sql is then not necessary. See [ADR 0008](./docs/adr/0008-prisma-targets-from-prisma-config-with-outputs-from-the-schema.md).
 
 ### Signature of the prisma area
 
@@ -773,13 +773,15 @@ A project root gets the Prisma targets when it has a `prisma.config.ts` directly
 
 Each target runs in `{projectRoot}`.
 
-| Target     | Command                 | Cached | Depends on |
-| ---------- | ----------------------- | ------ | ---------- |
-| `generate` | `prisma generate`       | yes    | —          |
-| `migrate`  | `prisma migrate dev`    | no     | `generate` |
-| `deploy`   | `prisma migrate deploy` | no     | —          |
-| `reset`    | `prisma migrate reset`  | no     | —          |
-| `pull`     | `prisma db pull`        | no     | —          |
+| Target           | Command                                                                                                                                         | Cached | Depends on |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ---------- |
+| `generate`       | `prisma generate`                                                                                                                               | yes    | —          |
+| `migrate`        | `prisma migrate dev`                                                                                                                            | no     | `generate` |
+| `migrate:check`  | `prisma migrate diff --from-migrations migrations --to-schema . --exit-code`, on a shadow database                                              | yes    | —          |
+| `migrate:create` | `prisma migrate diff --from-migrations migrations --to-schema . --script --output migrations/<time>_<name>/migration.sql`, on a shadow database | no     | —          |
+| `deploy`         | `prisma migrate deploy`                                                                                                                         | no     | —          |
+| `reset`          | `prisma migrate reset`                                                                                                                          | no     | —          |
+| `pull`           | `prisma db pull`                                                                                                                                | no     | —          |
 
 - The inputs of `generate` are `{projectRoot}/**/*.prisma`, `{projectRoot}/prisma.config.ts`, and the packages `prisma` and `@prisma/client` (`externalDependencies`). Thus a new model file in `models/` runs `generate` again, and an update of Prisma does too. The copies had the whole `package-lock.json` as an input, so each update of any package ran `generate` again.
 - The outputs of `generate` are the `output` folders of the `generator` blocks in the `*.prisma` files of the project. A path is relative to the file of its block, as Prisma reads it. For example, `output = "src/prisma"` in `schema.prisma` gives `{projectRoot}/src/prisma`. Nx restores these folders from the cache.
@@ -788,6 +790,21 @@ Each target runs in `{projectRoot}`.
 - Prisma reads the connection string. `prisma.config.ts` reads it from the environment, and Nx loads the `.env` file of the project root for each task.
 
 text2sql also has a target `prisma` that runs the Prisma CLI with the arguments that you give. It stays in each project that wants it.
+
+### Check the migrations
+
+`migrate:check` fails when the migrations in `migrations/` do not build the schema of the project folder: a model changed with no migration, or a migration with no change of the models. It prints Prisma's diff from the migrations to the schema. `migrate:create` writes that diff as a new migration:
+
+```sh
+npx nx run @acme/db:migrate:create --name add_patient_age
+npx nx run @acme/db:migrate:check
+```
+
+- Both run `src/prisma/migrate-diff.ts` of this package. It takes a new, empty database from `@zukhruf/testing/postgres`, gives it to Prisma as `SHADOW_CONNECTION_STRING`, and drops it after the diff. Prisma replays the migrations there. So the targets need Docker and `@zukhruf/testing`, as the tests of a db package do, and no `.env` entry, dev database or CI step. A `SHADOW_CONNECTION_STRING` in `.env` or in the shell is not used, so its database is never emptied.
+- `prisma.config.ts` must read `datasource.shadowDatabaseUrl` from `SHADOW_CONNECTION_STRING`, as the [prisma generator](#prisma-generator) writes it. Else Prisma stops with "You must set `datasource.shadowDatabaseUrl`".
+- The schema is the project folder (`--to-schema .`), with each `*.prisma` file under it, as `schema: '.'` of the generated config. A diff to `schema.prisma` alone removes every table that `models/*.prisma` holds.
+- The folder name of `migrate:create` is the UTC time to the second and the name, as `prisma migrate dev` names it. With no change, the file is `-- This is an empty migration.`, for SQL that you write. `migrate:create` needs no TTY and no dev database, where `migrate dev --create-only` refuses a data-loss warning with no TTY. Its SQL can still fail on a table with rows, for example a required column with no default: edit it before `deploy`.
+- `migrate:check` is cached on the `*.prisma` files, `prisma.config.ts`, the migrations and the package `prisma`. The [prisma generator](#prisma-generator) adds it to `targetDefaults.typecheck.dependsOn`. See [ADR 0018](./docs/adr/0018-migrate-check-diffs-the-migrations-on-a-shadow-database-that-it-makes.md).
 
 ### Migrate a workspace to the prisma area
 
@@ -830,6 +847,7 @@ npx nx migrate --run-migrations
 | `add-local-postgres`       | 0.8.40  | the root `compose.dev.yml`, `up` and `down` of each db package, the local `CONNECTION_STRING`, and `^up` in its backend serve (ADR 0012 decisions 16 and 17)                                              |
 | `node-env-production`      | 0.8.40  | the NODE_ENV configuration of ADR 0016 (nx.json defaults, target env, the web exceptions, `.env.example`, the workflow env, `ALLOWED_ORIGINS`), and a log of each NODE_ENV read in source                 |
 | `add-prisma-client-inputs` | 0.8.40  | `...` and `{ "dependentTasksOutputFiles": "**/*.ts" }` in the `inputs` of `targetDefaults.typecheck` and `.build` of a repo with `@zukhruf/nx/prisma`, so a schema change rebuilds the db package (#4826) |
+| `add-migrate-check`        | 0.8.44  | `migrate:check` in `targetDefaults.typecheck.dependsOn` of a repo with `@zukhruf/nx/prisma`, so the typecheck of a db package fails when its migrations do not build its schema (#4937, ADR 0018)         |
 
 ## release
 
@@ -1259,7 +1277,7 @@ The schema sets `additionalProperties: false`. The package name is `@<scope>/<la
 | `package.json` `nx.targets`           | `up`: `docker compose --file <root>/compose.dev.yml up --detach --wait database`, then `prisma migrate deploy`, with `CONNECTION_STRING` pinned to the local URL; `down`: `docker compose … down`, which keeps the volume |
 | `Dockerfile.migration`                | `npm ci --workspace=<package>` installs the CLI from the lockfile, and `CMD npx prisma migrate deploy` applies the migrations to the `CONNECTION_STRING` of the container                                                 |
 
-At the root: `compose.dev.yml` when missing, with one `database` service (the `postgres:18-alpine` of the deployed stack on `127.0.0.1:<port>`, the database `<scope>`, a named volume at `/var/lib/postgresql`, a `pg_isready` healthcheck); `@zukhruf/nx/prisma` in `plugins`; `generate` in the `dependsOn` of the `typecheck` and `build` defaults, with `...`; `<root>/src/prisma` in `.gitignore` and `.prettierignore`; `.dockerignore` when missing; the package root in `workspaces` when no `<parent>/*` glob holds it; `@zukhruf/testing`; and `@prisma/engines: true`, `prisma: false`, `ssh2: false`, `cpu-features: false` in `allowScripts`. A second run keeps the files of the package and adds no line or key twice.
+At the root: `compose.dev.yml` when missing, with one `database` service (the `postgres:18-alpine` of the deployed stack on `127.0.0.1:<port>`, the database `<scope>`, a named volume at `/var/lib/postgresql`, a `pg_isready` healthcheck); `@zukhruf/nx/prisma` in `plugins`; `generate` in the `dependsOn` of the `typecheck` and `build` defaults, and `migrate:check` in that of `typecheck`, with `...`; `<root>/src/prisma` in `.gitignore` and `.prettierignore`; `.dockerignore` when missing; the package root in `workspaces` when no `<parent>/*` glob holds it; `@zukhruf/testing`; and `@prisma/engines: true`, `prisma: false`, `ssh2: false`, `cpu-features: false` in `allowScripts`. A second run keeps the files of the package and adds no line or key twice.
 
 With `--backend`, the node-app gets:
 

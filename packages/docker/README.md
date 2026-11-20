@@ -495,8 +495,6 @@ for await (const event of docker.events({
 }
 ```
 
-Without `since`, `events()` gives only the events after the call. An event that the engine sent before the call does not come again. Thus a wait for the health of a container calls `container.inspect()` first, and waits for events only when the container is not healthy yet. april polls `inspect()` for the same reason (#2766).
-
 ## Send the Docker CLI to the same engine
 
 Image builds and Compose stay with the Docker CLI. `docker.cliEnvironment` gives the variables that send the CLI to the engine of the client, whatever context is current:
@@ -528,8 +526,6 @@ An `ssh://` engine needs the `environment` option, such as `process.env`: `ssh -
 A server can refuse the channel to the engine socket. Tailscale SSH allows a socket only under the home, `/tmp` and `/run/user/<uid>`, so it refuses a rootful `/run/docker.sock`. `Docker.connect` then rejects with a `ConnectionFailedError` that names the socket, the refusal of the server and the fixes: rootless Docker, whose socket is under `/run/user/<uid>`, or an OpenSSH server. The client does not fall back to `docker system dial-stdio`.
 
 With npm's `strict-allow-scripts`, add `"ssh2": false` and `"cpu-features": false` to `allowScripts`.
-
-A bundler, such as esbuild or electron-vite, must keep `cpu-features` external. ssh2 requires it inside a `try`/`catch`, and its `.node` binding cannot go into a bundle. When it is external and not installed, ssh2 runs without it, as in the text2sql desktop app (`apps/desktop/electron/electron.vite.config.ts`).
 
 ### Give flags to ssh
 
@@ -588,7 +584,7 @@ Host box
   ServerAliveCountMax 2
 ```
 
-With `ControlMaster` and `ControlPath`, the clients share one SSH connection ([Share one SSH connection between processes](#share-one-ssh-connection-between-processes), df254574). The tests of a run share one, through `@zukhruf/testing`.
+OpenSSH's connection sharing (`ControlMaster`) does not apply: each client has its own SSH connection. The tests of a run share one, through `@zukhruf/testing`.
 
 ## Parse a host
 
@@ -1134,30 +1130,6 @@ Each call sends these requests of the Engine API:
 | `volumes.*`, `volume.*`                                                                | `POST /volumes/create`, `GET /volumes/{name}`, `GET /volumes`, `DELETE /volumes/{name}`                                                                                                                            |
 | `networks.*`, `network.*`                                                              | `POST /networks/create`, `GET /networks/{id}`, `GET /networks`, `POST /networks/{id}/connect`, `/disconnect`, `DELETE /networks/{id}`                                                                              |
 | `images.*`                                                                             | `GET /images/{name}/json`, `GET /images/json`, `POST /images/create`, `POST /images/{name}/tag`, `POST /images/{name}/push`, `GET /images/get`, `POST /images/load`, `DELETE /images/{name}`, `POST /images/prune` |
-
-## Documentation
-
-**Decisions**
-
-- [ADR 0001](./docs/adr/0001-the-client-speaks-the-engine-api-not-the-docker-cli.md): the client speaks the Engine API, not the Docker CLI.
-- [ADR 0002](./docs/adr/0002-the-engine-is-the-one-that-the-docker-cli-selects.md): the engine is the one that the Docker CLI selects.
-- [ADR 0003](./docs/adr/0003-the-package-leads-and-the-repositories-change.md): the package leads, and the repositories change.
-- [ADR 0004](./docs/adr/0004-a-handle-owns-its-container-only-when-it-created-it.md): a handle owns its container only when it created it.
-- [ADR 0005](./docs/adr/0005-output-is-one-stream-of-chunks-and-only-a-close-ends-the-input.md): output is one stream of chunks, and only a close ends the input.
-- [ADR 0006](./docs/adr/0006-files-move-through-the-archive-requests-not-through-exec.md): files move through the archive requests, not through exec.
-- [ADR 0007](./docs/adr/0007-an-error-has-its-own-class-when-the-caller-handles-it-differently.md): an error has its own class when the caller handles it differently.
-- [ADR 0008](./docs/adr/0008-hostconfig-grows-field-by-field-from-the-engine-api-reference.md): HostConfig grows field by field from the Engine API reference.
-- [ADR 0009](./docs/adr/0009-a-platform-below-its-api-version-fails-and-is-not-ignored.md): a platform below its API version fails, and is not ignored.
-- [ADR 0010](./docs/adr/0010-ssh-gets-the-options-of-the-docker-cli-and-the-flags-of-the-caller.md): ssh gets the options of the Docker CLI and the flags of the caller.
-- [ADR 0011](./docs/adr/0011-only-a-failure-before-the-answer-is-a-connection-failure.md): only a failure before the answer is a connection failure.
-- [ADR 0012](./docs/adr/0012-a-reset-ends-the-output-and-a-failed-write-is-an-error-only-when-output-can-be-lost.md): a reset ends the output, and a failed write is an error only when output can be lost.
-- [ADR 0013](./docs/adr/0013-a-stat-of-a-missing-path-or-container-is-undefined-in-one-request.md): a stat of a missing path or container is undefined in one request.
-- [ADR 0014](./docs/adr/0014-output-framing-follows-the-tty-setting-as-the-docker-cli-chooses-it.md): output framing follows the TTY setting, as the Docker CLI chooses it.
-- [ADR 0015](./docs/adr/0015-an-ssh-engine-is-reached-through-zukhruf-ssh-in-the-node-process.md): an SSH engine is reached through @zukhruf/ssh in the Node process.
-
-**Copied code**
-
-- [docs/copied-code.md](./docs/copied-code.md): the code that is in two places, and where.
 
 ## What each repository changes
 

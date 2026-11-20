@@ -42,19 +42,6 @@
 }
 
 /*
- * a select popup sits exactly on its trigger. alignItemWithTrigger lines up the
- * selected item's text with the trigger's value text, which starts after a 1px
- * border and ps-2.5; the popup draws its edge with ring-1, a shadow, so its text
- * starts 1px sooner (p-1 + ps-1.5) and Base UI moved the popup 1px off. The 1px
- * stands in for the trigger's border on both sides, in both directions.
- */
-@layer components {
-  [data-slot='select-content'] {
-    padding-inline: 1px;
-  }
-}
-
-/*
  * a shortcut such as ⌘P reads left to right also in Arabic; plaintext keeps
  * the element right to left, so its ms-auto still pushes it to the far end
  */

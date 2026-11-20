@@ -160,41 +160,10 @@ jobs:
           path: ~/.nx
           key: ${{ steps.nx-cache.outputs.cache-primary-key }}
 
-  # GitHub has few hosted Macs: darwin starts only when a project tagged
-  # platform:darwin is affected, so a push that changes none of them never
-  # waits for one (#5009; run 44769332904 failed when no Mac came in 15 min).
-  # When one is affected, darwin runs, and a Mac it cannot get still fails the
-  # run, as ADR 0005 asks of a test that needs a capability.
-  changes:
-    runs-on: ubuntu-latest
-    outputs:
-      darwin: ${{ steps.darwin.outputs.affected }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-
-      - name: Set up the workspace
-        uses: $/.github/actions/setup-workspace
-
-      - name: Find what changed
-        uses: $/.github/actions/affected-range
-
-      - name: Find whether a platform:darwin project changed
-        id: darwin
-        run: |
-          # --json=false prints one name per line, and nothing when none is affected.
-          projects="$(npx nx show projects --affected --projects='tag:platform:darwin' --json=false)"
-          if [ -n "$projects" ]; then echo 'affected=true'; else echo 'affected=false'; fi >> "$GITHUB_OUTPUT"
-
   # A project that drives a facility of macOS, such as launchd, runs all its
   # targets on a macOS runner (docs/adr/0005). The pattern selects every project
   # and then takes the platform:darwin ones back out of the exclusion.
   darwin:
-    needs: changes
-    if: needs.changes.outputs.darwin == 'true'
     runs-on: macos-latest
     steps:
       - name: Checkout

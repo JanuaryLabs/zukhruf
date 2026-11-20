@@ -163,3 +163,7 @@ _Avoid_: Prisma project, persistence layer, ORM package
 **Schema replay**:
 What `applySchema` of `<db package>/testing` does: it runs each committed `migration.sql` in order on an empty test database, with no `_prisma_migrations` record. `prisma migrate deploy` applies migrations everywhere else.
 _Avoid_: Migrate, seed, reset
+
+**Shadow database**:
+The empty Postgres database on which `prisma migrate diff --from-migrations` replays the migrations, to compare them with the schema. Prisma empties it on each use and never creates it. `migrate:check` and `migrate:create` take a new one from `@zukhruf/testing/postgres` for each run and drop it after (ADR 0018).
+_Avoid_: Dev database (that one keeps its data), test database

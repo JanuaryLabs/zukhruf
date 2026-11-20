@@ -122,21 +122,6 @@ describe('the stylesheet of @zukhruf/shadcn', () => {
     );
   });
 
-  test('a select popup pads its inline sides by the 1px border of its trigger, in a layer that app utilities override', async () => {
-    // Act
-    const css = await buildAppStylesheet();
-
-    // Assert
-    assert.equal(
-      layerOf(
-        css,
-        /\[data-slot=['"]?select-content['"]?\]\s*\{\s*padding-inline:\s*1px;?\s*\}/,
-      ),
-      'components',
-      'Without the 1px the item text starts 1px before the trigger text, and alignItemWithTrigger moves the popup 1px off the trigger',
-    );
-  });
-
   test('a horizontal tabs list with flex-wrap takes the height of its rows, in the layer of the utility it beats', async () => {
     // Act
     const css = await buildAppStylesheet();
