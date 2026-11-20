@@ -1,6 +1,6 @@
 # SQLite drift
 
-A package keeps tables, indexes, views and triggers in a SQLite database. A later version of the package can declare them otherwise, for example with one more column. The database still stores the objects as the earlier version made them. This package compares the stored objects with their declaration, and makes the database store them as declared.
+A package keeps tables, virtual tables, indexes, views and triggers in a SQLite database. A later version of the package can declare them otherwise, for example with one more column. The database still stores the objects as the earlier version made them. This package compares the stored objects with their declaration, and makes the database store them as declared.
 
 ## Language
 
@@ -8,8 +8,12 @@ A package keeps tables, indexes, views and triggers in a SQLite database. A late
 The CREATE statements of the objects that one caller owns in a database.
 _Avoid_: Schema (in SQLite, a schema is one attached database, for example `main`), layout, version
 
+**Element**:
+One string of the `statements` of a declaration. It holds one statement, and the statement makes one declared object. A closing semicolon and comments after the statement are permitted.
+_Avoid_: Statement (the statement is the SQL that an element holds), entry
+
 **Object**:
-A table, an index, a view or a trigger that `sqlite_schema` lists.
+A table, a virtual table, an index, a view or a trigger that `sqlite_schema` lists.
 _Avoid_: Relation (a relation is a table or a view only), entity
 
 **Declared object**:
