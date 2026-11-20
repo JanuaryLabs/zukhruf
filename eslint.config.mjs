@@ -482,6 +482,8 @@ export default defineConfig(
       // shadcn 4.23's native-select wraps the <select> that the rule keeps
       // out of app code.
       'zukhruf/no-native-select': 'off',
+      // The kit styles its own parts through their data-slot.
+      'zukhruf/no-data-slot-restyle': 'off',
     },
   },
 );
