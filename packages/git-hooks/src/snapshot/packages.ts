@@ -11,6 +11,8 @@ import {
 } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 
+import { isErrno } from '@zukhruf/fs';
+
 import { workspaceFolders } from './workspaces.ts';
 
 // Gives the snapshot a node_modules made from the install at `installRoot`
@@ -86,7 +88,10 @@ async function link(
   }
   const isFolder = await stat(entry).then(
     (target) => target.isDirectory(),
-    () => true,
+    (error: unknown) => {
+      if (isErrno(error, 'ENOENT')) return true;
+      throw error;
+    },
   );
   if (isFolder) return symlink(entry, destination, 'junction');
   return copyFile(entry, destination);

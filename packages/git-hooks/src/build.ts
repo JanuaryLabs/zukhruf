@@ -2,6 +2,8 @@ import { readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { stripVTControlCharacters } from 'node:util';
 
+import { isErrno } from '@zukhruf/fs';
+
 import type { Push } from './push.ts';
 import { MissingLockfileError } from './snapshot/snapshots.ts';
 import { type Outcome, Step } from './step.ts';
@@ -128,7 +130,10 @@ export class Build extends Step<Push> {
         const output = await readFile(
           join(cache, 'terminalOutputs', task.hash),
           'utf8',
-        ).catch(() => '');
+        ).catch((error: unknown) => {
+          if (isErrno(error, 'ENOENT')) return '';
+          throw error;
+        });
         lines.push(...shown(output, true));
       }
       return { kind: 'failed', lines };

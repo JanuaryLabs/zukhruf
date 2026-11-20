@@ -14,7 +14,7 @@ import {
 import { basename, isAbsolute, join, normalize, sep } from 'node:path';
 import { promisify } from 'node:util';
 
-import { FileLock } from '@zukhruf/fs';
+import { FileLock, isErrno } from '@zukhruf/fs';
 
 import { Lockfile } from '../npm/lockfile.ts';
 import { workspaceFolders } from './workspaces.ts';
@@ -198,7 +198,10 @@ async function prune(installs: string): Promise<void> {
         name,
         at: await stat(join(installs, name, marker)).then(
           ({ mtimeMs }) => mtimeMs,
-          () => -1,
+          (error: unknown) => {
+            if (isErrno(error, 'ENOENT')) return -1;
+            throw error;
+          },
         ),
       })),
   );

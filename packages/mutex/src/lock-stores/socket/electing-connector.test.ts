@@ -428,10 +428,7 @@ describe('Electing connector', () => {
         }),
         waitFor(() => assert.equal(clock.countTimers(), 1), {
           signal: AbortSignal.any([t.signal, stepped.signal]),
-        }).then(
-          () => 'a step of the back-off',
-          () => 'neither',
-        ),
+        }).then(() => 'a step of the back-off'),
       ]);
 
       // Assert

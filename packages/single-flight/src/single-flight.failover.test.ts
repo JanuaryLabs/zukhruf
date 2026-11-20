@@ -11,7 +11,7 @@ import { setTimeout } from 'node:timers/promises';
 
 import { untilAborted } from '@zukhruf/async';
 import { SqliteElection } from '@zukhruf/election';
-import { TemporaryFiles } from '@zukhruf/fs';
+import { TemporaryFiles, isErrno } from '@zukhruf/fs';
 import { waitFor } from '@zukhruf/testing/async';
 import { type WorkerProcess, startWorker } from '@zukhruf/testing/process';
 
@@ -113,7 +113,12 @@ async function journal(directory: string) {
 }
 
 async function epochOf(directory: string) {
-  return readFile(join(directory, 'flight.epoch'), 'utf8').catch(() => '');
+  return readFile(join(directory, 'flight.epoch'), 'utf8').catch(
+    (error: unknown) => {
+      if (isErrno(error, 'ENOENT')) return '';
+      throw error;
+    },
+  );
 }
 
 describe('A single flight across processes when a leader stops', () => {

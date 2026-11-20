@@ -123,7 +123,8 @@ test(
           await conn.close();
           return 'logged in';
         },
-        () => 'refused',
+        (error: unknown) =>
+          Error.isError(error) ? error.message : 'not an Error',
       );
     });
     const other = await generateKey(rig.directory, 'other_ed25519');
@@ -143,7 +144,7 @@ test(
     // Assert
     await assert.rejects(dial, AuthenticationError);
     await rig.handled();
-    assert.equal(outcome.server, 'refused');
+    assert.equal(outcome.server, 'ssh: the client closed the connection');
   },
 );
 
@@ -162,7 +163,8 @@ test(
           await conn.close();
           return 'logged in';
         },
-        () => 'refused',
+        (error: unknown) =>
+          Error.isError(error) ? error.message : 'not an Error',
       );
     });
 
@@ -173,7 +175,7 @@ test(
     assert.equal(ssh.code, 255);
     assert.match(ssh.stderr, /Permission denied \(publickey\)/);
     await rig.handled();
-    assert.equal(outcome.server, 'refused');
+    assert.equal(outcome.server, 'ssh: the client closed the connection');
   },
 );
 

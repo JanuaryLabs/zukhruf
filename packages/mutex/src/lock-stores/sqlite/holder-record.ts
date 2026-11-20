@@ -66,7 +66,10 @@ export class HolderRecord {
       basename(this.#path),
       basename(Presence.pathOf(this.#path, me)),
     ]);
-    const names = await readdir(this.#folder).catch(() => []);
+    const names = await readdir(this.#folder).catch((error: unknown) => {
+      if (isErrno(error, 'ENOENT')) return [];
+      throw error;
+    });
     await Promise.all(
       names
         .filter((name) => !mine.has(name))

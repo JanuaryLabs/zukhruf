@@ -14,6 +14,7 @@ import { createClock } from '@sinonjs/fake-timers';
 import { TemporaryFiles } from '@zukhruf/fs';
 
 import { OpenSshConfig } from './config.ts';
+import { isErrno } from './errno.ts';
 import { AuthenticationError, ExitError } from './index.ts';
 import { KeyError, RevokedError } from './knownhosts.ts';
 import { startSilentServer } from './testing/silent-server.ts';
@@ -1386,7 +1387,10 @@ test(
     const alone = await no.share({ clock: createClock(), signal: t.signal });
     const aloneMadeSocket = await stat(join(directory.path, 'cm.zukhruf')).then(
       () => true,
-      () => false,
+      (error: unknown) => {
+        if (isErrno(error, 'ENOENT')) return false;
+        throw error;
+      },
     );
     await alone.close();
     await using master = await auto.share({

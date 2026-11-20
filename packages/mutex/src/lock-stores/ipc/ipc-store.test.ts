@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 
-import { TemporaryFiles } from '@zukhruf/fs';
+import { TemporaryFiles, isErrno } from '@zukhruf/fs';
 import { waitFor } from '@zukhruf/testing/async';
 import { describe, test } from '@zukhruf/testing/node';
 import { startWorker } from '@zukhruf/testing/process';
@@ -108,7 +108,14 @@ describe('Process-tree mutex with IpcStore', () => {
         'parent',
       );
       const childLog = async () =>
-        (await readFile(journal, 'utf8').catch(() => '')).trim().split('\n');
+        (
+          await readFile(journal, 'utf8').catch((error: unknown) => {
+            if (isErrno(error, 'ENOENT')) return '';
+            throw error;
+          })
+        )
+          .trim()
+          .split('\n');
       let log: string[] = [];
       const waitForLog = (line: string, message: string) =>
         waitFor(
@@ -201,7 +208,12 @@ describe('Process-tree mutex with IpcStore', () => {
       const waitForLog = (done: (log: string[]) => boolean, message: string) =>
         waitFor(
           async () => {
-            log = (await readFile(journal, 'utf8').catch(() => ''))
+            log = (
+              await readFile(journal, 'utf8').catch((error: unknown) => {
+                if (isErrno(error, 'ENOENT')) return '';
+                throw error;
+              })
+            )
               .trim()
               .split('\n');
             assert.ok(
