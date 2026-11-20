@@ -112,7 +112,8 @@ export class EngineLease implements AsyncDisposable {
       return new EngineLease(container, attach);
     } catch (error) {
       if (error instanceof ContainerNotFoundError) return undefined;
-      await container.remove({ force: true }).catch(() => {});
+      await using removal = new AsyncDisposableStack();
+      removal.defer(() => container.remove({ force: true }));
       throw error;
     }
   }

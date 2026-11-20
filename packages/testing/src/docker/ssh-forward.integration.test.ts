@@ -363,7 +363,9 @@ test(
     const ended = once(socket, 'close');
     sshd.kill('SIGKILL');
     await ended;
-    await forward.close().catch(() => {});
+    await assert.rejects(forward.close(), {
+      message: /^Docker SSH forwarding was lost: /,
+    });
 
     // Act
     const { stdout } = await host.shell('echo again');

@@ -28,7 +28,7 @@ import {
   ContainerNotFoundError,
   Docker,
 } from '@zukhruf/docker';
-import { type TemporaryDirectory, TemporaryFiles } from '@zukhruf/fs';
+import { type TemporaryDirectory, TemporaryFiles, isErrno } from '@zukhruf/fs';
 
 import { waitFor } from '../async/wait-for.ts';
 import { EngineLease } from '../docker/engine-lease.ts';
@@ -193,14 +193,13 @@ async function readState<T>(t: TestContext, statePath: string): Promise<T> {
 
 async function removeLeftovers(state: State | undefined): Promise<void> {
   if (!state) return;
-  for (const id of [state.id, state.general])
-    await removeContainer(id).catch(() => {});
+  for (const id of [state.id, state.general]) await removeContainer(id);
   for (const name of [
     state.volume,
     ...state.anonymousVolumes,
     ...state.generalVolumes,
   ])
-    await removeVolume(name).catch(() => {});
+    await removeVolume(name);
 }
 
 /**
@@ -214,29 +213,25 @@ async function removeLeftovers(state: State | undefined): Promise<void> {
 async function runsDirectory(prefix: string): Promise<TemporaryDirectory> {
   const directory = await new TemporaryFiles().directory(prefix);
   const cleanup = async () => {
-    try {
-      for (const entry of await readdir(directory.path, { recursive: true })) {
-        if (
-          !/(^|\/)zukhruf-testing\/docker-runs\/[^/]+\/run\.json$/.test(entry)
-        )
-          continue;
-        const { id }: { id: string } = JSON.parse(
-          await readFile(join(directory.path, entry), 'utf8'),
-        );
-        const label = `dev.zukhruf.testing.run=${id}`;
-        for (const { Id, Labels } of await docker.containers.list({
-          all: true,
-          filters: { label: [label] },
-        }))
-          if (Labels?.['dev.zukhruf.testing.server'] === undefined)
-            await removeContainer(Id).catch(() => {});
-        for (const { Name } of await docker.volumes.list({
-          filters: { label: [label] },
-        }))
-          await removeVolume(Name).catch(() => {});
-      }
-    } finally {
-      await directory.cleanup();
+    await using removal = new AsyncDisposableStack();
+    removal.defer(() => directory.cleanup());
+    for (const entry of await readdir(directory.path, { recursive: true })) {
+      if (!/(^|\/)zukhruf-testing\/docker-runs\/[^/]+\/run\.json$/.test(entry))
+        continue;
+      const { id }: { id: string } = JSON.parse(
+        await readFile(join(directory.path, entry), 'utf8'),
+      );
+      const label = `dev.zukhruf.testing.run=${id}`;
+      for (const { Id, Labels } of await docker.containers.list({
+        all: true,
+        filters: { label: [label] },
+      }))
+        if (Labels?.['dev.zukhruf.testing.server'] === undefined)
+          await removeContainer(Id);
+      for (const { Name } of await docker.volumes.list({
+        filters: { label: [label] },
+      }))
+        await removeVolume(Name);
     }
   };
   return { path: directory.path, cleanup, [Symbol.asyncDispose]: cleanup };
@@ -711,11 +706,7 @@ async function proxiedReaper(
     { name: reaperName(run) },
   );
   stack.defer(async () => {
-    await (
-      await docker.containers.find(reaper.id)
-    )
-      ?.remove({ force: true })
-      .catch(() => {});
+    await (await docker.containers.find(reaper.id))?.remove({ force: true });
   });
   const finished = endedOnce(reaper.id, since);
   finished.catch(() => {});
@@ -892,76 +883,78 @@ describe('a run and its recovery', { concurrency: 4 }, () => {
           runnerArgs('--test-timeout=90000', '--test-force-exit', file),
           env,
         );
-        let state: State | undefined;
-        try {
-          state = await readState<State>(t, statePath);
-          assert.ok(state.anonymousVolumes.length > 0);
-          assert.ok(state.generalVolumes.length > 0);
-          if (mode === 'SIGINT' || mode === 'SIGTERM') run.child.kill(mode);
-          if (proxy) {
-            await proxy.close();
-            await writeFile(stopped, '');
-          }
-          const code = await run.exited;
-          if (proxy) {
-            // The test passed, and the teardown needs no engine.
-            assert.equal(code, 0, run.output());
-            assert.doesNotMatch(run.output(), /retained ownership record/);
-          } else assert.notEqual(code, 0, run.output());
-          const ended = state;
-          await reaped(t, async () => {
-            for (const id of [ended.id, ended.general])
-              assert.equal(await exists(id), false, run.output());
-            for (const name of [
-              ended.volume,
-              ...ended.anonymousVolumes,
-              ...ended.generalVolumes,
-            ])
-              assert.equal(
-                await volumeExists(name),
-                false,
-                `the run left volume ${name}: ${run.output()}`,
-              );
-            // The reaper removes the directory after its first pass. Docker
-            // validates the remote path. This probe never creates the source.
-            await assert.rejects(
-              docker.containers.run({
-                Image: 'alpine:latest',
-                Cmd: ['true'],
-                HostConfig: {
-                  Mounts: [
-                    { Type: 'bind', Source: ended.path, Target: '/fixture' },
-                  ],
-                },
-              }),
-              BindSourceNotFoundError,
-            );
-          });
-          if (mode === 'SIGINT' || mode === 'SIGTERM') {
-            // The runner does not wait for a signalled test process, so the
-            // teardown may keep the run's records; the next run removes them.
-            const { pid } = state;
-            await waitFor(() => assert.equal(alive(pid), false), {
-              signal: t.signal,
-            });
-            await emptyRun(file, env);
-          }
-          // The teardown deletes the run's records with no engine call, also
-          // when the proxy is gone. After a signal, the next run deletes them.
-          assert.deepEqual(
-            await readdir(
-              join(directory.path, 'state', 'zukhruf-testing', 'docker-runs'),
-            ),
-            [],
-          );
-          assert.equal(await running(sentinel.id), true);
-          assert.equal(await volumeExists(sentinelVolume.name), true);
-        } finally {
+        // Disposed after the end of the run, which then creates nothing more.
+        await using leftovers = new AsyncDisposableStack();
+        await using cleanup = new AsyncDisposableStack();
+        cleanup.defer(async () => {
           if (run.child.exitCode === null && run.child.signalCode === null)
             run.child.kill('SIGKILL');
           await run.exited.catch(() => null);
-          await removeLeftovers(state);
+        });
+
+        const state = await readState<State>(t, statePath);
+        leftovers.defer(() => removeLeftovers(state));
+        assert.ok(state.anonymousVolumes.length > 0);
+        assert.ok(state.generalVolumes.length > 0);
+        if (mode === 'SIGINT' || mode === 'SIGTERM') run.child.kill(mode);
+        if (proxy) {
+          await proxy.close();
+          await writeFile(stopped, '');
         }
+        const code = await run.exited;
+        if (proxy) {
+          // The test passed, and the teardown needs no engine.
+          assert.equal(code, 0, run.output());
+          assert.doesNotMatch(run.output(), /retained ownership record/);
+        } else assert.notEqual(code, 0, run.output());
+        const ended = state;
+        await reaped(t, async () => {
+          for (const id of [ended.id, ended.general])
+            assert.equal(await exists(id), false, run.output());
+          for (const name of [
+            ended.volume,
+            ...ended.anonymousVolumes,
+            ...ended.generalVolumes,
+          ])
+            assert.equal(
+              await volumeExists(name),
+              false,
+              `the run left volume ${name}: ${run.output()}`,
+            );
+          // The reaper removes the directory after its first pass. Docker
+          // validates the remote path. This probe never creates the source.
+          await assert.rejects(
+            docker.containers.run({
+              Image: 'alpine:latest',
+              Cmd: ['true'],
+              HostConfig: {
+                Mounts: [
+                  { Type: 'bind', Source: ended.path, Target: '/fixture' },
+                ],
+              },
+            }),
+            BindSourceNotFoundError,
+          );
+        });
+        if (mode === 'SIGINT' || mode === 'SIGTERM') {
+          // The runner does not wait for a signalled test process, so the
+          // teardown may keep the run's records; the next run removes them.
+          const { pid } = state;
+          await waitFor(() => assert.equal(alive(pid), false), {
+            signal: t.signal,
+          });
+          await emptyRun(file, env);
+        }
+        // The teardown deletes the run's records with no engine call, also
+        // when the proxy is gone. After a signal, the next run deletes them.
+        assert.deepEqual(
+          await readdir(
+            join(directory.path, 'state', 'zukhruf-testing', 'docker-runs'),
+          ),
+          [],
+        );
+        assert.equal(await running(sentinel.id), true);
+        assert.equal(await volumeExists(sentinelVolume.name), true);
       },
     );
   }
@@ -1057,7 +1050,7 @@ describe('a run and its recovery', { concurrency: 4 }, () => {
         leftovers.defer(async () => {
           if (run === undefined) return;
           for (const id of await labelled(`dev.zukhruf.testing.run=${run}`))
-            await removeContainer(id).catch(() => {});
+            await removeContainer(id);
         });
       }
     },
@@ -1102,13 +1095,14 @@ describe('a run and its recovery', { concurrency: 4 }, () => {
         directory.path,
         proxy,
       );
-      try {
-        const results = await Promise.allSettled([recover(), recover()]);
-
-        await assertRecovered(t, results, state, root);
-      } finally {
+      await using cleanup = new AsyncDisposableStack();
+      cleanup.defer(async () => {
         await removeLeftovers(state);
-      }
+      });
+
+      const results = await Promise.allSettled([recover(), recover()]);
+
+      await assertRecovered(t, results, state, root);
     },
   );
 
@@ -1123,21 +1117,22 @@ describe('a run and its recovery', { concurrency: 4 }, () => {
         directory.path,
         proxy,
       );
-      try {
-        assert.notDeepEqual(
-          await readdir(root),
-          [],
-          'the killed run left its records',
-        );
-        const from = proxy.requests.length;
-
-        await recover();
-
-        assert.deepEqual(proxy.requests.slice(from), []);
-        assert.deepEqual(await readdir(root), []);
-      } finally {
+      await using cleanup = new AsyncDisposableStack();
+      cleanup.defer(async () => {
         await removeLeftovers(state);
-      }
+      });
+
+      assert.notDeepEqual(
+        await readdir(root),
+        [],
+        'the killed run left its records',
+      );
+      const from = proxy.requests.length;
+
+      await recover();
+
+      assert.deepEqual(proxy.requests.slice(from), []);
+      assert.deepEqual(await readdir(root), []);
     },
   );
 
@@ -1287,12 +1282,12 @@ describe('a run and its recovery', { concurrency: 4 }, () => {
         Cmd: ['sleep', '600'],
         Labels: { 'dev.zukhruf.testing.run': run },
       });
-      objects.defer(() => removeContainer(container.id).catch(() => {}));
+      objects.defer(() => removeContainer(container.id));
       await container.start();
       const { name } = await docker.volumes.create({
         Labels: { 'dev.zukhruf.testing.run': run },
       });
-      objects.defer(() => removeVolume(name).catch(() => {}));
+      objects.defer(() => removeVolume(name));
       return { container: container.id, volume: name };
     };
     const staleObjects = await owned(stale);
@@ -1316,7 +1311,7 @@ describe('a run and its recovery', { concurrency: 4 }, () => {
       ),
       { name: reaperName(stale) },
     );
-    objects.defer(() => removeContainer(created.id).catch(() => {}));
+    objects.defer(() => removeContainer(created.id));
     // A reaper whose creator may still start it: its window is 2 h.
     const young = randomUUID();
     const waiting = await docker.containers.create(
@@ -1328,7 +1323,7 @@ describe('a run and its recovery', { concurrency: 4 }, () => {
       ),
       { name: reaperName(young) },
     );
-    objects.defer(() => removeContainer(waiting.id).catch(() => {}));
+    objects.defer(() => removeContainer(waiting.id));
     const holding = await reaperHolder(t, live);
     objects.defer(async () => {
       holding.child.kill('SIGKILL');
@@ -1336,7 +1331,7 @@ describe('a run and its recovery', { concurrency: 4 }, () => {
     });
     const liveReaper = await docker.containers.find(reaperName(live));
     assert.ok(liveReaper);
-    objects.defer(() => removeContainer(liveReaper.id).catch(() => {}));
+    objects.defer(() => removeContainer(liveReaper.id));
     const statePath = join(directory.path, 'state.json');
     const file = join(directory.path, 'worker.test.ts');
     await writeFile(file, smallWorkerSource(statePath, ''));
@@ -1392,27 +1387,26 @@ describe('a run and its recovery', { concurrency: 4 }, () => {
       });
     `,
     );
-    let state: LabelState | undefined;
-    try {
-      await spawn(process.execPath, runnerArgs(file), {
-        env: runEnvironment(join(directory.path, 'state')),
-        timeout: 150_000,
-      });
-      state = await readState<LabelState>(t, statePath);
+    await using cleanup = new AsyncDisposableStack();
+    cleanup.defer(async () => {
+      for (const id of await labelled(verification)) await removeContainer(id);
+    });
 
-      await reaped(t, async () => {
-        assert.equal(await exists(state?.container ?? ''), false);
-        assert.equal(await volumeExists(state?.volume ?? ''), false);
-      });
-      assert.equal(await running(state.shared), true);
-    } finally {
-      for (const id of await labelled(verification))
-        await removeContainer(id).catch(() => {});
-      if (state) {
-        await removeContainer(state.container).catch(() => {});
-        await removeVolume(state.volume).catch(() => {});
-      }
-    }
+    await spawn(process.execPath, runnerArgs(file), {
+      env: runEnvironment(join(directory.path, 'state')),
+      timeout: 150_000,
+    });
+    const state = await readState<LabelState>(t, statePath);
+    cleanup.defer(async () => {
+      await removeContainer(state.container);
+      await removeVolume(state.volume);
+    });
+
+    await reaped(t, async () => {
+      assert.equal(await exists(state?.container ?? ''), false);
+      assert.equal(await volumeExists(state?.volume ?? ''), false);
+    });
+    assert.equal(await running(state.shared), true);
   });
 
   test('the reaper removes a container and a volume of a test process that only read docker.defaults(), when its run ends', async (t) => {
@@ -1441,31 +1435,29 @@ describe('a run and its recovery', { concurrency: 4 }, () => {
       });
     `,
     );
-    let state: Omit<LabelState, 'shared'> | undefined;
     const stateHome = join(directory.path, 'state');
-    try {
-      await spawn(process.execPath, runnerArgs(file), {
-        env: runEnvironment(stateHome),
-        timeout: 150_000,
-      });
-      state = await readState<Omit<LabelState, 'shared'>>(t, statePath);
+    await using cleanup = new AsyncDisposableStack();
 
-      const ended = state;
-      await reaped(t, async () => {
-        assert.equal(await exists(ended.container), false);
-        assert.equal(await volumeExists(ended.volume), false);
-      });
-      // The teardown deleted the run's records.
-      assert.deepEqual(
-        await readdir(join(stateHome, 'zukhruf-testing', 'docker-runs')),
-        [],
-      );
-    } finally {
-      if (state) {
-        await removeContainer(state.container).catch(() => {});
-        await removeVolume(state.volume).catch(() => {});
-      }
-    }
+    await spawn(process.execPath, runnerArgs(file), {
+      env: runEnvironment(stateHome),
+      timeout: 150_000,
+    });
+    const state = await readState<Omit<LabelState, 'shared'>>(t, statePath);
+    cleanup.defer(async () => {
+      await removeContainer(state.container);
+      await removeVolume(state.volume);
+    });
+
+    const ended = state;
+    await reaped(t, async () => {
+      assert.equal(await exists(ended.container), false);
+      assert.equal(await volumeExists(ended.volume), false);
+    });
+    // The teardown deleted the run's records.
+    assert.deepEqual(
+      await readdir(join(stateHome, 'zukhruf-testing', 'docker-runs')),
+      [],
+    );
   });
 
   test('start() pulls an image that the engine does not have', async (t) => {
@@ -1565,29 +1557,34 @@ describe('a run and its recovery', { concurrency: 4 }, () => {
     );
     const stateHome = join(directory.path, 'state');
     let state: { container: string } | undefined;
-    try {
-      await spawn(
-        process.execPath,
-        ['--test', `--test-global-setup=${setupFile}`, file],
-        { env: runEnvironment(stateHome), timeout: 150_000 },
-      );
-      state = await readState<{ container: string }>(t, statePath);
-
-      const { container } = state;
-      await reaped(t, async () => assert.equal(await exists(container), false));
-      // The teardown deleted the run's records.
-      assert.deepEqual(
-        await readdir(join(stateHome, 'zukhruf-testing', 'docker-runs')),
-        [],
-      );
-    } finally {
+    await using cleanup = new AsyncDisposableStack();
+    cleanup.defer(async () => {
       // A failed teardown leaves the container: the state still names it.
       state ??= await readFile(statePath, 'utf8').then(
         (text): { container: string } => JSON.parse(text),
-        () => undefined,
+        (error: unknown) => {
+          // The worker failed before it wrote the state.
+          if (isErrno(error, 'ENOENT')) return undefined;
+          throw error;
+        },
       );
-      if (state) await removeContainer(state.container).catch(() => {});
-    }
+      if (state) await removeContainer(state.container);
+    });
+
+    await spawn(
+      process.execPath,
+      ['--test', `--test-global-setup=${setupFile}`, file],
+      { env: runEnvironment(stateHome), timeout: 150_000 },
+    );
+    state = await readState<{ container: string }>(t, statePath);
+
+    const { container } = state;
+    await reaped(t, async () => assert.equal(await exists(container), false));
+    // The teardown deleted the run's records.
+    assert.deepEqual(
+      await readdir(join(stateHome, 'zukhruf-testing', 'docker-runs')),
+      [],
+    );
   });
 
   test('two processes that send the same request get one server, whatever their version', async (t) => {
@@ -1597,31 +1594,26 @@ describe('a run and its recovery', { concurrency: 4 }, () => {
     const probe = randomUUID();
     const env = runEnvironment(join(directory.path, 'state'));
     const ids: string[] = [];
-    try {
-      ids.push(
-        await reusedAndExited(
-          t,
-          directory.path,
-          await anotherVersion(directory.path, `${manifest.version}-next.0`),
-          probe,
-          env,
-        ),
-      );
+    await using cleanup = new AsyncDisposableStack();
+    cleanup.defer(async () => {
+      for (const id of ids) await removeContainer(id);
+    });
 
-      ids.push(
-        await reusedAndExited(
-          t,
-          directory.path,
-          JSON.parse(library),
-          probe,
-          env,
-        ),
-      );
+    ids.push(
+      await reusedAndExited(
+        t,
+        directory.path,
+        await anotherVersion(directory.path, `${manifest.version}-next.0`),
+        probe,
+        env,
+      ),
+    );
 
-      assert.equal(ids[1], ids[0]);
-    } finally {
-      for (const id of ids) await removeContainer(id).catch(() => {});
-    }
+    ids.push(
+      await reusedAndExited(t, directory.path, JSON.parse(library), probe, env),
+    );
+
+    assert.equal(ids[1], ids[0]);
   });
 
   test('a server younger than the TTL is kept', async (t) => {
@@ -1630,31 +1622,32 @@ describe('a run and its recovery', { concurrency: 4 }, () => {
     );
     const env = runEnvironment(join(directory.path, 'state'));
     const ids: string[] = [];
-    try {
-      // A process of another version: before ADR 0019, the run below removed its server.
-      const server = await reusedAndExited(
-        t,
-        directory.path,
-        await anotherVersion(directory.path, `${manifest.version}-next.0`),
-        randomUUID(),
-        env,
-      );
-      ids.push(server);
-      await unleased(t, await fingerprintOf(server));
-      const statePath = join(directory.path, 'state.json');
-      const file = join(directory.path, 'worker.test.ts');
-      await writeFile(file, smallWorkerSource(statePath, ''));
+    await using cleanup = new AsyncDisposableStack();
+    cleanup.defer(async () => {
+      for (const id of ids) await removeContainer(id);
+    });
 
-      await spawn(process.execPath, runnerArgs(file), {
-        env,
-        timeout: 150_000,
-      });
-      ids.push((await readState<SmallState>(t, statePath)).id);
+    // A process of another version: before ADR 0019, the run below removed its server.
+    const server = await reusedAndExited(
+      t,
+      directory.path,
+      await anotherVersion(directory.path, `${manifest.version}-next.0`),
+      randomUUID(),
+      env,
+    );
+    ids.push(server);
+    await unleased(t, await fingerprintOf(server));
+    const statePath = join(directory.path, 'state.json');
+    const file = join(directory.path, 'worker.test.ts');
+    await writeFile(file, smallWorkerSource(statePath, ''));
 
-      assert.equal(await running(server), true);
-    } finally {
-      for (const id of ids) await removeContainer(id).catch(() => {});
-    }
+    await spawn(process.execPath, runnerArgs(file), {
+      env,
+      timeout: 150_000,
+    });
+    ids.push((await readState<SmallState>(t, statePath)).id);
+
+    assert.equal(await running(server), true);
   });
 });
 
@@ -1689,35 +1682,36 @@ test(
       },
     });
     ids.push(older.id);
-    try {
-      const server = await reusedAndExited(
-        t,
-        directory.path,
-        JSON.parse(library),
-        randomUUID(),
-        env,
-      );
-      ids.push(server);
-      const fingerprint = await fingerprintOf(server);
-      await unleased(t, fingerprint);
-      // Six days later, the server is younger than its TTL.
-      const askedEarly = await sweep([fingerprint], {
-        serverTtl: REAPER_DEFAULTS.serverTtl - 6 * DAY,
-      });
-      const keptEarly = await exists(server);
-
-      await sweep([fingerprint], {});
-
-      assert.deepEqual(askedEarly, new Set());
-      assert.equal(keptEarly, true);
-      assert.equal(await exists(server), false);
-      assert.equal(await exists(container.id), true);
-      assert.equal(await exists(older.id), true);
-    } finally {
+    await using cleanup = new AsyncDisposableStack();
+    cleanup.defer(async () => {
       other.child.kill('SIGKILL');
       await other.exited;
-      for (const id of ids) await removeContainer(id).catch(() => {});
-    }
+      for (const id of ids) await removeContainer(id);
+    });
+
+    const server = await reusedAndExited(
+      t,
+      directory.path,
+      JSON.parse(library),
+      randomUUID(),
+      env,
+    );
+    ids.push(server);
+    const fingerprint = await fingerprintOf(server);
+    await unleased(t, fingerprint);
+    // Six days later, the server is younger than its TTL.
+    const askedEarly = await sweep([fingerprint], {
+      serverTtl: REAPER_DEFAULTS.serverTtl - 6 * DAY,
+    });
+    const keptEarly = await exists(server);
+
+    await sweep([fingerprint], {});
+
+    assert.deepEqual(askedEarly, new Set());
+    assert.equal(keptEarly, true);
+    assert.equal(await exists(server), false);
+    assert.equal(await exists(container.id), true);
+    assert.equal(await exists(older.id), true);
   },
 );
 
@@ -1751,21 +1745,21 @@ test(
       child.once('exit', () => resolve()),
     );
     let servers: string[] = [];
-    try {
-      servers = await readState<string[]>(t, statePath);
-
-      const fingerprints = await Promise.all(servers.map(fingerprintOf));
-
-      const asked = await sweep(fingerprints, {});
-
-      assert.deepEqual(asked, new Set(fingerprints));
-      for (const server of servers) assert.equal(await running(server), true);
-    } finally {
+    await using cleanup = new AsyncDisposableStack();
+    cleanup.defer(async () => {
       child.kill('SIGKILL');
       await exited;
-      for (const server of servers)
-        await removeContainer(server).catch(() => {});
-    }
+      for (const server of servers) await removeContainer(server);
+    });
+
+    servers = await readState<string[]>(t, statePath);
+
+    const fingerprints = await Promise.all(servers.map(fingerprintOf));
+
+    const asked = await sweep(fingerprints, {});
+
+    assert.deepEqual(asked, new Set(fingerprints));
+    for (const server of servers) assert.equal(await running(server), true);
   },
 );
 
@@ -1782,19 +1776,20 @@ test(
       randomUUID(),
       runEnvironment(join(directory.path, 'state')),
     );
-    try {
+    await using cleanup = new AsyncDisposableStack();
+    cleanup.defer(async () => {
       other.child.kill('SIGKILL');
-      await other.exited;
-      const fingerprint = await fingerprintOf(other.id);
-      await unleased(t, fingerprint);
+      await removeContainer(other.id);
+    });
 
-      await sweep([fingerprint], {});
+    other.child.kill('SIGKILL');
+    await other.exited;
+    const fingerprint = await fingerprintOf(other.id);
+    await unleased(t, fingerprint);
 
-      assert.equal(await exists(other.id), false);
-    } finally {
-      other.child.kill('SIGKILL');
-      await removeContainer(other.id).catch(() => {});
-    }
+    await sweep([fingerprint], {});
+
+    assert.equal(await exists(other.id), false);
   },
 );
 
@@ -1811,18 +1806,19 @@ test(
       randomUUID(),
       runEnvironment(join(directory.path, 'state')),
     );
-    try {
-      const fingerprint = await fingerprintOf(other.id);
-      assert.equal((await processLeases(fingerprint)).length, 1);
-
+    await using cleanup = new AsyncDisposableStack();
+    cleanup.defer(async () => {
       other.child.kill('SIGKILL');
-      await other.exited;
+      await removeContainer(other.id);
+    });
 
-      await unleased(t, fingerprint);
-    } finally {
-      other.child.kill('SIGKILL');
-      await removeContainer(other.id).catch(() => {});
-    }
+    const fingerprint = await fingerprintOf(other.id);
+    assert.equal((await processLeases(fingerprint)).length, 1);
+
+    other.child.kill('SIGKILL');
+    await other.exited;
+
+    await unleased(t, fingerprint);
   },
 );
 
@@ -1837,47 +1833,49 @@ test(
     const keeper = await holder(t, directory.path, probe, env);
     const server = keeper.id;
     const fingerprint = await fingerprintOf(server);
-    let other: Awaited<ReturnType<typeof holder>> | undefined;
-    try {
-      await ended(t, keeper, fingerprint);
-      const proxy = stack.use(await EngineProxy.start(engine));
-      const listing = sweepHold(proxy, fingerprint);
-      stack.defer(() => listing.release());
-      const { finished } = await proxiedReaper(stack, proxy, [fingerprint], {});
-      assert.equal(
-        await firstOf(listing.reached, finished),
-        'reached',
-        'the reaper must hold the sweep lease of the server',
-      );
-      const held = await listing.reached;
-      const lease = await docker.containers.find(sweepLease(fingerprint));
-      assert.ok(lease, 'the reaper holds the sweep lease');
-      const start = proxy.requests.findIndex(
-        ({ method, path }) =>
-          method === 'POST' && path === `/containers/${lease.id}/start`,
-      );
-      assert.ok(
-        start !== -1 && proxy.requests.indexOf(held) > start,
-        'the held list comes after the start of the sweep lease',
-      );
-      const holding = holder(t, directory.path, probe, env);
-      holding.catch(() => {});
-      await waitFor(
-        async () => assert.equal((await processLeases(fingerprint)).length, 1),
-        { signal: t.signal, interval: 100 },
-      );
-
-      listing.release();
-      other = await holding;
-
-      await finished;
-      assert.equal(other.id, server);
-      assert.equal(await running(server), true);
-    } finally {
+    await using cleanup = new AsyncDisposableStack();
+    cleanup.defer(async () => {
       keeper.child.kill('SIGKILL');
-      other?.child.kill('SIGKILL');
-      await removeContainer(server).catch(() => {});
-    }
+      await removeContainer(server);
+    });
+
+    await ended(t, keeper, fingerprint);
+    const proxy = stack.use(await EngineProxy.start(engine));
+    const listing = sweepHold(proxy, fingerprint);
+    stack.defer(() => listing.release());
+    const { finished } = await proxiedReaper(stack, proxy, [fingerprint], {});
+    assert.equal(
+      await firstOf(listing.reached, finished),
+      'reached',
+      'the reaper must hold the sweep lease of the server',
+    );
+    const held = await listing.reached;
+    const lease = await docker.containers.find(sweepLease(fingerprint));
+    assert.ok(lease, 'the reaper holds the sweep lease');
+    const start = proxy.requests.findIndex(
+      ({ method, path }) =>
+        method === 'POST' && path === `/containers/${lease.id}/start`,
+    );
+    assert.ok(
+      start !== -1 && proxy.requests.indexOf(held) > start,
+      'the held list comes after the start of the sweep lease',
+    );
+    const holding = holder(t, directory.path, probe, env);
+    holding.catch(() => {});
+    await waitFor(
+      async () => assert.equal((await processLeases(fingerprint)).length, 1),
+      { signal: t.signal, interval: 100 },
+    );
+
+    listing.release();
+    const other = await holding;
+    cleanup.defer(() => {
+      other.child.kill('SIGKILL');
+    });
+
+    await finished;
+    assert.equal(other.id, server);
+    assert.equal(await running(server), true);
   },
 );
 
@@ -1896,28 +1894,29 @@ test(
       runEnvironment(join(directory.path, 'state')),
     );
     const server = other.id;
-    try {
-      const fingerprint = await fingerprintOf(server);
-      await ended(t, other, fingerprint);
-      const proxy = stack.use(await EngineProxy.start(engine));
-      proxy.intercept('DELETE', `/containers/${server}`, () => {
-        throw new Error('The engine refuses this removal.');
-      });
-
-      const { finished } = await proxiedReaper(stack, proxy, [fingerprint], {});
-
-      await finished;
-      assert.ok(
-        proxy.requests.some(
-          ({ method, path }) =>
-            method === 'DELETE' && path === `/containers/${server}`,
-        ),
-      );
-      assert.equal(await running(server), true);
-    } finally {
+    await using cleanup = new AsyncDisposableStack();
+    cleanup.defer(async () => {
       other.child.kill('SIGKILL');
-      await removeContainer(server).catch(() => {});
-    }
+      await removeContainer(server);
+    });
+
+    const fingerprint = await fingerprintOf(server);
+    await ended(t, other, fingerprint);
+    const proxy = stack.use(await EngineProxy.start(engine));
+    proxy.intercept('DELETE', `/containers/${server}`, () => {
+      throw new Error('The engine refuses this removal.');
+    });
+
+    const { finished } = await proxiedReaper(stack, proxy, [fingerprint], {});
+
+    await finished;
+    assert.ok(
+      proxy.requests.some(
+        ({ method, path }) =>
+          method === 'DELETE' && path === `/containers/${server}`,
+      ),
+    );
+    assert.equal(await running(server), true);
   },
 );
 
@@ -1933,37 +1932,39 @@ test('a process waits for the sweep lease of its server, and then gets a running
   const statePath = join(directory.path, 'waiting.json');
   const file = join(directory.path, 'waiting.ts');
   await writeFile(file, holdingSource(JSON.parse(library), statePath, probe));
-  let waiting: ReturnType<typeof started> | undefined;
   let lease: EngineLease | undefined;
-  try {
-    await ended(t, other, fingerprint);
-    // A reaper that found no process lease of the server, and removes it.
-    lease = await sweepLeaseOf(fingerprint);
-    await removeContainer(server);
-    waiting = started([file], env);
-    await waitFor(
-      async () => assert.equal((await processLeases(fingerprint)).length, 1),
-      { signal: t.signal, interval: 100 },
-    );
-    // A fixed window: it proves that the process does not get the server
-    // while the sweep lease lives, and it gets one in well under 5 s without it.
-    await setTimeout(5_000);
-    const proceededBeforeRelease = existsSync(statePath);
-
-    await lease[Symbol.asyncDispose]();
-    lease = undefined;
-    const { id } = await readState<{ id: string }>(t, statePath);
-    ids.push(id);
-
-    assert.equal(proceededBeforeRelease, false, waiting.output());
-    assert.notEqual(id, server);
-    assert.equal(await running(id), true);
-  } finally {
+  await using cleanup = new AsyncDisposableStack();
+  cleanup.defer(async () => {
     await lease?.[Symbol.asyncDispose]();
     other.child.kill('SIGKILL');
-    waiting?.child.kill('SIGKILL');
-    for (const id of ids) await removeContainer(id).catch(() => {});
-  }
+    for (const id of ids) await removeContainer(id);
+  });
+
+  await ended(t, other, fingerprint);
+  // A reaper that found no process lease of the server, and removes it.
+  lease = await sweepLeaseOf(fingerprint);
+  await removeContainer(server);
+  const waiting = started([file], env);
+  cleanup.defer(() => {
+    waiting.child.kill('SIGKILL');
+  });
+  await waitFor(
+    async () => assert.equal((await processLeases(fingerprint)).length, 1),
+    { signal: t.signal, interval: 100 },
+  );
+  // A fixed window: it proves that the process does not get the server
+  // while the sweep lease lives, and it gets one in well under 5 s without it.
+  await setTimeout(5_000);
+  const proceededBeforeRelease = existsSync(statePath);
+
+  await lease[Symbol.asyncDispose]();
+  lease = undefined;
+  const { id } = await readState<{ id: string }>(t, statePath);
+  ids.push(id);
+
+  assert.equal(proceededBeforeRelease, false, waiting.output());
+  assert.notEqual(id, server);
+  assert.equal(await running(id), true);
 });
 
 test(
@@ -1979,17 +1980,18 @@ test(
     );
     const server = other.id;
     const fingerprint = await fingerprintOf(server);
-    try {
-      await ended(t, other, fingerprint);
-
-      await Promise.all([sweep([fingerprint], {}), sweep([fingerprint], {})]);
-
-      assert.equal(await exists(server), false);
-      assert.equal(await exists(sweepLease(fingerprint)), false);
-    } finally {
+    await using cleanup = new AsyncDisposableStack();
+    cleanup.defer(async () => {
       other.child.kill('SIGKILL');
-      await removeContainer(server).catch(() => {});
-    }
+      await removeContainer(server);
+    });
+
+    await ended(t, other, fingerprint);
+
+    await Promise.all([sweep([fingerprint], {}), sweep([fingerprint], {})]);
+
+    assert.equal(await exists(server), false);
+    assert.equal(await exists(sweepLease(fingerprint)), false);
   },
 );
 
@@ -2005,45 +2007,44 @@ test(
     const server = other.id;
     ids.push(server);
     const fingerprint = await fingerprintOf(server);
-    try {
-      // A sweep that finds the sweep lease created removes it. With the
-      // server gone, no sweep looks at its sweep lease again, so only the
-      // test process below can remove the stale lease.
-      await killedSweep(fingerprint, () => removeContainer(server));
-      const stale = await docker.containers.find(sweepLease(fingerprint));
-      assert.ok(stale);
-      await using proxy = await EngineProxy.start(engine);
-      const removal = leaseRemoval(proxy, stale.id);
-
-      const reused = await reusedAndExited(
-        t,
-        directory.path,
-        JSON.parse(library),
-        probe,
-        proxiedEnvironment(join(directory.path, 'state'), proxy),
-      );
-      ids.push(reused);
-
-      if (
-        !(await removal.asserted(
-          t,
-          'another process removed the stale sweep lease',
-        ))
-      )
-        return;
-      assert.notEqual(reused, server);
-      assert.equal(await running(reused), true);
-      assert.equal(await exists(stale.id), false);
-    } finally {
+    await using cleanup = new AsyncDisposableStack();
+    cleanup.defer(async () => {
       other.child.kill('SIGKILL');
       await other.exited;
       await (
         await docker.containers.find(sweepLease(fingerprint))
-      )
-        ?.remove({ force: true })
-        .catch(() => {});
-      for (const id of ids) await removeContainer(id).catch(() => {});
-    }
+      )?.remove({ force: true });
+      for (const id of ids) await removeContainer(id);
+    });
+
+    // A sweep that finds the sweep lease created removes it. With the
+    // server gone, no sweep looks at its sweep lease again, so only the
+    // test process below can remove the stale lease.
+    await killedSweep(fingerprint, () => removeContainer(server));
+    const stale = await docker.containers.find(sweepLease(fingerprint));
+    assert.ok(stale);
+    await using proxy = await EngineProxy.start(engine);
+    const removal = leaseRemoval(proxy, stale.id);
+
+    const reused = await reusedAndExited(
+      t,
+      directory.path,
+      JSON.parse(library),
+      probe,
+      proxiedEnvironment(join(directory.path, 'state'), proxy),
+    );
+    ids.push(reused);
+
+    if (
+      !(await removal.asserted(
+        t,
+        'another process removed the stale sweep lease',
+      ))
+    )
+      return;
+    assert.notEqual(reused, server);
+    assert.equal(await running(reused), true);
+    assert.equal(await exists(stale.id), false);
   },
 );
 
@@ -2062,29 +2063,28 @@ test(
     );
     const server = other.id;
     const fingerprint = await fingerprintOf(server);
-    try {
-      await killedSweep(fingerprint);
-      const stale = await docker.containers.find(sweepLease(fingerprint));
-      assert.ok(stale);
-      await ended(t, other, fingerprint);
-
-      await sweep([fingerprint], { leasePatience: 500 });
-
-      assert.equal(await exists(server), false);
-      assert.equal(
-        await docker.containers.find(sweepLease(fingerprint)),
-        undefined,
-      );
-    } finally {
+    await using cleanup = new AsyncDisposableStack();
+    cleanup.defer(async () => {
       other.child.kill('SIGKILL');
       await other.exited;
       await (
         await docker.containers.find(sweepLease(fingerprint))
-      )
-        ?.remove({ force: true })
-        .catch(() => {});
-      await removeContainer(server).catch(() => {});
-    }
+      )?.remove({ force: true });
+      await removeContainer(server);
+    });
+
+    await killedSweep(fingerprint);
+    const stale = await docker.containers.find(sweepLease(fingerprint));
+    assert.ok(stale);
+    await ended(t, other, fingerprint);
+
+    await sweep([fingerprint], { leasePatience: 500 });
+
+    assert.equal(await exists(server), false);
+    assert.equal(
+      await docker.containers.find(sweepLease(fingerprint)),
+      undefined,
+    );
   },
 );
 
@@ -2101,23 +2101,23 @@ test(
     );
     const server = other.id;
     const fingerprint = await fingerprintOf(server);
-    let lease: EngineLease | undefined;
-    try {
-      await ended(t, other, fingerprint);
-      lease = await sweepLeaseOf(fingerprint);
-
-      const asked = await sweep([fingerprint], {
-        sweepWait: 2000,
-        leasePatience: 500,
-      });
-
-      assert.deepEqual(asked, new Set([fingerprint]));
-      assert.equal(await running(server), true);
-    } finally {
-      await lease?.[Symbol.asyncDispose]();
+    await using cleanup = new AsyncDisposableStack();
+    cleanup.defer(async () => {
       other.child.kill('SIGKILL');
-      await removeContainer(server).catch(() => {});
-    }
+      await removeContainer(server);
+    });
+
+    await ended(t, other, fingerprint);
+    const lease = await sweepLeaseOf(fingerprint);
+    cleanup.defer(() => lease[Symbol.asyncDispose]());
+
+    const asked = await sweep([fingerprint], {
+      sweepWait: 2000,
+      leasePatience: 500,
+    });
+
+    assert.deepEqual(asked, new Set([fingerprint]));
+    assert.equal(await running(server), true);
   },
 );
 
@@ -2134,30 +2134,31 @@ test(
     );
     const server = other.id;
     const fingerprint = await fingerprintOf(server);
-    try {
-      await ended(t, other, fingerprint);
-      // A lease whose removal the engine did not finish, such as one it left
-      // dead: no operation of the package leaves one, so the test makes it.
-      const stale = await docker.containers.create(
-        {
-          Image: 'busybox:1.37.0',
-          Cmd: ['true'],
-          Labels: { 'dev.zukhruf.testing.probe': fingerprint },
-        },
-        { name: sweepLease(fingerprint) },
-      );
-      await stale.start();
-      await stale.wait({ condition: 'not-running', signal: t.signal });
-      assert.equal((await stale.inspect()).State?.Status, 'exited');
-
-      await sweep([fingerprint], {});
-
-      assert.equal(await exists(server), false);
-      assert.equal(await exists(stale.id), false);
-    } finally {
+    await using cleanup = new AsyncDisposableStack();
+    cleanup.defer(async () => {
       other.child.kill('SIGKILL');
-      await removeContainer(sweepLease(fingerprint)).catch(() => {});
-      await removeContainer(server).catch(() => {});
-    }
+      await removeContainer(sweepLease(fingerprint));
+      await removeContainer(server);
+    });
+
+    await ended(t, other, fingerprint);
+    // A lease whose removal the engine did not finish, such as one it left
+    // dead: no operation of the package leaves one, so the test makes it.
+    const stale = await docker.containers.create(
+      {
+        Image: 'busybox:1.37.0',
+        Cmd: ['true'],
+        Labels: { 'dev.zukhruf.testing.probe': fingerprint },
+      },
+      { name: sweepLease(fingerprint) },
+    );
+    await stale.start();
+    await stale.wait({ condition: 'not-running', signal: t.signal });
+    assert.equal((await stale.inspect()).State?.Status, 'exited');
+
+    await sweep([fingerprint], {});
+
+    assert.equal(await exists(server), false);
+    assert.equal(await exists(stale.id), false);
   },
 );

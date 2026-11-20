@@ -84,9 +84,7 @@ export abstract class MysqlFamilyServer<Pool, PoolOptions> {
         container.container,
         this.#options.password,
         database,
-      ).catch(() => {
-        /* Best-effort: the run's cleanup drops a database that disposal left. */
-      });
+      );
       await container.disconnect();
     });
   }

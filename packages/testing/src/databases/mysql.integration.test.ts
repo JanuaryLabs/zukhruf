@@ -109,7 +109,8 @@ test('the disposal of a database destroys the connections that are still checked
   const pool = database.pool();
   await pool.getConnection();
   const waiter = await pool.getConnection();
-  void waiter.query('SELECT GET_LOCK(?, 600)', [lock]).catch(() => {});
+  const leaked = waiter.query('SELECT GET_LOCK(?, 600)', [lock]);
+  leaked.catch(() => undefined);
   await waitFor(
     async () => {
       const [[row]] = await holder.query<RowDataPacket[]>(
@@ -135,6 +136,7 @@ test('the disposal of a database destroys the connections that are still checked
     sessions: 0,
     exists: false,
   });
+  await assert.rejects(leaked, { code: 'ER_QUERY_INTERRUPTED' });
 });
 
 test('a MySQL database whose disposal started gives no pool', async () => {

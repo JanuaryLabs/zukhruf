@@ -32,30 +32,23 @@ test('disposing an owned server removes its anonymous volumes', async () => {
   const volumes = ((await server.container.inspect()).Mounts ?? [])
     .filter((mount) => mount.Type === 'volume')
     .map((mount) => mount.Name ?? '');
-  try {
-    assert.ok(
-      volumes.length > 0,
-      'the image declares an anonymous data volume',
+  await using cleanup = new AsyncDisposableStack();
+  cleanup.defer(async () => {
+    for (const name of volumes)
+      await (await client.volumes.find(name))?.remove({ force: true });
+  });
+  assert.ok(volumes.length > 0, 'the image declares an anonymous data volume');
+
+  // Act
+  await server.cleanup();
+
+  // Assert
+  for (const name of volumes)
+    assert.equal(
+      await client.volumes.find(name),
+      undefined,
+      'anonymous data must not outlive its container',
     );
-
-    // Act
-    await server.cleanup();
-
-    // Assert
-    for (const name of volumes)
-      assert.equal(
-        await client.volumes.find(name),
-        undefined,
-        'anonymous data must not outlive its container',
-      );
-  } finally {
-    for (const name of volumes)
-      await (
-        await client.volumes.find(name)
-      )
-        ?.remove({ force: true })
-        .catch(() => {});
-  }
 });
 
 test('Docker identity preserves configuration, ownership, and unfinished creation', async (t) => {

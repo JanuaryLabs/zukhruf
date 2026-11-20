@@ -1,6 +1,10 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 
-import type { Container } from '@zukhruf/docker';
+import {
+  type Container,
+  ContainerNotFoundError,
+  ContainerNotRunningError,
+} from '@zukhruf/docker';
 
 import { succeeded } from './succeeded.ts';
 
@@ -44,15 +48,27 @@ export interface Collector {
   drop(name: string): string;
 }
 
-/** Drops the database `name` in the server `container` with the client of `collector`. */
+/**
+ * Drops the database `name` in the server `container` with the client of
+ * `collector`. A shared server runs with AutoRemove, so a server that stopped
+ * or is gone took its databases with it: that drop resolves.
+ */
 export async function dropDatabase(
   collector: Collector,
   container: Container,
   credential: string,
   name: string,
 ): Promise<void> {
-  await succeeded(
-    container,
-    collector.command(credential, collector.drop(name)),
-  );
+  try {
+    await succeeded(
+      container,
+      collector.command(credential, collector.drop(name)),
+    );
+  } catch (error) {
+    if (
+      !(error instanceof ContainerNotFoundError) &&
+      !(error instanceof ContainerNotRunningError)
+    )
+      throw error;
+  }
 }

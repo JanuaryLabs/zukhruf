@@ -102,9 +102,7 @@ export class Postgres {
         container.container,
         this.#options.user,
         database,
-      ).catch(() => {
-        /* Best-effort: the run's cleanup drops a database that disposal left. */
-      });
+      );
       await container.disconnect();
     });
   }

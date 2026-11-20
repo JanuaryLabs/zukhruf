@@ -144,8 +144,6 @@ export class SqlServer {
             this.#options.password,
             database,
           );
-        } catch {
-          // Best-effort: the run's cleanup drops a database that disposal left.
         } finally {
           await container.disconnect();
         }
@@ -187,7 +185,7 @@ export class SqlServer {
       await pool.connect();
       await pool.request().query('SELECT 1');
     } finally {
-      await pool.close().catch(() => {});
+      await pool.close();
     }
   }
 

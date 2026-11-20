@@ -104,7 +104,8 @@ test('the disposal of a database waits until the server has ended each connectio
     connectTimeout: 30_000,
   });
   const waiter = await pool.getConnection();
-  void waiter.query('SELECT GET_LOCK(?, 600)', [lock]).catch(() => {});
+  const leaked = waiter.query('SELECT GET_LOCK(?, 600)', [lock]);
+  leaked.catch(() => undefined);
   await untilItWaits(observer, waiter.threadId, t.signal);
   proxy.slowDown(1_000);
 
@@ -121,6 +122,7 @@ test('the disposal of a database waits until the server has ended each connectio
     await serverState(observer, database.database, [waiter.threadId]),
     { sessions: 0, exists: false },
   );
+  await assert.rejects(leaked, { code: 'ER_SOCKET_UNEXPECTED_CLOSE' });
 });
 
 test('the disposal of a MariaDB database ends the connections that are still checked out, drops the database, and then rejects with their count', async (t) => {
@@ -133,7 +135,8 @@ test('the disposal of a MariaDB database ends the connections that are still che
   const pool = database.pool();
   await pool.getConnection();
   const waiter = await pool.getConnection();
-  void waiter.query('SELECT GET_LOCK(?, 600)', [lock]).catch(() => {});
+  const leaked = waiter.query('SELECT GET_LOCK(?, 600)', [lock]);
+  leaked.catch(() => undefined);
   await untilItWaits(observer, waiter.threadId, t.signal);
   (await pool.getConnection()).destroy();
 
@@ -149,6 +152,7 @@ test('the disposal of a MariaDB database ends the connections that are still che
     sessions: 0,
     exists: false,
   });
+  await assert.rejects(leaked, { code: 'ER_SOCKET_UNEXPECTED_CLOSE' });
 });
 
 test('a MariaDB database whose disposal started gives no pool', async () => {

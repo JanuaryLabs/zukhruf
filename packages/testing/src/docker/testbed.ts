@@ -210,11 +210,16 @@ export class DockerTestbed {
         this.#startOrRemove(container),
       );
     } catch (error) {
+      await using removal = new AsyncDisposableStack();
+      removal.defer(remove);
       const output = await container.logs().then(
         (logs) => logs.output,
-        () => undefined,
+        (reading: unknown) => {
+          // #startOrRemove removed a container that did not start.
+          if (reading instanceof ContainerNotFoundError) return undefined;
+          throw reading;
+        },
       );
-      await remove().catch(() => {});
       if (output === undefined) throw error;
       throw new Error(`Container ${container.id} was not ready:\n${output}`, {
         cause: error,
@@ -354,7 +359,8 @@ export class DockerTestbed {
     try {
       await container.start();
     } catch (error) {
-      await container.remove({ force: true, v: true }).catch(() => {});
+      await using removal = new AsyncDisposableStack();
+      removal.defer(() => container.remove({ force: true, v: true }));
       throw error;
     }
   }
