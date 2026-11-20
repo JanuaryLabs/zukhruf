@@ -46,7 +46,7 @@ changed after second
 no change
 ```
 
-## The rules
+## Read the data version
 
 - `new DataVersion(path)` opens its own read-only connection to the database. It does not share a connection with a reader. [ADR 0001](./docs/adr/0001-poll-data-version.md) tells why.
 - `current` gives the data version now. It is the number of `DataVersion`, not the `PRAGMA data_version` of SQLite. Compare it with the value that you read before from the same `DataVersion`. A different value tells that another connection committed, or that the owner replaced the file. The same value tells that no change occurred.
@@ -80,7 +80,7 @@ for await (const outcomes of watcher.watch(signal)) {
 }
 ```
 
-## An owner that lets no reader in
+## Observe an owner that lets no reader in
 
 An exclusive owner holds SQLite's exclusive locking mode, as Chromium holds its History. `new DataVersion(path)` then fails with `SQLITE_BUSY` (5). Observe the database with `DataVersion.ofExclusiveOwner(path)`:
 
@@ -101,7 +101,7 @@ if (version.current !== seen) console.log('The owner committed. Read again.');
 
 [ADR 0004](./docs/adr/0004-the-version-of-an-exclusive-owner-is-the-stamp-of-its-database-file.md) tells why.
 
-## The last write
+## Find when the owner last wrote
 
 The data version tells that the owner committed after you read it before. It does not tell when. A new process has no earlier value, so it cannot use the data version to find how old the data is.
 
@@ -123,13 +123,15 @@ console.log(`The owner last wrote at ${written.toISOString()}`);
 
 ## Errors
 
-| Error                        | When                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `UnavailableError`           | SQLite cannot open the file: `SQLITE_CANTOPEN` (14), for a missing file or a file that the system denies, a privacy denial too. `new DataVersion` throws it, and `current` throws it when it cannot open a replaced file. `cause` is the error of SQLite. `ofExclusiveOwner` throws it when the file is missing (`ENOENT`, `ENOTDIR`) or the system denies this process (`EACCES`, `EPERM`); then `cause` is the error of the file system. |
-| The error of SQLite          | All other failures.                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| The error of the file system | `current` cannot read the status of the path, for a cause other than a missing path or a folder that denies this process.                                                                                                                                                                                                                                                                                                                  |
+| Error                        | When                                                                                                                                                                                                                                     |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `MissingError`               | The file of the database, or a folder on its path, is not there (`ENOENT`, `ENOTDIR`).                                                                                                                                                   |
+| `DeniedError`                | The system denies this process access to the file, or to a folder on its path (`EACCES`, `EPERM`), a privacy denial of macOS too.                                                                                                        |
+| `UnavailableError`           | The base class of `MissingError` and `DeniedError`. Alone, it comes when SQLite cannot open the file (`SQLITE_CANTOPEN`, 14) and the file system does not tell why: a second open of the file succeeds, or the path starts with `file:`. |
+| The error of SQLite          | All other failures.                                                                                                                                                                                                                      |
+| The error of the file system | `current` cannot read the status of the path, for a cause other than a missing path or a folder that denies this process. `lastWrite` cannot read the times of the file, for a cause other than a missing or denied file.                |
 
-`UnavailableError` has the `path`. `lastWrite` throws `UnavailableError` when the file is missing (`ENOENT`, `ENOTDIR`) or the system denies this process (`EACCES`, `EPERM`). Then `cause` is the error of the file system. `lastWrite` throws the error of the file system for all other failures. It is a `MissingError` when the file or a folder on its path is not there, and a `DeniedError` when the system denies access. The package exports both, and both are an `UnavailableError`.
+`new DataVersion`, `DataVersion.ofExclusiveOwner` and `lastWrite` throw a `MissingError` or a `DeniedError`. `current` throws one when it cannot open a replaced file. `new DataVersion` and `current` can also throw an `UnavailableError` alone, when SQLite cannot open the file and the file system does not tell why. They come from `UnavailableError.from` of `@zukhruf/sqlite-open`, which `open` and the package call (commit 14539105). Each has the `path`. For `new DataVersion` and `current`, `cause` is the error of SQLite. For `ofExclusiveOwner` and `lastWrite`, `cause` is the error of the file system. The package exports the three classes, and a catch of `UnavailableError` catches all three.
 
 ## The same concepts in other systems
 
@@ -142,12 +144,46 @@ console.log(`The owner last wrote at ${written.toISOString()}`);
 | SQLite `SQLITE_FCNTL_HAS_MOVED`        | `fileHasMoved` in `os_unix.c` compares the inode of the path with the inode of the open file. SQLite only gives a warning. It never opens the new file. `node:sqlite` has no `file_control`, so `DataVersion` reads the status of the path itself.                          |
 | Filebeat native file identity          | It identifies a file by its device and inode. After a file closes, the system can give its inode to a new file, and Filebeat then sees no new file. `DataVersion` keeps the old file open until the new file is open, so the system cannot give that inode to the new file. |
 
+## API
+
+```ts
+class DataVersion extends Gauge<number> implements Disposable {
+  // ofExclusiveOwner gives the second argument; a caller gives only the path.
+  constructor(path: string, database?: Disposable & { observe(): string });
+  static ofExclusiveOwner(path: string): DataVersion;
+  get current(): number;
+  value(check: Check): Promise<number>; // of Gauge, from @zukhruf/async
+  [Symbol.dispose](): void;
+}
+
+function lastWrite(path: string): Date;
+
+// The classes of @zukhruf/sqlite-open, which the package exports.
+class UnavailableError extends Error {
+  readonly path: string;
+  constructor(path: string, cause: unknown);
+  static from(path: string, error: unknown): UnavailableError | undefined;
+}
+class MissingError extends UnavailableError {
+  constructor(path: string, cause: unknown);
+}
+class DeniedError extends UnavailableError {
+  constructor(path: string, cause: unknown);
+}
+```
+
 ## Documentation
 
-- [0001 Poll data_version](./docs/adr/0001-poll-data-version.md)
-- [0002 A replaced file is followed by name](./docs/adr/0002-a-replaced-file-is-followed-by-name.md)
-- [0003 The package throws its own errors](./docs/adr/0003-the-package-throws-its-own-errors.md)
-- [0004 The version of an exclusive owner is the stamp of its database file](./docs/adr/0004-the-version-of-an-exclusive-owner-is-the-stamp-of-its-database-file.md)
+**Recipes**
+
+1. [Open the data version at its first read](./docs/recipes/open-the-data-version-at-its-first-read.md)
+
+**Decisions**
+
+- [ADR 0001](./docs/adr/0001-poll-data-version.md): poll data_version.
+- [ADR 0002](./docs/adr/0002-a-replaced-file-is-followed-by-name.md): a replaced file is followed by name.
+- [ADR 0003](./docs/adr/0003-the-package-throws-its-own-errors.md): the package throws its own errors.
+- [ADR 0004](./docs/adr/0004-the-version-of-an-exclusive-owner-is-the-stamp-of-its-database-file.md): the version of an exclusive owner is the stamp of its database file.
 
 ## Development
 

@@ -25,9 +25,18 @@ The time when the owner last wrote the database: the later of the modification t
 _Avoid_: Modified time, mtime, last update
 
 **Unavailable**:
-SQLite cannot open the file, or the file system cannot give its times: the file is missing, or the system denies access. The package then throws `UnavailableError`, the class of `@zukhruf/sqlite-open`. The caller can fix it, for example with a grant of access. Other failures are not unavailable.
+SQLite cannot open the file, or the file system cannot give its times: the file is missing, or the system denies access. The package then throws `UnavailableError`, the class of `@zukhruf/sqlite-open`. The caller can fix it, for example with a grant of access. Other failures are not unavailable. The package exports the two subclasses of `UnavailableError` (commit 14539105, [ADR 0008 of `@zukhruf/sqlite-open`](../open/docs/adr/0008-a-missing-file-and-a-denied-file-are-two-classes.md)):
+
+- `MissingError`: the file, or a folder on its path, is not there (`ENOENT`, `ENOTDIR`).
+- `DeniedError`: the system keeps this process from the file, or from a folder on its path (`EACCES`, `EPERM`, or SQLite's `SQLITE_READONLY_DIRECTORY`, 1544).
+
+When the error does not say which, the package throws a plain `UnavailableError`.
 _Avoid_: Not found, permission error
 
 **Exclusive owner**:
 An owner that holds SQLite's exclusive locking mode, with a rollback journal, as Chromium holds its History. No other connection can read the database while it holds the lock, so no connection can read `PRAGMA data_version`.
 _Avoid_: Locked database, busy database (busy is the error code, not the owner)
+
+**File stamp**:
+What the file system says about the file at a path: its device, its inode, its size, and the times of its last write and its last change, to the nanosecond. It is the `FileStamp` of `@zukhruf/fs`. For an exclusive owner, the data version changes when the file stamp of the database file changes ([ADR 0004](./docs/adr/0004-the-version-of-an-exclusive-owner-is-the-stamp-of-its-database-file.md)).
+_Avoid_: Fingerprint (a hash of the content), mtime (one part of the stamp), checksum
