@@ -1,6 +1,6 @@
 # A caller whose host is gone cancels its jobs, and the owner learns it from a closed connection
 
-Status: Proposed 2026-11-16 for Ezz's review (backlog #3527). Not built.
+Status: Accepted 2026-11-20 (backlog #3527). Not built.
 
 A caller's abort cancels its job ([ADR 0020](./0020-a-cancel-of-a-shared-job-is-a-leave-and-of-any-other-job-a-drop-or-a-kill.md)). A host can also end with no abort: a crash, a `SIGKILL`, or a chat server that ends when its chat closes. Its jobs stay in the store, the owner runs them, and nobody reads the output (map ticket 15):
 

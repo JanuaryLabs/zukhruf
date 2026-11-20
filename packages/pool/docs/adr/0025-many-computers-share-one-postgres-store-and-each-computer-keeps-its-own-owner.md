@@ -1,6 +1,6 @@
 # Many computers share one Postgres store, and each computer keeps its own owner
 
-Status: Proposed 2026-11-16 for Ezz's review (backlog #3527). Not built. Built only when a second computer is real (map, Revision 2026-11-13). Map ticket 14 is open.
+Status: Accepted 2026-11-20 (backlog #3527). Not built. Built only when a second computer is real (map, Revision 2026-11-13). Map ticket 14 is open.
 
 The destination of the map covers both scopes: one computer, and many computers (Ezz, 2026-11-03). The first build is one computer. This ADR records what the map decided for many computers, and what it did not.
 

@@ -1,6 +1,6 @@
 # News travels by push through the notify of the store, with a backstop
 
-Status: Proposed 2026-11-16 for Ezz's review (backlog #3527). Not built.
+Status: Accepted 2026-11-20 (backlog #3527). Not built.
 
 Two kinds of news travel between the hosts of a pool (map tickets 10 and 11):
 

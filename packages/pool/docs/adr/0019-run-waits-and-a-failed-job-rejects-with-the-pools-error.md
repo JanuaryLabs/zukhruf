@@ -1,6 +1,6 @@
 # run waits, and a failed job rejects with the pool's error
 
-Status: Proposed 2026-11-16 for Ezz's review (backlog #3527). Not built.
+Status: Accepted 2026-11-20 (backlog #3527). Not built.
 
 A host that gives the pool a job needs to know what it gets and when (map ticket 07). Today's callers wait: elt's `ImageFormat.text(path, signal)` awaits `pool.use(…)`. A job can also fail in new ways: a worker exits during the job, a job fails all its retries, the owner stops, or no owner exists.
 

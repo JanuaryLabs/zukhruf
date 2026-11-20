@@ -2,6 +2,7 @@ import { Cond, Future, type WallClock, delay } from '@zukhruf/async';
 import { SqliteElection, type Term } from '@zukhruf/election';
 
 import type { Eviction } from './eviction.ts';
+import type { PoolStats } from './pool-stats.ts';
 import type { Sizing } from './sizing.ts';
 import { type Slot, Slots } from './slots.ts';
 import type { Startup } from './startup.ts';
@@ -26,6 +27,15 @@ type Outcome<Output> =
   // A touch did not find the job under the owner's claim: the store took it
   // back, for example by a cancel or by a heartbeat that lapsed.
   | { readonly gone: true };
+
+/** What this host is to its pool: an owner reads its slots, a standby has none. */
+interface Role {
+  stats(): PoolStats;
+}
+
+const STANDBY: Role = {
+  stats: () => ({ starting: 0, idle: 0, lent: 0, waiting: 0 }),
+};
 
 /**
  * Offers this host's workers of one kind, and owns them while this host
@@ -53,6 +63,10 @@ export class PoolWorkers<Input, Output> implements AsyncDisposable {
   // Settles when the host stops offering its workers, and fails with the
   // failure that stopped it, if one did.
   readonly #ended: Future<void>;
+  // Settles at the first term, by the startup of its workers. A host that
+  // stops offering its workers before that rejects it.
+  readonly #ready = new Future<void>();
+  #role = STANDBY;
 
   constructor(options: {
     kind: WorkerKind<Input, Output>;
@@ -82,8 +96,27 @@ export class PoolWorkers<Input, Output> implements AsyncDisposable {
       clock: options.clock,
     });
     this.#ended = Future.run(() => this.#live());
+    this.#ended.wait().then(
+      () => this.#ready.reject(this.#disposed.signal.reason),
+      (error: unknown) => this.#ready.reject(error),
+    );
   }
 
+  /** This host's slots: zero in each count while it does not own (ADR 0013). */
+  get stats(): PoolStats {
+    return this.#role.stats();
+  }
+
+  /**
+   * Resolves when this host owns and the workers that its startup starts are
+   * ready, and rejects when one of them fails to start (ADR 0013).
+   */
+  ready(): Promise<void> {
+    return this.#ready.wait();
+  }
+
+  // Offers the workers until the disposal or a failure of the store, and
+  // then closes the store, so every disposal waits for the one end.
   async #live(): Promise<void> {
     const stop = AbortSignal.any([this.#disposed.signal, this.#failed.signal]);
     try {
@@ -98,6 +131,8 @@ export class PoolWorkers<Input, Output> implements AsyncDisposable {
       }
     } catch (error) {
       if (error !== this.#disposed.signal.reason) throw error;
+    } finally {
+      await this.#store[Symbol.asyncDispose]();
     }
     this.#failed.signal.throwIfAborted();
   }
@@ -116,6 +151,13 @@ export class PoolWorkers<Input, Output> implements AsyncDisposable {
       clock: this.#clock,
       resized: () => changed.broadcast(),
     });
+    // The jobs that wait for this host's workers wait in the store, so no
+    // job waits in the host itself.
+    this.#role = { stats: () => slots.stats(0) };
+    slots.ready().then(
+      () => this.#ready.resolve(),
+      (error: unknown) => this.#ready.reject(error),
+    );
     // Whether the last fetch took every job it asked for, so more may wait.
     let backlog = false;
     try {
@@ -145,6 +187,7 @@ export class PoolWorkers<Input, Output> implements AsyncDisposable {
       await Promise.all(running);
       // A standby takes over before the workers close: a close can be slow.
       await term.resign();
+      this.#role = STANDBY;
       await slots[Symbol.asyncDispose]();
     }
   }
@@ -272,11 +315,7 @@ export class PoolWorkers<Input, Output> implements AsyncDisposable {
 
   async [Symbol.asyncDispose](): Promise<void> {
     this.#disposed.abort();
-    try {
-      await this.#ended.wait();
-    } finally {
-      await this.#store[Symbol.asyncDispose]();
-    }
+    await this.#ended.wait();
   }
 }
 

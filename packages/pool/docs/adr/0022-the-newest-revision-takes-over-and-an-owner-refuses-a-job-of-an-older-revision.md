@@ -1,6 +1,6 @@
 # The newest revision takes over, and an owner refuses a job of an older revision
 
-Status: Proposed 2026-11-16 for Ezz's review (backlog #3527). Not built.
+Status: Accepted 2026-11-20 (backlog #3527). Not built.
 
 Old plugin servers run on after an update (#2127). Hosts of two revisions of one worker kind then share one pool. `@zukhruf/election` never moves ownership while the owner lives, so an old owner keeps the workers until it ends (map ticket 08).
 

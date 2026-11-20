@@ -78,7 +78,7 @@ _Avoid_: Metrics (a metric is measured over time), status (one value)
 
 ## The pool for the computer
 
-Design for review, partly built (backlog #3527): `WorkerKind`, `computerStore` and `PoolWorkers` are built, and `Pool` is not. The words above tell what the package does today. The words below are the words of the design in the README section "One pool for the computer" and ADRs 0011 to 0026. When the design is built, they join the list above.
+Design accepted 2026-11-20, partly built (backlog #3527): `WorkerKind`, `computerStore` and `PoolWorkers` are built, and `Pool` is not. The words above tell what the package does today. The words below are the words of the design in the README section "One pool for the computer" and ADRs 0011 to 0026. When the design is built, they join the list above.
 
 **Job** (in the design):
 Data: the input of one worker kind, which a caller sends to the store, and the output that the owner writes back. The pool still lends one worker to the job until the job ends.

@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import { type ChildProcess, spawn } from 'node:child_process';
 import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
+import { createInterface } from 'node:readline';
 import type { TestContext } from 'node:test';
+import { setTimeout } from 'node:timers/promises';
 
 import { createClock } from '@sinonjs/fake-timers';
 
@@ -16,10 +18,18 @@ import { waitFor } from '@zukhruf/testing/async';
 import { describe, test } from '@zukhruf/testing/node';
 
 import {
+  type Eviction,
   Fixed,
+  LeaderFirst,
   NoEviction,
+  OnDemand,
+  OrderedReady,
   Parallel,
   PoolWorkers,
+  Resources,
+  type Sample,
+  type Sizing,
+  type Startup,
   type Worker,
   WorkerKind,
 } from './index.ts';
@@ -232,6 +242,8 @@ describe('PoolWorkers', { concurrency: true }, () => {
   test('of two hosts on one store, only the owner starts workers and runs the jobs', async (t) => {
     await using folder = await new TemporaryFiles().directory('pool-');
     const store = join(folder.path, 'store.sqlite');
+    // Disposed after the hosts, so it removes the pipe of the last owner.
+    await using _successor = succeedLastOwner(store);
     await using owner = new Host(store, { workers: 2, retryLimit: 0 });
     await owner.report(owns, { signal: t.signal });
     await using standby = new Host(store, { workers: 2, retryLimit: 0 });
@@ -255,6 +267,8 @@ describe('PoolWorkers', { concurrency: true }, () => {
   test("the owner creates the kind's queue with the kind's rules and a heartbeat of 10 s", async (t) => {
     await using folder = await new TemporaryFiles().directory('pool-');
     const store = join(folder.path, 'store.sqlite');
+    // Disposed after the hosts, so it removes the pipe of the last owner.
+    await using _successor = succeedLastOwner(store);
     await using owner = new Host(store, {
       workers: 1,
       retryLimit: 3,
@@ -280,6 +294,8 @@ describe('PoolWorkers', { concurrency: true }, () => {
   test('the owner completes a job with its output, and fails a job whose worker throws with its name and message', async (t) => {
     await using folder = await new TemporaryFiles().directory('pool-');
     const store = join(folder.path, 'store.sqlite');
+    // Disposed after the hosts, so it removes the pipe of the last owner.
+    await using _successor = succeedLastOwner(store);
     await using owner = new Host(store, { workers: 2, retryLimit: 0 });
     await owner.report(owns, { signal: t.signal });
     await using sending = await sender(store);
@@ -302,6 +318,8 @@ describe('PoolWorkers', { concurrency: true }, () => {
   test('with Fixed(2), the store never holds more than 2 active jobs, and holds 2 at once', async (t) => {
     await using folder = await new TemporaryFiles().directory('pool-');
     const store = join(folder.path, 'store.sqlite');
+    // Disposed after the hosts, so it removes the pipe of the last owner.
+    await using _successor = succeedLastOwner(store);
     await using owner = new Host(store, { workers: 2, retryLimit: 0 });
     await owner.report(owns, { signal: t.signal });
     await using sending = await sender(store);
@@ -334,6 +352,8 @@ describe('PoolWorkers', { concurrency: true }, () => {
   test('after a SIGKILL of the owner while it runs a job, the standby owns and runs that job', async (t) => {
     await using folder = await new TemporaryFiles().directory('pool-');
     const store = join(folder.path, 'store.sqlite');
+    // Disposed after the hosts, so it removes the pipe of the last owner.
+    await using _successor = succeedLastOwner(store);
     await using owner = new Host(store, { workers: 1, retryLimit: 1 });
     await owner.report(owns, { signal: t.signal });
     await using standby = new Host(store, { workers: 1, retryLimit: 1 });
@@ -359,6 +379,8 @@ describe('PoolWorkers', { concurrency: true }, () => {
   test('an owner that disposes finishes its running job, then resigns while its process lives', async (t) => {
     await using folder = await new TemporaryFiles().directory('pool-');
     const store = join(folder.path, 'store.sqlite');
+    // Disposed after the hosts, so it removes the pipe of the last owner.
+    await using _successor = succeedLastOwner(store);
     await using owner = new Host(store, {
       workers: 1,
       retryLimit: 0,
@@ -391,6 +413,8 @@ describe('PoolWorkers', { concurrency: true }, () => {
   test('an owner that disposes resigns once its running job ends, before its workers close', async (t) => {
     await using folder = await new TemporaryFiles().directory('pool-');
     const store = join(folder.path, 'store.sqlite');
+    // Disposed after the hosts, so it removes the pipe of the last owner.
+    await using _successor = succeedLastOwner(store);
     await using owner = new Host(store, {
       workers: 1,
       retryLimit: 0,
@@ -434,6 +458,666 @@ describe('PoolWorkers', { concurrency: true }, () => {
     owner.send('dispose');
 
     assert.equal(await untilAborted(owner.closed(), t.signal), 0);
+  });
+});
+
+// The owner in the test process, with real worker processes on the real
+// clock. Until Pool sends jobs (ADR 0019), the test sends them to the store
+// itself, and the owner fetches a new job at its backstop.
+describe('PoolWorkers lends its workers', { concurrency: true }, () => {
+  test('an on-demand owner starts no worker until a job needs one, then reuses it', async (t) => {
+    await using folder = await new TemporaryFiles().directory('pool-');
+    const store = join(folder.path, 'store.sqlite');
+    const created: EchoWorker[] = [];
+    await using workers = lending(store, {
+      size: new Fixed(2),
+      startup: new OnDemand(),
+      eviction: new NoEviction(),
+      create: () => {
+        const worker = new EchoWorker();
+        worker.release();
+        created.push(worker);
+        return worker;
+      },
+    });
+    await using sending = await sender(store);
+    await workers.ready();
+    assert.equal(created.length, 0);
+
+    assert.equal(await ran(t, sending.jobs, 'one'), 'one');
+    assert.equal(await ran(t, sending.jobs, 'two'), 'two');
+    assert.equal(created.length, 1);
+
+    assert.deepEqual(
+      await Promise.all([
+        ran(t, sending.jobs, 'a'),
+        ran(t, sending.jobs, 'b'),
+        ran(t, sending.jobs, 'c'),
+      ]),
+      ['a', 'b', 'c'],
+    );
+    assert.equal(created.length, 2);
+  });
+
+  test('a parallel owner starts every worker at once', async (t) => {
+    await using folder = await new TemporaryFiles().directory('pool-');
+    const created: EchoWorker[] = [];
+    await using workers = lending(join(folder.path, 'store.sqlite'), {
+      size: new Fixed(3),
+      startup: new Parallel(),
+      eviction: new NoEviction(),
+      create: () => {
+        const worker = new EchoWorker();
+        created.push(worker);
+        return worker;
+      },
+    });
+    // Nothing is ready yet, so only a parallel start reaches three workers.
+    await waitFor(() => assert.equal(created.length, 3), {
+      signal: t.signal,
+      interval: 10,
+    });
+    for (const worker of created) worker.release();
+    await workers.ready();
+  });
+
+  test('an ordered-ready owner starts each worker after the previous one is ready', async (t) => {
+    await using folder = await new TemporaryFiles().directory('pool-');
+    const created: EchoWorker[] = [];
+    await using workers = lending(join(folder.path, 'store.sqlite'), {
+      size: new Fixed(3),
+      startup: new OrderedReady(),
+      eviction: new NoEviction(),
+      create: () => {
+        const worker = new EchoWorker();
+        created.push(worker);
+        return worker;
+      },
+    });
+    await waitFor(() => assert.equal(created.length, 1), {
+      signal: t.signal,
+      interval: 10,
+    });
+    await setTimeout(200);
+    assert.equal(created.length, 1);
+
+    created[0]!.release();
+    await waitFor(() => assert.equal(created.length, 2), {
+      signal: t.signal,
+      interval: 10,
+    });
+    await setTimeout(200);
+    assert.equal(created.length, 2);
+
+    created[1]!.release();
+    await waitFor(() => assert.equal(created.length, 3), {
+      signal: t.signal,
+      interval: 10,
+    });
+    created[2]!.release();
+    await workers.ready();
+  });
+
+  test('a leader-first owner starts the others together once the first is ready, and replaces a crashed worker at once', async (t) => {
+    await using folder = await new TemporaryFiles().directory('pool-');
+    const store = join(folder.path, 'store.sqlite');
+    const created: EchoWorker[] = [];
+    await using workers = lending(store, {
+      size: new Fixed(3),
+      startup: new LeaderFirst(),
+      eviction: new NoEviction(),
+      create: () => {
+        const worker = new EchoWorker();
+        created.push(worker);
+        // Only the leader waits for the test; it models a cold cache.
+        if (created.length > 1) worker.release();
+        return worker;
+      },
+    });
+    await using sending = await sender(store);
+    await waitFor(() => assert.equal(created.length, 1), {
+      signal: t.signal,
+      interval: 10,
+    });
+    const job = ran(t, sending.jobs, 'during warm-up');
+    await setTimeout(200);
+    assert.equal(created.length, 1, 'no worker may start beside the leader');
+
+    created[0]!.release();
+    await workers.ready();
+    assert.equal(created.length, 3);
+    assert.equal(await job, 'during warm-up');
+
+    process.kill(created[1]!.pid, 'SIGKILL');
+    await created[1]!.exited();
+    const results = await Promise.all(
+      Array.from({ length: 3 }, (_, index) =>
+        ran(t, sending.jobs, String(index)),
+      ),
+    );
+    assert.deepEqual(results, ['0', '1', '2']);
+    assert.equal(created.length, 4);
+  });
+
+  test('a worker that fails to start fails the job waiting for it, and the next job starts another', async (t) => {
+    await using folder = await new TemporaryFiles().directory('pool-');
+    const store = join(folder.path, 'store.sqlite');
+    const created: EchoWorker[] = [];
+    await using workers = lending(store, {
+      size: new Fixed(1),
+      startup: new OnDemand(),
+      eviction: new NoEviction(),
+      create: () => {
+        const worker = new EchoWorker();
+        if (created.length === 0) worker.fail();
+        else worker.release();
+        created.push(worker);
+        return worker;
+      },
+    });
+    await using sending = await sender(store);
+
+    await assert.rejects(ran(t, sending.jobs, 'first'), /Echo worker exited/);
+    assert.equal(await ran(t, sending.jobs, 'second'), 'second');
+    assert.equal(created.length, 2);
+  });
+
+  test('a resources sizing runs one worker per CPU while each finds its memory free, and at least one', async () => {
+    for (const [cpus, gibFree, expected] of [
+      [3, 64, 3],
+      [8, 2.5, 2],
+      [4, 0.5, 1],
+    ] as const) {
+      await using folder = await new TemporaryFiles().directory('pool-');
+      const created: EchoWorker[] = [];
+      await using workers = lending(join(folder.path, 'store.sqlite'), {
+        size: new Resources({
+          memoryPerWorker: 2 ** 30,
+          computer: {
+            availableParallelism: () => cpus,
+            availableMemory: () => gibFree * 2 ** 30,
+          },
+        }),
+        startup: new Parallel(),
+        eviction: new NoEviction(),
+        create: () => {
+          const worker = new EchoWorker();
+          worker.release();
+          created.push(worker);
+          return worker;
+        },
+      });
+      await workers.ready();
+      assert.equal(created.length, expected);
+    }
+  });
+
+  test('an owner keeps alive a worker it stops running while the sizing keeps it, and closes it once the sizing does not', async (t) => {
+    await using folder = await new TemporaryFiles().directory('pool-');
+    const store = join(folder.path, 'store.sqlite');
+    const created: EchoWorker[] = [];
+    const sizing = new Steered();
+    await using workers = lending(store, {
+      size: sizing,
+      startup: new Parallel(),
+      eviction: new NoEviction(),
+      create: () => {
+        const worker = new EchoWorker();
+        worker.release();
+        created.push(worker);
+        return worker;
+      },
+    });
+    await using sending = await sender(store);
+    await workers.ready();
+    const run = (text: string) => ran(t, sending.jobs, text);
+    assert.deepEqual(await Promise.all([run('a'), run('b')]), ['a', 'b']);
+
+    sizing.current = 1;
+    assert.equal(await run('c'), 'c');
+    sizing.current = 2;
+    assert.deepEqual(await Promise.all([run('d'), run('e')]), ['d', 'e']);
+    assert.equal(created.length, 2, 'the kept worker needed no new warm-up');
+    assert.ok(created.every((worker) => !worker.dead));
+
+    sizing.current = 1;
+    sizing.kept = 1;
+    assert.equal(await run('f'), 'f');
+    await created[1]!.exited();
+    assert.equal(created[0]!.dead, false);
+    assert.equal(await run('g'), 'g');
+    assert.equal(created.length, 2);
+  });
+
+  test('a job that started before the owner resized does not count toward the new size, and one after does', async (t) => {
+    await using folder = await new TemporaryFiles().directory('pool-');
+    const store = join(folder.path, 'store.sqlite');
+    const sizing = new Steered();
+    // The fast job resizes once its line comes back, while the slow job runs.
+    class Resizing extends EchoWorker {
+      override async run(text: string): Promise<string> {
+        const echoed = await super.run(text);
+        if (text === 'sleep 50') sizing.current = 1;
+        return echoed;
+      }
+    }
+    const created: EchoWorker[] = [];
+    await using workers = lending(store, {
+      size: sizing,
+      startup: new Parallel(),
+      eviction: new NoEviction(),
+      create: () => {
+        const worker = new Resizing();
+        created.push(worker);
+        return worker;
+      },
+    });
+    await using sending = await sender(store);
+    await waitFor(() => assert.equal(created.length, 2), {
+      signal: t.signal,
+      interval: 10,
+    });
+    // One at a time, so the store gives the slow and the fast job first.
+    const ids = await Array.fromAsync(
+      ['sleep 400', 'sleep 50', 'sleep 10', 'sleep 10', 'sleep 10'],
+      (text) => sent(sending.jobs, text),
+    );
+    // The owner fetched the slow and the fast job for its two workers, which
+    // warm up until the test releases them, so both jobs start together.
+    // Waiting jobs make the times measurable once the slow job ends.
+    await waitFor(() => assert.equal(workers.stats.waiting, 2), {
+      signal: t.signal,
+      interval: 10,
+    });
+    for (const worker of created) worker.release();
+
+    await Promise.all(ids.map((id) => outputOf(t, sending.jobs, id)));
+    const [, beforeResize, afterResize] = sizing.samples;
+    assert.equal(beforeResize!.measurable, false);
+    assert.equal(afterResize!.measurable, true);
+  });
+
+  test('an eager owner replaces an idle worker that exits on its own, before any job needs it', async (t) => {
+    await using folder = await new TemporaryFiles().directory('pool-');
+    const store = join(folder.path, 'store.sqlite');
+    const created: EchoWorker[] = [];
+    await using workers = lending(store, {
+      size: new Fixed(2),
+      startup: new Parallel(),
+      eviction: new NoEviction(),
+      create: () => {
+        const worker = new EchoWorker();
+        worker.release();
+        created.push(worker);
+        return worker;
+      },
+    });
+    await using sending = await sender(store);
+    await workers.ready();
+
+    process.kill(created[0]!.pid, 'SIGKILL');
+    await waitFor(() => assert.equal(created.length, 3), {
+      signal: t.signal,
+      interval: 10,
+    });
+    await created[2]!.ready();
+
+    assert.deepEqual(
+      await Promise.all([ran(t, sending.jobs, 'a'), ran(t, sending.jobs, 'b')]),
+      ['a', 'b'],
+    );
+    assert.equal(created.length, 3);
+  });
+
+  test('stats count the workers that start, wait idle or are lent, and the jobs that wait for one', async (t) => {
+    await using folder = await new TemporaryFiles().directory('pool-');
+    const store = join(folder.path, 'store.sqlite');
+    const gate = new Latch();
+    // A job holds its worker at the gate before it runs.
+    class Gated extends EchoWorker {
+      override async run(text: string): Promise<string> {
+        await gate.wait();
+        return super.run(text);
+      }
+    }
+    const created: EchoWorker[] = [];
+    await using workers = lending(store, {
+      size: new Fixed(2),
+      startup: new Parallel(),
+      eviction: new NoEviction(),
+      create: () => {
+        const worker = new Gated();
+        created.push(worker);
+        return worker;
+      },
+    });
+    await using sending = await sender(store);
+    const until = (stats: object) =>
+      waitFor(() => assert.deepEqual(workers.stats, stats), {
+        signal: t.signal,
+        interval: 10,
+      });
+    await until({ starting: 2, idle: 0, lent: 0, waiting: 0 });
+
+    // The owner takes two jobs for the workers that start; the third waits in
+    // the store, not in the owner.
+    const ids = await Array.fromAsync(['a', 'b', 'c'], (text) =>
+      sent(sending.jobs, text),
+    );
+    const jobs = ids.map((id) => outputOf(t, sending.jobs, id));
+    try {
+      await until({ starting: 2, idle: 0, lent: 0, waiting: 2 });
+      assert.deepEqual(
+        (await sending.jobs.findJobs(queue))
+          .map(({ state }) => state)
+          .toSorted(),
+        ['active', 'active', 'created'],
+      );
+
+      for (const worker of created) worker.release();
+      await until({ starting: 0, idle: 0, lent: 2, waiting: 0 });
+
+      gate.open();
+      assert.deepEqual(await Promise.all(jobs), ['a', 'b', 'c']);
+      await until({ starting: 0, idle: 2, lent: 0, waiting: 0 });
+
+      // A worker that exits is in no count, and its replacement starts after
+      // the back-off.
+      created[0]!.kill();
+      await until({ starting: 0, idle: 1, lent: 0, waiting: 0 });
+      await until({ starting: 1, idle: 1, lent: 0, waiting: 0 });
+      created[2]!.release();
+      await until({ starting: 0, idle: 2, lent: 0, waiting: 0 });
+    } finally {
+      // A failed count leaves jobs at the gate or before a worker that warms
+      // up; they settle before the owner disposes, so the count's own error
+      // is the one reported.
+      for (const worker of created) if (!worker.dead) worker.release();
+      gate.open();
+      await Promise.allSettled(jobs);
+    }
+  });
+
+  test('stats leave out a worker that exits while a job holds it, and a read keeps its values', async (t) => {
+    await using folder = await new TemporaryFiles().directory('pool-');
+    const store = join(folder.path, 'store.sqlite');
+    const gate = new Latch();
+    class Gated extends EchoWorker {
+      override async run(text: string): Promise<string> {
+        await gate.wait();
+        return super.run(text);
+      }
+    }
+    const created: EchoWorker[] = [];
+    await using workers = lending(store, {
+      size: new Fixed(1),
+      startup: new Parallel(),
+      eviction: new NoEviction(),
+      create: () => {
+        const worker = new Gated();
+        worker.release();
+        created.push(worker);
+        return worker;
+      },
+    });
+    await using sending = await sender(store);
+    await workers.ready();
+    const job = ran(t, sending.jobs, 'late');
+    try {
+      await waitFor(
+        () =>
+          assert.deepEqual(workers.stats, {
+            starting: 0,
+            idle: 0,
+            lent: 1,
+            waiting: 0,
+          }),
+        { signal: t.signal, interval: 10 },
+      );
+      const before = workers.stats;
+
+      created[0]!.kill();
+      await waitFor(
+        () =>
+          assert.deepEqual(workers.stats, {
+            starting: 0,
+            idle: 0,
+            lent: 0,
+            waiting: 0,
+          }),
+        { signal: t.signal, interval: 10 },
+      );
+      assert.deepEqual(before, { starting: 0, idle: 0, lent: 1, waiting: 0 });
+      gate.open();
+      await assert.rejects(job, /Echo worker exited/);
+    } finally {
+      gate.open();
+      await Promise.allSettled([job]);
+    }
+  });
+
+  test('stats leave out an idle worker that exits from an on-demand owner', async (t) => {
+    await using folder = await new TemporaryFiles().directory('pool-');
+    const store = join(folder.path, 'store.sqlite');
+    const created: EchoWorker[] = [];
+    await using workers = lending(store, {
+      size: new Fixed(1),
+      startup: new OnDemand(),
+      eviction: new NoEviction(),
+      create: () => {
+        const worker = new EchoWorker();
+        worker.release();
+        created.push(worker);
+        return worker;
+      },
+    });
+    await using sending = await sender(store);
+    assert.equal(await ran(t, sending.jobs, 'one'), 'one');
+    assert.deepEqual(workers.stats, {
+      starting: 0,
+      idle: 1,
+      lent: 0,
+      waiting: 0,
+    });
+
+    created[0]!.kill();
+    await waitFor(
+      () =>
+        assert.deepEqual(workers.stats, {
+          starting: 0,
+          idle: 0,
+          lent: 0,
+          waiting: 0,
+        }),
+      { signal: t.signal, interval: 10 },
+    );
+  });
+
+  test('a disposal that runs again or at the same time waits for the same end, and does not fail', async () => {
+    await using folder = await new TemporaryFiles().directory('pool-');
+    const created: EchoWorker[] = [];
+    const workers = lending(join(folder.path, 'store.sqlite'), {
+      size: new Fixed(1),
+      startup: new Parallel(),
+      eviction: new NoEviction(),
+      create: () => {
+        const worker = new EchoWorker();
+        worker.release();
+        created.push(worker);
+        return worker;
+      },
+    });
+    await workers.ready();
+
+    await Promise.all([
+      workers[Symbol.asyncDispose](),
+      workers[Symbol.asyncDispose](),
+    ]);
+    await workers[Symbol.asyncDispose]();
+
+    assert.ok(created.every((worker) => worker.dead));
+  });
+
+  test('a standby starts no worker, counts nothing in its stats, and is ready only once it owns', async (t) => {
+    await using folder = await new TemporaryFiles().directory('pool-');
+    const store = join(folder.path, 'store.sqlite');
+    const options = (created: EchoWorker[]) => ({
+      size: new Fixed(1),
+      startup: new Parallel(),
+      eviction: new NoEviction(),
+      create: () => {
+        const worker = new EchoWorker();
+        worker.release();
+        created.push(worker);
+        return worker;
+      },
+    });
+    await using owner = lending(store, options([]));
+    await owner.ready();
+    const standbyWorkers: EchoWorker[] = [];
+    await using standby = lending(store, options(standbyWorkers));
+    let owns = false;
+    const ready = standby.ready().then(() => (owns = true));
+
+    // The standby campaigns while the owner keeps its term.
+    await setTimeout(500);
+    assert.equal(owns, false);
+    assert.equal(standbyWorkers.length, 0);
+    assert.deepEqual(standby.stats, {
+      starting: 0,
+      idle: 0,
+      lent: 0,
+      waiting: 0,
+    });
+
+    await owner[Symbol.asyncDispose]();
+    await untilAborted(ready, t.signal);
+    assert.equal(standbyWorkers.length, 1);
+    assert.deepEqual(standby.stats, {
+      starting: 0,
+      idle: 1,
+      lent: 0,
+      waiting: 0,
+    });
+  });
+
+  test('an owner that hands over counts nothing in its stats while its workers still end', async (t) => {
+    await using folder = await new TemporaryFiles().directory('pool-');
+    const store = join(folder.path, 'store.sqlite');
+    const ending = new Latch();
+    // Ends only when the test lets it, as a helper that cleans up after its
+    // signal.
+    class SlowToEnd extends EchoWorker {
+      override kill(): void {
+        void ending.wait().then(() => super.kill());
+      }
+
+      override async close(): Promise<void> {
+        await ending.wait();
+        await super.close();
+      }
+    }
+    const options = (create: () => EchoWorker) => ({
+      size: new Fixed(1),
+      startup: new Parallel(),
+      eviction: new NoEviction(),
+      create: () => {
+        const worker = create();
+        worker.release();
+        return worker;
+      },
+    });
+    await using owner = lending(
+      store,
+      options(() => new SlowToEnd()),
+    );
+    await owner.ready();
+    await using standby = lending(
+      store,
+      options(() => new EchoWorker()),
+    );
+
+    const handOver = owner[Symbol.asyncDispose]();
+    try {
+      await untilAborted(standby.ready(), t.signal);
+      assert.deepEqual(owner.stats, {
+        starting: 0,
+        idle: 0,
+        lent: 0,
+        waiting: 0,
+      });
+    } finally {
+      ending.open();
+      await handOver;
+    }
+  });
+
+  test('ready() rejects with the error of a worker that the startup starts and whose warm-up fails', async () => {
+    await using folder = await new TemporaryFiles().directory('pool-');
+    const created: EchoWorker[] = [];
+    await using workers = lending(join(folder.path, 'store.sqlite'), {
+      size: new Fixed(1),
+      startup: new Parallel(),
+      eviction: new NoEviction(),
+      create: () => {
+        const worker = new EchoWorker();
+        if (created.length === 0) worker.fail();
+        else worker.release();
+        created.push(worker);
+        return worker;
+      },
+    });
+
+    await assert.rejects(workers.ready(), /Echo worker exited/);
+  });
+
+  test('a host that stops offering its workers before it owns rejects its ready()', async (t) => {
+    await using folder = await new TemporaryFiles().directory('pool-');
+    const store = join(folder.path, 'store.sqlite');
+    const options = {
+      size: new Fixed(1),
+      startup: new Parallel(),
+      eviction: new NoEviction(),
+      create: () => {
+        const worker = new EchoWorker();
+        worker.release();
+        return worker;
+      },
+    };
+    await using owner = lending(store, options);
+    await owner.ready();
+    const standby = lending(store, options);
+    const ready = standby.ready();
+
+    await standby[Symbol.asyncDispose]();
+
+    await assert.rejects(untilAborted(ready, t.signal), { name: 'AbortError' });
+  });
+
+  test('disposing an owner while its startup runs rejects its ready(), stops every worker and starts no other', async (t) => {
+    await using folder = await new TemporaryFiles().directory('pool-');
+    const created: EchoWorker[] = [];
+    const workers = lending(join(folder.path, 'store.sqlite'), {
+      size: new Fixed(2),
+      startup: new OrderedReady(),
+      eviction: new NoEviction(),
+      create: () => {
+        const worker = new EchoWorker();
+        created.push(worker);
+        return worker;
+      },
+    });
+    await waitFor(() => assert.equal(created.length, 1), {
+      signal: t.signal,
+      interval: 10,
+    });
+    const ready = assert.rejects(workers.ready());
+
+    await workers[Symbol.asyncDispose]();
+
+    await ready;
+    assert.equal(created.length, 1, 'the second worker must never start');
+    assert.ok(created.every((worker) => worker.dead));
   });
 });
 
@@ -711,16 +1395,14 @@ async function ownerOn(
     signal: t.signal,
     interval: 5,
   });
-  let disposal: Promise<void> | undefined;
-  const dispose = () => (disposal ??= owner[Symbol.asyncDispose]());
   return {
     store,
-    /** Disposes the owner once: its running jobs end by themselves or at the time limit. */
-    dispose,
+    /** Disposes the owner: its running jobs end by themselves or at the time limit. */
+    dispose: () => owner[Symbol.asyncDispose](),
     /** Answers every held job first, so a failed test does not wait for a time limit on a clock that stands still. */
     [Symbol.asyncDispose]: () => {
       workers.answerAll();
-      return dispose();
+      return owner[Symbol.asyncDispose]();
     },
   };
 }
@@ -790,6 +1472,194 @@ function settled(t: TestContext, jobs: SqliteJobQueue, count: number) {
     },
     { signal: t.signal, interval: 20 },
   );
+}
+
+// A real child process: it warms up when the test releases it, then echoes
+// each line back. A line "hang" never gets an answer.
+const script = `
+const lines = require('node:readline').createInterface({ input: process.stdin });
+let ready = false;
+lines.on('line', (line) => {
+  if (!ready) {
+    if (line === 'go') { ready = true; process.stdout.write('ready\\n'); }
+    if (line === 'fail') process.exit(3);
+    return;
+  }
+  if (line.startsWith('sleep ')) setTimeout(() => process.stdout.write(line + '\\n'), Number(line.slice(6)));
+  else if (line !== 'hang') process.stdout.write(line + '\\n');
+});
+`;
+
+class EchoWorker implements Worker<string, string> {
+  readonly #child = spawn(process.execPath, ['-e', script]);
+  readonly #waiting: ((line: string) => void)[] = [];
+  readonly #exit = new Latch();
+  readonly #warm = new Latch<PromiseSettledResult<void>>();
+
+  constructor() {
+    createInterface({ input: this.#child.stdout }).on('line', (line) =>
+      this.#waiting.shift()?.(line),
+    );
+    this.#child.once('close', () => this.#exit.open());
+    this.#next().then(
+      () => this.#warm.open({ status: 'fulfilled', value: undefined }),
+      (reason: unknown) => this.#warm.open({ status: 'rejected', reason }),
+    );
+  }
+
+  get pid(): number {
+    return this.#child.pid!;
+  }
+
+  get dead(): boolean {
+    const child = this.#child;
+    return child.killed || child.exitCode !== null || child.signalCode !== null;
+  }
+
+  async ready(): Promise<void> {
+    const warm = await this.#warm.wait();
+    if (warm.status === 'rejected') throw warm.reason;
+  }
+
+  exited(): Promise<void> {
+    return this.#exit.wait();
+  }
+
+  release(): void {
+    this.#child.stdin.write('go\n');
+  }
+
+  fail(): void {
+    this.#child.stdin.write('fail\n');
+  }
+
+  run(text: string): Promise<string> {
+    this.#child.stdin.write(`${text}\n`);
+    return this.#next();
+  }
+
+  #next(): Promise<string> {
+    return new Promise((resolve, reject) => {
+      this.#waiting.push(resolve);
+      void this.#exit
+        .wait()
+        .then(() => reject(new Error('Echo worker exited')));
+    });
+  }
+
+  kill(): void {
+    this.#child.kill();
+  }
+
+  async close(): Promise<void> {
+    this.#child.stdin.end();
+    await this.#exit.wait();
+  }
+}
+
+// A sizing the test steers, which keeps every sample the pool reports.
+class Steered implements Sizing {
+  readonly ceiling = 2;
+  current = 2;
+  kept = 2;
+  readonly samples: Sample[] = [];
+
+  record(sample: Sample): void {
+    this.samples.push(sample);
+  }
+}
+
+/** PoolWorkers of the "echo" kind, whose input and output are a line, on the real clock. */
+function lending(
+  store: string,
+  options: {
+    size: Sizing;
+    startup: Startup;
+    eviction: Eviction;
+    create: () => Worker<string, string>;
+  },
+): PoolWorkers<string, string> {
+  return new PoolWorkers({
+    kind: new WorkerKind<string, string>({
+      name: 'echo',
+      revision: 1,
+      policy: 'standard',
+      retryLimit: 0,
+      expireInSeconds: 60,
+    }),
+    store,
+    clock: globalThis,
+    ...options,
+  });
+}
+
+/**
+ * On disposal, owns the store's pool of the "echo" kind and hands it over. A
+ * host that a test killed while it owned leaves the socket file of its
+ * election pipe in the temporary folder of the system. The next owner removes
+ * that file, and its hand-over removes its own (election ADR 0005). It offers
+ * no worker, so it takes no job that a test left in the store. Dispose it
+ * after each host of the test ended: a live owner keeps its term.
+ */
+function succeedLastOwner(store: string): AsyncDisposable {
+  return {
+    async [Symbol.asyncDispose]() {
+      await using successor = lending(store, {
+        size: new Fixed(0),
+        startup: new OnDemand(),
+        eviction: new NoEviction(),
+        create: () => new EchoWorker(),
+      });
+      await successor.ready();
+    },
+  };
+}
+
+/**
+ * Sends one job of the "echo" kind, and resolves with its output once the
+ * owner completes it, or rejects with its failure, as `Pool.run` will
+ * (ADR 0019).
+ */
+async function ran(
+  t: TestContext,
+  jobs: SqliteJobQueue,
+  input: string,
+): Promise<string> {
+  return outputOf(t, jobs, await sent(jobs, input));
+}
+
+/** Sends one job of the "echo" kind in the pool's envelope, and gives its id. */
+async function sent(jobs: SqliteJobQueue, input: string): Promise<string> {
+  const id = await jobs.send(queue, { input });
+  assert.ok(id, 'the store took the job');
+  return id;
+}
+
+/** Resolves with the output of the job once it completes, or rejects with its failure. */
+async function outputOf(
+  t: TestContext,
+  jobs: SqliteJobQueue,
+  id: string,
+): Promise<string> {
+  const job = await waitFor(
+    async () => {
+      const [found] = await jobs.findJobs(queue, { id });
+      assert.ok(found, 'the store keeps the job');
+      assert.match(found.state, /^(completed|failed)$/);
+      return found;
+    },
+    { signal: t.signal, interval: 10 },
+  );
+  const { output } = job;
+  assert.ok(typeof output === 'object' && output !== null);
+  if (job.state === 'failed') {
+    assert.ok('message' in output && 'name' in output);
+    throw Object.assign(new Error(String(output.message)), {
+      name: String(output.name),
+    });
+  }
+  assert.ok('output' in output && typeof output.output === 'string');
+  return output.output;
 }
 
 /** The input in the pool's envelope of a job's data. */

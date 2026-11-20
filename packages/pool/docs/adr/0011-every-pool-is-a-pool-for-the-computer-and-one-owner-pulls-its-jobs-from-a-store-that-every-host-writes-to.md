@@ -1,6 +1,6 @@
 # Every pool is a pool for the computer, and one owner pulls its jobs from a store that every host writes to
 
-Status: Proposed 2026-11-16 for Ezz's review (backlog #3527). Partly built (2026-11-16): `PoolWorkers` campaigns, owns the workers of its computer, and pulls its jobs from the store. `Pool`, which sends the jobs, is not built yet, and `use` stays until it is.
+Status: Accepted 2026-11-20 (backlog #3527). Partly built (2026-11-16): `PoolWorkers` campaigns, owns the workers of its computer, and pulls its jobs from the store. `Pool`, which sends the jobs, is not built yet, and `use` stays until it is.
 
 Today each host builds its own pool. A host is one running copy of a program that builds the pool: each chat's context-compiler server, each CLI run. Several hosts on one computer thus run several full pools of Vision workers, and these pools compete for the Neural Engine:
 

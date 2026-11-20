@@ -1,6 +1,6 @@
 # start accepts a job now, and a JobHandle reads its output later from any host
 
-Status: Proposed 2026-11-16 for Ezz's review (backlog #3527). Not built.
+Status: Accepted 2026-11-20 (backlog #3527). Not built.
 
 `run` waits for the output ([ADR 0019](./0019-run-waits-and-a-failed-job-rejects-with-the-pools-error.md)). A host that answers `202 Accepted` must give a job id at once. Later it reads the state and the output of the job, also from another host or after a restart. With `run` only, the pool cannot do this (map, "Not yet specified").
 
