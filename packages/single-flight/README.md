@@ -4,7 +4,15 @@ Callers of one key share the flight in progress, in one process and across all t
 
 The words in these documents have one meaning each. See the glossary in [CONTEXT.md](./CONTEXT.md).
 
-## The problem
+## Use it
+
+This project is an experiment.
+
+```sh
+npm install @zukhruf/single-flight
+```
+
+The lease that the work gets comes from `@zukhruf/lease`, and its token comes from `@zukhruf/fencing`. Both are dependencies of this package, so you install nothing more.
 
 A user runs `sync`. A second `sync` starts while the first one runs. The mutex of `@zukhruf/mutex` gives two choices, and the user wants neither:
 
@@ -23,6 +31,7 @@ import { SingleFlight } from '@zukhruf/single-flight';
 
 const directory = await mkdtemp(join(tmpdir(), 'reports-'));
 const flights = new SingleFlight<string>({
+  clock: globalThis,
   directory,
   codec: { encode: (report) => report, decode: (text) => text },
 });
@@ -57,16 +66,6 @@ A report is being built. Waiting for it…
 ```
 
 The first caller is the leader: its call runs the work of the flight. The other two callers join it. `onJoin` runs once for each joiner, before it waits. A call after the flight ended starts a new flight: a flight is not a cache. To keep a value after its flight, see the mutex recipe [Compute a value once and share it](../mutex/docs/recipes/compute-once-and-share-it.md).
-
-## Use it
-
-This project is an experiment.
-
-```sh
-npm install @zukhruf/single-flight
-```
-
-The lease that the work gets comes from `@zukhruf/lease`, and its token comes from `@zukhruf/fencing`. Both are dependencies of this package, so you install nothing more.
 
 ## The directory
 
@@ -146,25 +145,6 @@ true 42
 
 A codec that cannot encode the value fails the flight for all callers. A codec that cannot decode the text fails only the call that decodes it.
 
-## Errors
-
-| The caller is | The flight                                                      | The call rejects with                                            |
-| ------------- | --------------------------------------------------------------- | ---------------------------------------------------------------- |
-| The leader    | Its work threw                                                  | The original error of the work                                   |
-| A joiner      | Its work threw                                                  | `FlightFailedError`                                              |
-| A joiner      | Interrupted: the leader's process stopped, or it lost the lease | `FlightInterruptedError`                                         |
-| The leader    | It lost the lease                                               | The reason of the lease's signal: `LeaseLostError`               |
-| The leader    | It lost the lease, and then its work threw                      | A new `LeaseLostError`. Its `cause` is the error of the work     |
-| Each caller   | `encode` threw in the leader                                    | The leader: the error of `encode`. A joiner: `FlightFailedError` |
-| One caller    | Its own `decode` threw                                          | The error of `decode`, for that caller only                      |
-| Each caller   | The coordinator speaks another protocol version                 | `ProtocolVersionError`                                           |
-| Each caller   | The directory is on a network file system                       | `NetworkDirectoryError`                                          |
-| Each caller   | The `SingleFlight` is disposed                                  | `Error('This single flight is closed.')`                         |
-
-A joiner in the leader's own process is a joiner too: it gets `FlightFailedError`, not the original error. `FlightFailedError` has the `key` and the `failure`: the `name`, the `message` and the `code` of the error. A thrown value that is not an error keeps only its text.
-
-`LeaseLostError` is the class of [`@zukhruf/lease`](../lease/README.md). This package exports it too, because the call of a leader rejects with it.
-
 ## Cancel a wait
 
 Give a signal to stop the wait of one caller: `flights.run(key, work, { signal: AbortSignal.timeout(30_000) })`. The call rejects with the reason of the signal. The flight continues for the other callers. When the caller of the leader cancels, the work continues and lands for the joiners. A call whose signal aborted before the call rejects at once: it never leads and never joins. [ADR 0004](./docs/adr/0004-a-cancel-withdraws-only-its-caller.md) tells why.
@@ -192,7 +172,7 @@ A call that was on its way to a coordinator that stopped joined nothing. It goes
 - A call of a key waits with no limit while a process that lives holds the key lock, for example a frozen leader, or a leader whose work does not end. To set a limit, give a `signal`. A call of another key does not wait for it.
 - A leader frees the key lock only when it reads the acknowledgment of its landing. A new call of the same key in the process of the leader waits in that process until the key lock frees, and then goes to the coordinator. Thus two flights of one key in one process follow each other with no wait. A call of the key from another process that comes before the key lock frees waits for one more check of the key lock, about 10 ms.
 
-## Changes from 0.3.x
+## Move a program from 0.3.x to this version
 
 Version 0.3.13 to 0.3.15 had a pull design. These parts changed:
 
@@ -204,19 +184,107 @@ Version 0.3.13 to 0.3.15 had a pull design. These parts changed:
 - A caller whose signal aborted before the call rejects at once.
 - A joiner of an interrupted flight no longer continues with the next flight of the key. It gets `FlightInterruptedError`.
 
+## Errors
+
+| Error                                    | When                                                                                                                                                                                                                       |
+| ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The original error of the work           | The caller is the leader, and its work threw.                                                                                                                                                                              |
+| `FlightFailedError`                      | The caller is a joiner, and the work of its leader threw, or `encode` threw in the leader.                                                                                                                                 |
+| `FlightInterruptedError`                 | The caller is a joiner, and its flight is interrupted: the leader's process stopped, or the leader lost the lease.                                                                                                         |
+| `LeaseLostError`                         | The caller is the leader, and it lost the lease: the call rejects with the reason of the lease's signal. When its work then threw, the call rejects with a new `LeaseLostError`, and its `cause` is the error of the work. |
+| The error of `encode`                    | The caller is the leader, and `encode` threw.                                                                                                                                                                              |
+| The error of `decode`                    | The caller's own `decode` threw. Only that caller rejects.                                                                                                                                                                 |
+| `ProtocolVersionError`                   | Each caller: the coordinator speaks another protocol version.                                                                                                                                                              |
+| `NetworkDirectoryError`                  | Each caller: the directory is on a network file system.                                                                                                                                                                    |
+| `Error('This single flight is closed.')` | Each caller: the `SingleFlight` is disposed.                                                                                                                                                                               |
+
+A joiner in the leader's own process is a joiner too: it gets `FlightFailedError`, not the original error. `FlightFailedError` has the `key` and the `failure`: the `name`, the `message` and the `code` of the error. A thrown value that is not an error keeps only its text.
+
+`LeaseLostError` is the class of [`@zukhruf/lease`](../lease/README.md). This package exports it too, because the call of a leader rejects with it.
+
+## API
+
+```ts
+interface Codec<T> {
+  encode(value: T): string;
+  decode(text: string): T;
+}
+
+interface SingleFlightOptions<T> {
+  directory: string; // a local folder; no default
+  codec: Codec<T>;
+  clock: Clock; // @zukhruf/async: globalThis in production, a fake clock in a test
+  leaseDuration?: number; // default: 15000
+}
+
+interface RunOptions {
+  onJoin?: (() => void) | undefined; // once, when this caller joins
+  signal?: AbortSignal | undefined; // cancels the wait of this caller only
+}
+
+interface FlightValue<T> {
+  readonly value: T;
+  readonly joined: boolean; // false for the leader, true for each joiner
+}
+
+class SingleFlight<T> implements AsyncDisposable {
+  constructor(options: SingleFlightOptions<T>);
+  run(
+    key: string,
+    work: (lease: FencedLease) => Promise<T>, // FencedLease of @zukhruf/fencing
+    options?: RunOptions,
+  ): Promise<FlightValue<T>>;
+  [Symbol.asyncDispose](): Promise<void>;
+}
+
+// A leader's error as text, because an Error object cannot cross a process boundary.
+interface Failure {
+  readonly name: string;
+  readonly message: string;
+  readonly code?: string | number;
+}
+
+class FlightFailedError extends Error {
+  constructor(key: string, failure: Failure);
+  readonly key: string;
+  readonly failure: Failure;
+}
+
+class FlightInterruptedError extends Error {
+  constructor(key: string);
+  readonly key: string;
+}
+
+class ProtocolVersionError extends Error {
+  constructor(ours: number, theirs: number);
+  readonly ours: number; // the protocol of this process
+  readonly theirs: number; // the protocol of the coordinator
+}
+
+export { NetworkDirectoryError } from '@zukhruf/fs';
+export { LeaseLostError } from '@zukhruf/lease';
+```
+
 ## Documentation
 
+**Recipes**
+
 - [Join a run that is still in flight](./docs/recipes/join-a-run-in-flight.md): three processes, one sync.
-- [ADR 0003: A caller leads or joins in one request to an elected coordinator](./docs/adr/0003-a-caller-leads-or-joins-in-one-request-to-an-elected-coordinator.md)
-- [ADR 0004: A cancel withdraws only its caller](./docs/adr/0004-a-cancel-withdraws-only-its-caller.md)
-- [ADR 0005: A joiner rejoins its flight by its token](./docs/adr/0005-a-joiner-rejoins-its-flight-by-its-token.md)
-- [ADR 0006: The election and the connection are a copy of the mutex code](./docs/adr/0006-the-election-and-the-connection-are-a-copy-of-the-mutex-code.md)
-- [ADR 0007: A work error after a lost lease rejects with LeaseLostError](./docs/adr/0007-a-work-error-after-a-lost-lease-rejects-with-leaselosterror.md)
-- [ADR 0008: A connection closes only when its framing breaks](./docs/adr/0008-a-connection-closes-only-when-its-framing-breaks.md)
-- [ADR 0010: A leader holds a kernel lock on its key until its outcome is handed over](./docs/adr/0010-a-leader-holds-a-kernel-lock-on-its-key-until-its-outcome-is-handed-over.md)
-- [ADR 0011: A follower observes the coordinator, so a frozen coordinator is ended](./docs/adr/0011-a-follower-observes-the-coordinator-so-a-frozen-coordinator-is-ended.md)
-- [Code copied from the mutex](./docs/copied-from-mutex.md): each copied file, what changed, and why; the rules that the single flight shares with the mutex; and the code that is in two places inside the single flight.
+- [Run the work only when no flight of the key runs](./docs/recipes/run-the-work-only-when-no-flight-of-the-key-runs.md)
+
+**Decisions**
+
+- [ADR 0003](./docs/adr/0003-a-caller-leads-or-joins-in-one-request-to-an-elected-coordinator.md): a caller leads or joins in one request to an elected coordinator.
+- [ADR 0004](./docs/adr/0004-a-cancel-withdraws-only-its-caller.md): a cancel withdraws only its caller.
+- [ADR 0005](./docs/adr/0005-a-joiner-rejoins-its-flight-by-its-token.md): a joiner rejoins its flight by its token.
+- [ADR 0006](./docs/adr/0006-the-election-and-the-connection-are-a-copy-of-the-mutex-code.md): the election and the connection are a copy of the mutex code.
+- [ADR 0007](./docs/adr/0007-a-work-error-after-a-lost-lease-rejects-with-leaselosterror.md): a work error after a lost lease rejects with LeaseLostError.
+- [ADR 0008](./docs/adr/0008-a-connection-closes-only-when-its-framing-breaks.md): a connection closes only when its framing breaks.
+- [ADR 0010](./docs/adr/0010-a-leader-holds-a-kernel-lock-on-its-key-until-its-outcome-is-handed-over.md): a leader holds a kernel lock on its key until its outcome is handed over.
+- [ADR 0011](./docs/adr/0011-a-follower-observes-the-coordinator-so-a-frozen-coordinator-is-ended.md): a follower observes the coordinator, so a frozen coordinator is ended.
 - Superseded: [ADR 0001](./docs/adr/0001-a-joiner-follows-its-flight-record-without-acquiring-the-key.md), [ADR 0002](./docs/adr/0002-a-flight-that-all-callers-left-is-abandoned.md) and [ADR 0009](./docs/adr/0009-the-next-coordinator-skips-the-grace-window-after-a-clean-shutdown.md).
+
+**Copied code**: [Code copied from the mutex](./docs/copied-from-mutex.md): each copied file, what changed, and why; the rules that the single flight shares with the mutex; and the code that is in two places inside the single flight.
 
 ## Development
 
