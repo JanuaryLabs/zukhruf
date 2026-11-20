@@ -6,12 +6,12 @@ The words in these documents have one meaning each. See the glossary in [CONTEXT
 
 ## Use it
 
-This project is an experiment. It uses `node:sqlite`. The package does not start a model, a server or a process. Give it a vectors port that is ready, for example a `Collection` of [`@zukhruf/embeddings`](../embeddings).
+This project is an experiment. It uses `node:sqlite`. The package does not start a model, a server or a process. Give it a vectors port that is ready, for example a `Collection` of [`@zukhruf/embeddings`](../../embeddings).
 
 The parameters come from research rounds #3130 and #3152, and they are valid only with EmbeddingGemma 2 ([ADR 0001](./docs/adr/0001-the-parameters-are-frozen-by-research-round-3130.md), [ADR 0005](./docs/adr/0005-research-round-3152-adds-a-same-publisher-term-and-fits-the-weights-again.md)). Give the publisher of each report when you know it.
 
 ```sh
-npm install @zukhruf/event-detection @zukhruf/embeddings ai
+npm install @zukhruf/event-detection @zukhruf/embeddings ai @ai-sdk/openai-compatible
 ```
 
 ```ts
@@ -50,20 +50,12 @@ detector.events({ since: new Date('2026-10-14') });
 // [{ id: 0, members: ['a'], firstSeen: …, lastSeen: … }]
 ```
 
-## API
-
-- `new EventDetector({ database, vectors, design })`. The caller opens and closes `database`. The detector makes its tables `event_report` and `event_clock` in it. `vectors` is the port to the vectors of this detector only. `design` is the recipe of one research round. The vectors must come from the embedding model that `design.embeddingModel` names.
-- `design3152b` is the design of research round #3152b ([ADR 0005](./docs/adr/0005-research-round-3152-adds-a-same-publisher-term-and-fits-the-weights-again.md)). `Design` is its type.
-- `add(reports)` gives each new report an event. A report has an `id`, a `title`, a `body`, a `publishedAt` date and, when the caller knows it, a `publisher`. The detector gives the lead of each report that has one to `vectors.upsert`, as `{ id, text, publishedAt }`. Then it gives the reports their events, in the order of their publish dates. A report whose id the detector has already is skipped.
-- `events({ since })` gives the events with a report published at or after `since`, in the order of their first report. An event has an `id` (a number), its `members` (report ids, in the order of their publish dates), `firstSeen` and `lastSeen`.
-- `Vectors` is the type of the port: `upsert(documents)`, `nearest(id, { k, withinDays })`, `neighbourGraph({ from, to, k, withinDays })` and `similarity(a, b)`. A clustering asks for one neighbour graph of the window. The `Collection` of `@zukhruf/embeddings` has this shape, with no adapter.
-
 ## How it decides
 
 1. **Lead.** The detector takes the title and the first two real sentences of the body. A URL line, a byline or a caption is not a real sentence. A URL in a real sentence goes away.
 2. **Shortlist.** The 80 nearest reports, by similarity, from the reports of 7 publish days before or after.
 3. **Pair score.** A logistic regression on the similarity, the numbers that both reports give, the numbers that only one report gives, and the same publisher. The numbers come from the title and the whole body. Two reports of one publisher get a lower pair score. A report without a publisher is never of the same publisher as another report.
-4. **Online assignment.** A new report joins the event of its shortlist with the highest mean pair score, when it is at least 0.5. Otherwise it starts a new event.
+4. **Online assignment.** A new report joins the event of its shortlist with the highest mean pair score, when it is at least the threshold of the design. The threshold of `design3152b` is 0.45 ([ADR 0005](./docs/adr/0005-research-round-3152-adds-a-same-publisher-term-and-fits-the-weights-again.md)). Otherwise it starts a new event.
 5. **Clustering.** When the first report of a new publish day arrives, the detector clusters the window of the last publish day again, with group average. Each new cluster keeps the event id of the old event that it overlaps most ([ADR 0002](./docs/adr/0002-the-window-is-clustered-again-on-each-new-publish-day.md)).
 6. **Headline-only reports.** A report with no real sentence is alone in its event, always ([ADR 0003](./docs/adr/0003-a-headline-only-report-never-joins-another-report.md)).
 
@@ -97,15 +89,127 @@ Read [the limitations](./docs/limitations.md) before you use the events for a de
 - The parameters are valid only with EmbeddingGemma 2 and the vector text of round #3130.
 - One clustering of a window of 1,001 reports takes 1.0 s, of 3,500 reports 9.6 s, and of 14,000 reports 175 s, through the `Collection` of `@zukhruf/embeddings`. The cost grows with the square of the window size (limitation 21).
 
-## Decisions
+## API
+
+`design3152b` is the design of research round #3152b ([ADR 0005](./docs/adr/0005-research-round-3152-adds-a-same-publisher-term-and-fits-the-weights-again.md)). `Design` is its type. The `Collection` of `@zukhruf/embeddings` has the shape of `Vectors`, with no adapter.
+
+```ts
+import type { DatabaseSync } from 'node:sqlite';
+
+type Report = {
+  readonly id: string;
+  readonly title: string;
+  readonly body: string;
+  readonly publishedAt: Date;
+  // Without a publisher, a report is never of the same publisher as another report.
+  readonly publisher?: string;
+};
+
+type Event = {
+  readonly id: number;
+  readonly members: readonly string[]; // report ids, in the order of their publish dates
+  readonly firstSeen: Date;
+  readonly lastSeen: Date;
+};
+
+type EventDetectorOptions = {
+  readonly database: DatabaseSync; // the caller opens and closes it
+  readonly vectors: Vectors; // the vectors of this detector only
+  readonly design: Design; // the vectors must come from the model that design.embeddingModel names
+};
+
+class EventDetector {
+  // Makes the tables event_report, event_clock and event_segment in database.
+  constructor(options: EventDetectorOptions);
+  // Gives each new report an event, in the order of the publish dates. It
+  // gives the lead of each report that has one to vectors.upsert, as
+  // { id, text, publishedAt }. A report whose id the detector has already is skipped.
+  add(reports: readonly Report[]): Promise<void>;
+  // The events with a report published at or after since, in the order of their first report.
+  events(options: { readonly since: Date }): Event[];
+}
+
+interface Vectors {
+  upsert(
+    documents: readonly {
+      readonly id: string;
+      readonly text: string;
+      readonly publishedAt: Date;
+    }[],
+  ): Promise<void>;
+  // The k most similar documents within withinDays, the most similar first.
+  nearest(
+    id: string,
+    options: { readonly k: number; readonly withinDays: number },
+  ): readonly { readonly id: string; readonly similarity: number }[];
+  // A clustering asks for one neighbour graph of the window.
+  neighbourGraph(options: {
+    readonly from: Date;
+    readonly to: Date;
+    readonly k: number;
+    readonly withinDays: number;
+  }): Iterable<
+    readonly [
+      string,
+      readonly { readonly id: string; readonly similarity: number }[],
+    ]
+  >;
+  similarity(a: string, b: string): number; // the cosine similarity
+}
+
+// One term of the pair score. The package does not export this name.
+type Term = {
+  readonly weight: number;
+  readonly mean: number;
+  readonly sd: number;
+};
+
+type Design = {
+  readonly name: string;
+  readonly planSha256: string;
+  readonly embeddingModel: string;
+  readonly lead: {
+    readonly sentences: number;
+    readonly minWords: number;
+    readonly minLetterRatio: number;
+    readonly maxUrlShare: number;
+    readonly urlPattern: string; // a regular expression source that matches one URL
+    // With clean, the URLs go away from the body before the sentence split,
+    // and a template segment is in no lead and gives no number.
+    readonly clean?: {
+      // A segment is a template of its publisher when at least this many
+      // reports of the publisher hold it. Null: no segment is a template.
+      readonly templateReports: number | null;
+    };
+  };
+  readonly vectorText: string; // {title} and {lead}
+  readonly shortlistSize: number;
+  readonly windowDays: number;
+  readonly threshold: number;
+  readonly pairScore: {
+    readonly intercept: number;
+    readonly similarity: Term;
+    readonly agreeingNumbers: Term;
+    readonly disagreeingNumbers: Term;
+    readonly samePublisher: Term;
+    // The similarity of two reports of one publisher, and 0 for other pairs.
+    // Without it, the term is not in the score.
+    readonly samePublisherSimilarity?: Term;
+  };
+};
+
+const design3152b: Design;
+```
+
+## Documentation
 
 Before you change a parameter, the similarity source or the model, read ADR 0001, ADR 0004, ADR 0005 and the limitations. A change needs a new research round on the evaluation sets.
 
 Before you change a parameter, run `nx run event-detection:eval`, and run it again after the change. It scores the detector on the labelled sets and compares each score with the accepted designs ([eval/README.md](./eval/README.md)).
 
-- [ADR 0001: The parameters are frozen by research round #3130](./docs/adr/0001-the-parameters-are-frozen-by-research-round-3130.md)
-- [ADR 0002: The window is clustered again on each new publish day](./docs/adr/0002-the-window-is-clustered-again-on-each-new-publish-day.md)
-- [ADR 0003: A headline-only report never joins another report](./docs/adr/0003-a-headline-only-report-never-joins-another-report.md)
-- [ADR 0004: The similarity source is a port, and the parameters belong to one source](./docs/adr/0004-the-similarity-source-is-a-port-and-the-parameters-belong-to-one-source.md)
-- [ADR 0005: Research round #3152 adds a same-publisher term and fits the weights again](./docs/adr/0005-research-round-3152-adds-a-same-publisher-term-and-fits-the-weights-again.md)
+- [ADR 0001](./docs/adr/0001-the-parameters-are-frozen-by-research-round-3130.md): the parameters are frozen by research round #3130.
+- [ADR 0002](./docs/adr/0002-the-window-is-clustered-again-on-each-new-publish-day.md): the window is clustered again on each new publish day.
+- [ADR 0003](./docs/adr/0003-a-headline-only-report-never-joins-another-report.md): a headline-only report never joins another report.
+- [ADR 0004](./docs/adr/0004-the-similarity-source-is-a-port-and-the-parameters-belong-to-one-source.md): the similarity source is a port, and the parameters belong to one source.
+- [ADR 0005](./docs/adr/0005-research-round-3152-adds-a-same-publisher-term-and-fits-the-weights-again.md): research round #3152 adds a same-publisher term and fits the weights again.
 - [Limitations](./docs/limitations.md)

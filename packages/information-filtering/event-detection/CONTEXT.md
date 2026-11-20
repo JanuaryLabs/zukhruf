@@ -26,9 +26,21 @@ _Avoid_: Cluster id, group id
 The title and the first two real sentences of the body of a report.
 _Avoid_: Summary, snippet, excerpt
 
+**Lead rule**:
+The part of the design that makes the lead: the number of real sentences in it, and the tests that a segment must pass to be a real sentence. Without `clean`, the URLs go away inside each sentence, and the numbers come from the title and the whole body. With `clean`, the URLs go away from the body before the sentence split, so a "?" or a "." in a URL splits no sentence, and the numbers come from the title and the body without its URLs and its template segments.
+_Avoid_: Lead config, lead settings
+
+**Segment**:
+A piece of the body, before the real-sentence test. The detector splits the body into segments with `Intl.Segmenter` at the `'sentence'` granularity. A segment is a real sentence only when it passes the test.
+_Avoid_: Chunk, block, paragraph
+
 **Real sentence**:
 A sentence with at least 5 words, mostly letters, and with URLs in at most half of its characters. A URL line, a byline or a caption is not a real sentence.
 _Avoid_: Segment (for the result)
+
+**Template segment**:
+A segment that at least `templateReports` reports of one publisher hold, for example a banner, a promotion or a player widget of the site. A template segment is in no lead and gives no number, also in later adds. Only a clean lead rule with a `templateReports` value has template segments, and a report without a publisher has none. This is site-level template detection (Bar-Yossef and Rajagopalan, "Template detection via data mining and its applications", WWW 2002): text that many pages of one site share is not the content of a page.
+_Avoid_: Boilerplate, banner (for every template segment)
 
 **Headline-only report**:
 A report with no real sentence after its title. A paywall preview and a description-only page are examples. A headline-only report is always alone in its event.
