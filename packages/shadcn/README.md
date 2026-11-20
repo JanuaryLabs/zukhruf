@@ -59,6 +59,24 @@ The theme is the values of a set of CSS variables, for example `--primary`, `--b
 - The package sets the default theme in `@layer base`. A rule outside of a layer wins over it. A rule in `@layer base` that comes after the import also wins over it. Thus a host theme in a layer, for example the ChatGPT tokens of OpenAI, can set the variables. A rule in `@layer theme` loses, because Tailwind CSS declares `theme` before `base`. See [ADR 0005](./docs/adr/0005-the-default-theme-is-in-layer-base.md).
 - The `.dark` class switches to the dark theme. Put it on an element, usually `<html>`. The element and all elements in it then use the `.dark` variables.
 
+The `@theme inline` block of `theme.css` maps these variables to Tailwind CSS colors, so that a class such as `bg-primary` reads them:
+
+- `--background`, `--foreground`, `--card`, `--card-foreground`, `--popover`, `--popover-foreground`, `--primary`, `--primary-foreground`, `--secondary`, `--secondary-foreground`, `--muted`, `--muted-foreground`, `--accent`, `--accent-foreground`, `--destructive`, `--border`, `--input` and `--ring`.
+- `--chart-1` to `--chart-5`.
+- `--sidebar`, `--sidebar-foreground`, `--sidebar-primary`, `--sidebar-primary-foreground`, `--sidebar-accent`, `--sidebar-accent-foreground`, `--sidebar-border` and `--sidebar-ring`.
+
+`--radius` gives the radii `--radius-sm` to `--radius-4xl`. `theme.css` does not set or map `--destructive-foreground`, `--success`, `--warning` or `--font-heading`. Thus a class such as `text-destructive-foreground` or `bg-success` has no color. An app that needs such a variable sets it, and maps it in its own `@theme inline` block ([Tailwind CSS: theme variables](https://tailwindcss.com/docs/theme)):
+
+```css
+:root {
+  --success: oklch(0.6 0.15 150);
+}
+
+@theme inline {
+  --color-success: var(--success);
+}
+```
+
 The preset is fixed. The class strings of each component contain the preset, for example the rounded corners and the spacing of the dialog. Thus an app cannot change the preset. An app changes only the theme. See [ADR 0004](./docs/adr/0004-the-components-use-base-ui-and-the-nova-preset.md).
 
 ## The open state of the sidebar
@@ -150,6 +168,7 @@ Use `cn` around `buttonVariants`. `Button` merges the classes that conflict thro
   </DropdownMenuContent>
   ```
 
+- **Know that the stylesheet changes the `data-*` variants of your own classes too.** `theme.css` imports `shadcn/tailwind.css`, and its `@custom-variant` rules redefine `data-open`, `data-closed`, `data-checked`, `data-unchecked`, `data-selected`, `data-disabled`, `data-active`, `data-horizontal` and `data-vertical` (`node_modules/shadcn/dist/tailwind.css`, `shadcn@4.23.0`). Stock Tailwind CSS makes `data-selected:` match an element that has the attribute, with any value ([Tailwind CSS: data attributes](https://tailwindcss.com/docs/hover-focus-and-other-states#data-attributes)). With the stylesheet, `data-selected:` matches only `[data-selected="true"]`. `data-open:`, `data-closed:`, `data-checked:`, `data-unchecked:`, `data-disabled:` and `data-active:` do not match the value `"false"`, and all of them except `data-disabled:` also match the same value of `data-state`, for example `[data-state="open"]`. `data-horizontal:` and `data-vertical:` match `[data-orientation="horizontal"]` and `[data-orientation="vertical"]`. These rules apply to each class of the app, not only to the components. For a different value, write the full form, for example `data-[selected=false]:`.
 - **Show an error at the place where it occurs.** Show a form error or a field error next to the field or the action that failed, for example with `FieldError`. Show the error of a background task or of a mutation as a toast. Use `toast` and `Toaster` of this package, which use the toast of Base UI.
 
 ## Your own components
@@ -172,6 +191,30 @@ The package has one entry, `@zukhruf/shadcn`. It exports all components, all hoo
 - The stylesheet gives the classes of all components, also of the components that the app does not use. An app that uses only `Button` and `Dialog` got 212 kB of CSS (31 kB with gzip) on 2026-10-15.
 
 See [ADR 0002](./docs/adr/0002-one-entry-and-private-imports-between-the-components.md).
+
+## API
+
+The entry (`src/index.ts`) has one `export *` line for each file of 63 components, two hooks and one hand-written module. The component files are in `src/components`: `accordion`, `alert-dialog`, `alert`, `aspect-ratio`, `attachment`, `avatar`, `badge`, `breadcrumb`, `bubble`, `button-group`, `button`, `calendar`, `card`, `carousel`, `chart`, `checkbox`, `code-block`, `collapsible`, `combobox`, `command`, `context-menu`, `dialog`, `direction`, `drawer`, `dropdown-menu`, `empty`, `field`, `hover-card`, `input-group`, `input-otp`, `input`, `item`, `kbd`, `label`, `marker`, `menubar`, `message-scroller`, `message`, `native-select`, `navigation-menu`, `pagination`, `popover`, `progress`, `questionnaire`, `radio-group`, `resizable`, `scroll-area`, `select`, `separator`, `sheet`, `sidebar`, `skeleton`, `slider`, `spinner`, `switch`, `table`, `tabs`, `textarea`, `toast`, `toggle-group`, `toggle`, `tooltip` and `trace`. Each file holds the components of the registry item with the same name.
+
+The hooks and the hand-written module:
+
+```ts
+// src/hooks/use-mobile.ts
+// true when the window is narrower than 768px; it changes when the width crosses 768px.
+export function useIsMobile(): boolean;
+
+// src/hooks/use-highlighted-code.ts
+// One node for each line of `value`, highlighted with Shiki for `language`.
+// Until the highlighter of the language loads, each line is plain text.
+export function useHighlightedCode(
+  value: string,
+  language: string,
+): React.ReactNode[];
+
+// src/hand-written/sidebar-cookie.ts
+// The cookie in which SidebarProvider keeps its open state.
+export const SIDEBAR_COOKIE_NAME = 'sidebar_state';
+```
 
 ## Documentation
 

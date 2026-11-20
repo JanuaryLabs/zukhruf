@@ -32,6 +32,14 @@ _Avoid_: Vendored code (a person updates vendored code by hand), copy (each app 
 The run of `nx run shadcn:sync`. It writes the generated source again from the registry, with `shadcn@4.23.0`. A person reads the diff before a commit.
 _Avoid_: Update (npm updates dependencies), build (the build compiles the generated source), regenerate
 
+**RTL mode**:
+The mode of the shadcn CLI that writes logical classes in place of classes that name left or right, for example `ps-2.5` in place of `pl-2.5`. `"rtl": true` in `components.json` turns it on, and the sync uses it since commit 8bf86523. A test of `src/styles.test.ts` fails when the built CSS has no logical classes, so a sync without RTL mode fails.
+_Avoid_: RTL patch (no patch mirrors a component), mirror block, direction (`dir` and `DirectionProvider` set the direction of a page)
+
+**Logical class**:
+A Tailwind class that names a side by the direction of the text, not by left or right, for example `ps-2.5`, `end-2` and `text-start`. It sets a CSS logical property, for example `pe-8` sets `padding-inline-end` ([CSS Logical Properties and Values](https://www.w3.org/TR/css-logical-1/)). Thus a component mirrors itself in a right-to-left page.
+_Avoid_: RTL class (the class works in both directions), directional class
+
 **Patch**:
 A CSS rule in `styles.css`, in a layer, that changes what stock shadcn/ui does. There are three patches: the pointer cursor on buttons, the cap on the height of a dialog, and the width of the mobile sidebar. A utility class of an app still wins over the cursor and the cap. The width patch is in `@layer utilities`, because it must win over a utility class of the `Sheet`.
 _Avoid_: Override, hack
