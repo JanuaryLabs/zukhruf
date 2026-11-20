@@ -920,6 +920,57 @@ test(
 );
 
 test(
+  'an election that ref() starts after the master is killed with SIGKILL, and that fails while no channel waits for it, is a process warning',
+  { skip: noSshd },
+  async (t) => {
+    // Arrange: as above, this process joins the owner's master, unref'd, the
+    // owner dies, and the folder of the socket refuses the removal of the
+    // socket that the owner left: platform setup, as no operation of the
+    // package makes the removal fail. A session that fails to elect shows
+    // that the connection knows its master is gone.
+    const warned = Promise.withResolvers<string | Error>();
+    const emitWarning = t.mock.method(
+      process,
+      'emitWarning',
+      (warning: string | Error) => warned.resolve(warning),
+    );
+    await using directory = await new TemporaryFiles().directory('ssh-', {
+      parent: '/tmp',
+    });
+    await using sshd = await startSshd();
+    const file = await writeSharingConfig(directory.path, sshd);
+    const owner = await startOwner(
+      ['share', file, 'box', directory.path],
+      t.signal,
+    );
+    const config = await OpenSshConfig.resolve('box', {
+      flags: ['-F', file],
+      environment: { PATH: '/usr/bin:/bin', HOME: directory.path },
+    });
+    await using joined = await config.share({ clock: globalThis });
+    joined.unref();
+    await owner[Symbol.asyncDispose]();
+    await chmod(directory.path, 0o500);
+    let warning: string | Error;
+    try {
+      await assert.rejects(joined.newSession().output('echo ran'), {
+        code: 'EACCES',
+      });
+
+      // Act
+      joined.ref();
+      warning = await untilAborted(warned.promise, t.signal);
+    } finally {
+      await chmod(directory.path, 0o700);
+    }
+
+    // Assert
+    assert.equal(emitWarning.mock.callCount(), 1);
+    assert.ok(isErrno(warning, 'EACCES'));
+  },
+);
+
+test(
   'a connection whose master’s socket was removed, as a cleaner of /tmp removes one, elects again for its next session: it becomes the master, and its hold on the old master ends, so that master’s process exits by itself',
   { skip: noSshd },
   async (t) => {

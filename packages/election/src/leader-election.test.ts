@@ -320,6 +320,27 @@ describe('A term that its leader resigns', () => {
     assert.deepEqual(second, { error: failure });
     assert.deepEqual(election.steps.slice(-2), ['release 1', 'close 1']);
   });
+
+  test('a resign whose release fails and whose close fails too rejects with a SuppressedError of the close’s failure over the release’s', async () => {
+    // Arrange
+    const releasing = new Error('The backend refused the release');
+    const freeing = new Error('The connection to the backend is gone');
+    const election = new ScriptedElection(globalThis, {
+      releaseFails: releasing,
+      closeFails: freeing,
+    });
+    const term = await election.campaign();
+    assert.ok(term);
+
+    // Act
+    const result = await settle(term.resign());
+
+    // Assert
+    assert.ok('error' in result && result.error instanceof SuppressedError);
+    assert.equal(result.error.suppressed, releasing);
+    assert.equal(result.error.error, freeing);
+    assert.deepEqual(election.steps.slice(-2), ['release 1', 'close 1']);
+  });
 });
 
 describe('A term that its leader resigns clean', () => {

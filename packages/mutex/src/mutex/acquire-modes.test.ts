@@ -187,6 +187,117 @@ describe('Cancelling a wait', () => {
     assert.equal(ran, false, 'A caller that cancelled must not run its task');
   });
 
+  test('a key that arrives after its caller cancelled and whose give-back fails is a process warning, not an unhandled rejection', async (t) => {
+    // Arrange: a lock store whose grant waits for the gate, and whose release
+    // frees the key but then rejects, as a dead connection to a store can.
+    const emitWarning = t.mock.method(process, 'emitWarning', () => {});
+    const inner = new MemoryStore();
+    const gate = Promise.withResolvers<void>();
+    const failure = new Error('The lock store is gone');
+    const mutex = new Mutex({
+      acquire: async (key, options) => {
+        await gate.promise;
+        const handle = await inner.acquire(key, options);
+        return {
+          token: handle.token,
+          signal: handle.signal,
+          [Symbol.asyncDispose]: async () => {
+            await handle[Symbol.asyncDispose]();
+            throw failure;
+          },
+        };
+      },
+      tryAcquire: (key) => inner.tryAcquire(key),
+      isHeld: (key) => inner.isHeld(key),
+    });
+    const unheeding: AcquireMode<'always'> = {
+      outcome: 'always',
+      acquire: (store, key) => store.acquire(key),
+    };
+    const cancel = new AbortController();
+    const reason = new Error('cancelled');
+    const cancelled = mutex.acquire('report:daily', async () => {}, {
+      mode: unheeding,
+      signal: cancel.signal,
+    });
+
+    // Act: the caller cancels, and then the key arrives.
+    cancel.abort(reason);
+    await assert.rejects(cancelled, (error) => error === reason);
+    gate.resolve();
+
+    // Assert
+    await waitFor(() => assert.equal(emitWarning.mock.callCount(), 1), {
+      signal: t.signal,
+    });
+    assert.deepEqual(
+      emitWarning.mock.calls.map((call) => call.arguments),
+      [[failure]],
+    );
+    assert.equal(await inner.isHeld('report:daily'), false);
+  });
+
+  test('an acquire that fails after its caller cancelled, with an error other than the reason, is a process warning', async (t) => {
+    // Arrange: a mode that ignores the signal and then fails on its own.
+    const emitWarning = t.mock.method(process, 'emitWarning', () => {});
+    const mutex = new Mutex(new MemoryStore());
+    const gate = Promise.withResolvers<void>();
+    const failure = new Error('The lock store refused the key');
+    const failing: AcquireMode<'always'> = {
+      outcome: 'always',
+      acquire: async () => {
+        await gate.promise;
+        throw failure;
+      },
+    };
+    const cancel = new AbortController();
+    const reason = new Error('cancelled');
+    const cancelled = mutex.acquire('report:daily', async () => {}, {
+      mode: failing,
+      signal: cancel.signal,
+    });
+
+    // Act
+    cancel.abort(reason);
+    await assert.rejects(cancelled, (error) => error === reason);
+    gate.resolve();
+
+    // Assert
+    await waitFor(() => assert.equal(emitWarning.mock.callCount(), 1), {
+      signal: t.signal,
+    });
+    assert.deepEqual(
+      emitWarning.mock.calls.map((call) => call.arguments),
+      [[failure]],
+    );
+  });
+
+  test('an acquire that stops with the caller’s own reason has nothing to give back, and warns of nothing', async (t) => {
+    // Arrange: the built-in wait passes the signal on, so the lock store
+    // rejects with the caller's reason.
+    const emitWarning = t.mock.method(process, 'emitWarning', () => {});
+    const mutex = new Mutex(new MemoryStore());
+    const holder = await hold(mutex, 'report:daily');
+    const cancel = new AbortController();
+    const reason = new Error('cancelled');
+    const cancelled = mutex.acquire('report:daily', async () => {}, {
+      mode: Modes.wait(),
+      signal: cancel.signal,
+    });
+
+    try {
+      // Act
+      cancel.abort(reason);
+      await assert.rejects(cancelled, (error) => error === reason);
+      await delay(settle);
+
+      // Assert
+      assert.deepEqual(emitWarning.mock.calls, []);
+    } finally {
+      await holder.release();
+    }
+  });
+
   test('a caller that cancels after its task started gets the task value, and holds the key until the task ends', async () => {
     // Arrange
     const mutex = new Mutex(new MemoryStore());
