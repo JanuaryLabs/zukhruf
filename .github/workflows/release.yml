@@ -73,6 +73,10 @@ jobs:
         env:
           TESTED: ${{ github.event.workflow_run.head_sha }}
         run: |
+          # nx release runs here through its Node API, not npx, so the shell
+          # that runs the preVersionCommand needs node_modules/.bin on PATH
+          # to find nx ("/bin/sh: nx: not found" in run 44767683501).
+          export PATH="$GITHUB_WORKSPACE/node_modules/.bin:$PATH"
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           node --input-type=module - <<'EOF'
@@ -143,6 +147,10 @@ jobs:
       # or published from main.
       - name: Merge the release into main
         run: |
+          # nx release runs here through its Node API, not npx, so a command
+          # it spawns finds the workspace's tools only with node_modules/.bin
+          # on PATH, as the release job's version step does.
+          export PATH="$GITHUB_WORKSPACE/node_modules/.bin:$PATH"
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           for _ in 1 2 3 4 5; do
