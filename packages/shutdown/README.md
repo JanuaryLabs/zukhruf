@@ -4,6 +4,12 @@ A graceful shutdown for a Node.js program. When the user presses Ctrl-C, or Dock
 
 The words in these documents have one meaning each. See the glossary in [CONTEXT.md](./CONTEXT.md).
 
+## Use it
+
+```sh
+npm install @zukhruf/shutdown
+```
+
 ## Stop the work at a termination signal
 
 Make one `Shutdown` at the start of the entry point, before the first `await`. Then a termination signal during the start also stops the work. Give the signal to the work:
@@ -26,7 +32,7 @@ The user presses Ctrl-C while the pipeline runs. Then:
 
 SIGINT, SIGTERM and SIGHUP start a shutdown. SIGQUIT does not: Ctrl-\ keeps its default action, which ends the process and writes a core dump.
 
-## What the parent sees
+## Read what the parent sees
 
 | Cause of the shutdown                          | Exit status                                          |
 | ---------------------------------------------- | ---------------------------------------------------- |
@@ -37,7 +43,7 @@ SIGINT, SIGTERM and SIGHUP start a shutdown. SIGQUIT does not: Ctrl-\ keeps its 
 
 An exit code of 130 is not the same as a death by SIGINT. A Bash script stops its loop only when the child died by SIGINT. In a terminal, `node app.js && next` runs `next` after Ctrl-C when `app.js` exits with 0. When `app.js` dies by SIGINT, zsh stops the whole line. A parent that calls `waitpid()` sees the difference too: Node.js gives `signal: 'SIGINT'`, not `code: 130`.
 
-## A second stop request
+## Handle a second stop request
 
 The first stop request removes the termination signal listeners of the package. Thus a second termination signal gets the default action, and the process ends at once. Use this when the cleanup does not end. For example, a read from a pipe that no program writes waits in the thread pool of Node.js, and no signal can stop it. The second Ctrl-C ends the process.
 
@@ -51,7 +57,7 @@ The package has no timer. The supervisor owns the deadline of a shutdown:
 | systemd    | 90 s, then SIGKILL (`TimeoutStopSec`)                |
 | Nx         | 5 s, then SIGKILL (`NX_PROCESS_KILL_GRACE_PERIOD`)   |
 
-## A crash
+## Handle a crash
 
 A crash is an exception that no code catches, or a rejection that no code handles. Without the package, Node.js writes the error and ends the process at once. With the package, a crash is a stop request:
 
@@ -91,17 +97,21 @@ With `init: true`, tini is PID 1. The program dies by the signal, and tini gives
 The package does not stop a server. Node.js does most of it. An `http.Server` is `AsyncDisposable`, and `server.close()` stops new connections and closes the idle ones:
 
 ```ts
-import { aborted } from 'node:util';
+import { once } from 'node:events';
 
 import { Shutdown } from '@zukhruf/shutdown';
 
 using shutdown = new Shutdown();
 await using server = serve({ fetch: app.fetch, port });
-await aborted(shutdown.signal, server);
+if (!shutdown.signal.aborted) {
+  await once(shutdown.signal, 'abort');
+}
 setTimeout(() => server.closeAllConnections(), 1_000).unref();
 ```
 
-`util.aborted()` also settles when the signal aborted before the call. `events.once(signal, 'abort')` does not.
+Check `signal.aborted` before the wait. A signal that aborted before the call emits no `'abort'` event again, so `events.once(signal, 'abort')` alone waits forever.
+
+Do not wait with `util.aborted(signal, resource)` on a resource that nothing else holds. `util.aborted()` holds its resource weakly: when a garbage collection takes the resource before the signal aborts, the promise never settles ([Node.js docs](https://nodejs.org/api/util.html#utilabortedsignal-resource)). In #3929, the websets app of context-compiler waited with `util.aborted(ends, collections)`, and after a garbage collection took the array, the process stayed alive until a second SIGINT. The fix waits on the signal itself (context-compiler commit `2d8c016`). The recipe [Stop an HTTP server at a termination signal](./docs/recipes/stop-an-http-server-at-a-termination-signal.md) shows a full program.
 
 A probe on Node.js 26.10.0 compared this with `stoppable`, which `@godaddy/terminus` uses:
 
@@ -123,6 +133,21 @@ Node.js keeps a connection that becomes idle after the call to `close()` until `
 - Stop child processes. `@zukhruf/coprocess` stops them.
 - A choice of termination signals. A program that must live on after its terminal closes runs under a supervisor or in tmux, not under `nohup`: a listener for SIGHUP replaces the ignore of `nohup`.
 - Windows. Windows has no POSIX signals.
+
+## Who uses it
+
+Each consumer below is an entry point that makes one `Shutdown`. The package itself is backlog #3579.
+
+| Consumer                                                 | How                                                                                                                                                                                                              | Record                                   |
+| -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
+| context-compiler: logful (`apps/logful/src/main.ts`)     | `pipeline.run({ signal: shutdown.signal })`. It replaced an `AbortController` for the termination signals that exited with code 0.                                                                               | #3580, context-compiler commit `9ea2c89` |
+| context-compiler: startup-credits                        | `AbortSignal.any([shutdown.signal, failed.signal])` is the signal of its loops. It throws the failure when only `failed` aborted. It replaced the same `AbortController`.                                        | #3580, context-compiler commit `9ea2c89` |
+| context-compiler: what-is-going-on                       | `await aborted(shutdown.signal, server)`, then `server.close()`. It replaced the same `AbortController`.                                                                                                         | #3580, context-compiler commit `9ea2c89` |
+| context-compiler: the MCP server of the Codex plugin     | `new Shutdown()` for the life of the process, with no dispose. A listener for `'abort'` on `shutdown.signal` calls `mcpServer.close()`. It replaced the same `AbortController`.                                  | #3580, context-compiler commit `9ea2c89` |
+| context-compiler: websets                                | `AbortSignal.any([shutdown.signal, failed.signal])` is the signal of its queue jobs and its loops. `await aborted(watching, server)`, then `server.close()`.                                                     | context-compiler commit `e9350c6`, #3929 |
+| context-compiler: ambient (`apps/ambient/src/server.ts`) | `Promise.race([aborted(shutdown.signal, server), observer.failure])`, then `server.close()` in a `finally` block.                                                                                                | context-compiler commit `673c1ae`        |
+| context-compiler: ipay                                   | `pipeline.watch({ signal: shutdown.signal })`.                                                                                                                                                                   | context-compiler commit `e30e754`        |
+| elt: the proactive app                                   | `pipeline.run({ signal: shutdown.signal })` and `automations.run(shutdown.signal)`. Its `await using` stack closes the Postgres clients before the process dies by the signal. It replaced an `AbortController`. | #3581, elt commit `aed72903`             |
 
 ## The same concepts in other systems
 
@@ -171,13 +196,3 @@ export class Shutdown implements Disposable {
 - [ADR 0001](./docs/adr/0001-the-process-dies-by-its-termination-signal-after-the-cleanup.md): the process dies by its termination signal after the cleanup.
 - [ADR 0002](./docs/adr/0002-only-the-first-stop-request-starts-a-shutdown.md): only the first stop request starts a shutdown.
 - [ADR 0003](./docs/adr/0003-a-crash-starts-a-shutdown.md): a crash starts a shutdown.
-
-## Who uses each part
-
-The consumers below come from the search of 2026-11-02. None of them dies by the termination signal today. The package itself is backlog mutex #3579.
-
-| Consumer                                                                 | Uses                          | Backlog                |
-| ------------------------------------------------------------------------ | ----------------------------- | ---------------------- |
-| context-compiler: logful, startup-credits and its eval, what-is-going-on | `signal`, the exit status     | context-compiler #3580 |
-| context-compiler: the MCP server of the Codex plugin                     | `signal`, to close the server | context-compiler #3580 |
-| elt: the proactive app                                                   | `signal`, the exit status     | elt #3581              |

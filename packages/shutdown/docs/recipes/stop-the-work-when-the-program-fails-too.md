@@ -115,9 +115,9 @@ exit status: code 1, signal null
 
 - **`AbortSignal.any()` aborts when one of its signals aborts.** Each loop sees one signal, and it does not have to know which cause stopped it ([MDN](https://developer.mozilla.org/en-US/docs/Web/API/AbortSignal/any_static)).
 - **The throw ends the scope of the `Shutdown` first.** The `using` scope ends before the error leaves the block. With no stop request, the end of the scope removes the listeners of the package. Then Node.js gets the error with its default: it writes the error and exits with code 1 ([Stop at the end of a scope](../../README.md#stop-at-the-end-of-a-scope)).
-- **`!shutdown.signal.aborted` keeps a stop request from looking like a failure.** A loop can fail because the stop ended its work, for example with an `AbortError`. Then `failed` aborts too, but the cause is the stop request. Without the check, the program throws during a shutdown. The package then writes the error as a crash and ends the process at once, by the termination signal ([A crash](../../README.md#a-crash)).
+- **`!shutdown.signal.aborted` keeps a stop request from looking like a failure.** A loop can fail because the stop ended its work, for example with an `AbortError`. Then `failed` aborts too, but the cause is the stop request. Without the check, the program throws during a shutdown. The package then writes the error as a crash and ends the process at once, by the termination signal ([Handle a crash](../../README.md#handle-a-crash)).
 
 ## Things to know
 
-- **The exit status follows the cause.** A termination signal gives a death by the signal, and a failure gives exit code 1. See [What the parent sees](../../README.md#what-the-parent-sees).
+- **The exit status follows the cause.** A termination signal gives a death by the signal, and a failure gives exit code 1. See [Read what the parent sees](../../README.md#read-what-the-parent-sees).
 - **A crash is not a failure of the program.** An exception that no code catches is a stop request, and the signal of the `Shutdown` aborts for it ([ADR 0003](../adr/0003-a-crash-starts-a-shutdown.md)). `failed` is for the errors that the program catches.
