@@ -4,6 +4,12 @@ A lease gives one holder the right to act for a subject, for example a key of a 
 
 The words in these documents have one meaning each. See the glossary in [CONTEXT.md](./CONTEXT.md).
 
+## Use it
+
+```sh
+npm install @zukhruf/lease
+```
+
 ## A lease is a signal
 
 A holder gets a `Lease`. A lease has one property: `signal`, an `AbortSignal`.
@@ -69,15 +75,19 @@ controller.end();
 - `end()` never aborts the signal. After `end()`, `lose` does nothing: the holder gave the right up, so it cannot lose it. A loss that the issuer sees late, after the release, does not reach the holder.
 - `end()` can be called again. It keeps the reason of an earlier loss.
 
-## A lease lasts for a session, not for a time
+## Errors
 
-In many systems, a lease ends after a time unless the holder renews it. A lease of zukhruf has no timer. It ends when the holder releases it, or when the holder's process stops: the operating system then frees the claim of that process. It is lost when the issuer decides that another holder may have the right, for example when a coordinator refuses the claim after a failover. Thus this package has no timer and no renew.
+| Error            | When                                                                                                                                                                                                                                                      |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `LeaseLostError` | The reason of `lease.signal` when another holder may have the right. `lose(cause?)` of the `LeaseController` aborts the signal with it. Its `subject` names what the lease gave the right to, and its `cause`, when there is one, is what the issuer saw. |
 
-## A lease warns the holder. It does not protect a resource
+## What the package does not do
 
-A holder can stop for some time, for example in a long garbage collection, and then write. In that time, the issuer can see the loss and give the right to another holder. The holder writes before it checks its signal. Thus the signal is a warning, not a protection.
+- **A lease lasts for a session, not for a time.** In many systems, a lease ends after a time unless the holder renews it. A lease of zukhruf has no timer. It ends when the holder releases it, or when the holder's process stops: the operating system then frees the claim of that process. It is lost when the issuer decides that another holder may have the right, for example when a coordinator refuses the claim after a failover. Thus this package has no timer and no renew. See [ADR 0001](./docs/adr/0001-a-lease-is-its-own-package-apart-from-fencing.md).
+- **It has no events.** A holder listens to the `abort` event of the signal ([ADR 0001](./docs/adr/0001-a-lease-is-its-own-package-apart-from-fencing.md)).
+- **A lease warns the holder. It does not protect a resource.** A holder can stop for some time, for example in a long garbage collection, and then write. In that time, the issuer can see the loss and give the right to another holder. The holder writes before it checks its signal. Thus the signal is a warning, not a protection.
 
-To protect a resource, use a fencing token. The resource keeps the highest token that it accepted, and it refuses a write with a lower token. Fencing tokens are in [`@zukhruf/fencing`](../fencing). A lease and a fencing token are two concepts: some systems use a lease with no token, and others use a token with no lease. See [ADR 0001](./docs/adr/0001-a-lease-is-its-own-package-apart-from-fencing.md).
+  To protect a resource, use a fencing token. The resource keeps the highest token that it accepted, and it refuses a write with a lower token. Fencing tokens are in [`@zukhruf/fencing`](../fencing). A lease and a fencing token are two concepts: some systems use a lease with no token, and others use a token with no lease. See [ADR 0001](./docs/adr/0001-a-lease-is-its-own-package-apart-from-fencing.md).
 
 ## The same concepts in other systems
 
@@ -90,3 +100,27 @@ To protect a resource, use a fencing token. The resource keeps the highest token
 | `lose(cause)` keeps the first reason | Go `cancel(cause)`: a second call does nothing; `AbortController.abort(reason)`: a second call does nothing                                                                                      |
 
 The leases of Gray and Cheriton, Kubernetes, and etcd last for a time, and the holder renews them. The leases of zukhruf last for a session.
+
+## API
+
+```ts
+interface Lease {
+  readonly signal: AbortSignal; // aborts once, with a LeaseLostError; never on a release
+}
+
+class LeaseController {
+  constructor(subject: string);
+  get signal(): AbortSignal;
+  lose(cause?: unknown): void;
+  end(): void;
+}
+
+class LeaseLostError extends Error {
+  readonly subject: string;
+  constructor(subject: string, options?: ErrorOptions);
+}
+```
+
+## Documentation
+
+- [ADR 0001](./docs/adr/0001-a-lease-is-its-own-package-apart-from-fencing.md): a lease is its own package, apart from fencing.
