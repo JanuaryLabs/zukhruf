@@ -4,7 +4,7 @@ Git hooks written in TypeScript. A pre-commit hook runs steps in order against t
 
 The words in these documents have one meaning each. See the glossary in [CONTEXT.md](./CONTEXT.md).
 
-## Install the hook
+## Use it
 
 Add the package and the repo's own Prettier:
 
@@ -222,8 +222,16 @@ interface Commit {
   generate(
     globs: readonly string[],
     work: (snapshot: PackagedSnapshot) => Promise<void>,
-  ): Promise<readonly DiffEntry[]>;
+  ): Promise<Generated>;
 }
+
+type Generated =
+  | { readonly kind: 'staged'; readonly entries: readonly DiffEntry[] }
+  | {
+      readonly kind: 'not-staged'; // a partial commit
+      readonly entries: readonly DiffEntry[];
+      readonly reason: string;
+    };
 
 interface Push {
   readonly remote: { readonly name: string; readonly url: string };
@@ -352,7 +360,9 @@ A step that writes files calls `commit.generate(globs, work)`. `work` runs in a 
 
 The hook also writes each staged file into the working tree, or deletes it there, but only when the working-tree copy still equals the old staged copy. Thus `git status` stays clean. When the working-tree copy holds another edit, the hook leaves it. It prints a line that names the file, under the name of the step.
 
-When `work` throws, `generate` stages nothing and throws the same error. In a partial commit, such as `git commit --only` or `git commit <paths>`, git commits its real index after the hook, so a file that the hook staged would be in the commit but not in the index. There, `generate` writes the working-tree copies by the same rule, stages nothing, and gives `{ kind: 'not-staged', entries, reason }`: the reason names the files and the command that adds them to the commit.
+When `work` throws, `generate` stages nothing and throws the same error. The hook stages the files with one `git update-index`, which takes the lock of the index. When another git process holds that lock, such as a peer's `git add`, `generate` stages nothing and throws `another git process holds the lock of the index, so the hook could not stage what it generated; commit again`. The working-tree copies are written before that update, so they stay written. Commit again when the other process ends.
+
+In a partial commit, such as `git commit --only` or `git commit <paths>`, git runs the hook with a temporary index, `next-index-<pid>.lock`. Git commits that index and then drops it, so a file that the hook staged there would be in the commit but not in the index of the repo. There, `generate` writes the working-tree copies by the same rule, stages nothing, and gives `{ kind: 'not-staged', entries, reason }`: the reason names the files and the command that adds them to the commit.
 
 ```ts
 import { type Commit, Step } from '@zukhruf/git-hooks';
@@ -439,7 +449,7 @@ chmod +x .husky/pre-push.ts
 ln -s pre-push.ts .husky/pre-push
 ```
 
-The hook uses `await` at the top level, so Node must read it as a module. When `package.json` has no `"type": "module"`, name the file `pre-push.mts`, and link to that name. The `prepare` script in [Install the hook](#install-the-hook) tells git where both hooks are.
+The hook uses `await` at the top level, so Node must read it as a module. When `package.json` has no `"type": "module"`, name the file `pre-push.mts`, and link to that name. The `prepare` script in [Use it](#use-it) tells git where both hooks are.
 
 Git gives the hook the name and the URL of the remote, and one line for each ref that the push changes. `prePush` reads them into a `Push`. It runs the steps in order and prints the outcome of each step. At the first fail, the push stops.
 
@@ -505,7 +515,7 @@ build     waiting for another pre-push build in this repo
 
 ## Where a step runs its tools
 
-A step runs its tools in a snapshot: a clone of the repo in a temporary folder outside the repo, with the files of one commit. Both hooks make it in the same way. The hook makes the clone with `git clone --shared --no-checkout`, and then runs `git checkout --detach <sha>` in it. For the staged commit, the hook first writes a commit of the staged tree with `git commit-tree`, with `HEAD` as its parent, and with an author, a committer and a date that do not change. Thus one tree and one parent always give the same commit. No ref holds that commit, and `git gc` prunes it. The clone shares the object store of the repo through `objects/info/alternates`, so git copies no objects. The snapshot holds what the commit holds, and nothing that is only in the working tree. A file that `.gitignore` names, such as `.env`, is not in the snapshot. Git writes the files of the commit as in each checkout: it makes the links and the executable files, and it applies `.gitattributes` and the filters of your git config. The clone and the checkout run none of your git hooks: they run with `core.hooksPath` set to a folder with no hooks, so a hook that your global or system git config names, such as `post-checkout` or `reference-transaction`, does not run in the snapshot.
+A step runs its tools in a snapshot: a clone of the repo in a temporary folder outside the repo, with the files of one commit. The hook makes a folder whose name starts with `git-hooks-snapshot-` in `os.tmpdir()`, with `TemporaryFiles` of [@zukhruf/fs](../fs/README.md), and checks the commit out in its `tree` subfolder. Both hooks make it in the same way. The hook makes the clone with `git clone --shared --no-checkout`, and then runs `git checkout --detach <sha>` in it. For the staged commit, the hook first writes a commit of the staged tree with `git commit-tree`, with `HEAD` as its parent, and with an author, a committer and a date that do not change. Thus one tree and one parent always give the same commit. No ref holds that commit, and `git gc` prunes it. The clone shares the object store of the repo through `objects/info/alternates`, so git copies no objects. The snapshot holds what the commit holds, and nothing that is only in the working tree. A file that `.gitignore` names, such as `.env`, is not in the snapshot. Git writes the files of the commit as in each checkout: it makes the links and the executable files, and it applies `.gitattributes` and the filters of your git config. The clone and the checkout run none of your git hooks: they run with `core.hooksPath` set to a folder with no hooks, so a hook that your global or system git config names, such as `post-checkout` or `reference-transaction`, does not run in the snapshot.
 
 nx and the other tools run in the snapshot, and git commands in them work there. The snapshot is a repo of its own, so git sees a clean checkout of the commit, with no changed and no untracked files. `nx affected --base --head` works, because git finds the base commit through the shared object store.
 
@@ -600,7 +610,7 @@ chmod +x .husky/commit-msg.ts
 ln -s commit-msg.ts .husky/commit-msg
 ```
 
-When `package.json` has no `"type": "module"`, name the file `commit-msg.mts`, and link to that name. The `prepare` script in [Install the hook](#install-the-hook) tells git where the hooks are.
+When `package.json` has no `"type": "module"`, name the file `commit-msg.mts`, and link to that name. The `prepare` script in [Use it](#use-it) tells git where the hooks are.
 
 Git gives the hook the file that holds the message. `commitMsg` reads it into a `CommitMessage`, without the comment lines of the editor. It runs the steps in order and prints the outcome of each step. At the first fail, the commit stops.
 
@@ -862,3 +872,15 @@ function commitMsg(
 ```
 
 `Commit`, `Push`, `CommitMessage`, `Tree`, `Snapshot` and `PackagedSnapshot` are classes in `src/`, but a step gets them from the hook and never builds one ([src/index.ts](./src/index.ts)). The three `@zukhruf/git-hooks/testing` functions share their names with the hook functions, and take the root and the hook environment that a test gives ([src/testing.ts](./src/testing.ts)).
+
+## Documentation
+
+**Decisions**
+
+- [ADR 0001](./docs/adr/0001-a-hook-reads-the-staged-commit-and-stages-only-what-its-steps-wrote.md): a hook reads the staged commit, and stages only the files that its steps wrote.
+- [ADR 0002](./docs/adr/0002-a-pre-push-step-builds-the-pushed-commit-in-a-snapshot.md): a pre-push step builds the pushed commit in a snapshot, not the working tree.
+- [ADR 0003](./docs/adr/0003-a-commit-msg-step-asks-the-parser-of-the-repos-own-nx.md): a commit-msg step asks the parser of the repo's own nx.
+- [ADR 0004](./docs/adr/0004-a-step-reads-a-tree-and-runs-its-tools-in-a-snapshot.md): a step reads a tree, and runs its tools in a snapshot without the git variables of the repo.
+- [ADR 0005](./docs/adr/0005-install-rules-are-read-from-the-staged-lockfile.md): two install rules of the monorepo standard are read from the staged lockfile.
+
+**Copied code**: [Code copied in this package](./docs/copied-code.md) records each copy of code in this package, as the Rule of Three asks.
