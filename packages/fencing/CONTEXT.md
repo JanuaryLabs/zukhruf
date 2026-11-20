@@ -4,6 +4,22 @@ A holder can lose its lease and not know it, for example when its process freeze
 
 ## Language
 
+**Key**:
+The name of the thing that the tokens protect, for example a row, a file or an object. Tokens of one key, from one token source, can be compared. Tokens of different keys cannot.
+_Avoid_: Resource name, lock name, lock ID
+
+**Holder**:
+The code that has a lease for a key now. See the glossary of [`@zukhruf/lease`](../lease/CONTEXT.md).
+_Avoid_: Owner, client
+
+**Issuer**:
+The code that grants a key and gives the lease to the holder, for example a mutex or a single flight. It asks its token source for the token of each grant.
+_Avoid_: Grantor, provider
+
+**Grant**:
+An issuer gives a lease for a key to one holder. Each grant gets one fencing token.
+_Avoid_: Allow, assign
+
 **Fencing token**:
 An integer that a holder gets with each grant. Each grant of a key gets a token that is higher than the tokens of all earlier grants of that key. The holder sends its token with each write to a fenced resource.
 _Avoid_: Version, revision, lock ID, UUID, timestamp (a token is not a time)

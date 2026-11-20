@@ -139,6 +139,15 @@ async function sell(lease: FencedLease, product: string) {
 
 A resource can refuse a stale holder only when the tokens of one key are strictly in the order of the grants. A random value or a UUID has no order. A UUIDv7 has an order by time only to the millisecond, and it is random in that millisecond. In a test in Node 26, 50,160 of 100,000 UUIDv7 values from one thread were lower than the value before them. A clock of the wall can go back. See [ADR 0001](./docs/adr/0001-a-fencing-token-is-a-number-the-resource-checks.md).
 
+## Errors
+
+| Error                 | When                                                                                                                                                                                                                                                                                                            |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `EpochExhaustedError` | `next` of an `EpochTokenSource` rejects with it when the epoch gave all its 2^32 − 1 tokens. It is a `RangeError` with the `epoch`. End the term: only a higher epoch gives more tokens ([src/epoch-exhausted-error.ts](./src/epoch-exhausted-error.ts), commit `4ac20e1a`).                                    |
+| `RangeError`          | `new EpochTokenSource(epoch)` throws it when the epoch is outside [0, 2^31) ([src/token-sources.test.ts](./src/token-sources.test.ts)).                                                                                                                                                                         |
+| `SyntaxError`         | `next` of a `FileTokenSource` rejects with it when the counter file of the key holds text that is not decimal digits. The message names the file, and the file stays as it is (commit `402d363f`, [src/token-sources.test.ts](./src/token-sources.test.ts)).                                                    |
+| A disk error          | `next` of a `FileTokenSource` rejects with the error of the file system, for example `EIO`, when the token cannot reach the disk. It uses up no token, and it leaves no draft behind: the directory lists the same files as before the call ([src/file-token-source.test.ts](./src/file-token-source.test.ts)). |
+
 ## The same concepts in other systems
 
 | This package                  | Other systems                                                                                                    |
@@ -147,3 +156,48 @@ A resource can refuse a stale holder only when the tokens of one key are strictl
 | The resource checks the token | Chubby `CheckSequencer()`; an SQL `UPDATE … WHERE fence <= ?`                                                    |
 | `EpochTokenSource`            | ZooKeeper `zxid`: epoch in the high 32 bits, counter in the low 32 bits; Raft term; Kafka leader epoch           |
 | `FencedLease`                 | Hazelcast `FencedLock`; etcd `concurrency.Mutex` with its session and the revision of its key                    |
+
+## API
+
+```ts
+class FencingToken {
+  constructor(value: bigint);
+  readonly value: bigint;
+  static parse(text: string): FencingToken | null; // null unless the text is decimal digits
+  isNewerThan(other: FencingToken): boolean; // this.value > other.value
+  toString(): string; // the decimal digits
+}
+
+interface TokenSource {
+  next(key: string): Promise<FencingToken>;
+}
+
+interface MonotonicClock {
+  hrtime: { bigint(): bigint };
+}
+
+interface FencedLease extends Lease {
+  readonly token: FencingToken;
+}
+
+class CounterTokenSource implements TokenSource {}
+
+class MonotonicClockTokenSource implements TokenSource {
+  constructor({ clock }: { clock: MonotonicClock }); // clock: process in production
+}
+
+class FileTokenSource implements TokenSource {
+  constructor(directory: string, { clock }: { clock: Clock }); // clock: globalThis in production
+}
+
+class EpochTokenSource implements TokenSource {
+  constructor(epoch: bigint); // RangeError: unless 0 <= epoch < 2^31
+}
+
+class EpochExhaustedError extends RangeError {
+  constructor(epoch: bigint);
+  readonly epoch: bigint;
+}
+```
+
+`Lease` is the type of `@zukhruf/lease`, and `Clock` is the type of `@zukhruf/async`.
