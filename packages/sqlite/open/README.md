@@ -146,7 +146,99 @@ A bundler that bundles this package does not copy the `lib` folder. A bundle tha
 | Rails 8               | A SQLite database gets a write-ahead log, `journal_size_limit = 67108864` and `synchronous = NORMAL` by default.                        |
 | `sqlite3 -readonly`   | It opens a reader. A missing file fails with "unable to open database file", the text of CANTOPEN.                                      |
 
+## API
+
+```ts
+// The options of new DatabaseSync of node:sqlite, without open and readOnly.
+type Settings = Omit<DatabaseSyncOptions, 'open' | 'readOnly'>;
+
+// A reader: a read-only connection that never changes the database.
+type ReaderOptions = Settings & {
+  readonly readOnly: true;
+  readonly journal?: never;
+};
+
+// The connection of the owner, which writes the database and sets its journal.
+type OwnerOptions = Settings & {
+  readonly readOnly?: false;
+  readonly journal?: Journal; // default: new WriteAheadLog()
+};
+
+// A reader with readOnly: true, else an owner. The busy timeout is 5000
+// milliseconds unless the caller gives timeout.
+function open(
+  path: ConstructorParameters<typeof DatabaseSync>[0],
+  options?: ReaderOptions | OwnerOptions,
+): DatabaseSync;
+
+interface Journal {
+  apply(database: DatabaseSync): void;
+}
+
+// A page size that SQLite accepts: a power of two from 512 to 65536.
+type PageSize = 512 | 1024 | 2048 | 4096 | 8192 | 16384 | 32768 | 65536;
+
+class WriteAheadLog implements Journal {
+  constructor(options?: {
+    readonly pageSize?: PageSize; // default: the page size of SQLite
+    readonly synchronous?: 'normal' | 'full'; // default: 'normal'
+  });
+  apply(database: DatabaseSync): void;
+}
+
+class PersistentWriteAheadLog implements Journal {
+  constructor(options?: {
+    readonly pageSize?: PageSize;
+    readonly synchronous?: 'normal' | 'full';
+  });
+  apply(database: DatabaseSync): void;
+}
+
+class RollbackJournal implements Journal {
+  apply(database: DatabaseSync): void;
+}
+
+class UnchangedJournal implements Journal {
+  apply(): void;
+}
+
+class UnavailableError extends Error {
+  readonly path: string;
+  constructor(path: string, cause: unknown);
+  // A MissingError or a DeniedError when the error says which, else undefined
+  // for an error that does not mean a missing or denied file.
+  static from(path: string, error: unknown): UnavailableError | undefined;
+}
+class MissingError extends UnavailableError {}
+class DeniedError extends UnavailableError {}
+
+// The result code of a SQLite error in its two parts: code is the primary
+// code, the same for each variant, and extendedCode names the variant.
+interface SqliteResultCode {
+  readonly code: number;
+  readonly extendedCode: number;
+}
+// undefined for a value that node:sqlite did not throw.
+function sqliteResultCode(error: unknown): SqliteResultCode | undefined;
+
+const SQLITE_ERROR = 1;
+const SQLITE_BUSY = 5;
+const SQLITE_CANTOPEN = 14;
+const SQLITE_NOTADB = 26;
+const SQLITE_CONSTRAINT_FOREIGNKEY = 787;
+const SQLITE_CONSTRAINT_NOTNULL = 1299;
+const SQLITE_READONLY_DIRECTORY = 1544;
+const SQLITE_CONSTRAINT_UNIQUE = 2067;
+```
+
 ## Documentation
+
+**Recipes**
+
+1. [Read the database of another program, and translate an unavailable file at your boundary](./docs/recipes/read-the-database-of-another-program.md)
+2. [Build a database file, then move it into place](./docs/recipes/build-a-database-file-then-move-it-into-place.md)
+
+**Decisions**
 
 - [0001 One package opens the reader and owns UnavailableError](./docs/adr/0001-one-package-opens-the-reader-and-owns-unavailable-error.md)
 - [0002 One open for readers and owners](./docs/adr/0002-one-open-for-readers-and-owners.md)
@@ -178,7 +270,11 @@ src/
   rollback-journal.ts               RollbackJournal
   unchanged-journal.ts              UnchangedJournal
   unavailable-error.ts              UnavailableError, MissingError, DeniedError
+  result-code.ts                    sqliteResultCode and the SQLITE_ result codes
   open.test.ts                      the tests, on real SQLite files and processes
+  result-code.test.ts               the tests of sqliteResultCode, on real SQLite errors
+  testing/
+    scratch-directory.ts            scratchDirectory, a temporary folder for each test
   native/
     persist_wal.c                   the native library
     sqlite3.h, sqlite3ext.h         the SQLite 3.54.0 headers

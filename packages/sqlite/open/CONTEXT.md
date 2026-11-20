@@ -24,6 +24,10 @@ _Avoid_: WAL mode, log
 When SQLite syncs the `-wal` file of a write-ahead log to the disk. `'normal'`, the default, syncs before each checkpoint: a power loss can roll back the commits after the last checkpoint. `'full'` syncs at each commit: a commit survives a power loss. The `synchronous` option of `WriteAheadLog` and `PersistentWriteAheadLog` sets it. SQLite uses the same word ("PRAGMA synchronous").
 _Avoid_: Durability mode, fsync mode, sync level
 
+**Page size**:
+The size of each page of a database file, in bytes: a power of two from 512 to 65536 (`PageSize`). The `pageSize` option of `WriteAheadLog` and `PersistentWriteAheadLog` sets it for a new file, just before the write-ahead log step, because SQLite sets it only before the first write of a file and never in a write-ahead log. An existing file keeps its own page size. SQLite uses the same word ("PRAGMA page_size", [pragma.html](https://www.sqlite.org/pragma.html#pragma_page_size)).
+_Avoid_: Block size
+
 **Persistent WAL**:
 A write-ahead log whose `-wal` and `-shm` files stay after the last connection closes. A reader that cannot write the folder of the database cannot make these files, so it needs them to stay. `PersistentWriteAheadLog` selects it.
 _Avoid_: Shared WAL, kept WAL
@@ -43,6 +47,10 @@ _Avoid_: Addon (a Node addon is a different thing), plugin, extension (alone)
 **Busy timeout**:
 How long a connection waits for the lock of another connection before it fails with `SQLITE_BUSY` (5). The `timeout` option sets it. The default is 5000 milliseconds.
 _Avoid_: Lock timeout, wait
+
+**Result code**:
+The number that SQLite gives with an error, in two parts. The primary code is the low byte, the same for each variant (`SQLITE_BUSY`, 5). The extended code is the full number, and names the variant (`SQLITE_CONSTRAINT_NOTNULL`, 1299). `sqliteResultCode(error)` gives the two parts as `code` and `extendedCode`, the names of go-sqlite3. SQLite uses the same words ([Result and Error Codes](https://www.sqlite.org/rescode.html)).
+_Avoid_: Error code, errcode (the field of `node:sqlite` that holds only the extended code)
 
 **Unavailable**:
 The file of the database is missing, or the system denies access to it. SQLite then gives `SQLITE_CANTOPEN` (14), or `SQLITE_READONLY_DIRECTORY` (1544) when the folder denies the write of a journal, and the file system gives `ENOENT`, `ENOTDIR`, `EACCES` or `EPERM`. The package then throws `UnavailableError`. The caller can fix it, for example with a grant of access. Other failures are not unavailable.
