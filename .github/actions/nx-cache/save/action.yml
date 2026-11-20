@@ -1,0 +1,17 @@
+name: Save the Nx cache
+description: Saves ~/.nx under the key that nx-cache/restore gave, on a push only, so a pull request never writes a cache that main reads. Call it with if always(), so that a failed or cancelled run saves the results it has; Nx caches only the tasks that passed (task-orchestrator.js shouldCacheTaskResult).
+
+inputs:
+  save-key:
+    description: The save-key output of nx-cache/restore. Empty saves nothing; a cache key is immutable, so a run again of a commit finds its key taken.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Save the Nx cache
+      if: always() && github.event_name == 'push' && inputs.save-key != ''
+      uses: actions/cache/save@v6
+      with:
+        path: ~/.nx
+        key: ${{ inputs.save-key }}

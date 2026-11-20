@@ -22,7 +22,8 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
-  # affected-range reads this workflow's runs to find the last green commit.
+  # affected-range reads this workflow's runs to find the last green commit,
+  # and the plan job the task profiles of the last green runs.
   actions: read
   contents: read
 
@@ -54,34 +55,10 @@ jobs:
         background: true
         uses: $/.github/actions/setup-zig
 
-      # nx:test runs the tofu tests of the dokploy-stack module and the tofu fmt
-      # and validate tests of the dokploy generator, which skip without tofu.
-      # 1.12.3 is the version that the hosts require (packages/nx/docs/adr/0015).
-      - name: Set up OpenTofu
-        id: tofu
-        background: true
-        uses: opentofu/setup-opentofu@v2
-        with:
-          tofu_version: 1.12.3
-          tofu_wrapper: false
-
-      # Nx keeps its cache and the database that indexes it in ~/.nx/<workspace>/,
-      # and it reads only the database named after the machine ID
-      # (nx/src/native/db/mod.rs), which a runner image bakes in. The key holds
-      # the ID, so a new image starts a new cache instead of carrying results
-      # that no database indexes.
-      - name: Find the machine ID that names the Nx database
-        id: nx-machine
-        run: echo "id=$(cat /var/lib/dbus/machine-id /etc/machine-id 2> /dev/null | head -n 1 | sha256sum | cut -c 1-16)" >> "$GITHUB_OUTPUT"
-
       - name: Restore the Nx cache
         id: nx-cache
         background: true
-        uses: actions/cache/restore@v6
-        with:
-          path: ~/.nx
-          key: nx-${{ runner.os }}-${{ steps.nx-machine.outputs.id }}-${{ github.sha }}
-          restore-keys: nx-${{ runner.os }}-${{ steps.nx-machine.outputs.id }}-
+        uses: $/.github/actions/nx-cache/restore
 
       - name: Set up the workspace
         uses: $/.github/actions/setup-workspace
@@ -129,13 +106,12 @@ jobs:
       - name: Check that a copy ledger records each copy in the test files
         run: npx nx run copy-check:check
 
-      - name: Wait for OpenTofu
-        wait: tofu
-
+      # The test jobs run the test targets. test-network stays here: it is
+      # short, and it reads the network instead of the cache.
       # The projects tagged platform:darwin run in the darwin job. The profile
       # goes to .nx, which git ignores, so the formatting check never reads it.
-      - name: Lint, type check, test and build what changed
-        run: npx nx affected -t lint typecheck test test-network build --exclude='tag:platform:darwin'
+      - name: Lint, type check and build what changed, and run its network tests
+        run: npx nx affected -t lint typecheck test-network build --exclude='tag:platform:darwin'
         env:
           NX_PROFILE: .nx/nx-profile.json
 
@@ -150,30 +126,28 @@ jobs:
         with:
           # The profile is under .nx, which the action skips unless told.
           include-hidden-files: true
+          name: ci
           path: |
             .nx/nx-profile.json
             packages/**/test-results.xml
             apps/**/test-results.xml
 
       # After the wait for the checks, since readme-table:check is an nx task too.
-      # Only main saves, and a failed or cancelled run saves the results it has:
-      # Nx caches only the tasks that passed (task-orchestrator.js shouldCacheTaskResult).
-      # A run again of the same commit finds its key taken: a cache key is immutable.
       - name: Save the Nx cache
-        if: always() && github.event_name == 'push' && steps.nx-cache.outputs.cache-primary-key != '' && steps.nx-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v6
+        if: always()
+        uses: $/.github/actions/nx-cache/save
         with:
-          path: ~/.nx
-          key: ${{ steps.nx-cache.outputs.cache-primary-key }}
+          save-key: ${{ steps.nx-cache.outputs.save-key }}
 
-  # GitHub has few hosted Macs: darwin starts only when a project tagged
-  # platform:darwin is affected, so a push that changes none of them never
-  # waits for one (#5009; run 44769332904 failed when no Mac came in 15 min).
-  # When one is affected, darwin runs, and a Mac it cannot get still fails the
-  # run, as ADR 0005 asks of a test that needs a capability.
-  changes:
+  # Deals the affected test tasks to the test machines by the time each took
+  # in the last green runs on main (tools/test-split). The workflow names no
+  # project: a project with no time yet counts as the average. It also tells
+  # the darwin job whether a platform:darwin project changed.
+  plan:
     runs-on: ubuntu-latest
     outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      machines: ${{ steps.plan.outputs.machines }}
       darwin: ${{ steps.darwin.outputs.affected }}
     steps:
       - name: Checkout
@@ -181,6 +155,29 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+
+      # The task profiles of the last five green runs, one folder per run: the
+      # plan takes each task's time from the newest run that executed it
+      # instead of reading it from the cache. The test machines upload theirs as
+      # test-<machine>; a run from before the split ran the tests in the ci job,
+      # which uploaded its profile under the action's default name, artifact.
+      # Without them, every task counts as the target, and the plan still runs
+      # every test.
+      - name: Download the task profiles of the last green runs
+        id: profiles
+        background: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PROFILES: ${{ runner.temp }}/profiles
+        run: |
+          runs="$(gh run list --workflow ci.yml --branch main --event push --status success --limit 5 --json databaseId --jq '.[].databaseId')" || {
+            echo "::warning::No list of the last green runs, so every test task counts as the target"
+            exit 0
+          }
+          for run in $runs; do
+            gh run download "$run" --pattern 'test-*' --pattern artifact --dir "$PROFILES/$run" || echo "Run $run has no task profile of its tests"
+          done
 
       - name: Set up the workspace
         uses: $/.github/actions/setup-workspace
@@ -197,12 +194,105 @@ jobs:
           projects="$(npx nx show projects --affected --projects='tag:platform:darwin' --json=false)"
           if [ -n "$projects" ]; then echo 'affected=true'; else echo 'affected=false'; fi >> "$GITHUB_OUTPUT"
 
+      - name: Wait for the task profiles
+        wait: profiles
+
+      # The same selection as the test targets that ci ran before the split.
+      - name: Plan the test machines
+        id: plan
+        env:
+          PROFILES: ${{ runner.temp }}/profiles
+        run: |
+          npx nx affected -t test --exclude='tag:platform:darwin' --graph=stdout |
+            node tools/test-split/src/main.ts --profiles "$PROFILES" --minutes 5 --machines 8 --parallel "$NX_PARALLEL" >> "$GITHUB_OUTPUT"
+
+  # One machine for each entry of the plan. A failed machine leaves the others
+  # running, so each reports its tests and saves its cache.
+  test:
+    name: test ${{ matrix.machine }}
+    needs: plan
+    if: needs.plan.outputs.machines != '0'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # sqlite-open's native target builds with zig cc (packages/sqlite/open/docs/adr/0006).
+      - name: Set up Zig
+        background: true
+        uses: $/.github/actions/setup-zig
+
+      # nx:test runs the tofu tests of the dokploy-stack module and the tofu fmt
+      # and validate tests of the dokploy generator, which skip without tofu.
+      # 1.12.3 is the version that the hosts require (packages/nx/docs/adr/0015).
+      - name: Set up OpenTofu
+        background: true
+        uses: opentofu/setup-opentofu@v2
+        with:
+          tofu_version: 1.12.3
+          tofu_wrapper: false
+
+      # A machine number holds much the same tasks from run to run, so it
+      # restores the cache that the same number saved last.
+      - name: Restore the Nx cache
+        id: nx-cache
+        background: true
+        uses: $/.github/actions/nx-cache/restore
+        with:
+          name: test-${{ matrix.machine }}
+
+      - name: Set up the workspace
+        uses: $/.github/actions/setup-workspace
+
+      - name: Wait for Zig, OpenTofu and the Nx cache
+        wait-all:
+
+      # The plan job reads this profile in the next runs: keep the artifact
+      # name test-<machine>.
+      - name: Test this machine's projects
+        run: npx nx run-many -t test --projects="$PROJECTS" ${SHARD:+"--test-shard=$SHARD"}
+        env:
+          PROJECTS: ${{ matrix.projects }}
+          SHARD: ${{ matrix.shard }}
+          NX_PROFILE: .nx/nx-profile.json
+
+      - name: Keep the task profile and test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          # The profile is under .nx, which the action skips unless told.
+          include-hidden-files: true
+          name: test-${{ matrix.machine }}
+          path: |
+            .nx/nx-profile.json
+            packages/**/test-results.xml
+            apps/**/test-results.xml
+
+      - name: Save the Nx cache
+        if: always()
+        uses: $/.github/actions/nx-cache/save
+        with:
+          save-key: ${{ steps.nx-cache.outputs.save-key }}
+
   # A project that drives a facility of macOS, such as launchd, runs all its
   # targets on a macOS runner (docs/adr/0005). The pattern selects every project
   # and then takes the platform:darwin ones back out of the exclusion.
+  #
+  # GitHub has few hosted Macs: darwin starts only when a project tagged
+  # platform:darwin is affected, which the plan job asks Nx, so a push that
+  # changes none of them never waits for one (#5009; run 44769332904 failed
+  # when no Mac came in 15 min). When one is affected, darwin runs, and a Mac
+  # it cannot get still fails the run, as ADR 0005 asks of a test that needs a
+  # capability.
   darwin:
-    needs: changes
-    if: needs.changes.outputs.darwin == 'true'
+    needs: plan
+    if: needs.plan.outputs.darwin == 'true'
     runs-on: macos-latest
     steps:
       - name: Checkout
@@ -216,21 +306,10 @@ jobs:
         background: true
         uses: $/.github/actions/setup-zig
 
-      # The same Nx cache restore and save as the ci job, with the Mac's machine
-      # ID: a fix to these steps goes into both jobs (strike 2, #4975).
-      # The database of a Mac is named after its hardware UUID, as ioreg prints it.
-      - name: Find the machine ID that names the Nx database
-        id: nx-machine
-        run: echo "id=$(ioreg -rd1 -c IOPlatformExpertDevice | awk -F '"' '/IOPlatformUUID/ { print $4 }' | shasum -a 256 | cut -c 1-16)" >> "$GITHUB_OUTPUT"
-
       - name: Restore the Nx cache
         id: nx-cache
         background: true
-        uses: actions/cache/restore@v6
-        with:
-          path: ~/.nx
-          key: nx-${{ runner.os }}-${{ steps.nx-machine.outputs.id }}-${{ github.sha }}
-          restore-keys: nx-${{ runner.os }}-${{ steps.nx-machine.outputs.id }}-
+        uses: $/.github/actions/nx-cache/restore
 
       - name: Set up the workspace
         uses: $/.github/actions/setup-workspace
@@ -263,8 +342,7 @@ jobs:
             packages/**/test-results.xml
 
       - name: Save the Nx cache
-        if: always() && github.event_name == 'push' && steps.nx-cache.outputs.cache-primary-key != '' && steps.nx-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v6
+        if: always()
+        uses: $/.github/actions/nx-cache/save
         with:
-          path: ~/.nx
-          key: ${{ steps.nx-cache.outputs.cache-primary-key }}
+          save-key: ${{ steps.nx-cache.outputs.save-key }}

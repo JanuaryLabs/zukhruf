@@ -132,6 +132,9 @@
       "path": "./tools/readme-table"
     },
     {
+      "path": "./tools/test-split"
+    },
+    {
       "path": "./.husky"
     },
     {

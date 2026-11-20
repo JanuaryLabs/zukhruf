@@ -1,0 +1,40 @@
+name: Restore the Nx cache
+description: Restores ~/.nx, where Nx 23 keeps its cache and the database that indexes it, from the newest Actions cache of this runner image under a name. Run it before the first nx command, and nx-cache/save at the end of the job with its save-key.
+
+inputs:
+  name:
+    description: The cache to restore and then save, such as the job id. Jobs that run different tasks keep apart, because a job restores only the newest cache of its name.
+    required: false
+    default: ${{ github.job }}
+
+outputs:
+  save-key:
+    description: The key that nx-cache/save writes, empty when the restore found this commit's own cache.
+    value: ${{ case(steps.restore.outputs.cache-hit == 'true', '', steps.restore.outputs.cache-primary-key) }}
+
+runs:
+  using: composite
+  steps:
+    # Nx reads only the database named after the machine ID
+    # (nx/src/native/db/mod.rs), which a runner image bakes in: on Linux the
+    # D-Bus machine ID, on a Mac the hardware UUID as ioreg prints it. The key
+    # holds the ID, so a new image starts a new cache instead of carrying
+    # results that no database indexes.
+    - name: Find the machine ID that names the Nx database
+      id: machine
+      shell: bash
+      run: |
+        case "$RUNNER_OS" in
+          Linux) id="$(cat /var/lib/dbus/machine-id /etc/machine-id 2> /dev/null | head -n 1 | sha256sum)" ;;
+          macOS) id="$(ioreg -rd1 -c IOPlatformExpertDevice | awk -F '"' '/IOPlatformUUID/ { print $4 }' | shasum -a 256)" ;;
+          *) echo "No machine ID for $RUNNER_OS" >&2; exit 1 ;;
+        esac
+        echo "id=$(printf '%s' "$id" | cut -c 1-16)" >> "$GITHUB_OUTPUT"
+
+    - name: Restore the Nx cache
+      id: restore
+      uses: actions/cache/restore@v6
+      with:
+        path: ~/.nx
+        key: nx-${{ runner.os }}-${{ steps.machine.outputs.id }}-${{ inputs.name }}-${{ github.sha }}
+        restore-keys: nx-${{ runner.os }}-${{ steps.machine.outputs.id }}-${{ inputs.name }}-

@@ -1,0 +1,7 @@
+{
+  "name": "test-split",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "tools/test-split/src",
+  "projectType": "application",
+  "tags": ["std:tool"]
+}
