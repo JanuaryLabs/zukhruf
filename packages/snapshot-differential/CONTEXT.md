@@ -36,6 +36,14 @@ _Avoid_: Create, add, upsert (an upsert does not tell an insert from an update)
 The change for a record whose key the snapshot has with a different fingerprint. A key that the policy judged unknown is in the snapshot, so a changed record with that key is an update.
 _Avoid_: Modify, upsert
 
+**Saved fingerprint**:
+The fingerprint that the snapshot has for the key of an update. An update gives it as `savedFingerprint`, with the new record.
+_Avoid_: Old fingerprint, previous hash
+
+**Delete**:
+The change for a vanished key that the policy judged deleted. It gives the key as its primary key fields, and no record.
+_Avoid_: Remove, tombstone
+
 **Bytes**:
 A `Uint8Array` value, such as a `Buffer` or a `BLOB` of SQLite. A record and a key can hold bytes.
 _Avoid_: Binary, blob (a blob is the SQLite type), buffer (a buffer is one kind of bytes)
@@ -63,6 +71,10 @@ _Avoid_: Pending, skipped
 **Expired**:
 The verdict when the upstream dropped the record for good, with no deletion, as a time to live does. The key leaves the snapshot, and no delete is yielded.
 _Avoid_: Forgotten, stale
+
+**Expiry**:
+The timestamp at which the upstream drops a record, as an ISO 8601 UTC string with milliseconds, such as `2026-01-01T00:00:00.000Z`. The `expiresBy` option names the record field that holds it, and the snapshot keeps it with the key, so the policy can read it from the vanished key.
+_Avoid_: TTL (a time to live is a duration, not a timestamp), deadline
 
 **Horizon**:
 The timestamp from which the upstream keeps records. A record with an expiry before the horizon expired.
