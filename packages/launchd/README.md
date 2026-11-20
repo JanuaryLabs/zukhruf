@@ -6,6 +6,26 @@ It runs `/bin/launchctl` with the current subcommands of launchctl(1): `bootstra
 
 The words in these documents have one meaning each. See the glossary in [CONTEXT.md](./CONTEXT.md). The decisions are in the [ADRs](./docs/adr/). The man pages are on each Mac: `man 5 launchd.plist`, `man 1 launchctl` and `man 3 xpc_events`. A line number in these documents is a line of `man -P cat <section> <page> | col -b | cat -n` on macOS 27.2.
 
+## Use it
+
+```sh
+npm install @zukhruf/launchd
+```
+
+```ts
+import { Launchd } from '@zukhruf/launchd';
+
+const launchd = Launchd.agents({ clock: globalThis });
+const service = launchd.service('com.example.sync');
+console.log(service.target, (await service.state()).state);
+```
+
+Output for user 501 at the console of the Mac, with no such job. The domain is `user/501` when another user owns the console:
+
+```text
+gui/501/com.example.sync not loaded
+```
+
 ## Install a job
 
 `Launchd.agents()` gives the agents of this user. `install()` writes the job to its job file, `<Label>.plist` in the folder of the domain, and loads it ([ADR 0003](./docs/adr/0003-install-is-a-reconcile-that-enables-then-bootstraps.md)).
@@ -335,7 +355,7 @@ async function loaded(): Promise<boolean> {
 - **It has no limit on restarts.** A `KeepAlive` job that exits starts again after `ThrottleInterval`, 10 seconds by default (launchd.plist(5), lines 325-328), forever. context-compiler found this (its backlog #4288). A program that must stop after many failures counts them itself. Or it uses `KeepAlive: { SuccessfulExit: false }`, and exits with status 0 to stop: launchd then does not start it again (lines 208-213).
 - **A job does not inherit the environment of the program that installs it.** context-compiler found this (its backlog #4280). Give each variable in `EnvironmentVariables`. The job file has mode `0644`, and each user of the computer can read it, so do not put a secret in it.
 - **It has no shell.** launchd gives `ProgramArguments` to execvp(3) (lines 136-140). It expands no `~`, no `$HOME` and no other variable, and it has no pipes. `EnableGlobbing` expands globs (lines 148-150). Thus each path in a job is absolute.
-- **macOS charges file access to the program that the job runs.** "Daemons and agents managed by launchd are subject to macOS user privacy protections" (lines 692-696). A job that reads a protected folder needs Full Disk Access for its program, for example the `node` binary, not for the terminal app that installed it. context-compiler records this in `apps/cli/src/background-watch.ts:22-23`.
+- **macOS charges file access to the program that the job runs.** "Daemons and agents managed by launchd are subject to macOS user privacy protections" (lines 692-696). A job that reads a protected folder needs Full Disk Access for its program, for example the `node` binary, not for the terminal app that installed it. context-compiler records this in `apps/cli/src/background-watch.ts:20-21`.
 
 ## What the package does not do
 
@@ -344,6 +364,16 @@ async function loaded(): Promise<boolean> {
 - **It does not use SMAppService.** SMAppService registers a job that is inside an app bundle (`Contents/Library/LaunchAgents`), and Node.js can call it only through a native binding ([ADR 0001](./docs/adr/0001-launchctl-is-the-interface-and-only-its-current-subcommands.md)). An app that installs a job file without SMAppService "should include this key with a value of the app's bundle identifier": `AssociatedBundleIdentifiers` (launchd.plist(5), lines 686-690).
 - **It does not read logs.** launchd writes the output of the job to `StandardOutPath` and `StandardErrorPath`. Read those files.
 - **It does not read a job file that it did not render.** It never parses a property list. `installed()` takes the labels from the file names. A program that inspects the job files of other programs reads them itself.
+
+## Who uses it
+
+The package leads. Each consumer below changed to fit it, with no adapter.
+
+| Consumer                                                 | How                                                                                                                                                                                                                                                                                                                                                                                                                                            | Record                                               |
+| -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| context-compiler `apps/cli/src/background-watch.ts`      | `BackgroundWatch` runs on the package. `sync watch start` is `install()`, `sync watch restart` is `kickstart({ kill: true })` and `sync watch stop` is `uninstall()`; they replace the hand-written `plutil` render and bootout loop. The job file holds only `HOME` and `XDG_CONFIG_HOME`, the configuration folder that holds the Google client and its session (#4280). The end-to-end tests read `state()` and reuse fixed labels (#4467). | context-compiler #4441, #4280, #4467; commit abada22 |
+| mac-cleanup `src/tasks/macos/launch-agents.ts`           | `assertNotLoaded` reads `launchd.service(label).state()` in place of `launchctl print` and its check of 113, and its advice names `service.target`. A label that is not one file name keeps its plist with a note. It still reads the job files of other programs itself.                                                                                                                                                                      | mac-cleanup #4442; commit efa7a70                    |
+| agent-plugin `skills/automations/scripts/automations.ts` | `automations.ts sync` installs one agent for each active automation with `install()`, with `StartCalendarInterval` from the schedule of the automation. It uninstalls each agent with its label prefix that `installed()` lists and no active automation keeps. `list` reads `state()`. The nightly job of #3821 can run as one automation; the item stays parked.                                                                             | agent-plugin #3821; commit a5b34db                   |
 
 ## The same concepts in other systems
 
@@ -640,7 +670,7 @@ export class PermissionDeniedError extends LaunchdError {}
 export class LaunchdUnavailableError extends LaunchdError {}
 ```
 
-## Each call and what it runs
+### Each call and what it runs
 
 Each `launchctl` below is `/bin/launchctl`, started with `execFile` and no shell. `<target>` is `<domain>/<label>`, and `<file>` is `<folder>/<label>.plist`.
 
@@ -660,12 +690,17 @@ Each `launchctl` below is `/bin/launchctl`, started with `execFile` and no shell
 | `service.bootout()`      | `launchctl bootout <target>` every second until it exits 3                                                                                                                                                                                                                                                                                                                                                           |
 | `service.uninstall()`    | As `bootout()`, then a removal of `<file>` that ignores a missing file                                                                                                                                                                                                                                                                                                                                               |
 
-## What each repository changes
+## Documentation
 
-The package leads. Each repository below changes to fit it, with no adapter. Each change is a backlog item in that repository.
+**Decisions**
 
-| Repository                                          | Change                                                                                                                                                                                                                                                                                                                                                                                                                 | Backlog                              |
-| --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
-| context-compiler `apps/cli/src/background-watch.ts` | Done (abada22): `BackgroundWatch` runs on the package. `sync watch start` is `install()`, `sync watch restart` is `kickstart({ kill: true })` and `sync watch stop` is `uninstall()`; the hand-written `plutil` render and bootout loop are gone. The job file holds only `HOME`, because the Google client moved to `client_secret.json` (#4280). The end-to-end tests read `state()` and reuse fixed labels (#4467). | context-compiler #4441, #4280, #4467 |
-| mac-cleanup `src/tasks/macos/launch-agents.ts`      | Done (efa7a70): `assertNotLoaded` reads `launchd.service(label).state()` in place of `launchctl print` and its check of 113, and its advice names `service.target`. A label that is not one file name keeps its plist with a note. It still reads the job files of other programs itself.                                                                                                                              | mac-cleanup #4442                    |
-| agent-plugin                                        | The nightly job of backlog #3821, with `StartCalendarInterval`, uses `install()` when it is built.                                                                                                                                                                                                                                                                                                                     | agent-plugin #3821                   |
+- [ADR 0001](./docs/adr/0001-launchctl-is-the-interface-and-only-its-current-subcommands.md): launchctl is the interface, and only its current subcommands.
+- [ADR 0002](./docs/adr/0002-a-job-is-the-typed-launchd-plist-with-apples-key-names.md): a job is the typed launchd.plist(5), with Apple's key names.
+- [ADR 0003](./docs/adr/0003-install-is-a-reconcile-that-enables-then-bootstraps.md): install is a reconcile that enables, then bootstraps.
+- [ADR 0004](./docs/adr/0004-a-bootout-is-repeated-until-launchd-forgets-the-service.md): a bootout is repeated until launchd forgets the service.
+- [ADR 0005](./docs/adr/0005-the-domain-of-agents-follows-the-owner-of-the-console.md): the domain of agents follows the owner of the console.
+- [ADR 0006](./docs/adr/0006-the-state-of-one-service-comes-from-print-and-only-two-of-its-lines.md): the state of one service comes from print, and only two of its lines.
+- [ADR 0007](./docs/adr/0007-an-error-has-its-own-class-when-the-caller-handles-it-differently.md): an error has its own class when the caller handles it differently.
+- [ADR 0008](./docs/adr/0008-the-job-file-is-rendered-by-the-plist-package-with-sorted-keys.md): the job file is rendered by the plist package, with sorted keys.
+
+**Copied code**: [Code copied in this package](./docs/copied-code.md) records each copy of code in this package, as the Rule of Three asks.
