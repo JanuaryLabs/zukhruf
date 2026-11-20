@@ -119,16 +119,19 @@ Not fixed: the mobile sidebar has a hidden title and description in English (`Si
 
 ## What the stylesheet adds to stock shadcn/ui
 
-The stylesheet has four patches:
+The stylesheet has five patches:
 
 - **A pointer cursor on enabled buttons.** In Tailwind CSS 4, a button has the default cursor of the browser, not the pointer. The upgrade guide of Tailwind CSS gives a rule that sets the pointer again. The patch is that rule, in `@layer base`.
 - **A cap on the height of a dialog.** A dialog is never taller than the window minus `2rem`, and it scrolls when its content is taller. Thus the buttons at the bottom of a tall dialog stay on the screen. The rule is `max-height: calc(100dvh - 2rem); overflow-y: auto` on `[data-slot="dialog-content"]`. The patch is in `@layer components`.
 - **The width of the mobile sidebar.** On a small screen, the sidebar is in a `Sheet`. The class `data-[side=left]:w-3/4` of the `Sheet` wins over the class `w-(--sidebar-width)` of the sidebar. Thus the sidebar was 3/4 of the window: 292.5px, not 288px, in a window of 390px. The patch sets `width: var(--sidebar-width)` on `[data-slot="sidebar"][data-mobile="true"][data-side]`.
 - **A keyboard shortcut reads left to right.** In Arabic, the direction of the page shows the shortcut `⌘P` of a menu item as `P⌘`. The rule `unicode-bidi: plaintext` on `[data-slot="dropdown-menu-shortcut"]` takes the direction of the shortcut from its own text. The element stays right to left, so its `ms-auto` still puts it at the far end of the item. `direction: ltr` would turn `ms-auto` into a left margin, and the shortcut would move next to the label. The patch is in `@layer components`.
+- **A tabs list that wraps grows to its rows.** The class `group-data-horizontal/tabs:h-8` of `TabsList` wins over the class `h-auto` of the app: both have the specificity of one class, and Tailwind CSS puts a class with a variant after a plain class. Thus a horizontal list with `flex-wrap` stayed 32px tall and its second row covered the content below it. In Meddit, at a width of 390px, four tabs took two rows of 74px in a list of 32px. The patch sets `height: auto` on `[data-slot="tabs-list"][data-orientation="horizontal"].flex-wrap`. A list with `flex-wrap` on one row also takes the height of its triggers: in Meddit at 1440px, 34px in place of 32px. The patch leaves a list without `flex-wrap` at 32px. Its triggers are `h-[calc(100%-1px)]`, thus 25px, and in a list of auto height the percentage does not resolve, so they would grow to 26px.
 
 The cursor, the cap and the shortcut are in layers before `utilities`. Thus a utility class of the app, for example `cursor-wait` or `max-h-none`, still changes them.
 
 The width patch is in `@layer utilities`, because only a rule in that layer wins over a utility class. Its selector has three attributes, so it wins over the two parts of `data-[side=left]:w-3/4`. The sidebar does not give its `className` to the mobile `Sheet`, so a utility class of the app cannot get to that element. To change the mobile width, write a rule outside of a layer.
+
+The tabs patch is in `@layer utilities` for the same reason. Its selector has two attributes and a class, so it wins over the one class of `group-data-horizontal/tabs:h-8` in any order of the rules.
 
 ## Links that look like buttons
 

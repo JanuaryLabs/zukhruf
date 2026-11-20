@@ -122,6 +122,21 @@ describe('the stylesheet of @zukhruf/shadcn', () => {
     );
   });
 
+  test('a horizontal tabs list with flex-wrap takes the height of its rows, in the layer of the utility it beats', async () => {
+    // Act
+    const css = await buildAppStylesheet();
+
+    // Assert
+    assert.equal(
+      layerOf(
+        css,
+        /\[data-slot=['"]?tabs-list['"]?\]\[data-orientation=['"]?horizontal['"]?\]\.flex-wrap\s*\{\s*height:\s*auto;?\s*\}/,
+      ),
+      'utilities',
+      'In an earlier layer the rule loses to group-data-horizontal/tabs:h-8, and the wrapped row overlaps what follows',
+    );
+  });
+
   // happy-dom 20 drops each rule in a @layer block from getComputedStyle, so
   // these tests check the cascade inputs: the layer and the order of each rule.
   test('a host theme in @layer base that loads after the stylesheet wins over the default theme', async () => {

@@ -29,6 +29,19 @@
 }
 
 /*
+ * a horizontal tabs list that the app lets wrap grows to its rows. The list's
+ * group-data-horizontal/tabs:h-8 has the app's h-auto specificity (0,1,0), and
+ * Tailwind emits a variant after a plain utility, so it wins; (0,3,0) wins
+ * without relying on source order. A list without flex-wrap keeps its 32px,
+ * which the triggers' h-[calc(100%-1px)] resolves against.
+ */
+@layer utilities {
+  [data-slot='tabs-list'][data-orientation='horizontal'].flex-wrap {
+    height: auto;
+  }
+}
+
+/*
  * a shortcut such as ⌘P reads left to right also in Arabic; plaintext keeps
  * the element right to left, so its ms-auto still pushes it to the far end
  */
