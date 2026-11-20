@@ -195,6 +195,10 @@ jobs:
           expect "green c3 after the tag" "$(base "$c3")" "$c3"
           expect "no green commit, tag" "$(base '')" "$c2"
           expect "head" "$(sh "$RANGE" "$c3" | sed -n 's/^head=//p')" "$c3"
+          # A host that releases before CI passes: a tag never moves the base.
+          tagless() { sh "$RANGE" "$1" '' | sed -n 's/^base=//p'; }
+          expect "no tested tags, green c1 before the tag" "$(tagless "$c1")" "$c1"
+          expect "no tested tags, no green commit" "$(tagless '')" "$(git hash-object -t tree /dev/null)"
 
       - name: Find what changed in this repository
         id: range

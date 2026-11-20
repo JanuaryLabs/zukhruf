@@ -6,13 +6,17 @@ on:
   push:
     branches: [main]
 
-# On main a push never cancels the run in progress, because each green run
-# releases the commit it tested (release.yml). The pushes that arrive meanwhile
-# wait as one pending run: the default queue holds a single pending run, and a
-# newer push replaces it. Each push holds the code of the pushes before it, and
-# affected-range starts at the last green run, so the next run checks every
-# commit it skipped. On a pull request a new push cancels the run in progress.
-# A run again of an older commit of main replaces the pending run of the newest.
+# CI reports on main and gates nothing: release.yml releases each push without
+# waiting for it (docs/adr/0007). On main a push never cancels the run in
+# progress, because pushes come faster than a run ends, and a run that is
+# always cancelled never says whether main is green. The pushes that arrive
+# meanwhile wait as one pending run: the default queue holds a single pending
+# run, and a newer push replaces it. Each push holds the code of the pushes
+# before it, and affected-range starts at the last green run, so the next run
+# checks every commit it skipped. A release tag can be on a commit that CI has
+# not checked yet, so no tag moves that base (tested-tags: ''). On a pull
+# request a new push cancels the run in progress. A run again of an older
+# commit of main replaces the pending run of the newest.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -84,6 +88,8 @@ jobs:
 
       - name: Find what changed
         uses: $/.github/actions/affected-range
+        with:
+          tested-tags: ''
 
       # Before the first nx command, which opens the database the restore writes.
       - name: Wait for the Nx cache
@@ -181,6 +187,8 @@ jobs:
 
       - name: Find what changed
         uses: $/.github/actions/affected-range
+        with:
+          tested-tags: ''
 
       - name: Find whether a platform:darwin project changed
         id: darwin
@@ -229,6 +237,8 @@ jobs:
 
       - name: Find what changed
         uses: $/.github/actions/affected-range
+        with:
+          tested-tags: ''
 
       - name: Wait for Zig
         wait: zig

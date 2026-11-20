@@ -8,11 +8,6 @@ rules:
       policies:
         # Tags and @main, not commit hashes, until actions are pinned (#4675).
         '*': ref-pin
-  dangerous-triggers:
-    ignore:
-      # Runs only after a successful push run of CI on main, and checks out
-      # main, never the code of the run that triggered it.
-      - release.yml
   artipacked:
     ignore:
       # These jobs push with the checkout's credentials: the release commit and

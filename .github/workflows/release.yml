@@ -1,27 +1,28 @@
 name: Release
 
-# Releases the commit that CI tested, once CI is green for it, even when main
-# has moved on since: nx release version versions it with what its conventional
-# commits since the last release ask, commits on top of it and tags that commit,
-# the tag is pushed, nx-release-publish publishes what was built from it, and
-# then the main job merges the release commit into main as main is then. So
-# nothing untested reaches npm, and nothing reaches npm without its tag. A
-# version already on npm is skipped. A commit with nothing to release, or one
-# that an earlier release holds, changes nothing. The tag and the merge are
-# pushed with GITHUB_TOKEN, which starts no further workflow run.
+# Releases each push to main and does not wait for CI (docs/adr/0007): the
+# pre-push hook proved lint, typecheck and build of each pushed commit, and CI
+# runs beside the release and only reports. nx release version versions the
+# pushed commit with what its conventional commits since the last release ask,
+# commits on top of it and tags that commit, the tag is pushed,
+# nx-release-publish publishes what was built from it, and then the main job
+# merges the release commit into main as main is then. So nothing reaches npm
+# without its tag. A version already on npm is skipped. A commit with nothing
+# to release, or one that an earlier release holds, changes nothing. The tag
+# and the merge are pushed with GITHUB_TOKEN, which starts no further workflow
+# run.
 on:
-  workflow_run:
-    workflows: [CI]
-    types: [completed]
+  push:
     branches: [main]
 
 # A release is never cancelled: one stopped between the tag and the publish
-# would leave a version unpublished. Every run waits its turn, in the order CI
-# finished, so each run finds the tag and the merge of the run before it.
+# would leave a version unpublished. The pushes that arrive during a release
+# wait as one pending run, and a newer push replaces it, so the newest push
+# releases every commit since the last release. Each run finds the tag and the
+# merge of the run before it.
 concurrency:
   group: release
   cancel-in-progress: false
-  queue: max
 
 # nx.json runs 6 tasks at once for the 14-core Mac that the sessions push from;
 # the runner keeps Nx's default of 3, as NX_PARALLEL wins over nx.json.
@@ -30,7 +31,6 @@ env:
 
 jobs:
   release:
-    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -42,10 +42,10 @@ jobs:
       commit: ${{ steps.version.outputs.commit }}
     steps:
       # The release job pushes the tag with these credentials.
-      - name: Checkout the tested commit
+      - name: Checkout the pushed commit
         uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.sha }}
           fetch-depth: 0
 
       - name: Set up the workspace
@@ -61,17 +61,17 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_ACCESS_TOKEN }}
 
-      # The tested commit may not hold the merge of the previous release yet,
+      # The pushed commit may not hold the merge of the previous release yet,
       # when it was pushed while that release ran, so the newest release tag is
       # looked up among all tags and not only those HEAD reaches; Nx then counts
       # the commits from that tag to HEAD. With no such commits Nx changes
-      # nothing: the newest release holds the tested commit, as when an older
-      # run is run again. The preVersionCommand builds the tested commit, and
+      # nothing: the newest release holds the pushed commit, as when an older
+      # run is run again. The preVersionCommand builds the pushed commit, and
       # the publish packs that build.
-      - name: Version the tested commit
+      - name: Version the pushed commit
         id: version
         env:
-          TESTED: ${{ github.event.workflow_run.head_sha }}
+          PUSHED: ${{ github.sha }}
         run: |
           # nx release runs here through its Node API, not npx, so the shell
           # that runs the preVersionCommand needs node_modules/.bin on PATH
@@ -86,16 +86,16 @@ jobs:
             releaseTag: { checkAllBranchesWhen: true },
           }).releaseVersion({ gitPush: false });
           EOF
-          if [ "$(git rev-parse HEAD)" = "$TESTED" ]; then
+          if [ "$(git rev-parse HEAD)" = "$PUSHED" ]; then
             tag="$(git -c versionsort.suffix=- for-each-ref --sort=-v:refname --count=1 --format='%(refname:strip=2)' 'refs/tags/release/*')"
-            if [ -z "$tag" ] || [ "$(git rev-parse "$tag^{commit}^1")" != "$TESTED" ]; then
-              echo "The newest release holds $TESTED, so there is nothing to release."
+            if [ -z "$tag" ] || [ "$(git rev-parse "$tag^{commit}^1")" != "$PUSHED" ]; then
+              echo "The newest release holds $PUSHED, so there is nothing to release."
               exit 0
             fi
             # A run of this commit tagged it and stopped before the end (#4692).
-            # Its tree is the tested commit with the versions, and the build of
-            # the tested commit is in place: dist is not in git.
-            echo "$tag was made for $TESTED; this run finishes its release."
+            # Its tree is the pushed commit with the versions, and the build of
+            # the pushed commit is in place: dist is not in git.
+            echo "$tag was made for $PUSHED; this run finishes its release."
             git checkout --detach "$tag"
           fi
           tag="$(git describe --exact-match --match 'release/*' HEAD)"
@@ -119,7 +119,7 @@ jobs:
   # Main gets the version as a merge of the release commit, so the tag is in
   # main's history. The merge takes main's tree and writes the version into it
   # with Nx; a textual merge of the release commit would conflict on every
-  # version line whenever the tested commit lacks the previous release's merge.
+  # version line whenever the pushed commit lacks the previous release's merge.
   # A push to main in the meantime rejects the merge, and the job builds it
   # again on the new main.
   main:

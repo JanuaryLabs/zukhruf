@@ -1,5 +1,5 @@
 name: Find what changed
-description: Sets NX_BASE and NX_HEAD for nx affected. The base is the newer of the last successful run of a workflow and the newest release/* tag; with neither, it is the empty tree, so every project is affected. The job needs actions read permission. Other repositories use it as JanuaryLabs/zukhruf/.github/actions/affected-range@main.
+description: Sets NX_BASE and NX_HEAD for nx affected. The base is the newer of the last successful run of a workflow and the newest tag that tested-tags matches (release/*); with neither, it is the empty tree, so every project is affected. The job needs actions read permission. Other repositories use it as JanuaryLabs/zukhruf/.github/actions/affected-range@main.
 
 inputs:
   workflow-id:
@@ -10,6 +10,10 @@ inputs:
     description: The event of that run. CI runs on push; a deploy that CI starts runs on workflow_run.
     required: false
     default: push
+  tested-tags:
+    description: The git describe --match pattern of the tags that mark a commit that CI passed. Empty when the host releases before CI passes, so that no tag moves the base.
+    required: false
+    default: release/*
 
 outputs:
   base:
@@ -37,8 +41,9 @@ runs:
       shell: bash
       env:
         GREEN: ${{ case(steps.green.outputs.noPreviousBuild == 'true', '', steps.green.outputs.base) }}
+        TESTED_TAGS: ${{ inputs.tested-tags }}
       run: |
-        range="$(sh "$GITHUB_ACTION_PATH/range.sh" "$GREEN")"
+        range="$(sh "$GITHUB_ACTION_PATH/range.sh" "$GREEN" "$TESTED_TAGS")"
         echo "$range"
         printf '%s\n' "$range" >> "$GITHUB_OUTPUT"
         # Both values are commit hashes that git printed.
