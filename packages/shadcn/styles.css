@@ -134,3 +134,23 @@
     );
   }
 }
+
+/*
+ * The tone and size of a field label are theme tokens too (ADR 0006).
+ * FieldLabel and FieldTitle both write data-slot="field-label". nova gives
+ * neither a colour class, so the colour patch has no specificity, as the input
+ * group's background has: any text-* class of the host wins over it. A label
+ * of an invalid Field keeps the text-destructive it inherits from the Field.
+ * The size is keyed on the text-sm both carry.
+ */
+@layer utilities {
+  :where(
+    [data-slot='field-label']:not([data-slot='field'][data-invalid='true'] *)
+  ) {
+    color: var(--field-label-foreground, currentcolor);
+  }
+
+  [data-slot='field-label'].text-sm {
+    font-size: var(--field-label-font-size, var(--text-sm));
+  }
+}

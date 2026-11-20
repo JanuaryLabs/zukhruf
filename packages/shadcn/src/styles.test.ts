@@ -238,6 +238,36 @@ describe('the stylesheet of @zukhruf/shadcn', () => {
     );
   });
 
+  test('a host sets the colour of a field label with --field-label-foreground, which inherits by default and leaves an invalid field its destructive colour', async () => {
+    // Act
+    const css = await buildAppStylesheet();
+
+    // Assert
+    assert.equal(
+      layerOf(
+        css,
+        /:where\(\s*\[data-slot=['"]?field-label['"]?\]:not\(\s*\[data-slot=['"]?field['"]?\]\[data-invalid=['"]?true['"]?\] \*\s*\)\s*\)\s*\{\s*color:\s*var\(--field-label-foreground,\s*currentcolor\);?\s*\}/,
+      ),
+      'utilities',
+      'nova gives a field label no colour class, so with any specificity the patch would win over a text-* class of the host',
+    );
+  });
+
+  test('a host sets the size of a field label with --field-label-font-size, with the text-sm of nova as the fallback', async () => {
+    // Act
+    const css = await buildAppStylesheet();
+
+    // Assert
+    assert.equal(
+      layerOf(
+        css,
+        /\[data-slot=['"]?field-label['"]?\]\.text-sm\s*\{\s*font-size:\s*var\(--field-label-font-size,\s*var\(--text-sm\)\);?\s*\}/,
+      ),
+      'utilities',
+      'In an earlier layer the patch loses to the text-sm utility of the label',
+    );
+  });
+
   test('each control still has the nova class that its token patch is keyed on, so a sync that drops one fails here', async () => {
     // Arrange
     const { createElement: h } = await import('react');
@@ -275,6 +305,8 @@ describe('the stylesheet of @zukhruf/shadcn', () => {
       ],
       [h(kit.Button), 'button', ['group/button', 'h-8']],
       [h(kit.Button, { size: 'sm' }), 'button', ['group/button', 'h-7']],
+      [h(kit.FieldLabel), 'field-label', ['text-sm']],
+      [h(kit.FieldTitle), 'field-label', ['text-sm']],
     ] as const;
 
     for (const [element, slot, classes] of anchors) {
