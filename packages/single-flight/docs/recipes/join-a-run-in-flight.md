@@ -2,11 +2,11 @@
 
 **Use case.** A command-line tool has a `sync` command. A sync takes a long time. A user starts `sync` in two terminals, or cron starts it while the user runs it. A second sync must not run, and a "busy" error does not help the user. The second `sync` must tell the user that a sync runs, wait for it, and report its outcome.
 
-**What you need.** A `SingleFlight` in each process, with the same directory and a codec for the value. The directory is a local folder of your tool, for example its data folder.
+**What you need.** A `SingleFlight` in each process, with the same directory, a codec for the value and a clock. The directory is a local folder of your tool, for example its data folder. The clock is required: give `globalThis`.
 
 ## The steps
 
-1. Create a `SingleFlight` with the directory and the codec.
+1. Create a `SingleFlight` with the directory, the codec and the clock.
 2. Call `flights.run('sync', sync, { onJoin })`. The first caller is the leader: its process runs the sync.
 3. Each other caller joins the flight. Its `onJoin` tells the user that a sync runs. Then it waits for the outcome of the flight.
 4. Each caller gets `{ value, joined }`. The value is the same for all callers of the flight.
@@ -31,6 +31,7 @@ if (role === 'sync') {
   const flights = new SingleFlight<string>({
     directory: join(shared!, 'flights'),
     codec: { encode: (summary) => summary, decode: (text) => text },
+    clock: globalThis,
   });
 
   async function sync() {
