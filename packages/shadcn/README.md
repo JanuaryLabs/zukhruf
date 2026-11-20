@@ -2,23 +2,17 @@
 
 Each [shadcn/ui](https://ui.shadcn.com) component, as one package. The components use Base UI as their headless library and nova as their preset. An app imports the components from one entry and the styles from one stylesheet. The app sets its theme with CSS variables.
 
+shadcn/ui is not a package. Its CLI copies the source of each component into the repo of the app. Thus each app keeps its own copy, and the copies drift apart. A fix in one copy does not go into the other copies. For example, two apps each wrote the same fix for a tall dialog, and other apps still do not have it. Also, `shadcn add --overwrite` writes over a copy, and it removes the changes that an app made by hand. This package keeps one copy. A fix goes into the package one time, and each app gets it with the next version.
+
 The words in these documents have one meaning each. See the glossary in [CONTEXT.md](./CONTEXT.md).
 
-## The problem
-
-shadcn/ui is not a package. Its CLI copies the source of each component into the repo of the app. Thus each app keeps its own copy, and the copies drift apart. A fix in one copy does not go into the other copies. For example, two apps each wrote the same fix for a tall dialog, and other apps still do not have it. Also, `shadcn add --overwrite` writes over a copy, and it removes the changes that an app made by hand.
-
-This package keeps one copy. A fix goes into the package one time, and each app gets it with the next version.
-
-## Install
+## Use it
 
 ```sh
 npm i @zukhruf/shadcn
 ```
 
 The peer dependencies are `react` 19, `react-dom` 19 and `tailwindcss` 4. The other dependencies, for example `@base-ui/react` and `lucide-react`, install with the package.
-
-## Use it
 
 Import the stylesheet in the Tailwind CSS file of the app, after Tailwind:
 
@@ -38,7 +32,7 @@ Obey two rules:
 - **Use a plain `@import`.** Do not write `@import '@zukhruf/shadcn/styles.css' layer(components);`. A `layer()` puts all of the stylesheet into a layer, also its `@utility` and `@source` rules. Tailwind CSS refuses these rules in a layer. The build stops with the error "`@utility` cannot be nested."
 - **Do not add an `@source` for the package.** The stylesheet registers its own `dist` folder. Tailwind CSS then finds the classes of the components. See [ADR 0003](./docs/adr/0003-the-stylesheet-registers-its-own-source-and-keeps-its-patches-in-layers.md).
 
-## Theme
+## Set the theme
 
 The theme is the values of a set of CSS variables, for example `--primary`, `--background` and `--radius`. To change the theme, set the variables after the import:
 
@@ -83,7 +77,7 @@ The preset is fixed. The class strings of each component contain the preset, for
 
 The theme also covers the density of the controls and the field labels: `--control-height`, `--control-height-sm`, `--control-background`, `--field-label-foreground` and `--field-label-font-size` (see [what the stylesheet adds](#what-the-stylesheet-adds-to-stock-shadcnui)). Set a token, not a `className` restyle such as `h-10 bg-card` on each control. A subtree can set a second value, for example taller controls on the auth pages. See [ADR 0006](./docs/adr/0006-a-host-gets-its-looks-through-theme-tokens-and-data-attribute-patches.md).
 
-## The open state of the sidebar
+## Read the open state of the sidebar on the server
 
 `SidebarProvider` keeps its open state in a cookie. `SIDEBAR_COOKIE_NAME` is the name of that cookie. Use it to read the open state of the sidebar on the server, and give the value to `defaultOpen`:
 
@@ -95,7 +89,7 @@ const defaultOpen = cookies.get(SIDEBAR_COOKIE_NAME)?.value !== 'false';
 <SidebarProvider defaultOpen={defaultOpen}>{children}</SidebarProvider>;
 ```
 
-## Composition
+## Set the element that a component renders
 
 Base UI uses the `render` prop where Radix UI uses `asChild`. The `render` prop sets the element that the component renders.
 
@@ -113,7 +107,7 @@ Base UI:
 <DialogTrigger render={<Button variant="outline" />}>Open</DialogTrigger>
 ```
 
-## Right to left
+## Show the components right to left
 
 The sync installs the components in the RTL mode of shadcn (`"rtl": true` in `components.json`). The CLI then writes logical classes in place of physical ones: `ps-2.5` for `pl-2.5`, `end-2` for `right-2`, `text-start` for `text-left`, `rtl:rotate-180` on a chevron that points forward, `rtl:` translations for the switch thumb and the submenu line of the sidebar, and `side="inline-end"` for a submenu. Thus each component mirrors itself in a right-to-left page, and it renders as before in a left-to-right page.
 
@@ -143,7 +137,7 @@ The width patch is in `@layer utilities`, because only a rule in that layer wins
 
 The tabs patch is in `@layer utilities` for the same reason. Its selector has two attributes and a class, so it wins over the one class of `group-data-horizontal/tabs:h-8` in any order of the rules.
 
-## Links that look like buttons
+## Make a link look like a button
 
 A control that goes to a different page must stay a link. Do not write `<Button render={<Link />} nativeButton={false}>`. This makes an `<a>` with `role="button"`. A screen reader then calls the link a button, and the Space key activates it.
 
@@ -169,7 +163,7 @@ Use `cn` around `buttonVariants`. `Button` merges the classes that conflict thro
 - **Use a component of the package first.** Before you write a new component, look for one in this package. Use it when it does the job.
 - **Keep your own components in the app.** A component that you make from the components of this package belongs to the app. Do not add it to this package. The sync writes over the generated source, and the package holds only the components of shadcn/ui.
 - **Remove the outline of a `Card` with `ring-0`.** `Card` draws its outline with `ring-1`, not with a border. Thus `border-0` does not remove the outline.
-- **Use the standard names of the theme variables.** Set `--primary`, `--background` and the other variables of the [theme](#theme). Do not add a brand prefix, for example `--acme-primary`. The components read only the standard names.
+- **Use the standard names of the theme variables.** Set `--primary`, `--background` and the other variables of the [theme](#set-the-theme). Do not add a brand prefix, for example `--acme-primary`. The components read only the standard names.
 - **Put a `DropdownMenuLabel` in a `DropdownMenuGroup`.** `DropdownMenuLabel` uses `Menu.GroupLabel` of Base UI, and that component reads the context of a group. A label outside a group throws Base UI error #31, and the full menu stops. Radix UI accepted a label outside a group, thus an app that moves from Radix UI must find these labels. text2sql found one when it moved.
 
   ```tsx
@@ -181,10 +175,23 @@ Use `cn` around `buttonVariants`. `Button` merges the classes that conflict thro
   </DropdownMenuContent>
   ```
 
+- **Put each `SelectItem` in a `SelectGroup`, and each `CommandItem` in a `CommandGroup`.** The list of `SelectContent` and `CommandList` have no padding. `SelectGroup` and `CommandGroup` give the `p-1` (`src/components/select.tsx`, `src/components/command.tsx`). Without a group, the items touch the edge of the popup, and `alignItemWithTrigger` moves the select popup about 5px off its trigger. text2sql put 58 Selects in a `SelectGroup` for this (text2sql 3e13c74f2). The `react` concept of `@zukhruf/eslint` refuses an item outside a group with `zukhruf/require-select-group` (b06049b1) and `zukhruf/require-command-group` (dd748598).
+
+  ```tsx
+  <SelectContent>
+    <SelectGroup>
+      <SelectItem value="light">Light</SelectItem>
+      <SelectItem value="dark">Dark</SelectItem>
+    </SelectGroup>
+  </SelectContent>
+  ```
+
+- **Give a `SelectTrigger` the width that you need.** `SelectTrigger` is `w-fit` (`src/components/select.tsx`). An app that moves from an old copy adds `w-full` where the old copy had it. The migrations of the apps found this.
+- **Mount one `Toaster`.** By default, each `Toaster` reads the one `toast` manager of the package (`toastManager = toast` in `src/components/toast.tsx`). An app that moves from an old copy moves all of its toasts in one commit, and never mounts two Toasters at once.
 - **Know that the stylesheet changes the `data-*` variants of your own classes too.** `theme.css` imports `shadcn/tailwind.css`, and its `@custom-variant` rules redefine `data-open`, `data-closed`, `data-checked`, `data-unchecked`, `data-selected`, `data-disabled`, `data-active`, `data-horizontal` and `data-vertical` (`node_modules/shadcn/dist/tailwind.css`, `shadcn@4.23.0`). Stock Tailwind CSS makes `data-selected:` match an element that has the attribute, with any value ([Tailwind CSS: data attributes](https://tailwindcss.com/docs/hover-focus-and-other-states#data-attributes)). With the stylesheet, `data-selected:` matches only `[data-selected="true"]`. `data-open:`, `data-closed:`, `data-checked:`, `data-unchecked:`, `data-disabled:` and `data-active:` do not match the value `"false"`, and all of them except `data-disabled:` also match the same value of `data-state`, for example `[data-state="open"]`. `data-horizontal:` and `data-vertical:` match `[data-orientation="horizontal"]` and `[data-orientation="vertical"]`. These rules apply to each class of the app, not only to the components. For a different value, write the full form, for example `data-[selected=false]:`.
 - **Show an error at the place where it occurs.** Show a form error or a field error next to the field or the action that failed, for example with `FieldError`. Show the error of a background task or of a mutation as a toast. Use `toast` and `Toaster` of this package, which use the toast of Base UI.
 
-## Your own components
+## Join class names in your own components
 
 An app that writes its own components often needs `cn`, the function that joins class names. Import it from the `cn` package:
 
@@ -194,7 +201,7 @@ import { cn } from 'cn';
 
 This package does not export `cn`. Each symbol has one home ([zukhruf ADR 0001](../../docs/adr/0001-zukhruf-is-a-layered-standard-library.md), rule 6).
 
-## One entry
+## Import all components from the one entry
 
 The package has one entry, `@zukhruf/shadcn`. It exports all components, all hooks and the hand-written modules, for example `SIDEBAR_COOKIE_NAME`. There are no subpaths such as `@zukhruf/shadcn/button`.
 
@@ -204,6 +211,28 @@ The package has one entry, `@zukhruf/shadcn`. It exports all components, all hoo
 - The stylesheet gives the classes of all components, also of the components that the app does not use. An app that uses only `Button` and `Dialog` got 212 kB of CSS (31 kB with gzip) on 2026-10-15.
 
 See [ADR 0002](./docs/adr/0002-one-entry-and-private-imports-between-the-components.md).
+
+## What the package does not do
+
+- **It does not export `cn`.** Import `cn` from the `cn` package. Each symbol has one home ([zukhruf ADR 0001](../../docs/adr/0001-zukhruf-is-a-layered-standard-library.md), rule 6).
+- **It has no subpaths.** An app imports each component from the one entry ([ADR 0002](./docs/adr/0002-one-entry-and-private-imports-between-the-components.md)).
+- **It does not hold the components of an app.** A component that an app makes from these components stays in the app. The sync writes over the generated source, and the package holds only the components of shadcn/ui ([ADR 0001](./docs/adr/0001-the-shadcn-cli-writes-the-source-and-the-commit-pins-it.md)).
+- **It does not let an app change the preset.** The class strings of each component contain nova. An app changes only the theme ([ADR 0004](./docs/adr/0004-the-components-use-base-ui-and-the-nova-preset.md)).
+- **It does not set `--destructive-foreground`, `--success`, `--warning` or `--font-heading`.** An app that needs one sets it and maps it in its own `@theme inline` block (see [Set the theme](#set-the-theme)).
+
+## Who uses it
+
+Each app imports the stylesheet in its Tailwind CSS file and the components from the entry. A library, such as blackboard `packages/annotation` or deepagents `packages/react/genai`, imports only the components, and the app that hosts it imports the stylesheet.
+
+| Consumer                                                                            | How                                                                                                                                                 | Record                      |
+| ----------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
+| sdk-it `packages/apiref`                                                            | `@import '@zukhruf/shadcn/styles.css'` in `app/styles.css`. It replaced both shadcn copies of the repo.                                             | sdk-it 245d1b7              |
+| blackboard `apps/web`, `packages/annotation`                                        | It replaced the local shadcn copy, and the Radix UI components of `annotation`.                                                                     | blackboard e6323a0, dcb9449 |
+| deepagents `apps/evals-web-runner`, `packages/devtool/host`, `packages/react/genai` | It replaced `@deepagents/react-shadcn`. `react-genai` has the package as a peer dependency (f7ceed16).                                              | deepagents 65b7db3a         |
+| text2sql, its frontends and UI packages, for example `apps/authx/frontend`          | `@import "@zukhruf/shadcn/styles.css"` in `src/styles.css`. About 25 commits, one for each project, replaced the copy, and the last one deleted it. | text2sql c0c95b42           |
+| factory `apps/factory/web`                                                          | The shadcn components of the app come from the entry, for example in `src/app/routes/Layout/Layout.tsx`.                                            | factory f1513cc             |
+| context-compiler `packages/ui`                                                      | `@import '@zukhruf/shadcn/styles.css'` in `src/page.css`. `ContextMenu` and `Select` replaced the Radix UI menus and list.                          | context-compiler 4c83084    |
+| theagentlab `apps/hackathon`                                                        | `@import '@zukhruf/shadcn/styles.css'` in `src/styles.css`. `Select` replaced four native `<select>` elements.                                      | theagentlab 640ddd6         |
 
 ## API
 

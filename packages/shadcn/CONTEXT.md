@@ -53,7 +53,7 @@ A file in `src/hand-written` that a person writes. It exports a value that an ap
 _Avoid_: Patch (a patch is a CSS rule), own code, custom component (custom components belong to the app)
 
 **Entry**:
-The one public module of the package: `@zukhruf/shadcn`. It exports each component and each hook. The `exports` field of `package.json` also has `./styles.css`, which is the stylesheet, not an entry.
+The one public module of the package: `@zukhruf/shadcn`. It exports each component, each hook and each hand-written module. The `exports` field of `package.json` also has `./styles.css`, which is the stylesheet, not an entry.
 _Avoid_: Barrel, subpath, index (`src/index.ts` is the file of the entry)
 
 **Stylesheet**:
