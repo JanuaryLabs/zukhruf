@@ -48,7 +48,7 @@
     "eslint-plugin-jsx-a11y-x": "0.2.0",
     "eslint-plugin-react-hooks": "7.1.1",
     "eslint-plugin-react-you-might-not-need-an-effect": "1.1.0",
-    "eslint-plugin-unicorn": "79.0.0",
+    "eslint-plugin-unicorn": "80.0.0",
     "fontkit": "2.0.4",
     "happy-dom": "20.14.5",
     "jscpd": "5.4.3",

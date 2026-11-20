@@ -85,7 +85,7 @@
     "eslint-plugin-jsx-a11y-x": "^0.2.0",
     "eslint-plugin-react-hooks": "^7.0.0",
     "eslint-plugin-react-you-might-not-need-an-effect": "^1.1.0",
-    "eslint-plugin-unicorn": "^79.0.0",
+    "eslint-plugin-unicorn": "^80.0.0",
     "jsonc-eslint-parser": "^2.4.0 || ^3.0.0",
     "react": "*",
     "typescript": ">=5.8.0 <6.1.0",
