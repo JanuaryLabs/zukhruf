@@ -839,8 +839,10 @@ export class SqliteJobQueue
     );
   }
 
-  // toSnapshot (manager.js:2136-2165) of the cache, which holds gauges only:
-  // the deltas stay null with persistQueueStats off.
+  // toSnapshot (pg-boss 12.38.2 manager.js:2620-2666) of the cache, which
+  // holds gauges only: with persistQueueStats off pg-boss counts nothing more
+  // (its cache and refresh paths, :2711-2728, read uncounted), so the deltas,
+  // the wait and run histograms and readyOldestSeconds stay null.
   static #toQueueStats(
     name: string,
     cached: CachedQueueStats & { capturedOn: Date },
@@ -858,6 +860,9 @@ export class SqliteJobQueue
       createdDelta: null,
       deltaSeconds: null,
       deltaOn: null,
+      waitBins: null,
+      runBins: null,
+      readyOldestSeconds: null,
       capturedOn: cached.capturedOn,
     };
   }

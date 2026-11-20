@@ -35,7 +35,9 @@ export class BooleanTranslation extends Translation {
     instructions: string,
     criteria: Criteria,
   ): readonly [string, string] {
-    if (criteria === undefined)
+    // @ai-sdk/provider 4.0.39 lets criteria be null as well as omitted
+    // (dist/index.d.ts:2474-2477); both mean that the question has none.
+    if (criteria === undefined || criteria === null)
       return [`No. ${instructions}`, `Yes. ${instructions}`];
     const { false: no, true: yes } = criteria;
     if (no === undefined || no === null || yes === undefined || yes === null)
