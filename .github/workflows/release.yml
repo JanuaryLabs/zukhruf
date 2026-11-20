@@ -143,6 +143,12 @@ jobs:
       - name: Set up the workspace
         uses: $/.github/actions/setup-workspace
 
+      # The push below runs the repo's pre-push hook (npm ci's prepare sets
+      # core.hooksPath), whose Build builds sqlite-open:native with Zig; without
+      # it the push stopped on "spawnSync zig ENOENT" (run 44787931344).
+      - name: Set up Zig
+        uses: $/.github/actions/setup-zig
+
       # The version is written without the preVersionCommand: nothing is built
       # or published from main.
       - name: Merge the release into main
