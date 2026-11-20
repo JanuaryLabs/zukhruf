@@ -4,6 +4,47 @@ Lends long-lived workers to jobs, one job for each worker at a time. A worker is
 
 The words in these documents have one meaning each. See the glossary in [CONTEXT.md](./CONTEXT.md).
 
+## Use it
+
+```sh
+npm install @zukhruf/pool
+```
+
+```ts
+import { Fixed, NoEviction, Parallel, Pool, type Worker } from '@zukhruf/pool';
+
+class Upper implements Worker<string, string> {
+  readonly #exit = Promise.withResolvers<void>();
+  async run(input: string): Promise<string> {
+    return input.toUpperCase();
+  }
+  exited(): Promise<void> {
+    return this.#exit.promise;
+  }
+  kill(): void {
+    this.#exit.resolve();
+  }
+  async close(): Promise<void> {
+    await this.#exit.promise;
+  }
+}
+
+await using pool = new Pool({
+  size: new Fixed(2),
+  startup: new Parallel(),
+  eviction: new NoEviction(),
+  clock: globalThis,
+  create: () => new Upper(),
+});
+const words = await Promise.all(
+  ['one', 'two', 'three'].map((word) => pool.use((worker) => worker.run(word))),
+);
+console.log(words, pool.stats);
+// [ 'ONE', 'TWO', 'THREE' ] { starting: 0, idle: 2, lent: 0, waiting: 0 }
+```
+
+The pool starts two workers and lends them to three jobs, one job for each worker at a time. After the jobs, both workers are idle. The disposal at the end of the program stops them.
+
 ## Lend a worker to a job
 
 ```ts
@@ -380,6 +421,142 @@ A plan, not code. The hosts that move are elt and context-compiler (map, Revisio
 6. **A measure**: the contention benchmark of 2026-11-02 runs again with two hosts on one store. One owner's sizing then caps the computer.
 
 Many computers come after map ticket 14, when a second computer is real.
+
+## Errors
+
+These are the errors that the package throws today. The errors of the design are in the section "One pool for the computer".
+
+| Error                    | When                                                                                                                                                                                                                                                                                                                    |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `RangeError`             | `new WorkerKind` gets a name whose channel `<name>.new-job` has 64 bytes or more ([src/worker-kind.test.ts](./src/worker-kind.test.ts)).                                                                                                                                                                                |
+| `RangeError`             | `new IdleTimeout({ after })` gets an `after` that is not above 0 and at most 2,147,483,647 ([src/pool.test.ts](./src/pool.test.ts)).                                                                                                                                                                                    |
+| `TypeError`              | `new PoolWorkers` gets a `postgres://` store. Only the store of one computer, the path of a SQLite file, is built ([src/pool-workers.test.ts](./src/pool-workers.test.ts)).                                                                                                                                             |
+| `Error`                  | `computerStore(env)` finds no `$HOME` on macOS, no `$HOME` and no `$XDG_STATE_HOME` on Linux, or no `%LOCALAPPDATA%` on Windows ([src/computer-store.test.ts](./src/computer-store.test.ts)).                                                                                                                           |
+| The failure of the store | The disposal of `PoolWorkers` rejects with the first failure of its store, for example an `expireInSeconds` that the store refuses ([src/pool-workers.test.ts](./src/pool-workers.test.ts)).                                                                                                                            |
+| `signal.reason`          | `pool.use` rejects with it when its signal aborts.                                                                                                                                                                                                                                                                      |
+| `AbortError`             | `pool.use` rejects with it when you dispose the pool, also for a job that waits ([src/pool.test.ts](./src/pool.test.ts)).                                                                                                                                                                                               |
+| The error of the job     | `pool.use` rejects with what `job` throws, for example the error of a worker that exited while the job ran.                                                                                                                                                                                                             |
+| The error of the warm-up | `pool.ready()` rejects with it when a worker that the startup starts with the pool fails its `ready()`. When you dispose the pool while such a worker warms up, the pool kills the worker, and `pool.ready()` rejects with the reason that the `ready()` of that worker gives ([src/pool.test.ts](./src/pool.test.ts)). |
+
+## API
+
+The exports of today. The section "One pool for the computer" gives the design, which is not all built.
+
+```ts
+import type { Clock, WallClock } from '@zukhruf/async';
+
+class Pool<T extends Worker<never, unknown>> implements AsyncDisposable {
+  constructor(options: {
+    size: Sizing;
+    startup: Startup;
+    eviction: Eviction;
+    create: () => T;
+    clock: Clock; // globalThis in production, a fake clock in a test
+  });
+  ready(): Promise<void>; // the workers that the startup starts with the pool are ready
+  get stats(): PoolStats; // a new snapshot at each read
+  use<R>(job: (worker: T) => Promise<R>, signal?: AbortSignal): Promise<R>;
+  [Symbol.asyncDispose](): Promise<void>; // stops every worker
+}
+
+class PoolWorkers<Input, Output> implements AsyncDisposable {
+  constructor(options: {
+    kind: WorkerKind<Input, Output>;
+    store: string; // the path of the store's SQLite file, such as computerStore(process.env)
+    clock: WallClock;
+    create: () => Worker<Input, Output>;
+    size: Sizing;
+    startup: Startup;
+    eviction: Eviction;
+  }); // TypeError: a postgres:// store
+  [Symbol.asyncDispose](): Promise<void>; // rejects with the failure of the store
+}
+
+class WorkerKind<Input, Output> {
+  constructor(options: {
+    name: string;
+    revision: number;
+    policy: 'standard' | 'exclusive';
+    retryLimit: number;
+    expireInSeconds: number;
+  }); // RangeError: "<name>.new-job" has 64 bytes or more
+  readonly name: string;
+  readonly revision: number;
+  readonly policy: 'standard' | 'exclusive';
+  readonly retryLimit: number;
+  readonly expireInSeconds: number;
+  readonly queue: string; // `<name>.r<revision>`
+}
+
+function computerStore(env: Record<string, string | undefined>): string;
+
+interface Worker<Input, Output> {
+  run(input: Input): Promise<Output>;
+  ready?(): Promise<unknown>;
+  exited(): Promise<unknown>;
+  kill(): void;
+  close(): Promise<void>;
+}
+
+interface Sizing {
+  readonly ceiling: number; // the most workers it may run, decided when the pool is built
+  readonly current: number; // the workers it runs now
+  readonly kept: number; // the workers it keeps alive, at least current
+  record(sample: Sample): void;
+}
+
+interface Sample {
+  readonly started: number;
+  readonly finished: number;
+  readonly measurable: boolean;
+}
+
+interface Startup {
+  readonly eager: boolean;
+  turn(settled: Promise<void>): Promise<void>;
+}
+
+interface Eviction {
+  idle(busy: AbortSignal, evict: () => void, clock: Clock): void;
+}
+
+interface Computer {
+  availableParallelism(): number;
+  availableMemory(): number;
+}
+
+interface PoolStats {
+  readonly starting: number;
+  readonly idle: number;
+  readonly lent: number;
+  readonly waiting: number;
+}
+
+class Fixed implements Sizing {
+  constructor(workers: number);
+}
+class Resources implements Sizing {
+  constructor(options: { memoryPerWorker: number; computer: Computer });
+}
+class HillClimbing implements Sizing {
+  constructor(options: { memoryPerWorker: number; computer: Computer });
+}
+class Gradient implements Sizing {
+  constructor(options: { memoryPerWorker: number; computer: Computer });
+}
+
+class OnDemand implements Startup {}
+class Parallel implements Startup {}
+class OrderedReady implements Startup {}
+class LeaderFirst implements Startup {}
+
+class NoEviction implements Eviction {}
+class IdleTimeout implements Eviction {
+  constructor(options: { after: number }); // RangeError: unless 0 < after <= 2147483647
+}
+```
+
+`HillClimbing` and `Gradient` extend a class that the package does not export ([src/climbing.ts](./src/climbing.ts)).
 
 ## Recipes
 

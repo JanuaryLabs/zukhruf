@@ -143,3 +143,11 @@ _Avoid_: Poll (a read with no wake at all), fallback
 **Hand-over**:
 The owner's clean exit. It stops fetching, finishes its running jobs, resigns and closes its workers.
 _Avoid_: Failover (that follows the end of an owner), drain
+
+**Heartbeat**:
+The time that a running job stays with its owner after its last touch: 10 s, the least that pg-boss accepts (`attorney.js:578`). When the heartbeat ends, the store's monitor takes the job back, so a job of a dead owner goes back about 11 s after its last touch (ADR 0017).
+_Avoid_: Lease, timeout (the kind's `expireInSeconds` limits one run), the election's heartbeat (the leader's signal on its pipe)
+
+**Touch**:
+The owner's write to the store that starts the heartbeat of one running job again, every 5 s (half the heartbeat), as pg-boss's `work` does (`manager.js:538`). A touch that affects 0 rows tells the owner that the store took the job back, for example by a cancel, and the owner kills the worker of the job.
+_Avoid_: Ping, keep-alive, renew
