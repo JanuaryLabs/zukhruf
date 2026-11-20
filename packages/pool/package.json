@@ -1,6 +1,6 @@
 {
   "name": "@zukhruf/pool",
-  "version": "0.8.51",
+  "version": "0.8.52",
   "description": "One pool of long-lived workers, such as native helpers, for each computer: every program sends its jobs to one store, and an elected owner runs them, while startups, sizings and evictions decide when workers start, how many run and when they close.",
   "license": "MIT",
   "repository": {
@@ -41,17 +41,17 @@
     "access": "public"
   },
   "dependencies": {
-    "@zukhruf/async": "^0.8.51",
-    "@zukhruf/election": "^0.8.51",
-    "@zukhruf/pipes": "^0.8.51",
-    "@zukhruf/sqlite-notify": "^0.8.51",
-    "@zukhruf/sqlite-open": "^0.8.51",
-    "@zukhruf/sqlite-queue": "^0.8.51"
+    "@zukhruf/async": "^0.8.52",
+    "@zukhruf/election": "^0.8.52",
+    "@zukhruf/pipes": "^0.8.52",
+    "@zukhruf/sqlite-notify": "^0.8.52",
+    "@zukhruf/sqlite-open": "^0.8.52",
+    "@zukhruf/sqlite-queue": "^0.8.52"
   },
   "devDependencies": {
     "@sinonjs/fake-timers": "15.5.0",
-    "@zukhruf/fs": "^0.8.51",
-    "@zukhruf/testing": "^0.8.51",
+    "@zukhruf/fs": "^0.8.52",
+    "@zukhruf/testing": "^0.8.52",
     "p-queue": "10.0.0"
   }
 }
