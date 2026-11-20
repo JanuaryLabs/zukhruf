@@ -49,6 +49,8 @@ The theme is the values of a set of CSS variables, for example `--primary`, `--b
 :root {
   --primary: oklch(0.55 0.2 260);
   --radius: 0.5rem;
+  --control-height: 2.5rem;
+  --control-background: var(--card);
 }
 
 .dark {
@@ -78,6 +80,8 @@ The `@theme inline` block of `theme.css` maps these variables to Tailwind CSS co
 ```
 
 The preset is fixed. The class strings of each component contain the preset, for example the rounded corners and the spacing of the dialog. Thus an app cannot change the preset. An app changes only the theme. See [ADR 0004](./docs/adr/0004-the-components-use-base-ui-and-the-nova-preset.md).
+
+The theme also covers the density of the controls: `--control-height`, `--control-height-sm` and `--control-background` (see [what the stylesheet adds](#what-the-stylesheet-adds-to-stock-shadcnui)). Set a token, not a `className` restyle such as `h-10 bg-card` on each control. A subtree can set a second value, for example taller controls on the auth pages. See [ADR 0006](./docs/adr/0006-a-host-gets-its-looks-through-theme-tokens-and-data-attribute-patches.md).
 
 ## The open state of the sidebar
 
@@ -119,7 +123,7 @@ Not fixed: the mobile sidebar has a hidden title and description in English (`Si
 
 ## What the stylesheet adds to stock shadcn/ui
 
-The stylesheet has six patches:
+The stylesheet has seven patches:
 
 - **A pointer cursor on enabled buttons.** In Tailwind CSS 4, a button has the default cursor of the browser, not the pointer. The upgrade guide of Tailwind CSS gives a rule that sets the pointer again. The patch is that rule, in `@layer base`.
 - **A cap on the height of a dialog.** A dialog is never taller than the window minus `2rem`, and it scrolls when its content is taller. Thus the buttons at the bottom of a tall dialog stay on the screen. The rule is `max-height: calc(100dvh - 2rem); overflow-y: auto` on `[data-slot="dialog-content"]`. The patch is in `@layer components`.
@@ -128,6 +132,8 @@ The stylesheet has six patches:
 - **A tabs list that wraps grows to its rows.** The class `group-data-horizontal/tabs:h-8` of `TabsList` wins over the class `h-auto` of the app: both have the specificity of one class, and Tailwind CSS puts a class with a variant after a plain class. Thus a horizontal list with `flex-wrap` stayed 32px tall and its second row covered the content below it. In Meddit, at a width of 390px, four tabs took two rows of 74px in a list of 32px. The patch sets `height: auto` on `[data-slot="tabs-list"][data-orientation="horizontal"].flex-wrap`. A list with `flex-wrap` on one row also takes the height of its triggers: in Meddit at 1440px, 34px in place of 32px. The patch leaves a list without `flex-wrap` at 32px. Its triggers are `h-[calc(100%-1px)]`, thus 25px, and in a list of auto height the percentage does not resolve, so they would grow to 26px.
 
 - **A select popup sits on its trigger.** With `alignItemWithTrigger`, the default of `SelectContent`, Base UI lines up the text of the selected item with the text of the trigger. The trigger's text starts after a 1px border and `ps-2.5`, 11px; the popup draws its edge with `ring-1`, a shadow, so the item's text started at 10px. Thus the popup sat 1px off the trigger: in Meddit at 1280px, 769–1169 for a trigger at 768–1168, and the label under the popup showed at its edge. The patch sets `padding-inline: 1px` on `[data-slot="select-content"]`, in `@layer components`. The popup then has the trigger's edges in both directions, and a popup opened without `alignItemWithTrigger` lines up its text with the trigger's text too.
+
+- **The controls take their height and background from the theme.** `--control-height` sets the height of `Input`, `SelectTrigger` at `data-size="default"`, `InputGroup` and `Button` at the default size, and the minimum height of `Textarea` and `ComboboxChips`. `--control-height-sm` sets the height of `Button` at `size="sm"`. The button rules are keyed on the `group/button` class of `buttonVariants()`, so a link with the classes of a button takes them too. `--control-background` sets the background of `Input`, `Textarea`, `SelectTrigger`, `InputGroup` and `ComboboxChips`. Without a value, each rule falls back to nova: 32px (64px for `Textarea`), 28px, and `transparent` (`input/30` under `.dark`). Each rule is keyed on the nova class that it replaces, for example `[data-slot='input'].h-8`, so a class of the app that tailwind-merge swaps in for that class turns the rule off. A disabled control, an `InputGroup` with a textarea or a block-aligned addon, a hovered dark `SelectTrigger` and a button of an `InputGroup` keep their nova styles. The patch is in `@layer utilities`. See [ADR 0006](./docs/adr/0006-a-host-gets-its-looks-through-theme-tokens-and-data-attribute-patches.md).
 
 The cursor, the cap, the shortcut and the select popup are in layers before `utilities`. Thus a utility class of the app, for example `cursor-wait` or `max-h-none`, still changes them.
 
@@ -230,6 +236,7 @@ export const SIDEBAR_COOKIE_NAME = 'sidebar_state';
 3. [The stylesheet registers its own source and keeps its patches in layers](./docs/adr/0003-the-stylesheet-registers-its-own-source-and-keeps-its-patches-in-layers.md)
 4. [The components use Base UI and the nova preset](./docs/adr/0004-the-components-use-base-ui-and-the-nova-preset.md)
 5. [The default theme is in `@layer base`](./docs/adr/0005-the-default-theme-is-in-layer-base.md)
+6. [A host gets its looks through theme tokens and data-attribute patches](./docs/adr/0006-a-host-gets-its-looks-through-theme-tokens-and-data-attribute-patches.md)
 
 ## Development
 

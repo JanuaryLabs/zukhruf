@@ -21,7 +21,7 @@ The visual design that the class strings of the components contain: the sizes, t
 _Avoid_: Style (the `style` field of `components.json` names the headless library and the preset together, as `base-nova`), theme
 
 **Theme**:
-The values of the CSS variables, for example `--primary` and `--radius`. The `.dark` class selects the dark values. `theme.css` sets the default values in `@layer base`. An app changes the theme when it sets the variables after the import of the stylesheet, outside of a layer or in `@layer base`.
+The values of the CSS variables, for example `--primary` and `--radius`. The `.dark` class selects the dark values. `theme.css` sets the default values in `@layer base`. An app changes the theme when it sets the variables after the import of the stylesheet, outside of a layer or in `@layer base`. The theme also covers density: `--control-height`, `--control-height-sm` and `--control-background` set the height and the background of the controls, and a subtree can set a second value ([ADR 0006](./docs/adr/0006-a-host-gets-its-looks-through-theme-tokens-and-data-attribute-patches.md)). The stylesheet does not set them; each patch that reads one falls back to the value of nova.
 _Avoid_: Preset, tokens, skin. `theme.css` is the generated file that sets the default theme.
 
 **Generated source**:
@@ -41,7 +41,7 @@ A Tailwind class that names a side by the direction of the text, not by left or 
 _Avoid_: RTL class (the class works in both directions), directional class
 
 **Patch**:
-A CSS rule in `styles.css`, in a layer, that changes what stock shadcn/ui does. There are six patches: the pointer cursor on buttons, the cap on the height of a dialog, the width of the mobile sidebar, the direction of a menu shortcut, the height of a tabs list that wraps, and the inline padding of a select popup. A utility class of an app still wins over the cursor, the cap, the shortcut and the select popup. The width patch and the tabs patch are in `@layer utilities`, because each must win over a utility class of the component.
+A CSS rule in `styles.css`, in a layer, that changes what stock shadcn/ui does. There are seven patches: the pointer cursor on buttons, the cap on the height of a dialog, the width of the mobile sidebar, the direction of a menu shortcut, the height of a tabs list that wraps, the inline padding of a select popup, and the control tokens. A utility class of an app still wins over the cursor, the cap, the shortcut and the select popup. The width patch, the tabs patch and the control tokens are in `@layer utilities`, because each must win over a utility class of the component. A token patch is keyed on the nova class that it replaces, so a host class that tailwind-merge swaps in for that class turns it off.
 _Avoid_: Override, hack
 
 **Private import**:
@@ -49,7 +49,7 @@ An import specifier that starts with `#`, for example `#components/button`. The 
 _Avoid_: Alias (the `aliases` of `components.json` give the CLI these specifiers), internal import, self-reference (a self-reference uses the package name and needs a public subpath)
 
 **Hand-written module**:
-A file in `src/hand-written` that a person writes. It exports a value that the generated source has but does not export, for example `SIDEBAR_COOKIE_NAME`. The sync never changes it, and it adds one `export *` line for it to the entry. A test makes sure that the value is the same as the value in the generated source.
+A file in `src/hand-written` that a person writes. It exports a value that an app needs and the generated source does not export: a value that the generated source has, for example `SIDEBAR_COOKIE_NAME`, or a name that the patches of the stylesheet read, for example the `data-variant` names of [ADR 0006](./docs/adr/0006-a-host-gets-its-looks-through-theme-tokens-and-data-attribute-patches.md). The sync never changes it, and it adds one `export *` line for it to the entry. A test makes sure that the value is the same as the value in the generated source or the stylesheet.
 _Avoid_: Patch (a patch is a CSS rule), own code, custom component (custom components belong to the app)
 
 **Entry**:

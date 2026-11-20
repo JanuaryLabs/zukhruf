@@ -63,3 +63,74 @@
     unicode-bidi: plaintext;
   }
 }
+
+/*
+ * Control density and tone are theme tokens (ADR 0006). A host sets
+ * --control-height, --control-height-sm and --control-background, and each
+ * patch below reads them with nova's own value as the fallback, so a host that
+ * sets none gets stock nova. Each patch is keyed on the nova class it replaces:
+ * a host class that tailwind-merge swaps in for it drops that class, and the
+ * patch no longer matches. They are in @layer utilities at one attribute more
+ * than the nova class, so they beat it without relying on source order; a
+ * state the nova class string styles (disabled, has-[>textarea], dark hover)
+ * is left out with :not(), so its nova rule still applies.
+ */
+@layer utilities {
+  [data-slot='input'].h-8,
+  [data-slot='input-group'].h-8:not(
+      :has(> textarea, > [data-align='block-start'], > [data-align='block-end'])
+    ),
+  [data-slot='select-trigger'][data-size='default'].data-\[size\=default\]\:h-8,
+  .group\/button.h-8:not([data-size]) {
+    height: var(--control-height, calc(var(--spacing) * 8));
+  }
+
+  [data-slot='textarea'].min-h-16 {
+    min-height: var(--control-height, calc(var(--spacing) * 16));
+  }
+
+  [data-slot='combobox-chips'].min-h-8 {
+    min-height: var(--control-height, calc(var(--spacing) * 8));
+  }
+
+  /*
+   * a button is keyed on group/button, which every buttonVariants() carries, so
+   * a link with the classes of a button takes the token too; InputGroupButton
+   * passes data-size, so its own sizes stay
+   */
+  .group\/button.h-7:not([data-size]) {
+    height: var(--control-height-sm, calc(var(--spacing) * 7));
+  }
+
+  [data-slot='input'].bg-transparent:not(:disabled),
+  [data-slot='textarea'].bg-transparent:not(:disabled),
+  [data-slot='select-trigger'].bg-transparent,
+  [data-slot='combobox-chips'].bg-transparent {
+    background-color: var(--control-background, transparent);
+  }
+
+  /*
+   * nova's input group has no light background class to key on, so the patch
+   * has no specificity: every utility wins over it, a host's bg-* class, the
+   * kit's has-disabled:bg-input/50 and the command input's bg-input/30.
+   */
+  :where([data-slot='input-group']) {
+    background-color: var(--control-background, transparent);
+  }
+
+  [data-slot='input'].dark\:bg-input\/30:not(:disabled):is(.dark, .dark *),
+  [data-slot='textarea'].dark\:bg-input\/30:not(:disabled):is(.dark, .dark *),
+  [data-slot='select-trigger'].dark\:bg-input\/30:not(:hover):is(
+      .dark,
+      .dark *
+    ),
+  [data-slot='combobox-chips'].dark\:bg-input\/30:is(.dark, .dark *),
+  [data-slot='input-group'].dark\:bg-input\/30:not(:has(:disabled)):not(
+      [data-slot='command-input-wrapper'] > *
+    ):is(.dark, .dark *) {
+    background-color: var(
+      --control-background,
+      color-mix(in oklab, var(--input) 30%, transparent)
+    );
+  }
+}

@@ -152,6 +152,142 @@ describe('the stylesheet of @zukhruf/shadcn', () => {
     );
   });
 
+  test('a host sets the height of the controls with --control-height, with the 32px of nova as the fallback', async () => {
+    // Act
+    const css = await buildAppStylesheet();
+
+    // Assert
+    const height =
+      /\[data-slot=['"]?input['"]?\]\.h-8,\s*\[data-slot=['"]?input-group['"]?\]\.h-8:not\(\s*:has\(\s*>\s*textarea,\s*>\s*\[data-align=['"]?block-start['"]?\],\s*>\s*\[data-align=['"]?block-end['"]?\]\s*\)\s*\),\s*\[data-slot=['"]?select-trigger['"]?\]\[data-size=['"]?default['"]?\]\.data-\\\[size\\=default\\\]\\:h-8,\s*\.group\\\/button\.h-8:not\(\[data-size\]\)\s*\{\s*height:\s*var\(--control-height,\s*calc\(var\(--spacing\) \* 8\)\);?\s*\}/;
+    assert.equal(
+      layerOf(css, height),
+      'utilities',
+      'In an earlier layer the patch loses to the h-8 utility of the component',
+    );
+  });
+
+  test('a textarea and the chips of a combobox take --control-height as their minimum height', async () => {
+    // Act
+    const css = await buildAppStylesheet();
+
+    // Assert
+    assert.equal(
+      layerOf(
+        css,
+        /\[data-slot=['"]?textarea['"]?\]\.min-h-16\s*\{\s*min-height:\s*var\(--control-height,\s*calc\(var\(--spacing\) \* 16\)\);?\s*\}/,
+      ),
+      'utilities',
+    );
+    assert.equal(
+      layerOf(
+        css,
+        /\[data-slot=['"]?combobox-chips['"]?\]\.min-h-8\s*\{\s*min-height:\s*var\(--control-height,\s*calc\(var\(--spacing\) \* 8\)\);?\s*\}/,
+      ),
+      'utilities',
+    );
+  });
+
+  test('a small button takes --control-height-sm, and a button of an input group keeps its own size', async () => {
+    // Act
+    const css = await buildAppStylesheet();
+
+    // Assert
+    assert.equal(
+      layerOf(
+        css,
+        /\.group\\\/button\.h-7:not\(\[data-size\]\)\s*\{\s*height:\s*var\(--control-height-sm,\s*calc\(var\(--spacing\) \* 7\)\);?\s*\}/,
+      ),
+      'utilities',
+      'InputGroupButton writes data-size; without :not([data-size]) its buttons would grow to the control height',
+    );
+  });
+
+  test('a host sets the background of the controls with --control-background, transparent by default and left to the disabled state', async () => {
+    // Act
+    const css = await buildAppStylesheet();
+
+    // Assert
+    assert.equal(
+      layerOf(
+        css,
+        /\[data-slot=['"]?input['"]?\]\.bg-transparent:not\(:disabled\),\s*\[data-slot=['"]?textarea['"]?\]\.bg-transparent:not\(:disabled\),\s*\[data-slot=['"]?select-trigger['"]?\]\.bg-transparent,\s*\[data-slot=['"]?combobox-chips['"]?\]\.bg-transparent\s*\{\s*background-color:\s*var\(--control-background,\s*transparent\);?\s*\}/,
+      ),
+      'utilities',
+    );
+    assert.equal(
+      layerOf(
+        css,
+        /:where\(\[data-slot=['"]?input-group['"]?\]\)\s*\{\s*background-color:\s*var\(--control-background,\s*transparent\);?\s*\}/,
+      ),
+      'utilities',
+      'With any specificity the patch would win over the bg-input/30 of the command input and the has-disabled background',
+    );
+  });
+
+  test('in dark mode --control-background falls back to the input/30 of nova, and a disabled or hovered control keeps its nova background', async () => {
+    // Act
+    const css = await buildAppStylesheet();
+
+    // Assert
+    assert.equal(
+      layerOf(
+        css,
+        /\[data-slot=['"]?input['"]?\]\.dark\\:bg-input\\\/30:not\(:disabled\):is\(\.dark, \.dark \*\),\s*\[data-slot=['"]?textarea['"]?\]\.dark\\:bg-input\\\/30:not\(:disabled\):is\(\.dark, \.dark \*\),\s*\[data-slot=['"]?select-trigger['"]?\]\.dark\\:bg-input\\\/30:not\(:hover\):is\(\s*\.dark, \.dark \*\s*\),\s*\[data-slot=['"]?combobox-chips['"]?\]\.dark\\:bg-input\\\/30:is\(\.dark, \.dark \*\),\s*\[data-slot=['"]?input-group['"]?\]\.dark\\:bg-input\\\/30:not\(:has\(:disabled\)\):not\(\s*\[data-slot=['"]?command-input-wrapper['"]?\] > \*\s*\):is\(\.dark, \.dark \*\)\s*\{[^}]*color-mix\(in oklab, var\(--input\) 30%, transparent\)/,
+      ),
+      'utilities',
+    );
+  });
+
+  test('each control still has the nova class that its token patch is keyed on, so a sync that drops one fails here', async () => {
+    // Arrange
+    const { createElement: h } = await import('react');
+    const { renderToStaticMarkup } = await import('react-dom/server');
+    const kit = await import('@zukhruf/shadcn');
+    const classesOf = (markup: string, slot: string) => {
+      const element = new RegExp(`<[^>]*data-slot="${slot}"[^>]*>`).exec(
+        markup,
+      );
+      assert.ok(element, `${slot} must render`);
+      const classes = /class="([^"]*)"/.exec(element[0])?.[1] ?? '';
+      return new Set(classes.replaceAll('&gt;', '>').split(' '));
+    };
+    const anchors = [
+      [h(kit.Input), 'input', ['h-8', 'bg-transparent', 'dark:bg-input/30']],
+      [
+        h(kit.Textarea),
+        'textarea',
+        ['min-h-16', 'bg-transparent', 'dark:bg-input/30'],
+      ],
+      [
+        h(kit.Select, null, h(kit.SelectTrigger, null, h(kit.SelectValue))),
+        'select-trigger',
+        ['data-[size=default]:h-8', 'bg-transparent', 'dark:bg-input/30'],
+      ],
+      [
+        h(kit.InputGroup, null, h(kit.InputGroupInput)),
+        'input-group',
+        ['h-8', 'has-[>textarea]:h-auto', 'dark:bg-input/30'],
+      ],
+      [
+        h(kit.Combobox, null, h(kit.ComboboxChips)),
+        'combobox-chips',
+        ['min-h-8', 'bg-transparent', 'dark:bg-input/30'],
+      ],
+      [h(kit.Button), 'button', ['group/button', 'h-8']],
+      [h(kit.Button, { size: 'sm' }), 'button', ['group/button', 'h-7']],
+    ] as const;
+
+    for (const [element, slot, classes] of anchors) {
+      // Act
+      const rendered = classesOf(renderToStaticMarkup(element), slot);
+
+      // Assert
+      for (const name of classes) {
+        assert.ok(rendered.has(name), `${slot} must have the class ${name}`);
+      }
+    }
+  });
+
   // happy-dom 20 drops each rule in a @layer block from getComputedStyle, so
   // these tests check the cascade inputs: the layer and the order of each rule.
   test('a host theme in @layer base that loads after the stylesheet wins over the default theme', async () => {
