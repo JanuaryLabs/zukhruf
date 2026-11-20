@@ -538,9 +538,18 @@ class ElectedConnection implements SharedConnection {
     return {
       dial: async (network, address) => (await elect()).dial(network, address),
       openSession: async (start) => (await elect()).openSession(start),
-      // Its connection keeps the process alive, as the hold did; an election
-      // that fails here leaves the next channel to elect.
-      ref: () => void elect().catch(() => undefined),
+      // Its connection keeps the process alive, as the hold did. An election
+      // that fails here rejects the channels that wait for it (ADR 0013), and
+      // leaves the next channel to elect. Nobody waits for this call, so its
+      // failure is a process warning.
+      ref: () =>
+        void elect().catch((error: unknown) => {
+          process.emitWarning(
+            Error.isError(error)
+              ? error
+              : new Error(String(error), { cause: error }),
+          );
+        }),
       unref: () => undefined,
       close: async () => {
         const role = await elected?.catch(() => undefined);

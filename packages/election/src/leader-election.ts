@@ -42,7 +42,12 @@ export abstract class LeaderElection<Claim> {
     this.clock = clock;
   }
 
-  /** Resolves with the new term, or `undefined` when another candidate still leads after `timeout`. */
+  /**
+   * Resolves with the new term, or `undefined` when another candidate still
+   * leads after `timeout`. When a step fails and giving the claim up or
+   * freeing the attempt fails too, it rejects with a `SuppressedError`: its
+   * `suppressed` is the step's error, and its `error` is the failure to free.
+   */
   async campaign({ timeout = 0, signal }: CampaignOptions = {}): Promise<
     Term | undefined
   > {
@@ -108,7 +113,8 @@ export abstract class LeaderElection<Claim> {
     try {
       won = await this.#tryUntil(claim, deadline, signal);
     } catch (error) {
-      await this.close(claim).catch(() => {});
+      await using closing = new AsyncDisposableStack();
+      closing.defer(() => this.close(claim));
       throw error;
     }
     if (won === undefined) {
@@ -170,8 +176,10 @@ export abstract class LeaderElection<Claim> {
         close: () => this.close(claim),
       });
     } catch (error) {
-      await this.release(claim).catch(() => {});
-      await this.close(claim).catch(() => {});
+      // Disposed last in, first out: the release, then the close.
+      await using giveUp = new AsyncDisposableStack();
+      giveUp.defer(() => this.close(claim));
+      giveUp.defer(() => this.release(claim));
       throw error;
     }
     return term.signal.aborted ? 'lost' : term;

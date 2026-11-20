@@ -146,12 +146,14 @@ describe('A term that its backend takes away', () => {
     ]);
   });
 
-  test('a resign after a loss resolves, gives nothing up, and frees the claim once, also when freeing it fails', async () => {
+  test('a resign after a loss resolves, gives nothing up, and frees the claim once; a failure to free it is a process warning', async (t) => {
     // Arrange: freeing the claim fails, as a dead connection to a backend can.
+    const emitWarning = t.mock.method(process, 'emitWarning', () => {});
+    const freeing = new Error('The connection to the backend is gone');
     const lease = new AbortController();
     const election = new ScriptedElection(globalThis, {
       lose: lease.signal,
-      closeFails: new Error('The connection to the backend is gone'),
+      closeFails: freeing,
     });
     const term = await election.campaign();
     assert.ok(term);
@@ -167,6 +169,10 @@ describe('A term that its backend takes away', () => {
     assert.deepEqual(
       election.steps.filter((step) => /release|close/.test(step)),
       ['close 1'],
+    );
+    assert.deepEqual(
+      emitWarning.mock.calls.map((call) => call.arguments),
+      [[freeing]],
     );
   });
 
@@ -507,36 +513,45 @@ describe('A campaign', () => {
     );
   });
 
-  test('a step that throws frees the attempt, and the campaign rejects with that step’s own error even when freeing fails too', async () => {
+  test('a step that throws frees the attempt, and when freeing fails too, the campaign rejects with a SuppressedError of the freeing error over the step’s own error', async () => {
     // Arrange
     const failure = new Error('The backend is unreachable');
+    const freeing = new Error('Freeing failed too');
     const election = new ScriptedElection(globalThis, {
       tries: [failure],
-      closeFails: new Error('Freeing failed too'),
+      closeFails: freeing,
     });
 
     // Act
     const result = await settle(election.campaign());
 
     // Assert
-    assert.deepEqual(result, { error: failure });
+    assert.ok('error' in result && result.error instanceof SuppressedError);
+    assert.equal(result.error.suppressed, failure);
+    assert.equal(result.error.error, freeing);
     assert.deepEqual(election.steps, ['open 1', 'try 1', 'close 1']);
   });
 
-  test('a watch that fails to start gives the won claim up and frees it, and the campaign rejects with the watch’s error, also when giving up and freeing fail', async () => {
+  test('a watch that fails to start gives the won claim up and frees it, and when giving up and freeing fail, the campaign rejects with a SuppressedError of both failures over the watch’s error', async () => {
     // Arrange
     const failure = new Error('The lease renewal could not start');
+    const releasing = new Error('The release failed');
+    const freeing = new Error('The close failed');
     const election = new ScriptedElection(globalThis, {
       watchFails: failure,
-      releaseFails: new Error('The release failed'),
-      closeFails: new Error('The close failed'),
+      releaseFails: releasing,
+      closeFails: freeing,
     });
 
     // Act
     const result = await settle(election.campaign());
 
-    // Assert
-    assert.deepEqual(result, { error: failure });
+    // Assert: the close ran after the release, so its error suppresses the release's.
+    assert.ok('error' in result && result.error instanceof SuppressedError);
+    assert.equal(result.error.suppressed, failure);
+    assert.ok(result.error.error instanceof SuppressedError);
+    assert.equal(result.error.error.suppressed, releasing);
+    assert.equal(result.error.error.error, freeing);
     assert.deepEqual(election.steps, [
       'open 1',
       'try 1',
@@ -594,21 +609,27 @@ describe('A campaign that its caller stops', () => {
     assert.deepEqual(election.steps, ['open 1', 'try 1', 'close 1']);
   });
 
-  test('a claim won after the caller left is given up and freed, and the campaign rejects with the signal’s reason, also when giving up and freeing fail', async () => {
+  test('a claim won after the caller left is given up and freed, and when giving up and freeing fail, the campaign rejects with a SuppressedError of both failures over the signal’s reason', async () => {
     // Arrange: the caller leaves while the claim is being won, and the release and the close fail.
     const stop = new AbortController();
     const reason = new Error('Stopped while the claim was won');
+    const releasing = new Error('The release failed');
+    const freeing = new Error('The close failed');
     const election = new ScriptedElection(globalThis, {
       duringTry: () => stop.abort(reason),
-      releaseFails: new Error('The release failed'),
-      closeFails: new Error('The close failed'),
+      releaseFails: releasing,
+      closeFails: freeing,
     });
 
     // Act
     const result = await settle(election.campaign({ signal: stop.signal }));
 
-    // Assert
-    assert.deepEqual(result, { error: reason });
+    // Assert: the close ran after the release, so its error suppresses the release's.
+    assert.ok('error' in result && result.error instanceof SuppressedError);
+    assert.equal(result.error.suppressed, reason);
+    assert.ok(result.error.error instanceof SuppressedError);
+    assert.equal(result.error.error.suppressed, releasing);
+    assert.equal(result.error.error.error, freeing);
     assert.deepEqual(election.steps, [
       'open 1',
       'try 1',

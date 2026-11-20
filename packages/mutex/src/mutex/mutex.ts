@@ -117,16 +117,30 @@ export class Mutex {
     try {
       return await untilAborted(acquiring, signal);
     } catch (error) {
-      if (signal?.aborted) void giveBack(acquiring);
+      if (signal?.aborted) void giveBack(acquiring, signal.reason);
       throw error;
     }
   }
 }
 
-async function giveBack(acquiring: Promise<LockHandle | undefined>) {
+/**
+ * Gives back the lease that an acquire got after its caller cancelled with
+ * `reason`. The caller already rejected, so nobody is left to tell of a
+ * failure here: it is a process warning.
+ */
+async function giveBack(
+  acquiring: Promise<LockHandle | undefined>,
+  reason: unknown,
+) {
   try {
-    await (await acquiring)?.[Symbol.asyncDispose]();
-  } catch {
-    // The caller already rejected with its reason; nobody is left to tell.
+    const handle = await acquiring.catch((error: unknown) => {
+      // A mode that heeds the signal stops with the caller's reason: it got no lease to give back.
+      if (error !== reason) throw error;
+    });
+    await handle?.[Symbol.asyncDispose]();
+  } catch (error) {
+    process.emitWarning(
+      Error.isError(error) ? error : new Error(String(error), { cause: error }),
+    );
   }
 }

@@ -13,6 +13,7 @@ export { type ConnectOptions, Docker } from './docker.ts';
 export { type ParsedHost, type SshHost, parseHost } from './host.ts';
 export {
   BindSourceNotFoundError,
+  ClientDisposedError,
   ConnectionFailedError,
   ContainerNotFoundError,
   ContainerNotRunningError,

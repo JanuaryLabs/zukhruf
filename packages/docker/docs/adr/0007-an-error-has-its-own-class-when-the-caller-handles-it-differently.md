@@ -1,5 +1,7 @@
 # An error has its own class when the caller handles it differently
 
+Amended on 2026-11-20 (#3619): the list of classes below also holds `ClientDisposedError`, a request that a disposed client could not finish. A caller handles it differently from a failure of the engine: the background removal of the docker lock store of `@zukhruf/mutex` ignores it after a shutdown that disposed the client, and reports every other error. `IncompleteOutputError` was already a class and was missing from the list.
+
 The first design had two error classes: `ConnectionFailedError`, and `DockerEngineError` with the HTTP status. A caller then tests `error.status === 409`, and a 409 has many meanings: a taken name, a volume in use, a stopped container, an image in use. The maintainer chose otherwise on 2026-10-20: "I prefer naunced error classes for cases where an error expcetion actually make a differnce."
 
 The sandbox of `@deepagents/context` shows which errors make a difference. It matches the text of the CLI to find them, and it does something different for each:

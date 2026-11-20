@@ -93,7 +93,7 @@ await using term = await election.campaign({ timeout: Infinity, signal });
 A term is a lease on leadership. `Term` implements the `Lease` interface of [`@zukhruf/lease`](../lease/README.md), so a function that takes a `Lease` also takes a term. See the glossary of [leases](../lease/CONTEXT.md).
 
 - `term.epoch` is the number of the term. Each epoch is below 2^31.
-- `term.resign()` ends the term and gives the claim up. A second call waits for the first, and its options do nothing. `await using` resigns at the end of its scope.
+- `term.resign()` ends the term and gives the claim up. A second call waits for the first, and its options do nothing. `await using` resigns at the end of its scope. When the release fails, the claim is still freed, and `resign` rejects with the release's error. When the release or the record of `clean` fails and freeing the claim fails too, `resign` rejects with a `SuppressedError`: its `suppressed` is that step's error, and its `error` is the failure to free. After a loss, `resign` never rejects: a failure to free the claim has no caller to go to, so it is a process warning (`process.emitWarning`).
 - `term.resign({ clean: true })` records a clean shutdown for the next term, and then ends the term. Use it only when the leader leaves nothing for the next term to recover, for example no work in progress. A lost term records nothing, also with `clean`. When the record fails, the claim is freed, and `resign` rejects with that error. The socket lock store of `@zukhruf/mutex` resigns clean when no process holds a key ([its ADR 0018](../mutex/docs/adr/0018-the-next-leader-skips-the-grace-window-after-a-clean-shutdown.md)). `@zukhruf/single-flight` no longer records a clean shutdown, because its coordinator has no grace window to skip ([its ADR 0010](../single-flight/docs/adr/0010-a-leader-holds-a-kernel-lock-on-its-key-until-its-outcome-is-handed-over.md)).
 - `term.afterCleanShutdown` is `true` only when the term just before this one resigned clean. Then the new leader knows that it has nothing to recover. It is `false` after a crash, after a lost term, after a resign without `clean`, and for the first term.
 - `term.signal` aborts with `LeaseLostError` when the term is lost while its leader still runs. The `subject` of the error is `'leadership'`, and its `cause` is the reason of the backend. The signal does not abort when the leader resigns.
@@ -131,7 +131,7 @@ A backend must keep six rules:
 2. `tryClaim` gives `afterCleanShutdown: true` only when the term just before this one recorded a clean shutdown. It reads each record one time only. Thus a crash after a clean term never reads as clean.
 3. `watch` calls `lose` before the backend can give the claim to another candidate. For a claim that the backend keeps only for a time, renew it well before that time ends, and count the time on a monotonic clock. Then an old leader stops before a new one starts.
 4. The campaign never calls `recordCleanShutdown` or `release` after a loss, because the claim can be another candidate's then.
-5. The campaign calls `close` after each end: a won term, a lost term, a failed attempt, or an attempt that never won.
+5. The campaign calls `close` after each end: a won term, a lost term, a failed attempt, or an attempt that never won. When a step fails and `release` or `close` fails too, the campaign rejects with a `SuppressedError`: its `suppressed` is the step's error, and its `error` is the failure to give the claim up or free it.
 6. `waitForChange` settles when its signal aborts, and it never ends the attempt itself. The campaign aborts that signal at its `timeout`, and then it tries one last time. A backend with no push polls in its own `waitForChange`, for example with `delay` of `@zukhruf/async`.
 
 This backend elects among the candidates of one process. Its claim is an entry in a map, and it has no push, so it polls:
@@ -214,6 +214,7 @@ The socket lock store of `@zukhruf/mutex` uses `SqliteElection`, with the claim 
 | `NetworkDirectoryError` | The directory of a `SqliteElection` is on a network file system. It is the class of `@zukhruf/fs`.                                                                                                                |
 | `LeaseLostError`        | The reason of `term.signal` when the backend took the claim away. Its `subject` is `'leadership'`, and its `cause` is the backend's reason. It is the class of `@zukhruf/lease`, and this package exports it too. |
 | `signal.reason`         | A campaign rejects with it when its signal aborts.                                                                                                                                                                |
+| `SuppressedError`       | A campaign or a resign rejects with it when a step failed and giving the claim up or freeing it failed too. Its `suppressed` is the step's error, and its `error` is the failure to free.                         |
 
 ## API
 

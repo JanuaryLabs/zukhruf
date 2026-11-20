@@ -36,6 +36,20 @@ export class ConnectionFailedError extends DockerError {
   }
 }
 
+/**
+ * The client was disposed, so it closed this connection to the engine. A
+ * request in flight, a request that starts after the disposal started, and an
+ * iteration of a stream that is open reject with it.
+ */
+export class ClientDisposedError extends DockerError {
+  constructor() {
+    super(
+      'The client was disposed, so it closed this connection to the engine.',
+    );
+    this.name = 'ClientDisposedError';
+  }
+}
+
 /** The host is not unix://, npipe:// or ssh://. */
 export class UnsupportedHostError extends DockerError {
   readonly host: string;

@@ -1,6 +1,8 @@
 import { type Clock, delay, timeout } from '@zukhruf/async';
 import {
   type CancelOptions,
+  ClientDisposedError,
+  ConnectionFailedError,
   type Container,
   ContainerNotFoundError,
   type ContainerProcess,
@@ -402,8 +404,31 @@ class Claim {
     if (this.#done.signal.aborted) return;
     this.#done.abort();
     this.#lease.lose(cause);
-    // Nobody waits for this removal; a failed one leaves the claim to the end of its attach.
-    this.#container.remove({ force: true }).catch(() => {});
+    // Nobody waits for this removal: an engine that stopped answering may never answer it.
+    void this.#removeLost();
+  }
+
+  /**
+   * An engine out of reach, or a client disposed meanwhile, leaves the claim
+   * to the end of its attach. Nobody is left to tell of another failure, so
+   * it is a process warning.
+   */
+  async #removeLost(): Promise<void> {
+    try {
+      await this.#container.remove({ force: true });
+    } catch (error) {
+      if (
+        error instanceof ConnectionFailedError ||
+        error instanceof ClientDisposedError
+      ) {
+        return;
+      }
+      process.emitWarning(
+        Error.isError(error)
+          ? error
+          : new Error(String(error), { cause: error }),
+      );
+    }
   }
 
   /** Removes the claim by its ID, so that a release never removes the claim of a later holder. */

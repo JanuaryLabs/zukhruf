@@ -5,9 +5,9 @@ import { pipeline } from 'node:stream/promises';
 
 import { compareApiVersions } from './api-version.ts';
 import {
+  ClientDisposedError,
   ConnectionFailedError,
   DockerEngineError,
-  DockerError,
   UnsupportedEngineError,
 } from './errors.ts';
 import type { Filters } from './options.ts';
@@ -73,14 +73,16 @@ function search(query: Query | undefined): string {
 /** The message of an error answer of the engine: {"message": "..."}, or the text itself. */
 function engineMessage(response: EngineResponse): string {
   const text = response.body.toString('utf8');
+  let parsed: unknown;
   try {
-    const parsed: unknown = JSON.parse(text);
-    const message: unknown = Reflect.get(Object(parsed), 'message');
-    if (typeof message === 'string') return message;
-  } catch {
+    parsed = JSON.parse(text);
+  } catch (error) {
     // The answer is not JSON: its text is the message.
+    if (error instanceof SyntaxError) return text.trim();
+    throw error;
   }
-  return text.trim();
+  const message: unknown = Reflect.get(Object(parsed), 'message');
+  return typeof message === 'string' ? message : text.trim();
 }
 
 /** True for a 2xx status. */
@@ -111,7 +113,7 @@ export class EngineClient {
    * socket, so only this set lets close() reach it.
    */
   readonly #streams: Set<Readable>;
-  /** Aborts when close() starts. Its reason is the DockerError of the disposal. */
+  /** Aborts when close() starts. Its reason is the ClientDisposedError of the disposal. */
   readonly #disposal: AbortController;
 
   constructor(
@@ -163,13 +165,10 @@ export class EngineClient {
   /**
    * Closes each connection, and resolves when each one is closed. A request
    * in flight, a request that starts after close() started, and an iteration
-   * of a stream that is open reject with a DockerError that says that the
-   * client was disposed.
+   * of a stream that is open reject with ClientDisposedError.
    */
   async close(): Promise<void> {
-    const error = new DockerError(
-      'The client was disposed, so it closed this connection to the engine.',
-    );
+    const error = new ClientDisposedError();
     this.#disposal.abort(error);
     for (const stream of this.#streams) stream.destroy(error);
     this.#streams.clear();
@@ -318,7 +317,7 @@ export class EngineClient {
       request.destroy();
       for (const response of responses) response.destroy(signal?.reason);
     };
-    // The disposal ends the exchange as an abort of the signal does, with the DockerError of the disposal.
+    // The disposal ends the exchange as an abort of the signal does, with the ClientDisposedError of the disposal.
     const dispose = () => {
       reject(disposal.reason);
       request.destroy();

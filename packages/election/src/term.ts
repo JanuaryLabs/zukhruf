@@ -65,8 +65,10 @@ export class Term implements Lease, AsyncDisposable {
   /**
    * Ends the term and gives the claim up. With `clean`, it first records a
    * clean shutdown for the next term. A second call waits for the first, and
-   * its options do nothing. After a loss, it only waits until the claim's
-   * resources are free, records nothing, and never rejects.
+   * its options do nothing. When a step fails and freeing the claim fails
+   * too, it rejects with a `SuppressedError`: its `suppressed` is the step's
+   * error, and its `error` is the failure to free. After a loss, it only waits
+   * until the claim's resources are free, records nothing, and never rejects.
    */
   async resign(options?: ResignOptions): Promise<void> {
     if (!this.#ending.signal.aborted) {
@@ -107,7 +109,8 @@ export class Term implements Lease, AsyncDisposable {
       if (clean) await this.#steps.recordCleanShutdown();
       await this.#steps.release();
     } catch (error) {
-      await this.#steps.close().catch(() => {});
+      await using closing = new AsyncDisposableStack();
+      closing.defer(() => this.#steps.close());
       throw error;
     }
     await this.#steps.close();
@@ -116,13 +119,20 @@ export class Term implements Lease, AsyncDisposable {
   /**
    * A lost claim is no longer this term's to give up: a release could undo
    * the next leader's claim. Only its resources are freed, and a loss has no
-   * caller to report a failure to.
+   * caller to report a failure to, so a failure to free them is a process
+   * warning.
    */
   async #freeLost(): Promise<void> {
     try {
       this.#watching.dispose();
     } finally {
-      await this.#steps.close().catch(() => {});
+      await this.#steps.close().catch((error: unknown) => {
+        process.emitWarning(
+          Error.isError(error)
+            ? error
+            : new Error(String(error), { cause: error }),
+        );
+      });
     }
   }
 }

@@ -269,6 +269,41 @@ describe('a request that the engine answers with an error', () => {
       return true;
     });
   });
+
+  test('whose answer is plain text, not JSON, has that text without its line end as its message', async () => {
+    // Arrange: the answer of Docker Desktop's engine (API 1.51) to GET /v0.1/info.
+    await using scratch = await new TemporaryFiles().directory('docker-test-');
+    await using engine = await fakeEngine({
+      directory: scratch.path,
+      apiVersion: '1.51',
+      answer: (_request, response) => {
+        response.writeHead(400, {
+          'Content-Type': 'text/plain; charset=utf-8',
+        });
+        response.end(
+          'client version 0.1 is too old. Minimum supported API version is 1.40, please upgrade your client to a newer version\n',
+        );
+      },
+    });
+    await using docker = await Docker.connect({
+      clock: globalThis,
+      host: engine.host,
+    });
+
+    // Act
+    const info = docker.info();
+
+    // Assert
+    await assert.rejects(info, (error: unknown) => {
+      assert.ok(error instanceof DockerEngineError);
+      assert.equal(error.status, 400);
+      assert.equal(
+        error.message,
+        'client version 0.1 is too old. Minimum supported API version is 1.40, please upgrade your client to a newer version',
+      );
+      return true;
+    });
+  });
 });
 
 describe('a connection that the engine closes before its answer', () => {
@@ -379,11 +414,11 @@ describe('the connections of a client', () => {
     });
     // A connection in use is a PipeWrap of the process until its close. An idle one is not: the agent unrefs it.
     const scenario = `
-import { Docker } from ${JSON.stringify(ENTRY)};
+import { ClientDisposedError, Docker } from ${JSON.stringify(ENTRY)};
 const connections = () => process.getActiveResourcesInfo().filter((name) => name === 'PipeWrap').length;
 const before = connections();
 const docker = await Docker.connect({ clock: globalThis, host: ${JSON.stringify(engine.host)} });
-const inFlight = docker.info().then(() => 'resolved', (error) => error.message);
+const inFlight = docker.info().then(() => 'resolved', (error) => ({ disposed: error instanceof ClientDisposedError, message: error.message }));
 const inUse = connections() - before;
 await docker[Symbol.asyncDispose]();
 const afterDisposal = connections() - before;
@@ -403,8 +438,11 @@ console.log(JSON.stringify({ inUse, afterDisposal, inFlight: await inFlight }));
       {
         inUse: 1,
         afterDisposal: 0,
-        inFlight:
-          'The client was disposed, so it closed this connection to the engine.',
+        inFlight: {
+          disposed: true,
+          message:
+            'The client was disposed, so it closed this connection to the engine.',
+        },
       },
       result.stderr,
     );

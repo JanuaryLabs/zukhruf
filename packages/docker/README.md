@@ -19,7 +19,7 @@ The words in these documents have one meaning each. See the glossary in [CONTEXT
 
 The package does not read `process.env`. The host program gives its environment as `environment`, and the package reads `DOCKER_HOST`, `DOCKER_CONTEXT` and `DOCKER_CONFIG` from it. Without `environment`, no variable applies, and the selection reads only the context store.
 
-Then `connect()` sends `GET /_ping` and negotiates the API version. Dispose the client to close its connections. After the disposal starts, a request in flight and each new request reject with a `DockerError` that says that the client was disposed. An idle connection does not keep the process running.
+Then `connect()` sends `GET /_ping` and negotiates the API version. Dispose the client to close its connections. After the disposal starts, a request in flight and each new request reject with a `ClientDisposedError`. An idle connection does not keep the process running.
 
 ```ts
 import { Docker } from '@zukhruf/docker';
@@ -89,6 +89,7 @@ An error has its own class when a caller does something different after it: star
 | `PathNotFoundError`        | A file request gets 404 and the container exists                                                                                                    | Use a default, or create the file                  |
 | `NotAFileError`            | `readFile()` finds a directory, a link or another kind of entry. `kind` names it                                                                    | Use `getArchive()` for the tree                    |
 | `ReadOnlyPathError`        | The engine refuses an extraction, and an inspect shows that the directory is on a read-only root filesystem or in a read-only mount                 | Write under a writable mount, or use `exec()`      |
+| `ClientDisposedError`      | The client was disposed, so it closed the connection of a request in flight, of a request after the disposal started, or of an open stream          | Ignore it in a shutdown that disposed the client   |
 | `IncompleteOutputError`    | A stdin write of an exec or an attach fails before the output ends, and no output came or the caller did not take it                                | Go on, or run it again if that is safe             |
 
 Each class extends a base class, so a broad catch still works. `DockerError` is the base of every error of the package. `DockerEngineError` is the base of every answer of the engine that is an error. It has `status` and `request` (the `method` and `path` of the request), and its `message` is the message of the engine. The base keeps the request apart in `request`, so `path` on `PathNotFoundError`, `NotAFileError` and `ReadOnlyPathError` is the path in the container. An error with no class of its own, such as an error in the progress of a pull, is a `DockerEngineError`.
@@ -1014,6 +1015,9 @@ export class DockerError extends Error {}
 export class ConnectionFailedError extends DockerError {
   readonly host: string;
 }
+
+/** The client was disposed, so it closed this connection to the engine. */
+export class ClientDisposedError extends DockerError {}
 
 export class UnsupportedHostError extends DockerError {
   readonly host: string;
