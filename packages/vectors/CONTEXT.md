@@ -16,6 +16,10 @@ _Avoid_: Base type, precision, dtype
 A vector of float16 numbers. SQL Server keeps it as `VECTOR(n, float16)`.
 _Avoid_: Float16 vector, halfvec
 
+**Int8 vector**:
+A vector of int8 numbers, each an integer from -128 to 127. sqlite-vec keeps it as `INT8[n]`. `Int8Vector` is the type.
+_Avoid_: Quantized vector, byte vector
+
 **Bit vector**:
 A vector of bits, packed eight to a byte. sqlite-vec packs the least significant bit first.
 _Avoid_: Binary vector

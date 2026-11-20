@@ -173,6 +173,13 @@ function euclideanDistance(a: Vector, b: Vector): number; // L2
 function hammingDistance(a: BitVector, b: BitVector): number;
 // Each function also takes HalfVector and Int8Vector where the engines do; both sides have one type.
 
+class DimensionMismatchError extends Error {
+  constructor(expected: number, actual: number);
+  readonly expected: number;
+  readonly actual: number;
+}
+class ZeroVectorError extends RangeError {}
+
 // @zukhruf/vectors/sqlite  (plain SQLite and sqlite-vec read the same bytes)
 function install(database: DatabaseSync): void; // vec_distance_cosine, vec_distance_L2
 class SqliteVecLoadedError extends Error {}
@@ -234,6 +241,23 @@ On Azure SQL Database (General Purpose, 2026-11-18), with throwaway tables:
 | `cosineDistance(a, b)`              | `cosineDistance(column, vector)` for Knex, Kysely, Sequelize | `cosineDistance(column, vector)` inside `orderBy` | `TensorPrimitives.CosineSimilarity`; `EF.Functions.VectorDistance('cosine', …)` | `vec_distance_cosine(a, b)`      |
 | `sqlite.install(db)`                | none                                                         | none                                              | none                                                                            | the extension itself             |
 | the program's own SQL               | the query builder's query                                    | `db.select().orderBy(…)`                          | LINQ                                                                            | `vec0` and `MATCH`               |
+
+## Documentation
+
+**Recipes**
+
+- [Keep a vector in a SQLite BLOB column and read it back](./docs/recipes/keep-a-vector-in-a-sqlite-blob-and-read-it-back.md)
+
+**Decisions**
+
+- [ADR 0001](./docs/adr/0001-the-scope-and-the-name-come-from-the-vector-types-of-pgvector-and-the-math-of-dotnet.md): the scope and the name come from the vector types of pgvector and the math of .NET.
+- [ADR 0002](./docs/adr/0002-the-package-composes-into-the-hosts-sql-and-never-runs-it.md): the package composes into the host's SQL, and never runs it.
+- [ADR 0003](./docs/adr/0003-each-element-type-of-the-engines-has-a-vector-type.md): each element type of the engines has a vector type.
+- [ADR 0004](./docs/adr/0004-distances-follow-the-engines-and-lower-is-nearer.md): distances follow the engines, and lower is nearer.
+- [ADR 0005](./docs/adr/0005-plain-sqlite-gets-the-distance-functions-of-sqlite-vec.md): plain SQLite gets the distance functions of sqlite-vec.
+- [ADR 0006](./docs/adr/0006-each-engine-has-tosql-and-fromsql-after-pgvector.md): each engine has `toSql` and `fromSql`, after pgvector.
+- [ADR 0007](./docs/adr/0007-sql-server-gets-json-text-with-the-digits-that-keep-each-value.md): SQL Server gets JSON text with the digits that keep each value.
+- [ADR 0008](./docs/adr/0008-the-embedding-cache-decorates-the-model-and-lives-outside-this-package.md): the embedding cache decorates the model, and lives outside this package.
 
 ## Why not an npm package
 
