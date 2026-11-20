@@ -10,6 +10,35 @@ The words in these documents have one meaning each. See the glossary in [CONTEXT
 npm install @zukhruf/lease
 ```
 
+```ts
+import { type Lease, LeaseController, LeaseLostError } from '@zukhruf/lease';
+
+// The issuer keeps the controller and gives the holder only the signal.
+const controller = new LeaseController('orders');
+const lease: Lease = { signal: controller.signal };
+
+// The holder stops its work when the signal aborts.
+lease.signal.addEventListener('abort', () => {
+  const reason: unknown = lease.signal.reason;
+  if (reason instanceof LeaseLostError && Error.isError(reason.cause)) {
+    console.log(reason.message);
+    console.log(reason.cause.message);
+  }
+});
+
+// The coordinator refused the claim, so another holder may have it:
+controller.lose(new Error('The coordinator refused the claim.'));
+```
+
+Output:
+
+```
+Lost the lease on "orders": another holder may have it now.
+The coordinator refused the claim.
+```
+
+The issuer makes a `LeaseController` for the subject `orders`, and gives the holder a `Lease`. When the issuer decides that the lease is lost, the signal aborts one time with a `LeaseLostError`, and its `cause` is what the issuer saw (`src/lease-controller.test.ts`).
+
 ## A lease is a signal
 
 A holder gets a `Lease`. A lease has one property: `signal`, an `AbortSignal`.
