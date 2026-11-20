@@ -141,7 +141,7 @@ The rules:
 4. When you change the program, run it again, and paste the new output.
 5. Write `## What the output shows` when the lesson is in the numbers. Write `## Why it works` when the lesson is the mechanism.
 6. A program that needs a server first gives its start command in a ```sh block before the program ([filter-a-feed-with-a-taught-profile.md](../packages/information-filtering/relevance-filtering/docs/recipes/filter-a-feed-with-a-taught-profile.md)).
-7. Run the program from a folder outside the packages, with the workspace's `node_modules` linked into it, as `node --conditions=@zukhruf/source <file>.ts`. The condition makes each `@zukhruf/*` import read the package's source, so the program needs no build.
+7. Run the program from a folder outside the packages, with the workspace's `node_modules` linked into it, as `node --conditions=@zukhruf/source <file>.ts`. The condition makes each `@zukhruf/*` import read the package's source, so the program needs no build. Node removes types from `.ts` files only, so a package with `.tsx` source (such as `ui`) cannot run from its source: Node stops with `ERR_UNKNOWN_FILE_EXTENSION`. Build that package with `npx nx build <project>`, then run the program without the condition, so it reads the built `dist`.
 
 The allowed variants:
 
