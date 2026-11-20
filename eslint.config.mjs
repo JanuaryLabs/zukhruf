@@ -463,6 +463,9 @@ export default defineConfig(
       'functional/no-let': 'off',
       // shadcn 4.23's use-highlighted-code cancels with `let cancelled`.
       'zukhruf/no-phase-flag': 'off',
+      // shadcn 4.23's code-block drops a clipboard rejection and
+      // use-highlighted-code a highlighter rejection (#3619).
+      'zukhruf/no-silent-catch': 'off',
     },
   },
 );

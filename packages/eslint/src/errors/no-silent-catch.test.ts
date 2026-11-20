@@ -6,7 +6,7 @@ import { fixtureConfig, lint } from '../testing/run-eslint.ts';
 
 const RULE = 'zukhruf/no-silent-catch';
 
-/** Lints `src/<file>`, holding `lines`, with `zukhruf/base` and the rule on, and returns the line of each finding of the rule. */
+/** Lints `src/<file>`, holding `lines`, with `zukhruf/base`, and returns the line of each finding of the rule. */
 async function reportedLines(file: string, lines: string[]): Promise<number[]> {
   await using workspace = await fixtureWorkspace({
     'nx.json': '{}',
@@ -21,7 +21,7 @@ async function reportedLines(file: string, lines: string[]): Promise<number[]> {
       include: ['**/*.ts'],
     }),
     'eslint.config.mjs': fixtureConfig(
-      `{ plugins: { zukhruf }, extends: ['zukhruf/base'], rules: { '${RULE}': 'error' } }`,
+      `{ plugins: { zukhruf }, extends: ['zukhruf/base'] }`,
     ),
     [`src/${file}`]: `${lines.join('\n')}\n`,
   });

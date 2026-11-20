@@ -216,11 +216,10 @@ export const base: Concept = {
       },
       {
         // A catch that drops the error hides the failure, in shipped code and
-        // in test cleanup alike. Off until zukhruf fixes its own findings
-        // (#3619).
+        // in test cleanup alike.
         name: 'zukhruf/base/errors',
         files: SOURCE,
-        rules: { 'zukhruf/no-silent-catch': 'off' },
+        rules: { 'zukhruf/no-silent-catch': 'error' },
       },
       {
         // A process-wide global (console) patched in one module changes every
