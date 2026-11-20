@@ -60,6 +60,10 @@ _Avoid_: Reranker (for the wrapper)
 The model that indexes a corpus and gives the score of each document that it finds for each query (`SearchProtocol`, MTEB's search protocol). MTEB's BM25 baseline `mteb/baseline-bm25s` is a search model with no embedding model. `SearchEncoderWrapper` makes an encoder a search model, and `SearchCrossEncoderWrapper` makes a cross-encoder a search model for reranking.
 _Avoid_: Retriever, search engine
 
+**Hybrid search**:
+The search model that runs two or more models on the same queries and fuses the scores of each document (`HybridSearch`, MTEB's `mteb/models/hybrid_wrappers.py`). Each model is an encoder, a cross-encoder or a search model. `fusionStrategy` gives the fusion: Reciprocal Rank Fusion (`rrf`, the default), Distribution-Based Score Fusion (`dbsf`), Relative Score Fusion (`rsf`) or a `FusionFunction` of your own.
+_Avoid_: Ensemble, fusion (the way that it combines the scores)
+
 **CO₂ emissions**:
 The kg CO₂eq of the electricity that the machine used for one task run, as codecarbon estimates it: the energy of the RAM and the CPU (and the GPU of an Apple chip) multiplied by the carbon intensity of the grid. `kgCo2Emissions` of a task result holds it.
 _Avoid_: Carbon footprint, energy (the energy is in kWh)
@@ -67,6 +71,14 @@ _Avoid_: Carbon footprint, energy (the energy is in kWh)
 **Embedding cache**:
 The folder that `CachedEmbeddingWrapper` keeps the embedding of each text in, for one encoder. An encoder embeds only the texts that the folder does not hold.
 _Avoid_: Result cache (it keeps scores), vector store
+
+**Result cache**:
+The folder that `ResultCache` keeps the results in: `results/<model>/<revision>/<task>.json`, and `experiments/<experimentName>/` in the revision folder for the results of an experiment. The default folder is `~/.cache/mteb`. `overwriteStrategy` of `evaluate` decides when `evaluate` runs a task again instead of reading its result from the result cache.
+_Avoid_: Embedding cache (it keeps embeddings), results folder
+
+**Predictions**:
+The file `<task name>_predictions.json` that a task writes in the `predictionFolder` of `evaluate`: what the model gives for each subset and split, such as the score of each document for each query in a retrieval task. `perQueryScores` and `Report.from` read it to give the score of each query. `evaluate` writes no predictions when it reads a result from the result cache.
+_Avoid_: Outputs, run file
 
 **Score**:
 One number of a result, such as `ndcg_at_10`. The main score of a task is the score that MTEB ranks models by.

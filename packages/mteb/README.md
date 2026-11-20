@@ -99,7 +99,7 @@ The task reads the files of the folder at each load. It does not use the revisio
 
 Give a task `topRanked` to make it a reranking task: each query then ranks only its candidates.
 
-## BM25 as a baseline on your own folder dataset
+## Set a BM25 baseline on your own folder dataset
 
 MTEB's BM25 baseline `mteb/baseline-bm25s` is a search model: it needs no embedding model and no server. Run it on your task first. Its score is the score that an encoder must beat.
 
@@ -121,7 +121,7 @@ bm25s has stopwords for English, German, Dutch, French, Spanish, Portuguese, Ita
 
 `bm25SSubword` is MTEB's `mteb/baseline-bm25s-subword`: BM25 with the tokenizer of Qwen/Qwen3-0.6B, for the 73 languages of Qwen3. The tokens get no stemmer, and they get the stopwords from document frequencies. Each `index` reads `tokenizer.json` of the repository at `main` from the Hub, and keeps it in `~/.cache/mteb/models/`. When the Hub cannot be reached, the search model reads the file that the last load kept. The package loads its dependency `@huggingface/tokenizers` only for a tokenizer of the Hub. Give a `BM25Search` the `hub` option to read the Hub through another endpoint or cache folder.
 
-## Hybrid search: BM25 with an embedding model
+## Combine BM25 and an embedding model in a hybrid search
 
 BM25 finds the documents that share words with the query. An encoder finds the documents with a similar meaning. A hybrid search uses both and fuses their scores. `HybridSearch` is MTEB's hybrid search. Give it two or more models: an encoder or a search model.
 
@@ -247,7 +247,7 @@ The emissions are the energy of the machine multiplied by the carbon intensity o
 
 Only one tracker can run on a machine at a time. It holds the file `.codecarbon.lock` in the temporary folder of the system, as codecarbon does, so a Python codecarbon run also stops it. When another run holds the file, the task runs, and then `evaluate` throws a `TypeError` with MTEB's message. The cause of the error names the file. A process that was killed leaves the file: delete it. On a resumed task, the new emissions add to the emissions of the cached result.
 
-## Reranking with a cross-encoder
+## Rerank the top ranked documents with a cross-encoder
 
 A cross-encoder gets the query and one document at the same time, and gives the pair one score. It does not give embeddings, so it cannot search a full corpus. It reranks the top ranked documents of each query: the documents that a first search found. MTEB runs a cross-encoder only on a reranking task, and so does this package.
 
@@ -288,7 +288,7 @@ await evaluate(noRerankingBaseline.loadModel(), reranking, {
 await evaluate(reranker, reranking, { cache, clock: globalThis });
 ```
 
-`noRerankingBaseline` keeps the order of the first search. Its score is the score that a reranker must beat.
+`noRerankingBaseline` keeps the order of the first search. Its score is the score that a cross-encoder must beat.
 
 MTEB's cross-encoders have their metadata here: `bgeRerankerV2M3`, `jinaRerankerMultilingual`, the five ms-marco cross-encoders (such as `msMarcoMinilmL6V2`) and `qwen3Reranker0B6`, `qwen3Reranker4B` and `qwen3Reranker8B`. `loadModel` takes the AI SDK reranking model of a server that serves the weights, and sends the texts that MTEB's model scores:
 
@@ -307,74 +307,86 @@ The cross-encoder sends one pair in each call, and it sends the calls one after 
 
 `HybridSearch` takes a cross-encoder as one of its models.
 
-## Pair classification
+## Classify pairs of texts
 
 In a pair classification task, each row of a split is a pair: two texts and a label. The label is 1 when the texts are similar, and 0 when they are not. The task gives each pair five scores: the cosine similarity, the Euclidean distance, the Manhattan distance, the similarity of the model and the dot product. For each score, it finds the threshold with the best accuracy and the threshold with the best F1, and it calculates the average precision. The main score of MTEB's pair classification tasks is `max_ap`, the best average precision of the five scores.
 
 ```ts
 import { SprintDuplicateQuestionsPC, evaluate } from '@zukhruf/mteb';
 
-const result = await evaluate(encoder, new SprintDuplicateQuestionsPC());
+const result = await evaluate(encoder, new SprintDuplicateQuestionsPC(), {
+  clock: globalThis,
+});
 ```
 
 A task of your own extends `AbsTaskPairClassification`. Its dataset has the columns `sentence1`, `sentence2` and `labels`. For other column names, set `input1ColumnName`, `input2ColumnName` and `labelColumnName`, or change the names with `renameColumn` in `datasetTransform`.
 
-## STS
+## Score the similarity of two texts
 
 In an STS (semantic textual similarity) task, each row of a split is a pair: two texts and a gold score. The gold score tells how similar the texts are, from `minScore` to `maxScore` (by default 0 to 5). The task gives each pair four scores: the cosine similarity, the negative Manhattan distance, the negative Euclidean distance and the similarity of the model. For each score, it calculates the Pearson and the Spearman correlation with the gold scores. The main score of MTEB's STS tasks is `cosine_spearman`.
 
 ```ts
 import { STSBenchmarkSTS, evaluate } from '@zukhruf/mteb';
 
-const result = await evaluate(encoder, new STSBenchmarkSTS());
+const result = await evaluate(encoder, new STSBenchmarkSTS(), {
+  clock: globalThis,
+});
 ```
 
 A task of your own extends `AbsTaskSTS`. Its dataset has the columns `sentence1`, `sentence2` and `score`. For other text columns, set `columnNames`. For another range of gold scores, set `minScore` and `maxScore`.
 
-## Clustering
+## Cluster texts
 
 In a clustering task, each row of a split is a text and its label. The task embeds a sample of the texts. Then it clusters the embeddings with k-means (`MiniBatchKMeans` of scikit-learn), and compares the clusters with the labels. The V-measure is 1 when each cluster holds the texts of one label only and each label is in one cluster only. `AbsTaskClustering` (MTEB's v2 tasks) embeds 4% of the split, and clusters 10 samples of 16384 embeddings. Its main score is `v_measure`, the mean V-measure of the 10 samples. `ami` is the mean adjusted mutual information. When a text has a list of labels, one for each level of a hierarchy, the task scores each level.
 
 ```ts
 import { BiorxivClusteringS2SFast, evaluate } from '@zukhruf/mteb';
 
-const result = await evaluate(encoder, new BiorxivClusteringS2SFast());
+const result = await evaluate(encoder, new BiorxivClusteringS2SFast(), {
+  clock: globalThis,
+});
 ```
 
 A task of your own extends `AbsTaskClustering`. Its dataset has the columns `sentences` and `labels`. For other columns, set `inputColumnName` and `labelColumnName`. To embed another part of the split, set `maxFractionOfDocumentsToEmbed` or `maxDocumentToEmbed`. `nClusters` sets the number of samples to cluster, and `maxDocumentsPerCluster` the size of each sample. `AbsTaskClusteringLegacy` is MTEB's older form: each row is a set of texts with a list of labels, and the task clusters each set.
 
-## Classification
+## Classify texts
 
 In a classification task, each row of a split is a text and its label. The task trains a classifier (`LogisticRegression` of scikit-learn) on the embeddings of 8 training rows of each label. Then the classifier predicts the label of each row of the evaluation split. The task does this 10 times, with other training rows each time, and gives the mean of the scores. The scores are the accuracy, and the F1, precision and recall with the macro and the weighted average. For two labels, the task also gives the average precision (`ap`). The main score of Banking77Classification is `accuracy`.
 
 ```ts
 import { Banking77ClassificationV2, evaluate } from '@zukhruf/mteb';
 
-const result = await evaluate(encoder, new Banking77ClassificationV2());
+const result = await evaluate(encoder, new Banking77ClassificationV2(), {
+  clock: globalThis,
+});
 ```
 
 A task of your own extends `AbsTaskClassification`. Its dataset has a `train` split and the columns `text` and `label`. For other columns, set `inputColumnName` and `labelColumnName`. For another training split, set `trainSplit`. `samplesPerLabel` sets the number of training rows of each label, and `nExperiments` the number of experiments.
 
-## Multilabel classification
+## Give each text a set of labels
 
 In a multilabel classification task, each row of a split is a text and its label set: a list of zero or more labels. The task selects training rows in a random order until each label has 8 rows. Then it trains a classifier (`KNeighborsClassifier` of scikit-learn, with 5 neighbours) on their embeddings, and the classifier predicts the label set of each row of the evaluation split. An evaluation split of more than 3000 rows keeps 3000 rows, with the same mix of labels. The task does this 10 times, with other training rows each time, and gives the mean of the scores. The scores are the accuracy (the share of rows with all labels right), the label ranking average precision (`lrap`), the F1 with the macro average, and the Hamming score (`hamming`: the labels that the prediction and the row share, divided by the labels that one of them has). The main score of KorHateSpeechMLClassification is `accuracy`.
 
 ```ts
 import { KorHateSpeechMLClassification, evaluate } from '@zukhruf/mteb';
 
-const result = await evaluate(encoder, new KorHateSpeechMLClassification());
+const result = await evaluate(encoder, new KorHateSpeechMLClassification(), {
+  clock: globalThis,
+});
 ```
 
 A task of your own extends `AbsTaskMultilabelClassification`. Its dataset has a `train` split, a column `text` and a column `label` with a list of labels in each row. The fields of a classification task set the columns, the training split, the rows of each label and the number of experiments. `maxEvalSamples` sets the largest evaluation split, and `null` keeps the whole split.
 
-## Regression
+## Predict a number from a text
 
 In a regression task, each row of a split is a text and its value: a number. The task trains a linear model (`LinearRegression` of scikit-learn) on the embeddings of the training rows. Then the model predicts the value of each row of the evaluation split. When the training split has more than 2048 rows, the task keeps 2048 of them, with the same share of each tenth of the values. The task does this 10 times, with other training rows each time, and gives the mean of the scores. The scores are the mean squared error (`mse`), the mean absolute error (`mae`), the coefficient of determination (`r2`), Kendall's tau (`kendalltau`) and the square root of `mse` (`rmse`). The main score of the RuSciBench tasks is `kendalltau`.
 
 ```ts
 import { RuSciBenchCitedCountRegression, evaluate } from '@zukhruf/mteb';
 
-const result = await evaluate(encoder, new RuSciBenchCitedCountRegression());
+const result = await evaluate(encoder, new RuSciBenchCitedCountRegression(), {
+  clock: globalThis,
+});
 ```
 
 A task of your own extends `AbsTaskRegression`. Its dataset has a `train` split and the columns `text` and `value`. The fields of a classification task set the columns, the training split and the number of experiments. `nSamples` sets the largest number of training rows of an experiment.
@@ -482,7 +494,10 @@ import { ResultCache, bm25S, evaluate } from '@zukhruf/mteb';
 
 const cache = new ResultCache('mteb-results');
 await evaluate(bm25S.loadModel(), new Faq(), { cache, clock: globalThis });
-await evaluate(bm25S.loadModel({ k1: 1.2 }), new Faq(), { cache });
+await evaluate(bm25S.loadModel({ k1: 1.2 }), new Faq(), {
+  cache,
+  clock: globalThis,
+});
 
 const results = cache
   .loadResults({ includeRemote: false, loadExperiments: 'match_name' })
@@ -495,9 +510,9 @@ The wide table has a second column level, `experiment`, below the model name. Th
 
 `nx run mteb:table` prints the table and the means with the experiments.
 
-A table does not say if a difference is more than chance. See [Is the change real?](#is-the-change-real).
+A table does not say if a difference is more than chance. See [Test if a change is more than chance](#test-if-a-change-is-more-than-chance).
 
-## Is the change real?
+## Test if a change is more than chance
 
 A table shows that a change scores higher or lower than its baseline. It does not show if the difference is more than chance: with other queries, the order can be the reverse. `pairedBootstrapTest` answers that question. MTEB has no such test.
 
@@ -518,6 +533,7 @@ await evaluate(bm25S.loadModel(), task, {
   overwriteStrategy: 'always',
 });
 await evaluate(bm25S.loadModel({ k1: 1.2, b: 0.5 }), task, {
+  clock: globalThis,
   predictionFolder: 'predictions/change',
   overwriteStrategy: 'always',
 });
@@ -980,3 +996,14 @@ function verdicts(options: {
 
 export { type ModelScores, type ReportData, type SplitReport };
 ```
+
+## Documentation
+
+**Decisions**
+
+- [ADR 0001](./docs/adr/0001-the-package-is-a-port-of-mteb.md): the package is a port of MTEB.
+- [ADR 0002](./docs/adr/0002-the-package-is-private-and-is-reached-through-a-workspace-path.md): the package is private and is reached through a workspace path.
+
+**Port**: [Ported from MTEB](./docs/ported-from-mteb.md) names the Python source module of each TypeScript module, and gives the differences from MTEB.
+
+**Copied code**: [Copied code](./docs/copied-code.md) records each copy of code in this package, as the Rule of Three asks.
