@@ -114,7 +114,7 @@ No generator writes a mobile app yet. This is the Nx 24 shape of 2026-10-29:
 
 An Nx workspace formats its files with Prettier. The `format` area is an Nx inference plugin. It gives each project of the workspace two targets: `format`, which writes the files, and `format:check`, which only reads them. You list the plugin one time in `nx.json`. You do not copy targets into each project.
 
-## Use it
+### Use it
 
 You need Nx 23 or 24 and Prettier 3. `nx`, `@nx/devkit` and `prettier` are peer dependencies.
 
@@ -137,7 +137,7 @@ zukhruf builds this package, so it lists the plugin by path: `"plugins": ["./pac
 
 The plugin does not change `typecheck`. That target belongs to `@nx/js/typescript`, and each workspace adds its own dependencies to it, for example `^sdk`. See [ADR 0001](./docs/adr/0001-inferred-targets-not-copied-defaults.md).
 
-## Signature
+### Signature
 
 ```ts
 // @zukhruf/nx/format
@@ -146,7 +146,7 @@ export const createNodes: CreateNodes;
 
 The plugin takes no options. The target names and the commands are the same in each of the 7 copies that this package replaces, so no option is necessary.
 
-## What each target runs
+### What each target runs
 
 | Target         | Command                          | Writes? | Cached | Inputs                                                                                                                                                                                                                    |
 | -------------- | -------------------------------- | ------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -160,7 +160,7 @@ The plugin takes no options. The target names and the commands are the same in e
 
 To format only your own files, give their paths: `npx prettier --write <files>`. See [ADR 0002](./docs/adr/0002-a-check-never-writes.md).
 
-## Override a project
+### Override a project
 
 A target in the `project.json` of a project replaces the inferred target. Nx applies the plugin first, then `targetDefaults`, then `project.json`. For example, the `infra` project of whatisgoingon formats OpenTofu files:
 
@@ -173,7 +173,7 @@ A target in the `project.json` of a project replaces the inferred target. Nx app
 }
 ```
 
-## Leave fixtures out
+### Leave fixtures out
 
 The plugin gives targets only to the projects that Nx finds, by the rule and the matcher of Nx itself:
 
@@ -198,7 +198,7 @@ A fixture inside the workspace globs is a project of Nx. Use the standard `exclu
 
 context-compiler already does this for `@nx/eslint/plugin`. See [ADR 0003](./docs/adr/0003-which-roots-get-targets.md).
 
-## Migrate a workspace
+### Migrate a workspace
 
 1. Add the plugin to `plugins` in `nx.json`.
 2. Delete the `format` and `format:check` entries from `targetDefaults`.
@@ -216,18 +216,19 @@ context-compiler already does this for `@nx/eslint/plugin`. See [ADR 0003](./doc
 | whatisgoingon    | same as factory; `infra` overrides `format` with `tofu fmt`                                  | 3, and `infra` adds `format:check` |
 | deepagents       | one stray `format` target in `packages/compaction`                                           | 1                                  |
 
-## Who uses it
+### Who uses it
 
-| Workspace        | Backlog item                    |
-| ---------------- | ------------------------------- |
-| zukhruf          | #3306 (phase 2, first consumer) |
-| elt              | #3318                           |
-| context-compiler | #3319                           |
-| factory          | #3320                           |
-| whatisgoingon    | #3321                           |
-| text2sql         | #3322                           |
-| deepagents       | #3323                           |
-| meddit           | #4606 (written by `preset`)     |
+| Consumer         | How                                                 | Record                          |
+| ---------------- | --------------------------------------------------- | ------------------------------- |
+| zukhruf          | `nx.json` lists the plugin by path                  | #3306 (phase 2, first consumer) |
+| elt              | `nx.json` lists `@zukhruf/nx/format`                | #3318                           |
+| context-compiler | `nx.json` lists `@zukhruf/nx/format`                | #3319                           |
+| factory          | `nx.json` lists `@zukhruf/nx/format`                | #3320                           |
+| whatisgoingon    | `nx.json` lists `@zukhruf/nx/format`                | #3321                           |
+| text2sql         | `nx.json` lists `@zukhruf/nx/format`                | #3322                           |
+| deepagents       | `nx.json` lists `@zukhruf/nx/format`                | #3323                           |
+| offers-evals     | `nx.json` lists `@zukhruf/nx/format`                | offers-evals commit 7fd9864     |
+| meddit           | `preset` writes `@zukhruf/nx/format` into `nx.json` | #4606                           |
 
 The umbrella item is #3317.
 
@@ -304,7 +305,7 @@ The 2026-10-29 audit of the 7 repos measured the effect. The rule matches each `
 - `--test-timeout`: the default is 300 s. `@zukhruf/testing` starts a shared database server the first time that a test calls `database()`, and it sets a time limit for each cold start: Postgres 60 s, MySQL and MariaDB 90 s, SQL Server 180 s. In a run, the first call of a test process also holds the reaper of the run, with a readiness bound of 60 s. One test can pay both in a row, so its own time limit must be longer than their sum. 300 s is the hold, 60 s, plus the slowest server, SQL Server 180 s, plus 60 s for the work of the test. The old default, 60 s, stopped a test before the readiness bound: on 2026-10-30 a MySQL test of text2sql and the SQL Server tests of deepagents stopped at 60 s. When `@zukhruf/testing` changes a readiness bound, change this default with it. A repo that wants a shorter limit sets the `timeout` option. One project sets `--test-timeout` in its `args`. No time limit is drift. See [ADR 0004](./docs/adr/0004-node-test-target-from-test-files.md).
 - Two reporters: `spec` to the terminal and `junit` to `test-results.xml`. zukhruf, deepagents and text2sql use both.
 - `^build`: a test imports the built output of the packages that the project depends on. factory, whatisgoingon and text2sql test from the source, so `^build` is sufficient for them. A repo whose tests also need the project's own `build` adds it (see [Prerequisites of the test area](#prerequisites-of-the-test-area)).
-- No cache: no repo caches a `node:test` run today.
+- No cache: the plugin gives `cache: false`. A repo that wants a cache sets `cache: true` in `targetDefaults.test`, which comes after the plugin. zukhruf does this since commit 03ae010f (#4831), with `{ "runtime": "node --version" }` in the `inputs`, so a new Node version runs the tests again.
 
 The base command has no `--test-force-exit` and no `--experimental-test-module-mocks`. Only Docker tests and tests with open handles need `--test-force-exit`. Only deepagents and the text2sql electron app use module mocks. A repo adds these flags with the `flags` option. One project adds them in its own `args` (see [Override the test target of a project](#override-the-test-target-of-a-project)).
 
@@ -359,8 +360,8 @@ A project with the tag `test:docker` starts Docker containers in its tests. zukh
 The plugin selects the path in this order:
 
 1. The project's own `src/testing/docker-global-setup.ts`, if it exists. mutex has one: it starts the shared servers before the run. `@zukhruf/testing` has one: its tests use its own source.
-2. Else, `@zukhruf/testing/docker-global-setup`, resolved from the project root with the default conditions. This gives `dist/scripts/docker-global-setup.js`. The plugin writes the path relative to the `cwd` of the target.
-3. If the plugin cannot resolve the package, it stops with an error. It does not run the tests with no global setup.
+2. Else, the file that the `./docker-global-setup` export of `@zukhruf/testing` names in its `default` condition: `dist/scripts/docker-global-setup.js`. The plugin finds the `package.json` of `@zukhruf/testing` from the project root with `module.findPackageJSON`, and reads the path from its `exports`. It does not resolve the file: `^build` builds `@zukhruf/testing` before the test, but after Nx makes the project graph, so a fresh checkout has no built file yet (commit eeea3e76, #3476). The plugin writes the path relative to the `cwd` of the target.
+3. If the plugin cannot find `@zukhruf/testing`, it stops with an error: `<root> has the tag test:docker, so it needs @zukhruf/testing/docker-global-setup (install @zukhruf/testing) or a src/testing/docker-global-setup.ts of its own`. It does not run the tests with no global setup.
 
 The value must be a path. Node resolves it with `path.resolve(cwd, value)`, so a package name does not work. That is why 5 repos keep a file that only re-exports the global setup. Each repo deletes this file when it migrates. The global setup runs one time for each `node --test` process.
 
@@ -418,28 +419,29 @@ A `scripts.test` in a `package.json` replaces the inferred target. Nx runs it wi
 7. Delete the `test:node` tags.
 8. Compare `nx show projects --withTarget test` before and after. The differences must be the ones in the table.
 
-| Workspace        | Today                                                                                                                                             | Changes                                                                                                                                                                                                                                                                                                                                                                   |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| zukhruf          | `targetDefaults.test` with filters `tag:test:node` and `tag:test:docker`; `dependsOn` `["build", "^build"]`; `--test-force-exit` for each project | 30 tagged projects; 2 Docker projects (mutex, testing) keep their own global setup; `dependsOn` `["...", "build"]`; no `flags`: since 2026-11-19 only the `test:docker` projects force-exit, as each other suite exits by itself (all 43 measured without the flag)                                                                                                       |
-| factory          | 2 targets: `api` with Docker arguments; `foundation` with its tests in `tests/`                                                                   | delete `apps/factory/api/src/testing/docker-global-setup.ts`; `dependsOn` `["...", "^sdk"]`                                                                                                                                                                                                                                                                               |
-| whatisgoingon    | 1 target                                                                                                                                          | 1                                                                                                                                                                                                                                                                                                                                                                         |
-| deepagents       | 11 tagged projects, 3 Docker projects, 4 demo scripts                                                                                             | delete `tools/src/docker-global-setup.ts`; `dependsOn` `["...", "build"]`; module mocks in `flags` or in the `args` of a project; the 4 demo scripts and the Docker context script stay                                                                                                                                                                                   |
-| elt              | 55 commands in the projects, 8 with the global setup                                                                                              | delete `docker-global-setup.ts`; `dependsOn` `["...", "build"]`; no override, because no test file reads a path from the working directory                                                                                                                                                                                                                                |
-| context-compiler | 17 targets; the `plugin` project has a no-op `test` that depends on `server:test`                                                                 | 5 connector targets that test nothing go; `dependsOn` `["...", "build"]`; the desktop e2e files stay as an override; if `plugin` owns no test file, the plugin gives it nothing and its own `test` in `project.json` stays; the test target runs in the project root, so 9 test files of `cli`, `desktop` and `server` find the workspace root from `import.meta.dirname` |
-| text2sql         | about 24 commands in the projects, and 13 projects on the shared default; Nx 23.1.0                                                               | update Nx; delete `packages/adapters/src/testing/docker-global-setup.ts` and `apps/desktop/backend/src/testing/docker-global-setup.ts`; 6 targets that test nothing go; `.agents` and `.claude` get a target; the backends set `--test-timeout=120000` in `args`; the daemon keeps `["image"]` or uses `"..."`                                                            |
+| Workspace        | Today                                                                                                                                             | Changes                                                                                                                                                                                                                                                                                                                                                                                                 |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| zukhruf          | `targetDefaults.test` with filters `tag:test:node` and `tag:test:docker`; `dependsOn` `["build", "^build"]`; `--test-force-exit` for each project | 30 tagged projects; 2 Docker projects (mutex, testing) keep their own global setup; `dependsOn` `["...", "build"]`; no `flags`: since 2026-11-19 only the `test:docker` projects force-exit, as each other suite exits by itself (all 43 measured without the flag); since 03ae010f, `targetDefaults.test` sets `cache: true` and the inputs `["default", "^default", { "runtime": "node --version" }]` |
+| factory          | 2 targets: `api` with Docker arguments; `foundation` with its tests in `tests/`                                                                   | delete `apps/factory/api/src/testing/docker-global-setup.ts`; `dependsOn` `["...", "^sdk"]`                                                                                                                                                                                                                                                                                                             |
+| whatisgoingon    | 1 target                                                                                                                                          | 1                                                                                                                                                                                                                                                                                                                                                                                                       |
+| deepagents       | 11 tagged projects, 3 Docker projects, 4 demo scripts                                                                                             | delete `tools/src/docker-global-setup.ts`; `dependsOn` `["...", "build"]`; module mocks in `flags` or in the `args` of a project; the 4 demo scripts and the Docker context script stay                                                                                                                                                                                                                 |
+| elt              | 55 commands in the projects, 8 with the global setup                                                                                              | delete `docker-global-setup.ts`; `dependsOn` `["...", "build"]`; no override, because no test file reads a path from the working directory                                                                                                                                                                                                                                                              |
+| context-compiler | 17 targets; the `plugin` project has a no-op `test` that depends on `server:test`                                                                 | 5 connector targets that test nothing go; `dependsOn` `["...", "build"]`; the desktop e2e files stay as an override; if `plugin` owns no test file, the plugin gives it nothing and its own `test` in `project.json` stays; the test target runs in the project root, so 9 test files of `cli`, `desktop` and `server` find the workspace root from `import.meta.dirname`                               |
+| text2sql         | about 24 commands in the projects, and 13 projects on the shared default; Nx 23.1.0                                                               | update Nx; delete `packages/adapters/src/testing/docker-global-setup.ts` and `apps/desktop/backend/src/testing/docker-global-setup.ts`; 6 targets that test nothing go; `.agents` and `.claude` get a target; the backends set `--test-timeout=120000` in `args`; the daemon keeps `["image"]` or uses `"..."`                                                                                          |
 
 ### Who uses the test area
 
-| Workspace        | Backlog item                                |
-| ---------------- | ------------------------------------------- |
-| zukhruf          | uses it: `nx.json` lists the plugin by path |
-| factory          | uses it (#3363)                             |
-| whatisgoingon    | uses it (#3364)                             |
-| deepagents       | uses it (#3365)                             |
-| elt              | uses it (#3366)                             |
-| context-compiler | uses it (#3367)                             |
-| text2sql         | uses it (#3368)                             |
-| meddit           | #4606 (written by `preset`)                 |
+| Consumer         | How                                               | Record                      |
+| ---------------- | ------------------------------------------------- | --------------------------- |
+| zukhruf          | `nx.json` lists the plugin by path                | #3328                       |
+| factory          | `nx.json` lists `@zukhruf/nx/test`                | #3363                       |
+| whatisgoingon    | `nx.json` lists `@zukhruf/nx/test`                | #3364                       |
+| deepagents       | `nx.json` lists `@zukhruf/nx/test`                | #3365                       |
+| elt              | `nx.json` lists `@zukhruf/nx/test`                | #3366                       |
+| context-compiler | `nx.json` lists `@zukhruf/nx/test`                | #3367                       |
+| text2sql         | `nx.json` lists `@zukhruf/nx/test`                | #3368                       |
+| offers-evals     | `nx.json` lists `@zukhruf/nx/test`                | offers-evals commit 7fd9864 |
+| meddit           | `preset` writes `@zukhruf/nx/test` into `nx.json` | #4606                       |
 
 The umbrella item is #3328.
 
@@ -579,16 +581,17 @@ The lockfile measured the edges on 2026-10-30. For factory, whatisgoingon, deepa
 
 ### Who uses the lint area
 
-| Workspace        | Backlog item                                |
-| ---------------- | ------------------------------------------- |
-| zukhruf          | uses it: `nx.json` lists the plugin by path |
-| factory          | uses it (#3386)                             |
-| whatisgoingon    | uses it (#3387)                             |
-| deepagents       | uses it (#3388)                             |
-| text2sql         | uses it (#3389)                             |
-| elt              | uses it (#3390)                             |
-| context-compiler | uses it (#3391)                             |
-| meddit           | #4606 (written by `preset`)                 |
+| Consumer         | How                                               | Record                      |
+| ---------------- | ------------------------------------------------- | --------------------------- |
+| zukhruf          | `nx.json` lists the plugin by path                | #3335                       |
+| factory          | `nx.json` lists `@zukhruf/nx/lint`                | #3386                       |
+| whatisgoingon    | `nx.json` lists `@zukhruf/nx/lint`                | #3387                       |
+| deepagents       | `nx.json` lists `@zukhruf/nx/lint`                | #3388                       |
+| text2sql         | `nx.json` lists `@zukhruf/nx/lint`                | #3389                       |
+| elt              | `nx.json` lists `@zukhruf/nx/lint`                | #3390                       |
+| context-compiler | `nx.json` lists `@zukhruf/nx/lint`                | #3391                       |
+| offers-evals     | `nx.json` lists `@zukhruf/nx/lint`                | offers-evals commit 7fd9864 |
+| meddit           | `preset` writes `@zukhruf/nx/lint` into `nx.json` | #4606                       |
 
 The umbrella item is #3335.
 
@@ -722,11 +725,11 @@ A target in the `project.json` of a project replaces the inferred target, or mer
 
 ### Who uses the opentofu area
 
-| Workspace     | Backlog item |
-| ------------- | ------------ |
-| whatisgoingon | #4612        |
-| text2sql      | #4613        |
-| meddit        | #4608        |
+| Consumer      | How                                                                                   | Record |
+| ------------- | ------------------------------------------------------------------------------------- | ------ |
+| whatisgoingon | `nx.json` lists `@zukhruf/nx/opentofu`, for `infra`                                   | #4612  |
+| text2sql      | `nx.json` lists `@zukhruf/nx/opentofu`, for its 4 OpenTofu projects                   | #4613  |
+| meddit        | the [dokploy generator](#dokploy-generator) lists `@zukhruf/nx/opentofu` in `nx.json` | #4608  |
 
 The backlog item of the area is #3339.
 
@@ -809,7 +812,7 @@ npx nx run @acme/db:migrate:check
 ### Migrate a workspace to the prisma area
 
 1. Add `@zukhruf/nx/prisma` to `plugins` in `nx.json`.
-2. Add `generate` to `targetDefaults.typecheck.dependsOn` and `targetDefaults.build.dependsOn`.
+2. Add `generate` to `targetDefaults.typecheck.dependsOn` and `targetDefaults.build.dependsOn`. Add `migrate:check` to `targetDefaults.typecheck.dependsOn`, as the [prisma generator](#prisma-generator) does (commit 19a4bd37, `src/generators/prisma/generator.test.ts`). `migrate:check` needs Docker and `@zukhruf/testing` (see [Check the migrations](#check-the-migrations)).
 3. Delete `generate`, `migrate`, `deploy`, `reset` and `pull` from each Prisma project, and the `typecheck` entry that only adds `generate`.
 4. Delete the `typecheck:generate` tag and its `targetDefaults` filter.
 5. Compare `nx show project <project> --json` before and after.
@@ -822,11 +825,11 @@ npx nx run @acme/db:migrate:check
 
 ### Who uses the prisma area
 
-| Workspace | Backlog item |
-| --------- | ------------ |
-| factory   | #4611        |
-| text2sql  | #4613        |
-| meddit    | #4607        |
+| Consumer | How                                                                               | Record |
+| -------- | --------------------------------------------------------------------------------- | ------ |
+| text2sql | `nx.json` lists `@zukhruf/nx/prisma`                                              | #4613  |
+| meddit   | the [prisma generator](#prisma-generator) lists `@zukhruf/nx/prisma` in `nx.json` | #4607  |
+| factory  | not yet: its `nx.json` does not list `@zukhruf/nx/prisma`                         | #4611  |
 
 The backlog item of the area is #3339.
 
@@ -1111,12 +1114,12 @@ Then check that `npm install` passes, that `npx nx run-many -t typecheck` and `n
 
 ### Who uses the generators
 
-| Workspace | Generators                                            | Backlog item |
-| --------- | ----------------------------------------------------- | ------------ |
-| meddit    | `preset`, `node-app`, `react-app`, `pair`             | #4606        |
-| meddit    | `prisma`                                              | #4607        |
-| meddit    | `dokploy`                                             | #4608        |
-| factory   | `init`, `node-app`, `react-app`, `pair`, `ui-package` | #4611        |
+| Consumer | How                                                   | Record |
+| -------- | ----------------------------------------------------- | ------ |
+| meddit   | `preset`, `node-app`, `react-app`, `pair`             | #4606  |
+| meddit   | `prisma`                                              | #4607  |
+| meddit   | `dokploy`                                             | #4608  |
+| factory  | `init`, `node-app`, `react-app`, `pair`, `ui-package` | #4611  |
 
 The decisions are in [ADR 0009](./docs/adr/0009-a-preset-and-an-init-generator-start-a-repo-from-nothing.md). The backlog item of the generators is #3337.
 
@@ -1294,7 +1297,7 @@ With `--backend`, the node-app gets:
 
 ### Migrations
 
-Write a migration by hand, or with `npx prisma migrate diff --from-empty --to-schema . --script` in the package for the first one, into `migrations/<timestamp>_<name>/migration.sql`. Apply it with `nx run @acme/db:deploy`, or with the image. `migrate dev` needs a TTY, so an agent does not run it, and nothing runs `migrate reset` on a shared database.
+Write each migration with `npx nx run @acme/db:migrate:create --name <name>`, the first one too. It writes the diff from the migrations to the schema into `migrations/<time>_<name>/migration.sql` (see [Check the migrations](#check-the-migrations)). Read the SQL, and edit it before `deploy` when it can fail on a table with rows. `migrate:check` runs before `typecheck`, so the `typecheck` of the package fails when the migrations do not build the schema (commit 19a4bd37). Apply a migration with `nx run @acme/db:deploy`, or with the image. `migrate dev` needs a TTY, so an agent does not run it, and nothing runs `migrate reset` on a shared database.
 
 ### Errors of the prisma generator
 
@@ -1520,3 +1523,30 @@ The compose reads `PUBLIC_HOST` in its labels, Postgres reads `POSTGRES_PASSWORD
 After the steps of [Test the app generators before a release](#test-the-app-generators-before-a-release), run `prisma` and then `dokploy` with `--database`, `--registryUser` and no `--host`, then `npm install`, `npx nx sync`, `npx nx run @acme/infra:typecheck`, `actionlint .github/workflows/*.yml`, `npx nx run-many -t typecheck lint`, `npx prettier --check .`, and `docker compose -f infra/compose.dokploy.yml config` (with an `infra/.env`, which the app's `env_file` names). actionlint 1.7.12 does not know the `parallel:` step of `ci.yml`, which GitHub runs. On 2026-11-18 each passed, also after a run with `--host` and no `--database` or `--registryUser`; after that, two runs with the first options passed again, and the second of them changed no file.
 
 The decisions are in [ADR 0011](./docs/adr/0011-the-dokploy-generator-writes-the-gitops-delivery-of-a-node-app.md) and [ADR 0015](./docs/adr/0015-an-opentofu-module-of-zukhruf-holds-the-dokploy-delivery-and-the-dokploy-generator-writes-infra-once.md). The backlog items of the dokploy generator are #4603 and #4733.
+
+## Documentation
+
+**Decisions**
+
+- [ADR 0001](./docs/adr/0001-inferred-targets-not-copied-defaults.md): an inference plugin gives each project its format targets.
+- [ADR 0002](./docs/adr/0002-a-check-never-writes.md): a check target never writes.
+- [ADR 0003](./docs/adr/0003-which-roots-get-targets.md): the plugin gives targets to the projects of Nx, by the matcher of Nx.
+- [ADR 0004](./docs/adr/0004-node-test-target-from-test-files.md): the plugin gives the test target to each project root that owns node:test files (superseded in part by ADR 0006 for the project roots, and for the default timeout by the owner, #4205).
+- [ADR 0005](./docs/adr/0005-docker-tests-get-the-global-setup.md): a project with the tag test:docker gets the global setup of @zukhruf/testing.
+- [ADR 0006](./docs/adr/0006-lint-inputs-from-the-eslint-package.md): the plugin adds the packages of @zukhruf/eslint to the inputs of lint.
+- [ADR 0007](./docs/adr/0007-opentofu-targets-from-environments-with-no-apply.md): an inference plugin gives each OpenTofu project its targets, and no apply target.
+- [ADR 0008](./docs/adr/0008-prisma-targets-from-prisma-config-with-outputs-from-the-schema.md): an inference plugin gives each Prisma project its targets, with the outputs that the schema names.
+- [ADR 0009](./docs/adr/0009-a-preset-and-an-init-generator-start-a-repo-from-nothing.md): a preset and an init generator start a repo from nothing.
+- [ADR 0010](./docs/adr/0010-the-app-generators-move-here-and-call-the-generators-of-nx.md): the app generators move here and call the generators of Nx.
+- [ADR 0011](./docs/adr/0011-the-dokploy-generator-writes-the-gitops-delivery-of-a-node-app.md): the dokploy generator writes the GitOps delivery of a node-app (decision 17 superseded by ADR 0015 for the files of `infra/`).
+- [ADR 0012](./docs/adr/0012-the-prisma-generator-writes-a-postgres-db-package-and-wires-a-backend.md): the prisma generator writes a Postgres db package and wires a backend.
+- [ADR 0013](./docs/adr/0013-a-target-names-the-tools-it-needs-and-a-hook-checks-them-before-ci-runs-tasks.md): a target names the tools it needs, and a hook checks them before CI runs tasks (rejected by the owner, #4654).
+- [ADR 0014](./docs/adr/0014-the-auth-generator-adds-better-auth-to-a-backend-and-its-db-package.md): the auth generator adds better-auth to a backend and its db package (proposed; superseded in part by ADR 0016).
+- [ADR 0015](./docs/adr/0015-an-opentofu-module-of-zukhruf-holds-the-dokploy-delivery-and-the-dokploy-generator-writes-infra-once.md): an OpenTofu module of zukhruf holds the Dokploy delivery, and the dokploy generator writes infra once.
+- [ADR 0016](./docs/adr/0016-the-generated-code-reads-explicit-settings-and-never-nodeenv.md): the generated code reads explicit settings, and never NODE_ENV.
+- [ADR 0017](./docs/adr/0017-nx-migrations-bring-a-change-of-generated-output-to-the-repos-that-ran-the-generator-before.md): Nx migrations bring a change of generated output to the repos that ran the generator before.
+- [ADR 0018](./docs/adr/0018-migrate-check-diffs-the-migrations-on-a-shadow-database-that-it-makes.md): migrate:check diffs the migrations on a shadow database that it makes.
+
+**Copied code**
+
+- [docs/copied-code.md](./docs/copied-code.md): each copy of code in this package, as the Rule of Three asks.

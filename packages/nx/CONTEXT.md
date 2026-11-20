@@ -1,6 +1,6 @@
 # Nx
 
-This package is the Nx part of the monorepo standard. Each area gives one part of the Nx configuration that the workspaces copied. The `format` area gives each project two targets: one that writes the files with Prettier, and one that only reads them. No workspace copies them. A check target never writes. The `test` area gives the test target to each project that owns test files. The `lint` area adds the lint packages to the inputs of the lint target. The `opentofu` area gives the OpenTofu targets to each project with environments. The `prisma` area gives the Prisma targets to each project with a `prisma.config.ts`. The generators `preset` and `init` write the root files of a workspace.
+This package is the Nx part of the monorepo standard. Each area gives one part of the Nx configuration that the workspaces copied. The `format` area gives each project two targets: one that writes the files with Prettier, and one that only reads them. No workspace copies them. A check target never writes. The `test` area gives the test target to each project that owns test files. The `lint` area adds the lint packages to the inputs of the lint target. The `opentofu` area gives the OpenTofu targets to each project with environments. The `prisma` area gives the Prisma targets to each project with a `prisma.config.ts`. The generators `preset` and `init` write the root files of a workspace, the app generators write projects, and the `prisma`, `auth` and `dokploy` generators add a db package, better-auth and the infra project to a node-app. An Nx migration brings a later change of that output to a repo that ran a generator before.
 
 ## Language
 
@@ -101,8 +101,12 @@ The target `generate` that the `prisma` area gives. It runs `prisma generate` in
 _Avoid_: Codegen target, prisma target (text2sql has a different target with that name)
 
 **Generator**:
-An Nx generator of this package, in `generators.json`. It writes files through a `Tree`, and Nx writes the changes to disk after it ends. `preset` and `init` write the root files (#3337); the app generators write projects (#3338).
+An Nx generator of this package, in `generators.json`. It writes files through a `Tree`, and Nx writes the changes to disk after it ends. `preset` and `init` write the root files (#3337), the app generators write projects (#3338), and `prisma`, `auth` and `dokploy` add a db package, better-auth and the infra project to a node-app.
 _Avoid_: Schematic, template, scaffold
+
+**Nx migration**:
+A function of this package in `migrations.json`, with the package version that brings it, for example `add-migrate-check` of 0.8.44. `nx migrate --run-migrations` runs it on a repo that ran a generator before: it adds only what is missing, and logs the step to take by hand where a file lost the shape that the generator wrote ([ADR 0017](./docs/adr/0017-nx-migrations-bring-a-change-of-generated-output-to-the-repos-that-ran-the-generator-before.md)). In the text about `migrations.json` and `nx migrate`, "migration" alone means an Nx migration.
+_Avoid_: Codemod, upgrade script
 
 **Preset**:
 The generator `preset`. create-nx-workspace runs it just after `nx new`, in a new folder or in an empty Git repo (`.`). It replaces the files of `nx new` that the standard owns, and then runs `init`.
@@ -159,6 +163,10 @@ _Avoid_: Image registry (GHCR is the registry), docker login
 **Db package**:
 The package that the `prisma` generator writes, `@<scope>/<name>`: the Prisma schema, the migrations, `createPrisma` and the test helper. Its generated client in `src/prisma` is not committed; the `generate` target writes it. A backend bundles it.
 _Avoid_: Prisma project, persistence layer, ORM package
+
+**Prisma migration**:
+A folder `migrations/<timestamp>_<name>` of a db package with one `migration.sql`, which changes the database schema one step. `prisma migrate deploy` applies it, schema replay runs it in tests, and `migrate:check` fails when the migrations do not build the schema ([ADR 0018](./docs/adr/0018-migrate-check-diffs-the-migrations-on-a-shadow-database-that-it-makes.md)). In the text about a db package and the `prisma` area, "migration" alone means a Prisma migration.
+_Avoid_: Changeset, database patch
 
 **Schema replay**:
 What `applySchema` of `<db package>/testing` does: it runs each committed `migration.sql` in order on an empty test database, with no `_prisma_migrations` record. `prisma migrate deploy` applies migrations everywhere else.
