@@ -31,6 +31,7 @@
     "@nx/vite": "23.2.1",
     "@nx/vitest": "23.2.1",
     "@rolldown/plugin-babel": "0.2.3",
+    "@shadcn/lint": "0.2.5",
     "@tailwindcss/node": "4.3.3",
     "@tailwindcss/oxide": "4.3.3",
     "@tailwindcss/vite": "4.3.3",

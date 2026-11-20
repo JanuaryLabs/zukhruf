@@ -26,6 +26,10 @@ _Avoid_: Modernization preset, node-native rule
 The config `zukhruf/shadcn`. Its checks are on the use of `@zukhruf/shadcn`, the component kit. `@zukhruf/eslint/react` is another thing: the configs of the React community, with no check of the package.
 _Avoid_: React config, `zukhruf/react` (its old name)
 
+**shadcn-strict**:
+The export `@zukhruf/eslint/shadcn-strict`. A host of the kit spreads it after **shadcn** once it has fixed its hits: `zukhruf/no-data-slot-restyle` and the rules of `@shadcn/lint`, at `error`.
+_Avoid_: Strict mode, shadcn lint config
+
 **Repo-owned rule**:
 A rule whose options are one list that each repo fills with its own entries: `no-restricted-syntax`, `no-restricted-imports`, `@typescript-eslint/no-restricted-imports`. The package never sets these rules.
 _Avoid_: Shared rule

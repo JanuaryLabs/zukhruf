@@ -45,6 +45,12 @@
       "import": "./dist/react.js",
       "default": "./dist/react.js"
     },
+    "./shadcn-strict": {
+      "@zukhruf/source": "./src/shadcn-strict.ts",
+      "types": "./dist/shadcn-strict.d.ts",
+      "import": "./dist/shadcn-strict.js",
+      "default": "./dist/shadcn-strict.js"
+    },
     "./modern-node": {
       "@zukhruf/source": "./src/modern-node.ts",
       "types": "./dist/modern-node.d.ts",
@@ -78,6 +84,7 @@
     "@eslint/js": "^9.30.0 || ^10.0.0",
     "@nx/devkit": ">=21.0.0",
     "@nx/eslint-plugin": ">=21.0.0",
+    "@shadcn/lint": "^0.2.5",
     "eslint": "^9.30.0 || ^10.0.0",
     "eslint-plugin-es-x": "^9.7.0 || ^10.0.0",
     "eslint-plugin-functional": "^10.0.0",
@@ -103,6 +110,9 @@
       "optional": true
     },
     "@nx/eslint-plugin": {
+      "optional": true
+    },
+    "@shadcn/lint": {
       "optional": true
     },
     "eslint-plugin-es-x": {

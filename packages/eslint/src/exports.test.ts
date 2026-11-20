@@ -173,3 +173,14 @@ test('@zukhruf/eslint loads neither plugin of modern-node, so a repo that does n
   assert.equal(names.includes('@e18e/eslint-plugin'), false);
   assert.equal(names.includes('eslint-plugin-unicorn'), false);
 });
+
+test('@zukhruf/eslint loads no @shadcn/lint, so a host that does not opt into shadcn-strict does not need it', () => {
+  // Act
+  const names = loadsOf('@zukhruf/eslint')
+    .filter(({ url }) => url.startsWith('file:'))
+    .map(({ url }) => nameOf(packageFolderOf(url)));
+
+  // Assert
+  assert.ok(names.length > 0, '@zukhruf/eslint loaded no modules');
+  assert.equal(names.includes('@shadcn/lint'), false);
+});

@@ -7,6 +7,7 @@ import hermes from '../hermes/plugin.ts';
 import island from '../island/plugin.ts';
 import manifest from '../manifest/plugin.ts';
 import zukhruf from '../plugin.ts';
+import shadcnStrict from '../react/strict.ts';
 
 // Rules whose options are one list a repo fills with its own entries. Flat
 // config keeps one options array per key, so a package that set them would be
@@ -25,7 +26,12 @@ function configsOf(plugin: { configs: Record<string, Linter.Config[]> }) {
   );
 }
 
-const shipped = Object.values(plugins).flatMap(configsOf);
+// A subpath config ships too: `@zukhruf/eslint/shadcn-strict` turns on a rule
+// of the plugin that no config of the plugin turns on.
+const shipped = [
+  ...Object.values(plugins).flatMap(configsOf),
+  ...shadcnStrict.map((config) => ({ name: 'shadcn-strict', config })),
+];
 
 test('no shipped config sets a rule that a repo owns', () => {
   const offenders = shipped.flatMap(({ name, config }) =>

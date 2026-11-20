@@ -30,12 +30,9 @@ export const shadcn: Concept = {
     {
       name: 'zukhruf/shadcn',
       files: JSX,
-      rules: {
-        ...enable(enabled),
-        // Off until @zukhruf/shadcn has the variants and sizes that hosts
-        // now get by restyling its parts (#5015, #5017).
-        'zukhruf/no-data-slot-restyle': 'off',
-      },
+      // `no-data-slot-restyle` is registered here and turned on by
+      // `@zukhruf/eslint/shadcn-strict`, which a host opts into (ADR 0011).
+      rules: enable(enabled),
     },
   ],
 };
