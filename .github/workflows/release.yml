@@ -1,11 +1,14 @@
 name: Release
 
-# Releases what the conventional commits on main ask for, once CI is green for
-# that commit: nx release version versions, commits, tags and pushes, then
-# nx-release-publish publishes, so nothing reaches npm unless main has the
-# release commit and tag. A version already on npm is skipped. A push with
-# nothing to release changes nothing. The release commit and tag are pushed with
-# GITHUB_TOKEN, which starts no further workflow run.
+# Releases the commit that CI tested, once CI is green for it, even when main
+# has moved on since: nx release version versions it with what its conventional
+# commits since the last release ask, commits on top of it and tags that commit,
+# the tag is pushed, nx-release-publish publishes what was built from it, and
+# then the main job merges the release commit into main as main is then. So
+# nothing untested reaches npm, and nothing reaches npm without its tag. A
+# version already on npm is skipped. A commit with nothing to release, or one
+# that an earlier release holds, changes nothing. The tag and the merge are
+# pushed with GITHUB_TOKEN, which starts no further workflow run.
 on:
   workflow_run:
     workflows: [CI]
@@ -13,8 +16,8 @@ on:
     branches: [main]
 
 # A release is never cancelled: one stopped between the tag and the publish
-# would leave a version that no later run releases. Every run waits its turn;
-# a run whose commit main moved past then stops at the tested-commit step.
+# would leave a version unpublished. Every run waits its turn, in the order CI
+# finished, so each run finds the tag and the merge of the run before it.
 concurrency:
   group: release
   cancel-in-progress: false
@@ -34,43 +37,137 @@ jobs:
       id-token: write
     # The release restores the npm cache but never writes one.
     cache-mode: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      commit: ${{ steps.version.outputs.commit }}
     steps:
-      # The release job pushes the release commit and tag with these credentials.
+      # The release job pushes the tag with these credentials.
+      - name: Checkout the tested commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+
+      - name: Set up the workspace
+        uses: $/.github/actions/setup-workspace
+        with:
+          registry-url: https://registry.npmjs.org/
+
+      - name: Set up Zig
+        uses: $/.github/actions/setup-zig
+
+      - name: Verify npm authentication
+        run: npm whoami
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_ACCESS_TOKEN }}
+
+      # The tested commit may not hold the merge of the previous release yet,
+      # when it was pushed while that release ran, so the newest release tag is
+      # looked up among all tags and not only those HEAD reaches; Nx then counts
+      # the commits from that tag to HEAD. With no such commits Nx changes
+      # nothing: the newest release holds the tested commit, as when an older
+      # run is run again. The preVersionCommand builds the tested commit, and
+      # the publish packs that build.
+      - name: Version the tested commit
+        id: version
+        env:
+          TESTED: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          node --input-type=module - <<'EOF'
+          import { ReleaseClient } from 'nx/release';
+
+          await new ReleaseClient({
+            releaseTag: { checkAllBranchesWhen: true },
+          }).releaseVersion({ gitPush: false });
+          EOF
+          if [ "$(git rev-parse HEAD)" = "$TESTED" ]; then
+            tag="$(git -c versionsort.suffix=- for-each-ref --sort=-v:refname --count=1 --format='%(refname:strip=2)' 'refs/tags/release/*')"
+            if [ -z "$tag" ] || [ "$(git rev-parse "$tag^{commit}^1")" != "$TESTED" ]; then
+              echo "The newest release holds $TESTED, so there is nothing to release."
+              exit 0
+            fi
+            # A run of this commit tagged it and stopped before the end (#4692).
+            # Its tree is the tested commit with the versions, and the build of
+            # the tested commit is in place: dist is not in git.
+            echo "$tag was made for $TESTED; this run finishes its release."
+            git checkout --detach "$tag"
+          fi
+          tag="$(git describe --exact-match --match 'release/*' HEAD)"
+          echo "version=${tag#release/}" >> "$GITHUB_OUTPUT"
+          echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      # The tag goes first: the next release counts its commits from it, so a
+      # version reaches npm only once its tag is there.
+      - name: Push the tag
+        if: steps.version.outputs.version != ''
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: git push origin "refs/tags/release/$VERSION"
+
+      - name: Publish
+        if: steps.version.outputs.version != ''
+        uses: $/.github/actions/nx-release-publish
+        with:
+          token: ${{ secrets.NPM_ACCESS_TOKEN }}
+
+  # Main gets the version as a merge of the release commit, so the tag is in
+  # main's history. The merge takes main's tree and writes the version into it
+  # with Nx; a textual merge of the release commit would conflict on every
+  # version line whenever the tested commit lacks the previous release's merge.
+  # A push to main in the meantime rejects the merge, and the job builds it
+  # again on the new main.
+  main:
+    needs: release
+    if: needs.release.outputs.version != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    cache-mode: read
+    env:
+      VERSION: ${{ needs.release.outputs.version }}
+      RELEASE: ${{ needs.release.outputs.commit }}
+    steps:
+      # The main job pushes the merge with these credentials.
       - name: Checkout
         uses: actions/checkout@v7
         with:
           ref: main
           fetch-depth: 0
 
-      - name: Release only the commit that CI tested
-        id: tested
-        uses: $/.github/actions/tested-commit
-
       - name: Set up the workspace
-        if: steps.tested.outputs.current == 'true'
         uses: $/.github/actions/setup-workspace
-        with:
-          registry-url: https://registry.npmjs.org/
 
-      - name: Set up Zig
-        if: steps.tested.outputs.current == 'true'
-        uses: $/.github/actions/setup-zig
-
-      - name: Verify npm authentication
-        if: steps.tested.outputs.current == 'true'
-        run: npm whoami
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_ACCESS_TOKEN }}
-
-      - name: Version
-        if: steps.tested.outputs.current == 'true'
+      # The version is written without the preVersionCommand: nothing is built
+      # or published from main.
+      - name: Merge the release into main
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          npx nx release version
+          for _ in 1 2 3 4 5; do
+            git fetch origin main
+            git checkout --force --detach origin/main
+            if git merge-base --is-ancestor "$RELEASE" HEAD; then
+              echo "main holds release $VERSION."
+              exit 0
+            fi
+            node --input-type=module - <<'EOF'
+          import { ReleaseClient } from 'nx/release';
 
-      - name: Publish
-        if: steps.tested.outputs.current == 'true'
-        uses: $/.github/actions/nx-release-publish
-        with:
-          token: ${{ secrets.NPM_ACCESS_TOKEN }}
+          await new ReleaseClient({
+            version: { preVersionCommand: '' },
+          }).releaseVersion({
+            specifier: process.env.VERSION,
+            gitCommit: false,
+            gitTag: false,
+            gitPush: false,
+            stageChanges: true,
+          });
+          EOF
+            merge="$(git commit-tree "$(git write-tree)" -p HEAD -p "$RELEASE" -m "chore(release): merge $VERSION into main")"
+            if git push origin "$merge:refs/heads/main"; then
+              exit 0
+            fi
+          done
+          exit 1
