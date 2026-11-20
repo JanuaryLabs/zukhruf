@@ -230,12 +230,14 @@ jobs:
 
       # nx:test runs the tofu tests of the dokploy-stack module and the tofu fmt
       # and validate tests of the dokploy generator, which skip without tofu.
-      # 1.12.3 is the version that the hosts require (packages/nx/docs/adr/0015).
+      # The latest, as tofu-apply.yml and the delivery workflow of the dokploy
+      # generator install for every apply, so CI tests what production runs.
+      # 1.12.3 is only the floor that the modules declare (packages/nx/docs/adr/0015).
       - name: Set up OpenTofu
         background: true
         uses: opentofu/setup-opentofu@v2
         with:
-          tofu_version: 1.12.3
+          tofu_version: latest
           tofu_wrapper: false
 
       # A machine number holds much the same tasks from run to run, so it
