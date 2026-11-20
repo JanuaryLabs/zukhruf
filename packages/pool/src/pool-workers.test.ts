@@ -11,6 +11,7 @@ import PQueue from 'p-queue';
 
 import { Latch, type WallClock, delay, untilAborted } from '@zukhruf/async';
 import { TemporaryFiles } from '@zukhruf/fs';
+import { open } from '@zukhruf/sqlite-open';
 import {
   SqliteJobQueue,
   type SqliteJobQueueOptions,
@@ -3108,6 +3109,174 @@ describe('PoolWorkers lends in order', { concurrency: true }, () => {
     // The worker is created a microtask after its slot starts.
     await new Promise((resolve) => setImmediate(resolve));
     assert.equal(created.length, 5, 'the back-off starts its own worker');
+  });
+});
+
+// A store that fails in the background: another connection holds the write
+// lock of the store's file, as another program would, so the passes of the
+// store and the owner's fetches wait 5 s for it and then fail with
+// SQLITE_BUSY. These tests block the event loop for those waits, so they run
+// alone.
+describe('PoolWorkers when its store fails', () => {
+  test('a failure of the store in the background is a process warning, and the owner keeps owning', async (t) => {
+    await using folder = await new TemporaryFiles().directory('pool-');
+    const store = join(folder.path, 'store.sqlite');
+    await using owner = lending(store, {
+      size: new Fixed(1),
+      startup: new Parallel(),
+      eviction: new NoEviction(),
+      create: () => {
+        const worker = new EchoWorker();
+        worker.release();
+        return worker;
+      },
+    });
+    await using sending = await sender(store);
+    await owner.ready();
+    const warnings: Error[] = [];
+    const warned = Promise.withResolvers<void>();
+    const onWarning = (warning: Error) => {
+      if (!/database is locked/.test(warning.message)) return;
+      warnings.push(warning);
+      warned.resolve();
+    };
+    process.on('warning', onWarning);
+    const holder = open(store);
+    try {
+      holder.exec('BEGIN IMMEDIATE');
+      await untilAborted(warned.promise, t.signal);
+      holder.exec('ROLLBACK');
+
+      assert.equal(await ran(t, sending.jobs, 'after'), 'after');
+      assert.ok(warnings.length > 0);
+    } finally {
+      if (holder.isTransaction) holder.exec('ROLLBACK');
+      holder.close();
+      process.off('warning', onWarning);
+    }
+  });
+
+  test('a touch that fails is a process warning, and the job keeps its worker', async (t) => {
+    await using folder = await new TemporaryFiles().directory('pool-');
+    const store = join(folder.path, 'store.sqlite');
+    const gate = new Latch();
+    let started = 0;
+    class Gated extends EchoWorker {
+      override async run(text: string): Promise<string> {
+        started = performance.now();
+        await gate.wait();
+        return super.run(text);
+      }
+    }
+    const created: EchoWorker[] = [];
+    await using owner = lending(store, {
+      size: new Fixed(1),
+      startup: new Parallel(),
+      eviction: new NoEviction(),
+      create: () => {
+        const worker = new Gated();
+        worker.release();
+        created.push(worker);
+        return worker;
+      },
+    });
+    await using sending = await sender(store);
+    await owner.ready();
+    const id = await sent(sending.jobs, 'kept');
+    await waitFor(() => assert.ok(started > 0, 'the job runs'), {
+      signal: t.signal,
+      interval: 10,
+    });
+    let warnings = 0;
+    const onWarning = (warning: Error) => {
+      if (/database is locked/.test(warning.message)) warnings++;
+    };
+    process.on('warning', onWarning);
+    const holder = open(store);
+    try {
+      holder.exec('BEGIN IMMEDIATE');
+      // The first touch comes 5 s after the fetch. The lock outlasts it and
+      // the wait of 5 s that the touch spends on the lock.
+      await waitFor(
+        () => {
+          assert.ok(warnings > 0, 'the store failed');
+          assert.ok(performance.now() - started > 11_000, 'a touch failed');
+        },
+        { signal: t.signal, interval: 50 },
+      );
+      holder.exec('ROLLBACK');
+
+      // The touch spent the heartbeat's margin on the lock, so the store may
+      // fail the job before its worker answers, as pg-boss does when a
+      // heartbeat lapses. Either way the worker stays, and runs the next job.
+      gate.open();
+      await Promise.allSettled([outputOf(t, sending.jobs, id)]);
+      assert.equal(await ran(t, sending.jobs, 'next'), 'next');
+      assert.equal(created.length, 1, 'the owner killed the worker of the job');
+    } finally {
+      gate.open();
+      if (holder.isTransaction) holder.exec('ROLLBACK');
+      holder.close();
+      process.off('warning', onWarning);
+    }
+  });
+
+  test('a settle that fails is a process warning, the job lapses by its heartbeat, and the owner runs the next job', async (t) => {
+    await using folder = await new TemporaryFiles().directory('pool-');
+    const store = join(folder.path, 'store.sqlite');
+    const gate = new Latch();
+    let answered = 0;
+    class Gated extends EchoWorker {
+      override async run(text: string): Promise<string> {
+        if (text === 'lapsed') {
+          await gate.wait();
+          answered = performance.now();
+        }
+        return super.run(text);
+      }
+    }
+    await using owner = lending(store, {
+      size: new Fixed(1),
+      startup: new Parallel(),
+      eviction: new NoEviction(),
+      create: () => {
+        const worker = new Gated();
+        worker.release();
+        return worker;
+      },
+    });
+    await using sending = await sender(store);
+    await owner.ready();
+    const id = await sent(sending.jobs, 'lapsed');
+    await waitFor(() => assert.equal(owner.stats.lent, 1), {
+      signal: t.signal,
+      interval: 10,
+    });
+    const holder = open(store);
+    try {
+      holder.exec('BEGIN IMMEDIATE');
+      // The worker answers while the lock holds: the owner's complete waits
+      // 5 s for the lock and fails.
+      gate.open();
+      await waitFor(
+        () =>
+          assert.ok(
+            answered > 0 && performance.now() - answered > 6_000,
+            'the settle failed',
+          ),
+        { signal: t.signal, interval: 50 },
+      );
+      holder.exec('ROLLBACK');
+
+      // No owner touches the job any more, so its heartbeat of 10 s lapses
+      // and the store fails it, as the kind runs a job only once.
+      await assert.rejects(outputOf(t, sending.jobs, id));
+      assert.equal(await ran(t, sending.jobs, 'next'), 'next');
+    } finally {
+      gate.open();
+      if (holder.isTransaction) holder.exec('ROLLBACK');
+      holder.close();
+    }
   });
 });
 

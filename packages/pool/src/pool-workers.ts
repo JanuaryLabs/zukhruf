@@ -58,8 +58,6 @@ export class PoolWorkers<Input, Output> implements AsyncDisposable {
   readonly #store: Store;
   readonly #election: SqliteElection;
   readonly #disposed = new AbortController();
-  // Aborts with the first failure of the store: the host then stops owning.
-  readonly #failed = new AbortController();
   // Settles when the host stops offering its workers, and fails with the
   // failure that stopped it, if one did.
   readonly #ended: Future<void>;
@@ -86,9 +84,8 @@ export class PoolWorkers<Input, Output> implements AsyncDisposable {
     this.#startup = options.startup;
     this.#eviction = options.eviction;
     this.#store = new Store(options.store, options.clock);
-    const fail = (error: unknown) => this.#failed.abort(error);
-    this.#store.queue.on('error', fail);
-    this.#store.notifications.on('error', fail);
+    this.#store.queue.on('error', warn);
+    this.#store.notifications.on('error', warn);
     this.#election = new SqliteElection({
       directory: this.#store.folder,
       claimFile: `${options.kind.name}.claim`,
@@ -115,10 +112,11 @@ export class PoolWorkers<Input, Output> implements AsyncDisposable {
     return this.#ready.wait();
   }
 
-  // Offers the workers until the disposal or a failure of the store, and
-  // then closes the store, so every disposal waits for the one end.
+  // Offers the workers until the disposal, and then closes the store, so
+  // every disposal waits for the one end. A store that fails to start ends
+  // the host with its failure.
   async #live(): Promise<void> {
-    const stop = AbortSignal.any([this.#disposed.signal, this.#failed.signal]);
+    const stop = this.#disposed.signal;
     try {
       await this.#store.start(this.#kind);
       while (!stop.aborted) {
@@ -134,7 +132,6 @@ export class PoolWorkers<Input, Output> implements AsyncDisposable {
     } finally {
       await this.#store[Symbol.asyncDispose]();
     }
-    this.#failed.signal.throwIfAborted();
   }
 
   // Owns until the stop, or until the term is lost: then it campaigns again.
@@ -164,13 +161,20 @@ export class PoolWorkers<Input, Output> implements AsyncDisposable {
       while (!owning.aborted) {
         const free = this.#size.current - running.size;
         if (free > 0) {
-          const jobs = await this.#store.queue.fetch(this.#kind.queue, {
-            batchSize: free,
-          });
+          // A fetch that fails waits for the backstop, as pg-boss's worker
+          // polls again after a failed fetch.
+          const jobs = await this.#store.queue
+            .fetch(this.#kind.queue, { batchSize: free })
+            .catch((error: unknown) => {
+              warn(error);
+              return [];
+            });
           backlog = jobs.length === free;
           for (const job of jobs) {
             const run = this.#run(slots, job, () => backlog)
-              .catch((error: unknown) => this.#failed.abort(error))
+              // A settle that fails leaves the job to lapse by its heartbeat,
+              // and the store runs it again by the kind's rules.
+              .catch(warn)
               .finally(() => {
                 running.delete(run);
                 changed.broadcast();
@@ -305,10 +309,17 @@ export class PoolWorkers<Input, Output> implements AsyncDisposable {
         signal: ended,
       });
       if (this.#clock.performance.now() >= deadline) return { expired: true };
-      const { affected } = await this.#store.queue.touch(
-        this.#kind.queue,
-        attempt,
-      );
+      let affected: number;
+      try {
+        ({ affected } = await this.#store.queue.touch(
+          this.#kind.queue,
+          attempt,
+        ));
+      } catch (error) {
+        // The job keeps its worker, and the next touch tries again.
+        warn(error);
+        continue;
+      }
       if (affected === 0) return { gone: true };
     }
   }
@@ -330,4 +341,15 @@ function failure(error: unknown): { name: string; message: string } {
   return Error.isError(error)
     ? { name: error.name, message: error.message }
     : { name: 'Error', message: String(error) };
+}
+
+/**
+ * A failure of the store that no caller waits for, as a process warning: the
+ * owner goes on, and the next pass, fetch or touch tries again, as pg-boss
+ * emits the failure of a pass and keeps polling.
+ */
+function warn(error: unknown): void {
+  process.emitWarning(
+    Error.isError(error) ? error : new Error(String(error), { cause: error }),
+  );
 }
