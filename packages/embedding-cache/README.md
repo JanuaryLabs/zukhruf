@@ -54,39 +54,6 @@ const store = new SqlServerEmbeddingCacheStore({
 });
 ```
 
-## API
-
-```ts
-// @zukhruf/embedding-cache
-function embeddingCacheMiddleware(options: {
-  store: EmbeddingCacheStore;
-}): EmbeddingModelMiddleware;
-
-interface EmbeddingCacheStore {
-  get(keys: readonly string[]): Promise<ReadonlyMap<string, readonly number[]>>; // only the keys it holds
-  set(entries: ReadonlyMap<string, readonly number[]>): Promise<void>;
-}
-class MemoryEmbeddingCacheStore implements EmbeddingCacheStore {}
-
-// @zukhruf/embedding-cache/sqlite
-class SqliteEmbeddingCacheStore implements EmbeddingCacheStore {
-  constructor(options: { database: DatabaseSync; table: string });
-}
-
-// @zukhruf/embedding-cache/sqlserver
-interface SqlServerSession {
-  // Rejects with the driver's error as it is: the store reads its `number`
-  // (208: no table, 2714: the table exists).
-  query(
-    sql: string,
-    parameters: Record<string, unknown>,
-  ): Promise<Record<string, unknown>[]>;
-}
-class SqlServerEmbeddingCacheStore implements EmbeddingCacheStore {
-  constructor(options: { session: SqlServerSession; table: string });
-}
-```
-
 ## What a call does underneath
 
 | Step   | What happens                                                                                                                                                                           |
@@ -121,6 +88,47 @@ An error of the model, of `store.get` or of `store.set` reaches the caller as it
 | the key                    | `GetCacheKey(ReadOnlySpan<object?> values)`                                             | `namespace + sha256(text)`                                               |
 | `EmbeddingCacheStore`      | `IDistributedCache`                                                                     | a byte store with `mget` and `mset`                                      |
 | every call is cached       | every call is cached                                                                    | documents only; `embedQuery` is not cached                               |
+
+## API
+
+```ts
+// @zukhruf/embedding-cache
+function embeddingCacheMiddleware(options: {
+  store: EmbeddingCacheStore;
+}): EmbeddingModelMiddleware;
+
+interface EmbeddingCacheStore {
+  get(keys: readonly string[]): Promise<ReadonlyMap<string, readonly number[]>>; // only the keys it holds
+  set(entries: ReadonlyMap<string, readonly number[]>): Promise<void>;
+}
+class MemoryEmbeddingCacheStore implements EmbeddingCacheStore {}
+
+// @zukhruf/embedding-cache/sqlite
+class SqliteEmbeddingCacheStore implements EmbeddingCacheStore {
+  constructor(options: { database: DatabaseSync; table: string });
+}
+
+// @zukhruf/embedding-cache/sqlserver
+interface SqlServerSession {
+  // Rejects with the driver's error as it is: the store reads its `number`
+  // (208: no table, 2714: the table exists).
+  query(
+    sql: string,
+    parameters: Record<string, unknown>,
+  ): Promise<Record<string, unknown>[]>;
+}
+class SqlServerEmbeddingCacheStore implements EmbeddingCacheStore {
+  constructor(options: { session: SqlServerSession; table: string });
+}
+```
+
+## Documentation
+
+- [ADR 0001](./docs/adr/0001-the-cache-is-its-own-package-after-dotnets-caching-embedding-generator.md): the cache is its own package, after .NET's caching embedding generator.
+- [ADR 0002](./docs/adr/0002-the-cache-is-a-middleware-that-calls-the-model-for-the-misses-only.md): the cache is a middleware that calls the model for the misses only.
+- [ADR 0003](./docs/adr/0003-the-key-is-the-sha256-of-the-provider-the-model-id-the-provider-options-and-the-text.md): the key is the sha256 of the provider, the model id, the provider options and the text.
+- [ADR 0004](./docs/adr/0004-a-hit-gives-the-numbers-that-the-model-gave.md): a hit gives the numbers that the model gave.
+- [ADR 0005](./docs/adr/0005-a-store-has-get-and-set-and-three-stores-ship.md): a store has `get` and `set`, and three stores ship.
 
 ## Why not an npm package
 
