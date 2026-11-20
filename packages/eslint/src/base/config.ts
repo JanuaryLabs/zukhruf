@@ -11,6 +11,7 @@ import noPhaseFlag from '../class-state/no-phase-flag.ts';
 import noCapturedAssignment from '../closure-state/no-captured-assignment.ts';
 import { type Concept, enable } from '../concept.ts';
 import noNodeEnv from '../environment/no-node-env.ts';
+import noSilentCatch from '../errors/no-silent-catch.ts';
 import {
   BUILD_OUTPUT,
   COMMONJS,
@@ -59,6 +60,7 @@ const rules = {
   'no-reflect-get-chain': noReflectGetChain,
   'no-process-global-write': noProcessGlobalWrite,
   'no-add-issue-string': noAddIssueString,
+  'no-silent-catch': noSilentCatch,
   ...importBans,
 };
 
@@ -211,6 +213,14 @@ export const base: Concept = {
         name: 'zukhruf/base/payloads',
         files: SOURCE,
         rules: { 'zukhruf/no-reflect-get-chain': 'error' },
+      },
+      {
+        // A catch that drops the error hides the failure, in shipped code and
+        // in test cleanup alike. Off until zukhruf fixes its own findings
+        // (#3619).
+        name: 'zukhruf/base/errors',
+        files: SOURCE,
+        rules: { 'zukhruf/no-silent-catch': 'off' },
       },
       {
         // A process-wide global (console) patched in one module changes every
