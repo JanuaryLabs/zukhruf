@@ -13,7 +13,11 @@ async function nextError(queue: JobQueue, ms: number) {
   try {
     return await Promise.race([
       reported,
-      sleep(ms, null, { signal: timeout.signal }).catch(() => null),
+      sleep(ms, null, { signal: timeout.signal }).catch((error: unknown) => {
+        // The finally aborts the sleep once the race is over.
+        if (!(Error.isError(error) && error.name === 'AbortError')) throw error;
+        return null;
+      }),
     ]);
   } finally {
     timeout.abort();
@@ -97,7 +101,14 @@ describe('error events', () => {
       try {
         const ran = await Promise.race([
           handled.promise,
-          sleep(5000, null, { signal: timeout.signal }).catch(() => null),
+          sleep(5000, null, { signal: timeout.signal }).catch(
+            (error: unknown) => {
+              // The finally aborts the sleep once the race is over.
+              if (!(Error.isError(error) && error.name === 'AbortError'))
+                throw error;
+              return null;
+            },
+          ),
         ]);
         return { failedPoll: failedPoll !== null, ran };
       } finally {

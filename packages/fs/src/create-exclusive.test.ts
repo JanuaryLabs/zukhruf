@@ -98,16 +98,17 @@ describe('createExclusive', () => {
     });
   }
 
-  test('a write of the draft that fails halfway rejects with that error, also when the draft cannot be removed', async (t) => {
+  test('a write of the draft that fails halfway, when the draft cannot be removed either, rejects with a SuppressedError of the failed removal over the failed write', async (t) => {
     // Arrange: a broken disk refuses the removal of the draft too.
     await using directory = await new TemporaryFiles().directory('zukhruf-fs-');
     const path = join(directory.path, 'job.lock');
     using disk = failWriteHalfway(t, 'EIO');
+    const removal = Object.assign(new Error('EIO: unlink failed'), {
+      code: 'EIO',
+      syscall: 'unlink',
+    });
     t.mock.method(fsPromises, 'unlink', async () => {
-      throw Object.assign(new Error('EIO: unlink failed'), {
-        code: 'EIO',
-        syscall: 'unlink',
-      });
+      throw removal;
     });
     syncBuiltinESMExports();
 
@@ -117,7 +118,12 @@ describe('createExclusive', () => {
     });
 
     // Assert
-    await assert.rejects(creating, (error) => error === disk.failure);
+    await assert.rejects(creating, (error) => {
+      assert.ok(error instanceof SuppressedError);
+      assert.equal(error.error, removal);
+      assert.equal(error.suppressed, disk.failure);
+      return true;
+    });
   });
 
   test('a link that fails for a reason other than an existing file rejects with that error and leaves no draft', async (t) => {

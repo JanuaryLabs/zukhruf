@@ -289,13 +289,15 @@ export class Timekeeper extends EventEmitter<Pick<PgBossEventMap, 'error'>> {
         // timekeeper.js:450-458: one row never decides the others'.
         continue;
       }
-      let missed: Date | null = null;
-      try {
-        missed = Timekeeper.#missedOccurrence(schedule, lastPass, windowStart);
-      } catch {
-        // timekeeper.js:464-474: the gap closes anyway, since the claim has
-        // moved.
-      }
+      // timekeeper.js:464-474 catches a catch-up that cannot be read. Its
+      // read is of the rule that the read above just read, and only
+      // schedule() writes a rule, which it refuses when a pass cannot read
+      // it (ADR 0003), so no failure is expected here.
+      const missed = Timekeeper.#missedOccurrence(
+        schedule,
+        lastPass,
+        windowStart,
+      );
       // timekeeper.js:503-515: a set of slots, so a missed occurrence and a
       // due one in the same minute send one job.
       const slots = new Set<string>();
@@ -428,13 +430,18 @@ export class Timekeeper extends EventEmitter<Pick<PgBossEventMap, 'error'>> {
   // timekeeper.js:658-665: an error event nobody listens for must not fail
   // the send-it job, which would replay every occurrence in its batch.
   #reportSendItError(error: unknown): void {
+    const reported = Error.isError(error) ? error : new Error(String(error));
     try {
-      this.emit(
-        'error',
-        Error.isError(error) ? error : new Error(String(error)),
+      this.emit('error', reported);
+    } catch (thrown) {
+      // An Error nobody listens for, here or on the queue that re-emits it,
+      // comes back out of emit() itself, and a listener that throws has no
+      // caller either: nothing is left to tell, so it is a process warning.
+      process.emitWarning(
+        Error.isError(thrown)
+          ? thrown
+          : new Error(String(thrown), { cause: thrown }),
       );
-    } catch {
-      // nothing left to report it to
     }
   }
 

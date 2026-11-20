@@ -28,6 +28,11 @@ export class IdleTimeout implements Eviction {
     // An abort stops the timer, also an abort before the call, as when the
     // owner disposed the pool while the worker became ready. The rejection of
     // the wait is the abort.
-    delay(this.#after, { clock, signal: busy }).then(evict, () => {});
+    delay(this.#after, { clock, signal: busy }).then(
+      evict,
+      (error: unknown) => {
+        if (error !== busy.reason) throw error;
+      },
+    );
   }
 }

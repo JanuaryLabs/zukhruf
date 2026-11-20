@@ -79,6 +79,8 @@ if (!created) console.log('Another process holds the job.');
 
 When a write fails, it removes its draft. Thus failed writes do not fill the directory with drafts. The file at the path keeps its old content.
 
+When `createExclusive` fails and the removal of its draft fails too, it rejects with a `SuppressedError`: `suppressed` is the failure of the create, and `error` is the failure of the removal. When the create succeeds or finds a file, a failed removal does not change its answer: the process gets a warning, and the draft stays. A draft has a unique name, so it never blocks a later create.
+
 ## Keep room for the name of the draft
 
 A draft has the name of the path plus `draftSuffixLength` characters. Most file systems limit a file name to 255 bytes. A caller that makes long file names, for example from user keys, keeps `draftSuffixLength` characters of room. Otherwise the name of the draft is too long, and the write fails with `ENAMETOOLONG`.

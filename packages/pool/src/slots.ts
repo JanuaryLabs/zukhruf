@@ -354,16 +354,20 @@ export class Slots<
     }
     const state = { kind: 'backoff', wait: new AbortController() } as const;
     this.#enter(slot, state);
+    const ended = AbortSignal.any([state.wait.signal, this.#stopped.signal]);
     delay(backoff.duration(slot.early - 1), {
       clock: this.#clock,
-      signal: AbortSignal.any([state.wait.signal, this.#stopped.signal]),
+      signal: ended,
     }).then(
       () => {
         if (slot.state !== state) return;
         this.#enter(slot, { kind: 'empty' });
         if (slot.index < this.#sizing.current) this.#spawn(slot);
       },
-      () => undefined,
+      (error: unknown) => {
+        // The rejection of the wait is the end of the back-off.
+        if (error !== ended.reason) throw error;
+      },
     );
   }
 
@@ -375,10 +379,12 @@ export class Slots<
     if (state.kind === 'ready' || state.kind === 'lost')
       void this.#close(state.worker);
     else if (state.kind === 'starting')
-      void state.outcome.wait().then(
-        (worker) => this.#close(worker),
-        () => undefined,
-      );
+      // A start that fails closes its own worker, and its failure stays in
+      // the outcome for the job or the startup that waits for it (ADR 0010),
+      // so only a started worker is left to close.
+      void Promise.allSettled([state.outcome.wait()]).then(async ([start]) => {
+        if (start.status === 'fulfilled') await this.#close(start.value);
+      });
   }
 
   async #close(worker: T): Promise<void> {

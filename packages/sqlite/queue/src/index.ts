@@ -541,9 +541,24 @@ export class SqliteJobQueue
               'error',
               toWorkerEvent(toError(error), worker.name, worker.id),
             );
-          } catch {
-            // An error event nobody listens for throws back out of emit();
-            // the remaining workers still have to be reached.
+          } catch (thrown) {
+            // The remaining workers still have to be reached, and nothing is
+            // left to tell: an error event nobody listens for throws
+            // ERR_UNHANDLED_ERROR back out of emit(), here or from an emitter
+            // that re-emits it, and a listener that throws has no caller.
+            // Either is a process warning, of the worker's own error when
+            // nobody listened.
+            const unheard =
+              Error.isError(thrown) &&
+              'code' in thrown &&
+              thrown.code === 'ERR_UNHANDLED_ERROR';
+            if (unheard) process.emitWarning(toError(error));
+            else
+              process.emitWarning(
+                Error.isError(thrown)
+                  ? thrown
+                  : new Error(String(thrown), { cause: thrown }),
+              );
           }
         }
       }

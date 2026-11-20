@@ -793,8 +793,9 @@ async function geoFromGeoJs(clock: Clock): Promise<GeoMetadata> {
       longitude: 'longitude',
       countryCode: 'country_code',
     });
-  } catch {
+  } catch (error) {
     // The backup API.
+    if (!isUnusableAnswer(error)) throw error;
   }
   try {
     const response = await getJson('https://ip-api.com/json/', clock);
@@ -825,6 +826,20 @@ async function geoFromGeoJs(clock: Clock): Promise<GeoMetadata> {
   } catch {
     return geoMetadata('CAN', 'Quebec');
   }
+}
+
+// What Python's `except Exception` catches of an API that gives no usable
+// answer: fetch fails with a TypeError when the host is not reached, the 0.5 s
+// limit aborts with a TimeoutError, JSON.parse throws a SyntaxError for a body
+// that is not JSON, and the reads of the answer throw a TypeError or a
+// RangeError.
+function isUnusableAnswer(error: unknown): boolean {
+  return (
+    error instanceof TypeError ||
+    error instanceof RangeError ||
+    error instanceof SyntaxError ||
+    (error instanceof DOMException && error.name === 'TimeoutError')
+  );
 }
 
 // requests.get(url, timeout=0.5).json(): the body of any status.
@@ -922,8 +937,16 @@ function releaseAll(): void {
   for (const lock of releaseAtExit.toReversed())
     try {
       lock.release();
-    } catch {
-      // atexit prints the error and runs the next function.
+    } catch (error) {
+      // atexit prints the error and runs the next function. The exit
+      // listener has no caller to tell, and process.emitWarning prints on a
+      // next tick that never runs after 'exit', so the warning is emitted now.
+      process.emit(
+        'warning',
+        Error.isError(error)
+          ? error
+          : new Error(String(error), { cause: error }),
+      );
     }
 }
 
@@ -984,7 +1007,9 @@ class PeriodicScheduler {
     const stop = new AbortController();
     this.#schedule = { kind: 'running', stop };
     // The stop rejects the wait, and that ends the schedule.
-    this.#run(stop.signal).catch(() => undefined);
+    this.#run(stop.signal).catch((error: unknown) => {
+      if (error !== stop.signal.reason) throw error;
+    });
   }
 
   async #run(signal: AbortSignal): Promise<void> {
@@ -994,8 +1019,15 @@ class PeriodicScheduler {
         signal,
         ref: false,
       });
-      // An error ends the call of a Python Timer thread, not the schedule.
-      this.#function().catch(() => undefined);
+      // An error ends the call of a Python Timer thread, not the schedule,
+      // and threading.excepthook prints it: no caller is left to tell.
+      this.#function().catch((error: unknown) => {
+        process.emitWarning(
+          Error.isError(error)
+            ? error
+            : new Error(String(error), { cause: error }),
+        );
+      });
     }
   }
 
@@ -1111,8 +1143,14 @@ export class EmissionsTracker {
     try {
       for (const hardware of run.hardware) hardware.start();
       run.scheduler.start();
-    } catch {
-      // @suppress(Exception)
+    } catch (error) {
+      // @suppress(Exception). Only the reading of a RAPL file can fail here:
+      // the file is gone, only root may read it, or it holds no number.
+      const unreadable =
+        Error.isError(error) &&
+        'code' in error &&
+        (error.code === 'ENOENT' || error.code === 'EACCES');
+      if (!(unreadable || error instanceof RangeError)) throw error;
     }
   }
 

@@ -406,7 +406,9 @@ describe('ChangeWatcher', () => {
     // Asks for the gauge again only after the first read has failed.
     class Retry extends Gauge<number> {
       protected async read(check: Check) {
-        await locked.value(check).catch(() => {});
+        await locked.value(check).catch((error: unknown) => {
+          if (error !== failure) throw error;
+        });
         return locked.value(check);
       }
     }
