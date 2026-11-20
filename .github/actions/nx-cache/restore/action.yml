@@ -25,7 +25,18 @@ runs:
       shell: bash
       run: |
         case "$RUNNER_OS" in
-          Linux) id="$(cat /var/lib/dbus/machine-id /etc/machine-id 2> /dev/null | head -n 1 | sha256sum)" ;;
+          # The first non-empty file, in the order Nx reads them. This shell
+          # runs with pipefail, and `cat … | head -n 1` failed the step when cat
+          # got SIGPIPE or met a missing file (run 44791427225). A machine with
+          # no ID hashes an empty one: the key only has to be stable, and a
+          # cache never fails the job. The bytes hashed are the first line and
+          # its newline, as before, so the saved entries still match.
+          Linux)
+            machine=''
+            for file in /var/lib/dbus/machine-id /etc/machine-id; do
+              if [ -s "$file" ]; then machine="$(< "$file")"; break; fi
+            done
+            id="$(printf '%s\n' "${machine%%$'\n'*}" | sha256sum)" ;;
           macOS) id="$(ioreg -rd1 -c IOPlatformExpertDevice | awk -F '"' '/IOPlatformUUID/ { print $4 }' | shasum -a 256)" ;;
           *) echo "No machine ID for $RUNNER_OS" >&2; exit 1 ;;
         esac
