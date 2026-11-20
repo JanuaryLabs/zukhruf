@@ -4,7 +4,14 @@ description: Installs the Zig that sqlite-open's native target builds the librar
 runs:
   using: composite
   steps:
+    # The action caches the Zig download under setup-zig-tarball-<version and
+    # platform>, one entry that every run shares. use-cache would also save
+    # Zig's build cache under a key that ends in the run ID, about 110 MB per
+    # job and run, which filled the 10 GB of Actions cache and evicted the npm
+    # and Nx entries (#4976). The Nx cache already keeps the native target's
+    # output across runs, on the same inputs that would key a build cache.
     - name: Setup Zig
       uses: mlugg/setup-zig@v2
       with:
         version: 0.16.0
+        use-cache: false
