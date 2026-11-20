@@ -80,13 +80,13 @@ Output:
 
 ## Why it works
 
-The leader holds an exclusive SQLite transaction for its full term. The other campaigns find the claim busy and try again. When the leader process stops, the kernel removes its file lock, and the next campaign wins. The new leader gets a higher epoch.
+The leader holds an exclusive SQLite transaction for its full term, and serves a pipe that sends a heartbeat. The other candidates read the leader record, connect to the pipe and wait: a candidate under a healthy leader keeps its attempt open and makes no new call of `tryClaim` until the pipe closes or its time is up. When the leader process stops, the kernel removes its file lock and closes the pipe. A waiting candidate then tries the claim at once, and wins. The new leader gets a higher epoch (commit `2037ed45`).
 
 ## Things to know
 
 - **Do not delete the election directory** while copies run. A new claim file lets a second leader win.
 - **Do not use the file names of `SocketStore`.** `SocketStore` of `@zukhruf/mutex` claims `leader.lock` and counts terms in `leader.epoch`. If the job uses these names in a directory of a `SocketStore`, it joins the election of the lock store. The job then wins terms that the lock store needs, or waits while the lock store leads.
 - **Stop the job when `term.signal` aborts.** `SqliteElection` never loses a living term, but another backend can take the claim away. Then another copy can lead, and the job must stop.
-- **Use the epoch to fence the job's writes.** If the old leader was only frozen, it can continue. Make fencing tokens from `term.epoch` with `EpochTokenSource` of `@zukhruf/fencing`, and give them to the resource. See [the term](../../README.md#the-term).
+- **Use the epoch to fence the job's writes.** With `SqliteElection`, a hung leader never runs again after a takeover: a candidate that hears no heartbeat for the `leaseDuration` sends `SIGKILL` to the leader's process, and a new term starts only after that process ended (commit `2037ed45`). With another backend, a hung old leader can run again after a new leader won. Make fencing tokens from `term.epoch` with `EpochTokenSource` of `@zukhruf/fencing`, and give them to the resource. See [the term](../../README.md#the-term).
 - **To stop leading**, call `await term.resign()`, or use `await using`.
 - **A campaign does not block** the event loop. The copy continues other work while it waits.

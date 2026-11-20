@@ -303,6 +303,7 @@ export { LeaseLostError } from '@zukhruf/lease';
 
 - [How SqliteElection elects a leader](./docs/concepts/leader-election.md)
 - [Recipe: Run a job in only one process](./docs/recipes/singleton-job-with-leader-election.md)
+- [Own one item at a time, and skip an item that another process owns](./docs/recipes/skip-work-that-another-process-owns.md)
 - [ADR 0001: Leader election is a package, and each backend is a subclass of one campaign](./docs/adr/0001-leader-election-is-a-package-and-each-backend-is-a-subclass.md)
 - [ADR 0002: A term is a lease on leadership, with no fencing](./docs/adr/0002-a-term-is-a-lease-on-leadership-with-no-fencing.md)
 - [ADR 0003: A term that shuts down cleanly tells its successor](./docs/adr/0003-a-term-that-shuts-down-cleanly-tells-its-successor.md)
@@ -331,5 +332,4 @@ src/
   term.ts                Term: the epoch, the lease on leadership, and resign
   sqlite/                SqliteElection: the backend of one host, its leader pipe,
                          its leader record, and the readers of the pipe
-  testing/               the helpers that start candidate processes in the tests
 ```
