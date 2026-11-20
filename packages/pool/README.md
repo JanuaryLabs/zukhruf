@@ -389,7 +389,7 @@ Each gap that the design found goes to the package that must have it, and is bui
 | `useListenNotify` across instances on one file                     | `@zukhruf/sqlite-queue`  | Built (#4334). The pool does not use it (ADR 0018). |
 | A standby that polls, and a hung leader that nobody ends           | `@zukhruf/election`      | Built (#4371)                                       |
 | An older release that rebuilds a newer file                        | `@zukhruf/sqlite-queue`  | Built (#4369)                                       |
-| A count of the jobs of a queue by state, pg-boss's `getQueueStats` | `@zukhruf/sqlite-queue`  | Not built. `pool.stats()` needs it (#2888).         |
+| A count of the jobs of a queue by state, pg-boss's `getQueueStats` | `@zukhruf/sqlite-queue`  | Built (#2888). `pool.stats()` needs it.             |
 | A job from `findJobs` carries a `signal`, and pg-boss's does not   | `@zukhruf/sqlite-queue`  | Fixed (#4331)                                       |
 | A write that waits more than the busy timeout of 5 s fails         | `@zukhruf/sqlite-queue`  | Open risk (#4355)                                   |
 | A synced commit on macOS is a plain `fsync`                        | `@zukhruf/sqlite-queue`  | Open risk (#4351)                                   |
@@ -413,7 +413,7 @@ Decided by the leaders (Ezz: "I trust your recommendation ... follow the top per
 
 A plan, not code. The hosts that move are elt and context-compiler (map, Revision 2026-11-13). trashbot is not in use, stays on `@zukhruf/pool` 0.6.15, and does not move.
 
-1. **zukhruf, before the pool**: Ezz reviews ADR 0011 to ADR 0026. `@zukhruf/sqlite-queue` gets pg-boss's `getQueueStats(name)` with its parity tests, because `pool.stats()` needs it (#2888). #4331 is fixed.
+1. **zukhruf, before the pool**: Ezz reviews ADR 0011 to ADR 0026. `@zukhruf/sqlite-queue` has pg-boss's `getQueueStats(name)` with its parity tests, which `pool.stats()` needs (#2888). #4331 is fixed.
 2. **zukhruf, the pool**: `WorkerKind`, `Pool` with `start`, `handle` and `run`, `PoolWorkers` and `computerStore`, with tests of several real hosts on one computer: each test with its own store file, real worker processes and the real clock. `use` and its tests go. The recipes change to the new API, and this section becomes the README. Then a release.
 3. **elt**: a `vision` kind (`exclusive`, with retries) and a `transcription` kind (`standard`) in modules with no native code. The worker classes implement `run`. `ImageFormat` takes a `Pool` of the `vision` kind, in place of `Pool<VisionWorker>` (`image-format.ts:56`). `local-transcription-model.ts:85` gives the path of its wav to `run`.
 4. **context-compiler**: the server (`apps/server/src/startup.ts:11`) and the CLI (`apps/cli/src/parsing.ts:61`) build a `Pool` and a `PoolWorkers` of the `vision` kind with `computerStore(process.env)`. `packages/connectors/connector/src/transcription.ts:96` does the same for transcription. Each host disposes them at a termination signal, through `@zukhruf/shutdown`.
