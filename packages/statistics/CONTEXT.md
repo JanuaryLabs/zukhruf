@@ -15,6 +15,9 @@ _Avoid_: mean of the values that are not NaN (another order)
 **Resample**:
 A sample of the data with as many items as the data, drawn with replacement. An item can come twice, and another item can be absent.
 
+**IID bootstrap**:
+The bootstrap of independent items: each resample draws its items from all the items of the data, with replacement. The name comes from [`arch.bootstrap.IIDBootstrap`](https://arch.readthedocs.io/en/latest/bootstrap/generated/arch.bootstrap.IIDBootstrap.html), and `IidBootstrap` is this bootstrap. A stratified bootstrap draws in each stratum; its callers draw their own resamples.
+
 **Statistic**:
 The number that a caller computes from the items of one resample, such as their mean.
 
@@ -23,6 +26,9 @@ The statistic of each resample.
 
 **Random index**:
 An index from 0 to n − 1 that the caller's random generator gives. One random index picks one item of a resample.
+
+**Quantile**:
+A number `q` from 0 to 1 that says where to read sorted values: 0 is the lowest value, 1 is the highest value. `numpy.quantile` requires `q` from 0 to 1.
 
 **Quantile method**:
 The rule that gives the value at a quantile `q` of sorted values when `(n − 1)q` is not a whole number. NumPy names these rules, such as `linear` and `inverted_cdf`.

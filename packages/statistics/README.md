@@ -63,7 +63,88 @@ These parts stay with each caller, because each caller has its own rule:
 - an interval with a rule of its own at each end, such as the `lower` method at the low end and the `higher` method at the high end of the Structured Output Benchmark: its caller writes it as a `ConfidenceIntervalMethod`;
 - a p-value and a verdict, such as "better" when the interval of a difference lies above 0: each caller builds its rule from `isAbove` and `isBelow`.
 
+## Errors
+
+Each error is a `RangeError`. Its message says which input is out of range.
+
+| Error        | When                                                                                                                                                      |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `RangeError` | `QuantileMethod.of` gets a `q` that is not from 0 to 1, or NaN: `A quantile is from 0 to 1, not 1.5` (`src/quantile/quantile-method.ts`).                 |
+| `RangeError` | `QuantileMethod.of` gets no values: `A quantile needs at least one value`. `PercentileInterval.of` of an empty distribution throws it too.                |
+| `RangeError` | `IidBootstrap.distribution` or `IidBootstrap.interval` gets data with no items: `A bootstrap needs at least one item` (`src/bootstrap/iid-bootstrap.ts`). |
+| `RangeError` | `randomIndex(n)` gives an index out of 0 to n − 1: `A random index is from 0 to 9, not 10`.                                                               |
+
+## API
+
+```ts
+// numpy.sum, numpy.mean and numpy.nanmean of a 1-D float64 array.
+function sum(values: ArrayLike<number>): number;
+function mean(values: ArrayLike<number>): number;
+function nanmean(values: ArrayLike<number>): number;
+
+// A method of numpy.quantile. A subclass gives only where its rule reads the values.
+abstract class QuantileMethod {
+  of(sorted: readonly number[], q: number): number;
+  protected abstract valueAt(sorted: readonly number[], q: number): number;
+  protected static value(sorted: readonly number[], index: number): number;
+}
+class Lower extends QuantileMethod {}
+class Higher extends QuantileMethod {}
+class Linear extends QuantileMethod {}
+class InvertedCdf extends QuantileMethod {}
+
+class ConfidenceInterval {
+  constructor(low: number, high: number);
+  readonly low: number;
+  readonly high: number;
+  isAbove(value: number): boolean;
+  isBelow(value: number): boolean;
+}
+
+class DifferenceInterval extends ConfidenceInterval {
+  constructor(low: number, high: number, observed: number);
+  readonly observed: number;
+}
+
+// The method of scipy.stats.bootstrap. Exported as a type only.
+interface ConfidenceIntervalMethod {
+  of(distribution: readonly number[]): ConfidenceInterval;
+}
+
+class PercentileInterval implements ConfidenceIntervalMethod {
+  constructor(options: {
+    readonly low: number;
+    readonly high: number;
+    readonly method: QuantileMethod;
+  });
+  of(distribution: readonly number[]): ConfidenceInterval;
+}
+
+class IidBootstrap {
+  constructor(options: {
+    readonly nResamples: number;
+    readonly randomIndex: (n: number) => number;
+  });
+  distribution<T>(
+    data: readonly T[],
+    statistic: (resample: readonly T[]) => number,
+  ): number[];
+  interval<T>(
+    data: readonly T[],
+    statistic: (resample: readonly T[]) => number,
+    method: ConfidenceIntervalMethod,
+  ): ConfidenceInterval;
+}
+```
+
 ## Documentation
+
+**Recipes**
+
+- [Give the interval that a Python program gives](./docs/recipes/give-the-interval-that-a-python-program-gives.md)
+- [Read an interval from resamples that you draw yourself](./docs/recipes/read-an-interval-from-resamples-you-draw.md)
+
+**Decisions**
 
 - [ADR 0001: one home for the percentile bootstrap that six places copied, reached through a workspace path](docs/adr/0001-one-home-for-the-percentile-bootstrap-that-six-places-copied.md)
 - [ADR 0002: one home for the pairwise sum of NumPy that four places copied](docs/adr/0002-one-home-for-the-pairwise-sum-of-numpy-that-four-places-copied.md)
