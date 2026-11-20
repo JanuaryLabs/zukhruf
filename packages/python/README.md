@@ -4,7 +4,13 @@ The results of CPython 3.12 in JavaScript, to the last bit: the `sum()` of float
 
 The package is public on npm. Until 2026-11-07 it was private and reached through a workspace path (ADR 0001); it became public with `@zukhruf/evals`, which depends on it (backlog #3888).
 
+The words in these documents have one meaning each. See the glossary in [CONTEXT.md](./CONTEXT.md).
+
 ## Use it
+
+```sh
+npm install @zukhruf/python
+```
 
 ```ts
 import {
@@ -41,7 +47,61 @@ new RegExp(`[${PYTHON_WORD}]+`, 'u'); // Python's \w
 | `toJsonParseValue` | none: the way out of `JsonData`          | The value that `JSON.parse` gives for the same text, for code that reads only plain JavaScript, such as a JSON Schema validator. A dict becomes an object, so its integer-like keys move first. An int becomes the nearest `number`, so an int beyond 2^53 loses digits. The int `-0` gives `0`. Keep the `JsonData`, and convert only where such code reads it (ADR 0002).                               |
 | `JsonParseValue`   | none                                     | The type of a value of `toJsonParseValue`: `null`, `boolean`, `number`, `string`, arrays and plain objects of them.                                                                                                                                                                                                                                                                                       |
 
+## Errors
+
+| Error         | When                                                                                                                                                                                                  |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SyntaxError` | `loadsJson` reads a text that is not JSON, as Python raises a `JSONDecodeError`. Comments and trailing commas are not JSON, and a `NaN`, `Infinity` or `-Infinity` key is not either.                 |
+| `RangeError`  | `loadsJson` reads an int of more than 4300 digits, as Python raises a `ValueError` (`sys.int_info.default_max_str_digits`). `NeumaierSum.mean` gets no value, as Python raises a `ZeroDivisionError`. |
+
+The golden test `src/cpython.golden.test.ts` proves each error against CPython 3.12.
+
+## API
+
+```ts
+function compareStrings(left: string, right: string): number;
+
+function floatRepr(value: number): string;
+
+type JsonData =
+  | null
+  | boolean
+  | bigint
+  | number
+  | string
+  | JsonData[]
+  | Map<string, JsonData>;
+
+function loadsJson(text: string): JsonData; // throws SyntaxError, RangeError
+
+class NeumaierSum {
+  static of(values: Iterable<number>): number;
+  static mean(values: Iterable<number>): number; // throws RangeError for no value
+  add(value: number): void;
+  get value(): number;
+}
+
+const PYTHON_SPACE: string; // the body of a RegExp class, u flag
+const PYTHON_WORD: string; // the body of a RegExp class, u flag
+
+type JsonParseValue =
+  | null
+  | boolean
+  | number
+  | string
+  | JsonParseValue[]
+  | { [key: string]: JsonParseValue };
+
+function toJsonParseValue(value: JsonData): JsonParseValue;
+```
+
 ## Documentation
+
+**Recipes**
+
+- [Give a JsonData value to a schema validator at an edge](./docs/recipes/give-json-data-to-a-validator-at-an-edge.md)
+
+**Decisions**
 
 - [ADR 0001: one home for the CPython rules that three places copied, reached through a workspace path](docs/adr/0001-one-home-for-the-cpython-rules-that-three-places-copied.md)
 - [ADR 0002: JsonData has one way out, and code takes it only at an edge](docs/adr/0002-json-data-has-one-way-out-at-an-edge.md)

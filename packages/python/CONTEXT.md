@@ -26,8 +26,17 @@ _Avoid_: integer (JavaScript calls `7.0` an integer)
 **Float**:
 A JSON number with `.`, `e` or `E`, or the token `NaN`, `Infinity` or `-Infinity`.
 
+**Dict**:
+A JSON object, as Python's `json.loads` reads it. `loadsJson` gives a `Map` in the order of its keys: a repeated key keeps its first place and its last value. `JSON.parse` moves the integer-like keys first (`src/cpython.golden.test.ts`).
+
 **White space**:
 A character for which Python's `str.isspace()` is true.
+
+**Word character**:
+A character that Python's `\w` matches in a `str` pattern: a letter, a number or `_`. `PYTHON_WORD` holds these characters as the body of a RegExp class. It equals the `\w` of CPython 3.12 for each character of Unicode 15.0 (`src/cpython.golden.test.ts`).
+
+**Code point order**:
+The order in which Python sorts two `str`: by Unicode code point, as `sorted()` gives. `compareStrings` gives this order. JavaScript's `<` compares UTF-16 code units, so a character above U+FFFF sorts before U+E000 to U+FFFF there and after them in Python (`src/compare-strings.test.ts`).
 
 **JSON.parse value**:
 The value that `JSON.parse` gives for a JSON text: an object for each dict and the nearest number for each int. Code that reads only plain JavaScript, such as a JSON Schema validator, needs it.
