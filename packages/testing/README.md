@@ -8,24 +8,25 @@ The words in these documents have one meaning each. See the glossary in [CONTEXT
 
 Each area has its own import path, so a test loads only the drivers it uses. The four drivers are optional peer dependencies: install the one an area names.
 
-| Import                        | Gives                                                  | Needs                      |
-| ----------------------------- | ------------------------------------------------------ | -------------------------- |
-| `@zukhruf/testing/node`       | Native `test`, `it`, `suite`, `describe` with `.each`  |                            |
-| `@zukhruf/testing/async`      | `waitFor`, `retryUntilReady`                           |                            |
-| `@zukhruf/testing/process`    | `startWorker`                                          |                            |
-| `@zukhruf/testing/docker`     | `DockerTestbed`, `ServiceContainer`, `DockerDirectory` | a Docker engine            |
-| `@zukhruf/testing/postgres`   | `Postgres`, `postgresPool`                             | a Docker engine, `pg`      |
-| `@zukhruf/testing/mysql`      | `Mysql`, `mysqlPool`                                   | a Docker engine, `mysql2`  |
-| `@zukhruf/testing/mariadb`    | `Mariadb`, `mariadbPool`                               | a Docker engine, `mariadb` |
-| `@zukhruf/testing/sqlserver`  | `SqlServer`, `SQL_SERVER_FULL_IMAGE`                   | a Docker engine, `mssql`   |
-| `@zukhruf/testing/clickhouse` | `ClickHouse`                                           | a Docker engine            |
-| `@zukhruf/testing/sqlite`     | `Sqlite`                                               |                            |
-| `@zukhruf/testing/duckdb`     | `DuckDB`                                               | `@duckdb/node-api`         |
-| `@zukhruf/testing/bigquery`   | `BigQuery`                                             | `@google-cloud/bigquery`   |
-| `@zukhruf/testing/http`       | `HttpServer`                                           |                            |
-| `@zukhruf/testing/streams`    | `StreamHarness`                                        |                            |
-| `@zukhruf/testing/msw`        | `Msw`                                                  | `msw`                      |
-| `@zukhruf/testing/preload`    | `notInstalled`                                         |                            |
+| Import                                 | Gives                                                               | Needs                      |
+| -------------------------------------- | ------------------------------------------------------------------- | -------------------------- |
+| `@zukhruf/testing/node`                | Native `test`, `it`, `suite`, `describe` with `.each`               |                            |
+| `@zukhruf/testing/async`               | `waitFor`, `retryUntilReady`                                        |                            |
+| `@zukhruf/testing/process`             | `startWorker`                                                       |                            |
+| `@zukhruf/testing/docker`              | `DockerTestbed`, `ServiceContainer`, `DockerDirectory`              | a Docker engine            |
+| `@zukhruf/testing/postgres`            | `Postgres`, `postgresPool`                                          | a Docker engine, `pg`      |
+| `@zukhruf/testing/mysql`               | `Mysql`, `mysqlPool`                                                | a Docker engine, `mysql2`  |
+| `@zukhruf/testing/mariadb`             | `Mariadb`, `mariadbPool`                                            | a Docker engine, `mariadb` |
+| `@zukhruf/testing/sqlserver`           | `SqlServer`, `SQL_SERVER_FULL_IMAGE`                                | a Docker engine, `mssql`   |
+| `@zukhruf/testing/clickhouse`          | `ClickHouse`                                                        | a Docker engine            |
+| `@zukhruf/testing/sqlite`              | `Sqlite`                                                            |                            |
+| `@zukhruf/testing/duckdb`              | `DuckDB`                                                            | `@duckdb/node-api`         |
+| `@zukhruf/testing/bigquery`            | `BigQuery`                                                          | `@google-cloud/bigquery`   |
+| `@zukhruf/testing/http`                | `HttpServer`                                                        |                            |
+| `@zukhruf/testing/streams`             | `StreamHarness`                                                     |                            |
+| `@zukhruf/testing/msw`                 | `Msw`                                                               | `msw`                      |
+| `@zukhruf/testing/preload`             | `notInstalled`                                                      |                            |
+| `@zukhruf/testing/docker-global-setup` | `globalSetup`, `globalTeardown` (see [A killed run](#a-killed-run)) |                            |
 
 ## Parameterized tests
 
@@ -208,11 +209,11 @@ test('stores a record', async () => {
 
 The handle has `connectionString`, `host`, `port`, `user`, `password`, `database`, `image` and `containerId`. `Mysql` and `Mariadb` handles also have `query(sql)`. Without an image, `Mysql` runs `mysql:lts` and `Mariadb` runs `mariadb:lts`. MariaDB 11 and later have no `mysql` client, so use `Mariadb` for a MariaDB image. A `Mariadb` connection string starts with `mariadb://`, because the `mariadb` driver accepts no other scheme. Without an image, `SqlServer` runs SQL Server 2022 (`SQL_SERVER_FULL_IMAGE`) on every engine. Microsoft builds it only for amd64, so an ARM engine runs it under emulation. `ClickHouse` takes an explicit `image`, and its `start()` gives a `ServiceContainer` of a dedicated server, so a test can create server-wide users and functions.
 
-`Sqlite` creates a file-backed database in a temporary directory, with a native `DatabaseSync` connection. Disposal closes the connection and removes the directory, including WAL files. `writeLock(path, durationMs)` holds a write lock from another process, which releases it after `durationMs`, even while the caller blocks in a synchronous write.
+`new Sqlite().database()` creates a file-backed database in a temporary directory, with a native `DatabaseSync` connection. The handle has `path`, the path of the database file, and `connection`, the `DatabaseSync`. Disposal closes the connection and removes the directory, including WAL files. `writeLock(path, durationMs)` holds a write lock from another process, which releases it after `durationMs`, even while the caller blocks in a synchronous write.
 
-`DuckDB` creates an in-memory database. Disposal closes the connection before the instance.
+`new DuckDB().database()` creates an in-memory database. The handle has `connection`, a `DuckDBConnection` of `@duckdb/node-api`. Disposal closes the connection before the instance.
 
-`BigQuery` creates a dataset in the project you name. Disposal deletes it with its tables and views. You provide the credentials.
+`new BigQuery({ projectId, location }).dataset()` creates a dataset in the project you name, in `location`. Both options are necessary. The name of the dataset is `test_` and 32 hex digits. The handle has `dataset`, a `Dataset` of `@google-cloud/bigquery`. Disposal deletes it with its tables and views. You provide the credentials.
 
 ### Take a pool from the database
 
@@ -492,6 +493,337 @@ using interception = msw.intercept(
 Do not use a catch-all handler, such as `http.all('*', …)`, that returns nothing for some requests. msw then sends each of those requests to the network, and the strict strategy has no effect. msw 3.0.2 does this.
 
 The driver is msw 3 (`msw ^3.0.3`), which needs Node.js 22.12 or later. Install it next to this package.
+
+## API
+
+```ts
+// @zukhruf/testing/node: the native functions of node:test, with `each`.
+// test === it and suite === describe.
+// Each is a name of this block, not an export.
+type Each = <Row>(
+  rows: readonly Row[],
+  register: (row: Row, index: number) => Promise<void>,
+) => Promise<void>;
+export const test: typeof import('node:test').test & { each: Each };
+export const suite: typeof import('node:test').suite & { each: Each };
+export { suite as describe, test as it };
+
+// @zukhruf/testing/async
+interface WaitForOptions {
+  signal: AbortSignal;
+  interval?: number; // 50 by default
+}
+function waitFor<T>(
+  check: () => T | PromiseLike<T>,
+  { signal, interval }: WaitForOptions,
+): Promise<T>;
+type RetryUntilReadyOptions = import('p-retry').Options;
+function retryUntilReady<T>(
+  fn: (attemptNumber: number) => PromiseLike<T> | T,
+  options?: RetryUntilReadyOptions,
+): Promise<T>;
+
+// @zukhruf/testing/process
+interface WorkerMessage {
+  type: string;
+  [field: string]: unknown;
+}
+type MessageMatch = string | ((message: WorkerMessage) => boolean);
+interface WorkerOptions {
+  admit?: (child: ChildProcess) => void;
+  nodeOptions?: string[];
+}
+interface WorkerProcess extends AsyncDisposable {
+  readonly child: ChildProcess;
+  readonly closed: Promise<void>;
+  readonly messages: WorkerMessage[];
+  stderr: string;
+  exit: { code: number | null; signal: NodeJS.Signals | null } | null;
+  has(type: string): boolean;
+  find(type: string): WorkerMessage | undefined;
+  next(
+    match: MessageMatch,
+    options: { signal: AbortSignal },
+  ): Promise<WorkerMessage>;
+}
+function startWorker(
+  source: string,
+  name: string,
+  options?: WorkerOptions,
+): WorkerProcess;
+
+// @zukhruf/testing/docker
+// Container, OwnedContainer, OwnedVolume, ExecResult, Docker, EngineApi and
+// Environment are of @zukhruf/docker.
+interface DockerTestbedOptions {
+  environment: Environment;
+}
+interface ServiceOptions {
+  internalPort: number;
+  name?: string;
+  healthy?: (service: ServiceContainer, signal: AbortSignal) => unknown;
+}
+class DockerTestbed {
+  constructor({ environment }: DockerTestbedOptions);
+  defaults(): Promise<{
+    Labels: Record<string, string>;
+    HostConfig: { Memory: number; NanoCpus: number };
+  }>;
+  client(): Promise<Docker>;
+  directory(): Promise<DockerDirectory>;
+  volume(): Promise<OwnedVolume>;
+  start(
+    body: EngineApi.ContainerCreateRequest,
+    options?: { name?: string },
+  ): Promise<OwnedContainer>;
+  serve(
+    body: EngineApi.ContainerCreateRequest,
+    options: ServiceOptions,
+  ): Promise<ServiceContainer>;
+  reuse(
+    body: EngineApi.ContainerCreateRequest,
+    options: ServiceOptions,
+  ): Promise<ServiceContainer>;
+  run(
+    body: EngineApi.ContainerCreateRequest,
+    options?: { name?: string },
+  ): Promise<ExecResult>;
+}
+class ServiceContainer implements AsyncDisposable {
+  readonly container: Container;
+  readonly host: '127.0.0.1';
+  readonly port: number;
+  readonly disconnect: () => Promise<void>;
+  cleanup(): Promise<void>;
+}
+class DockerDirectory implements AsyncDisposable {
+  readonly path: string;
+  mkdir(name: string): Promise<void>;
+  writeFile(name: string, content: string, mode?: number): Promise<void>; // mode 0o644 by default
+  readFile(name: string): Promise<string>;
+  chmod(name: string, mode: number): Promise<void>;
+  symlink(target: string, name: string): Promise<void>;
+}
+
+// @zukhruf/testing/postgres, mysql, mariadb, sqlserver: the shared types.
+interface Database extends AsyncDisposable {
+  connectionString: string;
+  image: string;
+  containerId: string;
+  host: string;
+  port: number;
+  user: string;
+  password: string;
+  database: string;
+  cleanup: () => Promise<void>;
+}
+interface DatabaseOptions extends DockerTestbedOptions {
+  labels?: Record<string, string>;
+  image?: string;
+  password?: string;
+  database?: string; // for start(); database() always makes a new name
+}
+
+// @zukhruf/testing/postgres
+interface PostgresOptions extends DatabaseOptions {
+  user?: string;
+}
+type PostgresPoolOptions = Omit<
+  pg.PoolConfig,
+  'connectionString' | 'database' | 'user' | 'password'
+>;
+interface PostgresDatabase extends Database {
+  pool(options?: PostgresPoolOptions): pg.Pool;
+}
+class Postgres {
+  constructor(options: PostgresOptions); // image 'postgres:18-alpine' by default
+  database(): Promise<PostgresDatabase>;
+  start(): Promise<PostgresDatabase>;
+}
+function postgresPool(
+  config: pg.PoolConfig,
+): AsyncDisposable & { readonly pool: pg.Pool };
+
+// @zukhruf/testing/mysql and @zukhruf/testing/mariadb
+// MysqlFamilyDatabase is not an export: MysqlDatabase and MariadbDatabase name it.
+interface MysqlFamilyDatabase<Pool, PoolOptions> extends Database {
+  query: (sql: string) => Promise<Record<string, string | null>[]>;
+  pool(options?: PoolOptions): Pool;
+}
+type MysqlOptions = DatabaseOptions;
+type MysqlPoolOptions = Omit<
+  mysql.PoolOptions,
+  'uri' | 'database' | 'user' | 'password'
+>;
+type MysqlPool = Omit<mysql.Pool, 'end' | 'pool' | typeof Symbol.asyncDispose>;
+type MysqlDatabase = MysqlFamilyDatabase<MysqlPool, MysqlPoolOptions>;
+class Mysql {
+  constructor(options: MysqlOptions); // image 'mysql:lts' by default
+  database(): Promise<MysqlDatabase>;
+  start(): Promise<MysqlDatabase>;
+}
+function mysqlPool(
+  options: mysql.PoolOptions,
+): AsyncDisposable & { readonly pool: MysqlPool };
+type MariadbOptions = DatabaseOptions;
+type MariadbPoolOptions = Omit<PoolConfig, 'database' | 'user' | 'password'>;
+type MariadbPool = Omit<Pool, 'end' | typeof Symbol.asyncDispose>;
+type MariadbDatabase = MysqlFamilyDatabase<MariadbPool, MariadbPoolOptions>;
+class Mariadb {
+  constructor(options: MariadbOptions); // image 'mariadb:lts' by default
+  database(): Promise<MariadbDatabase>;
+  start(): Promise<MariadbDatabase>;
+}
+function mariadbPool(
+  config: PoolConfig,
+): AsyncDisposable & { readonly pool: MariadbPool };
+
+// @zukhruf/testing/sqlserver
+const SQL_SERVER_FULL_IMAGE = 'mcr.microsoft.com/mssql/server:2022-latest';
+type SqlServerPoolOptions = Omit<
+  sql.config,
+  | 'server'
+  | 'database'
+  | 'user'
+  | 'password'
+  | 'domain'
+  | 'authentication'
+  | 'options'
+> & {
+  server?: string;
+  options?: Omit<sql.IOptions, 'database'>;
+};
+interface SqlServerDatabase extends Database {
+  pool(options?: SqlServerPoolOptions): Promise<sql.ConnectionPool>;
+}
+class SqlServer {
+  constructor(options: DatabaseOptions); // image SQL_SERVER_FULL_IMAGE by default
+  database(): Promise<SqlServerDatabase>;
+  start(): Promise<SqlServerDatabase>;
+}
+
+// @zukhruf/testing/clickhouse
+class ClickHouse {
+  constructor({ environment, image }: DockerTestbedOptions & { image: string });
+  start(): Promise<ServiceContainer>;
+}
+
+// @zukhruf/testing/sqlite
+interface SqliteDatabase extends AsyncDisposable {
+  path: string;
+  connection: DatabaseSync;
+  cleanup: () => Promise<void>;
+}
+class Sqlite {
+  writeLock(path: string, durationMs: number): Promise<AsyncDisposable>;
+  database(): Promise<SqliteDatabase>;
+}
+
+// @zukhruf/testing/duckdb
+interface DuckDBDatabase extends AsyncDisposable {
+  connection: DuckDBConnection;
+  cleanup: () => Promise<void>;
+}
+class DuckDB {
+  database(): Promise<DuckDBDatabase>;
+}
+
+// @zukhruf/testing/bigquery
+interface BigQueryDataset extends AsyncDisposable {
+  dataset: Dataset;
+  cleanup: () => Promise<void>;
+}
+class BigQuery {
+  constructor({ projectId, location }: { projectId: string; location: string });
+  dataset(): Promise<BigQueryDataset>;
+}
+
+// @zukhruf/testing/http
+type HttpHandler = (
+  request: IncomingMessage,
+  response: ServerResponse,
+) => unknown;
+interface HttpServerHandle extends AsyncDisposable {
+  origin: string;
+  server: Server;
+  cleanup: () => Promise<void>;
+}
+class HttpServer {
+  start(handler: HttpHandler): Promise<HttpServerHandle>;
+}
+
+// @zukhruf/testing/streams
+interface StreamSource<T> extends Disposable {
+  readonly stream: ReadableStream<T>;
+  readonly state: 'open' | 'closed' | 'errored' | 'cancelled';
+  enqueue(chunk: T): void;
+  close(): void;
+  error(reason: unknown): void;
+}
+type StreamResult<T> =
+  | { status: 'completed'; chunks: T[] }
+  | { status: 'errored'; chunks: T[]; error: unknown };
+interface StreamReader<T> extends AsyncDisposable {
+  read(): Promise<ReadableStreamReadResult<T>>;
+  collectUntilError(): Promise<StreamResult<T>>;
+}
+class StreamHarness {
+  source<T>(): StreamSource<T>;
+  reader<T>(stream: ReadableStream<T>): StreamReader<T>;
+}
+
+// @zukhruf/testing/msw
+interface MswInterception extends Disposable {
+  server: SetupServer;
+  requests: Request[];
+  cleanup: () => void;
+}
+class Msw {
+  intercept(...handlers: AnyHandler[]): MswInterception;
+}
+
+// @zukhruf/testing/preload
+function notInstalled(...packages: [string, ...string[]]): string;
+
+// @zukhruf/testing/docker-global-setup
+function globalSetup(): Promise<void>;
+function globalTeardown(): void;
+```
+
+## Documentation
+
+**Recipes**
+
+- [Intercept the requests of a child process](./docs/recipes/intercept-the-requests-of-a-child-process.md)
+- [Stand in for an HTTP API with a local server](./docs/recipes/stand-in-for-an-http-api.md)
+
+**Decisions**: the [architecture decision records](./docs/adr) tell why the design is as it is.
+
+- [ADR 0002](./docs/adr/0002-each-area-has-its-own-import-path.md): each area has its own import path.
+- [ADR 0004](./docs/adr/0004-a-servers-handler-is-a-node-request-listener.md): a server's handler is a Node.js request listener.
+- [ADR 0005](./docs/adr/0005-a-background-server-owns-its-connections.md): a background server owns its connections (superseded by ADR 0009).
+- [ADR 0006](./docs/adr/0006-a-killed-run-is-cleaned-by-nodes-global-setup-and-teardown.md): a killed run is cleaned by Node's global setup and teardown.
+- [ADR 0007](./docs/adr/0007-a-database-fixture-takes-the-environment.md): a database fixture takes the environment.
+- [ADR 0009](./docs/adr/0009-a-test-never-changes-the-environment-of-its-process.md): a test never changes the environment of its process.
+- [ADR 0010](./docs/adr/0010-the-msw-area-is-always-strict-and-records-each-request.md): the msw area is always strict and records each request.
+- [ADR 0011](./docs/adr/0011-the-run-id-in-a-databases-name-is-its-owner-reference-and-one-collector-for-each-kind-drops-a-dead-runs-databases.md): the run id in a database's name is its owner reference, and one collector for each kind drops a dead run's databases.
+- [ADR 0012](./docs/adr/0012-a-shared-server-belongs-to-one-version-of-the-package-and-the-global-teardown-removes-the-servers-of-every-other-version.md): a shared server belongs to one version of the package, and the global teardown removes the servers of every other version (superseded by ADR 0019).
+- [ADR 0013](./docs/adr/0013-the-docker-area-is-a-testbed-that-takes-engine-api-bodies-and-the-run-is-not-part-of-its-api.md): the Docker area is a testbed that takes Engine API bodies, and the run is not part of its API.
+- [ADR 0014](./docs/adr/0014-a-test-process-holds-a-process-lease-and-the-global-teardown-keeps-the-shared-servers-of-a-version-that-has-one.md): a test process holds a process lease, and the global teardown keeps the shared servers of a version that has one.
+- [ADR 0015](./docs/adr/0015-a-test-that-needs-docker-requires-it.md): a test that needs Docker requires it.
+- [ADR 0016](./docs/adr/0016-a-test-helper-goes-into-an-area-when-three-repositories-have-its-knowledge-and-it-does-not-use-mock.md): a test helper goes into an area when three repositories have its knowledge and it does not use `mock`.
+- [ADR 0017](./docs/adr/0017-a-project-gives-its-shared-servers-to-prebuild-and-the-global-setup-creates-them-before-the-run.md): a project gives its shared servers to `prebuild`, and the global setup creates them before the run (rejected).
+- [ADR 0018](./docs/adr/0018-a-preload-is-a-file-of-the-package-and-its-url-gives-its-settings.md): a preload is a file of the package, and its URL gives its settings.
+- [ADR 0019](./docs/adr/0019-a-shared-servers-name-comes-from-its-request-and-the-global-teardown-removes-it-after-a-ttl.md): a shared server's name comes from its request, and the global teardown removes it after a TTL.
+- [ADR 0020](./docs/adr/0020-a-reaper-container-removes-a-runs-engine-objects-when-the-attach-that-holds-it-closes-and-recovery-keeps-the-local-records.md): a reaper container removes a run's engine objects when the attach that holds it closes, and recovery keeps the local records.
+- [ADR 0021](./docs/adr/0021-a-test-helper-in-the-test-support-of-three-packages-goes-into-an-area-when-no-public-package-does-its-work.md): a test helper in the test support of three packages goes into an area when no public package does its work.
+- [ADR 0022](./docs/adr/0022-a-reaper-starts-again-after-a-restart-of-its-engine-and-removes-itself-at-its-end.md): a reaper starts again after a restart of its engine and removes itself at its end.
+- [ADR 0023](./docs/adr/0023-the-reaper-removes-the-runs-host-directories.md): the reaper removes the run's host directories.
+- [ADR 0024](./docs/adr/0024-a-run-holds-one-ssh-connection-to-an-ssh-engine-and-its-test-processes-reach-the-engine-host-through-it.md): a run holds one SSH connection to an SSH engine, and its test processes reach the engine host through it.
+- [ADR 0025](./docs/adr/0025-recovery-and-the-global-teardown-make-no-engine-call-and-a-test-process-has-no-process-record.md): recovery and the global teardown make no engine call, and a test process has no process record.
+- [ADR 0026](./docs/adr/0026-a-database-handle-owns-its-pools-and-its-disposal-ends-them-before-it-drops-the-database.md): a database handle owns its pools, and its disposal ends them before it drops the database.
+
+**Copied code**: [Code copied into this package](./docs/copied-code.md) records each copy of code in this package, as the Rule of Three asks.
 
 ## Development
 

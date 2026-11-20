@@ -34,9 +34,17 @@ A container that this process started and owns. It stays after it stops, until d
 A container whose port answers on 127.0.0.1 of this machine.
 _Avoid_: Server container
 
+**Dedicated server**:
+A service container that one handle owns: `serve()` of a `DockerTestbed`, or `start()` of a database, gives it. Failure or disposal of the handle removes its container. It is the opposite of a shared server.
+_Avoid_: Private server, own server
+
 **Shared server**:
 A service container that `reuse()` shares between processes, runs and versions of this package, one for each request. Its name and its label `dev.zukhruf.testing.server` hold the fingerprint of the request. The reaper of a run removes a shared server that is older than its time to live (TTL) of 7 days, when no process lease holds it.
 _Avoid_: Global container, singleton
+
+**Fingerprint**:
+The SHA-256 hash of a request to `reuse()`: the container body after the testbed adds its defaults and the published port, and the `internalPort`. The order of the keys does not change it. It names the shared server of the request, `zukhruf-testing-<fingerprint>` when the request gives no `name`, and the label `dev.zukhruf.testing.server` of that server holds it (ADR 0019).
+_Avoid_: Key, ID (for the hash)
 
 **Lease**:
 A container that runs `cat` on the standard input of the attach of its holder process. When the holder exits for any reason, the attach closes and the engine removes the lease. A process lease tells a reaper that a test process uses one shared server now. `reuse()` takes one for each process and shared server.
@@ -61,6 +69,10 @@ _Avoid_: Cleanup hook
 **Reaper**:
 A container of one run on one engine (ADR 0020). It mounts a socket of the engine's host, and lets a holder in only after it finds itself through that socket. Each test process of the run holds it with one `cat` exec, and takes the hold again at once when it ends while the process lives. About 2 s after the last holder ended, it closes, so a later holder holds the next reaper of the run, and it removes the run's containers and volumes and its host directories, drops the run's databases in the shared servers, checks again a few times, removes the expired shared servers, and exits.
 _Avoid_: Ryuk, janitor
+
+**Hold**:
+The one `cat` exec of a test process on the reaper of its run, that a `ReaperHold` takes before the process creates anything on the engine (ADR 0020). It ends when the process exits, for any reason, and it does not keep the process running. When it ends while the process lives, the process takes it again at once, on the same reaper or on the next reaper of the run.
+_Avoid_: Lease (a lease is a container), session
 
 **Runner**:
 The `node --test` process that runs the global setup, starts the test processes and runs the global teardown.
