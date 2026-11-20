@@ -5,6 +5,7 @@ import noDataSlotRestyle from './no-data-slot-restyle.ts';
 import noNativeSelect from './no-native-select.ts';
 import requireCommandGroup from './require-command-group.ts';
 import requireSelectGroup from './require-select-group.ts';
+import { SHADCN_SETTINGS } from './require-shadcn-config.ts';
 
 const enabled = {
   'no-as-child': noAsChild,
@@ -18,14 +19,16 @@ const rules = {
   'no-data-slot-restyle': noDataSlotRestyle,
 };
 
-/** React components built from shadcn/ui and Base UI primitives. */
-export const react: Concept = {
-  name: 'react',
+/** React components built from @zukhruf/shadcn, shadcn/ui on Base UI. */
+export const shadcn: Concept = {
+  name: 'shadcn',
   rules,
   config: (plugins) => [
-    { name: 'zukhruf/react/plugins', plugins },
+    // The setting has no `files`, so `zukhruf/require-shadcn-config` of `base`
+    // finds it in every file the config covers, a `.ts` file too.
+    { name: 'zukhruf/shadcn/plugins', plugins, settings: SHADCN_SETTINGS },
     {
-      name: 'zukhruf/react',
+      name: 'zukhruf/shadcn',
       files: JSX,
       rules: {
         ...enable(enabled),

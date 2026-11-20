@@ -12,7 +12,7 @@ import { nxProjectJson } from './nx-project/config.ts';
 import { packagedApp } from './packaged-app/config.ts';
 import { pulumi } from './pulumi/config.ts';
 import { reactRouter } from './react-router/config.ts';
-import { react } from './react/config.ts';
+import { shadcn } from './react/config.ts';
 import { tailwind } from './tailwind/config.ts';
 import { tests } from './test-files/config.ts';
 import { tsconfig } from './tsconfig/config.ts';
@@ -23,7 +23,7 @@ const concepts: Concept[] = [
   diagnostics,
   env,
   packagedApp,
-  react,
+  shadcn,
   reactRouter,
   hono,
   betterAuth,
@@ -51,5 +51,17 @@ const plugin = {
 for (const concept of concepts) {
   configs[concept.name] = concept.config({ zukhruf: plugin });
 }
+
+// `react` is the old name of `shadcn`, kept for one release (#4990). It is
+// not enumerable, so the plugin lists each config once.
+Object.defineProperty(configs, 'react', {
+  get() {
+    process.emitWarning(
+      "The config zukhruf/react is now zukhruf/shadcn. Use zukhruf.configs['shadcn'] or extends: ['zukhruf/shadcn']; the name react goes away in the next release.",
+      { type: 'DeprecationWarning', code: 'ZUKHRUF_ESLINT_REACT_CONFIG' },
+    );
+    return configs['shadcn'];
+  },
+});
 
 export default plugin;

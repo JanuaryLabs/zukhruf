@@ -110,7 +110,7 @@ export default defineConfig(
       'apps/diagram-playground/**',
     ],
     plugins: { zukhruf },
-    extends: ['zukhruf/react', 'zukhruf/tailwind'],
+    extends: ['zukhruf/shadcn', 'zukhruf/tailwind'],
   },
   // The loader guard throws React Router's replace(), as a loader does.
   {
