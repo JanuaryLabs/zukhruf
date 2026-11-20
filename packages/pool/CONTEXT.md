@@ -89,7 +89,7 @@ A host that offers its workers and does not own. It starts no workers until it o
 _Avoid_: Follower, candidate (election terms), replica
 
 **Store**:
-The durable place of the jobs of a pool, which every host writes to: a SQLite file on one computer, a Postgres database across computers.
+The durable place of the jobs of a pool, which every host writes to: a SQLite file on one computer, a Postgres database across computers (not built yet, ADR 0025).
 _Avoid_: Queue (one name in the store), database, broker
 
 **Worker kind**:
@@ -97,7 +97,7 @@ The name, the revision and the job rules of a pool, with the types of its input 
 _Avoid_: Worker class (the class that `create` builds), job type, task
 
 **Revision**:
-The integer of a worker kind that its author raises when `run` changes in a way that matters. Each revision has its own queue in the store. An owner refuses a job of an older revision.
+The integer of a worker kind that its author raises when `run` changes in a way that matters. Each revision has its own queue in the store. An owner refuses a job of an older revision (not built yet, ADR 0022).
 _Avoid_: Version (a release of a package)
 
 **Input**, **Output**:
@@ -111,6 +111,10 @@ _Avoid_: Client, sender, requester
 **Job handle**:
 The value that `start` and `handle(id)` give: the id of one job in the store, a wait for its output, and its cancel. Any host can make the handle of a job from its id until the store deletes the job. In the code: `JobHandle`, after Temporal's `WorkflowHandle`.
 _Avoid_: Future, promise (a promise belongs to one host), AsyncResult (Celery's name), ticket
+
+**Retention**:
+The time that the store keeps a job after it settles: 7 days, pg-boss's default `deleteAfterSeconds` (ADR 0026). After the retention, the store deletes the job, and `result` of its job handle rejects with `JobNotFoundError`.
+_Avoid_: Expiry (the kind's `expireInSeconds` limits one run), TTL, lifetime
 
 **Shared job**:
 A job of a kind whose policy is `exclusive`. Callers that give identical inputs share it.
