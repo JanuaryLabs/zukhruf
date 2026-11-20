@@ -9,7 +9,7 @@ The words in these documents have one meaning each. See the glossary in [CONTEXT
 This project is an experiment. It uses `node:sqlite` and an embedding model of the [AI SDK](https://ai-sdk.dev). The package does not start a model or a server. Give it a model that is ready.
 
 ```sh
-npm install @zukhruf/embeddings ai
+npm install @zukhruf/embeddings ai @ai-sdk/openai-compatible
 ```
 
 ```ts
@@ -62,7 +62,7 @@ collection.delete(['c']);
 collection.count(); // 2
 ```
 
-### Search a vector table of your own
+## Search a vector table of your own
 
 Another program can write the vectors into its own table. A `VectorSearch` searches that table with the same rules as a collection. The table or view must have the columns `id` (text) and `vector`. Each `vector` must be a unit vector, as a BLOB of float32 values, little-endian, as `toSql` of `@zukhruf/vectors/sqlite` writes it ([ADR 0005](./docs/adr/0005-a-vector-search-reads-a-vector-table-of-unit-vectors.md)). Each call except a query without a date range also reads the column `published_at` (milliseconds since the Unix epoch). Thus a table of documents with no publish date supports a query without a date range ([ADR 0007](./docs/adr/0007-a-query-without-a-date-range-compares-every-document.md)).
 
@@ -111,9 +111,23 @@ To search a table with other column names, make a view that renames the columns,
 - The search reads each document in the window ([ADR 0001](./docs/adr/0001-search-compares-each-document-in-the-window.md)). A window of many thousand documents is slow. A neighbour graph decodes each vector once, but it still calculates a similarity for each pair of documents in a window.
 - After a model change, upsert all documents again ([ADR 0002](./docs/adr/0002-the-hash-includes-the-model.md)).
 
+## The same concepts in other systems
+
+The calls of a collection take their names and rules from the vector stores ([ADR 0006](./docs/adr/0006-query-fetch-delete-and-count-follow-the-vector-stores.md)). The search reads each document with no index, as an exact search does ([ADR 0001](./docs/adr/0001-search-compares-each-document-in-the-window.md)).
+
+| Concept                                               | Other systems                                                                                                                                                                                                                                                                                                           |
+| ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `query(vector, range?)`                               | `index.query(vector=...)` of Pinecone, `query_points(query=...)` of Qdrant, `collection.query(query_embeddings=...)` of Chroma. In each one the filter is optional (`filter`, `query_filter`, `where`), as the date range is here ([ADR 0007](./docs/adr/0007-a-query-without-a-date-range-compares-every-document.md)) |
+| `fetch(ids)`                                          | `index.fetch(ids)` of Pinecone, `retrieve(ids, with_vectors=True)` of Qdrant, `get(ids, include=["embeddings"])` of Chroma. Pinecone and Chroma leave out an unknown id; here it is an `UnknownDocumentError`                                                                                                           |
+| `delete(ids)`                                         | `index.delete(ids)` of Pinecone, `delete(points_selector=...)` of Qdrant, `collection.delete(ids)` of Chroma. Pinecone and Chroma also accept an unknown id                                                                                                                                                             |
+| `count()`                                             | `describe_index_stats()` of Pinecone, `count()` of Qdrant, `collection.count()` of Chroma                                                                                                                                                                                                                               |
+| An exact search with no index                         | The flat index `IndexFlatIP` of FAISS; a `vec0` table of sqlite-vec, which needs the extension on each connection                                                                                                                                                                                                       |
+| An approximate index, which this package does not use | HNSW in sqlite-vec and pgvector                                                                                                                                                                                                                                                                                         |
+
 ## Recipes
 
 1. [Search a vector table that another program writes](./docs/recipes/search-a-vector-table-that-another-program-writes.md)
+2. [Test code that uses a collection with a mock model](./docs/recipes/test-code-that-uses-a-collection-with-a-mock-model.md)
 
 ## Decisions
 

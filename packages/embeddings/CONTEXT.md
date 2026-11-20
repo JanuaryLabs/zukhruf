@@ -32,6 +32,10 @@ _Avoid_: Embedder, encoder
 The list of numbers that the model gives for a text. The collection stores it with a length of 1 (a unit vector), as float32 values.
 _Avoid_: Embedding (for the stored value), tensor
 
+**Unit vector**:
+A vector divided by its length, so its length is 1, as `UnitVector.normalize` of `@zukhruf/vectors` makes it. The collection stores the unit vector of each text, and a query makes a unit vector of the vector that the caller gives. A vector search requires that each vector of a vector table is a unit vector and does not examine its length (`src/collection.ts`, `src/vector-search.ts`, [ADR 0005](docs/adr/0005-a-vector-search-reads-a-vector-table-of-unit-vectors.md)).
+_Avoid_: Normalized vector
+
 **Embedding cache**:
 The cache of `@zukhruf/embedding-cache` that the collection embeds through. It keeps the vector of each text that the model embedded in the table `embedding_cache` of the database of the collection, so an upsert calls the model only for a new or changed text. A delete does not remove a vector from the embedding cache, so an upsert of the same text after a delete calls no model (#3134, commit ba803520, `src/collection.ts`, [ADR 0002](docs/adr/0002-the-hash-includes-the-model.md)).
 _Avoid_: Collection, vector table (the embedding cache keeps the vectors of texts, not of documents), hash
