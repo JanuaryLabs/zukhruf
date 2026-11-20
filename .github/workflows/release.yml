@@ -37,8 +37,9 @@ jobs:
       id-token: write
     # The release restores the npm cache but never writes one.
     cache-mode: read
+    # The main job merges a version only when its tag reached origin.
     outputs:
-      version: ${{ steps.version.outputs.version }}
+      version: ${{ case(steps.tag.outputs.pushed == 'true', steps.version.outputs.version, '') }}
       commit: ${{ steps.version.outputs.commit }}
     steps:
       # The release job pushes the tag with these credentials.
@@ -103,15 +104,18 @@ jobs:
           echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       # The tag goes first: the next release counts its commits from it, so a
-      # version reaches npm only once its tag is there.
+      # version reaches npm only once its tag is there. GitHub refuses the tag
+      # when a newer push changed a workflow meanwhile; that push's own run
+      # releases these commits, so this run ends without a publish.
       - name: Push the tag
+        id: tag
         if: steps.version.outputs.version != ''
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
-        run: git push origin "refs/tags/release/$VERSION"
+        uses: $/.github/actions/push-release-tag
+        with:
+          version: ${{ steps.version.outputs.version }}
 
       - name: Publish
-        if: steps.version.outputs.version != ''
+        if: steps.tag.outputs.pushed == 'true'
         uses: $/.github/actions/nx-release-publish
         with:
           token: ${{ secrets.NPM_ACCESS_TOKEN }}
