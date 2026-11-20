@@ -8,6 +8,10 @@
 The changes that SQLite writes together between `BEGIN` and `COMMIT`, or undoes together with `ROLLBACK`.
 _Avoid_: Unit of work, batch, session
 
+**Work**:
+The synchronous function that `transaction` runs in the transaction or the savepoint. When the work returns, the changes commit. When the work throws, the changes roll back. Work that gives a promise causes a `TypeError`.
+_Avoid_: Callback, body, unit of work (the changes are the transaction)
+
 **Owner**:
 The call that starts the transaction because the connection has none. Only the owner commits or rolls back the whole transaction.
 _Avoid_: Outer call, root, parent

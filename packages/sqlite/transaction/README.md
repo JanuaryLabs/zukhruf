@@ -79,6 +79,21 @@ stop
 | Python `sqlite3`          | `with conn:` commits when the block ends, and rolls back when the block raises an exception.                                                                                                                              |
 | SQLite automatic rollback | After some errors, for example `SQLITE_IOERR` or `RAISE(ROLLBACK)` in a trigger, SQLite rolls back the transaction itself. See "Response To Errors Within A Transaction" in the SQLite documentation.                     |
 
+## API
+
+```ts
+// When a transaction that the call owns starts, and so when it takes the write lock.
+type TransactionMode = 'deferred' | 'immediate' | 'exclusive';
+
+// A DatabaseSync of node:sqlite fits the database parameter.
+// A work that gives a promise has the return type never, so TypeScript refuses it.
+function transaction<T>(
+  database: Pick<DatabaseSync, 'exec' | 'isTransaction'>,
+  work: () => T extends PromiseLike<unknown> ? never : T,
+  options: { readonly mode: TransactionMode },
+): T;
+```
+
 ## Documentation
 
 - [0001 Roll back only while SQLite holds the transaction](./docs/adr/0001-roll-back-only-while-sqlite-holds-the-transaction.md)
