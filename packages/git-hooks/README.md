@@ -1,6 +1,6 @@
 # @zukhruf/git-hooks
 
-Git hooks written in TypeScript. A pre-commit hook runs steps in order against the staged commit. The steps check the staged copy of each file with Prettier and change nothing, run `nx sync` on the staged commit and stage only the files that sync wrote, and build generated files when nx says that their projects are affected. A step reads a tree of the commit, and runs its tools in a snapshot of the commit, never in the working tree. A pre-push hook runs steps in order against the push. Its build step builds each pushed commit in a snapshot, never the working tree. A commit-msg hook runs steps in order against the message of the commit. Its scope step stops a subject that nx release reads with the wrong scope. Its breaking step stops a message that nx release reads as a breaking change. Its trailer step stops a message that ends with an attribution trailer, Co-authored-by or Claude-Session. A repo adds a step of its own as a class.
+Git hooks written in TypeScript. A pre-commit hook runs steps in order against the staged commit. `Format` checks the staged copy of each file with Prettier and changes nothing. `Sync` runs `nx sync` on the staged commit and stages only the files that sync wrote. `Codegen` builds generated files when nx says that their projects are affected. Other steps stop the commit: `NoNumericPins` when a file writes a Node or npm version as a number, `NpmrcPolicy` when `.npmrc` does not decide how npm installs, `LockfileSync` when `package-lock.json` does not record each `package.json`, `OneRuntimeCopy` when the lockfile installs a runtime package in more than one folder, `InstallScriptsReviewed` when a package has an install script that `allowScripts` does not decide, and `DockerfileInstallsFromLockfile` when a Dockerfile installs packages without the lockfile. `DependencyChecks` lints the `package.json` of each touched project, and `WorkflowChecks` lints the staged workflows, with the ESLint of the commit. A step reads a tree of the commit, and runs its tools in a snapshot of the commit, never in the working tree. A pre-push hook runs steps in order against the push. Its build step builds each pushed commit in a snapshot, never the working tree. A commit-msg hook runs steps in order against the message of the commit. Its scope step stops a subject that nx release reads with the wrong scope. Its breaking step stops a message that nx release reads as a breaking change. Its trailer step stops a message that ends with an attribution trailer, Co-authored-by or Claude-Session. A repo adds a step of its own as a class.
 
 The words in these documents have one meaning each. See the glossary in [CONTEXT.md](./CONTEXT.md).
 
@@ -667,3 +667,198 @@ export class SignedOff extends Step<CommitMessage> {
   }
 }
 ```
+
+## API
+
+```ts
+// One check of a hook. The subject is a Commit (pre-commit),
+// a Push (pre-push) or a CommitMessage (commit-msg).
+abstract class Step<Subject> {
+  abstract readonly name: string;
+  abstract run(subject: Subject): Promise<Outcome>;
+  protected pass(message?: string): Outcome;
+  protected skip(message: string): Outcome;
+  protected fail(message: string): Outcome; // stops the commit or the push
+}
+
+interface Outcome {
+  readonly kind: 'pass' | 'skip' | 'fail';
+  readonly message: string;
+}
+
+// The hooks: what .husky/<hook>.ts calls.
+function preCommit(steps: readonly Step<Commit>[]): Promise<void>;
+function prePush(steps: readonly Step<Push>[]): Promise<void>;
+function commitMsg(steps: readonly Step<CommitMessage>[]): Promise<void>;
+
+// Pre-commit steps.
+class Format extends Step<Commit> {} // name: 'format'
+class Sync extends Step<Commit> {
+  constructor(options?: { stage?: readonly string[] }); // default: ['**/tsconfig*.json']
+} // name: 'sync'
+class Codegen extends Step<Commit> {
+  constructor(options: {
+    readonly when?: readonly string[]; // nx projects; default: every commit
+    readonly run: readonly string[]; // nx targets, in order
+    readonly stage: readonly string[]; // globs of the generated files
+  });
+} // name: 'codegen'
+class NoNumericPins extends Step<Commit> {} // name: 'pins'
+class NpmrcPolicy extends Step<Commit> {} // name: 'npmrc'
+class LockfileSync extends Step<Commit> {} // name: 'lockfile'
+class OneRuntimeCopy extends Step<Commit> {
+  constructor(options?: OneRuntimeCopyOptions);
+} // name: 'runtime-copies'
+interface OneRuntimeCopyOptions {
+  readonly packages?: readonly string[]; // default: ['react', 'react-dom', 'zod']
+  readonly allowed?: Readonly<Record<string, string>>; // lockfile folder: reason
+}
+class InstallScriptsReviewed extends Step<Commit> {} // name: 'install-scripts'
+class DockerfileInstallsFromLockfile extends Step<Commit> {} // name: 'docker'
+class DependencyChecks extends Step<Commit> {} // name: 'dependencies'
+class WorkflowChecks extends Step<Commit> {} // name: 'workflows'
+
+// Pre-push steps.
+class Build extends Step<Push> {
+  constructor(options?: {
+    readonly targets?: readonly string[]; // default: ['build']
+    readonly parallel?: number; // default: the nx default
+    readonly env?: Readonly<Record<string, string>>; // for nx only, over NODE_ENV=production
+  });
+} // name: 'build'
+
+// Commit-msg steps.
+class NxReleaseScope extends Step<CommitMessage> {} // name: 'scope'
+class NoBreakingChange extends Step<CommitMessage> {} // name: 'breaking'
+class NoAttributionTrailer extends Step<CommitMessage> {} // name: 'trailer'
+
+// The subjects. They are exported as types: the hook builds them.
+interface Commit {
+  tree(): Promise<Tree>;
+  changes(): Promise<readonly DiffEntry[]>;
+  touches(globs: readonly string[]): Promise<boolean>;
+  snapshot(options?: { readonly packages?: false }): Promise<Snapshot>;
+  snapshot(options: { readonly packages: true }): Promise<PackagedSnapshot>;
+  generate(
+    globs: readonly string[],
+    work: (snapshot: PackagedSnapshot) => Promise<void>,
+  ): Promise<Generated>;
+}
+
+type Generated =
+  | { readonly kind: 'staged'; readonly entries: readonly DiffEntry[] }
+  | {
+      readonly kind: 'not-staged'; // a partial commit
+      readonly entries: readonly DiffEntry[];
+      readonly reason: string;
+    };
+
+interface Push {
+  readonly remote: { readonly name: string; readonly url: string };
+  readonly updates: readonly RefUpdate[];
+  tree(sha: string): Promise<Tree>;
+  changes(
+    update: Extract<RefUpdate, { kind: 'create' | 'update' }>,
+  ): Promise<readonly DiffEntry[]>;
+  snapshot(
+    sha: string,
+    options?: { readonly packages?: false },
+  ): Promise<Snapshot>;
+  snapshot(
+    sha: string,
+    options: { readonly packages: true },
+  ): Promise<PackagedSnapshot>;
+}
+
+type RefUpdate =
+  | {
+      readonly localRef: string;
+      readonly localSha: string;
+      readonly remoteRef: string;
+      readonly remoteSha: string;
+      readonly kind: 'create' | 'update';
+      readonly head: string;
+      readonly base: string | undefined; // undefined: the remote has no commit of that history
+    }
+  | {
+      readonly localRef: string;
+      readonly localSha: string;
+      readonly remoteRef: string;
+      readonly remoteSha: string;
+      readonly kind: 'delete';
+    };
+
+interface CommitMessage {
+  readonly text: string; // without comment lines
+  readonly subject: string; // as git log --format=%s gives it
+  readonly trailers: readonly {
+    readonly key: string;
+    readonly value: string;
+  }[];
+}
+
+interface Tree {
+  readonly id: string;
+  entries(globs?: readonly string[]): readonly TreeEntry[];
+  read(path: string): Promise<string | undefined>;
+}
+
+interface TreeEntry {
+  readonly path: string;
+  readonly kind: 'file' | 'link' | 'submodule';
+}
+
+type DiffEntry =
+  | {
+      readonly change: 'added' | 'modified' | 'type-changed';
+      readonly path: string;
+      readonly kind: TreeEntry['kind'];
+    }
+  | { readonly change: 'deleted'; readonly path: string };
+
+interface Snapshot {
+  readonly folder: string;
+  run(
+    command: string,
+    args: readonly string[],
+    options?: { readonly env?: Readonly<Record<string, string>> },
+  ): Promise<ProcessResult>;
+}
+
+interface PackagedSnapshot extends Snapshot {
+  readonly nxCacheDirectory: string;
+  bin(
+    name: string,
+    args: readonly string[],
+    options?: { readonly env?: Readonly<Record<string, string>> },
+  ): Promise<ProcessResult>;
+}
+
+interface ProcessResult {
+  readonly status: number | null; // null: a signal ended the process
+  readonly stdout: string;
+  readonly stderr: string;
+}
+
+// @zukhruf/git-hooks/testing: each function runs the steps as its hook runs
+// them, on the repo at root, and gives the outcome of each step that ran.
+function preCommit(
+  options: { root: string; environment: NodeJS.ProcessEnv },
+  steps: readonly Step<Commit>[],
+): Promise<readonly Outcome[]>; // a stopped commit adds a last fail
+function prePush(
+  options: {
+    root: string;
+    environment: NodeJS.ProcessEnv;
+    remote: { name: string; url: string };
+    input: string; // the lines that git gives the hook on its standard input
+  },
+  steps: readonly Step<Push>[],
+): Promise<readonly Outcome[]>;
+function commitMsg(
+  options: { root: string; environment: NodeJS.ProcessEnv; file: string },
+  steps: readonly Step<CommitMessage>[],
+): Promise<readonly Outcome[]>;
+```
+
+`Commit`, `Push`, `CommitMessage`, `Tree`, `Snapshot` and `PackagedSnapshot` are classes in `src/`, but a step gets them from the hook and never builds one ([src/index.ts](./src/index.ts)). The three `@zukhruf/git-hooks/testing` functions share their names with the hook functions, and take the root and the hook environment that a test gives ([src/testing.ts](./src/testing.ts)).

@@ -24,6 +24,10 @@ _Avoid_: Result, status
 The content that the next commit holds: the index that git gives the hook. `Commit` is its type in the code. Its tree is the staged tree, which `git write-tree` writes from a private copy of that index: `git write-tree` takes the lock of the index, and fails while another process holds it. When the index changes while the hook runs, and no step staged the change, the commit stops.
 _Avoid_: Index (the word is correct, but it has other meanings), cache
 
+**Partial commit**:
+A commit that names its paths: `git commit --only <paths>` or `git commit <paths>`. Git runs the hook with a temporary index, `next-index-<pid>.lock`, that holds the named paths from the working tree. Git commits that index and then drops it, so a file that the hook stages there is in the commit but not in the index of the repo. Thus `generate` stages nothing in a partial commit, and the step fails and names the generated files (`isPartialCommit` in `src/commit.ts`; `src/snapshot.test.ts`, `src/tree.test.ts`).
+_Avoid_: Commit with paths, `--only` commit
+
 **Commit message**:
 The message of the commit that git is about to make, as git gives it to the commit-msg hook in a file, without the comment lines of the editor. Its subject is the first paragraph, with its lines joined by spaces, as `git log --format=%s` and nx release read it. Its trailers are the lines that `git interpret-trailers --parse` reads from its last paragraph. `CommitMessage` is its type in the code.
 _Avoid_: Commit (that is the staged commit), header
