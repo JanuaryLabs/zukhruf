@@ -112,6 +112,14 @@ _Avoid_: Ping, keep-alive (TCP keep-alive is a different mechanism), presence
 The kernel lock that a holder or a waiter of a file lock store keeps while it runs. A waiter that can take the presence of another caller knows that the caller stopped.
 _Avoid_: Liveness check, heartbeat, process check
 
+**Namespace**:
+The first part of the name of each claim and each rung of a Docker engine lock store, and the value of the label `zukhruf.mutex.namespace` on them. Docker engine lock stores with one namespace on one engine share their locks (`namespace` of `DockerEngineStoreOptions`).
+_Avoid_: Prefix, scope
+
+**Lock-store contract**:
+The rules that each lock store must satisfy, in `src/testing/contract/`, one function for each group of rules. Each lock store calls the functions for its capabilities from its own `<store>.contract.test.ts`. See [ADR 0030](docs/adr/0030-each-lock-store-runs-the-lock-store-contract-from-its-own-tests-and-a-capability-is-a-typed-parameter.md).
+_Avoid_: Shared suites, store cases (the table that ADR 0030 removed)
+
 ### Fencing
 
 The glossary of [`@zukhruf/fencing`](../fencing/CONTEXT.md) defines the fencing terms, and the glossary of [`@zukhruf/lease`](../lease/CONTEXT.md) defines the lost lease. The entries below tell only what each term means for a mutex.
@@ -123,6 +131,10 @@ _Avoid_: Version, revision, lock ID, UUID
 **Token source**:
 The object that makes the fencing tokens of a lock store. See `@zukhruf/fencing`.
 _Avoid_: Counter, generator
+
+**Mint**:
+The step in which a lock store gets the fencing token of a granted key. A network lock store mints with its session, for example `nextval` of a sequence on Postgres. A failed mint releases the key, so the acquire rejects and the key stays free (`src/lock-stores/memory/memory-store.test.ts`). See [ADR 0019](docs/adr/0019-a-failed-token-mint-answers-the-request-and-an-exhausted-epoch-ends-the-term.md).
+_Avoid_: Generate, issue
 
 **Ladder**:
 The named volumes that give the fencing tokens of a Docker engine lock store. Each volume is a rung, and the number in its name is a token. To get a token, a holder creates the rung with the higher of two numbers: the engine time of its claim in microseconds, and the highest rung + 1. Then it removes the lower rungs. The engine time keeps the tokens higher than all earlier tokens when somebody removes the ladder.
@@ -162,6 +174,10 @@ _Avoid_: Master, primary
 A candidate that uses the current leader as its coordinator.
 _Avoid_: Client, replica, slave
 
+**Term**:
+The time during which one candidate is the leader. A term ends when the leader resigns, when its process dies, or when its epoch has no fencing tokens left. When its term ends, the leader stops its server. See the glossary of [`@zukhruf/election`](../election/CONTEXT.md).
+_Avoid_: Tenure
+
 **Epoch**:
 The number of a leader's term. Each new leader has a higher epoch than all earlier leaders.
 _Avoid_: Generation, term number
@@ -177,3 +193,7 @@ _Avoid_: Cooldown, quiet period
 **Reassert**:
 After a failover, a holder tells the new leader which keys it holds.
 _Avoid_: Reclaim, re-acquire
+
+**Protocol version**:
+The number of the message format between the processes of a socket lock store and their leader. Each process sends it in its `hello` before its first request. A leader refuses a process with another protocol version, and the acquire fails with `ProtocolVersionError`. See [ADR 0014](docs/adr/0014-a-process-says-its-protocol-version-before-its-first-request.md).
+_Avoid_: Package version (each new package version would then refuse all earlier ones)
