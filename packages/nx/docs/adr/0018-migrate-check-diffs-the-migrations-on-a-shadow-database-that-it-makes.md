@@ -1,6 +1,6 @@
 # migrate:check diffs the migrations on a shadow database that it makes
 
-Status: Proposed 2026-11-20 for the owner's review (backlog #4937).
+Status: Accepted 2026-11-20 by the owner (backlog #4937).
 
 Nothing checked that the schema of a db package and its migrations agree. In meddit (#4926, #4928, #4968, 2026-11-20) agents ran `prisma migrate diff` by hand several times a day, and met four problems:
 
