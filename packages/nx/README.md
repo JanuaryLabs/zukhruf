@@ -1,20 +1,21 @@
 # @zukhruf/nx
 
-This package is the Nx part of the monorepo standard. Each workspace copied the same Nx configuration into each project. This package gives that configuration one time, in areas. Each area has its own import path, and the package has no root entry point. Two [generators](#generators) write the root files of a workspace, four [app generators](#app-generators) add its projects, the [prisma generator](#prisma-generator) adds a db package, and the [dokploy generator](#dokploy-generator) adds the delivery of a backend. The lint rules stay in `@zukhruf/eslint`, and the Git hooks stay in `@zukhruf/git-hooks`. [Monorepo standard](#monorepo-standard) says where each rule of the standard lives, and why.
+This package is the Nx part of the monorepo standard. Each workspace copied the same Nx configuration into each project. This package gives that configuration one time, in areas. Each area has its own import path, and the package has no root entry point. Two [generators](#generators) write the root files of a workspace, four [app generators](#app-generators) add its projects, the [prisma generator](#prisma-generator) adds a db package, the [auth generator](#auth-generator) adds sign-in to a backend, and the [dokploy generator](#dokploy-generator) adds the delivery of a backend. The [release configuration](#release) gives the release policy that `nx.json` extends. The lint rules stay in `@zukhruf/eslint`, and the Git hooks stay in `@zukhruf/git-hooks`. [Monorepo standard](#monorepo-standard) says where each rule of the standard lives, and why.
 
 The words in these documents have one meaning each. See the glossary in [CONTEXT.md](./CONTEXT.md).
 
 ## Areas
 
-| Area             | Import path            | Status                                                                                                                               |
-| ---------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| format           | `@zukhruf/nx/format`   | This README                                                                                                                          |
-| test             | `@zukhruf/nx/test`     | This README                                                                                                                          |
-| lint             | `@zukhruf/nx/lint`     | This README                                                                                                                          |
-| portless         | `@zukhruf/nx/portless` | Candidate (#3336): 14 projects in 3 repos                                                                                            |
-| opentofu, prisma | `@zukhruf/nx/<area>`   | This README (#3339)                                                                                                                  |
-| generators       | `@zukhruf/nx:<name>`   | This README: `preset` and `init` (#3337); `node-app`, `react-app`, `pair`, `ui-package` (#3338); `dokploy` (#4603); `prisma` (#4604) |
-| migrations       | `nx migrate`           | This README (#4818)                                                                                                                  |
+| Area             | Import path                | Status                                                                                                                                               |
+| ---------------- | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| format           | `@zukhruf/nx/format`       | This README                                                                                                                                          |
+| test             | `@zukhruf/nx/test`         | This README                                                                                                                                          |
+| lint             | `@zukhruf/nx/lint`         | This README                                                                                                                                          |
+| portless         | `@zukhruf/nx/portless`     | Candidate (#3336): 14 projects in 3 repos                                                                                                            |
+| opentofu, prisma | `@zukhruf/nx/<area>`       | This README (#3339)                                                                                                                                  |
+| generators       | `@zukhruf/nx:<name>`       | This README: `preset` and `init` (#3337); `node-app`, `react-app`, `pair`, `ui-package` (#3338); `dokploy` (#4603); `prisma` (#4604); `auth` (#4719) |
+| migrations       | `nx migrate`               | This README (#4818)                                                                                                                                  |
+| release          | `@zukhruf/nx/release.json` | This README (#4677)                                                                                                                                  |
 
 The lint rules stay in `@zukhruf/eslint`. The `lint` area gives only the inputs of the `lint` target (#3335).
 
@@ -829,6 +830,31 @@ npx nx migrate --run-migrations
 | `add-local-postgres`       | 0.8.40  | the root `compose.dev.yml`, `up` and `down` of each db package, the local `CONNECTION_STRING`, and `^up` in its backend serve (ADR 0012 decisions 16 and 17)                                              |
 | `node-env-production`      | 0.8.40  | the NODE_ENV configuration of ADR 0016 (nx.json defaults, target env, the web exceptions, `.env.example`, the workflow env, `ALLOWED_ORIGINS`), and a log of each NODE_ENV read in source                 |
 | `add-prisma-client-inputs` | 0.8.40  | `...` and `{ "dependentTasksOutputFiles": "**/*.ts" }` in the `inputs` of `targetDefaults.typecheck` and `.build` of a repo with `@zukhruf/nx/prisma`, so a schema change rebuilds the db package (#4826) |
+
+## release
+
+The release block of `nx.json` was the same in zukhruf, elt, deepagents and sdk-it. The file `@zukhruf/nx/release.json` gives that block one time, and `nx.json` extends it (#4677, commit 001377af):
+
+```json
+{
+  "extends": "@zukhruf/nx/release.json"
+}
+```
+
+Nx's `extends` is a shallow merge (commit 001377af). A `release` key in the `nx.json` of the workspace replaces the whole block of the file.
+
+| Field                                      | Value                                            | What it does                                                                          |
+| ------------------------------------------ | ------------------------------------------------ | ------------------------------------------------------------------------------------- |
+| `projects`                                 | `["tag:npm:public"]`                             | Releases only the projects with the tag `npm:public`.                                 |
+| `conventionalCommits.types.refactor`       | `{ "semverBump": "patch" }`                      | A `refactor` commit makes a patch version.                                            |
+| `changelog.workspaceChangelog.file`        | `false`                                          | Writes no changelog file for the workspace.                                           |
+| `version.preVersionCommand`                | `nx run-many -t build --projects=tag:npm:public` | Builds the released projects before Nx writes the versions.                           |
+| `version.conventionalCommits`              | `true`                                           | Takes the next version from the conventional commits.                                 |
+| `version.preserveMatchingDependencyRanges` | `false`                                          | Writes the new version into each dependency range, also into a range that matches it. |
+| `version.git`                              | `{ "commit": true, "tag": true, "push": true }`  | Commits the versions, tags the commit and pushes it.                                  |
+| `releaseTag.pattern`                       | `release/{version}`                              | Names each tag `release/<version>`, such as `release/0.8.40`.                         |
+
+zukhruf ([nx.json](../../nx.json)) and deepagents extend the file. The release workflow of deepagents runs `nx release version` with it, and the `preVersionCommand` builds the `tag:npm:public` packages before the versions change.
 
 ## generators
 
