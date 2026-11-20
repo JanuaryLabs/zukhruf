@@ -14,7 +14,7 @@ The words in these documents have one meaning each. See the glossary in [GLOSSAR
 npm install @zukhruf/authentication hono react-router
 ```
 
-### Refuse a request without a session (Hono)
+## Refuse a request without a session (Hono)
 
 ```ts
 import { Hono } from 'hono';
@@ -41,7 +41,7 @@ A route that a guest may read too calls `auth.api.getSession({ headers: c.req.ra
 
 A request without a session gets `UnauthenticatedError` (401). A signed-in user without two-factor gets `TwoFactorRequiredError` (403). Both are `HTTPException`s, so the app's `onError` answers them as it answers every other `HTTPException` ([ADR 0004](./docs/adr/0004-a-refusal-is-an-httpexception-401-without-a-session-and-403-without-two-factor.md)).
 
-### Send a visitor to sign in, and back (React Router)
+## Send a visitor to sign in, and back (React Router)
 
 ```ts
 import { twoFactorClient } from 'better-auth/client/plugins';
@@ -74,6 +74,26 @@ navigate(target, { replace: true });
 ```
 
 A visitor on `/cases/42?tab=notes` without a session lands on `/sign-in?redirectTo=%2Fcases%2F42%3Ftab%3Dnotes`. When better-auth cannot answer (the network or the server is down), the loader throws `AuthenticationUnavailableError` for the route's error element, instead of sending a signed-in user to sign in. A navigation away aborts the loader's request, and with it the session read ([ADR 0006](./docs/adr/0006-a-failed-session-read-is-authentication-unavailable-never-signed-out.md)).
+
+## Errors
+
+| Error                            | When                                                 | What the caller does next                          |
+| -------------------------------- | ---------------------------------------------------- | -------------------------------------------------- |
+| `UnauthenticatedError` (401)     | no session                                           | sign in                                            |
+| `TwoFactorRequiredError` (403)   | a session, but the user has not turned two-factor on | set up two-factor                                  |
+| `AuthenticationUnavailableError` | the browser could not read the session               | try again later; the route's error element says so |
+
+The two server errors carry `cause: { code, detail }`, the shape that the error handler of an `@zukhruf/nx:node-app` backend already answers with. An error of better-auth itself, or of the network on the server, reaches the caller as it is.
+
+## The same concepts in other systems
+
+| This package           | ASP.NET Core                                                                  | go-chi/jwtauth          | Remix indie-stack        | @hono/auth-js           |
+| ---------------------- | ----------------------------------------------------------------------------- | ----------------------- | ------------------------ | ----------------------- |
+| `requireSession(auth)` | `[Authorize]`, `RequireAuthorization()`                                       | `Authenticator(ja)`     | `requireUserId(request)` | `verifyAuth()`          |
+| `{ twoFactor: true }`  | a policy with `RequireClaim("amr", "mfa")`; a failed policy is `Forbid` (403) | none                    | none                     | none                    |
+| `UnauthenticatedError` | `Challenge` (401 or the login page)                                           | `http.Error(w, …, 401)` | `redirect('/login')`     | `HTTPException(401)`    |
+| `REDIRECT_TO`          | `ReturnUrl`                                                                   | none                    | `redirectTo`             | `callbackUrl` (Auth.js) |
+| `safeRedirect`         | `Url.IsLocalUrl`                                                              | none                    | `safeRedirect`           | none                    |
 
 ## API
 
@@ -143,26 +163,6 @@ The guard expects the default client, whose `getSession()` answers `{ data, erro
 | the return path                             | `pathname + search` of `request.url`. On a page in `signIn` or `twoFactorSetup` itself, the page's own safe `redirectTo` goes on, so no page sends a visitor back to sign in. A path longer than 2,048 characters is left out                                                                                                                                                                                                                                                                                                                                                 |
 | `safeRedirect(to)`                          | the fallback, unless `to` starts with `/`, not with `//` or `/\`, is at most 2,048 characters, parses on `origin` to the same origin, and its path is not in `exclude`. Then the parsed `pathname + search + hash`, so a tab or newline that the parser drops cannot turn `/\t/evil.example` into `//evil.example`                                                                                                                                                                                                                                                            |
 
-## Errors
-
-| Error                            | When                                                 | What the caller does next                          |
-| -------------------------------- | ---------------------------------------------------- | -------------------------------------------------- |
-| `UnauthenticatedError` (401)     | no session                                           | sign in                                            |
-| `TwoFactorRequiredError` (403)   | a session, but the user has not turned two-factor on | set up two-factor                                  |
-| `AuthenticationUnavailableError` | the browser could not read the session               | try again later; the route's error element says so |
-
-The two server errors carry `cause: { code, detail }`, the shape that the error handler of an `@zukhruf/nx:node-app` backend already answers with. An error of better-auth itself, or of the network on the server, reaches the caller as it is.
-
-## The same concepts in other systems
-
-| This package           | ASP.NET Core                                                                  | go-chi/jwtauth          | Remix indie-stack        | @hono/auth-js           |
-| ---------------------- | ----------------------------------------------------------------------------- | ----------------------- | ------------------------ | ----------------------- |
-| `requireSession(auth)` | `[Authorize]`, `RequireAuthorization()`                                       | `Authenticator(ja)`     | `requireUserId(request)` | `verifyAuth()`          |
-| `{ twoFactor: true }`  | a policy with `RequireClaim("amr", "mfa")`; a failed policy is `Forbid` (403) | none                    | none                     | none                    |
-| `UnauthenticatedError` | `Challenge` (401 or the login page)                                           | `http.Error(w, …, 401)` | `redirect('/login')`     | `HTTPException(401)`    |
-| `REDIRECT_TO`          | `ReturnUrl`                                                                   | none                    | `redirectTo`             | `callbackUrl` (Auth.js) |
-| `safeRedirect`         | `Url.IsLocalUrl`                                                              | none                    | `safeRedirect`           | none                    |
-
 ## Why not an npm package
 
 Checked on 2026-11-19 (searches "better-auth hono middleware", "better-auth react-router", "hono session middleware better-auth"):
@@ -180,21 +180,21 @@ Node has no session or authentication API (a search of the exports of every buil
 
 | Now                                                    | Later (two places today; waits for a third)                                                               | Never                                                                      |
 | ------------------------------------------------------ | --------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| a better-auth session on Hono: resolve and require     | a bearer JWT from a better-auth JWKS (text2sql v2 and desktop `authxPass`)                                | the sign-in methods, pages and emails                                      |
+| a better-auth session on Hono: required                | a bearer JWT from a better-auth JWKS (text2sql v2 and desktop `authxPass`)                                | the sign-in methods, pages and emails                                      |
 | two-factor required                                    | an API key (thing `authenticateApiKey`, text2sql v1)                                                      | users, roles, organizations: authorization is its own concept              |
 | the React Router loader guard and the safe return path | a session younger than `freshAge`; a middleware that only reads the session (one place today: blackboard) | the tables and their migrations (better-auth's CLI and `@zukhruf/nx:auth`) |
 |                                                        | React Router middleware (`context.set`), when a host uses it                                              | an identity provider                                                       |
 
 ## Who moves onto it
 
-| Program                         | Its copy today                                                                                                                                      | After                                                                                                                             |
-| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| meddit (#4721, #4722)           | none                                                                                                                                                | `requireSession(auth, { twoFactor: true })`; React Router `requireSession` with `twoFactorSetup`                                  |
-| text2sql v1 (#4726)             | `authenticate` in `apps/backend/src/middlewares/middleware.ts` (session part); `requiresAuth` and `redirect-to.ts` in `apps/frontend/src/app/auth/` | `requireSession(auth)`, and its team middleware reads `c.var.session`; the frontend keeps its setup check before `requireSession` |
-| thing (#4727)                   | `authenticate` in `apps/backend/src/middlewares/middleware.ts`; `requiresAuth` in `apps/frontend` and `apps/pulse`                                  | `requireSession(auth)`; `authenticateEither` keeps its API-key branch and falls back to `requireSession`                          |
-| blackboard (#4728)              | `requireIdentity` and `redirectDestination` in `apps/web/src/auth.ts`; the `userId` middleware in `apps/api/src/app.ts`                             | React Router `requireSession` and `safeRedirect`; its `redirect` query parameter becomes `redirectTo`                             |
-| text2sql authx, v2, desktop     | an identity provider and its JWT clients                                                                                                            | stay; the JWT is the "later" column                                                                                               |
-| iworked, pm, Kortext regression | dormant or a client's repo                                                                                                                          | left out (Ezz, 2026-11-19)                                                                                                        |
+| Program                         | Its copy today                                                                                                                                                                                                                                                                                    | After                                                                                                                             |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| meddit (#4721, #4722)           | none                                                                                                                                                                                                                                                                                              | `requireSession(auth, { twoFactor: true })`; React Router `requireSession` with `twoFactorSetup`                                  |
+| text2sql v1 (#4726)             | none: `authenticate` in `apps/backend/src/middlewares/middleware.ts` and `requiresAuth` in `apps/frontend/src/app/auth/auth-gate.ts` call `requireSession`, and `redirect-to.ts` is gone (75d4f320)                                                                                               | `requireSession(auth)`, and its team middleware reads `c.var.session`; the frontend keeps its setup check before `requireSession` |
+| thing (#4727)                   | `authenticate` in `apps/backend/src/middlewares/middleware.ts`; `requiresAuth` in `apps/frontend` and `apps/pulse`                                                                                                                                                                                | `requireSession(auth)`; `authenticateEither` keeps its API-key branch and falls back to `requireSession`                          |
+| blackboard (#4728)              | the `userId` middleware in `apps/api/src/app.ts`, which only reads the session ([ADR 0002](./docs/adr/0002-the-package-only-requires-a-session-and-better-auths-getsession-reads-one.md)); its loader that requires a session moved onto the package and `apps/web/src/auth.ts` is gone (d054ae7) | React Router `requireSession` and `safeRedirect`; its `redirect` query parameter becomes `redirectTo`                             |
+| text2sql authx, v2, desktop     | an identity provider and its JWT clients                                                                                                                                                                                                                                                          | stay; the JWT is the "later" column                                                                                               |
+| iworked, pm, Kortext regression | dormant or a client's repo                                                                                                                                                                                                                                                                        | left out (Ezz, 2026-11-19)                                                                                                        |
 
 ## Documentation
 
