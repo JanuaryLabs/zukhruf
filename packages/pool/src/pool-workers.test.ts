@@ -3401,19 +3401,12 @@ describe(
     test('disposing a Pool ends its waiting runs with DisposedError, cancels their jobs, and refuses later jobs', async (t) => {
       await using folder = await new TemporaryFiles().directory('pool-');
       const store = join(folder.path, 'store.sqlite');
-      const gate = new Latch();
-      class Gated extends EchoWorker {
-        override async run(text: string): Promise<string> {
-          await gate.wait();
-          return super.run(text);
-        }
-      }
       await using owner = lending(store, {
         size: new Fixed(1),
         startup: new Parallel(),
         eviction: new NoEviction(),
         create: () => {
-          const worker = new Gated();
+          const worker = new EchoWorker();
           worker.release();
           return worker;
         },
@@ -3422,7 +3415,7 @@ describe(
       await using sending = await sender(store);
       await owner.ready();
       const runs = Promise.allSettled(
-        ['x', 'y', 'z'].map((text) => pool.run(text)),
+        ['hang', 'hang', 'hang'].map((text) => pool.run(text)),
       );
       await waitFor(
         async () =>
@@ -3431,19 +3424,15 @@ describe(
       );
 
       await pool[Symbol.asyncDispose]();
-      try {
-        for (const outcome of await runs) {
-          assert.equal(outcome.status, 'rejected');
-          assert.ok(outcome.reason instanceof DisposedError);
-        }
-        assert.deepEqual(
-          (await sending.jobs.findJobs(queue)).map(({ state }) => state),
-          ['cancelled', 'cancelled', 'cancelled'],
-        );
-        await assert.rejects(pool.run('after'), DisposedError);
-      } finally {
-        gate.open();
+      for (const outcome of await runs) {
+        assert.equal(outcome.status, 'rejected');
+        assert.ok(outcome.reason instanceof DisposedError);
       }
+      assert.deepEqual(
+        (await sending.jobs.findJobs(queue)).map(({ state }) => state),
+        ['cancelled', 'cancelled', 'cancelled'],
+      );
+      await assert.rejects(pool.run('after'), DisposedError);
     });
 
     test('a job joins a worker that starts before it starts one in an empty slot', async (t) => {
@@ -4105,20 +4094,20 @@ describe(
       await using folder = await new TemporaryFiles().directory('pool-');
       const store = join(folder.path, 'store.sqlite');
       const clock = createClock(Date.now());
-      const gate = new Latch();
-      const created: EchoWorker[] = [];
-      class Gated extends EchoWorker {
-        override async run(text: string): Promise<string> {
-          await gate.wait();
+      class Running extends EchoWorker {
+        readonly running = new Latch();
+        override run(text: string): Promise<string> {
+          this.running.open();
           return super.run(text);
         }
       }
+      const created: Running[] = [];
       await using owner = lendingOn(clock, store, {
         size: new Fixed(1),
         startup: new Parallel(),
         eviction: new NoEviction(),
         create: () => {
-          const worker = new Gated();
+          const worker = new Running();
           worker.release();
           created.push(worker);
           return worker;
@@ -4127,12 +4116,11 @@ describe(
       const pool = new Pool({ kind: echo(), store, clock });
       await owner.ready();
       // The disposal rejects the run with DisposedError.
-      const run = Promise.allSettled([pool.run('held')]);
+      const run = Promise.allSettled([pool.run('hang')]);
       try {
-        await waitFor(() => assert.equal(owner.stats.lent, 1), {
-          signal: t.signal,
-          interval: 5,
-        });
+        // A disposal before the worker runs the job only cancels the job
+        // (ADR 0021), so the test waits for the run on the worker.
+        await untilAborted(created[0]!.running.wait(), t.signal);
 
         // No touch comes on this clock, so only the closed connection to the
         // caller tells the owner.
@@ -4143,7 +4131,6 @@ describe(
           interval: 5,
         });
       } finally {
-        gate.open();
         await run;
       }
     });
