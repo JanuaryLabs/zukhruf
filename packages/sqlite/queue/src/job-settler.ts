@@ -145,7 +145,7 @@ export class JobSettler {
   }
 
   // failJobs as the supervisor runs it (node_modules/pg-boss/dist/plans.js:
-  // 2372-2386, 2403-2408): every job `where` selects, unfenced, with one
+  // 2968-2975, 3007-3012): every job `where` selects, unfenced, with one
   // output, in the select's transaction.
   static failJobs(
     db: DatabaseSync,
@@ -465,7 +465,7 @@ export class JobSettler {
   }
 
   // touch() past its argument checks (node_modules/pg-boss/dist/manager.js:
-  // 1994-2002, plans.js:2993-3006): an active job, and with an attempt only
+  // 2410-2418, plans.js:2993-3006): an active job, and with an attempt only
   // while that attempt holds the job. Plain ids carry no attempts, and the
   // touch is then not fenced. It gives the ids whose heartbeat it refreshed.
   static touch(

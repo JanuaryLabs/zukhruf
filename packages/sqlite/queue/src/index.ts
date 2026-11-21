@@ -938,7 +938,7 @@ export class SqliteJobQueue
     }
     // SQLite has one writer, so the refresh cannot lose pg-boss's try-lock to
     // another instance's scan and fall back to the cache (manager.js:
-    // 2217-2227): it always counts the queue and returns its row.
+    // 2718-2728): it always counts the queue and returns its row.
     return QueueStatsCache.refresh(this.db, [name], this.#now()).map((row) =>
       SqliteJobQueue.#toQueueStats(name, row, percentiles),
     );
@@ -1746,7 +1746,7 @@ export class SqliteJobQueue
 
   // Wakes every worker of a queue, busy ones included, so each fetches now
   // instead of waiting out its poll (node_modules/pg-boss/dist/manager.js:
-  // 1137-1143).
+  // 1413-1419).
   private notifyQueue(name: string): void {
     for (const worker of this.workers.values()) {
       if (worker.name === name) {

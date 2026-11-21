@@ -122,7 +122,7 @@ describe('timekeeper', () => {
       await run.queue.stop({ graceful: false, close: false });
       // The start pass at 10 s finds the claim stamped 10 s ago, so it waits
       // out the other 20 s of the interval and one more (timekeeper.js:
-      // 368, 406-411) and runs at 31 s.
+      // 407, 445-450) and runs at 31 s.
       await startTimekeeping(run);
       await run.clock.tick(30_000);
       return {

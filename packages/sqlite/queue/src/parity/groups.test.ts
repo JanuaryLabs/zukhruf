@@ -784,7 +784,7 @@ describe('local group concurrency', () => {
     });
 
     // Tracking goes only with the queue's last live worker (manager.js:
-    // 463-471), so g1 still holds one job at a time.
+    // 531-538), so g1 still holds one job at a time.
     assert.deepStrictEqual(observed, {
       batches: [[id(1)]],
       states: [

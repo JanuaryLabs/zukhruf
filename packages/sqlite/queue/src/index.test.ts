@@ -274,7 +274,7 @@ describe('SqliteJobQueue', () => {
   // frozen clock stamps every send alike, as sends sharing a millisecond are.
   // SQLite-only, like the key_strict_fifo test below: pg-boss leaves
   // created_on ties to index order (node_modules/pg-boss/dist/plans.js:
-  // 1954-1958), which a frozen clock cannot pin across backends; SQLite takes
+  // 2491-2495), which a frozen clock cannot pin across backends; SQLite takes
   // send order (rowid), where a random id would scramble same-millisecond
   // sends (backlog #2164).
   it('runs a standard queue in send order when sends share a millisecond', async () => {
@@ -330,7 +330,7 @@ describe('SqliteJobQueue', () => {
   // SQLite-only: the parity harness always listens. pg-boss defaults
   // useListenNotify to false (node_modules/pg-boss/dist/attorney.js:416) and
   // then never hears a NOTIFY and polls at the base interval (manager.js:
-  // 928-949); the same input on pg-boss over PGlite observes [] then [job].
+  // 1182-1203); the same input on pg-boss over PGlite observes [] then [job].
   it('wakes no worker and keeps the base poll when not listening for notify', async () => {
     const clock = new TestClock('2026-01-01T00:00:00.000Z');
     const queue = new SqliteJobQueue({ clock, schedule: false });

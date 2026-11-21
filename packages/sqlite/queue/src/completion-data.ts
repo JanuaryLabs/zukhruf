@@ -26,7 +26,7 @@ export class CompletionData {
   }
 
   // pg-boss's mapCompletionDataArg (node_modules/pg-boss/dist/manager.js:
-  // 1614-1622): what complete() and fail() store as a job's output. Nothing,
+  // 1998-2006): what complete() and fail() store as a job's output. Nothing,
   // undefined and functions store null; an object that is not an array stores
   // as it is; anything else, arrays included, as { value }. serialize-error
   // turns an Error into { name, message, stack, ... } and an object with toJSON

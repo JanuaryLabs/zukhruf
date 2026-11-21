@@ -3,7 +3,7 @@ import type { GroupConcurrencyConfig } from 'pg-boss';
 import type { JobRow } from './job-rows.ts';
 
 // pg-boss's localGroupConcurrency (node_modules/pg-boss/dist/manager.js:
-// 226-282, 454-501): this process's running jobs per group of each queue,
+// 282-340, 520-568): this process's running jobs per group of each queue,
 // counted in memory and never shared with another process.
 export class LocalGroups {
   readonly #configs = new Map<string, GroupConcurrencyConfig>();

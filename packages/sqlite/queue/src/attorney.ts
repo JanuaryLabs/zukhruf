@@ -11,7 +11,7 @@ import type { TimekeeperConfig } from './timekeeper.ts';
 import { Uuid } from './uuid.ts';
 
 // The supervisor's timers, in seconds (node_modules/pg-boss/dist/attorney.js:
-// 608-620).
+// 661-673).
 export type SuperviseIntervals = {
   superviseIntervalSeconds: number;
   maintenanceIntervalSeconds: number;

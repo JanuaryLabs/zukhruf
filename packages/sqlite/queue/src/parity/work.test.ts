@@ -209,7 +209,7 @@ describe('workers', () => {
 
     // A full batch skips the wait only when burstWhenBatchFull asks and the
     // batch holds more than one job (node_modules/pg-boss/dist/manager.js:
-    // 942-949).
+    // 1196-1203).
     assert.deepStrictEqual(observed, {
       burst: [[id(1), id(2)], [id(3)]],
       single: [[id(11)]],

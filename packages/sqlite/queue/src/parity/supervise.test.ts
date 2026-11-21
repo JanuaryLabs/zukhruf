@@ -322,7 +322,7 @@ describe('supervisor', () => {
   // Queues created before the first pass are claimed at odd seconds, and
   // one created at 1500 at even seconds (2 s intervals); each pass's expiry,
   // heartbeat and deletion cover only the queues it claimed (plans.js:
-  // 973-990, 1119-1137, 2372-2386, 3055-3066).
+  // 1360-1377, 1529-1547, 2968-2975, 3690-3696).
   it('monitors and maintains each queue on its own cadence from its first claim', async () => {
     const observed = await Parity.assertSame(
       async ({ queue, clock, errors }) => {
@@ -494,7 +494,7 @@ describe('supervisor', () => {
     );
 
     // The first pass claims the new queue's maintenance at 1000 (plans.js:
-    // 1119-1137); the next claim needs 86400 s on maintain_on.
+    // 1529-1547); the next claim needs 86400 s on maintain_on.
     assert.deepStrictEqual(observed, {
       afterSeconds: ['completed'],
       beforeDay: ['completed'],

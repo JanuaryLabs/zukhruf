@@ -6,7 +6,7 @@ import { Release } from './release.ts';
 import { queueSchema } from './schema.ts';
 
 // pg-boss's contractor.start() (node_modules/pg-boss/dist/contractor.js:
-// 79-91): a file that a newer release made stays as it is, and any other file
+// 83-95): a file that a newer release made stays as it is, and any other file
 // gets this release's schema with its rows kept (docs/adr/0004, 0006).
 export class Contractor {
   static start(database: DatabaseSync): void {
