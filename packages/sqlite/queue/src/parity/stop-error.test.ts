@@ -9,8 +9,8 @@ import { type JobQueue, SqliteJobQueue } from '../index.ts';
 
 // A queue with no 'error' listener. Its queue is deleted under a running
 // batch, a graceful stop starts, and then the batch ends: its settle throws
-// (manager.js:411), the worker's error emit throws with no listener, and the
-// worker's loop rejects while the stop waits for it (worker.js:77, 113).
+// (manager.js:477), the worker's error emit throws with no listener, and the
+// worker's loop rejects while the stop waits for it (worker.js:88, 125).
 // The observation: what stop() did, and how many rejections nobody handled.
 async function stopUnderWorkerError(queue: JobQueue) {
   const unhandled: unknown[] = [];
@@ -34,8 +34,8 @@ async function stopUnderWorkerError(queue: JobQueue) {
       timeout: 5000,
     });
     // Without useListenNotify, both stops reach worker.stop() in microtasks,
-    // with no I/O before it (index.js:228-229, notifier.js:66-79,
-    // manager.js:866-875), so after one turn of the event loop the worker is
+    // with no I/O before it (index.js:308-309, notifier.js:73-86,
+    // manager.js:1110-1120), so after one turn of the event loop the worker is
     // stopping. No public event says so: wip is not emitted after a stop.
     await setImmediate();
     release.resolve();
@@ -47,7 +47,7 @@ async function stopUnderWorkerError(queue: JobQueue) {
       stop = `rejected: ${String(error)}`;
     }
     // A graceful stop resolves after the worker's loop settled
-    // (index.js:269), and Node reports a rejection nobody handled at the
+    // (index.js:356), and Node reports a rejection nobody handled at the
     // end of the turn it settled in, before the next turn runs.
     await setImmediate();
     return { stop, unhandled: unhandled.length };

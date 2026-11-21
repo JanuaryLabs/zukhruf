@@ -10,7 +10,7 @@ export class LocalGroups {
   readonly #active = new Map<string, Map<string, number>>();
   readonly #maxLimits = new Map<string, number>();
 
-  // manager.js:454-462
+  // manager.js:520-528
   configure(
     name: string,
     localGroupConcurrency: number | GroupConcurrencyConfig,
@@ -29,7 +29,7 @@ export class LocalGroups {
   }
 
   // The groups with no room left for any tier, which a fetch skips
-  // (manager.js:235-256).
+  // (manager.js:291-312).
   atCapacity(name: string): string[] {
     const config = this.#configs.get(name);
     const counts = this.#active.get(name);
@@ -43,7 +43,7 @@ export class LocalGroups {
   }
 
   // Counts each job that fits its group's limit, in batch order; a job
-  // without a group always fits and is not counted (manager.js:472-494).
+  // without a group always fits and is not counted (manager.js:539-561).
   start(name: string, jobs: JobRow[]) {
     const allowed: JobRow[] = [];
     const excess: JobRow[] = [];
@@ -65,7 +65,7 @@ export class LocalGroups {
     return { allowed, excess, grouped };
   }
 
-  // manager.js:495-501
+  // manager.js:562-568
   end(name: string, grouped: JobRow[]): void {
     for (const job of grouped) {
       if (job.group_id) {
@@ -74,22 +74,24 @@ export class LocalGroups {
     }
   }
 
-  // manager.js:463-471, once no live worker is left on the queue.
+  // manager.js:529-538, once no live worker is left on the queue. The active
+  // counts stay: a handler still running, or one stop() abandoned, holds its
+  // slots until it settles, and the next work() on the queue must see them
+  // (12.38.0).
   forget(name: string): void {
     this.#configs.delete(name);
-    this.#active.delete(name);
     this.#maxLimits.delete(name);
   }
 
-  // manager.js:876-879
+  // manager.js:1121-1123: on a full stop too, the counts drop as their
+  // handlers settle.
   clear(): void {
     this.#configs.clear();
-    this.#active.clear();
     this.#maxLimits.clear();
   }
 
   // `in`, as pg-boss looks a tier up, so an inherited property such as
-  // `constructor` is found and no count is below it (manager.js:226-234).
+  // `constructor` is found and no count is below it (manager.js:282-290).
   #limit(name: string, groupTier: string | null): number {
     const config = this.#configs.get(name);
     if (!config) {
@@ -121,8 +123,13 @@ export class LocalGroups {
       return;
     }
     const count = counts.get(groupId) || 0;
+    // manager.js:322-335: at zero a count drops itself, and the queue's map
+    // with its last group.
     if (count <= 1) {
       counts.delete(groupId);
+      if (counts.size === 0) {
+        this.#active.delete(name);
+      }
     } else {
       counts.set(groupId, count - 1);
     }

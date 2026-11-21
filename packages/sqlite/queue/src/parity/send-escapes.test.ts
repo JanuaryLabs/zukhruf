@@ -110,7 +110,7 @@ describe('send escapes', () => {
 
     // createJob looks the queue up and checks key_strict_fifo first, then
     // sends the job as JSON.stringify([job]) (node_modules/pg-boss/dist/
-    // manager.js:1208-1242), which json_to_recordset reads (plans.js:2303).
+    // manager.js:1489-1526), which json_to_recordset reads (plans.js:2886).
     // Postgres refuses the first escape in that text no field can hold, in
     // the job's field order: \u0000 (22P05) or a surrogate not paired
     // high-then-low (22P02). Nothing is stored.
@@ -141,7 +141,8 @@ describe('send escapes', () => {
         nulBeforeLoneInData: unsupportedEscape,
         requestLone: invalidJson,
         requestNul: unsupportedEscape,
-        missingQueueFirst: 'Error: Queue missing does not exist',
+        missingQueueFirst:
+          'Error: Queue missing does not exist (PGBOSS_QUEUE_NOT_FOUND)',
         strictKeyFirst: 'Error: key_strict_fifo queues require a singletonKey',
         strictLoneKey: invalidJson,
         debounceLone: invalidJson,

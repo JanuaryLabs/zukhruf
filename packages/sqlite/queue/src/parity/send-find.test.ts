@@ -135,6 +135,61 @@ describe('send and findJobs', () => {
     });
   });
 
+  it('pages findJobs by limit and after in created_on then id order, after the data filter, and checks both before the queue', async () => {
+    const uuid = (n: number) =>
+      `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+
+    const observed = await Parity.assertSame(async ({ queue }) => {
+      await queue.start();
+      await queue.createQueue('jobs');
+      // One created_on on the stopped clock, so id orders them.
+      for (const n of [3, 1, 4, 2]) {
+        await queue.send('jobs', { odd: n % 2 }, { id: uuid(n) });
+      }
+      const find = async (options: object) =>
+        (await queue.findJobs('jobs', options)).map(({ id }) => id);
+      const refused = (name: string, options: object) =>
+        outcome(() => queue.findJobs(name, options));
+      return {
+        all: await find({}),
+        first: await find({ limit: 2 }),
+        next: await find({ limit: 2, after: uuid(2) }),
+        afterLast: await find({ after: uuid(4) }),
+        braced: await find({ after: `{${uuid(2).toUpperCase()}}` }),
+        dataLimited: await find({ data: { odd: 1 }, limit: 1 }),
+        limitZero: await refused('jobs', { limit: 0 }),
+        limitFraction: await refused('jobs', { limit: 1.5 }),
+        limitOver: await refused('jobs', { limit: 100_001 }),
+        afterEmpty: await refused('jobs', { after: '' }),
+        afterNotUuid: await refused('jobs', { after: 'x' }),
+        afterGone: await refused('jobs', { after: uuid(9) }),
+        limitBeforeQueue: await refused('missing', { limit: 0 }),
+      };
+    });
+
+    // attorney.js:575-594, manager.js:2743-2770, plans.js:4624-4657
+    // (12.38.0): limit 1 to 100000 (1000 when left out), after an id whose
+    // row still exists, both checked before the queue lookup.
+    const limit =
+      'AssertionError: findJobs: limit must be an integer between 1 and 100000';
+    assert.deepStrictEqual(observed, {
+      all: [uuid(1), uuid(2), uuid(3), uuid(4)],
+      first: [uuid(1), uuid(2)],
+      next: [uuid(3), uuid(4)],
+      afterLast: [],
+      braced: [uuid(3), uuid(4)],
+      dataLimited: [uuid(1)],
+      limitZero: limit,
+      limitFraction: limit,
+      limitOver: limit,
+      afterEmpty: 'AssertionError: findJobs: after must be a non-empty string',
+      afterNotUuid: 'AssertionError: findJobs: after must be a uuid',
+      afterGone:
+        'AssertionError: findJobs: after names a row that no longer exists',
+      limitBeforeQueue: limit,
+    });
+  });
+
   it('gives a found job exactly the keys of pg-boss, with no signal, even while a worker holds it', async () => {
     const observed = await Parity.assertSame(async ({ queue }) => {
       await queue.start();
@@ -159,8 +214,8 @@ describe('send and findJobs', () => {
     });
 
     // pg-boss's findJobs returns the rows as the database gives them
-    // (node_modules/pg-boss/dist/manager.js:2242-2261); only a worker adds a
-    // signal, to its own copy of the job (manager.js:530).
+    // (node_modules/pg-boss/dist/manager.js:2743-2772); only a worker adds a
+    // signal, to its own copy of the job (manager.js:599).
     assert.strictEqual(observed.created.length, 1);
     assert.deepStrictEqual(observed.active, observed.created);
     assert.ok(!observed.created[0]?.includes('signal'));

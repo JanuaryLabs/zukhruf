@@ -4,7 +4,7 @@ import type { AttachableClock, Clock, Db } from 'pg-boss';
 
 // pg-boss counts the statements it has in flight so an attached TestClock
 // lets them finish before it moves time on (node_modules/pg-boss/dist/
-// activity.js:14-95). node:sqlite answers at once, so what this counts are
+// activity.js:14-96). node:sqlite answers at once, so what this counts are
 // the event-loop turns standing in for pg-boss's I/O.
 export class Activity {
   // The queue binds clock.now() into its own statements, so the Postgres
@@ -25,7 +25,7 @@ export class Activity {
     return 'attach' in clock && typeof clock.attach === 'function';
   }
 
-  // index.js:152-154
+  // index.js:217-219
   attach(clock: AttachableClock): Promise<AsyncDisposable> {
     return clock.attach({
       db: Activity.#database,
@@ -53,7 +53,7 @@ export class Activity {
   }
 
   // Runs `notification` one counted turn from now: pg-boss wakes its notify
-  // workers at start only after the listener's own I/O (notifier.js:55-57).
+  // workers at start only after the listener's own I/O (notifier.js:56-58).
   deliver(notification: () => void): Promise<void> {
     return this.#counted(async () => {
       await setImmediate();
@@ -79,7 +79,7 @@ export class Activity {
     }
   }
 
-  // activity.js:77-93: true if it had to wait. A caller whose turn just
+  // activity.js:78-94: true if it had to wait. A caller whose turn just
   // ended runs on in microtasks and may start another before this one ends.
   async idle(): Promise<boolean> {
     let waited = false;

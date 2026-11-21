@@ -1,11 +1,15 @@
 import assert from 'node:assert';
 
-import { CronExpressionParser } from 'cron-parser';
+import {
+  CronDate,
+  type CronExpression,
+  CronExpressionParser,
+} from 'cron-parser';
 import { scheduleMissedPolicies } from 'pg-boss';
 import { RRuleTemporal } from 'rrule-temporal';
 
 // pg-boss's checks on a schedule's recurrence (node_modules/pg-boss/dist/
-// rrule.js, timezone.js and timekeeper.js, 12.35.1). None of them is
+// rrule.js, timezone.js and timekeeper.js, 12.38.2). None of them is
 // exported, so each is ported by citation and proven equal by the parity
 // suite.
 export class Recurrence {
@@ -49,14 +53,56 @@ export class Recurrence {
     scheduleMissedPolicies,
   );
 
+  // timekeeper.js:80-99 (12.38.1): the latest occurrence before an
+  // interval's reference, read backwards the way the forward walk reads
+  // forwards. When the clocks go back, a local time shows twice, and prev()
+  // answers with both instants an hour apart, so a daily job would be sent
+  // twice; only an hour field that lists every hour keeps both.
+  static previousOccurrence(interval: CronExpression, tz: string): Date {
+    const everyHour = interval.fields.hour.values.length === 24;
+    for (;;) {
+      const occurrence = interval.prev().toDate();
+      if (everyHour || !Recurrence.#repeatsLocalTime(occurrence, tz)) {
+        return occurrence;
+      }
+    }
+  }
+
+  // timekeeper.js:100-111: whether the local time an instant shows in `tz`
+  // was already shown once, before the clocks went back. The offset three
+  // hours before is the one in force before any change the instant could be
+  // repeating, since no zone goes back by more than two.
+  static #repeatsLocalTime(instant: Date, tz: string): boolean {
+    const offset = (time: number) => new CronDate(time, tz).getUTCOffset();
+    const time = instant.getTime();
+    const shift = offset(time - 3 * 60 * 60 * 1000) - offset(time);
+    return (
+      shift > 0 && offset(time - shift * 60 * 1000) - offset(time) === shift
+    );
+  }
+
+  // timekeeper.js:213-218 (12.37.0): cron-parser reads an empty expression,
+  // and undefined or null, as `* * * * *`, which is nearly always a missing
+  // value, so schedule() and each pass refuse it before either format reads
+  // it.
+  static assertExpression(expression: unknown): asserts expression is string {
+    assert(
+      typeof expression === 'string' && expression.trim() !== '',
+      'cron expression must be a non-empty string',
+    );
+  }
+
   // rrule.js:65-67
   static isRrule(expression: string): boolean {
     return Recurrence.#rruleShape.test(expression);
   }
 
-  // timekeeper.js:185-194. parseRecurrence's walk (176-180) is for
-  // previewSchedule, so only its two checks are kept.
-  static assertRecurrence(expression: string, tz: string): void {
+  // timekeeper.js:208-230. parseRecurrence's walk is for previewSchedule, so
+  // only its two checks are kept. cron-parser reads an empty expression, and
+  // undefined or null, as `* * * * *`, so a non-string or blank one is refused
+  // before either format reads it (12.37.0: 213-218).
+  static assertRecurrence(expression: unknown, tz: string): void {
+    Recurrence.assertExpression(expression);
     if (Recurrence.isRrule(expression)) {
       Recurrence.#assertRrule(expression, tz);
     } else {
@@ -91,7 +137,7 @@ export class Recurrence {
     );
   }
 
-  // timekeeper.js:156-163
+  // timekeeper.js:188-195
   static assertMissedPolicy(missed: unknown): void {
     assert(
       missed === undefined ||

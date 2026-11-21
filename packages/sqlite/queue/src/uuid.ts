@@ -8,6 +8,10 @@ export class Uuid {
   static readonly #input =
     /^(?:\{([0-9a-f]{4}(?:-?[0-9a-f]{4}){7})\}|([0-9a-f]{4}(?:-?[0-9a-f]{4}){7}))$/i;
 
+  static accepts(text: string): boolean {
+    return Uuid.#input.test(text);
+  }
+
   static canonical(text: string): string {
     const match = Uuid.#input.exec(text);
     const digits = (match?.[1] ?? match?.[2])
@@ -29,7 +33,7 @@ export class Uuid {
   }
 
   // send()'s id, which pg-boss's insert reads out of its JSON payload
-  // (node_modules/pg-boss/dist/plans.js:2303): a string as it is, anything
+  // (node_modules/pg-boss/dist/plans.js:2886): a string as it is, anything
   // else as its JSON text.
   static fromPayload(value: unknown): string {
     return Uuid.canonical(
@@ -37,7 +41,7 @@ export class Uuid {
     );
   }
 
-  // findJobs()'s id, bound as a parameter (plans.js:3694): null is SQL NULL,
+  // findJobs()'s id, bound as a parameter (plans.js:4630): null is SQL NULL,
   // which matches no job.
   static parameter(value: unknown): string | null {
     return value === null ? null : Uuid.canonical(String(value));

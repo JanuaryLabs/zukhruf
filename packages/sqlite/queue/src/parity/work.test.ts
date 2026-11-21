@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+import * as timers from 'node:timers/promises';
 
+import { PGlite } from '@electric-sql/pglite';
+import { type Clock, PgBoss, fromPglite, systemClock } from 'pg-boss';
+
+import { type JobQueue, SqliteJobQueue } from '../index.ts';
 import { flush } from '../testing/flush.ts';
 import { id } from '../testing/job-id.ts';
 import { outcome } from '../testing/outcome.ts';
@@ -63,8 +68,8 @@ describe('workers', () => {
       return results;
     });
 
-    // node_modules/pg-boss/dist/attorney.js:306-398, 585-607, run before
-    // work() checks whether the instance is stopped (manager.js:910-914).
+    // node_modules/pg-boss/dist/attorney.js:306-398, 638-660, run before
+    // work() checks whether the instance is stopped (manager.js:1160-1164).
     const rejects = (message: string) => `AssertionError: ${message}`;
     assert.deepStrictEqual(observed, {
       nullOptions: 'resolved',
@@ -165,8 +170,8 @@ describe('workers', () => {
     });
 
     // A worker fetches when it registers, then waits out its polling
-    // interval, 2s unless set (node_modules/pg-boss/dist/worker.js:50-90,
-    // attorney.js:587-589).
+    // interval, 2s unless set (node_modules/pg-boss/dist/worker.js:58-101,
+    // attorney.js:640-642).
     assert.deepStrictEqual(observed, {
       ranWhenWorkResolved: 0,
       registered: { standard: [id(1)], fast: [id(11)] },
@@ -230,7 +235,7 @@ describe('workers', () => {
 
     // PGlite runs statements in the order they arrive, so the claim lands
     // before findJobs reads even though its result is still on its way back
-    // (node_modules/pg-boss/dist/manager.js:1575-1577).
+    // (node_modules/pg-boss/dist/manager.js:1895-1897).
     assert.deepStrictEqual(observed, ['active']);
   });
 
@@ -256,7 +261,7 @@ describe('workers', () => {
 
     // The attached clock waits for every statement the burst starts before
     // tick() returns (node_modules/pg-boss/dist/clock.js:88-117,
-    // activity.js:77-93), each fetch starting as the last batch settles.
+    // activity.js:78-94), each fetch starting as the last batch settles.
     assert.deepStrictEqual(observed, [
       [id(1), id(2)],
       [id(3), id(4)],
@@ -293,10 +298,215 @@ describe('workers', () => {
       return { before, after: [...ran] };
     });
 
-    // The worker waits `interval - duration` (worker.js:79-89).
+    // The worker waits `interval - duration` (worker.js:90-100).
     assert.deepStrictEqual(observed, {
       before: [id(1)],
       after: [id(1), id(2)],
+    });
+  });
+
+  it('fetch one polling interval after a batch during which the clock was set back a day', async () => {
+    // pg-boss times the round on real time, so the set-back cannot stretch
+    // the wait by a day (12.38.1, #990, #987). A parity run's Date.now
+    // follows its TestClock, which would hide that, so each engine gets a
+    // clock of real time and real timers here, as pg-boss's own test does.
+    const fetchedNext = async (
+      queue: JobQueue,
+      setBack: () => void,
+    ): Promise<string> => {
+      await queue.start();
+      const stopWaiting = new AbortController();
+      try {
+        await queue.createQueue('jobs');
+        await queue.send('jobs', null, { id: id(1) });
+        const next = Promise.withResolvers<string>();
+        await queue.work(
+          'jobs',
+          { pollingIntervalSeconds: 0.5 },
+          async ([job]) => {
+            if (job?.id === id(1)) {
+              setBack();
+              // Sent after the set-back, so it is due on both engines:
+              // SQLite reads the clock, Postgres its own now().
+              await queue.send('jobs', null, { id: id(2) });
+            } else {
+              next.resolve('fetched');
+            }
+          },
+        );
+        return await Promise.race([
+          next.promise,
+          timers.setTimeout(10_000, 'still waiting', {
+            signal: stopWaiting.signal,
+          }),
+        ]);
+      } finally {
+        stopWaiting.abort();
+        await queue.stop({ graceful: false, close: true });
+      }
+    };
+    const settableClock = () => {
+      let offset = 0;
+      const clock: Clock = {
+        ...systemClock,
+        now: () => systemClock.now() + offset,
+      };
+      return { clock, setBack: () => (offset = -86_400_000) };
+    };
+
+    const pgBossClock = settableClock();
+    await using pglite = new PGlite();
+    const pgBoss = await fetchedNext(
+      new PgBoss({
+        backend: 'pglite',
+        db: fromPglite(pglite),
+        clock: pgBossClock.clock,
+        schedule: false,
+        supervise: false,
+      }),
+      pgBossClock.setBack,
+    );
+    const sqliteClock = settableClock();
+    const sqlite = await fetchedNext(
+      new SqliteJobQueue({
+        path: ':memory:',
+        clock: sqliteClock.clock,
+        schedule: false,
+        supervise: false,
+      }),
+      sqliteClock.setBack,
+    );
+
+    assert.deepStrictEqual(
+      { pgBoss, sqlite },
+      {
+        pgBoss: 'fetched',
+        sqlite: 'fetched',
+      },
+    );
+  });
+
+  it('hold a worker whose handler outran its expiry until the handler returns, with one handler_overrun warning', async () => {
+    const observed = await Parity.assertSame(
+      async ({ queue, clock, warnings }) => {
+        await queue.start();
+        await queue.createQueue('jobs', { expireInSeconds: 1, retryLimit: 1 });
+        await queue.send('jobs', null, { id: id(1) });
+        const runs: number[] = [];
+        const release = Promise.withResolvers<void>();
+        await queue.work('jobs', {}, async () => {
+          runs.push(clock.now() - Date.parse(ParityRun.start));
+          // Ignores job.signal, so it outruns the 1 s expiry.
+          await release.promise;
+        });
+        try {
+          await flush(clock);
+          await clock.tick(1000);
+          // Without the hold the worker would fetch the retry at 2000.
+          await clock.tick(5000);
+          const [job] = await queue.findJobs('jobs', { id: id(1) });
+          return {
+            runs: [...runs],
+            state: job?.state,
+            warnings: warnings.map(({ at, message, data }) => ({
+              at,
+              message,
+              data: { ...data, instance: typeof data['instance'] },
+            })),
+          };
+        } finally {
+          release.resolve();
+        }
+      },
+    );
+
+    // manager.js:776-806, 1213-1222 (12.38.0)
+    assert.deepStrictEqual(observed, {
+      runs: [0],
+      state: 'retry',
+      warnings: [
+        {
+          at: 1000,
+          message:
+            'a handler on queue jobs is still running after exceeding 1s. Its jobs were failed and their signals aborted, and this worker fetches nothing until it returns. Stop the handler on job.signal.',
+          data: {
+            type: 'handler_overrun',
+            instance: 'string',
+            queue: 'jobs',
+            jobs: [id(1)],
+            expireInSeconds: 1,
+          },
+        },
+      ],
+    });
+  });
+
+  it('end the hold of an overrunning handler when the worker stops, leaving the handler running', async () => {
+    const observed = await Parity.assertSame(async ({ queue, clock }) => {
+      await queue.start();
+      await queue.createQueue('jobs', { expireInSeconds: 1 });
+      await queue.send('jobs', null, { id: id(1) });
+      let settled = false;
+      const release = Promise.withResolvers<void>();
+      const workId = await queue.work('jobs', {}, async () => {
+        await release.promise;
+        settled = true;
+      });
+      try {
+        await flush(clock);
+        await clock.tick(1000);
+        // offWork waits for the worker to stop, which only its stop signal
+        // lets it do while the handler runs (worker.js:121-128); the handler
+        // is still running when offWork returns.
+        await queue.offWork('jobs', { id: workId, wait: true });
+        return { handlerSettled: settled };
+      } finally {
+        release.resolve();
+      }
+    });
+
+    assert.deepStrictEqual(observed, { handlerSettled: false });
+  });
+
+  it('keep the local group slot of a handler a stop abandoned until that handler settles', async () => {
+    const observed = await Parity.assertSame(async ({ queue, clock }) => {
+      await queue.start();
+      await queue.createQueue('jobs', { expireInSeconds: 1 });
+      await queue.send('jobs', null, { id: id(1), group: { id: 'g' } });
+      const release = Promise.withResolvers<void>();
+      const first = await queue.work(
+        'jobs',
+        { localGroupConcurrency: 1 },
+        async () => {
+          await release.promise;
+        },
+      );
+      const later: string[][] = [];
+      try {
+        await flush(clock);
+        await clock.tick(1000);
+        await queue.offWork('jobs', { id: first, wait: true });
+        await queue.send('jobs', null, { id: id(2), group: { id: 'g' } });
+        await queue.work('jobs', { localGroupConcurrency: 1 }, async (jobs) => {
+          later.push(jobs.map((job) => job.id));
+        });
+        await flush(clock);
+        await clock.tick(4000);
+        const whileRunning = [...later];
+        release.resolve();
+        await flush(clock);
+        await clock.tick(2000);
+        return { whileRunning, afterSettling: later.length > 0 };
+      } finally {
+        release.resolve();
+      }
+    });
+
+    // manager.js:1249-1262 (12.38.0): g's count drops when the abandoned
+    // handler settles, not when the stop ended the wait for it.
+    assert.deepStrictEqual(observed, {
+      whileRunning: [],
+      afterSettling: true,
     });
   });
 
@@ -317,7 +527,7 @@ describe('workers', () => {
       return { finished };
     });
 
-    // node_modules/pg-boss/dist/index.js:260-273.
+    // node_modules/pg-boss/dist/index.js:349-360.
     assert.deepStrictEqual(observed, { finished: true });
   });
 
@@ -367,8 +577,8 @@ describe('workers', () => {
     });
 
     // A notify queue's send wakes its workers at once when a stored job is due
-    // now (node_modules/pg-boss/dist/plans.js:2335-2350, manager.js:1137-1143);
-    // other jobs wait for the poll, 30s on a notify queue (attorney.js:600).
+    // now (node_modules/pg-boss/dist/plans.js:2919-2934, manager.js:1413-1419);
+    // other jobs wait for the poll, 30s on a notify queue (attorney.js:653).
     assert.deepStrictEqual(observed, {
       atSend: { plain: [], notified: [id(2)], deferred: [] },
       afterAPoll: { plain: [id(1)], notified: [id(2)], deferred: [] },
@@ -426,7 +636,7 @@ describe('workers', () => {
 
       // Each insert raises its NOTIFY as it runs (PGlite's src/pglite.ts:
       // 980-992), and a wake during a fetch makes the loop fetch again
-      // (worker.js:86, 96-100), so none waits for the 30s backstop. Which
+      // (worker.js:97, 107-111), so none waits for the 30s backstop. Which
       // batch takes which job follows PGlite's microtask depth, so only the
       // jobs that ran are compared.
       assert.deepStrictEqual(observed, { inTick: ids, afterBackstop: ids });
@@ -451,7 +661,7 @@ describe('workers', () => {
       return ran;
     });
 
-    // No NOTIFY for a job not due now (plans.js:2346), so the worker keeps
+    // No NOTIFY for a job not due now (plans.js:2930), so the worker keeps
     // its wait and finds the job when that wait ends; a wake would have
     // restarted the 30s wait.
     assert.deepStrictEqual(observed, [id(1)]);
@@ -492,7 +702,7 @@ describe('workers', () => {
     });
 
     // notifyPollingIntervalSeconds defaults to max(30s, the base poll)
-    // (node_modules/pg-boss/dist/attorney.js:590-602).
+    // (node_modules/pg-boss/dist/attorney.js:643-655).
     assert.deepStrictEqual(observed, {
       beforeTen: { backstop: [], custom: [] },
       atTen: { backstop: [], custom: [id(2)] },
@@ -522,7 +732,7 @@ describe('workers', () => {
     });
 
     // updateQueue writes notify like every other queue option
-    // (plans.js:1172); a caller that sets up its queues on each start turns
+    // (plans.js:1582); a caller that sets up its queues on each start turns
     // it on this way, when createQueue finds the queue already there.
     assert.deepStrictEqual(observed, { on: [id(1)], off: [] });
   });
@@ -548,7 +758,7 @@ describe('workers', () => {
       return { afterSend, afterFirstPoll, afterSecondPoll: attempts };
     });
 
-    // Only inserts and updates NOTIFY (plans.js:2346, 3119); a failed job's
+    // Only inserts and updates NOTIFY (plans.js:2930, 3865); a failed job's
     // retry is found by the next poll.
     assert.deepStrictEqual(observed, {
       afterSend: 0,
@@ -581,8 +791,8 @@ describe('workers', () => {
     });
 
     // JOB_COLUMNS_MIN unless includeMetadata asks for JOB_COLUMNS_ALL
-    // (node_modules/pg-boss/dist/plans.js:591-620, 2028), plus the signal
-    // the worker adds (manager.js:535).
+    // (node_modules/pg-boss/dist/plans.js:890-919, 2565), plus the signal
+    // the worker adds (manager.js:604).
     const minimal = [
       'data',
       'expireInSeconds',
@@ -712,7 +922,7 @@ describe('workers', () => {
     });
 
     // offWork matches a work() call's id against every loop it started and
-    // waits unless told not to (manager.js:1095-1125).
+    // waits unless told not to (manager.js:1371-1401).
     assert.deepStrictEqual(observed, {
       claimedAfterOnePoll: 1,
       finishedWhenOffWorkReturned: 1,

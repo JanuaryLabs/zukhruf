@@ -65,7 +65,7 @@ export class JobRows {
   }
 
   // The job as pg-boss sends it: JSON.stringify([job]) of #toJobPayload's
-  // fields, in its order (node_modules/pg-boss/dist/manager.js:1208-1230,
+  // fields, in its order (node_modules/pg-boss/dist/manager.js:1489-1511,
   // 1242).
   static payload(name: string, data: unknown, options: SendOptions): string {
     const {
@@ -156,9 +156,9 @@ export class JobRows {
     };
   }
 
-  // JOB_COLUMNS_ALL (node_modules/pg-boss/dist/plans.js:592-620), with no
+  // JOB_COLUMNS_ALL (node_modules/pg-boss/dist/plans.js:891-919), with no
   // signal: pg-boss's findJobs returns the rows as the database gives them
-  // (node_modules/pg-boss/dist/manager.js:2242-2261).
+  // (node_modules/pg-boss/dist/manager.js:2743-2772).
   static toFound(row: JobRow): FoundJob<unknown> {
     const data: unknown = JSON.parse(row.data);
 
@@ -197,7 +197,7 @@ export class JobRows {
       blocked: false,
       blocking: false,
       pendingDependencies: 0,
-      // Filled only on a dead letter copy (plans.js:2615-2643).
+      // Filled only on a dead letter copy (plans.js:3235-3264).
       sourceName: row.source_name,
       sourceId: row.source_id,
       sourceCreatedOn: SqlValues.parseNullableDate(row.source_created_on),
@@ -209,7 +209,7 @@ export class JobRows {
   }
 
   // A worker's job: what fetch gives, plus the signal that the worker adds
-  // (node_modules/pg-boss/dist/manager.js:530).
+  // (node_modules/pg-boss/dist/manager.js:599).
   static toJob(
     row: JobRow,
     includeMetadata: boolean,
@@ -219,7 +219,7 @@ export class JobRows {
   }
 
   // A fetched job: pg-boss's minimal columns unless includeMetadata asks for
-  // all of them (plans.js:591-620, 2028).
+  // all of them (plans.js:890-919, 2565).
   static toFetched(
     row: JobRow,
     includeMetadata: boolean,

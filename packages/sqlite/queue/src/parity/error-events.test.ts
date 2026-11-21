@@ -65,7 +65,7 @@ describe('error events', () => {
       registration: 'registered',
       reported: {
         isError: false,
-        keys: ['message', 'queue', 'stack', 'worker'],
+        keys: ['code', 'message', 'queue', 'stack', 'worker'],
         hasStack: true,
         queue: 'missing',
         message:

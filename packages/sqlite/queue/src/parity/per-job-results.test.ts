@@ -134,12 +134,12 @@ describe('per-job results', () => {
       },
     );
 
-    // #settlePerJob (node_modules/pg-boss/dist/manager.js:355-405): falsy
+    // #settlePerJob (node_modules/pg-boss/dist/manager.js:414-471): falsy
     // entries, entries naming no job of the batch by its exact id, or carrying
     // another status are ignored, the last valid entry per job wins, a job
     // without one fails with "no disposition returned by handler", and each
     // job keeps its own output at any batch size. Every settle is fenced to an
-    // active job at the claimed attempt (plans.js:2134-2151, 2646-2672), so a
+    // active job at the claimed attempt (plans.js:2677-2694, 3267-3293), so a
     // job cancelled or failed while its handler ran keeps that outcome.
     const settled = (n: number, state: string, output: unknown) => ({
       id: id(n),
@@ -231,11 +231,11 @@ describe('per-job results', () => {
       return { jobs, copies: await copies(queue, 'dlq') };
     });
 
-    // failJobsBody's forceTerminal (plans.js:2431-2439) fails the job and
+    // failJobsBody's forceTerminal (plans.js:3045-3053) fails the job and
     // stamps completed_on whatever retries remain, but start_after keeps its
-    // retry CASE (2494-2503): now + retry_delay, or the jittered backoff, unless
+    // retry CASE (3136-3145): now + retry_delay, or the jittered backoff, unless
     // the job's attempts are spent. The failed job is then copied into its dead
-    // letter queue (2615-2643).
+    // letter queue (3235-3264).
     const failed = (n: number, startAfter: unknown, output: unknown) => ({
       id: id(n),
       state: 'failed',
@@ -293,7 +293,7 @@ describe('per-job results', () => {
     });
 
     // A non-array result fails the batch's claimed attempts with one error
-    // (manager.js:356-363), so a job failed while the handler ran keeps the
+    // (manager.js:415-422), so a job failed while the handler ran keeps the
     // output that failure stored.
     const notAnArray = {
       name: 'Error',
@@ -385,9 +385,9 @@ describe('per-job results', () => {
       },
     );
 
-    // Three statements, not one transaction (manager.js:392-394): a group that
+    // Three statements, not one transaction (manager.js:454-462): a group that
     // throws leaves the groups before it settled, and the batch's failure
-    // (manager.js:639-655) then fails only what is still active, as a plain
+    // (manager.js:721-737) then fails only what is still active, as a plain
     // fail, so a dead-letter disposition never landed is retried.
     const thrown = {
       name: 'Error',
@@ -479,7 +479,7 @@ describe('per-job results', () => {
     });
 
     // Each group's statement matches (id, retry_count) of an active job
-    // (plans.js:2147, 2650, 2663), so attempt 0's dispositions land nowhere
+    // (plans.js:2690, 3271, 3284), so attempt 0's dispositions land nowhere
     // once attempt 1 holds the jobs.
     const all = (state: string, output: unknown) =>
       [1, 2, 3].map((n) => ({ id: id(n), state, retryCount: 1, output }));
@@ -536,7 +536,7 @@ describe('per-job results', () => {
 
     // A group binds its outputs as one JSON recordset: each mapped through
     // mapCompletionDataArg, then the payload stringified, then read row by row
-    // into jsonb (manager.js:412, 422, 447, 451; plans.js:2137, 2654, 2667), so
+    // into jsonb (manager.js:478, 488, 513, 517; plans.js:2680, 3275, 3288), so
     // a toJSON string is stored as a JSON string.
     const thrown = {
       name: 'Error',

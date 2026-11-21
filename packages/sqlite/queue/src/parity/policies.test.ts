@@ -39,7 +39,7 @@ async function jobStates(queue: JobQueue, name: string) {
 }
 
 // One poll's worth of time. Both backends poll every 2s by default
-// (node_modules/pg-boss/dist/attorney.js:587-589) and only on tick(), which
+// (node_modules/pg-boss/dist/attorney.js:640-642) and only on tick(), which
 // returns once each one's fetches settle (clock.js:88-117).
 async function poll(clock: TestClock) {
   await clock.tick(2000);
@@ -52,7 +52,7 @@ async function pollUntil(clock: TestClock, isDone: () => boolean) {
   }
 }
 
-// The policies whose batch fetch claims one job per key (plans.js:1842).
+// The policies whose batch fetch claims one job per key (plans.js:2367-2368).
 const singletonFetchPolicies = [policies.singleton, policies.stately];
 
 describe('queue policies and throttling', () => {
@@ -79,7 +79,7 @@ describe('queue policies and throttling', () => {
           ),
         };
         // fail() moves a job that never ran to retry while it has retries
-        // left (plans.js:2367-2370, 2433-2436).
+        // left (plans.js:2951-2955, 3047-3050).
         await queue.fail(policy, first);
         results[policy] = {
           ...sends,
@@ -95,7 +95,7 @@ describe('queue policies and throttling', () => {
       return results;
     });
 
-    // Per pg-boss's unique indexes (plans.js:882-893, 921-925): short allows one
+    // Per pg-boss's unique indexes (plans.js:1238-1249, 1277-1281): short allows one
     // created job per key, singleton one active (so queued duplicates pass),
     // stately one per state, exclusive one queued, retrying or active,
     // key_strict_fifo one active, retrying or failed, and refuses a job without
@@ -161,7 +161,7 @@ describe('queue policies and throttling', () => {
         singletonSeconds: 60,
       });
       // Half a second into a minute, a negative width's next slot starts now,
-      // which manager.js:1538 bumps to one second.
+      // which manager.js:1855 bumps to one second.
       await clock.setTime('2026-01-01T00:01:00.500Z');
       const negativeWidth = await send(10, {
         singletonKey: 'n',
@@ -186,8 +186,9 @@ describe('queue policies and throttling', () => {
       nextSlot: { startAfter: 61_000, singletonOn: slot + 60_000 },
       noKey: { startAfter: 10_000, singletonOn: slot },
       noKeyAgain: null,
-      zeroWidth: 'error: division by zero (22012)',
-      // A cancelled job gives its slot back (plans.js:891-893).
+      zeroWidth:
+        'Error: one or more jobs could not be created. This usually means a job id was duplicated, collided with an existing job, or was rejected by a queue policy (short, singleton, stately, or exclusive).',
+      // A cancelled job gives its slot back (plans.js:1247-1249).
       afterCancel: { startAfter: 10_000, singletonOn: slot },
       negativeWidth: { startAfter: 60_500, singletonOn: slot + 120_000 },
       negativeNextSlot: { startAfter: 61_500, singletonOn: slot + 60_000 },
@@ -232,7 +233,7 @@ describe('queue policies and throttling', () => {
     );
 
     // pg-boss's fetch claims the queued job, the policy's unique index refuses
-    // it, and the worker treats that as an empty fetch (manager.js:1580-1586).
+    // it, and the worker treats that as an empty fetch (manager.js:1900-1906).
     assert.deepStrictEqual(observed, {
       singleton: {
         queued: id(2),
@@ -311,7 +312,7 @@ describe('queue policies and throttling', () => {
     });
 
     // pg-boss ranks a singleton or stately batch by singleton_key and claims
-    // the first of each (plans.js:1842, 1971-1975, 2026).
+    // the first of each (plans.js:2367-2368, 2508-2512, 2563).
     assert.deepStrictEqual(observed, {
       singleton: { batchSize: 3, running: ['a', 'b', null] },
       stately: { batchSize: 3, running: ['a', 'b', null] },
@@ -417,7 +418,7 @@ describe('queue policies and throttling', () => {
     });
 
     // A key's head is its due retry job, else its oldest due job, and it
-    // waits while a sibling is active, retrying or failed (plans.js:1900-1917,
+    // waits while a sibling is active, retrying or failed (plans.js:2425-2442,
     // 1929-1939).
     assert.deepStrictEqual(observed, {
       batches: [[a1, b1, d2, g2, h2], [e1], [a2, d1, h1]],
@@ -444,9 +445,9 @@ describe('queue policies and throttling', () => {
     });
 
     // job_i8 holds one active, retrying or failed job per key
-    // (plans.js:924-926), so the second job can join the first neither in
+    // (plans.js:1280-1282), so the second job can join the first neither in
     // retry nor, failing over, in failed: the call rolls back
-    // (plans.js:2532-2609).
+    // (plans.js:3150-3229).
     assert.deepStrictEqual(observed, {
       secondFail:
         'error: duplicate key value violates unique constraint "job_common_i8" (23505)',

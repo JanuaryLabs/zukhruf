@@ -22,7 +22,7 @@ const keyed = (options: SendOptions, singletonKey: string | undefined) => {
 };
 
 // The ids of a batch, sorted: pg-boss's `UPDATE ... RETURNING` has no ORDER
-// BY (node_modules/pg-boss/dist/plans.js:2019-2028), so the order inside a
+// BY (node_modules/pg-boss/dist/plans.js:2556-2565), so the order inside a
 // batch is the planner's.
 const ids = (jobs: { id: string }[]) => jobs.map((job) => job.id).sort();
 
@@ -64,8 +64,8 @@ describe('fetch()', () => {
     });
 
     // limit: options.batchSize || 1 (node_modules/pg-boss/dist/
-    // manager.js:1571), JOB_COLUMNS_MIN (plans.js:591, 2028), and no signal:
-    // only a worker adds one (manager.js:530).
+    // manager.js:1891), JOB_COLUMNS_MIN (plans.js:890, 2565), and no signal:
+    // only a worker adds one (manager.js:599).
     assert.deepStrictEqual(observed, {
       empty: [],
       first: [
@@ -122,7 +122,7 @@ describe('fetch()', () => {
       };
     });
 
-    // `ORDER BY priority desc, created_on` and the LIMIT (plans.js:1947-1970).
+    // `ORDER BY priority desc, created_on` and the LIMIT (plans.js:2484-2507).
     // The order of the ids in one batch is not compared: see `ids`.
     assert.deepStrictEqual(observed, {
       first: [id(3)],
@@ -164,7 +164,7 @@ describe('fetch()', () => {
       return { plain, heads };
     });
 
-    // plans.js:1928, and 1915 for the head of a key.
+    // plans.js:2453, and 1915 for the head of a key.
     assert.deepStrictEqual(observed, {
       plain: {
         byDefault: [],
@@ -195,8 +195,8 @@ describe('fetch()', () => {
       }));
     });
 
-    // JOB_COLUMNS_ALL (plans.js:592-620, 2028), as the claim wrote the row
-    // (2019-2023).
+    // JOB_COLUMNS_ALL (plans.js:891-919, 2565), as the claim wrote the row
+    // (2556-2560).
     assert.strictEqual(observed.length, 1);
     assert.partialDeepStrictEqual(observed[0], {
       state: 'active',
@@ -254,8 +254,8 @@ describe('fetch()', () => {
       return attempts;
     });
 
-    // retry_count + 1 when the job was started before (plans.js:2019-2023);
-    // the attempt fence (manager.js:1596-1606).
+    // retry_count + 1 when the job was started before (plans.js:2556-2560);
+    // the attempt fence (manager.js:1980-1990).
     const round = (retryCount: number, at: number, state: string) => ({
       fetched: [{ id: id(1), retryCount }],
       claimed: { state: 'active', retryCount, startedOn: at, heartbeatOn: at },
@@ -287,7 +287,7 @@ describe('fetch()', () => {
         };
         // The key of each job of a batch, sorted. Which job of a key a
         // singleton or stately batch takes is not specified: pg-boss ranks
-        // them with no ORDER BY (plans.js:1971-1975).
+        // them with no ORDER BY (plans.js:2508-2512).
         const keys = async (jobs: { id: string }[]) => {
           const found = await queue.findJobs(policy);
           return jobs
@@ -332,8 +332,8 @@ describe('fetch()', () => {
     });
 
     // The claim of a singleton or stately batch takes one job of each key
-    // (plans.js:1842, 1971-1975, 2026); key_strict_fifo takes heads only
-    // (1907-1939).
+    // (plans.js:2367-2368, 2508-2512, 2563); key_strict_fifo takes heads only
+    // (2432-2464).
     const batches = Object.fromEntries(
       Object.entries(observed).map(([policy, { first, second, third }]) => [
         policy,
@@ -355,38 +355,113 @@ describe('fetch()', () => {
     });
   });
 
-  it('skips the singleton key that the supervisor last counted as active', async () => {
-    const observed = await Parity.assertSame(
-      async ({ queue, clock, errors }) => {
-        await queue.start();
-        await queue.createQueue('jobs', { policy: policies.singleton });
-        await queue.send('jobs', null, { id: id(1), singletonKey: 'k1' });
-        const held = ids(await queue.fetch('jobs'));
-        await queue.send('jobs', null, { id: id(2), singletonKey: 'k1' });
-        await queue.send('jobs', null, { id: id(3), singletonKey: 'k2' });
-        // Both keys are candidates, and the index refuses the claim of k1.
-        const beforeThePass = ids(await queue.fetch('jobs', { batchSize: 2 }));
-        await clock.tick(1000);
-        await clock.tick(1000);
-        const afterThePass = ids(await queue.fetch('jobs', { batchSize: 2 }));
-        return {
-          held,
-          beforeThePass,
-          afterThePass,
-          errors: errors.map((error) => error.message),
-        };
-      },
-      supervised,
-    );
+  it('skips the singleton key whose job is active, with no supervisor pass', async () => {
+    const observed = await Parity.assertSame(async ({ queue, errors }) => {
+      await queue.start();
+      await queue.createQueue('jobs', { policy: policies.singleton });
+      await queue.send('jobs', null, { id: id(1), singletonKey: 'k1' });
+      const held = ids(await queue.fetch('jobs'));
+      await queue.send('jobs', null, { id: id(2), singletonKey: 'k1' });
+      await queue.send('jobs', null, { id: id(3), singletonKey: 'k2' });
+      const first = ids(await queue.fetch('jobs', { batchSize: 2 }));
+      const second = ids(await queue.fetch('jobs', { batchSize: 2 }));
+      return {
+        held,
+        first,
+        second,
+        errors: errors.map((error) => error.message),
+      };
+    });
 
-    // ignoreSingletons: singletonsActive (manager.js:1564-1572,
-    // plans.js:1941); a unique violation is an empty fetch
-    // (manager.js:1580-1586).
+    // The fetch reads the active keys live (12.37.1, #957:
+    // plans.js:2466-2478), so k1 waits while job 1 is active.
     assert.deepStrictEqual(observed, {
       held: [id(1)],
-      beforeThePass: [],
-      afterThePass: [id(3)],
+      first: [id(3)],
+      second: [],
       errors: [],
+    });
+  });
+
+  it('gives back a claimed job whose group, counted again after the claim, is over that job tier limit', async () => {
+    const observed = await Parity.assertSame(async ({ queue }) => {
+      await queue.start();
+      await queue.createQueue('jobs');
+      await queue.send('jobs', null, {
+        id: id(1),
+        group: { id: 'g', tier: 'low' },
+      });
+      await queue.send('jobs', null, {
+        id: id(2),
+        group: { id: 'g', tier: 'high' },
+      });
+      const fetched = ids(
+        await queue.fetch('jobs', {
+          batchSize: 2,
+          groupConcurrency: { default: 1, tiers: { low: 1, high: 5 } },
+        }),
+      );
+      const [low] = await queue.findJobs('jobs', { id: id(1) });
+      return {
+        fetched,
+        low: {
+          state: low?.state,
+          startedOn: low?.startedOn ?? null,
+          retryCount: low?.retryCount,
+        },
+      };
+    });
+
+    // The claim ranks g's jobs across its tiers and checks each against its
+    // own tier, so it takes both; the recount finds two active in g, over
+    // low's limit of 1, and gives job 1 back as it was (12.38.1:
+    // manager.js:1908-1937, 1951-1975; plans.js:2778).
+    assert.deepStrictEqual(observed, {
+      fetched: [id(2)],
+      low: { state: 'created', startedOn: null, retryCount: 0 },
+    });
+  });
+
+  it('keeps a job active and runs it when the stately index refuses its give-back', async () => {
+    const observed = await Parity.assertSame(async ({ queue }) => {
+      await queue.start();
+      await queue.createQueue('jobs', { policy: 'stately', retryLimit: 1 });
+      await queue.send('jobs', null, {
+        id: id(1),
+        singletonKey: 'k',
+        group: { id: 'g', tier: 'low' },
+      });
+      // Job 1 waits in retry, so key k's created slot is free for job 2.
+      await queue.fetch('jobs');
+      await queue.fail('jobs', id(1));
+      await queue.send('jobs', null, { id: id(2), singletonKey: 'k' });
+      await queue.send('jobs', null, {
+        id: id(3),
+        singletonKey: 'm',
+        group: { id: 'g', tier: 'high' },
+      });
+      const fetched = ids(
+        await queue.fetch('jobs', {
+          batchSize: 3,
+          groupConcurrency: { default: 1, tiers: { low: 1, high: 5 } },
+        }),
+      );
+      const states = (await queue.findJobs('jobs')).map(
+        ({ id: jobId, state }) => [jobId, state],
+      );
+      return { fetched, states };
+    });
+
+    // Job 1 is over low's limit after the claim, but its way back to created
+    // meets job 2 on key k's created slot (plans.js:1245): the refused job
+    // stays active and runs (manager.js:1947-1975).
+    assert.deepStrictEqual(observed, {
+      fetched: [id(1), id(3)],
+      states: [
+        [id(1), 'active'],
+        [id(2), 'created'],
+        [id(3), 'active'],
+      ],
     });
   });
 
@@ -432,7 +507,7 @@ describe('fetch()', () => {
       };
     });
 
-    // plans.js:1942 for ignoreGroups; 1857-1900 and 1981-1994 for the limits.
+    // plans.js:2479 for ignoreGroups; 1857-1900 and 1981-1994 for the limits.
     assert.deepStrictEqual(observed, {
       ignored: [id(4), id(5)],
       limited: [id(1), id(6)],
@@ -465,7 +540,7 @@ describe('fetch()', () => {
       };
     });
 
-    // plans.js:1943-1944.
+    // plans.js:2480-2481.
     assert.deepStrictEqual(observed, {
       between: [id(2), id(3)],
       atMost: [id(1)],
@@ -497,7 +572,7 @@ describe('fetch()', () => {
       };
     });
 
-    // attorney.js:399-406, manager.js:849-861.
+    // attorney.js:399-406, manager.js:1044-1056.
     assert.partialDeepStrictEqual(observed, {
       noName: 'AssertionError: missing queue name',
       noQueue: 'Error: Queue missing does not exist',
@@ -547,7 +622,7 @@ describe('fetch()', () => {
       }
     });
 
-    // manager.js:1552-1559, 1562.
+    // manager.js:1869-1876, 1882.
     const both = [
       `priority: false ${sortWarning}`,
       `orderByCreatedOn: false ${sortWarning}`,
@@ -576,7 +651,7 @@ describe('fetch()', () => {
       };
     });
 
-    // Only the jobs of a worker fail at stop (manager.js:866-905), and a
+    // Only the jobs of a worker fail at stop (manager.js:1110-1155), and a
     // fetch still answers while the database stays open.
     assert.deepStrictEqual(observed, {
       fetched: [id(1)],
@@ -627,7 +702,7 @@ describe('fetch()', () => {
     );
 
     // failJobsByTimeout: started_on + expire_seconds < now
-    // (plans.js:2372-2378).
+    // (plans.js:2957-2961, 2968-2971).
     assert.deepStrictEqual(observed, {
       timeline: [
         {

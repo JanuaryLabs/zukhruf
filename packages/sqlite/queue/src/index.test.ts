@@ -149,7 +149,7 @@ describe('SqliteJobQueue', () => {
   });
 
   // SQLite-only: pg-boss swallows only a policy index refusing a claim and
-  // surfaces every other fetch error (manager.js:1580-1586). The trigger stands
+  // surfaces every other fetch error (manager.js:1900-1906). The trigger stands
   // in for a disk failure, which no queue operation can cause on purpose.
   it('reports a claim that fails for a reason other than a policy index', async (t) => {
     const database = open(':memory:');
@@ -174,6 +174,58 @@ describe('SqliteJobQueue', () => {
       const [job] = await queue.findJobs('jobs', { id: jobId });
       assert.match(errors[0] ?? '', /^disk I\/O error \(Queue: jobs, Worker: /);
       assert.equal(job?.state, 'created');
+    } finally {
+      await queue.stop({ graceful: false, close: true });
+      database.close();
+    }
+  });
+
+  // SQLite-only: a lookup here reads the live row, so pg-boss has no fault that
+  // fails its refresh and spares the lookups; one row no refresh can read
+  // does that here. onCacheQueues keeps the cache when a refresh fails
+  // (node_modules/pg-boss/dist/manager.js:1033-1042), and a worker bursts on
+  // the counts the cache held (1185-1200).
+  it('keeps the queue cache it held when a refresh fails, so a worker still bursts on its counts', async () => {
+    const database = open(':memory:');
+    const clock = new TestClock('2026-01-01T00:00:00.000Z');
+    const queue = new SqliteJobQueue({
+      database,
+      clock,
+      schedule: false,
+      supervise: true,
+      superviseIntervalSeconds: 1,
+      // One count, at 1000, before the minute runs out.
+      monitorIntervalSeconds: 60,
+      maintenanceIntervalSeconds: 1,
+      queueCacheIntervalSeconds: 1,
+    });
+    const errors: string[] = [];
+    queue.on('error', (error) => errors.push(error.message));
+    try {
+      await queue.start();
+      await queue.createQueue('jobs');
+      await queue.createQueue('other');
+      for (const n of [1, 2, 3, 4, 5]) {
+        await queue.send('jobs', null, { id: id(n) });
+      }
+      // The pass at 1000 counts 5 ready; the refresh at 2000 caches them.
+      await clock.tick(2000);
+      // The row now says none are ready, which a refresh or a lookup that
+      // missed the cache would read; only the counts the cache held burst.
+      database.exec(`UPDATE pgboss_queue SET ready_count = 0 WHERE name = 'jobs';
+        UPDATE pgboss_queue SET retry_limit = 'x' WHERE name = 'other'`);
+      await clock.tick(1000);
+      const claims: string[][] = [];
+      await queue.work('jobs', { burstWhenReadyExceeds: 1 }, async (jobs) => {
+        claims.push(jobs.map((job) => job.id));
+      });
+      await clock.tick(0);
+
+      assert.notEqual(errors.length, 0);
+      assert.deepStrictEqual(
+        claims,
+        [1, 2, 3, 4, 5].map((n) => [id(n)]),
+      );
     } finally {
       await queue.stop({ graceful: false, close: true });
       database.close();
@@ -306,7 +358,7 @@ describe('SqliteJobQueue', () => {
   // SQLite-only: the harness starts every queue before its workers. A worker
   // registered before start() is woken by it on a notify queue, as pg-boss
   // wakes them once its listener connects (adapters/pglite.js:144-152,
-  // manager.js:1144-1152); in memory, another instance's send never reaches
+  // manager.js:1420-1428); in memory, another instance's send never reaches
   // it, since only a file has the notifications of @zukhruf/sqlite-notify.
   it('wakes workers registered before start once it starts listening', async () => {
     const clock = new TestClock('2026-01-01T00:00:00.000Z');
@@ -342,10 +394,10 @@ describe('SqliteJobQueue', () => {
   });
 
   // A pg-boss listener hears the NOTIFY of its own instance
-  // (notifier.js:57). On a file the notification goes through
+  // (notifier.js:58). On a file the notification goes through
   // @zukhruf/sqlite-notify, and the instance that sent it hears it too,
   // before its poll. The poll here is an hour, also when the queue does not
-  // listen (attorney.js:587, 601): longer than the test runner lets a test run
+  // listen (attorney.js:640, 654): longer than the test runner lets a test run
   // (--test-timeout), so only the notification can run the second job before
   // the test ends.
   it('wakes its own waiting worker when it sends to a notify queue on a file', async (t) => {
@@ -381,7 +433,7 @@ describe('SqliteJobQueue', () => {
     }
   });
 
-  // node_modules/pg-boss/dist/plans.js:859-861, 2343-2347: the channel is
+  // node_modules/pg-boss/dist/plans.js:1173-1175, 2927-2931: the channel is
   // 'pgboss_' and 24 hex digits of the SHA-224 of the schema 'pgboss', and the
   // payload is the name of the queue. Another program on the file, which
   // listens on that channel, hears the send.

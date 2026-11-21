@@ -9,7 +9,7 @@ import { id } from '../testing/job-id.ts';
 import { Parity } from './parity.ts';
 
 // One poll's worth of time: both backends poll every 2s by default
-// (node_modules/pg-boss/dist/attorney.js:587-589).
+// (node_modules/pg-boss/dist/attorney.js:640-642).
 async function poll(clock: TestClock) {
   await clock.tick(2000);
 }
@@ -62,7 +62,7 @@ async function jobStates(queue: JobQueue) {
     .sort((a, b) => a.id.localeCompare(b.id));
 }
 
-// node_modules/pg-boss/dist/manager.js:919-920, raised for the harness's
+// node_modules/pg-boss/dist/manager.js:1169-1170, raised for the harness's
 // fromPglite adapter, which implements no beginTransaction
 // (adapters/pglite.js:16-155), and by SQLite for every transactional worker.
 const refused = {
@@ -144,10 +144,10 @@ describe('transactional workers', () => {
     });
 
     // work() runs checkWorkArgs (attorney.js:357-398), then the stopped check
-    // (manager.js:912-914), then the capability assert (919-920), before it
-    // stores a local group limit or spawns a worker (924-1003). The bound is
+    // (manager.js:1162-1164), then the capability assert (919-920), before it
+    // stores a local group limit or spawns a worker (1178-1278). The bound is
     // only validated (attorney.js:388-398). Without transactional the handler
-    // gets the jobs alone (manager.js:603-605).
+    // gets the jobs alone (manager.js:683-685).
     const checkWorkArgs = (message: string) => ({ ...refused, message });
     assert.deepStrictEqual(observed, {
       beforeStart: refused,
@@ -214,9 +214,9 @@ describe('transactional workers', () => {
     });
 
     // pg-boss stores a queue's local group limit only after the capability
-    // assert passes (manager.js:919-925, 454-460), so g1 keeps its limit of
+    // assert passes (manager.js:1169-1179, 520-526), so g1 keeps its limit of
     // 2: both workers' polls claim one g1 job each and neither is restored
-    // (manager.js:970-983).
+    // (manager.js:1236-1250).
     assert.deepStrictEqual(observed, {
       refusal: refused,
       batches: [[id(1)], [id(2)]],
@@ -250,7 +250,7 @@ describe('transactional workers', () => {
 
     // checkWorkArgs spreads the options into a copy (attorney.js:370), which
     // keeps own properties only, and work() reads that copy
-    // (manager.js:911-915): the worker is neither transactional nor batched.
+    // (manager.js:1161-1165): the worker is neither transactional nor batched.
     assert.deepStrictEqual(observed, {
       registered: 'resolved',
       batches: [[id(1)]],

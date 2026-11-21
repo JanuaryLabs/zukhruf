@@ -85,7 +85,7 @@ describe('send(request)', () => {
     // checkSendArgs (node_modules/pg-boss/dist/attorney.js:118-153): a
     // string first argument is the positional form, any other object the
     // request form with exactly one argument, and anything else has no name.
-    // createJob stores the payload through JSON (manager.js:1232-1243).
+    // createJob stores the payload through JSON (manager.js:1513-1528).
     const rejects = (message: string) => `AssertionError: ${message}`;
     const noQueueName = rejects('boss requires all jobs to have a queue name');
     assert.deepStrictEqual(observed, {

@@ -15,13 +15,13 @@ import { Row } from './rows.ts';
 import { SqlValues } from './sql-values.ts';
 import { Uuid } from './uuid.ts';
 
-// pg-boss's attemptFence (node_modules/pg-boss/dist/plans.js:2051-2054): a
+// pg-boss's attemptFence (node_modules/pg-boss/dist/plans.js:2588-2591): a
 // settle given the attempt it was claimed at touches the job only while that
 // attempt still holds it.
 const ATTEMPT_FENCE = "AND state = 'active' AND retry_count = ?";
 
 // A job's settle at the attempt its worker claimed, with the output stored on
-// it (node_modules/pg-boss/dist/manager.js:393).
+// it (node_modules/pg-boss/dist/manager.js:452).
 export type JobOutcome = JobAttempt & { output: unknown };
 
 type Settle = {
@@ -32,7 +32,7 @@ type Settle = {
 
 export class JobSettler {
   // pg-boss's mapCommandResponse over settledCountAndIds (node_modules/pg-boss/
-  // dist/manager.js:1623-1632, plans.js:2413-2415): the ids a settle touched,
+  // dist/manager.js:2007-2016, plans.js:3017-3019): the ids a settle touched,
   // each once, and their count.
   static response(ids: string[], settled: string[]) {
     return {
@@ -44,7 +44,7 @@ export class JobSettler {
   }
 
   // complete() past its argument checks. Plain ids carry no attempts, and the
-  // settle is then not fenced (node_modules/pg-boss/dist/manager.js:1636-1656).
+  // settle is then not fenced (node_modules/pg-boss/dist/manager.js:2020-2042).
   static complete(
     db: DatabaseSync,
     name: string,
@@ -54,7 +54,7 @@ export class JobSettler {
     includeQueued: boolean,
     now: Date,
   ): string[] {
-    // Postgres reads the bound ids before the output (manager.js:1651).
+    // Postgres reads the bound ids before the output (manager.js:2036).
     const uuids = ids.map((jobId) => Uuid.canonical(jobId));
     const output = CompletionData.serialize(data);
     return JobSettler.#completeEach(
@@ -66,7 +66,7 @@ export class JobSettler {
     );
   }
 
-  // completeJobsWithOutputs (node_modules/pg-boss/dist/plans.js:2134-2151):
+  // completeJobsWithOutputs (node_modules/pg-boss/dist/plans.js:2677-2694):
   // each job its own output.
   static completeWithOutputs(
     db: DatabaseSync,
@@ -83,7 +83,7 @@ export class JobSettler {
     );
   }
 
-  // completeJobsUpdate (node_modules/pg-boss/dist/plans.js:2082-2095): an
+  // completeJobsUpdate (node_modules/pg-boss/dist/plans.js:2619-2632): an
   // active job, or with includeQueued a job that is not yet completed, and
   // with an attempt only while that attempt holds the job. pg-boss also clears
   // `blocked` and `pending_dependencies` there with includeQueued. Only its
@@ -123,7 +123,7 @@ export class JobSettler {
   }
 
   // fail() past its argument checks, for any value: a handler's throw or
-  // shutdown's message reach it as they are (manager.js:639-655, 893).
+  // shutdown's message reach it as they are (manager.js:721-737, 1143).
   static fail(
     db: DatabaseSync,
     name: string,
@@ -132,7 +132,7 @@ export class JobSettler {
     attempts: number[] | undefined,
     now: Date,
   ): string[] {
-    // Postgres reads the bound ids before the output (manager.js:1691).
+    // Postgres reads the bound ids before the output (manager.js:2078).
     const uuids = ids.map((jobId) => Uuid.canonical(jobId));
     const output = CompletionData.serialize(data);
     return JobSettler.#failEach(
@@ -176,7 +176,7 @@ export class JobSettler {
   }
 
   // failJobsByIdWithOutputs, or with forceTerminal deadLetterJobsByIdWithOutputs
-  // (plans.js:2646-2672): each job its own output.
+  // (plans.js:3267-3293): each job its own output.
   static failWithOutputs(
     db: DatabaseSync,
     name: string,
@@ -194,7 +194,7 @@ export class JobSettler {
   }
 
   // Every output of a group is serialized before its statement runs
-  // (manager.js:412, 422, 447, 451).
+  // (manager.js:478, 488, 513, 517).
   static #serializeOutputs(outcomes: JobOutcome[]) {
     const outputs = CompletionData.serializeAll(
       outcomes.map(({ output }) => output),
@@ -265,6 +265,7 @@ export class JobSettler {
       `UPDATE pgboss_job
       SET state = ?,
         start_after = ?,
+        keep_until = ?,
         completed_on = ?,
         failed_on = ?,
         output = ?,
@@ -274,17 +275,25 @@ export class JobSettler {
     );
     const isoNow = SqlValues.asIso(now);
 
-    // failJobsBody (node_modules/pg-boss/dist/plans.js:2430-2645): retry while
+    // failJobsBody (node_modules/pg-boss/dist/plans.js:3044-3266): retry while
     // attempts remain, or with forceTerminal fail at once with the retry's
-    // start_after (2431-2439, 2494-2503); a row the key's unique index refuses
-    // fails for good instead (2529, 2607), keeping its start_after. With the
+    // start_after (3045-3053, 3136-3145); a row the key's unique index refuses
+    // fails for good instead (3147, 3227), keeping its start_after. With the
     // attempts spent, the CASEs compute that same failed row.
     if (job.retry_count < job.retry_limit) {
       const completedOn = forceTerminal ? isoNow : null;
+      const startAfter = JobSettler.#nextRetryStartAfter(job, now);
+      // The retention window moves with the start (12.38.2, #994:
+      // plans.js:3119, 3023).
+      const keepUntil = new Date(
+        startAfter.getTime() +
+          (Date.parse(job.keep_until) - Date.parse(job.start_after)),
+      );
       const landed = JobSettler.#unlessRefused(() =>
         settle.run(
           forceTerminal ? 'failed' : 'retry',
-          SqlValues.asIso(JobSettler.#nextRetryStartAfter(job, now)),
+          SqlValues.asIso(startAfter),
+          SqlValues.asIso(keepUntil),
           completedOn,
           completedOn,
           output,
@@ -300,7 +309,16 @@ export class JobSettler {
       }
     }
     try {
-      settle.run('failed', job.start_after, isoNow, isoNow, output, name, id);
+      settle.run(
+        'failed',
+        job.start_after,
+        job.keep_until,
+        isoNow,
+        isoNow,
+        output,
+        name,
+        id,
+      );
     } catch (error) {
       // The failed row has no ON CONFLICT (2532-2609): only key_strict_fifo's
       // job_i8 holds failed jobs, and its refusal rolls the call back.
@@ -319,7 +337,7 @@ export class JobSettler {
     return true;
   }
 
-  // ON CONFLICT DO NOTHING (plans.js:2529): false when a unique index refused
+  // ON CONFLICT DO NOTHING (plans.js:3147): false when a unique index refused
   // the write.
   static #unlessRefused(write: () => unknown): boolean {
     try {
@@ -333,7 +351,7 @@ export class JobSettler {
     }
   }
 
-  // plans.js:2494-2503: retry_delay seconds, or with backoff
+  // plans.js:3136-3145: retry_delay seconds, or with backoff
   // max(retry_delay, 1)·2^e/2·(1 + random()) for e = min(16, retry_count + 1),
   // capped by retry_delay_max when one is set.
   static #nextRetryStartAfter(row: JobRow, now: Date): Date {
@@ -350,7 +368,7 @@ export class JobSettler {
     );
   }
 
-  // plans.js:2615-2643: a job that ends failed is copied into its dead letter
+  // plans.js:3235-3264: a job that ends failed is copied into its dead letter
   // queue as a new job with that queue's retry settings, retention, expiry,
   // deletion and heartbeat, the job's data, priority, key and group, and its
   // lineage.
@@ -435,7 +453,7 @@ export class JobSettler {
     return [...settled];
   }
 
-  // restoreJobs (node_modules/pg-boss/dist/plans.js:2201-2209): back to
+  // restoreJobs (node_modules/pg-boss/dist/plans.js:2767-2786): back to
   // created whatever the state, unfenced, and with started_on cleared so the
   // next claim spends no attempt.
   static restore(db: DatabaseSync, name: string, ids: string[]): void {
@@ -447,7 +465,7 @@ export class JobSettler {
   }
 
   // touch() past its argument checks (node_modules/pg-boss/dist/manager.js:
-  // 1994-2002, plans.js:2387-2400): an active job, and with an attempt only
+  // 1994-2002, plans.js:2993-3006): an active job, and with an attempt only
   // while that attempt holds the job. Plain ids carry no attempts, and the
   // touch is then not fenced. It gives the ids whose heartbeat it refreshed.
   static touch(

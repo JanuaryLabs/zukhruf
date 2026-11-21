@@ -82,7 +82,7 @@ function holding(clock: TestClock) {
 
 // An expireInSeconds 1 job batched with a 900 s one: the batch's deadline is
 // the larger expiry, so only the supervisor can expire the short job
-// (node_modules/pg-boss/dist/manager.js:520-535).
+// (node_modules/pg-boss/dist/manager.js:589-604).
 async function expiry(
   { queue, clock, errors }: ParityRun,
   createOptions: {
@@ -158,8 +158,8 @@ describe('supervisor', () => {
     );
 
     // failJobsByTimeout: active AND started_on + expire_seconds < now
-    // (plans.js:2372-2378), through failJobsBody's retry branch unfenced
-    // (2430-2445). The handler keeps running; its completion is fenced out
+    // (plans.js:2957-2961, 2968-2971), through failJobsBody's retry branch unfenced
+    // (3044-3059). The handler keeps running; its completion is fenced out
     // and its signals abort only when the batch settles.
     const retried = {
       ...active,
@@ -167,6 +167,9 @@ describe('supervisor', () => {
       startAfter: 62000,
       output: timedOut,
       heartbeatOn: null,
+      // The retention window moves with the start (12.38.2, #994:
+      // plans.js:3119).
+      keepUntil: 62000 + retention,
     };
     const abort = (n: number) => ({
       id: id(n),
@@ -195,7 +198,7 @@ describe('supervisor', () => {
     );
 
     // failJobsBody's failed branch keeps start_after and dead-letters the
-    // job with its output as source_output (plans.js:2433-2439, 2615-2643).
+    // job with its output as source_output (plans.js:3047-3053, 3235-3264).
     const failed = {
       ...active,
       state: 'failed',
@@ -204,7 +207,7 @@ describe('supervisor', () => {
       heartbeatOn: null,
     };
     assert.deepStrictEqual(observed.timeline.at(-1), { at: 2000, job: failed });
-    // The handler's completion at 3000 is fenced out (plans.js:2051-2054).
+    // The handler's completion at 3000 is fenced out (plans.js:2588-2591).
     assert.deepStrictEqual(observed.settled[0], failed);
     assert.deepStrictEqual(observed.deadLetters, [
       {
@@ -287,21 +290,22 @@ describe('supervisor', () => {
     );
 
     // failJobsByHeartbeat: heartbeat_on + heartbeat_seconds < now
-    // (plans.js:2379-2385); the worker's next touch finds the claim gone
-    // (manager.js:537-566).
+    // (plans.js:2962-2967, 2972-2975); the worker's next touch finds the claim gone
+    // (manager.js:606-635).
     const retried = {
       ...active,
       state: 'retry',
       startAfter: 611000,
       output: { value: { message: 'job heartbeat timeout' } },
       heartbeatOn: null,
+      keepUntil: 611000 + retention,
     };
     const lost = {
       id: id(1),
       at: 60000,
       reason: `job ${id(1)} is no longer active under this worker's claim`,
     };
-    // Expiry runs first in a pass (boss.js:368-378), so a job past both
+    // Expiry runs first in a pass (boss.js:400-408), so a job past both
     // stores the timeout.
     const both = [{ ...retried, output: timedOut }, retried];
     assert.deepStrictEqual(observed, {
@@ -398,7 +402,7 @@ describe('supervisor', () => {
         await queue.send('held', null, { id: id(5) });
         await queue.cancel('jobs', id(2));
         // A job that never ran fails into retry while attempts remain, else
-        // for good (plans.js:2433-2439), keeping its keep_until.
+        // for good (plans.js:3047-3053), keeping its keep_until.
         await queue.fail('jobs', id(3));
         await queue.fail('idle', id(12));
         await queue.work('jobs', async () => 'ok');
@@ -431,7 +435,7 @@ describe('supervisor', () => {
       supervised,
     );
 
-    // deletion (plans.js:3055-3066): completed_on + deletion_seconds < now
+    // deletion (plans.js:3690-3697): completed_on + deletion_seconds < now
     // when deletion_seconds > 0, and keep_until < now for created and retry
     // jobs; both strict, active jobs never.
     const jobs = [
@@ -500,7 +504,7 @@ describe('supervisor', () => {
   });
 
   // queuedCount > (the queue's warningQueueSize || the instance's || 10000)
-  // (boss.js:121, 352-358); data is the stats row (plans.js:3548-3552).
+  // (boss.js:140, 388-394); data is the stats row (plans.js:4472-4476).
   for (const { label, options, warned } of [
     {
       label: "the queue's or the instance's",
@@ -523,7 +527,7 @@ describe('supervisor', () => {
           await queue.createQueue('zeta', { warningQueueSize: 1 });
           await queue.createQueue('alpha');
           await queue.createQueue('quiet');
-          // A null keeps the stored size (plans.js:1168); the contract types
+          // A null keeps the stored size (plans.js:1578); the contract types
           // no null.
           await queue.updateQueue(
             'zeta',
@@ -539,9 +543,9 @@ describe('supervisor', () => {
             await queue.send('quiet', null, { id: id(n) });
           }
           await clock.tick(2000);
-          // A pass emits in its stats statement's row order, which pg-boss
-          // leaves to the planner (plans.js:1181-1220, 3538-3557): on PGlite,
-          // name order for a few queues and creation order from 12.
+          // A pass emits in its stats statement's RETURNING order, which
+          // has no ORDER BY, so pg-boss leaves it to the planner
+          // (plans.js:4462-4481).
           return {
             warnings: warnings.toSorted(
               (a, b) => a.at - b.at || a.message.localeCompare(b.message),
@@ -571,15 +575,9 @@ describe('supervisor', () => {
   }
 
   // Worker A holds job 1; worker B, polling every 500 ms, faces jobs 2 and 3.
-  // A singleton or stately batch mixing a free key with a held one is
-  // refused whole (plans.js:2026), as is a one-job fetch of a held key; the
-  // monitor's singletonsActive, once the cache holds it, keeps the active
-  // keys out of every fetch (plans.js:1941, 3462; manager.js:1564-1572).
-  const defaultCache = {
-    supervise: true,
-    superviseIntervalSeconds: 1,
-    monitorIntervalSeconds: 1,
-  } satisfies RunOptions;
+  // A singleton or stately fetch skips a key whose job is active, read live,
+  // so B's first poll claims the free key whatever the monitor last counted
+  // or the cache holds (12.37.1, #957: plans.js:2466-2478; manager.js:1884).
   const heldKeyCases: {
     label: string;
     options: RunOptions;
@@ -590,35 +588,47 @@ describe('supervisor', () => {
     queued?: [number, string | undefined][];
     batchSize?: number;
     sendAt?: number;
-    at1500?: (queue: JobQueue) => Promise<unknown>;
   }[] = [
-    { label: 'never without supervision', options: {}, claims: [] },
     {
-      label: 'at the first cache refresh after a pass',
-      options: supervised,
-      claims: [{ at: 2000, ids: [id(3)] }],
+      label: 'without supervision',
+      options: {},
+      claims: [{ at: 0, ids: [id(3)] }],
     },
     {
-      label: 'on the slower cache cadence',
+      label: 'before any pass',
+      options: supervised,
+      claims: [{ at: 0, ids: [id(3)] }],
+    },
+    {
+      label: 'on a slow cache cadence',
       options: {
         supervise: true,
         superviseIntervalSeconds: 5,
         monitorIntervalSeconds: 5,
         queueCacheIntervalSeconds: 3,
       },
-      claims: [{ at: 6000, ids: [id(3)] }],
+      claims: [{ at: 0, ids: [id(3)] }],
+    },
+    {
+      label: 'before the 60 s cache refresh',
+      options: {
+        supervise: true,
+        superviseIntervalSeconds: 1,
+        monitorIntervalSeconds: 1,
+      },
+      claims: [{ at: 0, ids: [id(3)] }],
     },
     {
       label: 'on a stately queue',
       policy: 'stately',
       options: supervised,
-      claims: [{ at: 2000, ids: [id(3)] }],
+      claims: [{ at: 0, ids: [id(3)] }],
     },
     {
       label: 'one job at a time',
       batchSize: 1,
       options: supervised,
-      claims: [{ at: 2000, ids: [id(3)] }],
+      claims: [{ at: 0, ids: [id(3)] }],
     },
     {
       label: 'when the held job has no key',
@@ -628,7 +638,7 @@ describe('supervisor', () => {
         [3, 'k2'],
       ],
       options: supervised,
-      claims: [{ at: 2000, ids: [id(3)] }],
+      claims: [{ at: 0, ids: [id(3)] }],
     },
     {
       label: 'to a job with no key',
@@ -637,7 +647,7 @@ describe('supervisor', () => {
         [3, 'k1'],
       ],
       options: supervised,
-      claims: [{ at: 2000, ids: [id(2)] }],
+      claims: [{ at: 0, ids: [id(2)] }],
     },
     {
       label: 'only on singleton and stately queues',
@@ -647,23 +657,6 @@ describe('supervisor', () => {
       sendAt: 2000,
       options: supervised,
       claims: [{ at: 2000, ids: [id(2)] }],
-    },
-    {
-      label: 'not before the 60 s cache refresh',
-      options: defaultCache,
-      claims: [],
-    },
-    {
-      label: 'once updateQueue evicts the cached queue',
-      options: defaultCache,
-      at1500: (queue) => queue.updateQueue('jobs', { retryLimit: 1 }),
-      claims: [{ at: 2000, ids: [id(3)] }],
-    },
-    {
-      label: 'once createQueue evicts the cached queue',
-      options: defaultCache,
-      at1500: (queue) => queue.createQueue('jobs', { policy: 'singleton' }),
-      claims: [{ at: 2000, ids: [id(3)] }],
     },
   ];
   const twoKeys: [number, string | undefined][] = [
@@ -679,9 +672,8 @@ describe('supervisor', () => {
     queued = twoKeys,
     batchSize = 2,
     sendAt = 0,
-    at1500,
   } of heldKeyCases) {
-    it(`lets a batch past a held singleton key ${label}`, async () => {
+    it(`skips a held singleton key at once ${label}`, async () => {
       const observed = await Parity.assertSame(
         async ({ queue, clock, wip, errors }) => {
           await queue.start();
@@ -715,9 +707,6 @@ describe('supervisor', () => {
             }
             for (let step = 1; step <= 12; step++) {
               await clock.tick(500);
-              if (step === 3 && at1500) {
-                await at1500(queue);
-              }
               if (step * 500 === sendAt) {
                 await sendQueued();
               }
@@ -725,7 +714,7 @@ describe('supervisor', () => {
             return {
               batches: [...held.batches],
               // When each worker last fetched, as the wip event at 6000
-              // lists them: B kept polling even where it claimed nothing.
+              // lists them.
               fetched: wip.at(-1)?.workers.map((w) => w.lastFetchedOn),
               errors: errors.map((error) => error.message),
             };
@@ -738,41 +727,42 @@ describe('supervisor', () => {
 
       assert.deepStrictEqual(observed, {
         batches: [{ at: 0, ids: [id(1)] }, ...claims],
-        // B's last poll, or the batch it still holds; the wip interval at
-        // 6000 fires before B's poll at 6000 (armed earlier on the clock).
-        fetched: [0, Math.min(claims.at(-1)?.at ?? 5500, 5500)],
+        // B holds the batch it claimed, so its last fetch is that claim.
+        fetched: [0, claims.at(-1)?.at],
         errors: [],
       });
     });
   }
 
-  // Each start loads every queue into the cache (manager.js:837), so a
-  // restarted queue fetches with the keys its last pass found active, here
-  // job 1's, which the restart's failWip has since put back in retry.
+  // Each start loads every queue into the cache (manager.js:1041), and a
+  // full fetch bursts while the cached readyCount exceeds the threshold
+  // (manager.js:1185-1200). The pass at 1000 counts jobs 2 to 5 ready, so the
+  // restart at 1000 bursts on that count, 59 s before the cache refreshes.
   it('loads the queue cache at every start', async () => {
     const observed = await Parity.assertSame(
       async ({ queue, clock, errors }) => {
         await queue.start();
-        await queue.createQueue('jobs', { policy: 'singleton' });
-        await queue.send('jobs', null, { id: id(1), singletonKey: 'k1' });
-        const held = holding(clock);
-        await queue.work('jobs', held.handler);
-        try {
-          await flush(clock);
-          await clock.tick(1000);
-          await queue.stop({ graceful: false, close: false });
-          await queue.start();
-          await queue.send('jobs', null, { id: id(2), singletonKey: 'k2' });
-          await queue.work('jobs', { batchSize: 2 }, held.handler);
-          await flush(clock);
-          return {
-            batches: [...held.batches],
-            states: (await queue.findJobs('jobs')).map((job) => job.state),
-            errors: errors.map((error) => error.message),
-          };
-        } finally {
-          held.release();
+        await queue.createQueue('jobs');
+        for (const n of [1, 2, 3, 4, 5]) {
+          await queue.send('jobs', null, { id: id(n) });
         }
+        const claims: { at: number; ids: string[] }[] = [];
+        const claim = async (jobs: { id: string }[]) => {
+          claims.push({
+            at: clock.now() - origin,
+            ids: jobs.map((job) => job.id),
+          });
+        };
+        await queue.work('jobs', { burstWhenReadyExceeds: 1 }, claim);
+        await clock.tick(1000);
+        await queue.stop({ graceful: false, close: false });
+        await queue.start();
+        await queue.work('jobs', { burstWhenReadyExceeds: 1 }, claim);
+        await flush(clock);
+        return {
+          claims: [...claims],
+          errors: errors.map((error) => error.message),
+        };
       },
       {
         supervise: true,
@@ -782,17 +772,16 @@ describe('supervisor', () => {
     );
 
     assert.deepStrictEqual(observed, {
-      batches: [
-        { at: 0, ids: [id(1)] },
-        { at: 1000, ids: [id(2)] },
-      ],
-      states: ['retry', 'active'],
+      claims: [0, 1000, 1000, 1000, 1000].map((at, index) => ({
+        at,
+        ids: [id(index + 1)],
+      })),
       errors: [],
     });
   });
 
   // Boss.stop stops the claim timer and start arms a new one an interval out
-  // (boss.js:128-148), so a restart at 1500 moves the next pass from 2000 to
+  // (boss.js:147-167), so a restart at 1500 moves the next pass from 2000 to
   // 2500.
   it('re-arms the supervisor from a restart', async () => {
     const observed = await Parity.assertSame(
@@ -825,54 +814,53 @@ describe('supervisor', () => {
     });
   });
 
-  // stop clears the cache interval (manager.js:866-869), so after a restart
-  // at 1500 the cache refreshes at 2500 and 3500 only: the key the pass at
-  // 2500 finds held reaches worker B at 3500.
+  // stop clears the cache interval (manager.js:1112), so after a restart at
+  // 1500 the cache refreshes at 2500 and 3500 only, each ahead of the pass
+  // due with it (armed first at start). The ready count the pass at 2500
+  // writes makes the full fetch at 3500 burst (manager.js:1185-1200).
   it('refreshes the cache on the restarted interval only', async () => {
     const observed = await Parity.assertSame(
       async ({ queue, clock, errors }) => {
         await queue.start();
-        await queue.createQueue('jobs', { policy: 'singleton' });
+        await queue.createQueue('jobs');
         await clock.tick(1500);
         await queue.stop({ graceful: false, close: false });
         await queue.start();
-        await queue.send('jobs', null, { id: id(1), singletonKey: 'k1' });
-        const held = holding(clock);
-        await queue.work('jobs', held.handler);
-        try {
-          await flush(clock);
-          await queue.send('jobs', null, { id: id(2), singletonKey: 'k1' });
-          await queue.send('jobs', null, { id: id(3), singletonKey: 'k2' });
-          await queue.work(
-            'jobs',
-            { batchSize: 2, pollingIntervalSeconds: 0.5 },
-            held.handler,
-          );
-          for (let step = 0; step < 5; step++) {
-            await clock.tick(500);
-          }
-          return {
-            batches: [...held.batches],
-            errors: errors.map((error) => error.message),
-          };
-        } finally {
-          held.release();
+        for (const n of [1, 2, 3, 4, 5, 6, 7, 8]) {
+          await queue.send('jobs', null, { id: id(n) });
         }
+        const claims: { at: number; ids: string[] }[] = [];
+        await queue.work(
+          'jobs',
+          { burstWhenReadyExceeds: 1, pollingIntervalSeconds: 0.5 },
+          async (jobs) => {
+            claims.push({
+              at: clock.now() - origin,
+              ids: jobs.map((job) => job.id),
+            });
+          },
+        );
+        for (let step = 0; step < 5; step++) {
+          await clock.tick(500);
+        }
+        return {
+          claims: [...claims],
+          errors: errors.map((error) => error.message),
+        };
       },
       supervised,
     );
 
     assert.deepStrictEqual(observed, {
-      batches: [
-        { at: 1500, ids: [id(1)] },
-        { at: 3500, ids: [id(3)] },
-      ],
+      claims: [1500, 2000, 2500, 3000, 3500, 3500, 3500, 3500].map(
+        (at, index) => ({ at, ids: [id(index + 1)] }),
+      ),
       errors: [],
     });
   });
 
   // A full fetch bursts while the cached readyCount exceeds the threshold
-  // (manager.js:931-947). The pass at 1000 counts 3 ready; the cache reads
+  // (manager.js:1185-1201). The pass at 1000 counts 3 ready; the cache reads
   // that at 2000, after the poll that claims job 2, and before the next.
   for (const { label, options, at } of [
     {
@@ -961,7 +949,7 @@ describe('supervisor', () => {
 
     // The poll at 4000 reads the pass at 2000 through the cache at 3000:
     // six queued, three deferred, and job 8, due at 2000 exactly, ready
-    // (start_after > now, plans.js:3449, 3457).
+    // (start_after > now, plans.js:4225-4226).
     assert.deepStrictEqual(observed, {
       claims: {
         a: [0, 2000, 4000, 4000, 4000],
@@ -971,7 +959,7 @@ describe('supervisor', () => {
     });
   });
 
-  // pg-boss's defaults (attorney.js:610-619): a pass, a monitor claim and a
+  // pg-boss's defaults (attorney.js:663-672): a pass, a monitor claim and a
   // cache refresh every 60 s.
   it('supervises on the default intervals', async () => {
     const observed = await Parity.assertSame(
@@ -1038,11 +1026,11 @@ describe('supervisor', () => {
     });
   });
 
-  // A failed pass emits its error as is (boss.js:193-195) and a failed cache
-  // refresh a spread copy (manager.js:842-847); the claim timer re-arms after
-  // the failed pass (claimTimer.js:110-118), and the cache keeps what it held.
-  // Renaming singletons_active faults both on both backends (pg-boss's
-  // getQueues and SQLite's stats write read it) while no lookup runs.
+  // A failed pass emits its error as is (boss.js:212-214) and a failed cache
+  // refresh a spread copy (manager.js:1040-1042); the claim timer re-arms
+  // after the failed pass (claimTimer.js:110-118). Renaming singletons_active
+  // faults both on both backends (pg-boss's getQueues and SQLite's stats
+  // write read it) while no lookup runs.
   it('reports a failed pass and cache refresh, then supervises on', async () => {
     const rename = (backend: string, from: string, to: string) =>
       `ALTER TABLE ${backend === 'pg-boss' ? 'pgboss.queue' : 'pgboss_queue'} RENAME COLUMN ${from} TO ${to}`;
@@ -1060,15 +1048,12 @@ describe('supervisor', () => {
           await flush(clock);
           await queue.send('jobs', null, { id: id(2), singletonKey: 'k1' });
           await queue.send('jobs', null, { id: id(3), singletonKey: 'k2' });
-          // The pass at 1000 records k1 active after the cache read none.
+          // Jobs 2 and 3 wait, over warningQueueSize: each pass that runs
+          // warns.
           await clock.tick(1000);
           await sql(rename(backend, 'singletons_active', 'singletons_hidden'));
           await clock.tick(1000);
           await sql(rename(backend, 'singletons_hidden', 'singletons_active'));
-          // Worker B fetches with the cache the failed refresh kept, so k1
-          // is not skipped and the batch with it is refused.
-          await queue.work('jobs', { batchSize: 2 }, held.handler);
-          await flush(clock);
           const batches = [...held.batches];
           await clock.tick(1000);
           return {
@@ -1137,7 +1122,7 @@ describe('supervisor', () => {
       }
     };
     // Neither is started: pg-boss validates in its constructor
-    // (index.js:65, attorney.js:407-426), before it touches its database.
+    // (index.js:81, attorney.js:407-428), before it touches its database.
     const pglite = new PGlite();
     const database = open(':memory:');
     let pgBoss;

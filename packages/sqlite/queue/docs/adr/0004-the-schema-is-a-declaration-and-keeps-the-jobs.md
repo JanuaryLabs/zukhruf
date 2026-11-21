@@ -10,7 +10,7 @@ Before this change, `start()` ran `CREATE TABLE IF NOT EXISTS` and `CREATE INDEX
 - A file from before the supervisor (text2sql 4caf2db1) has no count columns in `pgboss_queue`. Each worker poll fails, and no job runs.
 - A file from text2sql 98d1eda8 has `pgboss_job_singleton_i` without `UNIQUE`. A singleton queue then runs two jobs of one key at the same time.
 
-When a program deletes the file, it loses its jobs and its schedules. pg-boss does not do that. It keeps a schema version, and its `start()` migrates an installed schema that has an earlier version (`node_modules/pg-boss/dist/contractor.js:79-91`). The jobs stay.
+When a program deletes the file, it loses its jobs and its schedules. pg-boss does not do that. It keeps a schema version, and its `start()` migrates an installed schema that has an earlier version (`node_modules/pg-boss/dist/contractor.js:83-95`). The jobs stay.
 
 Thus the schema is a `Declaration` of `@zukhruf/sqlite-drift`, with `rows: 'keep'` (`src/schema.ts`). Each element is one `CREATE` statement without `IF NOT EXISTS`. `start()` applies it: it makes each missing object, rebuilds each stale table and keeps its rows, and replaces each stale index. The connection pragmas stay before it, because a caller can give its own `database`. The cron claim row of `pgboss_version` is data, not a declared object, so `start()` adds it after the declaration with `INSERT OR IGNORE`.
 

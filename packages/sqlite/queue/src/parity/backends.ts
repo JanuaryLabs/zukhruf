@@ -15,6 +15,7 @@ import { open } from '@zukhruf/sqlite-open';
 
 import type { JobQueue } from '../index.ts';
 import { SqliteJobQueue } from '../index.ts';
+import { DateFollowsClock } from '../testing/date-follows-clock.ts';
 
 export type WipWorker = Omit<WipData, 'options' | 'lastError'> & {
   options: Record<string, unknown>;
@@ -40,7 +41,7 @@ export type RunOptions = Pick<
 
 // A warning event at its clock time. pinSeconds is how long the stats
 // aggregate held its snapshot in real time (node_modules/pg-boss/dist/
-// plans.js:3478, 3552), so it is compared only as a finite count of seconds.
+// plans.js:4383, 4476), so it is compared only as a finite count of seconds.
 export type WarningEvent = {
   at: number;
   message: string;
@@ -147,6 +148,7 @@ export class ParityRun {
   // The rows one query answers, for state no public method reads back.
   readonly rows: (text: string) => Promise<Record<string, unknown>[]>;
   readonly #close: () => Promise<void>;
+  readonly #dateFollowsClock: DateFollowsClock;
 
   constructor(
     queue: JobQueue,
@@ -170,12 +172,17 @@ export class ParityRun {
     this.stopped = events.stopped;
     this.clock = clock;
     this.#close = close;
+    this.#dateFollowsClock = new DateFollowsClock(clock);
   }
 
   static readonly start = '2026-01-01T00:00:00.000Z';
 
-  close(): Promise<void> {
-    return this.#close();
+  async close(): Promise<void> {
+    try {
+      await this.#close();
+    } finally {
+      this.#dateFollowsClock[Symbol.dispose]();
+    }
   }
 }
 

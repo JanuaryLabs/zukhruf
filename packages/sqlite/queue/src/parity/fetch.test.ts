@@ -52,9 +52,9 @@ describe('fetch', () => {
     });
 
     // Always `ORDER BY priority desc, created_on` (node_modules/pg-boss/dist/
-    // plans.js:1947-1970); work() never forwards ignoreStartAfter
-    // (manager.js:951-956) and warns once per deprecated sort option
-    // (manager.js:1552-1559).
+    // plans.js:2484-2507); work() never forwards ignoreStartAfter
+    // (manager.js:1205-1222) and warns once per deprecated sort option
+    // (manager.js:1869-1876).
     assert.deepStrictEqual(observed, {
       ran: [id(3), id(1), id(4), id(2)],
       warnings: [
@@ -83,7 +83,7 @@ describe('fetch', () => {
       return ran.sort();
     });
 
-    // node_modules/pg-boss/dist/plans.js:1943-1944.
+    // node_modules/pg-boss/dist/plans.js:2480-2481.
     assert.deepStrictEqual(observed, [id(2), id(3)]);
   });
 
@@ -124,8 +124,8 @@ describe('fetch', () => {
       }
     });
 
-    // attorney.js:370 copies the options and manager.js:915 destructures
-    // them; manager.js:1554 warns only for `=== false`.
+    // attorney.js:370 copies the options and manager.js:1165 destructures
+    // them; manager.js:1871 warns only for `=== false`.
     assert.deepStrictEqual(observed, { batches: [1, 1, 1], warnings: [] });
   });
 
@@ -153,7 +153,7 @@ describe('fetch', () => {
     });
 
     // Sorted: pg-boss's `UPDATE ... RETURNING` has no ORDER BY
-    // (node_modules/pg-boss/dist/plans.js:2019-2028), so the order inside a
+    // (node_modules/pg-boss/dist/plans.js:2556-2565), so the order inside a
     // batch is the planner's (claim order on an analyzed Postgres, id order on
     // PGlite's unanalyzed tables).
     assert.deepStrictEqual(observed, [[id(1), id(2), id(3), id(4)]]);

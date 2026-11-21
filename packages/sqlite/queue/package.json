@@ -47,7 +47,7 @@
     "@zukhruf/sqlite-open": "^0.8.55",
     "@zukhruf/sqlite-transaction": "^0.8.55",
     "cron-parser": "^5.10.6",
-    "pg-boss": "12.35.1",
+    "pg-boss": "12.38.2",
     "rrule-temporal": "^2.3.0",
     "serialize-error": "^13.1.0"
   },

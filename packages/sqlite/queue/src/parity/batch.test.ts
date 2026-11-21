@@ -52,8 +52,8 @@ describe('batches', () => {
 
     // The handler races a deadline of the batch's largest expireInSeconds,
     // on an abort controller every job's signal follows, which the race
-    // aborts when it settles (node_modules/pg-boss/dist/manager.js:515-535,
-    // 606; tools.js:66-77).
+    // aborts when it settles (node_modules/pg-boss/dist/manager.js:584-604,
+    // 606; tools.js:69-80).
     assert.deepStrictEqual(observed, {
       beforeDeadline: { slow: 0, quick: 1 },
       afterDeadline: { slow: 1, quick: 1 },
@@ -77,7 +77,7 @@ describe('batches', () => {
       return (await queue.findJobs('jobs')).map((job) => job.state);
     });
 
-    // maxExpiration is the batch's largest (manager.js:515).
+    // maxExpiration is the batch's largest (manager.js:584).
     assert.deepStrictEqual(observed, ['active', 'active']);
   });
 
@@ -126,8 +126,8 @@ describe('batches', () => {
       };
     });
 
-    // node_modules/pg-boss/dist/manager.js:884-909 fails each worker's jobs,
-    // then aborts its batch; index.js:215-217 makes a second stop a no-op.
+    // node_modules/pg-boss/dist/manager.js:1129-1159 fails each worker's jobs,
+    // then aborts its batch; index.js:286-288 makes a second stop a no-op.
     const shutDown = { value: 'pg-boss shut down while active' };
     assert.deepStrictEqual(observed, {
       states: ['retry', 'retry', 'retry', 'retry'],
@@ -148,10 +148,10 @@ describe('batches', () => {
         await new Promise<never>(() => undefined);
       });
       await flush(clock);
-      const started = Date.now();
-      // Below the floor: pg-boss waits at least a second (index.js:218).
+      const started = performance.now();
+      // Below the floor: pg-boss waits at least a second (index.js:289).
       await queue.stop({ graceful: true, close: false, timeout: 10 });
-      const waited = Date.now() - started;
+      const waited = performance.now() - started;
       const [job] = await queue.findJobs('jobs', { id: id(1) });
       return {
         waitedAtLeastASecond: waited >= 900,
@@ -160,7 +160,7 @@ describe('batches', () => {
     });
 
     // The graceful wait runs on real time, never the configured clock, then
-    // the stop fails what is still running (index.js:260-273).
+    // the stop fails what is still running (index.js:349-360).
     assert.deepStrictEqual(observed, {
       waitedAtLeastASecond: true,
       state: 'retry',
@@ -176,12 +176,12 @@ describe('batches', () => {
         await new Promise((resolve) => setTimeout(resolve, 300));
       });
       await flush(clock);
-      const started = Date.now();
+      const started = performance.now();
       const [first, second] = await Promise.all([
         queue.stop({ close: false }).then(() => 'resolved'),
         queue.stop({ close: false }).then(() => 'resolved'),
       ]);
-      const waited = Date.now() - started;
+      const waited = performance.now() - started;
       const [job] = await queue.findJobs('jobs', { id: id(1) });
       return {
         first,
@@ -193,7 +193,7 @@ describe('batches', () => {
 
     // graceful defaults to true and its wait ends when the workers do, well
     // before the 30s timeout; a stop already under way is shared
-    // (index.js:198-201, 260-273).
+    // (index.js:269-272, 349-360).
     assert.deepStrictEqual(observed, {
       first: 'resolved',
       second: 'resolved',
@@ -217,7 +217,7 @@ describe('batches', () => {
       return { stopped, work };
     });
 
-    // index.js:215-217: an instance that never started is already stopped.
+    // index.js:286-288: an instance that never started is already stopped.
     assert.deepStrictEqual(observed, { stopped: 'resolved', work: 'resolved' });
   });
 });

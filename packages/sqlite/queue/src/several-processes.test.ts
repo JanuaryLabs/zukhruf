@@ -83,7 +83,7 @@ function startWorker(
 }
 
 // SQLite-only: on Postgres, FOR UPDATE SKIP LOCKED gives each job to one
-// claim (node_modules/pg-boss/dist/plans.js:1885). pg-boss needs a server for
+// claim (node_modules/pg-boss/dist/plans.js:2410). pg-boss needs a server for
 // a second process, so the parity suite has one process on each side.
 describe('several processes on one queue file', () => {
   it('run each job one time', async (t) => {
@@ -284,12 +284,12 @@ describe('several processes on one queue file', () => {
     }
   });
 
-  // node_modules/pg-boss/dist/plans.js:2335-2350: the insert of a job that is
+  // node_modules/pg-boss/dist/plans.js:2919-2934: the insert of a job that is
   // due now sends a pg_notify on a notify queue, whether or not the sender
-  // listens (manager.js:1132-1134). Each listener on the schema then wakes
-  // the workers of the queue that the payload names (notifier.js:57,
-  // manager.js:1137-1143), before their poll. The poll here is an hour, also
-  // when the queue does not listen (attorney.js:587, 601): longer than the
+  // listens (manager.js:1408-1410). Each listener on the schema then wakes
+  // the workers of the queue that the payload names (notifier.js:58,
+  // manager.js:1413-1419), before their poll. The poll here is an hour, also
+  // when the queue does not listen (attorney.js:640, 654): longer than the
   // test runner lets a test run (--test-timeout), so only the notification
   // can run the second job of each queue before the test ends.
   it('wake the workers of each process that listens, when another process sends to a notify queue', async (t) => {
@@ -342,7 +342,7 @@ describe('several processes on one queue file', () => {
     }
   });
 
-  // pg-boss's stop() closes its listener (index.js:228, notifier.js:70-77):
+  // pg-boss's stop() closes its listener (index.js:308, notifier.js:77-84):
   // the program that stopped its queue ends by itself.
   it('let a process that listened end by itself after it stops its queue', async (t) => {
     await using dir = await new TemporaryFiles().directory('sqlite-queue-');

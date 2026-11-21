@@ -24,7 +24,7 @@ import { SqlValues } from './sql-values.ts';
 
 // One occurrence the pass files in the send-it queue: the request to send
 // with the schedule's key and slot beside it, under the singleton key and
-// slot that keep one job per (schedule, slot) (timekeeper.js:480, 514).
+// slot that keep one job per (schedule, slot) (timekeeper.js:519, 553).
 export type SlottedJob = {
   data: {
     name: string;
@@ -38,7 +38,7 @@ export type SlottedJob = {
 };
 
 // What the timekeeper asks of the queue it keeps time for, as pg-boss's
-// Timekeeper asks its Manager (timekeeper.js:252, 257, 268, 519, 673).
+// Timekeeper asks its Manager (timekeeper.js:291, 296, 307, 558, 718).
 export type TimekeeperManager = {
   createQueue(name: string): Promise<void>;
   work(
@@ -80,18 +80,24 @@ type TimekeeperPhase =
   | { kind: 'keeping'; database: DatabaseSync; timer: ClaimTimer };
 
 // pg-boss's Timekeeper (node_modules/pg-boss/dist/timekeeper.js) without the
-// clock-skew loop (SQLite's clock is the database clock), invalid_schedule
-// warnings, kind relabels and last_job_id: only schedule() writes a row, so
-// no row is unreadable or mislabelled, and no method of the queue reads one
-// back. A pass every cronMonitorIntervalSeconds claims the instance-wide
+// clock-skew loop (SQLite's clock is the database clock), kind relabels and
+// last_job_id: only schedule() writes a row, so no row is mislabelled, and no
+// method of the queue reads one back. A row an earlier release wrote can be
+// unreadable (an empty cron, 12.37.0), and gets pg-boss's invalid_schedule
+// warning. A pass every cronMonitorIntervalSeconds claims the instance-wide
 // cron stamp, files each schedule's due occurrences in __pgboss__send-it, one
 // job per minute slot, and the send-it worker forwards each to its queue.
-export class Timekeeper extends EventEmitter<Pick<PgBossEventMap, 'error'>> {
+export class Timekeeper extends EventEmitter<
+  Pick<PgBossEventMap, 'error' | 'warning'>
+> {
   // timekeeper.js:12-14
   static readonly sendIt = '__pgboss__send-it';
   // timekeeper.js:46: how long an occurrence stays due, and the width of the
   // slot its job is filed in.
   static readonly #occurrenceWindowSeconds = 60;
+  // timekeeper.js:248: the (queue, key, cron, zone) of each unreadable row
+  // already warned about, replaced after each pass by the rows still broken.
+  #warnedSchedules = new Set<string>();
   // timekeeper.js:48
   static readonly #missedPolicies: readonly unknown[] = Object.values(
     scheduleMissedPolicies,
@@ -124,7 +130,7 @@ export class Timekeeper extends EventEmitter<Pick<PgBossEventMap, 'error'>> {
     return `${name.replaceAll('_', '\\_')}__${key}`;
   }
 
-  // timekeeper.js:76-79
+  // timekeeper.js:76-111
   static #throttleSlot(instant: Date): string {
     const width = Timekeeper.#occurrenceWindowSeconds * 1000;
     return new Date(Math.floor(instant.getTime() / width) * width)
@@ -133,7 +139,7 @@ export class Timekeeper extends EventEmitter<Pick<PgBossEventMap, 'error'>> {
       .slice(0, 19);
   }
 
-  // timekeeper.js:105-112: SQLite hands timestamps back as the text it
+  // timekeeper.js:137-144: SQLite hands timestamps back as the text it
   // stored.
   static #toTime(value: string | null): number | null {
     if (value === null) {
@@ -143,7 +149,7 @@ export class Timekeeper extends EventEmitter<Pick<PgBossEventMap, 'error'>> {
     return Number.isNaN(time) ? null : time;
   }
 
-  // timekeeper.js:145-150
+  // timekeeper.js:177-182
   static #missedPolicy(options: unknown): unknown {
     const missed =
       typeof options === 'object' && options !== null && 'missed' in options
@@ -154,12 +160,14 @@ export class Timekeeper extends EventEmitter<Pick<PgBossEventMap, 'error'>> {
       : scheduleMissedPolicies.skip;
   }
 
-  // timekeeper.js:241-262. The first pass runs on a real setImmediate, as
+  // timekeeper.js:280-301. The first pass runs on a real setImmediate, as
   // pg-boss's does, then every cronMonitorIntervalSeconds on the clock.
   async start(database: DatabaseSync): Promise<void> {
     if (this.#phase.kind === 'keeping') {
       return;
     }
+    // timekeeper.js:288-289: a restart surfaces a row nobody fixed again.
+    this.#warnedSchedules.clear();
     await this.#manager.createQueue(Timekeeper.sendIt);
     await this.#manager.work(
       Timekeeper.sendIt,
@@ -181,7 +189,7 @@ export class Timekeeper extends EventEmitter<Pick<PgBossEventMap, 'error'>> {
     };
   }
 
-  // timekeeper.js:263-280, which polls its pass flag every 10 ms of real
+  // timekeeper.js:302-319, which polls its pass flag every 10 ms of real
   // time.
   async stop(): Promise<void> {
     const phase = this.#phase;
@@ -194,7 +202,7 @@ export class Timekeeper extends EventEmitter<Pick<PgBossEventMap, 'error'>> {
     await Promise.allSettled([this.#pass.inFlight?.wait()]);
   }
 
-  // timekeeper.js:335-384
+  // timekeeper.js:374-423
   async #onCron(): Promise<void> {
     if (this.#phase.kind !== 'keeping' || this.#pass.inFlight) {
       return;
@@ -230,7 +238,7 @@ export class Timekeeper extends EventEmitter<Pick<PgBossEventMap, 'error'>> {
     }
   }
 
-  // timekeeper.js:406-411: until the claim it lost to comes due, plus a
+  // timekeeper.js:445-450: until the claim it lost to comes due, plus a
   // quarter of the interval capped at a second.
   #claimRetryDelay(elapsed: number | null): number {
     const interval = this.#config.cronMonitorIntervalSeconds * 1000;
@@ -242,7 +250,7 @@ export class Timekeeper extends EventEmitter<Pick<PgBossEventMap, 'error'>> {
     return remaining + Math.min(1000, interval / 4);
   }
 
-  // trySetCronTime and trySetTimestamp (plans.js:1078-1086, 1111-1118): the
+  // trySetCronTime and trySetTimestamp (plans.js:1486-1494, 1519-1526): the
   // stamp it replaced and its age, and whether this pass moved it. A stamp
   // never written counts as a week old.
   static #trySetCronTime(db: DatabaseSync, seconds: number, now: Date): Claim {
@@ -270,7 +278,7 @@ export class Timekeeper extends EventEmitter<Pick<PgBossEventMap, 'error'>> {
     );
   }
 
-  // timekeeper.js:418-527, one instant for the whole pass.
+  // timekeeper.js:457-566, one instant for the whole pass.
   async #cron(db: DatabaseSync, priorCronOn: string | null): Promise<void> {
     const schedules = await this.#activity.query(() =>
       Timekeeper.#getSchedules(db),
@@ -280,16 +288,28 @@ export class Timekeeper extends EventEmitter<Pick<PgBossEventMap, 'error'>> {
     const windowStart =
       databaseTime - Timekeeper.#occurrenceWindowSeconds * 1000;
     const lastPass = Timekeeper.#toTime(priorCronOn);
+    const stillBroken = new Set<string>();
     for (const schedule of schedules) {
       const { name, key, data, options, kind, cron, timezone } = schedule;
       let due: Date[];
       try {
         due = Timekeeper.#readOccurrences(cron, kind, timezone, databaseTime);
-      } catch {
-        // timekeeper.js:450-458: one row never decides the others'.
+      } catch (error) {
+        // timekeeper.js:474-497: one row never decides the others', and a row
+        // the pass cannot read warns once, not every pass, since it never
+        // heals on its own.
+        const warned = JSON.stringify([name, key, cron, timezone]);
+        stillBroken.add(warned);
+        if (!this.#warnedSchedules.has(warned)) {
+          const reason = Error.isError(error) ? error.message : String(error);
+          this.emit('warning', {
+            message: `Warning: schedule for queue "${name}" (key "${key}") could not be evaluated and was skipped: ${reason}`,
+            data: { queue: name, key, cron, timezone },
+          });
+        }
         continue;
       }
-      // timekeeper.js:464-474 catches a catch-up that cannot be read. Its
+      // timekeeper.js:503-513 catches a catch-up that cannot be read. Its
       // read is of the rule that the read above just read, and only
       // schedule() writes a rule, which it refuses when a pass cannot read
       // it (ADR 0003), so no failure is expected here.
@@ -298,7 +318,7 @@ export class Timekeeper extends EventEmitter<Pick<PgBossEventMap, 'error'>> {
         lastPass,
         windowStart,
       );
-      // timekeeper.js:503-515: a set of slots, so a missed occurrence and a
+      // timekeeper.js:542-554: a set of slots, so a missed occurrence and a
       // due one in the same minute send one job.
       const slots = new Set<string>();
       if (missed !== null) {
@@ -312,17 +332,18 @@ export class Timekeeper extends EventEmitter<Pick<PgBossEventMap, 'error'>> {
           data: { name, key, data, options, slot },
           singletonKey: Timekeeper.#occurrenceKey(name, key),
           // The insert casts the slot to a zoneless timestamp
-          // (plans.js:2258).
+          // (plans.js:2839).
           singletonOn: NaiveTimestamp.fromUtc(new Date(`${slot}Z`)),
         });
       }
     }
+    this.#warnedSchedules = stillBroken;
     if (scheduled.length > 0 && this.#phase.kind === 'keeping') {
       await this.#manager.insert(Timekeeper.sendIt, scheduled);
     }
   }
 
-  // getSchedules (plans.js:1276-1290), in name and key order.
+  // getSchedules (plans.js:1713-1735), in name and key order.
   static #getSchedules(db: DatabaseSync): Schedule[] {
     return db
       .prepare(
@@ -349,7 +370,7 @@ export class Timekeeper extends EventEmitter<Pick<PgBossEventMap, 'error'>> {
       });
   }
 
-  // timekeeper.js:591-601: under `once`, the latest occurrence in
+  // timekeeper.js:634-644: under `once`, the latest occurrence in
   // (max(lastPass, createdOn), windowStart], the gap no pass covered.
   static #missedOccurrence(
     schedule: Schedule,
@@ -376,7 +397,7 @@ export class Timekeeper extends EventEmitter<Pick<PgBossEventMap, 'error'>> {
     );
   }
 
-  // timekeeper.js:610-621. cron-parser's prev() answers strictly before its
+  // timekeeper.js:653-664. cron-parser's prev() answers strictly before its
   // reference, so the reference is a millisecond past `until`.
   static #latestOccurrenceBefore(
     expression: string,
@@ -388,17 +409,18 @@ export class Timekeeper extends EventEmitter<Pick<PgBossEventMap, 'error'>> {
     if (kind === scheduleKinds.rrule) {
       return Recurrence.latestOccurrenceBefore(expression, after, until, tz);
     }
-    const occurrence = CronExpressionParser.parse(expression, {
+    const occurrence = Recurrence.previousOccurrence(
+      CronExpressionParser.parse(expression, {
+        tz,
+        strict: false,
+        currentDate: new Date(until.getTime() + 1),
+      }),
       tz,
-      strict: false,
-      currentDate: new Date(until.getTime() + 1),
-    })
-      .prev()
-      .toDate();
+    );
     return occurrence.getTime() > after.getTime() ? occurrence : null;
   }
 
-  // timekeeper.js:639-653: every occurrence in the last minute, a cron
+  // timekeeper.js:682-696: every occurrence in the last minute, a cron
   // expression's latest only.
   static #readOccurrences(
     expression: string,
@@ -406,6 +428,9 @@ export class Timekeeper extends EventEmitter<Pick<PgBossEventMap, 'error'>> {
     tz: string,
     databaseTime: number,
   ): Date[] {
+    // dueOccurrences (timekeeper.js:589): an empty expression, which a row an
+    // earlier release stored can hold, is refused first.
+    Recurrence.assertExpression(expression);
     const window = new Date(
       databaseTime - Timekeeper.#occurrenceWindowSeconds * 1000,
     );
@@ -417,17 +442,18 @@ export class Timekeeper extends EventEmitter<Pick<PgBossEventMap, 'error'>> {
         tz,
       );
     }
-    const previous = CronExpressionParser.parse(expression, {
+    const previous = Recurrence.previousOccurrence(
+      CronExpressionParser.parse(expression, {
+        tz,
+        strict: false,
+        currentDate: new Date(databaseTime + 1),
+      }),
       tz,
-      strict: false,
-      currentDate: new Date(databaseTime + 1),
-    })
-      .prev()
-      .toDate();
+    );
     return previous.getTime() > window.getTime() ? [previous] : [];
   }
 
-  // timekeeper.js:658-665: an error event nobody listens for must not fail
+  // timekeeper.js:701-708: an error event nobody listens for must not fail
   // the send-it job, which would replay every occurrence in its batch.
   #reportSendItError(error: unknown): void {
     const reported = Error.isError(error) ? error : new Error(String(error));
@@ -445,7 +471,7 @@ export class Timekeeper extends EventEmitter<Pick<PgBossEventMap, 'error'>> {
     }
   }
 
-  // timekeeper.js:666-687: each occurrence's request goes to send() without
+  // timekeeper.js:709-732: each occurrence's request goes to send() without
   // its key and slot; a send that rejects is reported, and the send-it job
   // completes either way.
   async #onSendIt(jobs: Job<unknown>[]): Promise<void> {

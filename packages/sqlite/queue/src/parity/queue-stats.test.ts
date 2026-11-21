@@ -75,7 +75,7 @@ describe('getQueueStats()', () => {
       return refusals;
     });
 
-    // manager.js:2132, 2196
+    // manager.js:2612, 2697
     assert.equal(observed.missingQueue, 'Error: Queue missing does not exist');
     assert.equal(observed.missingQueueForced, observed.missingQueue);
     assert.equal(Object.values(observed).includes('resolved'), false);
@@ -122,6 +122,10 @@ describe('getQueueStats()', () => {
       createdDelta: null,
       deltaSeconds: null,
       deltaOn: null,
+      // Uncounted with persistQueueStats off (12.36.0: manager.js:2620-2666).
+      waitBins: null,
+      runBins: null,
+      readyOldestSeconds: null,
       capturedOn: 0,
     };
     assert.deepStrictEqual(observed, {
@@ -135,7 +139,10 @@ describe('getQueueStats()', () => {
           readyCount: 1,
           activeCount: 1,
           failedCount: 1,
-          totalCount: 7,
+          // The live jobs only: no maintenance pass has counted the completed
+          // and cancelled ones into retained_count yet (12.38.0:
+          // plans.js:324-331, 4372).
+          totalCount: 5,
         },
       ],
     });
@@ -237,12 +244,63 @@ describe('getQueueStats()', () => {
     ]);
   });
 
+  it('checks percentiles after the name and before the queue, and gives each snapshot one entry per percent, uncounted', async () => {
+    const observed = await Parity.assertSame(async ({ queue }) => {
+      await queue.start();
+      await queue.createQueue('jobs');
+      // Plain values, as an untyped caller sends them, so ones the option
+      // types exclude reach both.
+      const read = async (name: string, percentiles: unknown) => {
+        const snapshots: unknown = await Reflect.apply(
+          queue.getQueueStats,
+          queue,
+          [name, { percentiles }],
+        );
+        assert.ok(Array.isArray(snapshots));
+        return snapshots.map((snapshot: object) =>
+          Reflect.get(snapshot, 'percentiles'),
+        );
+      };
+      return {
+        zero: await outcome(() => read('jobs', [0])),
+        overHundred: await outcome(() => read('jobs', [101])),
+        empty: await outcome(() => read('jobs', [])),
+        text: await outcome(() => read('jobs', ['50'])),
+        missingQueue: await outcome(() => read('missing', [0])),
+        badName: await outcome(() => read('', [0])),
+        listed: await read('jobs', [95, 50, 95]),
+        none: await read('jobs', undefined),
+      };
+    });
+
+    // manager.js:2611-2616, 2659-2665 (12.36.0): the name first, then the
+    // percents, then the queue; with persistQueueStats off the snapshot has no
+    // histograms, so each percentile reads null.
+    const refused =
+      'AssertionError: getQueueStats: percentiles must be a non-empty array of percents from 1 to 100, such as [50, 95]';
+    assert.deepStrictEqual(observed, {
+      zero: refused,
+      overHundred: refused,
+      empty: refused,
+      text: refused,
+      missingQueue: refused,
+      badName: 'AssertionError: Name is required',
+      listed: [
+        [
+          { p: 95, waitSeconds: null, runSeconds: null },
+          { p: 50, waitSeconds: null, runSeconds: null },
+        ],
+      ],
+      none: [undefined],
+    });
+  });
+
   it('ignores and checks none of the history options, which only persistQueueStats reads', async () => {
     const observed = await Parity.assertSame(async ({ queue, clock }) => {
       await queue.start();
       await queue.createQueue('jobs');
       await queue.send('jobs', null, { id: id(1) });
-      // A value each history check of pg-boss refuses (manager.js:2171-2178),
+      // A value each history check of pg-boss refuses (manager.js:2672-2679),
       // as an untyped caller sends them.
       const history = {
         from: new Date(origin + hour),
@@ -301,6 +359,9 @@ describe('getQueueStats()', () => {
         createdDelta: null,
         deltaSeconds: null,
         deltaOn: null,
+        waitBins: null,
+        runBins: null,
+        readyOldestSeconds: null,
         capturedOn: 1000,
       },
     ]);

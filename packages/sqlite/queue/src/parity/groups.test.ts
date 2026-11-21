@@ -10,7 +10,7 @@ import { Observe } from './observe.ts';
 import { Parity } from './parity.ts';
 
 // One poll's worth of time: both backends poll every 2s by default
-// (node_modules/pg-boss/dist/attorney.js:587-589).
+// (node_modules/pg-boss/dist/attorney.js:640-642).
 async function poll(clock: TestClock) {
   await clock.tick(2000);
 }
@@ -78,7 +78,7 @@ describe('group concurrency', () => {
       }
     });
 
-    // The batch's LIMIT comes before the group ranking (plans.js:1967-1968,
+    // The batch's LIMIT comes before the group ranking (plans.js:2504-2505,
     // 1985-1993), so g2's job waits behind g1's even with room in the batch.
     assert.deepStrictEqual(observed, {
       whileHeld: [[id(1)]],
@@ -107,7 +107,7 @@ describe('group concurrency', () => {
       }
     });
 
-    // ROW_NUMBER() OVER (PARTITION BY group_id ORDER BY id) (plans.js:1985).
+    // ROW_NUMBER() OVER (PARTITION BY group_id ORDER BY id) (plans.js:2522).
     assert.deepStrictEqual(observed, {
       batches: [[id(1)]],
       states: [
@@ -160,8 +160,8 @@ describe('group concurrency', () => {
       }
     });
 
-    // A tier's limit, else the default (plans.js:1857-1859), against the
-    // group's active count whatever their tiers (1872-1882): silver and the
+    // A tier's limit, else the default (plans.js:2382-2384), against the
+    // group's active count whatever their tiers (2397-2407): silver and the
     // untiered job are at their limit of 1, gold has room for one more.
     assert.deepStrictEqual(observed, {
       first: [[id(1)]],
@@ -206,7 +206,7 @@ describe('group concurrency', () => {
     });
 
     // active_cnt + group_rn <= groupLimit; jobs without a group always
-    // pass, however many (plans.js:1990-1994).
+    // pass, however many (plans.js:2527-2531).
     assert.deepStrictEqual(observed, {
       second: [[id(2), id(5), id(6), id(7)]],
       states: [
@@ -245,7 +245,7 @@ describe('group concurrency', () => {
       try {
         await flush(clock);
         // Which of a's jobs runs is the planner's pick on pg-boss
-        // (plans.js:1973 ranks a key without an ORDER BY), so keys are read.
+        // (plans.js:2510 ranks a key without an ORDER BY), so keys are read.
         const running = (await queue.findJobs('jobs'))
           .filter((job) => job.state === 'active')
           .map((job) => job.singletonKey)
@@ -259,7 +259,7 @@ describe('group concurrency', () => {
       }
     });
 
-    // The group ranks only each key's first job (plans.js:1986-1988), so a's
+    // The group ranks only each key's first job (plans.js:2523-2525), so a's
     // second job takes no place in g1's limit of 2.
     assert.deepStrictEqual(observed, {
       batchSizes: [2],
@@ -344,8 +344,8 @@ describe('group concurrency', () => {
         }
       });
 
-      // Each key offers only its head (plans.js:1900-1917), and the group
-      // limit ranks the heads after the LIMIT (1985-1993): a head past the
+      // Each key offers only its head (plans.js:2425-2442), and the group
+      // limit ranks the heads after the LIMIT (2522-2530): a head past the
       // limit waits, and a full group keeps every key's head out of the
       // claim until a job of the group ends.
       assert.deepStrictEqual(observed, expected);
@@ -383,7 +383,7 @@ describe('group concurrency', () => {
       }
     });
 
-    // tiers ->> group_tier (plans.js:1857-1859): each named tier allows both
+    // tiers ->> group_tier (plans.js:2382-2384): each named tier allows both
     // of its group's jobs; a tier the config does not name falls back to the
     // default of 1.
     assert.deepStrictEqual(observed, {
@@ -433,8 +433,8 @@ describe('local group concurrency', () => {
       }
     });
 
-    // The first worker claims [1, 2] and restores 2 (manager.js:972-980,
-    // plans.js:2201-2209) while the second claims [3]; 2 runs once 1 ends.
+    // The first worker claims [1, 2] and restores 2 (manager.js:1238-1246,
+    // plans.js:2767-2786) while the second claims [3]; 2 runs once 1 ends.
     const unstarted = {
       state: 'created',
       retryCount: 0,
@@ -552,9 +552,9 @@ describe('local group concurrency', () => {
       }
     });
 
-    // The claim counts an attempt of a started job (plans.js:2023); the
+    // The claim counts an attempt of a started job (plans.js:2560); the
     // restore clears started_on and keeps retry_count, so the next claim
-    // counts none (plans.js:2201-2209).
+    // counts none (plans.js:2767-2786).
     assert.deepStrictEqual(observed, {
       retrying: [
         { state: 'retry', retryCount: 0, startedOn: 0, heartbeatOn: null },
@@ -613,8 +613,8 @@ describe('local group concurrency', () => {
     });
 
     // Both workers' first fetches read the held groups before either claim
-    // lands (manager.js:951-955), so the second claims job 2 and restores it;
-    // once job 1 holds g1, a fetch skips g1 (plans.js:1942) and job 3 stays
+    // lands (manager.js:1205-1209), so the second claims job 2 and restores it;
+    // once job 1 holds g1, a fetch skips g1 (plans.js:2479) and job 3 stays
     // in retry until job 1 ends.
     assert.deepStrictEqual(observed, {
       atStart: {
@@ -691,8 +691,8 @@ describe('local group concurrency', () => {
     });
 
     // With one gold job running, g1 is under its largest limit (2), so the
-    // idle worker fetches from it (manager.js:235-256, 454-462): silver's
-    // limit of 1 restores job 2, gold's 2 runs job 3 (manager.js:226-234).
+    // idle worker fetches from it (manager.js:291-312, 520-528): silver's
+    // limit of 1 restores job 2, gold's 2 runs job 3 (manager.js:282-290).
     assert.deepStrictEqual(observed, {
       silver: {
         state: 'created',
@@ -742,8 +742,8 @@ describe('local group concurrency', () => {
     });
 
     // `groupTier in config.tiers` finds Object.prototype.constructor, a
-    // function no count is below (manager.js:230-232), so job 1 is put back
-    // on every claim; a job without a group bypasses the limit (476-479).
+    // function no count is below (manager.js:286-288), so job 1 is put back
+    // on every claim; a job without a group bypasses the limit (543-546).
     assert.deepStrictEqual(observed, {
       batches: [[id(2), id(3)]],
       inherited: {
@@ -795,7 +795,7 @@ describe('local group concurrency', () => {
   });
 
   for (const wait of [true, false]) {
-    it(`forgets a queue's group counts once no live worker is left, even while a stopping one still runs (offWork wait: ${wait})`, async () => {
+    it(`keeps a queue's group counts after its last live worker goes, while a stopping one still runs (offWork wait: ${wait})`, async () => {
       const observed = await Parity.assertSame(async ({ queue, clock }) => {
         await queue.start();
         await queue.createQueue('jobs');
@@ -831,21 +831,21 @@ describe('local group concurrency', () => {
         }
       });
 
-      // A stopping worker is not live (manager.js:465), so the idle worker's
-      // offWork clears g1's count while job 1 still runs (1117-1124), and job 2
-      // joins it.
+      // A stopping worker is not live (manager.js:533), so the idle worker's
+      // offWork clears g1's config, but job 1's count stays until its handler
+      // settles (12.38.0: 529-538), and job 2 waits behind it.
       assert.deepStrictEqual(observed, {
         first: [[id(1)]],
-        later: [[id(2)]],
+        later: [],
         states: [
           { id: id(1), state: 'active' },
-          { id: id(2), state: 'active' },
+          { id: id(2), state: 'created' },
         ],
       });
     });
   }
 
-  it('limits a fetch that lands while stop() closes the listener, before the tracking is cleared', async () => {
+  it('limits a fetch that lands while stop() closes the listener, and refuses its batch once failWip ran', async () => {
     const observed = await Parity.assertSame(async ({ queue, clock }) => {
       await queue.start();
       await queue.createQueue('jobs');
@@ -867,11 +867,12 @@ describe('local group concurrency', () => {
       }
     });
 
-    // The first fetch lands while stop() closes the listener (index.js:228),
-    // ahead of the workers' stop that clears the tracking (manager.js:
-    // 866-879): job 2 is restored, and the shutdown fails job 1 alone.
+    // The first fetch lands while stop() closes the listener (index.js:308),
+    // and job 2, over g1's limit, is restored; the restore's I/O outlasts the
+    // rest of the stop, so job 1 reaches the handler after failWip and is
+    // refused (12.37.0, #953: manager.js:679-681, 1131-1135).
     assert.deepStrictEqual(observed, {
-      batches: [[id(1)]],
+      batches: [],
       states: [
         { id: id(1), state: 'retry' },
         { id: id(2), state: 'created' },

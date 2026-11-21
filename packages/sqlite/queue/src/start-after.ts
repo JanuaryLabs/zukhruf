@@ -21,7 +21,7 @@ type Interval = {
 // pg-boss normalizes startAfter in Attorney.checkSendArgs
 // (node_modules/pg-boss/dist/attorney.js:108-116, 140-146), then casts a
 // date time string as timestamptz and anything else as an interval added to
-// now (plans.js:2228-2230, 2299-2302). This resolves the same normalization
+// now (plans.js:2805-2807, 2882-2885). This resolves the same normalization
 // and a cited subset of what Postgres then parses; every supported form is
 // proven equal to pg-boss in the parity suite (src/parity).
 export class StartAfter {
@@ -70,7 +70,7 @@ export class StartAfter {
     }
     // Errors name the caller's own value, not its normalized form.
     const original = typeof value === 'string' ? value : normalized;
-    // plans.js:2228-2230: a string ending in Z or starting with a date is a
+    // plans.js:2805-2807: a string ending in Z or starting with a date is a
     // timestamp, anything else an interval.
     if (normalized.endsWith('Z') || StartAfter.#isoDate.test(normalized)) {
       return StartAfter.#timestamp(normalized, original);

@@ -7,6 +7,7 @@ import type {
   JobAttempt,
   JobWithMetadata,
   OffWorkOptions,
+  PgBoss,
   Queue,
   QueuePolicy,
   QueueStats,
@@ -22,16 +23,16 @@ import type {
 
 // pg-boss's JobWithMetadata with the fields its declaration marks non-null
 // but its runtime returns as null: the schema stores them in nullable columns
-// (node_modules/pg-boss/dist/plans.js:561, 570, 573, 574) and findJobs returns
-// them as stored (plans.js:599, 601, 609, 613), so a job that has not started
+// (node_modules/pg-boss/dist/plans.js:858, 867, 870, 871) and findJobs returns
+// them as stored (plans.js:898, 900, 908, 912), so a job that has not started
 // has `startedOn: null` in pg-boss too. `retryDelayMax` stays optional so a
 // PgBoss still satisfies the type. Its declaration also inherits `signal` from
-// Job, which findJobs never sets at run time (manager.js:2242-2261).
+// Job, which findJobs never sets at run time (manager.js:2743-2772).
 export type FoundJob<T> = Omit<
   JobWithMetadata<T>,
   'startedOn' | 'deadLetter' | 'retryDelayMax' | 'output' | 'policy' | 'signal'
 > & {
-  // A dead letter copy is inserted without a policy (plans.js:2615-2643).
+  // A dead letter copy is inserted without a policy (plans.js:3235-3264).
   policy: QueuePolicy | null;
   startedOn: Date | null;
   deadLetter: string | null;
@@ -42,11 +43,16 @@ export type FoundJob<T> = Omit<
 // The subset of pg-boss's PgBoss API (node_modules/pg-boss/dist/index.d.ts)
 // that SqliteJobQueue implements, in pg-boss's own types. A PgBoss instance
 // satisfies it as is. Job data is unknown: a caller validates what it reads.
+// pg-boss 12.38.2 declares StartOptions (dist/types.d.ts:1434) but leaves it
+// out of the root's exported types (dist/index.d.ts:124), so it is read off
+// start() itself.
+export type StartOptions = NonNullable<Parameters<PgBoss['start']>[0]>;
+
 export interface JobQueue {
   // Failures in work no caller awaits — worker polls, cron, the pool. With no
   // listener, EventEmitter throws on emit.
   on(event: 'error', listener: (error: Error) => void): this;
-  start(): Promise<this>;
+  start(options?: StartOptions): Promise<this>;
   stop(options?: StopOptions): Promise<void>;
   offWork(name: string, options?: OffWorkOptions): Promise<void>;
   createQueue(name: string, options?: Omit<Queue, 'name'>): Promise<void>;
@@ -73,7 +79,7 @@ export interface JobQueue {
     handler: WorkHandler<unknown>,
   ): Promise<string>;
   // A fetched job has no signal at run time, on both engines: only a worker
-  // adds one (node_modules/pg-boss/dist/manager.js:530). The `db` option is a
+  // adds one (node_modules/pg-boss/dist/manager.js:599). The `db` option is a
   // Postgres connection, which SqliteJobQueue does not read.
   fetch(
     name: string,
@@ -105,7 +111,7 @@ export interface JobQueue {
   fail(
     name: string,
     id: string | string[] | JobAttempt | JobAttempt[],
-    data?: object | null,
+    data?: unknown,
   ): Promise<CommandResponse>;
   schedule(
     name: string,

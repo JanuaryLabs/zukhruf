@@ -2,7 +2,7 @@
 
 A program sends jobs to a queue, and workers do the jobs later, also after the program restarts. [pg-boss](https://github.com/timgit/pg-boss) is a job queue that keeps its jobs in Postgres. A program that has no Postgres server, for example a desktop app or a CLI, cannot use it. This package keeps the jobs in one SQLite file through `node:sqlite`, and gives the API of pg-boss: the same method names, the same options, the same results and the same errors. The API is a declared subset of pg-boss: 18 methods of `PgBoss`.
 
-Zero divergence is the contract. A parity suite runs each scenario on real pg-boss 12.35.1 over PGlite, and on this package. Then it compares what each engine returned, stored and emitted. A test passes only when the two are equal. Thus a program can change from one engine to the other and keep its code.
+Zero divergence is the contract. A parity suite runs each scenario on real pg-boss 12.38.2 over PGlite, and on this package. Then it compares what each engine returned, stored and emitted. A test passes only when the two are equal. Thus a program can change from one engine to the other and keep its code.
 
 The words in these documents have one meaning each. See the glossary in [CONTEXT.md](./CONTEXT.md).
 
@@ -118,7 +118,7 @@ A schedule sends a job to its queue at each time that its cron or rrule rule giv
 | `cancel(name, id)`, `fail(name, id, data)`                                      | Cancel or fail jobs by id or by attempt.                                                                                                                           |
 | `schedule(name, cron, data, options)`, `unschedule(name, key)`                  | Send a job on a cron or rrule schedule, and remove the schedule.                                                                                                   |
 
-Other methods of `PgBoss` are not in the subset, for example `getQueue`, `getJobById`, `retry`, `resume`, `deleteJob`, `sendAfter`, `insert` and `getDb`. A method or an option that needs Postgres itself, for example `getDb` and its SQL, or the `db` option of `fetch`, `complete`, `touch`, `cancel` and `fail`, will not come.
+Other methods of `PgBoss` are not in the subset, for example `getQueue`, `getJobById`, `retry`, `resume`, `deleteJob`, `sendAfter`, `insert` and `getDb`. A method or an option that needs Postgres itself, for example `getDb` and its SQL, or the `db` option of `fetch`, `complete`, `touch`, `cancel`, `fail`, `schedule` and `unschedule`, will not come.
 
 ## Errors
 
@@ -141,13 +141,13 @@ Code that runs on both engines examines `code`, not the class. On Postgres, the 
 
 ## API
 
-The types that come from `pg-boss` (`Queue`, `SendOptions`, `Job`, `PgBossEventMap` and the others) are the types of pg-boss 12.35.1, as `src/job-queue.ts` and `src/index.ts` import them.
+The types that come from `pg-boss` (`Queue`, `SendOptions`, `Job`, `PgBossEventMap` and the others) are the types of pg-boss 12.38.2, as `src/job-queue.ts` and `src/index.ts` import them. pg-boss leaves `StartOptions` out of its exported types, so this package exports it, read off `PgBoss.start`.
 
 ```ts
 // The subset of PgBoss, in the types of pg-boss. A PgBoss satisfies it as is.
 interface JobQueue {
   on(event: 'error', listener: (error: Error) => void): this;
-  start(): Promise<this>;
+  start(options?: StartOptions): Promise<this>;
   stop(options?: StopOptions): Promise<void>;
   offWork(name: string, options?: OffWorkOptions): Promise<void>;
   createQueue(name: string, options?: Omit<Queue, 'name'>): Promise<void>;
@@ -196,7 +196,7 @@ interface JobQueue {
   fail(
     name: string,
     id: string | string[] | JobAttempt | JobAttempt[],
-    data?: object | null,
+    data?: unknown,
   ): Promise<CommandResponse>;
   schedule(
     name: string,

@@ -8,6 +8,7 @@ import { open } from '@zukhruf/sqlite-open';
 
 import type { JobQueue } from '../index.ts';
 import { SqliteJobQueue } from '../index.ts';
+import { DateFollowsClock } from '../testing/date-follows-clock.ts';
 import { flush } from '../testing/flush.ts';
 import { outcome } from '../testing/outcome.ts';
 import { ParityRun, type RunOptions } from './backends.ts';
@@ -20,13 +21,13 @@ import { Parity } from './parity.ts';
 const SEND_IT = '__pgboss__send-it';
 
 // pg-boss's default cadence: a cron pass every 30 s, the send-it worker
-// polling every 5 s (attorney.js:656-659).
+// polling every 5 s (attorney.js:709-712).
 const timekeeping = { schedule: true } satisfies RunOptions;
 
 const origin = Date.parse(ParityRun.start);
 
 // Starts the queue and lets its first cron pass finish. pg-boss runs that
-// pass on a real setImmediate (timekeeper.js:258), outside the clock, so
+// pass on a real setImmediate (timekeeper.js:297), outside the clock, so
 // every schedule a scenario writes afterwards is first seen at 30 s.
 async function startTimekeeping({ queue, clock }: ParityRun) {
   await queue.start();
@@ -186,7 +187,7 @@ describe('timekeeper', () => {
         targets: await jobs(run.queue, 'jobs'),
         sendIt: await jobs(run.queue, SEND_IT),
         errors: errorsOf(run.errors),
-        // The send-it worker's batches emit no wip (manager.js:1067-1081).
+        // The send-it worker's batches emit no wip (manager.js:1343-1357).
         wip: [...run.wip],
       };
     }, timekeeping);
@@ -474,6 +475,66 @@ describe('timekeeper', () => {
     assert.deepStrictEqual(observed, { targets: [], sendIt: [] });
   });
 
+  it('skips a stored schedule with an empty cron and warns once, for a row an earlier release wrote', async () => {
+    const observed = await Parity.assertSame(async (run) => {
+      await startTimekeeping(run);
+      await run.queue.createQueue('jobs');
+      await run.queue.schedule('jobs', '* * * * *');
+      // schedule() refuses '' now; a file an earlier release wrote can hold
+      // it, which no operation can write any more.
+      await run.sql(
+        `UPDATE ${run.backend === 'pg-boss' ? 'pgboss.schedule' : 'pgboss_schedule'} SET cron = ''`,
+      );
+      await run.clock.tick(95_000);
+      return {
+        targets: await createdOn(run.queue, 'jobs'),
+        warnings: run.warnings.map(({ at, message, data }) => ({
+          at,
+          message,
+          data,
+        })),
+      };
+    }, timekeeping);
+
+    // timekeeper.js:474-497, 589 (12.37.0): cron-parser would read '' as
+    // every minute, so the pass refuses it, skips the row and warns once.
+    assert.deepStrictEqual(observed, {
+      targets: [],
+      warnings: [
+        {
+          at: 30_000,
+          message:
+            'Warning: schedule for queue "jobs" (key "") could not be evaluated and was skipped: cron expression must be a non-empty string',
+          data: { queue: 'jobs', key: '', cron: '', timezone: 'UTC' },
+        },
+      ],
+    });
+  });
+
+  it('sends a daily cron once on the night its local time repeats, at the first of its two instants', async () => {
+    const observed = await Parity.assertSame(async (run) => {
+      await startTimekeeping(run);
+      await run.queue.createQueue('jobs');
+      await run.queue.schedule('jobs', '30 1 * * *', null, {
+        tz: 'America/New_York',
+      });
+      // On 2026-11-01 New York's clocks go back from 02:00 EDT to 01:00 EST,
+      // so 01:30 is 05:30Z and again 06:30Z.
+      await run.clock.setTime(Date.parse('2026-11-01T05:29:30.000Z'));
+      for (let minute = 0; minute < 62; minute++) {
+        await run.clock.tick(60_000);
+      }
+      return (await createdOn(run.queue, 'jobs')).map((at) =>
+        new Date(origin + Number(at)).toISOString(),
+      );
+    }, timekeeping);
+
+    // previousOccurrence (12.38.1: timekeeper.js:80-111) reads backwards the
+    // way the forward walk reads forwards: the second instant of a repeated
+    // local time is skipped unless the hour field lists every hour.
+    assert.deepStrictEqual(observed, ['2026-11-01T05:30:00.000Z']);
+  });
+
   it("owes missed: 'once' nothing from before the schedule was written", async () => {
     const observed = await Parity.assertSame(async (run) => {
       await startTimekeeping(run);
@@ -483,7 +544,7 @@ describe('timekeeper', () => {
       await run.clock.tick(30_000);
       await run.clock.setTime(origin + 12_600_000);
       // Written after the outage, so 03:00 came due before it existed
-      // (timekeeper.js:591-601).
+      // (timekeeper.js:634-644).
       await run.queue.schedule('late', '0 * * * *', null, { missed: 'once' });
       await run.clock.tick(10_000);
       return {
@@ -519,6 +580,7 @@ describe('timekeeper', () => {
   it('keeps time by default, and not when schedule is given as undefined', async () => {
     // Built by hand: the harness always names schedule (attorney.js:412).
     const read = async (queue: JobQueue, clock: TestClock) => {
+      using dateFollowsClock = new DateFollowsClock(clock);
       try {
         await queue.start();
         await flush(clock);
@@ -686,8 +748,9 @@ describe('timekeeper', () => {
   it('completes the send-it job of a refused forward when nothing listens for error', async () => {
     // Built by hand: the harness always listens for error. With no listener
     // the error event throws, and the send-it handler must still resolve
-    // (timekeeper.js:654-665).
+    // (timekeeper.js:697-708).
     const observe = async (queue: JobQueue, clock: TestClock) => {
+      using dateFollowsClock = new DateFollowsClock(clock);
       try {
         await queue.start();
         await flush(clock);
@@ -761,7 +824,7 @@ describe('timekeeper', () => {
       { schedule: false, cronMonitorIntervalSeconds: 0 },
     ];
     // Neither is started: pg-boss validates in its constructor
-    // (index.js:65, attorney.js:407-426), before it touches its database.
+    // (index.js:81, attorney.js:407-428), before it touches its database.
     const pglite = new PGlite();
     const database = open(':memory:');
     const pgBoss: string[] = [];

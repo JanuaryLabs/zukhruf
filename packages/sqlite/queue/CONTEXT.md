@@ -29,7 +29,7 @@ The tests in `src/parity`. Each scenario runs on real pg-boss over PGlite, then 
 _Avoid_: Conformance tests, compatibility tests, golden tests
 
 **Oracle**:
-Real pg-boss 12.35.1 on an in-memory PGlite, in the parity suite. What it observes is correct by definition.
+Real pg-boss 12.38.2 on an in-memory PGlite, in the parity suite. What it observes is correct by definition.
 _Avoid_: Reference implementation, baseline, mock
 
 **Observation**:
@@ -53,11 +53,11 @@ The pass that runs every `superviseIntervalSeconds`: it refreshes the counts of 
 _Avoid_: Maintenance job, cron, janitor
 
 **Monitor**:
-The part of the supervisor pass that runs for a queue once in each `monitorIntervalSeconds`, 60 seconds by default. It counts the jobs of the queue by state and keeps the counts in the queue file, which `getQueueStats` reads. Then it warns about a large queue and fails the expired jobs and the jobs that lost their heartbeat. pg-boss's word (`boss.js:293-381`).
+The part of the supervisor pass that runs for a queue once in each `monitorIntervalSeconds`, 60 seconds by default. It counts the jobs of the queue by state and keeps the counts in the queue file, which `getQueueStats` reads. Then it warns about a large queue and fails the expired jobs and the jobs that lost their heartbeat. pg-boss's word (`boss.js:329-423`).
 _Avoid_: Stats job, health check, cron monitor (`cronMonitorIntervalSeconds` is the interval of the cron pass)
 
 **Heartbeat**:
-The time at which an active job was last touched, for a job with `heartbeatSeconds` (an integer of 10 or more). The fetch sets it, and `touch` sets it again. A worker touches its active jobs every `heartbeatRefreshSeconds`, or half the shortest `heartbeatSeconds` of its batch. When a heartbeat is older than `heartbeatSeconds`, the monitor fails the job with `job heartbeat timeout` (`src/several-processes.test.ts`). pg-boss's word (`manager.js:520-565`, `plans.js:2379-2386`).
+The time at which an active job was last touched, for a job with `heartbeatSeconds` (an integer of 10 or more). The fetch sets it, and `touch` sets it again. A worker touches its active jobs every `heartbeatRefreshSeconds`, or half the shortest `heartbeatSeconds` of its batch. When a heartbeat is older than `heartbeatSeconds`, the monitor fails the job with `job heartbeat timeout` (`src/several-processes.test.ts`). pg-boss's word (`manager.js:589-634`, `plans.js:2962-2967, 2972-2975`).
 _Avoid_: Keep-alive, ping, lease
 
 **Schedule**:

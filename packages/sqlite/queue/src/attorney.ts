@@ -8,6 +8,7 @@ import {
 } from 'pg-boss';
 
 import type { TimekeeperConfig } from './timekeeper.ts';
+import { Uuid } from './uuid.ts';
 
 // The supervisor's timers, in seconds (node_modules/pg-boss/dist/attorney.js:
 // 608-620).
@@ -19,7 +20,7 @@ export type SuperviseIntervals = {
 };
 
 // pg-boss's argument validation (node_modules/pg-boss/dist/attorney.js,
-// 12.35.1). pg-boss ships no exports map, so these are module-private there:
+// 12.38.2). pg-boss ships no exports map, so these are module-private there:
 // each assert is ported by citation and proven equal by the parity suite.
 // pg-boss compares raw values (`config.x >= 1`); `Number(value) >= n` keeps
 // JavaScript's relational coercion for primitives without widening types.
@@ -28,7 +29,7 @@ export class Attorney {
   static readonly MAX_EXPIRATION_HOURS = 24;
   // attorney.js:6
   static readonly MIN_POLLING_INTERVAL_MS = 500;
-  // attorney.js:428
+  // attorney.js:430
   static readonly #clockMethods = [
     'now',
     'setTimeout',
@@ -37,7 +38,7 @@ export class Attorney {
     'clearInterval',
   ] as const;
 
-  // attorney.js:429-437
+  // attorney.js:431-439
   static applyClockConfig(clock: Clock | undefined): Clock {
     if (clock) {
       for (const method of Attorney.#clockMethods) {
@@ -50,7 +51,7 @@ export class Attorney {
     return clock || systemClock;
   }
 
-  // attorney.js:608-620, in that order: each at least a second, at most a
+  // attorney.js:661-673, in that order: each at least a second, at most a
   // day, 60 s when unset except maintenance's day. pg-boss writes the
   // defaults onto its config; they are returned here.
   static applyOpsConfig(config: object): SuperviseIntervals {
@@ -93,7 +94,7 @@ export class Attorney {
     return seconds;
   }
 
-  // attorney.js:653-660, in that order. clockMonitorIntervalSeconds is
+  // attorney.js:706-713, in that order. clockMonitorIntervalSeconds is
   // validated only: it paces pg-boss's clock-skew read, and SQLite's clock is
   // the database clock.
   static applyScheduleConfig(config: object): TimekeeperConfig {
@@ -129,7 +130,7 @@ export class Attorney {
     return Number(value) || bounds.fallback;
   }
 
-  // attorney.js:445. warningSlowQuerySeconds and warningRetentionDays (446-449)
+  // attorney.js:466. warningSlowQuerySeconds and warningRetentionDays (446-449)
   // configure warnings this queue never raises or persists.
   static validateWarningConfig(config: object): void {
     assert(
@@ -139,7 +140,7 @@ export class Attorney {
     );
   }
 
-  // attorney.js:585-607: a worker's poll and notify-backstop intervals in ms.
+  // attorney.js:638-660: a worker's poll and notify-backstop intervals in ms.
   // pg-boss writes them onto the options object; they are returned here.
   static #applyPollingInterval(config: object): {
     pollingInterval: number;
@@ -438,7 +439,7 @@ export class Attorney {
     );
   }
 
-  // manager.js:1596-1605: ids, or jobs as fetch() and work() hand them out,
+  // manager.js:1980-1989: ids, or jobs as fetch() and work() hand them out,
   // whose retryCount fences the call to the attempt that was fetched.
   static mapAttemptArg(
     id: string | string[] | JobAttempt | JobAttempt[],
@@ -468,7 +469,7 @@ export class Attorney {
     };
   }
 
-  // attorney.js:554-559
+  // attorney.js:607-612
   static assertKey(key: unknown): void {
     if (!key) {
       return;
@@ -477,7 +478,35 @@ export class Attorney {
     Attorney.assertObjectName(key, 'Key');
   }
 
-  // attorney.js:549-553
+  // attorney.js:602-606
+  // attorney.js:575-582 (12.38.0): the limit of a public list read, an
+  // integer from 1 to 100000, 1000 when left out.
+  static assertListLimit(method: string, limit: unknown = 1000): number {
+    assert(
+      Number.isInteger(limit) &&
+        typeof limit === 'number' &&
+        limit >= 1 &&
+        limit <= 100_000,
+      `${method}: limit must be an integer between 1 and 100000`,
+    );
+    return limit;
+  }
+
+  // attorney.js:583-594: the `after` of a list read that pages by one value;
+  // with `id`, a uuid in any spelling the uuid type accepts.
+  static assertListAfter(method: string, after: unknown, id = false): void {
+    assert(
+      after === undefined || (typeof after === 'string' && after.length > 0),
+      `${method}: after must be a non-empty string`,
+    );
+    assert(
+      !id ||
+        after === undefined ||
+        (typeof after === 'string' && Uuid.accepts(after)),
+      `${method}: after must be a uuid`,
+    );
+  }
+
   static assertQueueName(name: unknown): asserts name is string {
     assert(name, 'Name is required');
     assert(typeof name === 'string', 'Name must be a string');
@@ -574,7 +603,7 @@ export class Attorney {
     );
   }
 
-  // attorney.js:570-576
+  // attorney.js:623-629
   static #validateRetryConfig(config: object): void {
     assert(
       !('retryDelay' in config) ||
@@ -609,7 +638,7 @@ export class Attorney {
     );
   }
 
-  // attorney.js:563-569
+  // attorney.js:616-622
   static #validateExpirationConfig(config: object): void {
     const expireInSeconds =
       'expireInSeconds' in config ? config.expireInSeconds : undefined;
@@ -624,7 +653,7 @@ export class Attorney {
     );
   }
 
-  // attorney.js:560-562
+  // attorney.js:613-615
   static #validateRetentionConfig(config: object): void {
     assert(
       !('retentionSeconds' in config) || Number(config.retentionSeconds) >= 1,
@@ -632,7 +661,7 @@ export class Attorney {
     );
   }
 
-  // attorney.js:650-652
+  // attorney.js:703-705
   static #validateDeletionConfig(config: object): void {
     assert(
       !('deleteAfterSeconds' in config) ||
@@ -641,7 +670,7 @@ export class Attorney {
     );
   }
 
-  // attorney.js:577-579
+  // attorney.js:630-632
   static #validateHeartbeatConfig(config: object): void {
     assert(
       !('heartbeatSeconds' in config) ||

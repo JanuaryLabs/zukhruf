@@ -1,11 +1,17 @@
-import type { Clock, WipData, WorkOptions, WorkerState } from 'pg-boss';
+import {
+  type Clock,
+  type WipData,
+  type WorkOptions,
+  type WorkerState,
+  systemClock,
+} from 'pg-boss';
 
 import { Future } from '@zukhruf/async';
 
 import { Timers } from './timers.ts';
 
 // work()'s options as checkWorkArgs copies them, with the poll intervals it
-// adds in ms (node_modules/pg-boss/dist/attorney.js:367-368, 585-602).
+// adds in ms (node_modules/pg-boss/dist/attorney.js:367-368, 638-655).
 export type WorkerOptions = WorkOptions & {
   pollingInterval: number;
   notifyPollingInterval: number;
@@ -34,7 +40,7 @@ type Observed = Pick<
 >;
 
 // One polling loop of a work() call, which starts one per localConcurrency
-// (node_modules/pg-boss/dist/worker.js:53-114): fetch at once, hand the jobs
+// (node_modules/pg-boss/dist/worker.js:61-129): fetch at once, hand the jobs
 // over, then wait out the interval on the clock unless notified meanwhile.
 export class Worker<TJob> {
   readonly id: string;
@@ -43,7 +49,7 @@ export class Worker<TJob> {
   readonly name: string;
   readonly options: WorkerOptions;
   readonly createdOn: number;
-  // The batch in flight, which a shutdown fails (manager.js:884-909).
+  // The batch in flight, which a shutdown fails (manager.js:1129-1159).
   jobs: TJob[] = [];
   // The batch's controller while it runs, which a shutdown aborts.
   abortController: AbortController | null = null;
@@ -58,6 +64,13 @@ export class Worker<TJob> {
   #notifications = 0;
   // Aborts the round's wait; a fresh one arms each wait.
   #wake = new AbortController();
+  // Aborted once stop() has spent its grace for running handlers, so a batch
+  // that lands after it is refused (12.37.0, #953: manager.js:679-681,
+  // 1131-1135).
+  readonly #grace = new AbortController();
+  // Aborted once stop() begins: a handler overrun waits only until then
+  // (12.38.0: worker.js:121-128).
+  readonly #stopRequested = new AbortController();
   // How the loop ended, which stop() waits for.
   readonly #ran = new Future<void>();
   // What the loop saw last, as pg-boss reports it in toWipData.
@@ -91,7 +104,19 @@ export class Worker<TJob> {
     return this.#state === 'stopped';
   }
 
-  // pg-boss keeps the loop's promise for stop() to await (worker.js:51, 113):
+  get stopSignal(): AbortSignal {
+    return this.#stopRequested.signal;
+  }
+
+  get graceExpired(): boolean {
+    return this.#grace.signal.aborted;
+  }
+
+  expireGrace(): void {
+    this.#grace.abort();
+  }
+
+  // pg-boss keeps the loop's promise for stop() to await (worker.js:59, 125):
   // a loop that rejects, for example on an error emit with no listener,
   // rejects the stop that waits for it, and is unhandled when no stop waits.
   start(): void {
@@ -112,7 +137,11 @@ export class Worker<TJob> {
       this.#state = 'active';
     }
     while (!this.stopping) {
-      const started = this.#clock.now();
+      // The round runs on the system clock of pg-boss, not the configured
+      // clock: a clock set back during the round would make the duration
+      // negative and stretch the wait by that much. The job times below
+      // read the configured clock (12.38.1, #990: worker.js:64-67,90).
+      const started = systemClock.now();
       // Stays 0 on an error, so a failed fetch backs off to the normal poll.
       let fetchedCount = 0;
       const notifications = this.#notifications;
@@ -145,7 +174,7 @@ export class Worker<TJob> {
         error.message = `${error.message} (Queue: ${this.name}, Worker: ${this.id})`;
         this.#onError(error);
       }
-      const duration = this.#clock.now() - started;
+      const duration = systemClock.now() - started;
       this.#observed = { ...this.#observed, lastJobDuration: duration };
       const remaining = this.#resolveInterval(fetchedCount) - duration;
       if (
@@ -165,7 +194,7 @@ export class Worker<TJob> {
     this.#wake.abort();
   }
 
-  // worker.js:115-122
+  // worker.js:130-137
   abort(): void {
     if (!this.abortController) {
       return;
@@ -180,11 +209,12 @@ export class Worker<TJob> {
       return;
     }
     this.#state = 'stopping';
+    this.#stopRequested.abort();
     this.#wake.abort();
     await this.#ran.wait();
   }
 
-  // worker.js:123-139
+  // worker.js:138-154
   toWipData(): WipData {
     return {
       id: this.id,

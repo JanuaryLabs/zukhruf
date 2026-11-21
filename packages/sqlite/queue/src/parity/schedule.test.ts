@@ -274,12 +274,14 @@ describe('schedule', () => {
       };
     });
 
-    // Timekeeper.schedule (node_modules/pg-boss/dist/timekeeper.js:812-849):
+    // Timekeeper.schedule (node_modules/pg-boss/dist/timekeeper.js:863-900):
+    // options without db, a non-empty string expression (12.37.0: 213-218),
     // the expression (cron-parser, or rrule.js's checks), the zone, a rule's
     // remaining occurrences, checkSendArgs, assertKey, assertMissedPolicy,
-    // then the upsert, whose foreign key names the queue (845-847).
+    // then the upsert, whose foreign key names the queue.
     const rejects = (message: string) =>
       `AssertionError: ${message} (ERR_ASSERTION)`;
+    const nonEmpty = rejects('cron expression must be a non-empty string');
     const spent = rejects(
       'rrule expression has no occurrence left, so the schedule would never send a job',
     );
@@ -302,10 +304,10 @@ describe('schedule', () => {
         dayOutOfRange:
           'Error: Constraint error, got value 32 expected range 1-31',
         tooManyFields: 'Error: Invalid cron expression, too many fields',
-        blank: 'Error: Invalid characters, got value: ',
+        blank: nonEmpty,
         unknownAlias: 'Error: Validation error, cannot resolve alias "min"',
-        number: 'TypeError: expression.trim is not a function',
-        empty: 'resolved',
+        number: nonEmpty,
+        empty: nonEmpty,
         seconds: 'resolved',
         alias: 'resolved',
         names: 'resolved',
@@ -383,7 +385,7 @@ describe('schedule', () => {
         badPriority: rejects('priority must be an integer'),
         undefinedPriority: rejects('priority must be an integer'),
         nullOptions:
-          "TypeError: Cannot destructure property 'tz' of 'options' as it is null.",
+          "TypeError: Cannot destructure property 'db' of 'options' as it is null.",
       },
       data: {
         function: rejects(
@@ -418,8 +420,7 @@ describe('schedule', () => {
         empty: noQueueName,
         number: noQueueName,
         null: rejects('send object API only accepts 1 argument'),
-        undefinedCron:
-          'error: null value in column "cron" of relation "schedule" violates not-null constraint (23502)',
+        undefinedCron: nonEmpty,
       },
       order: {
         cronBeforeMissingQueue: invalidCharacters,
@@ -464,7 +465,7 @@ describe('schedule', () => {
     });
 
     // assertRruleSends reads the first occurrence after the database's time
-    // in the schedule's own zone (timekeeper.js:834, rrule.js:232-235,
+    // in the schedule's own zone (timekeeper.js:888, rrule.js:232-235,
     // 382-384); SQLite's database time is the clock's.
     const spent =
       'AssertionError: rrule expression has no occurrence left, so the schedule would never send a job (ERR_ASSERTION)';
@@ -531,7 +532,7 @@ describe('schedule', () => {
       return { stored, upserted };
     });
 
-    // timekeeper.js:815-817, 836-841 and plans.js:358-374, 1337-1349: the
+    // timekeeper.js:869-871, 890-895 and plans.js:388-404, 1788-1800: the
     // zone defaults to UTC, the kind is read off the expression, a key keeps
     // the driver's text of a falsy non-string, data is jsonb (a string is
     // JSON text), and the options are stored whole, tz, key and missed
@@ -778,9 +779,9 @@ describe('schedule', () => {
       return { results, afterUnschedule, afterDelete: await keys() };
     });
 
-    // timekeeper.js:850-853, plans.js:1350-1356, the key bound as text as
+    // timekeeper.js:904-907, plans.js:1801-1807, the key bound as text as
     // schedule() stores it; the schedule's foreign key cascades
-    // (plans.js:360).
+    // (plans.js:390).
     assert.deepStrictEqual(observed, {
       results: {
         defaultKey: 'resolved',

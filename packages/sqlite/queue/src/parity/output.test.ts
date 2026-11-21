@@ -97,11 +97,11 @@ describe('outputs', () => {
       return outputs;
     });
 
-    // complete() stores the result only for a one-job batch (manager.js:628),
+    // complete() stores the result only for a one-job batch (manager.js:710),
     // through mapCompletionDataArg: null, undefined and functions as null,
     // objects as they are, anything else as { value }, all through
-    // serialize-error (manager.js:1614-1622); a throw fails the job with the
-    // serialized error (manager.js:639-655).
+    // serialize-error (manager.js:1998-2006); a throw fails the job with the
+    // serialized error (manager.js:721-737).
     const completed = (output: unknown) => [{ state: 'completed', output }];
     const failed = (output: unknown) => ({ state: 'failed', output });
     assert.deepStrictEqual(observed, {
@@ -188,9 +188,9 @@ describe('outputs', () => {
     // Both drivers bind a string as JSON text: a Date serializes to its ISO
     // string, which jsonb rejects (22P02), as it rejects \u0000 (22P05) and an
     // unpaired surrogate (22P02); serialize-error turns a bigint into "1n"
-    // before the driver sees it (manager.js:1614-1622). A
+    // before the driver sees it (manager.js:1998-2006). A
     // rejected fail() changes nothing; a rejected completion fails the job
-    // with the driver's error (manager.js:628, 639-655).
+    // with the driver's error (manager.js:710, 721-737).
     const invalidJson = {
       name: 'error',
       message: 'invalid input syntax for type json',

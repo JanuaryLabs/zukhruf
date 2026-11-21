@@ -4,7 +4,7 @@ import type { Clock } from 'pg-boss';
 export type ClockDelay = Promise<void> & { abort(): void };
 
 // pg-boss's waits, scheduled on the configured clock so a test clock fires
-// them (node_modules/pg-boss/dist/tools.js:32-77).
+// them (node_modules/pg-boss/dist/tools.js:35-80).
 export class Timers {
   // clockDelay: rejects with `error` when the wait runs out, if given.
   static delay(

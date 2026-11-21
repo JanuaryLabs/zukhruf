@@ -123,7 +123,7 @@ describe('touch()', () => {
       }
       const afterRefusals = await beats(queue, 'jobs');
       // The lookup takes each spelling of a uuid, and the fence is built from
-      // the canonical one (plans.js:2056-2075).
+      // the canonical one (plans.js:2593-2612).
       const braced = await queue.touch('jobs', {
         id: `{${id(1)}}`,
         retryCount: 0,
@@ -136,7 +136,7 @@ describe('touch()', () => {
       };
     });
 
-    // mapAttemptArg (manager.js:1596-1606), then the queue (manager.js:1998),
+    // mapAttemptArg (manager.js:1980-1990), then the queue (manager.js:2414),
     // then the statement.
     const requires = 'AssertionError: touch() requires an id';
     const notAMix =
@@ -211,8 +211,8 @@ describe('touch()', () => {
     }, supervised);
 
     // failJobsByHeartbeat: heartbeat_on + heartbeat_seconds < now
-    // (plans.js:2379-2386), and a touch sets heartbeat_on to now
-    // (plans.js:2387-2400).
+    // (plans.js:2962-2967, 2972-2975), and a touch sets heartbeat_on to now
+    // (plans.js:2993-3006).
     const touched = (n: number) => ({
       jobs: [id(n)],
       requested: 1,
@@ -307,7 +307,7 @@ describe('touch()', () => {
       return { responses, jobs: await beats(queue, 'jobs') };
     });
 
-    // mapCommandResponse (manager.js:1623-1633).
+    // mapCommandResponse (manager.js:2007-2017).
     const touched = (...ns: number[]) => ({
       jobs: ns.map((n) => id(n)),
       requested: ns.length,
@@ -391,8 +391,8 @@ describe('touch()', () => {
     }, supervised);
 
     // The fence matches an active job at the fetched retryCount only
-    // (plans.js:2051-2054); plain ids carry no fence (manager.js:1596-1606),
-    // and touchJobs needs an active job (plans.js:2387-2400).
+    // (plans.js:2588-2591); plain ids carry no fence (manager.js:1980-1990),
+    // and touchJobs needs an active job (plans.js:2993-3006).
     const none = { jobs: [id(1)], requested: 1, affected: 0, settled: [] };
     assert.deepStrictEqual(
       {
@@ -470,7 +470,7 @@ describe('touch()', () => {
       };
     });
 
-    // state = 'active' (plans.js:2387-2400).
+    // state = 'active' (plans.js:2993-3006).
     for (const [by, base] of [
       [observed.byId, 100],
       [observed.byJob, 200],

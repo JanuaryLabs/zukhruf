@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
 
@@ -65,7 +66,7 @@ describe('queue lifecycle', () => {
       );
 
     // pg-boss checks the clock while reading its configuration, before it
-    // touches a database (node_modules/pg-boss/dist/attorney.js:428-437).
+    // touches a database (node_modules/pg-boss/dist/attorney.js:430-439).
     const pgBoss = observe(
       (clock) =>
         new PgBoss({
@@ -134,8 +135,8 @@ describe('queue lifecycle', () => {
   });
 
   // No in-process oracle runs pg-boss on its own connection (that needs a
-  // Postgres server), so this pins pg-boss 12.35.1's message for it by
-  // citation: node_modules/pg-boss/dist/db.js:89.
+  // Postgres server), so this pins pg-boss 12.38.2's message for it by
+  // citation: node_modules/pg-boss/dist/db.js:112.
   it('refuses SQL before start and after a closing stop when it owns its database, and reopens it on restart', async () => {
     await using dir = await new TemporaryFiles().directory('queue-owned-');
     const queue = new SqliteJobQueue({
@@ -148,20 +149,20 @@ describe('queue lifecycle', () => {
       await queue.createQueue('jobs');
       const whileStarted = await outcome(() => queue.send('jobs', { n: 1 }));
       // A bare stop() closes it: pg-boss's close defaults to true
-      // (node_modules/pg-boss/dist/index.js:201).
+      // (node_modules/pg-boss/dist/index.js:272).
       await queue.stop();
       const afterClose = await outcome(() => queue.send('jobs', { n: 1 }));
       await queue.start();
       const afterRestart = await outcome(() => queue.send('jobs', { n: 2 }));
       // Stopped without closing, a later closing stop still closes it
-      // (node_modules/pg-boss/dist/index.js:206-214).
+      // (node_modules/pg-boss/dist/index.js:277-285).
       await queue.stop({ close: false });
       const afterKeepOpen = await outcome(() => queue.send('jobs', { n: 3 }));
       await queue.stop();
       const afterLateClose = await outcome(() => queue.send('jobs', { n: 4 }));
 
       const notOpened =
-        'AssertionError: Database not opened. Call open() before executing SQL.';
+        'AssertionError: Database not opened. Call start() before using pg-boss, or again after stop().';
       assert.deepStrictEqual(
         {
           beforeStart,
@@ -186,7 +187,7 @@ describe('queue lifecycle', () => {
   });
 
   // pg-boss returns its #startingPromise to a start that comes while one
-  // runs (node_modules/pg-boss/dist/index.js:112-117).
+  // runs (node_modules/pg-boss/dist/index.js:140-145).
   it('rejects a start that comes during a failing start with the same error', async () => {
     await using dir = await new TemporaryFiles().directory('queue-start-');
     const queue = new SqliteJobQueue({
@@ -203,6 +204,74 @@ describe('queue lifecycle', () => {
       assert.equal(second, first);
     } finally {
       await queue.stop({ graceful: false, close: true });
+    }
+  });
+
+  it('checks start() attempts before anything else, as pg-boss does', async () => {
+    const observed = await Parity.assertSame(async ({ queue }) => {
+      // As an untyped caller sends them.
+      const start = (attempts: unknown) =>
+        outcome(() => Reflect.apply(queue.start, queue, [{ attempts }]));
+      return {
+        zero: await start(0),
+        fraction: await start(1.5),
+        text: await start('2'),
+        three: await start(3),
+      };
+    });
+
+    // index.js:132-134 (12.37.0)
+    const refused =
+      'AssertionError: start() attempts must be an integer of 1 or more';
+    assert.deepStrictEqual(observed, {
+      zero: refused,
+      fraction: refused,
+      text: refused,
+      three: 'resolved',
+    });
+  });
+
+  // index.js:161-196, 259-264 (12.37.0): PGlite cannot fail a start without an
+  // assertion, so this has no pg-boss run beside it.
+  it('tries start() again after a failure that is not an assertion, warns once, and stop() ends the wait', async () => {
+    await using dir = await new TemporaryFiles().directory('queue-start-');
+    const path = join(dir.path, 'missing', 'queue.sqlite');
+    const exhausted = new SqliteJobQueue({ path, schedule: false });
+    const warnings: unknown[] = [];
+    exhausted.on('warning', (warning) => warnings.push(warning));
+    const stopped = new SqliteJobQueue({ path, schedule: false });
+    try {
+      const started = performance.now();
+      const twice = await outcome(() => exhausted.start({ attempts: 2 }));
+      const waited = performance.now() - started;
+
+      // Once the first attempt failed and its wait began, the folder exists,
+      // so a second attempt would open the file: only the stop's cancel keeps
+      // the start failed.
+      const warned = Promise.withResolvers<void>();
+      stopped.on('warning', () => warned.resolve());
+      const waiting = outcome(() => stopped.start({ attempts: 5 }));
+      await warned.promise;
+      await mkdir(join(dir.path, 'missing'));
+      await stopped.stop({ graceful: false, close: true });
+      const cancelled = await waiting;
+
+      assert.notEqual(twice, 'resolved');
+      assert.ok(waited >= 900, `waited ${waited} ms between the attempts`);
+      assert.deepStrictEqual(
+        warnings.map((warning) => Reflect.get(Object(warning), 'data')),
+        [
+          {
+            type: 'start_retry',
+            attempts: 2,
+            error: twice.replace(/^\w+: /, ''),
+          },
+        ],
+      );
+      assert.equal(cancelled, twice);
+    } finally {
+      await exhausted.stop({ graceful: false, close: true });
+      await stopped.stop({ graceful: false, close: true });
     }
   });
 
@@ -310,7 +379,7 @@ describe('queue lifecycle', () => {
     // null that passes validation (deleteAfterSeconds, warningQueueSize)
     // keeps it; retryDelayMax, heartbeatSeconds and deadLetter take a present
     // key's value, so null clears them
-    // (node_modules/pg-boss/dist/plans.js:1155-1177; attorney.js:90-101).
+    // (node_modules/pg-boss/dist/plans.js:1565-1587; attorney.js:90-101).
     // warningQueueSize reaches no job, so only its update is observed.
     const { warningQueueSize, notify, ...onJob } = settings;
     const kept = { update: 'resolved', job: onJob };
