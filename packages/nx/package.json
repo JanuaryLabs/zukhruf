@@ -1,6 +1,6 @@
 {
   "name": "@zukhruf/nx",
-  "version": "0.8.56",
+  "version": "0.8.57",
   "description": "The Nx part of the monorepo standard: inference plugins for format, test, lint, opentofu and prisma targets, and generators for the root files (preset, init), apps (node-app, react-app, pair, ui-package), a db package (prisma) and delivery (dokploy).",
   "license": "MIT",
   "repository": {
@@ -131,7 +131,7 @@
     "@nx/react": ">=24.0.6 <25.0.0",
     "@nx/vite": ">=24.0.6 <25.0.0",
     "@nx/vitest": ">=24.0.6 <25.0.0",
-    "@zukhruf/testing": "^0.8.56",
+    "@zukhruf/testing": "^0.8.57",
     "nx": ">=24.0.6 <25.0.0",
     "prettier": "^3.0.0"
   },
@@ -153,8 +153,8 @@
     }
   },
   "devDependencies": {
-    "@zukhruf/eslint": "^0.8.56",
-    "@zukhruf/fs": "^0.8.56",
-    "@zukhruf/testing": "^0.8.56"
+    "@zukhruf/eslint": "^0.8.57",
+    "@zukhruf/fs": "^0.8.57",
+    "@zukhruf/testing": "^0.8.57"
   }
 }
