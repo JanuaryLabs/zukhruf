@@ -92,7 +92,6 @@ export default async function reactAppGenerator(
     useReactRouter: false,
     strict: true,
     useProjectJson: false,
-    addPlugin: true,
     skipFormat: true,
   });
   const projectName = projectNameOf(tree, projectRoot);
@@ -217,7 +216,6 @@ async function addComponentTests(
     uiFramework: 'react',
     testEnvironment: 'happy-dom',
     coverageProvider: 'v8',
-    addPlugin: true,
     skipViteConfig: true,
     skipFormat: true,
   });

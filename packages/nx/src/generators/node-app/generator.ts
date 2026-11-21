@@ -111,7 +111,6 @@ export default async function nodeAppGenerator(
     e2eTestRunner: 'none',
     docker: false,
     useProjectJson: false,
-    addPlugin: true,
     port,
     skipFormat: true,
   });

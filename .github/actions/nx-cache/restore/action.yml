@@ -1,5 +1,5 @@
 name: Restore the Nx cache
-description: Restores ~/.nx, where Nx 23 keeps its cache and the database that indexes it, from the newest Actions cache of this runner image under a name. Run it before the first nx command, and nx-cache/save at the end of the job with its save-key.
+description: Restores ~/.nx, where Nx keeps its cache and the database that indexes it, from the newest Actions cache of this runner image and this Nx under a name. Run it before the first nx command, and nx-cache/save at the end of the job with its save-key.
 
 inputs:
   name:
@@ -42,10 +42,18 @@ runs:
         esac
         echo "id=$(printf '%s' "$id" | cut -c 1-16)" >> "$GITHUB_OUTPUT"
 
+    # A new Nx reads a database of a new version (Nx 23 <id>-v3.db, Nx 24
+    # <id>-v6.db), and its task hashes change, so it starts a new cache, as a
+    # new runner image does. The version is the one package-lock.json records.
+    - name: Find the Nx version
+      id: nx
+      shell: bash
+      run: echo "version=$(jq -r '.packages["node_modules/nx"].version' package-lock.json)" >> "$GITHUB_OUTPUT"
+
     - name: Restore the Nx cache
       id: restore
       uses: actions/cache/restore@v6
       with:
         path: ~/.nx
-        key: nx-${{ runner.os }}-${{ steps.machine.outputs.id }}-${{ inputs.name }}-${{ github.sha }}
-        restore-keys: nx-${{ runner.os }}-${{ steps.machine.outputs.id }}-${{ inputs.name }}-
+        key: nx-${{ runner.os }}-${{ steps.machine.outputs.id }}-nx${{ steps.nx.outputs.version }}-${{ inputs.name }}-${{ github.sha }}
+        restore-keys: nx-${{ runner.os }}-${{ steps.machine.outputs.id }}-nx${{ steps.nx.outputs.version }}-${{ inputs.name }}-

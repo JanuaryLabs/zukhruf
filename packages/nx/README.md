@@ -240,7 +240,7 @@ Seven workspaces run their tests with `node --test` through Nx. Each one copies 
 
 ### Use the test area
 
-You need Nx 23.2.1 or later. The peer range of `nx` and `@nx/devkit` becomes `>=23.2.1 <25`. See [Prerequisites of the test area](#prerequisites-of-the-test-area).
+You need Nx 24.0.6 or later. The peer range of `nx` and `@nx/devkit` becomes `>=24.0.6 <25`. See [Prerequisites of the test area](#prerequisites-of-the-test-area).
 
 Add the plugin to `plugins` in `nx.json`. The options are optional. They apply to each project of the workspace:
 
@@ -403,14 +403,14 @@ A `scripts.test` in a `package.json` replaces the inferred target. Nx runs it wi
 
 ### Prerequisites of the test area
 
-- Nx 23.2.1 or later. In Nx 23.2.1, a target default with its own `command` replaces the command of a plugin (`nx/dist/src/project-graph/utils/project-configuration/target-defaults.js:201-229`). Nx 23.1.0 does not do this. text2sql uses 23.1.0 today.
+- Nx 24.0.6 or later. In Nx 23.2.1, a target default with its own `command` replaces the command of a plugin (`nx/dist/src/project-graph/utils/project-configuration/target-defaults.js:201-229`). Nx 23.1.0 does not do this. text2sql uses 23.1.0 today.
 - Delete the `command` of `targetDefaults.test` in `nx.json`. If you keep it, it replaces the command of the plugin.
 - Write each extra dependency with `"..."`, so that `^build` stays. For example, factory writes `["...", "^sdk"]`.
 - If the tests of a project use its own built output, add `build`: `targetDefaults.test.dependsOn: ["...", "build"]`. zukhruf, deepagents, elt and context-compiler need this. For example, the tests of `@zukhruf/nx` resolve `@zukhruf/nx/format` to `dist`. Nx skips a dependency on a target that the project does not have, so this is safe for a project with no `build`.
 
 ### Migrate a workspace to the test area
 
-1. Update `nx` and `@nx/devkit` to 23.2.1 or later.
+1. Update `nx` and `@nx/devkit` to 24.0.6 or later.
 2. Add `@zukhruf/nx/test` to `plugins` in `nx.json`. Set `timeout` and `flags` if the repo needs other values.
 3. Delete the `command` of `targetDefaults.test`, and its tag filters. Write each extra dependency with `"..."`.
 4. Delete each `test` target in a `project.json` or `package.json` that the plugin now gives. Move the flags of one project into its `args`.
@@ -453,7 +453,7 @@ The `lint` area is an Nx inference plugin. It adds inputs to the `lint` target t
 
 ### Use the lint area
 
-You need Nx 23.2.1 or later, `@nx/eslint` and `@zukhruf/eslint`. Add the plugin to `plugins` in `nx.json`, after `@nx/eslint/plugin`:
+You need Nx 24.0.6 or later, `@nx/eslint` and `@zukhruf/eslint`. Add the plugin to `plugins` in `nx.json`, after `@nx/eslint/plugin`:
 
 ```json
 {
@@ -550,7 +550,7 @@ A local file that the root ESLint config imports is also an input of the workspa
 
 ### Prerequisites of the lint area
 
-- Nx 23.2.1 or later. The peer range of the package is `>=23.2.1 <25`.
+- Nx 24.0.6 or later. The peer range of the package is `>=24.0.6 <25`.
 - `@zukhruf/eslint` in the workspace.
 - Delete the hand list in `targetDefaults.lint.inputs`. `targetDefaults` comes after the plugins, so a list without `"..."` replaces the inputs of the plugin.
 - Keep the other keys of `targetDefaults.lint`, for example the `options.command`, `env` and `parallelism` of deepagents.
@@ -603,7 +603,7 @@ Five projects in two workspaces run OpenTofu through Nx: the `infra` project of 
 
 ### Use the opentofu area
 
-You need Nx 23.2.1 or later and the `tofu` command on the `PATH`. Add the plugin to `plugins` in `nx.json`, after `@zukhruf/nx/format`:
+You need Nx 24.0.6 or later and the `tofu` command on the `PATH`. Add the plugin to `plugins` in `nx.json`, after `@zukhruf/nx/format`:
 
 ```json
 {
@@ -741,7 +741,7 @@ Six projects in two workspaces run Prisma through Nx: `@factory/db` of factory, 
 
 ### Use the prisma area
 
-You need Nx 23.2.1 or later, and `prisma` and `@prisma/client` in the lockfile. Add the plugin to `plugins` in `nx.json`. Then add `generate` to the `dependsOn` of `typecheck` and `build` in `targetDefaults`:
+You need Nx 24.0.6 or later, and `prisma` and `@prisma/client` in the lockfile. Add the plugin to `plugins` in `nx.json`. Then add `generate` to the `dependsOn` of `typecheck` and `build` in `targetDefaults`:
 
 ```jsonc
 {
@@ -1188,7 +1188,7 @@ Each schema sets `additionalProperties: false`. The project name is the package 
 | `pair`       | in the web: `src/api.ts` and the client, `zod` and `fast-content-type-parse` in its manifest; in the api: `src/routes/ui.route.ts`, its mount in `app.ts` when `UI_ROOT` is set (the process exits at startup when `<UI_ROOT>/index.html` is missing), `UI_ROOT` (optional) in `env.ts`, and the Dockerfile again with the web build and `UI_ROOT=/app/<web>/dist`                                                                                                                                                                                                                                                                                                                   | —                                                                                                                                                                                                                                                                                                                                                 |
 | `ui-package` | `package.json` with the `development` export of `src/index.ts`, `src/package-name.tsx` (a `PackageName` component), `vite.config.ts` (a library with `vite-plugin-dts`), the tsconfigs, `eslint.config.mjs` with `@zukhruf/eslint/react` and `tailwind`, `tests/public-api.test.mjs`, `tests/package-name.test.mjs` (renders `PackageName` in happy-dom under `node:test`; `@happy-dom/global-registrator` and `react-dom` in its `devDependencies`)                                                                                                                                                                                                                                 | the React root packages; `fsevents: false` in `allowScripts`                                                                                                                                                                                                                                                                                      |
 
-The targets of a project are in the `nx` key of its `package.json`: the generators pass `useProjectJson: false` and `addPlugin: true` to Nx, so Nx 23 and 24 write the same shape. `format`, `lint`, `test` (node) and `typecheck` come from the inference plugins; `node-app` writes `build` (one ESM esbuild bundle, each npm package external, with a `require` banner), `serve` (with `NODE_ENV=production`), `portless` (`<app>.<scope>`), `docker:build` and `docker:run`, and keeps `prune-lockfile` of `@nx/node`. `react-app` writes `portless`, `dev` and `serve` with `NODE_ENV=development` (Vite turns React Fast Refresh off under production), and the `test` target of the project (`^sdk`, `NODE_ENV=test`, because production React has no `act()`).
+The targets of a project are in the `nx` key of its `package.json`: the generators pass `useProjectJson: false` to Nx, and Nx 24 always registers its inference plugins, so the targets come from those plugins. `format`, `lint`, `test` (node) and `typecheck` come from the inference plugins; `node-app` writes `build` (one ESM esbuild bundle, each npm package external, with a `require` banner), `serve` (with `NODE_ENV=production`), `portless` (`<app>.<scope>`), `docker:build` and `docker:run`, and keeps `prune-lockfile` of `@nx/node`. `react-app` writes `portless`, `dev` and `serve` with `NODE_ENV=development` (Vite turns React Fast Refresh off under production), and the `test` target of the project (`^sdk`, `NODE_ENV=test`, because production React has no `act()`).
 
 Both app generators add `PORTLESS_UNPRIVILEGED=1` and `PORTLESS_HTTPS=1` to `targetDefaults.portless.options.env` in `nx.json`, and keep any key that is already there. One portless proxy serves every app on the machine, and the first target to start it sets its mode. Unprivileged mode needs no sudo, so an agent with no TTY can start the proxy; without it, the start exits 1 with `Proxy is not running and no TTY is available for sudo`. HTTPS is set explicitly because portless 0.18 keeps the unprivileged mode when the proxy stops but resets its TLS, and an unprivileged proxy restarts on plain HTTP. That breaks the generated wiring, which expects `https://<name>.localhost`: the HMR client in `vite.config.ts` dials `wss` on port 443, and a plain-HTTP proxy does not serve 443. The generators set no `PORTLESS_TLD`: `localhost` is the default, and a set TLD replaces the TLDs that another repo's proxy saved. A repo that needs a real dev domain sets the TLD itself. A target with its own `options.env` drops this default unless that env starts with `"...": true`.
 
@@ -1225,7 +1225,7 @@ The brand: the fonts, colors and favicons of `index.html`. The generated `index.
 
 ### Tests of the app generators
 
-The tests run each generator on a virtual `Tree` with Nx 23.2.1, which zukhruf's root installs (`src/generators/*/generator.test.ts`, helpers in `src/testing/generator-tree.ts`). They port factory's `node-app`, `react-app`, `pair` and `ui-package` tests, and add the build sha, `testMode: "run"`, `test.dependsOn` after `node-app` and `react-app`, a backend-only workspace with no React, Vite, Vitest or Tailwind package, the workspace scope in the portless domain, and no brand in the web files. They drop factory's `modern-node.test.ts` and `root-vite.test.ts`, which write to disk and read zukhruf's installed versions; the smoke test below runs lint and a strict `npm install` instead. What Nx 24.0.6 writes itself is proven by the smoke test. Each app generator's test also lints the package.json and project.json files it writes with the manifest rules of @zukhruf/eslint (`src/testing/lint-manifests.ts`), except the rules that read files beyond the manifest, its workspace root or the project graph: `manifest/dependency-checks`, `manifest/no-root-script`, `manifest/nx-family-pinned`, `zukhruf/no-generate-package-json`, `zukhruf/no-duplicate-nx-key`, `zukhruf/no-missing-asset-input` and `zukhruf/no-missing-dependency-build`.
+The tests run each generator on a virtual `Tree` with Nx 24.0.6, which zukhruf's root installs (`src/generators/*/generator.test.ts`, helpers in `src/testing/generator-tree.ts`). They port factory's `node-app`, `react-app`, `pair` and `ui-package` tests, and add the build sha, `testMode: "run"`, `test.dependsOn` after `node-app` and `react-app`, a backend-only workspace with no React, Vite, Vitest or Tailwind package, the workspace scope in the portless domain, and no brand in the web files. They drop factory's `modern-node.test.ts` and `root-vite.test.ts`, which write to disk and read zukhruf's installed versions; the smoke test below runs lint and a strict `npm install` instead. What Nx 24.0.6 writes itself is proven by the smoke test. Each app generator's test also lints the package.json and project.json files it writes with the manifest rules of @zukhruf/eslint (`src/testing/lint-manifests.ts`), except the rules that read files beyond the manifest, its workspace root or the project graph: `manifest/dependency-checks`, `manifest/no-root-script`, `manifest/nx-family-pinned`, `zukhruf/no-generate-package-json`, `zukhruf/no-duplicate-nx-key`, `zukhruf/no-missing-asset-input` and `zukhruf/no-missing-dependency-build`.
 
 ### Test the app generators before a release
 

@@ -41,7 +41,7 @@ async function workspace(folder: string, hook: string) {
   );
   await repo.write(
     'tsconfig.json',
-    '{ "files": [], "references": [{ "path": "./packages/a" }, { "path": "./packages/b" }] }\n',
+    '{ "extends": "./tsconfig.base.json", "files": [], "references": [{ "path": "./packages/a" }, { "path": "./packages/b" }] }\n',
   );
   for (const [name, dependencies] of [
     ['a', {}],

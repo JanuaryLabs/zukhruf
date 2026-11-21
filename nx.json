@@ -38,5 +38,8 @@
   },
   "sync": {
     "applyChanges": true
+  },
+  "affected": {
+    "legacy": true
   }
 }

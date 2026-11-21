@@ -104,7 +104,6 @@ export default async function uiPackageGenerator(
     style: 'none',
     unitTestRunner: 'none',
     useProjectJson: false,
-    addPlugin: true,
     skipFormat: true,
   });
 
