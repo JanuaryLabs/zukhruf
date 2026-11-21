@@ -133,7 +133,7 @@ function TextButtonContent({
   children: React.ReactNode;
 }) {
   return (
-    <>
+    <span className="inline-flex items-center gap-2">
       {icon && (
         <div
           className={cn(
@@ -154,7 +154,7 @@ function TextButtonContent({
         <LoadingSpinner />
       </div>
       {children}
-    </>
+    </span>
   );
 }
 
@@ -275,7 +275,7 @@ export function TheButton({
         disabled={disabled || loading}
         size={size}
         {...props}
-        className={cn('cursor-pointer gap-2', props.className)}
+        className={cn('cursor-pointer', props.className)}
       >
         {isIconButton ? (
           <IconButtonContent icon={icon} showSpinner={showSpinner} />

@@ -481,7 +481,7 @@ src/
   lib/layouts/      the pure geometry of the graph and the timeline; text/ measures text with the glyph table
   lib/renderers/    svg/, canvas/, html/ and webgpu/ draw the layouts; shared/ holds the parts that they share
   lib/react/        the Diagram primitives and the chrome
-  testing/          the oracle (assertSoundLayout), and the script that writes the glyph table; the build does not ship them
+  testing/          the oracle (assertSoundLayout), the script that writes the glyph table, and app.css, the app stylesheet that the tests build and the linter reads the theme from; the build does not ship them
   index.ts          the entry
-styles.css          loads the Geist fonts, and registers dist with @source
+styles.css          loads the Geist fonts, registers dist with @source, and holds the dgm theme tokens and utilities that the classes of dist use
 ```

@@ -7,3 +7,28 @@
 @import '@fontsource/geist-mono/latin-600.css';
 @import '@fontsource/geist-mono/latin-700.css';
 @source "./dist";
+
+@theme inline {
+  --color-dgm-bg: var(--dgm-bg, #000000);
+  --color-dgm-text: var(--dgm-text, #ffffff);
+  --color-dgm-dim: var(--dgm-dim, rgba(255, 255, 255, 0.45));
+  --color-dgm-divider: var(--dgm-divider, rgba(255, 255, 255, 0.1));
+  --color-dgm-hover: var(--dgm-hover, rgba(255, 255, 255, 0.05));
+  --color-dgm-on-accent: var(--dgm-on-accent, #000000);
+  --text-2xs: 10px;
+  --spacing-dgm-bullet: 4.4px;
+  --spacing-dgm-scrub-track: 300vh;
+  --spacing-dgm-scrub-frame: 92vh;
+  --font-dgm-sans: 'Geist Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-dgm-mono: 'Geist Mono', ui-monospace, monospace;
+}
+
+/* the shaping the glyph-width table measures with (TEXT_SHAPING in font.ts) */
+@utility dgm-text-shaping {
+  font-kerning: normal;
+  font-variant-ligatures: none;
+}
+
+@utility dgm-zoom {
+  zoom: var(--dgm-zoom);
+}

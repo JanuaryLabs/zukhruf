@@ -1,9 +1,10 @@
+import { cn } from 'cn';
 import { type MotionValue, motion, useTransform } from 'motion/react';
 
 import { compileGraph } from '../../compiler/diagram-compile.ts';
 import type { NodeLayout } from '../../layouts/graph/graph-layout-result.ts';
 import { layoutGraph } from '../../layouts/graph/layout.ts';
-import { FONT_FAMILY, TEXT_SHAPING } from '../../layouts/text/font.ts';
+import { FONT_FAMILY } from '../../layouts/text/font.ts';
 import {
   DiagramFrame,
   type DiagramMode,
@@ -58,7 +59,7 @@ function NodeRect({
   const opacity = useTransform(progress, [start, end], [0, 1], {
     clamp: true,
   });
-  const translateY = useTransform(progress, [start, end], [-10, 0], {
+  const translateY = useTransform(progress, [start, end], ['-10px', '0px'], {
     clamp: true,
   });
   const { node, box, radius } = layout;
@@ -81,7 +82,11 @@ function NodeRect({
     );
   }
   return (
-    <motion.g style={{ opacity, y: translateY }}>
+    <motion.g
+      opacity={opacity}
+      className="translate-y-(--dgm-reveal-y)"
+      style={{ '--dgm-reveal-y': translateY }}
+    >
       {frame !== 'none' && (
         <>
           <NodeStackFrames
@@ -266,13 +271,17 @@ function GraphSVG({
     }))
     .filter(({ d }) => Boolean(d));
   const { graphNodes, notes } = splitNotes(layout.nodes);
-  const viewportProps = svgViewportProps(viewBox, viewport);
+  const { scale, className, ...viewportProps } = svgViewportProps(
+    viewBox,
+    viewport,
+  );
 
   return (
     <svg
       data-diagram-style-preset={stylePreset}
       {...viewportProps}
-      style={{ ...viewportProps.style, ...TEXT_SHAPING }}
+      className={cn('dgm-text-shaping', className)}
+      style={{ '--dgm-viewport-scale': scale }}
       viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`}
       preserveAspectRatio="xMidYMid meet"
       role="img"

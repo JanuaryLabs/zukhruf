@@ -343,8 +343,8 @@ test('diagram chrome keeps its title but renders without an outer border', () =>
   );
 
   assert.match(markup, /borderless-frame-test/);
-  assert.match(markup, /rounded-md bg-\[var\(--dgm-bg\)\]/);
-  assert.doesNotMatch(markup, /rounded-md border bg-\[var\(--dgm-bg\)\]/);
+  assert.match(markup, /rounded-md bg-dgm-bg/);
+  assert.doesNotMatch(markup, /rounded-md border bg-dgm-bg/);
   assert.doesNotMatch(markup, /border-color/);
 });
 
@@ -369,7 +369,10 @@ test('natural graph viewport renders at intrinsic content size multiplied by zoo
   const viewBox = svgViewBox(markup);
   assert.match(markup, /data-diagram-viewport-fit="natural"/);
   assert.match(markup, /data-diagram-viewport-zoom="1.5"/);
-  assert.match(markup, /class="block h-auto max-w-none shrink-0"/);
+  assert.match(
+    markup,
+    /class="dgm-text-shaping block h-auto max-w-none shrink-0"/,
+  );
   assert.ok(Math.abs(svgNumberAttr(markup, 'width') - viewBox.w * 1.5) < 0.01);
   assert.ok(Math.abs(svgNumberAttr(markup, 'height') - viewBox.h * 1.5) < 0.01);
 });
@@ -395,8 +398,10 @@ test('contained graph viewport fills its parent box without intrinsic dimensions
   const viewBox = svgViewBox(markup);
   assert.match(markup, /data-diagram-viewport-fit="contain"/);
   assert.match(markup, /data-diagram-viewport-zoom="1"/);
-  assert.match(markup, /class="block min-h-0 min-w-0 max-h-full max-w-full"/);
-  assert.match(markup, /style="width:100%;height:100%[;"]/);
+  assert.match(
+    markup,
+    /class="dgm-text-shaping block size-full min-h-0 min-w-0 max-h-full max-w-full"/,
+  );
   assert.doesNotMatch(markup, /<svg[^>]*\swidth="/);
   assert.doesNotMatch(markup, /<svg[^>]*\sheight="/);
   assert.ok(viewBox.w > 0);
@@ -511,12 +516,9 @@ test('contained timeline viewport supports zoomed parent-relative sizing', () =>
   assert.match(markup, /data-diagram-viewport-zoom="1.25"/);
   assert.match(
     markup,
-    /class="block min-h-0 min-w-0 max-h-none max-w-none shrink-0"/,
+    /class="dgm-text-shaping block h-\(--dgm-viewport-scale\) w-\(--dgm-viewport-scale\) min-h-0 min-w-0 max-h-none max-w-none shrink-0"/,
   );
-  assert.match(
-    markup,
-    /style="width:125%;height:125%;max-width:none;max-height:none[;"]/,
-  );
+  assert.match(markup, /style="--dgm-viewport-scale:125%"/);
   assert.doesNotMatch(markup, /<svg[^>]*\swidth="/);
   assert.doesNotMatch(markup, /<svg[^>]*\sheight="/);
 });
@@ -3527,10 +3529,8 @@ test('svg outputs draw text in Geist with kerning on and ligatures off, the shap
     const markup = render(output).replaceAll('&#x27;', "'");
 
     // Assert
-    assert.match(
-      markup,
-      /<svg[^>]*style="[^"]*font-kerning:normal;font-variant-ligatures:none/,
-    );
+    // styles.test.ts proves what an app's stylesheet makes of dgm-text-shaping.
+    assert.match(markup, /<svg[^>]*class="dgm-text-shaping[ "]/);
     const families = [...markup.matchAll(/font-family="([^"]*)"/g)].map(
       ([, family]) => family,
     );

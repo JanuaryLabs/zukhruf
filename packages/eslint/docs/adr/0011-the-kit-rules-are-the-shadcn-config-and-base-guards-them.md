@@ -1,5 +1,7 @@
 # The kit rules are the shadcn config, and base guards them
 
+Amended on 2026-11-22 (#5085) for the disable: a host fixes each flagged line in code. It does not disable the rule on the line, also with a reason, and it adds no exception in its config. This is the owner's rule of 2026-11-01 (#3519, #3530): no `eslint-disable` directive, even one with a `-- reason`. See [The strict rules are opt-in](#the-strict-rules-are-opt-in).
+
 Amended on 2026-11-20 (#5017): `no-data-slot-restyle` and the rules of `@shadcn/lint` are in the opt-in export `@zukhruf/eslint/shadcn-strict`, not in the `shadcn` config. See [The strict rules are opt-in](#the-strict-rules-are-opt-in).
 
 The package had two things named react. `@zukhruf/eslint/react` gives the configs of the React community. The config `zukhruf/react` turned on the rules of the package for `@zukhruf/shadcn`: `no-as-child`, `no-native-select`, `require-select-group`, `require-command-group` and `no-data-slot-restyle`. Meddit's web app spread `@zukhruf/eslint/react` and took React as covered, so no kit rule ran on it. The config is now `zukhruf/shadcn`, named for what it checks, and `base` reports a file that imports the kit when the config is missing (#4990).

@@ -1,5 +1,3 @@
-import type { CSSProperties } from 'react';
-
 import type { Box, DiagramViewport } from '../../model/diagram-ir.ts';
 import {
   formatZoom,
@@ -10,7 +8,8 @@ import {
 type DiagramSvgViewportProps = {
   className: string;
   height?: number;
-  style?: CSSProperties;
+  /** The zoomed size as a percentage of the container; the className reads it as --dgm-viewport-scale. */
+  scale?: string;
   width?: number;
   'data-diagram-viewport-fit': NonNullable<DiagramViewport['fit']>;
   'data-diagram-viewport-zoom': string;
@@ -29,22 +28,17 @@ export function svgViewportProps(
 
   if (fit === 'contain') {
     const scale = roundDimension(zoom * 100);
-    return {
-      ...common,
-      style:
-        zoom === 1
-          ? { width: '100%', height: '100%' }
-          : {
-              width: `${scale}%`,
-              height: `${scale}%`,
-              maxWidth: 'none',
-              maxHeight: 'none',
-            },
-      className:
-        zoom === 1
-          ? 'block min-h-0 min-w-0 max-h-full max-w-full'
-          : 'block min-h-0 min-w-0 max-h-none max-w-none shrink-0',
-    };
+    return zoom === 1
+      ? {
+          ...common,
+          className: 'block size-full min-h-0 min-w-0 max-h-full max-w-full',
+        }
+      : {
+          ...common,
+          scale: `${scale}%`,
+          className:
+            'block h-(--dgm-viewport-scale) w-(--dgm-viewport-scale) min-h-0 min-w-0 max-h-none max-w-none shrink-0',
+        };
   }
 
   if (fit === 'natural') {
@@ -59,8 +53,8 @@ export function svgViewportProps(
   if (zoom !== 1) {
     return {
       ...common,
-      style: { width: `${roundDimension(zoom * 100)}%`, maxWidth: 'none' },
-      className: 'block h-auto max-w-none',
+      scale: `${roundDimension(zoom * 100)}%`,
+      className: 'block h-auto w-(--dgm-viewport-scale) max-w-none',
     };
   }
 

@@ -1,0 +1,9 @@
+/*
+ * The stylesheet of an app that uses the diagram. styles.test.ts builds it,
+ * and @shadcn/lint reads the package's theme tokens from it: the linter takes
+ * the theme from a stylesheet under the package that imports tailwindcss. The
+ * import is by relative path, because the linter skips the tokens of a
+ * stylesheet that it reads as a package file.
+ */
+@import 'tailwindcss' source(none);
+@import '../../styles.css';

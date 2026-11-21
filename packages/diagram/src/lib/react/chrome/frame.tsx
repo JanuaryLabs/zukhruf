@@ -129,7 +129,7 @@ function StaticLayout({
   return (
     <div
       className={cn(
-        'flex flex-col rounded-md bg-[var(--dgm-bg)] p-4 sm:p-6',
+        'flex flex-col rounded-md bg-dgm-bg p-4 sm:p-6',
         fillContent && 'h-full min-h-0',
       )}
     >
@@ -178,7 +178,7 @@ function RevealLayout({
     <div
       ref={ref}
       className={cn(
-        'flex flex-col rounded-md bg-[var(--dgm-bg)] p-4 sm:p-6',
+        'flex flex-col rounded-md bg-dgm-bg p-4 sm:p-6',
         fillContent && 'h-full min-h-0',
       )}
     >
@@ -207,9 +207,9 @@ function ScrubLayout({
   });
 
   return (
-    <div ref={ref} className="relative" style={{ height: '300vh' }}>
+    <div ref={ref} className="relative h-dgm-scrub-track">
       <div className="sticky top-0 flex h-dvh items-center px-0 sm:px-2">
-        <div className="mx-auto flex max-h-[92vh] w-full max-w-5xl flex-col rounded-md bg-[var(--dgm-bg)] p-4 sm:p-6">
+        <div className="mx-auto flex max-h-dgm-scrub-frame w-full max-w-5xl flex-col rounded-md bg-dgm-bg p-4 sm:p-6">
           {showHeader && <DiagramHeader title={title} corner={corner} />}
           <div className="flex min-h-0 flex-1 items-center justify-center">
             {children(scrollYProgress, 'scrub')}

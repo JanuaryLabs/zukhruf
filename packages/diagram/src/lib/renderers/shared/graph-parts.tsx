@@ -410,7 +410,7 @@ export function GroupRect({
   const texturePattern = hasFill ? textureFill(texture, ids) : null;
   const [firstLabel] = label;
   return (
-    <motion.g style={{ opacity }}>
+    <motion.g opacity={opacity}>
       <rect
         data-diagram-group={group.id}
         data-diagram-group-tone={group.tone}
@@ -542,11 +542,8 @@ export function EdgeStroke({
       markerEnd={
         direction === 'forward' || direction === 'both' ? markerUrl : undefined
       }
-      style={
-        dasharray
-          ? { opacity: pathOpacity }
-          : { pathLength, opacity: pathOpacity }
-      }
+      opacity={pathOpacity}
+      pathLength={dasharray ? undefined : pathLength}
     />
   );
 }
@@ -608,7 +605,7 @@ function EdgeLabel({
   if (!first) return null;
 
   return (
-    <motion.g style={{ opacity }}>
+    <motion.g opacity={opacity}>
       {edge.labelFrame && (
         <rect
           data-diagram-edge-label-frame={`${edge.from}->${edge.to}`}
@@ -654,7 +651,7 @@ function EdgeBadge({
   return (
     <motion.g
       data-diagram-edge-badge={`${edge.from}->${edge.to}`}
-      style={{ opacity }}
+      opacity={opacity}
     >
       <rect
         x={box.x}

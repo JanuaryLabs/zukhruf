@@ -74,7 +74,7 @@ export function SpecialNode({
   const opacity = useTransform(progress, [start, end], [0, 1], {
     clamp: true,
   });
-  const translateY = useTransform(progress, [start, end], [-10, 0], {
+  const translateY = useTransform(progress, [start, end], ['-10px', '0px'], {
     clamp: true,
   });
   const { node, box, radius, icon, text, appliance } = layout;
@@ -102,7 +102,9 @@ export function SpecialNode({
     return (
       <motion.g
         data-diagram-appliance={node.id}
-        style={{ opacity, y: translateY }}
+        opacity={opacity}
+        className="translate-y-(--dgm-reveal-y)"
+        style={{ '--dgm-reveal-y': translateY }}
       >
         {rod && mast && (
           <g data-diagram-appliance-antenna={node.id}>
@@ -198,7 +200,11 @@ export function SpecialNode({
     );
 
     return (
-      <motion.g style={{ opacity, y: translateY }}>
+      <motion.g
+        opacity={opacity}
+        className="translate-y-(--dgm-reveal-y)"
+        style={{ '--dgm-reveal-y': translateY }}
+      >
         <rect
           data-diagram-node={node.id}
           data-diagram-connector={node.id}
@@ -253,7 +259,9 @@ export function SpecialNode({
     return (
       <motion.g
         data-diagram-marker={node.id}
-        style={{ opacity, y: translateY }}
+        opacity={opacity}
+        className="translate-y-(--dgm-reveal-y)"
+        style={{ '--dgm-reveal-y': translateY }}
       >
         <rect
           data-diagram-node={node.id}
@@ -291,7 +299,11 @@ export function SpecialNode({
     const junctionStroke = accentToneStroke(node, themeAccent, DIAGRAM_NEUTRAL);
     const junctionFill = junctionFillColor(node, themeAccent);
     return (
-      <motion.g style={{ opacity, y: translateY }}>
+      <motion.g
+        opacity={opacity}
+        className="translate-y-(--dgm-reveal-y)"
+        style={{ '--dgm-reveal-y': translateY }}
+      >
         <rect
           data-diagram-junction={node.id}
           x={box.x}
@@ -417,7 +429,7 @@ export function NoteText({
   const { node, text } = note;
   const [first] = text;
   return (
-    <motion.g style={{ opacity }}>
+    <motion.g opacity={opacity}>
       {leaders
         .filter((leader) => leader.note === node.id)
         .map((leader) => (

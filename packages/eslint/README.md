@@ -360,7 +360,7 @@ It turns on, at `error`, on `.tsx` and `.jsx`, `zukhruf/no-data-slot-restyle` an
 - `no-arbitrary-values` has no allow-list. An off-scale size rounds to Tailwind's scale; a CSS-variable setter such as `[--header-height:61px]` moves into the host's stylesheet, and a grid template becomes a named `@theme` value.
 - `no-raw-colors`, `no-unknown-classes`, `no-inline-styles` and `require-static-classes` keep their defaults.
 
-The rules are strict. Fix each flagged line, or disable the rule on that line with a reason: `// eslint-disable-next-line shadcn/no-inline-styles -- the width comes from a drag`.
+The rules are strict. Fix each flagged line in code: do not disable the rule on the line, also with a reason, and add no exception in the config. A value known only at runtime goes in a `--*` custom property in `style`, and a class reads it: ``style={{ '--drag-width': `${width}px` }}`` with `w-(--drag-width)`.
 
 It sets `settings.shadcn`, which names the kit for the linter: `componentImports: ['^@zukhruf/shadcn$']`, so the components of the package are the design system, and `themeImports: ['^@zukhruf/shadcn/']`, so the tokens of the kit's stylesheets that the host's theme imports count as the host's own. The linter reads each component's variants and sizes from the kit's built `dist`.
 

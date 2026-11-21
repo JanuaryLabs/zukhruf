@@ -1,3 +1,4 @@
+import { cn } from 'cn';
 import {
   type MotionValue,
   cancelFrame,
@@ -308,15 +309,18 @@ function GraphFlowEffectsCanvas({
         <canvas
           ref={canvasRef}
           aria-hidden="true"
-          className="block size-full motion-reduce:hidden"
+          className={cn(
+            'block size-full text-(--dgm-flow-accent) motion-reduce:hidden',
+            failure && 'invisible',
+          )}
           data-diagram-effects-status="initializing"
           data-diagram-effects-error={failure}
-          style={{ color: accent, visibility: failure ? 'hidden' : undefined }}
+          style={{ '--dgm-flow-accent': accent }}
         />
         {failure && (
           <p
             role="status"
-            className="absolute bottom-0 left-0 text-xs text-pretty text-[var(--dgm-dim)]"
+            className="absolute bottom-0 left-0 text-xs text-pretty text-dgm-dim"
           >
             Flow animation is unavailable in this browser.
           </p>

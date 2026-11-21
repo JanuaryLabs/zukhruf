@@ -1,25 +1,27 @@
 import assert from 'node:assert/strict';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { describe, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import { compile } from '@tailwindcss/node';
 import { Scanner } from '@tailwindcss/oxide';
 
-const packageDirectory = fileURLToPath(new URL('..', import.meta.url));
+const appStylesheet = new URL('testing/app.css', import.meta.url);
+const appDirectory = fileURLToPath(new URL('.', appStylesheet));
 
 /**
- * Builds an app stylesheet the way the Tailwind Vite plugin does: compile with
- * the `url()`s of imported stylesheets rewritten, scan the sources that the
- * stylesheets register, then build from what the scan found. `source(none)`
- * turns off the automatic scan, so only the `@source` of the package's own
- * stylesheet can find its classes.
+ * Builds the app stylesheet of src/testing/app.css the way the Tailwind Vite
+ * plugin does: compile with the `url()`s of imported stylesheets rewritten,
+ * scan the sources that the stylesheets register, then build from what the
+ * scan found. `source(none)` turns off the automatic scan, so only the
+ * `@source` of the package's own stylesheet can find its classes.
  */
 async function buildAppStylesheet() {
-  const compiler = await compile(
-    '@import "tailwindcss" source(none);\n@import "@zukhruf/diagram/styles.css";',
-    { base: packageDirectory, shouldRewriteUrls: true, onDependency() {} },
-  );
+  const compiler = await compile(readFileSync(appStylesheet, 'utf8'), {
+    base: appDirectory,
+    shouldRewriteUrls: true,
+    onDependency() {},
+  });
   const candidates = new Scanner({ sources: compiler.sources }).scan();
   return compiler.build(candidates);
 }
@@ -30,6 +32,11 @@ describe('the stylesheet of @zukhruf/diagram', () => {
     const css = await buildAppStylesheet();
 
     // Assert
+    assert.equal(
+      import.meta.resolve('@zukhruf/diagram/styles.css'),
+      new URL('../styles.css', import.meta.url).href,
+      'An app imports by package name the stylesheet that app.css imports by path',
+    );
     assert.match(
       css,
       /\.\\\[--dgm-bg\\:\\#ffffff\\\]\s*\{\s*--dgm-bg:\s*#ffffff;?\s*\}/,
@@ -37,7 +44,7 @@ describe('the stylesheet of @zukhruf/diagram', () => {
     );
     assert.match(
       css,
-      /\.bg-\\\[var\\\(--dgm-bg\\\)\\\]\s*\{\s*background-color:\s*var\(--dgm-bg\);?\s*\}/,
+      /\.bg-dgm-bg\s*\{\s*background-color:\s*var\(--dgm-bg,\s*#000000\);?\s*\}/,
       'The diagram frame paints its background from --dgm-bg',
     );
     assert.match(
@@ -47,8 +54,35 @@ describe('the stylesheet of @zukhruf/diagram', () => {
     );
     assert.match(
       css,
-      /\.text-\\\[var\\\(--dgm-dim\\\)\\\]\s*\{\s*color:\s*var\(--dgm-dim\);?\s*\}/,
+      /\.text-dgm-dim\s*\{\s*color:\s*var\(--dgm-dim,\s*rgba\(255,\s*255,\s*255,\s*0\.45\)\);?\s*\}/,
       'Dim diagram text reads --dgm-dim, which the package defines',
+    );
+  });
+
+  test('an app that imports it gets the text shaping, the Geist families and the zoom that the html and svg outputs draw with', async () => {
+    // Act
+    const css = await buildAppStylesheet();
+
+    // Assert
+    assert.match(
+      css,
+      /\.dgm-text-shaping\s*\{\s*font-kerning:\s*normal;\s*font-variant-ligatures:\s*none;?\s*\}/,
+      'The glyph-width table measures with kerning on and ligatures off, so the outputs draw text that way',
+    );
+    assert.match(
+      css,
+      /\.font-dgm-sans\s*\{\s*font-family:\s*'Geist Sans',/,
+      'The html text runs of the sans face draw in Geist Sans',
+    );
+    assert.match(
+      css,
+      /\.font-dgm-mono\s*\{\s*font-family:\s*'Geist Mono',/,
+      'The html text runs of the mono face draw in Geist Mono',
+    );
+    assert.match(
+      css,
+      /\.dgm-zoom\s*\{\s*zoom:\s*var\(--dgm-zoom\);?\s*\}/,
+      'The html output applies the viewport zoom from --dgm-zoom',
     );
   });
 
@@ -80,7 +114,7 @@ describe('the stylesheet of @zukhruf/diagram', () => {
     );
     for (const { family, weight, woff2 } of faces) {
       assert.ok(woff2, `${family} ${weight} has no woff2 source`);
-      const file = fileURLToPath(new URL(woff2, `file://${packageDirectory}`));
+      const file = fileURLToPath(new URL(woff2, `file://${appDirectory}`));
       assert.ok(
         existsSync(file),
         `${family} ${weight} loads ${woff2}, which resolves to the missing file ${file}`,

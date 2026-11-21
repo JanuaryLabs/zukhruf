@@ -122,7 +122,7 @@ export function Playground() {
 
   return (
     <main className="bg-background min-h-full">
-      <div className="mx-auto flex w-full max-w-[1720px] flex-col gap-4 px-4 py-4 sm:px-6">
+      <div className="mx-auto flex w-full max-w-430 flex-col gap-4 px-4 py-4 sm:px-6">
         <header className="flex flex-wrap items-end justify-between gap-3">
           <div className="min-w-0">
             <h1 className="text-foreground text-2xl font-medium text-balance">
@@ -166,10 +166,10 @@ export function Playground() {
             type="button"
             variant="outline"
             size="sm"
-            className="min-w-20 tabular-nums"
+            className="min-w-20"
             onClick={resetZoom}
           >
-            {zoomLabel}
+            <span className="tabular-nums">{zoomLabel}</span>
           </Button>
           <Button
             type="button"

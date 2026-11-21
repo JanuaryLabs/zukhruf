@@ -1,5 +1,6 @@
+import { cn } from 'cn';
 import { type MotionValue, motion, useTransform } from 'motion/react';
-import type { CSSProperties, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 
 import { compileGraph } from '../../compiler/diagram-compile.ts';
 import type {
@@ -7,7 +8,7 @@ import type {
   TextRun,
 } from '../../layouts/graph/graph-layout-result.ts';
 import { layoutGraph } from '../../layouts/graph/layout.ts';
-import { FONT_FAMILY, TEXT_SHAPING } from '../../layouts/text/font.ts';
+import type { FontFace, FontWeight } from '../../layouts/text/font.ts';
 import type {
   DiagramTexture,
   DiagramViewport,
@@ -121,14 +122,17 @@ function GraphHTML({
     <div
       role="group"
       aria-label={title.join(' ')}
-      className="w-full overflow-x-auto"
-      style={TEXT_SHAPING}
+      className="dgm-text-shaping w-full overflow-x-auto"
       data-diagram-style-preset={stylePreset}
       data-diagram-viewport-zoom={formatZoom(zoom)}
     >
       <div
-        className="relative mx-auto"
-        style={{ width: viewBox.w, height: viewBox.h, zoom }}
+        className="dgm-zoom relative mx-auto h-(--dgm-h) w-(--dgm-w)"
+        style={{
+          '--dgm-w': px(viewBox.w),
+          '--dgm-h': px(viewBox.h),
+          '--dgm-zoom': zoom,
+        }}
         data-diagram-html="graph"
       >
         <svg {...svgLayer}>
@@ -182,7 +186,10 @@ function GraphHTML({
             ),
           )}
         </svg>
-        <div className="absolute" style={{ left: -viewBox.x, top: -viewBox.y }}>
+        <div
+          className="absolute top-(--dgm-y) left-(--dgm-x)"
+          style={{ '--dgm-x': px(-viewBox.x), '--dgm-y': px(-viewBox.y) }}
+        >
           {boxNodes.map(({ layout: nodeLayout, segment }) => (
             <NodeBox
               key={`node-${nodeLayout.node.id}`}
@@ -254,10 +261,18 @@ function NodeReveal({
   children: ReactNode;
 }) {
   const opacity = useTransform(progress, [start, end], [0, 1], { clamp: true });
-  const translateY = useTransform(progress, [start, end], [-10, 0], {
+  const translateY = useTransform(progress, [start, end], ['-10px', '0px'], {
     clamp: true,
   });
-  return <motion.g style={{ opacity, y: translateY }}>{children}</motion.g>;
+  return (
+    <motion.g
+      opacity={opacity}
+      className="translate-y-(--dgm-reveal-y)"
+      style={{ '--dgm-reveal-y': translateY }}
+    >
+      {children}
+    </motion.g>
+  );
 }
 
 function NodeStack({
@@ -287,18 +302,23 @@ function NodeStack({
   );
 }
 
-function textureImage(
-  texture: DiagramTexture,
-): Pick<CSSProperties, 'backgroundImage' | 'backgroundSize'> {
+function px(value: number) {
+  return `${value}px`;
+}
+
+function textureImage(texture: DiagramTexture): {
+  image?: string;
+  size?: string;
+} {
   if (texture === 'dots') {
     return {
-      backgroundImage: `radial-gradient(circle at 2px 2px, ${DIAGRAM_DOT} 0.7px, transparent 0.8px)`,
-      backgroundSize: '6px 6px',
+      image: `radial-gradient(circle at 2px 2px, ${DIAGRAM_DOT} 0.7px, transparent 0.8px)`,
+      size: '6px 6px',
     };
   }
   if (texture === 'hatch') {
     return {
-      backgroundImage: `repeating-linear-gradient(135deg, ${DIAGRAM_HATCH} 0 0.8px, transparent 0.8px 5.66px)`,
+      image: `repeating-linear-gradient(135deg, ${DIAGRAM_HATCH} 0 0.8px, transparent 0.8px 5.66px)`,
     };
   }
   return {};
@@ -322,45 +342,54 @@ function NodeBox({
 }) {
   const { accent: themeAccent } = useDiagramTheme();
   const opacity = useTransform(progress, [start, end], [0, 1], { clamp: true });
-  const translateY = useTransform(progress, [start, end], [-10, 0], {
+  const translateY = useTransform(progress, [start, end], ['-10px', '0px'], {
     clamp: true,
   });
   const { node, box, icon, contentBox } = layout;
   const frame = node.frame ?? 'solid';
+  const framed = frame !== 'none';
   const fill = nodeTextFill(node, frame, themeAccent);
+  const texture = framed ? textureImage(nodeTexture(node, frame)) : {};
   const { title, description, items } = nodeTextParts(layout);
 
   return (
     <motion.div
-      className="absolute top-0 left-0"
-      style={{ color: fill, opacity, y: translateY }}
+      className="absolute top-0 left-0 translate-y-(--dgm-reveal-y) text-(--dgm-fill) opacity-(--dgm-reveal-opacity)"
+      style={{
+        '--dgm-fill': fill,
+        '--dgm-reveal-opacity': opacity,
+        '--dgm-reveal-y': translateY,
+      }}
     >
       <div
         data-diagram-node={node.id}
         data-diagram-node-tone={node.tone}
-        className="absolute"
+        className={cn(
+          'absolute top-(--dgm-y) left-(--dgm-x) box-border h-(--dgm-h) w-(--dgm-w) rounded-(--dgm-radius)',
+          framed && 'bg-(--dgm-frame-fill) shadow-(--dgm-frame-shadow)',
+          texture.image && 'bg-(image:--dgm-texture)',
+          texture.size && 'bg-(length:--dgm-texture-size)',
+        )}
         style={{
-          left: box.x,
-          top: box.y,
-          width: box.w,
-          height: box.h,
-          boxSizing: 'border-box',
-          borderRadius: layout.radius,
-          ...(frame === 'none'
-            ? {}
-            : {
-                backgroundColor: nodeFrameFill(node, frame),
-                boxShadow: `inset 0 0 0 ${nodeFrameStrokeWidth(node)}px ${nodeFrameStroke(node, frame, themeAccent)}`,
-                ...textureImage(nodeTexture(node, frame)),
-              }),
+          '--dgm-x': px(box.x),
+          '--dgm-y': px(box.y),
+          '--dgm-w': px(box.w),
+          '--dgm-h': px(box.h),
+          '--dgm-radius': px(layout.radius),
+          '--dgm-frame-fill': framed ? nodeFrameFill(node, frame) : undefined,
+          '--dgm-frame-shadow': framed
+            ? `inset 0 0 0 ${nodeFrameStrokeWidth(node)}px ${nodeFrameStroke(node, frame, themeAccent)}`
+            : undefined,
+          '--dgm-texture': texture.image,
+          '--dgm-texture-size': texture.size,
         }}
       />
       {node.icon && icon && (
         <svg
           width={icon.size}
           height={icon.size}
-          className="absolute"
-          style={{ left: icon.x, top: icon.y }}
+          className="absolute top-(--dgm-y) left-(--dgm-x)"
+          style={{ '--dgm-x': px(icon.x), '--dgm-y': px(icon.y) }}
           aria-hidden
         >
           <DiagramNodeIcon
@@ -385,14 +414,8 @@ function NodeBox({
       {items.map(({ run, bullet }, i) => (
         <div key={i} data-diagram-node-item={`${node.id}:${i}`}>
           <span
-            className="absolute rounded-full bg-current"
-            style={{
-              left: bullet.x,
-              top: bullet.y,
-              width: 4.4,
-              height: 4.4,
-              translate: '-50% -50%',
-            }}
+            className="absolute top-(--dgm-y) left-(--dgm-x) size-dgm-bullet -translate-1/2 rounded-full bg-current"
+            style={{ '--dgm-x': px(bullet.x), '--dgm-y': px(bullet.y) }}
           />
           <RunText run={run} />
         </div>
@@ -400,12 +423,12 @@ function NodeBox({
       {node.content && contentBox && (
         <div
           data-diagram-node-content={node.id}
-          className="absolute"
+          className="absolute top-(--dgm-y) left-(--dgm-x) h-(--dgm-h) w-(--dgm-w)"
           style={{
-            left: contentBox.x,
-            top: contentBox.y,
-            width: contentBox.w,
-            height: contentBox.h,
+            '--dgm-x': px(contentBox.x),
+            '--dgm-y': px(contentBox.y),
+            '--dgm-w': px(contentBox.w),
+            '--dgm-h': px(contentBox.h),
           }}
         >
           {node.content.element}
@@ -415,18 +438,33 @@ function NodeBox({
   );
 }
 
+const FONT_FACE_CLASS: Record<FontFace, string> = {
+  sans: 'font-dgm-sans',
+  mono: 'font-dgm-mono',
+};
+
+const FONT_WEIGHT_CLASS: Record<FontWeight, string> = {
+  400: 'font-normal',
+  500: 'font-medium',
+  600: 'font-semibold',
+  700: 'font-bold',
+};
+
 function RunText({ run, color }: { run: TextRun; color?: string }) {
   return (
     <span
-      className="absolute whitespace-pre"
+      className={cn(
+        'absolute top-(--dgm-y) left-(--dgm-x) text-(length:--dgm-font-size) leading-(--dgm-line-height) whitespace-pre',
+        FONT_FACE_CLASS[run.font.face],
+        FONT_WEIGHT_CLASS[run.font.weight],
+        color && 'text-(--dgm-run-color)',
+      )}
       style={{
-        left: run.bounds.x,
-        top: run.bounds.y,
-        fontFamily: FONT_FAMILY[run.font.face],
-        fontSize: run.font.size,
-        fontWeight: run.font.weight,
-        lineHeight: `${run.bounds.h}px`,
-        color,
+        '--dgm-x': px(run.bounds.x),
+        '--dgm-y': px(run.bounds.y),
+        '--dgm-font-size': px(run.font.size),
+        '--dgm-line-height': px(run.bounds.h),
+        '--dgm-run-color': color,
       }}
     >
       {run.text}

@@ -1,6 +1,6 @@
 import { cn } from 'cn';
 
-import { DIAGRAM_ON_ACCENT, type DiagramMode } from './theme.ts';
+import type { DiagramMode } from './theme.ts';
 
 export function DiagramControlPanel({
   value,
@@ -17,11 +17,11 @@ export function DiagramControlPanel({
     { id: 'scrub', label: 'scrub' },
   ];
   return (
-    <div className="border-t border-[color:var(--dgm-divider)] pt-3">
+    <div className="border-t border-dgm-divider pt-3">
       <div
         role="radiogroup"
         aria-label="Diagram motion mode"
-        className="mx-auto inline-flex divide-x divide-[color:var(--dgm-divider)] overflow-hidden rounded-sm border border-[color:var(--dgm-divider)] font-mono text-[10px] leading-none"
+        className="mx-auto inline-flex divide-x divide-dgm-divider overflow-hidden rounded-sm border border-dgm-divider font-mono text-2xs leading-none"
       >
         {options.map((opt) => {
           const active = opt.id === value;
@@ -34,16 +34,16 @@ export function DiagramControlPanel({
               onClick={() => onChange(opt.id)}
               style={
                 active && activeColor
-                  ? { backgroundColor: activeColor, color: DIAGRAM_ON_ACCENT }
+                  ? { '--dgm-active': activeColor }
                   : undefined
               }
               className={cn(
                 'px-2.5 py-1.5 transition-colors',
                 active
                   ? activeColor
-                    ? ''
-                    : 'bg-[var(--dgm-text)] text-[var(--dgm-bg)]'
-                  : 'text-[var(--dgm-dim)] hover:bg-[var(--dgm-hover)] hover:text-[var(--dgm-text)]',
+                    ? 'bg-(--dgm-active) text-dgm-on-accent'
+                    : 'bg-dgm-text text-dgm-bg'
+                  : 'text-dgm-dim hover:bg-dgm-hover hover:text-dgm-text',
               )}
             >
               {opt.label}

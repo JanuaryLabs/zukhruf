@@ -10,6 +10,7 @@ import island, {
   manifest,
   moduleBoundaries,
 } from './packages/eslint/src/nx.ts';
+import shadcnStrict from './packages/eslint/src/shadcn-strict.ts';
 
 // The workspace lints with @zukhruf/eslint's source, which Node runs with its
 // types stripped: Nx loads this file to build the project graph before
@@ -111,6 +112,16 @@ export default defineConfig(
     ],
     plugins: { zukhruf },
     extends: ['zukhruf/shadcn', 'zukhruf/tailwind'],
+  },
+  // The kit's hosts use it as installed (packages/eslint/docs/adr/0011). The
+  // kit's own source styles its parts, so it stays out.
+  {
+    files: [
+      'packages/diagram/**',
+      'packages/ui/**',
+      'apps/diagram-playground/**',
+    ],
+    extends: [shadcnStrict],
   },
   // The loader guard throws React Router's replace(), as a loader does.
   {

@@ -17,17 +17,31 @@ function firstCapture(match: RegExpMatchArray): string {
   return value;
 }
 
+/**
+ * The html output places an element with a class that reads a custom property
+ * it sets on the same element: left-(--dgm-x) with --dgm-x:12px.
+ */
 function htmlNodeBox(markup: string, id: string) {
   const tag = markup.match(new RegExp(`<div data-diagram-node="${id}"[^>]*>`));
   assert.ok(tag, `html node ${id} should render`);
-  const px = (property: string) => {
+  const classes = /\bclass="([^"]*)"/.exec(tag[0])?.[1]?.split(' ') ?? [];
+  const px = (utility: string, property: string) => {
+    assert.ok(
+      classes.includes(utility),
+      `html node ${id} should set ${property} with ${utility}`,
+    );
     const value = tag[0].match(
-      new RegExp(`[;"]${property}:(-?[\\d.]+)(?:px)?`),
+      new RegExp(`style="(?:[^"]*;)?${property}:(-?[\\d.]+)px`),
     );
     assert.ok(value, `html node ${id} should set ${property}`);
     return Number(value[1]);
   };
-  return { x: px('left'), y: px('top'), w: px('width'), h: px('height') };
+  return {
+    x: px('left-(--dgm-x)', '--dgm-x'),
+    y: px('top-(--dgm-y)', '--dgm-y'),
+    w: px('w-(--dgm-w)', '--dgm-w'),
+    h: px('h-(--dgm-h)', '--dgm-h'),
+  };
 }
 
 function svgNodeBox(markup: string, id: string) {
@@ -401,9 +415,9 @@ test('html output keeps natural size and applies viewport zoom', () => {
   assert.match(markup, /data-diagram-viewport-zoom="1.5"/);
   assert.match(
     markup,
-    /<div class="relative mx-auto" style="width:[\d.]+px;height:[\d.]+px;zoom:1.5" data-diagram-html="graph">/,
+    /<div class="dgm-zoom relative mx-auto h-\(--dgm-h\) w-\(--dgm-w\)" style="--dgm-w:[\d.]+px;--dgm-h:[\d.]+px;--dgm-zoom:1.5" data-diagram-html="graph">/,
   );
-  assert.match(markup, /class="w-full overflow-x-auto"/);
+  assert.match(markup, /class="dgm-text-shaping w-full overflow-x-auto"/);
 });
 
 test('the html output draws text in Geist with kerning on and ligatures off, the shaping its text is measured with', () => {
@@ -429,16 +443,25 @@ test('the html output draws text in Geist with kerning on and ligatures off, the
   ).replaceAll('&#x27;', "'");
 
   // Assert
-  assert.match(
-    markup,
-    /<div role="group"[^>]*style="font-kerning:normal;font-variant-ligatures:none"/,
-  );
-  const families = [...markup.matchAll(/font-family(?:="|:)([^";]*)/g)].map(
+  // styles.test.ts proves what an app's stylesheet makes of dgm-text-shaping
+  // and font-dgm-sans/font-dgm-mono.
+  assert.match(markup, /<div role="group" [^>]*class="dgm-text-shaping[ "]/);
+  const families = [...markup.matchAll(/font-family="([^"]*)"/g)].map(
     ([, family]) => family,
   );
+  const runFaces = [
+    ...markup.matchAll(/<span class="([^"]*\bwhitespace-pre\b[^"]*)"/g),
+  ].map(([, classes = '']) => classes.split(' '));
   assert.ok(families.length > 0, 'the diagram draws text');
+  assert.ok(runFaces.length > 0, 'the html output draws text runs');
   for (const family of families) {
     assert.match(family ?? '', /^'Geist (Sans|Mono)',/);
+  }
+  for (const classes of runFaces) {
+    assert.ok(
+      classes.includes('font-dgm-sans') || classes.includes('font-dgm-mono'),
+      `a text run draws in Geist: ${classes.join(' ')}`,
+    );
   }
 });
 

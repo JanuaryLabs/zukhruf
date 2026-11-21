@@ -136,19 +136,35 @@ function firstRun(runs: TextRun[] | undefined, what: string): TextRun {
   return run;
 }
 
-function px(source: string, property: string): number {
-  const value = source.match(new RegExp(`[;"]${property}:(-?[\\d.]+)(?:px)?`));
-  assert.ok(value?.[1], `${source} should set ${property}`);
+/**
+ * The html output places an element with a class that reads a custom property
+ * it sets on the same element: left-(--dgm-x) with --dgm-x:12px.
+ */
+const PLACEMENT = {
+  left: ['left-(--dgm-x)', '--dgm-x'],
+  top: ['top-(--dgm-y)', '--dgm-y'],
+  width: ['w-(--dgm-w)', '--dgm-w'],
+  height: ['h-(--dgm-h)', '--dgm-h'],
+} as const;
+
+function px(tag: string, property: keyof typeof PLACEMENT): number {
+  const [utility, variable] = PLACEMENT[property];
+  const classes = /\bclass="([^"]*)"/.exec(tag)?.[1]?.split(' ') ?? [];
+  assert.ok(
+    classes.includes(utility),
+    `${tag} should set ${property} with ${utility}`,
+  );
+  const value = tag.match(
+    new RegExp(`style="(?:[^"]*;)?${variable}:(-?[\\d.]+)px`),
+  );
+  assert.ok(value?.[1], `${tag} should set ${variable}`);
   return Number(value[1]);
 }
 
 function htmlRunPosition(markup: string, text: string) {
-  const span = markup.match(
-    new RegExp(`<span [^>]*style="([^"]*)"[^>]*>${text}</span>`),
-  );
+  const span = markup.match(new RegExp(`(<span [^>]*>)${text}</span>`));
   assert.ok(span?.[1], `the html output should draw "${text}"`);
-  const style = `;${span[1]}`;
-  return { x: px(style, 'left'), y: px(style, 'top') };
+  return { x: px(span[1], 'left'), y: px(span[1], 'top') };
 }
 
 function textPoint(tag: Map<string, string>) {

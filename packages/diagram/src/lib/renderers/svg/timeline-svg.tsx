@@ -1,10 +1,11 @@
+import { cn } from 'cn';
 import { type MotionValue, motion, useTransform } from 'motion/react';
 
 import {
   compileTimeline,
   validateTimeline,
 } from '../../compiler/diagram-compile.ts';
-import { FONT_FAMILY, TEXT_SHAPING } from '../../layouts/text/font.ts';
+import { FONT_FAMILY } from '../../layouts/text/font.ts';
 import {
   ACTOR_H,
   ACTOR_RX,
@@ -69,13 +70,17 @@ function LaneBox({
   const opacity = useTransform(progress, [start, end], [0, 1], {
     clamp: true,
   });
-  const translateY = useTransform(progress, [start, end], [-10, 0], {
+  const translateY = useTransform(progress, [start, end], ['-10px', '0px'], {
     clamp: true,
   });
   const stroke = placement.accent ? themeAccent : DIAGRAM_NEUTRAL;
 
   return (
-    <motion.g style={{ opacity, y: translateY }}>
+    <motion.g
+      opacity={opacity}
+      className="translate-y-(--dgm-reveal-y)"
+      style={{ '--dgm-reveal-y': translateY }}
+    >
       <rect
         x={placement.rectX}
         y={y}
@@ -181,7 +186,8 @@ function SignalMessage({
           fill="none"
           stroke={stroke}
           strokeWidth={1.5}
-          style={{ pathLength, opacity: pathOpacity }}
+          pathLength={pathLength}
+          opacity={pathOpacity}
         />
         <motion.path
           d={`M ${geom.stubB.x1} ${rowY} L ${geom.stubB.x2} ${rowY}`}
@@ -189,9 +195,10 @@ function SignalMessage({
           stroke={stroke}
           strokeWidth={1.5}
           markerEnd={`url(#${markerId})`}
-          style={{ pathLength, opacity: pathOpacity }}
+          pathLength={pathLength}
+          opacity={pathOpacity}
         />
-        <motion.g style={{ opacity: labelOpacity }}>
+        <motion.g opacity={labelOpacity}>
           <rect
             x={geom.boxLeft}
             y={geom.boxTop}
@@ -249,10 +256,11 @@ function SignalMessage({
         stroke={stroke}
         strokeWidth={1.5}
         markerEnd={`url(#${markerId})`}
-        style={{ pathLength, opacity: pathOpacity }}
+        pathLength={pathLength}
+        opacity={pathOpacity}
       />
       <motion.text
-        style={{ opacity: labelOpacity }}
+        opacity={labelOpacity}
         x={labelStartX}
         y={labelBaseY}
         textAnchor={labelAnchor}
@@ -304,7 +312,7 @@ function Lifeline({
       y2={yEnd}
       stroke={accent ? themeAccent : DIAGRAM_LIFELINE}
       strokeWidth={accent ? 1.5 : 1}
-      style={{ pathLength }}
+      pathLength={pathLength}
     />
   );
 }
@@ -324,7 +332,7 @@ function FrameBox({
     { clamp: true },
   );
   return (
-    <motion.g style={{ opacity }}>
+    <motion.g opacity={opacity}>
       <rect
         x={frame.x}
         y={frame.y}
@@ -423,7 +431,7 @@ function TimelineSVG({
   const layout = computeTimelineLayout(ir);
   const laneById = new Map(layout.lanes.map((a) => [a.id, a]));
   const labelById = new Map(ir.lanes.map((a) => [a.id, a.label]));
-  const viewportProps = svgViewportProps(
+  const { scale, className, ...viewportProps } = svgViewportProps(
     { w: layout.width, h: layout.height },
     viewport,
   );
@@ -432,7 +440,8 @@ function TimelineSVG({
     <svg
       data-diagram-style-preset={stylePreset}
       {...viewportProps}
-      style={{ ...viewportProps.style, ...TEXT_SHAPING }}
+      className={cn('dgm-text-shaping', className)}
+      style={{ '--dgm-viewport-scale': scale }}
       viewBox={`0 0 ${layout.width} ${layout.height}`}
       preserveAspectRatio="xMidYMid meet"
       role="img"
