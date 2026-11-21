@@ -73,7 +73,7 @@ export default defineConfig(
   nx.configs['flat/base'],
   // Snowball's JavaScript stemmers, kept byte for byte (sha256 in
   // packages/mteb/docs/ported-from-mteb.md).
-  globalIgnores(['packages/mteb/src/dependencies/snowball/']),
+  globalIgnores(['packages/mteb/vendor/']),
   // The frozen files of the relevance-filtering research rounds, kept byte for
   // byte (their sha256 files beside them). Their scripts ran from the
   // research folder, not from this workspace.

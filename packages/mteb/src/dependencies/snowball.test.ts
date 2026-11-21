@@ -4,9 +4,11 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
-// snowball/SHA256SUMS holds the sha256 of each file of jsstemmer-3.1.0.tar.gz
-// that this package includes without change.
-const FOLDER = join(import.meta.dirname, 'snowball');
+// vendor/snowball/SHA256SUMS holds the sha256 of each file of
+// jsstemmer-3.1.0.tar.gz that this package includes without change: the .js
+// files. The .d.ts files beside them are declarations that TS 6 emitted from
+// them, because TS 7 cannot read their Closure JSDoc types.
+const FOLDER = join(import.meta.dirname, '../../vendor/snowball');
 
 test('each Snowball file has the sha256 of its file in jsstemmer-3.1.0.tar.gz, and each file is listed', () => {
   const listed = readFileSync(join(FOLDER, 'SHA256SUMS'), 'utf8')
@@ -18,7 +20,7 @@ test('each Snowball file has the sha256 of its file in jsstemmer-3.1.0.tar.gz, a
     });
 
   const files = readdirSync(FOLDER)
-    .filter((file) => file !== 'SHA256SUMS')
+    .filter((file) => file.endsWith('.js'))
     .sort()
     .map((file) => [file, hash('sha256', readFileSync(join(FOLDER, file)))]);
 

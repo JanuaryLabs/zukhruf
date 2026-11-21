@@ -42,7 +42,7 @@ assert platform.python_version() == "3.12.9", platform.python_version()
 import Stemmer  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
-SNOWBALL = HERE.parent.parent / "snowball"
+SNOWBALL = HERE.parents[3] / "vendor" / "snowball"
 
 # libstemmer/modules.txt of libstemmer_c 3.1.0: each algorithm and its names.
 MODULES = {

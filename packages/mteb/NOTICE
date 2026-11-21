@@ -104,7 +104,8 @@ runs the tokenizer.json files of the HuggingFace Hub. The package does not
 include its code.
 
 It includes 37 files of Snowball 3.1.0 (https://snowballstem.org/) without
-change, compiled from src/dependencies/snowball/ to dist/dependencies/snowball/:
+change, in vendor/snowball/, beside the declarations that TypeScript 6
+emitted from them:
 base-stemmer.js and the stemmer of each algorithm, arabic-stemmer.js,
 armenian-stemmer.js, basque-stemmer.js, catalan-stemmer.js, czech-stemmer.js,
 danish-stemmer.js, dutch-stemmer.js, dutch_porter-stemmer.js,

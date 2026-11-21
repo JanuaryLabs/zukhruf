@@ -22,9 +22,6 @@
       "path": "../testing/tsconfig.lib.json"
     },
     {
-      "path": "./tsconfig.snowball.json"
-    },
-    {
       "path": "../statistics/tsconfig.lib.json"
     },
     {
