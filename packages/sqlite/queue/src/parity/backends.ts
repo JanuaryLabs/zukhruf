@@ -184,6 +184,11 @@ export class ParityRun {
 // in-memory instance; the dump is read-only and no run shares a database.
 const bareDatabase = (async () => {
   await using pglite = new PGlite();
+  // @electric-sql/pglite 0.5.17: a dumpDataDir() before the instance is ready
+  // never settles, and every run waits on this dump (CI run 44818283000 hung
+  // 6 h). After waitReady it settles at once. 0.5.10 made the dump wait for
+  // running queries (367ee2f).
+  await pglite.waitReady;
 
   return await pglite.dumpDataDir('none');
 })();

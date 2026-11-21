@@ -65,8 +65,8 @@ test('base reports a relative import and a relative type import that have no ext
 
   // Assert
   assert.deepEqual(extensionFindings(findings), [
-    'Missing file extension for "./a"',
-    'Missing file extension for "./b"',
+    'Missing file extension for "./a", but it cannot be determined automatically. Add the extension manually or configure an import resolver.',
+    'Missing file extension for "./b", but it cannot be determined automatically. Add the extension manually or configure an import resolver.',
   ]);
 });
 
