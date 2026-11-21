@@ -50,6 +50,25 @@ export function lint(cwd: string, paths: string[]): Finding[] {
   });
 }
 
+/**
+ * The source of `file` after ESLint applies its fixes, run from `cwd` as
+ * `lint` runs: `--fix-dry-run` prints the fixed source and writes nothing.
+ * The source as it is when no fix applies.
+ */
+export function fixed(cwd: string, file: string): string {
+  const results: unknown = JSON.parse(
+    eslint(cwd, ['--fix-dry-run', '--format', 'json', file]),
+  );
+  if (!Array.isArray(results) || !isRecord(results[0]))
+    throw new Error('ESLint printed no result.');
+  const { output, source } = results[0];
+  if (typeof output === 'string') return output;
+  if (typeof source === 'string') return source;
+  throw new Error(
+    `ESLint printed neither the output nor the source of ${file}.`,
+  );
+}
+
 /** The config ESLint computes for `file`, run from `cwd`. */
 export function printConfig(cwd: string, file: string): unknown {
   return JSON.parse(eslint(cwd, ['--print-config', file]));

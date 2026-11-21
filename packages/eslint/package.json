@@ -71,9 +71,11 @@
     "@typescript-eslint/utils": "^8.73.0",
     "globals": "^17.14.0",
     "ignore": "^7.0.16",
+    "semver": "^7.8.6",
     "ts-api-utils": "^2.5.0"
   },
   "devDependencies": {
+    "@types/semver": "^7.8.0",
     "@zukhruf/fs": "^0.8.54",
     "@zukhruf/testing": "^0.8.54",
     "esbuild": "0.28.2"

@@ -3,6 +3,7 @@ import type { Rule } from 'eslint';
 
 import { ruleOf } from '../authoring/rule-module.ts';
 import { inIsland } from '../island/island-scope.ts';
+import { withInstalledAliasVersions } from '../nx-policy/installed-alias-versions.ts';
 import { isRecord, stringsAt } from '../unknown-values.ts';
 import {
   cachedProjectGraph,
@@ -15,7 +16,9 @@ import {
   manifestPolicy,
 } from './manifest-policy.ts';
 
-const nxDependencyChecks = ruleOf(nx, 'dependency-checks');
+const nxDependencyChecks = withInstalledAliasVersions(
+  ruleOf(nx, 'dependency-checks'),
+);
 
 const strings = { type: 'array', items: { type: 'string' } } as const;
 

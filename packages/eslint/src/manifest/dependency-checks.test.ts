@@ -3,7 +3,7 @@ import { test } from 'node:test';
 
 import { fixtureWorkspace } from '../testing/fixture-workspace.ts';
 import { NX_JSON, buildProjectGraph } from '../testing/project-graph.ts';
-import { fixtureConfig, lint } from '../testing/run-eslint.ts';
+import { fixed, fixtureConfig, lint } from '../testing/run-eslint.ts';
 
 const LEFT_PAD =
   'sha512-XI5MPzVNApjAyhQzphX8BkmKsKUxD4LdyK24iZeQ9x9KXt8ys0eo2V1lPb4fGkuVqsXHKVjTomyT2l2mnaTfZQA==';
@@ -42,6 +42,8 @@ interface Layout {
   targetDefaults?: Record<string, unknown>;
   greetTags?: string[];
   greetDependencies?: Record<string, string>;
+  /** Packages the root installs under another name, as `npm:<name>@<version>`, by alias. */
+  aliases?: Record<string, { name: string; version: string }>;
   /** Fields that replace greet's own in its package.json, such as `exports`. */
   greetManifest?: Record<string, unknown>;
   /** greet's files under `src/`, by name; by default `index.ts` imports left-pad. */
@@ -61,6 +63,7 @@ function workspaceFiles({
   greetTags = [],
   greetDependencies = { 'left-pad': '1.3.0' },
   greetManifest = {},
+  aliases = {},
   greetSource = {
     'index.ts': `import leftPad from 'left-pad';\nexport const greet = () => leftPad('hi', 5);\n`,
   },
@@ -73,6 +76,12 @@ function workspaceFiles({
     ['libs/greet', '@fx/greet'],
     ['libs/shout', '@fx/shout'],
   ];
+  const aliasSpecs = Object.fromEntries(
+    Object.entries(aliases).map(([alias, { name, version }]) => [
+      alias,
+      `npm:${name}@${version}`,
+    ]),
+  );
   const lock = {
     name: 'fx',
     lockfileVersion: 3,
@@ -81,7 +90,11 @@ function workspaceFiles({
       '': {
         name: 'fx',
         workspaces: ['apps/*', 'libs/*'],
-        dependencies: { 'left-pad': '1.3.0', 'right-pad': '1.0.1' },
+        dependencies: {
+          'left-pad': '1.3.0',
+          'right-pad': '1.0.1',
+          ...aliasSpecs,
+        },
       },
       ...Object.fromEntries(
         workspaces.flatMap(([folder, name]) => [
@@ -94,6 +107,17 @@ function workspaceFiles({
         resolved: 'https://registry.npmjs.org/left-pad/-/left-pad-1.3.0.tgz',
         integrity: LEFT_PAD,
       },
+      ...Object.fromEntries(
+        Object.entries(aliases).map(([alias, { name, version }]) => [
+          `node_modules/${alias}`,
+          {
+            name,
+            version,
+            resolved: `https://registry.npmjs.org/${name}/-/${name}-${version}.tgz`,
+            integrity: LEFT_PAD,
+          },
+        ]),
+      ),
       'node_modules/right-pad': {
         version: '1.0.1',
         resolved: 'https://registry.npmjs.org/right-pad/-/right-pad-1.0.1.tgz',
@@ -152,9 +176,19 @@ function workspaceFiles({
       name: 'fx',
       private: true,
       workspaces: ['apps/*', 'libs/*'],
-      dependencies: { 'left-pad': '1.3.0', 'right-pad': '1.0.1' },
+      dependencies: {
+        'left-pad': '1.3.0',
+        'right-pad': '1.0.1',
+        ...aliasSpecs,
+      },
     }),
     'package-lock.json': JSON.stringify(lock),
+    ...Object.fromEntries(
+      Object.entries(aliases).map(([alias, { name, version }]) => [
+        `node_modules/${alias}/package.json`,
+        JSON.stringify({ name, version, main: 'index.js' }),
+      ]),
+    ),
     'eslint.config.mjs': fixtureConfig(`{
       plugins: { island, manifest },
       extends: ['island/recommended', 'manifest/recommended'],
@@ -452,6 +486,58 @@ test('an island manifest is reported once, by island/dependency-checks', async (
     ['island/dependency-checks'],
   );
   assert.match(findings[0]?.message ?? '', /left-pad/);
+});
+
+test('a range that holds the version an npm: alias installs is not reported, though Nx reads the alias as the installed version', async () => {
+  // Arrange: the root installs left-pad 1.3.0 as pad, and the island greet asks for pad ^1.0.0.
+  await using workspace = await fixtureWorkspace(
+    workspaceFiles({
+      apps: { web: { build: VITE_BUILD } },
+      greetTags: ['layer:island'],
+      aliases: { pad: { name: 'left-pad', version: '1.3.0' } },
+      greetDependencies: { pad: '^1.0.0' },
+      greetSource: {
+        'index.ts': `import pad from 'pad';\nexport const greet = () => pad('hi', 5);\n`,
+      },
+    }),
+  );
+  buildProjectGraph(workspace.root);
+
+  // Act
+  const findings = lint(workspace.root, ['libs/greet/package.json']);
+
+  // Assert
+  assert.deepEqual(findings, []);
+});
+
+test('a range that misses the version an npm: alias installs is reported with that version, and the fix writes it, not the alias', async () => {
+  // Arrange: the root installs left-pad 1.3.0 as pad, and greet asks for pad ^2.0.0.
+  await using workspace = await fixtureWorkspace(
+    workspaceFiles({
+      apps: { web: { build: VITE_BUILD } },
+      greetTags: ['layer:island'],
+      aliases: { pad: { name: 'left-pad', version: '1.3.0' } },
+      greetDependencies: { pad: '^2.0.0' },
+      greetSource: {
+        'index.ts': `import pad from 'pad';\nexport const greet = () => pad('hi', 5);\n`,
+      },
+    }),
+  );
+  buildProjectGraph(workspace.root);
+
+  // Act
+  const findings = lint(workspace.root, ['libs/greet/package.json']);
+  const manifest = fixed(workspace.root, 'libs/greet/package.json');
+
+  // Assert
+  assert.deepEqual(
+    findings.map(({ ruleId }) => ruleId),
+    ['island/dependency-checks'],
+  );
+  assert.match(findings[0]?.message ?? '', /pad/);
+  assert.match(findings[0]?.message ?? '', /1\.3\.0/);
+  assert.doesNotMatch(findings[0]?.message ?? '', /npm:/);
+  assert.equal(JSON.parse(manifest).dependencies.pad, '1.3.0');
 });
 
 for (const testFile of [

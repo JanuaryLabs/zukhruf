@@ -14,6 +14,7 @@ import {
   TYPESCRIPT,
 } from '../files.ts';
 import { dependencyPolicy } from '../nx-policy/dependency-policy.ts';
+import { withInstalledAliasVersions } from '../nx-policy/installed-alias-versions.ts';
 import { inIsland, inLibrary } from './island-scope.ts';
 import jsdomVirtualConsole from './jsdom-virtual-console.ts';
 import noAmbientTime from './no-ambient-time.ts';
@@ -30,7 +31,10 @@ const rules = {
     ruleOf(tseslint.plugin, 'no-explicit-any'),
     inIsland,
   ),
-  'dependency-checks': scopedRule(ruleOf(nx, 'dependency-checks'), inIsland),
+  'dependency-checks': scopedRule(
+    withInstalledAliasVersions(ruleOf(nx, 'dependency-checks')),
+    inIsland,
+  ),
   'no-process-env': scopedRule(noProcessEnv, inLibrary),
   'no-console': scopedRule(noConsole, inLibrary),
   'no-ambient-time': scopedRule(noAmbientTime, inLibrary),
