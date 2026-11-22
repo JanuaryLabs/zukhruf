@@ -1,6 +1,6 @@
 {
   "name": "@zukhruf/sqlite-open",
-  "version": "0.8.57",
+  "version": "0.8.58",
   "description": "One open for every node:sqlite connection: a reader, or an owner whose journal is a strategy (WAL by default, persistent WAL for readers that cannot write the folder), a 5 s busy timeout, and UnavailableError.",
   "license": "MIT",
   "repository": {
