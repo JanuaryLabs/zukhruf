@@ -837,15 +837,16 @@ npx nx migrate --run-migrations
 
 `nx migrate` moves every published @zukhruf package with `@zukhruf/nx` (`packageGroup`), and nothing runs the migrations otherwise. Each one adds only what is missing, writes what the generators write now, and logs the step to take by hand where a file lost the shape that the generator wrote. `packageJsonUpdates` in `migrations.json` move each third-party peer that the generators install to its pin in `versions.ts`, in a repo that has it, so a narrower peer range does not stop npm. [ADR 0017](./docs/adr/0017-nx-migrations-bring-a-change-of-generated-output-to-the-repos-that-ran-the-generator-before.md) has the rules.
 
-| Migration                       | Version | Brings                                                                                                                                                                                                                                                                  |
-| ------------------------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `add-portless-proxy-env`        | 0.8.40  | `PORTLESS_UNPRIVILEGED=1` and `PORTLESS_HTTPS=1` in `targetDefaults.portless` (#4768)                                                                                                                                                                                   |
-| `add-local-postgres`            | 0.8.40  | the root `compose.dev.yml`, `up` and `down` of each db package, the local `CONNECTION_STRING`, and `^up` in its backend serve (ADR 0012 decisions 16 and 17)                                                                                                            |
-| `node-env-production`           | 0.8.40  | the NODE_ENV configuration of ADR 0016 (nx.json defaults, target env, the web exceptions, `.env.example`, the workflow env, `ALLOWED_ORIGINS`), and a log of each NODE_ENV read in source                                                                               |
-| `add-prisma-client-inputs`      | 0.8.40  | `...` and `{ "dependentTasksOutputFiles": "**/*.ts" }` in the `inputs` of `targetDefaults.typecheck` and `.build` of a repo with `@zukhruf/nx/prisma`, so a schema change rebuilds the db package (#4826); since 0.8.60 it writes the rule of ADR 0019                  |
-| `add-migrate-check`             | 0.8.44  | `migrate:check` in `targetDefaults.typecheck.dependsOn` of a repo with `@zukhruf/nx/prisma`, so the typecheck of a db package fails when its migrations do not build its schema (#4937, ADR 0018)                                                                       |
-| `add-generated-source-defaults` | 0.8.60  | the rule of ADR 0019 in a repo whose `nx.json` lists the three plugins of `init`; removes the `dependsOn: ["^sdk"]` of a web `test` target; logs each other target that hides the rule (#5219)                                                                          |
-| `add-sdk-build-edges`           | 0.8.60  | `build-deps` in each node-app backend; `implicitDependencies` on the backend, `dependsOn: ["^build-deps"]` and the inputs of ADR 0021 in its client's `sdk`, when that target is the one `node-app` wrote; logs any other `sdk` target with the values to write (#5102) |
+| Migration                       | Version | Brings                                                                                                                                                                                                                                                                                                         |
+| ------------------------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `add-portless-proxy-env`        | 0.8.40  | `PORTLESS_UNPRIVILEGED=1` and `PORTLESS_HTTPS=1` in `targetDefaults.portless` (#4768)                                                                                                                                                                                                                          |
+| `add-local-postgres`            | 0.8.40  | the root `compose.dev.yml`, `up` and `down` of each db package, the local `CONNECTION_STRING`, and `^up` in its backend serve (ADR 0012 decisions 16 and 17)                                                                                                                                                   |
+| `node-env-production`           | 0.8.40  | the NODE_ENV configuration of ADR 0016 (nx.json defaults, target env, the web exceptions, `.env.example`, the workflow env, `ALLOWED_ORIGINS`), and a log of each NODE_ENV read in source                                                                                                                      |
+| `add-prisma-client-inputs`      | 0.8.40  | `...` and `{ "dependentTasksOutputFiles": "**/*.ts" }` in the `inputs` of `targetDefaults.typecheck` and `.build` of a repo with `@zukhruf/nx/prisma`, so a schema change rebuilds the db package (#4826); since 0.8.60 it writes the rule of ADR 0019                                                         |
+| `add-migrate-check`             | 0.8.44  | `migrate:check` in `targetDefaults.typecheck.dependsOn` of a repo with `@zukhruf/nx/prisma`, so the typecheck of a db package fails when its migrations do not build its schema (#4937, ADR 0018)                                                                                                              |
+| `add-generated-source-defaults` | 0.8.60  | the rule of ADR 0019 in a repo whose `nx.json` lists the three plugins of `init`; removes the `dependsOn: ["^sdk"]` of a web `test` target; logs each other target that hides the rule (#5219)                                                                                                                 |
+| `add-sdk-build-edges`           | 0.8.60  | `build-deps` in each node-app backend; `implicitDependencies` on the backend, `dependsOn: ["^build-deps"]` and the inputs of ADR 0021 in its client's `sdk`, when that target is the one `node-app` wrote; logs any other `sdk` target with the values to write (#5102)                                        |
+| `rename-eslint-react-config`    | 0.8.65  | `zukhruf.configs['shadcn']` for `zukhruf.configs['react']` or `.react` (whatever the default import of `@zukhruf/eslint` is called) and `'zukhruf/shadcn'` for `'zukhruf/react'` in an `extends` array, in each `eslint.config.*`; `@zukhruf/eslint/react` stays; logs each edit (#5263, ADR 0017 decision 10) |
 
 ## release
 
@@ -907,7 +908,7 @@ This is the path for meddit, which has only `.git`. Nx 24 supports it, and no st
 - An Nx generator writes files through a `Tree`. It never removes a folder that it did not write, so `.git` stays.
 - In a folder that is already a Git work tree, create-nx-workspace runs no `git init`, no `git add` and no commit (`create-nx-workspace/dist/src/utils/git/git.js:141-149`). The first commit is yours.
 
-A smoke test on 2026-11-18 ran this command with the `@zukhruf/nx` preset in a folder with only `git init` (see [Test the preset before a release](#test-the-preset-before-a-release)). The folder and `.git` stayed, `git log` showed no commit, `git status` showed each file as new, `core.hooksPath` was `.husky`, and the first commit passed the hooks. The preset `npm` behaves differently: create-nx-workspace maps it to the template flow for an agent (`bin/create-nx-workspace.js:362-380`), and that flow amends the README and can leave an `error.log` (`create-workspace.js:269-288`).
+A smoke test on 2026-11-18 ran this command with the `@zukhruf/nx` preset in a folder with only `git init` (see [Test the preset](#test-the-preset)). The folder and `.git` stayed, `git log` showed no commit, `git status` showed each file as new, `core.hooksPath` was `.husky`, and the first commit passed the hooks. The preset `npm` behaves differently: create-nx-workspace maps it to the template flow for an agent (`bin/create-nx-workspace.js:362-380`), and that flow amends the README and can leave an `error.log` (`create-workspace.js:269-288`).
 
 Two other seams do not work for an empty repo:
 
@@ -1048,7 +1049,7 @@ The Git hooks are the same in each repo. `Sync` stages `**/tsconfig*.json` and `
 ### Versions that the generators write
 
 - **The Nx family has one exact version.** `init` sets the root `nx` and each root `@nx/*` to `nxVersion`, also when the version is already there and is another one, a newer one included. Then npm installs one `nx` (#4532). An app generator adds its `@nx/*` packages at the same `nxVersion`. A test checks that the root `nx` equals `nxVersion` after `preset`, and that no root `@nx/*` has another version.
-- **A missing `@zukhruf/*` package gets the version of `@zukhruf/nx` itself.** nx release gives each public package of zukhruf the same version, so the generator reads its own `package.json` and writes no list of versions. A version that is already there stays, for example a `file:` tarball in a smoke test.
+- **A missing `@zukhruf/*` package gets the version of `@zukhruf/nx` itself.** nx release gives each public package of zukhruf the same version, so the generator reads its own `package.json` and writes no list of versions. A version that is already there stays.
 - **The other root tools have exact versions** from one module, `src/generators/versions.ts`, that the app generators share: TypeScript 7 as `@typescript/native: "npm:typescript@7.x"` and the TypeScript 6 API as `typescript: "npm:@typescript/typescript6@6.x"` (see [Decisions and their reasons](#decisions-and-their-reasons)), ESLint 10, Prettier 3, `@trivago/prettier-plugin-sort-imports`, and the peers of `@zukhruf/eslint` that the root config loads. `init` adds a missing package at that version, and keeps a version that is already there.
 - **`allowScripts`** names each install script of a package that the generator installs: `nx: false` and `unrs-resolver: false`. `init` adds a missing name, and keeps a decision that is already there. The smoke test of 2026-11-18 proved the list: `npm install` with `strict-allow-scripts=true` passed.
 
@@ -1095,21 +1096,9 @@ The tests use a virtual `Tree` from `createTreeWithEmptyWorkspace` of `@nx/devki
 - Each hook that `init` creates has the mode `755`.
 - The backend-neutral output: no React, Vite, Vitest or Tailwind package in `package.json`, and no app wiring in `nx.json`.
 
-### Test the preset before a release
+### Test the preset
 
-create-nx-workspace takes the version of a third-party preset from `NX_E2E_PRESET_VERSION` when it is set (`@nx/workspace/dist/src/generators/new/new.js:114-118`). So the preset runs from a tarball of the checkout, before a release:
-
-```sh
-npx nx run nx:build
-(cd packages/nx && npm pack --pack-destination <scratch>)
-mkdir <scratch>/acme && cd <scratch>/acme && git init
-NX_E2E_PRESET_VERSION=file:<scratch>/zukhruf-nx-<version>.tgz \
-  npx create-nx-workspace@latest . --preset=@zukhruf/nx --pm=npm --nxCloud=skip --aiAgents=none
-```
-
-Then check that `npm install` passes, that `npx nx run-many -t typecheck` and `npx nx run-many -t lint` pass, and that the first `git commit` passes the hooks. Delete the folder at the end. On 2026-11-18 both paths passed: a new folder (`acme`), and a folder with only `git init` (`.`). In the new folder, a demo package also passed `typecheck` (TypeScript 7.0.2) and `lint`, and its commit passed each hook. A second run of `npx nx g @zukhruf/nx:init` in the generated repo changed no file.
-
-After a release, two targets check the published version. `.github/workflows/nightly.yml` runs them each day and on `workflow_dispatch`, and no release waits for them ([ADR 0020](./docs/adr/0020-two-nightly-checks-run-the-generated-workspace-and-compare-an-upgraded-one-with-a-fresh-one.md)):
+A commit to main is a release (root [ADR 0007](../../docs/adr/0007-release-does-not-wait-for-ci.md)), so a test of the generators runs on a published version. Two targets do it, and `.github/workflows/nightly.yml` runs them each day and on `workflow_dispatch`, and no release waits for them ([ADR 0020](./docs/adr/0020-two-nightly-checks-run-the-generated-workspace-and-compare-an-upgraded-one-with-a-fresh-one.md)):
 
 ```sh
 npx nx run nx:e2e:smoke                         # latest
@@ -1235,9 +1224,9 @@ The brand: the fonts, colors and favicons of `index.html`. The generated `index.
 
 The tests run each generator on a virtual `Tree` with Nx 24.0.6, which zukhruf's root installs (`src/generators/*/generator.test.ts`, helpers in `src/testing/generator-tree.ts`). They port factory's `node-app`, `react-app`, `pair` and `ui-package` tests, and add the build sha, `testMode: "run"`, `test.dependsOn` after `node-app` and `react-app`, a backend-only workspace with no React, Vite, Vitest or Tailwind package, the workspace scope in the portless domain, and no brand in the web files. They drop factory's `modern-node.test.ts` and `root-vite.test.ts`, which write to disk and read zukhruf's installed versions; the smoke test below runs lint and a strict `npm install` instead. What Nx 24.0.6 writes itself is proven by the smoke test. Each app generator's test also lints the package.json and project.json files it writes with the manifest rules of @zukhruf/eslint (`src/testing/lint-manifests.ts`), except the rules that read files beyond the manifest, its workspace root or the project graph: `manifest/dependency-checks`, `manifest/no-root-script`, `manifest/nx-family-pinned`, `zukhruf/no-generate-package-json`, `zukhruf/no-duplicate-nx-key`, `zukhruf/no-missing-asset-input` and `zukhruf/no-missing-dependency-build`.
 
-### Test the app generators before a release
+### Test the app generators
 
-After the steps of [Test the preset before a release](#test-the-preset-before-a-release), in the generated repo: run the 3 commands of [Add a backend, a web app and their pair](#add-a-backend-a-web-app-and-their-pair), then `npx nx run-many -t typecheck lint test build`, the first commit (each hook passes), `npx nx run @acme/backend:docker:build`, and a container whose `/api/healthz` reports `git rev-parse HEAD`.
+In a workspace from the published preset (`npx create-nx-workspace@latest acme --preset=@zukhruf/nx --pm=npm --nxCloud=skip --aiAgents=none`): run the 3 commands of [Add a backend, a web app and their pair](#add-a-backend-a-web-app-and-their-pair), then `npx nx run-many -t typecheck lint test build`, the first commit (each hook passes), `npx nx run @acme/backend:docker:build`, and a container whose `/api/healthz` reports `git rev-parse HEAD`.
 
 The decisions are in [ADR 0010](./docs/adr/0010-the-app-generators-move-here-and-call-the-generators-of-nx.md). The backlog item of the app generators is #3338.
 
@@ -1315,9 +1304,9 @@ Write each migration with `npx nx run @acme/db:migrate:create --name <name>`, th
 | `packages/db already belongs to @acme/other.`                          | `directory` holds another package                         |
 | `apps/backend/src/server.ts has no "import './startup.ts';", so the …` | a backend file lost the line that the wiring changes      |
 
-### Test the prisma generator before a release
+### Test the prisma generator
 
-After the steps of [Test the preset before a release](#test-the-preset-before-a-release): `node-app apps/backend`, the 4 commands of [Add a db package](#add-a-db-package), and `npx nx run-many -t typecheck lint test build`. Then add a model and a first migration, put `@zukhruf/nx` back on the registry version (`npm ci` in an image cannot read a `file:` tarball), build `Dockerfile.migration`, and run its container against a new `postgres:18-alpine`: `prisma migrate deploy` applies the migration. On 2026-11-18 each step passed, and the backend image served `/api/healthz` with one database session and stopped at start with a wrong password.
+In a workspace from the published preset (`npx create-nx-workspace@latest acme --preset=@zukhruf/nx --pm=npm --nxCloud=skip --aiAgents=none`): `node-app apps/backend`, the 4 commands of [Add a db package](#add-a-db-package), and `npx nx run-many -t typecheck lint test build`. Then add a model and a first migration, build `Dockerfile.migration`, and run its container against a new `postgres:18-alpine`: `prisma migrate deploy` applies the migration. On 2026-11-18 each step passed, and the backend image served `/api/healthz` with one database session and stopped at start with a wrong password.
 
 The decisions are in [ADR 0012](./docs/adr/0012-the-prisma-generator-writes-a-postgres-db-package-and-wires-a-backend.md). The backlog item is #4604.
 
@@ -1430,13 +1419,13 @@ Both run in the backend root with `NODE_OPTIONS=--conditions=development`, so ji
 | `apps/web has no vite.config.ts, so it is not a react-app. Run …`                                                                                                                                                                                                                       | `--web` names a project that `react-app` did not write                                            |
 | `infra/src/environments/production/main.tf calls module "stack" but its env has no "# Generators add env keys above this line.", so the generator cannot add BETTER_AUTH_SECRET = … and BETTER_AUTH_URL = …. Add the two lines to env, or put the marker back as the last line of env.` | the repo removed the marker from the `env` map of the module call, and the two keys are not there |
 
-### Test the auth generator before a release
+### Test the auth generator
 
-After the steps of [Test the prisma generator before a release](#test-the-prisma-generator-before-a-release) up to `run-many`: run `auth --backend apps/backend --db packages/db`, then check that `auth:check` exits 0, that `run-many -t typecheck lint build test` passes, and that a second run changes no file. On 2026-11-19 each step passed. The production bundle on a `postgres:18-alpine`, with the schema from `prisma migrate diff`, answered `POST /api/auth/sign-up/email` with 200.
+After the steps of [Test the prisma generator](#test-the-prisma-generator) up to `run-many`: run `auth --backend apps/backend --db packages/db`, then check that `auth:check` exits 0, that `run-many -t typecheck lint build test` passes, and that a second run changes no file. On 2026-11-19 each step passed. The production bundle on a `postgres:18-alpine`, with the schema from `prisma migrate diff`, answered `POST /api/auth/sign-up/email` with 200.
 
 For `--web`, also run `react-app apps/web` and `pair` before prisma, and `auth` with `--web apps/web`. Start `serve` of the backend and `dev` of the web, then send `POST http://localhost:5173/api/auth/sign-up/email` with `Origin: http://localhost:5173`: it answers 200, and with another origin 403. Repeat on `https://web.acme.localhost` under the `portless` target. On 2026-11-19 each step passed, and `authClient.signUp.email` in Chromium answered 200.
 
-For the guards, add a route that lists `signedIn`: `GET` it without a cookie (401), then after sign-in (200). Until `@zukhruf/authentication` is on npm, install it from a tarball with an `overrides` entry (`file:<tgz>`), not with `npm link`: a link brings a second `hono`, and the app answers the refusal with 500. On 2026-11-19 both answers were right, through the Vite dev server, and a verification link opened through the Vite dev server and through portless signed in the page on that origin.
+For the guards, add a route that lists `signedIn`: `GET` it without a cookie (401), then after sign-in (200). On 2026-11-19 both answers were right, through the Vite dev server, and a verification link opened through the Vite dev server and through portless signed in the page on that origin.
 
 The decisions are in [ADR 0014](./docs/adr/0014-the-auth-generator-adds-better-auth-to-a-backend-and-its-db-package.md). The backlog item is #4719.
 
@@ -1526,9 +1515,9 @@ The compose reads `PUBLIC_HOST` in its labels, Postgres reads `POSTGRES_PASSWORD
 | `The host "app.example.org" is not a name in the zone "example.com".`           | `--host` outside `--zone`                                |
 | `The name "My App" is not a lowercase name that starts with a letter.`          | `--name`, or the scope, is not a lowercase name          |
 
-### Test the dokploy generator before a release
+### Test the dokploy generator
 
-After the steps of [Test the app generators before a release](#test-the-app-generators-before-a-release), run `prisma` and then `dokploy` with `--database`, `--registryUser` and no `--host`, then `npm install`, `npx nx sync`, `npx nx run @acme/infra:typecheck`, `actionlint .github/workflows/*.yml`, `npx nx run-many -t typecheck lint`, `npx prettier --check .`, and `docker compose -f infra/compose.dokploy.yml config` (with an `infra/.env`, which the app's `env_file` names). actionlint 1.7.12 does not know the `parallel:` step of `ci.yml`, which GitHub runs. On 2026-11-18 each passed, also after a run with `--host` and no `--database` or `--registryUser`; after that, two runs with the first options passed again, and the second of them changed no file.
+After the steps of [Test the app generators](#test-the-app-generators), run `prisma` and then `dokploy` with `--database`, `--registryUser` and no `--host`, then `npm install`, `npx nx sync`, `npx nx run @acme/infra:typecheck`, `actionlint .github/workflows/*.yml`, `npx nx run-many -t typecheck lint`, `npx prettier --check .`, and `docker compose -f infra/compose.dokploy.yml config` (with an `infra/.env`, which the app's `env_file` names). actionlint 1.7.12 does not know the `parallel:` step of `ci.yml`, which GitHub runs. On 2026-11-18 each passed, also after a run with `--host` and no `--database` or `--registryUser`; after that, two runs with the first options passed again, and the second of them changed no file.
 
 The decisions are in [ADR 0011](./docs/adr/0011-the-dokploy-generator-writes-the-gitops-delivery-of-a-node-app.md) and [ADR 0015](./docs/adr/0015-an-opentofu-module-of-zukhruf-holds-the-dokploy-delivery-and-the-dokploy-generator-writes-infra-once.md). The backlog items of the dokploy generator are #4603 and #4733.
 
