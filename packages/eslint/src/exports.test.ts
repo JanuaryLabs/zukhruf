@@ -6,6 +6,8 @@ import { basename, dirname, join, posix } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
+import { workspaceRoot } from '@nx/devkit';
+
 import { isRecord } from './unknown-values.ts';
 
 // A lint input of { externalDependencies: ['@zukhruf/eslint'] } hashes only
@@ -136,6 +138,17 @@ const specifiers = Object.keys(exportsMap)
   .filter((subpath) => subpath !== './package.json')
   .map((subpath) => posix.join('@zukhruf/eslint', subpath));
 
+// The default entry of @nx/eslint-plugin loads the rules folder of the
+// workspace it runs in, WORKSPACE_PLUGIN_DIR = join(workspaceRoot,
+// 'tools/eslint-rules') (@nx/eslint-plugin 24.0.6, dist/src/constants.js:6-7,
+// not exported), through @nx/js/internal's loadTsFile
+// (dist/src/resolve-workspace-rules.js:196), so the require runs inside nx.
+// That folder is the host's, not an edge of @zukhruf/eslint.
+const workspaceRulesPath = join(workspaceRoot, 'tools/eslint-rules');
+const workspaceRules = existsSync(workspaceRulesPath)
+  ? realpathSync(workspaceRulesPath)
+  : null;
+
 for (const specifier of specifiers) {
   test(`${specifier} loads only packages that @zukhruf/eslint reaches over declared edges`, () => {
     // Arrange
@@ -152,6 +165,7 @@ for (const specifier of specifiers) {
       if (folder === null || closure.has(folder)) continue;
       const loader = parentURL === null ? null : packageFolderOf(parentURL);
       if (loader === folder || undeclared.has(folder)) continue;
+      if (folder === workspaceRules) continue;
       undeclared.set(
         folder,
         `${nameOf(folder)} (loaded by ${parentURL === null ? 'the entry' : nameOf(loader)})`,

@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "dist",
+    "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo"
+  },
+  "include": ["index.ts", "pg-boss-citations/**/*.ts"],
+  "references": [
+    {
+      "path": "../../packages/fs/tsconfig.json"
+    }
+  ]
+}

@@ -476,6 +476,16 @@ export default defineConfig(
       ],
     },
   },
+  // Each pg-boss line that sqlite-queue cites is a line of the pinned pg-boss
+  // (its ADR 0001). The rules are in tools/eslint-rules.
+  {
+    files: ['packages/sqlite/queue/**/*.ts'],
+    rules: { '@nx/workspace-pg-boss-cited-lines': 'error' },
+  },
+  {
+    files: ['packages/sqlite/queue/package.json'],
+    rules: { '@nx/workspace-pg-boss-cited-version': 'error' },
+  },
   // The shadcn CLI writes these files (`nx run shadcn:sync`), and nobody edits
   // them by hand, so the rules that the stock code fails are off here only.
   {

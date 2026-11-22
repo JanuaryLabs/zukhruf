@@ -321,3 +321,5 @@ src/
   *.test.ts          the unit tests, for behavior that only SQLite has
   parity/            the parity suite: each scenario on pg-boss over PGlite and on SQLite
 ```
+
+Each pg-boss citation names lines of the pinned pg-boss, and lint holds it there ([ADR 0001](./docs/adr/0001-pg-boss-api-on-sqlite.md)). On a pg-boss bump, lint fails with `cited`. Install the new pin, then run `npx nx run sqlite-queue:repoint-citations` before you edit a citation by hand, because it leaves the lines changed since HEAD alone. It moves each cited line to its line in the new version. It lists each cited line in a block that the new version changed, and then exits 1. Cite those lines by hand, run `npx nx run sqlite-queue:repoint-citations --checked` to record the new version in `pg-boss-citations.json`, and commit. In Markdown, the codemod also reads a `(N)` in prose after a citation as a line of that citation; the flagged list and a review of the diff catch such a move.

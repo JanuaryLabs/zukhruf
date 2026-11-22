@@ -135,6 +135,9 @@
       "path": "./tools/test-split"
     },
     {
+      "path": "./tools/eslint-rules"
+    },
+    {
       "path": "./.husky"
     },
     {

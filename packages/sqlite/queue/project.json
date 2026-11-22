@@ -11,6 +11,14 @@
           "TZ": "Asia/Kolkata"
         }
       }
+    },
+    "repoint-citations": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "dependsOn": ["^build"],
+      "options": {
+        "command": "node tools/eslint-rules/pg-boss-citations/repoint.ts {projectRoot}"
+      }
     }
   }
 }

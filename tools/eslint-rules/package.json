@@ -1,0 +1,6 @@
+{
+  "name": "eslint-rules",
+  "private": true,
+  "type": "module",
+  "main": "./index.ts"
+}
