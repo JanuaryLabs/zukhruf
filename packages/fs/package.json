@@ -1,6 +1,6 @@
 {
   "name": "@zukhruf/fs",
-  "version": "0.8.64",
+  "version": "0.8.66",
   "description": "File writes a reader never sees half done, a file lock the kernel frees when its holder dies, a file stamp that tells that a file changed, as git does, and a temporary directory at its real path. Retries Windows' short refusals. Names a file by any key.",
   "license": "MIT",
   "repository": {
@@ -50,7 +50,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@zukhruf/async": "^0.8.64",
-    "@zukhruf/sqlite-open": "^0.8.64"
+    "@zukhruf/async": "^0.8.66",
+    "@zukhruf/sqlite-open": "^0.8.66"
   }
 }
