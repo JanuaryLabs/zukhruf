@@ -1,5 +1,7 @@
 # The app generators move here and call the generators of Nx
 
+Superseded in part on 2026-11-22 (#5219) for `^sdk` in decision 6. `init` writes it for every reader, and `node-app` gives the rule to the `@nx/esbuild:esbuild` default ([ADR 0019](./0019-a-task-that-reads-generated-code-runs-its-generator-first-and-hashes-its-output.md)).
+
 Status: Accepted 2026-11-18 by the owner (backlog #3338), with decision 1 changed: the generated web app keeps the theme script and the `dark` variant of the monorepo standard §10.
 
 Superseded in part on 2026-11-21 for decision 3: Nx 24 removed the `addPlugin` option of its generators, and their `init` always registers the inference plugin (`@nx/vitest/dist/src/generators/init/init.js:54`), so each call passes only `useProjectJson: false`. Also for decision 9: zukhruf's root installs Nx 24.0.6, so the tests run on a virtual Tree with Nx 24.0.6, and the peer range of the package is `>=24.0.6 <25` (#3271).

@@ -1,5 +1,7 @@
 # The prisma generator writes a Postgres db package and wires a backend
 
+Superseded in part on 2026-11-22 (#5219) for the `generate` entries and the client input of decision 6. `init` writes them for every reader, and the prisma generator writes only `migrate:check` ([ADR 0019](./0019-a-task-that-reads-generated-code-runs-its-generator-first-and-hashes-its-output.md)).
+
 Status: Accepted 2026-11-18 by the owner (backlog #4604), decisions 1 to 15; decisions 16 and 17 on 2026-11-19 (#4792). meddit runs on it in production.
 
 Six projects hold a Prisma db package of the same shape: `packages/persistence/db`, `apps/v2/db`, `apps/authx/db`, `apps/desktop/db` (sqlite) and `tools/playground/amail` of text2sql, and `packages/persistence/db` of factory. Three `Dockerfile.migration` copies in text2sql (`apps/v2`, `apps/authx`, `apps/backend`) are the same except for the package name and path. meddit needs a seventh, so the shape moves here (#4604). The design of #4604 (2026-11-18) lists what is shared as is and decides each difference. `@zukhruf/nx/prisma` gives the targets (#3339, ADR 0008).

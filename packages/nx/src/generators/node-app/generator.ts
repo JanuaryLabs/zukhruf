@@ -15,6 +15,7 @@ import { addLines } from '../add-lines.ts';
 import { appDirectory, projectNameOf } from '../app-directory.ts';
 import initGenerator from '../init/generator.ts';
 import {
+  addGeneratedSourceDefaults,
   mergeGeneratorDefaults,
   unique,
   updateTargetDefault,
@@ -404,10 +405,8 @@ function wireSdk(tree: Tree, options: SdkOptions): void {
  * The nx.json keys of a backend. An executor-keyed default wins over a
  * name-keyed one (Nx takes the first key that matches and never merges two),
  * so the esbuild entry keeps the Tailwind sync generator of the `build`
- * default away from a backend build. `^sdk` builds a generated client before
- * its consumers build, serve, typecheck or test; it does nothing for a
- * project with no such dependency, and `...` keeps the `^build` that
- * @zukhruf/nx/test infers for test.
+ * default away from a backend build. The esbuild entry also gets the
+ * generated-source rule of init, which the `build` entry has (ADR 0019).
  */
 function mergeNodeNxJson(tree: Tree): void {
   updateJson(tree, 'nx.json', (nxJson: NxJsonConfiguration) => {
@@ -422,17 +421,7 @@ function mergeNodeNxJson(tree: Tree): void {
         tsSolutionTsconfigInput,
       ]),
     }));
-    for (const [target, inferred] of [
-      ['build', []],
-      ['dev', []],
-      ['typecheck', []],
-      ['test', ['...']],
-    ] as const) {
-      updateTargetDefault(nxJson, target, (entry) => ({
-        ...entry,
-        dependsOn: unique([...inferred, ...(entry.dependsOn ?? []), '^sdk']),
-      }));
-    }
+    addGeneratedSourceDefaults(nxJson);
     addPortlessProxyEnv(nxJson);
     // sdk-it.config.ts imports the root CLI. Outside production, its closure
     // stays out of the pruned runtime lockfile of the app.

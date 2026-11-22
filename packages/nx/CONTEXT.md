@@ -97,7 +97,7 @@ The start of each OpenTofu target that reads the encrypted state: it stops when 
 _Avoid_: Secret check, env check
 
 **Generate target**:
-The target `generate` that the `prisma` area gives. It runs `prisma generate` in the project root. Nx caches it on the `*.prisma` files, `prisma.config.ts` and the Prisma packages, and restores the `output` folders of the generator blocks. `typecheck` and `build` depend on it through `targetDefaults`.
+The target `generate` that the `prisma` area gives. It runs `prisma generate` in the project root. Nx caches it on the `*.prisma` files, `prisma.config.ts` and the Prisma packages, and restores the `output` folders of the generator blocks. `typecheck`, `build`, `test`, `lint` and `dev` depend on it through the `targetDefaults` that `init` writes (ADR 0019).
 _Avoid_: Codegen target, prisma target (text2sql has a different target with that name)
 
 **Generator**:
@@ -133,7 +133,7 @@ The generator `pair`, and what it makes: a web app that imports the generated cl
 _Avoid_: Link, connect, full-stack app
 
 **Generated client**:
-The package `@<scope>/<app>-client` in `<app>/.sdk-it`, which `sdk-it generate` writes from the Hono routes of a backend. Only its `package.json` and `tsconfig.json` are committed; its `sdk` target writes the rest, and `^sdk` runs it before a consumer builds, serves, typechecks or tests.
+The package `@<scope>/<app>-client` in `<app>/.sdk-it`, which `sdk-it generate` writes from the Hono routes of a backend. Only its `package.json` and `tsconfig.json` are committed; its `sdk` target writes the rest, and `^sdk` runs it before a consumer typechecks, builds, tests, lints or runs `dev` (ADR 0019).
 _Avoid_: SDK (the CLI is sdk-it), API client package
 
 **Build sha**:

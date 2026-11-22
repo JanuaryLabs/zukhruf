@@ -156,7 +156,6 @@ test('component tests run with Vitest once, in testMode run', async () => {
   );
   assert.equal(vitest?.options.testMode, 'run');
   assert.deepEqual(readJson(tree, 'apps/web/package.json').nx.targets.test, {
-    dependsOn: ['^sdk'],
     options: { env: { NODE_ENV: 'test' } },
   });
   const spec = readJson(tree, 'apps/web/tsconfig.spec.json');
@@ -176,7 +175,7 @@ test('component tests run with Vitest once, in testMode run', async () => {
   );
 });
 
-test('after node-app, test.dependsOn stays ["...", "^sdk"] with no ^build of @nx/vitest', async () => {
+test('after node-app, the test default stays the one of init, with no ^build of @nx/vitest', async () => {
   const tree = generatorTree();
   await nodeAppGenerator(tree, { directory: 'apps/backend' });
 
@@ -184,7 +183,7 @@ test('after node-app, test.dependsOn stays ["...", "^sdk"] with no ^build of @nx
 
   assert.deepEqual(readJson(tree, 'nx.json').targetDefaults.test, {
     options: { env: { NODE_ENV: 'production' } },
-    dependsOn: ['...', '^sdk'],
+    dependsOn: ['generate', '^sdk', '...'],
   });
 });
 
@@ -198,13 +197,14 @@ test('a web app alone starts the portless proxy unprivileged on HTTPS, with no T
   });
 });
 
-test('a web app alone gets only the NODE_ENV of init in the test target default', async () => {
+test('a web app alone gets only the test target default of init', async () => {
   const tree = generatorTree();
 
   await reactAppGenerator(tree, { directory: 'apps/web' });
 
   assert.deepEqual(readJson(tree, 'nx.json').targetDefaults.test, {
     options: { env: { NODE_ENV: 'production' } },
+    dependsOn: ['generate', '^sdk', '...'],
   });
 });
 

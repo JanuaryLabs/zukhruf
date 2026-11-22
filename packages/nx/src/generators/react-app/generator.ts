@@ -222,7 +222,7 @@ async function addComponentTests(
 
   updateJson(tree, 'nx.json', (nxJson: NxJsonConfiguration) => {
     // In a TS solution workspace, @nx/vitest adds ^build to the test default.
-    // The test default stays as it was: ["...", "^sdk"] after node-app.
+    // The test default stays as init wrote it (ADR 0019).
     if (testDefault === undefined) {
       delete nxJson.targetDefaults?.['test'];
     } else {
@@ -241,10 +241,10 @@ async function addComponentTests(
   });
 
   // The project target, not a target default: a default with a list entry
-  // replaces the cwd, cache and inputs of the inferred target (Nx 24). It
-  // builds the generated client first. Production loads the React build that
-  // has no act(), so the component tests get test, on this project only
-  // (ADR 0016).
+  // replaces the cwd, cache and inputs of the inferred target (Nx 24).
+  // Production loads the React build that has no act(), so the component
+  // tests get test, on this project only (ADR 0016). It has no dependsOn: the
+  // test default of init runs the generated client first (ADR 0019).
   updateJson(
     tree,
     `${projectRoot}/package.json`,
@@ -253,10 +253,7 @@ async function addComponentTests(
         ...packageJson.nx,
         targets: {
           ...packageJson.nx?.targets,
-          test: {
-            dependsOn: ['^sdk'],
-            options: { env: { NODE_ENV: 'test' } },
-          },
+          test: { options: { env: { NODE_ENV: 'test' } } },
         },
       };
       return packageJson;

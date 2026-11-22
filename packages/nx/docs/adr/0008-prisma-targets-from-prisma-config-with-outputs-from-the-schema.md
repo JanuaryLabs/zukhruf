@@ -1,5 +1,7 @@
 # An inference plugin gives each Prisma project its targets, with the outputs that the schema names
 
+Superseded in part on 2026-11-22 (#5219) for the Consequences line: a workspace does not add `generate` to `typecheck` and `build` by hand. `init` writes it to every reader, with the client input ([ADR 0019](./0019-a-task-that-reads-generated-code-runs-its-generator-first-and-hashes-its-output.md)).
+
 Status: Accepted 2026-11-18 by the owner (backlog #3339).
 
 Six projects copy a cached `generate` target: `@factory/db` of factory, and `v2-db`, `authx-db`, `desktop-db`, `db` and `@workspace/amail` of text2sql. Five of them also copy `migrate` and `deploy`, and four copy `reset` and `pull`. meddit adds a seventh project. The owner put the area in scope on 2026-11-18 with these words: "detect a prisma schema / prisma.config.ts; cached generate (inputs models/\*\*/\*.prisma), migrate (migrate dev), deploy (migrate deploy), reset, pull; typecheck/build dependsOn generate".

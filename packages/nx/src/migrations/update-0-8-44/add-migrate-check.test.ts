@@ -14,9 +14,11 @@ test('a db package generated before #4937 gets the typecheck dependencies that t
   await prismaGenerator(tree, { directory: 'packages/db' });
   updateJson(tree, 'nx.json', (nxJson: NxJsonConfiguration) => {
     const typecheck = nxJson.targetDefaults?.['typecheck'];
-    if (typecheck !== undefined && !Array.isArray(typecheck)) {
-      typecheck.dependsOn = ['lint', 'format:check', '...', 'generate'];
-    }
+    assert.ok(typecheck !== undefined && !Array.isArray(typecheck));
+    assert.ok(typecheck.dependsOn !== undefined);
+    typecheck.dependsOn = typecheck.dependsOn.filter(
+      (dependency) => dependency !== 'migrate:check',
+    );
     return nxJson;
   });
 

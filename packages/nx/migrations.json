@@ -24,6 +24,11 @@
       "version": "0.8.44",
       "description": "The typecheck of a db package runs migrate:check, which fails when the migrations do not build the schema: targetDefaults.typecheck.dependsOn gets \"migrate:check\" in a repo with @zukhruf/nx/prisma (#4937, ADR 0018).",
       "implementation": "./dist/migrations/update-0-8-44/add-migrate-check.js"
+    },
+    "add-generated-source-defaults": {
+      "version": "0.8.58",
+      "description": "A task that reads generated code runs its generator first and hashes its output: in a repo whose nx.json init wrote, typecheck, build, test, lint and dev (and the @nx/esbuild:esbuild default) get dependsOn \"generate\" and \"^sdk\", lint also \"^build\", and typecheck, build and lint the input { \"dependentTasksOutputFiles\": \"**/*.ts\" }; a web test target loses the dependsOn [\"^sdk\"] that hid the rule, and each other target that hides it is logged (#5219, ADR 0019).",
+      "implementation": "./dist/migrations/update-0-8-58/add-generated-source-defaults.js"
     }
   }
 }

@@ -116,11 +116,24 @@ test('a fresh workspace gets each root file of the standard', async () => {
       '@zukhruf/nx/test',
     ],
   );
-  assert.deepEqual(nxJson.targetDefaults.typecheck.dependsOn, [
+  const generatedCode = { dependentTasksOutputFiles: '**/*.ts' };
+  const { typecheck, build, lint, test, dev } = nxJson.targetDefaults;
+  assert.deepEqual(typecheck.dependsOn, [
     'lint',
     'format:check',
     '...',
+    'generate',
+    '^sdk',
   ]);
+  assert.deepEqual(build.dependsOn, ['generate', '^sdk', '...']);
+  assert.deepEqual(lint.dependsOn, ['generate', '^sdk', '^build', '...']);
+  assert.deepEqual(test.dependsOn, ['generate', '^sdk', '...']);
+  assert.deepEqual(dev.dependsOn, ['generate', '^sdk', '...']);
+  for (const cached of [typecheck, build, lint]) {
+    assert.deepEqual(cached.inputs, ['...', generatedCode]);
+  }
+  assert.equal(test.inputs, undefined);
+  assert.equal(dev.inputs, undefined);
   assert.equal(nxJson.sync.applyChanges, true);
   const preCommit = tree.read('.husky/pre-commit.ts', 'utf-8') ?? '';
   assert.match(preCommit, /^#!\/usr\/bin\/env node\n/);
@@ -217,7 +230,7 @@ test('a repo with only a backend gets no wiring of one kind of app', async () =>
   assert.equal(nxJson.generators, undefined);
   assert.equal(nxJson.sync.generatorOptions, undefined);
   assert.equal(nxJson.targetDefaults['@nx/esbuild:esbuild'], undefined);
-  assert.doesNotMatch(JSON.stringify(nxJson), /\^sdk|tailwind/);
+  assert.doesNotMatch(JSON.stringify(nxJson), /tailwind/);
   assert.deepEqual(readJson(tree, '.prettierrc').plugins, [
     '@trivago/prettier-plugin-sort-imports',
   ]);
@@ -289,7 +302,8 @@ test('the target defaults and lines that are there stay', async () => {
 
   const nxJson = readJson(tree, 'nx.json');
   assert.deepEqual(nxJson.targetDefaults.build, {
-    dependsOn: ['^build', '^sdk'],
+    dependsOn: ['^build', '^sdk', 'generate', '...'],
+    inputs: ['...', { dependentTasksOutputFiles: '**/*.ts' }],
   });
   assert.deepEqual(nxJson.targetDefaults.typecheck.dependsOn, [
     '^typecheck',
@@ -297,13 +311,13 @@ test('the target defaults and lines that are there stay', async () => {
     'format:check',
     '^sdk',
     '...',
+    'generate',
   ]);
   assert.deepEqual(nxJson.targetDefaults.serve, {
     continuous: false,
     cache: false,
     options: { env: { NODE_ENV: 'production' } },
   });
-  assert.equal(nxJson.targetDefaults.lint, undefined);
   assert.deepEqual(nxJson.namedInputs.production.slice(0, 2), [
     'default',
     '!{projectRoot}/sdk-it.config.ts',
@@ -352,12 +366,12 @@ test('the test and serve target defaults run under production, and a NODE_ENV th
   await initGenerator(tree);
 
   const { targetDefaults } = readJson(tree, 'nx.json');
-  assert.deepEqual(targetDefaults.test, {
-    options: { env: { NODE_ENV: 'production' } },
+  assert.deepEqual(targetDefaults.test.options, {
+    env: { NODE_ENV: 'production' },
   });
   assert.deepEqual(targetDefaults.serve.options.env, {
     NODE_ENV: 'staging',
     PORT: '1',
   });
-  assert.equal(targetDefaults.build, undefined);
+  assert.equal(targetDefaults.build.options, undefined);
 });

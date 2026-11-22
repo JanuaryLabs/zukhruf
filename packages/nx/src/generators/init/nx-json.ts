@@ -156,10 +156,61 @@ export function mergeNxJson(tree: Tree): void {
     }
 
     addProductionNodeEnvDefaults(nxJson);
+    addGeneratedSourceDefaults(nxJson);
 
     nxJson.sync = { ...nxJson.sync, applyChanges: true };
     return nxJson;
   });
+}
+
+/** The targets that read the source of a project, generated code included. */
+export const generatedSourceReaders = [
+  'typecheck',
+  'build',
+  'test',
+  'lint',
+  'dev',
+];
+/** The cached readers: Nx hashes no gitignored file, so they hash the generated code as a task output. */
+const cachedReaders = new Set(['typecheck', 'build', 'lint']);
+/** The executor-keyed default that the standard writes (node-app). Nx takes it over the `build` default. */
+export const executorReader = '@nx/esbuild:esbuild';
+
+/**
+ * A task that reads generated code runs its generator first and hashes its
+ * output (ADR 0019). `generate` writes the Prisma client and `sdk` the sdk-it
+ * client; Nx skips a dependency on a target that the project does not have.
+ * `lint` also waits for the builds of its dependencies, as typed lint reads
+ * their types. `...` keeps what the plugins infer. Nx takes one default for a
+ * target (an executor key over a name key, never both), so the esbuild default
+ * gets the rule too when nx.json has it. init, node-app and the migrations
+ * call it.
+ */
+export function addGeneratedSourceDefaults(nxJson: NxJsonConfiguration): void {
+  const targets =
+    nxJson.targetDefaults?.[executorReader] === undefined
+      ? generatedSourceReaders
+      : [...generatedSourceReaders, executorReader];
+  for (const target of targets) {
+    const reader = target === executorReader ? 'build' : target;
+    updateTargetDefault(nxJson, target, (entry) => ({
+      ...entry,
+      dependsOn: unique([
+        ...(entry.dependsOn ?? []),
+        'generate',
+        '^sdk',
+        ...(reader === 'lint' ? ['^build'] : []),
+        '...',
+      ]),
+      ...(cachedReaders.has(reader) && {
+        inputs: unique([
+          ...(entry.inputs ?? []),
+          '...',
+          { dependentTasksOutputFiles: '**/*.ts' },
+        ]),
+      }),
+    }));
+  }
 }
 
 /**

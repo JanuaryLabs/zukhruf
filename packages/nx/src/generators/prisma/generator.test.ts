@@ -216,7 +216,7 @@ test('the migration image installs the CLI from the lockfile and runs migrate de
   assert.ok(tree.exists('.dockerignore'));
 });
 
-test('nx.json lists the prisma plugin, generate runs before typecheck and build, and migrate:check before typecheck', async () => {
+test('nx.json lists the prisma plugin once, and migrate:check runs before typecheck', async () => {
   const tree = generatorTree();
 
   await prismaGenerator(tree, { directory: 'packages/db' });
@@ -232,26 +232,9 @@ test('nx.json lists the prisma plugin, generate runs before typecheck and build,
     'format:check',
     '...',
     'generate',
+    '^sdk',
     'migrate:check',
   ]);
-  assert.deepEqual(targetDefaults.build.dependsOn, ['generate', '...']);
-  for (const target of ['typecheck', 'build']) {
-    assert.deepEqual(targetDefaults[target].inputs, [
-      '...',
-      { dependentTasksOutputFiles: '**/*.ts' },
-    ]);
-  }
-});
-
-test('the build default of a backend keeps ^sdk and gets generate', async () => {
-  const tree = generatorTree();
-  await nodeAppGenerator(tree, { directory: 'apps/backend' });
-
-  await prismaGenerator(tree, { directory: 'packages/db' });
-
-  const { targetDefaults } = readJson(tree, 'nx.json');
-  assert.deepEqual(targetDefaults.build.dependsOn, ['^sdk', 'generate', '...']);
-  assert.deepEqual(targetDefaults.test.dependsOn, ['...', '^sdk']);
 });
 
 test('the root gets @zukhruf/testing and the install scripts of Prisma', async () => {

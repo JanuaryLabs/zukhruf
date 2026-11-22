@@ -383,21 +383,27 @@ test('a .dockerignore that is there stays', async () => {
   assert.equal(tree.read('.dockerignore', 'utf-8'), 'custom\n');
 });
 
-test('nx.json gets the esbuild default, ^sdk, and test.dependsOn ["...", "^sdk"]', async () => {
+test('nx.json gets the esbuild default with the generated-source rule of init', async () => {
   const tree = generatorTree();
 
   await nodeAppGenerator(tree, { directory: 'apps/backend' });
 
   const { targetDefaults, namedInputs, generators } = readJson(tree, 'nx.json');
-  assert.deepEqual(targetDefaults.test, {
-    options: { env: { NODE_ENV: 'production' } },
-    dependsOn: ['...', '^sdk'],
+  assert.deepEqual(targetDefaults['@nx/esbuild:esbuild'], {
+    cache: true,
+    dependsOn: ['^build', 'generate', '^sdk', '...'],
+    inputs: [
+      'production',
+      '^production',
+      {
+        json: '{workspaceRoot}/tsconfig.json',
+        fields: ['extends', 'files', 'include'],
+      },
+      '...',
+      { dependentTasksOutputFiles: '**/*.ts' },
+    ],
   });
-  assert.ok(targetDefaults.build.dependsOn.includes('^sdk'));
-  assert.ok(targetDefaults.dev.dependsOn.includes('^sdk'));
-  assert.ok(targetDefaults.typecheck.dependsOn.includes('^sdk'));
-  assert.equal(targetDefaults['@nx/esbuild:esbuild'].cache, true);
-  assert.ok(targetDefaults['@nx/esbuild:esbuild'].dependsOn.includes('^build'));
+  assert.deepEqual(targetDefaults.test.dependsOn, ['generate', '^sdk', '...']);
   assert.ok(
     namedInputs.production.includes(
       '!{projectRoot}/sdk-it.config.{js,ts,mjs,mts}',
