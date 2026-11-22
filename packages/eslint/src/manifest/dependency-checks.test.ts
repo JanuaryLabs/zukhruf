@@ -41,6 +41,8 @@ interface Layout {
   /** nx.json `targetDefaults`. */
   targetDefaults?: Record<string, unknown>;
   greetTags?: string[];
+  /** Projects greet builds after without importing them. */
+  greetImplicitDependencies?: string[];
   greetDependencies?: Record<string, string>;
   /** Packages the root installs under another name, as `npm:<name>@<version>`, by alias. */
   aliases?: Record<string, { name: string; version: string }>;
@@ -61,6 +63,7 @@ function workspaceFiles({
   apps,
   targetDefaults = {},
   greetTags = [],
+  greetImplicitDependencies = [],
   greetDependencies = { 'left-pad': '1.3.0' },
   greetManifest = {},
   aliases = {},
@@ -206,6 +209,7 @@ function workspaceFiles({
       name: 'greet',
       projectType: 'library',
       tags: greetTags,
+      implicitDependencies: greetImplicitDependencies,
       targets: {
         build: { executor: 'nx:run-commands', options: { command: 'true' } },
       },
@@ -273,6 +277,29 @@ test('a bundled app does not declare the npm packages of a project it only build
       apps: { web: { build: VITE_BUILD, implicitDependencies: ['shout'] } },
       shoutSource: {
         'index.ts': `import leftPad from 'left-pad';\nimport rightPad from 'right-pad';\nexport const shout = () => leftPad(rightPad('hi', 5), 9);\n`,
+      },
+    }),
+  );
+  buildProjectGraph(workspace.root);
+
+  // Act
+  const findings = lint(workspace.root, ['apps/web/package.json']);
+
+  // Assert
+  assert.equal(findings.length, 1);
+  assert.match(findings[0]?.message ?? '', /left-pad/);
+  assert.doesNotMatch(findings[0]?.message ?? '', /right-pad/);
+});
+
+test('a bundled app does not declare the npm packages of a project that a project it imports only builds after', async () => {
+  // Arrange: web imports greet, as a web imports a generated client, and
+  // greet builds after shout, as the client builds after its backend.
+  await using workspace = await fixtureWorkspace(
+    workspaceFiles({
+      apps: { web: { build: VITE_BUILD } },
+      greetImplicitDependencies: ['shout'],
+      shoutSource: {
+        'index.ts': `import rightPad from 'right-pad';\nexport const shout = (text: string) => rightPad(text, 9);\n`,
       },
     }),
   );

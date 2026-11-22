@@ -478,15 +478,28 @@ export default defineConfig({
 }
 
 /**
+ * The backend's \`build-deps\`, which the client's \`sdk\` runs through
+ * \`^build-deps\`: the builds of the backend's dependencies, and their
+ * generators, run before sdk-it reads the backend's types. Nx makes a target
+ * with no command a no-op.
+ */
+export const buildDepsTarget = { dependsOn: ['^build'] };
+
+/**
  * The committed stub of the generated client. \`sdk-it generate\` (0.46.11,
  * project mode) keeps an existing package.json and assigns only its own
  * fields into it, so a stub with each of those keys, and the \`nx\` block that
  * sdk-it never touches, is written back unchanged. With the stub committed,
  * \`npm ci\` links the client on a fresh clone before the first \`sdk\` run, and
  * the client is an Nx library whose \`sdk\` target is its build: consumers reach
- * it through the \`^sdk\` target default. It has no implicit dependency on the
- * api, which would leak the api's runtime deps into every consumer manifest;
- * the cross-project \`production\` input keeps the cache right.
+ * it through the \`^sdk\` target default. sdk-it reads the api's types, and
+ * through them the generated code of the api's dependencies (the Prisma
+ * client), but the client imports neither, so the implicit dependency on the
+ * api is the edge: \`nx affected\` reaches the client and its consumers, and
+ * \`^build-deps\` runs the api's dependency builds, with their generators,
+ * before sdk-it. Their \`.ts\` outputs are in the hash. The edge brings no npm
+ * package into a consumer manifest: an implicit dependency is order, never an
+ * import (\`manifest/dependency-checks\` of @zukhruf/eslint, its ADR 0005).
  */
 export function clientManifest(name: string, apiProjectName: string): string {
   const manifest = {
@@ -509,6 +522,7 @@ export function clientManifest(name: string, apiProjectName: string): string {
     dependencies: { 'fast-content-type-parse': '^3.0.0', zod: '^4.3.0' },
     nx: {
       projectType: 'library',
+      implicitDependencies: [apiProjectName],
       targets: {
         sdk: {
           // Config discovery walks up from cwd to the api's sdk-it.config.ts.
@@ -518,8 +532,10 @@ export function clientManifest(name: string, apiProjectName: string): string {
             env: { NODE_ENV: 'production' },
           },
           cache: true,
+          dependsOn: ['^build-deps'],
           inputs: [
-            { projects: [apiProjectName], input: 'production' },
+            '^production',
+            { dependentTasksOutputFiles: '**/*.ts', transitive: true },
             '{workspaceRoot}/package-lock.json',
             '{projectRoot}/package.json',
           ],

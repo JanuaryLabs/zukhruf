@@ -32,6 +32,7 @@ import { workspaceScope } from '../workspace-scope.ts';
 import {
   appTestTs,
   appTs,
+  buildDepsTarget,
   clientManifest,
   clientTsconfig,
   dockerfile,
@@ -309,6 +310,7 @@ function writeProjectPackageJson(
         targets: {
           ...targets,
           build: buildTarget(app.projectRoot),
+          'build-deps': buildDepsTarget,
           serve: serveTarget(previousServe),
           portless: {
             command: `portless --name ${app.name}.${app.scope} --app-port ${app.port} -- nx run ${app.projectName}:serve --output-style=stream-without-prefixes`,

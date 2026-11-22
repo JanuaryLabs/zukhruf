@@ -133,7 +133,7 @@ The generator `pair`, and what it makes: a web app that imports the generated cl
 _Avoid_: Link, connect, full-stack app
 
 **Generated client**:
-The package `@<scope>/<app>-client` in `<app>/.sdk-it`, which `sdk-it generate` writes from the Hono routes of a backend. Only its `package.json` and `tsconfig.json` are committed; its `sdk` target writes the rest, and `^sdk` runs it before a consumer typechecks, builds, tests, lints or runs `dev` (ADR 0019).
+The package `@<scope>/<app>-client` in `<app>/.sdk-it`, which `sdk-it generate` writes from the Hono routes of a backend. Only its `package.json` and `tsconfig.json` are committed; its `sdk` target writes the rest, and `^sdk` runs it before a consumer typechecks, builds, tests, lints or runs `dev` (ADR 0019). The client names its backend in `implicitDependencies`, and `sdk` runs the backend's `build-deps` first, so the db generator runs before sdk-it reads the backend's types (ADR 0021).
 _Avoid_: SDK (the CLI is sdk-it), API client package
 
 **Build sha**:

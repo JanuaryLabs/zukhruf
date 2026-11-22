@@ -4,6 +4,12 @@ import { join, resolve } from 'node:path';
 import { test } from 'node:test';
 
 import { readJsonFile } from '@nx/devkit';
+import { rcompare, satisfies } from 'semver';
+
+import {
+  appPackageVersions,
+  rootToolVersions,
+} from '../generators/versions.ts';
 
 const packageRoot = resolve(import.meta.dirname, '..', '..');
 const workspaceRoot = resolve(packageRoot, '..', '..');
@@ -13,29 +19,45 @@ interface Manifest {
   private?: boolean;
   'nx-migrations'?: { migrations: string; packageGroup: string[] };
   files?: string[];
+  peerDependencies?: Record<string, string>;
+}
+
+interface PackageJsonUpdate {
+  version: string;
+  packages: Record<
+    string,
+    { version: string; alwaysAddToPackageJson: boolean }
+  >;
 }
 
 interface Migrations {
   generators: Record<string, { version: string; implementation: string }>;
+  // Nx reads a migrations.json with no packageJsonUpdates as one with none
+  // (nx migrate.js getPackageJsonUpdatesFromMigrationConfig).
+  packageJsonUpdates?: Record<string, PackageJsonUpdate>;
 }
 
-test('nx migrate moves every published @zukhruf package with @zukhruf/nx', () => {
-  // Nx tags each package that is not private npm:public, and nx release
-  // publishes that group at one version (nx.json release.projects).
+// Nx tags each package that is not private npm:public, and nx release
+// publishes that group at one version (nx.json release.projects).
+function publishedManifests(): (Manifest & { name: string })[] {
   const paths = execFileSync('git', ['ls-files', 'packages/**/package.json'], {
     cwd: workspaceRoot,
     encoding: 'utf8',
   })
     .trim()
     .split('\n');
-  const published = paths
+  return paths
     .map((path) => readJsonFile<Manifest>(join(workspaceRoot, path)))
     .filter(
-      (manifest) =>
+      (manifest): manifest is Manifest & { name: string } =>
         manifest.private !== true &&
-        manifest.name?.startsWith('@zukhruf/') === true &&
-        manifest.name !== '@zukhruf/nx',
-    )
+        manifest.name?.startsWith('@zukhruf/') === true,
+    );
+}
+
+test('nx migrate moves every published @zukhruf package with @zukhruf/nx', () => {
+  const published = publishedManifests()
+    .filter((manifest) => manifest.name !== '@zukhruf/nx')
     .map((manifest) => manifest.name);
 
   const manifest = readJsonFile<Manifest>(join(packageRoot, 'package.json'));
@@ -67,5 +89,60 @@ test('each migration points at a module that exports a generator', async () => {
         typeof module.default === 'function',
       name,
     );
+  }
+});
+
+// A release can narrow a peer range of a published package (#5061: unicorn
+// ^79.0.0 to ^80.0.0 in @zukhruf/eslint 0.8.45), and npm then refuses a repo
+// that has the old version (ERESOLVE). nx migrate moves a third-party package
+// only through packageJsonUpdates: Nx applies each entry above the installed
+// @zukhruf/nx, and only to a package that the repo declares when
+// alwaysAddToPackageJson is false.
+test('nx migrate moves each third-party peer that the generators install into the range of every published @zukhruf package', () => {
+  const pins: Record<string, string> = {
+    ...rootToolVersions,
+    ...appPackageVersions,
+  };
+  // versions.ts pins typescript and @typescript/native as npm aliases. Nx
+  // resolves a version that is not semver from the registry under the
+  // package's own name (migrate.js resolveVersionForCascade), so
+  // packageJsonUpdates cannot write an alias.
+  const aliased = Object.entries(pins)
+    .filter(([, pin]) => pin.startsWith('npm:'))
+    .map(([name]) => name);
+  assert.deepEqual(aliased, ['@typescript/native', 'typescript']);
+  const { packageJsonUpdates } = readJsonFile<Migrations>(
+    join(packageRoot, 'migrations.json'),
+  );
+  const updates = Object.values(packageJsonUpdates ?? {}).toSorted((a, b) =>
+    rcompare(a.version, b.version),
+  );
+
+  const outOfRange = publishedManifests().flatMap((manifest) =>
+    Object.entries(manifest.peerDependencies ?? {})
+      .filter(
+        ([peer]) =>
+          !peer.startsWith('@zukhruf/') &&
+          peer in pins &&
+          !aliased.includes(peer),
+      )
+      .flatMap(([peer, range]) => {
+        const newest = updates.flatMap(({ version, packages }) => {
+          const target = packages[peer];
+          return target ? [{ version, target: target.version }] : [];
+        })[0];
+        if (newest && satisfies(newest.target, range)) return [];
+        const moved = newest
+          ? `${newest.version} moves it to ${newest.target}`
+          : 'no packageJsonUpdates entry';
+        return [`${peer} ${range} of ${manifest.name}: ${moved}`];
+      }),
+  );
+
+  assert.deepEqual(outOfRange, []);
+  for (const { version, packages } of updates) {
+    for (const [name, update] of Object.entries(packages)) {
+      assert.equal(update.alwaysAddToPackageJson, false, `${version} ${name}`);
+    }
   }
 });

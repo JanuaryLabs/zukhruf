@@ -155,6 +155,7 @@
   "devDependencies": {
     "@zukhruf/eslint": "^0.8.59",
     "@zukhruf/fs": "^0.8.59",
-    "@zukhruf/testing": "^0.8.59"
+    "@zukhruf/testing": "^0.8.59",
+    "semver": "^7.8.5"
   }
 }

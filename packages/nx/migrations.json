@@ -26,9 +26,97 @@
       "implementation": "./dist/migrations/update-0-8-44/add-migrate-check.js"
     },
     "add-generated-source-defaults": {
-      "version": "0.8.58",
+      "version": "0.8.60",
       "description": "A task that reads generated code runs its generator first and hashes its output: in a repo whose nx.json init wrote, typecheck, build, test, lint and dev (and the @nx/esbuild:esbuild default) get dependsOn \"generate\" and \"^sdk\", lint also \"^build\", and typecheck, build and lint the input { \"dependentTasksOutputFiles\": \"**/*.ts\" }; a web test target loses the dependsOn [\"^sdk\"] that hid the rule, and each other target that hides it is logged (#5219, ADR 0019).",
-      "implementation": "./dist/migrations/update-0-8-58/add-generated-source-defaults.js"
+      "implementation": "./dist/migrations/update-0-8-60/add-generated-source-defaults.js"
+    },
+    "add-sdk-build-edges": {
+      "version": "0.8.60",
+      "description": "The sdk-it client runs after the db generator, hashes its output, and is affected by its backend: each node-app backend gets the target build-deps, and its .sdk-it/package.json gets implicitDependencies on the backend, sdk dependsOn [\"^build-deps\"] and the inputs ^production and { \"dependentTasksOutputFiles\": \"**/*.ts\", \"transitive\": true } when its sdk target is the one node-app wrote; another sdk target is logged (#5102).",
+      "implementation": "./dist/migrations/update-0-8-60/add-sdk-build-edges.js"
+    }
+  },
+  "packageJsonUpdates": {
+    "0.8.60": {
+      "version": "0.8.60",
+      "packages": {
+        "@e18e/eslint-plugin": {
+          "version": "0.8.1",
+          "alwaysAddToPackageJson": false
+        },
+        "@eslint-react/eslint-plugin": {
+          "version": "5.30.6",
+          "alwaysAddToPackageJson": false
+        },
+        "@eslint/js": {
+          "version": "10.0.1",
+          "alwaysAddToPackageJson": false
+        },
+        "eslint": {
+          "version": "10.15.0",
+          "alwaysAddToPackageJson": false
+        },
+        "eslint-plugin-functional": {
+          "version": "10.0.1",
+          "alwaysAddToPackageJson": false
+        },
+        "eslint-plugin-import-x": {
+          "version": "4.18.1",
+          "alwaysAddToPackageJson": false
+        },
+        "eslint-plugin-jsx-a11y-x": {
+          "version": "0.2.0",
+          "alwaysAddToPackageJson": false
+        },
+        "eslint-plugin-react-hooks": {
+          "version": "7.1.1",
+          "alwaysAddToPackageJson": false
+        },
+        "eslint-plugin-react-you-might-not-need-an-effect": {
+          "version": "1.3.1",
+          "alwaysAddToPackageJson": false
+        },
+        "eslint-plugin-unicorn": {
+          "version": "80.0.0",
+          "alwaysAddToPackageJson": false
+        },
+        "hono": {
+          "version": "4.13.20",
+          "alwaysAddToPackageJson": false
+        },
+        "jsonc-eslint-parser": {
+          "version": "3.3.0",
+          "alwaysAddToPackageJson": false
+        },
+        "pg": {
+          "version": "8.23.1",
+          "alwaysAddToPackageJson": false
+        },
+        "prettier": {
+          "version": "3.10.1",
+          "alwaysAddToPackageJson": false
+        },
+        "react": {
+          "version": "19.3.1",
+          "alwaysAddToPackageJson": false
+        },
+        "react-dom": {
+          "version": "19.3.1",
+          "alwaysAddToPackageJson": false
+        },
+        "react-router": {
+          "version": "8.5.2",
+          "alwaysAddToPackageJson": false
+        },
+        "tailwindcss": {
+          "version": "4.3.5",
+          "alwaysAddToPackageJson": false
+        },
+        "typescript-eslint": {
+          "version": "8.73.0",
+          "alwaysAddToPackageJson": false
+        }
+      }
     }
   }
 }

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
@@ -27,7 +28,7 @@ const producerOutput = { dependentTasksOutputFiles: '**/*.ts' };
 /** The tasks that read no generated code, by target name or task id, each with its reason. */
 const nonReaders = new Map([
   ['generate', 'a producer: it writes the Prisma client'],
-  ['sdk', 'a producer: it writes the sdk-it client (its db input is #5102)'],
+  ['sdk', 'a producer: it writes the sdk-it client'],
   ['format', 'Prettier writes the source; generated code is ignored'],
   ['format:check', 'Prettier reads the source; generated code is ignored'],
   ['migrate:check', 'prisma migrate diff reads the schema and the migrations'],
@@ -125,14 +126,17 @@ async function generatedFiles() {
   return files;
 }
 
-test('each task that reads generated code runs its generator first', async () => {
-  await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
+/**
+ * The generated workspace in `root`, with the lockfile entries that Nx needs
+ * to hash a task, and the names of every target of its projects.
+ */
+async function generatedWorkspace(root: string) {
   const files = await generatedFiles();
   const nxJsonText = files['nx.json'];
   assert.ok(nxJsonText !== undefined, 'init writes nx.json');
   const nxJson: NxJsonConfiguration = JSON.parse(nxJsonText);
   const probe = await workspace({
-    root: folder.path,
+    root,
     files: {
       ...files,
       'nx.json': JSON.stringify({
@@ -203,6 +207,12 @@ test('each task that reads generated code runs its generator first', async () =>
       Object.keys(node.data.targets),
     ),
   );
+  return { probe, graph, targets };
+}
+
+test('each task that reads generated code runs its generator first', async () => {
+  await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
+  const { probe, graph, targets } = await generatedWorkspace(folder.path);
 
   const run = await probe.nx(
     'run-many',
@@ -269,5 +279,84 @@ test('each task that reads generated code runs its generator first', async () =>
     '@acme/web reads @acme/backend-client:sdk',
   ]) {
     assert.ok(checked.has(reads), reads);
+  }
+});
+
+test('the sdk-it client runs after the db generator and hashes its output', async () => {
+  await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
+  const { probe } = await generatedWorkspace(folder.path);
+
+  const run = await probe.nx(
+    'run',
+    '@acme/backend-client:sdk',
+    '--graph=stdout',
+    '--skip-sync',
+  );
+
+  assert.equal(run.code, 0, run.output);
+  const {
+    tasks,
+    taskPlans,
+  }: TaskGraph & { taskPlans: Record<string, string[]> } = JSON.parse(
+    run.stdout,
+  );
+  const upstream = new Set<string>();
+  const walk = (id: string) => {
+    for (const dependency of tasks.dependencies[id] ?? []) {
+      if (!upstream.has(dependency.id)) {
+        upstream.add(dependency.id);
+        walk(dependency.id);
+      }
+    }
+  };
+  walk('@acme/backend-client:sdk');
+  assert.ok(upstream.has('@acme/db:generate'), [...upstream].join('\n'));
+  const plan = taskPlans['@acme/backend-client:sdk'];
+  assert.ok(plan !== undefined, 'nx prints the plan of the sdk task');
+  assert.ok(
+    plan.some((input) => input.includes('packages/db/src/prisma')),
+    plan.join('\n'),
+  );
+});
+
+test('a change of the backend or the db schema affects the client and the web', async () => {
+  await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
+  const { probe } = await generatedWorkspace(folder.path);
+  // Nx reads the affected files against git, so the folder is a repository
+  // with one commit, out of reach of the user's git config and hooks.
+  const git = (...args: string[]) =>
+    execFileSync('git', args, {
+      cwd: folder.path,
+      env: {
+        PATH: process.env['PATH'],
+        GIT_CONFIG_GLOBAL: '/dev/null',
+        GIT_CONFIG_NOSYSTEM: '1',
+        GIT_AUTHOR_NAME: 'probe',
+        GIT_AUTHOR_EMAIL: 'probe@example.invalid',
+        GIT_COMMITTER_NAME: 'probe',
+        GIT_COMMITTER_EMAIL: 'probe@example.invalid',
+      },
+    });
+  git('init', '--quiet');
+  git('add', '--all');
+  git('commit', '--quiet', '--no-verify', '--message', 'generated');
+
+  for (const file of [
+    'apps/backend/src/server.ts',
+    'packages/db/schema.prisma',
+  ]) {
+    const shown = await probe.nx(
+      'show',
+      'projects',
+      '--affected',
+      `--files=${file}`,
+      '--json',
+    );
+
+    assert.equal(shown.code, 0, shown.output);
+    const affected: string[] = JSON.parse(shown.stdout);
+    for (const project of ['@acme/backend-client', '@acme/web']) {
+      assert.ok(affected.includes(project), `${file}: ${affected.join(', ')}`);
+    }
   }
 });
