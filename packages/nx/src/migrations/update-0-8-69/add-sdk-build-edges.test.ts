@@ -71,7 +71,7 @@ test('a second run writes and logs nothing', async (t) => {
   assert.deepEqual(warn.mock.calls, []);
 });
 
-test('a client sdk edited by hand is logged with what to write, and stays as it was', async (t) => {
+test('a client sdk edited by hand leaves the backend and the client as they were, and one log names the edits of both', async (t) => {
   const tree = await oldWorkspace();
   // Meddit's client waits for the db generator by name.
   updateJson(
@@ -84,13 +84,18 @@ test('a client sdk edited by hand is logged with what to write, and stays as it 
       return manifest;
     },
   );
-  const before = readJson(tree, clientPath);
+  const backendBefore = readJson(tree, backendPath);
+  const clientBefore = readJson(tree, clientPath);
   const warn = t.mock.method(logger, 'warn', () => {});
 
   await addSdkBuildEdges(tree);
 
+  assert.deepEqual(readJson(tree, backendPath), backendBefore);
+  assert.deepEqual(readJson(tree, clientPath), clientBefore);
   const logged = warn.mock.calls.map((call) => String(call.arguments[0]));
   assert.equal(logged.length, 1, logged.join('\n'));
+  assert.match(logged[0] ?? '', /apps\/backend\/package\.json/);
+  assert.match(logged[0] ?? '', /"build-deps": \{"dependsOn":\["\^build"\]\}/);
   assert.match(logged[0] ?? '', /apps\/backend\/\.sdk-it\/package\.json/);
   assert.match(logged[0] ?? '', /"implicitDependencies": \["@acme\/backend"\]/);
   assert.match(logged[0] ?? '', /dependsOn with \["\^build-deps"\]/);
@@ -98,26 +103,43 @@ test('a client sdk edited by hand is logged with what to write, and stays as it 
     logged[0] ?? '',
     /"\^production",\{"dependentTasksOutputFiles":"\*\*\/\*\.ts","transitive":true\}/,
   );
-  assert.deepEqual(readJson(tree, clientPath), before);
-  assert.deepEqual(
-    readJson(tree, backendPath).nx.targets['build-deps'],
-    readJson(await workspace(), backendPath).nx.targets['build-deps'],
-  );
 });
 
-test('a backend with no client stub gets its build-deps, no stub, and a log that names no generator to run', async (t) => {
+test('a backend whose build-deps is not the one node-app writes leaves its client from 0.8.59 as it was, and one log names the edits of both', async (t) => {
+  const tree = await oldWorkspace();
+  updateJson(tree, backendPath, (manifest: ProjectManifest) => {
+    if (manifest.nx?.targets === undefined) throw new Error('no targets');
+    manifest.nx.targets['build-deps'] = { dependsOn: ['^generate'] };
+    return manifest;
+  });
+  const backendBefore = readJson(tree, backendPath);
+  const clientBefore = readJson(tree, clientPath);
+  const warn = t.mock.method(logger, 'warn', () => {});
+
+  await addSdkBuildEdges(tree);
+
+  assert.deepEqual(readJson(tree, backendPath), backendBefore);
+  assert.deepEqual(readJson(tree, clientPath), clientBefore);
+  const logged = warn.mock.calls.map((call) => String(call.arguments[0]));
+  assert.equal(logged.length, 1, logged.join('\n'));
+  assert.match(logged[0] ?? '', /\{"dependsOn":\["\^generate"\]\}/);
+  assert.match(logged[0] ?? '', /"build-deps": \{"dependsOn":\["\^build"\]\}/);
+  assert.match(logged[0] ?? '', /dependsOn with \["\^build-deps"\]/);
+});
+
+test('a backend with no client stub stays as it was, gets no stub, and a log that names build-deps and no generator to run', async (t) => {
   const tree = await oldWorkspace();
   tree.delete(clientPath);
+  const backendBefore = readJson(tree, backendPath);
   const warn = t.mock.method(logger, 'warn', () => {});
 
   await addSdkBuildEdges(tree);
 
   assert.equal(tree.exists(clientPath), false);
-  assert.deepEqual(readJson(tree, backendPath).nx.targets['build-deps'], {
-    dependsOn: ['^build'],
-  });
+  assert.deepEqual(readJson(tree, backendPath), backendBefore);
   const lines = warn.mock.calls.map(({ arguments: [line] }) => String(line));
-  assert.equal(lines.length, 1);
+  assert.equal(lines.length, 1, lines.join('\n'));
   assert.match(lines[0] ?? '', /apps\/backend\/\.sdk-it\/package\.json/);
+  assert.match(lines[0] ?? '', /"build-deps": \{"dependsOn":\["\^build"\]\}/);
   assert.doesNotMatch(lines[0] ?? '', /nx g /);
 });
