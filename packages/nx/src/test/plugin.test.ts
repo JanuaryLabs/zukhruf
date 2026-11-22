@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { mkdir, readFile, realpath, symlink } from 'node:fs/promises';
-import { join, relative } from 'node:path';
+import { dirname, extname, join, relative } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
@@ -15,7 +15,7 @@ const pluginEntry = fileURLToPath(import.meta.resolve('@zukhruf/nx/test'));
 
 interface TestTarget {
   executor: string;
-  options: { command: string; cwd: string; args: string };
+  options: { command: string; cwd: string; args?: string };
   outputs: string[];
   cache: boolean;
   dependsOn: string[];
@@ -42,7 +42,14 @@ const passing = (name: string) =>
   `import { test } from 'node:test';\ntest('${name}', () => {});\n`;
 
 const reporters =
-  '--test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-results.xml {args}';
+  '--test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-results.xml';
+
+// The script that the command runs, written relative to the project root.
+const runner = (workspaceRoot: string, root: string) =>
+  `node "${relative(join(workspaceRoot, root), join(dirname(pluginEntry), `run${extname(pluginEntry)}`))}" --test --no-warnings`;
+
+const testCases = (report: string) =>
+  [...report.matchAll(/<testcase name="([^"]+)"/g)].map(([, name]) => name);
 
 test('a project that owns test files gets the test target with one glob for each top-level folder', async () => {
   await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
@@ -66,16 +73,19 @@ test('a project that owns test files gets the test target with one glob for each
   assert.partialDeepStrictEqual(a?.['test'], {
     executor: 'nx:run-commands',
     options: {
-      command: `node --test --no-warnings --test-timeout=300000 ${reporters}`,
+      command: `${runner(folder.path, 'packages/a')} --test-timeout=300000 ${reporters} --selection="eval/**/*.test.ts" --selection="src/**/*.test.{mts,ts}" {args}`,
       cwd: 'packages/a',
-      args: '"eval/**/*.test.ts" "src/**/*.test.{mts,ts}"',
     },
     outputs: ['{projectRoot}/test-results.xml'],
     cache: false,
     dependsOn: ['^build'],
   });
+  assert.equal(a?.['test']?.options.args, undefined);
   assert.equal(b?.['test'], undefined);
-  assert.equal(inner?.['test']?.options.args, '"src/**/*.test.ts"');
+  assert.equal(
+    inner?.['test']?.options.command,
+    `${runner(folder.path, 'packages/a/fixtures/inner')} --test-timeout=300000 ${reporters} --selection="src/**/*.test.ts" {args}`,
+  );
 });
 
 test('test files directly in the project root get a glob with no **', async () => {
@@ -88,7 +98,10 @@ test('test files directly in the project root get a glob with no **', async () =
 
   const targets = await probe.targets('a');
 
-  assert.equal(targets['test']?.options.args, '"*.test.ts" "src/**/*.test.ts"');
+  assert.equal(
+    targets['test']?.options.command,
+    `${runner(folder.path, 'packages/a')} --test-timeout=300000 ${reporters} --selection="*.test.ts" --selection="src/**/*.test.ts" {args}`,
+  );
 });
 
 test('a Vitest project gets no test target, and a Vite project without test does', async () => {
@@ -110,8 +123,12 @@ test('a Vitest project gets no test target, and a Vite project without test does
   );
 
   assert.deepEqual(
-    shown.map((targets) => targets['test']?.options.args),
-    [undefined, undefined, '"src/**/*.test.ts"'],
+    shown.map((targets) => targets['test']?.options.command),
+    [
+      undefined,
+      undefined,
+      `${runner(folder.path, 'packages/vite-app')} --test-timeout=300000 ${reporters} --selection="src/**/*.test.ts" {args}`,
+    ],
   );
 });
 
@@ -158,8 +175,8 @@ test('the timeout and flags options change the command, and a Docker flag in fla
   assert.deepEqual(
     shown.map((targets) => targets['test']?.options.command),
     [
-      `node --test --no-warnings --test-timeout=10000 --test-force-exit --experimental-test-module-mocks ${reporters}`,
-      `node --test --no-warnings --test-timeout=10000 --test-force-exit --experimental-test-module-mocks --test-global-setup=src/testing/docker-global-setup.ts ${reporters}`,
+      `${runner(folder.path, 'packages/a')} --test-timeout=10000 --test-force-exit --experimental-test-module-mocks ${reporters} --selection="src/**/*.test.ts" {args}`,
+      `${runner(folder.path, 'packages/d')} --test-timeout=10000 --test-force-exit --experimental-test-module-mocks --test-global-setup=src/testing/docker-global-setup.ts ${reporters} --selection="src/**/*.test.ts" {args}`,
     ],
   );
 });
@@ -192,11 +209,11 @@ test('a test:docker project gets its own global setup, else the one of @zukhruf/
     ]),
     [
       [
-        `node --test --no-warnings --test-timeout=300000 --test-global-setup=src/testing/docker-global-setup.ts --test-force-exit ${reporters}`,
+        `${runner(folder.path, 'packages/own')} --test-timeout=300000 --test-global-setup=src/testing/docker-global-setup.ts --test-force-exit ${reporters} --selection="src/**/*.test.ts" {args}`,
         false,
       ],
       [
-        `node --test --no-warnings --test-timeout=300000 --test-global-setup=${packageSetup} --test-force-exit ${reporters}`,
+        `${runner(folder.path, 'packages/shared')} --test-timeout=300000 --test-global-setup=${packageSetup} --test-force-exit ${reporters} --selection="src/**/*.test.ts" {args}`,
         false,
       ],
     ],
@@ -229,7 +246,7 @@ test('a test:docker project gets the global setup of @zukhruf/testing before tha
   // Assert: the path the run will find once the build of @zukhruf/testing ran.
   assert.equal(
     targets['test']?.options.command,
-    `node --test --no-warnings --test-timeout=300000 --test-global-setup=../../node_modules/@zukhruf/testing/dist/scripts/docker-global-setup.js --test-force-exit ${reporters}`,
+    `${runner(folder.path, 'packages/shared')} --test-timeout=300000 --test-global-setup=../../node_modules/@zukhruf/testing/dist/scripts/docker-global-setup.js --test-force-exit ${reporters} --selection="src/**/*.test.ts" {args}`,
   );
 });
 
@@ -252,6 +269,8 @@ test('a run narrows with --args, selects by name with a CLI flag, and writes the
     'packages/a/package.json': packageJson('a'),
     'packages/a/src/ok.test.ts': passing('ok'),
     'packages/a/src/login.test.ts': passing('login'),
+    // Outside the selection, but in Node's own default pattern: its `login`
+    // test fails when it runs.
     'packages/a/test/helpers/login.ts':
       "import { test } from 'node:test';\ntest('login', () => { throw new Error('a helper ran'); });\n",
   });
@@ -262,23 +281,155 @@ test('a run narrows with --args, selects by name with a CLI flag, and writes the
   const namedReport = await probe.read('packages/a/test-results.xml');
 
   assert.equal(narrowed.code, 0, narrowed.output);
-  assert.deepEqual(
-    [...narrowedReport.matchAll(/<testcase name="([^"]+)"/g)].map(
-      ([, name]) => name,
-    ),
-    ['ok'],
-  );
+  assert.deepEqual(testCases(narrowedReport), ['ok']);
   // A file with no test of that name stays in the report as its own
-  // test case, so the report lists the files of the selection too. The
-  // helper outside the selection fails its `login` test when it runs.
+  // test case, so the report lists the files of the selection too.
   assert.equal(named.code, 0, named.output);
-  assert.deepEqual(
-    [...namedReport.matchAll(/<testcase name="([^"]+)"/g)].map(
-      ([, name]) => name,
-    ),
-    ['login', 'src/ok.test.ts'],
-  );
+  assert.deepEqual(testCases(namedReport), ['login', 'src/ok.test.ts']);
   assert.doesNotMatch(namedReport, /<failure/);
+});
+
+test('a test file or a glob after -- narrows the run', async () => {
+  await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
+  const probe = await workspace(folder.path, {
+    'packages/a/package.json': packageJson('a'),
+    'packages/a/src/ok.test.ts': passing('ok'),
+    'packages/a/src/module.test.mjs': passing('module'),
+    'packages/a/src/login.test.ts': passing('login'),
+    // Outside the selection, but in Node's own default pattern: its `login`
+    // test fails when it runs.
+    'packages/a/test/helpers/login.ts':
+      "import { test } from 'node:test';\ntest('login', () => { throw new Error('a helper ran'); });\n",
+  });
+
+  const file = await probe.nx('run', 'a:test', '--', 'src/ok.test.ts');
+  const fileReport = await probe.read('packages/a/test-results.xml');
+  const glob = await probe.nx('run', 'a:test', '--', 'src/**/login.test.ts');
+  const globReport = await probe.read('packages/a/test-results.xml');
+  const module = await probe.nx('run', 'a:test', '--', 'src/module.test.mjs');
+  const moduleReport = await probe.read('packages/a/test-results.xml');
+
+  assert.equal(file.code, 0, file.output);
+  assert.deepEqual(testCases(fileReport), ['ok']);
+  assert.equal(glob.code, 0, glob.output);
+  assert.deepEqual(testCases(globReport), ['login']);
+  assert.equal(module.code, 0, module.output);
+  assert.deepEqual(testCases(moduleReport), ['module']);
+});
+
+test('a flag before a file after -- selects by name in that file only', async () => {
+  await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
+  const probe = await workspace(folder.path, {
+    'packages/a/package.json': packageJson('a'),
+    'packages/a/src/ok.test.ts': passing('ok'),
+    'packages/a/src/login.test.ts': passing('login'),
+    // Outside the selection, but in Node's own default pattern: its `login`
+    // test fails when it runs.
+    'packages/a/test/helpers/login.ts':
+      "import { test } from 'node:test';\ntest('login', () => { throw new Error('a helper ran'); });\n",
+  });
+
+  const run = await probe.nx(
+    'run',
+    'a:test',
+    '--',
+    '--test-name-pattern=login',
+    'src/login.test.ts',
+  );
+  const report = await probe.read('packages/a/test-results.xml');
+
+  assert.equal(run.code, 0, run.output);
+  assert.deepEqual(testCases(report), ['login']);
+});
+
+test('a flag alone keeps the selection: in --args, after -- with its value as a separate word, or with a value that ends like a test file', async () => {
+  await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
+  const probe = await workspace(folder.path, {
+    'packages/a/package.json': packageJson('a'),
+    'packages/a/src/ok.test.ts': passing('ok'),
+    'packages/a/src/login.test.ts': passing('login'),
+    // Outside the selection, but in Node's own default pattern: its `login`
+    // test fails when it runs.
+    'packages/a/test/helpers/login.ts':
+      "import { test } from 'node:test';\ntest('login', () => { throw new Error('a helper ran'); });\n",
+  });
+
+  const inArgs = await probe.nx(
+    'run',
+    'a:test',
+    '--args=--test-name-pattern=login',
+  );
+  const inArgsReport = await probe.read('packages/a/test-results.xml');
+  const separate = await probe.nx(
+    'run',
+    'a:test',
+    '--',
+    '--test-name-pattern',
+    'login',
+  );
+  const separateReport = await probe.read('packages/a/test-results.xml');
+  const fileLike = await probe.nx(
+    'run',
+    'a:test',
+    '--',
+    '--test-skip-pattern=none.test.ts',
+  );
+  const fileLikeReport = await probe.read('packages/a/test-results.xml');
+
+  assert.equal(inArgs.code, 0, inArgs.output);
+  assert.deepEqual(testCases(inArgsReport), ['login', 'src/ok.test.ts']);
+  assert.doesNotMatch(inArgsReport, /<failure/);
+  assert.equal(separate.code, 0, separate.output);
+  assert.deepEqual(testCases(separateReport), ['login', 'src/ok.test.ts']);
+  assert.doesNotMatch(separateReport, /<failure/);
+  assert.equal(fileLike.code, 0, fileLike.output);
+  assert.deepEqual(testCases(fileLikeReport), ['login', 'ok']);
+  assert.doesNotMatch(fileLikeReport, /<failure/);
+});
+
+test('the args of a project with a flag and a glob narrow its run', async () => {
+  await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
+  const probe = await workspace(folder.path, {
+    'packages/a/package.json': `${JSON.stringify(
+      {
+        name: 'a',
+        version: '0.0.0',
+        nx: {
+          targets: {
+            test: {
+              options: { args: '--test-timeout=120000 "src/**/login.test.ts"' },
+            },
+          },
+        },
+      },
+      null,
+      2,
+    )}\n`,
+    'packages/a/src/ok.test.ts': passing('ok'),
+    'packages/a/src/login.test.ts': passing('login'),
+  });
+
+  const run = await probe.nx('run', 'a:test');
+  const report = await probe.read('packages/a/test-results.xml');
+
+  assert.equal(run.code, 0, run.output);
+  assert.deepEqual(testCases(report), ['login']);
+});
+
+test('a failing test fails the run', async () => {
+  await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
+  const probe = await workspace(folder.path, {
+    'packages/a/package.json': packageJson('a'),
+    'packages/a/src/ok.test.ts': passing('ok'),
+    'packages/a/src/bad.test.ts':
+      "import { test } from 'node:test';\ntest('bad', () => { throw new Error('bad'); });\n",
+  });
+
+  const run = await probe.nx('run', 'a:test');
+  const report = await probe.read('packages/a/test-results.xml');
+
+  assert.notEqual(run.code, 0, run.output);
+  assert.match(report, /<failure/);
 });
 
 test('a test:docker run loads its own global setup from the project root', async () => {

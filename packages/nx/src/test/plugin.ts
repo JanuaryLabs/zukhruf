@@ -11,16 +11,19 @@ import {
 } from '@nx/devkit';
 
 import { nearestRoot, projectRootFiles } from '../project-roots.ts';
+import { testFile } from './test-file.ts';
 
 export interface TestOptions {
   timeout?: number;
   flags?: string[];
 }
 
-const testFile = /\.test\.(?:ts|mts|cts|js|mjs)$/;
 const viteConfig = /^vite\.config\.(?:js|ts|mjs|mts|cjs|cts)$/;
 const vitestConfig = /^vitest\.config\.(?:js|ts|mjs|mts|cjs|cts)$/;
 const ownGlobalSetup = 'src/testing/docker-global-setup.ts';
+// The script of the test target ships beside this file: `.ts` in the source
+// that zukhruf runs, `.js` in the build that npm installs.
+const run = join(import.meta.dirname, `run${extname(import.meta.filename)}`);
 
 /**
  * Gives the `test` target, a `node --test` run, to each project root that
@@ -75,7 +78,7 @@ export const createNodes: CreateNodes<TestOptions> = [
           new Set(configFiles),
         ).includes('test:docker');
         const command = [
-          'node --test --no-warnings',
+          `node "${relative(join(context.workspaceRoot, root), run)}" --test --no-warnings`,
           `--test-timeout=${timeout}`,
           ...new Set([
             ...flags,
@@ -88,11 +91,12 @@ export const createNodes: CreateNodes<TestOptions> = [
           ]),
           '--test-reporter=spec --test-reporter-destination=stdout',
           '--test-reporter=junit --test-reporter-destination=test-results.xml',
+          ...selection(tests),
           '{args}',
         ].join(' ');
         const test: TargetConfiguration = {
           executor: 'nx:run-commands',
-          options: { command, cwd: '{projectRoot}', args: selection(tests) },
+          options: { command, cwd: '{projectRoot}' },
           outputs: ['{projectRoot}/test-results.xml'],
           cache: false,
           dependsOn: ['^build'],
@@ -107,7 +111,8 @@ export const createNodes: CreateNodes<TestOptions> = [
 ];
 
 // One glob for each top-level folder with test files, and one glob with no
-// `**` for the test files directly in the root (ADR 0004).
+// `**` for the test files directly in the root (ADR 0004), each marked for
+// `run.ts`, which drops them when the run names its own test files.
 function selection(tests: string[]) {
   const extensions = new Map<string, Set<string>>();
   for (const test of tests) {
@@ -125,9 +130,8 @@ function selection(tests: string[]) {
         found.size === 1
           ? [...found].join('')
           : `{${[...found].toSorted().join(',')}}`;
-      return `"${folder === '' ? '' : `${folder}/**/`}*.test.${extension}"`;
-    })
-    .join(' ');
+      return `--selection="${folder === '' ? '' : `${folder}/**/`}*.test.${extension}"`;
+    });
 }
 
 // The rule of `@nx/vitest`: a `vite.config.*` whose resolved config has

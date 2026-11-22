@@ -104,3 +104,20 @@ test('a client sdk edited by hand is logged with what to write, and stays as it 
     readJson(await workspace(), backendPath).nx.targets['build-deps'],
   );
 });
+
+test('a backend with no client stub gets its build-deps, no stub, and a log that names no generator to run', async (t) => {
+  const tree = await oldWorkspace();
+  tree.delete(clientPath);
+  const warn = t.mock.method(logger, 'warn', () => {});
+
+  await addSdkBuildEdges(tree);
+
+  assert.equal(tree.exists(clientPath), false);
+  assert.deepEqual(readJson(tree, backendPath).nx.targets['build-deps'], {
+    dependsOn: ['^build'],
+  });
+  const lines = warn.mock.calls.map(({ arguments: [line] }) => String(line));
+  assert.equal(lines.length, 1);
+  assert.match(lines[0] ?? '', /apps\/backend\/\.sdk-it\/package\.json/);
+  assert.doesNotMatch(lines[0] ?? '', /nx g /);
+});

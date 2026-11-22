@@ -84,7 +84,7 @@ function updateBuildDeps(tree: Tree, path: string, backend: string): void {
 function updateClient(tree: Tree, path: string, backend: string): void {
   if (!tree.exists(path)) {
     logger.warn(
-      `add-sdk-build-edges: ${path} is not there, so the sdk-it client of ${backend} gets no edge to it. Run nx g @zukhruf/nx:node-app again to write the stub (#5102).`,
+      `add-sdk-build-edges: ${backend} has no sdk-it client package at ${path}, so no sdk edge is written. A web that reads the API another way (such as @sdk-it/vite) needs its readers to run after the generators that the backend's types read (#5102).`,
     );
     return;
   }

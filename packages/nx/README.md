@@ -292,14 +292,13 @@ The 2026-10-29 audit of the 7 repos measured the effect. The rule matches each `
 
 ### What the test target runs
 
-| Part        | Value                                                                                                                                                                                          |
-| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Command     | `node --test --no-warnings --test-timeout=<timeout> <flags> --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-results.xml {args}` |
-| `cwd`       | `{projectRoot}`                                                                                                                                                                                |
-| `args`      | the test selection (see below)                                                                                                                                                                 |
-| `outputs`   | `["{projectRoot}/test-results.xml"]`                                                                                                                                                           |
-| `cache`     | `false`                                                                                                                                                                                        |
-| `dependsOn` | `["^build"]`                                                                                                                                                                                   |
+| Part        | Value                                                                                                                                                                                                                           |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Command     | `node "<run.js>" --test --no-warnings --test-timeout=<timeout> <flags> --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-results.xml --selection="<glob>"… {args}` |
+| `cwd`       | `{projectRoot}`                                                                                                                                                                                                                 |
+| `outputs`   | `["{projectRoot}/test-results.xml"]`                                                                                                                                                                                            |
+| `cache`     | `false`                                                                                                                                                                                                                         |
+| `dependsOn` | `["^build"]`                                                                                                                                                                                                                    |
 
 - `--no-warnings`: 5 of the 7 repos use it.
 - `--test-timeout`: the default is 300 s. `@zukhruf/testing` starts a shared database server the first time that a test calls `database()`, and it sets a time limit for each cold start: Postgres 60 s, MySQL and MariaDB 90 s, SQL Server 180 s. In a run, the first call of a test process also holds the reaper of the run, with a readiness bound of 60 s. One test can pay both in a row, so its own time limit must be longer than their sum. 300 s is the hold, 60 s, plus the slowest server, SQL Server 180 s, plus 60 s for the work of the test. The old default, 60 s, stopped a test before the readiness bound: on 2026-10-30 a MySQL test of text2sql and the SQL Server tests of deepagents stopped at 60 s. When `@zukhruf/testing` changes a readiness bound, change this default with it. A repo that wants a shorter limit sets the `timeout` option. One project sets `--test-timeout` in its `args`. No time limit is drift. See [ADR 0004](./docs/adr/0004-node-test-target-from-test-files.md).
@@ -318,34 +317,28 @@ Thus a file outside these globs does not run, for example a build output or a `t
 
 ### Run one file or one test
 
-`--args` replaces the test selection. Use it to run one file:
+`<run.js>` is `dist/test/run.js` of this package, written relative to the project root. It starts `node` with the words of the command in their order. Each `--selection="<glob>"` is a glob of the test selection (see above).
+
+Put the test files after `--` to run only them, as with `@nx/jest` and `@nx/vite`. A word that does not start with `-` and ends with `.test.{ts,mts,cts,js,mjs}` names test files, and a glob does too. Then the selection goes:
 
 ```sh
-nx run mutex:test --args="src/lock-stores/memory/memory-store.contract.test.ts"
+nx run mutex:test -- src/lock-stores/memory/memory-store.contract.test.ts
+nx run mutex:test -- "src/lock-stores/**/*.test.ts"
 ```
 
-A Node flag on the CLI keeps the test selection. Use it to run the tests with a name:
+`--args` does the same: `nx run mutex:test --args="src/lock-stores/memory/memory-store.contract.test.ts"`.
+
+A Node flag keeps the selection. Use it to run the tests with a name:
 
 ```sh
 nx run mutex:test --test-name-pattern=login
 ```
 
-The command ends with `{args}`. For a command with `{args}`, Nx puts the CLI flags and the positional words first, then `args` (`nx/dist/src/executors/run-commands/run-commands.impl.js:136-142`). Thus `--test-name-pattern=login` comes before the globs, and Node reads it as a flag.
+Put a flag before the files, because Node reads a flag after a file as a file name. `node --test "x.test.ts" --test-timeout=1` stops with exit code 1: `Could not find 'x.test.ts, --test-timeout=1'`. Thus `nx run mutex:test -- --test-name-pattern=login src/login.test.ts` runs the tests named `login` in `src/login.test.ts`. When the run names no files, `run.js` puts the selection after all the words, so a flag on the CLI, after `--` or in `--args` always comes before the globs.
 
-Without `{args}`, the order is different. Nx puts a CLI flag after `args` (`run-commands.impl.js:117-119` and `145-162`): only an unknown option that is not on the CLI comes before `args`. Then `nx run mutex:test --test-name-pattern=login` puts the flag after the globs, and Node reads it as a file name.
+The selection is in the command, not in `args`, because `--args` replaces `args`. Then `--args=--test-name-pattern=login` would leave Node with no file, and Node's own default pattern would run `test/helpers/*` too.
 
-A positional file does not replace the selection. In `nx run mutex:test src/lock-stores/memory/memory-store.contract.test.ts`, Nx adds the file before the selection, and all the tests run. Use `--args`.
-
-A probe on Nx 23.2.1 (2026-10-29) showed this, with `args` `DEFAULT` and a command that prints its arguments:
-
-| CLI                                  | With `{args}`                       | Without `{args}`                    |
-| ------------------------------------ | ----------------------------------- | ----------------------------------- |
-| `--args=X`                           | `X`                                 | `X`                                 |
-| `--test-name-pattern=login`          | `--test-name-pattern=login DEFAULT` | `DEFAULT --test-name-pattern=login` |
-| `pos.test.ts`                        | `pos.test.ts DEFAULT`               | `DEFAULT pos.test.ts`               |
-| `--args=X --test-name-pattern=login` | `--test-name-pattern=login X`       | —                                   |
-
-The selection is in `args` and not in the command, because a flag after a glob does not work. `node --test "x.test.ts" --test-timeout=1` reads the flag as a file name. It stops with exit code 1: `Could not find 'x.test.ts, --test-timeout=1'`. zukhruf has `"src/**/*.test.ts"` at the end of its command today, so a zukhruf run cannot narrow. Also, a glob that matches no file gives exit code 0. Thus a wrong narrowing passes with no test.
+A glob that matches no file gives exit code 0. Thus a wrong narrowing passes with no test.
 
 ### Docker tests
 
