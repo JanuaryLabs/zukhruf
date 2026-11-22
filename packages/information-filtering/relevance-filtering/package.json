@@ -1,6 +1,6 @@
 {
   "name": "@zukhruf/relevance-filtering",
-  "version": "0.8.62",
+  "version": "0.8.64",
   "description": "Ranks a stream of articles for a reader's profile through a scorer port (a decision model, or embedding similarity calibrated on the reader's answers), with thresholds that turn the probabilities into yes or no.",
   "license": "MIT",
   "repository": {
@@ -40,14 +40,14 @@
     "access": "public"
   },
   "dependencies": {
-    "@zukhruf/statistics": "^0.8.62",
-    "@zukhruf/vectors": "^0.8.62",
+    "@zukhruf/statistics": "^0.8.64",
+    "@zukhruf/vectors": "^0.8.64",
     "ai": "^7.0.179"
   },
   "devDependencies": {
-    "@zukhruf/embeddings": "^0.8.62",
-    "@zukhruf/evals": "^0.8.62",
+    "@zukhruf/embeddings": "^0.8.64",
+    "@zukhruf/evals": "^0.8.64",
     "@zukhruf/random": "*",
-    "@zukhruf/sqlite-open": "^0.8.62"
+    "@zukhruf/sqlite-open": "^0.8.64"
   }
 }
