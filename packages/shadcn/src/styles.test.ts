@@ -6,10 +6,10 @@ import { Window } from 'happy-dom';
 import { buildAppStylesheet } from './testing/build-app-stylesheet.ts';
 
 /**
- * The name of the innermost `@layer` block that encloses the first match of
- * `rule`, or `undefined` when the rule is in no layer.
+ * The preludes of the blocks that enclose the first match of `rule`, the
+ * outermost first, for example `['@layer utilities', '@media (hover: none)']`.
  */
-function layerOf(css: string, rule: RegExp) {
+function blocksAround(css: string, rule: RegExp) {
   const match = rule.exec(css);
   assert.ok(match, `The stylesheet must contain ${rule}`);
   const enclosing: string[] = [];
@@ -27,8 +27,71 @@ function layerOf(css: string, rule: RegExp) {
       prelude += character;
     }
   }
-  const layer = enclosing.findLast((block) => block.startsWith('@layer '));
+  return enclosing;
+}
+
+/**
+ * The name of the innermost `@layer` block that encloses the first match of
+ * `rule`, or `undefined` when the rule is in no layer.
+ */
+function layerOf(css: string, rule: RegExp) {
+  const layer = blocksAround(css, rule).findLast((block) =>
+    block.startsWith('@layer '),
+  );
   return layer?.slice('@layer '.length);
+}
+
+/**
+ * Each style rule of `css`: its selectors, split at the commas of the list and
+ * with their whitespace normalised, and the preludes of the blocks that
+ * enclose it, the outermost first.
+ */
+function rulesOf(css: string) {
+  const rules: { selectors: string[]; blocks: string[] }[] = [];
+  const enclosing: string[] = [];
+  let prelude = '';
+  for (const character of css.replaceAll(/\/\*[\s\S]*?\*\//g, '')) {
+    if (character === '{') {
+      const trimmed = prelude.trim();
+      if (!trimmed.startsWith('@')) {
+        rules.push({ selectors: selectorsOf(trimmed), blocks: [...enclosing] });
+      }
+      enclosing.push(trimmed);
+      prelude = '';
+    } else if (character === '}') {
+      enclosing.pop();
+      prelude = '';
+    } else if (character === ';') {
+      prelude = '';
+    } else {
+      prelude += character;
+    }
+  }
+  return rules;
+}
+
+function selectorsOf(list: string) {
+  const selectors: string[] = [];
+  let depth = 0;
+  let current = '';
+  for (const character of list) {
+    if (character === ',' && depth === 0) {
+      selectors.push(current);
+      current = '';
+      continue;
+    }
+    if (character === '(') depth++;
+    if (character === ')') depth--;
+    current += character;
+  }
+  selectors.push(current);
+  return selectors.map((selector) =>
+    selector
+      .replaceAll(/\s+/g, ' ')
+      .replaceAll(/\(\s+/g, '(')
+      .replaceAll(/\s+\)/g, ')')
+      .trim(),
+  );
 }
 
 describe('the stylesheet of @zukhruf/shadcn', () => {
@@ -260,6 +323,42 @@ describe('the stylesheet of @zukhruf/shadcn', () => {
       ),
       'utilities',
       'Without :not(:hover) the patch would win over the dark:hover:bg-input/50 of the outline Button',
+    );
+  });
+
+  test('on a touch screen, where no hover: class of nova applies, each patch that leaves out :hover has a twin without it, so a tapped control keeps its token', async () => {
+    // Act
+    const css = await buildAppStylesheet();
+
+    // Assert
+    assert.equal(
+      blocksAround(css, /\.hover\\:bg-muted:hover\s*\{/).at(-1),
+      '@media (hover: hover)',
+      'The touch twins mirror where Tailwind writes its hover variant',
+    );
+    const rules = rulesOf(css);
+    const leavingOutHover = rules
+      .filter(({ blocks }) => blocks.join() === '@layer utilities')
+      .flatMap(({ selectors }) => selectors)
+      .filter((selector) => selector.includes(':not(:hover)'));
+    assert.ok(
+      leavingOutHover.length > 0,
+      'The patches of the SelectTrigger and the PopoverTrigger leave out :hover',
+    );
+    const twins = new Set(
+      rules
+        .filter(
+          ({ blocks }) =>
+            blocks.join() === '@layer utilities,@media (hover: none)',
+        )
+        .flatMap(({ selectors }) => selectors),
+    );
+    assert.deepEqual(
+      leavingOutHover
+        .map((selector) => selector.replaceAll(':not(:hover)', ''))
+        .filter((twin) => !twins.has(twin)),
+      [],
+      'A touch screen keeps a tapped control in :hover while no hover: class applies, so each patch that leaves out :hover needs a twin without it in @media (hover: none) of @layer utilities',
     );
   });
 

@@ -155,6 +155,30 @@
       color-mix(in oklab, var(--input) 30%, transparent)
     );
   }
+
+  /*
+   * nova's hover: classes apply only under @media (hover: hover), as Tailwind
+   * writes its hover variant. A touch screen keeps a tapped element in :hover,
+   * so there the patches above would stop matching while no hover class
+   * applies; without a hover, a hovered control takes the token too
+   */
+  @media (hover: none) {
+    [data-slot='popover-trigger'].group\/button.bg-background:not(
+        [aria-expanded='true']
+      ) {
+      background-color: var(--control-background, var(--background));
+    }
+
+    [data-slot='select-trigger'].dark\:bg-input\/30:is(.dark, .dark *),
+    [data-slot='popover-trigger'].group\/button.dark\:bg-input\/30:not(
+        [aria-expanded='true']
+      ):is(.dark, .dark *) {
+      background-color: var(
+        --control-background,
+        color-mix(in oklab, var(--input) 30%, transparent)
+      );
+    }
+  }
 }
 
 /*
