@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { mkdir, readFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { promisify } from 'node:util';
 
@@ -16,7 +16,21 @@ const execFileAsync = promisify(execFile);
 // package.json, but b's tsconfig has no reference to a yet, so `nx sync`
 // writes one. node_modules links nx, @nx and typescript from zukhruf's
 // install. The base commit is made without the hook.
-async function workspace(folder: string, hook: string) {
+async function workspace(
+  folder: string,
+  hook: string,
+  {
+    packages = [],
+    gitignore = 'node_modules\n.nx\n',
+    nxJson = '{ "plugins": [{ "plugin": "@nx/js/typescript", "options": { "typecheck": { "targetName": "typecheck" } } }] }\n',
+    files = {},
+  }: {
+    readonly packages?: readonly { folder: string; name: string }[];
+    readonly gitignore?: string;
+    readonly nxJson?: string;
+    readonly files?: Readonly<Record<string, string>>;
+  } = {},
+) {
   const repo = await repository(folder, hook);
   await toolPackages(
     repo.root,
@@ -24,17 +38,15 @@ async function workspace(folder: string, hook: string) {
     [
       { folder: 'packages/a', name: '@probe/a' },
       { folder: 'packages/b', name: '@probe/b' },
+      ...packages,
     ],
   );
-  await repo.write('.gitignore', 'node_modules\n.nx\n');
+  await repo.write('.gitignore', gitignore);
   await repo.write(
     'package.json',
     '{ "name": "probe", "private": true, "type": "module", "workspaces": ["packages/*"] }\n',
   );
-  await repo.write(
-    'nx.json',
-    '{ "plugins": [{ "plugin": "@nx/js/typescript", "options": { "typecheck": { "targetName": "typecheck" } } }] }\n',
-  );
+  await repo.write('nx.json', nxJson);
   await repo.write(
     'tsconfig.base.json',
     '{ "compilerOptions": { "composite": true, "module": "NodeNext", "declaration": true } }\n',
@@ -60,6 +72,10 @@ async function workspace(folder: string, hook: string) {
       `packages/${name}/src/index.ts`,
       `export const ${name} = 1;\n`,
     );
+  }
+  for (const [path, content] of Object.entries(files)) {
+    await mkdir(dirname(join(repo.root, path)), { recursive: true });
+    await repo.write(path, content);
   }
   await repo.git('add', '--all');
   await repo.git('commit', '--quiet', '--no-verify', '-m', 'base');
@@ -164,6 +180,99 @@ await preCommit([new Sync({ stage: ['**/styles.css'] })]);
     await repo.git('status', '--porcelain', '--', 'packages/b/tsconfig.json'),
     '',
     'nx sync wrote the tsconfig in its snapshot only, so the working tree keeps the committed copy',
+  );
+});
+
+// The workspace plus a sync generator whose input is gitignored generated code,
+// as an OpenAPI document derived from a backend needs a generated Prisma
+// client: @probe/tools:mirror copies generated/value.txt, which only the
+// target @probe/a:produce writes, into the committed mirror.txt, and throws
+// when the input is missing.
+function workspaceWithGeneratedInput(folder: string, hook: string) {
+  return workspace(folder, hook, {
+    packages: [{ folder: 'packages/tools', name: '@probe/tools' }],
+    gitignore: 'node_modules\n.nx\ngenerated\n',
+    nxJson:
+      '{ "sync": { "globalGenerators": ["@probe/tools:mirror"] }, "plugins": [{ "plugin": "@nx/js/typescript", "options": { "typecheck": { "targetName": "typecheck" } } }] }\n',
+    files: {
+      'packages/tools/package.json':
+        '{ "name": "@probe/tools", "version": "0.0.0", "generators": "./generators.json" }\n',
+      'packages/tools/generators.json':
+        '{ "generators": { "mirror": { "factory": "./mirror.cjs", "schema": "./schema.json", "description": "mirror" } } }\n',
+      'packages/tools/schema.json': '{ "type": "object" }\n',
+      'packages/tools/mirror.cjs': `const { readFileSync } = require('node:fs');
+const { join } = require('node:path');
+exports.default = async function mirror(tree) {
+  const value = readFileSync(join(tree.root, 'generated/value.txt'), 'utf8');
+  if (tree.read('mirror.txt', 'utf8') === value) return {};
+  tree.write('mirror.txt', value);
+  return { outOfSyncMessage: 'mirror.txt is stale' };
+};
+`,
+      'packages/a/produce.mjs': `import { mkdirSync, writeFileSync } from 'node:fs';
+mkdirSync('generated', { recursive: true });
+writeFileSync('generated/value.txt', 'produced in the snapshot\\n');
+`,
+      'packages/a/package.json': `${JSON.stringify({ name: '@probe/a', version: '0.0.0', type: 'module', nx: { targets: { produce: { command: 'node packages/a/produce.mjs' } } } })}\n`,
+    },
+  });
+}
+
+test('the sync step runs its before targets in the snapshot before nx sync, so a sync generator whose input is gitignored generated code stages its file', async () => {
+  // Arrange
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
+  const repo = await workspaceWithGeneratedInput(
+    folder.path,
+    `import { Sync, preCommit } from '@zukhruf/git-hooks';
+await preCommit([new Sync({ before: ['@probe/a:produce'], stage: ['mirror.txt'] })]);
+`,
+  );
+  await repo.write('packages/a/src/index.ts', 'export const a = 2;\n');
+  await repo.git('add', 'packages/a/src/index.ts');
+
+  // Act
+  const result = await repo.commit('change a');
+
+  // Assert
+  assert.equal(result.code, 0, result.stderr);
+  assert.equal(
+    await repo.git('show', 'HEAD:mirror.txt'),
+    'produced in the snapshot\n',
+    'The commit must hold what the sync generator wrote from the before target’s output',
+  );
+  assert.equal(
+    await repo.git('ls-files', 'generated'),
+    '',
+    'The gitignored output of the before target must not be committed',
+  );
+});
+
+test('a before target that fails stops the commit with the reason the target gave, and nothing is committed', async () => {
+  // Arrange
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
+  const repo = await workspaceWithGeneratedInput(
+    folder.path,
+    `import { Sync, preCommit } from '@zukhruf/git-hooks';
+await preCommit([new Sync({ before: ['@probe/a:missing-target'], stage: ['mirror.txt'] })]);
+`,
+  );
+  await repo.write('packages/a/src/index.ts', 'export const a = 2;\n');
+  await repo.git('add', 'packages/a/src/index.ts');
+
+  // Act
+  const result = await repo.commit('change a');
+
+  // Assert
+  assert.notEqual(result.code, 0, 'the before target failed');
+  assert.match(
+    result.stderr,
+    /^sync\s+nx run @probe\/a:missing-target exited with \d+/m,
+    'The sync step must name the before target that failed',
+  );
+  assert.equal(
+    await repo.git('rev-list', '--count', 'HEAD'),
+    '1\n',
+    'Only the base commit may exist',
   );
 });
 

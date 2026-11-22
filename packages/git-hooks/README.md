@@ -65,6 +65,17 @@ await preCommit([
 
 nx sync reads the staged commit, so an edit that is not staged does not change what it writes. The step stages only a changed file that `stage` matches. It also writes that file into the working tree, but only when the working-tree copy still equals the old staged copy, so `git status` stays clean. When the working-tree copy holds another edit, the step leaves it, and the hook names it. When `nx sync` fails, the commit stops, and the hook shows the reason that nx gave. A partial commit, such as `git commit --only` or `git commit <paths>`, cannot take a synced file: the commit stops, and the hook names the files and the command that adds them (see [Write generated files](#write-generated-files)).
 
+The snapshot holds the commit only, so a gitignored file that a target generates is not there. The option `before` holds nx targets that the step runs in the snapshot, in order, before `nx sync`, for a sync generator whose input is such a file. An OpenAPI document that a sync generator derives from a backend needs the backend's generated Prisma client:
+
+```ts
+new Sync({
+  before: ['@acme/db:generate'],
+  stage: ['**/tsconfig*.json', 'apps/web/src/backend.openapi'],
+});
+```
+
+When a `before` target fails, the commit stops, and the hook names the target and shows its output. The step does not stage what a `before` target writes: only a changed file that `stage` matches.
+
 ## Refuse a Node or npm version written as a number
 
 `NoNumericPins` keeps every repo on the current LTS of Node and the latest npm. It reads the staged copy of each staged `.nvmrc`, workflow under `.github/`, Dockerfile and `package.json`. The commit stops when one of them picks a version by number:

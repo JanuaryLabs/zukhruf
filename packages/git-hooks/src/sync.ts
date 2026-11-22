@@ -6,22 +6,35 @@ import { type Outcome, Step } from './step.ts';
 // generators write. `sync.applyChanges` in nx.json applies only in an
 // interactive terminal, so a commit from a GUI client or an agent shell would
 // miss the synced files. nx syncs the staged tree, not the working tree, so a
-// file that another session edits is judged as the commit holds it.
+// file that another session edits is judged as the commit holds it. Each
+// `before` target runs first, in the same snapshot: a sync generator whose
+// input is gitignored generated code (a Prisma client that an OpenAPI
+// analysis reads) finds it there, since the snapshot holds the commit only.
 export class Sync extends Step<Commit> {
   readonly name = 'sync';
   readonly #globs: readonly string[];
+  readonly #before: readonly string[];
 
   constructor({
     stage = ['**/tsconfig*.json'],
-  }: { stage?: readonly string[] } = {}) {
+    before = [],
+  }: { stage?: readonly string[]; before?: readonly string[] } = {}) {
     super();
     this.#globs = stage;
+    this.#before = before;
   }
 
   async run(commit: Commit): Promise<Outcome> {
     let generated;
     try {
       generated = await commit.generate(this.#globs, async (snapshot) => {
+        for (const target of this.#before) {
+          const ran = await snapshot.bin('nx', ['run', target]);
+          if (ran.status !== 0)
+            throw new Error(
+              `nx run ${target} exited with ${ran.status}:\n${`${ran.stdout}${ran.stderr}`.trimEnd()}`,
+            );
+        }
         const { status, stdout, stderr } = await snapshot.bin('nx', ['sync']);
         if (status !== 0)
           throw new Error(
