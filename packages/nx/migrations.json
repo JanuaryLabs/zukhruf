@@ -36,9 +36,9 @@
       "implementation": "./dist/migrations/update-0-8-60/add-sdk-build-edges.js"
     },
     "rename-eslint-react-config": {
-      "version": "0.8.65",
+      "version": "0.8.66",
       "description": "An eslint.config reads the kit config of @zukhruf/eslint by its new name: zukhruf.configs['react'] and zukhruf.configs.react become zukhruf.configs['shadcn'], whatever the default import is called, and 'zukhruf/react' in an extends array becomes 'zukhruf/shadcn'; @zukhruf/eslint/react stays, and each changed file is logged (#5263, #4990).",
-      "implementation": "./dist/migrations/update-0-8-65/rename-eslint-react-config.js"
+      "implementation": "./dist/migrations/update-0-8-66/rename-eslint-react-config.js"
     }
   },
   "packageJsonUpdates": {
