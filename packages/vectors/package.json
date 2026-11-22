@@ -1,6 +1,6 @@
 {
   "name": "@zukhruf/vectors",
-  "version": "0.8.64",
+  "version": "0.8.65",
   "description": "Vector types, their math, and the SQL form of each vector in SQLite, sqlite-vec and SQL Server, which a program composes into its own SQL. After the vector types of pgvector and the TensorPrimitives of .NET.",
   "license": "MIT",
   "repository": {
@@ -55,8 +55,8 @@
   },
   "devDependencies": {
     "@types/mssql": "^12.3.0",
-    "@zukhruf/sqlite-open": "^0.8.64",
-    "@zukhruf/testing": "^0.8.64",
+    "@zukhruf/sqlite-open": "^0.8.65",
+    "@zukhruf/testing": "^0.8.65",
     "mssql": "^12.8.0",
     "sqlite-vec": "^0.1.9"
   }
