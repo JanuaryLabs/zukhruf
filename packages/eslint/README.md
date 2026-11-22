@@ -278,7 +278,7 @@ The workspace root is the nearest folder with an `nx.json`, a `pnpm-workspace.ya
 
 ## React
 
-`@zukhruf/eslint/react` gives the configs that the React community maintains. The package adds no rule of its own to them and changes no severity. Use it in the `eslint.config.mjs` of a React project. Put it first, and then the root config, as before:
+`@zukhruf/eslint/react` gives the configs that the React community maintains. The package adds no rule of its own to them and changes no severity; it sets the options of one rule, below. Use it in the `eslint.config.mjs` of a React project. Put it first, and then the root config, as before:
 
 ```js
 import react from '@zukhruf/eslint/react';
@@ -293,6 +293,7 @@ The configs apply only to TypeScript files, the files to which `zukhruf/base` gi
 It gives these configs, in this order:
 
 1. `recommended` of `eslint-plugin-jsx-a11y-x`: the accessibility rules. This plugin is the maintained fork of `eslint-plugin-jsx-a11y`, and its peer range includes ESLint 10.
+   `label-has-associated-control` keeps its severity and `assert`, and gets two options: `controlComponents` names the controls of `@zukhruf/shadcn` that a wrapping `<label>` labels (`Checkbox`, `Switch`, `RadioGroupItem`, `Slider`, `Input`, `Textarea`, `SelectTrigger` and the other inputs), and `depth` 4 reaches the text of shadcn's choice card, a `<label>` around a `Field` with a `Checkbox`.
 2. `flat.recommended` of `eslint-plugin-react-hooks`: the rules of the React team.
 3. `recommended-type-checked` of `@eslint-react/eslint-plugin`: the React rules, for example `@eslint-react/no-missing-key`. The rules use type information. `zukhruf/base` gives it, because it sets `projectService`.
 4. `disable-conflict-eslint-plugin-react-hooks` of `@eslint-react/eslint-plugin`: it turns off the 12 rules of `eslint-plugin-react-hooks` that `@eslint-react/eslint-plugin` also has.

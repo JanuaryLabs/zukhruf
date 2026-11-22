@@ -178,3 +178,98 @@ test('./react leaves a package.json to manifest/recommended, also when a script 
   // Assert
   assert.deepEqual(findings, []);
 });
+
+test('./react takes a control of @zukhruf/shadcn that a <label> wraps as the label control', async () => {
+  // Arrange: Base UI names the Checkbox from its parent <label>.
+  await using workspace = await fixtureWorkspace({
+    'nx.json': '{}',
+    'tsconfig.json': tsconfig,
+    'eslint.config.mjs': reactProjectConfig,
+    'src/terms.tsx': [
+      `import { Checkbox } from '@zukhruf/shadcn';`,
+      `export const Terms = () => (`,
+      `  <label>`,
+      `    <Checkbox name="terms" />`,
+      `    Accept the terms`,
+      `  </label>`,
+      `);`,
+      ``,
+    ].join('\n'),
+  });
+
+  // Act
+  const findings = lint(workspace.root, ['src']);
+
+  // Assert
+  assert.deepEqual(
+    findings.filter(
+      ({ ruleId }) => ruleId === 'jsx-a11y-x/label-has-associated-control',
+    ),
+    [],
+  );
+});
+
+test("./react finds the text of shadcn's choice card, a <label> around a Field with a Checkbox", async () => {
+  // Arrange: the text is 4 levels below the <label>.
+  await using workspace = await fixtureWorkspace({
+    'nx.json': '{}',
+    'tsconfig.json': tsconfig,
+    'eslint.config.mjs': reactProjectConfig,
+    'src/plan.tsx': [
+      `import { Checkbox, Field, FieldContent, FieldTitle } from '@zukhruf/shadcn';`,
+      `export const Plan = () => (`,
+      `  <label htmlFor="pro">`,
+      `    <Field orientation="horizontal">`,
+      `      <Checkbox id="pro" />`,
+      `      <FieldContent>`,
+      `        <FieldTitle>Pro plan</FieldTitle>`,
+      `      </FieldContent>`,
+      `    </Field>`,
+      `  </label>`,
+      `);`,
+      ``,
+    ].join('\n'),
+  });
+
+  // Act
+  const findings = lint(workspace.root, ['src']);
+
+  // Assert
+  assert.deepEqual(
+    findings.filter(
+      ({ ruleId }) => ruleId === 'jsx-a11y-x/label-has-associated-control',
+    ),
+    [],
+  );
+});
+
+test('./react reports a <label> whose only content is a control of @zukhruf/shadcn, as it has no text', async () => {
+  // Arrange
+  await using workspace = await fixtureWorkspace({
+    'nx.json': '{}',
+    'tsconfig.json': tsconfig,
+    'eslint.config.mjs': reactProjectConfig,
+    'src/terms.tsx': [
+      `import { Checkbox } from '@zukhruf/shadcn';`,
+      `export const Terms = () => (`,
+      `  <label>`,
+      `    <Checkbox name="terms" />`,
+      `  </label>`,
+      `);`,
+      ``,
+    ].join('\n'),
+  });
+
+  // Act
+  const findings = lint(workspace.root, ['src']);
+
+  // Assert
+  assert.deepEqual(
+    findings
+      .filter(
+        ({ ruleId }) => ruleId === 'jsx-a11y-x/label-has-associated-control',
+      )
+      .map(({ message }) => message),
+    ['A form label must have accessible text.'],
+  );
+});
