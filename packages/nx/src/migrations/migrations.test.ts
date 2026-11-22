@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path';
 import { test } from 'node:test';
 
 import { readJsonFile } from '@nx/devkit';
-import { rcompare, satisfies } from 'semver';
+import { gte, rcompare, satisfies } from 'semver';
 
 import {
   appPackageVersions,
@@ -145,4 +145,25 @@ test('nx migrate moves each third-party peer that the generators install into th
       assert.equal(update.alwaysAddToPackageJson, false, `${version} ${name}`);
     }
   }
+});
+
+// nx migrate writes packageJsonUpdates in the root package.json only (nx
+// 24.0.6 migrate.js updatePackageJson), so move-peers-in-project-manifests
+// moves the same packages in each project's package.json (#5296). Nx runs a
+// migration only above the installed version, so a repo gets a new entry in
+// its apps only when the migration runs at or after that entry.
+test("move-peers-in-project-manifests runs at or after the newest packageJsonUpdates entry, so a package that a release moves in the root moves in each project's package.json too", () => {
+  const { generators, packageJsonUpdates } = readJsonFile<Migrations>(
+    join(packageRoot, 'migrations.json'),
+  );
+  const migration = generators['move-peers-in-project-manifests'];
+  const [newest] = Object.values(packageJsonUpdates ?? {})
+    .map(({ version }) => version)
+    .toSorted(rcompare);
+  assert.ok(migration, 'migrations.json has move-peers-in-project-manifests');
+  assert.ok(newest, 'migrations.json has a packageJsonUpdates entry');
+  assert.ok(
+    gte(migration.version, newest),
+    `move-peers-in-project-manifests runs at ${migration.version}, before the packageJsonUpdates of ${newest}: move it to the release of that entry`,
+  );
 });

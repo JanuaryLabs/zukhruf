@@ -39,6 +39,11 @@
       "version": "0.8.66",
       "description": "An eslint.config reads the kit config of @zukhruf/eslint by its new name: zukhruf.configs['react'] and zukhruf.configs.react become zukhruf.configs['shadcn'], whatever the default import is called, and 'zukhruf/react' in an extends array becomes 'zukhruf/shadcn'; @zukhruf/eslint/react stays, and each changed file is logged (#5263, #4990).",
       "implementation": "./dist/migrations/update-0-8-66/rename-eslint-react-config.js"
+    },
+    "move-peers-in-project-manifests": {
+      "version": "0.8.70",
+      "description": "A package that packageJsonUpdates moves in the root package.json moves in each project's package.json that declares it too, in the section that declares it, never down and never into a project that does not declare it, so the root and the apps install one copy, one React; each move is logged (#5296).",
+      "implementation": "./dist/migrations/update-0-8-70/move-peers-in-project-manifests.js"
     }
   },
   "packageJsonUpdates": {
