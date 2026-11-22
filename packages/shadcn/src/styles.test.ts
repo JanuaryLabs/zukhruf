@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
+import { Window } from 'happy-dom';
+
 import { buildAppStylesheet } from './testing/build-app-stylesheet.ts';
 
 /**
@@ -354,7 +356,8 @@ describe('the stylesheet of @zukhruf/shadcn', () => {
     }
   });
 
-  // happy-dom 20 drops each rule in a @layer block from getComputedStyle, so
+  // happy-dom (20.14.5 and 21.0.4) drops each rule in a @layer block from
+  // getComputedStyle (https://github.com/capricorn86/happy-dom/issues/2284), so
   // these tests check the cascade inputs: the layer and the order of each rule.
   test('a host theme in @layer base that loads after the stylesheet wins over the default theme', async () => {
     // Arrange: OpenAI's ChatGPT tokens are a host theme of this kind
@@ -378,6 +381,36 @@ describe('the stylesheet of @zukhruf/shadcn', () => {
       'In one layer, the later rule wins, so the default must come before the host theme',
     );
   });
+
+  test(
+    'a document that loads the stylesheet with a host theme in @layer base computes the host background',
+    {
+      todo: '#5256 happy-dom drops rules inside @layer from getComputedStyle: https://github.com/capricorn86/happy-dom/issues/2284',
+    },
+    async () => {
+      // Arrange
+      const css = await buildAppStylesheet(
+        '@layer base { :root { --background: #123456; } }',
+      );
+      const window = new Window();
+      try {
+        const style = window.document.createElement('style');
+        style.textContent = css;
+        window.document.head.append(style);
+
+        // Act
+        const background = window
+          .getComputedStyle(window.document.documentElement)
+          .getPropertyValue('--background')
+          .trim();
+
+        // Assert
+        assert.equal(background, '#123456');
+      } finally {
+        await window.happyDOM.close();
+      }
+    },
+  );
 
   test('the .dark defaults follow the :root defaults in the same layer, so the .dark class switches the theme', async () => {
     // Act
