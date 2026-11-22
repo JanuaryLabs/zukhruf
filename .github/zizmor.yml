@@ -10,7 +10,5 @@ rules:
         '*': ref-pin
   artipacked:
     ignore:
-      # These jobs push with the checkout's credentials: the release commit and
-      # tag, and the reconciled state.
-      - release.yml
+      # This job pushes the reconciled state with the checkout's credentials.
       - tofu-apply.yml

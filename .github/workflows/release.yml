@@ -2,15 +2,13 @@ name: Release
 
 # Releases each push to main and does not wait for CI (docs/adr/0007): the
 # pre-push hook proved lint, typecheck and build of each pushed commit, and CI
-# runs beside the release and only reports. nx release version versions the
-# pushed commit with what its conventional commits since the last release ask,
-# commits on top of it and tags that commit, the tag is pushed,
-# nx-release-publish publishes what was built from it, and then the main job
-# merges the release commit into main as main is then. So nothing reaches npm
-# without its tag. A version already on npm is skipped. A commit with nothing
-# to release, or one that an earlier release holds, changes nothing. The tag
-# and the merge are pushed with GITHUB_TOKEN, which starts no further workflow
-# run.
+# runs beside the release and only reports. nx release version writes the
+# versions that the conventional commits since the last release tag ask into
+# the runner's checkout only: it commits, tags and pushes nothing, and main
+# keeps the versions of its files. The release tag is then made on the pushed
+# commit through the GitHub API, and nx-release-publish publishes what was
+# built from it. So nothing reaches npm without its tag. A version already on
+# npm is skipped. A commit with nothing to release changes nothing.
 on:
   push:
     branches: [main]
@@ -18,8 +16,8 @@ on:
 # A release is never cancelled: one stopped between the tag and the publish
 # would leave a version unpublished. The pushes that arrive during a release
 # wait as one pending run, and a newer push replaces it, so the newest push
-# releases every commit since the last release. Each run finds the tag and the
-# merge of the run before it.
+# releases every commit since the last release. Each run finds the tag of the
+# run before it.
 concurrency:
   group: release
   cancel-in-progress: false
@@ -33,27 +31,28 @@ jobs:
   release:
     runs-on: ubuntu-latest
     permissions:
+      # The tag step creates refs/tags/release/<version> through the API.
       contents: write
       id-token: write
     # The release restores the npm cache but never writes one.
     cache-mode: read
-    # The main job merges a version only when its tag reached origin.
-    outputs:
-      version: ${{ case(steps.tag.outputs.pushed == 'true', steps.version.outputs.version, '') }}
-      commit: ${{ steps.version.outputs.commit }}
     steps:
-      # The release job pushes the tag with these credentials.
+      # The tags come with the history: Nx counts the commits since the newest
+      # release tag that the pushed commit holds.
       - name: Checkout the pushed commit
         uses: actions/checkout@v7
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Set up the workspace
         uses: $/.github/actions/setup-workspace
         with:
           registry-url: https://registry.npmjs.org/
 
+      # The preVersionCommand builds sqlite-open, whose native target builds
+      # with Zig.
       - name: Set up Zig
         uses: $/.github/actions/setup-zig
 
@@ -62,130 +61,56 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_ACCESS_TOKEN }}
 
-      # The pushed commit may not hold the merge of the previous release yet,
-      # when it was pushed while that release ran, so the newest release tag is
-      # looked up among all tags and not only those HEAD reaches; Nx then counts
-      # the commits from that tag to HEAD. With no such commits Nx changes
-      # nothing: the newest release holds the pushed commit, as when an older
-      # run is run again. The preVersionCommand builds the pushed commit, and
-      # the publish packs that build.
+      # The preVersionCommand builds the pushed commit, and the publish packs
+      # that build. When a release tag already points at the pushed commit, a
+      # run of this commit tagged it and stopped before the end (#4692): this
+      # run writes that version again and publishes what npm does not have.
+      # The lock file is not updated: nothing reads it after this step.
       - name: Version the pushed commit
         id: version
-        env:
-          PUSHED: ${{ github.sha }}
         run: |
           # nx release runs here through its Node API, not npx, so the shell
           # that runs the preVersionCommand needs node_modules/.bin on PATH
           # to find nx ("/bin/sh: nx: not found" in run 44767683501).
           export PATH="$GITHUB_WORKSPACE/node_modules/.bin:$PATH"
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          node --input-type=module - <<'EOF'
-          import { ReleaseClient } from 'nx/release';
+          TAGGED="$(git for-each-ref --points-at HEAD --format='%(refname:strip=2)' 'refs/tags/release/*')" node --input-type=module - <<'EOF'
+          import { appendFileSync } from 'node:fs';
+          import { releaseVersion } from 'nx/release';
 
-          await new ReleaseClient({
-            releaseTag: { checkAllBranchesWhen: true },
-          }).releaseVersion({ gitPush: false });
-          EOF
-          if [ "$(git rev-parse HEAD)" = "$PUSHED" ]; then
-            tag="$(git -c versionsort.suffix=- for-each-ref --sort=-v:refname --count=1 --format='%(refname:strip=2)' 'refs/tags/release/*')"
-            if [ -z "$tag" ] || [ "$(git rev-parse "$tag^{commit}^1")" != "$PUSHED" ]; then
-              echo "The newest release holds $PUSHED, so there is nothing to release."
-              exit 0
-            fi
-            # A run of this commit tagged it and stopped before the end (#4692).
-            # Its tree is the pushed commit with the versions, and the build of
-            # the pushed commit is in place: dist is not in git.
-            echo "$tag was made for $PUSHED; this run finishes its release."
-            git checkout --detach "$tag"
-          fi
-          tag="$(git describe --exact-match --match 'release/*' HEAD)"
-          echo "version=${tag#release/}" >> "$GITHUB_OUTPUT"
-          echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-
-      # The tag goes first: the next release counts its commits from it, so a
-      # version reaches npm only once its tag is there. GitHub refuses the tag
-      # when a newer push changed a workflow meanwhile; that push's own run
-      # releases these commits, so this run ends without a publish.
-      - name: Push the tag
-        id: tag
-        if: steps.version.outputs.version != ''
-        uses: $/.github/actions/push-release-tag
-        with:
-          version: ${{ steps.version.outputs.version }}
-
-      - name: Publish
-        if: steps.tag.outputs.pushed == 'true'
-        uses: $/.github/actions/nx-release-publish
-        with:
-          token: ${{ secrets.NPM_ACCESS_TOKEN }}
-
-  # Main gets the version as a merge of the release commit, so the tag is in
-  # main's history. The merge takes main's tree and writes the version into it
-  # with Nx; a textual merge of the release commit would conflict on every
-  # version line whenever the pushed commit lacks the previous release's merge.
-  # A push to main in the meantime rejects the merge, and the job builds it
-  # again on the new main.
-  main:
-    needs: release
-    if: needs.release.outputs.version != ''
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    cache-mode: read
-    env:
-      VERSION: ${{ needs.release.outputs.version }}
-      RELEASE: ${{ needs.release.outputs.commit }}
-    steps:
-      # The main job pushes the merge with these credentials.
-      - name: Checkout
-        uses: actions/checkout@v7
-        with:
-          ref: main
-          fetch-depth: 0
-
-      - name: Set up the workspace
-        uses: $/.github/actions/setup-workspace
-
-      # The push below runs the repo's pre-push hook (npm ci's prepare sets
-      # core.hooksPath), whose Build builds sqlite-open:native with Zig; without
-      # it the push stopped on "spawnSync zig ENOENT" (run 44787931344).
-      - name: Set up Zig
-        uses: $/.github/actions/setup-zig
-
-      # The version is written without the preVersionCommand: nothing is built
-      # or published from main.
-      - name: Merge the release into main
-        run: |
-          # nx release runs here through its Node API, not npx, so a command
-          # it spawns finds the workspace's tools only with node_modules/.bin
-          # on PATH, as the release job's version step does.
-          export PATH="$GITHUB_WORKSPACE/node_modules/.bin:$PATH"
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          for _ in 1 2 3 4 5; do
-            git fetch origin main
-            git checkout --force --detach origin/main
-            if git merge-base --is-ancestor "$RELEASE" HEAD; then
-              echo "main holds release $VERSION."
-              exit 0
-            fi
-            node --input-type=module - <<'EOF'
-          import { ReleaseClient } from 'nx/release';
-
-          await new ReleaseClient({
-            version: { preVersionCommand: '' },
-          }).releaseVersion({
-            specifier: process.env.VERSION,
+          const tagged = process.env.TAGGED;
+          const { workspaceVersion } = await releaseVersion({
+            specifier: tagged === '' ? undefined : tagged.slice('release/'.length),
             gitCommit: false,
             gitTag: false,
             gitPush: false,
-            stageChanges: true,
+            stageChanges: false,
+            versionActionsOptionsOverrides: { skipLockFileUpdate: true },
           });
+          if (workspaceVersion) {
+            appendFileSync(
+              process.env.GITHUB_OUTPUT,
+              `version=${workspaceVersion}\ntagged=${tagged !== ''}\n`,
+            );
+          } else {
+            console.log(`${process.env.GITHUB_SHA} has nothing to release.`);
+          }
           EOF
-            merge="$(git commit-tree "$(git write-tree)" -p HEAD -p "$RELEASE" -m "chore(release): merge $VERSION into main")"
-            if git push origin "$merge:refs/heads/main"; then
-              exit 0
-            fi
-          done
-          exit 1
+
+      # The tag goes first: the next release counts its commits from it, so a
+      # version reaches npm only once its tag is there. The tag names the
+      # pushed commit, which main already holds, so the API makes no new
+      # object and starts no workflow run. When GitHub refuses the tag, the
+      # step fails and nothing is published; the Release run of the next push
+      # counts from the tag before and releases these commits too.
+      - name: Tag the pushed commit
+        if: steps.version.outputs.version != '' && steps.version.outputs.tagged == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" -f "ref=refs/tags/release/$VERSION" -f "sha=$GITHUB_SHA"
+
+      - name: Publish
+        if: steps.version.outputs.version != ''
+        uses: $/.github/actions/nx-release-publish
+        with:
+          token: ${{ secrets.NPM_ACCESS_TOKEN }}

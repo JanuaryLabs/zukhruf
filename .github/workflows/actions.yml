@@ -12,7 +12,6 @@ on:
       - .github/actions/affected-projects/**
       - .github/actions/affected-range/**
       - .github/actions/dokploy-deploy/**
-      - .github/actions/push-release-tag/**
       - .github/actions/tested-commit/**
       - .github/actions/wait-for-health/**
       - .github/workflows/actions.yml
@@ -22,7 +21,6 @@ on:
       - .github/actions/affected-projects/**
       - .github/actions/affected-range/**
       - .github/actions/dokploy-deploy/**
-      - .github/actions/push-release-tag/**
       - .github/actions/tested-commit/**
       - .github/actions/wait-for-health/**
       - .github/workflows/actions.yml
@@ -162,54 +160,6 @@ jobs:
           [ "$SAME" = true ] || { echo "HEAD was not current: $SAME" >&2; exit 1; }
           [ "$OTHER" = false ] || { echo "another commit was current: $OTHER" >&2; exit 1; }
           [ "$MISSING" = failure ] || { echo "a missing sha passed" >&2; exit 1; }
-
-  push-release-tag:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-
-      # A throwaway remote whose pre-receive hook answers for GitHub. Main
-      # moved to c2 after the release tagged c1, as when a push lands while a
-      # release runs.
-      - name: A tag push succeeds, defers on a workflow refusal, or fails
-        env:
-          PUSH: ${{ github.workspace }}/.github/actions/push-release-tag/push-tag.sh
-        run: |
-          cd "$(mktemp -d)"
-          git init -q --bare remote.git
-          git init -q -b main work
-          cd work
-          git config user.name test
-          git config user.email test@example.com
-          git remote add origin ../remote.git
-          expect() { [ "$2" = "$3" ] || { echo "$1: got '$2', want '$3'" >&2; exit 1; }; }
-          answer() { printf '#!/bin/sh\n%s\n' "$1" > ../remote.git/hooks/pre-receive && chmod +x ../remote.git/hooks/pre-receive; }
-          remote_tag() { git ls-remote origin 'refs/tags/release/1.0.0^{}' | cut -f1; }
-          git commit -q --allow-empty -m c1
-          c1="$(git rev-parse HEAD)"
-          git commit -q --allow-empty -m c2
-          c2="$(git rev-parse HEAD)"
-          git push -q origin main
-          git checkout -q --detach "$c1"
-          git tag -a release/1.0.0 -m 1.0.0
-
-          answer 'echo "refusing to allow a GitHub App to create or update workflow .github/workflows/ci.yml without workflows permission" >&2; exit 1'
-          out="$(sh "$PUSH" 1.0.0 2> err)" || { cat err >&2; echo "a workflow refusal failed" >&2; exit 1; }
-          expect "a workflow refusal" "$out" "pushed=false"
-          expect "a workflow refusal pushes no tag" "$(remote_tag)" ""
-          grep -q "$c2" err || { cat err >&2; echo "the message does not name main's head $c2" >&2; exit 1; }
-
-          answer 'echo "the tag is protected" >&2; exit 1'
-          if sh "$PUSH" 1.0.0 > out 2>&1; then cat out >&2; echo "another refusal passed" >&2; exit 1; fi
-
-          answer 'exit 0'
-          expect "an accepted push" "$(sh "$PUSH" 1.0.0 2> /dev/null)" "pushed=true"
-          expect "the tag is on the remote at c1" "$(remote_tag)" "$c1"
-          expect "a push of a tag that the remote has" "$(sh "$PUSH" 1.0.0 2> /dev/null)" "pushed=true"
 
   affected-range:
     runs-on: ubuntu-latest
