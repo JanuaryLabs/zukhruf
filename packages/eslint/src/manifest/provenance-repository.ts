@@ -20,9 +20,11 @@ function stringValue(node: unknown): string | undefined {
  * `{ type: 'git', url }`, so a non-empty string passes. A `directory` is not
  * part of that check, but a manifest below the workspace root names its folder
  * in `directory`, so the npm page links to the package, not the repository
- * root. npm does not publish a manifest with `"private": true`, so the rule
- * does not check it. The rule reads only the manifest and its path: it cannot
- * know the Git remote, so it does not check which repository the URL names.
+ * root. npm does not publish a manifest with `"private": true`, or one
+ * without a string `name` and `version` ("Invalid package, must have name and
+ * version"), so the rule does not check it. The rule reads only the manifest
+ * and its path: it cannot know the Git remote, so it does not check which
+ * repository the URL names.
  */
 const rule: Rule.RuleModule = {
   meta: {
@@ -53,6 +55,12 @@ const rule: Rule.RuleModule = {
         const fields = new Map(objectProperties(manifest));
         const isPrivate = fields.get('private')?.['value'];
         if (isType(isPrivate, 'JSONLiteral') && isPrivate['value'] === true) {
+          return;
+        }
+        if (
+          stringValue(fields.get('name')?.['value']) === undefined ||
+          stringValue(fields.get('version')?.['value']) === undefined
+        ) {
           return;
         }
         const property = fields.get('repository');

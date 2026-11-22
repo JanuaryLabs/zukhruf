@@ -123,6 +123,30 @@ test('a private manifest with no repository is not reported, because npm does no
   assert.deepEqual(findings, []);
 });
 
+test('a manifest with no name is not reported, because npm does not publish it', async () => {
+  // Act
+  const findings = await lintManifest({ name: undefined });
+
+  // Assert
+  assert.deepEqual(findings, []);
+});
+
+test('a manifest with no version is not reported, because npm does not publish it', async () => {
+  // Act
+  const findings = await lintManifest({ version: undefined });
+
+  // Assert
+  assert.deepEqual(findings, []);
+});
+
+test('a manifest with neither name nor version is not reported, because npm does not publish it', async () => {
+  // Act
+  const findings = await lintManifest({ name: undefined, version: undefined });
+
+  // Assert
+  assert.deepEqual(findings, []);
+});
+
 test('a published workspace root whose repository is a url string is not reported, because npm publish turns it into an object', async () => {
   // Act
   const findings = await lintWorkspace(
