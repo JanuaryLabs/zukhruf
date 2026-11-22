@@ -77,34 +77,20 @@ npx nx run <project>:test      # one project, e.g. mutex
 npx nx run copy-check:check    # each copy in the test files has a line in a copy ledger
 ```
 
-## Use a package's source from another repo
+## Change a package and a repo that uses it
 
-Each export of a package has a `@zukhruf/source` condition first. This condition points at the source in `src/`. The other conditions point at the build in `dist/`. A repo that sets no condition gets `dist/`.
-
-To change a package and a repo that uses it together, link the package. Then tell Node.js and TypeScript in the other repo to use the condition:
+To change a package and a repo that uses it together, push the package: a push to `main` releases it (see [Release](#release)). Then install the published version in the other repo:
 
 ```sh
-npm link                                            # in packages/<package>
-npm link @zukhruf/<package>                         # in the other repo
-NODE_OPTIONS=--conditions=@zukhruf/source node …    # in the other repo
+npm view @zukhruf/<package> version         # the newest version on npm
+npm install @zukhruf/<package>@<version>    # in the other repo
 ```
 
-In the `tsconfig.json` of the other repo:
+Do not link the package into the other repo. A link runs code that no release holds, and the other repo can get a second copy of a dependency that both repos use. The `NoOutsideLinks` step of [`@zukhruf/git-hooks`](packages/git-hooks/README.md) stops a commit while a package is linked from another checkout.
 
-```json
-{
-  "compilerOptions": {
-    "customConditions": ["@zukhruf/source"],
-    "allowImportingTsExtensions": true
-  }
-}
-```
+## The source condition
 
-Node.js then runs the `.ts` files of the package, with no build. It can strip their types, because the link goes to a folder outside `node_modules`.
-
-TypeScript then checks the source of the package with the options of the other repo. The source imports its own files with the `.ts` extension, so the other repo needs `allowImportingTsExtensions`. If the other repo emits JavaScript, use `rewriteRelativeImportExtensions` instead.
-
-Set the condition in Node.js only while the package is linked. The published package has no `src/`, so Node.js stops with `ERR_MODULE_NOT_FOUND`. TypeScript does not stop: when the source file is not there, it uses the next condition, `types`.
+Each export of a package has a `@zukhruf/source` condition first. This condition points at the source in `src/`. The other conditions point at the build in `dist/`. A repo that sets no condition gets `dist/`. In this repo, the git hooks (`node --conditions=@zukhruf/source`) and `apps/diagram-playground` set the condition, so they run the source of a workspace package with no build. The published package has no `src/`.
 
 The name follows the `@<scope>/source` convention of Nx and of the "live types" setup in TypeScript monorepos. The scope keeps the name unique. A repo that asks for `@zukhruf/source` gets the source of zukhruf packages only, and not of other packages that define a plain `source` condition. The name is not `development`, because bundlers such as Vite set `development` for every consumer.
 
