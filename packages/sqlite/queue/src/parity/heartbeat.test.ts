@@ -96,7 +96,7 @@ describe('heartbeats', () => {
     // heartbeatSeconds, the worker touches the attempts it still holds
     // (fenced); a job the touch no longer finds active loses its own claim
     // signal, and without heartbeatSeconds nothing aborts on cancel or fail
-    // (node_modules/pg-boss/dist/manager.js:589-634; plans.js:2993-3006).
+    // (node_modules/pg-boss/dist/manager.js:603-648; plans.js:3142-3155).
     const lost = (n: number) => ({
       id: id(n),
       at: 5000,
@@ -170,9 +170,9 @@ describe('heartbeats', () => {
     });
 
     // touch() is fenced to (id, retry_count) of the batch's own claim
-    // (plans.js:2993-3006, 2588-2591), so attempt 0's heartbeat at 5000 finds
+    // (plans.js:3142-3155, 2642-2645), so attempt 0's heartbeat at 5000 finds
     // nothing, aborts its claim and leaves attempt 1's heartbeatOn alone;
-    // attempt 1's own heartbeat refreshes it at 7000 (manager.js:606-635).
+    // attempt 1's own heartbeat refreshes it at 7000 (manager.js:620-649).
     const lost = {
       attempt: 0,
       at: 5000,
@@ -213,7 +213,7 @@ describe('heartbeats', () => {
       },
     );
 
-    // The batch clears its heartbeat timer as it settles (manager.js:738-740).
+    // The batch clears its heartbeat timer as it settles (manager.js:754-756).
     assert.deepStrictEqual(observed, { state: 'completed', errors: [] });
   });
 
@@ -262,10 +262,10 @@ describe('heartbeats', () => {
     );
 
     // The completed group and failWip's fail look the queue up first
-    // (manager.js:477, 1142, 2067): the per-job batch's worker reports it; the
+    // (manager.js:491, 1158, 2271): the per-job batch's worker reports it; the
     // stop reports the held batch it could not fail, then that batch's own
     // settle reports it once released. The idle per-job worker is gone by
-    // then (index.js:298-313).
+    // then (index.js:299-314).
     const missing = (name: string) => `Queue ${name} does not exist`;
     const worker = (name: string) =>
       `${missing(name)} (Queue: ${name}, Worker: <worker>)`;
@@ -320,7 +320,7 @@ describe('heartbeats', () => {
     );
 
     // touch() looks the queue up first and throws; the heartbeat emits that
-    // error as it is and aborts nothing (manager.js:614-620, 2410-2414).
+    // error as it is and aborts nothing (manager.js:628-634, 2614-2618).
     assert.deepStrictEqual(observed, {
       reported: [
         {

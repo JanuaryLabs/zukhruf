@@ -29,7 +29,7 @@ The tests in `src/parity`. Each scenario runs on real pg-boss over PGlite, then 
 _Avoid_: Conformance tests, compatibility tests, golden tests
 
 **Oracle**:
-Real pg-boss 12.38.2 on an in-memory PGlite, in the parity suite. What it observes is correct by definition.
+Real pg-boss 12.39.0 on an in-memory PGlite, in the parity suite. What it observes is correct by definition.
 _Avoid_: Reference implementation, baseline, mock
 
 **Observation**:
@@ -57,7 +57,7 @@ The part of the supervisor pass that runs for a queue once in each `monitorInter
 _Avoid_: Stats job, health check, cron monitor (`cronMonitorIntervalSeconds` is the interval of the cron pass)
 
 **Heartbeat**:
-The time at which an active job was last touched, for a job with `heartbeatSeconds` (an integer of 10 or more). The fetch sets it, and `touch` sets it again. A worker touches its active jobs every `heartbeatRefreshSeconds`, or half the shortest `heartbeatSeconds` of its batch. When a heartbeat is older than `heartbeatSeconds`, the monitor fails the job with `job heartbeat timeout` (`src/several-processes.test.ts`). pg-boss's word (`manager.js:589-634`, `plans.js:2962-2967, 2972-2975`).
+The time at which an active job was last touched, for a job with `heartbeatSeconds` (an integer of 10 or more). The fetch sets it, and `touch` sets it again. A worker touches its active jobs every `heartbeatRefreshSeconds`, or half the shortest `heartbeatSeconds` of its batch. When a heartbeat is older than `heartbeatSeconds`, the monitor fails the job with `job heartbeat timeout` (`src/several-processes.test.ts`). pg-boss's word (`manager.js:603-648`, `plans.js:3111-3116, 3121-3124`).
 _Avoid_: Keep-alive, ping, lease
 
 **Schedule**:
@@ -65,7 +65,7 @@ A cron or rrule rule with a key, which sends a job to its queue at each time tha
 _Avoid_: Timer, recurring job, cron job
 
 **Cron pass**:
-The pass that runs at start and then every `cronMonitorIntervalSeconds`. It finds the occurrences of each schedule that are due, and puts a job for each slot in the send-it queue.
+The pass that runs at start and then every `cronMonitorIntervalSeconds`. It finds the occurrences of each schedule that are due, and puts a job for each slot in the send-it queue. A schedule with `precision: 'second'` is not in the send-it queue: the instance whose pass claimed the cron stamp sends a job for each of its occurrences, every second.
 _Avoid_: Poll, tick, scheduler run
 
 **Occurrence**:

@@ -18,7 +18,7 @@ import { SqlValues } from './sql-values.ts';
 // node_modules/pg-boss/dist/boss.js:15
 const LARGE_QUEUE = { size: 10_000, message: 'Warning: large queue backlog' };
 
-// The outputs failJobsByTimeout and failJobsByHeartbeat store (plans.js:2969,
+// The outputs failJobsByTimeout and failJobsByHeartbeat store (plans.js:3118,
 // 2973).
 const TIMED_OUT = JSON.stringify({ value: { message: 'job timed out' } });
 const HEARTBEAT_TIMED_OUT = JSON.stringify({
@@ -42,7 +42,7 @@ export type SupervisorConfig = SuperviseIntervals & {
 };
 
 // A queue's stats row as cacheQueueStats returns it, which is also the
-// backlog warning's data (plans.js:4472-4476). pinSeconds is how long the
+// backlog warning's data (plans.js:4621-4625). pinSeconds is how long the
 // statement held its snapshot, in real time.
 type QueueStatsRow = {
   name: string;
@@ -146,7 +146,7 @@ export class Supervisor extends EventEmitter<
   }
 
   // boss.js:329-423. Nothing here backs off the stats, so every claimed
-  // queue's counts are refreshed (refreshStats, plans.js:1374).
+  // queue's counts are refreshed (refreshStats, plans.js:1391).
   async #monitor(names: string[]): Promise<void> {
     if (this.#stopped) {
       return;
@@ -186,7 +186,7 @@ export class Supervisor extends EventEmitter<
       return;
     }
     const queues = JSON.stringify(claimed);
-    // failJobsByTimeout (plans.js:2957-2961, 2968-2971)
+    // failJobsByTimeout (plans.js:3106-3110, 3117-3120)
     await this.#query((db, now) =>
       JobSettler.failJobs(
         db,
@@ -204,7 +204,7 @@ export class Supervisor extends EventEmitter<
     if (this.#stopped) {
       return;
     }
-    // failJobsByHeartbeat (plans.js:2962-2967, 2972-2975)
+    // failJobsByHeartbeat (plans.js:3111-3116, 3121-3124)
     await this.#query((db, now) =>
       JobSettler.failJobs(
         db,
@@ -266,7 +266,7 @@ export class Supervisor extends EventEmitter<
     });
   }
 
-  // getQueues (plans.js:1596-1649) orders the queues by name (12.38.0),
+  // getQueues (plans.js:1615-1668) orders the queues by name (12.38.0),
   // which decides each 100-queue chunk; PGlite's C collation and SQLite's
   // BINARY order the queue names alike.
   static #queueNames(db: DatabaseSync): string[] {
@@ -276,7 +276,7 @@ export class Supervisor extends EventEmitter<
       .map((row) => Row.readString(row, 'name'));
   }
 
-  // trySetQueueMonitorTime and trySetQueueTimestamp (plans.js:1360-1377,
+  // trySetQueueMonitorTime and trySetQueueTimestamp (plans.js:1377-1394,
   // 1119-1137): a queue is due once its stamp is `seconds` old, or at once
   // without one; the due queues are stamped now. pg-boss takes the rows in
   // name order only as a lock order (queueRowLock, 1146-1148) and leaves its
@@ -320,7 +320,7 @@ export class Supervisor extends EventEmitter<
     );
   }
 
-  // cacheQueueStats (plans.js:4385-4481): the shared aggregate over the
+  // cacheQueueStats (plans.js:4534-4630): the shared aggregate over the
   // claimed queues, each row with how long the statement held its snapshot.
   static #cacheQueueStats(
     db: DatabaseSync,
@@ -339,7 +339,7 @@ export class Supervisor extends EventEmitter<
     }));
   }
 
-  // deletion (plans.js:3690-3697): settled jobs deletion_seconds after they
+  // deletion (plans.js:3839-3846): settled jobs deletion_seconds after they
   // settled, unless that is 0, and jobs never started once past keep_until.
   static #deletion(db: DatabaseSync, names: string[], now: Date): void {
     const isoNow = SqlValues.asIso(now);

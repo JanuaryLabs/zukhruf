@@ -11,7 +11,7 @@ import { Future } from '@zukhruf/async';
 import { Timers } from './timers.ts';
 
 // work()'s options as checkWorkArgs copies them, with the poll intervals it
-// adds in ms (node_modules/pg-boss/dist/attorney.js:367-368, 638-655).
+// adds in ms (node_modules/pg-boss/dist/attorney.js:368-369, 639-656).
 export type WorkerOptions = WorkOptions & {
   pollingInterval: number;
   notifyPollingInterval: number;
@@ -49,7 +49,7 @@ export class Worker<TJob> {
   readonly name: string;
   readonly options: WorkerOptions;
   readonly createdOn: number;
-  // The batch in flight, which a shutdown fails (manager.js:1129-1159).
+  // The batch in flight, which a shutdown fails (manager.js:1145-1175).
   jobs: TJob[] = [];
   // The batch's controller while it runs, which a shutdown aborts.
   abortController: AbortController | null = null;
@@ -65,7 +65,7 @@ export class Worker<TJob> {
   // Aborts the round's wait; a fresh one arms each wait.
   #wake = new AbortController();
   // Aborted once stop() has spent its grace for running handlers, so a batch
-  // that lands after it is refused (12.37.0, #953: manager.js:679-681,
+  // that lands after it is refused (12.37.0, #953: manager.js:694-696,
   // 1131-1135).
   readonly #grace = new AbortController();
   // Aborted once stop() begins: a handler overrun waits only until then

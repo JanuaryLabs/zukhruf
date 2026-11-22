@@ -13,7 +13,7 @@ export class CompletionData {
   }
 
   // A group's outputs bound as one JSON recordset (node_modules/pg-boss/dist/
-  // manager.js:478, 488, 513, 517; plans.js:2680, 3275, 3288): every output is
+  // manager.js:492, 502, 527, 531; plans.js:2734, 3424, 3437): every output is
   // mapped before the payload is stringified, and each row's output is then
   // stored as the JSON value it is, so a mapped string stays a JSON string.
   // An output the payload leaves out or holds as JSON null is SQL NULL.

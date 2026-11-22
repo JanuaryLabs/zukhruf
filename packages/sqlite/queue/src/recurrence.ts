@@ -5,11 +5,11 @@ import {
   type CronExpression,
   CronExpressionParser,
 } from 'cron-parser';
-import { scheduleMissedPolicies } from 'pg-boss';
+import { scheduleMissedPolicies, schedulePrecisions } from 'pg-boss';
 import { RRuleTemporal } from 'rrule-temporal';
 
 // pg-boss's checks on a schedule's recurrence (node_modules/pg-boss/dist/
-// rrule.js, timezone.js and timekeeper.js, 12.38.2). None of them is
+// rrule.js, timezone.js and timekeeper.js, 12.39.0). None of them is
 // exported, so each is ported by citation and proven equal by the parity
 // suite.
 export class Recurrence {
@@ -48,27 +48,125 @@ export class Recurrence {
   // rrule.js:290-291
   static readonly #stepSeconds = 60 * 60;
   static readonly #stepGrowth = 4;
-  // timekeeper.js:48
+  // timekeeper.js:52
   static readonly #missedPolicies: readonly unknown[] = Object.values(
     scheduleMissedPolicies,
   );
 
-  // timekeeper.js:80-99 (12.38.1): the latest occurrence before an
+  // timekeeper.js:53
+  static readonly #precisions: readonly unknown[] =
+    Object.values(schedulePrecisions);
+
+  // timekeeper.js:86-133 (12.39.0): whether a schedule is sent every second,
+  // for each occurrence, rather than by the pass a job a minute. Opt-in, so a
+  // stored `* * * * * *` keeps its job a minute; read off the parsed seconds
+  // field, so `@secondly` is every second and a seconds field of 0 stays with
+  // the pass. An expression that does not parse stays with the pass too.
+  static isSecondCron(expression: string, options: unknown): boolean {
+    const precision =
+      typeof options === 'object' && options !== null && 'precision' in options
+        ? options.precision
+        : undefined;
+    if (precision !== schedulePrecisions.second) {
+      return false;
+    }
+    try {
+      const seconds = CronExpressionParser.parse(expression, { strict: false })
+        .fields.second.values;
+      return !(seconds.length === 1 && seconds[0] === 0);
+    } catch {
+      return false;
+    }
+  }
+
+  // timekeeper.js:114-132 (12.39.0): every occurrence in (after, until], oldest
+  // first, each second asked about, and the second instant of a repeated
+  // local time passed over as previousOccurrence passes it over.
+  static cronOccurrencesBetween(
+    interval: CronExpression,
+    tz: string,
+    after: number,
+    until: number,
+  ): Date[] {
+    const found: Date[] = [];
+    for (
+      let second = Math.floor(after / 1000) + 1;
+      second * 1000 <= until;
+      second++
+    ) {
+      const instant = new Date(second * 1000);
+      if (
+        interval.includesDate(instant) &&
+        !Recurrence.#passedOver(interval, instant, tz)
+      ) {
+        found.push(instant);
+      }
+    }
+    return found;
+  }
+
+  // timekeeper.js:173-184 (12.39.0, #1007): an occurrence a repeated local
+  // time holds no job for, in an expression that names neither every hour
+  // nor multiple minutes across multiple hours, which is a run rather than a
+  // time of day and keeps both instants.
+  static #passedOver(
+    interval: CronExpression,
+    instant: Date,
+    tz: string,
+  ): boolean {
+    const { hour, minute } = interval.fields;
+    const keepsRepeatedHour =
+      hour.values.length === 24 ||
+      (hour.values.length > 1 && minute.values.length > 1);
+    return !keepsRepeatedHour && Recurrence.#repeatsLocalTime(instant, tz);
+  }
+
+  // timekeeper.js:133-152 (12.39.0): the latest occurrence before an
   // interval's reference, read backwards the way the forward walk reads
   // forwards. When the clocks go back, a local time shows twice, and prev()
   // answers with both instants an hour apart, so a daily job would be sent
-  // twice; only an hour field that lists every hour keeps both.
+  // twice; the second is passed over as #passedOver says.
   static previousOccurrence(interval: CronExpression, tz: string): Date {
-    const everyHour = interval.fields.hour.values.length === 24;
     for (;;) {
       const occurrence = interval.prev().toDate();
-      if (everyHour || !Recurrence.#repeatsLocalTime(occurrence, tz)) {
+      if (!Recurrence.#passedOver(interval, occurrence, tz)) {
         return occurrence;
       }
     }
   }
 
-  // timekeeper.js:100-111: whether the local time an instant shows in `tz`
+  // timekeeper.js:153-172 (12.39.0): the latest occurrence in (after, until],
+  // walking forwards, for a range prev() cannot read back across. The
+  // forward walk moves a skipped time's occurrence into the hour the clocks
+  // landed on, which the expression does not name, so includesDate leaves
+  // it out as the backward read does.
+  static latestOccurrenceForward(
+    expression: string,
+    tz: string,
+    after: number,
+    until: number,
+  ): Date | null {
+    const interval = CronExpressionParser.parse(expression, {
+      tz,
+      strict: false,
+      currentDate: new Date(after),
+    });
+    let latest: Date | null = null;
+    for (;;) {
+      const occurrence = interval.next().toDate();
+      if (occurrence.getTime() > until) {
+        return latest;
+      }
+      if (
+        interval.includesDate(occurrence) &&
+        !Recurrence.#passedOver(interval, occurrence, tz)
+      ) {
+        latest = occurrence;
+      }
+    }
+  }
+
+  // timekeeper.js:184-195: whether the local time an instant shows in `tz`
   // was already shown once, before the clocks went back. The offset three
   // hours before is the one in force before any change the instant could be
   // repeating, since no zone goes back by more than two.
@@ -81,7 +179,7 @@ export class Recurrence {
     );
   }
 
-  // timekeeper.js:213-218 (12.37.0): cron-parser reads an empty expression,
+  // timekeeper.js:308-313 (12.37.0): cron-parser reads an empty expression,
   // and undefined or null, as `* * * * *`, which is nearly always a missing
   // value, so schedule() and each pass refuse it before either format reads
   // it.
@@ -97,7 +195,7 @@ export class Recurrence {
     return Recurrence.#rruleShape.test(expression);
   }
 
-  // timekeeper.js:208-230. parseRecurrence's walk is for previewSchedule, so
+  // timekeeper.js:303-325. parseRecurrence's walk is for previewSchedule, so
   // only its two checks are kept. cron-parser reads an empty expression, and
   // undefined or null, as `* * * * *`, so a non-string or blank one is refused
   // before either format reads it (12.37.0: 213-218).
@@ -137,13 +235,23 @@ export class Recurrence {
     );
   }
 
-  // timekeeper.js:188-195
+  // timekeeper.js:278-290
   static assertMissedPolicy(missed: unknown): void {
     assert(
       missed === undefined ||
         missed === null ||
         Recurrence.#missedPolicies.includes(missed),
       `missed must be one of: ${Recurrence.#missedPolicies.join(', ')}`,
+    );
+  }
+
+  // timekeeper.js:285-289 (12.39.0): nullish is the default, minute.
+  static assertPrecision(precision: unknown): void {
+    assert(
+      precision === undefined ||
+        precision === null ||
+        Recurrence.#precisions.includes(precision),
+      `precision must be one of: ${Recurrence.#precisions.join(', ')}`,
     );
   }
 

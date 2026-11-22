@@ -66,7 +66,7 @@ describe('queue lifecycle', () => {
       );
 
     // pg-boss checks the clock while reading its configuration, before it
-    // touches a database (node_modules/pg-boss/dist/attorney.js:430-439).
+    // touches a database (node_modules/pg-boss/dist/attorney.js:433-442).
     const pgBoss = observe(
       (clock) =>
         new PgBoss({
@@ -135,7 +135,7 @@ describe('queue lifecycle', () => {
   });
 
   // No in-process oracle runs pg-boss on its own connection (that needs a
-  // Postgres server), so this pins pg-boss 12.38.2's message for it by
+  // Postgres server), so this pins pg-boss 12.39.0's message for it by
   // citation: node_modules/pg-boss/dist/db.js:112.
   it('refuses SQL before start and after a closing stop when it owns its database, and reopens it on restart', async () => {
     await using dir = await new TemporaryFiles().directory('queue-owned-');
@@ -149,13 +149,13 @@ describe('queue lifecycle', () => {
       await queue.createQueue('jobs');
       const whileStarted = await outcome(() => queue.send('jobs', { n: 1 }));
       // A bare stop() closes it: pg-boss's close defaults to true
-      // (node_modules/pg-boss/dist/index.js:272).
+      // (node_modules/pg-boss/dist/index.js:273).
       await queue.stop();
       const afterClose = await outcome(() => queue.send('jobs', { n: 1 }));
       await queue.start();
       const afterRestart = await outcome(() => queue.send('jobs', { n: 2 }));
       // Stopped without closing, a later closing stop still closes it
-      // (node_modules/pg-boss/dist/index.js:277-285).
+      // (node_modules/pg-boss/dist/index.js:278-286).
       await queue.stop({ close: false });
       const afterKeepOpen = await outcome(() => queue.send('jobs', { n: 3 }));
       await queue.stop();
@@ -187,7 +187,7 @@ describe('queue lifecycle', () => {
   });
 
   // pg-boss returns its #startingPromise to a start that comes while one
-  // runs (node_modules/pg-boss/dist/index.js:140-145).
+  // runs (node_modules/pg-boss/dist/index.js:141-146).
   it('rejects a start that comes during a failing start with the same error', async () => {
     await using dir = await new TemporaryFiles().directory('queue-start-');
     const queue = new SqliteJobQueue({
@@ -220,7 +220,7 @@ describe('queue lifecycle', () => {
       };
     });
 
-    // index.js:132-134 (12.37.0)
+    // index.js:133-135 (12.37.0)
     const refused =
       'AssertionError: start() attempts must be an integer of 1 or more';
     assert.deepStrictEqual(observed, {
@@ -231,7 +231,7 @@ describe('queue lifecycle', () => {
     });
   });
 
-  // index.js:161-196, 259-264 (12.37.0): PGlite cannot fail a start without an
+  // index.js:162-197, 260-265 (12.37.0): PGlite cannot fail a start without an
   // assertion, so this has no pg-boss run beside it.
   it('tries start() again after a failure that is not an assertion, warns once, and stop() ends the wait', async () => {
     await using dir = await new TemporaryFiles().directory('queue-start-');
@@ -379,7 +379,7 @@ describe('queue lifecycle', () => {
     // null that passes validation (deleteAfterSeconds, warningQueueSize)
     // keeps it; retryDelayMax, heartbeatSeconds and deadLetter take a present
     // key's value, so null clears them
-    // (node_modules/pg-boss/dist/plans.js:1565-1587; attorney.js:90-101).
+    // (node_modules/pg-boss/dist/plans.js:1584-1606; attorney.js:91-102).
     // warningQueueSize reaches no job, so only its update is observed.
     const { warningQueueSize, notify, ...onJob } = settings;
     const kept = { update: 'resolved', job: onJob };
@@ -420,7 +420,7 @@ describe('queue lifecycle', () => {
       retryDelayMaxWithoutBackoff: '{"retryDelayMax":5}',
       retryDelayMaxNegative: '{"retryBackoff":true,"retryDelayMax":-1}',
       expireInSecondsZero: '{"expireInSeconds":0}',
-      expireInSecondsOverDay: '{"expireInSeconds":86401}',
+      expireInSecondsOverTwoWeeks: '{"expireInSeconds":1209601}',
       retentionSeconds: '{"retentionSeconds":0}',
       deleteAfterSeconds: '{"deleteAfterSeconds":-1}',
       heartbeatSeconds: '{"heartbeatSeconds":5}',

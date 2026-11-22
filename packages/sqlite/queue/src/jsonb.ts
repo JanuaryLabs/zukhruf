@@ -1,7 +1,7 @@
 import { DatabaseError } from './database-error.ts';
 
 // Postgres jsonb containment (`@>`), which pg-boss's findJobs uses for its
-// `data` filter (node_modules/pg-boss/dist/plans.js:4638). Rules from
+// `data` filter (node_modules/pg-boss/dist/plans.js:4787). Rules from
 // https://www.postgresql.org/docs/current/datatype-json.html#JSON-CONTAINMENT:
 // an object contains each key of the needle recursively, an array contains
 // each needle element somewhere (order and duplicates ignored), and scalars

@@ -274,7 +274,7 @@ describe('schedule', () => {
       };
     });
 
-    // Timekeeper.schedule (node_modules/pg-boss/dist/timekeeper.js:863-900):
+    // Timekeeper.schedule (node_modules/pg-boss/dist/timekeeper.js:1292-1333):
     // options without db, a non-empty string expression (12.37.0: 213-218),
     // the expression (cron-parser, or rrule.js's checks), the zone, a rule's
     // remaining occurrences, checkSendArgs, assertKey, assertMissedPolicy,
@@ -438,6 +438,67 @@ describe('schedule', () => {
     });
   });
 
+  it("refuses a precision other than minute or second, and singletonNextSlot with second, after missed and before the queue's lookup", async () => {
+    const observed = await Parity.assertSame(async ({ queue }) => {
+      await queue.start();
+      await queue.createQueue('jobs');
+      let n = 0;
+      const schedule = (options: Record<string, unknown>, name = 'jobs') =>
+        outcome(() =>
+          queue.schedule(name, '* * * * * *', null, {
+            key: `k${n++}`,
+            ...options,
+          }),
+        );
+      return {
+        unknown: await schedule({ precision: 'hour' }),
+        uppercase: await schedule({ precision: 'SECOND' }),
+        number: await schedule({ precision: 1 }),
+        null: await schedule({ precision: null }),
+        minute: await schedule({ precision: 'minute' }),
+        second: await schedule({ precision: 'second' }),
+        secondNextSlot: await schedule({
+          precision: 'second',
+          singletonSeconds: 10,
+          singletonNextSlot: true,
+        }),
+        minuteNextSlot: await schedule({
+          precision: 'minute',
+          singletonSeconds: 10,
+          singletonNextSlot: true,
+        }),
+        missedBeforePrecision: await schedule({ missed: 'x', precision: 'x' }),
+        precisionBeforeNextSlot: await schedule({
+          precision: 'x',
+          singletonNextSlot: true,
+        }),
+        precisionBeforeMissingQueue: await schedule(
+          { precision: 'x' },
+          'missing',
+        ),
+      };
+    });
+
+    // timekeeper.js:1296-1299, 1322-1325 (12.39.0)
+    const precision =
+      'AssertionError: precision must be one of: minute, second (ERR_ASSERTION)';
+    assert.deepStrictEqual(observed, {
+      unknown: precision,
+      uppercase: precision,
+      number: precision,
+      null: 'resolved',
+      minute: 'resolved',
+      second: 'resolved',
+      secondNextSlot:
+        "AssertionError: singletonNextSlot is not supported with precision: 'second' (ERR_ASSERTION)",
+      minuteNextSlot: 'resolved',
+      missedBeforePrecision:
+        'AssertionError: missed must be one of: skip, once (ERR_ASSERTION)',
+      precisionBeforeNextSlot: precision,
+      precisionBeforeMissingQueue: precision,
+    });
+  });
+
   it("judges whether a rule has an occurrence left from the clock, in the schedule's zone", async () => {
     const observed = await Parity.assertSame(async ({ queue, clock }) => {
       await queue.start();
@@ -465,7 +526,7 @@ describe('schedule', () => {
     });
 
     // assertRruleSends reads the first occurrence after the database's time
-    // in the schedule's own zone (timekeeper.js:888, rrule.js:232-235,
+    // in the schedule's own zone (timekeeper.js:1318, rrule.js:232-235,
     // 382-384); SQLite's database time is the clock's.
     const spent =
       'AssertionError: rrule expression has no occurrence left, so the schedule would never send a job (ERR_ASSERTION)';
@@ -532,7 +593,7 @@ describe('schedule', () => {
       return { stored, upserted };
     });
 
-    // timekeeper.js:869-871, 890-895 and plans.js:388-404, 1788-1800: the
+    // timekeeper.js:1299-1306, 1320-1328 and plans.js:404-421, 1810-1829: the
     // zone defaults to UTC, the kind is read off the expression, a key keeps
     // the driver's text of a falsy non-string, data is jsonb (a string is
     // JSON text), and the options are stored whole, tz, key and missed
@@ -779,9 +840,9 @@ describe('schedule', () => {
       return { results, afterUnschedule, afterDelete: await keys() };
     });
 
-    // timekeeper.js:904-907, plans.js:1801-1807, the key bound as text as
+    // timekeeper.js:1337-1340, plans.js:1830-1836, the key bound as text as
     // schedule() stores it; the schedule's foreign key cascades
-    // (plans.js:390).
+    // (plans.js:406).
     assert.deepStrictEqual(observed, {
       results: {
         defaultKey: 'resolved',

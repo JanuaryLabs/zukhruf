@@ -75,7 +75,7 @@ describe('getQueueStats()', () => {
       return refusals;
     });
 
-    // manager.js:2612, 2697
+    // manager.js:2816, 2901
     assert.equal(observed.missingQueue, 'Error: Queue missing does not exist');
     assert.equal(observed.missingQueueForced, observed.missingQueue);
     assert.equal(Object.values(observed).includes('resolved'), false);
@@ -122,7 +122,7 @@ describe('getQueueStats()', () => {
       createdDelta: null,
       deltaSeconds: null,
       deltaOn: null,
-      // Uncounted with persistQueueStats off (12.36.0: manager.js:2620-2666).
+      // Uncounted with persistQueueStats off (12.36.0: manager.js:2824-2870).
       waitBins: null,
       runBins: null,
       readyOldestSeconds: null,
@@ -141,7 +141,7 @@ describe('getQueueStats()', () => {
           failedCount: 1,
           // The live jobs only: no maintenance pass has counted the completed
           // and cancelled ones into retained_count yet (12.38.0:
-          // plans.js:324-331, 4372).
+          // plans.js:335-342, 4521).
           totalCount: 5,
         },
       ],
@@ -273,7 +273,7 @@ describe('getQueueStats()', () => {
       };
     });
 
-    // manager.js:2611-2616, 2659-2665 (12.36.0): the name first, then the
+    // manager.js:2815-2820, 2863-2869 (12.36.0): the name first, then the
     // percents, then the queue; with persistQueueStats off the snapshot has no
     // histograms, so each percentile reads null.
     const refused =
@@ -300,7 +300,7 @@ describe('getQueueStats()', () => {
       await queue.start();
       await queue.createQueue('jobs');
       await queue.send('jobs', null, { id: id(1) });
-      // A value each history check of pg-boss refuses (manager.js:2672-2679),
+      // A value each history check of pg-boss refuses (manager.js:2876-2883),
       // as an untyped caller sends them.
       const history = {
         from: new Date(origin + hour),

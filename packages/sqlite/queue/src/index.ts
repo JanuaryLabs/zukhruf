@@ -30,6 +30,7 @@ import {
   type WorkOptions,
   policies,
   scheduleKinds,
+  schedulePrecisions,
   systemClock,
 } from 'pg-boss';
 
@@ -65,7 +66,11 @@ import { StartAfter } from './start-after.ts';
 import { Supervisor } from './supervisor.ts';
 import { Throttle } from './throttle.ts';
 import { Timekeeper } from './timekeeper.ts';
-import type { SlottedJob } from './timekeeper.ts';
+import type {
+  ScheduledReport,
+  ScheduledSend,
+  SlottedJob,
+} from './timekeeper.ts';
 import { Timers } from './timers.ts';
 import { Uuid } from './uuid.ts';
 import { Worker } from './worker.ts';
@@ -80,7 +85,7 @@ function toError(value: unknown): Error {
 }
 
 // pg-boss emits a spread copy of a worker's error, not the Error itself
-// (node_modules/pg-boss/dist/manager.js:1267-1269): an Error's message, stack and
+// (node_modules/pg-boss/dist/manager.js:1297-1299): an Error's message, stack and
 // name are non-enumerable, so the payload carries only the fields set here and
 // is not `instanceof Error`.
 function toWorkerEvent(error: Error, queue: string, workerId: string) {
@@ -88,7 +93,7 @@ function toWorkerEvent(error: Error, queue: string, workerId: string) {
 }
 
 // pg-boss's spread copy of an error it emits (node_modules/pg-boss/dist/
-// manager.js:1041).
+// manager.js:1057).
 function toErrorEvent(error: unknown) {
   return spreadCopy(toError(error), {});
 }
@@ -145,11 +150,11 @@ type NotifyRoute =
   | { kind: 'memory' };
 
 // pg-boss's channel: 'pgboss_' and the first 24 hex digits of the SHA-224 of
-// the schema name (node_modules/pg-boss/dist/plans.js:1173-1175). The schema is
+// the schema name (node_modules/pg-boss/dist/plans.js:1190-1192). The schema is
 // pg-boss's default, 'pgboss' (plans.js:12); this package has no schema option.
 const notifyChannel = `pgboss_${hash('sha224', 'pgboss', 'hex').slice(0, 24)}`;
 
-// node_modules/pg-boss/dist/manager.js:150, 154
+// node_modules/pg-boss/dist/manager.js:151, 155
 const QUEUE_STATS_CACHE_TTL_SECONDS = 60 * 60;
 const QUEUE_STATS_FORCE_TTL_SECONDS = 60;
 
@@ -178,7 +183,7 @@ export class SqliteJobQueue
   >
   implements JobQueue
 {
-  // Like pg-boss (node_modules/pg-boss/dist/index.js:587-594): a `path` makes
+  // Like pg-boss (node_modules/pg-boss/dist/index.js:596-603): a `path` makes
   // the queue own its database, opened by start() and refusing SQL until then
   // (db.js:112); a caller-supplied `database` is used as is, like pg-boss's
   // `db` adapter, so SQL before start() fails on the missing schema.
@@ -187,11 +192,11 @@ export class SqliteJobQueue
   readonly #ownsDatabase: boolean;
   // pg-boss's manager #stopped, set in start() and stop(), so work() before
   // the first start() is allowed (node_modules/pg-boss/dist/
-  // manager.js:1162-1164).
+  // manager.js:1178-1180).
   #manager: ManagerPhase = { kind: 'unstarted' };
   readonly #clock: Clock;
   readonly #useListenNotify: boolean;
-  // manager.js:227, 254: this instance's id, which a handler_overrun warning
+  // manager.js:228, 262: this instance's id, which a handler_overrun warning
   // names (12.38.0).
   readonly #instanceId = randomUUID();
   readonly #warnedFetchOptions = new Set<string>();
@@ -200,7 +205,7 @@ export class SqliteJobQueue
   #notifier: NotifierPhase = { kind: 'unavailable' };
   #notifyRoute: NotifyRoute = { kind: 'stopped' };
   // PgBoss's own #stopped and #started (node_modules/pg-boss/dist/
-  // index.js:80, 152, 345): armed before a start runs, so stop() can shut
+  // index.js:81, 153, 346): armed before a start runs, so stop() can shut
   // down what a start that threw partway left armed.
   #lifecycle: LifecyclePhase = { kind: 'stopped' };
   readonly #starting = new CurrentOperation<this>();
@@ -208,7 +213,7 @@ export class SqliteJobQueue
   readonly #activity = new Activity();
   #attachment: Attachment = { kind: 'detached' };
   // When wip last went out, first read at construction
-  // (node_modules/pg-boss/dist/manager.js:240).
+  // (node_modules/pg-boss/dist/manager.js:248).
   #wipTs: number;
   #wipInterval: ClockTimer | undefined;
   readonly #queueCache = new QueueCache();
@@ -219,7 +224,7 @@ export class SqliteJobQueue
   readonly #pendingCleanups = new WaitGroup();
   readonly #localGroups = new LocalGroups();
   readonly #supervisor: Supervisor;
-  // attorney.js:412
+  // attorney.js:415
   readonly #schedule: boolean;
   readonly #timekeeper: Timekeeper;
   private readonly workers = new Map<string, Worker<JobRow>>();
@@ -233,7 +238,7 @@ export class SqliteJobQueue
         : { kind: 'open', database: normalized.database };
     this.#path = normalized.path ?? ':memory:';
     this.#ownsDatabase = normalized.database === undefined;
-    // node_modules/pg-boss/dist/attorney.js:419, 421, 426
+    // node_modules/pg-boss/dist/attorney.js:422, 424, 429
     this.#clock = Attorney.applyClockConfig(normalized.clock);
     const intervals = Attorney.applyOpsConfig(normalized);
     const timekeeping = Attorney.applyScheduleConfig(normalized);
@@ -242,11 +247,11 @@ export class SqliteJobQueue
     this.#intervals = intervals;
     this.#supervisor = new Supervisor(this.#clock, this.#activity, {
       ...intervals,
-      // attorney.js:413
+      // attorney.js:416
       supervise: 'supervise' in normalized ? normalized.supervise : true,
       warningQueueSize: normalized.warningQueueSize,
     });
-    // index.js:111-112, 127-130
+    // index.js:112-113, 128-131
     this.#supervisor.on('error', (error) => this.emit('error', error));
     this.#supervisor.on('warning', (warning) => this.emit('warning', warning));
     this.#schedule = Boolean(
@@ -262,13 +267,21 @@ export class SqliteJobQueue
         offWork: (name, options) => this.offWork(name, options),
         send: (request) => this.#send([request]),
         insert: (name, jobs) => this.#insertSlotted(name, jobs),
+        // manager.js:1692-1699 (12.39.0), resolved as send() resolves them;
+        // the queue's defaults fill the rest at the insert, as for send().
+        scheduledJobFields: (name, data, options) => {
+          const request = Attorney.checkSendArgs([name, data ?? null, options]);
+          return { data: request.data ?? null, options: request.options };
+        },
+        getQueueCache: (name) => this.getQueueOrThrow(name),
+        sendScheduled: (sends) => this.#sendScheduled(sends),
       },
     );
-    // index.js:113
+    // index.js:114
     this.#timekeeper.on('error', (error) => this.emit('error', error));
     this.#timekeeper.on('warning', (warning) => this.emit('warning', warning));
     this.#wipTs = this.#clock.now();
-    // node_modules/pg-boss/dist/attorney.js:416
+    // node_modules/pg-boss/dist/attorney.js:419
     this.#useListenNotify = normalized.useListenNotify ?? false;
   }
 
@@ -285,7 +298,7 @@ export class SqliteJobQueue
     return this.#connection.database;
   }
 
-  // node_modules/pg-boss/dist/index.js:132-160: attempts is checked first
+  // node_modules/pg-boss/dist/index.js:133-161: attempts is checked first
   // (12.37.0), a stop in flight finishes first, and a concurrent start shares
   // the one in flight.
   async start(options: StartOptions = {}): Promise<this> {
@@ -310,7 +323,7 @@ export class SqliteJobQueue
     return this.#starting.run(this.#startAttempts(attempts, retry));
   }
 
-  // index.js:161-196: each attempt is a start again after a failure. An
+  // index.js:162-197: each attempt is a start again after a failure. An
   // AssertionError is a configuration this cannot run, the same every time,
   // so it fails at once; any other failure waits 1 s, doubling up to 30 s,
   // on real time, as pg-boss's delay does, and warns on the first one only.
@@ -349,7 +362,7 @@ export class SqliteJobQueue
     }
   }
 
-  // index.js:198-236: the clock attaches once the schema exists and before
+  // index.js:199-237: the clock attaches once the schema exists and before
   // anything arms a timer.
   async #doStart(): Promise<this> {
     if (this.#connection.kind === 'closed') {
@@ -370,7 +383,7 @@ export class SqliteJobQueue
       };
     }
     this.#manager = { kind: 'started' };
-    // manager.js:1012-1030: the cache refresh, then wip, both on the clock in
+    // manager.js:1028-1046: the cache refresh, then wip, both on the clock in
     // that order, then the cache's first load.
     this.#queueCacheInterval = this.#clock.setInterval(() => {
       void this.#onCacheQueues(true);
@@ -384,7 +397,7 @@ export class SqliteJobQueue
     if (this.#useListenNotify) {
       await this.#listen(this.#notifyRoute);
     }
-    // index.js:224-229
+    // index.js:225-230
     this.#supervisor.start(this.db);
     if (this.#schedule) {
       await this.#timekeeper.start(this.db);
@@ -406,14 +419,14 @@ export class SqliteJobQueue
         performance: { now: () => clock.now() },
       },
     });
-    // The notifier's errors are the instance's (index.js:116).
+    // The notifier's errors are the instance's (index.js:117).
     notifications.on('error', (error) => this.emit('error', toError(error)));
     return { kind: 'file', notifications };
   }
 
   // notifier.js:52-71: a listener that cannot start leaves the workers on
   // their poll. Once it listens, each worker of a notify queue fetches, for
-  // what was sent before (adapters/pglite.js:144-152, manager.js:1420-1428).
+  // what was sent before (adapters/pglite.js:144-152, manager.js:1590-1598).
   async #listen(route: NotifyRoute): Promise<void> {
     if (route.kind === 'file') {
       route.notifications.on('notification', ({ payload }) =>
@@ -438,7 +451,7 @@ export class SqliteJobQueue
   }
 
   // The pg_notify(channel, queue name) of pg-boss's insert, in the insert's
-  // transaction (plans.js:2919-2934).
+  // transaction (plans.js:2991-3083).
   #notify(name: string): void {
     const route = this.#notifyRoute;
     if (route.kind === 'file') {
@@ -449,10 +462,10 @@ export class SqliteJobQueue
     }
   }
 
-  // node_modules/pg-boss/dist/index.js:258-362.
+  // node_modules/pg-boss/dist/index.js:259-363.
   async stop(options: StopOptions = {}): Promise<void> {
     // A start waiting between attempts stops trying, and fails now with its
-    // last error (index.js:259-264).
+    // last error (index.js:260-265).
     if (this.#lifecycle.kind === 'armed') {
       this.#lifecycle.retry.abort();
     }
@@ -483,18 +496,18 @@ export class SqliteJobQueue
     timeout: number,
   ): Promise<void> {
     // pg-boss closes its listener first, still listening through the close's
-    // I/O (node_modules/pg-boss/dist/index.js:308, notifier.js:77-84), so a
+    // I/O (node_modules/pg-boss/dist/index.js:309, notifier.js:77-84), so a
     // fetch in flight lands before the workers stop and their group tracking
     // is cleared.
     if (this.#notifier.kind === 'available') {
       await this.#unlisten(this.#notifyRoute);
     }
     this.#notifier = { kind: 'unavailable' };
-    // manager.js:1110-1125: refuse new work and let every worker wind down.
+    // manager.js:1126-1141: refuse new work and let every worker wind down.
     this.#manager = { kind: 'stopped' };
     this.#clock.clearInterval(this.#queueCacheInterval);
     this.#clock.clearInterval(this.#wipInterval);
-    // The send-it worker is the timekeeper's to stop (manager.js:1117-1119).
+    // The send-it worker is the timekeeper's to stop (manager.js:1133-1135).
     const names = new Set(
       Array.from(this.workers.values(), (w) => w.name).filter(
         (name) => name !== Timekeeper.sendIt,
@@ -504,10 +517,10 @@ export class SqliteJobQueue
       Array.from(names, (name) => this.offWork(name, { wait: false })),
     );
     this.#localGroups.clear();
-    // index.js:310-313
+    // index.js:311-314
     await this.#timekeeper.stop();
     await this.#supervisor.stop();
-    // pg-boss's later stops do no I/O before failWip (index.js:308-320), so a
+    // pg-boss's later stops do no I/O before failWip (index.js:309-321), so a
     // claim still restoring its excess lands after failWip and is refused
     // (traced on 12.38.2: the restore settles after failWip starts).
     const shutdown = async () => {
@@ -536,7 +549,7 @@ export class SqliteJobQueue
       deadlineTimer = systemClock.setTimeout(resolve, timeout);
     });
     try {
-      // manager.js:1364-1370: waits until no worker is still stopping.
+      // manager.js:1420-1426: waits until no worker is still stopping.
       await Promise.race([
         this.#pendingCleanups.wait({ signal: undefined }),
         deadline,
@@ -575,11 +588,11 @@ export class SqliteJobQueue
     }
   }
 
-  // manager.js:1129-1159: fail each worker's batch, then abandon it. A failure
+  // manager.js:1145-1175: fail each worker's batch, then abandon it. A failure
   // is reported rather than thrown, so every worker is still reached.
   async #failWip(): Promise<void> {
     // Every worker first, so a batch landing on a later worker while an
-    // earlier one's fail runs is refused too (manager.js:1131-1135).
+    // earlier one's fail runs is refused too (manager.js:1147-1151).
     for (const worker of this.workers.values()) {
       worker.expireGrace();
     }
@@ -628,7 +641,7 @@ export class SqliteJobQueue
     }
   }
 
-  // manager.js:1033-1043: a refresh that fails keeps the cache it had, and only
+  // manager.js:1049-1059: a refresh that fails keeps the cache it had, and only
   // the interval's reports it.
   async #onCacheQueues(emit: boolean): Promise<void> {
     try {
@@ -646,7 +659,7 @@ export class SqliteJobQueue
     }
   }
 
-  // manager.js:1020-1029: while a worker holds jobs, at least 2000 ms apart.
+  // manager.js:1036-1045: while a worker holds jobs, at least 2000 ms apart.
   #onWipInterval(): void {
     const now = this.#clock.now();
     if (now - this.#wipTs < 2000) {
@@ -659,7 +672,7 @@ export class SqliteJobQueue
     }
   }
 
-  // manager.js:1343-1351: before and after each batch, strictly more than
+  // manager.js:1399-1407: before and after each batch, strictly more than
   // 2000 ms apart, except the send-it worker's.
   #emitWip(name: string): void {
     if (name === Timekeeper.sendIt) {
@@ -672,7 +685,7 @@ export class SqliteJobQueue
     }
   }
 
-  // manager.js:1352-1357: the send-it worker is internal.
+  // manager.js:1408-1413: the send-it worker is internal.
   #getWipData(): WipData[] {
     return Array.from(this.workers.values(), (worker) =>
       worker.toWipData(),
@@ -682,7 +695,7 @@ export class SqliteJobQueue
     );
   }
 
-  // manager.js:1371-1401: stops the queue's workers, or one work() call's
+  // manager.js:1427-1457: stops the queue's workers, or one work() call's
   // (by its id), and waits for their batches unless told not to.
   async offWork(
     name: string,
@@ -718,7 +731,7 @@ export class SqliteJobQueue
     }
   }
 
-  // manager.js:531-538: a queue's group tracking goes with its last worker
+  // manager.js:545-552: a queue's group tracking goes with its last worker
   // neither stopping nor stopped.
   #forgetLocalGroups(name: string): void {
     const live = this.workers
@@ -735,7 +748,7 @@ export class SqliteJobQueue
     name: string,
     options: Omit<Queue, 'name'> = {},
   ): Promise<void> {
-    // node_modules/pg-boss/dist/manager.js:2421-2429. `partition` is a pg-boss
+    // node_modules/pg-boss/dist/manager.js:2625-2633. `partition` is a pg-boss
     // storage layout (a table per queue) with no observable effect, so it is
     // accepted and has nothing to store here.
     Attorney.assertQueueName(name);
@@ -794,7 +807,7 @@ export class SqliteJobQueue
   ): Promise<void> {
     // pg-boss counts keys, not defined values, rejects the two settings fixed
     // at creation, then validates every key present
-    // (node_modules/pg-boss/dist/manager.js:2475-2483).
+    // (node_modules/pg-boss/dist/manager.js:2679-2687).
     Attorney.assertQueueName(name);
     assert(Object.keys(options).length > 0, 'no properties found to update');
     if ('policy' in options) {
@@ -805,7 +818,7 @@ export class SqliteJobQueue
     }
     Attorney.validateQueueArgs(options);
     // null clears the dead letter queue; only a name is checked
-    // (manager.js:2484-2490).
+    // (manager.js:2688-2694).
     const { deadLetter } = options;
     if (deadLetter !== null && deadLetter !== undefined) {
       Attorney.assertQueueName(deadLetter);
@@ -838,7 +851,7 @@ export class SqliteJobQueue
     this.#reloadQueueCache(name);
   }
 
-  // #reloadQueueCache (manager.js:1100-1110): the entry becomes the queue's row
+  // #reloadQueueCache (manager.js:1116-1126): the entry becomes the queue's row
   // as it stands, so a queue created again or updated picks up what changed.
   #reloadQueueCache(name: string): void {
     const queue = this.findQueue(name);
@@ -851,8 +864,8 @@ export class SqliteJobQueue
 
   // A dead letter queue still in use is refused before any job is deleted,
   // naming another queue that uses it, else another queue's job; the queue's
-  // own jobs go first (node_modules/pg-boss/dist/manager.js:2499-2522,
-  // plans.js:1185-1192). One transaction, so no reference lands between the
+  // own jobs go first (node_modules/pg-boss/dist/manager.js:2703-2726,
+  // plans.js:1202-1209). One transaction, so no reference lands between the
   // check and the delete.
   async deleteQueue(name: string): Promise<void> {
     Attorney.assertQueueName(name);
@@ -887,16 +900,16 @@ export class SqliteJobQueue
     this.#queueCache.evict(name);
   }
 
-  // node_modules/pg-boss/dist/manager.js:2611-2729 with persistQueueStats off,
+  // node_modules/pg-boss/dist/manager.js:2815-2933 with persistQueueStats off,
   // the only mode here: SqliteJobQueueOptions has no persistQueueStats, so the
-  // history options are neither read nor checked (2667-2687). pg-boss's
-  // vacuum backoff (2712-2714) has no counterpart (see Supervisor).
+  // history options are neither read nor checked (2871-2891). pg-boss's
+  // vacuum backoff (2916-2918) has no counterpart (see Supervisor).
   async getQueueStats(
     name: string,
     options: QueueStatsOptions = {},
   ): Promise<QueueStats[]> {
     Attorney.assertQueueName(name);
-    // manager.js:2613-2616 (12.36.0): each percent once, in the order first
+    // manager.js:2817-2820 (12.36.0): each percent once, in the order first
     // asked for.
     const requested: unknown = options.percentiles;
     assert(
@@ -922,7 +935,7 @@ export class SqliteJobQueue
             this.#intervals.monitorIntervalSeconds,
             this.#intervals.superviseIntervalSeconds,
           )) * 1000;
-    // A queue never counted has an infinite cache age (manager.js:2702).
+    // A queue never counted has an infinite cache age (manager.js:2906).
     const { capturedOn } = cached;
     if (
       capturedOn !== null &&
@@ -944,7 +957,7 @@ export class SqliteJobQueue
     );
   }
 
-  // toSnapshot (manager.js:2620-2666) of the cache, which holds gauges only:
+  // toSnapshot (manager.js:2824-2870) of the cache, which holds gauges only:
   // with persistQueueStats off pg-boss counts nothing more (its cache and
   // refresh paths, :2711-2728, read uncounted), so the deltas, the wait and
   // run histograms and readyOldestSeconds (12.36.0) stay null.
@@ -972,7 +985,7 @@ export class SqliteJobQueue
       capturedOn: cached.capturedOn,
     };
     // Read from the snapshot's histograms, which are null here
-    // (manager.js:2659-2665).
+    // (manager.js:2863-2869).
     if (percentiles) {
       snapshot.percentiles = percentiles.map((p) => ({
         p,
@@ -989,7 +1002,7 @@ export class SqliteJobQueue
     data?: TData | null,
     options?: SendOptions,
   ): Promise<string | null>;
-  // node_modules/pg-boss/dist/manager.js:1460-1463, 1513-1543.
+  // node_modules/pg-boss/dist/manager.js:1639-1642, 1717-1747.
   async send(...args: unknown[]): Promise<string | null> {
     return this.#send(args);
   }
@@ -1000,14 +1013,14 @@ export class SqliteJobQueue
     // and its outcome comes back over I/O.
     return this.#activity.query(() => {
       const queue = this.getQueueOrThrow(name);
-      // node_modules/pg-boss/dist/manager.js:1522-1524
+      // node_modules/pg-boss/dist/manager.js:1726-1728
       if (queue.policy === policies.key_strict_fifo && !options.singletonKey) {
         throw new Error(
           `${policies.key_strict_fifo} queues require a singletonKey`,
         );
       }
       // pg-boss sends the job as one JSON text that json_to_recordset reads
-      // (manager.js:1526, plans.js:2886), so the first escape no field can
+      // (manager.js:1730, plans.js:2979), so the first escape no field can
       // hold refuses the send, whichever field holds it.
       Jsonb.assertEscapes(JobRows.payload(queue.name, data, options));
       const now = this.#now();
@@ -1015,7 +1028,7 @@ export class SqliteJobQueue
         return this.#sendInTransaction(queue, data, options, now);
       } catch (error) {
         // The insert's division_by_zero, here a throttle slot of no width,
-        // is pg-boss's write error (12.37.0: manager.js:170-176, 1526).
+        // is pg-boss's write error (12.37.0: manager.js:171-177, 1730).
         if (error instanceof DatabaseError && error.code === '22012') {
           throw new Error(
             'one or more jobs could not be created. This usually means a job id was duplicated, collided with an existing job, or was rejected by a queue policy (short, singleton, stately, or exclusive).',
@@ -1041,7 +1054,7 @@ export class SqliteJobQueue
             startAfter: options.startAfter,
             singletonOn: Throttle.slot(options.singletonSeconds, 0, now),
           }) ??
-          // manager.js:1538-1541: a send a unique index refused retries once
+          // manager.js:1742-1745: a send a unique index refused retries once
           // into the next throttle slot, starting when that slot does.
           (options.singletonNextSlot
             ? this.#insertJob(queue.name, data, options, queue, now, {
@@ -1061,7 +1074,7 @@ export class SqliteJobQueue
         }
         // A notify queue's insert notifies when the stored job is due now,
         // whether or not this instance listens (node_modules/pg-boss/dist/
-        // plans.js:2919-2934, manager.js:1408-1410, 1525).
+        // plans.js:2991-3083, manager.js:1578-1580, 1729).
         if (queue.notify && stored.startAfter <= SqlValues.asIso(now)) {
           this.#notify(queue.name);
         }
@@ -1071,9 +1084,9 @@ export class SqliteJobQueue
     );
   }
 
-  // manager.js:1666-1751 with __singletonSlots, the cron pass's own insert:
+  // manager.js:1870-1955 with __singletonSlots, the cron pass's own insert:
   // each job names the throttle slot it is filed in, and one a unique index
-  // refuses is skipped (plans.js:2839, 2913). One statement for the batch.
+  // refuses is skipped (plans.js:2879, 2985). One statement for the batch.
   async #insertSlotted(name: string, jobs: SlottedJob[]): Promise<void> {
     await this.#activity.query(() => {
       const queue = this.getQueueOrThrow(name);
@@ -1091,7 +1104,7 @@ export class SqliteJobQueue
               { startAfter: undefined, singletonOn: job.singletonOn },
             ),
           );
-          // One pg_notify when an inserted job is due now (plans.js:2927-2931).
+          // One pg_notify when an inserted job is due now (plans.js:2999-3003).
           if (
             queue.notify &&
             stored.some(
@@ -1106,9 +1119,126 @@ export class SqliteJobQueue
     });
   }
 
+  // sendScheduledJobs and sendScheduled (12.39.0: plans.js:3006-3083,
+  // manager.js:1700-1716): each schedule matched on the definition it was
+  // read under, its cursor moved to `through` by a compare-and-set on the
+  // value read, and only then its occurrences after that value inserted, as
+  // send() inserts a job. One IMMEDIATE transaction holds the write lock from
+  // the read to the last insert, so no other writer runs between them, where
+  // Postgres needs the UPDATE to re-check the row once a racing writer
+  // commits; the compare on sent_on stays as pg-boss writes it. A schedule
+  // that matches nothing has no row in the report.
+  async #sendScheduled(sends: ScheduledSend[]): Promise<ScheduledReport[]> {
+    return this.#activity.query(() => {
+      const now = this.#now();
+      return transaction(
+        this.db,
+        () => {
+          const report: ScheduledReport[] = [];
+          const inserts: Array<{
+            queue: QueueRow;
+            data: unknown;
+            options: SendOptions;
+          }> = [];
+          for (const send of sends) {
+            const matched = this.db
+              .prepare(
+                `SELECT sent_on FROM pgboss_schedule
+                WHERE queue_name = ? AND key = ? AND cron = ?
+                  AND COALESCE(timezone, 'UTC') = ?
+                  AND data IS ? AND options IS ?`,
+              )
+              .get(
+                send.name,
+                send.key,
+                send.cron,
+                send.timezone,
+                send.data,
+                send.options,
+              );
+            if (matched === undefined) {
+              continue;
+            }
+            const prev = Row.readNullableString(
+              Row.parse(matched, 'schedule'),
+              'sent_on',
+            );
+            const prevTime = prev === null ? null : Date.parse(prev);
+            const claimed =
+              (prevTime === null || prevTime < send.through.getTime()) &&
+              this.db
+                .prepare(
+                  `UPDATE pgboss_schedule SET sent_on = ?
+                  WHERE queue_name = ? AND key = ? AND sent_on IS ?`,
+                )
+                .run(SqlValues.asIso(send.through), send.name, send.key, prev)
+                .changes > 0;
+            report.push({ name: send.name, key: send.key, prev, claimed });
+            if (!claimed) {
+              continue;
+            }
+            const queue = this.getQueueOrThrow(send.name);
+            for (const occurrence of send.occurrences) {
+              if (prevTime === null || occurrence.getTime() > prevTime) {
+                inserts.push({
+                  queue,
+                  data: send.job.data,
+                  options: { ...send.job.options, id: randomUUID() },
+                });
+              }
+            }
+          }
+          // plans.js:3043: in queue and singletonKey order, nulls last.
+          inserts.sort((a, b) => {
+            if (a.queue.name !== b.queue.name) {
+              return a.queue.name < b.queue.name ? -1 : 1;
+            }
+            const x = a.options.singletonKey ?? null;
+            const y = b.options.singletonKey ?? null;
+            if (x === y) {
+              return 0;
+            }
+            if (x === null || y === null) {
+              return x === null ? 1 : -1;
+            }
+            return x < y ? -1 : 1;
+          });
+          const notified = new Set<string>();
+          for (const { queue, data, options } of inserts) {
+            Jsonb.assertEscapes(JobRows.payload(queue.name, data, options));
+            const stored = this.#insertJob(
+              queue.name,
+              data,
+              options,
+              queue,
+              now,
+              {
+                startAfter: options.startAfter,
+                singletonOn: Throttle.slot(options.singletonSeconds, 0, now),
+              },
+            );
+            // plans.js:3047-3052
+            if (
+              queue.notify &&
+              stored !== null &&
+              stored.startAfter <= SqlValues.asIso(now)
+            ) {
+              notified.add(queue.name);
+            }
+          }
+          for (const name of notified) {
+            this.#notify(name);
+          }
+          return report;
+        },
+        { mode: 'immediate' },
+      );
+    });
+  }
+
   // One insert, returning the stored id and start_after; null when a unique
   // index (policy or throttle) refuses it, like pg-boss's ON CONFLICT DO
-  // NOTHING (plans.js:2913).
+  // NOTHING (plans.js:2985).
   #insertJob(
     name: string,
     data: unknown,
@@ -1158,7 +1288,7 @@ export class SqliteJobQueue
           options.id == null ? randomUUID() : Uuid.fromPayload(options.id),
           name,
           // pg-boss sends the job as JSON.stringify([job]), where a payload
-          // JSON cannot hold drops to null (manager.js:1526).
+          // JSON cannot hold drops to null (manager.js:1730).
           JSON.stringify(data) ?? 'null',
           queue.policy,
           options.priority ?? 0,
@@ -1181,8 +1311,8 @@ export class SqliteJobQueue
         );
     } catch (error) {
       // The queue is already checked, so a refused reference is the dead
-      // letter queue's (plans.js:1234-1237), which pg-boss names
-      // (manager.js:1086-1088).
+      // letter queue's (plans.js:1251-1254), which pg-boss names
+      // (manager.js:1102-1104).
       if (Database.isForeignKeyViolation(error)) {
         throw new Error(
           `Dead letter queue ${options.deadLetter ?? queue.dead_letter} does not exist`,
@@ -1210,7 +1340,7 @@ export class SqliteJobQueue
     ...args: [WorkHandler<unknown>] | [WorkOptions, WorkHandler<unknown>]
   ): Promise<string> {
     // The arguments are checked before the stopped state, as pg-boss does
-    // (node_modules/pg-boss/dist/manager.js:1160-1164).
+    // (node_modules/pg-boss/dist/manager.js:1176-1180).
     const { pollingInterval, notifyPollingInterval } = Attorney.checkWorkArgs(
       name,
       args,
@@ -1222,15 +1352,15 @@ export class SqliteJobQueue
     const options: WorkOptions = args.length === 1 ? {} : args[0] || {};
     // checkWorkArgs' copy, own properties only, which work() reads and every
     // worker of this call reports in wip (node_modules/pg-boss/dist/
-    // attorney.js:370, manager.js:1161-1165).
+    // attorney.js:371, manager.js:1177-1181).
     const workerOptions = {
       ...options,
       pollingInterval,
       notifyPollingInterval,
     };
 
-    // node_modules/pg-boss/dist/manager.js:1165-1279. Read once, as pg-boss
-    // destructures them here (1165).
+    // node_modules/pg-boss/dist/manager.js:1181-1333. Read once, as pg-boss
+    // destructures them here (1181).
     const {
       batchSize = 1,
       localConcurrency = 1,
@@ -1248,7 +1378,7 @@ export class SqliteJobQueue
       transactional = false,
     } = workerOptions;
     // pg-boss refuses a transactional worker unless its db adapter can open a
-    // transaction (manager.js:1169-1170); SQLite's connection never can, so it
+    // transaction (manager.js:1185-1186); SQLite's connection never can, so it
     // refuses every one, as pg-boss does on an adapter without
     // beginTransaction.
     assert(
@@ -1260,15 +1390,15 @@ export class SqliteJobQueue
     }
     // The queue's notify flag as the last fetch read it (false when that read
     // threw). pg-boss reads it from a queue cache its fetch fills
-    // (manager.js:1045-1059, 1184), so choosing the wait does no I/O that could
+    // (manager.js:1061-1075, 1206), so choosing the wait does no I/O that could
     // fail outside the loop's catch.
     let queueNotifies = false;
     // The wait before each fetch: none after a full batch while the cached
     // ready count exceeds burstWhenReadyExceeds or when burstWhenBatchFull
     // asks (ignored at batchSize 1, where every fetch is full), the notify
     // backstop while this process hears the queue's notifications, else the
-    // base poll (manager.js:1182-1203). The ready count is the monitor's, as the
-    // cache last read it, and 0 for a queue it holds no entry for (1186).
+    // base poll (manager.js:1204-1225). The ready count is the monitor's, as the
+    // cache last read it, and 0 for a queue it holds no entry for (1208).
     const resolveInterval = (lastFetchCount: number) => {
       const readyCount = this.#queueCache.peek(name)?.ready_count ?? 0;
       const burst =
@@ -1295,9 +1425,9 @@ export class SqliteJobQueue
         resolveInterval,
         // pg-boss's claim runs as it is issued, ahead of any statement
         // issued after it, and comes back over I/O, so work() resolves
-        // before its first fetch lands (manager.js:1895-1897).
+        // before its first fetch lands (manager.js:2099-2101).
         fetch: () => {
-          // Read as the fetch starts, before its I/O (manager.js:1205-1209).
+          // Read as the fetch starts, before its I/O (manager.js:1227-1231).
           const ignoreGroups =
             localGroupConcurrency == null
               ? undefined
@@ -1306,7 +1436,7 @@ export class SqliteJobQueue
             this.#warnDeprecatedFetchOptions({ priority, orderByCreatedOn });
             queueNotifies = false;
             // pg-boss checks the queue on every fetch, not when work()
-            // registers (node_modules/pg-boss/dist/manager.js:1044-1056).
+            // registers (node_modules/pg-boss/dist/manager.js:1060-1072).
             const queue = this.getQueueOrThrow(name);
             queueNotifies = queue.notify;
             return JobFetcher.claim(
@@ -1314,7 +1444,7 @@ export class SqliteJobQueue
               queue,
               {
                 batchSize,
-                // work() never forwards it (manager.js:1205-1222).
+                // work() never forwards it (manager.js:1227-1252).
                 ignoreStartAfter: false,
                 minPriority,
                 maxPriority,
@@ -1348,7 +1478,7 @@ export class SqliteJobQueue
           if (localGroupConcurrency == null) {
             await run(rows);
           } else {
-            // manager.js:1236-1263: the jobs over their group's local limit go
+            // manager.js:1266-1293: the jobs over their group's local limit go
             // back to created before the handler sees the rest.
             const { allowed, excess, grouped } = this.#localGroups.start(
               name,
@@ -1375,7 +1505,7 @@ export class SqliteJobQueue
               }
             } finally {
               // A handler a stop abandoned still runs, so its group slots
-              // stay taken until it settles (manager.js:1249-1262).
+              // stay taken until it settles (manager.js:1279-1292).
               const end = () => this.#localGroups.end(name, grouped);
               if (overrun.abandoned) {
                 overrun.abandoned.then(end, end);
@@ -1401,7 +1531,7 @@ export class SqliteJobQueue
     options: FetchOptions & { includeMetadata: true },
   ): Promise<JobWithMetadata<unknown>[]>;
   fetch(name: string, options?: FetchOptions): Promise<Job<unknown>[]>;
-  // node_modules/pg-boss/dist/manager.js:1877-1976, without options.db, which
+  // node_modules/pg-boss/dist/manager.js:2081-2180, without options.db, which
   // is a Postgres connection.
   async fetch(name: string, options: FetchOptions = {}) {
     Attorney.checkFetchArgs(name, options);
@@ -1439,7 +1569,7 @@ export class SqliteJobQueue
     options: FindJobsOptions = {},
   ): Promise<FoundJob<unknown>[]> {
     Attorney.assertQueueName(name);
-    // manager.js:2743-2770 (12.38.0): the page's limit and anchor are checked
+    // manager.js:2947-2974 (12.38.0): the page's limit and anchor are checked
     // before the queue is looked up.
     const limit = Attorney.assertListLimit('findJobs', options.limit);
     const after: unknown = options.after;
@@ -1464,7 +1594,7 @@ export class SqliteJobQueue
     }
 
     // A job deleted since the previous page would otherwise end the list
-    // early without saying so (manager.js:2762-2767, plans.js:4644-4649).
+    // early without saying so (manager.js:2966-2971, plans.js:4793-4798).
     if (typeof after === 'string') {
       const id = Uuid.canonical(after);
       const anchor = this.db
@@ -1512,7 +1642,7 @@ export class SqliteJobQueue
     );
   }
 
-  // node_modules/pg-boss/dist/manager.js:2020-2042
+  // node_modules/pg-boss/dist/manager.js:2224-2246
   async complete(
     name: string,
     id: string | string[] | JobAttempt | JobAttempt[],
@@ -1537,7 +1667,7 @@ export class SqliteJobQueue
     );
   }
 
-  // node_modules/pg-boss/dist/manager.js:2410-2418
+  // node_modules/pg-boss/dist/manager.js:2614-2622
   async touch(name: string, id: string | string[] | JobAttempt | JobAttempt[]) {
     Attorney.assertQueueName(name);
     const { ids, attempts } = Attorney.mapAttemptArg(id, 'touch');
@@ -1564,7 +1694,7 @@ export class SqliteJobQueue
     );
   }
 
-  // node_modules/pg-boss/dist/timekeeper.js:863-900. db comes out first, so
+  // node_modules/pg-boss/dist/timekeeper.js:1292-1333. db comes out first, so
   // the stored options never hold a connection (12.37.0, #946); this queue
   // takes no connection of the caller's (README).
   async schedule<TData extends object>(
@@ -1574,7 +1704,9 @@ export class SqliteJobQueue
     options: ScheduleOptions = {},
   ): Promise<void> {
     const { db, ...persisted } = options;
-    const { tz: requestedTz, key = '', missed, ...rest } = persisted;
+    // timekeeper.js:1296-1299 (12.39.0): missed and precision tell the pass
+    // what it owes and how finely to send, and are no send options.
+    const { tz: requestedTz, key = '', missed, precision, ...rest } = persisted;
     const tz = requestedTz || 'UTC';
     const kind = Recurrence.isRrule(cron)
       ? scheduleKinds.rrule
@@ -1587,8 +1719,18 @@ export class SqliteJobQueue
     Attorney.checkSendArgs([name, data, { ...rest }]);
     Attorney.assertKey(key);
     Recurrence.assertMissedPolicy(missed);
+    // timekeeper.js:1323-1325 (12.39.0): the cron statement inserts each
+    // occurrence once, where send() would try the next slot.
+    Recurrence.assertPrecision(precision);
+    assert(
+      !(precision === schedulePrecisions.second && rest.singletonNextSlot),
+      "singletonNextSlot is not supported with precision: 'second'",
+    );
     try {
-      // plans.js:1788-1800
+      // plans.js:1807-1827 (12.39.0): a new row, or a new expression, zone or
+      // precision, starts sent_on now, since nothing before it is owed under
+      // that definition; any other rewrite keeps its place. options->>'precision'
+      // is json_extract here.
       this.db
         .prepare(
           `INSERT INTO pgboss_schedule (
@@ -1600,15 +1742,24 @@ export class SqliteJobQueue
             data,
             options,
             created_on,
-            updated_on
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            updated_on,
+            sent_on
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(queue_name, key) DO UPDATE SET
             kind = excluded.kind,
             cron = excluded.cron,
             timezone = excluded.timezone,
             data = excluded.data,
             options = excluded.options,
-            updated_on = excluded.updated_on`,
+            updated_on = excluded.updated_on,
+            sent_on = CASE
+              WHEN pgboss_schedule.cron = excluded.cron
+                AND COALESCE(pgboss_schedule.timezone, 'UTC') = COALESCE(excluded.timezone, 'UTC')
+                AND COALESCE(json_extract(pgboss_schedule.options, '$.precision'), '${schedulePrecisions.minute}')
+                  = COALESCE(json_extract(excluded.options, '$.precision'), '${schedulePrecisions.minute}')
+              THEN pgboss_schedule.sent_on
+              ELSE excluded.sent_on
+            END`,
         )
         .run(
           name,
@@ -1620,9 +1771,10 @@ export class SqliteJobQueue
           Jsonb.parameter(options),
           SqlValues.asIso(now),
           SqlValues.asIso(now),
+          SqlValues.asIso(now),
         );
     } catch (error) {
-      // timekeeper.js:898-901 names the queue a refused reference points
+      // timekeeper.js:1331-1334 names the queue a refused reference points
       // at; Postgres names the column a null violates.
       if (Database.isForeignKeyViolation(error)) {
         throw new DatabaseError(`Queue ${name} not found`, '23503');
@@ -1638,7 +1790,7 @@ export class SqliteJobQueue
     }
   }
 
-  // timekeeper.js:904-907, plans.js:1801-1807
+  // timekeeper.js:1337-1340, plans.js:1830-1836
   async unschedule(name: string, key = ''): Promise<void> {
     this.db
       .prepare(
@@ -1679,7 +1831,7 @@ export class SqliteJobQueue
   }
 
   // COALESCE((o.data->>key)::type, column) (node_modules/pg-boss/dist/
-  // plans.js:1569-1571, 1575-1578, 1582): a null keeps the stored value, as
+  // plans.js:1588-1590, 1594-1597, 1601): a null keeps the stored value, as
   // an absent key does.
   private pushOption(
     entries: Array<[string, SQLInputValue]>,
@@ -1691,7 +1843,7 @@ export class SqliteJobQueue
     }
   }
 
-  // CASE WHEN (o.data -> key) IS NOT NULL (plans.js:1572-1574, 1579-1581,
+  // CASE WHEN (o.data -> key) IS NOT NULL (plans.js:1591-1593, 1598-1600,
   // 1173-1175): a present key is written, so null clears the column.
   private pushClearableOption(
     entries: Array<[string, SQLInputValue]>,
@@ -1712,7 +1864,7 @@ export class SqliteJobQueue
 
   // pg-boss looks a queue up through getQueueCache, whose cache miss validates
   // the name first and fills the cache, and codes a missing queue
-  // (node_modules/pg-boss/dist/manager.js:23, 1044-1056).
+  // (node_modules/pg-boss/dist/manager.js:23, 1060-1072).
   private getQueueOrThrow(name: unknown): QueueRow {
     Attorney.assertQueueName(name);
     const queue = this.findQueue(name);
@@ -1727,7 +1879,7 @@ export class SqliteJobQueue
 
   // A DeprecationWarning, not a queue event, once per option per instance and
   // only when the option is set to false (node_modules/pg-boss/dist/
-  // manager.js:160-166, 1869-1876).
+  // manager.js:161-167, 2073-2080).
   #warnDeprecatedFetchOptions(options: {
     priority?: boolean | undefined;
     orderByCreatedOn?: boolean | undefined;
@@ -1758,7 +1910,7 @@ export class SqliteJobQueue
   // PGlite's listener reports a connect once it subscribes, and pg-boss then
   // wakes every worker of a notify queue to fetch what it may have missed
   // (node_modules/pg-boss/dist/adapters/pglite.js:144-152,
-  // manager.js:1420-1428).
+  // manager.js:1590-1598).
   private wakeNotifyQueueWorkers(): void {
     for (const worker of this.workers.values()) {
       if (this.findQueue(worker.name)?.notify) {
@@ -1767,7 +1919,7 @@ export class SqliteJobQueue
     }
   }
 
-  // node_modules/pg-boss/dist/manager.js:582-758, without transactions, which
+  // node_modules/pg-boss/dist/manager.js:596-774, without transactions, which
   // slice 8 ports. The handler races a deadline of the batch's largest
   // expireInSeconds on a controller every job's signal follows; the race aborts
   // it when it settles. A job's signal also follows its own claim, which a
@@ -1784,7 +1936,7 @@ export class SqliteJobQueue
   ): Promise<void> {
     const ids = rows.map((row) => row.id);
     // work() settles with the jobs it claimed, fenced to their attempts
-    // (manager.js:710, 734).
+    // (manager.js:725, 750).
     const attempts = rows.map((row) => row.retry_count);
     const maxExpiration = rows.reduce(
       (max, row) => Math.max(max, row.expire_seconds),
@@ -1793,7 +1945,7 @@ export class SqliteJobQueue
     const batch = new AbortController();
     worker.abortController = batch;
     const claimed = rows.map((row) => ({ row, claim: new AbortController() }));
-    // manager.js:598-599: the batch's signal or the job's own claim.
+    // manager.js:612-613: the batch's signal or the job's own claim.
     const jobs = claimed.map(({ row, claim }) =>
       JobRows.toJob(
         row,
@@ -1807,13 +1959,13 @@ export class SqliteJobQueue
       heartbeatRefreshSeconds,
     );
     // The handler's own promise: the timeout stops the wait for it, not the
-    // handler (manager.js:651, 683-687).
+    // handler (manager.js:665, 698-702).
     let handling: Promise<unknown> | null = null;
     let handlerSettled = false;
     try {
       try {
         // A fetch can land after stop() has spent its grace for running
-        // handlers (manager.js:679-681).
+        // handlers (manager.js:694-696).
         if (worker.graceExpired) {
           throw new Error('pg-boss shut down before the handler started');
         }
@@ -1836,7 +1988,7 @@ export class SqliteJobQueue
         if (perJobResults) {
           this.#settlePerJob(name, rows, result);
         } else {
-          // The result is stored only for a batch of one (manager.js:710).
+          // The result is stored only for a batch of one (manager.js:725).
           this.#settle(name, () =>
             JobSettler.complete(
               this.db,
@@ -1861,7 +2013,7 @@ export class SqliteJobQueue
       }
     } finally {
       // Still running after its batch was failed: the worker waits for it,
-      // even when that fail threw (manager.js:745-757).
+      // even when that fail threw (manager.js:761-773).
       if (handling !== null && !handlerSettled) {
         await this.#awaitHandlerOverrun(
           name,
@@ -1877,7 +2029,7 @@ export class SqliteJobQueue
     }
   }
 
-  // manager.js:776-806 (12.38.0): a handler that ignores job.signal is still
+  // manager.js:792-822 (12.38.0): a handler that ignores job.signal is still
   // running after its batch was failed. Holding the worker until it returns
   // keeps localConcurrency and localGroupConcurrency a bound on the handlers
   // actually running, and keeps the worker from fetching a retry of the same
@@ -1919,11 +2071,11 @@ export class SqliteJobQueue
     }
   }
 
-  // manager.js:414-471: the handler's results settle each job of the batch.
+  // manager.js:426-485: the handler's results settle each job of the batch.
   // Entries without an id and status, naming no job of the batch by its exact
   // id, or carrying another status are ignored, the last valid entry per job
   // wins, and a job without one fails. The completed, failed and dead-lettered jobs then
-  // settle in that order, each group on its own (452-462), so a group that
+  // settle in that order, each group on its own (466-476), so a group that
   // throws leaves the groups before it settled.
   #settlePerJob(name: string, rows: JobRow[], result: unknown): void {
     if (!Array.isArray(result)) {
@@ -1980,7 +2132,7 @@ export class SqliteJobQueue
         });
       }
     }
-    // An empty group runs no statement (manager.js:454-462).
+    // An empty group runs no statement (manager.js:468-476).
     if (completed.length > 0) {
       this.#settle(name, () =>
         JobSettler.completeWithOutputs(this.db, name, completed, this.#now()),
@@ -2005,7 +2157,7 @@ export class SqliteJobQueue
   }
 
   // A worker's settle looks its queue up first, as pg-boss's complete(),
-  // fail(), restore() and per-job settles do (manager.js:477, 496, 2026,
+  // fail(), restore() and per-job settles do (manager.js:491, 510, 2230,
   // 2067, 2395), so a queue deleted under a running batch makes the settle
   // throw.
   #settle<T>(name: string, write: () => T): T {
@@ -2013,7 +2165,7 @@ export class SqliteJobQueue
     return write();
   }
 
-  // manager.js:589-634: every heartbeatRefreshSeconds, or half the batch's
+  // manager.js:603-648: every heartbeatRefreshSeconds, or half the batch's
   // shortest heartbeatSeconds, touch the attempts still held; a job the touch
   // no longer finds active under this claim loses its own signal. Without a
   // heartbeat nothing is touched or aborted.

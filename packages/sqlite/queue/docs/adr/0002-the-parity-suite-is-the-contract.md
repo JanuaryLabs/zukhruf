@@ -2,7 +2,7 @@
 
 The package promises zero divergence from pg-boss ([ADR 0001](./0001-pg-boss-api-on-sqlite.md)). A test that states the expected result by hand proves only what its author thinks pg-boss does. pg-boss has many behaviors that its documentation does not state, for example the order of a batch, the fields of an `error` event, and the escapes that Postgres refuses in JSON.
 
-Thus the oracle is pg-boss itself. Each parity test runs one scenario two times: on real pg-boss 12.38.2 over an in-memory PGlite, and on this package. Both runs use a pg-boss `TestClock` at the same start time. `Parity.assertSame` deep-compares what the two runs observed, and the test passes only when they are equal. pg-boss runs its own test suite on PGlite too, so PGlite gives the Postgres behavior that pg-boss expects.
+Thus the oracle is pg-boss itself. Each parity test runs one scenario two times: on real pg-boss 12.39.0 over an in-memory PGlite, and on this package. Both runs use a pg-boss `TestClock` at the same start time. `Parity.assertSame` deep-compares what the two runs observed, and the test passes only when they are equal. pg-boss runs its own test suite on PGlite too, so PGlite gives the Postgres behavior that pg-boss expects.
 
 The suite ships with the package, in `src/parity`, and runs in `sqlite-queue:test`. PGlite is a dev dependency. The suite is not a step of the port that goes away after the port: each change of the package, and each new version of pg-boss, runs it again.
 

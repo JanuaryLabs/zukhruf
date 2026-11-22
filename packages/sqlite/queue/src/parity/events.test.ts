@@ -73,7 +73,7 @@ describe('wip events', () => {
     });
 
     // The 2s interval emits once 2000 ms have passed since the last wip and
-    // a worker holds jobs (node_modules/pg-boss/dist/manager.js:1019-1029).
+    // a worker holds jobs (node_modules/pg-boss/dist/manager.js:1035-1045).
     const holder = worker({ count: 1 });
     assert.deepStrictEqual(observed, {
       batches: [[id(1)]],
@@ -98,8 +98,8 @@ describe('wip events', () => {
       return { idle, wip: [...wip] };
     });
 
-    // An empty fetch emits nothing (manager.js:1224-1228), and an interval
-    // with no jobs held keeps the last wip time (1025-1028), so the claim at
+    // An empty fetch emits nothing (manager.js:1254-1258), and an interval
+    // with no jobs held keeps the last wip time (1041-1044), so the claim at
     // 8000 is more than 2000 ms past it and emits before the batch runs.
     assert.deepStrictEqual(observed, {
       idle: [],
@@ -154,8 +154,8 @@ describe('wip events', () => {
         },
       );
 
-      // Before a batch, strictly more than 2000 ms (manager.js:1343-1350);
-      // the interval, 2000 ms or more (1019-1024).
+      // Before a batch, strictly more than 2000 ms (manager.js:1399-1406);
+      // the interval, 2000 ms or more (1035-1040).
       assert.deepStrictEqual(observed, at);
     });
   }
@@ -177,7 +177,7 @@ describe('wip events', () => {
       }
     });
 
-    // The emit after a batch (manager.js:1265) comes before the worker clears
+    // The emit after a batch (manager.js:1295) comes before the worker clears
     // its jobs and stamps the batch's end (worker.js:79-81).
     const holder = worker({
       options: {
@@ -213,7 +213,7 @@ describe('wip events', () => {
       }
     });
 
-    // wipTs is read when the manager is built (manager.js:240).
+    // wipTs is read when the manager is built (manager.js:248).
     const holder = worker({
       count: 1,
       createdOn: 3000,
@@ -251,7 +251,7 @@ describe('wip events', () => {
     });
 
     // getWipData lists the workers of every queue but the stopped ones
-    // (manager.js:1352-1357); the workers of one work() share its id.
+    // (manager.js:1408-1413); the workers of one work() share its id.
     const concurrent = {
       localConcurrency: 2,
       pollingInterval: 2000,
@@ -356,7 +356,7 @@ describe('wip events', () => {
       },
     );
 
-    // stop() clears the interval (manager.js:1110-1115), so nothing goes out
+    // stop() clears the interval (manager.js:1126-1131), so nothing goes out
     // at 6000 while the batch is still held; the batch's own emit still runs,
     // from a worker now stopping (worker.js:113-129).
     const holder = worker({
@@ -415,7 +415,7 @@ describe('stopped events', () => {
     );
 
     // `stopped` is the last step of the shutdown (node_modules/pg-boss/dist/
-    // index.js:318-347), after failWip fails and aborts each batch.
+    // index.js:319-348), after failWip fails and aborts each batch.
     assert.deepStrictEqual(observed, {
       atCall: 0,
       atAbort: 0,
@@ -437,7 +437,7 @@ describe('stopped events', () => {
     });
 
     // A stop before start, a repeated one and a closing one after
-    // close: false all find the instance stopped (index.js:277-288).
+    // close: false all find the instance stopped (index.js:278-289).
     assert.deepStrictEqual(observed, { beforeStart: [], stopped: [0] });
   });
 
@@ -465,7 +465,7 @@ describe('stopped events', () => {
     );
 
     // A graceful stop waits for the workers' cleanups before the shutdown
-    // (index.js:349-361).
+    // (index.js:350-362).
     assert.deepStrictEqual(observed, {
       whileHeld: [],
       states: ['completed'],
@@ -518,7 +518,7 @@ describe('stopped events', () => {
     }
 
     // start() clears the instance's stopped flag before it runs
-    // (index.js:146-153), so a start that threw leaves a stop to do.
+    // (index.js:147-154), so a start that threw leaves a stop to do.
     assert.deepStrictEqual(sqlite, pgBoss);
     assert.deepStrictEqual(pgBoss, {
       started: 'Error: attach refused',
@@ -550,7 +550,7 @@ describe('stopped events', () => {
       };
     });
 
-    // index.js:132-160, 266-271: each call waits for the other in flight.
+    // index.js:133-161, 267-272: each call waits for the other in flight.
     assert.deepStrictEqual(observed, {
       sameStart: true,
       afterRestart: { stopped: 1, work: 'resolved' },

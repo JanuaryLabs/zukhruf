@@ -4,12 +4,12 @@ The schema is a declaration with `rows: 'keep'` ([ADR 0004](./0004-the-schema-is
 
 pg-boss does not do this. Its `start()` migrates only when its `schemaVersion` is above the version that its `version` table holds (`node_modules/pg-boss/dist/contractor.js:83-95`). With a newer installed schema the test is false, and `start()` goes on with no change (`contractor.js:87`). An older pg-boss runs on a newer schema unchecked. That is a divergence here ([ADR 0002](./0002-the-parity-suite-is-the-contract.md)).
 
-Thus `pgboss_version` has a `version` column, as the `version` table of pg-boss has (`plans.js:300-310`). It holds the version of the release of this package that last applied the schema. `start()` (`src/contractor.ts`) first reads the version and the drift of the declaration with no lock, as pg-boss reads `isInstalled()` and `schemaVersion()` with no lock (`contractor.js:83-95`). A reader of a WAL file does not wait for a writer. Thus a file that needs no change starts next to the write of another program, as a pg-boss schema does (backlog #4394):
+Thus `pgboss_version` has a `version` column, as the `version` table of pg-boss has (`plans.js:311-321`). It holds the version of the release of this package that last applied the schema. `start()` (`src/contractor.ts`) first reads the version and the drift of the declaration with no lock, as pg-boss reads `isInstalled()` and `schemaVersion()` with no lock (`contractor.js:83-95`). A reader of a WAL file does not wait for a writer. Thus a file that needs no change starts next to the write of another program, as a pg-boss schema does (backlog #4394):
 
 - The file records a later release: `start()` changes nothing and goes on.
 - The file records this release and fits the declaration: `start()` changes nothing and goes on.
 
-Any other file needs a change. pg-boss takes its lock only to create or migrate (`plans.js:143`, `:166`). `start()` then reads the version again and applies the declaration in one `IMMEDIATE` transaction, so two programs that start together cannot both act on the version that they read:
+Any other file needs a change. pg-boss takes its lock only to create or migrate (`plans.js:154`, `:166`). `start()` then reads the version again and applies the declaration in one `IMMEDIATE` transaction, so two programs that start together cannot both act on the version that they read:
 
 - The file now records a later release: `start()` changes nothing and goes on.
 - The file records this release, an earlier one, or none (a new file, or a file of a release before this column): `start()` applies the declaration, as before, and records this release.

@@ -82,7 +82,7 @@ function holding(clock: TestClock) {
 
 // An expireInSeconds 1 job batched with a 900 s one: the batch's deadline is
 // the larger expiry, so only the supervisor can expire the short job
-// (node_modules/pg-boss/dist/manager.js:589-604).
+// (node_modules/pg-boss/dist/manager.js:603-618).
 async function expiry(
   { queue, clock, errors }: ParityRun,
   createOptions: {
@@ -158,8 +158,8 @@ describe('supervisor', () => {
     );
 
     // failJobsByTimeout: active AND started_on + expire_seconds < now
-    // (plans.js:2957-2961, 2968-2971), through failJobsBody's retry branch unfenced
-    // (3044-3059). The handler keeps running; its completion is fenced out
+    // (plans.js:3106-3110, 3117-3120), through failJobsBody's retry branch unfenced
+    // (3193-3208). The handler keeps running; its completion is fenced out
     // and its signals abort only when the batch settles.
     const retried = {
       ...active,
@@ -168,7 +168,7 @@ describe('supervisor', () => {
       output: timedOut,
       heartbeatOn: null,
       // The retention window moves with the start (12.38.2, #994:
-      // plans.js:3119).
+      // plans.js:3268).
       keepUntil: 62000 + retention,
     };
     const abort = (n: number) => ({
@@ -198,7 +198,7 @@ describe('supervisor', () => {
     );
 
     // failJobsBody's failed branch keeps start_after and dead-letters the
-    // job with its output as source_output (plans.js:3047-3053, 3235-3264).
+    // job with its output as source_output (plans.js:3196-3202, 3384-3413).
     const failed = {
       ...active,
       state: 'failed',
@@ -207,7 +207,7 @@ describe('supervisor', () => {
       heartbeatOn: null,
     };
     assert.deepStrictEqual(observed.timeline.at(-1), { at: 2000, job: failed });
-    // The handler's completion at 3000 is fenced out (plans.js:2588-2591).
+    // The handler's completion at 3000 is fenced out (plans.js:2642-2645).
     assert.deepStrictEqual(observed.settled[0], failed);
     assert.deepStrictEqual(observed.deadLetters, [
       {
@@ -220,7 +220,7 @@ describe('supervisor', () => {
     ]);
   });
 
-  // pg-boss reads the key's presence (attorney.js:413); an explicit
+  // pg-boss reads the key's presence (attorney.js:416); an explicit
   // undefined is outside its types under exactOptionalPropertyTypes.
   const supervisedUndefined: RunOptions = { ...supervised };
   Reflect.set(supervisedUndefined, 'supervise', undefined);
@@ -290,8 +290,8 @@ describe('supervisor', () => {
     );
 
     // failJobsByHeartbeat: heartbeat_on + heartbeat_seconds < now
-    // (plans.js:2962-2967, 2972-2975); the worker's next touch finds the claim gone
-    // (manager.js:606-635).
+    // (plans.js:3111-3116, 3121-3124); the worker's next touch finds the claim gone
+    // (manager.js:620-649).
     const retried = {
       ...active,
       state: 'retry',
@@ -402,7 +402,7 @@ describe('supervisor', () => {
         await queue.send('held', null, { id: id(5) });
         await queue.cancel('jobs', id(2));
         // A job that never ran fails into retry while attempts remain, else
-        // for good (plans.js:3047-3053), keeping its keep_until.
+        // for good (plans.js:3196-3202), keeping its keep_until.
         await queue.fail('jobs', id(3));
         await queue.fail('idle', id(12));
         await queue.work('jobs', async () => 'ok');
@@ -435,7 +435,7 @@ describe('supervisor', () => {
       supervised,
     );
 
-    // deletion (plans.js:3690-3697): completed_on + deletion_seconds < now
+    // deletion (plans.js:3839-3846): completed_on + deletion_seconds < now
     // when deletion_seconds > 0, and keep_until < now for created and retry
     // jobs; both strict, active jobs never.
     const jobs = [
@@ -504,7 +504,7 @@ describe('supervisor', () => {
   });
 
   // queuedCount > (the queue's warningQueueSize || the instance's || 10000)
-  // (boss.js:140, 388-394); data is the stats row (plans.js:4472-4476).
+  // (boss.js:140, 388-394); data is the stats row (plans.js:4621-4625).
   for (const { label, options, warned } of [
     {
       label: "the queue's or the instance's",
@@ -527,7 +527,7 @@ describe('supervisor', () => {
           await queue.createQueue('zeta', { warningQueueSize: 1 });
           await queue.createQueue('alpha');
           await queue.createQueue('quiet');
-          // A null keeps the stored size (plans.js:1578); the contract types
+          // A null keeps the stored size (plans.js:1597); the contract types
           // no null.
           await queue.updateQueue(
             'zeta',
@@ -545,7 +545,7 @@ describe('supervisor', () => {
           await clock.tick(2000);
           // A pass emits in its stats statement's RETURNING order, which
           // has no ORDER BY, so pg-boss leaves it to the planner
-          // (plans.js:4462-4481).
+          // (plans.js:4611-4630).
           return {
             warnings: warnings.toSorted(
               (a, b) => a.at - b.at || a.message.localeCompare(b.message),
@@ -577,7 +577,7 @@ describe('supervisor', () => {
   // Worker A holds job 1; worker B, polling every 500 ms, faces jobs 2 and 3.
   // A singleton or stately fetch skips a key whose job is active, read live,
   // so B's first poll claims the free key whatever the monitor last counted
-  // or the cache holds (12.37.1, #957: plans.js:2466-2478; manager.js:1884).
+  // or the cache holds (12.37.1, #957: plans.js:2520-2532; manager.js:2088).
   const heldKeyCases: {
     label: string;
     options: RunOptions;
@@ -734,9 +734,9 @@ describe('supervisor', () => {
     });
   }
 
-  // Each start loads every queue into the cache (manager.js:1041), and a
+  // Each start loads every queue into the cache (manager.js:1057), and a
   // full fetch bursts while the cached readyCount exceeds the threshold
-  // (manager.js:1185-1200). The pass at 1000 counts jobs 2 to 5 ready, so the
+  // (manager.js:1207-1222). The pass at 1000 counts jobs 2 to 5 ready, so the
   // restart at 1000 bursts on that count, 59 s before the cache refreshes.
   it('loads the queue cache at every start', async () => {
     const observed = await Parity.assertSame(
@@ -814,10 +814,10 @@ describe('supervisor', () => {
     });
   });
 
-  // stop clears the cache interval (manager.js:1112), so after a restart at
+  // stop clears the cache interval (manager.js:1128), so after a restart at
   // 1500 the cache refreshes at 2500 and 3500 only, each ahead of the pass
   // due with it (armed first at start). The ready count the pass at 2500
-  // writes makes the full fetch at 3500 burst (manager.js:1185-1200).
+  // writes makes the full fetch at 3500 burst (manager.js:1207-1222).
   it('refreshes the cache on the restarted interval only', async () => {
     const observed = await Parity.assertSame(
       async ({ queue, clock, errors }) => {
@@ -860,7 +860,7 @@ describe('supervisor', () => {
   });
 
   // A full fetch bursts while the cached readyCount exceeds the threshold
-  // (manager.js:1185-1201). The pass at 1000 counts 3 ready; the cache reads
+  // (manager.js:1207-1223). The pass at 1000 counts 3 ready; the cache reads
   // that at 2000, after the poll that claims job 2, and before the next.
   for (const { label, options, at } of [
     {
@@ -949,7 +949,7 @@ describe('supervisor', () => {
 
     // The poll at 4000 reads the pass at 2000 through the cache at 3000:
     // six queued, three deferred, and job 8, due at 2000 exactly, ready
-    // (start_after > now, plans.js:4225-4226).
+    // (start_after > now, plans.js:4374-4375).
     assert.deepStrictEqual(observed, {
       claims: {
         a: [0, 2000, 4000, 4000, 4000],
@@ -959,7 +959,7 @@ describe('supervisor', () => {
     });
   });
 
-  // pg-boss's defaults (attorney.js:663-672): a pass, a monitor claim and a
+  // pg-boss's defaults (attorney.js:664-673): a pass, a monitor claim and a
   // cache refresh every 60 s.
   it('supervises on the default intervals', async () => {
     const observed = await Parity.assertSame(
@@ -1027,7 +1027,7 @@ describe('supervisor', () => {
   });
 
   // A failed pass emits its error as is (boss.js:212-214) and a failed cache
-  // refresh a spread copy (manager.js:1040-1042); the claim timer re-arms
+  // refresh a spread copy (manager.js:1056-1058); the claim timer re-arms
   // after the failed pass (claimTimer.js:110-118). Renaming singletons_active
   // faults both on both backends (pg-boss's getQueues and SQLite's stats
   // write read it) while no lookup runs.
@@ -1122,7 +1122,7 @@ describe('supervisor', () => {
       }
     };
     // Neither is started: pg-boss validates in its constructor
-    // (index.js:81, attorney.js:407-428), before it touches its database.
+    // (index.js:82, attorney.js:410-431), before it touches its database.
     const pglite = new PGlite();
     const database = open(':memory:');
     let pgBoss;

@@ -1,10 +1,10 @@
 import type { QueueRow } from './queue-rows.ts';
 
-// pg-boss's queue cache (node_modules/pg-boss/dist/manager.js:1033-1059):
+// pg-boss's queue cache (node_modules/pg-boss/dist/manager.js:1049-1075):
 // replaced whole at start and every queueCacheIntervalSeconds, filled by a
 // lookup that misses, replaced with its row as it stands by createQueue and
 // updateQueue (#reloadQueueCache: 2432, 2493), and evicted by deleteQueue
-// (2538). Lookups here still read the live row; what workers take from the
+// (2742). Lookups here still read the live row; what workers take from the
 // cache are the monitor's counts as of the entry's last read.
 export class QueueCache {
   #queues = new Map<string, QueueRow>();

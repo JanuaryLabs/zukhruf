@@ -268,7 +268,7 @@ describe('PoolWorkers', { concurrency: true }, () => {
         revision: 1,
         policy: 'standard',
         retryLimit: 0,
-        expireInSeconds: 25 * 60 * 60,
+        expireInSeconds: 14 * 24 * 60 * 60 + 1,
       }),
       store: join(folder.path, 'store.sqlite'),
       clock: globalThis,
@@ -280,7 +280,7 @@ describe('PoolWorkers', { concurrency: true }, () => {
 
     await assert.rejects(
       host[Symbol.asyncDispose](),
-      /expiration cannot exceed 24 hours/,
+      /expiration cannot exceed 14 days/,
     );
   });
 
@@ -3511,7 +3511,7 @@ describe(
           revision: 1,
           policy: 'standard',
           retryLimit: 0,
-          expireInSeconds: 25 * 60 * 60,
+          expireInSeconds: 14 * 24 * 60 * 60 + 1,
         }),
         store: join(folder.path, 'store.sqlite'),
         clock: globalThis,
@@ -3519,7 +3519,7 @@ describe(
 
       await assert.rejects(
         pool.start('never'),
-        /expiration cannot exceed 24 hours/,
+        /expiration cannot exceed 14 days/,
       );
     });
 

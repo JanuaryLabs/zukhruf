@@ -9,7 +9,7 @@ import { id } from '../testing/job-id.ts';
 import { Parity } from './parity.ts';
 
 // One poll's worth of time: both backends poll every 2s by default
-// (node_modules/pg-boss/dist/attorney.js:640-642).
+// (node_modules/pg-boss/dist/attorney.js:641-643).
 async function poll(clock: TestClock) {
   await clock.tick(2000);
 }
@@ -62,7 +62,7 @@ async function jobStates(queue: JobQueue) {
     .sort((a, b) => a.id.localeCompare(b.id));
 }
 
-// node_modules/pg-boss/dist/manager.js:1169-1170, raised for the harness's
+// node_modules/pg-boss/dist/manager.js:1185-1186, raised for the harness's
 // fromPglite adapter, which implements no beginTransaction
 // (adapters/pglite.js:16-155), and by SQLite for every transactional worker.
 const refused = {
@@ -143,11 +143,11 @@ describe('transactional workers', () => {
       };
     });
 
-    // work() runs checkWorkArgs (attorney.js:357-398), then the stopped check
-    // (manager.js:1162-1164), then the capability assert (919-920), before it
-    // stores a local group limit or spawns a worker (1178-1278). The bound is
-    // only validated (attorney.js:388-398). Without transactional the handler
-    // gets the jobs alone (manager.js:683-685).
+    // work() runs checkWorkArgs (attorney.js:358-401), then the stopped check
+    // (manager.js:1178-1180), then the capability assert (919-920), before it
+    // stores a local group limit or spawns a worker (1200-1332). The bound is
+    // only validated (attorney.js:390-401). Without transactional the handler
+    // gets the jobs alone (manager.js:698-700).
     const checkWorkArgs = (message: string) => ({ ...refused, message });
     assert.deepStrictEqual(observed, {
       beforeStart: refused,
@@ -156,7 +156,7 @@ describe('transactional workers', () => {
         timeout: refused,
         noTimeout: refused,
         negativeTimeout: checkWorkArgs(
-          'transactionTimeoutSeconds must be an integer >= 0',
+          'transactionTimeoutSeconds must be an integer from 0 to 2147483',
         ),
         pollingTooFast: checkWorkArgs(
           'configuration assert: pollingIntervalSeconds must be at least every 500ms',
@@ -214,9 +214,9 @@ describe('transactional workers', () => {
     });
 
     // pg-boss stores a queue's local group limit only after the capability
-    // assert passes (manager.js:1169-1179, 520-526), so g1 keeps its limit of
+    // assert passes (manager.js:1185-1201, 534-540), so g1 keeps its limit of
     // 2: both workers' polls claim one g1 job each and neither is restored
-    // (manager.js:1236-1250).
+    // (manager.js:1266-1280).
     assert.deepStrictEqual(observed, {
       refusal: refused,
       batches: [[id(1)], [id(2)]],
@@ -248,9 +248,9 @@ describe('transactional workers', () => {
       return { registered, batches, states: await jobStates(queue) };
     });
 
-    // checkWorkArgs spreads the options into a copy (attorney.js:370), which
+    // checkWorkArgs spreads the options into a copy (attorney.js:371), which
     // keeps own properties only, and work() reads that copy
-    // (manager.js:1161-1165): the worker is neither transactional nor batched.
+    // (manager.js:1177-1181): the worker is neither transactional nor batched.
     assert.deepStrictEqual(observed, {
       registered: 'resolved',
       batches: [[id(1)]],

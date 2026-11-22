@@ -68,8 +68,8 @@ describe('workers', () => {
       return results;
     });
 
-    // node_modules/pg-boss/dist/attorney.js:306-398, 638-660, run before
-    // work() checks whether the instance is stopped (manager.js:1160-1164).
+    // node_modules/pg-boss/dist/attorney.js:307-401, 639-661, run before
+    // work() checks whether the instance is stopped (manager.js:1176-1180).
     const rejects = (message: string) => `AssertionError: ${message}`;
     assert.deepStrictEqual(observed, {
       nullOptions: 'resolved',
@@ -171,7 +171,7 @@ describe('workers', () => {
 
     // A worker fetches when it registers, then waits out its polling
     // interval, 2s unless set (node_modules/pg-boss/dist/worker.js:58-101,
-    // attorney.js:640-642).
+    // attorney.js:641-643).
     assert.deepStrictEqual(observed, {
       ranWhenWorkResolved: 0,
       registered: { standard: [id(1)], fast: [id(11)] },
@@ -235,7 +235,7 @@ describe('workers', () => {
 
     // PGlite runs statements in the order they arrive, so the claim lands
     // before findJobs reads even though its result is still on its way back
-    // (node_modules/pg-boss/dist/manager.js:1895-1897).
+    // (node_modules/pg-boss/dist/manager.js:2099-2101).
     assert.deepStrictEqual(observed, ['active']);
   });
 
@@ -420,7 +420,7 @@ describe('workers', () => {
       },
     );
 
-    // manager.js:776-806, 1213-1222 (12.38.0)
+    // manager.js:792-822, 1237-1252 (12.38.0)
     assert.deepStrictEqual(observed, {
       runs: [0],
       state: 'retry',
@@ -502,7 +502,7 @@ describe('workers', () => {
       }
     });
 
-    // manager.js:1249-1262 (12.38.0): g's count drops when the abandoned
+    // manager.js:1279-1292 (12.38.0): g's count drops when the abandoned
     // handler settles, not when the stop ended the wait for it.
     assert.deepStrictEqual(observed, {
       whileRunning: [],
@@ -527,7 +527,7 @@ describe('workers', () => {
       return { finished };
     });
 
-    // node_modules/pg-boss/dist/index.js:349-360.
+    // node_modules/pg-boss/dist/index.js:350-361.
     assert.deepStrictEqual(observed, { finished: true });
   });
 
@@ -544,7 +544,7 @@ describe('workers', () => {
       return ran;
     });
 
-    // attorney.js:359-362 reads a single argument as the handler.
+    // attorney.js:360-363 reads a single argument as the handler.
     assert.deepStrictEqual(observed, [{ n: 1 }]);
   });
 
@@ -577,8 +577,8 @@ describe('workers', () => {
     });
 
     // A notify queue's send wakes its workers at once when a stored job is due
-    // now (node_modules/pg-boss/dist/plans.js:2919-2934, manager.js:1413-1419);
-    // other jobs wait for the poll, 30s on a notify queue (attorney.js:653).
+    // now (node_modules/pg-boss/dist/plans.js:2991-3083, manager.js:1583-1589);
+    // other jobs wait for the poll, 30s on a notify queue (attorney.js:654).
     assert.deepStrictEqual(observed, {
       atSend: { plain: [], notified: [id(2)], deferred: [] },
       afterAPoll: { plain: [id(1)], notified: [id(2)], deferred: [] },
@@ -661,7 +661,7 @@ describe('workers', () => {
       return ran;
     });
 
-    // No NOTIFY for a job not due now (plans.js:2930), so the worker keeps
+    // No NOTIFY for a job not due now (plans.js:3002), so the worker keeps
     // its wait and finds the job when that wait ends; a wake would have
     // restarted the 30s wait.
     assert.deepStrictEqual(observed, [id(1)]);
@@ -702,7 +702,7 @@ describe('workers', () => {
     });
 
     // notifyPollingIntervalSeconds defaults to max(30s, the base poll)
-    // (node_modules/pg-boss/dist/attorney.js:643-655).
+    // (node_modules/pg-boss/dist/attorney.js:644-656).
     assert.deepStrictEqual(observed, {
       beforeTen: { backstop: [], custom: [] },
       atTen: { backstop: [], custom: [id(2)] },
@@ -732,7 +732,7 @@ describe('workers', () => {
     });
 
     // updateQueue writes notify like every other queue option
-    // (plans.js:1582); a caller that sets up its queues on each start turns
+    // (plans.js:1601); a caller that sets up its queues on each start turns
     // it on this way, when createQueue finds the queue already there.
     assert.deepStrictEqual(observed, { on: [id(1)], off: [] });
   });
@@ -758,7 +758,7 @@ describe('workers', () => {
       return { afterSend, afterFirstPoll, afterSecondPoll: attempts };
     });
 
-    // Only inserts and updates NOTIFY (plans.js:2930, 3865); a failed job's
+    // Only inserts and updates NOTIFY (plans.js:3002, 4014); a failed job's
     // retry is found by the next poll.
     assert.deepStrictEqual(observed, {
       afterSend: 0,
@@ -791,8 +791,8 @@ describe('workers', () => {
     });
 
     // JOB_COLUMNS_MIN unless includeMetadata asks for JOB_COLUMNS_ALL
-    // (node_modules/pg-boss/dist/plans.js:890-919, 2565), plus the signal
-    // the worker adds (manager.js:604).
+    // (node_modules/pg-boss/dist/plans.js:907-936, 2619), plus the signal
+    // the worker adds (manager.js:618).
     const minimal = [
       'data',
       'expireInSeconds',
@@ -922,7 +922,7 @@ describe('workers', () => {
     });
 
     // offWork matches a work() call's id against every loop it started and
-    // waits unless told not to (manager.js:1371-1401).
+    // waits unless told not to (manager.js:1427-1457).
     assert.deepStrictEqual(observed, {
       claimedAfterOnePoll: 1,
       finishedWhenOffWorkReturned: 1,

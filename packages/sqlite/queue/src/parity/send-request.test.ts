@@ -82,10 +82,10 @@ describe('send(request)', () => {
       return { results, generated: typeof generated, jobs };
     });
 
-    // checkSendArgs (node_modules/pg-boss/dist/attorney.js:118-153): a
+    // checkSendArgs (node_modules/pg-boss/dist/attorney.js:119-154): a
     // string first argument is the positional form, any other object the
     // request form with exactly one argument, and anything else has no name.
-    // createJob stores the payload through JSON (manager.js:1513-1528).
+    // createJob stores the payload through JSON (manager.js:1717-1732).
     const rejects = (message: string) => `AssertionError: ${message}`;
     const noQueueName = rejects('boss requires all jobs to have a queue name');
     assert.deepStrictEqual(observed, {
@@ -141,7 +141,7 @@ describe('send(request)', () => {
       return { results, jobs };
     });
 
-    // checkSendArgs validates and returns `{ ...options }` (attorney.js:137),
+    // checkSendArgs validates and returns `{ ...options }` (attorney.js:138),
     // own properties only.
     assert.deepStrictEqual(observed, {
       results: {

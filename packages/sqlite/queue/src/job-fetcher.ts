@@ -18,7 +18,7 @@ type Fragment = [sql: string, ...values: SQLInputValue[]];
 type Candidate = { row: JobRow; activeCount: number; groupLimit: number };
 
 export class JobFetcher {
-  // pg-boss's fetchNextJob (node_modules/pg-boss/dist/plans.js:2364-2569).
+  // pg-boss's fetchNextJob (node_modules/pg-boss/dist/plans.js:2416-2623).
   static claim(
     db: DatabaseSync,
     queue: QueueRow,
@@ -56,7 +56,7 @@ export class JobFetcher {
       ['j.queue_name = ?', name],
       ["j.state IN ('created', 'retry')"],
     ];
-    // plans.js:2453
+    // plans.js:2507
     const dueBy = ignoreStartAfter ? null : isoNow;
     if (dueBy !== null) {
       conditions.push(['j.start_after <= ?', dueBy]);
@@ -65,7 +65,7 @@ export class JobFetcher {
       conditions.push(...JobFetcher.#keyStrictFifoConditions(dueBy));
     }
     // A key whose active slot is taken offers no job, read live, not from the
-    // stats the supervisor last wrote (12.37.1, #957: plans.js:2466-2478).
+    // stats the supervisor last wrote (12.37.1, #957: plans.js:2520-2532).
     if (singletonPolicy) {
       conditions.push([
         `NOT EXISTS (
@@ -79,7 +79,7 @@ export class JobFetcher {
         policy,
       ]);
     }
-    // plans.js:2479
+    // plans.js:2533
     if (ignoreGroups && ignoreGroups.length > 0) {
       conditions.push([
         '(j.group_id IS NULL OR j.group_id NOT IN (SELECT value FROM json_each(?)))',
@@ -92,16 +92,16 @@ export class JobFetcher {
     if (maxPriority !== undefined) {
       conditions.push(['j.priority <= ?', maxPriority]);
     }
-    // A group already at its limit offers no job (plans.js:2413-2425). With
+    // A group already at its limit offers no job (plans.js:2467-2479). With
     // a default of 1 and no tiers pg-boss asks NOT EXISTS instead of counting
-    // (2379, 2415-2423), which keeps the same jobs.
+    // (2431, 2469-2477), which keeps the same jobs.
     if (groups) {
       conditions.push([
         '(j.group_id IS NULL OR COALESCE(a.active_cnt, 0) < COALESCE(t.value, d.group_default))',
       ]);
     }
 
-    // Always priority, then creation (plans.js:2484-2507), and the LIMIT
+    // Always priority, then creation (plans.js:2538-2561), and the LIMIT
     // before any key or group ranking. pg-boss leaves created_on ties to
     // index order, which tracks insertion; rowid is that order here, where
     // millisecond created_on ties often.
@@ -123,8 +123,8 @@ export class JobFetcher {
       '\n',
     );
     // On Postgres, FOR UPDATE OF j SKIP LOCKED gives each job to one claim
-    // (plans.js:2410), and one statement reads the candidates and the group
-    // counts and claims the jobs (2549-2565). SQLite has no row locks. Thus
+    // (plans.js:2464), and one statement reads the candidates and the group
+    // counts and claims the jobs (2603-2619). SQLite has no row locks. Thus
     // the transaction takes the write lock before the read: no other
     // connection of the file claims between the read and the UPDATE.
     try {
@@ -143,7 +143,7 @@ export class JobFetcher {
               };
             });
           // A batch on a singleton or stately queue claims one job per
-          // singleton_key, keyless jobs sharing one (plans.js:2367-2368,
+          // singleton_key, keyless jobs sharing one (plans.js:2419-2420,
           // 2508-2512, 2563).
           const claimedKeys = new Set<string | null>();
           const firstOfKeys = singletonFetch
@@ -153,7 +153,7 @@ export class JobFetcher {
                 return isFirstOfKey;
               })
             : candidates;
-          // pg-boss's RETURNING carries no ORDER BY (plans.js:2556-2565); on
+          // pg-boss's RETURNING carries no ORDER BY (plans.js:2610-2619); on
           // an analyzed Postgres a batch comes back in claim order, which is
           // the order of the candidates. The claim gives only the rows that
           // its UPDATE changed, as RETURNING does.
@@ -196,7 +196,7 @@ export class JobFetcher {
       );
     } catch (error) {
       // The one fetch error pg-boss tolerates: a policy index refusing the
-      // claim, which it treats as an empty fetch (manager.js:1900-1906).
+      // claim, which it treats as an empty fetch (manager.js:2104-2110).
       if (Database.isUniqueViolation(error)) {
         return [];
       }
@@ -206,8 +206,8 @@ export class JobFetcher {
 
   // pg-boss counts the active jobs of each claimed group again once its claim
   // committed, and gives back, from the end of the batch, each job whose
-  // group is over that job's own tier limit (12.38.1: manager.js:1908-1937,
-  // plans.js:2778). No claim races here, but the claim ranks a group across
+  // group is over that job's own tier limit (12.38.1: manager.js:2112-2141,
+  // plans.js:2832). No claim races here, but the claim ranks a group across
   // its tiers, so a batch can still hold a job past its own tier. pg-boss's
   // fetch again after giving everything back needs a race, and at least a
   // tier's limit of each group stays here.
@@ -253,7 +253,7 @@ export class JobFetcher {
     return rows.filter((row) => !givenBack.has(row.id));
   }
 
-  // #giveBack (manager.js:1947-1975): a policy index can refuse a job its way
+  // #giveBack (manager.js:2151-2179): a policy index can refuse a job its way
   // back, a stately key whose created slot filled after the claim, and one
   // refusal fails the statement, so each id is then tried alone; the refused
   // ones stay active and run. SQLite backs out only the refused statement.
@@ -297,11 +297,11 @@ export class JobFetcher {
   // A key_strict_fifo job is claimed only as its key's head, a retry job
   // first ('retry' sorts after 'created' as text, as in pg-boss's enum),
   // and only while no sibling is active, retrying or failed
-  // (plans.js:2432-2442, 2454-2464). pg-boss breaks created_on ties by id,
+  // (plans.js:2486-2496, 2508-2518). pg-boss breaks created_on ties by id,
   // which only decides under a frozen clock: Postgres's microsecond now()
   // keeps sends apart. Millisecond created_on ties here, so insertion order
   // (rowid) breaks ties, as Postgres's timestamps would. With
-  // ignoreStartAfter, a deferred job can be the head (plans.js:2440).
+  // ignoreStartAfter, a deferred job can be the head (plans.js:2494).
   static #keyStrictFifoConditions(dueBy: string | null): Fragment[] {
     return [
       [
@@ -331,8 +331,8 @@ export class JobFetcher {
   }
 
   // Each candidate's group limit, its tier's or else the default
-  // (plans.js:2382-2384), and its group's active jobs of every tier
-  // (2395-2407), so the WHERE and the ranking read the same two numbers.
+  // (plans.js:2434-2436), and its group's active jobs of every tier
+  // (2449-2461), so the WHERE and the ranking read the same two numbers.
   static #groupJoins(name: string, groups: GroupConcurrencyConfig): Fragment {
     return [
       `LEFT JOIN (
@@ -349,20 +349,14 @@ export class JobFetcher {
     ];
   }
 
-  // group_ranking and group_filtered (plans.js:2518-2531): within each group,
-  // by id, a job is claimed while its group's active jobs and those ranked
-  // before it stay under its limit. Canonical uuid text sorts as Postgres
-  // orders uuids.
+  // group_ranking and group_filtered (plans.js:2571-2585): within each group,
+  // by priority desc, created_on (2576), a job is claimed while its group's
+  // active jobs and those ranked before it stay under its limit. The
+  // candidates come in that order, with rowid for created_on ties.
   static #withinGroupLimits(candidates: Candidate[]): Candidate[] {
     const ranks = new Map<string, number>();
     const claimed = new Set<Candidate>();
-    const byId = candidates.toSorted((a, b) => {
-      if (a.row.id < b.row.id) {
-        return -1;
-      }
-      return a.row.id > b.row.id ? 1 : 0;
-    });
-    for (const candidate of byId) {
+    for (const candidate of candidates) {
       const groupId = candidate.row.group_id;
       if (groupId === null) {
         claimed.add(candidate);

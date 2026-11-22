@@ -133,8 +133,8 @@ describe('job ids', () => {
         shortByOne: invalid(hex.slice(1)),
         longByOne: invalid(`${hex}0`),
       },
-      // send() reads its id out of a JSON payload (plans.js:2886); findJobs()
-      // binds it, and NULL matches nothing (plans.js:4630).
+      // send() reads its id out of a JSON payload (plans.js:2979); findJobs()
+      // binds it, and NULL matches nothing (plans.js:4779).
       untyped: {
         sendArray: invalid(`["${lower}"]`),
         sendObject: invalid('{}'),
@@ -155,7 +155,7 @@ describe('job ids', () => {
         },
         // The queue is looked up before any id is cast, the priority checked
         // before the insert, and the ids cast before the output
-        // (manager.js:2078, 2351-2356).
+        // (manager.js:2282, 2555-2560).
         cancelOnMissingQueue:
           'Error: Queue missing does not exist (PGBOSS_QUEUE_NOT_FOUND)',
         sendNotUuidWithBadPriority:

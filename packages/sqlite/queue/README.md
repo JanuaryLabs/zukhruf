@@ -2,7 +2,7 @@
 
 A program sends jobs to a queue, and workers do the jobs later, also after the program restarts. [pg-boss](https://github.com/timgit/pg-boss) is a job queue that keeps its jobs in Postgres. A program that has no Postgres server, for example a desktop app or a CLI, cannot use it. This package keeps the jobs in one SQLite file through `node:sqlite`, and gives the API of pg-boss: the same method names, the same options, the same results and the same errors. The API is a declared subset of pg-boss: 18 methods of `PgBoss`.
 
-Zero divergence is the contract. A parity suite runs each scenario on real pg-boss 12.38.2 over PGlite, and on this package. Then it compares what each engine returned, stored and emitted. A test passes only when the two are equal. Thus a program can change from one engine to the other and keep its code.
+Zero divergence is the contract. A parity suite runs each scenario on real pg-boss 12.39.0 over PGlite, and on this package. Then it compares what each engine returned, stored and emitted. A test passes only when the two are equal. Thus a program can change from one engine to the other and keep its code.
 
 The words in these documents have one meaning each. See the glossary in [CONTEXT.md](./CONTEXT.md).
 
@@ -92,8 +92,9 @@ A new release can change the tables. A file that an earlier release made keeps i
 A schedule sends a job to its queue at each time that its cron or rrule rule gives. The timekeeper of pg-boss does this work, and this package copies it ([ADR 0003](./docs/adr/0003-the-timekeeper-is-ported-literally.md)).
 
 - `schedule` is `true` by default, as in pg-boss. `start()` then makes the queue `__pgboss__send-it`, starts one worker on it, and starts the cron pass. `schedule: false` starts none of them.
-- The cron pass runs at start, then every `cronMonitorIntervalSeconds` (30 by default) on the clock. It finds the occurrences of each schedule in the last 60 seconds. For each occurrence, it puts one job in `__pgboss__send-it`, in the slot of the minute of the occurrence. A unique index keeps one job for each schedule and slot, so the next pass does not send the same occurrence again.
+- The cron pass runs at start, then every `cronMonitorIntervalSeconds` (30 by default) on the clock. It finds the occurrences of each schedule in the last 60 seconds. For each occurrence of a schedule of the default precision, `'minute'`, it puts one job in `__pgboss__send-it`, in the slot of the minute of the occurrence. A unique index keeps one job for each schedule and slot, so the next pass does not send the same occurrence again.
 - The worker of `__pgboss__send-it` polls every `cronWorkerIntervalSeconds` (5 by default). It sends each job to the queue of its schedule, with the data and the options of the schedule. Thus a job goes out up to 35 seconds after its time, as in pg-boss.
+- With `precision: 'second'`, a cron expression with a seconds field sends one job for each occurrence, not one for each minute. The instance whose pass claims the cron stamp reads these schedules for one `cronMonitorIntervalSeconds` and checks them every second. It sends each job straight to the queue of the schedule, not through `__pgboss__send-it`. After a time when no pass ran, `skip` sends nothing and `once` sends the latest occurrence of that time. `schedule()` refuses `singletonNextSlot` with this precision.
 - A cron expression without `tz` uses UTC. An rrule without `DTSTART` counts from 1970-01-01, so `FREQ=MINUTELY;INTERVAL=2` gives the even minutes.
 - `missed` tells the pass what to do after a time when no pass ran, for example when the program was stopped. With `skip` (the default), the pass sends only the occurrences of the last 60 seconds. With `once`, the pass also sends the latest occurrence of that time, but not one from before the schedule was written.
 - When the send to the queue of the schedule fails, the failure goes to the `error` event, and the job in `__pgboss__send-it` completes. The pass does not send the occurrence again.
@@ -141,7 +142,7 @@ Code that runs on both engines examines `code`, not the class. On Postgres, the 
 
 ## API
 
-The types that come from `pg-boss` (`Queue`, `SendOptions`, `Job`, `PgBossEventMap` and the others) are the types of pg-boss 12.38.2, as `src/job-queue.ts` and `src/index.ts` import them. pg-boss leaves `StartOptions` out of its exported types, so this package exports it, read off `PgBoss.start`.
+The types that come from `pg-boss` (`Queue`, `SendOptions`, `Job`, `PgBossEventMap` and the others) are the types of pg-boss 12.39.0, as `src/job-queue.ts` and `src/index.ts` import them. pg-boss leaves `StartOptions` out of its exported types, so this package exports it, read off `PgBoss.start`.
 
 ```ts
 // The subset of PgBoss, in the types of pg-boss. A PgBoss satisfies it as is.

@@ -12,7 +12,7 @@ export class Contractor {
   static start(database: DatabaseSync): void {
     // pg-boss reads isInstalled() and schemaVersion() with no lock
     // (contractor.js:83-95), and locks only in create() and migrate()
-    // (plans.js:143, :166). A WAL reader does not wait for a writer, so a
+    // (plans.js:154, :166). A WAL reader does not wait for a writer, so a
     // file that needs no change starts next to the write of another program.
     if (Contractor.#settled(database)) return;
     // The rebuild of pgboss_queue needs foreign keys off, which SQLite cannot

@@ -19,9 +19,9 @@ type Interval = {
 };
 
 // pg-boss normalizes startAfter in Attorney.checkSendArgs
-// (node_modules/pg-boss/dist/attorney.js:108-116, 140-146), then casts a
+// (node_modules/pg-boss/dist/attorney.js:109-117, 141-147), then casts a
 // date time string as timestamptz and anything else as an interval added to
-// now (plans.js:2805-2807, 2882-2885). This resolves the same normalization
+// now (plans.js:2859-2861, 2921-2924). This resolves the same normalization
 // and a cited subset of what Postgres then parses; every supported form is
 // proven equal to pg-boss in the parity suite (src/parity).
 export class StartAfter {
@@ -70,7 +70,7 @@ export class StartAfter {
     }
     // Errors name the caller's own value, not its normalized form.
     const original = typeof value === 'string' ? value : normalized;
-    // plans.js:2805-2807: a string ending in Z or starting with a date is a
+    // plans.js:2859-2861: a string ending in Z or starting with a date is a
     // timestamp, anything else an interval.
     if (normalized.endsWith('Z') || StartAfter.#isoDate.test(normalized)) {
       return StartAfter.#timestamp(normalized, original);
@@ -78,7 +78,7 @@ export class StartAfter {
     return StartAfter.#add(now, StartAfter.#interval(normalized, original));
   }
 
-  // attorney.js:140-146
+  // attorney.js:141-147
   static #normalize(value: unknown): string | undefined {
     if (value instanceof Date) {
       return value.toISOString();
@@ -87,7 +87,7 @@ export class StartAfter {
       return String(value);
     }
     if (typeof value === 'string') {
-      // attorney.js:115-117, pinZonelessDateTime.
+      // attorney.js:116-118, pinZonelessDateTime.
       return StartAfter.#isoDate.test(value) &&
         StartAfter.#zonelessTime.test(value.slice(10))
         ? `${value}Z`

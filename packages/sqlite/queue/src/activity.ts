@@ -25,7 +25,7 @@ export class Activity {
     return 'attach' in clock && typeof clock.attach === 'function';
   }
 
-  // index.js:217-219
+  // index.js:218-220
   attach(clock: AttachableClock): Promise<AsyncDisposable> {
     return clock.attach({
       db: Activity.#database,

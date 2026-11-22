@@ -190,7 +190,7 @@ describe('complete()', () => {
       };
       const afterRefusals = await settles(queue, 'jobs');
       // The lookup takes each spelling of a uuid, and the fence is built from
-      // the canonical one (plans.js:2593-2612).
+      // the canonical one (plans.js:2647-2666).
       const braced = await queue.complete('jobs', {
         id: `{${id(1)}}`,
         retryCount: 0,
@@ -203,7 +203,7 @@ describe('complete()', () => {
       };
     });
 
-    // mapAttemptArg (manager.js:1980-1990), then the queue (manager.js:2024),
+    // mapAttemptArg (manager.js:2184-2194), then the queue (manager.js:2228),
     // then the statement.
     const requires = 'AssertionError: complete() requires an id';
     const notAMix =
@@ -288,7 +288,7 @@ describe('complete()', () => {
     });
 
     // The fence matches an active job at the fetched retryCount only
-    // (plans.js:2588-2591); plain ids carry no fence (manager.js:1980-1990).
+    // (plans.js:2642-2645); plain ids carry no fence (manager.js:2184-2194).
     const none = { jobs: [id(1)], requested: 1, affected: 0, settled: [] };
     assert.deepStrictEqual(observed, {
       attempts: {
@@ -360,7 +360,7 @@ describe('complete()', () => {
       supervised,
     );
 
-    // failJobsByTimeout (plans.js:2957-2961, 2968-2971), then the fence.
+    // failJobsByTimeout (plans.js:3106-3110, 3117-3120), then the fence.
     const none = { jobs: [id(1)], requested: 1, affected: 0, settled: [] };
     assert.deepStrictEqual(
       {
@@ -401,7 +401,7 @@ describe('complete()', () => {
       };
     });
 
-    // state = 'active' (plans.js:2619-2632).
+    // state = 'active' (plans.js:2673-2686).
     assert.deepStrictEqual(observed, {
       byId: expectedStates(100, ['active']),
       byJob: expectedStates(200, ['active']),
@@ -425,8 +425,8 @@ describe('complete()', () => {
       };
     });
 
-    // state < 'completed' (plans.js:2619-2632); the fence still needs an
-    // active job (plans.js:2588-2591).
+    // state < 'completed' (plans.js:2673-2686); the fence still needs an
+    // active job (plans.js:2642-2645).
     assert.deepStrictEqual(observed, {
       byId: expectedStates(100, ['created', 'retry', 'active']),
       byJob: expectedStates(200, ['active']),
@@ -463,7 +463,7 @@ describe('complete()', () => {
       return { responses, jobs: await settles(queue, 'jobs') };
     });
 
-    // mapCommandResponse (manager.js:2007-2017).
+    // mapCommandResponse (manager.js:2211-2221).
     const completed = (n: number, by: string) => ({
       id: id(n),
       state: 'completed',
@@ -545,7 +545,7 @@ describe('complete()', () => {
       return { fetched: fetched.length, results };
     });
 
-    // mapCompletionDataArg (manager.js:1998-2006).
+    // mapCompletionDataArg (manager.js:2202-2210).
     const outputs = Object.fromEntries(
       Object.entries(observed.results).map(([kind, result]) => [
         kind,
@@ -595,7 +595,7 @@ describe('complete()', () => {
         };
         // The key and the state of each job, sorted. Which job of a key a
         // batch takes is not specified: pg-boss ranks them with no ORDER BY
-        // (plans.js:2508-2512).
+        // (plans.js:2562-2566).
         const held = async () =>
           (await queue.findJobs(policy))
             .map((job) => `${job.singletonKey} ${job.state}`)
@@ -631,7 +631,7 @@ describe('complete()', () => {
     });
 
     // A completed job is outside the indexes and the ranks that hold a slot
-    // (plans.js:2367-2368, 2432-2464, 2508-2512).
+    // (plans.js:2419-2420, 2486-2518, 2562-2566).
     const fetches = Object.fromEntries(
       Object.entries(observed).map(([policy, result]) => [
         policy,
@@ -649,7 +649,7 @@ describe('complete()', () => {
       singleton: { first: 3, whileActive: 0, affected: 3, afterComplete: 3 },
       stately: { first: 3, whileActive: 0, affected: 3, afterComplete: 3 },
       // An exclusive queue refuses a send while its key has a job
-      // (plans.js:1278), so no job waited.
+      // (plans.js:1295), so no job waited.
       exclusive: { first: 3, whileActive: 0, affected: 3, afterComplete: 0 },
       key_strict_fifo: {
         first: 2,

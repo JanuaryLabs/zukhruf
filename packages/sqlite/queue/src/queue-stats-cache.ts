@@ -10,7 +10,7 @@ import type { SqliteRow } from './rows.ts';
 import { SqlValues } from './sql-values.ts';
 
 // A queue's counts as the monitor caches them on pgboss_queue
-// (node_modules/pg-boss/dist/plans.js:2041-2065). capturedOn is monitor_on,
+// (node_modules/pg-boss/dist/plans.js:2093-2117). capturedOn is monitor_on,
 // null until something counted the queue.
 export type CachedQueueStats = Pick<
   QueueStats,
@@ -36,11 +36,11 @@ const columns = `name,
 // The cache of each queue's counts that the supervisor's monitor and
 // getQueueStats both write, and getQueueStats serves.
 export class QueueStatsCache {
-  // DELTA_LAG_SECONDS (plans.js:3943): a completion stamped before a pass but
+  // DELTA_LAG_SECONDS (plans.js:4092): a completion stamped before a pass but
   // committed after it is still ahead of the watermark.
   static readonly deltaLagSeconds = 10;
 
-  // setRetainedCount (plans.js:3776-3797), after a maintenance pass deleted
+  // setRetainedCount (plans.js:3925-3946), after a maintenance pass deleted
   // what it deletes: the completed and cancelled jobs it left that finished
   // by `before`, which retained_on moves to; total_count is the live jobs the
   // last monitor pass counted plus them and the ones finished since.
@@ -66,7 +66,7 @@ export class QueueStatsCache {
       WHERE name = ?1`,
     ).run(name, SqlValues.asIso(before), SqlValues.asIso(now));
   }
-  // getQueueStatsCache (plans.js:2041-2065): undefined for a queue that does
+  // getQueueStatsCache (plans.js:2093-2117): undefined for a queue that does
   // not exist.
   static read(db: DatabaseSync, name: string): CachedQueueStats | undefined {
     const row = db
@@ -75,8 +75,8 @@ export class QueueStatsCache {
     return row === undefined ? undefined : QueueStatsCache.#decode(row);
   }
 
-  // The aggregate of getQueueStats (plans.js:4219-4376) that cacheQueueStats
-  // and refreshQueueStats share (4385-4481, 4508-4543): each queue's counts
+  // The aggregate of getQueueStats (plans.js:4368-4525) that cacheQueueStats
+  // and refreshQueueStats share (4534-4630, 4657-4692): each queue's counts
   // by state, the keys its singleton and stately jobs hold active (NULL for
   // none, as array_agg over no rows) and monitor_on, written and returned in
   // the order of `names`. A name with no queue returns no row.
@@ -86,7 +86,7 @@ export class QueueStatsCache {
     now: Date,
   ): (CachedQueueStats & { capturedOn: Date })[] {
     const isoNow = SqlValues.asIso(now);
-    // deltaWindowEnd (plans.js:3943-3954): the pass counts finished jobs into
+    // deltaWindowEnd (plans.js:4092-4103): the pass counts finished jobs into
     // retained_count only up to DELTA_LAG before now.
     const isoEnd = SqlValues.asIso(
       new Date(now.getTime() - QueueStatsCache.deltaLagSeconds * 1000),
@@ -95,7 +95,7 @@ export class QueueStatsCache {
     return transaction(
       db,
       () => {
-        // Only the live jobs (LIVE_STATES, plans.js:97): the finished ones
+        // Only the live jobs (LIVE_STATES, plans.js:108): the finished ones
         // are counted through retained_count (12.38.0).
         const counts = new Map(
           db
@@ -115,7 +115,7 @@ export class QueueStatsCache {
             .map((row) => [Row.readString(row, 'queue_name'), row]),
         );
         // The jobs completed or cancelled since retained_on up to the window's
-        // end, and those after it (plans.js:4322-4337). SQLite's MAX() is NULL
+        // end, and those after it (plans.js:4471-4486). SQLite's MAX() is NULL
         // with a NULL argument, where Postgres's GREATEST skips it.
         const retained = new Map(
           db
@@ -173,7 +173,7 @@ export class QueueStatsCache {
           const count = (column: string) =>
             row ? Row.readNumber(row, column) : 0;
           const keys = singletons.get(name);
-          // retainedAssignments (plans.js:4352-4380). The read above and this
+          // retainedAssignments (plans.js:4501-4529). The read above and this
           // write share the transaction, so retained_on is still the one the
           // finished jobs were counted from. A queue no maintenance pass has
           // counted keeps the larger of its total and its live jobs.

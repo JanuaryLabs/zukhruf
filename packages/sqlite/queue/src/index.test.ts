@@ -149,7 +149,7 @@ describe('SqliteJobQueue', () => {
   });
 
   // SQLite-only: pg-boss swallows only a policy index refusing a claim and
-  // surfaces every other fetch error (manager.js:1900-1906). The trigger stands
+  // surfaces every other fetch error (manager.js:2104-2110). The trigger stands
   // in for a disk failure, which no queue operation can cause on purpose.
   it('reports a claim that fails for a reason other than a policy index', async (t) => {
     const database = open(':memory:');
@@ -183,8 +183,8 @@ describe('SqliteJobQueue', () => {
   // SQLite-only: a lookup here reads the live row, so pg-boss has no fault that
   // fails its refresh and spares the lookups; one row no refresh can read
   // does that here. onCacheQueues keeps the cache when a refresh fails
-  // (node_modules/pg-boss/dist/manager.js:1033-1042), and a worker bursts on
-  // the counts the cache held (1185-1200).
+  // (node_modules/pg-boss/dist/manager.js:1049-1058), and a worker bursts on
+  // the counts the cache held (1207-1222).
   it('keeps the queue cache it held when a refresh fails, so a worker still bursts on its counts', async () => {
     const database = open(':memory:');
     const clock = new TestClock('2026-01-01T00:00:00.000Z');
@@ -328,7 +328,7 @@ describe('SqliteJobQueue', () => {
   });
 
   // SQLite-only: the parity harness always listens. pg-boss defaults
-  // useListenNotify to false (node_modules/pg-boss/dist/attorney.js:416) and
+  // useListenNotify to false (node_modules/pg-boss/dist/attorney.js:419) and
   // then never hears a NOTIFY and polls at the base interval (manager.js:
   // 1182-1203); the same input on pg-boss over PGlite observes [] then [job].
   it('wakes no worker and keeps the base poll when not listening for notify', async () => {
@@ -358,7 +358,7 @@ describe('SqliteJobQueue', () => {
   // SQLite-only: the harness starts every queue before its workers. A worker
   // registered before start() is woken by it on a notify queue, as pg-boss
   // wakes them once its listener connects (adapters/pglite.js:144-152,
-  // manager.js:1420-1428); in memory, another instance's send never reaches
+  // manager.js:1590-1598); in memory, another instance's send never reaches
   // it, since only a file has the notifications of @zukhruf/sqlite-notify.
   it('wakes workers registered before start once it starts listening', async () => {
     const clock = new TestClock('2026-01-01T00:00:00.000Z');
@@ -397,7 +397,7 @@ describe('SqliteJobQueue', () => {
   // (notifier.js:58). On a file the notification goes through
   // @zukhruf/sqlite-notify, and the instance that sent it hears it too,
   // before its poll. The poll here is an hour, also when the queue does not
-  // listen (attorney.js:640, 654): longer than the test runner lets a test run
+  // listen (attorney.js:641, 655): longer than the test runner lets a test run
   // (--test-timeout), so only the notification can run the second job before
   // the test ends.
   it('wakes its own waiting worker when it sends to a notify queue on a file', async (t) => {
@@ -433,7 +433,7 @@ describe('SqliteJobQueue', () => {
     }
   });
 
-  // node_modules/pg-boss/dist/plans.js:1173-1175, 2927-2931: the channel is
+  // node_modules/pg-boss/dist/plans.js:1190-1192, 2999-3003: the channel is
   // 'pgboss_' and 24 hex digits of the SHA-224 of the schema 'pgboss', and the
   // payload is the name of the queue. Another program on the file, which
   // listens on that channel, hears the send.

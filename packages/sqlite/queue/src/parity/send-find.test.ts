@@ -167,7 +167,7 @@ describe('send and findJobs', () => {
       };
     });
 
-    // attorney.js:575-594, manager.js:2743-2770, plans.js:4624-4657
+    // attorney.js:578-597, manager.js:2947-2974, plans.js:4773-4806
     // (12.38.0): limit 1 to 100000 (1000 when left out), after an id whose
     // row still exists, both checked before the queue lookup.
     const limit =
@@ -214,8 +214,8 @@ describe('send and findJobs', () => {
     });
 
     // pg-boss's findJobs returns the rows as the database gives them
-    // (node_modules/pg-boss/dist/manager.js:2743-2772); only a worker adds a
-    // signal, to its own copy of the job (manager.js:599).
+    // (node_modules/pg-boss/dist/manager.js:2947-2976); only a worker adds a
+    // signal, to its own copy of the job (manager.js:613).
     assert.strictEqual(observed.created.length, 1);
     assert.deepStrictEqual(observed.active, observed.created);
     assert.ok(!observed.created[0]?.includes('signal'));

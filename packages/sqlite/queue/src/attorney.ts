@@ -20,7 +20,7 @@ export type SuperviseIntervals = {
 };
 
 // pg-boss's argument validation (node_modules/pg-boss/dist/attorney.js,
-// 12.38.2). pg-boss ships no exports map, so these are module-private there:
+// 12.39.0). pg-boss ships no exports map, so these are module-private there:
 // each assert is ported by citation and proven equal by the parity suite.
 // pg-boss compares raw values (`config.x >= 1`); `Number(value) >= n` keeps
 // JavaScript's relational coercion for primitives without widening types.
@@ -28,8 +28,10 @@ export class Attorney {
   // attorney.js:5
   static readonly MAX_EXPIRATION_HOURS = 24;
   // attorney.js:6
+  static readonly MAX_JOB_EXPIRATION_DAYS = 14;
+  // attorney.js:7
   static readonly MIN_POLLING_INTERVAL_MS = 500;
-  // attorney.js:430
+  // attorney.js:433
   static readonly #clockMethods = [
     'now',
     'setTimeout',
@@ -38,7 +40,7 @@ export class Attorney {
     'clearInterval',
   ] as const;
 
-  // attorney.js:431-439
+  // attorney.js:434-442
   static applyClockConfig(clock: Clock | undefined): Clock {
     if (clock) {
       for (const method of Attorney.#clockMethods) {
@@ -51,7 +53,7 @@ export class Attorney {
     return clock || systemClock;
   }
 
-  // attorney.js:661-673, in that order: each at least a second, at most a
+  // attorney.js:662-674, in that order: each at least a second, at most a
   // day, 60 s when unset except maintenance's day. pg-boss writes the
   // defaults onto its config; they are returned here.
   static applyOpsConfig(config: object): SuperviseIntervals {
@@ -94,7 +96,7 @@ export class Attorney {
     return seconds;
   }
 
-  // attorney.js:706-713, in that order. clockMonitorIntervalSeconds is
+  // attorney.js:707-714, in that order. clockMonitorIntervalSeconds is
   // validated only: it paces pg-boss's clock-skew read, and SQLite's clock is
   // the database clock.
   static applyScheduleConfig(config: object): TimekeeperConfig {
@@ -130,7 +132,7 @@ export class Attorney {
     return Number(value) || bounds.fallback;
   }
 
-  // attorney.js:466. warningSlowQuerySeconds and warningRetentionDays (446-449)
+  // attorney.js:469. warningSlowQuerySeconds and warningRetentionDays (446-449)
   // configure warnings this queue never raises or persists.
   static validateWarningConfig(config: object): void {
     assert(
@@ -140,7 +142,7 @@ export class Attorney {
     );
   }
 
-  // attorney.js:638-660: a worker's poll and notify-backstop intervals in ms.
+  // attorney.js:639-661: a worker's poll and notify-backstop intervals in ms.
   // pg-boss writes them onto the options object; they are returned here.
   static #applyPollingInterval(config: object): {
     pollingInterval: number;
@@ -190,7 +192,7 @@ export class Attorney {
     return { pollingInterval, notifyPollingInterval };
   }
 
-  // attorney.js:357-383. pg-boss checks a copy of the options and writes the
+  // attorney.js:358-384. pg-boss checks a copy of the options and writes the
   // poll intervals onto it; they are returned here instead.
   static checkWorkArgs(
     name: unknown,
@@ -251,7 +253,7 @@ export class Attorney {
     return intervals;
   }
 
-  // attorney.js:399-406. pg-boss does not check groupConcurrency or
+  // attorney.js:402-409. pg-boss does not check groupConcurrency or
   // ignoreGroups here.
   static checkFetchArgs(name: unknown, options: object): void {
     assert(name, 'missing queue name');
@@ -283,7 +285,7 @@ export class Attorney {
     return key in config ? Reflect.get(config, key) : undefined;
   }
 
-  // attorney.js:320-330
+  // attorney.js:321-331
   static #validatePriorityRangeConfig(config: object): void {
     const minPriority = Attorney.#read(config, 'minPriority');
     const maxPriority = Attorney.#read(config, 'maxPriority');
@@ -301,7 +303,7 @@ export class Attorney {
     }
   }
 
-  // attorney.js:331-341
+  // attorney.js:332-342
   static #validateGroupConcurrencyConfig(config: object): void {
     const groupConcurrency = Attorney.#read(config, 'groupConcurrency');
     const localGroupConcurrency = Attorney.#read(
@@ -332,7 +334,7 @@ export class Attorney {
     }
   }
 
-  // attorney.js:306-319
+  // attorney.js:307-320
   static #validateGroupConcurrencyValue(value: unknown, name: string): void {
     if (typeof value === 'number') {
       assert(
@@ -366,7 +368,7 @@ export class Attorney {
     }
   }
 
-  // attorney.js:342-356
+  // attorney.js:343-357
   static #validateLocalGroupConcurrencyLimit(
     localGroupConcurrency: unknown,
     localConcurrency: unknown,
@@ -398,7 +400,7 @@ export class Attorney {
     }
   }
 
-  // attorney.js:401-405
+  // attorney.js:404-408
   static #validateHeartbeatRefreshConfig(config: object): void {
     const refresh = Attorney.#read(config, 'heartbeatRefreshSeconds');
     if (refresh == null) {
@@ -410,13 +412,20 @@ export class Attorney {
     );
   }
 
-  // attorney.js:388-398
+  // attorney.js:389
+  static readonly #MAX_TRANSACTION_TIMEOUT_SECONDS = Math.floor(
+    (2 ** 31 - 1) / 1000,
+  );
+
+  // attorney.js:390-401
   static #validateTransactionalConfig(config: object): void {
     const timeout = Attorney.#read(config, 'transactionTimeoutSeconds');
     assert(
       !('transactionTimeoutSeconds' in config) ||
-        (Number.isInteger(timeout) && Number(timeout) >= 0),
-      'transactionTimeoutSeconds must be an integer >= 0',
+        (Number.isInteger(timeout) &&
+          Number(timeout) >= 0 &&
+          Number(timeout) <= Attorney.#MAX_TRANSACTION_TIMEOUT_SECONDS),
+      `transactionTimeoutSeconds must be an integer from 0 to ${Attorney.#MAX_TRANSACTION_TIMEOUT_SECONDS}`,
     );
     if (!Attorney.#read(config, 'transactional')) {
       assert(
@@ -431,7 +440,7 @@ export class Attorney {
     );
   }
 
-  // attorney.js:87-89
+  // attorney.js:88-90
   static assertObjectName(value: unknown, name: string): void {
     assert(
       /^[\w.\-/]+$/.test(String(value)),
@@ -439,7 +448,7 @@ export class Attorney {
     );
   }
 
-  // manager.js:1980-1989: ids, or jobs as fetch() and work() hand them out,
+  // manager.js:2184-2193: ids, or jobs as fetch() and work() hand them out,
   // whose retryCount fences the call to the attempt that was fetched.
   static mapAttemptArg(
     id: string | string[] | JobAttempt | JobAttempt[],
@@ -469,7 +478,7 @@ export class Attorney {
     };
   }
 
-  // attorney.js:607-612
+  // attorney.js:610-615
   static assertKey(key: unknown): void {
     if (!key) {
       return;
@@ -478,8 +487,8 @@ export class Attorney {
     Attorney.assertObjectName(key, 'Key');
   }
 
-  // attorney.js:602-606
-  // attorney.js:575-582 (12.38.0): the limit of a public list read, an
+  // attorney.js:605-609
+  // attorney.js:578-585 (12.38.0): the limit of a public list read, an
   // integer from 1 to 100000, 1000 when left out.
   static assertListLimit(method: string, limit: unknown = 1000): number {
     assert(
@@ -492,7 +501,7 @@ export class Attorney {
     return limit;
   }
 
-  // attorney.js:583-594: the `after` of a list read that pages by one value;
+  // attorney.js:586-597: the `after` of a list read that pages by one value;
   // with `id`, a uuid in any spelling the uuid type accepts.
   static assertListAfter(method: string, after: unknown, id = false): void {
     assert(
@@ -513,7 +522,7 @@ export class Attorney {
     Attorney.assertObjectName(name, 'Name');
   }
 
-  // attorney.js:90-101
+  // attorney.js:91-102
   static validateQueueArgs(config: object): void {
     const deadLetter = 'deadLetter' in config ? config.deadLetter : undefined;
     assert(
@@ -536,7 +545,7 @@ export class Attorney {
     Attorney.#validateHeartbeatConfig(config);
   }
 
-  // attorney.js:118-153: the positional send(name, data, options) and the
+  // attorney.js:119-154: the positional send(name, data, options) and the
   // request send({ name, data, options }), the options checked and returned
   // as an own-property copy. The startAfter normalization it ends with lives
   // in StartAfter.
@@ -581,7 +590,7 @@ export class Attorney {
     return { name, data, options: copy };
   }
 
-  // attorney.js:208-215
+  // attorney.js:209-216
   static #validateGroupConfig(config: object): void {
     if (
       !('group' in config) ||
@@ -603,7 +612,7 @@ export class Attorney {
     );
   }
 
-  // attorney.js:623-629
+  // attorney.js:624-630
   static #validateRetryConfig(config: object): void {
     assert(
       !('retryDelay' in config) ||
@@ -638,7 +647,7 @@ export class Attorney {
     );
   }
 
-  // attorney.js:616-622
+  // attorney.js:619-623
   static #validateExpirationConfig(config: object): void {
     const expireInSeconds =
       'expireInSeconds' in config ? config.expireInSeconds : undefined;
@@ -648,12 +657,12 @@ export class Attorney {
     );
     assert(
       !expireInSeconds ||
-        Number(expireInSeconds) / 60 / 60 <= Attorney.MAX_EXPIRATION_HOURS,
-      `configuration assert: expiration cannot exceed ${Attorney.MAX_EXPIRATION_HOURS} hours`,
+        Number(expireInSeconds) / 86400 <= Attorney.MAX_JOB_EXPIRATION_DAYS,
+      `configuration assert: expiration cannot exceed ${Attorney.MAX_JOB_EXPIRATION_DAYS} days`,
     );
   }
 
-  // attorney.js:613-615
+  // attorney.js:616-618
   static #validateRetentionConfig(config: object): void {
     assert(
       !('retentionSeconds' in config) || Number(config.retentionSeconds) >= 1,
@@ -661,7 +670,7 @@ export class Attorney {
     );
   }
 
-  // attorney.js:703-705
+  // attorney.js:704-706
   static #validateDeletionConfig(config: object): void {
     assert(
       !('deleteAfterSeconds' in config) ||
@@ -670,7 +679,7 @@ export class Attorney {
     );
   }
 
-  // attorney.js:630-632
+  // attorney.js:631-633
   static #validateHeartbeatConfig(config: object): void {
     assert(
       !('heartbeatSeconds' in config) ||

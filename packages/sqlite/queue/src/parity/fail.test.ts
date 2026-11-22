@@ -94,7 +94,7 @@ describe('fail', () => {
     // fail() leaves retry_count alone (only a claim spends an attempt) and
     // waits retry_delay, or with backoff max(delay, 1)·2^e/2·(1 + random())
     // with e = min(16, retry_count + 1), capped by retryDelayMax
-    // (node_modules/pg-boss/dist/plans.js:3047-3050, 3136-3145).
+    // (node_modules/pg-boss/dist/plans.js:3196-3199, 3285-3294).
     assert.deepStrictEqual(observed, {
       plain: { state: 'retry', retryCount: 0, delay: 7000, completedOn: null },
       capped: { state: 'retry', retryCount: 0, delay: 3000, completedOn: null },
@@ -153,11 +153,11 @@ describe('fail', () => {
       };
     });
 
-    // Each claim of a started job spends an attempt (plans.js:2560), and the
+    // Each claim of a started job spends an attempt (plans.js:2614), and the
     // backoff's exponent is min(16, retry_count + 1), so a delay of
     // max(retry_delay, 1)·2^e/2·(1 + random()) lands in [4, 8) s, then
     // [8, 16) s, then [16, 32) s; the last attempt fails for good
-    // (plans.js:3047-3050, 3136-3145).
+    // (plans.js:3196-3199, 3285-3294).
     assert.deepStrictEqual(observed, {
       attempts: [0, 1, 2, 3],
       withinRange: [true, true, true],
@@ -206,7 +206,7 @@ describe('fail', () => {
     // A job that ends failed is copied into dead_letter as a new created job
     // that takes its retry settings and retention from that queue and keeps
     // the job's data, key, priority and lineage; a retry is not copied
-    // (plans.js:3235-3264).
+    // (plans.js:3384-3413).
     const { failed, copyIds, source, copies, retrying } = observed;
     assert.deepStrictEqual(
       { failed, copyIds, retrying, sourceState: source?.state },
@@ -295,7 +295,7 @@ describe('fail', () => {
     // The copy takes retry, expiry, retention, deletion and heartbeat from
     // the dead letter queue, never its retryDelayMax or deadLetter, so a copy
     // never chains on; the failing attempt's retry_count is its lineage
-    // (plans.js:3235-3264).
+    // (plans.js:3384-3413).
     assert.deepStrictEqual(observed, {
       source: { state: 'failed', retryCount: 1 },
       copies: [
@@ -384,7 +384,7 @@ describe('fail', () => {
 
     // The retry re-insert the key's index refuses falls back to failed,
     // forfeiting the retries left and dead-lettering the job
-    // (plans.js:3147, 3227).
+    // (plans.js:3296, 3376).
     assert.deepStrictEqual(observed, {
       failed: { jobs: [id(2)], requested: 1, affected: 1, settled: [id(2)] },
       jobs: [
@@ -431,10 +431,10 @@ describe('fail', () => {
       };
     });
 
-    // dead_letter references queue(name) on both tables (plans.js:345,
+    // dead_letter references queue(name) on both tables (plans.js:356,
     // 878-881), so the refused send stores nothing beside the accepted one.
-    // A send names the missing dead letter queue (manager.js:1086-1088), and
-    // deleteQueue names what still uses it (2514-2520); updateQueue keeps the
+    // A send names the missing dead letter queue (manager.js:1102-1104), and
+    // deleteQueue names what still uses it (2718-2724); updateQueue keeps the
     // database's error.
     assert.deepStrictEqual(observed, {
       send: 'Error: Dead letter queue nowhere does not exist',

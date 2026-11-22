@@ -16,12 +16,12 @@ export const queueSchema = new Declaration(
     retention_seconds INTEGER NOT NULL DEFAULT 1209600 CHECK (retention_seconds >= 1),
     deletion_seconds INTEGER NOT NULL DEFAULT 604800 CHECK (deletion_seconds >= 0),
     heartbeat_seconds INTEGER CHECK (heartbeat_seconds IS NULL OR heartbeat_seconds >= 10),
-    -- queue_dead_letter_fkey (node_modules/pg-boss/dist/plans.js:345)
+    -- queue_dead_letter_fkey (node_modules/pg-boss/dist/plans.js:356)
     dead_letter TEXT REFERENCES pgboss_queue(name),
     warning_queue_size INTEGER NOT NULL DEFAULT 0 CHECK (warning_queue_size >= 0),
     notify INTEGER NOT NULL DEFAULT 0 CHECK (notify IN (0, 1)),
     -- The monitor's counts and claim stamps (node_modules/pg-boss/dist/
-    -- plans.js:348-372); singletons_active is a JSON array of keys, nulls
+    -- plans.js:359-383); singletons_active is a JSON array of keys, nulls
     -- included, or NULL when no singleton or stately job is active.
     deferred_count INTEGER NOT NULL DEFAULT 0,
     queued_count INTEGER NOT NULL DEFAULT 0,
@@ -31,7 +31,7 @@ export const queueSchema = new Declaration(
     total_count INTEGER NOT NULL DEFAULT 0,
     -- The completed and cancelled jobs the queue holds, and the time they
     -- were counted to; total_count is the live jobs plus them. Both NULL
-    -- until the queue's first maintenance pass (12.38.0: plans.js:324-331).
+    -- until the queue's first maintenance pass (12.38.0: plans.js:335-342).
     retained_count INTEGER,
     retained_on TEXT,
     singletons_active TEXT,
@@ -46,7 +46,7 @@ export const queueSchema = new Declaration(
     queue_name TEXT NOT NULL REFERENCES pgboss_queue(name) ON DELETE CASCADE,
     data TEXT NOT NULL DEFAULT '{}',
     state TEXT NOT NULL DEFAULT 'created' CHECK (state IN ('created', 'retry', 'active', 'completed', 'cancelled', 'failed')),
-    -- A dead letter copy carries none (plans.js:3235-3264).
+    -- A dead letter copy carries none (plans.js:3384-3413).
     policy TEXT,
     priority INTEGER NOT NULL DEFAULT 0,
     retry_limit INTEGER NOT NULL DEFAULT 2 CHECK (retry_limit >= 0),
@@ -71,7 +71,7 @@ export const queueSchema = new Declaration(
     failed_on TEXT,
     output TEXT,
     error TEXT,
-    -- dlq_fkey, RESTRICT (plans.js:1234-1237)
+    -- dlq_fkey, RESTRICT (plans.js:1251-1254)
     dead_letter TEXT REFERENCES pgboss_queue(name),
     group_id TEXT,
     group_tier TEXT,
@@ -86,7 +86,7 @@ export const queueSchema = new Declaration(
     PRIMARY KEY (queue_name, id)
   )`,
     `CREATE TABLE pgboss_schedule (
-    -- node_modules/pg-boss/dist/plans.js:388-404, without last_job_id.
+    -- node_modules/pg-boss/dist/plans.js:404-421, without last_job_id.
     queue_name TEXT NOT NULL REFERENCES pgboss_queue(name) ON DELETE CASCADE,
     key TEXT NOT NULL DEFAULT '',
     kind TEXT NOT NULL DEFAULT 'cron' CHECK (kind IN ('cron', 'rrule')),
@@ -96,11 +96,16 @@ export const queueSchema = new Declaration(
     options TEXT,
     created_on TEXT NOT NULL,
     updated_on TEXT NOT NULL,
+    -- The latest occurrence sent for this definition, not when it was sent:
+    -- every occurrence at or before it has been sent or is not owed
+    -- (12.39.0: plans.js:398-402, 417). NULL on a row an earlier release
+    -- kept, as pg-boss's migration leaves it (migrationStore.js:2340).
+    sent_on TEXT,
     PRIMARY KEY (queue_name, key)
   )`,
-    // One row (node_modules/pg-boss/dist/plans.js:300-310): the release that
+    // One row (node_modules/pg-boss/dist/plans.js:311-321): the release that
     // made the schema (docs/adr/0006), and the instance-wide cron claim, when
-    // a pass last ran (plans.js:1486-1494).
+    // a pass last ran (plans.js:1503-1513).
     `CREATE TABLE pgboss_version (
     singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
     version TEXT,
@@ -114,31 +119,31 @@ export const queueSchema = new Declaration(
     // pg-boss's policy and throttle indexes, each cited by its name and line in
     // node_modules/pg-boss/dist/plans.js. Its `state <= active` compares enum
     // order, which is created, retry, active.
-    // job_i1, plans.js:1238
+    // job_i1, plans.js:1255
     `CREATE UNIQUE INDEX pgboss_job_short_i
     ON pgboss_job (queue_name, COALESCE(singleton_key, ''))
     WHERE state = 'created' AND policy = 'short'`,
-    // job_i2, plans.js:1241
+    // job_i2, plans.js:1258
     `CREATE UNIQUE INDEX pgboss_job_singleton_i
     ON pgboss_job (queue_name, COALESCE(singleton_key, ''))
     WHERE state = 'active' AND policy = 'singleton'`,
-    // job_i3, plans.js:1244
+    // job_i3, plans.js:1261
     `CREATE UNIQUE INDEX pgboss_job_stately_i
     ON pgboss_job (queue_name, state, COALESCE(singleton_key, ''))
     WHERE state IN ('created', 'retry', 'active') AND policy = 'stately'`,
-    // job_i4, plans.js:1247
+    // job_i4, plans.js:1264
     `CREATE UNIQUE INDEX pgboss_job_throttle_i
     ON pgboss_job (queue_name, singleton_on, COALESCE(singleton_key, ''))
     WHERE state <> 'cancelled' AND singleton_on IS NOT NULL`,
-    // job_i6, plans.js:1277
+    // job_i6, plans.js:1294
     `CREATE UNIQUE INDEX pgboss_job_exclusive_i
     ON pgboss_job (queue_name, COALESCE(singleton_key, ''))
     WHERE state IN ('created', 'retry', 'active') AND policy = 'exclusive'`,
-    // job_i8, plans.js:1280
+    // job_i8, plans.js:1297
     `CREATE UNIQUE INDEX pgboss_job_key_strict_fifo_i
     ON pgboss_job (queue_name, singleton_key)
     WHERE state IN ('active', 'retry', 'failed') AND policy = 'key_strict_fifo'`,
-    // job_i10, plans.js:1296: each key's queued jobs in head order, so a claim
+    // job_i10, plans.js:1313: each key's queued jobs in head order, so a claim
     // finds a key's head without scanning the queue. SQLite ends every index
     // with rowid, the head order's tiebreak, where pg-boss's ends with id.
     `CREATE INDEX pgboss_job_key_strict_fifo_heads_i

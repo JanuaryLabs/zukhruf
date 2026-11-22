@@ -7,11 +7,11 @@ import { NaiveTimestamp } from './naive-timestamp.ts';
 // refused send into the next slot.
 export class Throttle {
   // pg-boss's throttle slot: singletonSeconds wide, shifted by an offset, as a
-  // zoneless timestamp (node_modules/pg-boss/dist/plans.js:2861). A null width
+  // zoneless timestamp (node_modules/pg-boss/dist/plans.js:2900). A null width
   // is no throttle there (`"singletonSeconds" IS NOT NULL`), and a zero width
   // divides by zero in Postgres, which pg-boss surfaces as the driver's error.
   // The offset is 0, or singletonSeconds when a refused send retries into the
-  // next slot (manager.js:1538-1541).
+  // next slot (manager.js:1742-1745).
   static slot(
     singletonSeconds: SendOptions['singletonSeconds'],
     offset: SendOptions['singletonSeconds'],
@@ -29,7 +29,7 @@ export class Throttle {
     return NaiveTimestamp.fromUtc(new Date(slotStartSeconds * 1000));
   }
 
-  // manager.js:1850-1859: seconds until the next throttle slot starts, never 0,
+  // manager.js:2054-2063: seconds until the next throttle slot starts, never 0,
   // and one more for slots wider than a second. Without a width the slot
   // arithmetic is NaN, which the `|| 1` floors, as in pg-boss.
   static debounceStartAfter(

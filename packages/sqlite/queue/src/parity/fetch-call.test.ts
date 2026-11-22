@@ -22,7 +22,7 @@ const keyed = (options: SendOptions, singletonKey: string | undefined) => {
 };
 
 // The ids of a batch, sorted: pg-boss's `UPDATE ... RETURNING` has no ORDER
-// BY (node_modules/pg-boss/dist/plans.js:2556-2565), so the order inside a
+// BY (node_modules/pg-boss/dist/plans.js:2610-2619), so the order inside a
 // batch is the planner's.
 const ids = (jobs: { id: string }[]) => jobs.map((job) => job.id).sort();
 
@@ -64,8 +64,8 @@ describe('fetch()', () => {
     });
 
     // limit: options.batchSize || 1 (node_modules/pg-boss/dist/
-    // manager.js:1891), JOB_COLUMNS_MIN (plans.js:890, 2565), and no signal:
-    // only a worker adds one (manager.js:599).
+    // manager.js:2095), JOB_COLUMNS_MIN (plans.js:907, 2619), and no signal:
+    // only a worker adds one (manager.js:613).
     assert.deepStrictEqual(observed, {
       empty: [],
       first: [
@@ -122,7 +122,7 @@ describe('fetch()', () => {
       };
     });
 
-    // `ORDER BY priority desc, created_on` and the LIMIT (plans.js:2484-2507).
+    // `ORDER BY priority desc, created_on` and the LIMIT (plans.js:2538-2561).
     // The order of the ids in one batch is not compared: see `ids`.
     assert.deepStrictEqual(observed, {
       first: [id(3)],
@@ -164,7 +164,7 @@ describe('fetch()', () => {
       return { plain, heads };
     });
 
-    // plans.js:2453, and 1915 for the head of a key.
+    // plans.js:2507, and 1915 for the head of a key.
     assert.deepStrictEqual(observed, {
       plain: {
         byDefault: [],
@@ -195,8 +195,8 @@ describe('fetch()', () => {
       }));
     });
 
-    // JOB_COLUMNS_ALL (plans.js:891-919, 2565), as the claim wrote the row
-    // (2556-2560).
+    // JOB_COLUMNS_ALL (plans.js:908-936, 2619), as the claim wrote the row
+    // (2610-2614).
     assert.strictEqual(observed.length, 1);
     assert.partialDeepStrictEqual(observed[0], {
       state: 'active',
@@ -254,8 +254,8 @@ describe('fetch()', () => {
       return attempts;
     });
 
-    // retry_count + 1 when the job was started before (plans.js:2556-2560);
-    // the attempt fence (manager.js:1980-1990).
+    // retry_count + 1 when the job was started before (plans.js:2610-2614);
+    // the attempt fence (manager.js:2184-2194).
     const round = (retryCount: number, at: number, state: string) => ({
       fetched: [{ id: id(1), retryCount }],
       claimed: { state: 'active', retryCount, startedOn: at, heartbeatOn: at },
@@ -287,7 +287,7 @@ describe('fetch()', () => {
         };
         // The key of each job of a batch, sorted. Which job of a key a
         // singleton or stately batch takes is not specified: pg-boss ranks
-        // them with no ORDER BY (plans.js:2508-2512).
+        // them with no ORDER BY (plans.js:2562-2566).
         const keys = async (jobs: { id: string }[]) => {
           const found = await queue.findJobs(policy);
           return jobs
@@ -332,8 +332,8 @@ describe('fetch()', () => {
     });
 
     // The claim of a singleton or stately batch takes one job of each key
-    // (plans.js:2367-2368, 2508-2512, 2563); key_strict_fifo takes heads only
-    // (2432-2464).
+    // (plans.js:2419-2420, 2562-2566, 2617); key_strict_fifo takes heads only
+    // (2486-2518).
     const batches = Object.fromEntries(
       Object.entries(observed).map(([policy, { first, second, third }]) => [
         policy,
@@ -374,7 +374,7 @@ describe('fetch()', () => {
     });
 
     // The fetch reads the active keys live (12.37.1, #957:
-    // plans.js:2466-2478), so k1 waits while job 1 is active.
+    // plans.js:2520-2532), so k1 waits while job 1 is active.
     assert.deepStrictEqual(observed, {
       held: [id(1)],
       first: [id(3)],
@@ -415,7 +415,7 @@ describe('fetch()', () => {
     // The claim ranks g's jobs across its tiers and checks each against its
     // own tier, so it takes both; the recount finds two active in g, over
     // low's limit of 1, and gives job 1 back as it was (12.38.1:
-    // manager.js:1908-1937, 1951-1975; plans.js:2778).
+    // manager.js:2112-2141, 2155-2179; plans.js:2832).
     assert.deepStrictEqual(observed, {
       fetched: [id(2)],
       low: { state: 'created', startedOn: null, retryCount: 0 },
@@ -453,8 +453,8 @@ describe('fetch()', () => {
     });
 
     // Job 1 is over low's limit after the claim, but its way back to created
-    // meets job 2 on key k's created slot (plans.js:1245): the refused job
-    // stays active and runs (manager.js:1947-1975).
+    // meets job 2 on key k's created slot (plans.js:1262): the refused job
+    // stays active and runs (manager.js:2151-2179).
     assert.deepStrictEqual(observed, {
       fetched: [id(1), id(3)],
       states: [
@@ -507,7 +507,7 @@ describe('fetch()', () => {
       };
     });
 
-    // plans.js:2479 for ignoreGroups; 1857-1900 and 1981-1994 for the limits.
+    // plans.js:2533 for ignoreGroups; 1857-1900 and 1981-1994 for the limits.
     assert.deepStrictEqual(observed, {
       ignored: [id(4), id(5)],
       limited: [id(1), id(6)],
@@ -540,7 +540,7 @@ describe('fetch()', () => {
       };
     });
 
-    // plans.js:2480-2481.
+    // plans.js:2534-2535.
     assert.deepStrictEqual(observed, {
       between: [id(2), id(3)],
       atMost: [id(1)],
@@ -572,7 +572,7 @@ describe('fetch()', () => {
       };
     });
 
-    // attorney.js:399-406, manager.js:1044-1056.
+    // attorney.js:402-409, manager.js:1060-1072.
     assert.partialDeepStrictEqual(observed, {
       noName: 'AssertionError: missing queue name',
       noQueue: 'Error: Queue missing does not exist',
@@ -622,7 +622,7 @@ describe('fetch()', () => {
       }
     });
 
-    // manager.js:1869-1876, 1882.
+    // manager.js:2073-2080, 2086.
     const both = [
       `priority: false ${sortWarning}`,
       `orderByCreatedOn: false ${sortWarning}`,
@@ -651,7 +651,7 @@ describe('fetch()', () => {
       };
     });
 
-    // Only the jobs of a worker fail at stop (manager.js:1110-1155), and a
+    // Only the jobs of a worker fail at stop (manager.js:1126-1171), and a
     // fetch still answers while the database stays open.
     assert.deepStrictEqual(observed, {
       fetched: [id(1)],
@@ -702,7 +702,7 @@ describe('fetch()', () => {
     );
 
     // failJobsByTimeout: started_on + expire_seconds < now
-    // (plans.js:2957-2961, 2968-2971).
+    // (plans.js:3106-3110, 3117-3120).
     assert.deepStrictEqual(observed, {
       timeline: [
         {

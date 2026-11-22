@@ -33,7 +33,7 @@ export class Uuid {
   }
 
   // send()'s id, which pg-boss's insert reads out of its JSON payload
-  // (node_modules/pg-boss/dist/plans.js:2886): a string as it is, anything
+  // (node_modules/pg-boss/dist/plans.js:2979): a string as it is, anything
   // else as its JSON text.
   static fromPayload(value: unknown): string {
     return Uuid.canonical(
@@ -41,7 +41,7 @@ export class Uuid {
     );
   }
 
-  // findJobs()'s id, bound as a parameter (plans.js:4630): null is SQL NULL,
+  // findJobs()'s id, bound as a parameter (plans.js:4779): null is SQL NULL,
   // which matches no job.
   static parameter(value: unknown): string | null {
     return value === null ? null : Uuid.canonical(String(value));

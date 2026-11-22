@@ -41,7 +41,7 @@ export type RunOptions = Pick<
 
 // A warning event at its clock time. pinSeconds is how long the stats
 // aggregate held its snapshot in real time (node_modules/pg-boss/dist/
-// plans.js:4383, 4476), so it is compared only as a finite count of seconds.
+// plans.js:4532, 4625), so it is compared only as a finite count of seconds.
 export type WarningEvent = {
   at: number;
   message: string;

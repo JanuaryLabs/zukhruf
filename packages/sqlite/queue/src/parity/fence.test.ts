@@ -17,7 +17,7 @@ async function outcome(call: () => Promise<unknown>) {
 }
 
 // A settle's result with `settled` sorted: pg-boss aggregates the ids it
-// touched in no specified order (plans.js:3017-3019).
+// touched in no specified order (plans.js:3166-3168).
 function sortSettled(response: unknown) {
   if (
     response === null ||
@@ -90,8 +90,8 @@ describe('attempt fence', () => {
     });
 
     // work() settles with the jobs it claimed, { id, retryCount } each
-    // (manager.js:710, 734), so attempt 0's completion and failure match
-    // nothing once attempt 1 holds the job (plans.js:2588-2591).
+    // (manager.js:725, 750), so attempt 0's completion and failure match
+    // nothing once attempt 1 holds the job (plans.js:2642-2645).
     const active = { state: 'active', retryCount: 1, output: null };
     const completed = {
       state: 'completed',
@@ -164,8 +164,8 @@ describe('attempt fence', () => {
       };
     });
 
-    // mapAttemptArg (manager.js:1980-1989) and the fence, which matches only an
-    // active job at the named retryCount (plans.js:2588-2591).
+    // mapAttemptArg (manager.js:2184-2193) and the fence, which matches only an
+    // active job at the named retryCount (plans.js:2642-2645).
     const requires =
       'AssertionError: fail() requires either ids or jobs with an id and an integer retryCount, not a mix';
     assert.deepStrictEqual(observed, {
@@ -185,7 +185,7 @@ describe('attempt fence', () => {
           settled: [id(3)],
         },
         queuedCancel: { jobs: [id(5)], requested: 1, affected: 0, settled: [] },
-        // Each id is settled once (plans.js:3017-3019).
+        // Each id is settled once (plans.js:3166-3168).
         duplicate: {
           jobs: [id(4), id(4)],
           requested: 2,
@@ -193,7 +193,7 @@ describe('attempt fence', () => {
           settled: [id(4)],
         },
         emptyId: 'AssertionError: fail() requires an id',
-        // The ids are checked before the queue (manager.js:2351-2354).
+        // The ids are checked before the queue (manager.js:2555-2558).
         noIdsOnMissingQueue: 'AssertionError: cancel() requires an id',
         mixed: requires,
         negative: requires.replace('fail()', 'cancel()'),
