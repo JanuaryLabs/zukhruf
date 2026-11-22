@@ -1,5 +1,7 @@
 # The release writes no commit and tags the pushed commit
 
+Superseded in part on 2026-11-22 (#4985) for `@zukhruf/nx/release.json`. It writes no git now, and deepagents, sdk-it and elt release this way too ([ADR 0009](./0009-every-repository-releases-each-push-with-no-git-writes.md)).
+
 Until 2026-11-22, the release committed the versions on top of the pushed commit, pushed the tag of that commit, and merged it into `main` ([ADR 0007](./0007-release-does-not-wait-for-ci.md)). A push took 10 to 14 minutes to reach npm, and 17 minutes when it waited behind another release (the run of 15d7a454, 2026-11-22):
 
 - The tag push ran the pre-push hook on the runner, which built 49 projects with an empty Nx cache: 2.6 to 3.6 minutes.

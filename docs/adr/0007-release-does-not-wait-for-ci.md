@@ -2,6 +2,8 @@
 
 Superseded in part on 2026-11-22 (#3271) for how the release versions and tags a commit. The release writes no commit to `main`, tags the pushed commit through the GitHub API and merges nothing into `main` ([ADR 0008](./0008-the-release-writes-no-commit-and-tags-the-pushed-commit.md)).
 
+Superseded in part on 2026-11-22 (#4985) for the other repositories that use `affected-range`. deepagents, sdk-it and elt now release each push before CI too, and give `tested-tags: ''` ([ADR 0009](./0009-every-repository-releases-each-push-with-no-git-writes.md)).
+
 A push to `main` is a release. Until this decision, `.github/workflows/release.yml` started only after a CI run on `main` passed (`on: workflow_run`). A red or cancelled run released nothing.
 
 The cost was high. On 2026-11-20, the last 60 CI runs on `main` (about 30 hours) gave 33 green, 11 red and 15 cancelled runs, and 8 releases. A green run took 27.7 minutes (median). Sessions pushed every 8.2 minutes (median). One Docker test that failed in one package stopped the release of 40 packages. Seventeen `feat` and `fix` commits waited on `main` after `release/0.8.43`.
