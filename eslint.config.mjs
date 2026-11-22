@@ -266,6 +266,19 @@ export default defineConfig(
       'island/no-ambient-time': 'off',
     },
   },
+  // The nightly checks of @zukhruf/nx are not shipped. Like the tests, they
+  // import the tool layer. They are command line programs: they give their
+  // environment to the tools of a generated workspace, pick the base release
+  // by its age, and print each step (packages/nx ADR 0020).
+  {
+    files: ['packages/nx/src/e2e/**'],
+    rules: {
+      '@nx/enforce-module-boundaries': moduleBoundaryRule('tests'),
+      'island/no-console': 'off',
+      'island/no-process-env': 'off',
+      'island/no-ambient-time': 'off',
+    },
+  },
   // @zukhruf/shutdown takes over the report of a crash from Node.js. With a
   // listener for 'uncaughtException', Node.js does not write the error, and a
   // crash after a termination signal ends the process before a host can log

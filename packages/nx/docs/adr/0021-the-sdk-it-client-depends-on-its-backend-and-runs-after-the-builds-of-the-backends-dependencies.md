@@ -31,3 +31,4 @@ A workspace from the generators of 0.8.59 (Nx 24.0.6) showed three gaps:
 - `sdk` waits for the builds of the backend's dependencies.
 - The hash of `sdk` changes when a file of the backend's dependencies or their generated code changes.
 - `nx affected` runs the client and the web for each change of the backend or of a package it depends on.
+- `^build` reaches the backend through the client, which has no `build`. So the `build` and `lint` of the web, and the client's `lint`, wait for the production build of the backend (seen in the task graph of the nightly upgrade check, 2026-11-22).

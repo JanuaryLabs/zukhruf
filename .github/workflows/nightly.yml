@@ -1,0 +1,75 @@
+name: Nightly
+
+# Makes workspaces of the standard from the published @zukhruf/nx and checks
+# them as a repo of the standard runs them (packages/nx/docs/adr/0020). smoke
+# commits a generated workspace through its hooks and runs lint, typecheck,
+# build and test on a fresh checkout of it. upgrade moves a workspace of an
+# older release to latest with nx migrate and compares its Nx configuration
+# with a fresh one. Each reports and gates nothing: a release never waits for
+# CI (docs/adr/0007). They read npm, not this commit, so no push runs them.
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# nx.json runs 6 tasks at once for the 14-core Mac that the sessions push from.
+# A runner has 4 CPUs, so every nx call here, also in the generated
+# workspaces, keeps Nx's default of 3: NX_PARALLEL wins over nx.json.
+env:
+  NX_PARALLEL: 3
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # The target builds @zukhruf/fs, which builds sqlite-open's native
+      # libraries with zig cc (packages/sqlite/open/docs/adr/0006).
+      - name: Set up Zig
+        id: zig
+        background: true
+        uses: $/.github/actions/setup-zig
+
+      - name: Set up the workspace
+        uses: $/.github/actions/setup-workspace
+
+      - name: Wait for Zig
+        wait: zig
+
+      # The tests of the db package and the backend start a Postgres in the
+      # Docker of the runner.
+      - name: Generate a workspace and run its targets
+        run: npx nx run nx:e2e:smoke
+
+  upgrade:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # The target builds @zukhruf/fs, which builds sqlite-open's native
+      # libraries with zig cc (packages/sqlite/open/docs/adr/0006).
+      - name: Set up Zig
+        id: zig
+        background: true
+        uses: $/.github/actions/setup-zig
+
+      - name: Set up the workspace
+        uses: $/.github/actions/setup-workspace
+
+      - name: Wait for Zig
+        wait: zig
+
+      - name: Compare a migrated workspace with a fresh one
+        run: npx nx run nx:e2e:upgrade

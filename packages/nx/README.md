@@ -1109,6 +1109,17 @@ NX_E2E_PRESET_VERSION=file:<scratch>/zukhruf-nx-<version>.tgz \
 
 Then check that `npm install` passes, that `npx nx run-many -t typecheck` and `npx nx run-many -t lint` pass, and that the first `git commit` passes the hooks. Delete the folder at the end. On 2026-11-18 both paths passed: a new folder (`acme`), and a folder with only `git init` (`.`). In the new folder, a demo package also passed `typecheck` (TypeScript 7.0.2) and `lint`, and its commit passed each hook. A second run of `npx nx g @zukhruf/nx:init` in the generated repo changed no file.
 
+After a release, two targets check the published version. `.github/workflows/nightly.yml` runs them each day and on `workflow_dispatch`, and no release waits for them ([ADR 0020](./docs/adr/0020-two-nightly-checks-run-the-generated-workspace-and-compare-an-upgraded-one-with-a-fresh-one.md)):
+
+```sh
+npx nx run nx:e2e:smoke                         # latest
+npx nx run nx:e2e:smoke --args="--version=0.8.57"
+npx nx run nx:e2e:upgrade
+```
+
+- `e2e:smoke` makes a workspace with the preset, `node-app`, `react-app`, `pair`, `prisma`, `auth` and `ui-package`, commits it through its hooks, removes what Git ignores except `node_modules`, and runs `nx run-many -t lint typecheck build test --skip-nx-cache`. The tests of the db package need Docker. Give the version in `--args`: Nx reads a `--version` of its own command line.
+- `e2e:upgrade` makes the same workspace with the newest release older than a day, moves it to `latest` with `nx migrate` and its migrations, and compares it with a workspace made with `latest`: `targetDefaults`, `namedInputs` and `plugins` of `nx.json`, the `nx` key and `project.json` of each project, and the edges of the task graph. It prints each difference with its two values.
+
 ### Who uses the generators
 
 | Consumer | How                                                   | Record |
@@ -1544,6 +1555,7 @@ The decisions are in [ADR 0011](./docs/adr/0011-the-dokploy-generator-writes-the
 - [ADR 0017](./docs/adr/0017-nx-migrations-bring-a-change-of-generated-output-to-the-repos-that-ran-the-generator-before.md): Nx migrations bring a change of generated output to the repos that ran the generator before.
 - [ADR 0018](./docs/adr/0018-migrate-check-diffs-the-migrations-on-a-shadow-database-that-it-makes.md): migrate:check diffs the migrations on a shadow database that it makes.
 - [ADR 0019](./docs/adr/0019-a-task-that-reads-generated-code-runs-its-generator-first-and-hashes-its-output.md): a task that reads generated code runs its generator first and hashes its output.
+- [ADR 0020](./docs/adr/0020-two-nightly-checks-run-the-generated-workspace-and-compare-an-upgraded-one-with-a-fresh-one.md): two nightly checks run the generated workspace and compare an upgraded one with a fresh one.
 - [ADR 0021](./docs/adr/0021-the-sdk-it-client-depends-on-its-backend-and-runs-after-the-builds-of-the-backends-dependencies.md): the sdk-it client depends on its backend and runs after the builds of the backend's dependencies.
 
 **Copied code**
