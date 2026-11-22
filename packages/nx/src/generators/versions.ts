@@ -31,8 +31,8 @@ export const rootToolVersions: Record<string, string> = {
   eslint: '10.15.0',
   'eslint-plugin-functional': '10.0.1',
   'eslint-plugin-import-x': '4.18.1',
-  // @zukhruf/eslint peers on ^79.0.0.
-  'eslint-plugin-unicorn': '79.0.0',
+  // @zukhruf/eslint peers on ^80.0.0.
+  'eslint-plugin-unicorn': '80.0.0',
   'jsonc-eslint-parser': '3.3.0',
   prettier: '3.10.1',
   typescript: 'npm:@typescript/typescript6@6.0.2',
