@@ -1,5 +1,5 @@
 name: Publish the release
-description: Runs nx release publish with npm provenance and, when a project fails (a Rekor 409), publishes once more only the projects that the first run did not publish, so one failure cannot leave a version half-published. Needs the workspace installed with registry-url (setup-workspace), the commit that nx release version made, and an nx.json that extends @zukhruf/nx/release.json, whose release projects are tag:npm:public. The job needs id-token write permission. Other repositories use it as JanuaryLabs/zukhruf/.github/actions/nx-release-publish@main.
+description: Runs nx release publish with npm provenance and, when a project fails (a Rekor 409), publishes once more only the projects that the first run did not publish, so one failure cannot leave a version half-published. Needs the workspace installed with registry-url (setup-workspace), the versions that nx release version wrote in the same job (in a release commit, or only in the checkout, as zukhruf's release does since ADR 0008), and an nx.json whose release projects are tag:npm:public (zukhruf's @zukhruf/nx/release.json has them). The job needs id-token write permission. Other repositories use it as JanuaryLabs/zukhruf/.github/actions/nx-release-publish@main.
 
 inputs:
   token:

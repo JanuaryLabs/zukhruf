@@ -4,7 +4,7 @@ Publishes what `nx release version` versioned, with npm provenance. When a proje
 
 ```yaml
 permissions:
-  contents: write # nx release version pushes the release commit and tag
+  contents: write # the job writes the release tag (and, in a repo that commits its versions, the release commit)
   id-token: write # npm provenance
 steps:
   - uses: JanuaryLabs/zukhruf/.github/actions/setup-workspace@main
