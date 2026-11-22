@@ -1,6 +1,6 @@
 {
   "name": "@zukhruf/election",
-  "version": "0.8.57",
+  "version": "0.8.59",
   "description": "Elects a leader among candidates. Each term has a higher epoch and ends when the leader resigns or dies. Backends subclass one campaign. `SqliteElection` elects among processes of one host; candidates and observers end a leader whose pipe heartbeats stop.",
   "license": "MIT",
   "repository": {
@@ -40,13 +40,13 @@
     "access": "public"
   },
   "dependencies": {
-    "@zukhruf/async": "^0.8.57",
-    "@zukhruf/fs": "^0.8.57",
-    "@zukhruf/lease": "^0.8.57",
-    "@zukhruf/pipes": "^0.8.57"
+    "@zukhruf/async": "^0.8.59",
+    "@zukhruf/fs": "^0.8.59",
+    "@zukhruf/lease": "^0.8.59",
+    "@zukhruf/pipes": "^0.8.59"
   },
   "devDependencies": {
     "@sinonjs/fake-timers": "15.5.0",
-    "@zukhruf/testing": "^0.8.57"
+    "@zukhruf/testing": "^0.8.59"
   }
 }
