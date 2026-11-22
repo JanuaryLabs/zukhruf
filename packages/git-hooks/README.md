@@ -1,6 +1,6 @@
 # @zukhruf/git-hooks
 
-Git hooks written in TypeScript. A pre-commit hook runs steps in order against the staged commit. `Format` checks the staged copy of each file with Prettier and changes nothing. `Sync` runs `nx sync` on the staged commit and stages only the files that sync wrote. `Codegen` builds generated files when nx says that their projects are affected. Other steps stop the commit: `NoNumericPins` when a file writes a Node or npm version as a number, `NpmrcPolicy` when `.npmrc` does not decide how npm installs, `LockfileSync` when `package-lock.json` does not record each `package.json`, `OneRuntimeCopy` when the lockfile installs a runtime package in more than one folder, `InstallScriptsReviewed` when a package has an install script that `allowScripts` does not decide, and `DockerfileInstallsFromLockfile` when a Dockerfile installs packages without the lockfile. `DependencyChecks` lints the `package.json` of each touched project, and `WorkflowChecks` lints the staged workflows, with the ESLint of the commit. A step reads a tree of the commit, and runs its tools in a snapshot of the commit, never in the working tree. A pre-push hook runs steps in order against the push. Its build step builds each pushed commit in a snapshot, never the working tree. A commit-msg hook runs steps in order against the message of the commit. Its scope step stops a subject that nx release reads with the wrong scope. Its breaking step stops a message that nx release reads as a breaking change. Its trailer step stops a message that ends with an attribution trailer, Co-authored-by or Claude-Session. A repo adds a step of its own as a class.
+Git hooks written in TypeScript. A pre-commit hook runs steps in order against the staged commit. `Format` checks the staged copy of each file with Prettier and changes nothing. `Sync` runs `nx sync` on the staged commit and stages only the files that sync wrote. `Codegen` builds generated files when nx says that their projects are affected. Other steps stop the commit: `NoNumericPins` when a file writes a Node or npm version as a number, `NpmrcPolicy` when `.npmrc` does not decide how npm installs, `LockfileSync` when `package-lock.json` does not record each `package.json`, `OneRuntimeCopy` when the lockfile installs a runtime package in more than one folder, `NoOutsideLinks` when the repo uses a package from another checkout, `InstallScriptsReviewed` when a package has an install script that `allowScripts` does not decide, and `DockerfileInstallsFromLockfile` when a Dockerfile installs packages without the lockfile. `DependencyChecks` lints the `package.json` of each touched project, and `WorkflowChecks` lints the staged workflows, with the ESLint of the commit. A step reads a tree of the commit, and runs its tools in a snapshot of the commit, never in the working tree. A pre-push hook runs steps in order against the push. Its build step builds each pushed commit in a snapshot, never the working tree. A commit-msg hook runs steps in order against the message of the commit. Its scope step stops a subject that nx release reads with the wrong scope. Its breaking step stops a message that nx release reads as a breaking change. Its trailer step stops a message that ends with an attribution trailer, Co-authored-by or Claude-Session. A repo adds a step of its own as a class.
 
 The words in these documents have one meaning each. See the glossary in [CONTEXT.md](./CONTEXT.md).
 
@@ -148,6 +148,18 @@ await preCommit([
 ]);
 ```
 
+## Install no package from another checkout
+
+`NoOutsideLinks` runs at each commit. The commit stops when the staged `package-lock.json` links a folder outside the repo, as `npm link <folder>` writes it: an entry with `"link": true` whose `resolved` starts with `..` or is absolute. The commit also stops when a package in `node_modules` of the root or of a workspace is a link whose real path is outside the repo, such as a link that `ln -s` made. No commit holds `node_modules`, so this step reads the install in the working tree (ADR 0006). The hook names each package and the folder that it links to. Push the package (a push to its main releases it), then `npm install` the published version. A workspace link points inside the repo, and passes.
+
+A repo that keeps a link to another checkout names the package in `allowed`, as a glob of package names.
+
+```ts
+import { NoOutsideLinks, preCommit } from '@zukhruf/git-hooks';
+
+await preCommit([new NoOutsideLinks({ allowed: ['@eltjs/*'] })]);
+```
+
 ## Decide each install script
 
 `InstallScriptsReviewed` runs when a commit changes `package-lock.json` or the root `package.json`. The commit stops when a package of the staged lockfile has an install script and no key of `allowScripts` in the root `package.json` names it, with `true` or `false`. The hook names each such package, its folders, and the platform that each folder fits.
@@ -208,12 +220,13 @@ The targets run in the order that `run` gives. They build from the staged commit
 
 ## Write a step
 
-A pre-commit step is a subclass of `Step<Commit>`. It names itself and gives an outcome: `this.pass()`, `this.skip(why)` or `this.fail(why)`. A fail stops the commit. A step reads the commit only through its subject. It never reads the working tree, and it never gets an environment.
+A pre-commit step is a subclass of `Step<Commit>`. It names itself and gives an outcome: `this.pass()`, `this.skip(why)` or `this.fail(why)`. A fail stops the commit. A step reads the commit only through its subject. It never reads the working tree, and it never gets an environment. The one exception is the install: no commit holds `node_modules`, so `installRoot` names the folder where the repo installed its packages, and a step that checks the install reads it there (ADR 0006).
 
 `Commit`, `Push` and `CommitMessage` are types, not classes: the hook builds them. Import them with `type`. These are the types that a step uses:
 
 ```ts
 interface Commit {
+  readonly installRoot: string;
   tree(): Promise<Tree>;
   changes(): Promise<readonly DiffEntry[]>;
   touches(globs: readonly string[]): Promise<boolean>;
@@ -723,6 +736,12 @@ interface OneRuntimeCopyOptions {
   readonly packages?: readonly string[]; // default: ['react', 'react-dom', 'zod']
   readonly allowed?: Readonly<Record<string, string>>; // lockfile folder: reason
 }
+class NoOutsideLinks extends Step<Commit> {
+  constructor(options?: NoOutsideLinksOptions);
+} // name: 'outside-links'
+interface NoOutsideLinksOptions {
+  readonly allowed?: readonly string[]; // globs of package names, default: []
+}
 class InstallScriptsReviewed extends Step<Commit> {} // name: 'install-scripts'
 class DockerfileInstallsFromLockfile extends Step<Commit> {} // name: 'docker'
 class DependencyChecks extends Step<Commit> {} // name: 'dependencies'
@@ -744,6 +763,7 @@ class NoAttributionTrailer extends Step<CommitMessage> {} // name: 'trailer'
 
 // The subjects. They are exported as types: the hook builds them.
 interface Commit {
+  readonly installRoot: string;
   tree(): Promise<Tree>;
   changes(): Promise<readonly DiffEntry[]>;
   touches(globs: readonly string[]): Promise<boolean>;

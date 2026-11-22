@@ -205,9 +205,10 @@ export const hooks: Record<string, string> = {
 // refuse a Node or npm version written as a number, an .npmrc without the
 // install policy, a package-lock.json that does not record each staged
 // package.json, a lockfile that installs react, react-dom or zod twice, a
-// package with an install script that allowScripts does not decide, a
-// Dockerfile that installs without the lockfile, a package.json that breaks
-// the lint, and a workflow or action under .github that breaks the lint.
+// package linked from another checkout (npm link), a package with an install
+// script that allowScripts does not decide, a Dockerfile that installs
+// without the lockfile, a package.json that breaks the lint, and a workflow
+// or action under .github that breaks the lint.
 import {
   DependencyChecks,
   DockerfileInstallsFromLockfile,
@@ -215,6 +216,7 @@ import {
   InstallScriptsReviewed,
   LockfileSync,
   NoNumericPins,
+  NoOutsideLinks,
   NpmrcPolicy,
   OneRuntimeCopy,
   Sync,
@@ -229,6 +231,7 @@ await preCommit([
   new NpmrcPolicy(),
   new LockfileSync(),
   new OneRuntimeCopy(),
+  new NoOutsideLinks(),
   new InstallScriptsReviewed(),
   new DockerfileInstallsFromLockfile(),
   new DependencyChecks(),

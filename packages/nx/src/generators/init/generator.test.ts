@@ -140,7 +140,7 @@ test('a fresh workspace gets each root file of the standard', async () => {
   assert.match(preCommit, /new Format\(\)/);
   assert.match(
     preCommit,
-    /new LockfileSync\(\),\n {2}new OneRuntimeCopy\(\),\n {2}new InstallScriptsReviewed\(\),\n/,
+    /new LockfileSync\(\),\n {2}new OneRuntimeCopy\(\),\n {2}new NoOutsideLinks\(\),\n {2}new InstallScriptsReviewed\(\),\n/,
   );
   assert.match(
     preCommit,

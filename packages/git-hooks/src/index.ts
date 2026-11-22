@@ -10,6 +10,10 @@ export { LockfileSync } from './lockfile-sync.ts';
 export { NoAttributionTrailer } from './no-attribution-trailer.ts';
 export { NoBreakingChange } from './no-breaking-change.ts';
 export { NoNumericPins } from './no-numeric-pins.ts';
+export {
+  NoOutsideLinks,
+  type NoOutsideLinksOptions,
+} from './no-outside-links.ts';
 export { NpmrcPolicy } from './npmrc-policy.ts';
 export { NxReleaseScope } from './nx-release-scope.ts';
 export {

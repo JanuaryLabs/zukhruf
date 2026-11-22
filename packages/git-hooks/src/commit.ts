@@ -84,6 +84,13 @@ export class Commit {
     this.#git = gitIn(root, environment);
   }
 
+  // The folder where the repo installed its packages: the top of the working
+  // tree, a real path, as git runs the hook there. No commit holds
+  // node_modules, so a step that checks the install reads it here.
+  get installRoot(): string {
+    return this.#root;
+  }
+
   // The staged tree: the tree that `git write-tree` writes from the index of
   // the hook. Each call writes the tree of the index as it is then.
   async tree(): Promise<Tree> {

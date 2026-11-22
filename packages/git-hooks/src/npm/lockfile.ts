@@ -1,3 +1,5 @@
+import { isAbsolute } from 'node:path';
+
 // A package of a node_modules folder that the lockfile records, and that is
 // not a link: a dependency from the registry, git or a tarball.
 export interface ThirdPartyPackage {
@@ -19,6 +21,13 @@ export interface ThirdPartyPackage {
   readonly fromRegistry: boolean;
   // The `os`, `cpu` and `libc` that the package fits; empty for each one.
   readonly platform: Readonly<Record<'os' | 'cpu' | 'libc', readonly string[]>>;
+}
+
+// A package of the lockfile that links to a folder outside the repo: the
+// name that `import` resolves, and the folder as the lockfile names it.
+export interface OutsideLink {
+  readonly name: string;
+  readonly target: string;
 }
 
 // The `packages` of an npm lockfile (lockfileVersion 2 or 3), keyed by the
@@ -106,6 +115,30 @@ export class Lockfile {
         targets.add(resolved);
     }
     return [...targets];
+  }
+
+  // The links of the lockfile to a folder outside the repo: a `resolved`
+  // that starts with `..` or is absolute, as `npm link <folder>` writes it.
+  // npm also writes the folder itself as a key that starts with `..`, but
+  // only as the target of such a link, so the links name each one.
+  outsideLinks(): OutsideLink[] {
+    const links: OutsideLink[] = [];
+    for (const [key, value] of this.#packages) {
+      const resolved = field(value, 'resolved');
+      if (
+        inNodeModules(key) &&
+        field(value, 'link') === true &&
+        typeof resolved === 'string' &&
+        (resolved.startsWith('..') || isAbsolute(resolved))
+      )
+        links.push({
+          name: key.slice(
+            key.lastIndexOf('node_modules/') + 'node_modules/'.length,
+          ),
+          target: resolved,
+        });
+    }
+    return links;
   }
 
   // The names of the third-party packages that the lockfile marks with an
