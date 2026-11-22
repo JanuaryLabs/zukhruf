@@ -133,6 +133,28 @@
       color-mix(in oklab, var(--input) 30%, transparent)
     );
   }
+
+  /*
+   * a date picker's trigger is a PopoverTrigger rendered as an outline Button,
+   * a field like a SelectTrigger, so it takes the token too; only the outline
+   * variant carries bg-background and dark:bg-input/30, so a ghost or default
+   * Button as a trigger keeps its look, and so does an outline Button that
+   * opens no popover; a hovered or open trigger keeps its nova muted background
+   */
+  [data-slot='popover-trigger'].group\/button.bg-background:not(:hover):not(
+      [aria-expanded='true']
+    ) {
+    background-color: var(--control-background, var(--background));
+  }
+
+  [data-slot='popover-trigger'].group\/button.dark\:bg-input\/30:not(
+      :hover
+    ):not([aria-expanded='true']):is(.dark, .dark *) {
+    background-color: var(
+      --control-background,
+      color-mix(in oklab, var(--input) 30%, transparent)
+    );
+  }
 }
 
 /*

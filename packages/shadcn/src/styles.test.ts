@@ -238,6 +238,29 @@ describe('the stylesheet of @zukhruf/shadcn', () => {
     );
   });
 
+  test('the trigger of a date picker, a PopoverTrigger rendered as an outline Button, takes --control-background, and a hovered or open trigger keeps its nova background', async () => {
+    // Act
+    const css = await buildAppStylesheet();
+
+    // Assert
+    assert.equal(
+      layerOf(
+        css,
+        /\[data-slot=['"]?popover-trigger['"]?\]\.group\\\/button\.bg-background:not\(:hover\):not\(\s*\[aria-expanded=['"]?true['"]?\]\s*\)\s*\{\s*background-color:\s*var\(--control-background,\s*var\(--background\)\);?\s*\}/,
+      ),
+      'utilities',
+      'In an earlier layer the patch loses to the bg-background utility of the outline Button',
+    );
+    assert.equal(
+      layerOf(
+        css,
+        /\[data-slot=['"]?popover-trigger['"]?\]\.group\\\/button\.dark\\:bg-input\\\/30:not\(\s*:hover\s*\):not\(\[aria-expanded=['"]?true['"]?\]\):is\(\.dark, \.dark \*\)\s*\{[^}]*var\(\s*--control-background,\s*color-mix\(in oklab, var\(--input\) 30%, transparent\)/,
+      ),
+      'utilities',
+      'Without :not(:hover) the patch would win over the dark:hover:bg-input/50 of the outline Button',
+    );
+  });
+
   test('a host sets the colour of a field label with --field-label-foreground, which inherits by default and leaves an invalid field its destructive colour', async () => {
     // Act
     const css = await buildAppStylesheet();
@@ -305,6 +328,17 @@ describe('the stylesheet of @zukhruf/shadcn', () => {
       ],
       [h(kit.Button), 'button', ['group/button', 'h-8']],
       [h(kit.Button, { size: 'sm' }), 'button', ['group/button', 'h-7']],
+      [
+        h(
+          kit.Popover,
+          null,
+          h(kit.PopoverTrigger, {
+            render: h(kit.Button, { variant: 'outline' }),
+          }),
+        ),
+        'popover-trigger',
+        ['group/button', 'h-8', 'bg-background', 'dark:bg-input/30'],
+      ],
       [h(kit.FieldLabel), 'field-label', ['text-sm']],
       [h(kit.FieldTitle), 'field-label', ['text-sm']],
     ] as const;
