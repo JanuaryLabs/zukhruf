@@ -59,7 +59,7 @@
   },
   "devDependencies": {
     "better-auth": "1.7.27",
-    "hono": "^4.13.19",
+    "hono": "^4.13.20",
     "react-router": "^8.5.2"
   }
 }

@@ -58,7 +58,7 @@
     "@zukhruf/python": "*",
     "@zukhruf/random": "*",
     "@zukhruf/statistics": "*",
-    "ai": "^7.0.178",
+    "ai": "^7.0.179",
     "cephes": "^3.3.4",
     "heap": "^0.2.7",
     "hyparquet": "^1.33.1",

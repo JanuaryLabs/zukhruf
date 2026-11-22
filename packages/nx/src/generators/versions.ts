@@ -55,14 +55,14 @@ export const appPackageVersions = {
   '@types/node': '26.6.6',
   tslib: '2.9.1',
   evlog: '2.35.1',
-  hono: '4.13.19',
+  hono: '4.13.20',
   zod: '4.6.7',
   // pair: the generated client imports it. sdk-it writes ^3.0.0 in the client
   // manifest, so the web app takes the latest 3.x, not 4.
   'fast-content-type-parse': '3.0.0',
   // react-app and ui-package: React, Vite, Tailwind and the React lint plugins
   // that @zukhruf/eslint/react loads.
-  '@eslint-react/eslint-plugin': '5.30.4',
+  '@eslint-react/eslint-plugin': '5.30.6',
   '@juristr/nx-tailwind-sync': '0.0.9',
   '@rolldown/plugin-babel': '0.3.1',
   '@tailwindcss/vite': '4.3.5',
@@ -72,7 +72,7 @@ export const appPackageVersions = {
   'babel-plugin-react-compiler': '1.0.0',
   'eslint-plugin-jsx-a11y-x': '0.2.0',
   'eslint-plugin-react-hooks': '7.1.1',
-  'eslint-plugin-react-you-might-not-need-an-effect': '1.2.0',
+  'eslint-plugin-react-you-might-not-need-an-effect': '1.3.1',
   'prettier-plugin-tailwindcss': '0.8.1',
   react: '19.3.1',
   'react-dom': '19.3.1',

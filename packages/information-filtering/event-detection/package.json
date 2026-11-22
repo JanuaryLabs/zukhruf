@@ -51,7 +51,7 @@
     "@zukhruf/embeddings": "^0.8.57",
     "@zukhruf/sqlite-open": "^0.8.57",
     "@zukhruf/statistics": "^0.8.57",
-    "ai": "^7.0.178",
+    "ai": "^7.0.179",
     "linkedom": "0.18.15",
     "ml-matrix": "6.15.1",
     "munkres": "2.1.1"

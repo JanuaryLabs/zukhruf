@@ -47,7 +47,7 @@
     "@zukhruf/async": "*",
     "@zukhruf/embedding-cache": "*",
     "@zukhruf/fs": "*",
-    "ai": "^7.0.178",
+    "ai": "^7.0.179",
     "cephes": "^3.3.4"
   }
 }

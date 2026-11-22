@@ -42,7 +42,7 @@
   "dependencies": {
     "@zukhruf/statistics": "^0.8.57",
     "@zukhruf/vectors": "^0.8.57",
-    "ai": "^7.0.178"
+    "ai": "^7.0.179"
   },
   "devDependencies": {
     "@zukhruf/embeddings": "^0.8.57",

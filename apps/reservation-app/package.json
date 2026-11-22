@@ -6,7 +6,7 @@
     "@zukhruf/fencing": "*",
     "@zukhruf/mutex": "*",
     "@zukhruf/sqlite-open": "*",
-    "hono": "^4.13.13"
+    "hono": "^4.13.20"
   },
   "devDependencies": {
     "@zukhruf/fs": "*",
