@@ -186,6 +186,41 @@ Use `cn` around `buttonVariants`. `Button` merges the classes that conflict thro
   </SelectContent>
   ```
 
+- **Pick a date with `Popover` and `Calendar`.** Do not use `<input type="date">` or `Input type="date"`. The browser draws their popup, and it does not follow the theme, the direction or the language of the app. shadcn/ui ships the date picker as example code only: the base-nova registry has `calendar` and `calendar-example`, and no `date-picker` item. Thus the app composes it from `Popover`, `PopoverTrigger`, `PopoverContent` and `Calendar`, and keeps it in the app. Know these traps:
+  - `Calendar` submits nothing. Put the day in a hidden input as `yyyy-MM-dd`, so `FormData` keeps working. Build the string from the local day (`getFullYear`, `getMonth`, `getDate`). `toISOString()` gives the day in UTC, which is the day before or after in many time zones.
+  - Set a bound with `disabled`, for example `disabled={{ after: today }}`, not with `max`.
+  - For a birth date, set `captionLayout="dropdown"` with `startMonth` and `endMonth`, so the user picks the year from a list.
+  - For another language, pass a locale of `react-day-picker/locale` and the `dir` of the page, for example `locale={ar} dir="rtl"`.
+  - For a date and a time, put an `Input type="time"` beside the calendar, as the example of shadcn/ui does.
+
+  `zukhruf/no-native-control` of `@zukhruf/eslint` refuses a date, checkbox, radio or range `<input>`, and names the component to use.
+
+  ```tsx
+  const today = new Date();
+  const [born, setBorn] = useState<Date>();
+  const value = born
+    ? `${born.getFullYear()}-${String(born.getMonth() + 1).padStart(2, '0')}-${String(born.getDate()).padStart(2, '0')}`
+    : '';
+
+  <Popover>
+    <PopoverTrigger render={<Button variant="outline" />}>
+      {born ? born.toLocaleDateString() : 'Pick a date'}
+    </PopoverTrigger>
+    <PopoverContent className="w-auto p-0">
+      <Calendar
+        mode="single"
+        selected={born}
+        onSelect={setBorn}
+        disabled={{ after: today }}
+        captionLayout="dropdown"
+        startMonth={new Date(today.getFullYear() - 120, 0)}
+        endMonth={today}
+      />
+    </PopoverContent>
+  </Popover>
+  <input type="hidden" name="birthDate" value={value} />
+  ```
+
 - **Give a `SelectTrigger` the width that you need.** `SelectTrigger` is `w-fit` (`src/components/select.tsx`). An app that moves from an old copy adds `w-full` where the old copy had it. The migrations of the apps found this.
 - **Mount one `Toaster`.** By default, each `Toaster` reads the one `toast` manager of the package (`toastManager = toast` in `src/components/toast.tsx`). An app that moves from an old copy moves all of its toasts in one commit, and never mounts two Toasters at once.
 - **Know that the stylesheet changes the `data-*` variants of your own classes too.** `theme.css` imports `shadcn/tailwind.css`, and its `@custom-variant` rules redefine `data-open`, `data-closed`, `data-checked`, `data-unchecked`, `data-selected`, `data-disabled`, `data-active`, `data-horizontal` and `data-vertical` (`node_modules/shadcn/dist/tailwind.css`, `shadcn@4.23.0`). Stock Tailwind CSS makes `data-selected:` match an element that has the attribute, with any value ([Tailwind CSS: data attributes](https://tailwindcss.com/docs/hover-focus-and-other-states#data-attributes)). With the stylesheet, `data-selected:` matches only `[data-selected="true"]`. `data-open:`, `data-closed:`, `data-checked:`, `data-unchecked:`, `data-disabled:` and `data-active:` do not match the value `"false"`, and all of them except `data-disabled:` also match the same value of `data-state`, for example `[data-state="open"]`. `data-horizontal:` and `data-vertical:` match `[data-orientation="horizontal"]` and `[data-orientation="vertical"]`. These rules apply to each class of the app, not only to the components. For a different value, write the full form, for example `data-[selected=false]:`.

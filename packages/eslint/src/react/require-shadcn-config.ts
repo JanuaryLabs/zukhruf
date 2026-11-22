@@ -26,7 +26,7 @@ const rule: Rule.RuleModule = {
     schema: [],
     messages: {
       missing:
-        "This file imports `@zukhruf/shadcn`, but its ESLint config does not include the `zukhruf/shadcn` config, so the kit rules (`zukhruf/no-as-child`, `zukhruf/no-native-select`, `zukhruf/require-select-group`, …) do not run here. Add `...zukhruf.configs['shadcn']` or `extends: ['zukhruf/shadcn']` for these files. `@zukhruf/eslint/react`, the React community configs, does not include it.",
+        "This file imports `@zukhruf/shadcn`, but its ESLint config does not include the `zukhruf/shadcn` config, so the kit rules (`zukhruf/no-as-child`, `zukhruf/no-native-control`, `zukhruf/require-select-group`, …) do not run here. Add `...zukhruf.configs['shadcn']` or `extends: ['zukhruf/shadcn']` for these files. `@zukhruf/eslint/react`, the React community configs, does not include it.",
     },
   },
   create(context) {

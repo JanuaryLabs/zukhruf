@@ -492,7 +492,7 @@ export default defineConfig(
       'zukhruf/no-silent-catch': 'off',
       // shadcn 4.23's native-select wraps the <select> that the rule keeps
       // out of app code.
-      'zukhruf/no-native-select': 'off',
+      'zukhruf/no-native-control': 'off',
       // The kit styles its own parts through their data-slot.
       'zukhruf/no-data-slot-restyle': 'off',
       // shadcn's chart (registry, 2026-11-20) reads the Legend's

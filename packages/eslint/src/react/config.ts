@@ -2,14 +2,14 @@ import { type Concept, enable } from '../concept.ts';
 import { JSX } from '../files.ts';
 import noAsChild from './no-as-child.ts';
 import noDataSlotRestyle from './no-data-slot-restyle.ts';
-import noNativeSelect from './no-native-select.ts';
+import noNativeControl from './no-native-control.ts';
 import requireCommandGroup from './require-command-group.ts';
 import requireSelectGroup from './require-select-group.ts';
 import { SHADCN_SETTINGS } from './require-shadcn-config.ts';
 
 const enabled = {
   'no-as-child': noAsChild,
-  'no-native-select': noNativeSelect,
+  'no-native-control': noNativeControl,
   'require-command-group': requireCommandGroup,
   'require-select-group': requireSelectGroup,
 };
