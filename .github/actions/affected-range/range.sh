@@ -11,7 +11,8 @@ set -eu
 # before it marks every project affected (zukhruf #3245). The tag is a base
 # only when the host releases a commit after CI passed for it. A host that
 # releases before CI passes gives an empty second argument, so a tag on an
-# untested commit never hides the commits before it (zukhruf ADR 0007). With
+# untested commit never hides the commits before it (zukhruf ADR 0007). Since
+# zukhruf ADR 0009 every releasing repository of ours does so. With
 # neither commit, the base is the empty tree: every file differs, so every
 # project is affected, and the caller needs no second command for a first run.
 green="${1:-}"
