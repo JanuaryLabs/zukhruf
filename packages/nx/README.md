@@ -861,18 +861,18 @@ The release block of `nx.json` was the same in zukhruf, elt, deepagents and sdk-
 
 Nx's `extends` is a shallow merge (commit 001377af). A `release` key in the `nx.json` of the workspace replaces the whole block of the file.
 
-| Field                                      | Value                                            | What it does                                                                          |
-| ------------------------------------------ | ------------------------------------------------ | ------------------------------------------------------------------------------------- |
-| `projects`                                 | `["tag:npm:public"]`                             | Releases only the projects with the tag `npm:public`.                                 |
-| `conventionalCommits.types.refactor`       | `{ "semverBump": "patch" }`                      | A `refactor` commit makes a patch version.                                            |
-| `changelog.workspaceChangelog.file`        | `false`                                          | Writes no changelog file for the workspace.                                           |
-| `version.preVersionCommand`                | `nx run-many -t build --projects=tag:npm:public` | Builds the released projects before Nx writes the versions.                           |
-| `version.conventionalCommits`              | `true`                                           | Takes the next version from the conventional commits.                                 |
-| `version.preserveMatchingDependencyRanges` | `false`                                          | Writes the new version into each dependency range, also into a range that matches it. |
-| `version.git`                              | `{ "commit": true, "tag": true, "push": true }`  | Commits the versions, tags the commit and pushes it.                                  |
-| `releaseTag.pattern`                       | `release/{version}`                              | Names each tag `release/<version>`, such as `release/0.8.40`.                         |
+| Field                                      | Value                                              | What it does                                                                                                                                              |
+| ------------------------------------------ | -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `projects`                                 | `["tag:npm:public"]`                               | Releases only the projects with the tag `npm:public`.                                                                                                     |
+| `conventionalCommits.types.refactor`       | `{ "semverBump": "patch" }`                        | A `refactor` commit makes a patch version.                                                                                                                |
+| `changelog.workspaceChangelog.file`        | `false`                                            | Writes no changelog file for the workspace.                                                                                                               |
+| `version.preVersionCommand`                | `nx run-many -t build --projects=tag:npm:public`   | Builds the released projects before Nx writes the versions.                                                                                               |
+| `version.conventionalCommits`              | `true`                                             | Takes the next version from the conventional commits.                                                                                                     |
+| `version.preserveMatchingDependencyRanges` | `false`                                            | Writes the new version into each dependency range, also into a range that matches it.                                                                     |
+| `version.git`                              | `{ "commit": false, "tag": false, "push": false }` | Writes the versions into the checkout only: no commit, no tag and no push. The release job tags the pushed commit through the GitHub API (root ADR 0008). |
+| `releaseTag.pattern`                       | `release/{version}`                                | Names each tag `release/<version>`, such as `release/0.8.40`.                                                                                             |
 
-zukhruf ([nx.json](../../nx.json)) and deepagents extend the file. The release workflow of deepagents runs `nx release version` with it, and the `preVersionCommand` builds the `tag:npm:public` packages before the versions change.
+zukhruf ([nx.json](../../nx.json)) and deepagents extend the file. Their release workflows run zukhruf's `nx-release-version` action, which passes the same git switches, and the `preVersionCommand` builds the `tag:npm:public` packages before the versions change; zukhruf's `release-tag` action then makes the tag `release/<version>` on the pushed commit (root ADR 0008, #4985).
 
 ## generators
 

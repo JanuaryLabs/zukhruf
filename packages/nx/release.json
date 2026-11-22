@@ -18,9 +18,9 @@
       "conventionalCommits": true,
       "preserveMatchingDependencyRanges": false,
       "git": {
-        "commit": true,
-        "tag": true,
-        "push": true
+        "commit": false,
+        "tag": false,
+        "push": false
       }
     },
     "releaseTag": {
