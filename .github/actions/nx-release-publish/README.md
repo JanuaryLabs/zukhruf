@@ -10,8 +10,14 @@ steps:
   - uses: JanuaryLabs/zukhruf/.github/actions/setup-workspace@main
     with:
       registry-url: https://registry.npmjs.org/
-  - run: npx nx release version
-  - uses: JanuaryLabs/zukhruf/.github/actions/nx-release-publish@main
+  - id: version
+    uses: JanuaryLabs/zukhruf/.github/actions/nx-release-version@main
+  - if: steps.version.outputs.version != '' && steps.version.outputs.tagged == 'false'
+    uses: JanuaryLabs/zukhruf/.github/actions/release-tag@main
+    with:
+      version: ${{ steps.version.outputs.version }}
+  - if: steps.version.outputs.version != ''
+    uses: JanuaryLabs/zukhruf/.github/actions/nx-release-publish@main
     with:
       token: ${{ secrets.NPM_ACCESS_TOKEN }}
 ```

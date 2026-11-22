@@ -7,7 +7,7 @@ Sets `NX_BASE` and `NX_HEAD` for `nx affected`. The base is the newer of two com
 
 A release commit changes every `package.json` and gets no CI run, so a base before it would mark every project affected. With neither commit, as on a first run, the base is the empty tree: every file differs, so every project is affected and the workflow needs no second command for that case.
 
-The tag is a base only when the repository releases a commit after CI passed for it. A repository that releases each push before CI passes, as zukhruf does ([ADR 0007](../../../docs/adr/0007-release-does-not-wait-for-ci.md)), gives `tested-tags: ''`. Otherwise a tag on an untested commit moves the base past the commits that CI did not test yet, and CI never checks them:
+Since root ADR 0008 no repository of ours commits its versions: zukhruf, deepagents, sdk-it and elt release each push, tag the pushed commit, and give `tested-tags: ''` (#4985). The tag is a base only when the repository releases a commit after CI passed for it. A repository that releases each push before CI passes, as zukhruf does ([ADR 0007](../../../docs/adr/0007-release-does-not-wait-for-ci.md)), gives `tested-tags: ''`. Otherwise a tag on an untested commit moves the base past the commits that CI did not test yet, and CI never checks them:
 
 ```yaml
 - uses: JanuaryLabs/zukhruf/.github/actions/affected-range@main

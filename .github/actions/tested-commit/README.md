@@ -1,6 +1,6 @@
 # tested-commit
 
-Tells a workflow that CI starts (`on: workflow_run`) whether HEAD is still the commit that CI tested. When main moved past it, the newer commit's own run releases or deploys it, and shipping the older one would roll main back.
+Tells a workflow that CI starts (`on: workflow_run`) whether HEAD is still the commit that CI tested. When main moved past it, the newer commit's own run deploys it, and shipping the older one would roll main back. The npm releases of zukhruf, deepagents, sdk-it and elt run on push and do not use it (root ADR 0008).
 
 ```yaml
 - uses: actions/checkout@v7
@@ -9,7 +9,7 @@ Tells a workflow that CI starts (`on: workflow_run`) whether HEAD is still the c
 - id: tested
   uses: JanuaryLabs/zukhruf/.github/actions/tested-commit@main
 - if: steps.tested.outputs.current == 'true'
-  run: npx nx release version
+  run: ./deploy.sh # the deploy of the tested commit
 ```
 
 | Input | Default                                     | Meaning                    |
