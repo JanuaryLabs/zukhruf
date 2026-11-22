@@ -12,21 +12,58 @@ import { succeeded } from './succeeded.ts';
 
 export type { Database, DatabaseOptions } from './database.ts';
 
-/** The size of the tmpfs that holds the data directory, its WAL included. */
-const DISK_MB = 512;
+/** The server's own tmpfs mount, the data directory with its WAL. */
+const DATA_DIRECTORY = '/var/lib/postgresql';
+const DATA_MOUNT = 'rw,size=512m';
 
 /**
- * WAL may take a quarter of the disk, so the databases keep the rest. The
- * 1 GB default is twice the disk: a load filled it before a checkpoint (#4940).
- * max_wal_size "is never a hard limit", so the rest is also its headroom; no
- * archiving, slot or wal_keep_size (default 0) keeps WAL past it, and the
- * min_wal_size default of 80 MB is under it
- * (https://www.postgresql.org/docs/current/wal-configuration.html).
+ * The suffixes of a tmpfs size=, each 1024 times the one before. Docker
+ * passes the options of HostConfig.Tmpfs to the mount unchanged (moby
+ * daemon/oci_linux.go; MergeTmpfsOptions in moby/sys mount/flags_unix.go
+ * keeps the last size=), so Linux parses size= with memparse: a number with
+ * an optional k, m, g, t, p or e, of either case (lib/cmdline.c), or a
+ * percent of the RAM (mm/shmem.c). It has no b suffix.
  */
-const MAX_WAL_MB = DISK_MB / 4;
+const UNITS = ['', 'k', 'm', 'g', 't', 'p', 'e'];
+
+/**
+ * The flags that let WAL take a quarter of the disk of the data directory, so
+ * the databases keep the rest. The 1 GB default was twice the 512 MB disk: a
+ * load filled it before a checkpoint (#4940). max_wal_size "is never a hard
+ * limit", so the rest is also its headroom; no archiving, slot or
+ * wal_keep_size (default 0) keeps WAL past it, and the min_wal_size default of
+ * 80 MB is under it
+ * (https://www.postgresql.org/docs/current/wal-configuration.html). A mount
+ * with no size=, or size=0, has no fixed disk to fit, so it keeps the default.
+ */
+function walFlags(options: string): string[] {
+  const size = options
+    .split(',')
+    .findLast((option) => option.startsWith('size='))
+    ?.slice('size='.length);
+  if (size === undefined) return [];
+  const match = /^(0|[1-9]\d*)([kmgtpe]?)$/i.exec(size);
+  if (match === null)
+    throw new TypeError(
+      `The size=${size} of ${DATA_DIRECTORY} is not a number of bytes with an optional k, m, g, t, p or e, so it gives no max_wal_size.`,
+    );
+  // Both groups take part in every match, so the defaults never apply.
+  const [, digits = '', suffix = ''] = match;
+  const bytes = Number(digits) * 1024 ** UNITS.indexOf(suffix.toLowerCase());
+  if (bytes === 0) return [];
+  return ['-c', `max_wal_size=${Math.floor(bytes / 4 / 2 ** 20)}MB`];
+}
 
 export interface PostgresOptions extends DatabaseOptions {
   user?: string;
+  /**
+   * Testcontainers' withTmpFs: each container path to the options of its tmpfs
+   * mount, as Docker's HostConfig.Tmpfs takes them. The entries merge over the
+   * server's own mount of /var/lib/postgresql (rw,size=512m), so a path the
+   * caller names replaces that mount's options. max_wal_size is a quarter of
+   * the size= of the data directory's mount.
+   */
+  tmpFs?: Record<string, string>;
 }
 
 /** The options of a pool of a handle: the handle names the database and the user. */
@@ -93,10 +130,13 @@ export class Postgres {
     database = 'testdb',
     user = 'postgres',
     labels,
+    tmpFs,
   }: PostgresOptions) {
     this.#docker = new DockerTestbed({ environment });
     this.#runId = readRun(environment)?.id;
-    this.#options = { image, password, database, user, labels };
+    const mounts = { [DATA_DIRECTORY]: DATA_MOUNT, ...tmpFs };
+    const wal = walFlags(mounts[DATA_DIRECTORY]);
+    this.#options = { image, password, database, user, labels, mounts, wal };
   }
 
   /** Create an isolated database on the persistent shared server. */
@@ -143,7 +183,7 @@ export class Postgres {
     database: string,
     mode: 'serve' | 'reuse',
   ): Promise<ServiceContainer> {
-    const { image, password, user, labels } = this.#options;
+    const { image, password, user, labels, mounts, wal } = this.#options;
     return this.#docker[mode](
       {
         Image: image,
@@ -153,9 +193,9 @@ export class Postgres {
           `POSTGRES_DB=${database}`,
           `POSTGRES_USER=${user}`,
         ],
-        Cmd: ['-c', `max_wal_size=${MAX_WAL_MB}MB`],
+        ...(wal.length > 0 && { Cmd: wal }),
         HostConfig: {
-          Tmpfs: { '/var/lib/postgresql': `rw,size=${DISK_MB}m` },
+          Tmpfs: mounts,
           MemorySwappiness: 0,
         },
       },

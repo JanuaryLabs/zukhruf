@@ -154,6 +154,137 @@ test('a server takes more WAL than its disk holds, since it checkpoints before t
   assert.equal(rows[0].n, 3 * 74_879);
 });
 
+/** The size in KiB of the filesystem at `path` inside the server of `server`. */
+async function diskKib(
+  server: PostgresDatabase,
+  path: string,
+): Promise<number> {
+  const client = await server.pool().connect();
+  try {
+    await client.query('CREATE TEMP TABLE df (line text)');
+    await client.query(`COPY df FROM PROGRAM 'df -kP ${path} | tail -n 1'`);
+    const { rows } = await client.query('SELECT line FROM df');
+    return Number(rows[0].line.split(/\s+/)[1]);
+  } finally {
+    client.release();
+  }
+}
+
+/** The max_wal_size of the server of `server`. */
+async function maxWalSize(server: PostgresDatabase): Promise<string> {
+  const { rows } = await server.pool().query('SHOW max_wal_size');
+  return rows[0].max_wal_size;
+}
+
+test('a dedicated server whose tmpFs sizes its data directory gets that disk and a quarter of it as max_wal_size', async () => {
+  // Arrange
+  const sized = new Postgres({
+    environment: process.env,
+    tmpFs: { '/var/lib/postgresql': 'rw,size=1g' },
+  });
+
+  // Act
+  await using server = await sized.start();
+
+  // Assert
+  assert.equal(await diskKib(server, '/var/lib/postgresql'), 1024 ** 2);
+  assert.equal(await maxWalSize(server), '256MB');
+});
+
+test('a dedicated server without tmpFs keeps the 512 MB data directory and 128 MB of WAL', async () => {
+  // Act
+  await using server = await postgres.start();
+
+  // Assert
+  assert.equal(await diskKib(server, '/var/lib/postgresql'), 512 * 1024);
+  assert.equal(await maxWalSize(server), '128MB');
+});
+
+test("a data directory mount with no size=, or size=0, keeps Postgres's default max_wal_size", async () => {
+  // Arrange
+  const unsized = new Postgres({
+    environment: process.env,
+    tmpFs: { '/var/lib/postgresql': 'rw' },
+  });
+  const unlimited = new Postgres({
+    environment: process.env,
+    tmpFs: { '/var/lib/postgresql': 'rw,size=0' },
+  });
+
+  // Act
+  await using server = await unsized.start();
+  await using other = await unlimited.start();
+
+  // Assert: Linux gives a tmpfs with no size= half the RAM, so only "not 512 MiB" is fixed.
+  assert.notEqual(await diskKib(server, '/var/lib/postgresql'), 512 * 1024);
+  assert.equal(await maxWalSize(server), '1GB');
+  assert.equal(await maxWalSize(other), '1GB');
+});
+
+test('the last size= of the data directory mount counts, with its suffix in either case', async () => {
+  // Arrange: a tmpfs reserves no memory, so a 1 TiB limit is only a limit.
+  const sized = new Postgres({
+    environment: process.env,
+    tmpFs: { '/var/lib/postgresql': 'rw,size=64m,size=1T' },
+  });
+
+  // Act
+  await using server = await sized.start();
+
+  // Assert
+  assert.equal(await diskKib(server, '/var/lib/postgresql'), 1024 ** 3);
+  assert.equal(await maxWalSize(server), '256GB');
+});
+
+test("a tmpFs mount at another path adds that mount and keeps the data directory's", async () => {
+  // Arrange
+  const scratch = new Postgres({
+    environment: process.env,
+    tmpFs: { '/scratch': 'rw,size=64m' },
+  });
+
+  // Act
+  await using server = await scratch.start();
+
+  // Assert
+  assert.equal(await diskKib(server, '/scratch'), 64 * 1024);
+  assert.equal(await diskKib(server, '/var/lib/postgresql'), 512 * 1024);
+  assert.equal(await maxWalSize(server), '128MB');
+});
+
+test('a database() with tmpFs is on another shared server than a database() without it', async () => {
+  // Arrange: a mount at another path keeps max_wal_size, so only the mounts differ.
+  const scratch = new Postgres({
+    environment: process.env,
+    tmpFs: { '/scratch': 'rw,size=64m' },
+  });
+
+  // Act
+  await using plain = await postgres.database();
+  await using other = await scratch.database();
+
+  // Assert
+  assert.notEqual(other.containerId, plain.containerId);
+  assert.equal(await diskKib(other, '/scratch'), 64 * 1024);
+});
+
+for (const size of ['10%', '1gb']) {
+  test(`a data directory size=${size} is refused, since Postgres gets no max_wal_size from it`, () => {
+    // Act & Assert
+    assert.throws(
+      () =>
+        new Postgres({
+          environment: process.env,
+          tmpFs: { '/var/lib/postgresql': `rw,size=${size}` },
+        }),
+      {
+        name: 'TypeError',
+        message: `The size=${size} of /var/lib/postgresql is not a number of bytes with an optional k, m, g, t, p or e, so it gives no max_wal_size.`,
+      },
+    );
+  });
+}
+
 test("postgresPool's disposal resolves once every client of its pool has closed", async () => {
   // Arrange: three idle clients.
   await using database = await postgres.database();

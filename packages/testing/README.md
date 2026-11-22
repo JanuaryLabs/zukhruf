@@ -209,6 +209,15 @@ test('stores a record', async () => {
 
 The handle has `connectionString`, `host`, `port`, `user`, `password`, `database`, `image` and `containerId`. `Mysql` and `Mariadb` handles also have `query(sql)`. Without an image, `Mysql` runs `mysql:lts` and `Mariadb` runs `mariadb:lts`. MariaDB 11 and later have no `mysql` client, so use `Mariadb` for a MariaDB image. A `Mariadb` connection string starts with `mariadb://`, because the `mariadb` driver accepts no other scheme. Without an image, `SqlServer` runs SQL Server 2022 (`SQL_SERVER_FULL_IMAGE`) on every engine. Microsoft builds it only for amd64, so an ARM engine runs it under emulation. `ClickHouse` takes an explicit `image`, and its `start()` gives a `ServiceContainer` of a dedicated server, so a test can create server-wide users and functions.
 
+A Postgres server keeps its data directory, WAL included, on a tmpfs of 512 MB, and `max_wal_size` is a quarter of it. A load that needs more disk gives `tmpFs`, as Testcontainers' `withTmpFs` does: each container path to the options of its tmpfs mount, as Docker's `HostConfig.Tmpfs` takes them. The entries merge over the mount of `/var/lib/postgresql`, so that path replaces its options. `max_wal_size` is a quarter of its `size=`; a mount with no `size=`, or `size=0`, keeps the Postgres default. The constructor refuses a `size=` that is not a number with an optional `k`, `m`, `g`, `t`, `p` or `e`, such as a percent of the RAM. A `database()` with `tmpFs` gets a shared server of its own.
+
+```ts
+await using server = await new Postgres({
+  environment: process.env,
+  tmpFs: { '/var/lib/postgresql': 'rw,size=1g' }, // max_wal_size 256MB
+}).start();
+```
+
 `new Sqlite().database()` creates a file-backed database in a temporary directory, with a native `DatabaseSync` connection. The handle has `path`, the path of the database file, and `connection`, the `DatabaseSync`. Disposal closes the connection and removes the directory, including WAL files. `writeLock(path, durationMs)` holds a write lock from another process, which releases it after `durationMs`, even while the caller blocks in a synchronous write.
 
 `new DuckDB().database()` creates an in-memory database. The handle has `connection`, a `DuckDBConnection` of `@duckdb/node-api`. Disposal closes the connection before the instance.
@@ -627,6 +636,7 @@ interface DatabaseOptions extends DockerTestbedOptions {
 // @zukhruf/testing/postgres
 interface PostgresOptions extends DatabaseOptions {
   user?: string;
+  tmpFs?: Record<string, string>; // merges over { '/var/lib/postgresql': 'rw,size=512m' }
 }
 type PostgresPoolOptions = Omit<
   pg.PoolConfig,
