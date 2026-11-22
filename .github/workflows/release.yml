@@ -62,52 +62,20 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_ACCESS_TOKEN }}
 
       # The preVersionCommand builds the pushed commit, and the publish packs
-      # that build. When a release tag already points at the pushed commit, a
-      # run of this commit tagged it and stopped before the end (#4692): this
-      # run writes that version again and publishes what npm does not have.
-      # The lock file is not updated: nothing reads it after this step.
+      # that build.
       - name: Version the pushed commit
         id: version
-        run: |
-          # nx release runs here through its Node API, not npx, so the shell
-          # that runs the preVersionCommand needs node_modules/.bin on PATH
-          # to find nx ("/bin/sh: nx: not found" in run 44767683501).
-          export PATH="$GITHUB_WORKSPACE/node_modules/.bin:$PATH"
-          TAGGED="$(git for-each-ref --points-at HEAD --format='%(refname:strip=2)' 'refs/tags/release/*')" node --input-type=module - <<'EOF'
-          import { appendFileSync } from 'node:fs';
-          import { releaseVersion } from 'nx/release';
+        uses: $/.github/actions/nx-release-version
 
-          const tagged = process.env.TAGGED;
-          const { workspaceVersion } = await releaseVersion({
-            specifier: tagged === '' ? undefined : tagged.slice('release/'.length),
-            gitCommit: false,
-            gitTag: false,
-            gitPush: false,
-            stageChanges: false,
-            versionActionsOptionsOverrides: { skipLockFileUpdate: true },
-          });
-          if (workspaceVersion) {
-            appendFileSync(
-              process.env.GITHUB_OUTPUT,
-              `version=${workspaceVersion}\ntagged=${tagged !== ''}\n`,
-            );
-          } else {
-            console.log(`${process.env.GITHUB_SHA} has nothing to release.`);
-          }
-          EOF
-
-      # The tag goes first: the next release counts its commits from it, so a
-      # version reaches npm only once its tag is there. The tag names the
-      # pushed commit, which main already holds, so the API makes no new
-      # object and starts no workflow run. When GitHub refuses the tag, the
-      # step fails and nothing is published; the Release run of the next push
-      # counts from the tag before and releases these commits too.
+      # The tag goes first: the next release counts its commits from it. When
+      # GitHub refuses the tag, the step fails and nothing is published; the
+      # Release run of the next push counts from the tag before and releases
+      # these commits too.
       - name: Tag the pushed commit
         if: steps.version.outputs.version != '' && steps.version.outputs.tagged == 'false'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ steps.version.outputs.version }}
-        run: gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" -f "ref=refs/tags/release/$VERSION" -f "sha=$GITHUB_SHA"
+        uses: $/.github/actions/release-tag
+        with:
+          version: ${{ steps.version.outputs.version }}
 
       - name: Publish
         if: steps.version.outputs.version != ''

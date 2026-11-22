@@ -1,0 +1,19 @@
+name: Tag the pushed commit
+description: Makes the tag refs/tags/release/<version> on the pushed commit (github.sha) through the GitHub API, before the publish, so a version reaches npm only once its tag is there. When GitHub refuses the tag, the step fails. The job needs contents write permission. Other repositories use it as JanuaryLabs/zukhruf/.github/actions/release-tag@main.
+
+inputs:
+  version:
+    description: The version that nx-release-version wrote, such as 0.8.72.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    # The tag names the pushed commit, which main already holds, so the API
+    # makes no new object and starts no workflow run.
+    - name: Tag the pushed commit
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        VERSION: ${{ inputs.version }}
+      run: gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" -f "ref=refs/tags/release/$VERSION" -f "sha=$GITHUB_SHA"

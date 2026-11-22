@@ -1,0 +1,23 @@
+name: Version the pushed commit
+description: Runs nx release version for the commit that is checked out and writes the versions into the checkout only, with no commit, no tag and no push, whatever release.version.git says. Sets version, or leaves it empty when the commit has nothing to release; when a release/* tag already names the commit, a run of it tagged and stopped, and the action writes that tag's version again with tagged 'true'. Needs the workspace installed (setup-workspace), a checkout with fetch-depth 0, and an nx.json whose releaseTag pattern is release/{version} with version.conventionalCommits true (zukhruf's @zukhruf/nx/release.json has them). Other repositories use it as JanuaryLabs/zukhruf/.github/actions/nx-release-version@main.
+
+outputs:
+  version:
+    description: The version that the commit releases, such as 0.8.72; empty when it has nothing to release.
+    value: ${{ steps.version.outputs.version }}
+  tagged:
+    description: "'true' when a release tag already names the commit, 'false' when the release still has to make it."
+    value: ${{ steps.version.outputs.tagged }}
+
+runs:
+  using: composite
+  steps:
+    - name: Version the pushed commit
+      id: version
+      shell: bash
+      run: |
+        # nx release runs here through its Node API, not npx, so the shell
+        # that runs the preVersionCommand needs node_modules/.bin on PATH
+        # to find nx ("/bin/sh: nx: not found" in run 44767683501).
+        export PATH="$GITHUB_WORKSPACE/node_modules/.bin:$PATH"
+        node --input-type=module - < "$GITHUB_ACTION_PATH/version.mjs"

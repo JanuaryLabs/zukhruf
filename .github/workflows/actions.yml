@@ -1,10 +1,11 @@
 name: Actions
 
 # Runs the actions that other repositories call against a fake of what they
-# talk to (the health endpoint, the Dokploy API, a git history, this
-# workspace's project graph): each must pass on the good answer and fail on the
-# bad one. nx-release-publish and the ghcr actions talk to npm and GHCR, so the
-# release and the deploys that use them prove them.
+# talk to (the health endpoint, the Dokploy API, a git history, a throwaway Nx
+# workspace, the gh CLI, this workspace's project graph): each must pass on the
+# good answer and fail on the bad one. nx-release-publish and the ghcr actions
+# talk to npm and GHCR, so the release and the deploys that use them prove
+# them.
 on:
   pull_request:
     branches: [main]
@@ -12,6 +13,8 @@ on:
       - .github/actions/affected-projects/**
       - .github/actions/affected-range/**
       - .github/actions/dokploy-deploy/**
+      - .github/actions/nx-release-version/**
+      - .github/actions/release-tag/**
       - .github/actions/tested-commit/**
       - .github/actions/wait-for-health/**
       - .github/workflows/actions.yml
@@ -21,6 +24,8 @@ on:
       - .github/actions/affected-projects/**
       - .github/actions/affected-range/**
       - .github/actions/dokploy-deploy/**
+      - .github/actions/nx-release-version/**
+      - .github/actions/release-tag/**
       - .github/actions/tested-commit/**
       - .github/actions/wait-for-health/**
       - .github/workflows/actions.yml
@@ -160,6 +165,144 @@ jobs:
           [ "$SAME" = true ] || { echo "HEAD was not current: $SAME" >&2; exit 1; }
           [ "$OTHER" = false ] || { echo "another commit was current: $OTHER" >&2; exit 1; }
           [ "$MISSING" = failure ] || { echo "a missing sha passed" >&2; exit 1; }
+
+  nx-release-version:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up the workspace
+        uses: $/.github/actions/setup-workspace
+
+      # The job's install gives the throwaway workspace its nx: Node finds
+      # node_modules in the parent folder. b depends on a, and nx.json has the
+      # release config of @zukhruf/nx/release.json, release.version.git
+      # included. The history: a feat tagged release/0.1.0, a docs commit, a
+      # fix, and then the tag release/0.1.1 on the fix, as after a run that
+      # tagged and stopped.
+      - name: Nothing to release, a patch, and a tagged HEAD
+        env:
+          VERSION: ${{ github.workspace }}/.github/actions/nx-release-version/version.mjs
+        run: |
+          cd "$(mktemp -d "$GITHUB_WORKSPACE/release-version.XXXXXX")"
+          export PATH="$GITHUB_WORKSPACE/node_modules/.bin:$PATH"
+          export NX_DAEMON=false
+          git init -q -b main
+          git config user.name test
+          git config user.email test@example.com
+          expect() { [ "$2" = "$3" ] || { echo "$1: got '$2', want '$3'" >&2; exit 1; }; }
+          manifest() { node -p "const m = require('./packages/$1/package.json'); m.version + ' ' + (m.dependencies?.a ?? '-')"; }
+          run() {
+            : > out
+            GITHUB_OUTPUT=out GITHUB_SHA="$(git rev-parse HEAD)" node --input-type=module - < "$VERSION" > log 2>&1 || { cat log >&2; exit 1; }
+          }
+          mkdir -p packages/a packages/b
+          printf '.nx\ndist\nout\nlog\n' > .gitignore
+          echo '{ "name": "root", "private": true, "workspaces": ["packages/*"] }' > package.json
+          for p in a b; do
+            dependencies=''
+            [ "$p" = b ] && dependencies=', "dependencies": { "a": "^0.0.0" }'
+            echo "{ \"name\": \"$p\", \"version\": \"0.0.0\", \"scripts\": { \"build\": \"mkdir -p dist && touch dist/built\" }, \"nx\": { \"tags\": [\"npm:public\"] }$dependencies }" > "packages/$p/package.json"
+          done
+          cat > nx.json <<'EOF'
+          {
+            "release": {
+              "projects": ["tag:npm:public"],
+              "conventionalCommits": { "types": { "refactor": { "semverBump": "patch" } } },
+              "changelog": { "workspaceChangelog": { "file": false } },
+              "version": {
+                "preVersionCommand": "nx run-many -t build --projects=tag:npm:public",
+                "conventionalCommits": true,
+                "preserveMatchingDependencyRanges": false,
+                "git": { "commit": true, "tag": true, "push": true }
+              },
+              "releaseTag": { "pattern": "release/{version}" }
+            }
+          }
+          EOF
+          npm install --package-lock-only --ignore-scripts --no-audit --no-fund > /dev/null
+          git add .
+          git commit -q -m 'feat: a and b'
+          git tag release/0.1.0
+
+          echo docs > packages/a/README.md
+          git add .
+          git commit -q -m 'docs(a): a readme'
+          run
+          expect "a docs commit" "$(cat out)" ""
+          grep -q "$(git rev-parse HEAD) has nothing to release." log || { cat log >&2; echo "no 'nothing to release'" >&2; exit 1; }
+
+          echo fix > packages/a/index.js
+          git add .
+          git commit -q -m 'fix(a): an index'
+          head="$(git rev-parse HEAD)"
+          run
+          expect "a fix commit" "$(cat out)" "$(printf 'version=0.1.1\ntagged=false')"
+          expect "a's manifest" "$(manifest a)" "0.1.1 -"
+          expect "b's manifest" "$(manifest b)" "0.1.1 ^0.1.1"
+          [ -f packages/a/dist/built ] && [ -f packages/b/dist/built ] || { cat log >&2; echo "the preVersionCommand did not build" >&2; exit 1; }
+          expect "HEAD" "$(git rev-parse HEAD)" "$head"
+          expect "the tags" "$(git tag -l)" "release/0.1.0"
+          expect "the staged files" "$(git diff --cached --name-only)" ""
+          git diff --quiet package-lock.json || { git diff package-lock.json >&2; echo "the lock file changed" >&2; exit 1; }
+
+          git checkout -q -- .
+          git tag release/0.1.1
+          run
+          expect "a tagged HEAD" "$(cat out)" "$(printf 'version=0.1.1\ntagged=true')"
+          expect "a's manifest at a tagged HEAD" "$(manifest a)" "0.1.1 -"
+          expect "b's manifest at a tagged HEAD" "$(manifest b)" "0.1.1 ^0.1.1"
+          expect "HEAD at a tagged HEAD" "$(git rev-parse HEAD)" "$head"
+
+  release-tag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # A fake gh first on PATH records its arguments and whether it got a
+      # token, and exits with the code in gh-exit.
+      - name: Put a fake gh first on PATH
+        run: |
+          mkdir "$RUNNER_TEMP/fake-gh"
+          cat > "$RUNNER_TEMP/fake-gh/gh" <<'EOF'
+          #!/bin/sh
+          printf '%s\n' "$@" "token=${GH_TOKEN:+set}" > "$RUNNER_TEMP/gh-args"
+          exit "$(cat "$RUNNER_TEMP/gh-exit")"
+          EOF
+          chmod +x "$RUNNER_TEMP/fake-gh/gh"
+          echo 0 > "$RUNNER_TEMP/gh-exit"
+          echo "$RUNNER_TEMP/fake-gh" >> "$GITHUB_PATH"
+
+      - name: Tag the commit
+        uses: $/.github/actions/release-tag
+        with:
+          version: 9.9.9
+
+      - name: The API call names the tag and this commit
+        run: |
+          printf '%s\n' api --method POST "repos/$GITHUB_REPOSITORY/git/refs" -f ref=refs/tags/release/9.9.9 -f "sha=$GITHUB_SHA" token=set > want
+          diff want "$RUNNER_TEMP/gh-args" || { echo "the gh call differs" >&2; exit 1; }
+          echo 1 > "$RUNNER_TEMP/gh-exit"
+
+      - name: GitHub refuses the tag
+        id: refused
+        continue-on-error: true
+        uses: $/.github/actions/release-tag
+        with:
+          version: 9.9.9
+
+      - name: A refusal fails the step
+        env:
+          REFUSED: ${{ steps.refused.outcome }}
+        run: '[ "$REFUSED" = failure ] || { echo "a refused tag passed" >&2; exit 1; }'
 
   affected-range:
     runs-on: ubuntu-latest

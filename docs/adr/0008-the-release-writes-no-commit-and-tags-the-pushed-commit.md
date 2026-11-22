@@ -19,6 +19,7 @@ The maintainer rejected two patches that kept the release commit (a bot push wit
 - Nx reads the current version from the newest release tag, because `version.conventionalCommits: true` sets the `git-tag` resolver (nx 24.0.6, `config.js`). `nx.json` and `@zukhruf/nx/release.json` do not change.
 - When a release tag already names the pushed commit, a run of this commit made the tag and stopped before the end (#4692). A new run of the commit writes the version of that tag again and publishes what npm does not have. A commit with nothing to release ends with "nothing to release".
 - The `main` job and `.github/actions/push-release-tag` are gone.
+- The version and tag steps live in `.github/actions/nx-release-version` and `.github/actions/release-tag`, which deepagents, sdk-it and elt also use (#4985).
 
 ## Considered Options
 
