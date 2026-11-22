@@ -127,6 +127,10 @@ function abortIsTheSubject(
  * the input of that API, and the rule does not read it. A limit on a clock
  * that the test moves is not real time, and stays allowed. Type information is
  * optional: with it, the rule also sees a test context that an interface types.
+ * `t.signal` ends at the runner's `--test-timeout`, which Node does not set:
+ * the test target of `@zukhruf/nx` sets 300000, and
+ * `zukhruf/no-missing-test-timeout` reports a target that runs `node --test`
+ * without it.
  */
 const rule = ESLintUtils.RuleCreator.withoutDocs({
   meta: {
@@ -137,11 +141,11 @@ const rule = ESLintUtils.RuleCreator.withoutDocs({
     schema: [],
     messages: {
       waitFor:
-        "This wait takes no signal, so it ends at a limit of its own: use waitFor(() => { assert… }, { signal: t.signal }) from @zukhruf/testing/async, which ends at the test's limit.",
+        "This wait takes no signal, so it ends at a limit of its own: use waitFor(() => { assert… }, { signal: t.signal }) from @zukhruf/testing/async, which ends at the test's limit (the runner's --test-timeout).",
       settleWithin:
-        "settleWithin ends at a limit of its own: use untilAborted(promise, t.signal) from @zukhruf/async, which ends at the test's limit.",
+        "settleWithin ends at a limit of its own: use untilAborted(promise, t.signal) from @zukhruf/async, which ends at the test's limit (the runner's --test-timeout).",
       signalTimeout:
-        "This signal aborts at a limit of its own: pass t.signal, which aborts at the test's limit. A test whose subject is the abort reads the reason of its signal.",
+        "This signal aborts at a limit of its own: pass t.signal, which aborts at the test's limit (the runner's --test-timeout). A test whose subject is the abort reads the reason of its signal.",
     },
   },
   create(context) {

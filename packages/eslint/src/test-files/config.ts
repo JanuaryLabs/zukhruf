@@ -1,5 +1,5 @@
 import { type Concept, enable } from '../concept.ts';
-import { CONFIG_FILES, TESTS, TEST_SUPPORT } from '../files.ts';
+import { CONFIG_FILES, GLOBAL_SETUP, TESTS, TEST_SUPPORT } from '../files.ts';
 import noAssertInRetryUntilReady from './no-assert-in-retry-until-ready.ts';
 import noCatchAllMswHandler from './no-catch-all-msw-handler.ts';
 import noDirectMswServer from './no-direct-msw-server.ts';
@@ -42,6 +42,12 @@ export const tests: Concept = {
       name: 'zukhruf/tests',
       files: [...TESTS, ...TEST_SUPPORT],
       rules: enable(testFileRules),
+    },
+    {
+      // A global setup runs before any test process, and process.env is its only channel to them.
+      name: 'zukhruf/tests/global-setup',
+      files: GLOBAL_SETUP,
+      rules: { 'zukhruf/no-process-env-write': 'off' },
     },
     {
       // Vitest reads its test options from a Vite or Vitest config.

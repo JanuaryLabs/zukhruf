@@ -123,6 +123,35 @@ test('the tests config checks a test helper in src/testing as a test file', asyn
   assert.ok(ruleIds(findings).includes('zukhruf/no-test-lifecycle-hooks'));
 });
 
+test('the Docker global setup in src/testing may write process.env, and another test helper may not', async () => {
+  // Arrange: the global setup that the test target of @zukhruf/nx passes to
+  // --test-global-setup runs before any test process, and hands each one its
+  // connection through process.env.
+  const setup =
+    "export async function globalSetup() {\n  process.env['DATABASE_URL'] = 'postgres://localhost';\n}\n";
+  await using workspace = await fixtureWorkspace({
+    'nx.json': '{}',
+    'tsconfig.json': tsconfig,
+    'eslint.config.mjs': fixtureConfig(
+      `{ plugins: { zukhruf }, extends: ['zukhruf/base', 'zukhruf/tests'] }`,
+    ),
+    'src/testing/docker-global-setup.ts': setup,
+    'src/testing/database.ts': setup,
+  });
+
+  // Act
+  const findings = lint(workspace.root, ['src']);
+
+  // Assert
+  const envWrites = findings.filter(
+    ({ ruleId }) => ruleId === 'zukhruf/no-process-env-write',
+  );
+  assert.deepEqual(
+    envWrites.map(({ file }) => file),
+    [workspace.path('src/testing/database.ts')],
+  );
+});
+
 test('a config that skips test files also skips a test helper in src/testing', async () => {
   // Arrange: the same module-scope `let` in shipped source and in a test
   // helper (docs/adr/0001 of the workspace: a file in src/testing is a test file).

@@ -1,6 +1,6 @@
 # Modern Node is a namespace and a config
 
-Superseded in part on 2026-11-17 (#4205) for how a test waits for the fact (the paragraph after the table of candidates). A wait in a test ends on `t.signal`, which aborts at the limit of the test, and sets no limit of its own. `zukhruf/no-own-wait-limit` reports `t.waitFor`, `settleWithin` and `AbortSignal.timeout` in a test.
+Superseded in part on 2026-11-17 (#4205) for how a test waits for the fact (the paragraph after the table of candidates). A wait in a test ends on `t.signal`, which aborts at the limit of the test, and sets no limit of its own. `zukhruf/no-own-wait-limit` reports `t.waitFor`, `settleWithin` and `AbortSignal.timeout` in a test. `t.signal` ends at the runner's `--test-timeout`, which Node does not set: the test target of `@zukhruf/nx` sets 300000, and `zukhruf/no-missing-test-timeout` reports a target that runs `node --test` without it.
 
 Node and JavaScript add APIs that replace older code. The `node-native` skill finds this code, but only when a person runs the skill. A check finds it on each lint run, so these checks go into ESLint. The skill finds new candidates, and it proves that a package can go.
 

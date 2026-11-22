@@ -8,12 +8,14 @@ import noGeneratePackageJson from './no-generate-package-json.ts';
 import noMissingAssetInput from './no-missing-asset-input.ts';
 import noMissingCommandExecutor from './no-missing-command-executor.ts';
 import noMissingDependencyBuild from './no-missing-dependency-build.ts';
+import noMissingTestTimeout from './no-missing-test-timeout.ts';
 
 /** Rules of a target, wherever Nx reads it: project.json or the `nx` key of package.json. */
 const targetRules = {
   'no-missing-command-executor': noMissingCommandExecutor,
   'no-depends-on-project': noDependsOnProject,
   'no-generate-package-json': noGeneratePackageJson,
+  'no-missing-test-timeout': noMissingTestTimeout,
 };
 
 const rules = {

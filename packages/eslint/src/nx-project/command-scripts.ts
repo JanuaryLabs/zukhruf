@@ -77,14 +77,23 @@ function simpleCommands(line: string): string[][] {
   return commands.filter((words) => words.length > 0);
 }
 
-function scriptsOf(words: string[], cwd: string): Script[] {
+/** A simple command that runs `node` or `tsx`, read as Node reads its words. */
+interface NodeRun {
+  readonly test: boolean;
+  readonly testTimeout: boolean;
+  readonly conditions: readonly string[];
+  readonly positionals: readonly string[];
+}
+
+function nodeRun(words: string[]): NodeRun | undefined {
   let index = 0;
   while (ENV_ASSIGNMENT.test(words[index] ?? '')) index++;
   if (words[index] === 'npx') index++;
-  if (!RUNNERS.has(words[index] ?? '')) return [];
+  if (!RUNNERS.has(words[index] ?? '')) return undefined;
   const conditions: string[] = [];
   const positionals: string[] = [];
   let test = false;
+  let testTimeout = false;
   for (index++; index < words.length; index++) {
     const word = words[index] ?? '';
     if (word === '--test') {
@@ -94,6 +103,12 @@ function scriptsOf(words: string[], cwd: string): Script[] {
       conditions.push(words[index] ?? '');
     } else if (word.startsWith('--conditions=')) {
       conditions.push(word.slice('--conditions='.length));
+    } else if (
+      word === '--test-timeout' ||
+      word.startsWith('--test-timeout=')
+    ) {
+      testTimeout = true;
+      if (word === '--test-timeout') index++;
     } else if (VALUE_FLAGS.has(word)) {
       index++;
     } else if (!word.startsWith('-')) {
@@ -102,16 +117,20 @@ function scriptsOf(words: string[], cwd: string): Script[] {
       if (!test) break;
     }
   }
-  const files = test
-    ? positionals.flatMap((word) =>
+  return { test, testTimeout, conditions, positionals };
+}
+
+function scriptsOf(run: NodeRun, cwd: string): Script[] {
+  const files = run.test
+    ? run.positionals.flatMap((word) =>
         GLOB.test(word) ? globSync(word, { cwd }) : [word],
       )
-    : positionals.slice(0, 1);
+    : run.positionals.slice(0, 1);
   return files
     .filter((file) => SCRIPT.test(file))
     .map((file) => resolve(cwd, file))
     .filter((file) => existsSync(file))
-    .map((file) => ({ file, conditions }));
+    .map((file) => ({ file, conditions: run.conditions }));
 }
 
 /**
@@ -120,5 +139,19 @@ function scriptsOf(words: string[], cwd: string): Script[] {
  * them. With `node -e`, the code is the first positional, so no file runs.
  */
 export function scriptsRun(line: string, cwd: string): Script[] {
-  return simpleCommands(line).flatMap((words) => scriptsOf(words, cwd));
+  return simpleCommands(line).flatMap((words) => {
+    const run = nodeRun(words);
+    return run === undefined ? [] : scriptsOf(run, cwd);
+  });
+}
+
+/**
+ * Whether `line` runs `node --test` or `tsx --test` with no `--test-timeout`.
+ * Node's own limit is Infinity, so a test of such a run never times out.
+ */
+export function runsTestsWithoutTimeout(line: string): boolean {
+  return simpleCommands(line).some((words) => {
+    const run = nodeRun(words);
+    return run !== undefined && run.test && !run.testTimeout;
+  });
 }

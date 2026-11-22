@@ -21,6 +21,8 @@ export const TEST_EXTENSIONS = [
 export const TESTS = [`**/*.{test,spec}.{${TEST_EXTENSIONS.join(',')}}`];
 /** Test helpers: a file in `src/testing` is a test file too, and the build does not ship it. */
 export const TEST_SUPPORT = ['**/src/testing/**'];
+/** The global setup that the test target of `@zukhruf/nx` passes to `--test-global-setup`. */
+export const GLOBAL_SETUP = ['**/src/testing/docker-global-setup.ts'];
 /** Test-support scripts run top-level like tests: their state is arrange state. */
 export const FIXTURES = ['**/*.fixture.ts'];
 /** A script's stdout is its interface. */
