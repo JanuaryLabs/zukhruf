@@ -143,6 +143,205 @@ test('a view whose query differs from its declaration is stale', async () => {
   assert.equal(declaration.drift(database), 'stale');
 });
 
+test('a table whose stored text differs from its declaration only in comments fits, and apply keeps the stored text and the rows', async () => {
+  for (const { older, newer } of [
+    {
+      older: `CREATE TABLE jobs (
+        -- plans.js:871-880
+        id TEXT PRIMARY KEY
+      ) STRICT`,
+      newer: `CREATE TABLE jobs (
+        -- plans.js:888-897
+        id TEXT PRIMARY KEY
+      ) STRICT`,
+    },
+    {
+      older: 'CREATE TABLE jobs (/* the key */ id TEXT PRIMARY KEY) STRICT',
+      newer: `CREATE TABLE jobs (/* the key
+        of a job */ id TEXT PRIMARY KEY) STRICT`,
+    },
+    {
+      older: 'CREATE TABLE jobs (id TEXT/**/PRIMARY KEY) STRICT',
+      newer: `CREATE TABLE jobs (id TEXT -- the key
+        PRIMARY KEY) STRICT`,
+    },
+  ]) {
+    await using scratch = await new TemporaryFiles().directory('drift-');
+    using database = open(join(scratch.path, 'data.sqlite'));
+    new Declaration([older], { rows: 'replace' }).apply(database);
+    database.exec("INSERT INTO jobs VALUES ('a')");
+    const before = stored(database);
+    const declaration = new Declaration([newer], { rows: 'replace' });
+
+    assert.equal(declaration.drift(database), 'fits', newer);
+    declaration.apply(database);
+
+    assert.deepEqual(stored(database), before);
+    assert.equal(count(database, 'jobs'), 1);
+  }
+});
+
+test('a table whose stored text differs from its declaration only in the spaces and line breaks between tokens fits', async () => {
+  for (const { older, newer } of [
+    {
+      older:
+        "CREATE TABLE jobs (id TEXT PRIMARY KEY, state TEXT NOT NULL DEFAULT 'created') STRICT",
+      newer: `CREATE TABLE jobs (
+        id   TEXT PRIMARY KEY,
+\tstate TEXT NOT NULL
+          DEFAULT 'created'
+      )   STRICT`,
+    },
+    {
+      older: 'CREATE TABLE jobs ( id TEXT , n INT CHECK ( n > 0 ) ) STRICT',
+      newer: 'CREATE TABLE jobs(id TEXT,n INT CHECK(n > 0))STRICT',
+    },
+  ]) {
+    await using scratch = await new TemporaryFiles().directory('drift-');
+    using database = open(join(scratch.path, 'data.sqlite'));
+    new Declaration([older], { rows: 'replace' }).apply(database);
+    const declaration = new Declaration([newer], { rows: 'replace' });
+
+    assert.equal(declaration.drift(database), 'fits', newer);
+  }
+});
+
+test('with rows keep, apply rebuilds the table whose column changed, and a table whose comment changed keeps its stored text and its rows', async () => {
+  await using scratch = await new TemporaryFiles().directory('drift-');
+  using database = open(join(scratch.path, 'data.sqlite'));
+  new Declaration(
+    [
+      'CREATE TABLE runs (id INTEGER PRIMARY KEY) STRICT',
+      `CREATE TABLE notes (
+        -- plans.js:871-880
+        body TEXT
+      ) STRICT`,
+    ],
+    { rows: 'keep' },
+  ).apply(database);
+  database.exec(`INSERT INTO runs VALUES (1);
+    INSERT INTO notes VALUES ('kept')`);
+  const notes = stored(database).find(({ name }) => name === 'notes');
+  const declaration = new Declaration(
+    [
+      'CREATE TABLE runs (id INTEGER PRIMARY KEY, name TEXT) STRICT',
+      `CREATE TABLE notes (
+        -- plans.js:888-897
+        body TEXT
+      ) STRICT`,
+    ],
+    { rows: 'keep' },
+  );
+
+  assert.equal(declaration.drift(database), 'stale');
+  declaration.apply(database);
+
+  assert.equal(declaration.drift(database), 'fits');
+  assert.deepEqual(stored(database), [
+    notes,
+    {
+      type: 'table',
+      name: 'runs',
+      sql: 'CREATE TABLE runs (id INTEGER PRIMARY KEY, name TEXT) STRICT',
+    },
+  ]);
+  assert.deepEqual(rows(database, 'SELECT * FROM notes'), [{ body: 'kept' }]);
+  assert.deepEqual(rows(database, 'SELECT * FROM runs'), [
+    { id: 1, name: null },
+  ]);
+});
+
+test('a change inside a string, a quoted name or a token, or a change of a column or a constraint beside a comment, is stale', async () => {
+  for (const { older, newer } of [
+    {
+      older: "CREATE TABLE jobs (state TEXT DEFAULT 'a -- b') STRICT",
+      newer: "CREATE TABLE jobs (state TEXT DEFAULT 'a -- c') STRICT",
+    },
+    {
+      older: "CREATE TABLE jobs (state TEXT DEFAULT 'it''s -- b') STRICT",
+      newer: "CREATE TABLE jobs (state TEXT DEFAULT 'it''s -- c') STRICT",
+    },
+    {
+      older: "CREATE TABLE jobs (state TEXT DEFAULT 'a /* b */ c') STRICT",
+      newer: "CREATE TABLE jobs (state TEXT DEFAULT 'a /* b */ d') STRICT",
+    },
+    {
+      older: "CREATE TABLE jobs (state TEXT DEFAULT 'a b') STRICT",
+      newer: "CREATE TABLE jobs (state TEXT DEFAULT 'a  b') STRICT",
+    },
+    {
+      older: 'CREATE TABLE jobs ("the state" TEXT) STRICT',
+      newer: 'CREATE TABLE jobs ("the  state" TEXT) STRICT',
+    },
+    {
+      older: 'CREATE TABLE jobs ("a"" -- b" TEXT) STRICT',
+      newer: 'CREATE TABLE jobs ("a"" -- c" TEXT) STRICT',
+    },
+    {
+      older: 'CREATE TABLE jobs (`the state` TEXT) STRICT',
+      newer: 'CREATE TABLE jobs (`the  state` TEXT) STRICT',
+    },
+    {
+      older: 'CREATE TABLE jobs (`a`` /* b */` TEXT) STRICT',
+      newer: 'CREATE TABLE jobs (`a`` /* c */` TEXT) STRICT',
+    },
+    {
+      older: 'CREATE TABLE jobs ([the state] TEXT) STRICT',
+      newer: 'CREATE TABLE jobs ([the  state] TEXT) STRICT',
+    },
+    {
+      older: 'CREATE TABLE jobs (state TEXT) STRICT',
+      newer: 'CREATE TABLE jobs ("state" TEXT) STRICT',
+    },
+    {
+      older: 'CREATE TABLE jobs ("state" TEXT) STRICT',
+      newer: 'CREATE TABLE jobs ([state] TEXT) STRICT',
+    },
+    {
+      older: 'CREATE TABLE jobs (state TEXT) STRICT',
+      newer: 'CREATE TABLE jobs (`state` TEXT) STRICT',
+    },
+    {
+      older: 'CREATE TABLE jobs (state TEXT) STRICT',
+      newer: 'CREATE TABLE jobs ([state] TEXT) STRICT',
+    },
+    {
+      older: 'CREATE TABLE jobs (state TEXT) STRICT',
+      newer: 'CREATE TABLE jobs (state text) STRICT',
+    },
+    {
+      older: 'CREATE TABLE jobs (id INT, state TEXT)',
+      newer: 'CREATE TABLE jobs (id INT, stateTEXT)',
+    },
+    {
+      older: `CREATE TABLE jobs (
+        -- the key
+        id TEXT
+      ) STRICT`,
+      newer: `CREATE TABLE jobs (
+        -- the key, and the state
+        id TEXT,
+        state TEXT
+      ) STRICT`,
+    },
+    {
+      older: `CREATE TABLE jobs (
+        n INT /* above 0 */ CHECK (n > 0)
+      ) STRICT`,
+      newer: `CREATE TABLE jobs (
+        n INT /* above 1 */ CHECK (n > 1)
+      ) STRICT`,
+    },
+  ]) {
+    await using scratch = await new TemporaryFiles().directory('drift-');
+    using database = open(join(scratch.path, 'data.sqlite'));
+    new Declaration([older], { rows: 'replace' }).apply(database);
+    const declaration = new Declaration([newer], { rows: 'replace' });
+
+    assert.equal(declaration.drift(database), 'stale', newer);
+  }
+});
+
 test('drift reads a database opened read-only and changes nothing', async () => {
   await using scratch = await new TemporaryFiles().directory('drift-');
   const path = join(scratch.path, 'data.sqlite');

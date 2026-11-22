@@ -18,14 +18,15 @@ type SchemaObject = {
   readonly sql: string;
 };
 
-// A declared object and the stored object of the same name, whose text differs.
+// A declared object and the stored object of the same name, whose tokens
+// differ.
 type Stale = { readonly object: SchemaObject; readonly found: SchemaObject };
 
 // The tables, indexes, views and triggers a caller owns in a SQLite database,
 // by the CREATE statements that make them, one statement for each object.
 // SQLite keeps the text of each CREATE in sqlite_schema. A declaration makes
 // its objects once in the dev database, so the declared text and
-// the stored text both come from SQLite, and they compare as they are. The
+// the stored text both come from SQLite, and they compare by their tokens. The
 // other rows that a statement adds to sqlite_schema (shadow tables,
 // sqlite_sequence) are owned objects: SQLite makes and drops them with the
 // declared object (ADR 0004).
@@ -56,7 +57,9 @@ export class Declaration {
       found: stored(database, object.name),
     }));
     if (pairs.every(({ found }) => found === undefined)) return 'missing';
-    return pairs.every(({ object, found }) => found?.sql === object.sql)
+    return pairs.every(
+      ({ object, found }) => found !== undefined && same(object, found),
+    )
       ? 'fits'
       : 'stale';
   }
@@ -134,7 +137,7 @@ export class Declaration {
   #stale(database: DatabaseSync): Stale[] {
     return this.#objects.flatMap((object) => {
       const found = stored(database, object.name);
-      return found !== undefined && found.sql !== object.sql
+      return found !== undefined && !same(object, found)
         ? [{ object, found }]
         : [];
     });
@@ -293,6 +296,39 @@ function holds(database: DatabaseSync, text: string): boolean {
       error.code === 'ERR_INVALID_ARG_VALUE'
     );
   }
+}
+
+// Whether two objects have the same tokens. A comment or a change of the
+// spaces between tokens does not change the object, so it does not rebuild a
+// table (Röthlisberger and Manley compare tables by normalise_sql too).
+function same(object: SchemaObject, found: SchemaObject): boolean {
+  return tokens(object.sql) === tokens(found.sql);
+}
+
+// The text without its comments, with one space between two tokens, and none
+// next to ( ) , or ;. A string or a quoted name stays as it is, by the rules
+// of the tokenizer of SQLite (tokenize.c). The text that sqlite_schema keeps
+// ends at the last token of the statement, so no comment, string or name in it
+// runs to the end of the text without its end.
+function tokens(sql: string): string {
+  const tight = new Set(['(', ')', ',', ';']);
+  let text = '';
+  let previous = '';
+  let gap = false;
+  for (const [token] of sql.matchAll(
+    /[ \t\n\f\r]+|--[^\n]*|\/\*[^]*?\*\/|'(?:[^']|'')*'|"(?:[^"]|"")*"|`(?:[^`]|``)*`|\[[^\]]*\]|[^]/gy,
+  )) {
+    if (/^(?:[ \t\n\f\r]|--|\/\*)/.test(token)) {
+      gap = true;
+      continue;
+    }
+    if (gap && text !== '' && !tight.has(previous) && !tight.has(token))
+      text += ' ';
+    text += token;
+    previous = token;
+    gap = false;
+  }
+  return text;
 }
 
 function virtual(object: SchemaObject): boolean {

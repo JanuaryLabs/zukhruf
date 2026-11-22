@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { cp, readFile, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import type { DatabaseSync } from 'node:sqlite';
 import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
@@ -76,6 +77,14 @@ async function newerRelease(directory: string) {
   };
 }
 
+// The text of each object that sqlite_schema keeps.
+function storedSchema(database: DatabaseSync) {
+  return database
+    .prepare('SELECT name, sql FROM sqlite_schema ORDER BY name')
+    .all()
+    .map(({ name, sql }) => ({ name: String(name), sql }));
+}
+
 function jobColumns(path: string) {
   using database = open(path);
   return database
@@ -130,6 +139,70 @@ describe('two releases on one queue file', () => {
 
     assert.deepEqual(found, [id(1)]);
     assert.ok(jobColumns(path).includes('newer_note'));
+  });
+
+  it('a newer release whose CREATE statements differ from the file only in their pg-boss citations starts on it, rebuilds no table, and keeps the jobs', async () => {
+    await using scratch = await new TemporaryFiles().directory('queue-');
+    const path = join(scratch.path, 'queue.sqlite');
+    const older = new SqliteJobQueue({
+      path,
+      schedule: false,
+      supervise: false,
+    });
+    try {
+      await older.start();
+      await older.createQueue('jobs');
+      await older.send('jobs', { from: 'older' }, { id: id(1) });
+    } finally {
+      await older.stop({ graceful: false, close: true });
+    }
+    const before = (() => {
+      // An earlier release cited other lines of pg-boss in the comments of
+      // its CREATE statements, as 12.38.2 did before the port to 12.39.0, and
+      // recorded its own version. No public operation makes that text, so it
+      // is written in SQL, with SQLite's defensive mode off so that
+      // writable_schema can change sqlite_schema.
+      using database = open(path, { defensive: false });
+      database.exec(`UPDATE pgboss_version SET version = '0.0.0'`);
+      database.exec('PRAGMA writable_schema = ON');
+      const update = database.prepare(
+        'UPDATE sqlite_schema SET sql = ? WHERE name = ?',
+      );
+      for (const { name, sql } of database
+        .prepare('SELECT name, sql FROM sqlite_schema WHERE sql IS NOT NULL')
+        .all())
+        update.run(
+          String(sql).replaceAll(
+            /(\.js:(?:\s*--\s*)?)\d+(?:-\d+)?/g,
+            (_, cite: string) => `${cite}1`,
+          ),
+          String(name),
+        );
+      database.exec('PRAGMA writable_schema = OFF');
+      return storedSchema(database);
+    })();
+    assert.match(
+      String(before.find(({ name }) => name === 'pgboss_job')?.sql),
+      /plans\.js:\s*--\s*1\)/,
+    );
+
+    const queue = new SqliteJobQueue({
+      path,
+      schedule: false,
+      supervise: false,
+    });
+    try {
+      await queue.start();
+      assert.deepEqual(
+        (await queue.findJobs('jobs')).map((job) => job.id),
+        [id(1)],
+      );
+    } finally {
+      await queue.stop({ graceful: false, close: true });
+    }
+
+    using database = open(path);
+    assert.deepEqual(storedSchema(database), before);
   });
 
   it('records this release on a file that fits and records an earlier release', async () => {

@@ -82,7 +82,7 @@ export const queueSchema = new Declaration(
     source_output TEXT,
     source_root_id TEXT,
     -- pg-boss keys a job by queue and id (node_modules/pg-boss/dist/plans.js:
-    -- 871-880), so the same id may live in two queues.
+    -- 1244-1246), so the same id may live in two queues.
     PRIMARY KEY (queue_name, id)
   )`,
     `CREATE TABLE pgboss_schedule (

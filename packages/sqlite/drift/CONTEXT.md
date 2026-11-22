@@ -29,7 +29,7 @@ The empty database in memory where a declaration makes its objects once, to read
 _Avoid_: Blank database, shadow database (the Prisma term), scratch database
 
 **Drift**:
-How the database stores the objects of a declaration: `missing` when it stores none of them, `fits` when it stores each one as declared, and `stale` for all other cases.
+How the database stores the objects of a declaration: `missing` when it stores none of them, `fits` when it stores each one as declared (the same tokens: comments and the spaces between tokens do not count), and `stale` for all other cases.
 _Avoid_: Mismatch, diff, outdated
 
 **Apply**:
