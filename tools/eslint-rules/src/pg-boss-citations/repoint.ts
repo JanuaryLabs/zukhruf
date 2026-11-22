@@ -2,7 +2,7 @@
 // pg-boss-citations.json records to the installed pg-boss, which must be the
 // pinned one.
 //
-//   node tools/eslint-rules/pg-boss-citations/repoint.ts <package dir> [--checked]
+//   node tools/eslint-rules/src/pg-boss-citations/repoint.ts <package dir> [--checked]
 //
 // A cited line that is in a block the new version changed is listed for a hand
 // check and not moved; the record then stays as it is and the exit code is 1.

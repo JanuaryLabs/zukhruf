@@ -17,7 +17,7 @@
       "cache": false,
       "dependsOn": ["^build"],
       "options": {
-        "command": "node tools/eslint-rules/pg-boss-citations/repoint.ts {projectRoot}"
+        "command": "node tools/eslint-rules/src/pg-boss-citations/repoint.ts {projectRoot}"
       }
     }
   }

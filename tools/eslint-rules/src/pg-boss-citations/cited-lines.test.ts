@@ -3,8 +3,8 @@ import { test } from 'node:test';
 import { RuleTester } from 'eslint';
 import tseslint from 'typescript-eslint';
 
+import { fixtureWorkspace } from '../testing/fixture-workspace.ts';
 import rule from './cited-lines.ts';
-import { fixtureWorkspace } from './testing/fixture-workspace.ts';
 
 // A package that pins pg-boss, with pg-boss installed as npm installs it: a
 // manager.js of 10 lines and an adapters/pglite.js of 3 lines.

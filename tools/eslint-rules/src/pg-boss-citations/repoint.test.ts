@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { promisify } from 'node:util';
 
-import { fixtureWorkspace } from './testing/fixture-workspace.ts';
+import { fixtureWorkspace } from '../testing/fixture-workspace.ts';
 
 const exec = promisify(execFile);
 const REPOINT = join(import.meta.dirname, 'repoint.ts');

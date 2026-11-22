@@ -3,8 +3,8 @@ import { test } from 'node:test';
 import { RuleTester } from 'eslint';
 import * as jsonc from 'jsonc-eslint-parser';
 
+import { fixtureWorkspace } from '../testing/fixture-workspace.ts';
 import rule from './cited-version.ts';
-import { fixtureWorkspace } from './testing/fixture-workspace.ts';
 
 const manifest = (pin: string) =>
   JSON.stringify({ name: '@acme/queue', dependencies: { 'pg-boss': pin } });
