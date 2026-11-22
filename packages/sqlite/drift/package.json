@@ -1,6 +1,6 @@
 {
   "name": "@zukhruf/sqlite-drift",
-  "version": "0.8.67",
+  "version": "0.8.68",
   "description": "Declarative schema management for SQLite. A declaration lists the CREATE statements of the tables, indexes, views and triggers one caller owns. Gives the drift from what SQLite stores (missing, fits or stale) and applies the declaration.",
   "license": "MIT",
   "repository": {
@@ -42,11 +42,11 @@
     "access": "public"
   },
   "dependencies": {
-    "@zukhruf/sqlite-open": "^0.8.67",
-    "@zukhruf/sqlite-transaction": "^0.8.67"
+    "@zukhruf/sqlite-open": "^0.8.68",
+    "@zukhruf/sqlite-transaction": "^0.8.68"
   },
   "devDependencies": {
-    "@zukhruf/fs": "^0.8.67",
-    "@zukhruf/testing": "^0.8.67"
+    "@zukhruf/fs": "^0.8.68",
+    "@zukhruf/testing": "^0.8.68"
   }
 }
