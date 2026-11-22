@@ -15,7 +15,7 @@
   },
   "devDependencies": {
     "@babel/cli": "7.29.7",
-    "@babel/core": "7.29.7",
+    "@babel/core": "7.29.13",
     "@babel/plugin-transform-react-jsx": "7.29.7",
     "@babel/preset-typescript": "7.29.7",
     "@e18e/eslint-plugin": "0.8.1",
@@ -30,7 +30,7 @@
     "@nx/react": "24.0.6",
     "@nx/vite": "24.0.6",
     "@nx/vitest": "24.0.6",
-    "@rolldown/plugin-babel": "0.2.3",
+    "@rolldown/plugin-babel": "0.3.1",
     "@shadcn/lint": "0.2.5",
     "@tailwindcss/node": "4.3.5",
     "@tailwindcss/oxide": "4.3.5",
