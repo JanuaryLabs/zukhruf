@@ -3,6 +3,8 @@ import { hash, randomUUID } from 'node:crypto';
 import { describe, test } from 'node:test';
 import { setTimeout } from 'node:timers/promises';
 
+import { packTar, unpackTar } from 'modern-tar';
+
 import { TemporaryFiles } from '@zukhruf/fs';
 
 import {
@@ -12,8 +14,6 @@ import {
   ImageNotFoundError,
   UnsupportedEngineError,
 } from './index.ts';
-import { tarEntries } from './tar-reader.ts';
-import { tarArchive } from './tar-writer.ts';
 import { TEST_LABEL, connect, removeLabeled } from './testing/engine.ts';
 import { fakeEngine } from './testing/fake-engine.ts';
 
@@ -81,8 +81,9 @@ async function archiveArchitectures(
   archive: ReadableStream<Uint8Array>,
 ): Promise<string[]> {
   const architectures: string[] = [];
-  for await (const entry of tarEntries(archive)) {
-    if (entry.type !== 'file' || !entry.path.startsWith('blobs/')) continue;
+  for (const entry of await unpackTar(archive, { strict: true })) {
+    if (entry.header.type !== 'file' || !entry.header.name.startsWith('blobs/'))
+      continue;
     let blob: unknown;
     try {
       blob = JSON.parse(new TextDecoder().decode(entry.data));
@@ -544,16 +545,19 @@ describe('docker.images', () => {
     });
     const run = randomUUID();
     const name = `zukhruf-test-${run}:x`;
-    const file = (path: string, data: Uint8Array) => ({
-      path,
-      type: 'file' as const,
-      data,
-      mode: 0o644,
-      uid: 0,
-      gid: 0,
-      mtime: 0,
+    const file = (name: string, data: Uint8Array) => ({
+      header: {
+        name,
+        type: 'file' as const,
+        size: data.byteLength,
+        mode: 0o644,
+        uid: 0,
+        gid: 0,
+        mtime: new Date(0),
+      },
+      body: data,
     });
-    const layer = tarArchive([file('run', new TextEncoder().encode(run))]);
+    const layer = await packTar([file('run', new TextEncoder().encode(run))]);
     const diffId = hash('sha256', layer, 'hex');
     // No architecture, so the engine of any platform creates the container; a
     // create needs a command, which the container never runs.
@@ -567,7 +571,7 @@ describe('docker.images', () => {
     ]);
     try {
       await docker.images.load(
-        tarArchive([
+        await packTar([
           file('manifest.json', new TextEncoder().encode(manifest)),
           file('config.json', new TextEncoder().encode(config)),
           file('layer.tar', layer),

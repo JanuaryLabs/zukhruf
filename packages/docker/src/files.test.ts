@@ -4,6 +4,8 @@ import { randomUUID } from 'node:crypto';
 import { Readable } from 'node:stream';
 import { describe, test } from 'node:test';
 
+import { packTar } from 'modern-tar';
+
 import { TemporaryFiles } from '@zukhruf/fs';
 
 import {
@@ -12,6 +14,7 @@ import {
   type ContainerUserFile,
   Docker,
   DockerEngineError,
+  DockerError,
   NotAFileError,
   PathNotFoundError,
   ReadOnlyPathError,
@@ -190,6 +193,81 @@ describe('the files of a container', () => {
     }
   });
 
+  test('a written entry has the time of the write as its mtime', async (t) => {
+    // Arrange
+    await using docker = await connect(IMAGE, t.signal);
+    const run = randomUUID();
+    try {
+      const container = await docker.containers.create({
+        Image: IMAGE,
+        Cmd: ['sleep', '300'],
+        Labels: { [TEST_LABEL]: run },
+      });
+      await container.start();
+      const before = Math.floor(Date.now() / 1000);
+
+      // Act
+      await container.writeFiles([
+        { path: '/opt/stamp/file.txt', data: 'x' },
+        { path: '/opt/stamp/dir', directory: true },
+      ]);
+      const after = Math.ceil(Date.now() / 1000);
+
+      // Assert
+      const mtimes = (
+        await shell(
+          container,
+          "stat -c '%Y' /opt/stamp/file.txt /opt/stamp/dir",
+        )
+      )
+        .trim()
+        .split('\n')
+        .map(Number);
+      assert.equal(mtimes.length, 2);
+      for (const mtime of mtimes) {
+        assert.ok(
+          mtime >= before && mtime <= after,
+          `${mtime} is not in ${before}..${after}`,
+        );
+      }
+    } finally {
+      await removeLabeled(docker, run);
+    }
+  });
+
+  test('an empty file goes in through writeFiles() and comes back through readFile() with no bytes', async (t) => {
+    // Arrange
+    await using docker = await connect(IMAGE, t.signal);
+    const run = randomUUID();
+    try {
+      const container = await docker.containers.create({
+        Image: IMAGE,
+        Cmd: ['sleep', '300'],
+        Labels: { [TEST_LABEL]: run },
+      });
+      await container.start();
+
+      // Act
+      await container.writeFiles([
+        { path: '/tmp/empty.txt', data: '' },
+        { path: '/tmp/after.txt', data: 'after' },
+      ]);
+      const read = await container.readFile('/tmp/empty.txt');
+
+      // Assert
+      assert.equal(read.byteLength, 0);
+      assert.equal(
+        await shell(
+          container,
+          "stat -c '%F %s' /tmp/empty.txt; cat /tmp/after.txt",
+        ),
+        'regular empty file 0\nafter',
+      );
+    } finally {
+      await removeLabeled(docker, run);
+    }
+  });
+
   test('stat() gives the path stat of a file, and undefined for a missing path and for a missing container', async (t) => {
     // Arrange
     await using docker = await connect(IMAGE, t.signal);
@@ -360,6 +438,101 @@ describe('the files of a container', () => {
       await assert.rejects(gone, ContainerNotFoundError);
     } finally {
       await removeLabeled(docker, run);
+    }
+  });
+
+  test('readFile() of a FIFO is a NotAFileError of the kind other', async (t) => {
+    // Arrange
+    await using docker = await connect(IMAGE, t.signal);
+    const run = randomUUID();
+    try {
+      const container = await docker.containers.create({
+        Image: IMAGE,
+        Cmd: ['sleep', '300'],
+        Labels: { [TEST_LABEL]: run },
+      });
+      await container.start();
+      await shell(container, 'mkfifo /tmp/pipe');
+
+      // Act
+      const reading = container.readFile('/tmp/pipe');
+
+      // Assert
+      await assert.rejects(reading, (error) => {
+        assert.ok(error instanceof NotAFileError, String(error));
+        assert.equal(error.kind, 'other');
+        assert.equal(error.path, '/tmp/pipe');
+        return true;
+      });
+    } finally {
+      await removeLabeled(docker, run);
+    }
+  });
+
+  test('readFile() of an archive with a bad header checksum, of one that ends inside an entry, and of one with no entry rejects with a DockerError that is not an engine error', async () => {
+    // Arrange: the engine answers each archive request with 200 and a broken tar.
+    await using scratch = await new TemporaryFiles().directory('docker-test-');
+    const valid = await packTar([
+      {
+        header: {
+          name: 'run.sh',
+          type: 'file',
+          size: 1000,
+          mtime: new Date(0),
+        },
+        body: new Uint8Array(1000),
+      },
+    ]);
+    const badChecksum = valid.slice();
+    badChecksum[0] = 'x'.charCodeAt(0);
+    const archives = new Map<string, Uint8Array>([
+      ['/checksum', badChecksum],
+      ['/cut', valid.subarray(0, 512 + 100)],
+      ['/empty', new Uint8Array(1024)],
+    ]);
+    await using engine = await fakeEngine({
+      directory: scratch.path,
+      apiVersion: '1.51',
+      answer: (request, response) => {
+        const url = new URL(request.url ?? '', 'http://engine');
+        if (url.pathname === '/v1.51/containers/c1/json') {
+          response.writeHead(200, { 'Content-Type': 'application/json' });
+          response.end(JSON.stringify({ Id: 'c1' }));
+          return;
+        }
+        const archive = archives.get(url.searchParams.get('path') ?? '');
+        if (
+          url.pathname === '/v1.51/containers/c1/archive' &&
+          archive !== undefined
+        ) {
+          response.writeHead(200, { 'Content-Type': 'application/x-tar' });
+          response.end(archive);
+          return;
+        }
+        response.writeHead(500);
+        response.end();
+      },
+    });
+    await using docker = await Docker.connect({
+      clock: globalThis,
+      host: engine.host,
+    });
+    const container = await docker.containers.find('c1');
+    assert.ok(container);
+
+    // Act
+    const readings = [...archives.keys()].map((path) =>
+      container.readFile(path),
+    );
+    await Promise.allSettled(readings);
+
+    // Assert
+    for (const reading of readings) {
+      await assert.rejects(reading, (error: unknown) => {
+        assert.ok(error instanceof DockerError, String(error));
+        assert.ok(!(error instanceof DockerEngineError), String(error));
+        return true;
+      });
     }
   });
 

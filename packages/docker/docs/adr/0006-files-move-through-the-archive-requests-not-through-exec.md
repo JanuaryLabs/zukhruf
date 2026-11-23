@@ -1,5 +1,7 @@
 # Files move through the archive requests, not through exec
 
+Superseded in part on 2026-11-23 by [ADR 0016](./0016-an-image-build-sends-a-tar-context-to-buildkit-through-the-engine-api-and-the-caller-pulls-each-base-image-first.md) for the tar code. The package no longer writes and reads tar itself: [`modern-tar`](https://www.npmjs.com/package/modern-tar) writes the archive of `writeFiles()` and reads the archive of `readFile()`. The decision below stays true: files move through the archive requests.
+
 The repositories move files in and out of containers through exec, as base64 text:
 
 - The sandbox of `@deepagents/context` writes files as base64 in the arguments of `exec`, in parts of 32 KB, because of the limit on the length of arguments (`cli-process.ts:83`). It reads files and checks paths with more commands.

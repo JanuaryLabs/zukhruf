@@ -1,6 +1,13 @@
 import type { IncomingHttpHeaders, IncomingMessage } from 'node:http';
 import { posix } from 'node:path';
 
+import {
+  type TarEntry,
+  type TarHeader,
+  createTarDecoder,
+  packTar,
+} from 'modern-tar';
+
 import { type WallClock, delay, poll } from '@zukhruf/async';
 
 import { ContainerProcess } from './container-process.ts';
@@ -29,8 +36,6 @@ import type { Images } from './images.ts';
 import { type OutputChunk, outputChunks } from './multiplexed-stream.ts';
 import type { CancelOptions, Filters } from './options.ts';
 import { type ExecResult, type Output, readOutput } from './output.ts';
-import { tarEntries } from './tar-reader.ts';
-import { type TarWriterEntry, tarArchive } from './tar-writer.ts';
 
 /** A file or a directory for writeFiles(). It belongs to uid:gid, or to 0:0. */
 export type ContainerFile =
@@ -112,6 +117,18 @@ function isReadOnly(
     )[0];
   if (holding !== undefined) return holding.RW === false;
   return container.HostConfig?.ReadonlyRootfs === true;
+}
+
+/** The kind of an entry that is not a regular file, as NotAFileError names it. */
+function notAFileKind(header: TarHeader): NotAFileError['kind'] {
+  if (
+    header.type === 'directory' ||
+    header.type === 'symlink' ||
+    header.type === 'link'
+  ) {
+    return header.type;
+  }
+  return 'other';
 }
 
 async function* bytesOf(response: IncomingMessage): AsyncGenerator<Uint8Array> {
@@ -643,20 +660,42 @@ export class Container {
     const method = 'GET';
     const requestPath = `${this.#path}/archive`;
     const response = await this.#archive(path, options);
-    // The first entry of the archive is the path itself, so a directory fails before its tree comes.
-    for await (const entry of tarEntries(bytesOf(response))) {
-      if (entry.type === 'file') return entry.data;
+    const entries = ReadableStream.from(bytesOf(response))
+      .pipeThrough(createTarDecoder({ strict: true }))
+      .getReader();
+    try {
+      // The first entry of the archive is the path itself, so a directory fails before its tree comes.
+      const first = await entries.read();
+      if (first.done) {
+        throw new DockerError(
+          `The archive of ${path} in the container ${this.id} has no entry.`,
+        );
+      }
+      const { header, body } = first.value;
+      if (header.type === 'file') {
+        const data = await new Response(body).bytes();
+        await entries.cancel();
+        return data;
+      }
+      await entries.cancel();
+      const kind = notAFileKind(header);
       throw new NotAFileError(
-        `${path} in the container ${this.id} is a ${entry.type}, not a regular file.`,
+        `${path} in the container ${this.id} is a ${kind}, not a regular file.`,
         { status: response.statusCode, request: { method, path: requestPath } },
         this.id,
         path,
-        entry.type,
+        kind,
+      );
+    } catch (error) {
+      // A failure of the response itself stays as it is; a failure of the decoder is a broken archive.
+      if (error instanceof DockerError || response.errored !== null) {
+        throw error;
+      }
+      throw new DockerError(
+        `The archive of ${path} in the container ${this.id} is not a valid tar archive.`,
+        { cause: error },
       );
     }
-    throw new DockerError(
-      `The archive of ${path} in the container ${this.id} has no entry.`,
-    );
   }
 
   /**
@@ -677,7 +716,7 @@ export class Container {
     options: CancelOptions & { copyUIDGID?: true } = {},
   ): Promise<void> {
     if (files.length === 0) return;
-    const mtime = Math.floor(this.#clock.Date.now() / 1000);
+    const mtime = new Date(this.#clock.Date.now());
     const absolute = files.map((file) => ({
       file,
       path: posix.resolve('/', file.path),
@@ -702,24 +741,37 @@ export class Container {
           }))
       : [];
     const entries = [...created, ...absolute].map(
-      ({ file, path }): TarWriterEntry => {
-        const isDirectory = 'directory' in file;
+      ({ file, path }): TarEntry => {
+        const name = posix.relative(directory, path);
+        const shared = { uid: file.uid ?? 0, gid: file.gid ?? 0, mtime };
+        if ('directory' in file) {
+          return {
+            header: {
+              ...shared,
+              name: `${name}/`,
+              type: 'directory',
+              size: 0,
+              mode: file.mode ?? 0o755,
+            },
+          };
+        }
+        const data =
+          typeof file.data === 'string'
+            ? new TextEncoder().encode(file.data)
+            : file.data;
         return {
-          path: posix.relative(directory, path),
-          type: isDirectory ? 'directory' : 'file',
-          data: isDirectory
-            ? new Uint8Array(0)
-            : typeof file.data === 'string'
-              ? new TextEncoder().encode(file.data)
-              : file.data,
-          mode: file.mode ?? (isDirectory ? 0o755 : 0o644),
-          uid: file.uid ?? 0,
-          gid: file.gid ?? 0,
-          mtime,
+          header: {
+            ...shared,
+            name,
+            type: 'file',
+            size: data.byteLength,
+            mode: file.mode ?? 0o644,
+          },
+          body: data,
         };
       },
     );
-    await this.putArchive(directory, tarArchive(entries), {
+    await this.putArchive(directory, await packTar(entries), {
       ...options,
       noOverwriteDirNonDir: true,
     });

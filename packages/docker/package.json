@@ -32,6 +32,7 @@
   },
   "files": [
     "dist",
+    "NOTICE",
     "!dist/spec/**",
     "!**/*.tsbuildinfo",
     "!**/*.test.*"
@@ -41,7 +42,8 @@
   },
   "dependencies": {
     "@zukhruf/async": "^0.8.70",
-    "@zukhruf/ssh": "^0.8.70"
+    "@zukhruf/ssh": "^0.8.70",
+    "modern-tar": "^0.8.6"
   },
   "devDependencies": {
     "@sinonjs/fake-timers": "15.5.0",
