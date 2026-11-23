@@ -226,7 +226,7 @@ function portOf(server: Server): number {
   return address.port;
 }
 
-test('connectTimeout rejects the dial with a TimeoutError when it passes on the clock of the config, and not before', async () => {
+test('connectTimeout, when it passes on the clock of the config and not before, rejects a dial that got no banner with an error that names the host, the port and the banner exchange, whose cause is the TimeoutError', async () => {
   // Arrange
   await using server = await startSilentServer();
   const clock = createClock();
@@ -253,10 +253,117 @@ test('connectTimeout rejects the dial with a TimeoutError when it passes on the 
   // Assert
   assert.equal(settledBefore, false);
   await assert.rejects(dial, (error) => {
-    assert.ok(error instanceof DOMException);
-    assert.equal(error.name, 'TimeoutError');
+    assert.ok(Error.isError(error));
+    assert.equal(
+      error.message,
+      `ssh: connect to host 127.0.0.1 port ${server.port}: connection timed out during the banner exchange`,
+    );
+    assert.ok(error.cause instanceof DOMException);
+    assert.equal(error.cause.name, 'TimeoutError');
     return true;
   });
+});
+
+test('connectTimeout that passes before the TCP connect ends rejects the dial with an error that names the host, the port and the TCP connect, whose cause is the TimeoutError', async () => {
+  // Arrange
+  await using server = await startSilentServer();
+  const clock = createClock();
+  const dial = Client.dial(`127.0.0.1:${server.port}`, {
+    user: 'nobody',
+    auth: [],
+    hostKey: () => undefined,
+    clock,
+    connectTimeout: 5000,
+  });
+
+  // Act
+  clock.tick(5000);
+
+  // Assert
+  await assert.rejects(dial, (error) => {
+    assert.ok(Error.isError(error));
+    assert.equal(
+      error.message,
+      `ssh: connect to host 127.0.0.1 port ${server.port}: connection timed out during the TCP connect`,
+    );
+    assert.ok(error.cause instanceof DOMException);
+    assert.equal(error.cause.name, 'TimeoutError');
+    return true;
+  });
+});
+
+test('connectTimeout that passes after the banner of the server rejects the dial with an error that names the host, the port and the key exchange', async () => {
+  // Arrange
+  const sockets = new Set<Socket>();
+  const kexInit = Promise.withResolvers<void>();
+  const server = createServer((socket) => {
+    sockets.add(socket);
+    let received = '';
+    socket.on('data', (chunk: Buffer) => {
+      received += chunk.toString('latin1');
+      const banner = received.indexOf('\r\n');
+      if (banner !== -1 && received.length > banner + 2) kexInit.resolve();
+    });
+    socket.write('SSH-2.0-OpenSSH_9.9\r\n');
+  });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  try {
+    const clock = createClock();
+    const dial = Client.dial(`127.0.0.1:${portOf(server)}`, {
+      user: 'nobody',
+      auth: [],
+      hostKey: () => undefined,
+      clock,
+      connectTimeout: 5000,
+    });
+    dial.catch(() => undefined);
+    await kexInit.promise;
+
+    // Act
+    clock.tick(5000);
+
+    // Assert
+    await assert.rejects(dial, (error) => {
+      assert.ok(Error.isError(error));
+      assert.equal(
+        error.message,
+        `ssh: connect to host 127.0.0.1 port ${portOf(server)}: connection timed out during the key exchange`,
+      );
+      assert.ok(error.cause instanceof DOMException);
+      assert.equal(error.cause.name, 'TimeoutError');
+      return true;
+    });
+  } finally {
+    for (const socket of sockets) socket.destroy();
+    server.close();
+    await once(server, 'close');
+  }
+});
+
+test('with a connectTimeout, a signal that aborts first rejects the dial with its own reason', async () => {
+  // Arrange
+  await using server = await startSilentServer();
+  const controller = new AbortController();
+  const reason = new Error('stop');
+  const dial = Client.dial(
+    `127.0.0.1:${server.port}`,
+    {
+      user: 'nobody',
+      auth: [],
+      hostKey: () => undefined,
+      clock: createClock(),
+      connectTimeout: 5000,
+    },
+    { signal: controller.signal },
+  );
+  await server.accepted;
+
+  // Act
+  controller.abort(reason);
+
+  // Assert
+  await assert.rejects(dial, (error) => error === reason);
 });
 
 test('a signal that aborts during the handshake rejects the dial with its reason', async () => {

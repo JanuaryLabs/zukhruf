@@ -1,4 +1,4 @@
-import { connect } from 'node:net';
+import { Socket, connect } from 'node:net';
 import type { Duplex } from 'node:stream';
 
 import ssh2, {
@@ -373,8 +373,26 @@ export class Client implements AsyncDisposable {
       started.reject(error);
     };
     function onAbort(this: AbortSignal): void {
-      fail(this.reason);
+      if (limit === undefined || this.reason !== limit.signal.reason) {
+        fail(this.reason);
+        return;
+      }
+      fail(
+        new Error(
+          `ssh: connect to host ${host} port ${port}: connection timed out during the ${phase()}`,
+          { cause: limit.signal.reason },
+        ),
+      );
     }
+    // The phases of OpenSSH's ConnectTimeout that the start can see: the
+    // socket of a dial still connects, no "SSH-" line came, or the key
+    // exchange runs until the handshake event.
+    const phase = (): string => {
+      if (transport instanceof Socket && transport.connecting) {
+        return 'TCP connect';
+      }
+      return serverVersion.value() === '' ? 'banner exchange' : 'key exchange';
+    };
     abort?.addEventListener('abort', onAbort, { once: true });
     const serverVersion = readServerVersion(transport);
 

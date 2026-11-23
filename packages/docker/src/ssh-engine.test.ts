@@ -156,8 +156,11 @@ describe('the SSH connection of an ssh:// host', () => {
       await assert.rejects(connected, (error) => {
         assert.ok(error instanceof ConnectionFailedError);
         assert.equal(error.host, SSH_HOST);
-        assert.ok(error.cause instanceof DOMException);
-        assert.equal(error.cause.name, 'TimeoutError');
+        // @zukhruf/ssh names the phase that timed out, over the TimeoutError of the limit.
+        assert.ok(Error.isError(error.cause));
+        assert.match(error.cause.message, /connection timed out during the /);
+        assert.ok(error.cause.cause instanceof DOMException);
+        assert.equal(error.cause.cause.name, 'TimeoutError');
         return true;
       });
     },

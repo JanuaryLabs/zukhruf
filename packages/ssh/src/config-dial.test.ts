@@ -1065,7 +1065,7 @@ test(
 );
 
 test(
-  'ConnectTimeout rejects the dial with a TimeoutError when it passes on the given clock, and not before',
+  'ConnectTimeout, when it passes on the given clock and not before, rejects the dial with an error that names the host, the port and the banner exchange, whose cause is the TimeoutError',
   { skip: noSsh },
   async (t) => {
     // Arrange
@@ -1107,8 +1107,13 @@ test(
     // Assert
     assert.equal(settledBefore, false);
     await assert.rejects(dial, (error) => {
-      assert.ok(error instanceof DOMException);
-      assert.equal(error.name, 'TimeoutError');
+      assert.ok(Error.isError(error));
+      assert.equal(
+        error.message,
+        `ssh: connect to host 127.0.0.1 port ${server.port}: connection timed out during the banner exchange`,
+      );
+      assert.ok(error.cause instanceof DOMException);
+      assert.equal(error.cause.name, 'TimeoutError');
       return true;
     });
   },
