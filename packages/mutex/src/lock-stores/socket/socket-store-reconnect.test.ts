@@ -681,7 +681,10 @@ describe('A socket store that reconnects', () => {
     // Act: the lease is released with no open connection to tell, then the store follows the next leader.
     await lease[Symbol.asyncDispose]();
     second.welcome();
-    await delay(settle);
+    // The store sends its reasserts before its marker, so once the marker came, a reassert would have come too.
+    await waitFor(() => assert.equal(second.markers.length, 1), {
+      signal: t.signal,
+    });
 
     // Assert
     assert.deepEqual(
