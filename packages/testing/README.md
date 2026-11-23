@@ -458,7 +458,7 @@ A call with no name does not compile. [ADR 0018](./docs/adr/0018-a-preload-is-a-
 
 ## Intercepted requests
 
-`new Msw().intercept(...handlers)` starts an msw server in this process with the handlers, and returns an interception. The handle has `server`, `requests` and `cleanup`. Disposal closes the server.
+`new Msw().intercept(...handlers)` starts an msw server in this process with the handlers, and returns an interception. The handle has `server`, `requests` and `cleanup`. Disposal closes the server, and then waits until the client has closed each connection that the server closed. Write `await using`, or `await interception.cleanup()`: the handle has no `Symbol.dispose`, so `using` does not compile.
 
 ```ts
 import { HttpResponse, http } from 'msw';
@@ -468,7 +468,7 @@ import { Msw } from '@zukhruf/testing/msw';
 const msw = new Msw();
 
 test('sends the token', async (t) => {
-  using interception = msw.intercept(
+  await using interception = msw.intercept(
     http.get('https://api.example.com/user', () =>
       HttpResponse.json({ id: 1 }),
     ),
@@ -495,13 +495,15 @@ import { http, passthrough } from 'msw';
 import { HttpServer } from '@zukhruf/testing/http';
 
 await using local = await new HttpServer().start(handler);
-using interception = msw.intercept(
+await using interception = msw.intercept(
   http.all(`${local.origin}/*`, () => passthrough()),
   http.get('https://api.example.com/user', () => HttpResponse.json({ id: 1 })),
 );
 ```
 
 Do not use a catch-all handler, such as `http.all('*', …)`, that returns nothing for some requests. msw then sends each of those requests to the network, and the strict strategy has no effect. msw 3.0.2 does this.
+
+`fetch` keeps each connection in its pool and clears the timer of the connection only when the connection emits `close`, a few turns after `server.close()`. In a test that fakes `setTimeout` with `t.mock.timers`, that timer comes from the fake. If the clear runs after node:test resets the fake timers, Node 26 removes a timer of the next test that fakes them. Thus the disposal waits for those `close` events ([ADR 0028](./docs/adr/0028-an-interceptions-disposal-waits-until-the-client-has-closed-each-connection-that-the-server-closed.md)). It does not close a passthrough connection, which the local server closes.
 
 The driver is msw 3 (`msw ^3.0.3`), which needs Node.js 22.12 or later. Install it next to this package.
 
@@ -785,10 +787,10 @@ class StreamHarness {
 }
 
 // @zukhruf/testing/msw
-interface MswInterception extends Disposable {
+interface MswInterception extends AsyncDisposable {
   server: SetupServer;
   requests: Request[];
-  cleanup: () => void;
+  cleanup: () => Promise<void>;
 }
 class Msw {
   intercept(...handlers: AnyHandler[]): MswInterception;
@@ -834,6 +836,7 @@ function globalTeardown(): void;
 - [ADR 0024](./docs/adr/0024-a-run-holds-one-ssh-connection-to-an-ssh-engine-and-its-test-processes-reach-the-engine-host-through-it.md): a run holds one SSH connection to an SSH engine, and its test processes reach the engine host through it.
 - [ADR 0025](./docs/adr/0025-recovery-and-the-global-teardown-make-no-engine-call-and-a-test-process-has-no-process-record.md): recovery and the global teardown make no engine call, and a test process has no process record.
 - [ADR 0026](./docs/adr/0026-a-database-handle-owns-its-pools-and-its-disposal-ends-them-before-it-drops-the-database.md): a database handle owns its pools, and its disposal ends them before it drops the database.
+- [ADR 0028](./docs/adr/0028-an-interceptions-disposal-waits-until-the-client-has-closed-each-connection-that-the-server-closed.md): an interception's disposal waits until the client has closed each connection that the server closed (proposed).
 
 **Copied code**: [Code copied into this package](./docs/copied-code.md) records each copy of code in this package, as the Rule of Three asks.
 
