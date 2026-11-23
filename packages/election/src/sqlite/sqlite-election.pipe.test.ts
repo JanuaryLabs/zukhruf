@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { access, readFile, rm, writeFile } from 'node:fs/promises';
-import { connect } from 'node:net';
+import { type Socket, connect } from 'node:net';
 import { join } from 'node:path';
 import { type TestContext, describe, test } from 'node:test';
 
@@ -390,6 +390,70 @@ describe('A candidate that waits on the leader of a SQLite election', () => {
       `The waits have no jitter: ${waits.join(', ')}`,
     );
   });
+
+  test(
+    'a candidate under a leader whose pipe has a full listen queue waits its back-off and ends at its timeout, and an observer reports absent',
+    {
+      skip:
+        process.platform === 'linux'
+          ? false
+          : 'Only Linux refuses a connect to a full listen queue with EAGAIN; macOS refuses it with ECONNREFUSED, a NoServerError',
+    },
+    async (t) => {
+      // Arrange: a hung leader accepts nothing, so connects fill its queue.
+      await using directory = await new TemporaryFiles().directory(
+        'election-test-',
+      );
+      const leader = startWorker(
+        leaderSource(directory.path, {
+          leaseDuration: 15_000,
+          heartbeatInterval: 5_000,
+        }),
+        'leader',
+      );
+      const queued: Socket[] = [];
+      try {
+        await leader.next('leader', { signal: t.signal });
+        leader.child.kill('SIGSTOP');
+        const { address } = JSON.parse(
+          await readFile(join(directory.path, 'term.lock.leader'), 'utf8'),
+        );
+        for (let refused = false; !refused;) {
+          const socket = connect(address);
+          queued.push(socket);
+          refused = await new Promise<boolean>((resolve, reject) => {
+            socket.once('connect', () => resolve(false));
+            socket.once('error', (error: NodeJS.ErrnoException) =>
+              error.code === 'EAGAIN' ? resolve(true) : reject(error),
+            );
+          });
+        }
+        const clock = createClock();
+
+        // Act
+        const campaigning = track(
+          electionIn(directory.path, clock).campaign({ timeout: 1_000 }),
+        );
+        // The deadline of the campaign and the first wait of its back-off.
+        await waitFor(
+          () => assert.ok(campaigning.settled || clock.countTimers() === 2),
+          { signal: t.signal },
+        );
+        await clock.tickAsync(1_000);
+        await untilAborted(campaigning.done, t.signal);
+        using observer = electionIn(directory.path, clock).observe();
+
+        // Assert
+        assert.equal(campaigning.error, undefined);
+        assert.equal(campaigning.value, undefined);
+        assert.equal(await observer.left, 'absent');
+      } finally {
+        for (const socket of queued) socket.destroy();
+        await leader[Symbol.asyncDispose]();
+        await succeed(directory.path, t.signal);
+      }
+    },
+  );
 
   test('a campaign with a timeout ends at its deadline on its clock while another process leads', async (t) => {
     // Arrange: the leader is another election of this process, on the real clock.

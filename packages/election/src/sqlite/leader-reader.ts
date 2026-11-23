@@ -21,7 +21,9 @@ export interface ReaderOptions {
 
 /**
  * Reads the leader record, connects to its pipe once, and resolves when the
- * leader left. Resolves `'absent'` when no leader serves a pipe.
+ * leader left. Resolves `'absent'` when it holds no connection to a leader's
+ * pipe: no leader serves one, the pipe is another user's, or its listen queue
+ * is full.
  *
  * While connected, the reader keeps the deadline of the heartbeat: the
  * record's `leaseDuration` after the connect, and again after each heartbeat
@@ -42,8 +44,15 @@ export async function readLeader(
       signal: options.signal,
     });
   } catch (error) {
-    // No server listens on the pipe of the record, or the pipe is another user's (ADR 0007).
-    if (error instanceof NoServerError || isErrno(error, 'EACCES'))
+    // No server listens on the pipe of the record, the pipe is another user's
+    // (ADR 0007), or its listen queue is full (EAGAIN on Linux; macOS refuses
+    // that connect as no server, #5425): a leader serves, but no connection
+    // to its pipe can be held now.
+    if (
+      error instanceof NoServerError ||
+      isErrno(error, 'EACCES') ||
+      isErrno(error, 'EAGAIN')
+    )
       return 'absent';
     throw error;
   }

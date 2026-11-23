@@ -27,9 +27,10 @@ export class LeaderObserver implements Disposable {
 
   /**
    * Resolves `'closed'` when the leader left, `'ended'` when this observer
-   * ended a silent leader and its pipe closed, and `'absent'` when no leader
-   * served a pipe. Rejects with any other error. Never settles after a
-   * disposal.
+   * ended a silent leader and its pipe closed, and `'absent'` when it held no
+   * connection to a leader's pipe: no leader served one, the pipe was another
+   * user's, or its listen queue was full. Rejects with any other error.
+   * Never settles after a disposal.
    */
   get left(): Promise<Left | 'absent'> {
     return this.#left.wait();

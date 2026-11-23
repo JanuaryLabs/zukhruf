@@ -93,7 +93,7 @@ The file `<claimFile>.leader` that the winner of a claim writes before its term 
 _Avoid_: Lease (the term is the lease), lock file, pid file
 
 **Back-off**:
-The wait of a reader after a connect that found no pipe, while a new leader starts or under a published leader. It grows from 25 ms by 1.6 times, with a jitter of ±20 %, to at most 1000 ms. gRPC's connection backoff. The only wait of a candidate that no push ends.
+The wait of a reader after a connect that holds no connection to a leader's pipe: no leader serves one yet (a new leader starts, or a published one leads), the pipe is another user's, or its listen queue is full (#5425). It grows from 25 ms by 1.6 times, with a jitter of ±20 %, to at most 1000 ms. gRPC's connection backoff. The only wait of a candidate that no push ends.
 _Avoid_: Retry period, poll interval, delay
 
 **Observer**:
