@@ -1,11 +1,10 @@
-import { mean } from '@zukhruf/statistics';
+import { mean, std } from '@zukhruf/statistics';
 
 import {
   type Dataset,
   type DatasetValue,
   datasetFromDict,
 } from '../dependencies/datasets.ts';
-import { std } from '../dependencies/numpy.ts';
 import { type ClusterLabel, vMeasureScore } from '../dependencies/sklearn.ts';
 import { ClusteringEvaluator } from '../evaluators/clustering-evaluator.ts';
 import { isEncoder } from '../models/models-protocols.ts';

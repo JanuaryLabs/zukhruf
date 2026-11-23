@@ -1,22 +1,12 @@
 // The NumPy 2.5 algorithms whose results MTEB depends on, for 1-D arrays of
-// float64, beside numpy.sum and numpy.mean of @zukhruf/statistics. gsumpw of
-// stdlib is the pairwise summation of numpy's add loop (loops_utils.h):
-// blocks of up to 128 values in 8 accumulators, larger arrays split in two.
-// ssumpw is the same summation in float32.
+// float64, beside numpy.sum, numpy.mean and numpy.std of @zukhruf/statistics.
+// gsumpw of stdlib is the pairwise summation of numpy's add loop
+// (loops_utils.h): blocks of up to 128 values in 8 accumulators, larger
+// arrays split in two. ssumpw is the same summation in float32.
 import gsumpw from '@stdlib/blas-ext-base-gsumpw';
 import ssumpw from '@stdlib/blas-ext-base-ssumpw';
 
-import { mean, sum } from '@zukhruf/statistics';
-
-// np.std with ddof=0.
-export function std(values: ArrayLike<number>): number {
-  const average = mean(values);
-  const squares = Array.from(values, (value) => {
-    const deviation = value - average;
-    return deviation * deviation;
-  });
-  return Math.sqrt(sum(squares) / values.length);
-}
+import { mean } from '@zukhruf/statistics';
 
 // np.add.reduceat for increasing starts: each segment is its first value plus
 // the pairwise sum of the rest. As numpy's documentation says, the segment of

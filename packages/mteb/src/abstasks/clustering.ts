@@ -1,4 +1,4 @@
-import { mean } from '@zukhruf/statistics';
+import { mean, std } from '@zukhruf/statistics';
 
 import { createDataloaderFromTexts } from '../create-dataloaders.ts';
 import {
@@ -6,7 +6,6 @@ import {
   type DatasetValue,
   select,
 } from '../dependencies/datasets.ts';
-import { std } from '../dependencies/numpy.ts';
 import { PythonRandom } from '../dependencies/python-random.ts';
 import { MiniBatchKMeans } from '../dependencies/sklearn-kmeans.ts';
 import {

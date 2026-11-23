@@ -1,13 +1,3 @@
-import { mean, sum } from '@zukhruf/statistics';
-
-// The standard deviation of the values themselves (divided by n, not n - 1).
-export function populationSd(values: readonly number[]): number {
-  const centre = mean(values);
-  return Math.sqrt(
-    sum(values.map((value) => (value - centre) ** 2)) / values.length,
-  );
-}
-
 // The logistic function, in the tanh form of the research code, so that the
 // package gives its probabilities to the last bits.
 export function logistic(logit: number): number {

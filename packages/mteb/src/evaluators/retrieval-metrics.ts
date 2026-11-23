@@ -1,12 +1,7 @@
 import { NeumaierSum } from '@zukhruf/python';
-import { mean } from '@zukhruf/statistics';
+import { mean, std } from '@zukhruf/statistics';
 
-import {
-  addReduceat,
-  argsortStable,
-  linspace,
-  std,
-} from '../dependencies/numpy.ts';
+import { addReduceat, argsortStable, linspace } from '../dependencies/numpy.ts';
 import {
   pythonRound,
   pythonRoundToInteger,

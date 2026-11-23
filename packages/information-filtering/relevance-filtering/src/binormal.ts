@@ -1,6 +1,6 @@
-import { mean, sum } from '@zukhruf/statistics';
+import { mean, std, sum } from '@zukhruf/statistics';
 
-import { logAddExp, logistic, populationSd } from './statistics.ts';
+import { logAddExp, logistic } from './statistics.ts';
 
 const SD_FLOOR = 0.05;
 const ITERATIONS = 500;
@@ -23,7 +23,7 @@ export function binormal(
   notRelevant: readonly number[],
 ): number[] | undefined {
   const centre = mean(stream);
-  const spread = populationSd(stream);
+  const spread = std(stream);
   if (spread === 0) return undefined;
   const standard = (score: number) => (score - centre) / spread;
   const z = stream.map(standard);
@@ -33,9 +33,9 @@ export function binormal(
   const hi = 0.5;
   let share = Math.min(Math.max(START_SHARE, lo), hi);
   let mu1 = mean(zp);
-  let s1 = Math.max(populationSd(zp), SD_FLOOR);
+  let s1 = Math.max(std(zp), SD_FLOOR);
   let mu0 = mean(z);
-  let s0 = Math.max(populationSd(z), SD_FLOOR);
+  let s0 = Math.max(std(z), SD_FLOOR);
   if (mu1 <= mu0) return undefined;
   const posterior = () =>
     z.map((x) =>
