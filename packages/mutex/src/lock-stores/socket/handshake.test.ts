@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { type Socket, connect, createServer } from 'node:net';
 import { join } from 'node:path';
-import { createInterface } from 'node:readline';
 import { describe } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 
@@ -11,6 +10,7 @@ import { TemporaryFiles } from '@zukhruf/fs';
 import { waitFor } from '@zukhruf/testing/async';
 import { test } from '@zukhruf/testing/node';
 
+import { linesOf } from '../../testing/lines-of.ts';
 import { onUnixSockets } from '../../testing/on-unix-sockets.ts';
 import { outcome } from '../../testing/outcome.ts';
 import { standInServer } from '../../testing/stand-in-server.ts';
@@ -30,7 +30,7 @@ const standInLeader = (
   answer: (peer: Socket, line: string) => void,
 ) =>
   standInServer(join(directory, 'lock.sock'), (peer) => {
-    createInterface({ input: peer }).on('line', (line) => answer(peer, line));
+    linesOf(peer).on('line', (line) => answer(peer, line));
   });
 
 /** Sends `line` to the leader on the socket path, and reads its one answer before the connection ends. */
@@ -39,7 +39,7 @@ async function askLeader(directory: string, line: string) {
   await once(socket, 'connect');
   socket.write(`${line}\n`);
   const lines: string[] = [];
-  createInterface({ input: socket }).on('line', (answer) => lines.push(answer));
+  linesOf(socket).on('line', (answer) => lines.push(answer));
   // A leader that wrongly keeps the peer would never hang up; the answers so far then fail the test.
   await Promise.race([once(socket, 'close'), delay(2000)]);
   socket.destroy();
@@ -390,9 +390,7 @@ describe('Socket store protocol handshake', () => {
       const socket = connect(join(directory.path, 'lock.sock'));
       await once(socket, 'connect');
       const answers: string[] = [];
-      createInterface({ input: socket }).on('line', (line) =>
-        answers.push(line),
-      );
+      linesOf(socket).on('line', (line) => answers.push(line));
 
       try {
         // Act: the hello and an acquire leave in one write.

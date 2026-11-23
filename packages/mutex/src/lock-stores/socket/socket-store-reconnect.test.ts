@@ -3,7 +3,6 @@ import { hash } from 'node:crypto';
 import { once } from 'node:events';
 import { type Socket, createServer } from 'node:net';
 import { resolve } from 'node:path';
-import { createInterface } from 'node:readline';
 import { type TestContext, describe } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 import { aborted } from 'node:util';
@@ -17,6 +16,7 @@ import { startWorker } from '@zukhruf/testing/process';
 
 import { LeaseLostError, type LockHandle, Mutex } from '../../index.ts';
 import { isRecord } from '../../shared/is-record.ts';
+import { linesOf } from '../../testing/lines-of.ts';
 import { standInServer } from '../../testing/stand-in-server.ts';
 import { settle } from '../../testing/timing.ts';
 import { watch } from '../../testing/watch.ts';
@@ -78,7 +78,7 @@ async function standInLeader(directory: string) {
       };
       socket.once('close', () => side.closed.open());
       connections.push(side);
-      createInterface({ input: socket }).on('line', (line) => {
+      linesOf(socket).on('line', (line) => {
         const message: unknown = JSON.parse(line);
         if (side.hello === undefined) side.hello = message;
         else if (isRecord(message) && message.op === 'reasserted') {

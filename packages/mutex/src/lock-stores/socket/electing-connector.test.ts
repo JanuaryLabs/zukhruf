@@ -4,7 +4,6 @@ import { subscribe, unsubscribe } from 'node:diagnostics_channel';
 import { once } from 'node:events';
 import { Socket, createServer } from 'node:net';
 import { join } from 'node:path';
-import { createInterface } from 'node:readline';
 import { describe, test } from 'node:test';
 
 import { createClock } from '@sinonjs/fake-timers';
@@ -16,6 +15,7 @@ import { PipeAddress } from '@zukhruf/pipes';
 import { waitFor } from '@zukhruf/testing/async';
 
 import { isRecord } from '../../shared/is-record.ts';
+import { linesOf } from '../../testing/lines-of.ts';
 import { standInServer } from '../../testing/stand-in-server.ts';
 import { ElectingConnector } from './electing-connector.ts';
 import { socketElection } from './socket-election.ts';
@@ -98,9 +98,7 @@ describe('Electing connector', () => {
     await using _welcoming = await standInServer(
       join(directory.path, 'lock.sock'),
       (peer) => {
-        createInterface({ input: peer }).once('line', () =>
-          peer.write('{"op":"welcome"}\n'),
-        );
+        linesOf(peer).once('line', () => peer.write('{"op":"welcome"}\n'));
       },
     );
     const sockets: Socket[] = [];
@@ -407,7 +405,7 @@ describe('Electing connector', () => {
     await using _failingOver = await standInServer(
       join(directory.path, 'lock.sock'),
       (peer) => {
-        createInterface({ input: peer }).once('line', () => {
+        linesOf(peer).once('line', () => {
           if (++hellos === 1) peer.destroy();
           else peer.write('{"op":"welcome"}\n');
         });
@@ -465,7 +463,7 @@ describe('Electing connector', () => {
     const leader = createServer((peer) => {
       peers.add(peer);
       peer.on('error', () => {});
-      createInterface({ input: peer }).once('line', () => peer.destroy());
+      linesOf(peer).once('line', () => peer.destroy());
     });
     leader.listen(socketPath);
     await once(leader, 'listening');

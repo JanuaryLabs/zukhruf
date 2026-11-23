@@ -3,7 +3,6 @@ import { once } from 'node:events';
 import { mkdir, readFile, readdir } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
-import { createInterface } from 'node:readline';
 import { describe, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 
@@ -18,6 +17,7 @@ import { Mutex } from '../../mutex/mutex.ts';
 import { isRecord } from '../../shared/is-record.ts';
 import { FencedRegister } from '../../testing/fenced-register.ts';
 import { grantedWithin } from '../../testing/granted-within.ts';
+import { linesOf } from '../../testing/lines-of.ts';
 import { modesUrl, mutexUrl } from '../../testing/module-urls.ts';
 import { onUnixSockets } from '../../testing/on-unix-sockets.ts';
 import { standInServer } from '../../testing/stand-in-server.ts';
@@ -936,7 +936,7 @@ describe('Socket store sessions', () => {
       await using _leader = await standInServer(
         join(directory.path, 'lock.sock'),
         (peer) => {
-          createInterface({ input: peer }).once('line', (line) => {
+          linesOf(peer).once('line', (line) => {
             void (async () => {
               const hello: unknown = JSON.parse(line);
               const session = isRecord(hello) ? String(hello.session) : '';

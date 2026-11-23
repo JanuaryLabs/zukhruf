@@ -3,7 +3,6 @@ import { hash, randomUUID } from 'node:crypto';
 import { once } from 'node:events';
 import { connect } from 'node:net';
 import { resolve } from 'node:path';
-import { createInterface } from 'node:readline';
 import { type TestContext, describe } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 
@@ -16,6 +15,7 @@ import { test } from '@zukhruf/testing/node';
 
 import { isRecord } from '../../shared/is-record.ts';
 import { grantedWithin } from '../../testing/granted-within.ts';
+import { linesOf } from '../../testing/lines-of.ts';
 import { settle } from '../../testing/timing.ts';
 import { PROTOCOL_VERSION } from './handshake.ts';
 import { SocketStore } from './index.ts';
@@ -113,7 +113,7 @@ async function rawPeer(
   socket.on('error', () => {});
   await once(socket, 'connect');
   const received: Record<string, unknown>[] = [];
-  const reader = createInterface({ input: socket }).on('line', (line) => {
+  const reader = linesOf(socket).on('line', (line) => {
     const message: unknown = JSON.parse(line);
     received.push(isRecord(message) ? message : { line });
   });

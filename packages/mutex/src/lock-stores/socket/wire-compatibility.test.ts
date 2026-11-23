@@ -4,7 +4,6 @@ import { once } from 'node:events';
 import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { type Socket, connect, createServer } from 'node:net';
 import { join, resolve, win32 } from 'node:path';
-import { createInterface } from 'node:readline';
 import { describe } from 'node:test';
 
 import { Latch, untilAborted } from '@zukhruf/async';
@@ -15,6 +14,7 @@ import { test } from '@zukhruf/testing/node';
 import { startWorker } from '@zukhruf/testing/process';
 
 import { Mutex } from '../../index.ts';
+import { linesOf } from '../../testing/lines-of.ts';
 import { onUnixSockets } from '../../testing/on-unix-sockets.ts';
 import { taskOutcome } from '../../testing/outcome.ts';
 import { standInServer } from '../../testing/stand-in-server.ts';
@@ -61,7 +61,7 @@ async function publishedLeader(
   const firstLines: string[] = [];
   const server = await standInServer(join(directory, 'lock.sock'), (peer) => {
     let opens = true;
-    createInterface({ input: peer }).on('line', (line) => {
+    linesOf(peer).on('line', (line) => {
       if (opens) firstLines.push(line);
       answer(peer, line, opens);
       opens = false;
@@ -547,7 +547,9 @@ describe('What a socket store shares with other versions on Windows', () => {
         process.chdir(${JSON.stringify(scratch.path)});
         const leader = createServer((peer) => {
           peer.on('error', () => {});
-          createInterface({ input: peer }).once('line', (line) => process.send({ type: 'hello', line }));
+          const lines = createInterface({ input: peer });
+          lines.on('error', () => {});
+          lines.once('line', (line) => process.send({ type: 'hello', line }));
         });
         leader.listen(${JSON.stringify(pipe)}, () => {
           const store = new SocketStore(${JSON.stringify(directory)}, { clock: globalThis });
