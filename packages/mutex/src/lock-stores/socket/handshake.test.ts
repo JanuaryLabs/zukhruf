@@ -172,6 +172,30 @@ describe('Socket store protocol handshake', () => {
         JSON.stringify({ op: 'hello', version: 99 }),
       ],
       ['a hello with no protocol version', JSON.stringify({ op: 'hello' })],
+      [
+        'a hello of protocol version 2 with a session',
+        JSON.stringify({ op: 'hello', version: 2, session: 'peer' }),
+      ],
+      [
+        'a hello of a later protocol version with a session',
+        JSON.stringify({
+          op: 'hello',
+          version: PROTOCOL_VERSION + 1,
+          session: 'peer',
+        }),
+      ],
+      [
+        'a hello of this protocol version with no session',
+        JSON.stringify({ op: 'hello', version: PROTOCOL_VERSION }),
+      ],
+      [
+        'a hello of this protocol version with an empty session',
+        JSON.stringify({ op: 'hello', version: PROTOCOL_VERSION, session: '' }),
+      ],
+      [
+        'a hello of this protocol version with a session that is not text',
+        JSON.stringify({ op: 'hello', version: PROTOCOL_VERSION, session: 5 }),
+      ],
       ['a line that is not JSON', 'not json'],
       [
         'a lock request with no hello',
@@ -332,7 +356,7 @@ describe('Socket store protocol handshake', () => {
         'The successor must lead before the hang-up',
       );
       hungUp.destroy();
-      // Another key is granted only after the grace window. After it, the
+      // Another key is granted only after the recovery. After it, the
       // successor would grant the waiter if the store had not reasserted its key.
       await (await successor.acquire('other'))[Symbol.asyncDispose]();
       const kept = !lease.signal.aborted;
@@ -373,7 +397,7 @@ describe('Socket store protocol handshake', () => {
       try {
         // Act: the hello and an acquire leave in one write.
         socket.write(
-          `${JSON.stringify({ op: 'hello', version: PROTOCOL_VERSION })}\n${JSON.stringify({ op: 'acquire', id: 'a', key: 'product:42' })}\n`,
+          `${JSON.stringify({ op: 'hello', version: PROTOCOL_VERSION, session: 'peer' })}\n${JSON.stringify({ op: 'acquire', id: 'a', key: 'product:42' })}\n`,
         );
 
         // Assert: the leader welcomes the peer and still sees the request behind the hello.

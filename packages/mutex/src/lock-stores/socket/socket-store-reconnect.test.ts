@@ -41,8 +41,10 @@ function publishedSocketPath(directory: string) {
 interface LeaderSide {
   /** The first line the store sent, parsed. */
   hello: unknown;
-  /** Every line after the hello, parsed, in order. */
+  /** Every line after the hello, parsed, in order, but the end-of-reasserts markers. */
   readonly requests: Record<string, unknown>[];
+  /** For each end-of-reasserts marker, how many requests came before it. */
+  readonly markers: number[];
   /** Opens when the connection closed. */
   readonly closed: Latch;
   welcome(): void;
@@ -66,6 +68,7 @@ async function standInLeader(directory: string) {
       const side: LeaderSide = {
         hello: undefined,
         requests: [],
+        markers: [],
         closed: new Latch(),
         welcome: () => write({ op: 'welcome' }),
         refuse: () =>
@@ -78,7 +81,9 @@ async function standInLeader(directory: string) {
       createInterface({ input: socket }).on('line', (line) => {
         const message: unknown = JSON.parse(line);
         if (side.hello === undefined) side.hello = message;
-        else side.requests.push(isRecord(message) ? message : { line });
+        else if (isRecord(message) && message.op === 'reasserted') {
+          side.markers.push(side.requests.length);
+        } else side.requests.push(isRecord(message) ? message : { line });
       });
     },
   );
@@ -621,7 +626,7 @@ describe('A socket store that reconnects', () => {
     assert.deepEqual(second.requests, [], 'A try must not be asked again');
   });
 
-  test('after a reconnect, held keys are reasserted before waiting acquires are sent again', async (t) => {
+  test('after a reconnect, held keys are reasserted, then the end-of-reasserts marker, before waiting acquires are sent again', async (t) => {
     // Arrange: the store holds one key and waits for another.
     await using follower = await followerOfStandIn();
     const { leader, store } = follower;
@@ -652,6 +657,11 @@ describe('A socket store that reconnects', () => {
         ['acquire', 'waiting'],
       ],
     );
+    assert.deepEqual(
+      second.markers,
+      [1],
+      'The marker must come once, after the reassert and before the acquire',
+    );
     assert.equal(lease.token.value, 7n);
     assert.equal(
       second.requests[0]!.token,
@@ -678,6 +688,11 @@ describe('A socket store that reconnects', () => {
       second.requests,
       [],
       'A lease being released must never be reasserted after a reconnect',
+    );
+    assert.deepEqual(
+      second.markers,
+      [0],
+      'A store that holds no key must send only the end-of-reasserts marker',
     );
   });
 

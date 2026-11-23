@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { setImmediate as nextTurn } from 'node:timers/promises';
 
+import { untilAborted } from '@zukhruf/async';
 import { describe, test } from '@zukhruf/testing/node';
 
 import { Modes } from '../../mutex/acquire-modes/modes.ts';
@@ -167,7 +168,12 @@ export function threads<H extends Host>(
 					`,
         ),
       );
-      await once(thread, 'message');
+      // A thread of a store over its port sends its lock messages on the same channel, so the test waits for its own message.
+      const holding = Promise.withResolvers<void>();
+      thread.on('message', (message) => {
+        if (message === 'holding') holding.resolve();
+      });
+      await untilAborted(holding.promise, t.signal);
       const whileHeld = await mutex.acquire(
         'product:42',
         async (lease) => lease.token,

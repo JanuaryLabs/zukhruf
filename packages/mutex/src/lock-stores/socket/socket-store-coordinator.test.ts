@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { hash } from 'node:crypto';
+import { hash, randomUUID } from 'node:crypto';
 import { once } from 'node:events';
 import { connect } from 'node:net';
 import { resolve } from 'node:path';
@@ -7,7 +7,9 @@ import { createInterface } from 'node:readline';
 import { type TestContext, describe } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 
-import { untilAborted } from '@zukhruf/async';
+import { createClock } from '@sinonjs/fake-timers';
+
+import { type Clock, untilAborted } from '@zukhruf/async';
 import { TemporaryFiles } from '@zukhruf/fs';
 import { waitFor } from '@zukhruf/testing/async';
 import { test } from '@zukhruf/testing/node';
@@ -15,7 +17,9 @@ import { test } from '@zukhruf/testing/node';
 import { isRecord } from '../../shared/is-record.ts';
 import { grantedWithin } from '../../testing/granted-within.ts';
 import { settle } from '../../testing/timing.ts';
+import { PROTOCOL_VERSION } from './handshake.ts';
 import { SocketStore } from './index.ts';
+import { SessionDirectory } from './session-directory.ts';
 import { socketElection } from './socket-election.ts';
 
 /**
@@ -31,23 +35,25 @@ function publishedSocketPath(directory: string) {
 }
 
 /** Makes `store` the leader of `directory` with its first call, and owns both. */
-async function serving(
+async function serving<Extra extends object>(
   stack: AsyncDisposableStack,
   directory: string,
   store: SocketStore,
+  extra: Extra,
 ) {
-  // During a grace window the leader answers its own try busy at once.
+  // During a recovery the leader answers its own try busy at once.
   const warmUp = await store.tryAcquire('warm-up');
   await warmUp?.[Symbol.asyncDispose]();
   const owned = stack.move();
   return {
+    ...extra,
     directory,
     leader: store,
     [Symbol.asyncDispose]: () => owned.disposeAsync(),
   };
 }
 
-/** A real store that leads the first term of its directory, which has no grace window. */
+/** A real store that leads the first term of its directory, which has no recovery. */
 async function firstLeader() {
   await using stack = new AsyncDisposableStack();
   const directory = stack.use(
@@ -56,35 +62,53 @@ async function firstLeader() {
   const store = stack.use(
     new SocketStore(directory.path, { clock: globalThis }),
   );
-  return await serving(stack, directory.path, store);
+  return await serving(stack, directory.path, store, {});
 }
 
 /**
- * A real store that leads the term after an earlier one, as after a failover,
- * so it grants nothing for `graceWindow` milliseconds from its first call.
+ * A real store that leads the term after an earlier one that did not shut
+ * down cleanly, as after a failover. Each of `sessions` is recorded first, as
+ * a process records its session before it connects, with a lease duration of
+ * one minute, so the leader grants nothing until each of them sent its
+ * end-of-reasserts marker. `clock` is the clock of the leader; `records`
+ * gives the record of each session, which a test can dispose as a process
+ * that stops frees its presence.
  */
-async function leaderAfterFailover(graceWindow: number) {
+async function leaderAfterFailover(
+  sessions: string[],
+  clock: Clock = globalThis,
+) {
   await using stack = new AsyncDisposableStack();
   const directory = stack.use(
     await new TemporaryFiles().directory('mutex-test-'),
   );
   const earlier = await socketElection(directory.path, globalThis).campaign();
   await earlier?.resign();
-  const store = stack.use(
-    new SocketStore(directory.path, {
-      clock: globalThis,
-      graceWindow,
-    }),
-  );
-  return await serving(stack, directory.path, store);
+  const directoryOfSessions = new SessionDirectory(directory.path, globalThis);
+  const records = new Map<string, AsyncDisposable>();
+  for (const session of sessions) {
+    records.set(
+      session,
+      stack.use(await directoryOfSessions.record(session, 60_000)),
+    );
+  }
+  const store = stack.use(new SocketStore(directory.path, { clock }));
+  return await serving(stack, directory.path, store, { records });
 }
+
+/** The end-of-reasserts marker of a session. */
+const reasserted = { op: 'reasserted' };
 
 /**
  * A process that talks to the leader on its socket, line by line, the way a
  * follower does. `send` writes all its lines in one write, so the leader reads
  * them in one turn.
  */
-async function rawPeer(t: TestContext, directory: string) {
+async function rawPeer(
+  t: TestContext,
+  directory: string,
+  session: string = randomUUID(),
+) {
   const socket = connect(publishedSocketPath(directory));
   socket.on('error', () => {});
   await once(socket, 'connect');
@@ -94,7 +118,9 @@ async function rawPeer(t: TestContext, directory: string) {
     received.push(isRecord(message) ? message : { line });
   });
   const answered = once(reader, 'line');
-  socket.write(`${JSON.stringify({ op: 'hello', version: 2 })}\n`);
+  socket.write(
+    `${JSON.stringify({ op: 'hello', version: PROTOCOL_VERSION, session })}\n`,
+  );
   // The leader must answer the hello.
   await untilAborted(answered, t.signal);
   assert.equal(received.shift()?.op, 'welcome');
@@ -121,37 +147,41 @@ async function rawPeer(t: TestContext, directory: string) {
 }
 
 describe('A leader after a failover', () => {
-  test('an acquire that arrives during the grace window is granted only after it ends', async (t) => {
+  test('an acquire that arrives during the recovery is granted only after it ends', async (t) => {
     // Arrange
-    await using scene = await leaderAfterFailover(600);
-    await using waiter = await rawPeer(t, scene.directory);
+    await using scene = await leaderAfterFailover(['waiter', 'other']);
+    await using waiter = await rawPeer(t, scene.directory, 'waiter');
+    await using other = await rawPeer(t, scene.directory, 'other');
 
     // Act
-    waiter.send({ op: 'acquire', id: 'w', key: 'product:42' });
-    await delay(150);
-    const duringGrace = [...waiter.received];
+    waiter.send(reasserted, { op: 'acquire', id: 'w', key: 'product:42' });
+    await delay(settle);
+    const duringRecovery = [...waiter.received];
+    other.send(reasserted);
 
     // Assert
     assert.deepEqual(
-      duringGrace,
+      duringRecovery,
       [],
-      'Nothing may be granted during the grace window',
+      'Nothing may be granted while a recorded session may still reassert',
     );
     await waitFor(
       () =>
         assert.ok(
           waiter.received.some((response) => response.op === 'granted'),
-          'The acquire must be granted once the grace window ends',
+          'The acquire must be granted once the recovery ends',
         ),
       { signal: t.signal },
     );
   });
 
-  test('a reassert that arrives after the grace window is refused', async (t) => {
-    // Arrange: a holder reconnects too late, for example after a freeze.
-    await using scene = await leaderAfterFailover(50);
-    await using holder = await rawPeer(t, scene.directory);
-    await delay(100);
+  test('a reassert that arrives after the recovery is refused', async (t) => {
+    // Arrange: a holder reconnects after its recovery ended, for example after a second connection of its process sent the marker.
+    await using scene = await leaderAfterFailover(['holder']);
+    await using holder = await rawPeer(t, scene.directory, 'holder');
+    holder.send(reasserted);
+    // The look of the leader is answered once the recovery is over.
+    await scene.leader.isHeld('product:42');
 
     // Act
     holder.send({ op: 'reassert', id: 'h', key: 'product:42', token: '7' });
@@ -170,16 +200,20 @@ describe('A leader after a failover', () => {
 
   test('a reasserted key stays with its holder, ahead of an acquire that arrived first, and other keys do not wait', async (t) => {
     // Arrange: a waiter's acquire arrives before the holder reconnects.
-    await using scene = await leaderAfterFailover(200);
-    await using waiter = await rawPeer(t, scene.directory);
-    await using holder = await rawPeer(t, scene.directory);
-    waiter.send({ op: 'acquire', id: 'w', key: 'product:42' });
+    await using scene = await leaderAfterFailover(['waiter', 'holder']);
+    await using waiter = await rawPeer(t, scene.directory, 'waiter');
+    await using holder = await rawPeer(t, scene.directory, 'holder');
+    waiter.send(reasserted, { op: 'acquire', id: 'w', key: 'product:42' });
     await delay(settle);
-    holder.send({ op: 'reassert', id: 'h', key: 'product:42', token: '5' });
+    holder.send(
+      { op: 'reassert', id: 'h', key: 'product:42', token: '5' },
+      reasserted,
+    );
 
-    // Act: the grace window ends while the holder still has the key.
-    await delay(300);
-    const afterGrace = [...waiter.received];
+    // Act: the recovery ends while the holder still has the key.
+    const held = await scene.leader.isHeld('product:42');
+    await delay(settle);
+    const afterRecovery = [...waiter.received];
     const otherKey = await grantedWithin(
       scene.leader.acquire('other-key'),
       settle,
@@ -187,8 +221,9 @@ describe('A leader after a failover', () => {
     holder.send({ op: 'release', id: 'h' });
 
     // Assert: the waiter gets the key only after the holder releases it.
+    assert.equal(held, true, 'The reasserted key must be held');
     assert.deepEqual(
-      afterGrace,
+      afterRecovery,
       [],
       'The waiter was granted a key that a holder reasserted',
     );
@@ -205,14 +240,20 @@ describe('A leader after a failover', () => {
 
   test('when two holders reassert one key, the newer token keeps it, and the older one leaving does not free it', async (t) => {
     // Arrange
-    await using scene = await leaderAfterFailover(150);
-    await using older = await rawPeer(t, scene.directory);
-    await using newer = await rawPeer(t, scene.directory);
+    await using scene = await leaderAfterFailover(['older', 'newer']);
+    await using older = await rawPeer(t, scene.directory, 'older');
+    await using newer = await rawPeer(t, scene.directory, 'newer');
 
     // Act
-    older.send({ op: 'reassert', id: 'o', key: 'product:42', token: '5' });
+    older.send(
+      { op: 'reassert', id: 'o', key: 'product:42', token: '5' },
+      reasserted,
+    );
     await delay(settle);
-    newer.send({ op: 'reassert', id: 'n', key: 'product:42', token: '9' });
+    newer.send(
+      { op: 'reassert', id: 'n', key: 'product:42', token: '9' },
+      reasserted,
+    );
     await waitFor(
       () =>
         assert.ok(
@@ -223,7 +264,7 @@ describe('A leader after a failover', () => {
     );
     const olderAnswers = [...older.received];
     older.drop();
-    await delay(250);
+    await delay(settle);
 
     // Assert: the older claim is refused, and its disconnect does not free the newer holder's key.
     assert.deepEqual(olderAnswers, [{ op: 'rejected', id: 'o' }]);
@@ -239,19 +280,62 @@ describe('A leader after a failover', () => {
     await untilAborted(next, t.signal);
   });
 
-  test('waiters that arrive during the grace window are granted in arrival order', async (t) => {
-    // Arrange: two peers wait for one key during the grace window.
-    await using scene = await leaderAfterFailover(200);
-    await using first = await rawPeer(t, scene.directory);
-    await using second = await rawPeer(t, scene.directory);
+  test('a recovering session whose connection closes before its marker, and whose process still runs, keeps the recovery open', async (t) => {
+    // Arrange: the presence of the session stays held, as a process that reconnects keeps it.
+    await using scene = await leaderAfterFailover(['holder']);
+    await using holder = await rawPeer(t, scene.directory, 'holder');
+    holder.send({ op: 'reassert', id: 'h', key: 'product:42', token: '5' });
+    await delay(settle);
+
+    // Act
+    holder.drop();
+    const waiter = scene.leader.acquire('other-key');
+
+    // Assert
+    assert.equal(
+      await grantedWithin(waiter, 2 * settle),
+      'waiting',
+      'A closed connection of a session that runs must not end its recovery',
+    );
+    await using again = await rawPeer(t, scene.directory, 'holder');
+    again.send(reasserted);
+    // The marker of the reconnected session must end the recovery
+    await untilAborted(waiter, t.signal);
+  });
+
+  test('a recovering session whose connection closes before its marker, and whose presence is free, ends its recovery at once', async (t) => {
+    // Arrange: the clock of the leader never moves, so no step of the back-off checks the presence.
+    await using scene = await leaderAfterFailover(['holder'], createClock());
+    await using holder = await rawPeer(t, scene.directory, 'holder');
+    holder.send({ op: 'reassert', id: 'h', key: 'product:42', token: '5' });
+    await delay(settle);
+    const waiter = scene.leader.acquire('product:42', { signal: t.signal });
+
+    // Act: the process of the session stops: its presence frees, and its connection closes.
+    await scene.records.get('holder')?.[Symbol.asyncDispose]();
+    holder.drop();
+
+    // Assert
+    // The close of the connection must end the recovery of a session that stopped
+    await untilAborted(waiter, t.signal);
+  });
+
+  test('waiters that arrive during the recovery are granted in arrival order', async (t) => {
+    // Arrange: two peers wait for one key during the recovery.
+    await using scene = await leaderAfterFailover(['first', 'second']);
+    await using first = await rawPeer(t, scene.directory, 'first');
+    await using second = await rawPeer(t, scene.directory, 'second');
     first.send({ op: 'acquire', id: 'f', key: 'product:42' });
     await delay(settle);
     second.send({ op: 'acquire', id: 's', key: 'product:42' });
+    await delay(settle);
+    first.send(reasserted);
+    second.send(reasserted);
     await waitFor(
       () =>
         assert.ok(
           first.received.length > 0,
-          'The first waiter must be granted when the grace window ends',
+          'The first waiter must be granted when the recovery ends',
         ),
       { signal: t.signal },
     );
@@ -278,15 +362,15 @@ describe('A leader after a failover', () => {
     );
   });
 
-  test('a try during the grace window is answered busy', async (t) => {
+  test('a try during the recovery is answered busy', async (t) => {
     // Arrange
-    await using scene = await leaderAfterFailover(300);
-    await using peer = await rawPeer(t, scene.directory);
+    await using scene = await leaderAfterFailover(['peer']);
+    await using peer = await rawPeer(t, scene.directory, 'peer');
 
     // Act
     peer.send({ op: 'try', id: 't', key: 'product:42' });
 
-    // Assert: nothing is granted during the grace window, so the key counts as busy.
+    // Assert: nothing is granted during the recovery, so the key counts as busy.
     await waitFor(
       () =>
         assert.ok(peer.received.length > 0, 'The leader must answer the try'),
@@ -295,14 +379,13 @@ describe('A leader after a failover', () => {
     assert.deepEqual(peer.received, [{ op: 'busy', id: 't' }]);
   });
 
-  test('a try after the grace window can be granted', async (t) => {
+  test('a try after the recovery can be granted', async (t) => {
     // Arrange
-    await using scene = await leaderAfterFailover(50);
-    await using peer = await rawPeer(t, scene.directory);
-    await delay(100);
+    await using scene = await leaderAfterFailover(['peer']);
+    await using peer = await rawPeer(t, scene.directory, 'peer');
 
-    // Act
-    peer.send({ op: 'try', id: 't', key: 'product:42' });
+    // Act: the marker ends the recovery, and the try comes after it on the same connection.
+    peer.send(reasserted, { op: 'try', id: 't', key: 'product:42' });
 
     // Assert
     await waitFor(
@@ -323,33 +406,38 @@ describe('A leader after a failover', () => {
     ] as const,
     ([leaves, leave]) =>
       test(`a newer reassert after the first reasserter ${leaves} keeps the key from waiters`, async (t) => {
-        // Arrange: the first reasserter takes the key in the grace window, then lets it go.
-        const graceWindow = 300;
-        await using scene = await leaderAfterFailover(graceWindow);
-        await using first = await rawPeer(t, scene.directory);
-        await using newer = await rawPeer(t, scene.directory);
-        first.send({
-          op: 'reassert',
-          id: 'first',
-          key: 'product:42',
-          token: '5',
-        });
+        // Arrange: the first reasserter takes the key in the recovery, then lets it go.
+        await using scene = await leaderAfterFailover(['first', 'newer']);
+        await using first = await rawPeer(t, scene.directory, 'first');
+        await using newer = await rawPeer(t, scene.directory, 'newer');
+        first.send(
+          {
+            op: 'reassert',
+            id: 'first',
+            key: 'product:42',
+            token: '5',
+          },
+          reasserted,
+        );
         await delay(settle);
         leave(first);
         await delay(settle);
 
-        // Act: a holder with a newer token reasserts the key.
-        newer.send({
-          op: 'reassert',
-          id: 'newer',
-          key: 'product:42',
-          token: '9',
-        });
+        // Act: a holder with a newer token reasserts the key, and the recovery ends.
+        newer.send(
+          {
+            op: 'reassert',
+            id: 'newer',
+            key: 'product:42',
+            token: '9',
+          },
+          reasserted,
+        );
         const waiter = scene.leader.acquire('product:42');
 
         // Assert: only one holder at a time, so the waiter gets the key after the newer holder releases it.
         assert.equal(
-          await grantedWithin(waiter, graceWindow + 2 * settle),
+          await grantedWithin(waiter, 2 * settle),
           'waiting',
           'A waiter was granted a key that a newer reasserter holds',
         );
@@ -369,11 +457,11 @@ describe('A leader after a failover', () => {
       }),
   );
 
-  test('after a reasserter releases in the grace window, a reassert with an older token is still refused', async (t) => {
+  test('after a reasserter releases in the recovery, a reassert with an older token is still refused', async (t) => {
     // Arrange: a holder reasserts a newer token and then releases the key.
-    await using scene = await leaderAfterFailover(300);
-    await using newer = await rawPeer(t, scene.directory);
-    await using stale = await rawPeer(t, scene.directory);
+    await using scene = await leaderAfterFailover(['newer', 'stale']);
+    await using newer = await rawPeer(t, scene.directory, 'newer');
+    await using stale = await rawPeer(t, scene.directory, 'stale');
     newer.send({ op: 'reassert', id: 'newer', key: 'product:42', token: '9' });
     await delay(settle);
     newer.send({ op: 'release', id: 'newer' });
@@ -400,18 +488,17 @@ type RawPeer = Awaited<ReturnType<typeof rawPeer>>;
 describe('Requests that a leader reads in one turn', () => {
   test('a reassert repeated on one connection keeps the key with its holder', async (t) => {
     // Arrange
-    const graceWindow = 150;
-    await using scene = await leaderAfterFailover(graceWindow);
-    await using holder = await rawPeer(t, scene.directory);
+    await using scene = await leaderAfterFailover(['holder']);
+    await using holder = await rawPeer(t, scene.directory, 'holder');
     const reassert = { op: 'reassert', id: 'h', key: 'product:42', token: '5' };
 
     // Act: the same reassert arrives twice in one write, before the first is registered.
-    holder.send(reassert, reassert);
+    holder.send(reassert, reassert, reasserted);
     const waiter = scene.leader.acquire('product:42');
 
     // Assert: the holder keeps the key until it releases it.
     assert.equal(
-      await grantedWithin(waiter, graceWindow + 2 * settle),
+      await grantedWithin(waiter, 2 * settle),
       'waiting',
       'A repeated reassert must not free a key its holder still has',
     );
@@ -422,22 +509,22 @@ describe('Requests that a leader reads in one turn', () => {
 
   test('of two claims for one key in one write, the newer outranks the older before it is registered', async (t) => {
     // Arrange
-    const graceWindow = 150;
-    await using scene = await leaderAfterFailover(graceWindow);
-    await using peer = await rawPeer(t, scene.directory);
+    await using scene = await leaderAfterFailover(['peer']);
+    await using peer = await rawPeer(t, scene.directory, 'peer');
 
     // Act: two claims arrive in one write, so the older one is outranked before it is registered.
     peer.send(
       { op: 'reassert', id: 'o', key: 'product:42', token: '5' },
       { op: 'reassert', id: 'n', key: 'product:42', token: '9' },
+      reasserted,
     );
     const waiter = scene.leader.acquire('product:42');
 
     // Assert: the key passes to the newer claim and then to the waiter, and the older claim is refused.
     assert.equal(
-      await grantedWithin(waiter, graceWindow + 2 * settle),
+      await grantedWithin(waiter, 2 * settle),
       'waiting',
-      'The newer claim must have the key after the grace window',
+      'The newer claim must have the key after the recovery',
     );
     peer.send({ op: 'release', id: 'n' });
     // An outranked claim must not keep the key after the newer claim releases it
@@ -447,37 +534,34 @@ describe('Requests that a leader reads in one turn', () => {
 
   test('a release that arrives while its reassert is being registered frees the key', async (t) => {
     // Arrange
-    const graceWindow = 100;
-    await using scene = await leaderAfterFailover(graceWindow);
-    await using holder = await rawPeer(t, scene.directory);
+    await using scene = await leaderAfterFailover(['holder']);
+    await using holder = await rawPeer(t, scene.directory, 'holder');
 
     // Act: the holder reasserts and releases in one write, before the claim is registered.
     holder.send(
       { op: 'reassert', id: 'h', key: 'product:42', token: '5' },
       { op: 'release', id: 'h' },
+      reasserted,
     );
 
-    // Assert: the key is free once the grace window ends, although the holder is still connected.
-    assert.equal(
-      await grantedWithin(
-        scene.leader.acquire('product:42'),
-        graceWindow + 500,
-      ),
-      'granted',
-      'A released key must not stay held until its connection closes',
-    );
+    // Assert: the key is free once the recovery ends, although the holder is still connected.
+    // A released key must not stay held until its connection closes
+    await untilAborted(scene.leader.acquire('product:42'), t.signal);
     assert.equal(holder.closed, false);
   });
 
   test('a peer that hangs up right after it reasserts does not keep the key', async (t) => {
     // Arrange
-    await using scene = await leaderAfterFailover(100);
-    await using holder = await rawPeer(t, scene.directory);
+    await using scene = await leaderAfterFailover(['holder']);
+    await using holder = await rawPeer(t, scene.directory, 'holder');
 
     // Act: the peer reasserts and hangs up in one step. Its claim resolves before the leader reads the close, so the leader releases it when the connection ends.
-    holder.leave({ op: 'reassert', id: 'h', key: 'product:42', token: '5' });
+    holder.leave(
+      { op: 'reassert', id: 'h', key: 'product:42', token: '5' },
+      reasserted,
+    );
 
-    // Assert: once the grace window ends, the key is free.
+    // Assert: once the recovery ends, the key is free.
     // A peer that left must not keep the key it reasserted
     await untilAborted(scene.leader.acquire('product:42'), t.signal);
   });
@@ -645,32 +729,36 @@ describe('Requests a leader does not know, and looks', () => {
     assert.equal(stillHeld, true, 'The peer must keep its key');
   });
 
-  test('a look during the grace window waits for it to end, then sees the key that was reasserted', async (t) => {
+  test('a look during the recovery waits for it to end, then sees the key that was reasserted', async (t) => {
     // Arrange: a holder from before the failover reasserts its key.
-    await using scene = await leaderAfterFailover(600);
-    await using holder = await rawPeer(t, scene.directory);
-    await using looker = await rawPeer(t, scene.directory);
-    holder.send({ op: 'reassert', id: 'h', key: 'product:42', token: '7' });
+    await using scene = await leaderAfterFailover(['holder', 'looker']);
+    await using holder = await rawPeer(t, scene.directory, 'holder');
+    await using looker = await rawPeer(t, scene.directory, 'looker');
+    holder.send(
+      { op: 'reassert', id: 'h', key: 'product:42', token: '7' },
+      reasserted,
+    );
 
     // Act
     looker.send(
       { op: 'isHeld', id: 'held', key: 'product:42' },
       { op: 'isHeld', id: 'free', key: 'product:7' },
     );
-    await delay(150);
-    const duringGrace = [...looker.received];
+    await delay(settle);
+    const duringRecovery = [...looker.received];
+    looker.send(reasserted);
     await waitFor(
       () =>
         assert.ok(
           looker.received.length === 2,
-          'The looks must be answered once the grace window ends',
+          'The looks must be answered once the recovery ends',
         ),
       { signal: t.signal },
     );
 
     // Assert
     assert.deepEqual(
-      duringGrace,
+      duringRecovery,
       [],
       'Holders may still reassert, so no look is answered yet',
     );

@@ -48,7 +48,7 @@ const mutex = new Mutex(
 ## Evidence
 
 - `apps/reservation-app/src/fenced-stock.test.ts`: an older token is refused as `'stale'`, and one holder can write two times with one token.
-- `src/lock-stores/socket/socket-store.test.ts`: a holder that was frozen past the grace window writes after a newer holder. A fenced register refuses the write as `'stale'`.
+- `src/lock-stores/socket/socket-store.test.ts`: a holder that was frozen past its `leaseDuration` during a failover writes after a newer holder. A fenced register refuses the write as `'stale'`.
 - `src/testing/contract/single-process.ts`, which the contract test of each lock store runs: tokens increase in the order of the grants.
 - `src/testing/contract/processes.ts`, which the contract test of each lock store that shares its locks with child processes runs: tokens increase in the order of the grants across four processes.
 - `src/lock-stores/socket/wire-compatibility.test.ts`: the tokens on the wire are the same as in the published version.

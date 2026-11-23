@@ -209,11 +209,17 @@ export class RemoteLockClient implements LockStore {
     }
   }
 
-  /** A new connection: reassert held keys first, then send what waits. */
+  /**
+   * A new connection: reassert held keys first, then the end-of-reasserts
+   * marker, then send what waits. A connection keeps the order of its
+   * messages, so a new leader that reads the marker has read every reassert
+   * of this client (ADR 0033).
+   */
   #resume() {
     for (const [id, { key, token }] of this.#held) {
       this.#link.send({ op: 'reassert', id, key, token: token.toString() });
     }
+    this.#link.send({ op: 'reasserted' });
     for (const [id, pending] of this.#pending) {
       // A try is one attempt; the coordinator that would have answered it is gone.
       if (pending.delivery === 'stranded') this.#take(id)?.resolve(undefined);

@@ -77,7 +77,7 @@ describe('Lock server', () => {
       const starting = LockServer.start(
         new PipeEndpoint(socketPath, { prefix: 'zukhruf-mutex' }),
         term,
-        { grace: undefined },
+        { recovery: undefined },
       );
 
       // Assert
@@ -109,12 +109,11 @@ describe('Lock server', () => {
           prefix: 'zukhruf-mutex',
         }),
         term,
-        { grace: undefined },
+        { recovery: undefined },
       );
       try {
         await using store = new SocketStore(directory.path, {
           clock: globalThis,
-          graceWindow: 50,
         });
         const roles: SocketRole[] = [];
         store.on('role', (role) => roles.push(role));

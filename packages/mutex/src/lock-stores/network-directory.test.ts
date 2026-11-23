@@ -47,7 +47,7 @@ describe('A lock directory on a network file system', () => {
       await using directory = await new TemporaryFiles().directory(
         'mutex-test-',
       );
-      const options = { pollInterval: 10, graceWindow: 50 };
+      const options = { pollInterval: 10 };
       const leader = new SocketStore(directory.path, {
         ...options,
         clock: globalThis,
@@ -97,7 +97,7 @@ describe('A lock directory on a network file system', () => {
       await using directory = await new TemporaryFiles().directory(
         'mutex-test-',
       );
-      const options = { pollInterval: 10, graceWindow: 50 };
+      const options = { pollInterval: 10 };
       await using leader = new SocketStore(directory.path, {
         ...options,
         clock: globalThis,

@@ -39,6 +39,7 @@ describe('Electing connector', () => {
     subscribe('net.client.socket', onSocket);
     const connector = new ElectingConnector({
       clock: createClock(),
+      session: randomUUID(),
       address: new PipeAddress(join(directory.path, 'lock.sock')),
       election: {
         campaign: (options?: CampaignOptions) => {
@@ -110,6 +111,7 @@ describe('Electing connector', () => {
     subscribe('net.client.socket', onSocket);
     const connector = new ElectingConnector({
       clock: globalThis,
+      session: randomUUID(),
       address: new PipeAddress(join(directory.path, 'lock.sock')),
       election,
       serve: async () => assert.fail('A follower must not serve'),
@@ -175,6 +177,7 @@ describe('Electing connector', () => {
     subscribe('net.client.socket', onSocket);
     const connector = new ElectingConnector({
       clock: globalThis,
+      session: randomUUID(),
       address: new PipeAddress(join(directory.path, 'lock.sock')),
       election,
       serve: async (term) => {
@@ -230,6 +233,7 @@ describe('Electing connector', () => {
     const triedAt: number[] = [];
     const connector = new ElectingConnector({
       clock,
+      session: randomUUID(),
       address: new PipeAddress(join(directory.path, 'lock.sock')),
       election: {
         campaign: (options?: CampaignOptions) => {
@@ -298,6 +302,7 @@ describe('Electing connector', () => {
     const served: Term[] = [];
     const connector = new ElectingConnector({
       clock: globalThis,
+      session: randomUUID(),
       address: new PipeAddress(join(directory.path, 'lock.sock')),
       election: {
         campaign: async (options?: CampaignOptions) => {
@@ -333,6 +338,7 @@ describe('Electing connector', () => {
     let campaigns = 0;
     const connector = new ElectingConnector({
       clock: globalThis,
+      session: randomUUID(),
       address: new PipeAddress(join(directory.path, 'lock.sock')),
       election: {
         campaign: async () => {
@@ -363,6 +369,7 @@ describe('Electing connector', () => {
     const reason = new Error('The store closed');
     const connector = new ElectingConnector({
       clock: createClock(),
+      session: randomUUID(),
       address: new PipeAddress(join(directory.path, 'lock.sock')),
       election: {
         campaign: async () => {
@@ -410,6 +417,7 @@ describe('Electing connector', () => {
     const abort = new AbortController();
     const connector = new ElectingConnector({
       clock,
+      session: randomUUID(),
       address: new PipeAddress(join(directory.path, 'lock.sock')),
       election,
       serve: async () => assert.fail('A follower must not serve'),
@@ -472,6 +480,7 @@ describe('Electing connector', () => {
     const clock = createClock();
     const connector = new ElectingConnector({
       clock,
+      session: randomUUID(),
       address: new PipeAddress(socketPath),
       election: {
         campaign: async () => undefined,

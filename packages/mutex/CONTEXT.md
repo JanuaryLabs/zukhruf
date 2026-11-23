@@ -97,7 +97,7 @@ A reach that includes all processes on all machines that reach one server, for e
 _Avoid_: Distributed, global, cluster, remote
 
 **Session**:
-A connection to the server of a network lock store. The server keeps the lock of a key while the session that holds it lasts, and releases the lock when the session ends. For a Docker engine lock store, the session of a holder is its attach to its claim.
+A connection to the server of a network lock store. The server keeps the lock of a key while the session that holds it lasts, and releases the lock when the session ends. For a Docker engine lock store, the session of a holder is its attach to its claim. For a socket lock store, a session is one `SocketStore` object across failovers: a random id, a record in the folder `sessions` of the directory and a presence, from before its first connection until the store is disposed. Each new leader waits for the recorded sessions in its recovery (see [ADR 0033](docs/adr/0033-a-new-leader-grants-nothing-until-each-recorded-session-reasserted-its-keys-stopped-or-missed-its-lease.md)).
 _Avoid_: Connection pool, client
 
 **Claim**:
@@ -109,7 +109,7 @@ A short query that the session of a holder sends at a fixed interval, with a tim
 _Avoid_: Ping, keep-alive (TCP keep-alive is a different mechanism), presence
 
 **Presence**:
-The kernel lock that a holder or a waiter of a file lock store keeps while it runs. A waiter that can take the presence of another caller knows that the caller stopped.
+The kernel lock that a holder or a waiter of a file lock store, or a session of a socket lock store, keeps while it runs. A waiter that can take the presence of another caller knows that the caller stopped. A new leader of a socket lock store that finds the presence of a session free knows that the session stopped.
 _Avoid_: Liveness check, heartbeat, process check
 
 **Ticket**:
@@ -198,12 +198,12 @@ _Avoid_: Generation, term number
 A new leader replaces a leader that stopped or lost its term. A follower stops a leader that sent no heartbeat for longer than its lease duration (see `@zukhruf/election`), so a frozen leader is replaced too.
 _Avoid_: Switchover, handover
 
-**Grace window**:
-The time after a failover when the new leader grants no keys. A new leader after a clean shutdown (see `@zukhruf/election`) has no grace window.
-_Avoid_: Cooldown, quiet period
+**Recovery**:
+The phase after a failover in which the new leader grants no keys. It ends when each recorded session reasserted its keys and sent the end-of-reasserts marker, stopped, or missed its lease duration. The first leader of a directory, and a new leader after a clean shutdown (see `@zukhruf/election`), have no recovery. The word is the one of PostgreSQL's crash recovery. See [ADR 0033](docs/adr/0033-a-new-leader-grants-nothing-until-each-recorded-session-reasserted-its-keys-stopped-or-missed-its-lease.md).
+_Avoid_: Grace window (the fixed time that ADR 0033 removed), cooldown, quiet period
 
 **Reassert**:
-After a failover, a holder tells the new leader which keys it holds.
+After a failover, a holder tells the new leader which keys it holds. Then it sends the end-of-reasserts marker, `{"op":"reasserted"}`, also when it holds no key.
 _Avoid_: Reclaim (a waiter of a file lock store removes a holder that stopped), re-acquire
 
 **Protocol version**:

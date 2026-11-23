@@ -1,14 +1,14 @@
 import assert from 'node:assert/strict';
 import { hash } from 'node:crypto';
 import { once } from 'node:events';
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { type Socket, connect, createServer } from 'node:net';
 import { join, resolve, win32 } from 'node:path';
 import { createInterface } from 'node:readline';
 import { describe } from 'node:test';
 
 import { Latch, untilAborted } from '@zukhruf/async';
-import { TemporaryFiles } from '@zukhruf/fs';
+import { FileLock, TemporaryFiles } from '@zukhruf/fs';
 import { UnchangedJournal, open } from '@zukhruf/sqlite-open';
 import { waitFor } from '@zukhruf/testing/async';
 import { test } from '@zukhruf/testing/node';
@@ -27,7 +27,13 @@ import { ProtocolVersionError, type SocketRole, SocketStore } from './index.ts';
 // code and changes one of them fails here: processes of two versions would
 // then lead side by side, or never find each other, and no error would tell.
 // The other messages are spelled out too: a change to one of them must change
-// PROTOCOL_VERSION, so that the hello tells two versions apart.
+// PROTOCOL_VERSION, so that the hello tells two versions apart. The files of
+// a session in the folder `sessions` are spelled out as well: a new leader
+// learns from them which processes it waits for (ADR 0033).
+
+/** The hello of this protocol version: the version, and the random id of the session of the store. */
+const helloLine =
+  /^\{"op":"hello","version":3,"session":"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})"\}$/;
 
 /** Holds the term in `directory` as a published leader does: an exclusive SQLite transaction on `leader.lock`. */
 function holdTerm(directory: string) {
@@ -186,7 +192,6 @@ describe('What a socket store shares with other versions in its directory', () =
       await writeFile(join(directory.path, 'leader.epoch'), '6');
       await using store = new SocketStore(directory.path, {
         clock: globalThis,
-        graceWindow: 50,
       });
 
       // Act
@@ -205,16 +210,17 @@ describe('What a socket store shares with other versions in its directory', () =
   );
 
   test(
-    'a store follows a published leader on lock.sock with the published hello and the published requests',
+    'a store follows a leader on lock.sock with the hello, the end-of-reasserts marker and the requests of this protocol, after it records its session',
     { ...onUnixSockets },
     async (t) => {
-      // Arrange: a published leader holds the term, grants each acquire a token of its term 5, and answers each look that the key is held.
+      // Arrange: a leader of this protocol holds the term, grants each acquire a token of its term 5, and answers each look that the key is held.
       await using directory = await new TemporaryFiles().directory(
         'mutex-test-',
       );
       using _term = holdTerm(directory.path);
       const granted = (5n << 32n) | 1n;
       const requests: Record<string, unknown>[] = [];
+      const lines: string[] = [];
       await using leader = await publishedLeader(
         directory.path,
         (peer, line, opens) => {
@@ -222,6 +228,7 @@ describe('What a socket store shares with other versions in its directory', () =
             peer.write('{"op":"welcome"}\n');
             return;
           }
+          lines.push(line);
           const request: unknown = JSON.parse(line);
           if (!isRecord(request)) return;
           requests.push(request);
@@ -259,16 +266,31 @@ describe('What a socket store shares with other versions in its directory', () =
         { signal: t.signal },
       );
 
+      const [hello] = leader.firstLines;
+      const session = helloLine.exec(hello ?? '')?.[1];
+      const sessions = join(directory.path, 'sessions');
+      const files = (await readdir(sessions)).toSorted();
+      const record = await readFile(join(sessions, `${session}.json`), 'utf8');
+      const presence = FileLock.check(join(sessions, `${session}.presence`));
+
       // Assert
-      assert.deepEqual(leader.firstLines, ['{"op":"hello","version":2}']);
+      assert.ok(session, `The hello must name a session, got ${hello}`);
+      assert.deepEqual(leader.firstLines, [hello]);
+      assert.deepEqual(files, [`${session}.json`, `${session}.presence`]);
+      assert.equal(
+        record,
+        `{"leaseDuration":15000,"processId":${process.pid}}`,
+      );
+      assert.equal(presence, 'locked');
+      assert.equal(lines[0], '{"op":"reasserted"}');
       assert.equal(token.value, granted);
       assert.deepEqual(roles, ['follower']);
       assert.equal(answer, true);
       assert.deepEqual(
         requests.map(({ op }) => op),
-        ['acquire', 'isHeld', 'release'],
+        ['reasserted', 'acquire', 'isHeld', 'release'],
       );
-      const [acquire] = requests;
+      const acquire = requests[1];
       assert.equal(acquire?.key, 'product:42');
       assert.equal(typeof acquire?.id, 'string');
       assert.equal(requests.at(-1)?.id, acquire?.id);
@@ -276,7 +298,7 @@ describe('What a socket store shares with other versions in its directory', () =
   );
 
   test(
-    'a leader answers the published hello on lock.sock with the published welcome',
+    'a leader answers the hello of this protocol on lock.sock with the published welcome',
     { ...onUnixSockets },
     async (t) => {
       // Arrange
@@ -285,10 +307,10 @@ describe('What a socket store shares with other versions in its directory', () =
       );
       await using _leader = await leaderOf(directory.path);
 
-      // Act: a follower of a published version says hello.
+      // Act: a follower of this protocol says hello.
       using follower = await publishedPeer(
         directory.path,
-        '{"op":"hello","version":2}\n',
+        '{"op":"hello","version":3,"session":"d3b07384-d9a0-4c9b-8f6e-1a2b3c4d5e6f"}\n',
       );
 
       // Assert
@@ -314,16 +336,16 @@ describe('What a socket store shares with other versions in its directory', () =
       );
       await using _leader = await leaderOf(directory.path);
 
-      // Act: a process of protocol version 3 says hello.
+      // Act: a process of protocol version 2 says hello.
       using other = await publishedPeer(
         directory.path,
-        '{"op":"hello","version":3}\n',
+        '{"op":"hello","version":2}\n',
       );
 
       // Assert
       // The leader must hang up.
       await untilAborted(other.closed.wait(), t.signal);
-      assert.equal(other.received, '{"op":"refused","version":2}\n');
+      assert.equal(other.received, '{"op":"refused","version":3}\n');
     },
   );
 
@@ -339,10 +361,10 @@ describe('What a socket store shares with other versions in its directory', () =
       const term = 1n << 32n;
       const lines = (received: string) => received.split('\n').length - 1;
 
-      // Act: a follower of a published version takes the key, gives it back, and takes it again.
+      // Act: a follower of this protocol takes the key, gives it back, and takes it again; nothing answers its marker.
       using follower = await publishedPeer(
         directory.path,
-        '{"op":"hello","version":2}\n{"op":"acquire","id":"a","key":"product:42"}\n',
+        '{"op":"hello","version":3,"session":"d3b07384-d9a0-4c9b-8f6e-1a2b3c4d5e6f"}\n{"op":"reasserted"}\n{"op":"acquire","id":"a","key":"product:42"}\n',
       );
       await waitFor(
         () =>
@@ -381,13 +403,13 @@ describe('What a socket store shares with other versions in its directory', () =
     'a store refused by a leader of another protocol version rejects with the ProtocolVersionError of this package',
     { ...onUnixSockets },
     async () => {
-      // Arrange: a leader of protocol version 3 holds the term and refuses every hello, as the published refusal does.
+      // Arrange: a leader of protocol version 2 holds the term and refuses every hello, as the published refusal does.
       await using directory = await new TemporaryFiles().directory(
         'mutex-test-',
       );
       using _term = holdTerm(directory.path);
       await using _leader = await publishedLeader(directory.path, (peer) =>
-        peer.end('{"op":"refused","version":3}\n'),
+        peer.end('{"op":"refused","version":2}\n'),
       );
       await using store = new SocketStore(directory.path, {
         clock: globalThis,
@@ -400,8 +422,8 @@ describe('What a socket store shares with other versions in its directory', () =
 
       // Assert
       assert.ok(result instanceof ProtocolVersionError, String(result));
-      assert.equal(result.theirs, 3);
-      assert.equal(result.ours, 2);
+      assert.equal(result.theirs, 2);
+      assert.equal(result.ours, 3);
     },
   );
 
@@ -415,7 +437,7 @@ describe('What a socket store shares with other versions in its directory', () =
       );
       await using _leader = await leaderOf(directory.path);
       const helloOf = (bytes: number) =>
-        `{"op":"hello","version":2${' '.repeat(bytes - 26)}}`;
+        `{"op":"hello","version":3,"session":"p"${' '.repeat(bytes - 40)}}`;
       assert.equal(Buffer.byteLength(helloOf(1024)), 1024);
 
       // Act
@@ -434,7 +456,7 @@ describe('What a socket store shares with other versions in its directory', () =
 
       // Assert
       assert.equal(longest.received, '{"op":"welcome"}\n');
-      assert.equal(tooLong.received, '{"op":"refused","version":2}\n');
+      assert.equal(tooLong.received, '{"op":"refused","version":3}\n');
     },
   );
 
@@ -510,7 +532,7 @@ describe('What a socket store shares with other versions on Windows', () => {
   const pipeFor = (socketPath: string) =>
     `\\\\.\\pipe\\zukhruf-mutex-${hash('sha256', win32.resolve(socketPath).toLowerCase()).slice(0, 32)}`;
 
-  test('a store says the published hello on the pipe named for its directory', async (t) => {
+  test('a store says the hello of this protocol on the pipe named for its directory', async (t) => {
     // Arrange: a leader of a published version listens on the pipe of the directory.
     await using scratch = await new TemporaryFiles().directory('mutex-test-');
     const pipe = pipeFor(resolve(scratch.path, directory, 'lock.sock'));
@@ -545,9 +567,9 @@ describe('What a socket store shares with other versions on Windows', () => {
     ]);
 
     // Assert
-    assert.equal(
-      follower.find('hello')?.line,
-      '{"op":"hello","version":2}',
+    assert.match(
+      String(follower.find('hello')?.line),
+      helloLine,
       `Messages: ${JSON.stringify(follower.messages)} ${follower.stderr}`,
     );
   });
@@ -575,7 +597,7 @@ describe('What a socket store shares with other versions on Windows', () => {
           if (received.includes('\\n')) process.send({ type: 'answer', received });
         });
         follower.on('error', (error) => process.send({ type: 'failed', message: String(error) }));
-        follower.write('{"op":"hello","version":2}\\n');
+        follower.write('{"op":"hello","version":3,"session":"d3b07384-d9a0-4c9b-8f6e-1a2b3c4d5e6f"}\\n');
       `,
       'windows-leader',
       { nodeOptions: asOnWindows },

@@ -1,5 +1,7 @@
 # A follower observes the leader, so a frozen leader is ended
 
+Superseded in part on 2026-11-23 (#5265) for the grace window in its consequences. A holder now reasserts its keys in the recovery of the new leader, which waits for each recorded session until that session sends its marker, stops, or misses its own `leaseDuration`. Thus the back-off no longer has to be shorter than a window, and `leaseDuration` also gives the silence that a new leader accepts from a session during its recovery ([ADR 0033](./0033-a-new-leader-grants-nothing-until-each-recorded-session-reasserted-its-keys-stopped-or-missed-its-lease.md)).
+
 A follower of the socket lock store reached the server of the leader, so it did not campaign until that connection closed. A leader that froze, for example during `SIGSTOP`, kept each connection open and answered nothing. Thus each follower waited forever, and no process could lead. Also, between two tries a process waited one poll interval, 10 ms. Thus a process under a leader whose server did not listen yet made 100 tries a second.
 
 `SqliteElection` now has a heartbeat on the pipe of the leader, and an observer of the leader, after etcd's `Election.Observe` ([election ADR 0009](../../../election/docs/adr/0009-a-process-that-does-not-campaign-observes-the-leader.md)). The socket lock store uses them:

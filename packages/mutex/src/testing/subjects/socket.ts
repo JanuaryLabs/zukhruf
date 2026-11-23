@@ -1,12 +1,11 @@
 import { SocketStore } from '../../lock-stores/socket/socket-store.ts';
 import type { Fixture, Subject } from '../contract/subject.ts';
 import { succeedLastLeader } from '../succeed-last-leader.ts';
-import { graceWindow } from '../timing.ts';
 import { directoryFixture, sharedByDirectory } from './directory.ts';
 
 /** The store of a child process or a worker thread over `directory`. */
 export const openInProcess = (directory: string) =>
-  new SocketStore(directory, { clock: globalThis, graceWindow });
+  new SocketStore(directory, { clock: globalThis });
 
 const shared = sharedByDirectory(
   'SocketStore',

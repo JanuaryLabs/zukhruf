@@ -9,7 +9,9 @@ export type LockRequest =
   | { op: 'isHeld'; id: string; key: string }
   | { op: 'cancel'; id: string }
   | { op: 'release'; id: string }
-  | { op: 'reassert'; id: string; key: string; token: string };
+  | { op: 'reassert'; id: string; key: string; token: string }
+  /** The end-of-reasserts marker: every reassert of this connection came before it. It has no id, and nothing answers it (ADR 0033). */
+  | { op: 'reasserted' };
 
 export type LockResponse =
   | { op: 'granted'; id: string; token: string }
@@ -24,7 +26,9 @@ const isToken = (value: unknown): boolean =>
 
 /** Messages arrive from another thread or process, so their shape is checked before use. */
 export function isLockRequest(message: unknown): message is LockRequest {
-  if (!isRecord(message) || typeof message.id !== 'string') return false;
+  if (!isRecord(message)) return false;
+  if (message.op === 'reasserted') return true;
+  if (typeof message.id !== 'string') return false;
   switch (message.op) {
     case 'acquire':
     case 'try':

@@ -1,12 +1,13 @@
 import type { Socket } from 'node:net';
 
-import { Backoff, type Clock, delay, untilAborted } from '@zukhruf/async';
+import { type Clock, delay, untilAborted } from '@zukhruf/async';
 import type { LeaderObserver, SqliteElection, Term } from '@zukhruf/election';
 import { isErrno } from '@zukhruf/fs';
 import { NoServerError, type PipeAddress } from '@zukhruf/pipes';
 
 import type { ClientConnection, ClientConnector } from '../remote/connector.ts';
 import type { LockRequest } from '../remote/protocol.ts';
+import { backoff } from './backoff.ts';
 import { type Greeting, PROTOCOL_VERSION, greet } from './handshake.ts';
 import { OwnServerConnection } from './own-server-connection.ts';
 import { ProtocolVersionError } from './protocol-version-error.ts';
@@ -19,24 +20,13 @@ export interface ElectingConnectorOptions {
   election: Pick<SqliteElection, 'campaign' | 'observe'>;
   /** The clock of the back-off between two tries. */
   clock: Clock;
+  /** The id of the session of this store, which each `hello` says (ADR 0033). */
+  session: string;
   /** Starts serving for a term this process just won. */
   serve(term: Term): Promise<void>;
   /** Reached the server of another process, so this process follows it. */
   connected(): void;
 }
-
-/**
- * The wait after a lost try while the server of the new leader is not
- * reachable yet: the back-off of the election, etcd's first retry of 25 ms,
- * gRPC's multiplier of 1.6 and jitter of ±20 %, at most 1000 ms (election
- * ADR 0007).
- */
-const backoff = new Backoff({
-  initial: 25,
-  multiplier: 1.6,
-  max: 1000,
-  jitter: { kind: 'ratio', ratio: 0.2 },
-});
 
 /**
  * Reaches the leader's socket, and when nobody serves it, campaigns to become
@@ -75,10 +65,10 @@ export class ElectingConnector implements ClientConnector {
 
   /**
    * After a leader hung up on the hello: a leader that stops frees its term
-   * within moments, so this process leads or follows the successor soon
-   * enough to reassert its keys in the successor's grace window. A campaign
-   * that waits for the term would miss that window when the successor already
-   * leads. Resolves `undefined` once nothing listens.
+   * within moments, so this process leads or follows the successor soon. A
+   * campaign that waits for the term would wait for nothing when the
+   * successor already leads, and the successor's recovery waits for this
+   * session. Resolves `undefined` once nothing listens.
    */
   async #outlastHangUp(
     betweenTries: BetweenTries,
@@ -119,7 +109,11 @@ export class ElectingConnector implements ClientConnector {
     serving.move();
     const own = await reachUnlessAborted(this.#options.address, signal);
     if (!own) return undefined;
-    const greeting = await greetUnlessAborted(own, signal);
+    const greeting = await greetUnlessAborted(
+      own,
+      this.#options.session,
+      signal,
+    );
     if (greeting.kind === 'welcome') {
       return new OwnServerConnection<LockRequest>(own);
     }
@@ -134,9 +128,11 @@ export class ElectingConnector implements ClientConnector {
   ): Promise<ClientConnection | undefined> {
     const greeted = new AbortController();
     this.#observeLeader(socket, greeted.signal);
-    const greeting = await greetUnlessAborted(socket, signal).finally(() =>
-      greeted.abort(),
-    );
+    const greeting = await greetUnlessAborted(
+      socket,
+      this.#options.session,
+      signal,
+    ).finally(() => greeted.abort());
     if (greeting.kind !== 'welcome') {
       socket.destroy();
       if (greeting.kind === 'refused') {
@@ -283,11 +279,12 @@ async function reach(address: PipeAddress): Promise<Socket | undefined> {
 /** Greets the leader on `socket`; a store that closes meanwhile gives the socket up. */
 async function greetUnlessAborted(
   socket: Socket,
+  session: string,
   signal: AbortSignal,
 ): Promise<Greeting> {
   using greeting = new DisposableStack();
   greeting.defer(() => socket.destroy());
-  const greeted = await untilAborted(greet(socket), signal);
+  const greeted = await untilAborted(greet(socket, session), signal);
   greeting.move();
   return greeted;
 }

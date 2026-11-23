@@ -305,11 +305,11 @@ class LeaseLostError extends Error {
 - [ADR 0011](./docs/adr/0011-a-windows-refusal-of-a-lock-file-is-tried-again-for-a-limited-time.md): a Windows refusal of a lock file is tried again for a limited time.
 - [ADR 0012](./docs/adr/0012-a-file-store-holder-is-judged-by-its-presence.md): a file store holder is judged by its presence.
 - [ADR 0013](./docs/adr/0013-a-lost-lease-aborts-the-signal-of-the-lease.md): a lost lease aborts the signal of the lease.
-- [ADR 0014](./docs/adr/0014-a-process-says-its-protocol-version-before-its-first-request.md): a process says its protocol version before its first request.
+- [ADR 0014](./docs/adr/0014-a-process-says-its-protocol-version-before-its-first-request.md): a process says its protocol version before its first request (superseded in part by ADR 0033).
 - [ADR 0015](./docs/adr/0015-a-holder-check-never-acquires-the-key.md): a holder check never acquires the key.
 - [ADR 0016](./docs/adr/0016-a-leader-lists-the-requests-that-it-added.md): a leader lists the requests that it added (superseded by ADR 0014).
 - [ADR 0017](./docs/adr/0017-a-connection-closes-only-when-its-framing-breaks.md): a connection closes only when its framing breaks.
-- [ADR 0018](./docs/adr/0018-the-next-leader-skips-the-grace-window-after-a-clean-shutdown.md): the next leader skips the grace window after a clean shutdown.
+- [ADR 0018](./docs/adr/0018-the-next-leader-skips-the-grace-window-after-a-clean-shutdown.md): the next leader skips the grace window after a clean shutdown (superseded in part by ADR 0033).
 - [ADR 0019](./docs/adr/0019-a-failed-token-mint-answers-the-request-and-an-exhausted-epoch-ends-the-term.md): a failed token mint answers the request, and an exhausted epoch ends the term.
 - [ADR 0020](./docs/adr/0020-each-store-family-has-its-own-import-path.md): each family of lock stores has its own import path.
 - [ADR 0021](./docs/adr/0021-a-lock-store-can-reach-every-machine-that-reaches-one-server.md): a lock store can reach every machine that reaches one server.
@@ -322,8 +322,9 @@ class LeaseLostError extends Error {
 - [ADR 0028](./docs/adr/0028-a-docker-engine-token-is-the-higher-of-the-engine-time-and-the-ladder.md): a Docker engine token is the higher of the engine time and the ladder.
 - [ADR 0029](./docs/adr/0029-a-docker-engine-store-marks-its-claims-and-rungs-with-the-labels-of-the-caller.md): a Docker engine store marks its claims and rungs with the labels of the caller.
 - [ADR 0030](./docs/adr/0030-each-lock-store-runs-the-lock-store-contract-from-its-own-tests-and-a-capability-is-a-typed-parameter.md): each lock store runs the lock-store contract from its own tests, and a capability is a typed parameter.
-- [ADR 0031](./docs/adr/0031-a-follower-observes-the-leader-so-a-frozen-leader-is-ended.md): a follower observes the leader, so a frozen leader is ended.
+- [ADR 0031](./docs/adr/0031-a-follower-observes-the-leader-so-a-frozen-leader-is-ended.md): a follower observes the leader, so a frozen leader is ended (superseded in part by ADR 0033).
 - [ADR 0032](./docs/adr/0032-a-cancelled-waiter-of-the-memory-store-leaves-the-line.md): a cancelled waiter of the memory store leaves the line.
+- [ADR 0033](./docs/adr/0033-a-new-leader-grants-nothing-until-each-recorded-session-reasserted-its-keys-stopped-or-missed-its-lease.md): a new leader grants nothing until each recorded session reasserted its keys, stopped, or missed its lease.
 
 **Copied code**: [Code that is in two places](./docs/copied-code.md) records each copy of code in this package, as the Rule of Three asks.
 

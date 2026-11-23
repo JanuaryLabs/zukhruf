@@ -10,7 +10,7 @@ import { leaveErrorsToClose } from './leave-errors-to-close.ts';
  * shape in every version: they are how a leader and a process find out that
  * they cannot read each other.
  */
-export const PROTOCOL_VERSION = 2;
+export const PROTOCOL_VERSION = 3;
 
 /** What a leader answered to this process's `hello`. */
 export type Greeting =
@@ -19,9 +19,12 @@ export type Greeting =
   /** The leader closed the connection without an answer: it stops. */
   | { kind: 'closed' };
 
-/** Says which protocol this process speaks, and reads the leader's answer. */
-export async function greet(socket: Socket): Promise<Greeting> {
-  socket.write(jsonLine({ op: 'hello', version: PROTOCOL_VERSION }));
+/** Says which protocol this process speaks and the id of its session, and reads the leader's answer. */
+export async function greet(
+  socket: Socket,
+  session: string,
+): Promise<Greeting> {
+  socket.write(jsonLine({ op: 'hello', version: PROTOCOL_VERSION, session }));
   const answer = parse(await readLine(socket));
   if (isRecord(answer) && answer.op === 'welcome') {
     return { kind: 'welcome' };
@@ -37,25 +40,28 @@ export async function greet(socket: Socket): Promise<Greeting> {
 }
 
 /**
- * Reads a new process's first line. A `hello` of this protocol is welcomed.
- * Anything else, a `hello` of another version included, is refused with this
- * leader's version, and the connection ends once that answer is written.
+ * Reads a new process's first line. A `hello` of this protocol with the id of
+ * a session is welcomed, and the id is returned. Anything else, a `hello` of
+ * another version or with no session included, is refused with this leader's
+ * version, and the connection ends once that answer is written.
  */
-export async function welcome(socket: Socket): Promise<boolean> {
+export async function welcome(socket: Socket): Promise<string | undefined> {
   const hello = parse(await readLine(socket));
   if (
     isRecord(hello) &&
     hello.op === 'hello' &&
-    hello.version === PROTOCOL_VERSION
+    hello.version === PROTOCOL_VERSION &&
+    typeof hello.session === 'string' &&
+    hello.session !== ''
   ) {
     socket.write(jsonLine({ op: 'welcome' }));
-    return true;
+    return hello.session;
   }
   // Destroyed once the answer is written: a paused socket would never see a silent process hang up.
   socket.end(jsonLine({ op: 'refused', version: PROTOCOL_VERSION }), () =>
     socket.destroy(),
   );
-  return false;
+  return undefined;
 }
 
 function parse(line: string | undefined): unknown {
