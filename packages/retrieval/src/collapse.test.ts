@@ -1,0 +1,110 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+
+import { Collapse } from './index.ts';
+
+const scored = (
+  id: string,
+  source: string,
+  score: number,
+  metadata: Readonly<Record<string, unknown>> = {},
+) => ({
+  passage: { id, text: id, source, seq: 0, start: 0, end: 0, metadata },
+  score,
+});
+
+const ids = (
+  results: readonly { readonly passage: { readonly id: string } }[],
+) => results.map(({ passage }) => passage.id);
+
+test('by default a Collapse keeps the best passage of each source, best first, when the list is not sorted by score', async () => {
+  // Arrange
+  const collapse = new Collapse();
+
+  // Act
+  const results = await collapse.postprocess([
+    scored('guide-1', 'guide', 0.2),
+    scored('notes-1', 'notes', 0.5),
+    scored('guide-2', 'guide', 0.9),
+    scored('notes-2', 'notes', 0.4),
+    scored('faq-1', 'faq', 0.7),
+  ]);
+
+  // Assert: guide 0.9 > 0.2, notes 0.5 > 0.4, faq alone.
+  assert.deepEqual(
+    results.map(({ passage, score }) => [passage.id, score]),
+    [
+      ['guide-2', 0.9],
+      ['faq-1', 0.7],
+      ['notes-1', 0.5],
+    ],
+  );
+});
+
+test('a Collapse on a metadata field keeps the best size passages of each value', async () => {
+  // Arrange
+  const collapse = new Collapse({ field: 'metadata.product', size: 2 });
+
+  // Act
+  const results = await collapse.postprocess([
+    scored('v1', 'a', 0.9, { product: 'vault' }),
+    scored('v2', 'b', 0.8, { product: 'vault' }),
+    scored('k1', 'c', 0.7, { product: 'kms' }),
+    scored('v3', 'd', 0.6, { product: 'vault' }),
+    scored('k2', 'e', 0.5, { product: 'kms' }),
+    scored('k3', 'f', 0.4, { product: 'kms' }),
+  ]);
+
+  // Assert: v3 and k3 are the third of their product.
+  assert.deepEqual(ids(results), ['v1', 'v2', 'k1', 'k2']);
+});
+
+test('the passages without a value for the field, absent or null, are one group, as Elasticsearch collapses a missing value under the key null', async () => {
+  // Arrange
+  const collapse = new Collapse({ field: 'metadata.product' });
+
+  // Act
+  const results = await collapse.postprocess([
+    scored('absent', 'a', 0.9),
+    scored('vault', 'b', 0.8, { product: 'vault' }),
+    scored('null', 'c', 0.7, { product: null }),
+  ]);
+
+  // Assert: null is in the group of the absent value, which absent leads.
+  assert.deepEqual(ids(results), ['absent', 'vault']);
+});
+
+test('of passages with equal scores the one first in the list is kept and comes first', async () => {
+  // Arrange
+  const collapse = new Collapse();
+
+  // Act
+  const results = await collapse.postprocess([
+    scored('notes-1', 'notes', 0.5),
+    scored('guide-1', 'guide', 0.5),
+    scored('guide-2', 'guide', 0.5),
+    scored('notes-2', 'notes', 0.5),
+  ]);
+
+  // Assert
+  assert.deepEqual(ids(results), ['notes-1', 'guide-1']);
+});
+
+test('a Collapse on a passage field groups by the value of that field', async () => {
+  // Arrange
+  const collapse = new Collapse({ field: 'seq' });
+  const at = (id: string, seq: number, score: number) => ({
+    passage: { id, text: id, source: id, seq, start: 0, end: 0, metadata: {} },
+    score,
+  });
+
+  // Act
+  const results = await collapse.postprocess([
+    at('guide-0', 0, 0.9),
+    at('notes-0', 0, 0.8),
+    at('notes-1', 1, 0.7),
+  ]);
+
+  // Assert: guide-0 and notes-0 share seq 0, from different sources.
+  assert.deepEqual(ids(results), ['guide-0', 'notes-1']);
+});

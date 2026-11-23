@@ -18,3 +18,10 @@ The engines split on the direction of a score. Distances are lower for a better 
 
 - `SimilarityCutoff` keeps the passages with `score >= threshold` for every retriever.
 - The scores of two retrievers stay on different scales; only fusion compares them ([ADR 0007](./0007-reciprocal-rank-fusion-is-the-default-fusion-with-k-60-and-ranks-from-1.md)).
+
+## Amendment 2026-11-23: the order of a list
+
+Accepted by Ezz on 2026-11-23 ("Accept"). A higher score is still a better passage, and a retriever gives its list best first. A score-based postprocessor (`Rerank`, `SimilarityCutoff`, `Collapse`) keeps that order. Two postprocessors give another order on purpose, and each keeps every passage's score:
+
+- `MaximalMarginalRelevance` gives the passages in the order it picks them, as LangChain and Haystack do (Elasticsearch keeps the input order) ([ADR 0008](./0008-a-search-is-composed-of-retrievers-that-wrap-retrievers-and-a-list-of-postprocessors.md)).
+- `LongContextReorder` puts the best passages at the two ends of the list, which is its job.

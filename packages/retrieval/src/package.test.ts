@@ -34,6 +34,7 @@ test('a consumer imports each subpath by its package name, and the package depen
       vectorMissing: new VectorMissingError('p').name,
       retrievers: [core.FusionRetriever, core.HydeRetriever, core.MultiQueryRetriever].map((type) => type.name),
       fusions: [core.distributionBasedScoreFusion, core.reciprocalRankFusion, core.relativeScoreFusion].map((fusion) => typeof fusion().fuse),
+      postprocessors: [core.Collapse, core.ContextWindow, core.LongContextReorder, core.MaximalMarginalRelevance, core.PostprocessingRetriever, core.Rerank, core.SimilarityCutoff].map((type) => type.name),
       sqlite: [SqliteBM25Retriever, SqliteEmbeddingRetriever, SqlitePassageStore].map((type) => type.name),
       dependencies: Object.keys(manifest.dependencies ?? {}),
     }));
@@ -45,6 +46,15 @@ test('a consumer imports each subpath by its package name, and the package depen
     vectorMissing: 'VectorMissingError',
     retrievers: ['FusionRetriever', 'HydeRetriever', 'MultiQueryRetriever'],
     fusions: ['function', 'function', 'function'],
+    postprocessors: [
+      'Collapse',
+      'ContextWindow',
+      'LongContextReorder',
+      'MaximalMarginalRelevance',
+      'PostprocessingRetriever',
+      'Rerank',
+      'SimilarityCutoff',
+    ],
     sqlite: [
       'SqliteBM25Retriever',
       'SqliteEmbeddingRetriever',

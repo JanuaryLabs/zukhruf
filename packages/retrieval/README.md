@@ -134,7 +134,11 @@ const search = new PostprocessingRetriever({
   postprocessors: [
     new Rerank({ model: rerankingModel, topN: 20 }), // AI SDK rerank
     new SimilarityCutoff({ threshold: 0.3 }),
-    new MaximalMarginalRelevance({ lambda: 0.5, topK: 8 }), // lambda 1 = relevance only
+    new MaximalMarginalRelevance({
+      model: embeddingModel,
+      lambda: 0.5,
+      topK: 8,
+    }), // lambda 1 = relevance only
     new Collapse({ field: 'source', size: 1 }), // one passage per source
     new ContextWindow({
       store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
@@ -150,7 +154,7 @@ const results = await search.retrieve('rotate a key', {
 });
 ```
 
-`MaximalMarginalRelevance` compares the vectors of the passages, so its retriever runs with `includeVectors: true`.
+`MaximalMarginalRelevance` compares the vectors of the passages, so its retriever runs with `includeVectors: true`. Its `model` embeds the query, and the relevance of a passage is the cosine similarity of the two vectors (ADR 0008, the proposed amendment of 2026-11-23).
 
 ## Search many queries at once
 
@@ -348,10 +352,17 @@ class SimilarityCutoff implements Postprocessor {
   constructor(options: { threshold: number }); // keeps score >= threshold
 }
 class MaximalMarginalRelevance implements Postprocessor {
-  constructor(options: { lambda?: number; topK: number }); // 0.5; 1 = relevance only
+  constructor(options: {
+    model: EmbeddingModel; // embeds the query (proposed amendment of ADR 0008)
+    lambda?: number; // 0.5; 1 = relevance only
+    topK: number;
+  });
 }
 class Collapse implements Postprocessor {
-  constructor(options?: { field?: string; size?: number }); // 'source', 1
+  constructor(options?: {
+    field?: 'source' | 'seq' | 'start' | 'end' | `metadata.${string}`; // 'source'
+    size?: number; // 1
+  });
 }
 class LongContextReorder implements Postprocessor {}
 class ContextWindow implements Postprocessor {
