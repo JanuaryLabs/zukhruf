@@ -13,6 +13,7 @@ import {
   PgvectorEmbeddingRetriever,
   type PostgresSession,
 } from '../postgres.ts';
+import { embeddingModel } from '../testing/embedding-model.ts';
 
 type Row = {
   readonly id: string;
@@ -70,30 +71,6 @@ const session = (pool: pg.Pool): PostgresSession => ({
     (await pool.query(sql, [...parameters])).rows,
 });
 
-// A real embedding model cannot run in CI. The AI SDK's own mock model gives
-// the vector that the test names for each query and records each call.
-function model(
-  vectors: Record<string, readonly number[]>,
-  identity: { readonly provider: string; readonly modelId: string } = {
-    provider: 'test',
-    modelId: 'mini',
-  },
-): MockEmbeddingModelV4 {
-  return new MockEmbeddingModelV4({
-    ...identity,
-    maxEmbeddingsPerCall: 100,
-    doEmbed: async ({ values }) => ({
-      embeddings: values.map((text) => {
-        const vector = vectors[text];
-        if (vector === undefined)
-          throw new Error(`The test names no vector for ${text}`);
-        return [...vector];
-      }),
-      warnings: [],
-    }),
-  });
-}
-
 const ids = (
   results: readonly { readonly passage: { readonly id: string } }[],
 ) => results.map(({ passage }) => passage.id);
@@ -116,7 +93,7 @@ test('the passages come best first, each with 1 - <=> as its score, and a tie go
     session: session(pool),
     passages: 'docs_passages',
     vectors: 'docs_passage_vectors',
-    model: model({ 'rotate a key': [1, 0, 0, 0] }),
+    model: embeddingModel({ 'rotate a key': [1, 0, 0, 0] }),
   });
 
   // Act
@@ -166,7 +143,7 @@ test('a call gives 10 passages when it gives no topK, and topK passages when it 
     session: session(pool),
     passages: 'docs_passages',
     vectors: 'docs_passage_vectors',
-    model: model({ q: [1, 0, 0, 0] }),
+    model: embeddingModel({ q: [1, 0, 0, 0] }),
   });
 
   // Act
@@ -186,11 +163,11 @@ test('a query model of another provider or model id fails with ModelMismatchErro
   await using database = await server().database();
   const pool = database.pool();
   await contract(pool, [{ id: 'a', vector: [1, 0, 0, 0] }]);
-  const otherModel = model(
+  const otherModel = embeddingModel(
     { q: [1, 0, 0, 0] },
     { provider: 'test', modelId: 'large' },
   );
-  const otherProvider = model(
+  const otherProvider = embeddingModel(
     { q: [1, 0, 0, 0] },
     { provider: 'other', modelId: 'mini' },
   );
@@ -250,7 +227,10 @@ test('with two stored identities, ModelMismatchError names the first in the byte
     session: session(pool),
     passages: 'docs_passages',
     vectors: 'docs_passage_vectors',
-    model: model({ q: [1, 0, 0, 0] }, { provider: 'other', modelId: 'mini' }),
+    model: embeddingModel(
+      { q: [1, 0, 0, 0] },
+      { provider: 'other', modelId: 'mini' },
+    ),
   });
 
   // Act
@@ -272,7 +252,7 @@ test('a query vector of other dimensions fails with DimensionMismatchError after
     { id: 'a', vector: [1, 0, 0, 0] },
     { id: 'b', vector: [1, 0, 0], model: 'test/mini (3 dimensions)' },
   ]);
-  const query = model({ q: [1, 0] });
+  const query = embeddingModel({ q: [1, 0] });
   const sent: string[] = [];
   const retriever = new PgvectorEmbeddingRetriever({
     session: {
@@ -320,7 +300,7 @@ test('a query compares only with the vectors of its own model identity when the 
     session: session(pool),
     passages: 'docs_passages',
     vectors: 'docs_passage_vectors',
-    model: model({ q: [1, 0] }),
+    model: embeddingModel({ q: [1, 0] }),
   });
 
   // Act
@@ -337,7 +317,7 @@ test('a stored model that is not a model identity, and a string model id without
   await contract(pool, [
     { id: 'a', vector: [1, 0, 0, 0], model: 'text-embedding-3-small' },
   ]);
-  const query = model({ q: [1, 0, 0, 0] });
+  const query = embeddingModel({ q: [1, 0, 0, 0] });
   const retriever = new PgvectorEmbeddingRetriever({
     session: session(pool),
     passages: 'docs_passages',
@@ -376,7 +356,7 @@ test('an empty vector table gives no passages and makes no model call', async ()
   await using database = await server().database();
   const pool = database.pool();
   await contract(pool, []);
-  const query = model({ q: [1, 0, 0, 0] });
+  const query = embeddingModel({ q: [1, 0, 0, 0] });
   const retriever = new PgvectorEmbeddingRetriever({
     session: session(pool),
     passages: 'docs_passages',
@@ -399,7 +379,7 @@ test('retrieveMany of no queries gives no lists', async () => {
   await using database = await server().database();
   const pool = database.pool();
   await contract(pool, [{ id: 'x', vector: [1, 0, 0, 0] }]);
-  const query = model({});
+  const query = embeddingModel({});
   const retriever = new PgvectorEmbeddingRetriever({
     session: session(pool),
     passages: 'docs_passages',
@@ -427,7 +407,7 @@ test('includeVectors gives the stored vector of each passage, and no call gives 
     session: session(pool),
     passages: 'docs_passages',
     vectors: 'docs_passage_vectors',
-    model: model({ q: [1, 0, 0, 0] }),
+    model: embeddingModel({ q: [1, 0, 0, 0] }),
   });
 
   // Act
@@ -456,7 +436,7 @@ test('retrieveMany embeds the queries in one model call, searches them in one SQ
     { id: 'y', vector: [0, 1, 0, 0] },
     { id: 'z', vector: [0, 0, 1, 0] },
   ]);
-  const query = model({
+  const query = embeddingModel({
     'toward y': [0, 2, 1, 0],
     'toward x': [2, 0, 1, 0],
     'toward z': [0, 0, 1, 0],
@@ -501,7 +481,7 @@ test('an aborted call rejects with the reason of its signal, before the model ca
   await using database = await server().database();
   const pool = database.pool();
   await contract(pool, [{ id: 'x', vector: [1, 0, 0, 0] }]);
-  const before = model({ q: [1, 0, 0, 0] });
+  const before = embeddingModel({ q: [1, 0, 0, 0] });
   const controller = new AbortController();
   // A model that ignores the signal and answers after the abort.
   const during = new MockEmbeddingModelV4({
@@ -582,7 +562,7 @@ test('each filter operator selects the passages it names, on passage fields and 
     session: session(pool),
     passages: 'docs_passages',
     vectors: 'docs_passage_vectors',
-    model: model({ q: [1, 0, 0, 0] }),
+    model: embeddingModel({ q: [1, 0, 0, 0] }),
   });
   const filtered = async (filter: Parameters<typeof retriever.retrieve>[1]) =>
     ids(await retriever.retrieve('q', filter)).toSorted();
@@ -676,7 +656,7 @@ test('AND, OR and NOT nest, NOT negates all its conditions, and a boolean value 
     session: session(pool),
     passages: 'docs_passages',
     vectors: 'docs_passage_vectors',
-    model: model({ q: [1, 0, 0, 0] }),
+    model: embeddingModel({ q: [1, 0, 0, 0] }),
   });
   const filtered = async (filter: Parameters<typeof retriever.retrieve>[1]) =>
     ids(await retriever.retrieve('q', filter)).toSorted();
@@ -749,7 +729,7 @@ test('SQL in a filter field stays one column name, and SQL in a filter value sta
     session: session(pool),
     passages: 'docs_passages',
     vectors: 'docs_passage_vectors',
-    model: model({ q: [1, 0, 0, 0] }),
+    model: embeddingModel({ q: [1, 0, 0, 0] }),
   });
 
   // Act
@@ -793,7 +773,7 @@ test('a filter field that is not a passage field or a metadata column, a value S
     session: session(pool),
     passages: 'docs_passages',
     vectors: 'docs_passage_vectors',
-    model: model({ q: [1, 0, 0, 0] }),
+    model: embeddingModel({ q: [1, 0, 0, 0] }),
   });
 
   // Act
@@ -847,7 +827,7 @@ test('a metadata column keeps its name and value even when it has the name of a 
     session: session(pool),
     passages: 'docs "passages"',
     vectors: 'docs vectors',
-    model: model({ q: [1, 0] }),
+    model: embeddingModel({ q: [1, 0] }),
   });
 
   // Act

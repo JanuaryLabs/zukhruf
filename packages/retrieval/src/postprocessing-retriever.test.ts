@@ -3,7 +3,6 @@ import type { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 
 import type { RerankingModel } from 'ai';
-import { MockEmbeddingModelV4 } from 'ai/test';
 
 import { open } from '@zukhruf/sqlite-open';
 import { Vector } from '@zukhruf/vectors';
@@ -16,6 +15,7 @@ import {
   SimilarityCutoff,
 } from './index.ts';
 import { SqliteEmbeddingRetriever } from './sqlite.ts';
+import { embeddingModel } from './testing/embedding-model.ts';
 
 // The passages and their vectors, as elt writes them. Each vector has length
 // 5; the cosine similarities to the query [4, 3, 0] are alpha 20/25 = 0.8,
@@ -48,24 +48,9 @@ function knowledge(): DatabaseSync {
   return database;
 }
 
-// A real embedding model cannot run in CI. The AI SDK's own mock model gives
-// the query the vector [4, 3, 0] and records the abort signal of each call.
+// The query 'rotate a key' has the vector [4, 3, 0].
 const embeddings = (signals: (AbortSignal | undefined)[]) =>
-  new MockEmbeddingModelV4({
-    provider: 'test',
-    modelId: 'mini',
-    doEmbed: async ({ values, abortSignal }) => {
-      signals.push(abortSignal);
-      return {
-        embeddings: values.map((value) => {
-          if (value !== 'rotate a key')
-            throw new Error(`The test names no vector for ${value}`);
-          return [4, 3, 0];
-        }),
-        warnings: [],
-      };
-    },
-  });
+  embeddingModel({ 'rotate a key': [4, 3, 0] }, { signals });
 
 const search = (
   database: DatabaseSync,

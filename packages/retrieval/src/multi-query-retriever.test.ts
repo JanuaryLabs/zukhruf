@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import type { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 
-import { MockEmbeddingModelV4, MockLanguageModelV4 } from 'ai/test';
+import { MockLanguageModelV4 } from 'ai/test';
 
 import { open } from '@zukhruf/sqlite-open';
 import { Vector } from '@zukhruf/vectors';
@@ -10,6 +10,7 @@ import { install, toSql } from '@zukhruf/vectors/sqlite';
 
 import { MultiQueryRetriever, relativeScoreFusion } from './index.ts';
 import { SqliteBM25Retriever, SqliteEmbeddingRetriever } from './sqlite.ts';
+import { embeddingModel } from './testing/embedding-model.ts';
 
 // Each passage matches one query of the tests, and its vector is the one
 // that the embedding model gives for that query.
@@ -293,21 +294,7 @@ test('the filter and includeVectors of the call reach each search, and its abort
     database,
     passages: 'docs_passages',
     vectors: 'docs_passage_vectors',
-    model: new MockEmbeddingModelV4({
-      provider: 'test',
-      modelId: 'mini',
-      maxEmbeddingsPerCall: 100,
-      doEmbed: async ({ values, abortSignal }) => ({
-        embeddings: values.map((value) => {
-          signals.push(abortSignal);
-          const vector = embeddings[value];
-          if (vector === undefined)
-            throw new Error(`The test names no vector for ${value}`);
-          return [...vector];
-        }),
-        warnings: [],
-      }),
-    }),
+    model: embeddingModel(embeddings, { signals }),
   });
   const retriever = new MultiQueryRetriever({
     retriever: meaning,

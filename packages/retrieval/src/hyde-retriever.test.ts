@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import type { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 
-import { MockEmbeddingModelV4, MockLanguageModelV4 } from 'ai/test';
+import { MockLanguageModelV4 } from 'ai/test';
 
 import { open } from '@zukhruf/sqlite-open';
 import { Vector } from '@zukhruf/vectors';
@@ -10,6 +10,7 @@ import { install, toSql } from '@zukhruf/vectors/sqlite';
 
 import { HydeRetriever } from './index.ts';
 import { SqliteEmbeddingRetriever } from './sqlite.ts';
+import { embeddingModel } from './testing/embedding-model.ts';
 
 // The passages and their vectors as elt's Vectorizer writes them.
 function contract(): DatabaseSync {
@@ -39,9 +40,8 @@ function contract(): DatabaseSync {
 const answer =
   'To rotate a signing key, create a new key and retire the old one.';
 
-// A real embedding model cannot run in CI. The AI SDK's own mock model knows
-// a vector only for the answer of the language model, so a search with any
-// other text fails. It records the abort signal of each call.
+// The embedding model knows a vector only for the answer of the language
+// model, so a search with any other text fails.
 const meaning = (
   database: DatabaseSync,
   signals: (AbortSignal | undefined)[] = [],
@@ -50,20 +50,7 @@ const meaning = (
     database,
     passages: 'docs_passages',
     vectors: 'docs_passage_vectors',
-    model: new MockEmbeddingModelV4({
-      provider: 'test',
-      modelId: 'mini',
-      maxEmbeddingsPerCall: 100,
-      doEmbed: async ({ values, abortSignal }) => ({
-        embeddings: values.map((value) => {
-          signals.push(abortSignal);
-          if (value !== answer)
-            throw new Error(`The test names no vector for ${value}`);
-          return [1, 0];
-        }),
-        warnings: [],
-      }),
-    }),
+    model: embeddingModel({ [answer]: [1, 0] }, { signals }),
   });
 
 type Call = {

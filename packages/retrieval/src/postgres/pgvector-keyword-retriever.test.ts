@@ -217,8 +217,8 @@ test('a configuration is a value, never SQL: a configuration that would change t
     { id: 'vault', text: 'vault keeps secrets' },
     { id: 'consul', text: 'consul keeps services' },
   ]);
-  // Spliced into the SQL, this text would close the configuration and OR in
-  // a match of every vault passage.
+  // A configuration name with SQL syntax in it. The retriever binds it as a
+  // parameter, so Postgres refuses it as a name before it reads any row.
   const hostile =
     "english', 'x') || to_tsquery('english', 'vault') || plainto_tsquery('english";
   const retriever = new PgvectorKeywordRetriever({

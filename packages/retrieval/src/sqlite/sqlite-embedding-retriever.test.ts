@@ -10,6 +10,7 @@ import { install, toSql } from '@zukhruf/vectors/sqlite';
 
 import { ModelMismatchError } from '../index.ts';
 import { SqliteEmbeddingRetriever } from '../sqlite.ts';
+import { embeddingModel } from '../testing/embedding-model.ts';
 
 type Row = {
   readonly id: string;
@@ -60,30 +61,6 @@ function contract(rows: readonly Row[]): DatabaseSync {
   return database;
 }
 
-// A real embedding model cannot run in CI. The AI SDK's own mock model gives
-// the vector that the test names for each query and records each call.
-function model(
-  vectors: Record<string, readonly number[]>,
-  identity: { readonly provider: string; readonly modelId: string } = {
-    provider: 'test',
-    modelId: 'mini',
-  },
-): MockEmbeddingModelV4 {
-  return new MockEmbeddingModelV4({
-    ...identity,
-    maxEmbeddingsPerCall: 100,
-    doEmbed: async ({ values }) => ({
-      embeddings: values.map((text) => {
-        const vector = vectors[text];
-        if (vector === undefined)
-          throw new Error(`The test names no vector for ${text}`);
-        return [...vector];
-      }),
-      warnings: [],
-    }),
-  });
-}
-
 const ids = (
   results: readonly { readonly passage: { readonly id: string } }[],
 ) => results.map(({ passage }) => passage.id);
@@ -102,7 +79,7 @@ test('the passages come best first, each with the cosine similarity as its score
     database,
     passages: 'docs_passages',
     vectors: 'docs_passage_vectors',
-    model: model({ 'rotate a key': [1, 0, 0, 0] }),
+    model: embeddingModel({ 'rotate a key': [1, 0, 0, 0] }),
   });
 
   // Act
@@ -146,7 +123,7 @@ test('a call gives 10 passages when it gives no topK, and topK passages when it 
     database,
     passages: 'docs_passages',
     vectors: 'docs_passage_vectors',
-    model: model({ q: [1, 0, 0, 0] }),
+    model: embeddingModel({ q: [1, 0, 0, 0] }),
   });
 
   // Act
@@ -164,11 +141,11 @@ test('a call gives 10 passages when it gives no topK, and topK passages when it 
 test('a query model of another provider or model id fails with ModelMismatchError before any model call', async () => {
   // Arrange
   using database = contract([{ id: 'a', vector: [1, 0, 0, 0] }]);
-  const otherModel = model(
+  const otherModel = embeddingModel(
     { q: [1, 0, 0, 0] },
     { provider: 'test', modelId: 'large' },
   );
-  const otherProvider = model(
+  const otherProvider = embeddingModel(
     { q: [1, 0, 0, 0] },
     { provider: 'other', modelId: 'mini' },
   );
@@ -221,7 +198,10 @@ test('with two stored identities, ModelMismatchError names the first in the orde
     database,
     passages: 'docs_passages',
     vectors: 'docs_passage_vectors',
-    model: model({ q: [1, 0, 0, 0] }, { provider: 'other', modelId: 'mini' }),
+    model: embeddingModel(
+      { q: [1, 0, 0, 0] },
+      { provider: 'other', modelId: 'mini' },
+    ),
   });
 
   // Act
@@ -238,7 +218,7 @@ test('with two stored identities, ModelMismatchError names the first in the orde
 test('a query vector of other dimensions fails with DimensionMismatchError after the model call', async () => {
   // Arrange
   using database = contract([{ id: 'a', vector: [1, 0, 0, 0] }]);
-  const query = model({ q: [1, 0] });
+  const query = embeddingModel({ q: [1, 0] });
   const retriever = new SqliteEmbeddingRetriever({
     database,
     passages: 'docs_passages',
@@ -271,7 +251,7 @@ test('a query compares only with the vectors of its own model identity when the 
     database,
     passages: 'docs_passages',
     vectors: 'docs_passage_vectors',
-    model: model({ q: [1, 0] }),
+    model: embeddingModel({ q: [1, 0] }),
   });
 
   // Act
@@ -286,7 +266,7 @@ test('a stored model that is not a model identity, and a string model id without
   using database = contract([
     { id: 'a', vector: [1, 0, 0, 0], model: 'text-embedding-3-small' },
   ]);
-  const query = model({ q: [1, 0, 0, 0] });
+  const query = embeddingModel({ q: [1, 0, 0, 0] });
   const retriever = new SqliteEmbeddingRetriever({
     database,
     passages: 'docs_passages',
@@ -321,7 +301,7 @@ test('a stored model that is not a model identity, and a string model id without
 test('an empty vector table gives no passages and makes no model call', async () => {
   // Arrange
   using database = contract([]);
-  const query = model({ q: [1, 0, 0, 0] });
+  const query = embeddingModel({ q: [1, 0, 0, 0] });
   const retriever = new SqliteEmbeddingRetriever({
     database,
     passages: 'docs_passages',
@@ -349,7 +329,7 @@ test('includeVectors gives the stored vector of each passage, and no call gives 
     database,
     passages: 'docs_passages',
     vectors: 'docs_passage_vectors',
-    model: model({ q: [1, 0, 0, 0] }),
+    model: embeddingModel({ q: [1, 0, 0, 0] }),
   });
 
   // Act
@@ -376,7 +356,7 @@ test('retrieveMany embeds the queries in one model call and gives one list for e
     { id: 'y', vector: [0, 1, 0, 0] },
     { id: 'z', vector: [0, 0, 1, 0] },
   ]);
-  const query = model({
+  const query = embeddingModel({
     'toward y': [0, 2, 1, 0],
     'toward x': [2, 0, 1, 0],
     'toward z': [0, 0, 1, 0],
@@ -411,7 +391,7 @@ test('retrieveMany embeds the queries in one model call and gives one list for e
 test('retrieveMany of no queries gives no lists', async () => {
   // Arrange
   using database = contract([{ id: 'x', vector: [1, 0, 0, 0] }]);
-  const query = model({});
+  const query = embeddingModel({});
   const retriever = new SqliteEmbeddingRetriever({
     database,
     passages: 'docs_passages',
@@ -430,7 +410,7 @@ test('retrieveMany of no queries gives no lists', async () => {
 test('an aborted call rejects with the reason of its signal, before the model call and after it', async () => {
   // Arrange
   using database = contract([{ id: 'x', vector: [1, 0, 0, 0] }]);
-  const before = model({ q: [1, 0, 0, 0] });
+  const before = embeddingModel({ q: [1, 0, 0, 0] });
   const controller = new AbortController();
   // A model that ignores the signal and answers after the abort.
   const during = new MockEmbeddingModelV4({
@@ -505,7 +485,7 @@ test('each filter operator selects the passages it names, on passage fields and 
     database,
     passages: 'docs_passages',
     vectors: 'docs_passage_vectors',
-    model: model({ q: [1, 0, 0, 0] }),
+    model: embeddingModel({ q: [1, 0, 0, 0] }),
   });
   const filtered = async (filter: Parameters<typeof retriever.retrieve>[1]) =>
     ids(await retriever.retrieve('q', filter)).toSorted();
@@ -581,7 +561,7 @@ test('AND, OR and NOT nest, NOT negates all its conditions, and a boolean value 
     database,
     passages: 'docs_passages',
     vectors: 'docs_passage_vectors',
-    model: model({ q: [1, 0, 0, 0] }),
+    model: embeddingModel({ q: [1, 0, 0, 0] }),
   });
   const filtered = async (filter: Parameters<typeof retriever.retrieve>[1]) =>
     ids(await retriever.retrieve('q', filter)).toSorted();
@@ -650,7 +630,7 @@ test('SQL in a filter field stays one column name, and SQL in a filter value sta
     database,
     passages: 'docs_passages',
     vectors: 'docs_passage_vectors',
-    model: model({ q: [1, 0, 0, 0] }),
+    model: embeddingModel({ q: [1, 0, 0, 0] }),
   });
 
   // Act
@@ -692,7 +672,7 @@ test('a filter field that is not a passage field or a metadata column, a value S
     database,
     passages: 'docs_passages',
     vectors: 'docs_passage_vectors',
-    model: model({ q: [1, 0, 0, 0] }),
+    model: embeddingModel({ q: [1, 0, 0, 0] }),
   });
 
   // Act
@@ -742,7 +722,7 @@ test('a metadata column keeps its name and value even when it has the name of a 
     database,
     passages: 'docs "passages"',
     vectors: 'docs vectors',
-    model: model({ q: [1, 0] }),
+    model: embeddingModel({ q: [1, 0] }),
   });
 
   // Act

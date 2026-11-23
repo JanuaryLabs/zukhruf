@@ -1,27 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { MockEmbeddingModelV4 } from 'ai/test';
-
 import { MaximalMarginalRelevance, VectorMissingError } from './index.ts';
+import { embeddingModel } from './testing/embedding-model.ts';
 
-// A real embedding model cannot run in CI. The AI SDK's own mock model gives
-// the query 'rotate a key' the vector [4, 3, 0], and records the abort signal
-// of each call.
+// The query 'rotate a key' has the vector [4, 3, 0].
 const model = (signals: (AbortSignal | undefined)[] = []) =>
-  new MockEmbeddingModelV4({
-    provider: 'test',
-    modelId: 'mini',
-    doEmbed: async ({ values, abortSignal }) => ({
-      embeddings: values.map((value) => {
-        signals.push(abortSignal);
-        if (value !== 'rotate a key')
-          throw new Error(`The test names no vector for ${value}`);
-        return [4, 3, 0];
-      }),
-      warnings: [],
-    }),
-  });
+  embeddingModel({ 'rotate a key': [4, 3, 0] }, { signals });
 
 // Every vector has length 5, so a cosine is the dot product / 25.
 //   relevance to the query [4, 3, 0]: a 20/25 = 0.8, b 15/25 = 0.6,

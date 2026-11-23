@@ -2,14 +2,13 @@ import assert from 'node:assert/strict';
 import type { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 
-import { MockEmbeddingModelV4 } from 'ai/test';
-
 import { open } from '@zukhruf/sqlite-open';
 import { Vector } from '@zukhruf/vectors';
 import { install, toSql } from '@zukhruf/vectors/sqlite';
 
 import { FusionRetriever, relativeScoreFusion } from './index.ts';
 import { SqliteBM25Retriever, SqliteEmbeddingRetriever } from './sqlite.ts';
+import { embeddingModel } from './testing/embedding-model.ts';
 
 type Row = {
   readonly id: string;
@@ -59,24 +58,9 @@ const rows: readonly Row[] = [
   { id: 'far', text: 'nothing here', vector: [-1, 0, 0, 0] },
 ];
 
-// A real embedding model cannot run in CI. The AI SDK's own mock model gives
-// the vector [1, 0, 0, 0] for the one query of these tests, and records the
-// abort signal of each call.
+// The one query of these tests has the vector [1, 0, 0, 0].
 const model = (signals: (AbortSignal | undefined)[]) =>
-  new MockEmbeddingModelV4({
-    provider: 'test',
-    modelId: 'mini',
-    maxEmbeddingsPerCall: 100,
-    doEmbed: async ({ values, abortSignal }) => ({
-      embeddings: values.map((value) => {
-        signals.push(abortSignal);
-        if (value !== 'rotate key')
-          throw new Error(`The test names no vector for ${value}`);
-        return [1, 0, 0, 0];
-      }),
-      warnings: [],
-    }),
-  });
+  embeddingModel({ 'rotate key': [1, 0, 0, 0] }, { signals });
 
 const keywords = (database: DatabaseSync) =>
   new SqliteBM25Retriever({
