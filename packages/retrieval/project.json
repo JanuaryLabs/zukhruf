@@ -3,5 +3,5 @@
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "packages/retrieval/src",
   "projectType": "library",
-  "tags": ["layer:island", "std:base"]
+  "tags": ["layer:island", "std:base", "test:docker"]
 }

@@ -19,3 +19,7 @@ Most leaders give a structured filter of AND, OR and NOT over comparisons. Hayst
 ## Amendment 2026-11-23
 
 Accepted by Ezz on 2026-11-23 ("They stand"). A filter keeps Haystack's meaning of a missing value, as Haystack's pgvector store writes it in SQL ([filters.py](https://raw.githubusercontent.com/deepset-ai/haystack-core-integrations/main/integrations/pgvector/src/haystack_integrations/document_stores/pgvector/filters.py)): `==` with `null` selects NULL (SQLite `IS`), `!=` keeps NULL (`IS NOT`, pgvector's `IS DISTINCT FROM`), and `not in` keeps NULL (`IS NULL OR NOT IN`). A `metadata.<column>` field is one quoted identifier, and each value is a parameter; a boolean value is 1 or 0 on SQLite, which has no boolean. An empty `AND` selects every passage and an empty `OR` none. A field that is not a passage field or `metadata.<column>`, or an `in` / `not in` value that is not an array, fails the call with a `TypeError`; a column that the passages do not have fails with the error of the engine.
+
+## Amendment 2026-11-23: the filter on Postgres
+
+Accepted by Ezz on 2026-11-23 ("They stand"). Postgres has a boolean, so a boolean value compares with a boolean column, not as 1 or 0. Postgres refuses an empty list, `IN ()`, so an empty `in` selects no passage and an empty `not in` every passage, as on SQLite. A value is a string, a number, a bigint, a boolean or null; each value is a positional parameter, `$n`.

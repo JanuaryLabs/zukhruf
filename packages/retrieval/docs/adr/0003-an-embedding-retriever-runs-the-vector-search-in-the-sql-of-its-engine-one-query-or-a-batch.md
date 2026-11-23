@@ -27,3 +27,7 @@ Today exact vector search runs in three ways: `VectorSearch` of `@zukhruf/embedd
 ## Amendment 2026-11-23
 
 Accepted by Ezz on 2026-11-23 ("They stand"). On SQLite, `retrieve` and `retrieveMany` run the same single statement: a `VALUES` table of the query vectors, `CROSS JOIN` the passage vectors, and `ROW_NUMBER() OVER (PARTITION BY query ORDER BY distance, id)` cut at `topK`. A tie of distance goes to the smaller passage id, as `VectorSearch` of `@zukhruf/embeddings` orders its ties, so a result is the same on every run. The measurement of #5422 may change this form; it does not change the result.
+
+## Amendment 2026-11-23: the batch on Postgres
+
+Accepted by Ezz on 2026-11-23 ("They stand"). On Postgres, `retrieve` and `retrieveMany` run one statement: a `VALUES` table of the query vectors `CROSS JOIN LATERAL` an ordered, limited scan of the passage vectors of the identity of the query, `ORDER BY "vector" <=> query, id LIMIT topK`. The ids order in bytes (`COLLATE "C"`), and the stored identities too, so a tie and `ModelMismatchError.stored` are the same as on SQLite whatever the collation of the database is. None of the leaders has a batch search on Postgres: Haystack, LlamaIndex and LangChain send one query for each search.

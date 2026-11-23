@@ -19,12 +19,13 @@ const run = async (source: string): Promise<unknown> => {
   return JSON.parse(stdout);
 };
 
-test('a consumer imports each subpath by its package name, and the package depends at run time only on ai, @zukhruf/statistics and @zukhruf/vectors', async () => {
+test('a consumer imports each subpath by its package name, and the package depends at run time only on ai, pgvector, @zukhruf/statistics and @zukhruf/vectors', async () => {
   // Act
   const result = await run(`
     const core = await import('@zukhruf/retrieval');
     const { ModelMismatchError, VectorMissingError } = core;
     const { SqliteBM25Retriever, SqliteEmbeddingRetriever, SqlitePassageStore } = await import('@zukhruf/retrieval/sqlite');
+    const { PgvectorEmbeddingRetriever, PgvectorKeywordRetriever, PostgresPassageStore } = await import('@zukhruf/retrieval/postgres');
     const { default: manifest } = await import('@zukhruf/retrieval/package.json', { with: { type: 'json' } });
     console.log(JSON.stringify({
       modelMismatch: new ModelMismatchError(
@@ -36,6 +37,8 @@ test('a consumer imports each subpath by its package name, and the package depen
       fusions: [core.distributionBasedScoreFusion, core.reciprocalRankFusion, core.relativeScoreFusion].map((fusion) => typeof fusion().fuse),
       postprocessors: [core.Collapse, core.ContextWindow, core.LongContextReorder, core.MaximalMarginalRelevance, core.PostprocessingRetriever, core.Rerank, core.SimilarityCutoff].map((type) => type.name),
       sqlite: [SqliteBM25Retriever, SqliteEmbeddingRetriever, SqlitePassageStore].map((type) => type.name),
+      postgres: [PgvectorEmbeddingRetriever, PgvectorKeywordRetriever, PostgresPassageStore].map((type) => type.name),
+      postgresConditions: Object.keys(manifest.exports['./postgres']),
       dependencies: Object.keys(manifest.dependencies ?? {}),
     }));
   `);
@@ -60,7 +63,13 @@ test('a consumer imports each subpath by its package name, and the package depen
       'SqliteEmbeddingRetriever',
       'SqlitePassageStore',
     ],
-    dependencies: ['@zukhruf/statistics', '@zukhruf/vectors', 'ai'],
+    postgres: [
+      'PgvectorEmbeddingRetriever',
+      'PgvectorKeywordRetriever',
+      'PostgresPassageStore',
+    ],
+    postgresConditions: ['@zukhruf/source', 'types', 'import', 'default'],
+    dependencies: ['@zukhruf/statistics', '@zukhruf/vectors', 'ai', 'pgvector'],
   });
 });
 
@@ -98,6 +107,7 @@ test('the built package imports only node built-ins, its dependencies and its ow
       '@zukhruf/vectors',
       '@zukhruf/vectors/sqlite',
       'ai',
+      'pgvector',
     ],
   );
 });

@@ -80,6 +80,20 @@ const keywords = new SqliteBM25Retriever({
 const results = await keywords.retrieve('rotate signing key');
 ```
 
+On Postgres the query has to use the text search configuration of the index. `PgvectorKeywordRetriever` takes it as `configuration`, `'english'` when absent, as Haystack's `language`, LlamaIndex's `text_search_config` and LangChain's `tsv_lang` do. The configuration is a parameter of the statement, never SQL.
+
+```ts
+// Planned API.
+import { PgvectorKeywordRetriever } from '@zukhruf/retrieval/postgres';
+
+const keywords = new PgvectorKeywordRetriever({
+  session,
+  passages: 'docs_passages',
+  index: 'keywords', // GENERATED ALWAYS AS (to_tsvector('simple', text)) STORED
+  configuration: 'simple', // keeps stop words and does not stem
+});
+```
+
 ## Combine searches
 
 `FusionRetriever` asks each retriever for `rankWindowSize` passages, fuses the lists on `Passage.id` and gives the best `topK`. The default fusion is reciprocal rank fusion with k 60 and ranks from 1; each retriever has a weight of 1 ([ADR 0007](./docs/adr/0007-reciprocal-rank-fusion-is-the-default-fusion-with-k-60-and-ranks-from-1.md)).
@@ -428,7 +442,8 @@ class PgvectorKeywordRetriever implements Retriever {
     passages: string;
     index: string;
     operator?: 'AND' | 'OR';
-  });
+    configuration?: string;
+  }); // 'AND', 'english'
 }
 class PostgresPassageStore implements PassageStore {
   constructor(options: { session: PostgresSession; passages: string });
