@@ -51,6 +51,7 @@
     "access": "public"
   },
   "dependencies": {
+    "@zukhruf/statistics": "^0.8.70",
     "@zukhruf/vectors": "^0.8.70",
     "ai": "^7.0.179"
   },

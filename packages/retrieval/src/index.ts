@@ -1,10 +1,16 @@
 export type { BatchRetriever } from './batch-retriever.ts';
+export { distributionBasedScoreFusion } from './distribution-based-score-fusion.ts';
 export type { Filter } from './filter.ts';
+export { FusionRetriever } from './fusion-retriever.ts';
 export type { Fusion } from './fusion.ts';
+export { HydeRetriever } from './hyde-retriever.ts';
 export { ModelMismatchError } from './model-mismatch-error.ts';
+export { MultiQueryRetriever } from './multi-query-retriever.ts';
 export type { PassageStore } from './passage-store.ts';
 export type { Passage } from './passage.ts';
 export type { Postprocessor } from './postprocessor.ts';
+export { reciprocalRankFusion } from './reciprocal-rank-fusion.ts';
+export { relativeScoreFusion } from './relative-score-fusion.ts';
 export type { RetrieveOptions } from './retrieve-options.ts';
 export type { Retriever } from './retriever.ts';
 export type { ScoredPassage } from './scored-passage.ts';

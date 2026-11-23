@@ -19,10 +19,11 @@ const run = async (source: string): Promise<unknown> => {
   return JSON.parse(stdout);
 };
 
-test('a consumer imports each subpath by its package name, and the package depends at run time only on ai and @zukhruf/vectors', async () => {
+test('a consumer imports each subpath by its package name, and the package depends at run time only on ai, @zukhruf/statistics and @zukhruf/vectors', async () => {
   // Act
   const result = await run(`
-    const { ModelMismatchError, VectorMissingError } = await import('@zukhruf/retrieval');
+    const core = await import('@zukhruf/retrieval');
+    const { ModelMismatchError, VectorMissingError } = core;
     const { SqliteBM25Retriever, SqliteEmbeddingRetriever, SqlitePassageStore } = await import('@zukhruf/retrieval/sqlite');
     const { default: manifest } = await import('@zukhruf/retrieval/package.json', { with: { type: 'json' } });
     console.log(JSON.stringify({
@@ -31,6 +32,8 @@ test('a consumer imports each subpath by its package name, and the package depen
         { provider: 'openai', modelId: 'b' },
       ).name,
       vectorMissing: new VectorMissingError('p').name,
+      retrievers: [core.FusionRetriever, core.HydeRetriever, core.MultiQueryRetriever].map((type) => type.name),
+      fusions: [core.distributionBasedScoreFusion, core.reciprocalRankFusion, core.relativeScoreFusion].map((fusion) => typeof fusion().fuse),
       sqlite: [SqliteBM25Retriever, SqliteEmbeddingRetriever, SqlitePassageStore].map((type) => type.name),
       dependencies: Object.keys(manifest.dependencies ?? {}),
     }));
@@ -40,12 +43,14 @@ test('a consumer imports each subpath by its package name, and the package depen
   assert.deepEqual(result, {
     modelMismatch: 'ModelMismatchError',
     vectorMissing: 'VectorMissingError',
+    retrievers: ['FusionRetriever', 'HydeRetriever', 'MultiQueryRetriever'],
+    fusions: ['function', 'function', 'function'],
     sqlite: [
       'SqliteBM25Retriever',
       'SqliteEmbeddingRetriever',
       'SqlitePassageStore',
     ],
-    dependencies: ['@zukhruf/vectors', 'ai'],
+    dependencies: ['@zukhruf/statistics', '@zukhruf/vectors', 'ai'],
   });
 });
 
@@ -78,6 +83,11 @@ test('the built package imports only node built-ins, its dependencies and its ow
           !specifier.startsWith('node:') && !specifier.startsWith('.'),
       )
       .toSorted(),
-    ['@zukhruf/vectors', '@zukhruf/vectors/sqlite', 'ai'],
+    [
+      '@zukhruf/statistics',
+      '@zukhruf/vectors',
+      '@zukhruf/vectors/sqlite',
+      'ai',
+    ],
   );
 });
