@@ -124,7 +124,7 @@ The `'role'` event tells you each time this process starts to lead, or starts to
 ## Evidence
 
 - **A naive takeover is not safe.** Two servers that each did "connect, see `ECONNREFUSED`, delete the socket file, listen" both listened in 11 of 20 races. Clients were split between them. Thus the lock store elects its leader before it removes the socket file.
-- **`ECONNREFUSED` does not mean "no leader".** A live leader with a full connection queue also gave `ECONNREFUSED`.
+- **`ECONNREFUSED` does not mean "no leader".** On macOS, a live leader with a full connection queue also gave `ECONNREFUSED`, after 128 queued connections (`kern.ipc.somaxconn`). Linux gives `EAGAIN` there (probe 2026-11-23, #5424).
 - `src/lock-stores/socket/lock-server.test.ts`: a server whose term is lost closes without a call to `close`, and a follower then leads with a higher epoch. A server that starts for a lost term rejects with `LeaseLostError` and serves nobody.
 - `src/lock-stores/remote/remote-locking.test.ts` (`A request whose epoch has no tokens left`): the coordinator reports the exhausted epoch once, answers nothing, and keeps the connection. No test reaches the end of a real epoch, which needs 2^32 grants, so no test runs the step-down of `LockServer` for it.
 - After `SIGKILL` of a client, the server saw the connection close in 1.25 ms.

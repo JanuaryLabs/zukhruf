@@ -16,6 +16,7 @@ import { describe, test } from 'node:test';
 import { TemporaryFiles } from '@zukhruf/fs';
 
 import {
+  NoServerError,
   PipeAddress,
   PipeEndpoint,
   type PipeServer,
@@ -53,6 +54,16 @@ async function codeOf(promise: Promise<unknown>): Promise<unknown> {
   return Reflect.get(Object(error), 'code');
 }
 
+/** The code of the error of Node.js under the `NoServerError` that `connecting` rejects with. */
+async function noServerCode(connecting: Promise<unknown>): Promise<unknown> {
+  const error = await connecting.then(
+    () => assert.fail('expected a rejection'),
+    (reason: unknown) => reason,
+  );
+  assert.ok(error instanceof NoServerError, String(error));
+  return Reflect.get(Object(error.cause), 'code');
+}
+
 describe(
   'endpoint.listen after a server was killed',
   { skip: posixOnly },
@@ -82,7 +93,7 @@ console.log('listening');`);
       await clientClosed;
 
       // Act
-      const refused = await codeOf(endpoint.address.connect());
+      const refused = await noServerCode(endpoint.address.connect());
       const leftover = await lstat(endpoint.address.path);
       await using server = await endpoint.listen((socket) =>
         socket.end('again'),
@@ -112,7 +123,10 @@ console.log('listening');`);
         killed.child.kill('SIGKILL');
         await killed.exited({ signal: t.signal });
       }
-      assert.equal(await codeOf(endpoint.address.connect()), 'ECONNREFUSED');
+      assert.equal(
+        await noServerCode(endpoint.address.connect()),
+        'ECONNREFUSED',
+      );
 
       // Act
       await using _server = await endpoint.listen((socket) =>
@@ -354,17 +368,21 @@ describe('the server', { skip: posixOnly }, () => {
     const endpoint = new PipeEndpoint('echo', { prefix: folder.prefix });
     const server = await endpoint.listen((socket) => socket.pipe(socket));
     const client = await endpoint.address.connect();
+    // The close waits for the open connection, so a failed assertion must not leave it open.
+    try {
+      // Act
+      const closed = server.close();
 
-    // Act
-    const closed = server.close();
-
-    // Assert
-    assert.equal(await codeOf(endpoint.address.connect()), 'ENOENT');
-    client.write('still open');
-    const [echo] = await once(client, 'data');
-    assert.equal(String(echo), 'still open');
-    client.end();
-    await closed;
+      // Assert
+      assert.equal(await noServerCode(endpoint.address.connect()), 'ENOENT');
+      client.write('still open');
+      const [echo] = await once(client, 'data');
+      assert.equal(String(echo), 'still open');
+      client.end();
+      await closed;
+    } finally {
+      client.destroy();
+    }
   });
 
   test('await using removes the file at the end of the block', async () => {

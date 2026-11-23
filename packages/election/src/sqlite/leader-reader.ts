@@ -3,7 +3,7 @@ import type { Socket } from 'node:net';
 
 import type { Clock } from '@zukhruf/async';
 import { isErrno } from '@zukhruf/fs';
-import { PipeAddress } from '@zukhruf/pipes';
+import { NoServerError, PipeAddress } from '@zukhruf/pipes';
 
 import { unrefed } from './leader-pipe.ts';
 import { type LeaderRecord, readLeaderRecord } from './leader-record.ts';
@@ -18,9 +18,6 @@ export interface ReaderOptions {
   /** Stops the read: the connection closes, the deadline is cleared, and the read rejects with `signal.reason`. */
   signal: AbortSignal;
 }
-
-/** The connect fails because no process serves the pipe of the record, or the pipe is another user's (ADR 0007). */
-const ABSENT = ['ENOENT', 'ECONNREFUSED', 'EACCES'];
 
 /**
  * Reads the leader record, connects to its pipe once, and resolves when the
@@ -45,7 +42,9 @@ export async function readLeader(
       signal: options.signal,
     });
   } catch (error) {
-    if (ABSENT.some((code) => isErrno(error, code))) return 'absent';
+    // No server listens on the pipe of the record, or the pipe is another user's (ADR 0007).
+    if (error instanceof NoServerError || isErrno(error, 'EACCES'))
+      return 'absent';
     throw error;
   }
   return untilLeft(socket, record, options);

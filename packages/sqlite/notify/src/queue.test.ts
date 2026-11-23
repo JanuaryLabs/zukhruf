@@ -5,7 +5,7 @@ import { describe, test } from 'node:test';
 import { createClock } from '@sinonjs/fake-timers';
 
 import { TemporaryFiles } from '@zukhruf/fs';
-import { PipeAddress } from '@zukhruf/pipes';
+import { NoServerError, PipeAddress } from '@zukhruf/pipes';
 import { WriteAheadLog, open } from '@zukhruf/sqlite-open';
 import { transaction } from '@zukhruf/sqlite-transaction';
 
@@ -41,7 +41,9 @@ async function connectAfterTheSender(address: string): Promise<string> {
     (await new PipeAddress(address).connect()).destroy();
     return 'connected';
   } catch (error) {
-    return String(Reflect.get(Object(error), 'code'));
+    // A connect that no server accepts rejects with NoServerError over the error of Node.js.
+    const failure = error instanceof NoServerError ? error.cause : error;
+    return String(Reflect.get(Object(failure), 'code'));
   }
 }
 

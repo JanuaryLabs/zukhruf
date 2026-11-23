@@ -60,22 +60,25 @@ hello
 - The server owns the socket file while it listens. `server.close()` stops listening at once, and Node removes the socket file. Node removes the file at the path, also when another server's file is there now (probe, 2026-11-14). So a server that lost its right to the path closes before the next server listens. `await using` closes it too: `[Symbol.asyncDispose]` is `close`.
 - Only the first `server.close()` or `[Symbol.asyncDispose]()` closes. A later call, also one made while the first waits for open connections, waits until the server has closed and resolves. Node calls the callback of `close` at the `close` event, and passes `ERR_SERVER_NOT_RUNNING` only "if the server was not open when it was closed" (Node's docs), so the package takes that code as the close that came first. Node never fails the close of a server that listens. This is .NET's rule for `IDisposable.Dispose`: "If an object's Dispose method is called more than once, the object must ignore all calls after the first one" ([learn.microsoft.com](https://learn.microsoft.com/en-us/dotnet/api/system.idisposable.dispose)). Node's `net.Server[Symbol.asyncDispose]` resolves on a second call too, but its `close` rejects with `ERR_SERVER_NOT_RUNNING`. Mutex closes its lock server twice: a lost term closes it, and the store's dispose closes it again.
 - `server.close()` does not end the connections that are open. This is Node's rule. The caller keeps them and ends them: mutex destroys them, and single-flight ends each one after what it wrote is sent. Close first, and end them in the same step, so no new connection comes in between.
-- A crash leaves the socket file. A connect to it gives `ECONNREFUSED` (research 20a P1). The next `endpoint.listen` on the path removes it. Windows removes a pipe when its program exits.
+- A crash leaves the socket file. A connect to it rejects with `NoServerError`, and its `cause` has the code `ECONNREFUSED` (research 20a P1). The next `endpoint.listen` on the path removes it. Windows removes a pipe when its program exits.
 - A socket that Node makes has mode `0755`. Another user cannot connect to it, because a connect needs the write bit (research 20a P5, Linux).
-- `address.connect` connects once. It does not try again, and it does not remove a dead server's file: what a refused connect means is the caller's rule ([ADR 0006](./docs/adr/0006-connect-tries-once.md)).
+- `address.connect` connects once. It does not try again, and it does not remove a dead server's file ([ADR 0006](./docs/adr/0006-connect-tries-once.md)). It rejects with `NoServerError` when no server accepts the connection on the path: nothing is at the path (`ENOENT`), a socket file has no server (`ECONNREFUSED`), a file that is not a socket is there (`ENOTSOCK`, macOS), or the server closed before it accepted the connection (`ECONNRESET`, Linux). `cause` is the error of Node.js ([ADR 0008](./docs/adr/0008-a-connect-that-finds-no-server-rejects-with-no-server-error.md), #5317). What the caller does then is its rule (ADR 0006).
+- On Linux, the kernel completes a connect at once, and libuv reads its result (`SO_ERROR`) one turn of its loop later. A server that closes in between resets the connection, so the connect fails with `ECONNRESET`. macOS connects, and then the socket ends. A probe gave each result 20 times of 20 (ADR 0008).
+- A live server whose listen queue is full refuses a connect on macOS with `ECONNREFUSED`, after 128 connections (`kern.ipc.somaxconn`). So on macOS, `NoServerError` can come from a live server that accepts nothing now (#5424). Linux gives `EAGAIN` after 512 connections, and `EAGAIN` stays the error of Node.js (probe 2026-11-23, ADR 0008).
 - The package waits on no timer, so it takes no clock.
 - The socket is the `net.Socket` of `node:net`. Call `socket.unref()` when it must not keep the program alive, and `server.unref()` for the server.
 
 ## Errors
 
-| Error                | When                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `RangeError`         | `new PipeEndpoint` makes a socket path longer than the limit. The message: `The socket path <path> is <n> bytes, more than <limit>; choose a shorter folder or name.` .NET throws `ArgumentOutOfRangeException` here.                                                                                                                                                                                                                                            |
-| `TypeError`          | A plain name or a prefix that breaks the rule of a plain name. The message names the value and the rule.                                                                                                                                                                                                                                                                                                                                                         |
-| `UnsafeFolderError`  | `endpoint.listen` with a plain name finds a default folder that is not a folder, is a link, belongs to another user, or gives access to its group or others. `path` is the folder. The message is tmux's: `<path> is not a folder` or `<path> has unsafe permissions`.                                                                                                                                                                                           |
-| The error of Node.js | All other failures, with its `code`. `endpoint.listen`: `EADDRINUSE` when a live pipe has the name on Windows, `EACCES` for a folder that this user cannot write. `address.connect`: `ENOENT` when nothing is at the path, `ECONNREFUSED` for a leftover file, `ENOTSOCK` on macOS when a file that is not a socket is at the path, `EAGAIN` on Linux when the server's backlog is full, `EACCES` for another user's socket, `ABORT_ERR` when the signal aborts. |
+| Error                | When                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `RangeError`         | `new PipeEndpoint` makes a socket path longer than the limit. The message: `The socket path <path> is <n> bytes, more than <limit>; choose a shorter folder or name.` .NET throws `ArgumentOutOfRangeException` here.                                                                                                                                                                                                                                                                                      |
+| `TypeError`          | A plain name or a prefix that breaks the rule of a plain name. The message names the value and the rule.                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `NoServerError`      | `address.connect` finds no server that accepts the connection on the path: `ENOENT` (nothing at the path), `ECONNREFUSED` (a leftover file), `ENOTSOCK` (macOS, a file that is not a socket), or `ECONNRESET` before the connect completes (Linux, the server closed before it accepted). `path` is the path of the address, and `cause` is the error of Node.js. The message: `No server listens on <path>` ([ADR 0008](./docs/adr/0008-a-connect-that-finds-no-server-rejects-with-no-server-error.md)). |
+| `UnsafeFolderError`  | `endpoint.listen` with a plain name finds a default folder that is not a folder, is a link, belongs to another user, or gives access to its group or others. `path` is the folder. The message is tmux's: `<path> is not a folder` or `<path> has unsafe permissions`.                                                                                                                                                                                                                                     |
+| The error of Node.js | All other failures, with its `code`. `endpoint.listen`: `EADDRINUSE` when a live pipe has the name on Windows, `EACCES` for a folder that this user cannot write. `address.connect`: `EAGAIN` on Linux when the server's backlog is full, `EACCES` for another user's socket, `ABORT_ERR` when the signal aborts.                                                                                                                                                                                          |
 
-Check a code with `isErrno` of [`@zukhruf/fs`](../fs/README.md#check-the-error-code). A failed `endpoint.listen` closes its `net.Server`, and a failed `address.connect` destroys its socket.
+Check the code of the error of Node.js with `isErrno` of [`@zukhruf/fs`](../fs/README.md#check-the-error-code). For `NoServerError`, read the code in `error.cause.code`. A failed `endpoint.listen` closes its `net.Server`, and a failed `address.connect` destroys its socket.
 
 ## What each call does
 
@@ -87,8 +90,8 @@ Check a code with `isErrno` of [`@zukhruf/fs`](../fs/README.md#check-the-error-c
 | `endpoint.listen`, plain name                 | Makes the default folder with mode `0700` if it is missing, and checks it. Removes the file at the path. Listens. | Listens.                                                                                  |
 | `endpoint.listen`, rooted name                | Removes the file at the path. Listens.                                                                            | Listens.                                                                                  |
 | `server.close()`, or the end of `await using` | Stops listening. Node removes the file at the path. Open connections stay open.                                   | Windows removes the pipe. Open connections stay open.                                     |
-| The server's program crashes                  | The file stays. A connect gives `ECONNREFUSED`.                                                                   | Windows removes the pipe. A connect gives `ENOENT`.                                       |
-| `address.connect()`, nothing listens          | `ENOENT` when there is no file, `ECONNREFUSED` when a leftover file is there.                                     | `ENOENT`.                                                                                 |
+| The server's program crashes                  | The file stays. A connect rejects with `NoServerError`, cause `ECONNREFUSED`.                                     | Windows removes the pipe. A connect rejects with `NoServerError`, cause `ENOENT`.         |
+| `address.connect()`, nothing listens          | `NoServerError`: cause `ENOENT` when there is no file, `ECONNREFUSED` when a leftover file is there.              | `NoServerError`, cause `ENOENT`.                                                          |
 | Another user's program connects               | `EACCES`: the socket has mode `0755`, and the default folder has mode `0700` (research 20a P5).                   | The default security of a pipe gives every user read access [inference, not run; #4340].  |
 
 ## Who uses it
@@ -97,7 +100,7 @@ Check a code with `isErrno` of [`@zukhruf/fs`](../fs/README.md#check-the-error-c
 | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
 | `@zukhruf/mutex`         | `new PipeEndpoint(resolve(directory, 'lock.sock'), { prefix: 'zukhruf-mutex' })`. The lock server calls `endpoint.listen` when its election wins, and each client calls `endpoint.address.connect`. It replaced `socketPathFor` in `src/lock-stores/socket/socket-store.ts`, the `rm`, `createServer`, `listen` and `once(server, 'listening')` in `lock-server.ts`, and `connect` and `once(socket, 'connect')` in `reach` of `electing-connector.ts` (4be98347). The lock server keeps its set of connections, and holds a `PipeServer` in place of a `net.Server`. | backlog #2496 |
 | `@zukhruf/single-flight` | The same with `flight.sock` and the prefix `zukhruf-single-flight`. It replaced `src/connection/socket-path.ts`, the same lines in `src/coordinator/flight-server.ts`, and `reach` in `src/connection/electing-connector.ts` (4b5db558). The ledger `docs/copied-from-mutex.md` records it.                                                                                                                                                                                                                                                                           | backlog #2496 |
-| `@zukhruf/sqlite-notify` | `new PipeEndpoint(<listener id>, { prefix: 'zukhruf-sqlite-notify' })`. The listener id is 16 random bytes in hex. The listener calls `endpoint.listen` and writes `endpoint.address.path` in its row. A sender calls `new PipeAddress(<the path it read>).connect()`, and removes a dead listener's file after a refused connect.                                                                                                                                                                                                                                    | its ADR 0008  |
+| `@zukhruf/sqlite-notify` | `new PipeEndpoint(<listener id>, { prefix: 'zukhruf-sqlite-notify' })`. The listener id is 16 random bytes in hex. The listener calls `endpoint.listen` and writes `endpoint.address.path` in its row. A sender calls `new PipeAddress(<the path it read>).connect()`, and removes a dead listener's file after a connect that rejects with `NoServerError`.                                                                                                                                                                                                          | its ADR 0008  |
 
 Backlog #2496 holds the transport code that mutex and single-flight copy. This package is its socket-address part: the third consumer, `@zukhruf/sqlite-notify`, needs only that part. JSON lines, the handshake, the connection supervisor and the server shell keep their two copies.
 
@@ -168,19 +171,14 @@ async function reach(socketPath: string): Promise<Socket | undefined> {
 }
 ```
 
-After (`reach` in `electing-connector.ts`, e405dc27, #3619). 4be98347 changed it to `address.connect()`, and e405dc27 made it resolve `undefined` only for the codes that mean nothing answers yet, and throw every other error:
+After (`reach` in `electing-connector.ts`). 4be98347 changed it to `address.connect()`, e405dc27 made it resolve `undefined` only for the codes that mean nothing answers yet and throw every other error (#3619), and #5317 replaced those codes with `NoServerError`:
 
 ```ts
 async function reach(address: PipeAddress): Promise<Socket | undefined> {
   try {
     return await address.connect();
   } catch (error) {
-    if (
-      isErrno(error, 'ENOENT') ||
-      isErrno(error, 'ECONNREFUSED') ||
-      isErrno(error, 'ENOTSOCK') ||
-      isErrno(error, 'EAGAIN')
-    ) {
+    if (error instanceof NoServerError || isErrno(error, 'EAGAIN')) {
       return undefined;
     }
     throw error;
@@ -219,8 +217,23 @@ export class PipeAddress {
   constructor(path: string); // checks nothing and makes nothing
   /** The path that `node:net` connects to: a socket path on macOS and Linux, a pipe path on Windows. */
   readonly path: string;
-  /** Tries once (ADR 0006). Resolves when the socket is connected. */
+  /**
+   * Tries once (ADR 0006). Resolves when the socket is connected. Rejects
+   * with `NoServerError` when no server listens on the path (ADR 0008), and
+   * with the error of Node.js otherwise.
+   */
   connect(options?: { signal?: AbortSignal }): Promise<Socket>;
+}
+
+/**
+ * No server listens on the pipe: nothing is at the path, a dead server's file
+ * is there, a file that is not a socket is there (macOS), or the server closed
+ * before it accepted the connection (Linux). `cause` is the error of Node.js.
+ */
+export class NoServerError extends Error {
+  constructor(path: string, options: { cause: unknown });
+  /** The path that the connect tried. */
+  readonly path: string;
 }
 
 export interface PipeEndpointOptions {
@@ -257,5 +270,6 @@ export class UnsafeFolderError extends Error {
 - [0003 Listen removes the file at the path, and close removes it again](./docs/adr/0003-listen-removes-the-file-at-the-path-and-close-removes-it-again.md)
 - [0004 The socket path is at most one byte less than sun_path](./docs/adr/0004-the-socket-path-is-at-most-one-byte-less-than-sun-path.md)
 - [0005 A rooted name on Windows is a pipe named by a hash of its path](./docs/adr/0005-a-rooted-name-on-windows-is-a-pipe-named-by-a-hash-of-its-path.md)
-- [0006 Connect tries once](./docs/adr/0006-connect-tries-once.md)
+- [0006 Connect tries once](./docs/adr/0006-connect-tries-once.md) (superseded in part by ADR 0008)
 - [0007 The endpoint listens, the address connects, and the server owns its file](./docs/adr/0007-the-endpoint-listens-the-address-connects-and-the-server-owns-its-file.md)
+- [0008 A connect that finds no server rejects with NoServerError](./docs/adr/0008-a-connect-that-finds-no-server-rejects-with-no-server-error.md)

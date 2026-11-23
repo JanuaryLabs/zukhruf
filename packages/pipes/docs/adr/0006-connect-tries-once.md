@@ -1,5 +1,7 @@
 # Connect tries once
 
+Superseded in part on 2026-11-23 (#5317) for its last consequence. `address.connect` rejects with `NoServerError` when no server accepts the connection; what a consumer does then stays its rule ([ADR 0008](./0008-a-connect-that-finds-no-server-rejects-with-no-server-error.md)).
+
 > Changed in part on 2026-11-14 by [ADR 0007](./0007-the-endpoint-listens-the-address-connects-and-the-server-owns-its-file.md): connect is a method of the address, not a function that takes a path. A client that has only a path makes its address with `new PipeAddress(path)`. Connect still tries once and takes no clock.
 
 A client connects to a server. The precedent (research 21 §1, §2):

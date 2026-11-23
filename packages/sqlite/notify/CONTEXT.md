@@ -81,7 +81,7 @@ A queue with `maxQueuedNotifications` rows above the lowest position. `notify` t
 _Avoid_: Overflow, backpressure, limit reached
 
 **Dead listener**:
-A listener whose address gave `ECONNREFUSED` or `ENOENT` to a connect, or closed the sender's connection. The sender removes its rows in its next transaction, and again in each later one until the removal is known to have committed: at once after a transaction of its own, or by a read on the next microtask after the caller's transaction. Then it removes the socket file (ADR 0010).
+A listener whose connect rejected with `NoServerError` of `@zukhruf/pipes` (cause `ECONNREFUSED`, `ENOENT`, `ENOTSOCK` or `ECONNRESET`), or that closed the sender's connection. The sender removes its rows in its next transaction, and again in each later one until the removal is known to have committed: at once after a transaction of its own, or by a read on the next microtask after the caller's transaction. Then it removes the socket file (ADR 0010).
 _Avoid_: Stale listener, zombie, orphan
 
 **Laggard**:

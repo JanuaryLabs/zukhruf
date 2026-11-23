@@ -2,7 +2,7 @@ import type { Socket } from 'node:net';
 
 import { Cond, Future, type WallClock, delay } from '@zukhruf/async';
 import { SqliteElection, type Term } from '@zukhruf/election';
-import { PipeAddress } from '@zukhruf/pipes';
+import { NoServerError, PipeAddress } from '@zukhruf/pipes';
 
 import type { Eviction } from './eviction.ts';
 import type { PoolStats } from './pool-stats.ts';
@@ -29,9 +29,9 @@ interface Envelope<Input> {
   readonly caller?: string;
 }
 
-// The codes of a connection to a caller whose program is gone: nothing listens
-// at its pipe, its pipe file is gone, or the connection broke.
-const GONE = new Set(['ECONNREFUSED', 'ENOENT', 'ECONNRESET', 'EPIPE']);
+// The codes of a connection to a caller whose program is gone: the connection
+// broke. A connect that finds the caller gone rejects with NoServerError.
+const GONE = new Set(['ECONNRESET', 'EPIPE']);
 
 /** The end of one run of a job on a worker. */
 type Outcome<Output> =
@@ -273,7 +273,7 @@ export class PoolWorkers<Input, Output> implements AsyncDisposable {
         try {
           connection = await new PipeAddress(caller).connect();
         } catch (error) {
-          if (!isGone(error)) throw error;
+          if (!(error instanceof NoServerError)) throw error;
           // The caller is gone before its job starts: the job never runs.
           await this.#store.queue.cancel(this.#kind.queue, job.id);
           return;

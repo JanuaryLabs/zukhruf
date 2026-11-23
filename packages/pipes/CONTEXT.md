@@ -61,5 +61,9 @@ A `net.Socket` that a server accepted: `endpoint.listen` gives each one to its `
 _Avoid_: Client (the socket that `address.connect` connected), session, stream
 
 **Leftover file**:
-A socket file whose server crashed. A connect to it gives `ECONNREFUSED`. `endpoint.listen` removes it. .NET's word ("anything left over").
+A socket file whose server crashed. A connect to it rejects with `NoServerError`, and its `cause` has the code `ECONNREFUSED`. `endpoint.listen` removes it. .NET's word ("anything left over").
 _Avoid_: Stale socket, dead file, orphan
+
+**No server**:
+A path on which no server accepts a connection: nothing is at it, a leftover file is there, a file that is not a socket is there, or the server closed before it accepted the connection. `address.connect` rejects with `NoServerError` (ADR 0008). Ours, not an industry term: no industry name for this group of codes was found.
+_Avoid_: Dead server (a leftover file is only one case), gone, refused (`ECONNREFUSED` is only one of the codes)

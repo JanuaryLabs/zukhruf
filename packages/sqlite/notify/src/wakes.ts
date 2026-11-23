@@ -2,7 +2,7 @@ import { rm } from 'node:fs/promises';
 import type { Socket } from 'node:net';
 
 import { Latch, WaitGroup } from '@zukhruf/async';
-import { PipeAddress } from '@zukhruf/pipes';
+import { NoServerError, PipeAddress } from '@zukhruf/pipes';
 
 /** A listener as a sender reads it from its row. */
 export interface Addressed {
@@ -12,10 +12,6 @@ export interface Addressed {
 
 // The wake: one byte with no content (ADR 0002).
 const WAKE = Buffer.of(0);
-
-// The connect errors that mean nobody serves the address any more: a file
-// that a killed listener left (ECONNREFUSED), or no file (ENOENT).
-const DEAD_CODES = new Set(['ECONNREFUSED', 'ENOENT']);
 
 /**
  * The sender's side: one connection to each listener it woke, the wakes that
@@ -137,8 +133,9 @@ class Connection {
         (error: unknown) => {
           if (this.#state.kind === 'ended') return;
           this.#state = { kind: 'ended' };
-          if (DEAD_CODES.has(String(Reflect.get(Object(error), 'code'))))
-            events.dead();
+          // Nobody serves the address any more: a killed listener's file, no
+          // file, or a listener that closed during the connect.
+          if (error instanceof NoServerError) events.dead();
           else events.lost(error);
         },
       )

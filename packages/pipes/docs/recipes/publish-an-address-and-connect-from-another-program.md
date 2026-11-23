@@ -9,7 +9,7 @@
 1. In the server, make a `PipeEndpoint` with a random plain name, and call `endpoint.listen`.
 2. Write `endpoint.address.path` in the record.
 3. In the client, read the path from the record, and call `new PipeAddress(path).connect()`.
-4. When the connect rejects with `ECONNREFUSED` or `ENOENT`, treat the server as gone.
+4. When the connect rejects with `NoServerError`, treat the server as gone.
 
 ## The program
 
@@ -24,7 +24,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 
-import { PipeAddress, PipeEndpoint } from '@zukhruf/pipes';
+import { NoServerError, PipeAddress, PipeEndpoint } from '@zukhruf/pipes';
 
 const [role, record] = process.argv.slice(2);
 
@@ -82,9 +82,9 @@ if (role === 'server') {
     const socket = await new PipeAddress(address).connect();
     for await (const chunk of socket) process.stdout.write(chunk);
   } catch (error) {
-    const code = error instanceof Error ? Reflect.get(error, 'code') : '';
-    // A refused connect, or no file at the path: the server is gone.
-    if (code === 'ECONNREFUSED' || code === 'ENOENT') {
+    // No server accepts the connection on the path: the server is gone.
+    if (error instanceof NoServerError) {
+      const code = Reflect.get(Object(error.cause), 'code');
       console.log(`the server is gone (${code})`);
     } else throw error;
   }
@@ -117,27 +117,28 @@ Output on macOS, for the user with the id 501 (the names and the process ids cha
 
 ```
 1. A server listens, and a client connects.
-server: published /tmp/recipe-pipes-501/bf504b824a054abc7404b5e6260ae611
-client: hello from process 94229
+server: published /tmp/recipe-pipes-501/cc2a6549bb2324d268807b2731f208f4
+client: hello from process 43348
 2. The server crashes. Its socket file stays.
 client: the server is gone (ECONNREFUSED)
 3. A new server listens, then closes.
-server: published /tmp/recipe-pipes-501/c983ea2277217199aa6ba25c99ca21a8
-client: hello from process 94265
+server: published /tmp/recipe-pipes-501/e213bd93e842823dd5a43516c643a0d1
+client: hello from process 43375
 client: the server is gone (ENOENT)
 ```
 
 ## Why it works
 
 - **The record holds the path, not the name.** `new PipeAddress(path)` reads no file, makes no file and checks no length: the program that made the path checked it. So the client needs no prefix and no default folder ([ADR 0006](../adr/0006-connect-tries-once.md), [ADR 0007](../adr/0007-the-endpoint-listens-the-address-connects-and-the-server-owns-its-file.md)).
-- **A crash leaves a leftover file.** The process that `SIGKILL` ends cannot close its server, so its socket file stays at the path. A connect to it gives `ECONNREFUSED` (step 2).
-- **A close removes the file.** `server.close()` stops listening, and Node removes the socket file. A connect to the path then gives `ENOENT` (step 3, [ADR 0003](../adr/0003-listen-removes-the-file-at-the-path-and-close-removes-it-again.md)).
-- **A connect tries once.** `address.connect` does not try again, so the client knows at once that the server is gone. What a refused connect means is the caller's rule ([ADR 0006](../adr/0006-connect-tries-once.md)).
+- **A crash leaves a leftover file.** The process that `SIGKILL` ends cannot close its server, so its socket file stays at the path. A connect to it rejects with `NoServerError`, and its `cause` has the code `ECONNREFUSED` (step 2).
+- **A close removes the file.** `server.close()` stops listening, and Node removes the socket file. A connect to the path then rejects with `NoServerError`, and its `cause` has the code `ENOENT` (step 3, [ADR 0003](../adr/0003-listen-removes-the-file-at-the-path-and-close-removes-it-again.md)).
+- **A connect tries once.** `address.connect` does not try again, so the client knows at once that the server is gone. It rejects with `NoServerError` when no server accepts the connection ([ADR 0008](../adr/0008-a-connect-that-finds-no-server-rejects-with-no-server-error.md)). What the caller does then is its rule ([ADR 0006](../adr/0006-connect-tries-once.md)).
 
 ## Things to know
 
 - **Give each server a random plain name.** `endpoint.listen` removes the file at the path without a check, so only one server may use a path. sqlite-notify and election take 16 random bytes in hex, and a name is never used again ([ADR 0003](../adr/0003-listen-removes-the-file-at-the-path-and-close-removes-it-again.md)).
-- **Remove a leftover file when the client finds one.** The next `endpoint.listen` on a path removes its file, but a random name is never used again. sqlite-notify's sender removes a dead listener's row and its file after a refused connect (`src/wakes.ts`). This program does not: the file of step 2 stays in `/tmp/recipe-pipes-501`.
-- **Choose which codes mean "gone".** sqlite-notify takes `ECONNREFUSED` and `ENOENT` (`src/wakes.ts`). election takes `EACCES` too: another user's socket is not its leader (`src/sqlite/leader-reader.ts`). Treat every other error as a failure.
+- **Remove a leftover file when the client finds one.** The next `endpoint.listen` on a path removes its file, but a random name is never used again. sqlite-notify's sender removes a dead listener's row and its file after a connect that rejects with `NoServerError` (`src/wakes.ts`). This program does not: the file of step 2 stays in `/tmp/recipe-pipes-501`.
+- **Choose which errors mean "gone".** `NoServerError` groups `ENOENT`, `ECONNREFUSED`, `ENOTSOCK` (macOS) and `ECONNRESET` before the connect completes (Linux, the server closed before it accepted the connection). sqlite-notify takes `NoServerError` (`src/wakes.ts`). election takes `EACCES` too: another user's socket is not its leader (`src/sqlite/leader-reader.ts`). Treat every other error as a failure, such as `EAGAIN` on Linux when the listen queue of a live server is full ([ADR 0008](../adr/0008-a-connect-that-finds-no-server-rejects-with-no-server-error.md)).
+- **On macOS, a full listen queue also gives `NoServerError`.** A live server that accepts nothing refuses a connect with `ECONNREFUSED` after 128 connections (`kern.ipc.somaxconn`). So do not destroy the state of a server only because of one `NoServerError` on macOS (#5424).
 - **Replace the record in one step when a client can read it at any time.** Here the client starts only after the server wrote the record. election writes its leader record with `atomicWrite` of [`@zukhruf/fs`](../../../fs/README.md), so a reader never sees a part of it (`src/sqlite/leader-record.ts`).
-- **On Windows, the path is a named pipe.** The server publishes `\\.\pipe\recipe-pipes-<name>`. Windows removes a pipe when its program exits, so a connect after a crash gives `ENOENT`, not `ECONNREFUSED` ([README](../../README.md#what-each-call-does)).
+- **On Windows, the path is a named pipe.** The server publishes `\\.\pipe\recipe-pipes-<name>`. Windows removes a pipe when its program exits, so a connect after a crash rejects with `NoServerError` whose `cause` has the code `ENOENT`, not `ECONNREFUSED` ([README](../../README.md#what-each-call-does)).

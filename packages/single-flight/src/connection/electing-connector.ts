@@ -3,7 +3,7 @@ import type { Socket } from 'node:net';
 import { Backoff, type Clock, delay, untilAborted } from '@zukhruf/async';
 import type { LeaderObserver, SqliteElection, Term } from '@zukhruf/election';
 import { isErrno } from '@zukhruf/fs';
-import type { PipeAddress } from '@zukhruf/pipes';
+import { NoServerError, type PipeAddress } from '@zukhruf/pipes';
 
 import type { FlightRequest } from '../protocol/flight-protocol.ts';
 import type { FlightConnection, FlightConnector } from './connector.ts';
@@ -257,21 +257,16 @@ async function reachUnlessAborted(
 }
 
 /**
- * Resolves `undefined` when nothing answers yet: no file (ENOENT), a dead
- * coordinator's file (ECONNREFUSED), something else at the path (ENOTSOCK on
- * macOS), which the campaign's own listen then reports, or a full backlog
- * (EAGAIN on Linux), after which the lost campaign waits and reaches again.
+ * Resolves `undefined` when nothing answers yet: no server listens on the
+ * path (`NoServerError` of @zukhruf/pipes; something else at the path is
+ * then reported by the campaign's own listen), or a full backlog (EAGAIN on
+ * Linux), after which the lost campaign waits and reaches again.
  */
 async function reach(address: PipeAddress): Promise<Socket | undefined> {
   try {
     return await address.connect();
   } catch (error) {
-    if (
-      isErrno(error, 'ENOENT') ||
-      isErrno(error, 'ECONNREFUSED') ||
-      isErrno(error, 'ENOTSOCK') ||
-      isErrno(error, 'EAGAIN')
-    ) {
+    if (error instanceof NoServerError || isErrno(error, 'EAGAIN')) {
       return undefined;
     }
     throw error;
