@@ -1,0 +1,15 @@
+# The package is in the base layer
+
+Status: accepted by Ezz on 2026-11-23 ("this is base layer").
+
+Root ADR 0001 sorts the packages into layers by their imports: shipped code of a `std:base` package imports only `std:base` packages, and shipped domain code imports only base and coordination packages (`eslint.config.mjs`, lines 26-38). Ezz ruled on the same day that a layer follows the imports ("Imports decide: base"), and five packages moved to base (e130cccd, #5418). `@zukhruf/mteb` is base since e130cccd, and its `HybridSearch` can move onto the fusions of this package (#5400).
+
+## Decision
+
+- `@zukhruf/retrieval` has the tag `std:base`.
+- Its shipped code imports `@zukhruf/vectors` (the SQLite distance functions), `@zukhruf/statistics` and `ai` only. It imports `mean` from `@zukhruf/statistics`. The population standard deviation that `distributionBasedScoreFusion` needs moves into `@zukhruf/statistics` at this third place (backlog #3992: `np.std` with `ddof=0` is copied in `@zukhruf/mteb` `src/dependencies/numpy.ts` and in relevance-filtering `src/statistics.ts` `populationSd`).
+- The engine subpaths take a `DatabaseSync` of `node:sqlite` or a session with one `query(sql, parameters)` method, so the package imports no database driver. `SqlServerSession` takes named parameters, a `Record`, as the SQL Server store of `@zukhruf/embedding-cache` does (`packages/embedding-cache/src/sqlserver.ts`). `PostgresSession` takes positional parameters, an array.
+
+## Considered Options
+
+- **The domain layer.** It lost: the imports of this package are all base, so the rule of e130cccd puts it in base, and a base package such as `@zukhruf/mteb` could not import a domain package.
