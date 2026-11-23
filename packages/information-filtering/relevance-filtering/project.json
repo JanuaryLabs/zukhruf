@@ -3,7 +3,7 @@
   "$schema": "../../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "packages/information-filtering/relevance-filtering/src",
   "projectType": "library",
-  "tags": ["layer:island", "std:domain"],
+  "tags": ["layer:island", "std:base"],
   "targets": {
     "eval": {
       "executor": "nx:run-commands",

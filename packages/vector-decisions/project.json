@@ -3,7 +3,7 @@
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "packages/vector-decisions/src",
   "projectType": "library",
-  "tags": ["layer:island", "std:domain"],
+  "tags": ["layer:island", "std:base"],
   "targets": {
     "test-network": {
       "executor": "nx:run-commands",

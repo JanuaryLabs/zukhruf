@@ -3,7 +3,7 @@
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "packages/mteb/src",
   "projectType": "library",
-  "tags": ["layer:island", "std:domain"],
+  "tags": ["layer:island", "std:base"],
   "targets": {
     "codecarbon-data": {
       "executor": "nx:run-commands",
