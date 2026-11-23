@@ -19,17 +19,19 @@ const run = async (source: string): Promise<unknown> => {
   return JSON.parse(stdout);
 };
 
-test('a consumer imports the package by its name, and the package has no runtime dependency', async () => {
+test('a consumer imports each subpath by its package name, and the package depends at run time only on ai and @zukhruf/vectors', async () => {
   // Act
   const result = await run(`
     const { ModelMismatchError, VectorMissingError } = await import('@zukhruf/retrieval');
+    const { SqliteBM25Retriever, SqliteEmbeddingRetriever, SqlitePassageStore } = await import('@zukhruf/retrieval/sqlite');
     const { default: manifest } = await import('@zukhruf/retrieval/package.json', { with: { type: 'json' } });
     console.log(JSON.stringify({
       modelMismatch: new ModelMismatchError(
-        { provider: 'openai', modelId: 'a', dimensions: 1 },
-        { provider: 'openai', modelId: 'b', dimensions: 1 },
+        { provider: 'openai', modelId: 'a' },
+        { provider: 'openai', modelId: 'b' },
       ).name,
       vectorMissing: new VectorMissingError('p').name,
+      sqlite: [SqliteBM25Retriever, SqliteEmbeddingRetriever, SqlitePassageStore].map((type) => type.name),
       dependencies: Object.keys(manifest.dependencies ?? {}),
     }));
   `);
@@ -38,14 +40,21 @@ test('a consumer imports the package by its name, and the package has no runtime
   assert.deepEqual(result, {
     modelMismatch: 'ModelMismatchError',
     vectorMissing: 'VectorMissingError',
-    dependencies: [],
+    sqlite: [
+      'SqliteBM25Retriever',
+      'SqliteEmbeddingRetriever',
+      'SqlitePassageStore',
+    ],
+    dependencies: ['@zukhruf/vectors', 'ai'],
   });
 });
 
-test('the built package imports only node built-ins and its own files at run time', async () => {
+test('the built package imports only node built-ins, its dependencies and its own files at run time', async () => {
   // Arrange
   const dist = join(import.meta.dirname, '..', 'dist');
-  const files = (await readdir(dist)).filter((file) => file.endsWith('.js'));
+  const files = (await readdir(dist, { recursive: true })).filter((file) =>
+    file.endsWith('.js'),
+  );
 
   // Act
   const specifiers = new Set<string>();
@@ -63,10 +72,12 @@ test('the built package imports only node built-ins and its own files at run tim
     'the scan found no imports',
   );
   assert.deepEqual(
-    [...specifiers].filter(
-      (specifier) =>
-        !specifier.startsWith('node:') && !specifier.startsWith('./'),
-    ),
-    [],
+    [...specifiers]
+      .filter(
+        (specifier) =>
+          !specifier.startsWith('node:') && !specifier.startsWith('.'),
+      )
+      .toSorted(),
+    ['@zukhruf/vectors', '@zukhruf/vectors/sqlite', 'ai'],
   );
 });

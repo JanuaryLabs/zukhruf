@@ -26,3 +26,7 @@ The leaders compose a search in three ways. LangChain nests retrievers: `Ensembl
 
 - `MaximalMarginalRelevance` reads `ScoredPassage.vector`, so its retriever runs with `includeVectors: true`. A passage without a vector is a `VectorMissingError`.
 - Each engine ships a `PassageStore` with `get(ids)` and `neighbours({ source, seq, windowSize })`.
+
+## Amendment 2026-11-23
+
+Accepted by Ezz on 2026-11-23 ("They stand"). `PassageStore.neighbours({ source, seq, windowSize })` gives the passages of the source with `seq - windowSize <= seq <= seq + windowSize`, the passage itself among them, in the order of `seq`, as Haystack's `SentenceWindowRetriever` reads its window ([sentence_window_retriever.py](https://raw.githubusercontent.com/deepset-ai/haystack/main/haystack/components/retrievers/sentence_window_retriever.py)). `get(ids)` leaves out an id that the store does not hold.

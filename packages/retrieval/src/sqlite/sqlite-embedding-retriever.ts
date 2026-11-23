@@ -1,0 +1,174 @@
+import type { DatabaseSync } from 'node:sqlite';
+
+import { type EmbeddingModel, embed, embedMany } from 'ai';
+
+import { DimensionMismatchError, Vector } from '@zukhruf/vectors';
+import { fromSql, toSql } from '@zukhruf/vectors/sqlite';
+
+import type { BatchRetriever } from '../batch-retriever.ts';
+import {
+  type ModelIdentity,
+  describe,
+  modelName,
+  parseModelIdentity,
+} from '../model-identity.ts';
+import { ModelMismatchError } from '../model-mismatch-error.ts';
+import type { RetrieveOptions } from '../retrieve-options.ts';
+import type { ScoredPassage } from '../scored-passage.ts';
+import { identifier } from './identifier.ts';
+import { passageRows } from './passage-rows.ts';
+import { where } from './where.ts';
+
+/**
+ * Ranks the passages by the cosine similarity of their vectors to the query,
+ * with `vec_distance_cosine` in the SQL of SQLite (ADR 0003). The host
+ * registers that function: it loads sqlite-vec, or calls `install()` of
+ * `@zukhruf/vectors/sqlite`.
+ */
+export class SqliteEmbeddingRetriever implements BatchRetriever {
+  readonly #database: DatabaseSync;
+  readonly #passages: string;
+  readonly #vectors: string;
+  readonly #model: EmbeddingModel;
+
+  constructor(options: {
+    readonly database: DatabaseSync;
+    readonly passages: string;
+    readonly vectors: string;
+    readonly model: EmbeddingModel;
+  }) {
+    this.#database = options.database;
+    this.#passages = identifier(options.passages);
+    this.#vectors = identifier(options.vectors);
+    this.#model = options.model;
+  }
+
+  async retrieve(
+    query: string,
+    options: RetrieveOptions = {},
+  ): Promise<ScoredPassage[]> {
+    const [passages] = await this.#retrieve(1, options, async (abortSignal) => {
+      const { embedding } = await embed({
+        model: this.#model,
+        value: query,
+        ...(abortSignal === undefined ? {} : { abortSignal }),
+      });
+      return [embedding];
+    });
+    return passages ?? [];
+  }
+
+  async retrieveMany(
+    queries: readonly string[],
+    options: RetrieveOptions = {},
+  ): Promise<ScoredPassage[][]> {
+    if (queries.length === 0) return [];
+    return this.#retrieve(queries.length, options, async (abortSignal) => {
+      const { embeddings } = await embedMany({
+        model: this.#model,
+        values: [...queries],
+        ...(abortSignal === undefined ? {} : { abortSignal }),
+      });
+      return embeddings;
+    });
+  }
+
+  async #retrieve(
+    count: number,
+    options: RetrieveOptions,
+    embedQueries: (abortSignal?: AbortSignal) => Promise<readonly number[][]>,
+  ): Promise<ScoredPassage[][]> {
+    options.abortSignal?.throwIfAborted();
+    const query = modelName(this.#model);
+    const stored = this.#storedIdentities();
+    const [first] = stored;
+    if (first === undefined) return Array.from({ length: count }, () => []);
+    const sameModel = stored.filter(
+      ({ provider, modelId }) =>
+        provider === query.provider && modelId === query.modelId,
+    );
+    const [nearest] = sameModel;
+    if (nearest === undefined) {
+      throw new ModelMismatchError(
+        { provider: first.provider, modelId: first.modelId },
+        query,
+      );
+    }
+
+    const vectors = await embedQueries(options.abortSignal);
+    options.abortSignal?.throwIfAborted();
+    const dimensions = vectors[0]?.length ?? 0;
+    const identity = sameModel.find(
+      (candidate) => candidate.dimensions === dimensions,
+    );
+    if (identity === undefined) {
+      throw new DimensionMismatchError(nearest.dimensions, dimensions);
+    }
+    return this.#search(vectors, identity, options);
+  }
+
+  /** The identities of the stored vectors, in the order of their text. */
+  #storedIdentities(): ModelIdentity[] {
+    return this.#database
+      .prepare(`SELECT DISTINCT "model" FROM ${this.#vectors} ORDER BY "model"`)
+      .all()
+      .map(({ model }) => parseModelIdentity(String(model)));
+  }
+
+  /**
+   * One SQL query for every query vector. It compares a query only with the
+   * vectors of its own model identity, and breaks a tie of distance by the
+   * passage id, as `VectorSearch` of `@zukhruf/embeddings` does.
+   */
+  #search(
+    vectors: readonly (readonly number[])[],
+    identity: ModelIdentity,
+    options: RetrieveOptions,
+  ): ScoredPassage[][] {
+    const filter = where(options.filter);
+    const statement = this.#database.prepare(`
+      WITH "queries" ("query", "vector") AS (VALUES ${vectors.map(() => '(?, ?)').join(', ')}),
+      "scored" AS (
+        SELECT q."query", v."id", v."vector", vec_distance_cosine(v."vector", q."vector") AS "distance"
+        FROM "queries" q CROSS JOIN ${this.#vectors} v JOIN ${this.#passages} p ON p."id" = v."id"
+        WHERE v."model" = ? AND ${filter.sql}
+      ),
+      "ranked" AS (
+        SELECT *, ROW_NUMBER() OVER (PARTITION BY "query" ORDER BY "distance", "id") AS "rank" FROM "scored"
+      )
+      SELECT r."query", r."distance", r."vector", p.*
+      FROM "ranked" r JOIN ${this.#passages} p ON p."id" = r."id"
+      WHERE r."rank" <= ?
+      ORDER BY r."query", r."rank"`);
+    const rows = passageRows(statement, 3, [
+      ...vectors.flatMap((vector, index) => [
+        index,
+        toSql(Vector.from(vector)),
+      ]),
+      describe(identity),
+      ...filter.parameters,
+      options.topK ?? 10,
+    ]);
+    const lists = vectors.map((): ScoredPassage[] => []);
+    for (const {
+      cells: [query, distance, vector],
+      passage,
+    } of rows) {
+      lists[Number(query)]?.push({
+        passage,
+        score: 1 - Number(distance),
+        ...(options.includeVectors === true
+          ? { vector: Array.from(fromSql(Vector, blob(vector)).values) }
+          : {}),
+      });
+    }
+    return lists;
+  }
+}
+
+function blob(value: unknown): Uint8Array {
+  if (value instanceof Uint8Array) return value;
+  throw new TypeError(
+    `A stored vector is a BLOB of float32 values, not ${String(value)}`,
+  );
+}

@@ -23,7 +23,7 @@ The object that reads passages of the contract by id and the neighbours of a pas
 _Avoid_: Document store, repository
 
 **Model identity**:
-The provider, the model id and the dimensions of the AI SDK embedding model that made a vector, as elt's Embedding rule stores it: `openai/text-embedding-3-small (1536 dimensions)` (elt `packages/embedding/README.md`). The passage vectors keep it, and an embedding retriever compares it with its query model ([ADR 0010](./docs/adr/0010-an-embedding-retriever-refuses-a-query-model-whose-identity-differs-from-the-stored-vectors.md)).
+The provider, the model id and the dimensions of the AI SDK embedding model that made a vector, as elt's Embedding rule stores it: `openai/text-embedding-3-small (1536 dimensions)` (elt `packages/embedding/README.md`). The passage vectors keep it, and an embedding retriever compares it with its query model: the provider and the model id before the model call (`ModelMismatchError`), the dimensions after it (`DimensionMismatchError` of `@zukhruf/vectors`) ([ADR 0010](./docs/adr/0010-an-embedding-retriever-refuses-a-query-model-whose-identity-differs-from-the-stored-vectors.md)).
 _Avoid_: Model name, dimension (alone: two models can have the same dimension)
 
 ### Searches

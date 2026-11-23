@@ -60,7 +60,7 @@ const results = await retriever.retrieve('rotate a key', {
 });
 ```
 
-The retriever reads the model identity of the stored vectors first. When its query model has another identity, the call fails with `ModelMismatchError` and sends no search ([ADR 0010](./docs/adr/0010-an-embedding-retriever-refuses-a-query-model-whose-identity-differs-from-the-stored-vectors.md)).
+The retriever reads the model identity of the stored vectors first. When its query model has another provider or model id, the call fails with `ModelMismatchError` and sends no model call and no search. When the query vector has other dimensions than the stored vectors, the call fails with `DimensionMismatchError` of `@zukhruf/vectors` after the model call and sends no search ([ADR 0010](./docs/adr/0010-an-embedding-retriever-refuses-a-query-model-whose-identity-differs-from-the-stored-vectors.md)).
 
 ## Search by keywords
 
@@ -185,10 +185,11 @@ On Postgres, pgvector filters after the approximate index scan, so a filtered ca
 
 ## Errors
 
-| Error                | When                                                                                         |
-| -------------------- | -------------------------------------------------------------------------------------------- |
-| `ModelMismatchError` | The query model of an embedding retriever has another model identity than the stored vectors |
-| `VectorMissingError` | `MaximalMarginalRelevance` gets a passage without a vector: the call did not ask for vectors |
+| Error                                         | When                                                                                                                      |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `ModelMismatchError`                          | The query model of an embedding retriever has another provider or model id than the stored vectors, before the model call |
+| `DimensionMismatchError` (`@zukhruf/vectors`) | The query vector has other dimensions than the stored vectors, after the model call. `expected` and `actual`              |
+| `VectorMissingError`                          | `MaximalMarginalRelevance` gets a passage without a vector: the call did not ask for vectors                              |
 
 An error of the model, of the engine or of the reranking model reaches the caller as it is. An aborted call rejects with the reason of its `abortSignal`.
 
@@ -367,8 +368,8 @@ interface PassageStore {
 }
 
 class ModelMismatchError extends Error {
-  readonly stored: { provider: string; modelId: string; dimensions: number };
-  readonly query: { provider: string; modelId: string; dimensions: number };
+  readonly stored: { provider: string; modelId: string };
+  readonly query: { provider: string; modelId: string }; // before the model call; other dimensions are DimensionMismatchError of @zukhruf/vectors (ADR 0010)
 }
 class VectorMissingError extends Error {
   readonly passageId: string;

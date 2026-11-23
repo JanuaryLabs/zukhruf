@@ -10,7 +10,7 @@ The leaders keep the two sides apart and join them by a stored contract. pgai's 
 
 - The package is the query side of RAG. It never cuts and never embeds documents. It embeds only the query.
 - It reads the **passage contract** that elt writes:
-  - passages: `id, source, seq, start, end, text` and the metadata columns of the source row;
+  - passages: `id, source, seq, start, end, text` and the metadata columns of the source row; on SQLite also an integer `rowid`, native in a rowid table or a column `AS rowid` in a view, which the keyword index joins on;
   - passage vectors: `id, vector, model`, where `model` is the model identity ([ADR 0010](./0010-an-embedding-retriever-refuses-a-query-model-whose-identity-differs-from-the-stored-vectors.md));
   - a keyword index over the same passages: FTS5 with external content on SQLite, `tsvector` with a GIN index on Postgres, a full-text index on SQL Server ([ADR 0004](./0004-a-keyword-retriever-queries-the-keyword-index-that-elt-writes.md)).
 - A `Passage` is one row of the contract: `{ id, text, source, seq, start, end, metadata }`. `source` is the key of the source row (LlamaIndex `relationships[SOURCE]`, Haystack `meta.source_id`, the pgai foreign key). `seq` is the order of the passage in its source (pgai `chunk_seq`). `start` and `end` are character offsets (LlamaIndex `start_char_idx`, `end_char_idx`; [schema.py](https://raw.githubusercontent.com/run-llama/llama_index/main/llama-index-core/llama_index/core/schema.py)).
@@ -27,3 +27,7 @@ The leaders keep the two sides apart and join them by a stored contract. pgai's 
 - elt gets the forced changes that the contract needs: a push source, one Vectorizer declaration, a keyword index dataset, a pgvector column and index on Postgres, source metadata through the passages view and a readable model identity (#5401 to #5405).
 - Cutting text moves to its own zukhruf package (#5414), not into this one.
 - A host that writes the contract by hand, without elt, works the same, because the package reads only the tables.
+
+## Amendment 2026-11-23
+
+Accepted by Ezz on 2026-11-23: the metadata ("They stand"), the key ("Integer key on passages"). A metadata column is every column of the passages other than `rowid, id, source, seq, start, end, text`, under its own name; `Passage.metadata` holds each of them, NULL as `null`. On SQLite the passages relation has an integer `rowid`, a rowid table natively or a view by an integer column `AS rowid`, because the keyword index joins on it ([ADR 0004](./0004-a-keyword-retriever-queries-the-keyword-index-that-elt-writes.md)).

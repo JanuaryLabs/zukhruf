@@ -23,3 +23,7 @@ Today exact vector search runs in three ways: `VectorSearch` of `@zukhruf/embedd
 
 - The filter of a call becomes a SQL `WHERE` in the same query ([ADR 0009](./0009-a-filter-has-the-shape-of-haystacks-filters.md)). pgvector filters after the approximate index scan, so a filtered call can give fewer than `topK` rows ([pgvector README](https://github.com/pgvector/pgvector/blob/master/README.md)).
 - The SQLite form of the batch waits on the cost probe (#5422); the SQL Server form waits on a probe of `CROSS APPLY` over `VECTOR_SEARCH`.
+
+## Amendment 2026-11-23
+
+Accepted by Ezz on 2026-11-23 ("They stand"). On SQLite, `retrieve` and `retrieveMany` run the same single statement: a `VALUES` table of the query vectors, `CROSS JOIN` the passage vectors, and `ROW_NUMBER() OVER (PARTITION BY query ORDER BY distance, id)` cut at `topK`. A tie of distance goes to the smaller passage id, as `VectorSearch` of `@zukhruf/embeddings` orders its ties, so a result is the same on every run. The measurement of #5422 may change this form; it does not change the result.

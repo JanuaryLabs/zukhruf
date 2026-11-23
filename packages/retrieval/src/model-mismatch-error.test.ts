@@ -8,12 +8,10 @@ test('ModelMismatchError holds both model identities and names them in its messa
   const stored = {
     provider: 'openai',
     modelId: 'text-embedding-3-small',
-    dimensions: 1536,
   };
   const query = {
     provider: 'openai',
     modelId: 'text-embedding-3-large',
-    dimensions: 3072,
   };
 
   // Act
@@ -24,7 +22,7 @@ test('ModelMismatchError holds both model identities and names them in its messa
   assert.equal(error.name, 'ModelMismatchError');
   assert.equal(
     error.message,
-    'The query model openai/text-embedding-3-large (3072 dimensions) is not the model of the stored vectors, openai/text-embedding-3-small (1536 dimensions)',
+    'The query model openai/text-embedding-3-large is not the model of the stored vectors, openai/text-embedding-3-small',
   );
   assert.deepEqual(error.stored, stored);
   assert.deepEqual(error.query, query);
