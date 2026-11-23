@@ -480,6 +480,8 @@ A save with a platform writes only the content of that platform. A load with a p
 
 `images.prune()` deletes the images that no container uses. The engine selects them, and the `filters` of the Engine API narrow its selection: `dangling`, `until` and `label`. With no `dangling` filter, the engine deletes only images that have no name. `dangling: ['false']` also deletes unused images that have a name. On an engine that other programs use, give a `label` filter, because a prune without one can delete their images. A filter does not protect their pulls: on the containerd image store, each prune ends each pull in progress on the engine, and that pull rejects with `lease does not exist` (the engine does this, not this package: `daemon/containerd/image_prune.go` of [Moby at 402d0a16f131](https://github.com/moby/moby/blob/402d0a16f131/daemon/containerd/image_prune.go)). Do not prune while another program pulls. `ImagesDeleted` lists each deleted image and each removed name, and it is empty when the engine deleted nothing. A second prune while one runs rejects with `DockerEngineError` and status 409.
 
+Planned, not built: `images.build(context, options)` builds an image with BuildKit through `POST /build`, from a folder, files in memory or a tar archive, and gives its `ImageID`. The caller pulls each base image first ([ADR 0016](./docs/adr/0016-an-image-build-sends-a-tar-context-to-buildkit-through-the-engine-api-and-the-caller-pulls-each-base-image-first.md), proposed, backlog #5441). Until it ships, build with the CLI ([Send the Docker CLI to the same engine](#send-the-docker-cli-to-the-same-engine)).
+
 `images.remove()` of one name of an image that has more names removes only that name. A removal of an image that a container uses, or a removal by ID of an image with more than one name, rejects with `ImageInUseError`. `auth` holds explicit credentials. The package runs no credential helper, because a helper is a program on the `PATH`.
 
 ## Events
@@ -1154,6 +1156,7 @@ Each call sends these requests of the Engine API:
 - [ADR 0013](./docs/adr/0013-a-stat-of-a-missing-path-or-container-is-undefined-in-one-request.md): a stat of a missing path or container is undefined in one request.
 - [ADR 0014](./docs/adr/0014-output-framing-follows-the-tty-setting-as-the-docker-cli-chooses-it.md): output framing follows the TTY setting, as the Docker CLI chooses it.
 - [ADR 0015](./docs/adr/0015-an-ssh-engine-is-reached-through-zukhruf-ssh-in-the-node-process.md): an SSH engine is reached through @zukhruf/ssh in the Node process.
+- [ADR 0016](./docs/adr/0016-an-image-build-sends-a-tar-context-to-buildkit-through-the-engine-api-and-the-caller-pulls-each-base-image-first.md): an image build sends a tar context to BuildKit through the Engine API, and the caller pulls each base image first (proposed).
 
 **Copied code**
 
