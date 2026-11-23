@@ -2,7 +2,7 @@
 
 > **Status: implemented.** Each call of the `## API` block works, and the tests run it on Docker Desktop (API 1.56) and on an SSH engine (API 1.51). A Windows named pipe is not proved yet (backlog #2753). The decisions are in the [ADRs](./docs/adr/). The package leads, and the repositories that use Docker change to fit it ([ADR 0003](./docs/adr/0003-the-package-leads-and-the-repositories-change.md)).
 
-A client for the Docker Engine API on Node.js. It selects the engine that the Docker CLI selects, and it sends HTTP requests to that engine with `node:http`: through a Unix socket, a Windows named pipe, or SSH, which `@zukhruf/ssh` speaks inside the Node process ([ADR 0015](./docs/adr/0015-an-ssh-engine-is-reached-through-zukhruf-ssh-in-the-node-process.md)). It needs no Docker CLI on the `PATH` of this machine; an SSH engine needs the `ssh` binary, for `ssh -G`, and a Docker CLI on the engine host. It depends on `@zukhruf/async`, `@zukhruf/ssh` (and through it on ssh2), and on [`modern-tar`](https://www.npmjs.com/package/modern-tar), which writes and reads the tar archives of the file requests. Thus a desktop app that starts from the macOS Dock can use it, and so can a test, a sandbox or a deploy tool.
+A client for the Docker Engine API on Node.js. It selects the engine that the Docker CLI selects, and it sends HTTP requests to that engine with `node:http`: through a Unix socket, a Windows named pipe, or SSH, which `@zukhruf/ssh` speaks inside the Node process ([ADR 0015](./docs/adr/0015-an-ssh-engine-is-reached-through-zukhruf-ssh-in-the-node-process.md)). It needs no Docker CLI on the `PATH` of this machine; an SSH engine needs the `ssh` binary, for `ssh -G`, and a Docker CLI on the engine host. It depends on `@zukhruf/async`, `@zukhruf/ssh` (and through it on ssh2), and on [`modern-tar`](https://www.npmjs.com/package/modern-tar), which writes and reads the tar archives of the file requests and of a build context. Thus a desktop app that starts from the macOS Dock can use it, and so can a test, a sandbox or a deploy tool.
 
 The package covers the containers of one engine and the resources around them: their images, volumes, networks, files, processes, output and events.
 
@@ -86,6 +86,7 @@ An error has its own class when a caller does something different after it: star
 | `VolumeInUseError`         | A volume removal gets 409                                                                                                                           | Remove its containers first, or wait and try again |
 | `NetworkInUseError`        | A network removal gets 403 while running containers are connected                                                                                   | Disconnect them first                              |
 | `ImageInUseError`          | An image removal gets 409                                                                                                                           | Remove its containers first, or use `force`        |
+| `BuildFailedError`         | `images.build()` reports an error in its progress: a step of the Dockerfile fails, or a base image is missing. `vertex` and `output` name the step  | Show the step and its output; pull the base first  |
 | `PathNotFoundError`        | A file request gets 404 and the container exists                                                                                                    | Use a default, or create the file                  |
 | `NotAFileError`            | `readFile()` finds a directory, a link or another kind of entry. `kind` names it                                                                    | Use `getArchive()` for the tree                    |
 | `ReadOnlyPathError`        | The engine refuses an extraction, and an inspect shows that the directory is on a read-only root filesystem or in a read-only mount                 | Write under a writable mount, or use `exec()`      |
@@ -480,9 +481,83 @@ A save with a platform writes only the content of that platform. A load with a p
 
 `images.prune()` deletes the images that no container uses. The engine selects them, and the `filters` of the Engine API narrow its selection: `dangling`, `until` and `label`. With no `dangling` filter, the engine deletes only images that have no name. `dangling: ['false']` also deletes unused images that have a name. On an engine that other programs use, give a `label` filter, because a prune without one can delete their images. A filter does not protect their pulls: on the containerd image store, each prune ends each pull in progress on the engine, and that pull rejects with `lease does not exist` (the engine does this, not this package: `daemon/containerd/image_prune.go` of [Moby at 402d0a16f131](https://github.com/moby/moby/blob/402d0a16f131/daemon/containerd/image_prune.go)). Do not prune while another program pulls. `ImagesDeleted` lists each deleted image and each removed name, and it is empty when the engine deleted nothing. A second prune while one runs rejects with `DockerEngineError` and status 409.
 
-Planned, not built: `images.build(context, options)` builds an image with BuildKit through `POST /build`, from a folder, files in memory or a tar archive, and gives its `ImageID`. The caller pulls each base image first ([ADR 0016](./docs/adr/0016-an-image-build-sends-a-tar-context-to-buildkit-through-the-engine-api-and-the-caller-pulls-each-base-image-first.md), proposed, backlog #5441). Until it ships, build with the CLI ([Send the Docker CLI to the same engine](#send-the-docker-cli-to-the-same-engine)).
-
 `images.remove()` of one name of an image that has more names removes only that name. A removal of an image that a container uses, or a removal by ID of an image with more than one name, rejects with `ImageInUseError`. `auth` holds explicit credentials. The package runs no credential helper, because a helper is a program on the `PATH`.
+
+## Build an image
+
+`images.build(context, options)` builds an image with BuildKit through `POST /build`, reads the progress to its end, and gives the `ImageID` of the image (`{ ID }`). The options have the names of the query of the Engine API: `dockerfile` (a path in the context, `Dockerfile` by default), `t` (one name or more), `buildargs`, `labels`, `platform` (`'linux/amd64'`, as `pull()` takes it), `target` and `nocache` ([ADR 0016](./docs/adr/0016-an-image-build-sends-a-tar-context-to-buildkit-through-the-engine-api-and-the-caller-pulls-each-base-image-first.md)).
+
+```ts
+import { BuildFailedError, Docker } from '@zukhruf/docker';
+
+await using docker = await Docker.connect({
+  clock: globalThis,
+  context: 'desktop-linux',
+  environment: process.env,
+});
+
+// The build has no BuildKit session: pull each base image first.
+await docker.images.pull('alpine:3.20.3', { platform: 'linux/amd64' });
+
+const dockerfile = `FROM alpine:3.20.3
+ARG GREETING
+RUN echo "$GREETING" > /greeting.txt
+`;
+const { ID } = await docker.images.build(
+  { files: [{ path: 'Dockerfile', data: dockerfile }] },
+  {
+    t: 'example/greeting:1',
+    buildargs: { GREETING: 'hello' },
+    labels: { 'example.app': 'greeting' },
+    platform: 'linux/amd64',
+  },
+);
+console.log(ID);
+
+try {
+  await docker.images.build(
+    {
+      files: [
+        {
+          path: 'Dockerfile',
+          data: 'FROM alpine:3.20.3\nRUN echo no-network; exit 3\n',
+        },
+      ],
+    },
+    { platform: 'linux/amd64' },
+  );
+} catch (error) {
+  if (!(error instanceof BuildFailedError)) throw error;
+  console.log(error.vertex);
+  console.log(error.output);
+  console.log(error.message);
+}
+await docker.images.remove('example/greeting:1');
+```
+
+The output on Docker Desktop (Engine 29.9.3):
+
+```text
+sha256:14e33ef70e470a06b1c6eabd22ed35a93130722d5877de2dafceb9a89f364de1
+[2/2] RUN echo no-network; exit 3
+no-network
+
+process "/bin/sh -c echo no-network; exit 3" did not complete successfully: exit code: 3
+```
+
+The context has three forms:
+
+| Context         | What the engine gets                                                                                                                                                                                                                                                                              |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `{ files }`     | A tar of the files in memory, owner 0:0, gzipped. A file has `path`, `data` and an optional `mode` (0o644 by default); a directory has `path`, `directory: true` and an optional `mode` (0o755 by default).                                                                                       |
+| `{ directory }` | A tar of a folder on this machine, gzipped and streamed one file at a time. Its `.dockerignore` filters it as the Docker CLI does, `!` exceptions too. The Dockerfile and `.dockerignore` are always sent. Each entry keeps its mode and mtime, gets owner 0:0, and a symbolic link stays a link. |
+| `{ archive }`   | The tar of the caller, a `ReadableStream` or a `Uint8Array`, as it is.                                                                                                                                                                                                                            |
+
+**Pull each base image first.** The build has no BuildKit session, so BuildKit cannot ask the client for registry credentials. Before Engine 29.6.0, such as the 28.0.4 of the GitHub runner `ubuntu-24.04`, a base that is not on the engine fails with `no active sessions`, also from a public registry. On each version, a base from a registry with credentials fails so. A base that is on the engine builds: when the resolve from the registry fails, BuildKit uses the local image. From 29.6.0 on, BuildKit asks the registry first. Thus `pull()` each `FROM` image with its `platform` and `auth`, then build. The call never sends `pull`, because then BuildKit does not use the local image, and it takes no `auth`. Secrets, `RUN --mount=type=ssh` and credentials inside the build need the session (backlog #5455): use the CLI for them ([Send the Docker CLI to the same engine](#send-the-docker-cli-to-the-same-engine)).
+
+**The first entry of an `archive`.** BuildKit reads the first 1024 bytes of the body. When they hold neither the magic of a compressed archive nor a whole tar header, BuildKit takes the whole body as the Dockerfile, and the build fails with `unknown instruction: PaxHeader/…`. Thus an `archive` is compressed (gzip, bzip2, xz or zstd), or its first entry needs no PAX or GNU header: a name of 100 bytes or less (or a ustar split of 155 and 100 bytes), a link target of 100 bytes or less, a user and group name of 32 bytes or less, a uid and gid of 2097151 or less, a size of less than 8 GiB, and no extended attributes. A tar from macOS `tar` with extended attributes fails so. The package gzips the `files` and `directory` bodies that it makes, so their first entry can be any entry.
+
+An error in the progress rejects with `BuildFailedError`, a `DockerEngineError` whose `status` is `undefined`, because the HTTP status was 200. `vertex` is the name of the step that failed, such as `[2/2] RUN make`, and `output` is the last 64 KiB of that step's output. A missing base image is a `BuildFailedError` too. Its message differs by engine, so no code reads it. An answer before the progress, such as 400 for a bad parameter, is a `DockerEngineError` with its status. The signal ends the request, and the engine then cancels the build. Over SSH, the context streams through the channel of the request, and the build runs on the engine host.
 
 ## Events
 
@@ -630,7 +705,7 @@ The lowest version is 1.44. From that version on, "`POST /networks/create` with 
 
 [ADR 0003](./docs/adr/0003-the-package-leads-and-the-repositories-change.md) gives the reason for each:
 
-- Image builds and Compose. Use the CLI with `docker.cliEnvironment`.
+- Compose, and image builds that need a BuildKit session: secrets, SSH mounts and registry credentials inside the build. Use the CLI with `docker.cliEnvironment`.
 - Engines on TCP.
 - Credential helpers. Give `auth` instead.
 - A stop or a time limit for one exec.
@@ -964,6 +1039,15 @@ export class OwnedNetwork extends Network implements AsyncDisposable {
   [Symbol.asyncDispose](): Promise<void>;
 }
 
+export type BuildFile =
+  | { path: string; data: string | Uint8Array; mode?: number }
+  | { path: string; directory: true; mode?: number };
+
+export type BuildContext =
+  | { directory: string }
+  | { files: BuildFile[] }
+  | { archive: ReadableStream<Uint8Array> | Uint8Array };
+
 export interface Images {
   /** undefined for 404. A platform needs API 1.49. */
   inspect(
@@ -1004,6 +1088,19 @@ export interface Images {
       platform?: EngineApi.OCIPlatform | EngineApi.OCIPlatform[];
     },
   ): Promise<void>;
+  /** Builds with BuildKit and no session: pull each base image first. An error in the progress is a BuildFailedError. */
+  build(
+    context: BuildContext,
+    options?: CancelOptions & {
+      dockerfile?: string;
+      t?: string | string[];
+      buildargs?: Record<string, string>;
+      labels?: Record<string, string>;
+      platform?: string;
+      target?: string;
+      nocache?: boolean;
+    },
+  ): Promise<EngineApi.ImageID>;
   /** Resolves for 404. */
   remove(
     reference: string,
@@ -1110,6 +1207,14 @@ export class ReadOnlyPathError extends DockerEngineError {
   readonly path: string;
 }
 
+/** An image build reported an error in its progress; status is undefined. */
+export class BuildFailedError extends DockerEngineError {
+  /** The name of the step that failed; undefined when no step reported the error. */
+  readonly vertex: string | undefined;
+  /** The last 64 KiB of the output of that step. */
+  readonly output: string;
+}
+
 /** The bodies and answers of the Engine API, with the names of its reference. Types only. */
 export type * as EngineApi from './engine-api.ts';
 ```
@@ -1118,24 +1223,24 @@ export type * as EngineApi from './engine-api.ts';
 
 Each call sends these requests of the Engine API:
 
-| Call                                                                                   | Request                                                                                                                                                                                                            |
-| -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `Docker.connect()`                                                                     | `GET /_ping`                                                                                                                                                                                                       |
-| `docker.info()`, `docker.events()`                                                     | `GET /info`, `GET /events`                                                                                                                                                                                         |
-| `containers.create()`, `createOrGet()`                                                 | `POST /containers/create`, and `GET /containers/{id}/json` after a 409                                                                                                                                             |
-| `containers.run()`                                                                     | `create`, `attach`, `start`, `wait`, `DELETE /containers/{id}`                                                                                                                                                     |
-| `containers.find()`, `containers.inspect()`, `container.inspect()`, `container.port()` | `GET /containers/{id}/json`                                                                                                                                                                                        |
-| `containers.list()`                                                                    | `GET /containers/json`                                                                                                                                                                                             |
-| `start()`, `stop()`, `restart()`, `kill()`, `pause()`, `unpause()`, `wait()`           | `POST /containers/{id}/start`, `/stop`, `/restart`, `/kill`, `/pause`, `/unpause`, `/wait`                                                                                                                         |
-| `container.remove()`                                                                   | `DELETE /containers/{id}`                                                                                                                                                                                          |
-| `container.logs()`, `followLogs()`                                                     | `GET /containers/{id}/logs`                                                                                                                                                                                        |
-| `container.attach()`                                                                   | `POST /containers/{id}/attach` (hijacked)                                                                                                                                                                          |
-| `container.exec()`, `spawn()`                                                          | `POST /containers/{id}/exec`, `POST /exec/{id}/start` (hijacked), `GET /exec/{id}/json`                                                                                                                            |
-| `container.stat()`, `readFile()`, `getArchive()`                                       | `HEAD`, `GET /containers/{id}/archive`                                                                                                                                                                             |
-| `container.writeFiles()`, `putArchive()`                                               | `PUT /containers/{id}/archive`                                                                                                                                                                                     |
-| `volumes.*`, `volume.*`                                                                | `POST /volumes/create`, `GET /volumes/{name}`, `GET /volumes`, `DELETE /volumes/{name}`                                                                                                                            |
-| `networks.*`, `network.*`                                                              | `POST /networks/create`, `GET /networks/{id}`, `GET /networks`, `POST /networks/{id}/connect`, `/disconnect`, `DELETE /networks/{id}`                                                                              |
-| `images.*`                                                                             | `GET /images/{name}/json`, `GET /images/json`, `POST /images/create`, `POST /images/{name}/tag`, `POST /images/{name}/push`, `GET /images/get`, `POST /images/load`, `DELETE /images/{name}`, `POST /images/prune` |
+| Call                                                                                   | Request                                                                                                                                                                                                                           |
+| -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Docker.connect()`                                                                     | `GET /_ping`                                                                                                                                                                                                                      |
+| `docker.info()`, `docker.events()`                                                     | `GET /info`, `GET /events`                                                                                                                                                                                                        |
+| `containers.create()`, `createOrGet()`                                                 | `POST /containers/create`, and `GET /containers/{id}/json` after a 409                                                                                                                                                            |
+| `containers.run()`                                                                     | `create`, `attach`, `start`, `wait`, `DELETE /containers/{id}`                                                                                                                                                                    |
+| `containers.find()`, `containers.inspect()`, `container.inspect()`, `container.port()` | `GET /containers/{id}/json`                                                                                                                                                                                                       |
+| `containers.list()`                                                                    | `GET /containers/json`                                                                                                                                                                                                            |
+| `start()`, `stop()`, `restart()`, `kill()`, `pause()`, `unpause()`, `wait()`           | `POST /containers/{id}/start`, `/stop`, `/restart`, `/kill`, `/pause`, `/unpause`, `/wait`                                                                                                                                        |
+| `container.remove()`                                                                   | `DELETE /containers/{id}`                                                                                                                                                                                                         |
+| `container.logs()`, `followLogs()`                                                     | `GET /containers/{id}/logs`                                                                                                                                                                                                       |
+| `container.attach()`                                                                   | `POST /containers/{id}/attach` (hijacked)                                                                                                                                                                                         |
+| `container.exec()`, `spawn()`                                                          | `POST /containers/{id}/exec`, `POST /exec/{id}/start` (hijacked), `GET /exec/{id}/json`                                                                                                                                           |
+| `container.stat()`, `readFile()`, `getArchive()`                                       | `HEAD`, `GET /containers/{id}/archive`                                                                                                                                                                                            |
+| `container.writeFiles()`, `putArchive()`                                               | `PUT /containers/{id}/archive`                                                                                                                                                                                                    |
+| `volumes.*`, `volume.*`                                                                | `POST /volumes/create`, `GET /volumes/{name}`, `GET /volumes`, `DELETE /volumes/{name}`                                                                                                                                           |
+| `networks.*`, `network.*`                                                              | `POST /networks/create`, `GET /networks/{id}`, `GET /networks`, `POST /networks/{id}/connect`, `/disconnect`, `DELETE /networks/{id}`                                                                                             |
+| `images.*`                                                                             | `GET /images/{name}/json`, `GET /images/json`, `POST /images/create`, `POST /images/{name}/tag`, `POST /images/{name}/push`, `GET /images/get`, `POST /images/load`, `DELETE /images/{name}`, `POST /images/prune`, `POST /build` |
 
 ## Documentation
 
@@ -1156,7 +1261,7 @@ Each call sends these requests of the Engine API:
 - [ADR 0013](./docs/adr/0013-a-stat-of-a-missing-path-or-container-is-undefined-in-one-request.md): a stat of a missing path or container is undefined in one request.
 - [ADR 0014](./docs/adr/0014-output-framing-follows-the-tty-setting-as-the-docker-cli-chooses-it.md): output framing follows the TTY setting, as the Docker CLI chooses it.
 - [ADR 0015](./docs/adr/0015-an-ssh-engine-is-reached-through-zukhruf-ssh-in-the-node-process.md): an SSH engine is reached through @zukhruf/ssh in the Node process.
-- [ADR 0016](./docs/adr/0016-an-image-build-sends-a-tar-context-to-buildkit-through-the-engine-api-and-the-caller-pulls-each-base-image-first.md): an image build sends a tar context to BuildKit through the Engine API, and the caller pulls each base image first (proposed).
+- [ADR 0016](./docs/adr/0016-an-image-build-sends-a-tar-context-to-buildkit-through-the-engine-api-and-the-caller-pulls-each-base-image-first.md): an image build sends a tar context to BuildKit through the Engine API, and the caller pulls each base image first.
 
 **Copied code**
 

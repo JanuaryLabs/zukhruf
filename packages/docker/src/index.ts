@@ -13,6 +13,7 @@ export { type ConnectOptions, Docker } from './docker.ts';
 export { type ParsedHost, type SshHost, parseHost } from './host.ts';
 export {
   BindSourceNotFoundError,
+  BuildFailedError,
   ClientDisposedError,
   ConnectionFailedError,
   ContainerNotFoundError,
@@ -35,6 +36,7 @@ export {
   VolumeInUseError,
   VolumeNotFoundError,
 } from './errors.ts';
+export type { BuildContext, BuildFile } from './build-context.ts';
 export type { Images } from './images.ts';
 export { Network, type Networks, OwnedNetwork } from './networks.ts';
 export type { OutputChunk } from './multiplexed-stream.ts';

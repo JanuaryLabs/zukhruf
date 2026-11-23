@@ -64,7 +64,7 @@ export class Docker implements AsyncDisposable {
       DOCKER_CONTEXT: undefined,
     });
     this.#client = client;
-    this.images = new Images(client);
+    this.images = new Images(client, clock);
     this.containers = new Containers(client, this.images, clock);
     this.volumes = new Volumes(client);
     this.networks = new Networks(client);

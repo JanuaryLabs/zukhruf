@@ -1,5 +1,7 @@
 # The package leads, and the repositories change
 
+Superseded in part on 2026-11-23 by [ADR 0016](./0016-an-image-build-sends-a-tar-context-to-buildkit-through-the-engine-api-and-the-caller-pulls-each-base-image-first.md) for image builds: `images.build()` builds an image through the Engine API, and only Compose and the builds that need the session stay with the CLI.
+
 The first design of this package came from its call sites. Each part was to ship with the first repository that used it. A capability with no user waited "until a consumer needs it". That design kept the habits of the copies: handles that find a container by its name, and files that move as base64 text through an exec. The copies have these habits because the Docker CLI gave them no better way. The habits do not come from Docker.
 
 On 2026-10-20 the maintainer decided the other way: "this new package drive the other repos not the otherwise". The package follows the Engine API, and the repositories that use Docker change to fit it.

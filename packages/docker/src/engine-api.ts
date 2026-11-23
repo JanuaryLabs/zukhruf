@@ -477,6 +477,11 @@ export interface ImagePruneResponse {
   SpaceReclaimed: number;
 }
 
+/** The image of POST /build, from its `moby.image.id` progress message. */
+export interface ImageID {
+  ID: string;
+}
+
 /** One image of GET /images/json. */
 export interface ImageSummary {
   Id: string;

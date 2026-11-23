@@ -407,3 +407,28 @@ export class ReadOnlyPathError extends DockerEngineError {
     this.path = path;
   }
 }
+
+/**
+ * An image build reported an error in its progress, after the status 200: a
+ * step of the Dockerfile failed, or a base image is missing. The caller shows
+ * the step and its output, and does not try again (ADR 0016).
+ */
+export class BuildFailedError extends DockerEngineError {
+  /** The name of the step that failed, such as `[2/2] RUN make`; undefined when no step reported the error. */
+  readonly vertex: string | undefined;
+  /** The output of that step, up to its last 64 KiB. */
+  readonly output: string;
+
+  constructor(
+    message: string,
+    answer: EngineAnswer,
+    vertex: string | undefined,
+    output: string,
+    options?: ErrorOptions,
+  ) {
+    super(message, answer, options);
+    this.name = 'BuildFailedError';
+    this.vertex = vertex;
+    this.output = output;
+  }
+}

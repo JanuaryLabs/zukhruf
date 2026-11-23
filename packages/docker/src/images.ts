@@ -1,5 +1,9 @@
 import { Readable } from 'node:stream';
 
+import type { WallClock } from '@zukhruf/async';
+
+import { type BuildContext, buildContextBody } from './build-context.ts';
+import { readBuildProgress } from './build-progress.ts';
 import type * as EngineApi from './engine-api.ts';
 import { type EngineClient, isSuccess, parseBody } from './engine-client.ts';
 import {
@@ -44,9 +48,12 @@ type PlatformOption = EngineApi.OCIPlatform | EngineApi.OCIPlatform[];
 /** The images of one engine. Images have no owner, so no handle removes one on disposal. */
 export class Images {
   readonly #client: EngineClient;
+  /** The clock of the mtime of the files of a build context in memory. */
+  readonly #clock: WallClock;
 
-  constructor(client: EngineClient) {
+  constructor(client: EngineClient, clock: WallClock) {
     this.#client = client;
+    this.#clock = clock;
   }
 
   /** The platform query of save() and load(): one platform needs API 1.48, more than one needs 1.52. */
@@ -232,6 +239,54 @@ export class Images {
       signal: options.signal,
     });
     await readProgress(progress, { method, path });
+  }
+
+  /**
+   * Builds an image with BuildKit and reads the progress of the engine to its
+   * end. The build has no BuildKit session, so the caller pulls each base
+   * image first: the build uses the image on the engine (ADR 0016). An error
+   * in the progress is a BuildFailedError. The signal ends the request, and
+   * the engine then cancels the build.
+   */
+  async build(
+    context: BuildContext,
+    options: CancelOptions & {
+      /** The path of the Dockerfile in the context; 'Dockerfile' by default. */
+      dockerfile?: string;
+      /** The names of the image, 'name:tag'. */
+      t?: string | string[];
+      buildargs?: Record<string, string>;
+      labels?: Record<string, string>;
+      /** 'linux/amd64', as pull() takes it. */
+      platform?: string;
+      /** The stage of a multi-stage Dockerfile to build. */
+      target?: string;
+      nocache?: boolean;
+    } = {},
+  ): Promise<EngineApi.ImageID> {
+    const { dockerfile = 'Dockerfile', t, buildargs, labels, signal } = options;
+    const method = 'POST';
+    const path = '/build';
+    // Never `pull`: it makes BuildKit resolve each base from the registry, and
+    // not use the image that the caller pulled (ADR 0016, decision 1).
+    const progress = await this.#client.stream(method, path, {
+      query: {
+        version: '2',
+        dockerfile,
+        t: t === undefined ? undefined : [t].flat(),
+        buildargs: buildargs && JSON.stringify(buildargs),
+        labels: labels && JSON.stringify(labels),
+        platform: options.platform,
+        target: options.target,
+        nocache: options.nocache,
+      },
+      content: {
+        type: 'application/x-tar',
+        data: buildContextBody(context, dockerfile, this.#clock),
+      },
+      signal,
+    });
+    return readBuildProgress(progress, { method, path });
   }
 
   /** Resolves for 404. A 409 is an ImageInUseError: a container uses the image, or, by ID, several names refer to it. */

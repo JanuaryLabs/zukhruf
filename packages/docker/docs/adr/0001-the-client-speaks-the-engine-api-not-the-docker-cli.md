@@ -1,5 +1,7 @@
 # The client speaks the Engine API, not the Docker CLI
 
+Superseded in part on 2026-11-23 by [ADR 0016](./0016-an-image-build-sends-a-tar-context-to-buildkit-through-the-engine-api-and-the-caller-pulls-each-base-image-first.md) for image builds: `images.build()` sends a tar context to BuildKit through `POST /build`, with no session, and the caller pulls each base image first. Compose and the builds that need the session stay with the CLI.
+
 On 2026-10-20, a search of 13 repositories found about 90 files that talk to Docker. They reach the engine in three ways:
 
 - **The Docker CLI**, through `nano-spawn`, `execa` or `execFile`. `@zukhruf/testing/docker`, the sandbox of `@deepagents/context`, the volume adapter of text2sql, finetuning and april do this. Each one turns the text on standard error into errors with regular expressions: `docker.ts` and `container.ts` of `@zukhruf/testing` and its global setup, `docker-sandbox.ts:311`, `:533-549` and `:917` of `@deepagents/context`, and `volume-adapter.ts:57-69` of text2sql. That makes more than 11 expressions in three homes.

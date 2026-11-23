@@ -88,6 +88,10 @@ _Avoid_: EOF write, half-close (one way to make the end on one kind of host)
 A tar stream of files that the engine reads from a container or writes into it, through `/containers/{id}/archive`. `docker cp` uses the same requests.
 _Avoid_: Tarball, copy
 
+**Build context**:
+The files that an image build can read, which `images.build()` sends to the engine as one tar archive in the body of `POST /build`: files in memory, a folder filtered by its `.dockerignore`, or a tar archive of the caller ([ADR 0016](./docs/adr/0016-an-image-build-sends-a-tar-context-to-buildkit-through-the-engine-api-and-the-caller-pulls-each-base-image-first.md)). It is not a **Context**.
+_Avoid_: Context (that is a name for a host)
+
 **Event**:
 A message of `GET /events`: an action of the engine on a container, image, volume or network, such as `start` or `health_status: healthy`.
 _Avoid_: Notification
