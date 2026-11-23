@@ -23,6 +23,8 @@ interface Script {
   losers?: Array<(reason: Error) => void>;
   /** Thrown by each watch: the backend could not start to watch its claim. */
   watchFails?: Error;
+  /** Thrown by each watch's disposer: the backend could not stop watching its claim. */
+  unwatchFails?: Error;
   recordFails?: Error;
   /** Runs inside `release`, before it answers. */
   duringRelease?: () => Promise<void>;
@@ -85,6 +87,7 @@ class ScriptedElection extends LeaderElection<number> {
       [Symbol.dispose]: () => {
         this.#script.lose?.removeEventListener('abort', expire);
         this.steps.push(`unwatch ${claim}`);
+        if (this.#script.unwatchFails) throw this.#script.unwatchFails;
       },
     };
   }
@@ -174,6 +177,67 @@ describe('A term that its backend takes away', () => {
       emitWarning.mock.calls.map((call) => call.arguments),
       [[freeing]],
     );
+  });
+
+  test('a lost term whose watch fails to stop still ends: each resign resolves, gives nothing up, and frees the claim once; the watch’s failure is a process warning', async (t) => {
+    // Arrange: stopping the watch fails, as a backend whose watcher already broke can.
+    const emitWarning = t.mock.method(process, 'emitWarning', () => {});
+    const unwatching = new Error('The watcher of the claim already broke');
+    const lease = new AbortController();
+    const election = new ScriptedElection(globalThis, {
+      lose: lease.signal,
+      unwatchFails: unwatching,
+    });
+    const term = await election.campaign();
+    assert.ok(term);
+    lease.abort();
+
+    // Act
+    const first = await settle(term.resign());
+    const second = await settle(term.resign());
+
+    // Assert
+    assert.deepEqual(first, { value: undefined });
+    assert.deepEqual(second, { value: undefined });
+    assert.deepEqual(
+      election.steps.filter((step) => /unwatch|release|close/.test(step)),
+      ['unwatch 1', 'close 1'],
+    );
+    assert.deepEqual(
+      emitWarning.mock.calls.map((call) => call.arguments),
+      [[unwatching]],
+    );
+  });
+
+  test('a lost term whose watch fails to stop and whose claim fails to free still ends, and its one warning is a SuppressedError of the close’s failure over the watch’s', async (t) => {
+    // Arrange: both steps fail, as they can when the connection to the backend is gone.
+    const emitWarning = t.mock.method(process, 'emitWarning', () => {});
+    const unwatching = new Error('The watcher of the claim already broke');
+    const freeing = new Error('The connection to the backend is gone');
+    const lease = new AbortController();
+    const election = new ScriptedElection(globalThis, {
+      lose: lease.signal,
+      unwatchFails: unwatching,
+      closeFails: freeing,
+    });
+    const term = await election.campaign();
+    assert.ok(term);
+    lease.abort();
+
+    // Act
+    const resigned = await settle(term.resign());
+
+    // Assert
+    assert.deepEqual(resigned, { value: undefined });
+    assert.deepEqual(
+      election.steps.filter((step) => /unwatch|release|close/.test(step)),
+      ['unwatch 1', 'close 1'],
+    );
+    assert.equal(emitWarning.mock.callCount(), 1);
+    const [warning] = emitWarning.mock.calls[0]?.arguments ?? [];
+    assert.ok(warning instanceof SuppressedError);
+    assert.equal(warning.error, freeing);
+    assert.equal(warning.suppressed, unwatching);
   });
 
   test('a loss that comes while the term resigns changes nothing: the signal stays quiet, and the claim is given up and freed once', async () => {

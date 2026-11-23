@@ -118,21 +118,23 @@ export class Term implements Lease, AsyncDisposable {
 
   /**
    * A lost claim is no longer this term's to give up: a release could undo
-   * the next leader's claim. Only its resources are freed, and a loss has no
-   * caller to report a failure to, so a failure to free them is a process
-   * warning.
+   * the next leader's claim. It only stops watching and frees the claim's
+   * resources. A loss has no caller to report a failure to, so a failure of
+   * either step is a process warning, and the term still ends. When both
+   * fail, the warning is a `SuppressedError` of the failure to free over the
+   * failure to stop watching.
    */
   async #freeLost(): Promise<void> {
     try {
+      await using freeing = new AsyncDisposableStack();
+      freeing.defer(() => this.#steps.close());
       this.#watching.dispose();
-    } finally {
-      await this.#steps.close().catch((error: unknown) => {
-        process.emitWarning(
-          Error.isError(error)
-            ? error
-            : new Error(String(error), { cause: error }),
-        );
-      });
+    } catch (error) {
+      process.emitWarning(
+        Error.isError(error)
+          ? error
+          : new Error(String(error), { cause: error }),
+      );
     }
   }
 }
