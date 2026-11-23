@@ -1,6 +1,6 @@
 # @zukhruf/retrieval
 
-> Design on paper, for review: no code exists yet. Ezz approved the API on 2026-11-23 ("Approve, write the paper"). The ADRs with the status Proposed wait for his review (backlog #5399). Each example below shows the planned API.
+> Design on paper, for review: no code exists yet. Ezz approved the API on 2026-11-23 ("Approve, write the paper"). He ruled on each ADR the same day; all are accepted (backlog #5399). Each example below shows the planned API.
 
 This package is the query side of retrieval-augmented generation (RAG). A query goes in. The best passages come out, best first, each with a score that is higher for a better passage. The package never cuts or embeds documents: elt writes the passages, their vectors with the model identity, and a keyword index ([ADR 0001](./docs/adr/0001-the-package-is-the-query-side-of-rag-and-reads-a-passage-contract-that-elt-writes.md)).
 

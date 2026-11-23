@@ -1,6 +1,6 @@
 # The package is @zukhruf/retrieval, and its port is Retriever with retrieve, after Go
 
-Status: Proposed 2026-11-23 for the owner's review (backlog #5399). Ezz left the home to the agent: "it doesn't really matter now. your call".
+Status: accepted by Ezz on 2026-11-23 ("Accept"). Ezz left the home to the agent: "it doesn't really matter now. your call".
 
 The workspace takes the scope and name of a new package from Go and .NET. Go has no retrieval package in the standard library or in `golang.org/x`. The leading Go libraries agree on **Retriever**: CloudWeGo Eino `components/retriever` with `Retriever.Retrieve(ctx, query, opts...)` and the options `TopK` and `ScoreThreshold` ([eino retriever](https://pkg.go.dev/github.com/cloudwego/eino/components/retriever)); Genkit `go/ai` `Retriever` with `Retrieve` ([genkit ai](https://pkg.go.dev/github.com/firebase/genkit/go/ai)); langchaingo `schema.Retriever` with `GetRelevantDocuments` ([langchaingo schema](https://pkg.go.dev/github.com/tmc/langchaingo/schema)). .NET says **Search**: `Microsoft.SemanticKernel.Data` `ITextSearch.SearchAsync` ([text search abstractions](https://learn.microsoft.com/en-us/semantic-kernel/concepts/text-search/text-search-abstractions)) and `Microsoft.Extensions.VectorData` `SearchAsync` ([vector search](https://learn.microsoft.com/en-us/dotnet/ai/vector-stores/vector-search)). No Microsoft NuGet package is named Retrieval (search of 2026-11-23).
 

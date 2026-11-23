@@ -1,6 +1,6 @@
 # A retriever is a port for any source
 
-Status: Proposed 2026-11-23 for the owner's review (backlog #5399).
+Status: accepted by Ezz on 2026-11-23 ("Accept").
 
 The engine retrievers of this package read the passage contract ([ADR 0001](./0001-the-package-is-the-query-side-of-rag-and-reads-a-passage-contract-that-elt-writes.md)). A host can also have passages that no table holds: a web search or the API of a product. The leaders give both kinds one interface. Semantic Kernel has `ITextSearch` for web search engines, vector stores and other sources ([text search abstractions](https://learn.microsoft.com/en-us/semantic-kernel/concepts/text-search/text-search-abstractions)), with `VectorStoreTextSearch` over a vector store ([text search with vector stores](https://learn.microsoft.com/en-us/semantic-kernel/concepts/text-search/text-search-vector-stores)). LangChain's `BaseRetriever` is a `Runnable<string, Document[]>` that any class can implement ([retrievers/index.ts](https://raw.githubusercontent.com/langchain-ai/langchainjs/main/libs/langchain-core/src/retrievers/index.ts)); the ruling of #5399 names its Arxiv and Wikipedia retrievers. LlamaIndex has `BaseRetriever.retrieve` ([base_retriever.py](https://raw.githubusercontent.com/run-llama/llama_index/main/llama-index-core/llama_index/core/base/base_retriever.py)).
 
