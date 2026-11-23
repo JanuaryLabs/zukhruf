@@ -28,7 +28,7 @@ Start with the [project README](../README.md). The glossary is in [CONTEXT.md](.
 4. [Worker threads that share a lock](./recipes/worker-threads.md)
 5. [Protect a database from stale holders](./recipes/fence-a-database.md)
 6. [Survive a crashed holder](./recipes/survive-a-crashed-holder.md)
-7. [Run a job in only one process](../../election/docs/recipes/singleton-job-with-leader-election.md), in `@zukhruf/election`
+7. [Run a job in only one process](./recipes/run-a-job-in-only-one-process.md), with `LeaderSelector` and `@zukhruf/election`
 8. [Write your own lock store](./recipes/write-your-own-lock-store.md)
 9. [Skip a job that is already running](./recipes/skip-a-job-that-is-already-running.md)
 10. [Compute a value once and share it](./recipes/compute-once-and-share-it.md)
@@ -37,7 +37,7 @@ Start with the [project README](../README.md). The glossary is in [CONTEXT.md](.
 ## Architecture decision records
 
 1. [Every process is a candidate](./adr/0001-every-process-is-a-candidate.md)
-2. [Leader election is not part of the mutex](./adr/0002-election-is-not-part-of-the-mutex.md)
+2. [Leader election is not part of the mutex](./adr/0002-election-is-not-part-of-the-mutex.md) (superseded in part by ADR 0034)
 3. [A fencing token on every lease](./adr/0003-a-fencing-token-on-every-lease.md)
 4. [When the parent stops, held keys stay held](./adr/0004-parent-stops-held-keys-stay.md)
 5. [Threads use a coordinator, not Web Locks](./adr/0005-threads-use-a-coordinator-not-web-locks.md)
@@ -69,6 +69,7 @@ Start with the [project README](../README.md). The glossary is in [CONTEXT.md](.
 31. [A follower observes the leader, so a frozen leader is ended](./adr/0031-a-follower-observes-the-leader-so-a-frozen-leader-is-ended.md) (superseded in part by ADR 0033)
 32. [A cancelled waiter of the memory store leaves the line](./adr/0032-a-cancelled-waiter-of-the-memory-store-leaves-the-line.md)
 33. [A new leader grants nothing until each recorded session reasserted its keys, stopped, or missed its lease](./adr/0033-a-new-leader-grants-nothing-until-each-recorded-session-reasserted-its-keys-stopped-or-missed-its-lease.md)
+34. [A leader selector of the mutex runs a task each time it leads, and requeues as Apache Curator does](./adr/0034-a-leader-selector-of-the-mutex-runs-a-task-each-time-it-leads-and-requeues-as-apache-curator-does.md)
 
 ## Copied code
 

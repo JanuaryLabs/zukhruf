@@ -1,5 +1,10 @@
 export { Mutex } from './mutex/mutex.ts';
 export { Key } from './mutex/key.ts';
+export {
+  LeaderSelector,
+  type LeaderSelectorListener,
+  type LeaderSelectorOptions,
+} from './leader-selector/leader-selector.ts';
 export { leaseFor, type LockHandle } from './mutex/lease.ts';
 export type { AcquireOptions, LockStore } from './mutex/lock-store.ts';
 export { LeaseLostError } from '@zukhruf/lease';

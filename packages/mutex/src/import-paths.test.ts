@@ -80,6 +80,7 @@ test('each lock-store family has its own import path with its stores and the err
 test('the root import path has only the core and no lock store', async () => {
   assert.deepEqual(await exportsOf('@zukhruf/mutex'), [
     'Key',
+    'LeaderSelector',
     'LeaseLostError',
     'Modes',
     'Mutex',

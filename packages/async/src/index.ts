@@ -1,4 +1,5 @@
 export { Backoff, type BackoffOptions, type Jitter } from './backoff.ts';
+export { BackgroundService } from './background-service.ts';
 export { type Clock, type WallClock } from './clock.ts';
 export { Cond } from './cond.ts';
 export { delay, type DelayOptions } from './delay.ts';

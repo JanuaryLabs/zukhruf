@@ -57,6 +57,7 @@ next term: 2n
 - The directory must be on a local file system. On a network file system, `campaign` rejects with `NetworkDirectoryError`.
 - A try never blocks the process. Between two tries, a candidate waits on pushes from the leader, not on a period ([A leader that hangs](#a-leader-that-hangs)).
 - `clock` is the clock that the campaign waits on, and that measures its `timeout`, the heartbeats of a leader and the deadline of a reader. It is required. Give `globalThis` in production. A test gives a fake clock, for example `createClock()` of `@sinonjs/fake-timers`, and moves the time of the campaign without a real wait ([`@zukhruf/async`](../async/README.md#run-a-wait-on-a-clock)).
+- To run a job each time this process leads, and to campaign again after each term, use `LeaderSelector` of `@zukhruf/mutex`. It resigns the term when the job ends, and its dispose waits for the job ([Run a job in only one process](../mutex/docs/recipes/run-a-job-in-only-one-process.md)).
 
 ## A leader that hangs
 
@@ -302,7 +303,7 @@ export { LeaseLostError } from '@zukhruf/lease';
 ## Documentation
 
 - [How SqliteElection elects a leader](./docs/concepts/leader-election.md)
-- [Recipe: Run a job in only one process](./docs/recipes/singleton-job-with-leader-election.md)
+- [Recipe: Run a job in only one process](../mutex/docs/recipes/run-a-job-in-only-one-process.md), with `LeaderSelector` of `@zukhruf/mutex`
 - [Own one item at a time, and skip an item that another process owns](./docs/recipes/skip-work-that-another-process-owns.md)
 - [ADR 0001: Leader election is a package, and each backend is a subclass of one campaign](./docs/adr/0001-leader-election-is-a-package-and-each-backend-is-a-subclass.md)
 - [ADR 0002: A term is a lease on leadership, with no fencing](./docs/adr/0002-a-term-is-a-lease-on-leadership-with-no-fencing.md)

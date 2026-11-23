@@ -515,6 +515,34 @@ The wall time can jump, for example when a time server sets it. `performance.now
 
 See [ADR 0005](./docs/adr/0005-a-wait-runs-on-the-clock-that-the-caller-gives.md).
 
+## Own work that runs until you stop it, with a background service
+
+A caller starts work that runs until the caller stops it, for example a loop that watches a store. `BackgroundService.start(execute)` runs `execute(signal)` at once. A dispose aborts the signal, and waits for the end of the work. Put the service in the `AsyncDisposableStack` of the program, not in a module variable.
+
+```ts
+import { BackgroundService } from '@zukhruf/async';
+
+await using resources = new AsyncDisposableStack();
+const watching = resources.use(
+  BackgroundService.start((signal) => watchStore({ signal })),
+);
+watching.ended.catch((error: unknown) => {
+  console.error(error);
+  process.exitCode = 1;
+});
+```
+
+| Call                                   | What happens                                                                                                                                                                            |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `BackgroundService.start(execute)`     | Calls `execute(signal)` in the same step. A sync throw of `execute` is a failure of the work, as in `Future.run`.                                                                       |
+| `service.ended`                        | A wait on the end: it resolves when the work ends, and rejects with its failure. A failure that nobody reads leaves no unhandled rejection, because a future holds it.                  |
+| `await service[Symbol.asyncDispose]()` | Aborts the signal with an `AbortError`, then waits for the end. It rejects with the failure of the work, if one came. A second dispose waits for the first.                             |
+| The work rejects after the stop        | A rejection whose reason is `signal.reason` is a clean end: `ended` resolves. Each other rejection is a failure, also after the stop.                                                   |
+| The work fails before the stop         | `ended` rejects. The service does not start the work again: the owner decides what comes next, for example `process.exit(1)`, as `StopHost`, the default of .NET.                       |
+| The work ignores the signal            | The dispose waits until the work ends. The limit of a shutdown belongs to the owner, for example `Shutdown` of [`@zukhruf/shutdown`](../shutdown/README.md) or the timeout of terminus. |
+
+The service does not acquire anything again. To run work while this process holds a key of [`@zukhruf/mutex`](../mutex/README.md) or leads an election of [`@zukhruf/election`](../election/README.md), and to wait for it again after a loss, use `LeaderSelector` of `@zukhruf/mutex`. It runs its rounds in a background service ([mutex ADR 0034](../mutex/docs/adr/0034-a-leader-selector-of-the-mutex-runs-a-task-each-time-it-leads-and-requeues-as-apache-curator-does.md)).
+
 ## Errors
 
 | Error                                       | When                                                                                                                                                                                                                                                                                                                                                                                                                                |
@@ -525,17 +553,18 @@ See [ADR 0005](./docs/adr/0005-a-wait-runs-on-the-clock-that-the-caller-gives.md
 
 ## The same concepts in other systems
 
-| Concept    | Other systems                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Future     | Java [`CompletableFuture`](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/CompletableFuture.html), Scala `Promise` and `Future`, Rust futures. .NET names it `TaskCompletionSource`, and Kotlin `CompletableDeferred` ([ADR 0014](./docs/adr/0014-a-future-keeps-its-failure-as-data-and-only-a-wait-rejects.md))                                                                                   |
-| Wait group | Go [`sync.WaitGroup`](https://pkg.go.dev/sync#WaitGroup). Java `CountDownLatch` and .NET `CountdownEvent` cannot count up after zero ([ADR 0015](./docs/adr/0015-a-wait-group-counts-disposable-tokens-and-may-count-up-again-after-zero.md))                                                                                                                                                                                          |
-| Token      | `TaskTrackerToken` of tokio_util ([ADR 0015](./docs/adr/0015-a-wait-group-counts-disposable-tokens-and-may-count-up-again-after-zero.md))                                                                                                                                                                                                                                                                                              |
-| Cond       | Go [`sync.Cond`](https://pkg.go.dev/sync#Cond), without its lock. tokio `Notify` keeps a permit for a later wait, and Python `asyncio.Condition` and Java `Condition` hold a lock ([ADR 0016](./docs/adr/0016-a-cond-wakes-the-waits-that-started-before-a-broadcast-and-keeps-nothing-for-a-later-wait.md))                                                                                                                           |
-| Ref count  | `uv_ref` and `uv_unref` of libuv (`src/uv-common.h`), a flag and not a count; `Control#refCounted` and `#unrefCounted` of Node.js for the IPC channel of a child process (`lib/internal/child_process.js`) ([ADR 0017](./docs/adr/0017-a-ref-count-holds-a-handle-ref-d-while-work-holds-a-token.md))                                                                                                                                  |
-| Jitter     | The ratio jitter of [cenkalti/backoff](https://github.com/cenkalti/backoff) and of the [gRPC connection backoff](https://github.com/grpc/grpc/blob/master/doc/connection-backoff.md); the full and the equal jitter of [AWS, "Exponential Backoff And Jitter"](https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/) ([ADR 0011](./docs/adr/0011-a-back-off-gives-the-wait-before-a-retry-and-keeps-no-state.md)) |
-| Timeout    | [`AbortSignal.timeout`](https://developer.mozilla.org/en-US/docs/Web/API/AbortSignal/timeout_static), on the real clock only                                                                                                                                                                                                                                                                                                           |
-| Delay      | `setTimeout` of [`node:timers/promises`](https://nodejs.org/api/timers.html), on the real clock only                                                                                                                                                                                                                                                                                                                                   |
-| Clock      | [`TimeProvider`](https://learn.microsoft.com/en-us/dotnet/api/system.timeprovider) of .NET                                                                                                                                                                                                                                                                                                                                             |
+| Concept            | Other systems                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Future             | Java [`CompletableFuture`](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/CompletableFuture.html), Scala `Promise` and `Future`, Rust futures. .NET names it `TaskCompletionSource`, and Kotlin `CompletableDeferred` ([ADR 0014](./docs/adr/0014-a-future-keeps-its-failure-as-data-and-only-a-wait-rejects.md))                                                                                   |
+| Wait group         | Go [`sync.WaitGroup`](https://pkg.go.dev/sync#WaitGroup). Java `CountDownLatch` and .NET `CountdownEvent` cannot count up after zero ([ADR 0015](./docs/adr/0015-a-wait-group-counts-disposable-tokens-and-may-count-up-again-after-zero.md))                                                                                                                                                                                          |
+| Token              | `TaskTrackerToken` of tokio_util ([ADR 0015](./docs/adr/0015-a-wait-group-counts-disposable-tokens-and-may-count-up-again-after-zero.md))                                                                                                                                                                                                                                                                                              |
+| Cond               | Go [`sync.Cond`](https://pkg.go.dev/sync#Cond), without its lock. tokio `Notify` keeps a permit for a later wait, and Python `asyncio.Condition` and Java `Condition` hold a lock ([ADR 0016](./docs/adr/0016-a-cond-wakes-the-waits-that-started-before-a-broadcast-and-keeps-nothing-for-a-later-wait.md))                                                                                                                           |
+| Ref count          | `uv_ref` and `uv_unref` of libuv (`src/uv-common.h`), a flag and not a count; `Control#refCounted` and `#unrefCounted` of Node.js for the IPC channel of a child process (`lib/internal/child_process.js`) ([ADR 0017](./docs/adr/0017-a-ref-count-holds-a-handle-ref-d-while-work-holds-a-token.md))                                                                                                                                  |
+| Jitter             | The ratio jitter of [cenkalti/backoff](https://github.com/cenkalti/backoff) and of the [gRPC connection backoff](https://github.com/grpc/grpc/blob/master/doc/connection-backoff.md); the full and the equal jitter of [AWS, "Exponential Backoff And Jitter"](https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/) ([ADR 0011](./docs/adr/0011-a-back-off-gives-the-wait-before-a-retry-and-keeps-no-state.md)) |
+| Timeout            | [`AbortSignal.timeout`](https://developer.mozilla.org/en-US/docs/Web/API/AbortSignal/timeout_static), on the real clock only                                                                                                                                                                                                                                                                                                           |
+| Delay              | `setTimeout` of [`node:timers/promises`](https://nodejs.org/api/timers.html), on the real clock only                                                                                                                                                                                                                                                                                                                                   |
+| Clock              | [`TimeProvider`](https://learn.microsoft.com/en-us/dotnet/api/system.timeprovider) of .NET                                                                                                                                                                                                                                                                                                                                             |
+| Background service | .NET [`BackgroundService`](https://github.com/dotnet/runtime/blob/main/src/libraries/Microsoft.Extensions.Hosting.Abstractions/src/BackgroundService.cs) (`ExecuteAsync(stoppingToken)`, `StopAsync`, `ExecuteTask`), Go `errgroup` with `context.WithCancel`, Kotlin `Job.cancelAndJoin` ([ADR 0018](./docs/adr/0018-work-that-a-caller-owns-runs-as-a-background-service-that-a-dispose-stops-and-waits-for.md))                     |
 
 ## API
 
@@ -708,6 +737,14 @@ class ChangeWatcher<G extends Gauge> {
     signal: AbortSignal,
   ): AsyncGenerator<ReadonlyMap<G, Outcome>, void, undefined>;
 }
+
+class BackgroundService implements AsyncDisposable {
+  static start(
+    execute: (signal: AbortSignal) => Promise<void>,
+  ): BackgroundService;
+  get ended(): Promise<void>; // rejects with the failure of the work; an end by the stop is no failure
+  [Symbol.asyncDispose](): Promise<void>; // aborts, waits for the end, rejects with the failure
+}
 ```
 
 ## Documentation
@@ -736,3 +773,4 @@ class ChangeWatcher<G extends Gauge> {
 - [ADR 0015](./docs/adr/0015-a-wait-group-counts-disposable-tokens-and-may-count-up-again-after-zero.md): a wait group counts disposable tokens, and may count up again after zero.
 - [ADR 0016](./docs/adr/0016-a-cond-wakes-the-waits-that-started-before-a-broadcast-and-keeps-nothing-for-a-later-wait.md): a cond wakes the waits that started before a broadcast, and keeps nothing for a later wait.
 - [ADR 0017](./docs/adr/0017-a-ref-count-holds-a-handle-ref-d-while-work-holds-a-token.md): a ref count holds a handle ref'd while work holds a token.
+- [ADR 0018](./docs/adr/0018-work-that-a-caller-owns-runs-as-a-background-service-that-a-dispose-stops-and-waits-for.md): work that a caller owns runs as a background service that a dispose stops and waits for.
