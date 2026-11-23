@@ -12,6 +12,10 @@ _Avoid_: sum (without the order), Kahan sum (another algorithm)
 The mean that `numpy.nanmean` gives: each NaN becomes 0, the pairwise sum adds all the values, and the sum is divided by the number of values that are not NaN. A mean of only the values that are not NaN adds in other blocks, so it can give other last bits.
 _Avoid_: mean of the values that are not NaN (another order)
 
+**Standard deviation**:
+The value that `numpy.std` gives: the square root of the pairwise sum of the squared deviations from the mean, divided by n − `ddof`. `ddof` 0 gives the population standard deviation, and `ddof` 1 the sample standard deviation.
+_Avoid_: SD, population SD (say `ddof` 0)
+
 **Resample**:
 A sample of the data with as many items as the data, drawn with replacement. An item can come twice, and another item can be absent.
 

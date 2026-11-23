@@ -1,6 +1,6 @@
 # @zukhruf/statistics
 
-The percentile bootstrap, the quantile methods of NumPy, and `numpy.sum`, `numpy.mean` and `numpy.nanmean` in JavaScript, to the last bit. Use it when a TypeScript eval must give the same interval as a Python program, such as the summary of a benchmark or the comparison of two models.
+The percentile bootstrap, the quantile methods of NumPy, and `numpy.sum`, `numpy.mean`, `numpy.nanmean` and `numpy.std` in JavaScript, to the last bit. Use it when a TypeScript eval must give the same interval as a Python program, such as the summary of a benchmark or the comparison of two models.
 
 The package is public on npm. Until 2026-11-07 it was private and reached through a workspace path (ADR 0001); it became public with `@zukhruf/evals`, which depends on it (backlog #3888).
 
@@ -43,6 +43,7 @@ nanmean([1, NaN, 3]); // 2, as numpy.nanmean(a)
 | `sum`                      | `numpy.sum` of a 1-D float64 array                                                 | The pairwise sum of NumPy: blocks of up to 128 values in 8 accumulators, and two halves for more values. It starts from 0, so values of −0 give 0. No values give 0.                                                                                                                                                                                                                   |
 | `mean`                     | `numpy.mean` of a 1-D float64 array                                                | `sum` divided by the number of values. No values give NaN.                                                                                                                                                                                                                                                                                                                             |
 | `nanmean`                  | `numpy.nanmean` of a 1-D float64 array                                             | Each NaN becomes 0, `sum` adds all the values, and the sum is divided by the number of values that are not NaN. A `mean` of only the values that are not NaN can give other last bits. No values, or only NaN values, give NaN.                                                                                                                                                        |
+| `std`                      | `numpy.std` of a 1-D float64 array, with its `ddof`                                | The square root of the `sum` of the squared deviations from the `mean`, divided by n − `ddof`. `ddof` is 0 by default (the population standard deviation), and `ddof: 1` gives the sample standard deviation. No values give NaN. A `ddof` of n or more divides by 0: NaN or Infinity, as NumPy gives them.                                                                            |
 | `QuantileMethod`           | the `method` of `numpy.quantile`                                                   | A rule that gives the value at the quantile `q` of sorted values: `of(sorted, q)`. `q` is from 0 to 1. A `q` out of that range, or no values, throws a `RangeError`.                                                                                                                                                                                                                   |
 | `Lower`                    | `method='lower'`                                                                   | The value at the index `floor((n − 1)q)`.                                                                                                                                                                                                                                                                                                                                              |
 | `Higher`                   | `method='higher'`                                                                  | The value at the index `ceil((n − 1)q)`.                                                                                                                                                                                                                                                                                                                                               |
@@ -63,6 +64,17 @@ These parts stay with each caller, because each caller has its own rule:
 - an interval with a rule of its own at each end, such as the `lower` method at the low end and the `higher` method at the high end of the Structured Output Benchmark: its caller writes it as a `ConfidenceIntervalMethod`;
 - a p-value and a verdict, such as "better" when the interval of a difference lies above 0: each caller builds its rule from `isAbove` and `isBelow`.
 
+## Give the standard deviation that NumPy gives
+
+`std(values)` gives the value of `numpy.std(a)`, to the last bit. It adds the values and the squared deviations in the pairwise order of NumPy, so a large mean with small deviations gives the same bits as NumPy. Give `ddof` as NumPy names it:
+
+```ts
+import { std } from '@zukhruf/statistics';
+
+std([1, 2, 3, 4]); // 1.118033988749895, as numpy.std(a)
+std([1, 2, 3, 4], { ddof: 1 }); // 1.2909944487358056, as numpy.std(a, ddof=1)
+```
+
 ## Errors
 
 Each error is a `RangeError`. Its message says which input is out of range.
@@ -77,10 +89,14 @@ Each error is a `RangeError`. Its message says which input is out of range.
 ## API
 
 ```ts
-// numpy.sum, numpy.mean and numpy.nanmean of a 1-D float64 array.
+// numpy.sum, numpy.mean, numpy.nanmean and numpy.std of a 1-D float64 array.
 function sum(values: ArrayLike<number>): number;
 function mean(values: ArrayLike<number>): number;
 function nanmean(values: ArrayLike<number>): number;
+function std(
+  values: ArrayLike<number>,
+  options?: { readonly ddof?: number },
+): number;
 
 // A method of numpy.quantile. A subclass gives only where its rule reads the values.
 abstract class QuantileMethod {
