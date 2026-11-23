@@ -1,0 +1,9 @@
+# Code copied in this package
+
+This package keeps code that another place also has. Each copy is listed here with its source and what changed, so that a fix in one copy goes into each copy, and the commit names all of them.
+
+| Copy                                                                                | Source                                                                                    | What changed                                                                                                                            | Backlog                      |
+| ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
+| `run` and the test of the built imports in `packages/retrieval/src/package.test.ts` | `run` and the test of the built imports in `packages/embedding-cache/src/package.test.ts` | The proof that the scan found imports names `./model-mismatch-error.js`, not `node:crypto`: the package imports no built-in of Node.js. | — (test helpers stay copied) |
+
+Test helpers stay copied ([ADR 0001 of zukhruf](../../../docs/adr/0001-zukhruf-is-a-layered-standard-library.md), rule 2). `packages/authentication/src/package.test.ts` scans its built files with the same pattern, but it checks the packages of each file, not one list for the package.

@@ -150,6 +150,9 @@
       "path": "./packages/embedding-cache"
     },
     {
+      "path": "./packages/retrieval"
+    },
+    {
       "path": "./packages/authentication"
     }
   ]

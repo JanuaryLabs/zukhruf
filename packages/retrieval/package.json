@@ -1,0 +1,47 @@
+{
+  "name": "@zukhruf/retrieval",
+  "version": "0.8.70",
+  "description": "The query side of RAG: retrievers that search a passage table by meaning or keywords in SQLite, Postgres or SQL Server, fuse lists, rerank and post-process, and give the best passages first with a score that is higher for a better passage.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JanuaryLabs/zukhruf",
+    "directory": "packages/retrieval"
+  },
+  "bugs": {
+    "url": "https://github.com/JanuaryLabs/zukhruf/issues"
+  },
+  "homepage": "https://github.com/JanuaryLabs/zukhruf/tree/main/packages/retrieval#readme",
+  "keywords": [
+    "retrieval",
+    "rag",
+    "retriever",
+    "vector-search",
+    "bm25",
+    "reciprocal-rank-fusion",
+    "rerank",
+    "ai-sdk",
+    "sqlite",
+    "postgres",
+    "sql-server"
+  ],
+  "type": "module",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "@zukhruf/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "!dist/spec/**",
+    "!**/*.tsbuildinfo",
+    "!**/*.test.*"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}

@@ -92,6 +92,7 @@
       "@zukhruf/pool",
       "@zukhruf/python",
       "@zukhruf/relevance-filtering",
+      "@zukhruf/retrieval",
       "@zukhruf/shadcn",
       "@zukhruf/shutdown",
       "@zukhruf/single-flight",
