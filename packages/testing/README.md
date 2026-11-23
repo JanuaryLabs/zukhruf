@@ -322,6 +322,8 @@ test('counts the items', async (t) => {
 
 Step 2 of the disposal: it closes each connection that is checked out now (tedious `close()`, then waits for its `end`), gives it back to the pool, and then closes the pool. tarn reports a connection that it gives out only after mssql validated it, so the disposal also closes each connection that tarn reports while the pool closes. `close()` of mssql resolves once the socket of each connection has closed, but it waits with no limit for a connection that is checked out, so those close first. A test may close a pool itself: a second `close()` joins a close that runs, and resolves at once after one. SQL Server has no helper for a pool without a handle: no test of the three repositories needs one.
 
+Planned, not built: the SQL Server image has no Full-Text Search, so `CONTAINSTABLE` and `FREETEXTTABLE` fail on it. A `fullTextSearch: true` option is proposed, which builds an image with `mssql-server-fts` on the engine from the `image` option ([ADR 0027](./docs/adr/0027-a-sql-server-with-full-text-search-runs-an-image-that-the-fixture-builds-on-the-engine-from-the-plain-image.md), backlog #5439).
+
 Install the driver of the area next to this package: `pg` for `postgres`, `mysql2` for `mysql`, `mariadb` for `mariadb`, and `mssql` for `sqlserver`. Each is an optional peer dependency.
 
 ## HTTP servers and streams
