@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
-import { spawn as spawnProcess } from 'node:child_process';
+import { execFile, spawn as spawnProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
 import { readdir } from 'node:fs/promises';
 import { createInterface } from 'node:readline';
 import { test } from 'node:test';
+import { promisify } from 'node:util';
 
-import spawn from 'nano-spawn';
 import pg from 'pg';
 
 import { ConnectionFailedError, Docker } from '@zukhruf/docker';
@@ -364,10 +364,14 @@ test('two processes that reuse one configuration get one server, which disposal 
       const testbed = new DockerTestbed({ environment: process.env });
       const server = await testbed.reuse(${JSON.stringify(body)}, { internalPort: 8080 });
       await server[Symbol.asyncDispose]();
-      console.log(server.container.id);
+      process.stdout.write(server.container.id);
     `;
   const reuse = () =>
-    spawn(process.execPath, ['--input-type=module', '--eval', reuser]);
+    promisify(execFile)(process.execPath, [
+      '--input-type=module',
+      '--eval',
+      reuser,
+    ]);
   try {
     // Act
     const [first, second] = await Promise.all([reuse(), reuse()]);
@@ -510,7 +514,10 @@ test(
       const [line] = await once(createInterface(child.stdout), 'line');
 
       // Act
-      const children = await spawn('ps', ['-Ao', 'pid=,ppid=,comm=']);
+      const children = await promisify(execFile)('ps', [
+        '-Ao',
+        'pid=,ppid=,comm=',
+      ]);
 
       // Assert
       const ssh = children.stdout.split('\n').filter((row) => {

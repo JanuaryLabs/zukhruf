@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
 import { test } from 'node:test';
-
-import spawn from 'nano-spawn';
+import { promisify } from 'node:util';
 
 import { notInstalled } from './index.ts';
 
@@ -24,7 +24,7 @@ async function child(
   preloads: string[],
   code: string,
 ): Promise<Record<string, Outcome>> {
-  const { stdout } = await spawn(process.execPath, [
+  const { stdout } = await promisify(execFile)(process.execPath, [
     ...preloads.flatMap((preload) => ['--import', preload]),
     '--input-type=module',
     '--eval',
@@ -79,7 +79,7 @@ test('an import of a subpath of a hidden package fails and names the package', a
 
 test('a require of a hidden package fails as a require of a module that is not installed', async () => {
   // The first line only: Node.js adds a require stack, which a hook cannot know.
-  const { stdout } = await spawn(process.execPath, [
+  const { stdout } = await promisify(execFile)(process.execPath, [
     '--import',
     notInstalled('msw'),
     '--input-type=commonjs',
@@ -170,7 +170,7 @@ test('preloads compose: each hides its package, and a preload before them still 
 });
 
 test('the preload works from NODE_OPTIONS', async () => {
-  const { stdout } = await spawn(
+  const { stdout } = await promisify(execFile)(
     process.execPath,
     [
       '--input-type=module',
@@ -188,7 +188,10 @@ test('the preload works from NODE_OPTIONS', async () => {
       `,
     ],
     {
-      env: { NODE_OPTIONS: `--import=${notInstalled('msw', 'pg')}` },
+      env: {
+        ...process.env,
+        NODE_OPTIONS: `--import=${notInstalled('msw', 'pg')}`,
+      },
     },
   );
 
@@ -200,12 +203,12 @@ test('the preload works from NODE_OPTIONS', async () => {
 
 test('the built area gives a preload that a consumer can use', async () => {
   // A consumer imports the build: its preload is the .js file next to it.
-  const { stdout: preload } = await spawn(process.execPath, [
+  const { stdout: preload } = await promisify(execFile)(process.execPath, [
     '--input-type=module',
     '--eval',
     `
     const { notInstalled } = await import('@zukhruf/testing/preload');
-    console.log(notInstalled('msw'));
+    process.stdout.write(notInstalled('msw'));
     `,
   ]);
 

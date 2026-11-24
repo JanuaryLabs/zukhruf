@@ -157,7 +157,6 @@
     "@zukhruf/docker": "^0.8.70",
     "@zukhruf/fs": "^0.8.70",
     "@zukhruf/ssh": "^0.8.70",
-    "nano-spawn": "^3.0.0",
     "p-memoize": "^9.0.0",
     "p-retry": "^9.0.0"
   },

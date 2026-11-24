@@ -467,12 +467,13 @@ A package can have optional peer dependencies. A project that does not use a par
 `notInstalled(...packages)` makes installed packages look not installed, in one child process. Give its result to the `--import` flag of the child, then import your module in the child. The hook changes the resolution of the whole process, and the test process needs the packages. Thus the check runs in a child.
 
 ```ts
-import spawn from 'nano-spawn';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 
 import { notInstalled } from '@zukhruf/testing/preload';
 
 test('the http area loads without msw', async () => {
-  await spawn(process.execPath, [
+  await promisify(execFile)(process.execPath, [
     '--import',
     notInstalled('msw'),
     '--input-type=module',
@@ -496,7 +497,7 @@ Thus code that reads `error.code` to find a peer that is not installed takes the
 To use more preloads, give one `--import` flag for each. Node.js runs them in order, and each hook gives the specifiers that it does not stop to the hook before it:
 
 ```ts
-spawn(process.execPath, [
+await promisify(execFile)(process.execPath, [
   '--import',
   notInstalled('typescript'),
   '--import',

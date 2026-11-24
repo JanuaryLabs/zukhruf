@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
 import { once } from 'node:events';
 import { connect, createServer } from 'node:net';
 import { test } from 'node:test';
 import * as tls from 'node:tls';
+import { promisify } from 'node:util';
 
 import { HttpResponse, http, passthrough } from 'msw';
-import spawn from 'nano-spawn';
 
 import { HttpServer } from '../http/http-server.ts';
 import { Msw } from './msw.ts';
@@ -176,7 +177,7 @@ test('while two interceptions are open, a request that only the first one handle
 test('disposal waits until fetch has closed each connection that the server closed, so the next test keeps the timers that it fakes', async () => {
   const msw = import.meta.resolve('./msw.ts');
 
-  await spawn(process.execPath, [
+  await promisify(execFile)(process.execPath, [
     '--input-type=module',
     '--eval',
     `
@@ -280,7 +281,7 @@ test('disposal settles after a TLS connection that passed through the intercepto
   }
 });
 const inChild = (body: string) =>
-  spawn(process.execPath, [
+  promisify(execFile)(process.execPath, [
     '--input-type=module',
     '--eval',
     `

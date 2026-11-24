@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
 import { Server } from 'node:http';
 import { test } from 'node:test';
-
-import spawn, { SubprocessError } from 'nano-spawn';
+import { promisify } from 'node:util';
 
 import { HttpServer } from './http-server.ts';
 
@@ -98,7 +98,7 @@ test('an async handler answers', async () => {
 
 test('a rejected async handler fails its process with its own error', async () => {
   // A server that answered or reset instead would hide a broken fake.
-  const child = spawn(
+  const child = promisify(execFile)(
     process.execPath,
     [
       '--input-type=module',
@@ -117,9 +117,11 @@ test('a rejected async handler fails its process with its own error', async () =
   await assert.rejects(
     child,
     (error: unknown) =>
-      error instanceof SubprocessError &&
-      error.exitCode === 1 &&
-      error.stderr.includes('Error: the fake broke'),
+      Error.isError(error) &&
+      'code' in error &&
+      error.code === 1 &&
+      'stderr' in error &&
+      String(error.stderr).includes('Error: the fake broke'),
   );
 });
 
@@ -136,7 +138,7 @@ test('HTTP servers listen on the IPv4 loopback interface only', async () => {
 });
 
 const nextTestKeepsItsFakeTimer = (requests: string) =>
-  spawn(process.execPath, [
+  promisify(execFile)(process.execPath, [
     '--input-type=module',
     '--eval',
     `

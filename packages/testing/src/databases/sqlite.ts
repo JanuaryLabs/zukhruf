@@ -1,8 +1,8 @@
+import { execFile } from 'node:child_process';
 import { once } from 'node:events';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-
-import spawn, { SubprocessError } from 'nano-spawn';
+import { promisify } from 'node:util';
 
 import { TemporaryFiles } from '@zukhruf/fs';
 
@@ -17,50 +17,47 @@ export interface SqliteDatabase extends AsyncDisposable {
 export class Sqlite {
   /** Holds a write lock in another process, which releases even while the caller blocks. */
   async writeLock(path: string, durationMs: number): Promise<AsyncDisposable> {
-    const holder = spawn(
-      process.execPath,
-      [
-        '--input-type=module',
-        '--eval',
-        `
-          import { DatabaseSync } from 'node:sqlite';
-          import { setTimeout } from 'node:timers/promises';
+    const holder = promisify(execFile)(process.execPath, [
+      '--input-type=module',
+      '--eval',
+      `
+        import { DatabaseSync } from 'node:sqlite';
+        import { setTimeout } from 'node:timers/promises';
 
-          process.once('disconnect', () => process.exit(0));
-          using database = new DatabaseSync(process.argv[1]);
-          database.exec('BEGIN IMMEDIATE');
-          process.send('locked');
-          await setTimeout(Number(process.argv[2]));
-          database.exec('ROLLBACK');
-          process.disconnect();
-        `,
-        path,
-        String(durationMs),
-      ],
-      { stdio: ['ignore', 'ignore', 'pipe', 'ipc'] },
-    );
+        process.stdin.once('end', () => process.exit(0));
+        process.stdin.resume();
+        using database = new DatabaseSync(process.argv[1]);
+        database.exec('BEGIN IMMEDIATE');
+        process.stdout.write('locked');
+        await setTimeout(Number(process.argv[2]));
+        database.exec('ROLLBACK');
+        process.exit(0);
+      `,
+      path,
+      String(durationMs),
+    ]);
     const exited = holder.then(() => {
       throw new Error('SQLite lock holder exited before acquiring the lock.');
     });
-    const child = await Promise.race([holder.nodeChildProcess, exited]);
     try {
-      await Promise.race([once(child, 'message'), exited]);
+      await Promise.race([once(holder.child.stdout!, 'data'), exited]);
     } catch (error) {
-      child.kill();
+      holder.child.kill();
       await Promise.allSettled([holder]);
       throw error;
     }
 
     const resources = new AsyncDisposableStack();
     resources.defer(async () => {
-      const killed = child.kill();
+      const killed = holder.child.kill();
       try {
         await holder;
       } catch (error) {
         if (
           !killed ||
-          !(error instanceof SubprocessError) ||
-          error.signalName !== 'SIGTERM'
+          !Error.isError(error) ||
+          !('signal' in error) ||
+          error.signal !== 'SIGTERM'
         )
           throw error;
       }

@@ -26,7 +26,7 @@ export const runEnvironment = (
   // A nested run serves an SSH connection of its own, not this run's docker.sock.
   ...(process.env.DOCKER_HOST !== undefined && { DOCKER_HOST: engine }),
   XDG_STATE_HOME: state,
-  // Undefined, not deleted: nano-spawn adds process.env back, and Node
+  // Undefined, not deleted: the object spreads process.env, and Node
   // passes no variable whose value is undefined.
   // A runner launched from a test worker would otherwise skip its files.
   NODE_TEST_CONTEXT: undefined,

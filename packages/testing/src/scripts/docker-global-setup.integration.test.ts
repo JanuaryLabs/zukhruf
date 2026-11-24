@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { spawn as spawnProcess } from 'node:child_process';
+import { execFile, spawn as spawnProcess } from 'node:child_process';
 import { hash, randomUUID } from 'node:crypto';
 import { once } from 'node:events';
 import { existsSync } from 'node:fs';
@@ -19,8 +19,7 @@ import { dirname, join } from 'node:path';
 import { type TestContext, describe, test } from 'node:test';
 import { setTimeout } from 'node:timers/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-
-import spawn, { SubprocessError } from 'nano-spawn';
+import { promisify } from 'node:util';
 
 import { untilAborted } from '@zukhruf/async';
 import {
@@ -135,7 +134,7 @@ const proxiedEnvironment = (
 
 /** A run that runs no test of `file`, so it only recovers and ends. */
 const emptyRun = (file: string, env: Record<string, string | undefined>) =>
-  spawn(
+  promisify(execFile)(
     process.execPath,
     runnerArgs('--test-name-pattern=no-matching-tests', file),
     { env, timeout: 90_000 },
@@ -297,7 +296,7 @@ async function killedRun(
     await waitFor(() => assert.equal(alive(pid), false), { signal: t.signal });
     assert.equal(await exists(state.general), true);
     const recover = () =>
-      spawn(
+      promisify(execFile)(
         process.execPath,
         runnerArgs('--test-name-pattern=no-matching-tests', file),
         {
@@ -331,8 +330,8 @@ async function assertRecovered(
       result.status,
       'fulfilled',
       result.status === 'rejected'
-        ? result.reason instanceof SubprocessError
-          ? `${result.reason.message}\n${result.reason.output}`
+        ? Error.isError(result.reason) && 'stdout' in result.reason
+          ? `${result.reason.message}\n${String(result.reason.stdout)}`
           : String(result.reason)
         : '',
     );
@@ -549,7 +548,7 @@ async function reusedAndExited(
   await writeFile(file, reuseSource(library, statePath, probe));
   const stop = new AbortController();
   try {
-    const reuse = spawn(process.execPath, [file], {
+    const reuse = promisify(execFile)(process.execPath, [file], {
       env,
       signal: stop.signal,
       killSignal: 'SIGKILL',
@@ -1045,7 +1044,7 @@ describe('a run and its recovery', { concurrency: 4 }, () => {
       );
       const state = join(directory.path, 'state');
 
-      await spawn(process.execPath, runnerArgs(file), {
+      await promisify(execFile)(process.execPath, runnerArgs(file), {
         env: proxiedEnvironment(state, proxy),
         timeout: 60_000,
       });
@@ -1310,7 +1309,7 @@ describe('a run and its recovery', { concurrency: 4 }, () => {
     const file = join(directory.path, 'worker.test.ts');
     await writeFile(file, smallWorkerSource(statePath, ''));
 
-    await spawn(process.execPath, runnerArgs(file), {
+    await promisify(execFile)(process.execPath, runnerArgs(file), {
       env: runEnvironment(join(directory.path, 'state')),
       timeout: 150_000,
     });
@@ -1366,7 +1365,7 @@ describe('a run and its recovery', { concurrency: 4 }, () => {
       for (const id of await labelled(verification)) await removeContainer(id);
     });
 
-    await spawn(process.execPath, runnerArgs(file), {
+    await promisify(execFile)(process.execPath, runnerArgs(file), {
       env: runEnvironment(join(directory.path, 'state')),
       timeout: 150_000,
     });
@@ -1412,7 +1411,7 @@ describe('a run and its recovery', { concurrency: 4 }, () => {
     const stateHome = join(directory.path, 'state');
     await using cleanup = new AsyncDisposableStack();
 
-    await spawn(process.execPath, runnerArgs(file), {
+    await promisify(execFile)(process.execPath, runnerArgs(file), {
       env: runEnvironment(stateHome),
       timeout: 150_000,
     });
@@ -1461,7 +1460,7 @@ describe('a run and its recovery', { concurrency: 4 }, () => {
     `,
     );
     try {
-      await spawn(process.execPath, runnerArgs(file), {
+      await promisify(execFile)(process.execPath, runnerArgs(file), {
         env: runEnvironment(join(directory.path, 'state')),
         timeout: 150_000,
       });
@@ -1545,7 +1544,7 @@ describe('a run and its recovery', { concurrency: 4 }, () => {
       if (state) await removeContainer(state.container);
     });
 
-    await spawn(
+    await promisify(execFile)(
       process.execPath,
       ['--test', `--test-global-setup=${setupFile}`, file],
       { env: runEnvironment(stateHome), timeout: 150_000 },
@@ -1615,7 +1614,7 @@ describe('a run and its recovery', { concurrency: 4 }, () => {
     const file = join(directory.path, 'worker.test.ts');
     await writeFile(file, smallWorkerSource(statePath, ''));
 
-    await spawn(process.execPath, runnerArgs(file), {
+    await promisify(execFile)(process.execPath, runnerArgs(file), {
       env,
       timeout: 150_000,
     });

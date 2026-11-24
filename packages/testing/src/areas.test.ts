@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
 import { test } from 'node:test';
-
-import spawn, { SubprocessError } from 'nano-spawn';
+import { promisify } from 'node:util';
 
 import { notInstalled } from './preload/index.ts';
 
@@ -11,7 +11,7 @@ import { notInstalled } from './preload/index.ts';
  * the way a consumer without it sees the package.
  */
 const importArea = (area: string, hidden: [string, ...string[]]) =>
-  spawn(process.execPath, [
+  promisify(execFile)(process.execPath, [
     '--import',
     notInstalled(...hidden),
     '--input-type=module',
@@ -61,8 +61,9 @@ test('an area with a driver needs only its own driver', async () => {
     await assert.rejects(
       importArea(area, [driver]),
       (error: unknown) =>
-        error instanceof SubprocessError &&
-        error.stderr.includes(`Cannot find package '${driver}'`),
+        Error.isError(error) &&
+        'stderr' in error &&
+        String(error.stderr).includes(`Cannot find package '${driver}'`),
     );
   }
 });
