@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import { hash, randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, unlinkSync } from 'node:fs';
 import {
   cp,
   mkdir,
@@ -35,12 +35,38 @@ const leases = 'leases';
 export function leaseInstall(folder: string): Disposable {
   mkdirSync(join(folder, leases), { recursive: true });
   const path = join(folder, leases, `${randomUUID()}.lock`);
-  const lease = new DisposableStack();
-  const lock = lease.use(FileLock.open(path));
+  using opened = new DisposableStack();
+  const lock = opened.use(FileLock.open(path));
   if (!lock.tryLock())
     throw new Error(`another process holds the new lease ${path}`);
-  lease.defer(() => rmSync(path, { force: true }));
-  return lease;
+  opened.move();
+  return { [Symbol.dispose]: () => endLease(path, lock) };
+}
+
+// Deletes the lease file while it holds its lock, then frees it, so a prune
+// that opened the file to check it never sees a lock on a file that is gone.
+// Windows does not delete a file that a handle keeps open, so there the lock
+// is freed first, and a refusal then means that a prune opened the file. A
+// copy of #deleteIfFree of mutex's SessionDirectory (#5462, #5463).
+function endLease(path: string, lock: FileLock): void {
+  let refused: boolean;
+  {
+    using held = lock;
+    refused = unlinkRefused(path);
+  }
+  if (refused) unlinkRefused(path);
+}
+
+// Deletes `path`; `true` when Windows refused it because a handle keeps it open.
+function unlinkRefused(path: string): boolean {
+  try {
+    unlinkSync(path);
+    return false;
+  } catch (error) {
+    if (isErrno(error, 'ENOENT')) return false;
+    if (isErrno(error, 'EPERM') || isErrno(error, 'EBUSY')) return true;
+    throw error;
+  }
 }
 
 // An install of the lockfile of the snapshot in a folder of the state folder,
@@ -211,10 +237,8 @@ async function prune(installs: string): Promise<void> {
       await rm(join(installs, name), { recursive: true, force: true });
 }
 
-// Whether a live snapshot links to the install. Only an install that the
-// prune would delete is checked: the install that this process uses is the
-// one it used last, which the prune keeps. That matters, because reading a
-// lease file that this process holds would drop its lock (FileLock).
+// Whether a live snapshot links to the install. A check of a lease file that
+// this process holds answers locked and keeps the lock (FileLock).
 async function isLeased(folder: string): Promise<boolean> {
   let names: string[];
   try {
