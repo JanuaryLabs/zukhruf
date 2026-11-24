@@ -12,6 +12,7 @@ import noCapturedAssignment from '../closure-state/no-captured-assignment.ts';
 import { type Concept, enable } from '../concept.ts';
 import noNodeEnv from '../environment/no-node-env.ts';
 import noSilentCatch from '../errors/no-silent-catch.ts';
+import noUnhandledReadlineError from '../errors/no-unhandled-readline-error.ts';
 import {
   BUILD_OUTPUT,
   COMMONJS,
@@ -62,6 +63,7 @@ const rules = {
   'no-process-global-write': noProcessGlobalWrite,
   'no-add-issue-string': noAddIssueString,
   'no-silent-catch': noSilentCatch,
+  'no-unhandled-readline-error': noUnhandledReadlineError,
   'require-shadcn-config': requireShadcnConfig,
   ...importBans,
 };
@@ -303,6 +305,9 @@ export const base: Concept = {
           '@typescript-eslint/no-deprecated': 'error',
           'zukhruf/no-promise-field': 'error',
           'zukhruf/no-phase-flag': 'error',
+          // readline emits a socket's errors again on its interface, so a
+          // reset that Linux gives and macOS does not stops the process.
+          'zukhruf/no-unhandled-readline-error': 'error',
           // zod 4 aborts every parent schema's checks on a string issue.
           'zukhruf/no-add-issue-string': 'error',
         },
