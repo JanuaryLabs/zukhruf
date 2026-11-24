@@ -44,11 +44,10 @@ export class Msw {
     const owned = new AsyncDisposableStack();
     owned.defer(async () => {
       unsubscribe('net.client.socket', track);
+      const open = [...closes].filter(([socket]) => !socket.destroyed);
       server.close();
       await Promise.all(
-        [...closes]
-          .filter(([socket]) => socket.destroyed)
-          .map(([, closed]) => closed),
+        open.filter(([socket]) => socket.destroyed).map(([, closed]) => closed),
       );
     });
     const cleanup = () => owned.disposeAsync();

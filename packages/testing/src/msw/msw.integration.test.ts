@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
+import { once } from 'node:events';
+import { connect, createServer } from 'node:net';
 import { test } from 'node:test';
+import * as tls from 'node:tls';
 
 import { HttpResponse, http, passthrough } from 'msw';
 import spawn from 'nano-spawn';
@@ -170,4 +173,68 @@ test('disposal waits until fetch has closed each connection that the server clos
     });
     `,
   ]);
+});
+
+test('disposal settles after a TCP connection that passed through the interceptor and that the client closed', async () => {
+  await using echo = createServer((socket) => socket.pipe(socket));
+  echo.listen(0, '127.0.0.1');
+  await once(echo, 'listening');
+  const address = echo.address();
+  assert.ok(address !== null && typeof address === 'object');
+  const { port } = address;
+
+  {
+    await using _interception = new Msw().intercept();
+    const client = connect(port, '127.0.0.1');
+    await once(client, 'connect');
+    client.write('ping');
+    const [echoed] = await once(client, 'data');
+    assert.equal(String(echoed), 'ping');
+    client.end();
+    await once(client, 'close');
+  }
+});
+
+// A self-signed certificate for 127.0.0.1, valid until 2126, made with
+// `openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes
+// -days 36500 -subj /CN=localhost -addext subjectAltName=IP:127.0.0.1`.
+// Node has no API that makes a certificate.
+const key = `-----BEGIN PRIVATE KEY-----
+MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgy6C+Rla1gqmpcT3H
+VI8DxW8tDWJ8u3i0rxhytjXgFxahRANCAARZUdfXsGy4a1K7rLkaPvYrXn7Gjsbz
+YgXWwzvXgn7K8Vpfg2jImJRLPXigMI212e3ebuYcVgioI7PWu9VAE3AO
+-----END PRIVATE KEY-----
+`;
+const cert = `-----BEGIN CERTIFICATE-----
+MIIBbzCCARWgAwIBAgIUeDCPsTL/oZISO4iQ9s1boYB95pIwCgYIKoZIzj0EAwIw
+FDESMBAGA1UEAwwJbG9jYWxob3N0MCAXDTI2MTEyNDA5NTcyOFoYDzIxMjYxMDMx
+MDk1NzI4WjAUMRIwEAYDVQQDDAlsb2NhbGhvc3QwWTATBgcqhkjOPQIBBggqhkjO
+PQMBBwNCAARZUdfXsGy4a1K7rLkaPvYrXn7GjsbzYgXWwzvXgn7K8Vpfg2jImJRL
+PXigMI212e3ebuYcVgioI7PWu9VAE3AOo0MwQTAdBgNVHQ4EFgQUHMWzXzEuOmlz
+sO7V1BstKWQbxeowDwYDVR0TAQH/BAUwAwEB/zAPBgNVHREECDAGhwR/AAABMAoG
+CCqGSM49BAMCA0gAMEUCIApiritEi6dsQh6b1XammLNWbvCciZm+ziKjOenxTx9T
+AiEAj3H5ASLjhiv/U35TDltyi0LA79aqMqh1S119aVVnVNU=
+-----END CERTIFICATE-----
+`;
+
+test('disposal settles after a TLS connection that passed through the interceptor and that the client closed', async () => {
+  await using echo = tls.createServer({ key, cert }, (socket) =>
+    socket.pipe(socket),
+  );
+  echo.listen(0, '127.0.0.1');
+  await once(echo, 'listening');
+  const address = echo.address();
+  assert.ok(address !== null && typeof address === 'object');
+  const { port } = address;
+
+  {
+    await using _interception = new Msw().intercept();
+    const client = tls.connect({ port, host: '127.0.0.1', ca: cert });
+    await once(client, 'secureConnect');
+    client.write('ping');
+    const [echoed] = await once(client, 'data');
+    assert.equal(String(echoed), 'ping');
+    client.end();
+    await once(client, 'close');
+  }
 });
