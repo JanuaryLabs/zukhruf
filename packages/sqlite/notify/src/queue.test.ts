@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { stat } from 'node:fs/promises';
+import type { Socket } from 'node:net';
 import { describe, test } from 'node:test';
 
 import { createClock } from '@sinonjs/fake-timers';
@@ -403,4 +404,56 @@ describe('the trim wakes the listener at the lowest position, whatever its chann
     );
     assert.deepEqual(errors, []);
   });
+});
+
+describe('a full listen queue', () => {
+  test(
+    'a stopped listener program whose listen queue is full refuses the wake, and still keeps its rows and its socket file; after SIGCONT it gets every notification',
+    {
+      skip:
+        process.platform !== 'darwin' &&
+        'only macOS refuses a connect to a live server whose listen queue is full, with the ECONNREFUSED of a dead server; Linux gives EAGAIN',
+      todo: '#5424',
+    },
+    async (t) => {
+      await using folder = await new TemporaryFiles().directory('notify-');
+      const path = `${folder.path}/app.sqlite`;
+      await using hung = await startProgram(path, { signal: t.signal });
+      hung.do({ do: 'listen', channel: 'jobs' });
+      await hung.printedOne((p) => p.event === 'listened');
+      const [address] = addressesOf(path, hung.pid);
+      assert.ok(address);
+      hung.child.kill('SIGSTOP');
+      // The connects that fill the queue of the stopped program, as a flood of
+      // new senders does: platform setup that no operation exposes.
+      const queued: Socket[] = [];
+      try {
+        for (;;) {
+          try {
+            queued.push(await new PipeAddress(address).connect());
+          } catch (error) {
+            if (error instanceof NoServerError) break;
+            throw error;
+          }
+        }
+        await using sender = new Notifications({ path, clock: createClock() });
+        hear(sender);
+
+        sender.notify('jobs', 'n0');
+        assert.equal(await connectAfterTheSender(address), 'ECONNREFUSED');
+        sender.notify('jobs', 'n1');
+        await sender[Symbol.asyncDispose]();
+
+        assert.equal(addressesOf(path, hung.pid).length, 1);
+        assert.ok((await stat(address)).isSocket());
+      } finally {
+        for (const socket of queued) socket.destroy();
+      }
+      hung.child.kill('SIGCONT');
+      assert.deepEqual(
+        (await hung.heard(2)).map((n) => n.payload),
+        ['n0', 'n1'],
+      );
+    },
+  );
 });
