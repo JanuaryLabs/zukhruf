@@ -149,6 +149,22 @@ async function present(image: string): Promise<void> {
 const exists = async (id: string): Promise<boolean> =>
   (await docker.containers.find(id)) !== undefined;
 
+/**
+ * True when the reaper `id` of `run` ended: it is gone, or it is a kept
+ * reaper (ADR 0031), which exited with 0 under the name
+ * `<reaperName(run)>-<self>` after a call hit its request time limit, as
+ * endedOnce reads it.
+ */
+const reaperEnded = async (id: string, run: string): Promise<boolean> => {
+  const reaper = await (await docker.containers.find(id))?.inspect();
+  return (
+    reaper === undefined ||
+    (reaper.State?.Status === 'exited' &&
+      reaper.State.ExitCode === 0 &&
+      reaper.Name?.startsWith(`/${reaperName(run)}-`) === true)
+  );
+};
+
 const volumeExists = async (name: string): Promise<boolean> =>
   (await docker.volumes.find(name)) !== undefined;
 
@@ -1357,7 +1373,7 @@ describe('a run and its recovery', { concurrency: 4 }, () => {
 
     await waitFor(
       async () => {
-        assert.equal(await exists(created.id), false);
+        assert.equal(await reaperEnded(created.id, stale), true);
         assert.equal(await exists(staleObjects.container), false);
         assert.equal(await volumeExists(staleObjects.volume), false);
       },
