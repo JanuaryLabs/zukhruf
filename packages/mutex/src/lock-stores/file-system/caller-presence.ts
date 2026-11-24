@@ -1,30 +1,27 @@
-import { unlink } from 'node:fs/promises';
-
 import type { Clock } from '@zukhruf/async';
-import { FileLock, patiently } from '@zukhruf/fs';
+import { Presence } from '@zukhruf/fs';
 
 import { Caller } from './caller.ts';
 
 /**
- * A caller's presence: the file lock of a file of its own, held from before
- * the caller's record (a lock file, a ticket, or the holder record of
- * `SqliteStore`) appears until after it is gone. The kernel ends it when the
- * caller's process or thread stops, however it stops, so a waiter that can
- * check the file knows the caller is gone.
+ * A caller's presence: the `Presence` of `@zukhruf/fs` on a file of its own,
+ * held from before the caller's record (a lock file, a ticket, or the holder
+ * record of `SqliteStore`) appears until after it is gone. The kernel ends it
+ * when the caller's process or thread stops, however it stops, so a waiter
+ * that can check the file knows the caller is gone.
  */
-export class Presence {
-  readonly #path: string;
-  readonly #lock: FileLock;
+export class CallerPresence {
+  readonly #presence: Presence;
   readonly #clock: Clock;
 
-  private constructor(path: string, lock: FileLock, clock: Clock) {
-    this.#path = path;
-    this.#lock = lock;
+  private constructor(presence: Presence, clock: Clock) {
+    this.#presence = presence;
     this.#clock = clock;
   }
 
   /** The length of what `pathOf` adds to a record's path. */
-  static readonly suffixLength = Presence.pathOf('', Caller.current()).length;
+  static readonly suffixLength = CallerPresence.pathOf('', Caller.current())
+    .length;
 
   /** The presence file of `caller`, whose record is at `record`. */
   static pathOf(record: string, caller: Caller): string {
@@ -32,17 +29,15 @@ export class Presence {
   }
 
   /** Claims the presence of `caller`, whose record is at `record`. */
-  static claim(record: string, caller: Caller, clock: Clock): Presence {
-    const path = Presence.pathOf(record, caller);
-    using opened = new DisposableStack();
-    const lock = opened.use(FileLock.open(path));
-    if (!lock.tryLock()) {
+  static claim(record: string, caller: Caller, clock: Clock): CallerPresence {
+    const path = CallerPresence.pathOf(record, caller);
+    const presence = Presence.tryOpen(path);
+    if (!presence) {
       throw new Error(
         `The presence file ${JSON.stringify(path)} is locked already, but it belongs to one caller only. Another program opened it.`,
       );
     }
-    opened.move();
-    return new Presence(path, lock, clock);
+    return new CallerPresence(presence, clock);
   }
 
   /**
@@ -56,12 +51,12 @@ export class Presence {
     caller: Caller,
     readNamed: () => Promise<Caller | undefined>,
   ): Promise<'present' | 'gone' | 'moved'> {
-    const path = Presence.pathOf(record, caller);
-    const state = FileLock.check(path);
-    if (state === 'locked') return 'present';
-    if (state === 'unlocked') return 'gone';
+    const path = CallerPresence.pathOf(record, caller);
+    const state = Presence.check(path);
+    if (state === 'present') return 'present';
+    if (state === 'ended') return 'gone';
     if ((await readNamed())?.id === caller.id) {
-      throw Presence.missing(record, path);
+      throw CallerPresence.missing(record, path);
     }
     return 'moved';
   }
@@ -74,20 +69,17 @@ export class Presence {
     for (;;) {
       const caller = await readNamed();
       if (!caller) return false;
-      const state = await Presence.judge(record, caller, readNamed);
+      const state = await CallerPresence.judge(record, caller, readNamed);
       if (state !== 'moved') return state === 'present';
     }
   }
 
-  /** Deletes the file of a presence that has ended. */
+  /** Deletes the file of a presence that has ended, while it holds its lock (`Presence.removeIfEnded`). */
   static async delete(path: string, clock: Clock): Promise<void> {
     try {
-      await patiently(() => unlink(path), { clock });
+      await Presence.removeIfEnded(path, { clock });
     } catch (error) {
-      throw new Error(
-        `The presence ${JSON.stringify(path)} has ended, but its file could not be deleted. The file locks nothing; delete it by hand.`,
-        { cause: error },
-      );
+      throw CallerPresence.#undeletable(path, error);
     }
   }
 
@@ -98,9 +90,16 @@ export class Presence {
     );
   }
 
+  static #undeletable(path: string, cause: unknown): Error {
+    return new Error(
+      `The presence ${JSON.stringify(path)} has ended, but its file could not be deleted. The file locks nothing; delete it by hand.`,
+      { cause },
+    );
+  }
+
   /** Lets the kernel lock go. The file stays for whoever removes the caller's record. */
   end(): void {
-    this.#lock[Symbol.dispose]();
+    this.#presence[Symbol.dispose]();
   }
 
   /**
@@ -115,13 +114,15 @@ export class Presence {
       this.end();
       throw error;
     }
-    this.end();
-    await Presence.delete(this.#path, this.#clock);
+    await this.withdraw();
   }
 
   /** Ends a presence whose record never appeared, or is gone already. */
   async withdraw(): Promise<void> {
-    this.end();
-    await Presence.delete(this.#path, this.#clock);
+    try {
+      await this.#presence.remove({ clock: this.#clock });
+    } catch (error) {
+      throw CallerPresence.#undeletable(this.#presence.path, error);
+    }
   }
 }

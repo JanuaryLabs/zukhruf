@@ -3,9 +3,12 @@ import { join } from 'node:path';
 import { setImmediate as nextTurn } from 'node:timers/promises';
 
 import type { Clock } from '@zukhruf/async';
-import { FileLock, atomicWrite, isErrno, patiently } from '@zukhruf/fs';
+import { Presence, atomicWrite, isErrno, patiently } from '@zukhruf/fs';
 
 import { isRecord } from '../../shared/is-record.ts';
+
+/** How long a new session tries to open its presence while a recovery holds the file for a moment, as long as `patiently` of `@zukhruf/fs` tries. */
+const PRESENCE_PATIENCE = 1000;
 
 /** What a session writes in its record. No step of the lock store reads `processId`: it is for a person who reads the directory. */
 interface SessionRecordContent {
@@ -30,7 +33,7 @@ export class SessionDirectory {
     this.#clock = clock;
   }
 
-  /** Takes the presence of `session`, then writes its record. Disposing the result deletes the record, then frees the presence. */
+  /** Takes the presence of `session`, then writes its record. Disposing the result deletes the record, then removes the presence. */
   async record(session: string, leaseDuration: number): Promise<SessionRecord> {
     await mkdir(this.#path, { recursive: true });
     const presence = await this.#takePresence(session);
@@ -43,16 +46,10 @@ export class SessionDirectory {
         clock: this.#clock,
       });
     } catch (error) {
-      presence[Symbol.dispose]();
-      await this.#deleteIfFree(this.#presencePath(session));
+      await presence.remove({ clock: this.#clock });
       throw error;
     }
-    return new SessionRecord(
-      this.#recordPath(session),
-      this.#presencePath(session),
-      presence,
-      this.#clock,
-    );
+    return new SessionRecord(this.#recordPath(session), presence, this.#clock);
   }
 
   /**
@@ -71,7 +68,9 @@ export class SessionDirectory {
           recovering.set(session, leaseDuration);
         }
       } else if (files.presence) {
-        await this.#deleteIfFree(this.#presencePath(session));
+        await Presence.removeIfEnded(this.#presencePath(session), {
+          clock: this.#clock,
+        });
       }
     }
     return recovering;
@@ -83,9 +82,9 @@ export class SessionDirectory {
    */
   async endIfStopped(session: string): Promise<boolean> {
     const presence = this.#presencePath(session);
-    if (FileLock.check(presence) === 'locked') return false;
+    if (Presence.check(presence) === 'present') return false;
     await deleteFile(this.#recordPath(session), this.#clock);
-    await this.#deleteIfFree(presence);
+    await Presence.removeIfEnded(presence, { clock: this.#clock });
     return true;
   }
 
@@ -98,20 +97,22 @@ export class SessionDirectory {
   }
 
   /**
-   * Takes the lock of a new presence file. A recovery that found the file
-   * before the lock deletes it under its own lock, so a lock taken on a
-   * deleted file is let go and taken again on a new one.
+   * Takes a new presence. A recovery that found the file before the lock
+   * holds it for a moment while it checks or deletes it, so the open is
+   * tried again on each turn, for at most 1 second on the clock, as
+   * `patiently` of `@zukhruf/fs` allows Windows.
    */
-  async #takePresence(session: string): Promise<FileLock> {
+  async #takePresence(session: string): Promise<Presence> {
     const path = this.#presencePath(session);
+    const started = this.#clock.performance.now();
     for (;;) {
-      using opened = new DisposableStack();
-      const lock = opened.use(FileLock.open(path));
-      if (lock.tryLock() && FileLock.check(path) === 'locked') {
-        opened.move();
-        return lock;
+      const presence = Presence.tryOpen(path);
+      if (presence) return presence;
+      if (this.#clock.performance.now() - started > PRESENCE_PATIENCE) {
+        throw new Error(
+          `The presence file ${JSON.stringify(path)} stayed locked for 1 second, but it belongs to one session only. Another program opened it.`,
+        );
       }
-      opened.dispose();
       await nextTurn();
     }
   }
@@ -161,35 +162,6 @@ export class SessionDirectory {
     }
     return content.leaseDuration;
   }
-
-  /**
-   * Deletes a presence file whose lock is free. It deletes the file while it
-   * holds the lock itself, so a session that opened the file and is about to
-   * lock it never keeps a lock on a file that is gone without seeing it. On
-   * Windows a file that a handle keeps open cannot be deleted, so the lock is
-   * let go first, and a refusal means that a session opened the file.
-   */
-  async #deleteIfFree(path: string): Promise<void> {
-    let refused: boolean;
-    {
-      using lock = FileLock.open(path);
-      if (!lock.tryLock()) return;
-      refused = await unlinkRefused(path);
-    }
-    if (refused) await unlinkRefused(path);
-  }
-}
-
-/** Deletes `path`; `true` when Windows refused it because a handle keeps it open. */
-async function unlinkRefused(path: string): Promise<boolean> {
-  try {
-    await unlink(path);
-    return false;
-  } catch (error) {
-    if (isErrno(error, 'ENOENT')) return false;
-    if (isErrno(error, 'EPERM') || isErrno(error, 'EBUSY')) return true;
-    throw error;
-  }
 }
 
 /** Deletes `path`, trying again for a limited time while Windows refuses. A file that is gone already is no fault: a recovery deletes the files of a session that it found stopped. */
@@ -203,30 +175,22 @@ async function deleteFile(path: string, clock: Clock): Promise<void> {
 
 /** The record and the presence of one session. */
 export class SessionRecord implements AsyncDisposable {
-  readonly #recordPath: string;
-  readonly #presencePath: string;
-  readonly #presence: FileLock;
-  readonly #clock: Clock;
+  readonly #ending = new AsyncDisposableStack();
 
-  constructor(
-    recordPath: string,
-    presencePath: string,
-    presence: FileLock,
-    clock: Clock,
-  ) {
-    this.#recordPath = recordPath;
-    this.#presencePath = presencePath;
-    this.#presence = presence;
-    this.#clock = clock;
+  constructor(recordPath: string, presence: Presence, clock: Clock) {
+    this.#ending.defer(async () => {
+      try {
+        await deleteFile(recordPath, clock);
+      } catch (error) {
+        presence[Symbol.dispose]();
+        throw error;
+      }
+      await presence.remove({ clock });
+    });
   }
 
-  /** Deletes the record first and frees the presence second, so the presence outlasts the record. */
+  /** Deletes the record first and removes the presence second, so the presence outlasts the record. A record that cannot be deleted still ends the presence. A second disposal does nothing. */
   async [Symbol.asyncDispose](): Promise<void> {
-    try {
-      await deleteFile(this.#recordPath, this.#clock);
-    } finally {
-      this.#presence[Symbol.dispose]();
-    }
-    await deleteFile(this.#presencePath, this.#clock);
+    await this.#ending.disposeAsync();
   }
 }

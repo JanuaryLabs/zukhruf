@@ -125,6 +125,7 @@ export class Notifications
     );
     this.#wakes = new Wakes(
       path,
+      this.#clock,
       (id) => {
         if (this.#listener.kind !== 'listening') return false;
         const { listening } = this.#listener;

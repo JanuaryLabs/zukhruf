@@ -263,7 +263,7 @@ export class Snapshots implements AsyncDisposable {
           ),
         this.#clock,
       );
-      resources.use(leaseInstall(installed));
+      resources.use(leaseInstall(installed, this.#clock));
     }
     await linkPackages(installed, clone.folder);
   }

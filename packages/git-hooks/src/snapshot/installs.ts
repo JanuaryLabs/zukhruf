@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import { hash, randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, unlinkSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 import {
   cp,
   mkdir,
@@ -14,7 +14,8 @@ import {
 import { basename, isAbsolute, join, normalize, sep } from 'node:path';
 import { promisify } from 'node:util';
 
-import { FileLock, isErrno } from '@zukhruf/fs';
+import type { Clock } from '@zukhruf/async';
+import { Presence, isErrno } from '@zukhruf/fs';
 
 import { Lockfile } from '../npm/lockfile.ts';
 import { workspaceFolders } from './workspaces.ts';
@@ -25,48 +26,19 @@ const execFileAsync = promisify(execFile);
 const kept = 2;
 // Written last, so a folder without it is an install that did not end.
 const marker = 'installed';
-// One locked file in it for each snapshot that links to the install.
+// One presence in it for each snapshot that links to the install.
 const leases = 'leases';
 
 // Marks the install at `folder` as in use until the lease is disposed. The
-// kernel holds the lock of the lease file, so a hook that dies lets it go.
-// Take it under the lock of the installs, so no prune runs between the
-// install and the lease.
-export function leaseInstall(folder: string): Disposable {
+// lease is a presence of @zukhruf/fs, so a hook that dies lets it go, and its
+// disposal deletes the file in the order of each system. Take it under the
+// lock of the installs, so no prune runs between the install and the lease.
+export function leaseInstall(folder: string, clock: Clock): AsyncDisposable {
   mkdirSync(join(folder, leases), { recursive: true });
   const path = join(folder, leases, `${randomUUID()}.lock`);
-  using opened = new DisposableStack();
-  const lock = opened.use(FileLock.open(path));
-  if (!lock.tryLock())
-    throw new Error(`another process holds the new lease ${path}`);
-  opened.move();
-  return { [Symbol.dispose]: () => endLease(path, lock) };
-}
-
-// Deletes the lease file while it holds its lock, then frees it, so a prune
-// that opened the file to check it never sees a lock on a file that is gone.
-// Windows does not delete a file that a handle keeps open, so there the lock
-// is freed first, and a refusal then means that a prune opened the file. A
-// copy of #deleteIfFree of mutex's SessionDirectory (#5462, #5463).
-function endLease(path: string, lock: FileLock): void {
-  let refused: boolean;
-  {
-    using held = lock;
-    refused = unlinkRefused(path);
-  }
-  if (refused) unlinkRefused(path);
-}
-
-// Deletes `path`; `true` when Windows refused it because a handle keeps it open.
-function unlinkRefused(path: string): boolean {
-  try {
-    unlinkSync(path);
-    return false;
-  } catch (error) {
-    if (isErrno(error, 'ENOENT')) return false;
-    if (isErrno(error, 'EPERM') || isErrno(error, 'EBUSY')) return true;
-    throw error;
-  }
+  const presence = Presence.tryOpen(path);
+  if (!presence) throw new Error(`another process holds the new lease ${path}`);
+  return { [Symbol.asyncDispose]: () => presence.remove({ clock }) };
 }
 
 // An install of the lockfile of the snapshot in a folder of the state folder,
@@ -237,8 +209,8 @@ async function prune(installs: string): Promise<void> {
       await rm(join(installs, name), { recursive: true, force: true });
 }
 
-// Whether a live snapshot links to the install. A check of a lease file that
-// this process holds answers locked and keeps the lock (FileLock).
+// Whether a live snapshot links to the install. A check of a lease that this
+// process holds answers present and keeps the lock (Presence).
 async function isLeased(folder: string): Promise<boolean> {
   let names: string[];
   try {
@@ -249,6 +221,6 @@ async function isLeased(folder: string): Promise<boolean> {
     throw error;
   }
   return names.some(
-    (name) => FileLock.check(join(folder, leases, name)) === 'locked',
+    (name) => Presence.check(join(folder, leases, name)) === 'present',
   );
 }

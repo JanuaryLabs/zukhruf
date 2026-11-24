@@ -1,6 +1,6 @@
 # @zukhruf/fs
 
-Helpers that write files, a lock on a file that the kernel frees when its holder dies, and a stamp that tells that a file changed. A reader never sees a part of a write. `@zukhruf/mutex` uses them for its lock files, `@zukhruf/fencing` for its fencing counters, and `@zukhruf/election` for the claim and the epoch of each election. `@zukhruf/single-flight` claims a `FileLock` through `@zukhruf/election` for its election. It also holds a `FileLock` of its own for each key, in the file `execution-locks/<SHA-256 of the key>.lock`, and it never deletes these files ([key-locks.ts](../single-flight/src/key-lock/key-locks.ts)).
+Helpers that write files, a lock on a file that the kernel frees when its holder dies, a presence that tells other processes that its owner still runs, and a stamp that tells that a file changed. A reader never sees a part of a write. `@zukhruf/mutex` uses them for its lock files, `@zukhruf/fencing` for its fencing counters, and `@zukhruf/election` for the claim and the epoch of each election. `@zukhruf/single-flight` claims a `FileLock` through `@zukhruf/election` for its election. It also holds a `FileLock` of its own for each key, in the file `execution-locks/<SHA-256 of the key>.lock`, and it never deletes these files ([key-locks.ts](../single-flight/src/key-lock/key-locks.ts)).
 
 The words in these documents have one meaning each. See the glossary in [CONTEXT.md](./CONTEXT.md).
 
@@ -173,6 +173,47 @@ Obey these rules:
 
 The journal of the transaction is in memory, so a holder that dies leaves no `<path>-journal` file. Other programs can hold an exclusive SQLite transaction on the same file in the default journal mode. Such a transaction and a `FileLock` exclude each other. A journal file that such a program leaves is deleted by the next `tryLock()`.
 
+## Tell other processes that an owner still runs
+
+A **presence** tells other processes that its owner still runs. The owner holds the file lock of a file of its own while it lives. Another process checks the file: a held lock means that the owner runs, also when it is frozen. A free lock means that the owner stopped, also after `SIGKILL`. A process id cannot tell this, because a process id is used again, and a zombie process still answers `kill(pid, 0)`. The names come from FreeBSD `pidfile(3)` ([ADR 0007](./docs/adr/0007-a-presence-is-a-file-lock-that-its-owner-holds-while-it-lives.md)).
+
+```ts
+import { Presence } from '@zukhruf/fs';
+
+// The owner: before its record appears.
+const presence = Presence.tryOpen(`/var/lib/app/${id}.presence`);
+if (!presence) throw new Error('Another program opened the presence file.');
+// ... it writes its record, and works.
+// It removes its record, then:
+await presence.remove({ clock: globalThis });
+
+// Another process, which found the record:
+if (Presence.check(`/var/lib/app/${id}.presence`) !== 'present') {
+  // The owner stopped. It removes the record, then the file of the presence.
+  await Presence.removeIfEnded(`/var/lib/app/${id}.presence`, {
+    clock: globalThis,
+  });
+}
+```
+
+| Call                                      | What happens underneath                                                                                                                                                                                                                                                                                                                                                                                       |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Presence.tryOpen(path)`                  | `FileLock.open(path)` and `tryLock()`. `undefined` at once when another handle holds the lock: another owner, a deleter, or a check for a moment. When a deleter removed the file meanwhile, the lock is on a file that no reader finds: it opens the new file and tries again.                                                                                                                               |
+| `Presence.check(path)`                    | `FileLock.check(path)`: `'locked'` is `'present'`, `'unlocked'` is `'ended'`, and `'missing'` stays `'missing'`. It never creates the file and never takes the lock.                                                                                                                                                                                                                                          |
+| `Presence.removeIfEnded(path, { clock })` | It opens the file as the SQLite URI `file:<path>?mode=rw`, which never creates it, and tries the lock. With the lock it deletes the file as `remove` does: `'removed'`. When another handle holds the lock, `check` tells why: `'present'` is an owner or another deleter, and `'ended'` is a check for a moment, which it waits out on `clock` for at most 1 second. `'missing'` when the file is not there. |
+| `presence.remove({ clock })`              | On Unix: it deletes the file, then frees the lock, as `pidfile_remove(3)` does. On Windows: it frees the lock, then deletes the file; a refusal while another handle holds the lock leaves the file to it, and a refusal for a moment is tried again for 1 second (`patiently`).                                                                                                                              |
+| `presence[Symbol.dispose]()`              | It frees the lock and keeps the file, as `pidfile_close(3)` does. A second disposal does nothing.                                                                                                                                                                                                                                                                                                             |
+
+Obey these rules:
+
+- Delete the file of another owner only with `removeIfEnded`. A check holds the file for a moment, so a deleter that tries the lock once can leave the file, and an open of `tryOpen` creates it again.
+- Give each owner a path of its own, for example with a random id in the name. A presence is not a lock that owners share. For a lock that many processes take, use `FileLock`.
+- Take the presence before the owner's record appears. Remove it only after the record is gone. Thus a record whose presence ended belongs to an owner that stopped.
+- Decide what `'missing'` means for your records: a fault, an owner that moved on, or a record of an older release. The package cannot know it.
+- A check, an open or a `removeIfEnded` in the owner's own process is safe. The check answers `'present'`, the open returns `undefined`, `removeIfEnded` resolves `'present'`, and the lock stays (`src/presence.test.ts`). Open the file only through `Presence`: a descriptor of `node:fs`, or of a second SQLite library, drops the lock on Unix when it closes.
+
+`Presence` has no error class of its own. The faults of `FileLock` reach the caller, and `remove` rejects with the error of the delete when the delete still fails after 1 second. `removeIfEnded` rejects when checks of other processes kept the lock from it for 1 second.
+
 ## Refuse a network directory
 
 A lock that a file or SQLite holds works between the processes of one machine. On a network file system, for example NFS or SMB, other machines do not see that lock reliably. `assertLocalDirectory(directory)` rejects with `NetworkDirectoryError` when the directory is on a network file system. A directory that does not exist yet gets the result of its nearest parent that exists.
@@ -333,6 +374,18 @@ class FileLock implements Disposable {
   [Symbol.dispose](): void;
 }
 
+class Presence implements Disposable {
+  readonly path: string;
+  static tryOpen(path: string): Presence | undefined;
+  static check(path: string): 'present' | 'ended' | 'missing';
+  static removeIfEnded(
+    path: string,
+    options: { clock: Clock },
+  ): Promise<'removed' | 'present' | 'missing'>;
+  remove(options: { clock: Clock }): Promise<void>;
+  [Symbol.dispose](): void;
+}
+
 class FileStamp {
   readonly path: string;
   readonly modifiedAt: Date | undefined;
@@ -389,3 +442,4 @@ class TemporaryFiles {
 - [ADR 0004](./docs/adr/0004-a-file-stamp-is-the-stat-data-that-git-compares.md): a file stamp is the stat data that git compares.
 - [ADR 0005](./docs/adr/0005-a-write-waits-on-the-clock-that-the-caller-gives.md): a write waits on the clock that the caller gives.
 - [ADR 0006](./docs/adr/0006-a-temporary-directory-retries-its-removal-and-gives-its-real-path.md): a temporary directory retries its removal and gives its real path (superseded in part by [root ADR 0006](../../docs/adr/0006-production-code-and-tests-make-a-temporary-directory-with-temporaryfiles-of-zukhruf-fs.md)).
+- [ADR 0007](./docs/adr/0007-a-presence-is-a-file-lock-that-its-owner-holds-while-it-lives.md): a presence is a file lock that its owner holds while it lives.

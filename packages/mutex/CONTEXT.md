@@ -109,7 +109,7 @@ A short query that the session of a holder sends at a fixed interval, with a tim
 _Avoid_: Ping, keep-alive (TCP keep-alive is a different mechanism), presence
 
 **Presence**:
-The kernel lock that a holder or a waiter of a file lock store, or a session of a socket lock store, keeps while it runs. A waiter that can take the presence of another caller knows that the caller stopped. A new leader of a socket lock store that finds the presence of a session free knows that the session stopped.
+The kernel lock that a holder or a waiter of a file lock store, or a session of a socket lock store, keeps while it runs: a `Presence` of `@zukhruf/fs` (its ADR 0007). `CallerPresence` (`src/lock-stores/file-system/caller-presence.ts`) is the presence of a caller of a file lock store. A waiter that can take the presence of another caller knows that the caller stopped. A new leader of a socket lock store that finds the presence of a session free knows that the session stopped.
 _Avoid_: Liveness check, heartbeat, process check
 
 **Ticket**:

@@ -123,7 +123,7 @@ export class Listening {
       (opened) => opened.close(),
     );
     const presence = registering.adopt(
-      await ListenerPresence.take(options.path, id),
+      await ListenerPresence.take(options.path, id, options.clock),
       (taken) => taken.end(),
     );
     const endpoint = new PipeEndpoint(id, { prefix: 'zukhruf-sqlite-notify' });

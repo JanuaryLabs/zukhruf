@@ -2,10 +2,10 @@ import { Backoff, type Clock, delay } from '@zukhruf/async';
 
 import { isErrno } from './errno.ts';
 
-/** How long to retry a file operation that Windows refuses for a moment. */
-const WINDOWS_PATIENCE = 1000;
+/** How long to retry a file operation that another handle refuses for a moment: Windows, or a check of a presence. */
+export const PATIENCE = 1000;
 
-const WINDOWS_BACKOFF = new Backoff({
+export const PATIENCE_BACKOFF = new Backoff({
   initial: 5,
   multiplier: 2,
   max: 100,
@@ -41,10 +41,10 @@ export async function patiently<T>(
     } catch (error) {
       if (
         !isRefusedForNow(error) ||
-        clock.performance.now() - started > WINDOWS_PATIENCE
+        clock.performance.now() - started > PATIENCE
       )
         throw error;
-      await delay(WINDOWS_BACKOFF.duration(attempt), {
+      await delay(PATIENCE_BACKOFF.duration(attempt), {
         clock,
         signal: undefined,
       });

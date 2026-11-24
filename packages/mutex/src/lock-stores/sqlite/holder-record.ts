@@ -4,8 +4,8 @@ import { basename, join } from 'node:path';
 import type { Clock } from '@zukhruf/async';
 import { atomicWrite, isErrno, patiently } from '@zukhruf/fs';
 
+import { CallerPresence } from '../file-system/caller-presence.ts';
 import { Caller } from '../file-system/caller.ts';
-import { Presence } from '../file-system/presence.ts';
 import { readRecord } from '../file-system/record-file.ts';
 
 /**
@@ -34,7 +34,7 @@ export class HolderRecord {
     await mkdir(this.#folder, { recursive: true });
     await using announcing = new AsyncDisposableStack();
     const presence = announcing.adopt(
-      Presence.claim(this.#path, me, this.#clock),
+      CallerPresence.claim(this.#path, me, this.#clock),
       (claimed) => claimed.withdraw(),
     );
     await atomicWrite(this.#path, me.serialize(), { clock: this.#clock });
@@ -52,7 +52,7 @@ export class HolderRecord {
 
   /** Whether the holder that the record names still runs. Writes nothing. */
   isPresent(): Promise<boolean> {
-    return Presence.isNamedCallerPresent(this.#path, () => this.#read());
+    return CallerPresence.isNamedCallerPresent(this.#path, () => this.#read());
   }
 
   /**
@@ -64,7 +64,7 @@ export class HolderRecord {
   async #clearEarlierHolders(me: Caller) {
     const mine = new Set([
       basename(this.#path),
-      basename(Presence.pathOf(this.#path, me)),
+      basename(CallerPresence.pathOf(this.#path, me)),
     ]);
     const names = await readdir(this.#folder).catch((error: unknown) => {
       if (isErrno(error, 'ENOENT')) return [];

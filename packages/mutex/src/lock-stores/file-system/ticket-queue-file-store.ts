@@ -3,9 +3,9 @@ import { appendFile } from 'node:fs/promises';
 import type { Clock } from '@zukhruf/async';
 import { atomicWrite, draftSuffixLength, patiently } from '@zukhruf/fs';
 
+import { CallerPresence } from './caller-presence.ts';
 import { Caller } from './caller.ts';
 import { FileLockStore } from './file-lock-store.ts';
-import { Presence } from './presence.ts';
 import { readRecord } from './record-file.ts';
 
 /**
@@ -20,7 +20,7 @@ import { readRecord } from './record-file.ts';
 export class TicketQueueFileStore extends FileLockStore {
   /** The longer of a presence file and the draft that `atomicWrite` writes beside the record. */
   protected readonly longestSuffix = Math.max(
-    Presence.suffixLength,
+    CallerPresence.suffixLength,
     draftSuffixLength,
   );
 
@@ -30,7 +30,7 @@ export class TicketQueueFileStore extends FileLockStore {
   ): Promise<AsyncDisposable> {
     const me = Caller.current();
     await using leaving = new AsyncDisposableStack();
-    const presence = Presence.claim(path, me, this.clock);
+    const presence = CallerPresence.claim(path, me, this.clock);
     leaving.defer(() => leave(path, me, presence, this.clock));
     await enqueue(path, me, this.clock);
     await this.poll(() => this.#attempt(path, me), signal);
@@ -45,7 +45,7 @@ export class TicketQueueFileStore extends FileLockStore {
 
     const me = Caller.current();
     await using leaving = new AsyncDisposableStack();
-    const presence = Presence.claim(path, me, this.clock);
+    const presence = CallerPresence.claim(path, me, this.clock);
     leaving.defer(() => leave(path, me, presence, this.clock));
     await enqueue(path, me, this.clock);
     // Another waiter appended at the same moment and is first.
@@ -56,7 +56,7 @@ export class TicketQueueFileStore extends FileLockStore {
 
   /** The first ticket's caller holds the key. A gone one does not, and a waiter behind it holds nothing yet. */
   protected isHeldAt(path: string): Promise<boolean> {
-    return Presence.isNamedCallerPresent(path, () =>
+    return CallerPresence.isNamedCallerPresent(path, () =>
       readHead(path, this.clock),
     );
   }
@@ -89,7 +89,10 @@ export class TicketQueueFileStore extends FileLockStore {
         if (tickets[0]?.id !== gone.id) return;
         const rest = tickets.filter((ticket) => ticket.id !== gone.id);
         await replace(path, rest, this.clock);
-        await Presence.delete(Presence.pathOf(path, gone), this.clock);
+        await CallerPresence.delete(
+          CallerPresence.pathOf(path, gone),
+          this.clock,
+        );
         const [next] = rest;
         if (!next || !(await isGone(path, next, this.clock))) return;
         gone = next;
@@ -104,7 +107,9 @@ async function isGone(
   head: Caller,
   clock: Clock,
 ): Promise<boolean> {
-  const state = await Presence.judge(path, head, () => readHead(path, clock));
+  const state = await CallerPresence.judge(path, head, () =>
+    readHead(path, clock),
+  );
   return state === 'gone';
 }
 
@@ -116,7 +121,7 @@ async function isGone(
 async function leave(
   path: string,
   me: Caller,
-  presence: Presence,
+  presence: CallerPresence,
   clock: Clock,
 ) {
   using reading = new DisposableStack();
@@ -130,7 +135,7 @@ async function leave(
 function holding(
   path: string,
   me: Caller,
-  presence: Presence,
+  presence: CallerPresence,
   clock: Clock,
 ): AsyncDisposable {
   return {

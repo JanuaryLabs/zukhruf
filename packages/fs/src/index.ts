@@ -10,6 +10,7 @@ export { FileLock } from './file-lock.ts';
 export { assertLocalDirectory } from './local-directory.ts';
 export { NetworkDirectoryError } from './network-directory-error.ts';
 export { patiently } from './patiently.ts';
+export { Presence } from './presence.ts';
 export { safeFileName } from './safe-file-name.ts';
 export {
   type TemporaryDirectory,

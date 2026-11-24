@@ -47,23 +47,16 @@ Backlog #2544 is about this code: `close` stops the listeners, but it does not e
 - Same: `acquire`, `tryAcquire` and `isHeld` give each call to the lock store that does the work.
 - Differs: `SocketStore` gives each call to its own `RemoteLockClient`. It extends `EventEmitter` for its role events, and a class has only one base class, so it cannot extend `DelegatingLockStore`. A new operation of `LockStore` goes into both places, as `isHeld` did in fb6456b.
 
-**A presence that outlasts its record.**
-
-- Places: `Presence` (`file-system/presence.ts`: `claim`, `releaseAfter`), and `SessionDirectory.record` with `SessionRecord` (`socket/session-directory.ts`). Outside this package: `ListenerPresence` of `@zukhruf/sqlite-notify` (`packages/sqlite/notify/src/listener-presence.ts`, its [ledger](../../sqlite/notify/docs/copied-code.md)), and the install lease of `@zukhruf/git-hooks` (`packages/git-hooks/src/snapshot/installs.ts`). The extraction of the four into `@zukhruf/fs` is #5463, and waits for Ezz's go. Until then, a fix to one goes into each, and the commit names the files.
-- Same: a caller takes a `FileLock` on a file of its own before its record appears. To leave, it removes its record first, then frees the lock, then deletes the presence file. A reader that finds the record and a free presence knows that the caller stopped ([ADR 0012](./adr/0012-a-file-store-holder-is-judged-by-its-presence.md)).
-- Differs: a session of a socket store has its own names, `sessions/<id>.json` and `sessions/<id>.presence`, and a record of its own content, so it cannot use the paths of `Presence`. A new leader also deletes a presence file that has no record and no lock, under its own lock, so a session that finds its locked file gone takes its presence again ([ADR 0033](./adr/0033-a-new-leader-grants-nothing-until-each-recorded-session-reasserted-its-keys-stopped-or-missed-its-lease.md)). `Presence` is never deleted by another caller before its record exists.
-- The delete order: `SessionDirectory` (`#deleteIfFree`, `unlinkRefused`) deletes a presence file while it holds the lock, then frees it. On Windows a file that a handle keeps open cannot be deleted, so that delete is refused, the lock is freed, and the delete is tried once more; a second refusal means that another handle opened the file. `ListenerPresence` copies this order, and the install lease copies it since #5462 (`endLease` and `unlinkRefused` in `installs.ts`); before, the lease deleted its file with the lock open, which Windows refuses (EPERM), so a Windows lease left its file. `Presence` frees first and deletes with `patiently`.
-
 **The second check under the reclaim lock.**
 
 - Places: `#evictIfGone` of `LockFileStore` (`file-system/lock-file-store.ts`), and `#evictGoneHeads` of `TicketQueueFileStore` (`file-system/ticket-queue-file-store.ts`).
-- Same: `Presence.judge` found the caller gone. Under the reclaim lock, the lock store reads the record again. When the record does not name that caller now, another waiter evicted it first, and the lock store stops. Otherwise the lock store removes the caller from the record, and then deletes the presence file of the caller.
+- Same: `CallerPresence.judge` found the caller gone. Under the reclaim lock, the lock store reads the record again. When the record does not name that caller now, another waiter evicted it first, and the lock store stops. Otherwise the lock store removes the caller from the record, and then deletes the presence file of the caller.
 - Differs: `LockFileStore` deletes the lock file. `TicketQueueFileStore` writes the other tickets back, and then does the same for the next ticket while its caller is gone too.
 
 **The longest suffix of the two file stores.**
 
 - Places: `longestSuffix` of `LockFileStore` and of `TicketQueueFileStore`.
-- Same: `Math.max(Presence.suffixLength, draftSuffixLength)`.
+- Same: `Math.max(CallerPresence.suffixLength, draftSuffixLength)`.
 - Differs: only the comment. In `LockFileStore`, `createExclusive` writes the draft. In `TicketQueueFileStore`, `atomicWrite` writes it.
 - Not counted: `SqliteStore.longestSuffix` (`sqlite/sqlite-store.ts`) is `'-journal'.length`. It keeps the file names that published versions gave the keys, so it does not come from the files that the lock store makes.
 
@@ -175,3 +168,10 @@ The maintainer chose the copies over a shared helper on 2026-11-20, and again on
 - Same: a map of requests by id. An entry keeps only what settles the caller's promise. `#take` gets an entry, deletes it, and tells its owner that the map changed, so the owner can `ref` or `unref` its connection. A reject-all takes each entry and rejects it.
 
 The maintainer chose to keep the three places (backlog #2538). The parts that are the same are short, and the parts that differ (the delivery states, what a new connection sends again, what keeps the process alive) stay with each owner. A fourth place, or the coordinator package of backlog #2496, is the time to extract it.
+
+## Moved to `@zukhruf/fs`
+
+**A presence that outlasts its record.** This code is no longer a copy. The knowledge moved to `Presence` of `@zukhruf/fs` ([its ADR 0007](../../fs/docs/adr/0007-a-presence-is-a-file-lock-that-its-owner-holds-while-it-lives.md), #5463): an owner holds a file lock on a file of its own from before its record appears until after the record is gone, and a deleter deletes another owner's file only while it holds the lock, in the order of each system. It was in four places: `Presence` of this package (now `CallerPresence`), `SessionDirectory` with `SessionRecord`, `ListenerPresence` of `@zukhruf/sqlite-notify`, and the install lease of `@zukhruf/git-hooks`. Each place keeps its own records, names of files and rule for a missing file:
+
+- `CallerPresence` (`file-system/caller-presence.ts`) keeps `pathOf`, `judge`, `isNamedCallerPresent`, and the rule that a missing presence file is a fault while the record names the caller. The delete of a gone caller's file now holds its lock.
+- `SessionDirectory` (`socket/session-directory.ts`) keeps `sessions/<id>.json` and `sessions/<id>.presence`, its listing, and the rule that a missing presence file is a session that stopped. Its open of a new presence tries again for at most 1 second while a recovery holds the file. `#deleteIfFree` and `unlinkRefused` are gone.

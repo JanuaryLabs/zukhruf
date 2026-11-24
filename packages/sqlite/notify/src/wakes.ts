@@ -1,7 +1,7 @@
 import { rm } from 'node:fs/promises';
 import type { Socket } from 'node:net';
 
-import { Latch, WaitGroup } from '@zukhruf/async';
+import { type Clock, Latch, WaitGroup } from '@zukhruf/async';
 import { isErrno } from '@zukhruf/fs';
 import { NoServerError, PipeAddress } from '@zukhruf/pipes';
 
@@ -31,16 +31,19 @@ export class Wakes {
   // waits for.
   readonly #removals = new WaitGroup();
   readonly #database: string;
+  readonly #clock: Clock;
   readonly #wakeOwn: (id: string) => boolean;
   readonly #fail: (error: unknown) => void;
 
-  /** `database` is the path of the file. `wakeOwn` wakes the listener of the sending instance with no socket, and tells whether the id was its own. */
+  /** `database` is the path of the file. `wakeOwn` wakes the listener of the sending instance with no socket, and tells whether the id was its own. The removal of a presence file waits on `clock` while Windows refuses it. */
   constructor(
     database: string,
+    clock: Clock,
     wakeOwn: (id: string) => boolean,
     fail: (error: unknown) => void,
   ) {
     this.#database = database;
+    this.#clock = clock;
     this.#wakeOwn = wakeOwn;
     this.#fail = fail;
   }
@@ -62,7 +65,9 @@ export class Wakes {
     for (const [id, address] of dead) {
       this.#dead.delete(id);
       this.#removeFile(address);
-      this.#track(ListenerPresence.removeIfFree(this.#database, id));
+      this.#track(
+        ListenerPresence.removeIfEnded(this.#database, id, this.#clock),
+      );
     }
   }
 
@@ -116,7 +121,7 @@ export class Wakes {
   #mayLive(id: string, error: NoServerError): boolean {
     if (process.platform === 'linux' || !isErrno(error.cause, 'ECONNREFUSED'))
       return false;
-    return ListenerPresence.check(this.#database, id) === 'locked';
+    return ListenerPresence.lives(this.#database, id);
   }
 
   // A killed listener's socket file stays (research 20a P1); the sender that

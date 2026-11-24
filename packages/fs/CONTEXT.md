@@ -42,11 +42,15 @@ _Avoid_: Truncated name, short name
 
 **File lock**:
 A lock on a file that the kernel holds for one handle at a time. The kernel frees it when the process of the holder stops, however it stops. It is an exclusive SQLite transaction on the file.
-_Avoid_: Claim (the election uses a file lock as its claim), presence (the mutex uses a file lock as a presence), lock file (a file whose presence is the lock, which stays when its holder dies)
+_Avoid_: Claim (the election uses a file lock as its claim), presence (a file lock that one owner holds on a file of its own while it lives), lock file (a file whose presence is the lock, which stays when its holder dies)
 
 **Handle**:
 An open `FileLock` of a path. It takes the file lock with `tryLock()` and lets it go with `unlock()`, and it stays open for the next `tryLock()`. Two handles in one process exclude each other too (`src/file-lock.test.ts`).
 _Avoid_: Connection (the SQLite database in the handle), descriptor (a file descriptor of the kernel; a close of another descriptor of the file drops the lock)
+
+**Presence**:
+The file lock that one owner holds on a file of its own while it lives (`Presence`, ADR 0007). Another process checks the file: a held lock means that the owner runs, also when it is frozen; a free lock means that it stopped, also after `SIGKILL`. The names come from FreeBSD `pidfile(3)`.
+_Avoid_: Pid file (the file holds no process id, and an owner is not a process), heartbeat (a frozen owner stays present), liveness
 
 **File stamp**:
 What the file system says about the file at a path: its device, its inode, its size, and the times of its last write and its last change, to the nanosecond. A write or a new file at the path changes it. A missing file has a stamp of its own.

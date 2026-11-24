@@ -85,7 +85,7 @@ A listener whose connect rejected with `NoServerError` of `@zukhruf/pipes` (caus
 _Avoid_: Stale listener, zombie, orphan
 
 **Presence**:
-A listener's kernel lock (`FileLock` of `@zukhruf/fs`) on its file `<database>.listeners/<listener id>.presence`, held from before its row is inserted until after its row is removed. The kernel frees it when the listener's process stops. A sender reads it only after a refused connect outside Linux: locked, the listener lives and its wake is lost; free or missing, it is dead (ADR 0011).
+A listener's `Presence` of `@zukhruf/fs`, the kernel lock on its file `<database>.listeners/<listener id>.presence`, held from before its row is inserted until after its row is removed. The kernel frees it when the listener's process stops. A sender reads it only after a refused connect outside Linux: locked, the listener lives and its wake is lost; free or missing, it is dead (ADR 0011).
 _Avoid_: Heartbeat, lock file, pid file
 
 **Laggard**:

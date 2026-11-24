@@ -3,9 +3,9 @@ import { unlink } from 'node:fs/promises';
 import type { Clock } from '@zukhruf/async';
 import { createExclusive, draftSuffixLength, patiently } from '@zukhruf/fs';
 
+import { CallerPresence } from './caller-presence.ts';
 import { Caller } from './caller.ts';
 import { FileLockStore } from './file-lock-store.ts';
-import { Presence } from './presence.ts';
 import { readRecord } from './record-file.ts';
 
 /**
@@ -15,7 +15,7 @@ import { readRecord } from './record-file.ts';
 export class LockFileStore extends FileLockStore {
   /** The longer of a presence file and the draft that `createExclusive` writes beside the record. */
   protected readonly longestSuffix = Math.max(
-    Presence.suffixLength,
+    CallerPresence.suffixLength,
     draftSuffixLength,
   );
 
@@ -46,7 +46,7 @@ export class LockFileStore extends FileLockStore {
 
     await using claiming = new AsyncDisposableStack();
     const presence = claiming.adopt(
-      Presence.claim(path, me, this.clock),
+      CallerPresence.claim(path, me, this.clock),
       (claimed) => claimed.withdraw(),
     );
     if (!(await createExclusive(path, me.serialize(), { clock: this.clock })))
@@ -60,20 +60,23 @@ export class LockFileStore extends FileLockStore {
 
   /** A gone holder stays: only a caller that acquires evicts it. */
   protected isHeldAt(path: string): Promise<boolean> {
-    return Presence.isNamedCallerPresent(path, () =>
+    return CallerPresence.isNamedCallerPresent(path, () =>
       readHolder(path, this.clock),
     );
   }
 
   async #evictIfGone(path: string, holder: Caller) {
-    const state = await Presence.judge(path, holder, () =>
+    const state = await CallerPresence.judge(path, holder, () =>
       readHolder(path, this.clock),
     );
     if (state !== 'gone') return;
     await this.withReclaimLock(path, async () => {
       if ((await readHolder(path, this.clock))?.id !== holder.id) return;
       await removeLockFile(path, this.clock);
-      await Presence.delete(Presence.pathOf(path, holder), this.clock);
+      await CallerPresence.delete(
+        CallerPresence.pathOf(path, holder),
+        this.clock,
+      );
     });
   }
 }
