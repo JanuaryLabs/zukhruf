@@ -57,12 +57,13 @@ test('each lock-store family has its own import path with its stores and the err
     ['sqlserver', ['SqlServerStore']],
     ['mysql', ['MysqlStore']],
     ['mariadb', ['MariadbStore']],
-    ['docker', ['DockerEngineStore']],
+    ['docker', ['DockerEngineStore', 'DockerEngineStoreWarning']],
     [
       'socket',
       [
         'CoordinatorUnavailableError',
         'GrantFailedError',
+        'LockServerWarning',
         'NetworkDirectoryError',
         'ProtocolVersionError',
         'SocketStore',
@@ -81,9 +82,11 @@ test('the root import path has only the core and no lock store', async () => {
   assert.deepEqual(await exportsOf('@zukhruf/mutex'), [
     'Key',
     'LeaderSelector',
+    'LeaderSelectorWarning',
     'LeaseLostError',
     'Modes',
     'Mutex',
+    'MutexWarning',
     'SkipIfBusyMode',
     'WaitMode',
     'leaseFor',
