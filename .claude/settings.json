@@ -1,4 +1,7 @@
 {
+  "env": {
+    "SHARED_CHECKOUT": "1"
+  },
   "permissions": {
     "allow": ["Bash(git commit:*)", "Bash(git push:*)"]
   }
