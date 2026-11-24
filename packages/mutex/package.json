@@ -1,7 +1,7 @@
 {
   "name": "@zukhruf/mutex",
   "version": "0.8.70",
-  "description": "A mutex with interchangeable lock stores, from one object to every process on a host, with fencing tokens on every lease.",
+  "description": "A mutex with interchangeable lock stores, from one object to every process on a host, with fencing tokens on every lease, and a leader selector (Apache Curator's) that runs a task each time this process holds a key or leads an election.",
   "license": "MIT",
   "repository": {
     "type": "git",
