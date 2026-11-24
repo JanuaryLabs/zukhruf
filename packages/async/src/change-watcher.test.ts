@@ -17,6 +17,7 @@ import {
   type Primitive,
   type Sample,
   poll,
+  untilAborted,
 } from './index.ts';
 
 const execFileAsync = promisify(execFile);
@@ -233,6 +234,124 @@ describe('ChangeWatcher', () => {
       clock.countTimers(),
       0,
       'The timer of the timeout must end with the check',
+    );
+  });
+
+  test('a read that rejects with its own error right after the timeout aborts it fails with that error, so the consumer sees what the read was doing', async (t) => {
+    // Arrange: a read that names its step, as a driver that wraps the abort.
+    const clock = createClock();
+    class Opening extends Gauge<number> {
+      protected async read(check: Check) {
+        try {
+          return await untilAborted(
+            new Promise<number>(() => {}),
+            check.signal,
+          );
+        } catch (error) {
+          throw new Error('timed out in open', { cause: error });
+        }
+      }
+    }
+    const opening = new Opening();
+    const other = new Setting(1);
+    const checks = new ChangeWatcher([opening, other], {
+      interval: 5,
+      timeout: 50,
+      clock,
+    }).watch(new AbortController().signal);
+
+    // Act
+    const first = checks.next();
+    await poll(async () => (other.reads === 1 ? true : undefined), {
+      signal: t.signal,
+      clock: globalThis,
+      interval: 1,
+    });
+    await clock.tickAsync(50);
+    const outcome = ((await first).value ?? undefined)?.get(opening);
+
+    // Assert
+    const error = outcome?.state === 'failed' ? outcome.error : undefined;
+    assert.ok(Error.isError(error), 'The read must fail');
+    assert.equal(error.message, 'timed out in open');
+    assert.ok(
+      error.cause instanceof DOMException,
+      'The error of the read must keep the abort as its cause',
+    );
+    assert.equal(error.cause.name, 'TimeoutError');
+  });
+
+  test('a read that gives a value right after the timeout aborts it fails with the TimeoutError, because it took longer than the timeout', async (t) => {
+    // Arrange
+    const clock = createClock();
+    class Late extends Gauge<number> {
+      protected read(check: Check) {
+        return new Promise<number>((resolve) =>
+          check.signal.addEventListener('abort', () => resolve(1)),
+        );
+      }
+    }
+    const late = new Late();
+    const other = new Setting(1);
+    const checks = new ChangeWatcher([late, other], {
+      interval: 5,
+      timeout: 50,
+      clock,
+    }).watch(new AbortController().signal);
+
+    // Act
+    const first = checks.next();
+    await poll(async () => (other.reads === 1 ? true : undefined), {
+      signal: t.signal,
+      clock: globalThis,
+      interval: 1,
+    });
+    await clock.tickAsync(50);
+    const outcome = ((await first).value ?? undefined)?.get(late);
+
+    // Assert
+    const error = outcome?.state === 'failed' ? outcome.error : undefined;
+    assert.ok(error instanceof DOMException, 'The late value must not count');
+    assert.equal(error.name, 'TimeoutError');
+  });
+
+  test('a read that rejects with the reason of the abort fails with that same TimeoutError', async (t) => {
+    // Arrange
+    const clock = createClock();
+    let reason: unknown;
+    class Aborting extends Gauge<number> {
+      protected read(check: Check) {
+        check.signal.addEventListener('abort', () => {
+          reason = check.signal.reason;
+        });
+        return untilAborted(new Promise<number>(() => {}), check.signal);
+      }
+    }
+    const aborting = new Aborting();
+    const other = new Setting(1);
+    const checks = new ChangeWatcher([aborting, other], {
+      interval: 5,
+      timeout: 50,
+      clock,
+    }).watch(new AbortController().signal);
+
+    // Act
+    const first = checks.next();
+    await poll(async () => (other.reads === 1 ? true : undefined), {
+      signal: t.signal,
+      clock: globalThis,
+      interval: 1,
+    });
+    await clock.tickAsync(50);
+    const outcome = ((await first).value ?? undefined)?.get(aborting);
+
+    // Assert
+    assert.ok(reason instanceof DOMException);
+    assert.equal(reason.name, 'TimeoutError');
+    assert.equal(
+      outcome?.state === 'failed' && outcome.error,
+      reason,
+      'The outcome must carry the reason itself, not a copy or a wrapper',
     );
   });
 

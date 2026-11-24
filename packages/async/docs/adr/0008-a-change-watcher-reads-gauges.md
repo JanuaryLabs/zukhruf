@@ -1,5 +1,7 @@
 # A change watcher reads gauges
 
+Superseded in part on 2026-11-24 (#5566) for the error of a read that takes longer than `timeout`. At the abort, the watcher waits one turn of the event loop for the read, and a read that rejects in that turn fails with its own error ([ADR 0019](./0019-at-the-timeout-of-a-check-a-read-that-rejects-within-one-turn-of-the-event-loop-fails-with-its-own-error.md)). The rest of the decision below stays true.
+
 [ADR 0004](./0004-a-change-watcher-yields-each-check-with-the-keys-that-changed.md) gave `pollChanges` one read for each key. [ADR 0007](./0007-a-check-is-one-read-that-gives-the-value-of-each-key.md) gave it one read for each check, which returns a map from each key to its value. Each form fit some consumers and forced the others to adapt. With one read for each key, a consumer whose one query gives the values of many keys shared a cache between closures and relied on the order of the reads. With one read for each check, a consumer that holds a read for each store had to join its reads into one, the same three lines in each consumer (#3840).
 
 Both forms mix three jobs: the schedule of the checks, how a check reads, and what the values stand for. This decision gives each job its own concept, from the domain of polling, not from a consumer. Prometheus scrapes gauges and collectors, Kubernetes informers list many keys in one read, and the Signals proposal of TC39 compares each value with `Object.is`.

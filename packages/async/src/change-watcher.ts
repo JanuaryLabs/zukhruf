@@ -1,3 +1,5 @@
+import { setImmediate as nextTurn } from 'node:timers/promises';
+
 import { Check } from './check.ts';
 import type { WallClock } from './clock.ts';
 import { delay } from './delay.ts';
@@ -28,6 +30,25 @@ function same(a: Value, b: Value): boolean {
   if (Array.isArray(a) && Array.isArray(b))
     return a.length === b.length && a.every((value, i) => same(value, b[i]));
   return Object.is(a, b);
+}
+
+// Settles like the read, or fails when the signal aborts first. A read that
+// then rejects within one turn of the event loop fails with its own error,
+// which can name what it was doing (ADR 0019). A read that does not reject
+// in that turn fails with the reason of the signal.
+async function untilRead<V>(read: Promise<V>, signal: AbortSignal): Promise<V> {
+  try {
+    return await untilAborted(read, signal);
+  } catch (error) {
+    if (!signal.aborted) throw error;
+    throw await Promise.race([
+      read.then(
+        () => signal.reason,
+        (own: unknown) => own,
+      ),
+      nextTurn(signal.reason),
+    ]);
+  }
 }
 
 /**
@@ -86,11 +107,12 @@ export class ChangeWatcher<G extends Gauge> {
       this.#clock.Date.now(),
       AbortSignal.any([signal, limit.signal]),
     );
-    // A read that ignores the signal still ends for this check at the timeout.
+    // A read that ignores the signal still ends for this check at the timeout,
+    // one turn of the event loop after the abort.
     const reads = await Promise.all(
       this.#gauges.map(async (gauge) => {
         try {
-          const value = await untilAborted(gauge.value(check), check.signal);
+          const value = await untilRead(gauge.value(check), check.signal);
           return { gauge, read: true as const, value };
         } catch (error) {
           return { gauge, read: false as const, error };
