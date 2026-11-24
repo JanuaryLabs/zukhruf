@@ -7,7 +7,8 @@ import { createInterface } from 'node:readline';
 import { text } from 'node:stream/consumers';
 import { describe, test } from 'node:test';
 
-import { untilAborted } from '@zukhruf/async';
+import { createClock } from '@sinonjs/fake-timers';
+
 import { DeniedError } from '@zukhruf/sqlite-open';
 
 import { Presence } from './presence.ts';
@@ -442,27 +443,41 @@ describe('Presence', () => {
     );
   });
 
-  test('removeIfEnded of an ended presence that another process checks without a pause gives up after 1 second with its error, and the file stays', async (t) => {
+  test('removeIfEnded of an ended presence that another process checks without a pause gives up after 1 second with its error, not before and not much later, and the file stays', async () => {
     // Arrange
     await using directory = await new TemporaryFiles().directory('zukhruf-fs-');
     const [path] = endedPresences(directory.path, 1);
     assert.ok(path);
     await using _check = await startEndlessCheck(path);
-    const started = performance.now();
+    const clock = createClock();
+    let settled = false;
+    const removing = Presence.removeIfEnded(path, { clock });
+    removing.then(
+      () => (settled = true),
+      () => (settled = true),
+    );
 
-    // Act: a deleter that never gives up still waits when the test's limit
-    // ends; the end of the endless check then lets it remove the file.
-    const removing = Presence.removeIfEnded(path, { clock: globalThis });
-    await assert.rejects(untilAborted(removing, t.signal), {
+    // Act: each attempt is synchronous, so the fake clock alone paces the
+    // deleter's waits between checks.
+    while (clock.now < 1000 && !settled) await clock.tickAsync(5);
+    const settledBeforeOneSecond = settled;
+    await clock.tickAsync(100);
+
+    // Assert: the last wait of the backoff is 100 ms, so the give-up comes
+    // within 100 ms after 1 second.
+    assert.equal(
+      settledBeforeOneSecond,
+      false,
+      `The deleter must wait out checks for 1 second; it settled at ${clock.now} ms`,
+    );
+    assert.equal(
+      settled,
+      true,
+      'The deleter must give up within 100 ms after 1 second',
+    );
+    await assert.rejects(removing, {
       message: `The presence ${JSON.stringify(path)} has ended, but other processes checked it without a pause for 1 second, so its file stays.`,
     });
-    const waited = performance.now() - started;
-
-    // Assert
-    assert.ok(
-      waited >= 1000,
-      `The deleter must wait out checks for 1 second before it gives up; it gave up after ${Math.round(waited)} ms`,
-    );
     assert.deepEqual(await readdir(directory.path), ['0.presence']);
   });
 
