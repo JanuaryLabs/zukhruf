@@ -306,10 +306,16 @@ directories() {
 }
 
 # Resolves when the lease $1 is gone, as EngineLease.gone does; fails at $deadline.
+# An inspect that hit its request time limit (bounded's status 137) does not say
+# that the lease is gone, so gone() asks again.
 gone() {
   seen=
   while :; do
-    state=$(once docker inspect -f '{{.State.Status}}' "$1" 2>/dev/null) || return 0
+    [ "$(now)" -ge "$deadline" ] && return 1
+    state=$(once docker inspect -f '{{.State.Status}}' "$1" 2>/dev/null) || {
+      [ $? -eq 137 ] || return 0
+      continue
+    }
     case $state in exited|dead) once docker rm "$1" >/dev/null 2>&1; return 0 ;; esac
     if [ "$seen" = created ] && [ "$state" = created ]; then
       once docker rm "$1" >/dev/null 2>&1
@@ -319,7 +325,7 @@ gone() {
     patience=$(($(now) + REAPER_LEASE_PATIENCE))
     while [ "$(now)" -lt "$patience" ]; do
       [ "$(now)" -ge "$deadline" ] && return 1
-      once docker inspect "$1" >/dev/null 2>&1 || return 0
+      once docker inspect "$1" >/dev/null 2>&1 || [ $? -eq 137 ] || return 0
       sleep $tick
     done
   done

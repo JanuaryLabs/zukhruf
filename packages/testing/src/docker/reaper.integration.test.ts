@@ -1452,10 +1452,17 @@ exec sleep 3600`,
       // other shared server is refused, so the test keeps them all.
       proxy.sweepOnly([fingerprint]);
       const events: ('try' | 'gone')[] = [];
+      // The removal of the holder. It starts at the first inspect of the lease
+      // after the Conflict, and never runs inside that inspect: the reaper
+      // bounds each request by its requestTimeout, and polls until the lease
+      // is gone.
+      let removal: Promise<void> | undefined;
       proxy.intercept('POST', '/containers/create', async ({ body }) => {
         const { Labels: labels }: { Labels: Record<string, string> } =
           JSON.parse(body);
         if (labels['dev.zukhruf.testing.lease'] !== 'sweep') return;
+        await removal;
+        removal = undefined;
         events.push('try');
         if ((await docker.containers.find(lease)) !== undefined) return;
         const taken = await docker.containers.create(
@@ -1469,11 +1476,13 @@ exec sleep 3600`,
         );
         await taken.start();
       });
-      proxy.intercept('GET', `/containers/${lease}/json`, async () => {
-        const taken = await docker.containers.find(lease);
-        if (taken === undefined) return;
-        await taken.remove({ force: true });
-        events.push('gone');
+      proxy.intercept('GET', `/containers/${lease}/json`, () => {
+        removal ??= (async () => {
+          const taken = await docker.containers.find(lease);
+          if (taken === undefined) return;
+          await taken.remove({ force: true });
+          events.push('gone');
+        })();
       });
 
       const { finished } = await proxiedReaper(stack, proxy, run, {
@@ -1485,6 +1494,7 @@ exec sleep 3600`,
       });
 
       await within(finished, t.signal, 'the end of the reaper');
+      await removal;
       assert.deepEqual(
         events,
         Array.from({ length: sweepTries }, () => ['try', 'gone']).flat(),
