@@ -1,6 +1,6 @@
 # no-unhandled-readline-error counts an input that the code can write to
 
-Status: Proposed on 2026-11-24 (#5458). The owner has not decided the input types yet.
+Status: Accepted on 2026-11-24 (#5458). Ezz chose "Accept the narrowing": only an input that the code can write to (a socket, a TLS socket, a PassThrough, any Duplex) counts, and a child process's stdout, a plain Readable and process.stdin do not.
 
 readline emits the errors of its input again on its interface. With no `'error'` listener on the interface, the error is an uncaught exception, even when the input has its own listener. A coordinator that a test served read its peers with readline, and Linux CI turned red twice: in #2573 (single-flight, fixed in 5e83b4e) and in #5265 (mutex, red from 368c4f9c, fixed in 6be94b21). Linux resets a Unix socket when its peer closes with data in its receive queue that it did not read. macOS does not, so every local run passed.
 
