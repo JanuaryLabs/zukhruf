@@ -611,7 +611,7 @@ async function proxiedReaper(
   proxy: EngineProxy,
   fingerprints: readonly string[],
   settings: Partial<ReaperSettings>,
-): Promise<{ finished: Promise<void> }> {
+): Promise<{ finished: Promise<'removed' | 'kept'> }> {
   proxy.sweepOnly(fingerprints);
   // Docker Desktop resolves host.docker.internal to this machine for each
   // container. On a native Linux engine the reaper reaches this machine at
@@ -681,7 +681,7 @@ async function proxiedReaper(
   stack.defer(async () => {
     await (await docker.containers.find(reaper.id))?.remove({ force: true });
   });
-  const finished = endedOnce(reaper.id, since);
+  const finished = endedOnce(reaper.id, run, since);
   finished.catch(() => {});
   // The reaper reads the age of a server in whole seconds.
   await setTimeout(1_100);
@@ -690,25 +690,37 @@ async function proxiedReaper(
 }
 
 /**
- * Resolves when the engine destroyed the reaper `id`, from `since` on, after
- * one start and one end. A reaper removes itself, so its exit code is 137 at
- * its end, also after a crash that its restart policy followed with a start:
- * that rejects.
+ * Resolves when the reaper `id` of `run` ended, from `since` on, after one
+ * start and one end, with how it ended. A reaper removes itself, so its exit
+ * code is 137 at its end and the engine destroys it: `removed`. A reaper with
+ * a call that hit its request time limit exits 0 under the name of a kept
+ * reaper, and stays (ADR 0031): `kept`. A crash that its restart policy
+ * followed with a start rejects.
  */
-async function endedOnce(id: string, since: number): Promise<void> {
+async function endedOnce(
+  id: string,
+  run: string,
+  since: number,
+): Promise<'removed' | 'kept'> {
   const actions: (string | undefined)[] = [];
-  for await (const { Action } of docker.events({
+  for await (const { Action, Actor } of docker.events({
     since,
     filters: { container: [id], event: ['start', 'die', 'destroy'] },
   })) {
-    actions.push(Action);
-    if (Action === 'destroy') break;
+    const kept =
+      Action === 'die' &&
+      Actor?.Attributes?.exitCode === '0' &&
+      Actor.Attributes.name?.startsWith(`${reaperName(run)}-`) === true;
+    actions.push(kept ? 'kept' : Action);
+    if (kept || Action === 'destroy') break;
   }
+  const end = actions.at(-1) === 'kept' ? 'kept' : 'removed';
   assert.deepEqual(
     actions,
-    ['start', 'die', 'destroy'],
+    end === 'kept' ? ['start', 'kept'] : ['start', 'die', 'destroy'],
     'the reaper ends once, and its policy never starts it again',
   );
+  return end;
 }
 
 /**

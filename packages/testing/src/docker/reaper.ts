@@ -73,6 +73,8 @@ export interface ReaperSettings {
   firstHolder: number;
   /** The age from which the reaper removes a shared server that no process lease holds (ADR 0019). */
   serverTtl: number;
+  /** The age from which the reaper removes a stopped reaper, such as a kept reaper (ADR 0031). */
+  keptTtl: number;
   /** How long the reaper waits for the sweep lease of one server that another holder has (ADR 0014). */
   sweepWait: number;
   /** The tries to take the sweep lease of one server. */
@@ -96,6 +98,7 @@ export const REAPER_DEFAULTS: ReaperSettings = {
   retries: 10,
   firstHolder: 60_000,
   serverTtl: 7 * 24 * 60 * 60 * 1000,
+  keptTtl: 7 * 24 * 60 * 60 * 1000,
   sweepWait: 30_000,
   sweepTries: 3,
   leasePatience: 5_000,
@@ -124,6 +127,13 @@ const BIND = '/tmp/bind';
  * holder (ADR 0020, item 9).
  */
 const CAME = '/tmp/came';
+
+/**
+ * The mark of a call that the request time limit ended: the reaper keeps its
+ * container at its end, so its logs keep the line of that call (ADR 0031). A
+ * restart keeps the mark, as the logs keep the lines of each start.
+ */
+const LIMITED = '/tmp/limited';
 
 /**
  * The exec of a holder. It waits for the check of the reaper's socket, and
@@ -163,10 +173,10 @@ function dropBranch(collector: Collector): string {
       credential=$(value ${name})
       ${fallback === undefined ? '' : `[ -n "$credential" ] || credential=${word(fallback)}`}
       list=${word(collector.list)}
-      names=$(once docker exec "$1" ${run('list')}) || return 0
+      names=$(bounded "docker exec $1 list" "$1" docker exec "$1" ${run('list')}) || return 0
       for name in $(echo "$names" | tr -d '\\r' | grep -E ${word(ownedNames(variable('hex')))}); do
         drop=${word(collector.drop(variable('name')))}
-        once docker exec "$1" ${run('drop')} >/dev/null || return 0
+        bounded "docker exec $1 drop $name" "$1" docker exec "$1" ${run('drop')} >/dev/null || return 0
       done ;;`;
 }
 
@@ -176,12 +186,16 @@ function dropBranch(collector: Collector): string {
  * that comes back stops the countdown. Then it closes the door, removes the
  * run's containers and volumes, removes the run's host directories, drops
  * the run's databases, does the re-check passes and removes the expired shared
- * servers, with the door closed, and removes itself.
+ * servers and the expired stopped reapers, with the door closed. It removes
+ * itself, or keeps its container when a call hit its request time limit
+ * (ADR 0031).
  */
 function script(): string {
   return `
 set -u
 exec 9>>${DOOR}
+# The reaper's own standard error, which the redirection of a call does not reach.
+exec 3>&2
 # A restart by the engine keeps the files of the last start: a mark of a first
 # holder would end the wait for one at once, and an old check of the socket
 # would answer a holder before this start checked it (#4508).
@@ -196,7 +210,50 @@ now() { awk '{ printf "%.0f", $1 * 1000 }' /proc/uptime; }
 holders() { pgrep -x cat | wc -l; }
 seconds() { awk -v ms="$1" 'BEGIN { print ms / 1000 }'; }
 limit=$(seconds "$REAPER_REQUEST_TIMEOUT")
-once() { timeout -s KILL "$limit" "$@"; }
+# Runs a call within the request time limit: a watchdog kills the call at the
+# limit. A call that the watchdog killed writes one line in the slog text shape
+# of Ryuk to the reaper's standard error, with the name $1 of the call and the
+# server $2 when it is not empty, and marks the reaper to keep its container
+# (ADR 0031). The line names the call and does not copy it: the command of a
+# drop holds the credential of its server. The watchdog writes its file before
+# its kill, and the exit status 137 says that the kill ended the call. The exit
+# status alone is no proof: docker exec also exits 137 when its container is
+# removed during the call, and BusyBox timeout gives the status of its program.
+bounded() {
+  what=$1 server=$2
+  shift 2
+  "$@" &
+  callpid=$!
+  fired=/tmp/fired-$callpid
+  # The watchdog. Its stop kills its sleep with KILL: a TERM that comes before
+  # the exec of the sleep goes to the trap of the shell that forks it, which
+  # the exec drops, and that sleep would run to the limit. A stop that comes
+  # before the watchdog has the pid of its sleep kills that sleep once it has it.
+  (
+    stop=
+    trap 'stop=1; kill -KILL "\${nap-}" 2>/dev/null' TERM
+    sleep "$limit" &
+    nap=$!
+    [ -z "$stop" ] || kill -KILL "$nap"
+    wait "$nap" && [ -z "$stop" ] && : > "$fired" && kill -KILL "$callpid"
+    # Reaps the sleep when the trap ended the first wait.
+    wait "$nap"
+  ) >/dev/null 2>&1 &
+  watchdog=$!
+  wait "$callpid"
+  status=$?
+  # With no redirection, the shell writes "Terminated" for the stopped
+  # watchdog to the standard error of the call, which a caller can capture.
+  kill "$watchdog" 2>/dev/null
+  wait "$watchdog" 2>/dev/null
+  if [ -e "$fired" ] && [ "$status" -eq 137 ]; then
+    : > ${LIMITED}
+    echo "level=WARN msg=\\"request time limit\\" call=\\"$what\\"\${server:+ server=$server} limit=$REAPER_REQUEST_TIMEOUT run=$REAPER_RUN" >&3
+  fi
+  rm -f "$fired"
+  return "$status"
+}
+once() { bounded "$1 \${2-}" "" "$@"; }
 # Tries a removal, and again REAPER_RETRIES times, one interval apart.
 call() {
   attempt=0
@@ -219,7 +276,7 @@ quiet() {
 value() { echo "$env" | sed -n "s/^$1=//p" | head -n 1; }
 
 drop_in() {
-  env=$(once docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$1") || return 0
+  env=$(bounded "docker inspect $1" "$1" docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$1") || return 0
   case $2 in${COLLECTORS.map((collector) => dropBranch(collector)).join('')}
   esac
 }
@@ -305,15 +362,31 @@ sweep() {
   wait "$job"
 }
 
+# Succeeds when the container $1 is older than $2 ms, from its Created time.
+expired() {
+  created=$(once docker inspect -f '{{.Created}}' "$1") || return 1
+  created=\${created%%.*}
+  born=$(date -u -D '%Y-%m-%dT%H:%M:%S' -d "\${created%Z}" +%s) || return 1
+  [ $((($(date -u +%s) - born) * 1000)) -gt "$2" ]
+}
+
 expire() {
   servers=$(once docker ps -a --no-trunc --filter "label=${SERVER_LABEL}" --format '{{.ID}} {{.Label "${SERVER_LABEL}"}}') || return 0
   echo "$servers" | while read -r id fingerprint; do
     [ -n "$fingerprint" ] || continue
-    created=$(once docker inspect -f '{{.Created}}' "$id") || continue
-    created=\${created%%.*}
-    born=$(date -u -D '%Y-%m-%dT%H:%M:%S' -d "\${created%Z}" +%s) || continue
-    [ $((($(date -u +%s) - born) * 1000)) -gt "$REAPER_SERVER_TTL" ] || continue
+    expired "$id" "$REAPER_SERVER_TTL" || continue
     sweep "$id" "$fingerprint"
+  done
+}
+
+# Removes each stopped reaper that is older than REAPER_KEPT_TTL, such as a
+# reaper that kept its container (ADR 0031). With no -f: the engine refuses
+# the removal of a reaper that runs.
+forget() {
+  stopped=$(once docker ps -aq --no-trunc --filter "label=${REAPER_LABEL}" --filter status=exited --filter status=dead) || return 0
+  for id in $stopped; do
+    expired "$id" "$REAPER_KEPT_TTL" || continue
+    once docker rm -v "$id" >/dev/null 2>&1
   done
 }
 
@@ -376,7 +449,16 @@ while :; do
     pass
   done
   expire
+  forget
   revive
+  # A reaper with a call that hit its request time limit keeps its container,
+  # stopped, so its logs keep the line of that call (ADR 0031). It ends its
+  # restart policy, which would start it again after its exit, and it frees
+  # the name of the run's reaper for the next reaper of the run. When one of
+  # the two fails, it removes itself.
+  if [ -e ${LIMITED} ] && once docker update --restart no "$found" >/dev/null && once docker rename "$found" "${reaperName('$REAPER_RUN')}-$REAPER_SELF" >/dev/null; then
+    exit 0
+  fi
   # Docker refuses a restart policy on a container with AutoRemove, so the
   # reaper removes itself. When that fails, the engine starts it again after
   # the exit, and it does its passes again.
@@ -396,7 +478,7 @@ done
  * that a relay reaches does not: the run's engine objects do not wait for its
  * directories (ADR 0023). It has no restart policy and no AutoRemove: the
  * reaper sets its policy once it verified its socket, and removes itself at
- * its end.
+ * its end, or keeps its container (ADR 0031).
  */
 export function reaperRequest(
   runId: string,
@@ -419,6 +501,7 @@ export function reaperRequest(
       `REAPER_RETRIES=${settings.retries}`,
       `REAPER_FIRST_HOLDER=${settings.firstHolder}`,
       `REAPER_SERVER_TTL=${settings.serverTtl}`,
+      `REAPER_KEPT_TTL=${settings.keptTtl}`,
       `REAPER_SWEEP_WAIT=${settings.sweepWait}`,
       `REAPER_SWEEP_TRIES=${settings.sweepTries}`,
       `REAPER_LEASE_PATIENCE=${settings.leasePatience}`,
@@ -457,22 +540,25 @@ function socketSources(endpoint: string): string[] {
  * The longest that a reaper can run after it closed its door: its first pass,
  * the removal of the run's host directories (a chmod and a remove, each within
  * `requestTimeout`), its re-check passes, `interval` apart, its expiry pass
- * with one sweep, the start of one reaper left `created`, and its removal of
- * itself. A pass makes four removals (the list and the removal of the
- * containers, then of the volumes), each with its first try and `retries`
- * more, `interval` apart and each within `requestTimeout`, and one list of the
- * shared servers. The expiry pass lists the servers and, for one expired
+ * with one sweep, the removal of one expired stopped reaper, the start of one
+ * reaper left `created`, and its removal of itself, which takes longer than
+ * the update and the rename of a reaper that keeps its container. A pass
+ * makes four removals (the list and the removal of the containers, then of
+ * the volumes), each with its first try and `retries` more, `interval` apart
+ * and each within `requestTimeout`, and one list of the shared servers. The expiry pass lists the servers and, for one expired
  * server, inspects it, waits `sweepWait` at most for its sweep lease, lists
- * its process leases and removes it. The start of a reaper left `created`
- * lists them, inspects one twice and starts it. Each database to drop, each
- * other expired server and each other reaper to start adds to this, so a hold
- * that waits longer fails.
+ * its process leases and removes it. The removal of an expired stopped reaper
+ * lists them, inspects one and removes it. The start of a reaper left
+ * `created` lists them, inspects one twice and starts it. Each database to
+ * drop, each other expired server or stopped reaper and each other reaper to
+ * start adds to this, so a hold that waits longer fails.
  */
 export function closingTime(settings: ReaperSettings): number {
   const { requestTimeout, retries, interval, passes, sweepWait } = settings;
   const removal = (retries + 1) * requestTimeout + retries * interval;
   const pass = 4 * removal + requestTimeout;
   const expiry = 4 * requestTimeout + sweepWait;
+  const forgetting = 3 * requestTimeout;
   const revival = 4 * requestTimeout;
   const directories = 2 * requestTimeout;
   return (
@@ -480,15 +566,17 @@ export function closingTime(settings: ReaperSettings): number {
     directories +
     passes * interval +
     expiry +
+    forgetting +
     revival +
     removal
   );
 }
 
 /**
- * Resolves when the engine removed `reaper`, which closed its door. Its waits
- * keep no process running. Fails after the closing time of the reaper, or
- * with the reason of `signal`.
+ * Resolves when `reaper`, which closed its door, ended: the engine removed it,
+ * or it stopped and kept its container (ADR 0031). Its waits keep no process
+ * running. Fails after the closing time of the reaper, or with the reason of
+ * `signal`.
  */
 async function closed(
   docker: Docker,
@@ -498,11 +586,14 @@ async function closed(
   signal: AbortSignal,
 ): Promise<void> {
   const ms = closingTime(settings);
-  const removed = await poll(
-    async () =>
-      (await docker.containers.find(reaper.id, { signal })) === undefined
+  const ended = await poll(
+    async () => {
+      const state = (await docker.containers.inspect(reaper.id, { signal }))
+        ?.State?.Status;
+      return state === undefined || state === 'exited' || state === 'dead'
         ? true
-        : undefined,
+        : undefined;
+    },
     {
       interval: settings.interval,
       signal,
@@ -511,9 +602,9 @@ async function closed(
       ref: false,
     },
   );
-  if (removed === undefined)
+  if (ended === undefined)
     throw new Error(
-      `The reaper ${reaper.id} closed and was not removed within ${ms} ms`,
+      `The reaper ${reaper.id} closed and did not end within ${ms} ms`,
     );
 }
 

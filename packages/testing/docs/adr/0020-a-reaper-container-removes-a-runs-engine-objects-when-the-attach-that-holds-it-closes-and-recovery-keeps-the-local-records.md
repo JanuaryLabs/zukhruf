@@ -1,5 +1,7 @@
 # A reaper container removes a run's engine objects when the attach that holds it closes, and recovery keeps the local records
 
+Superseded in part on 2026-11-24 (#5482) for item 8. A list or a drop that does not answer within one request time limit still counts as done, and the reaper now writes one line for that call and keeps its stopped container, so `docker logs` keeps the line ([ADR 0031](./0031-a-reaper-writes-a-line-for-each-call-that-hits-its-request-time-limit-and-then-keeps-its-stopped-container.md)).
+
 Superseded in part on 2026-11-18 (#4508) by [ADR 0025](./0025-recovery-and-the-global-teardown-make-no-engine-call-and-a-test-process-has-no-process-record.md). Recovery and the global teardown make no engine call: recovery removes the recorded SSH forward directories and then the records of a dead run, with no `reaped` or `startReaper` (items 5, 9 and 13), and the global teardown deletes the run's records (item 6). A test process writes no process record for itself (item 11).
 
 Superseded in part on 2026-11-18 (#4508) for the host directories. The reaper mounts the folder of the engine's host that holds them, and removes the run's directories after its first pass; a directory has no record, and the global teardown and recovery remove only the SSH forward directories (item 6) ([ADR 0023](./0023-the-reaper-removes-the-runs-host-directories.md)).

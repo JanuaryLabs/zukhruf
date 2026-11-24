@@ -1,5 +1,7 @@
 # A reaper starts again after a restart of its engine and removes itself at its end
 
+Superseded in part on 2026-11-24 (#5482) for item 3. A reaper with a call that hit its request time limit does not remove itself: it sets the restart policy `no`, renames itself and exits, and a later reaper removes it after 7 days ([ADR 0031](./0031-a-reaper-writes-a-line-for-each-call-that-hits-its-request-time-limit-and-then-keeps-its-stopped-container.md)).
+
 [ADR 0020](./0020-a-reaper-container-removes-a-runs-engine-objects-when-the-attach-that-holds-it-closes-and-recovery-keeps-the-local-records.md) gave the reaper `AutoRemove` (item 1). A restart of the engine, for example a restart of Docker Desktop, stops each container. A reaper with no restart policy stays stopped. Its run then leaks until a later test run's recovery starts a new reaper of that run (ADR 0020 item 9). When no test runs again, the run's objects stay.
 
 The maintainer asked about that backstop on 2026-11-18 (backlog #4508): "what happens if tests never ran again? you are depending on tests actually running again to heal the reaper". The direction was a restart policy, so that Docker starts the reaper again after a restart of the engine. He said: "yes, probe the real reaper with a restart policy". After the probe, he decided to implement the reaper part first, and to remove the recovery of the global setup in a second commit (#4508).
