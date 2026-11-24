@@ -171,6 +171,7 @@ export async function engineProxy(docker: Docker) {
   const sockets = new Set<Socket>();
   const queues = new Map<Socket, Buffer[]>();
   let trigger: ({ request: RegExp } | { conflictOf: RegExp }) | undefined;
+  const answers: { request: RegExp; answer: string }[] = [];
   let reached = Promise.withResolvers<void>();
   let holding = false;
   const startHolding = () => {
@@ -200,6 +201,14 @@ export async function engineProxy(docker: Docker) {
         trigger.request.test(line[0])
       ) {
         startHolding();
+      }
+      const answer =
+        line === null
+          ? undefined
+          : answers.find(({ request }) => request.test(line[0]));
+      if (answer !== undefined) {
+        client.write(answer.answer);
+        return;
       }
       if (holding) queue.push(chunk);
       else upstream.write(chunk);
@@ -239,6 +248,10 @@ export async function engineProxy(docker: Docker) {
     partition: () => partitioned.abort(),
     /** Holds from the first request whose request line matches. */
     holdRequestsFrom: (request: RegExp) => holdFrom({ request }),
+    /** Answers each request whose request line matches with `answer`, a raw HTTP response, in place of the engine. */
+    answerRequestsWith: (request: RegExp, answer: string) => {
+      answers.push({ request, answer });
+    },
     /** Holds from the first create of a container that gets 409: a name conflict. */
     holdAfterNameConflict: () =>
       holdFrom({ conflictOf: /^POST \S*\/containers\/create\?/ }),

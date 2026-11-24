@@ -3097,7 +3097,7 @@ describe('PoolWorkers lends in order', { concurrency: true }, () => {
 // SQLITE_BUSY. These tests block the event loop for those waits, so they run
 // alone.
 describe('PoolWorkers when its store fails', () => {
-  test('a failure of the store in the background is a process warning, and the owner keeps owning', async (t) => {
+  test('a failure of the store in the background is a PoolWarning of the queue, a fetch that fails is a PoolWarning of the fetch, each with its code, the queue and the failure as its cause, and the owner keeps owning', async (t) => {
     await using folder = await new TemporaryFiles().directory('pool-');
     const store = join(folder.path, 'store.sqlite');
     await using owner = lending(store, {
@@ -3112,23 +3112,90 @@ describe('PoolWorkers when its store fails', () => {
     });
     await owner.ready();
     const warnings: Error[] = [];
-    const warned = Promise.withResolvers<void>();
     const onWarning = (warning: Error) => {
-      if (!/database is locked/.test(warning.message)) return;
-      warnings.push(warning);
-      warned.resolve();
+      if (/database is locked/.test(warning.message)) warnings.push(warning);
     };
+    const failed = (what: string) =>
+      warnings.find((warning) => warning.message.startsWith(what));
+    const passFailed = 'The queue of the store failed, and the pool goes on';
+    const fetchFailed = 'A fetch failed, and the owner waits for the backstop';
     process.on('warning', onWarning);
     const holder = open(store);
     try {
       holder.exec('BEGIN IMMEDIATE');
-      await untilAborted(warned.promise, t.signal);
+      // A pass of the queue's supervisor and the owner's fetch each wait 5 s
+      // for the lock, and fail.
+      await waitFor(
+        () =>
+          assert.ok(
+            failed(passFailed) && failed(fetchFailed),
+            'a pass and a fetch failed',
+          ),
+        { signal: t.signal, interval: 50 },
+      );
       holder.exec('ROLLBACK');
+      for (const [code, message] of [
+        ['ZUKHRUF_POOL_QUEUE_ERROR', passFailed],
+        ['ZUKHRUF_POOL_FETCH_FAILED', fetchFailed],
+      ] as const) {
+        const warning = failed(message);
+        assert.ok(warning instanceof PoolWarning, code);
+        assert.deepEqual(
+          { ...warning },
+          { name: 'PoolWarning', code, detail: `queue: ${echo().queue}` },
+        );
+        assert.ok(Error.isError(warning.cause));
+        assert.match(warning.cause.message, /database is locked/);
+        assert.equal(warning.message, `${message}: ${warning.cause.message}`);
+      }
 
       // Built once the lock ends, so only the owner's store meets the lock.
       await using pool = new Pool({ kind: echo(), store, clock: globalThis });
       assert.equal(await pool.run('after'), 'after');
-      assert.ok(warnings.length > 0);
+    } finally {
+      if (holder.isTransaction) holder.exec('ROLLBACK');
+      holder.close();
+      process.off('warning', onWarning);
+    }
+  });
+
+  test('a failure of the store in the background of a Pool is a PoolWarning with its code, the queue and the failure as its cause', async (t) => {
+    // Arrange: no PoolWorkers, so only the Pool's store meets the lock.
+    await using folder = await new TemporaryFiles().directory('pool-');
+    const store = join(folder.path, 'store.sqlite');
+    await using pool = new Pool({ kind: echo(), store, clock: globalThis });
+    await pool.start('waits');
+    const warnings: Error[] = [];
+    const onWarning = (warning: Error) => {
+      if (/database is locked/.test(warning.message)) warnings.push(warning);
+    };
+    process.on('warning', onWarning);
+    const holder = open(store);
+    try {
+      // Act: a pass of the Pool's queue waits 5 s for the lock, and fails.
+      holder.exec('BEGIN IMMEDIATE');
+      await waitFor(() => assert.ok(warnings.length > 0, 'a pass failed'), {
+        signal: t.signal,
+        interval: 50,
+      });
+      holder.exec('ROLLBACK');
+
+      // Assert
+      const [warning] = warnings;
+      assert.ok(warning instanceof PoolWarning);
+      assert.deepEqual(
+        { ...warning },
+        {
+          name: 'PoolWarning',
+          code: 'ZUKHRUF_POOL_QUEUE_ERROR',
+          detail: `queue: ${echo().queue}`,
+        },
+      );
+      assert.ok(Error.isError(warning.cause));
+      assert.equal(
+        warning.message,
+        `The queue of the store failed, and the pool goes on: ${warning.cause.message}`,
+      );
     } finally {
       if (holder.isTransaction) holder.exec('ROLLBACK');
       holder.close();
@@ -3220,7 +3287,7 @@ describe('PoolWorkers when its store fails', () => {
     }
   });
 
-  test('a settle that fails is a process warning, the job lapses by its heartbeat, and the owner runs the next job', async (t) => {
+  test('a settle that fails is a PoolWarning with its code, the queue and the job, and the failure as its cause, the job lapses by its heartbeat, and the owner runs the next job', async (t) => {
     await using folder = await new TemporaryFiles().directory('pool-');
     const store = join(folder.path, 'store.sqlite');
     const gate = new Latch();
@@ -3251,6 +3318,12 @@ describe('PoolWorkers when its store fails', () => {
       signal: t.signal,
       interval: 10,
     });
+    const warnings: Error[] = [];
+    const onWarning = (warning: Error) => {
+      if ('code' in warning && warning.code === 'ZUKHRUF_POOL_SETTLE_FAILED')
+        warnings.push(warning);
+    };
+    process.on('warning', onWarning);
     const holder = open(store);
     try {
       holder.exec('BEGIN IMMEDIATE');
@@ -3266,6 +3339,22 @@ describe('PoolWorkers when its store fails', () => {
         { signal: t.signal, interval: 50 },
       );
       holder.exec('ROLLBACK');
+      const [warning] = warnings;
+      assert.equal(warnings.length, 1);
+      assert.ok(warning instanceof PoolWarning);
+      assert.deepEqual(
+        { ...warning },
+        {
+          name: 'PoolWarning',
+          code: 'ZUKHRUF_POOL_SETTLE_FAILED',
+          detail: `queue: ${echo().queue}\njob: ${lapsed.id}`,
+        },
+      );
+      assert.ok(Error.isError(warning.cause));
+      assert.match(
+        warning.message,
+        /^A settle failed, and the job lapses by its heartbeat: .*database is locked/,
+      );
 
       // No owner touches the job any more, so its heartbeat of 10 s lapses
       // and the store fails it, as the kind runs a job only once.
@@ -3282,6 +3371,7 @@ describe('PoolWorkers when its store fails', () => {
       gate.open();
       if (holder.isTransaction) holder.exec('ROLLBACK');
       holder.close();
+      process.off('warning', onWarning);
     }
   });
 });

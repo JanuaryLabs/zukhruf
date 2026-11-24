@@ -11,7 +11,11 @@ import { type Notification, Notifications } from '@zukhruf/sqlite-notify';
 import { open } from '@zukhruf/sqlite-open';
 import { waitFor } from '@zukhruf/testing/async';
 
-import { SqliteJobQueue, TimekeeperWarning } from './index.ts';
+import {
+  SqliteJobQueue,
+  SqliteJobQueueWarning,
+  TimekeeperWarning,
+} from './index.ts';
 import { DateFollowsClock } from './testing/date-follows-clock.ts';
 import { id } from './testing/job-id.ts';
 
@@ -653,6 +657,108 @@ describe('SqliteJobQueue', () => {
         'key_strict_fifo queues require a singletonKey',
       );
     } finally {
+      process.off('warning', onWarning);
+      await queue.stop({ graceful: false, close: true });
+    }
+  });
+
+  // SQLite-only: pg-boss's stop lets the error of failWip escape (ADR 0003).
+  it("reports a stop that fails to fail a worker's active jobs, with no 'error' listener, as a SqliteJobQueueWarning with its code, the queue and the worker, and the failure as its cause", async () => {
+    // Arrange: the queue is deleted under the worker's running job, so the
+    // stop's fail of that job finds no queue.
+    const warnings: Error[] = [];
+    const onWarning = (warning: Error) => {
+      if (warning.name === 'SqliteJobQueueWarning') warnings.push(warning);
+    };
+    process.on('warning', onWarning);
+    const queue = new SqliteJobQueue({ schedule: false, supervise: false });
+    const release = Promise.withResolvers<void>();
+    try {
+      await queue.start();
+      await queue.createQueue('jobs');
+      await queue.send('jobs', { n: 1 });
+      const started = Promise.withResolvers<void>();
+      const worker = await queue.work('jobs', async () => {
+        started.resolve();
+        await release.promise;
+      });
+      await started.promise;
+      await queue.deleteQueue('jobs');
+
+      // Act
+      await queue.stop({ graceful: false, close: false });
+      await setImmediate();
+
+      // Assert
+      const [warning] = warnings;
+      assert.equal(warnings.length, 1);
+      assert.ok(warning instanceof SqliteJobQueueWarning);
+      assert.deepEqual(
+        { ...warning, message: warning.message },
+        {
+          name: 'SqliteJobQueueWarning',
+          code: 'ZUKHRUF_SQLITE_QUEUE_STOP_FAIL_UNHEARD',
+          detail: `queue: jobs\nworker: ${worker}`,
+          message:
+            "The fail of a worker's active jobs at stop failed, and nobody listens for 'error': Queue jobs does not exist",
+        },
+      );
+      assert.ok(Error.isError(warning.cause));
+      assert.equal(warning.cause.message, 'Queue jobs does not exist');
+    } finally {
+      release.resolve();
+      process.off('warning', onWarning);
+      await queue.stop({ graceful: false, close: true });
+    }
+  });
+
+  it("reports an 'error' listener that throws on a stop's failed fail of a worker's active jobs as a SqliteJobQueueWarning with its code, the queue and the worker, and the listener's error as its cause", async () => {
+    // Arrange: the queue is deleted under the worker's running job, and the
+    // host's 'error' listener throws.
+    const warnings: Error[] = [];
+    const onWarning = (warning: Error) => {
+      if (warning.name === 'SqliteJobQueueWarning') warnings.push(warning);
+    };
+    process.on('warning', onWarning);
+    const queue = new SqliteJobQueue({ schedule: false, supervise: false });
+    const listenerError = new Error('The error listener of the host broke');
+    queue.on('error', () => {
+      throw listenerError;
+    });
+    const release = Promise.withResolvers<void>();
+    try {
+      await queue.start();
+      await queue.createQueue('jobs');
+      await queue.send('jobs', { n: 1 });
+      const started = Promise.withResolvers<void>();
+      const worker = await queue.work('jobs', async () => {
+        started.resolve();
+        await release.promise;
+      });
+      await started.promise;
+      await queue.deleteQueue('jobs');
+
+      // Act
+      await queue.stop({ graceful: false, close: false });
+      await setImmediate();
+
+      // Assert
+      const [warning] = warnings;
+      assert.equal(warnings.length, 1);
+      assert.ok(warning instanceof SqliteJobQueueWarning);
+      assert.deepEqual(
+        { ...warning, message: warning.message },
+        {
+          name: 'SqliteJobQueueWarning',
+          code: 'ZUKHRUF_SQLITE_QUEUE_ERROR_LISTENER_THREW',
+          detail: `queue: jobs\nworker: ${worker}`,
+          message:
+            "The fail of a worker's active jobs at stop failed, and an 'error' listener threw: The error listener of the host broke",
+        },
+      );
+      assert.equal(warning.cause, listenerError);
+    } finally {
+      release.resolve();
       process.off('warning', onWarning);
       await queue.stop({ graceful: false, close: true });
     }

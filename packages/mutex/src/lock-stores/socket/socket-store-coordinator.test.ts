@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import { hash, randomUUID } from 'node:crypto';
 import { once } from 'node:events';
+import { mkdir } from 'node:fs/promises';
 import { connect } from 'node:net';
-import { resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { type TestContext, describe } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 
@@ -18,7 +19,7 @@ import { grantedWithin } from '../../testing/granted-within.ts';
 import { linesOf } from '../../testing/lines-of.ts';
 import { settle } from '../../testing/timing.ts';
 import { PROTOCOL_VERSION } from './handshake.ts';
-import { SocketStore } from './index.ts';
+import { LockServerWarning, SocketStore } from './index.ts';
 import { SessionDirectory } from './session-directory.ts';
 import { socketElection } from './socket-election.ts';
 
@@ -315,6 +316,59 @@ describe('A leader after a failover', () => {
     // Assert
     // The close of the connection must end the recovery of a session that stopped
     await untilAborted(waiter, t.signal);
+  });
+
+  test('a recovering session whose presence is free but whose record cannot be deleted is a LockServerWarning with its code and the session, and the failure as its cause', async (t) => {
+    // Arrange: the clock of the leader moves only when the test ticks it, so
+    // no step of the back-off checks the presence before the record is
+    // replaced.
+    const clock = createClock();
+    await using scene = await leaderAfterFailover(['holder'], clock);
+    await using holder = await rawPeer(t, scene.directory, 'holder');
+    holder.send({ op: 'reassert', id: 'h', key: 'product:42', token: '5' });
+    await delay(settle);
+    const warnings: Error[] = [];
+    const onWarning = (warning: Error) => {
+      if (warning.name === 'LockServerWarning') warnings.push(warning);
+    };
+    process.on('warning', onWarning);
+    try {
+      // The process of the session stops, and another program puts a folder
+      // where its record was, which no step of the store can delete.
+      await scene.records.get('holder')?.[Symbol.asyncDispose]();
+      await mkdir(join(scene.directory, 'sessions', 'holder.json'));
+
+      // Act
+      holder.drop();
+
+      // Assert: on Windows the delete is tried again for 1 second on the clock.
+      await waitFor(
+        async () => {
+          await clock.tickAsync(250);
+          assert.ok(warnings.length > 0, 'the recovery check failed');
+        },
+        { signal: t.signal },
+      );
+      const [warning] = warnings;
+      assert.ok(warning instanceof LockServerWarning);
+      assert.ok(Error.isError(warning.cause));
+      assert.deepEqual(
+        { ...warning, message: warning.message },
+        {
+          name: 'LockServerWarning',
+          code: 'ZUKHRUF_MUTEX_LOCK_SERVER_RECOVERY_CHECK_FAILED',
+          detail: 'session: holder',
+          message: `The recovery check of a session failed, and the server ends its term: ${warning.cause.message}`,
+        },
+      );
+      assert.ok(
+        'code' in warning.cause &&
+          ['EPERM', 'EISDIR'].includes(String(warning.cause.code)),
+        `the delete of the folder must be the cause, not ${String(warning.cause)}`,
+      );
+    } finally {
+      process.off('warning', onWarning);
+    }
   });
 
   test('waiters that arrive during the recovery are granted in arrival order', async (t) => {

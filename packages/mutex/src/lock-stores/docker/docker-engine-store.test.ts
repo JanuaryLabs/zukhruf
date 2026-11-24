@@ -18,7 +18,7 @@ import { startWorker } from '@zukhruf/testing/process';
 import { Mutex } from '../../index.ts';
 import { hold } from '../../testing/hold.ts';
 import { engineProxy } from '../../testing/subjects/docker-engine.ts';
-import { DockerEngineStore } from './index.ts';
+import { DockerEngineStore, DockerEngineStoreWarning } from './index.ts';
 
 /**
  * The first fourteen tests are the design errors that the probes of
@@ -973,5 +973,62 @@ test('a rung left by a killed test process is removed by the run’s reaper afte
         await (await docker.volumes.find(Name))?.remove({ force: true });
       }
     }
+  }
+});
+
+test('a lost claim whose removal the engine refuses is a DockerEngineStoreWarning with its code, the key and the claim, and the failure as its cause', async (t) => {
+  // Arrange: the store reaches the engine through a proxy, which answers each
+  // removal of a container with an error of the engine, as no operation of the
+  // store makes the engine refuse a removal.
+  await using fixture = await engine();
+  await using proxy = await engineProxy(fixture.docker);
+  await using client = await Docker.connect({
+    clock: globalThis,
+    host: proxy.host,
+  });
+  const holder = await hold(new Mutex(fixture.store(client)), 'report:daily');
+  const [claim] = await fixture.docker.containers.list({
+    all: true,
+    filters: { label: [`${namespaceLabel}=${fixture.namespace}`] },
+  });
+  assert.ok(claim);
+  const refusal = JSON.stringify({ message: 'driver failed to remove' });
+  proxy.answerRequestsWith(
+    /^DELETE \S*\/containers\//,
+    `HTTP/1.1 500 Internal Server Error\r\nContent-Type: application/json\r\nContent-Length: ${Buffer.byteLength(refusal)}\r\n\r\n${refusal}`,
+  );
+  const warnings: Error[] = [];
+  const onWarning = (warning: Error) => {
+    if (warning.name === 'DockerEngineStoreWarning') warnings.push(warning);
+  };
+  process.on('warning', onWarning);
+  try {
+    // Act: the claim goes, so the holder loses it, and the store removes it.
+    await (
+      await fixture.docker.containers.find(claim.Id)
+    )?.remove({ force: true });
+
+    // Assert
+    await waitFor(() => assert.equal(warnings.length, 1), {
+      signal: t.signal,
+    });
+    const [warning] = warnings;
+    assert.ok(warning instanceof DockerEngineStoreWarning);
+    assert.deepEqual(
+      { ...warning, message: warning.message },
+      {
+        name: 'DockerEngineStoreWarning',
+        code: 'ZUKHRUF_MUTEX_DOCKER_CLAIM_REMOVE_FAILED',
+        detail: `key: report:daily\ncontainer: ${claim.Id}`,
+        message:
+          'The removal of a lost claim failed, and the claim ends with its attach: driver failed to remove',
+      },
+    );
+    assert.ok(Error.isError(warning.cause));
+    assert.equal(warning.cause.message, 'driver failed to remove');
+  } finally {
+    process.off('warning', onWarning);
+    // The holder lost its key, so its acquire rejects.
+    await Promise.allSettled([holder.release()]);
   }
 });

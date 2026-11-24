@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
+import { once } from 'node:events';
 import { closeSync, openSync, unlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -15,6 +17,7 @@ import {
 import { TaskMetadata } from './abstasks/task-metadata.ts';
 import { ResultCache } from './cache/result-cache.ts';
 import { evaluate } from './evaluate.ts';
+import { LockWarning } from './index.ts';
 import { AiSdkEncoder } from './models/ai-sdk-encoder.ts';
 import { ModelMeta } from './models/model-meta.ts';
 
@@ -258,4 +261,98 @@ test('without co2Tracker, evaluate does not track: a held lock changes nothing',
 
   assert.equal(result.taskResults[0]?.mainScore, 1);
   assert.equal(result.taskResults[0]?.kgCo2Emissions, null);
+});
+
+// A program that tracks a task with co2Tracker in the temporary folder of
+// argv[1], and exits once the tracker holds codecarbon's lock. Another
+// program has then put a folder in place of the lock file, so the release at
+// exit fails. Its 'warning' listener writes each LockWarning as JSON to
+// stdout, in the exit, where nothing asynchronous runs any more.
+const exitingTracker = `
+import { existsSync, mkdirSync, rmSync, writeSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { AbsTaskRetrieval, AiSdkEncoder, LockWarning, ModelMeta, TaskMetadata, evaluate } from ${JSON.stringify(new URL('./index.ts', import.meta.url).href)};
+
+process.on('warning', (warning) => {
+  if (warning.name !== 'LockWarning') return;
+  const { name, code, detail, message, cause } = warning;
+  writeSync(1, JSON.stringify({ instance: warning instanceof LockWarning, name, code, detail, message, cause: { code: cause?.code, message: cause?.message } }) + '\\n');
+});
+
+class NeverLoads extends AbsTaskRetrieval {
+  constructor() {
+    super({ metadata: new TaskMetadata({ name: 'Never', description: 'Its splits never load.', dataset: { path: 'local/never', revision: '1' }, type: 'Retrieval', category: 't2t', modalities: ['text'], evalSplits: ['test'], evalLangs: ['eng-Latn'], mainScore: 'ndcg_at_10' }) });
+  }
+  loadSplits() {
+    return new Promise(() => {});
+  }
+}
+
+const model = { specificationVersion: 'v4', provider: 'test', modelId: 'never', maxEmbeddingsPerCall: undefined, supportsParallelCalls: true, async doEmbed() { throw new Error('No task loads, so nothing embeds.'); } };
+const lockfile = join(tmpdir(), '.codecarbon.lock');
+void evaluate(new AiSdkEncoder({ model, modelMeta: ModelMeta.createEmpty({ name: 'test/never', revision: '1' }) }), new NeverLoads(), { cache: null, co2Tracker: true, clock: globalThis });
+const held = setInterval(() => {
+  if (!existsSync(lockfile)) return;
+  clearInterval(held);
+  rmSync(lockfile);
+  mkdirSync(lockfile);
+  process.exit(0);
+}, 1);
+`;
+
+test('with co2Tracker, a release of the lock at exit that fails is a LockWarning with its code and the lock file, and the failure as its cause', async () => {
+  // Arrange: the program's own temporary folder holds its codecarbon lock,
+  // so no other run on the machine meets it.
+  await using folder = await new TemporaryFiles().directory('mteb-co2-');
+  const temporary = {
+    TMPDIR: folder.path,
+    TMP: folder.path,
+    TEMP: folder.path,
+  };
+
+  // Act
+  const child = spawn(
+    process.execPath,
+    ['--input-type=module', '--eval', exitingTracker],
+    {
+      env: { ...process.env, ...temporary },
+      stdio: ['ignore', 'pipe', 'inherit'],
+    },
+  );
+  let stdout = '';
+  child.stdout.setEncoding('utf8').on('data', (chunk: string) => {
+    stdout += chunk;
+  });
+  const [code] = await once(child, 'close');
+
+  // Assert
+  assert.equal(code, 0);
+  const warnings: unknown[] = stdout
+    .split('\n')
+    .filter((line) => line !== '')
+    .map((line) => JSON.parse(line));
+  assert.equal(warnings.length, 1);
+  const [warning] = warnings;
+  assert.ok(
+    typeof warning === 'object' && warning !== null && 'cause' in warning,
+  );
+  const { cause, ...rest } = warning;
+  assert.ok(
+    typeof cause === 'object' &&
+      cause !== null &&
+      'code' in cause &&
+      'message' in cause,
+  );
+  assert.deepEqual(rest, {
+    instance: true,
+    name: 'LockWarning',
+    code: 'ZUKHRUF_MTEB_LOCK_RELEASE_FAILED',
+    detail: `lockfile: ${join(folder.path, '.codecarbon.lock')}`,
+    message: `The release of the lock at exit failed, and the next lock is released: ${String(cause.message)}`,
+  });
+  assert.ok(
+    ['EPERM', 'EISDIR'].includes(String(cause.code)),
+    `the unlink of the folder must be the cause, not ${JSON.stringify(cause)}`,
+  );
 });
