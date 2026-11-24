@@ -20,6 +20,18 @@ function isEmitWarning(declaration: ts.Declaration | undefined): boolean {
   );
 }
 
+/** `Object.assign` as the lib of TypeScript declares it: a method of the interface `ObjectConstructor`. */
+function isObjectAssign(declaration: ts.Declaration | undefined): boolean {
+  return (
+    declaration !== undefined &&
+    ts.isMethodSignature(declaration) &&
+    ts.isIdentifier(declaration.name) &&
+    declaration.name.text === 'assign' &&
+    ts.isInterfaceDeclaration(declaration.parent) &&
+    declaration.parent.name.text === 'ObjectConstructor'
+  );
+}
+
 const isStringLike = (type: ts.Type) =>
   unionConstituents(type).every(
     (part) => (part.flags & ts.TypeFlags.StringLike) !== 0,
@@ -30,14 +42,16 @@ const rule = ESLintUtils.RuleCreator.withoutDocs({
     type: 'problem',
     docs: {
       description:
-        'Disallow a process warning with no code, and an Error warning passed with options that Node ignores',
+        'Disallow a process warning with no code, an Error warning passed with options that Node ignores, and an Error warning built in place with Object.assign',
     },
     schema: [],
     messages: {
       missingCode:
-        "This warning has no code, so a 'warning' listener and `--disable-warning` cannot tell it from a warning of Node or of another package. Give a string warning `{ type, code, detail }`, or emit `Object.assign(new Error(message, { cause }), { name, code, detail })`.",
+        "This warning has no code, so a 'warning' listener and `--disable-warning` cannot tell it from a warning of Node or of another package. Emit an instance of a warning class that sets its `name`, `code` and `detail`, as `process.emitWarning(new LeaderSelectorWarning(failure, { key }))`, or give a string warning `{ type, code, detail }`.",
       optionsIgnored:
-        'Node ignores the type, the code and the options of an Error warning, so this call reads as typed and is not. Set `name`, `code` and `detail` on the Error, as `Object.assign(new Error(message, { cause }), { name, code, detail })`, and pass the Error alone.',
+        'Node ignores the type, the code and the options of an Error warning, so this call reads as typed and is not. Set `name`, `code` and `detail` in a warning class, and pass its instance alone, as `process.emitWarning(new LeaderSelectorWarning(failure, { key }))`.',
+      inlineWarning:
+        'This warning is an Error with `name`, `code` and `detail` set in place, so a host cannot test it with `instanceof`. Declare a warning class that `extends Error` and sets its `name`, `code` and `detail`, export it, and emit its instance, as `process.emitWarning(new LeaderSelectorWarning(failure, { key }))`.',
     },
   },
   create(context) {
@@ -48,6 +62,12 @@ const rule = ESLintUtils.RuleCreator.withoutDocs({
       checker.getTypeAtLocation(services.esTreeNodeToTSNodeMap.get(node));
     const hasCode = (node: TSESTree.Node) =>
       checker.getPropertyOfType(typeOf(node), 'code') !== undefined;
+    const isAssigned = (node: TSESTree.Node) =>
+      node.type === 'CallExpression' &&
+      isObjectAssign(
+        checker.getResolvedSignature(services.esTreeNodeToTSNodeMap.get(node))
+          ?.declaration,
+      );
     return {
       CallExpression(node: TSESTree.CallExpression) {
         const [warning, second, third] = node.arguments;
@@ -58,6 +78,8 @@ const rule = ESLintUtils.RuleCreator.withoutDocs({
         if (!isStringLike(typeOf(warning))) {
           if (second !== undefined)
             context.report({ node, messageId: 'optionsIgnored' });
+          else if (isAssigned(warning))
+            context.report({ node, messageId: 'inlineWarning' });
           else if (!hasCode(warning))
             context.report({ node, messageId: 'missingCode' });
           return;

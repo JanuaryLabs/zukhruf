@@ -40,6 +40,8 @@ export {
   loadDataset,
   renameColumn,
 } from './dependencies/datasets.ts';
+export { LockWarning } from './dependencies/lock-warning.ts';
+export { PeriodicSchedulerWarning } from './dependencies/periodic-scheduler-warning.ts';
 export * from './abstasks/task-metadata.ts';
 export type { PairClassificationDistances } from './evaluators/pair-classification-evaluator.ts';
 export type { STSEvaluatorScores } from './evaluators/any-sts-evaluator.ts';

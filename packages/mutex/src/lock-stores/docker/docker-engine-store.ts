@@ -17,6 +17,7 @@ import type { LockHandle } from '../../mutex/lease.ts';
 import type { AcquireOptions, LockStore } from '../../mutex/lock-store.ts';
 import { InProcessTurns } from '../../shared/in-process-turns.ts';
 import { keyDigest } from '../../shared/key-digest.ts';
+import { DockerEngineStoreWarning } from './docker-engine-store-warning.ts';
 
 export interface DockerEngineStoreOptions {
   /** The client of the engine. The caller owns it; its disposal ends each attach, so each held key is lost. */
@@ -424,17 +425,10 @@ class Claim {
         return;
       }
       process.emitWarning(
-        Object.assign(
-          new Error(
-            `The removal of a lost claim failed, and the claim ends with its attach: ${Error.isError(error) ? error.message : String(error)}`,
-            { cause: error },
-          ),
-          {
-            name: 'DockerEngineStoreWarning',
-            code: 'ZUKHRUF_MUTEX_DOCKER_CLAIM_REMOVE_FAILED',
-            detail: `key: ${this.#key}\ncontainer: ${this.#container.id}`,
-          },
-        ),
+        new DockerEngineStoreWarning(error, {
+          key: this.#key,
+          container: this.#container.id,
+        }),
       );
     }
   }

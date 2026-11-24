@@ -11,6 +11,10 @@ import type { FencedLease } from '@zukhruf/fencing';
 import type { Lease } from '@zukhruf/lease';
 
 import { Key } from '../mutex/key.ts';
+import {
+  type LeaderSelectorSource,
+  LeaderSelectorWarning,
+} from './leader-selector-warning.ts';
 
 export interface LeaderSelectorListener<L> {
   /** Return, or reject with `signal.reason`, to give the leadership up. */
@@ -45,8 +49,8 @@ type RoundEnd = { granted: true } | { granted: false; error: unknown };
  */
 export class LeaderSelector implements AsyncDisposable {
   readonly #lead: Lead;
-  /** The source in the detail of a warning: `key: <name>`, or `election: <name>`. */
-  readonly #source: string;
+  /** The subject of a warning: the key or the election, by its name. */
+  readonly #source: LeaderSelectorSource;
   readonly #autoRequeue: LeaderSelectorOptions['autoRequeue'];
   readonly #disposed = new AbortController();
   #state: Queued | Leading | Idle | Ended = QUEUED;
@@ -54,7 +58,7 @@ export class LeaderSelector implements AsyncDisposable {
 
   private constructor(
     lead: Lead,
-    source: string,
+    source: LeaderSelectorSource,
     { autoRequeue }: LeaderSelectorOptions,
   ) {
     this.#lead = lead;
@@ -85,12 +89,12 @@ export class LeaderSelector implements AsyncDisposable {
     return source instanceof Key
       ? new LeaderSelector(
           LeaderSelector.#overKey(source, listener),
-          `key: ${source.name}`,
+          { key: source.name },
           options,
         )
       : new LeaderSelector(
           LeaderSelector.#overElection(source, listener),
-          `election: ${source.name}`,
+          { election: source.name },
           options,
         );
   }
@@ -151,19 +155,7 @@ export class LeaderSelector implements AsyncDisposable {
       }
       if (this.#autoRequeue === undefined) throw end.error;
       const { backoff, clock } = this.#autoRequeue;
-      process.emitWarning(
-        Object.assign(
-          new Error(
-            `The acquire failed, and the selector tries again: ${Error.isError(end.error) ? end.error.message : String(end.error)}`,
-            { cause: end.error },
-          ),
-          {
-            name: 'LeaderSelectorWarning',
-            code: 'ZUKHRUF_MUTEX_LEADER_SELECTOR_ACQUIRE_FAILED',
-            detail: this.#source,
-          },
-        ),
-      );
+      process.emitWarning(new LeaderSelectorWarning(end.error, this.#source));
       await delay(backoff.duration(retries++), { clock, signal: stop });
     }
   }

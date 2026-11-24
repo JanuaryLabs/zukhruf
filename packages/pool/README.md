@@ -305,7 +305,7 @@ The store keeps the wall time of each job, so `Pool` and `PoolWorkers` take a `W
 | The error of the warm-up | `workers.ready()` rejects with it when a worker that the startup of the owner starts fails its `ready()` ([src/pool-workers.test.ts](./src/pool-workers.test.ts)).                                                                                                                                      |
 | `AbortError`             | `workers.ready()` rejects with it when you dispose `PoolWorkers` before its host owns ([src/pool-workers.test.ts](./src/pool-workers.test.ts)).                                                                                                                                                         |
 
-A failure that no caller waits for is a process warning, in the shape of [root ADR 0010](../../docs/adr/0010-a-package-warning-names-its-type-code-and-subject-and-keeps-the-failure-as-its-cause.md). A `'warning'` listener reads its type as `name`, its `code`, and its subject in `detail`, one `<term>: <value>` line each. Its `cause` is the failure, and its message ends with the failure's message. `--disable-warning=<code or type>` stops the print.
+A failure that no caller waits for is a process warning, in the shape of [root ADR 0010](../../docs/adr/0010-a-package-warning-names-its-type-code-and-subject-and-keeps-the-failure-as-its-cause.md). A `'warning'` listener reads its type as `name`, its `code`, and its subject in `detail`, one `<term>: <value>` line each. Its `cause` is the failure, and its message ends with the failure's message. `--disable-warning=<code or type>` stops the print. `PoolWarning` is a class that the package exports, and its `code` names the condition, so a listener can test `warning instanceof` the class ([root ADR 0011](../../docs/adr/0011-a-package-warning-is-an-instance-of-its-own-class-which-the-package-exports.md)). With two installed copies of the package, `instanceof` fails across the copies, so compare `code`.
 
 | Warning       | Code                                   | Detail                          | When                                                                                                                                          |
 | ------------- | -------------------------------------- | ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -394,6 +394,30 @@ class JobFailedError extends Error {
 class JobCancelledError extends Error {}
 class JobNotFoundError extends Error {}
 class DisposedError extends Error {}
+
+class PoolWarning extends Error {
+  readonly code: PoolWarningSubject['code'];
+  readonly detail: string; // the subject, one line each
+  constructor(failure: unknown, subject: PoolWarningSubject);
+}
+
+type PoolWarningSubject =
+  // the code with its subject
+  | { readonly code: 'ZUKHRUF_POOL_NOTIFY_FAILED'; readonly channel: string }
+  | {
+      readonly code: 'ZUKHRUF_POOL_SETTLE_FAILED' | 'ZUKHRUF_POOL_TOUCH_FAILED';
+      readonly queue: string;
+      readonly job: string;
+    }
+  | {
+      readonly code:
+        | 'ZUKHRUF_POOL_QUEUE_ERROR'
+        | 'ZUKHRUF_POOL_NOTIFICATIONS_ERROR'
+        | 'ZUKHRUF_POOL_OWNER_CONNECTION_ERROR'
+        | 'ZUKHRUF_POOL_FETCH_FAILED'
+        | 'ZUKHRUF_POOL_CALLER_CONNECTION_ERROR';
+      readonly queue: string;
+    };
 
 interface Failure {
   readonly name: string;

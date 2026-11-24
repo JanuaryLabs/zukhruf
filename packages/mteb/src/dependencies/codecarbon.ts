@@ -18,6 +18,8 @@ import { type Clock, delay, timeout } from '@zukhruf/async';
 import { NeumaierSum } from '@zukhruf/python';
 import { mean } from '@zukhruf/statistics';
 
+import { LockWarning } from './lock-warning.ts';
+import { PeriodicSchedulerWarning } from './periodic-scheduler-warning.ts';
 import {
   asciiDigits,
   pythonFloat,
@@ -943,17 +945,7 @@ function releaseAll(): void {
       // next tick that never runs after 'exit', so the warning is emitted now.
       process.emit(
         'warning',
-        Object.assign(
-          new Error(
-            `The release of the lock at exit failed, and the next lock is released: ${Error.isError(error) ? error.message : String(error)}`,
-            { cause: error },
-          ),
-          {
-            name: 'LockWarning',
-            code: 'ZUKHRUF_MTEB_LOCK_RELEASE_FAILED',
-            detail: `lockfile: ${lock.lockfilePath}`,
-          },
-        ),
+        new LockWarning(error, { lockfile: lock.lockfilePath }),
       );
     }
 }
@@ -1031,17 +1023,7 @@ class PeriodicScheduler {
       // and threading.excepthook prints it: no caller is left to tell.
       this.#function().catch((error: unknown) => {
         process.emitWarning(
-          Object.assign(
-            new Error(
-              `A call of the periodic scheduler failed, and the next call comes at the next interval: ${Error.isError(error) ? error.message : String(error)}`,
-              { cause: error },
-            ),
-            {
-              name: 'PeriodicSchedulerWarning',
-              code: 'ZUKHRUF_MTEB_PERIODIC_CALL_FAILED',
-              detail: `interval: ${this.#interval} s`,
-            },
-          ),
+          new PeriodicSchedulerWarning(error, { interval: this.#interval }),
         );
       });
     }

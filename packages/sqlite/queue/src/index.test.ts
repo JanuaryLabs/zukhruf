@@ -11,7 +11,7 @@ import { type Notification, Notifications } from '@zukhruf/sqlite-notify';
 import { open } from '@zukhruf/sqlite-open';
 import { waitFor } from '@zukhruf/testing/async';
 
-import { SqliteJobQueue } from './index.ts';
+import { SqliteJobQueue, TimekeeperWarning } from './index.ts';
 import { DateFollowsClock } from './testing/date-follows-clock.ts';
 import { id } from './testing/job-id.ts';
 
@@ -636,7 +636,7 @@ describe('SqliteJobQueue', () => {
       // Assert
       const [warning] = warnings;
       assert.equal(warnings.length, 1);
-      assert.ok(warning);
+      assert.ok(warning instanceof TimekeeperWarning);
       assert.deepEqual(
         { ...warning, message: warning.message },
         {

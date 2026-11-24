@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { type TestContext, describe, test } from 'node:test';
 
 import { createExclusive } from './create-exclusive.ts';
+import { CreateExclusiveWarning } from './index.ts';
 import { TemporaryFiles } from './temporary-files.ts';
 
 /** Records each `link` with the content its source holds at that moment; every link still reaches the disk. */
@@ -152,6 +153,7 @@ describe('createExclusive', () => {
       // Assert
       assert.equal(created, true);
       const warning = await warned.promise;
+      assert.ok(warning instanceof CreateExclusiveWarning);
       const [draft] = (await readdir(directory.path)).filter(
         (name) => name !== 'job.lock',
       );

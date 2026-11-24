@@ -10,6 +10,7 @@ import {
   type SqliteJobQueueOptions,
 } from '@zukhruf/sqlite-queue';
 
+import { PoolWarning } from './pool-warning.ts';
 import type { WorkerKind } from './worker-kind.ts';
 
 // The least heartbeat that pg-boss accepts (attorney.js:578). A job of a dead
@@ -78,11 +79,9 @@ export class Store implements AsyncDisposable {
     try {
       this.notifications.notify(channel, payload);
     } catch (error) {
-      warn(error, {
-        message: 'A notify failed, and the backstop finds the lost wake',
-        code: 'ZUKHRUF_POOL_NOTIFY_FAILED',
-        detail: `channel: ${channel}`,
-      });
+      process.emitWarning(
+        new PoolWarning(error, { code: 'ZUKHRUF_POOL_NOTIFY_FAILED', channel }),
+      );
     }
   }
 
@@ -123,25 +122,4 @@ class Interval {
   clear(): void {
     this.#clock.clearTimeout(this.#timer);
   }
-}
-
-/**
- * A failure of the store that no caller waits for, as a `PoolWarning` with
- * the caller's code and detail: the host goes on, and the next pass, fetch,
- * touch or backstop tries again, as pg-boss emits the failure of a pass and
- * keeps polling. `message` says what failed and what the pool does next.
- */
-export function warn(
-  error: unknown,
-  { message, code, detail }: { message: string; code: string; detail: string },
-): void {
-  process.emitWarning(
-    Object.assign(
-      new Error(
-        `${message}: ${Error.isError(error) ? error.message : String(error)}`,
-        { cause: error },
-      ),
-      { name: 'PoolWarning', code, detail },
-    ),
-  );
 }

@@ -10,6 +10,7 @@ import { LockCoordinator } from '../remote/lock-coordinator.ts';
 import type { LockResponse } from '../remote/protocol.ts';
 import { backoff } from './backoff.ts';
 import { welcome } from './handshake.ts';
+import { LockServerWarning } from './lock-server-warning.ts';
 import type { SessionDirectory } from './session-directory.ts';
 import { SocketConnection } from './socket-connection.ts';
 
@@ -157,19 +158,7 @@ export class LockServer {
         this.#coordinator.ended(session);
       }
     } catch (error) {
-      process.emitWarning(
-        Object.assign(
-          new Error(
-            `The recovery check of a session failed, and the server ends its term: ${Error.isError(error) ? error.message : String(error)}`,
-            { cause: error },
-          ),
-          {
-            name: 'LockServerWarning',
-            code: 'ZUKHRUF_MUTEX_LOCK_SERVER_RECOVERY_CHECK_FAILED',
-            detail: `session: ${session}`,
-          },
-        ),
-      );
+      process.emitWarning(new LockServerWarning(error, { session }));
       await this.close();
     }
   }

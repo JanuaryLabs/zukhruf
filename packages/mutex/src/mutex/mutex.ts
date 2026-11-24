@@ -7,6 +7,7 @@ import { WaitMode } from './acquire-modes/wait-mode.ts';
 import { Key } from './key.ts';
 import type { LockHandle } from './lease.ts';
 import type { AcquireOptions, LockStore } from './lock-store.ts';
+import { MutexWarning } from './mutex-warning.ts';
 
 const wait = new WaitMode();
 
@@ -140,18 +141,6 @@ async function giveBack(
     });
     await handle?.[Symbol.asyncDispose]();
   } catch (error) {
-    process.emitWarning(
-      Object.assign(
-        new Error(
-          `The give-back of a lease that a cancelled acquire got failed, and its caller already rejected: ${Error.isError(error) ? error.message : String(error)}`,
-          { cause: error },
-        ),
-        {
-          name: 'MutexWarning',
-          code: 'ZUKHRUF_MUTEX_GIVE_BACK_FAILED',
-          detail: `key: ${key}`,
-        },
-      ),
-    );
+    process.emitWarning(new MutexWarning(error, { key }));
   }
 }

@@ -635,7 +635,7 @@ npx nx run mteb:report
 
 With `raiseError: false`, `evaluate` does not throw an error from the run of a task. The `exceptions` of the `ModelResult` give the task name and the message of the error as a `TaskError`, and `evaluate` goes on with the next task ([src/evaluate.test.ts](./src/evaluate.test.ts)). Only the run of the task is in the `try` that `raiseError: false` adds, so these errors throw also with `raiseError: false`: the invalid `overwriteStrategy` and the modalities of the model, which `evaluate` checks before the first task, and the errors of the result cache (`'only-cache'` with no cached result, and `'never'` or `'only-cache'` with missing splits or subsets), which `evaluate` checks for each task before its run ([src/evaluate.ts](./src/evaluate.ts)).
 
-A failure that no caller waits for is a process warning, in the shape of [root ADR 0010](../../docs/adr/0010-a-package-warning-names-its-type-code-and-subject-and-keeps-the-failure-as-its-cause.md). A `'warning'` listener reads its type as `name`, its `code`, and its subject in `detail`, one `<term>: <value>` line each. Its `cause` is the failure, and its message ends with the failure's message. `--disable-warning=<code or type>` stops the print.
+A failure that no caller waits for is a process warning, in the shape of [root ADR 0010](../../docs/adr/0010-a-package-warning-names-its-type-code-and-subject-and-keeps-the-failure-as-its-cause.md). A `'warning'` listener reads its type as `name`, its `code`, and its subject in `detail`, one `<term>: <value>` line each. Its `cause` is the failure, and its message ends with the failure's message. `--disable-warning=<code or type>` stops the print. Each type is a class that `@zukhruf/mteb` exports, so a listener can test `warning instanceof` the class ([root ADR 0011](../../docs/adr/0011-a-package-warning-is-an-instance-of-its-own-class-which-the-package-exports.md)). With two installed copies of the package, `instanceof` fails across the copies, so compare `code`.
 
 | Warning                    | Code                                | Detail             | When                                                                                                  |
 | -------------------------- | ----------------------------------- | ------------------ | ----------------------------------------------------------------------------------------------------- |
@@ -690,6 +690,18 @@ class ValidationError extends Error {
     title: string,
     errors: readonly { readonly loc: string; readonly msg: string }[],
   );
+}
+
+class PeriodicSchedulerWarning extends Error {
+  readonly code: 'ZUKHRUF_MTEB_PERIODIC_CALL_FAILED';
+  readonly detail: string; // interval: <s> s
+  constructor(failure: unknown, subject: { interval: number });
+}
+
+class LockWarning extends Error {
+  readonly code: 'ZUKHRUF_MTEB_LOCK_RELEASE_FAILED';
+  readonly detail: string; // lockfile: <path>
+  constructor(failure: unknown, subject: { lockfile: string });
 }
 
 class TaskMetadata {

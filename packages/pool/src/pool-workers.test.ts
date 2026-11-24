@@ -36,6 +36,7 @@ import {
   OrderedReady,
   Parallel,
   Pool,
+  PoolWarning,
   PoolWorkers,
   Resources,
   type Sample,
@@ -3188,7 +3189,7 @@ describe('PoolWorkers when its store fails', () => {
       });
       holder.exec('ROLLBACK');
       const [warning] = warnings;
-      assert.ok(warning);
+      assert.ok(warning instanceof PoolWarning);
       assert.deepEqual(
         { ...warning },
         {

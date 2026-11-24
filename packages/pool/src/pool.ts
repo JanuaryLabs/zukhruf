@@ -11,7 +11,8 @@ import {
   JobFailedError,
   JobNotFoundError,
 } from './errors.ts';
-import { Store, warn } from './store.ts';
+import { PoolWarning } from './pool-warning.ts';
+import { Store } from './store.ts';
 import {
   type WorkerKind,
   newJobChannel,
@@ -87,21 +88,19 @@ export class Pool<Input, Output> implements AsyncDisposable {
     this.#kind = options.kind;
     this.#clock = options.clock;
     this.#store = new Store(options.store, options.clock);
-    const queue = `queue: ${options.kind.queue}`;
+    const { queue } = options.kind;
     this.#store.queue.on('error', (error) =>
-      warn(error, {
-        message: 'The queue of the store failed, and the pool goes on',
-        code: 'ZUKHRUF_POOL_QUEUE_ERROR',
-        detail: queue,
-      }),
+      process.emitWarning(
+        new PoolWarning(error, { code: 'ZUKHRUF_POOL_QUEUE_ERROR', queue }),
+      ),
     );
     this.#store.notifications.on('error', (error) =>
-      warn(error, {
-        message:
-          'The notifications of the store failed, and the backstop finds the lost wakes',
-        code: 'ZUKHRUF_POOL_NOTIFICATIONS_ERROR',
-        detail: queue,
-      }),
+      process.emitWarning(
+        new PoolWarning(error, {
+          code: 'ZUKHRUF_POOL_NOTIFICATIONS_ERROR',
+          queue,
+        }),
+      ),
     );
     const output = outputChannel(options.kind);
     this.#store.notifications.on('notification', ({ channel, payload }) => {
@@ -125,12 +124,12 @@ export class Pool<Input, Output> implements AsyncDisposable {
               socket.unref();
               this.#owners.add(socket);
               socket.on('error', (error) =>
-                warn(error, {
-                  message:
-                    'The connection of an owner broke, and the pool drops it',
-                  code: 'ZUKHRUF_POOL_OWNER_CONNECTION_ERROR',
-                  detail: queue,
-                }),
+                process.emitWarning(
+                  new PoolWarning(error, {
+                    code: 'ZUKHRUF_POOL_OWNER_CONNECTION_ERROR',
+                    queue,
+                  }),
+                ),
               );
               socket.once('close', () => this.#owners.delete(socket));
             });

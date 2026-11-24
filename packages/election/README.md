@@ -218,7 +218,7 @@ The socket lock store of `@zukhruf/mutex` uses `SqliteElection`, with the claim 
 | `signal.reason`         | A campaign rejects with it when its signal aborts.                                                                                                                                                                |
 | `SuppressedError`       | A campaign or a resign rejects with it when a step failed and giving the claim up or freeing it failed too. Its `suppressed` is the step's error, and its `error` is the failure to free.                         |
 
-A failure that no caller waits for is a process warning, in the shape of [root ADR 0010](../../docs/adr/0010-a-package-warning-names-its-type-code-and-subject-and-keeps-the-failure-as-its-cause.md). A `'warning'` listener reads its type as `name`, its `code`, and its subject in `detail`, one `<term>: <value>` line each. Its `cause` is the failure, and its message ends with the failure's message. `--disable-warning=<code or type>` stops the print.
+A failure that no caller waits for is a process warning, in the shape of [root ADR 0010](../../docs/adr/0010-a-package-warning-names-its-type-code-and-subject-and-keeps-the-failure-as-its-cause.md). A `'warning'` listener reads its type as `name`, its `code`, and its subject in `detail`, one `<term>: <value>` line each. Its `cause` is the failure, and its message ends with the failure's message. `--disable-warning=<code or type>` stops the print. `TermWarning` is a class that the package exports, so a listener can test `warning instanceof` the class ([root ADR 0011](../../docs/adr/0011-a-package-warning-is-an-instance-of-its-own-class-which-the-package-exports.md)). With two installed copies of the package, `instanceof` fails across the copies, so compare `code`.
 
 | Warning       | Code                                | Detail                                  | When                                                                                                                                                                                                                           |
 | ------------- | ----------------------------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -284,6 +284,12 @@ class Term implements Lease, AsyncDisposable {
   get signal(): AbortSignal; // aborts with LeaseLostError when the term is lost
   resign(options?: ResignOptions): Promise<void>;
   [Symbol.asyncDispose](): Promise<void>; // resign()
+}
+
+class TermWarning extends Error {
+  readonly code: 'ZUKHRUF_ELECTION_TERM_FREE_FAILED';
+  readonly detail: string; // election: <name>, then epoch: <epoch>
+  constructor(failure: unknown, subject: { election: string; epoch: bigint });
 }
 
 interface SqliteElectionOptions {

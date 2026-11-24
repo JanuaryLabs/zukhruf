@@ -279,7 +279,7 @@ try {
 | `SuppressedError`       | `createExclusive` rejects with it when the create fails and the removal of its draft fails too. Its `suppressed` is the failure of the create, and its `error` is the failure of the removal (`src/create-exclusive.test.ts`).                                                                                                                                                                             |
 | `ENAMETOOLONG`          | A write rejects with this error code when the name of its draft is too long for the file system (see "Keep room for the name of the draft", `src/draft.test.ts`). The removal of a draft that fails with `ENAMETOOLONG`, or with `ENOTDIR` for a parent that is a file, means that no draft is there. Thus `createExclusive` rejects with the error of its write, not with a `SuppressedError` (4494d9be). |
 
-A failure that no caller waits for is a process warning, in the shape of [root ADR 0010](../../docs/adr/0010-a-package-warning-names-its-type-code-and-subject-and-keeps-the-failure-as-its-cause.md). A `'warning'` listener reads its type as `name`, its `code`, and its subject in `detail`, one `<term>: <value>` line each. Its `cause` is the failure, and its message ends with the failure's message. `--disable-warning=<code or type>` stops the print.
+A failure that no caller waits for is a process warning, in the shape of [root ADR 0010](../../docs/adr/0010-a-package-warning-names-its-type-code-and-subject-and-keeps-the-failure-as-its-cause.md). A `'warning'` listener reads its type as `name`, its `code`, and its subject in `detail`, one `<term>: <value>` line each. Its `cause` is the failure, and its message ends with the failure's message. `--disable-warning=<code or type>` stops the print. `CreateExclusiveWarning` is a class that the package exports, so a listener can test `warning instanceof` the class ([root ADR 0011](../../docs/adr/0011-a-package-warning-is-an-instance-of-its-own-class-which-the-package-exports.md)). With two installed copies of the package, `instanceof` fails across the copies, so compare `code`.
 
 | Warning                  | Code                             | Detail          | When                                                                                   |
 | ------------------------ | -------------------------------- | --------------- | -------------------------------------------------------------------------------------- |
@@ -317,6 +317,12 @@ function assertLocalDirectory(directory: string): Promise<void>;
 class NetworkDirectoryError extends Error {
   readonly directory: string;
   readonly fileSystem: string;
+}
+
+class CreateExclusiveWarning extends Error {
+  readonly code: 'ZUKHRUF_FS_DRAFT_REMOVE_FAILED';
+  readonly detail: string; // draft: <path>
+  constructor(failure: unknown, subject: { draft: string });
 }
 
 class FileLock implements Disposable {

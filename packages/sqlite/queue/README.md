@@ -132,7 +132,7 @@ Other methods of `PgBoss` are not in the subset, for example `getQueue`, `getJob
 
 Code that runs on both engines examines `code`, not the class. On Postgres, the error comes from the driver, not from this package, and `instanceof DatabaseError` is false. The `code` is the same on both engines.
 
-A failure that no caller waits for is a process warning, in the shape of [root ADR 0010](../../../docs/adr/0010-a-package-warning-names-its-type-code-and-subject-and-keeps-the-failure-as-its-cause.md). A `'warning'` listener reads its type as `name`, its `code`, and its subject in `detail`, one `<term>: <value>` line each. Its `cause` is the failure, and its message ends with the failure's message. `--disable-warning=<code or type>` stops the print.
+A failure that no caller waits for is a process warning, in the shape of [root ADR 0010](../../../docs/adr/0010-a-package-warning-names-its-type-code-and-subject-and-keeps-the-failure-as-its-cause.md). A `'warning'` listener reads its type as `name`, its `code`, and its subject in `detail`, one `<term>: <value>` line each. Its `cause` is the failure, and its message ends with the failure's message. `--disable-warning=<code or type>` stops the print. `SqliteJobQueueWarning` and `TimekeeperWarning` are classes that the package exports, so a listener can test `warning instanceof` the class ([root ADR 0011](../../../docs/adr/0011-a-package-warning-is-an-instance-of-its-own-class-which-the-package-exports.md)). With two installed copies of the package, `instanceof` fails across the copies, so compare `code`.
 
 | Warning                 | Code                                        | Detail                                                                               | When                                                                                                                                        |
 | ----------------------- | ------------------------------------------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -289,6 +289,32 @@ class UnsupportedStartAfterError extends Error {
   name: string; // 'UnsupportedStartAfterError'
   readonly startAfter: string;
   constructor(startAfter: string);
+}
+
+class SqliteJobQueueWarning extends Error {
+  readonly code:
+    | 'ZUKHRUF_SQLITE_QUEUE_STOP_FAIL_UNHEARD'
+    | 'ZUKHRUF_SQLITE_QUEUE_ERROR_LISTENER_THREW';
+  readonly detail: string; // queue: <name>, then worker: <id>
+  constructor(
+    failure: unknown,
+    subject: {
+      code: SqliteJobQueueWarning['code'];
+      queue: string;
+      worker: string;
+    },
+  );
+}
+
+class TimekeeperWarning extends Error {
+  readonly code: 'ZUKHRUF_SQLITE_QUEUE_SEND_IT_UNREPORTED';
+  readonly detail: string; // schedule: <name>, then key: <key>; or job: <id>
+  constructor(
+    failure: unknown,
+    subject:
+      | { readonly schedule: string; readonly key: string }
+      | { readonly job: string },
+  );
 }
 ```
 

@@ -1,5 +1,7 @@
 # A package warning names its type, code and subject, and keeps the failure as its cause
 
+Superseded in part on 2026-11-24 (#5474) for the bullet "Inline" of the decision. Each type of warning is its own class that `extends Error`, and each site emits its instance, such as `process.emitWarning(new TermWarning(error, { election, epoch }))`. The owner said: "I don't like the warning abstraction. instead of we should have own class that each place does like process.emitWarning(new class)", and chose "Build it". pool has no `warn` function, and `zukhruf/require-warning-code` reports the `Object.assign(…)` form ([ADR 0011](./0011-a-package-warning-is-an-instance-of-its-own-class-which-the-package-exports.md)).
+
 Superseded in part on 2026-11-24 (#5478) for the detail of an election. `LeaderElection` has a public `name`, and the detail names the election by it: `election: <name>` for `LeaderSelectorWarning`, and `election: <name>`, then `epoch: <epoch>`, for `TermWarning` ([election ADR 0010](../../packages/election/docs/adr/0010-an-election-has-a-name-and-the-name-of-a-sqlite-election-is-the-path-of-its-claim-file.md)).
 
 Status: Accepted 2026-11-24 (backlog #5472). For the convention, the owner chose "Accept (Recommended)". For a shared helper, he chose "Inline now, file the helper (Recommended)": each site writes the call inline, and the helper waits for his go as backlog #5474.

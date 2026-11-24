@@ -1,5 +1,6 @@
 export { atomicWrite } from './atomic-write.ts';
 export { createExclusive } from './create-exclusive.ts';
+export { CreateExclusiveWarning } from './create-exclusive-warning.ts';
 export { draftSuffixLength } from './draft.ts';
 export { durableWrite } from './durable-write.ts';
 export { FileStamp } from './file-stamp.ts';

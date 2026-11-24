@@ -8,7 +8,7 @@ import { createClock } from '@sinonjs/fake-timers';
 import { type Clock, delay } from '@zukhruf/async';
 import { waitFor } from '@zukhruf/testing/async';
 
-import { LeaderElection, LeaseLostError } from './index.ts';
+import { LeaderElection, LeaseLostError, TermWarning } from './index.ts';
 
 interface Script {
   /** What each try answers, in order: an epoch, `busy`, or an error. The last answer repeats. */
@@ -182,7 +182,7 @@ describe('A term that its backend takes away', () => {
         signal: t.signal,
       });
       const [warning] = warnings;
-      assert.ok(warning);
+      assert.ok(warning instanceof TermWarning);
       assert.deepEqual(
         { ...warning, message: warning.message },
         {

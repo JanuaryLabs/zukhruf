@@ -231,7 +231,7 @@ The signal of the task aborts at the dispose, at `interruptLeadership()`, and wh
 | `signal.reason`                | A call rejects with it when its signal aborts while it waits for the key. The task does not run ([ADR 0008](./docs/adr/0008-a-caller-cancels-an-acquire-mode-gives-up.md)).                                                                                                                                                                                                            |
 | The failure of a leader's task | `ended` and the dispose of a `LeaderSelector` reject with the error of a task that failed, and, without `autoRequeue`, with the error of a failed acquire. `requeue()` throws an `Error` after the dispose, and after a failure ended the selector ([ADR 0034](./docs/adr/0034-a-leader-selector-of-the-mutex-runs-a-task-each-time-it-leads-and-requeues-as-apache-curator-does.md)). |
 
-A failure that no caller waits for is a process warning, in the shape of [root ADR 0010](../../docs/adr/0010-a-package-warning-names-its-type-code-and-subject-and-keeps-the-failure-as-its-cause.md). A `'warning'` listener reads its type as `name`, its `code`, and its subject in `detail`, one `<term>: <value>` line each. Its `cause` is the failure, and its message ends with the failure's message. `--disable-warning=<code or type>` stops the print.
+A failure that no caller waits for is a process warning, in the shape of [root ADR 0010](../../docs/adr/0010-a-package-warning-names-its-type-code-and-subject-and-keeps-the-failure-as-its-cause.md). A `'warning'` listener reads its type as `name`, its `code`, and its subject in `detail`, one `<term>: <value>` line each. Its `cause` is the failure, and its message ends with the failure's message. `--disable-warning=<code or type>` stops the print. Each type is a class that the package exports: `LeaderSelectorWarning` and `MutexWarning` from `@zukhruf/mutex`, `DockerEngineStoreWarning` from `@zukhruf/mutex/docker`, and `LockServerWarning` from `@zukhruf/mutex/socket`, so a listener can test `warning instanceof` the class ([root ADR 0011](../../docs/adr/0011-a-package-warning-is-an-instance-of-its-own-class-which-the-package-exports.md)). With two installed copies of the package, `instanceof` fails across the copies, so compare `code`.
 
 | Warning                    | Code                                              | Detail                                                       | When                                                                                                                                                |
 | -------------------------- | ------------------------------------------------- | ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -374,6 +374,35 @@ function leaseFor(
 class LeaseLostError extends Error {
   readonly subject: string; // the key
   constructor(subject: string, options?: ErrorOptions);
+}
+
+class LeaderSelectorWarning extends Error {
+  readonly code: 'ZUKHRUF_MUTEX_LEADER_SELECTOR_ACQUIRE_FAILED';
+  readonly detail: string; // key: <name>, or election: <name>
+  constructor(
+    failure: unknown,
+    source: { readonly key: string } | { readonly election: string },
+  );
+}
+
+class MutexWarning extends Error {
+  readonly code: 'ZUKHRUF_MUTEX_GIVE_BACK_FAILED';
+  readonly detail: string; // key: <key>
+  constructor(failure: unknown, subject: { key: string });
+}
+
+// @zukhruf/mutex/docker
+class DockerEngineStoreWarning extends Error {
+  readonly code: 'ZUKHRUF_MUTEX_DOCKER_CLAIM_REMOVE_FAILED';
+  readonly detail: string; // key: <key>, then container: <id>
+  constructor(failure: unknown, subject: { key: string; container: string });
+}
+
+// @zukhruf/mutex/socket
+class LockServerWarning extends Error {
+  readonly code: 'ZUKHRUF_MUTEX_LOCK_SERVER_RECOVERY_CHECK_FAILED';
+  readonly detail: string; // session: <id>
+  constructor(failure: unknown, subject: { session: string });
 }
 ```
 

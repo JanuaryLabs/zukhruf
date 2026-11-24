@@ -27,8 +27,12 @@ async function workspace() {
   });
 }
 
-// The shape of ADR 0010 of the zukhruf repository.
-const typed = `Object.assign(new Error('The acquire failed, and the selector tries again', { cause: failure }), { name: 'LeaderSelectorWarning', code: 'ZUKHRUF_MUTEX_LEADER_SELECTOR_ACQUIRE_FAILED', detail: 'key: jobs' })`;
+// The shape of ADR 0011 of the zukhruf repository: a class for each type.
+const warningClass = `class LeaderSelectorWarning extends Error { readonly code = 'ZUKHRUF_MUTEX_LEADER_SELECTOR_ACQUIRE_FAILED'; readonly detail: string; constructor(failure: unknown, { key }: { key: string }) { super('The acquire failed, and the selector tries again: ' + String(failure), { cause: failure }); this.name = 'LeaderSelectorWarning'; this.detail = 'key: ' + key; } }`;
+const typed = `new LeaderSelectorWarning(failure, { key: 'jobs' })`;
+
+// The shape of ADR 0010 before ADR 0011: the Error is typed in place.
+const inline = `Object.assign(new Error('The acquire failed, and the selector tries again', { cause: failure }), { name: 'LeaderSelectorWarning', code: 'ZUKHRUF_MUTEX_LEADER_SELECTOR_ACQUIRE_FAILED', detail: 'key: jobs' })`;
 
 test('a warning with no code is reported: a raw failure, a string alone, a string with only a type, and through each import of process', async () => {
   await using fixture = await workspace();
@@ -109,14 +113,42 @@ test('an Error passed with options, a type or a constructor is reported, because
       },
       {
         filename,
-        code: `declare const failure: unknown; process.emitWarning(${typed}, { code: 'ZUKHRUF_X' });`,
+        code: `${warningClass} declare const failure: unknown; process.emitWarning(${typed}, { code: 'ZUKHRUF_X' });`,
         errors: optionsIgnored,
       },
     ],
   });
 });
 
-test('a warning with a code passes: the typed Error alone, a string with a code in its options or as its third argument, and an emitWarning that is not Node’s', async () => {
+test('an Error typed in place with Object.assign is reported, also with a code, so that each warning is an instance of its own class', async () => {
+  await using fixture = await workspace();
+  const filename = fixture.path('case.mts');
+  const inlineWarning = [{ messageId: 'inlineWarning' }];
+
+  typedRuleTester(fixture.root).run('require-warning-code', rule, {
+    valid: [],
+    invalid: [
+      {
+        // The 12 sites of ADR 0010 after #5472.
+        filename,
+        code: `declare const failure: unknown; process.emitWarning(${inline});`,
+        errors: inlineWarning,
+      },
+      {
+        filename,
+        code: `import { emitWarning } from 'node:process'; declare const failure: unknown; emitWarning(${inline});`,
+        errors: inlineWarning,
+      },
+      {
+        filename,
+        code: `declare const failure: Error; process.emitWarning(Object.assign(failure, { name: 'LeaderSelectorWarning' }));`,
+        errors: inlineWarning,
+      },
+    ],
+  });
+});
+
+test('a warning with a code passes: the instance of a warning class alone, a string with a code in its options or as its third argument, and an emitWarning that is not Node’s', async () => {
   await using fixture = await workspace();
   const filename = fixture.path('case.mts');
 
@@ -124,11 +156,16 @@ test('a warning with a code passes: the typed Error alone, a string with a code 
     valid: [
       {
         filename,
-        code: `declare const failure: unknown; process.emitWarning(${typed});`,
+        code: `${warningClass} declare const failure: unknown; process.emitWarning(${typed});`,
       },
       {
         filename,
-        code: `import { emitWarning } from 'node:process'; declare const failure: unknown; emitWarning(${typed});`,
+        code: `import { emitWarning } from 'node:process'; ${warningClass} declare const failure: unknown; emitWarning(${typed});`,
+      },
+      {
+        // A warning class with a code, built away from the call.
+        filename,
+        code: `${warningClass} declare const failure: unknown; const warning = ${typed}; process.emitWarning(warning);`,
       },
       {
         // The deprecation of @zukhruf/eslint's plugin.ts.

@@ -10,7 +10,7 @@ import { test } from 'node:test';
 import { untilAborted } from '@zukhruf/async';
 import { TemporaryFiles, isErrno } from '@zukhruf/fs';
 
-import { OpenSshConfig } from './config.ts';
+import { OpenSshConfig, SharedConnectionWarning } from './config.ts';
 import { hermeticLines } from './testing/ssh-config.ts';
 import { type Sshd, startSshd } from './testing/sshd.ts';
 
@@ -971,7 +971,7 @@ test(
     // Assert
     const [warning] = warnings;
     assert.equal(warnings.length, 1);
-    assert.ok(warning);
+    assert.ok(warning instanceof SharedConnectionWarning);
     assert.deepEqual(
       { ...warning },
       {

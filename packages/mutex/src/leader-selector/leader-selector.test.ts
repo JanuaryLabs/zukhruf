@@ -21,6 +21,7 @@ import {
   LeaderSelector,
   type LeaderSelectorListener,
   type LeaderSelectorOptions,
+  LeaderSelectorWarning,
   type LockStore,
   Modes,
   Mutex,
@@ -1010,7 +1011,7 @@ describe('Over an election', () => {
       { signal: t.signal },
     );
     const [warning] = emitWarning.mock.calls[0]!.arguments;
-    assert.ok(Error.isError(warning));
+    assert.ok(warning instanceof LeaderSelectorWarning);
     assert.deepEqual(
       { ...warning },
       {

@@ -3,6 +3,7 @@ export {
   type SocketRole,
   type SocketStoreOptions,
 } from './socket-store.ts';
+export { LockServerWarning } from './lock-server-warning.ts';
 export { ProtocolVersionError } from './protocol-version-error.ts';
 export { CoordinatorUnavailableError } from '../remote/coordinator-unavailable-error.ts';
 export { GrantFailedError } from '../remote/grant-failed-error.ts';

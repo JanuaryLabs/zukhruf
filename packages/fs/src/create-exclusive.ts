@@ -2,6 +2,7 @@ import { link, unlink, writeFile } from 'node:fs/promises';
 
 import type { Clock } from '@zukhruf/async';
 
+import { CreateExclusiveWarning } from './create-exclusive-warning.ts';
 import { draftOf } from './draft.ts';
 import { isErrno } from './errno.ts';
 import { patiently } from './patiently.ts';
@@ -22,19 +23,7 @@ export async function createExclusive(
   const created = await createFromDraft(draft, path, content, clock);
   // A draft left behind has a unique name, so it never blocks a key; failing to remove it must not change whether `path` was created, so nobody is left to tell of it.
   await removeDraft(draft, clock).catch((error: unknown) => {
-    process.emitWarning(
-      Object.assign(
-        new Error(
-          `The removal of the draft failed, and the draft stays: ${Error.isError(error) ? error.message : String(error)}`,
-          { cause: error },
-        ),
-        {
-          name: 'CreateExclusiveWarning',
-          code: 'ZUKHRUF_FS_DRAFT_REMOVE_FAILED',
-          detail: `draft: ${draft}`,
-        },
-      ),
-    );
+    process.emitWarning(new CreateExclusiveWarning(error, { draft }));
   });
   return created;
 }

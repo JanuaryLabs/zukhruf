@@ -24,6 +24,7 @@ import {
 } from './control-client.ts';
 import { serveConnection } from './control-master.ts';
 import type { Request } from './messages.ts';
+import { SharedConnectionWarning } from './shared-connection-warning.ts';
 
 /**
  * One SSH connection to a host that the processes of the user share, as
@@ -545,17 +546,7 @@ class ElectedConnection implements SharedConnection {
       ref: () =>
         void elect().catch((error: unknown) => {
           process.emitWarning(
-            Object.assign(
-              new Error(
-                `The election of a ref'd shared connection failed, and its next channel elects again: ${Error.isError(error) ? error.message : String(error)}`,
-                { cause: error },
-              ),
-              {
-                name: 'SharedConnectionWarning',
-                code: 'ZUKHRUF_SSH_SHARED_CONNECTION_ELECTION_FAILED',
-                detail: `socket: ${this.#socket}`,
-              },
-            ),
+            new SharedConnectionWarning(error, { socket: this.#socket }),
           );
         }),
       unref: () => undefined,

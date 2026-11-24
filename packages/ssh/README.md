@@ -454,7 +454,7 @@ A failure of the connection has no class of its own. Every error of `Client.dial
 
 A connection that is lost after the start ends each open channel with an error whose `cause` is the error that ended the connection, and `client.wait()` rejects with it. `OpenSshConfig#dial` rejects a `ProxyCommand` route under `ProxyUseFdpass yes` before it runs the command (Node.js cannot receive a file descriptor), and a `ProxyCommand` with a token that OpenSSH does not know. A `ProxyCommand` that exits before the handshake ends rejects the dial with the error that ssh2 gives for a transport that closed. Through `@zukhruf/ssh/control`, an open that the master's connection refuses rejects with the same `OpenChannelError` as on the `Client`. A dial stream whose master died or was disposed fails with `ssh: the control master closed the connection`, and a session then rejects with `ExitMissingError` whose `cause` is that error, or the error that ended the master's connection. A `ControlClient` with no master at its path rejects with the error of `node:net`, such as `ENOENT` or `ECONNREFUSED`. A failed `ssh -G` rejects `OpenSshConfig.resolve` with an `Error` whose message is the standard error of `ssh` and whose `cause` is the error of `execFile`, with the exit code as its `code`. A loop of jump hosts rejects with `jumphost loop via <host>`, as OpenSSH words it.
 
-A failure that no caller waits for is a process warning, in the shape of [root ADR 0010](../../docs/adr/0010-a-package-warning-names-its-type-code-and-subject-and-keeps-the-failure-as-its-cause.md). A `'warning'` listener reads its type as `name`, its `code`, and its subject in `detail`, one `<term>: <value>` line each. Its `cause` is the failure, and its message ends with the failure's message. `--disable-warning=<code or type>` stops the print.
+A failure that no caller waits for is a process warning, in the shape of [root ADR 0010](../../docs/adr/0010-a-package-warning-names-its-type-code-and-subject-and-keeps-the-failure-as-its-cause.md). A `'warning'` listener reads its type as `name`, its `code`, and its subject in `detail`, one `<term>: <value>` line each. Its `cause` is the failure, and its message ends with the failure's message. `--disable-warning=<code or type>` stops the print. `SharedConnectionWarning` is a class that `@zukhruf/ssh/config` exports, so a listener can test `warning instanceof` the class ([root ADR 0011](../../docs/adr/0011-a-package-warning-is-an-instance-of-its-own-class-which-the-package-exports.md)). With two installed copies of the package, `instanceof` fails across the copies, so compare `code`.
 
 | Warning                   | Code                                            | Detail           | When                                                                                                                                    |
 | ------------------------- | ----------------------------------------------- | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
@@ -1102,6 +1102,12 @@ export interface SharedConnection extends AsyncDisposable {
   ref(): void;
   unref(): void;
   close(): Promise<void>;
+}
+
+export class SharedConnectionWarning extends Error {
+  readonly code: 'ZUKHRUF_SSH_SHARED_CONNECTION_ELECTION_FAILED';
+  readonly detail: string; // socket: <path>
+  constructor(failure: unknown, subject: { socket: string });
 }
 
 /** How dial reaches the host. OpenSSH uses one of the three: ProxyJump and ProxyCommand exclude each other. */

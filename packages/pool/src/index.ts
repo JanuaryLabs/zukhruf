@@ -17,6 +17,7 @@ export {
 } from './errors.ts';
 export { type JobCounts, type JobHandle, Pool } from './pool.ts';
 export { PoolWorkers } from './pool-workers.ts';
+export { PoolWarning, type PoolWarningSubject } from './pool-warning.ts';
 export type { PoolStats } from './pool-stats.ts';
 export { Resources } from './resources.ts';
 export type { Computer } from './capacity.ts';

@@ -7,6 +7,7 @@ import { createClock } from '@sinonjs/fake-timers';
 import { waitFor } from '@zukhruf/testing/async';
 import { describe } from '@zukhruf/testing/node';
 
+import { MutexWarning } from '../index.ts';
 import { MemoryStore } from '../lock-stores/memory/memory-store.ts';
 import { grantedWithin } from '../testing/granted-within.ts';
 import { hold } from '../testing/hold.ts';
@@ -236,7 +237,7 @@ describe('Cancelling a wait', () => {
         signal: t.signal,
       });
       const [warning] = warnings;
-      assert.ok(warning);
+      assert.ok(warning instanceof MutexWarning);
       assert.deepEqual(
         { ...warning, message: warning.message },
         {

@@ -24,6 +24,7 @@ import { NaiveTimestamp } from './naive-timestamp.ts';
 import { Recurrence } from './recurrence.ts';
 import { Row } from './rows.ts';
 import { SqlValues } from './sql-values.ts';
+import { TimekeeperWarning } from './timekeeper-warning.ts';
 
 // One occurrence the pass files in the send-it queue: the request to send
 // with the schedule's key and slot beside it, under the singleton key and
@@ -928,22 +929,14 @@ export class Timekeeper extends EventEmitter<
       // caller either: nothing is left to tell, so it is a process warning.
       // A send-it job's data names its schedule, unless the data is no object.
       process.emitWarning(
-        Object.assign(
-          new Error(
-            `A send-it job failed, and no 'error' listener took the failure: ${Error.isError(thrown) ? thrown.message : String(thrown)}`,
-            { cause: thrown },
-          ),
-          {
-            name: 'TimekeeperWarning',
-            code: 'ZUKHRUF_SQLITE_QUEUE_SEND_IT_UNREPORTED',
-            detail:
-              typeof data === 'object' &&
-              data !== null &&
-              'name' in data &&
-              'key' in data
-                ? `schedule: ${String(data.name)}\nkey: ${String(data.key)}`
-                : `job: ${id}`,
-          },
+        new TimekeeperWarning(
+          thrown,
+          typeof data === 'object' &&
+            data !== null &&
+            'name' in data &&
+            'key' in data
+            ? { schedule: String(data.name), key: String(data.key) }
+            : { job: id },
         ),
       );
     }

@@ -6,10 +6,11 @@ import { NoServerError, PipeAddress } from '@zukhruf/pipes';
 
 import type { Eviction } from './eviction.ts';
 import type { PoolStats } from './pool-stats.ts';
+import { PoolWarning } from './pool-warning.ts';
 import type { Sizing } from './sizing.ts';
 import { type Slot, Slots } from './slots.ts';
 import type { Startup } from './startup.ts';
-import { Store, TOUCH_INTERVAL, warn } from './store.ts';
+import { Store, TOUCH_INTERVAL } from './store.ts';
 import {
   type WorkerKind,
   newJobChannel,
@@ -108,21 +109,19 @@ export class PoolWorkers<Input, Output> implements AsyncDisposable {
     this.#startup = options.startup;
     this.#eviction = options.eviction;
     this.#store = new Store(options.store, options.clock);
-    const queue = `queue: ${options.kind.queue}`;
+    const { queue } = options.kind;
     this.#store.queue.on('error', (error) =>
-      warn(error, {
-        message: 'The queue of the store failed, and the pool goes on',
-        code: 'ZUKHRUF_POOL_QUEUE_ERROR',
-        detail: queue,
-      }),
+      process.emitWarning(
+        new PoolWarning(error, { code: 'ZUKHRUF_POOL_QUEUE_ERROR', queue }),
+      ),
     );
     this.#store.notifications.on('error', (error) =>
-      warn(error, {
-        message:
-          'The notifications of the store failed, and the backstop finds the lost wakes',
-        code: 'ZUKHRUF_POOL_NOTIFICATIONS_ERROR',
-        detail: queue,
-      }),
+      process.emitWarning(
+        new PoolWarning(error, {
+          code: 'ZUKHRUF_POOL_NOTIFICATIONS_ERROR',
+          queue,
+        }),
+      ),
     );
     const newJob = newJobChannel(options.kind);
     this.#store.notifications.on('notification', ({ channel }) => {
@@ -211,11 +210,12 @@ export class PoolWorkers<Input, Output> implements AsyncDisposable {
           const jobs = await this.#store.queue
             .fetch(this.#kind.queue, { batchSize: free })
             .catch((error: unknown) => {
-              warn(error, {
-                message: 'A fetch failed, and the owner waits for the backstop',
-                code: 'ZUKHRUF_POOL_FETCH_FAILED',
-                detail: `queue: ${this.#kind.queue}`,
-              });
+              process.emitWarning(
+                new PoolWarning(error, {
+                  code: 'ZUKHRUF_POOL_FETCH_FAILED',
+                  queue: this.#kind.queue,
+                }),
+              );
               return [];
             });
           backlog = jobs.length === free;
@@ -224,12 +224,13 @@ export class PoolWorkers<Input, Output> implements AsyncDisposable {
               // A settle that fails leaves the job to lapse by its heartbeat,
               // and the store runs it again by the kind's rules.
               .catch((error: unknown) =>
-                warn(error, {
-                  message:
-                    'A settle failed, and the job lapses by its heartbeat',
-                  code: 'ZUKHRUF_POOL_SETTLE_FAILED',
-                  detail: `queue: ${this.#kind.queue}\njob: ${job.id}`,
-                }),
+                process.emitWarning(
+                  new PoolWarning(error, {
+                    code: 'ZUKHRUF_POOL_SETTLE_FAILED',
+                    queue: this.#kind.queue,
+                    job: job.id,
+                  }),
+                ),
               )
               .finally(() => {
                 running.delete(run);
@@ -403,11 +404,13 @@ export class PoolWorkers<Input, Output> implements AsyncDisposable {
         ));
       } catch (error) {
         // The job keeps its worker, and the next touch tries again.
-        warn(error, {
-          message: 'A touch failed, and the next touch tries again',
-          code: 'ZUKHRUF_POOL_TOUCH_FAILED',
-          detail: `queue: ${this.#kind.queue}\njob: ${attempt.id}`,
-        });
+        process.emitWarning(
+          new PoolWarning(error, {
+            code: 'ZUKHRUF_POOL_TOUCH_FAILED',
+            queue: this.#kind.queue,
+            job: attempt.id,
+          }),
+        );
         continue;
       }
       if (affected === 0) return { gone: true };
@@ -450,12 +453,12 @@ function left<Output>(
 ): Promise<Outcome<Output>> {
   connection.on('error', (error) => {
     if (!isGone(error))
-      warn(error, {
-        message:
-          'The connection to a caller broke, and the owner treats the caller as gone',
-        code: 'ZUKHRUF_POOL_CALLER_CONNECTION_ERROR',
-        detail: `queue: ${queue}`,
-      });
+      process.emitWarning(
+        new PoolWarning(error, {
+          code: 'ZUKHRUF_POOL_CALLER_CONNECTION_ERROR',
+          queue,
+        }),
+      );
   });
   return new Promise((resolve) => {
     connection.once('close', () => resolve({ left: true }));

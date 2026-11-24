@@ -62,6 +62,7 @@ import type { CachedQueueStats } from './queue-stats-cache.ts';
 import { Recurrence } from './recurrence.ts';
 import { Row } from './rows.ts';
 import { SqlValues } from './sql-values.ts';
+import { SqliteJobQueueWarning } from './sqlite-job-queue-warning.ts';
 import { StartAfter } from './start-after.ts';
 import { Supervisor } from './supervisor.ts';
 import { Throttle } from './throttle.ts';
@@ -77,6 +78,8 @@ import { Worker } from './worker.ts';
 
 export { DatabaseError } from './database-error.ts';
 export { UnsupportedStartAfterError } from './start-after.ts';
+export { SqliteJobQueueWarning } from './sqlite-job-queue-warning.ts';
+export { TimekeeperWarning } from './timekeeper-warning.ts';
 
 export type { FoundJob, JobQueue, StartOptions } from './job-queue.ts';
 
@@ -627,34 +630,20 @@ export class SqliteJobQueue
               Error.isError(thrown) &&
               'code' in thrown &&
               thrown.code === 'ERR_UNHANDLED_ERROR';
-            const detail = `queue: ${worker.name}\nworker: ${worker.id}`;
+            const subject = { queue: worker.name, worker: worker.id };
             if (unheard)
               process.emitWarning(
-                Object.assign(
-                  new Error(
-                    `The fail of a worker's active jobs at stop failed, and nobody listens for 'error': ${Error.isError(error) ? error.message : String(error)}`,
-                    { cause: error },
-                  ),
-                  {
-                    name: 'SqliteJobQueueWarning',
-                    code: 'ZUKHRUF_SQLITE_QUEUE_STOP_FAIL_UNHEARD',
-                    detail,
-                  },
-                ),
+                new SqliteJobQueueWarning(error, {
+                  code: 'ZUKHRUF_SQLITE_QUEUE_STOP_FAIL_UNHEARD',
+                  ...subject,
+                }),
               );
             else
               process.emitWarning(
-                Object.assign(
-                  new Error(
-                    `The fail of a worker's active jobs at stop failed, and an 'error' listener threw: ${Error.isError(thrown) ? thrown.message : String(thrown)}`,
-                    { cause: thrown },
-                  ),
-                  {
-                    name: 'SqliteJobQueueWarning',
-                    code: 'ZUKHRUF_SQLITE_QUEUE_ERROR_LISTENER_THREW',
-                    detail,
-                  },
-                ),
+                new SqliteJobQueueWarning(thrown, {
+                  code: 'ZUKHRUF_SQLITE_QUEUE_ERROR_LISTENER_THREW',
+                  ...subject,
+                }),
               );
           }
         }

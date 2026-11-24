@@ -17,6 +17,7 @@ import { type Environment, Settings } from './ssh-g.ts';
 
 export type { Environment } from './ssh-g.ts';
 export type { SharedConnection } from './control/shared-connection.ts';
+export { SharedConnectionWarning } from './control/shared-connection-warning.ts';
 
 /** How dial reaches the host. OpenSSH uses one of the three: ProxyJump and ProxyCommand exclude each other. */
 export type Route =

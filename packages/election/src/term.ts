@@ -1,6 +1,8 @@
 import { Future } from '@zukhruf/async';
 import { type Lease, LeaseController } from '@zukhruf/lease';
 
+import { TermWarning } from './term-warning.ts';
+
 /** What a term needs from its election to end: the backend's steps for the claim it won. */
 export interface TermSteps {
   /** Starts watching the claim; `lose` reports that the backend took it away. */
@@ -138,17 +140,7 @@ export class Term implements Lease, AsyncDisposable {
       this.#watching.dispose();
     } catch (error) {
       process.emitWarning(
-        Object.assign(
-          new Error(
-            `The lost term failed to stop watching its claim or to free it, and it ends anyway: ${Error.isError(error) ? error.message : String(error)}`,
-            { cause: error },
-          ),
-          {
-            name: 'TermWarning',
-            code: 'ZUKHRUF_ELECTION_TERM_FREE_FAILED',
-            detail: `election: ${this.#election}\nepoch: ${this.epoch}`,
-          },
-        ),
+        new TermWarning(error, { election: this.#election, epoch: this.epoch }),
       );
     }
   }
