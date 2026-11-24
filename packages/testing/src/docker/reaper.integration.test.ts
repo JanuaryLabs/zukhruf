@@ -784,7 +784,15 @@ describe('the reaper of a run', { concurrency: 4 }, () => {
     const run = randomUUID();
     await present('alpine:latest');
     const database = `test_${run.replaceAll('-', '')}_0123456789abcdef`;
-    const settings = { ...quick, grace: 100, passes: 0, requestTimeout: 1_000 };
+    // A list that does not answer within one request time limit counts as
+    // done (ADR 0020, item 8), so a tighter limit than the shipped one races
+    // the list under load, not the drop.
+    const settings = {
+      ...quick,
+      grace: 100,
+      passes: 0,
+      requestTimeout: REAPER_DEFAULTS.requestTimeout,
+    };
     const others: string[] = [];
     await using cleanup = new AsyncDisposableStack();
     cleanup.defer(() => removeRun(run, others));
