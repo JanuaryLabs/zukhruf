@@ -878,7 +878,7 @@ function globalTeardown(): void;
 - [ADR 0024](./docs/adr/0024-a-run-holds-one-ssh-connection-to-an-ssh-engine-and-its-test-processes-reach-the-engine-host-through-it.md): a run holds one SSH connection to an SSH engine, and its test processes reach the engine host through it.
 - [ADR 0025](./docs/adr/0025-recovery-and-the-global-teardown-make-no-engine-call-and-a-test-process-has-no-process-record.md): recovery and the global teardown make no engine call, and a test process has no process record.
 - [ADR 0026](./docs/adr/0026-a-database-handle-owns-its-pools-and-its-disposal-ends-them-before-it-drops-the-database.md): a database handle owns its pools, and its disposal ends them before it drops the database.
-- [ADR 0028](./docs/adr/0028-an-interceptions-disposal-waits-until-the-client-has-closed-each-connection-that-the-server-closed.md): an interception's disposal waits until the client has closed each connection that the server closed (proposed).
+- [ADR 0028](./docs/adr/0028-an-interceptions-disposal-waits-until-the-client-has-closed-each-connection-that-the-server-closed.md): an interception's disposal waits until the client has closed each connection that the server closed.
 
 **Copied code**: [Code copied into this package](./docs/copied-code.md) records each copy of code in this package, as the Rule of Three asks.
 

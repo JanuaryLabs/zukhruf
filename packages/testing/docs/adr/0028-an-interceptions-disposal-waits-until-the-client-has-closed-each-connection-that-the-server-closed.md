@@ -1,6 +1,6 @@
 # An interception's disposal waits until the client has closed each connection that the server closed
 
-Status: Proposed 2026-11-23 for the owner's review (backlog #5446).
+Status: Accepted 2026-11-24 (Ezz, "Accept"; backlog #5446).
 
 On msw 3.0.7 and `@mswjs/interceptors` 0.45.12, `fetch` sends a request through undici, on a socket that the interceptor controls. `server.close()` destroys each idle socket at once, but the socket emits `close` on a later turn. undici clears the timer of the socket in its `close` listener (`onHttpSocketClose`, then `Parser.destroy`, then `clearTimeout`). undici reads the global `setTimeout` and `clearTimeout`, so in a test that fakes them with `t.mock.timers`, the timer came from the fake. With the old synchronous disposal, the test ended and node:test reset its fake timers before that `close`. The `clearTimeout` then ran under the fake timers of the next test, and Node 26.13 removed one of that test's timers. Meddit's PubMed tests found it: a backoff of 1 ms never fired (#5446). A test that fetches once, moves its fake time by 1 s and yields 5 turns, followed by a test that sets a 1 ms timer, yields 5 turns and moves its time by 1 ms, fails 3 of 3 runs with the old disposal and passes with this one.
 
