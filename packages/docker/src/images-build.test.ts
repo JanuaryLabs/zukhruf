@@ -21,13 +21,15 @@ import { TEST_LABEL, removeLabeled } from './testing/engine.ts';
 /** A small base at a pinned tag. Each build names linux/amd64, so the base is pulled for it, as ADR 0016 says the caller does. */
 const BASE = 'alpine:3.20.3';
 const PLATFORM = 'linux/amd64';
-const AMD64 = { os: 'linux', architecture: 'amd64' };
 
+/**
+ * Pulls each time: on the containerd image store, an inspect with a platform
+ * answers for each platform of the index, also one whose content is not on
+ * the engine, so it is no presence check.
+ */
 async function connect(clock: WallClock = globalThis): Promise<Docker> {
   const docker = await Docker.connect({ clock, environment: process.env });
-  if (!(await docker.images.inspect(BASE, { platform: AMD64 }))) {
-    await docker.images.pull(BASE, { platform: PLATFORM });
-  }
+  await docker.images.pull(BASE, { platform: PLATFORM });
   return docker;
 }
 
@@ -469,13 +471,7 @@ describe('docker.images.build()', () => {
     const names = [`zukhruf-test-${run}:a`, `zukhruf-test-${run}:b`];
     const architecture =
       (await docker.info()).Architecture === 'x86_64' ? 'arm64' : 'amd64';
-    if (
-      !(await docker.images.inspect(BASE, {
-        platform: { os: 'linux', architecture },
-      }))
-    ) {
-      await docker.images.pull(BASE, { platform: `linux/${architecture}` });
-    }
+    await docker.images.pull(BASE, { platform: `linux/${architecture}` });
     try {
       // Act: no RUN, so no emulator of the other platform is needed.
       const { ID } = await docker.images.build(
