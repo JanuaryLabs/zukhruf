@@ -363,16 +363,25 @@ import { TemporaryFiles } from '@zukhruf/fs';
     `,
   ]);
 
-test('a request of npm undici to a URL that has a handler gets the mock, and requests records it', async () => {
+test('a request of npm undici to a URL that has a handler gets the mock, requests records it, and the server at that URL gets no connection', async () => {
   await inChild(`
+    let connections = 0;
+    await using local = createServer((socket) => {
+      connections += 1;
+      socket.end('HTTP/1.1 200 OK\\r\\ncontent-type: application/json\\r\\ncontent-length: 16\\r\\nconnection: close\\r\\n\\r\\n{"id":"network"}', () => socket.destroy());
+    });
+    local.listen(0, '127.0.0.1');
+    await once(local, 'listening');
+    const url = 'http://127.0.0.1:' + local.address().port + '/user';
     await using interception = new Msw().intercept(
-      http.get('https://api.example.invalid/user', () => HttpResponse.json({ id: 1 })),
+      http.get(url, () => HttpResponse.json({ id: 1 })),
     );
 
-    const response = await request('https://api.example.invalid/user');
+    const response = await request(url);
 
     assert.deepEqual(await response.body.json(), { id: 1 });
-    assert.deepEqual(interception.requests.map(({ url }) => url), ['https://api.example.invalid/user']);
+    assert.deepEqual(interception.requests.map(({ url }) => url), [url]);
+    assert.equal(connections, 0);
   `);
 });
 
@@ -410,6 +419,23 @@ test('a connection to an address that is not a loopback address fails with ERR_I
       error.code === 'ENETUNREACH' &&
       error.message === 'Disallowed net connect for "192.0.2.1:80"',
     );
+  `);
+});
+
+test('while two interceptions are open, a connection to an address that is not a loopback address fails once with ERR_IP_BLOCKED, and the disposal of each interception rejects with its host and port', async () => {
+  await inChild(`
+    const one = new Msw().intercept();
+    const two = new Msw().intercept();
+
+    const client = connect(80, '192.0.2.6');
+    const [error] = await once(client, 'error');
+
+    assert.equal(error.code, 'ERR_IP_BLOCKED');
+    const refused = (error) =>
+      error instanceof NetConnectNotAllowedError &&
+      error.message === 'Disallowed net connect for "192.0.2.6:80"';
+    await assert.rejects(two.cleanup(), refused);
+    await assert.rejects(one.cleanup(), refused);
   `);
 });
 
