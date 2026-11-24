@@ -1,5 +1,7 @@
 # The backend owns the wait between two tries, and poll leaves the campaign
 
+Superseded in part on 2026-11-24 (#5478) for the constructor of `LeaderElection`. It takes the name of the election and the clock: `super(name, clock)` ([ADR 0010](./0010-an-election-has-a-name-and-the-name-of-a-sqlite-election-is-the-path-of-its-claim-file.md)).
+
 Status: Proposed 2026-11-15 for the owner's review (backlog #4371). Rewritten the same day for a campaign that waits on events. It replaces "The campaign owns its early wake, and poll gets none", which was written for a campaign that polls. Built 2026-11-15.
 
 The campaign waits between two tries with `poll` of `@zukhruf/async` (`src/leader-election.ts:102-107`). `poll` waits a fixed `interval`, and only its signal can end that wait early. An abort rejects the poll (`packages/async/src/poll.ts:38-49`). The first version of this paper kept `poll` and asked where an early wake belongs: in `poll`, or in the campaign.

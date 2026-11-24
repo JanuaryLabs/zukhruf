@@ -296,6 +296,34 @@ describe('The files of a SQLite election', () => {
     );
   });
 
+  test('the name of an election is the path of its claim file: elections on one claim file share it, and another claim file has another name', async () => {
+    // Arrange
+    await using directory = await new TemporaryFiles().directory(
+      'election-test-',
+    );
+    const electionOn = (claimFile: string) =>
+      new SqliteElection({
+        clock: globalThis,
+        directory: directory.path,
+        claimFile,
+        epochFile: 'count',
+      });
+
+    // Act
+    const names = [
+      electionOn('seat-a.db').name,
+      electionOn('seat-a.db').name,
+      electionOn('seat-b.db').name,
+    ];
+
+    // Assert
+    assert.deepEqual(names, [
+      join(directory.path, 'seat-a.db'),
+      join(directory.path, 'seat-a.db'),
+      join(directory.path, 'seat-b.db'),
+    ]);
+  });
+
   test('a clean resign writes its epoch beside the claim file, and leaves the epoch file as decimal text, so each published version still reads it', async () => {
     // Arrange
     await using directory = await new TemporaryFiles().directory(

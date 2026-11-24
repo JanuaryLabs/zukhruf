@@ -40,6 +40,8 @@ export class Term implements Lease, AsyncDisposable {
    * did not say it was clean, and for the first term.
    */
   readonly afterCleanShutdown: boolean;
+  /** The name of the election that elected this term, for the detail of a warning. */
+  readonly #election: string;
   readonly #steps: TermSteps;
   readonly #lease = new LeaseController('leadership');
   /** Aborts once the term starts to end, by resign or by loss. */
@@ -48,11 +50,16 @@ export class Term implements Lease, AsyncDisposable {
   readonly #watching = new DisposableStack();
 
   constructor(
-    { epoch, afterCleanShutdown }: Pick<Term, 'epoch' | 'afterCleanShutdown'>,
+    {
+      epoch,
+      afterCleanShutdown,
+      election,
+    }: Pick<Term, 'epoch' | 'afterCleanShutdown'> & { election: string },
     steps: TermSteps,
   ) {
     this.epoch = epoch;
     this.afterCleanShutdown = afterCleanShutdown;
+    this.#election = election;
     this.#steps = steps;
     this.#watching.use(steps.watch((reason) => this.#lose(reason)));
   }
@@ -139,7 +146,7 @@ export class Term implements Lease, AsyncDisposable {
           {
             name: 'TermWarning',
             code: 'ZUKHRUF_ELECTION_TERM_FREE_FAILED',
-            detail: `epoch: ${this.epoch}`,
+            detail: `election: ${this.#election}\nepoch: ${this.epoch}`,
           },
         ),
       );

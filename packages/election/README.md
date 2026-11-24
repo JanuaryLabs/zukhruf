@@ -51,6 +51,7 @@ next term: 2n
 
 - `campaign({ timeout, signal })` resolves with a `Term`, or with `undefined` when another candidate still leads after `timeout` milliseconds. Without a `timeout`, it tries once. With `timeout: Infinity`, it waits until it wins or `signal` aborts. When `signal` aborts, it rejects with `signal.reason`, and a claim that it won meanwhile is given up.
 - `claimFile` and `epochFile` are files in `directory`. Candidates with the same directory and the same file names are one group. Never delete `claimFile` while candidates run: a new file lets a second leader win.
+- `election.name` is the path of `claimFile`: `join(directory, claimFile)`. Two elections with the same name are one election. A warning names the election by its name ([ADR 0010](./docs/adr/0010-an-election-has-a-name-and-the-name-of-a-sqlite-election-is-the-path-of-its-claim-file.md)).
 - `epochFile` holds the epoch of the last term as decimal digits. When it holds other text, `campaign` rejects with a `SyntaxError` that names the file, gives the claim up, and does not change the file. An example is the empty file that `@zukhruf/mutex` 0.2.0 or earlier can leave after a power loss, because those versions did not sync the file to the disk. Thus the epochs never start again at 1, and each new term has a higher epoch than each earlier term.
 - `lastEpoch()` resolves with the epoch of the last term in `epochFile`, or with `0n` when no term was won yet. It only reads the file. It does not campaign, it does not take the claim, and it does not create a file or the directory. Use it to find out if a value from an earlier term is stale, for example a fencing token that an old leader made with `EpochTokenSource`. A new term can start immediately after the read, so the answer can be old when you get it. When `epochFile` holds text that is not decimal digits, `lastEpoch()` rejects with the same `SyntaxError` as `campaign`. When it cannot read the file for another reason, it rejects with that error. It never answers `0n` for a file that it cannot read.
 - A term that resigns clean writes a third file, `<claimFile>.clean`, beside `claimFile`. It holds the epoch of that term. The next term reads it and removes it.
@@ -114,7 +115,7 @@ const token = await tokens.next('orders');
 
 ## Write a backend
 
-`LeaderElection` is an abstract class. It runs the campaign, and it owns the term. Its constructor takes only the clock. A backend is a subclass that implements seven steps for its claim ([ADR 0008](./docs/adr/0008-the-backend-owns-the-wait-between-two-tries-and-poll-leaves-the-campaign.md)):
+`LeaderElection` is an abstract class. It runs the campaign, and it owns the term. Its constructor takes the name of the election and the clock. The name is the identity of the election in its backend: two elections with the same name are one election. Derive it from the claim, so that it cannot disagree with the claim ([ADR 0010](./docs/adr/0010-an-election-has-a-name-and-the-name-of-a-sqlite-election-is-the-path-of-its-claim-file.md)). A backend is a subclass that implements seven steps for its claim ([ADR 0008](./docs/adr/0008-the-backend-owns-the-wait-between-two-tries-and-poll-leaves-the-campaign.md)):
 
 | Step                                | What it does                                                                                                                                          |
 | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -149,7 +150,7 @@ class MapElection extends LeaderElection<string> {
   readonly #name: string;
 
   constructor(name: string) {
-    super(globalThis);
+    super(name, globalThis);
     this.#name = name;
   }
 
@@ -219,9 +220,9 @@ The socket lock store of `@zukhruf/mutex` uses `SqliteElection`, with the claim 
 
 A failure that no caller waits for is a process warning, in the shape of [root ADR 0010](../../docs/adr/0010-a-package-warning-names-its-type-code-and-subject-and-keeps-the-failure-as-its-cause.md). A `'warning'` listener reads its type as `name`, its `code`, and its subject in `detail`, one `<term>: <value>` line each. Its `cause` is the failure, and its message ends with the failure's message. `--disable-warning=<code or type>` stops the print.
 
-| Warning       | Code                                | Detail           | When                                                                                                                                                                                                                           |
-| ------------- | ----------------------------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `TermWarning` | `ZUKHRUF_ELECTION_TERM_FREE_FAILED` | `epoch: <epoch>` | A lost term fails to stop watching its claim or to free it. The term still ends. When both fail, the `cause` is a `SuppressedError`: its `suppressed` is the failure to stop watching, and its `error` is the failure to free. |
+| Warning       | Code                                | Detail                                  | When                                                                                                                                                                                                                           |
+| ------------- | ----------------------------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `TermWarning` | `ZUKHRUF_ELECTION_TERM_FREE_FAILED` | `election: <name>` and `epoch: <epoch>` | A lost term fails to stop watching its claim or to free it. The term still ends. When both fail, the `cause` is a `SuppressedError`: its `suppressed` is the failure to stop watching, and its `error` is the failure to free. |
 
 ## API
 
@@ -232,8 +233,9 @@ interface CampaignOptions {
 }
 
 abstract class LeaderElection<Claim> {
+  readonly name: string; // the identity of the election in its backend
   protected readonly clock: Clock;
-  protected constructor(clock: Clock);
+  protected constructor(name: string, clock: Clock);
   campaign(options?: CampaignOptions): Promise<Term | undefined>;
   protected abstract open(signal: AbortSignal | undefined): Promise<Claim>;
   protected abstract tryClaim(
@@ -270,7 +272,11 @@ interface TermSteps {
 
 class Term implements Lease, AsyncDisposable {
   constructor(
-    { epoch, afterCleanShutdown }: Pick<Term, 'epoch' | 'afterCleanShutdown'>,
+    {
+      epoch,
+      afterCleanShutdown,
+      election, // the name of the election, for the detail of a warning
+    }: Pick<Term, 'epoch' | 'afterCleanShutdown'> & { election: string },
     steps: TermSteps,
   );
   readonly epoch: bigint;
@@ -291,6 +297,7 @@ interface SqliteElectionOptions {
 
 class SqliteElection extends LeaderElection<SqliteAttempt> {
   constructor(options: SqliteElectionOptions); // RangeError: unless 0 < heartbeatInterval < leaseDuration
+  readonly name: string; // join(directory, claimFile)
   lastEpoch(): Promise<bigint>;
   observe(): LeaderObserver;
 }
@@ -320,6 +327,7 @@ export { LeaseLostError } from '@zukhruf/lease';
 - [ADR 0007: A candidate waits on pushes from the leader's pipe, not on a period](./docs/adr/0007-a-candidate-waits-on-pushes-from-the-leaders-pipe-not-on-a-period.md) (proposed)
 - [ADR 0008: The backend owns the wait between two tries, and poll leaves the campaign](./docs/adr/0008-the-backend-owns-the-wait-between-two-tries-and-poll-leaves-the-campaign.md) (proposed)
 - [ADR 0009: A process that does not campaign observes the leader](./docs/adr/0009-a-process-that-does-not-campaign-observes-the-leader.md) (proposed)
+- [ADR 0010: An election has a name, and the name of a SQLite election is the path of its claim file](./docs/adr/0010-an-election-has-a-name-and-the-name-of-a-sqlite-election-is-the-path-of-its-claim-file.md)
 - [Code copied into this package](./docs/copied-code.md)
 
 ## Development

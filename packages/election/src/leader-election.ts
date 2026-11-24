@@ -35,10 +35,16 @@ export interface CampaignOptions {
  *   attempt itself.
  */
 export abstract class LeaderElection<Claim> {
+  /**
+   * The identity of the election in its backend: two elections with the
+   * same name are the same election. Each backend derives it from its claim.
+   */
+  readonly name: string;
   /** The clock of the campaign: `globalThis` in production, a fake clock in a test. */
   protected readonly clock: Clock;
 
-  protected constructor(clock: Clock) {
+  protected constructor(name: string, clock: Clock) {
+    this.name = name;
     this.clock = clock;
   }
 
@@ -169,12 +175,15 @@ export abstract class LeaderElection<Claim> {
     let term: Term;
     try {
       signal?.throwIfAborted();
-      term = new Term(won, {
-        watch: (lose) => this.watch(claim, lose),
-        recordCleanShutdown: () => this.recordCleanShutdown(claim, won.epoch),
-        release: () => this.release(claim),
-        close: () => this.close(claim),
-      });
+      term = new Term(
+        { ...won, election: this.name },
+        {
+          watch: (lose) => this.watch(claim, lose),
+          recordCleanShutdown: () => this.recordCleanShutdown(claim, won.epoch),
+          release: () => this.release(claim),
+          close: () => this.close(claim),
+        },
+      );
     } catch (error) {
       // Disposed last in, first out: the release, then the close.
       await using giveUp = new AsyncDisposableStack();

@@ -64,7 +64,8 @@ const backoff = new Backoff({
  * kernel keeps that lock until the leader's process dies, so a dead leader
  * frees it at once. A leader serves a pipe and pushes a heartbeat on it; a
  * candidate waits on that pipe, and ends a leader that stays silent past its
- * lease duration (ADR 0004 to 0007).
+ * lease duration (ADR 0004 to 0007). Its name is the path of the claim
+ * file, so two elections on one claim file are one election (ADR 0010).
  */
 export class SqliteElection extends LeaderElection<SqliteAttempt> {
   readonly #directory: string;
@@ -83,14 +84,15 @@ export class SqliteElection extends LeaderElection<SqliteAttempt> {
     heartbeatInterval = leaseDuration / 3,
     clock,
   }: SqliteElectionOptions) {
-    super(clock);
+    const claimPath = join(directory, claimFile);
+    super(claimPath, clock);
     if (!(heartbeatInterval > 0 && heartbeatInterval < leaseDuration)) {
       throw new RangeError(
         `heartbeatInterval (${heartbeatInterval}) must be above 0 and below leaseDuration (${leaseDuration}).`,
       );
     }
     this.#directory = directory;
-    this.#claimPath = join(directory, claimFile);
+    this.#claimPath = claimPath;
     this.#epochPath = join(directory, epochFile);
     this.#cleanShutdownPath = `${this.#claimPath}.clean`;
     this.#recordPath = `${this.#claimPath}.leader`;

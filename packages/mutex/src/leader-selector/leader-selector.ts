@@ -45,7 +45,7 @@ type RoundEnd = { granted: true } | { granted: false; error: unknown };
  */
 export class LeaderSelector implements AsyncDisposable {
   readonly #lead: Lead;
-  /** The source in the detail of a warning: `key: <name>`, or `election: <its class>`. */
+  /** The source in the detail of a warning: `key: <name>`, or `election: <name>`. */
   readonly #source: string;
   readonly #autoRequeue: LeaderSelectorOptions['autoRequeue'];
   readonly #disposed = new AbortController();
@@ -90,7 +90,7 @@ export class LeaderSelector implements AsyncDisposable {
         )
       : new LeaderSelector(
           LeaderSelector.#overElection(source, listener),
-          `election: ${source.constructor.name}`,
+          `election: ${source.name}`,
           options,
         );
   }

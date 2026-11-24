@@ -47,7 +47,7 @@ class ScriptedElection extends LeaderElection<number> {
   #tries = 0;
 
   constructor(clock: Clock, script: Script, interval = 1) {
-    super(clock);
+    super('scripted', clock);
     this.#script = script;
     this.#interval = interval;
   }
@@ -149,7 +149,7 @@ describe('A term that its backend takes away', () => {
     ]);
   });
 
-  test('a resign after a loss resolves, gives nothing up, and frees the claim once; a failure to free it is a TermWarning with its code, the epoch and the failure as its cause', async (t) => {
+  test('a resign after a loss resolves, gives nothing up, and frees the claim once; a failure to free it is a TermWarning with its code, the election and the epoch, and the failure as its cause', async (t) => {
     // Arrange: freeing the claim fails, as a dead connection to a backend can.
     const warnings: Error[] = [];
     const onWarning = (warning: Error) => {
@@ -188,7 +188,7 @@ describe('A term that its backend takes away', () => {
         {
           name: 'TermWarning',
           code: 'ZUKHRUF_ELECTION_TERM_FREE_FAILED',
-          detail: `epoch: ${term.epoch}`,
+          detail: `election: scripted\nepoch: ${term.epoch}`,
           message:
             'The lost term failed to stop watching its claim or to free it, and it ends anyway: The connection to the backend is gone',
         },
@@ -231,7 +231,7 @@ describe('A term that its backend takes away', () => {
         {
           name: 'TermWarning',
           code: 'ZUKHRUF_ELECTION_TERM_FREE_FAILED',
-          detail: `epoch: ${term.epoch}`,
+          detail: `election: scripted\nepoch: ${term.epoch}`,
           cause: unwatching,
         },
       ],

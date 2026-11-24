@@ -48,6 +48,10 @@ _Avoid_: Expired, revoked
 A subclass of `LeaderElection` that implements one kind of claim. `SqliteElection` is the backend of this package.
 _Avoid_: Driver, adapter, provider
 
+**Name**:
+The identity of an election in its backend: `LeaderElection#name`. Two elections with the same name are the same election. The backend derives it from its claim. The name of a `SqliteElection` is the path of its claim file. Hazelcast's `DistributedObject.getName()`, Redisson's `RObject.getName()` (ADR 0010).
+_Avoid_: Key (etcd's `Election.Key()` is the key of one candidate), ID, identity (client-go's `Identity()` is the holder)
+
 ## Language of a hung leader
 
 These words tell how a candidate waits on the leader, and how a hung leader is found and ended (backlog #4371, ADRs 0004 to 0009).

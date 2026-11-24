@@ -1016,7 +1016,7 @@ describe('Over an election', () => {
       {
         name: 'LeaderSelectorWarning',
         code: 'ZUKHRUF_MUTEX_LEADER_SELECTOR_ACQUIRE_FAILED',
-        detail: 'election: SqliteElection',
+        detail: `election: ${join(file, 'writer', 'writer.lock')}`,
       },
     );
     assert.ok(Error.isError(warning.cause));
