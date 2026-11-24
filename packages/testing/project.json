@@ -7,6 +7,35 @@
   "targets": {
     "test": {
       "parallelism": false
+    },
+    "build": {
+      "command": "tsc --build tsconfig.lib.json && node --eval \"require('node:fs').copyFileSync('src/databases/sqlserver-full-text-search.Dockerfile', 'dist/databases/sqlserver-full-text-search.Dockerfile')\"",
+      "options": {
+        "cwd": "packages/testing"
+      },
+      "inputs": [
+        "{projectRoot}/package.json",
+        "{workspaceRoot}/tsconfig.base.json",
+        "{projectRoot}/tsconfig.lib.json",
+        "{projectRoot}/src/**/*.ts",
+        "!{projectRoot}/src/**/*.test.ts",
+        "!{projectRoot}/src/testing/**",
+        "{projectRoot}/src/**/*.Dockerfile",
+        {
+          "dependentTasksOutputFiles": "**/*.{d.ts,d.cts,d.mts,tsbuildinfo}",
+          "transitive": true
+        },
+        {
+          "fileset": "{projectRoot}/**/*.{d.ts,d.cts,d.mts}",
+          "dependencies": true
+        },
+        "^{projectRoot}/tsconfig.lib.json"
+      ],
+      "outputs": [
+        "{projectRoot}/dist/**/*.{js,cjs,mjs,jsx,d.ts,d.cts,d.mts}{,.map}",
+        "{projectRoot}/dist/**/*.Dockerfile",
+        "{projectRoot}/dist/tsconfig.lib.tsbuildinfo"
+      ]
     }
   }
 }

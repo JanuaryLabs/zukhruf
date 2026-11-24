@@ -86,6 +86,11 @@ const byKey = ([a]: [string, unknown], [b]: [string, unknown]): number => {
   return 0;
 };
 
+/** The name of the build lease of the image `tag` on an engine: a tag has characters that a container name cannot have. */
+function buildLeaseName(tag: string): string {
+  return `zukhruf-testing-build-${hash('sha256', tag)}`;
+}
+
 /** The value with its object keys sorted and its `Env` entries sorted; every other array keeps its order. */
 function canonical(value: unknown, key?: string): unknown {
   if (Array.isArray(value)) {
@@ -286,6 +291,42 @@ export class DockerTestbed {
     return this.#creating(engine, () =>
       engine.client.containers.run(owned, options),
     );
+  }
+
+  /**
+   * Makes sure that the engine has the image `tag`, and builds it once across
+   * processes when it has none. The builder holds the build lease of the tag,
+   * as a reaper holds the sweep lease of a server; another process waits until
+   * that lease is gone, and looks again. `build` must tag the image `tag`.
+   */
+  async image(
+    tag: string,
+    build: (docker: Docker) => Promise<unknown>,
+  ): Promise<void> {
+    const engine = await this.#engine();
+    const name = buildLeaseName(tag);
+    for (;;) {
+      if ((await engine.client.images.inspect(tag)) !== undefined) return;
+      const lease = await this.#creating(engine, () =>
+        EngineLease.take(
+          engine.client,
+          { ...this.#defaults().Labels, [LEASE_LABEL]: 'build' },
+          { name },
+        ),
+      );
+      if (lease === undefined) {
+        await EngineLease.gone(engine.client, name, { clock: globalThis });
+        continue;
+      }
+      try {
+        // Another process can have built it between the look and the lease.
+        if ((await engine.client.images.inspect(tag)) === undefined)
+          await build(engine.client);
+        return;
+      } finally {
+        await lease[Symbol.asyncDispose]();
+      }
+    }
   }
 
   /** The process lease of this process for the shared server of `fingerprint`: a sweep keeps that server while it runs. */

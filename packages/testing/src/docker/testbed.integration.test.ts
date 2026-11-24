@@ -400,6 +400,84 @@ test('two processes that reuse one configuration get one server, which disposal 
   }
 });
 
+test('two processes that need one absent image at once build it once, and the other uses that image', async () => {
+  // Arrange: each build tags its image also with a tag of its own process, so
+  // the engine keeps a record of each build that ran.
+  const testbed = new DockerTestbed({ environment: process.env });
+  const client = await testbed.client();
+  await client.images.pull('busybox:1.37.0');
+  const repository = 'zukhruf-testing-build-verification';
+  const scope = randomUUID();
+  const tag = `${repository}:${scope}`;
+  const own = (builder: number) => `${repository}:${scope}-${builder}`;
+  const builder = (index: number) => {
+    const child = spawnProcess(
+      process.execPath,
+      [
+        '--input-type=module',
+        '--eval',
+        `
+        import { once } from 'node:events';
+        import { createInterface } from 'node:readline';
+        import { DockerTestbed } from ${library};
+        const testbed = new DockerTestbed({ environment: process.env });
+        const docker = await testbed.client();
+        console.log('ready');
+        const go = createInterface({ input: process.stdin });
+        await once(go, 'line');
+        go.close();
+        await testbed.image(${JSON.stringify(tag)}, (engine) =>
+          engine.images.build(
+            { files: [{ path: 'Dockerfile', data: 'FROM busybox:1.37.0\\nRUN true\\n' }] },
+            { t: [${JSON.stringify(tag)}, ${JSON.stringify(own(index))}], labels: { 'dev.zukhruf.testing.verification': ${JSON.stringify(scope)} }, nocache: true },
+          ),
+        );
+        console.log((await docker.images.inspect(${JSON.stringify(tag)}))?.Id);
+        `,
+      ],
+      { stdio: ['pipe', 'pipe', 'inherit'] },
+    );
+    return {
+      child,
+      exited: once(child, 'exit'),
+      lines: createInterface(child.stdout)[Symbol.asyncIterator](),
+    };
+  };
+  const builders = [builder(0), builder(1)];
+  try {
+    for (const { lines } of builders)
+      assert.equal((await lines.next()).value, 'ready');
+
+    // Act
+    for (const { child } of builders) child.stdin.end('go\n');
+    const seen = await Promise.all(
+      builders.map(async ({ lines, exited }) => {
+        const { value } = await lines.next();
+        assert.deepEqual(await exited, [0, null]);
+        return value;
+      }),
+    );
+
+    // Assert
+    const built = (
+      await Promise.all(
+        [0, 1].map((index) => client.images.inspect(own(index))),
+      )
+    ).filter((image) => image !== undefined);
+    assert.equal(built.length, 1, 'exactly one build ran');
+    const image = (await client.images.inspect(tag))?.Id;
+    assert.equal(image, built[0]?.Id);
+    assert.deepEqual(seen, [image, image]);
+  } finally {
+    for (const { child, exited } of builders) {
+      child.kill('SIGKILL');
+      await exited;
+    }
+    for (const reference of [tag, own(0), own(1)])
+      await client.images.remove(reference, { force: true });
+  }
+});
+
 test(
   'a test process of a run on an ssh:// engine starts no ssh process: its engine calls and an exec go through the run’s connection (ADR 0024)',
   {

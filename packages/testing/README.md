@@ -96,16 +96,17 @@ test('a holder in another container', async () => {
 });
 ```
 
-| Member                                           | Gives                                                                                                                                                          | Returns                           |
-| ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
-| `start(body, { name? })`                         | A container this process owns. It stays after it stops, so its logs remain, until disposal removes it.                                                         | `OwnedContainer`                  |
-| `serve(body, { internalPort, name?, healthy? })` | A dedicated server whose `internalPort` answers on `127.0.0.1` of this machine. Failure or disposal removes it.                                                | `ServiceContainer`                |
-| `reuse(body, { internalPort, name?, healthy? })` | One server per request on the engine, shared across processes, runs and versions of this package.                                                              | `ServiceContainer`                |
-| `run(body, { name? })`                           | A container that runs to completion. It gives the output and the exit code, and removes the container. A non-zero exit code does not throw.                    | `ExecResult`                      |
-| `volume()`                                       | A named volume.                                                                                                                                                | `OwnedVolume`                     |
-| `directory()`                                    | A directory on the engine's host, for bind mounts. It has `mkdir`, `writeFile`, `readFile`, `chmod` and `symlink`.                                             | `DockerDirectory`                 |
-| `client()`                                       | The `@zukhruf/docker` client of the engine, for each other Engine API call, such as `info()` or `containers.find(id)`.                                         | `Docker` (from `@zukhruf/docker`) |
-| `defaults()`                                     | The run's labels and the default resources, in the shape of a body: `{ Labels, HostConfig: { Memory, NanoCpus } }`. In a run, it holds the run's reaper first. |                                   |
+| Member                                           | Gives                                                                                                                                                                                                                              | Returns                           |
+| ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
+| `start(body, { name? })`                         | A container this process owns. It stays after it stops, so its logs remain, until disposal removes it.                                                                                                                             | `OwnedContainer`                  |
+| `serve(body, { internalPort, name?, healthy? })` | A dedicated server whose `internalPort` answers on `127.0.0.1` of this machine. Failure or disposal removes it.                                                                                                                    | `ServiceContainer`                |
+| `reuse(body, { internalPort, name?, healthy? })` | One server per request on the engine, shared across processes, runs and versions of this package.                                                                                                                                  | `ServiceContainer`                |
+| `run(body, { name? })`                           | A container that runs to completion. It gives the output and the exit code, and removes the container. A non-zero exit code does not throw.                                                                                        | `ExecResult`                      |
+| `volume()`                                       | A named volume.                                                                                                                                                                                                                    | `OwnedVolume`                     |
+| `directory()`                                    | A directory on the engine's host, for bind mounts. It has `mkdir`, `writeFile`, `readFile`, `chmod` and `symlink`.                                                                                                                 | `DockerDirectory`                 |
+| `client()`                                       | The `@zukhruf/docker` client of the engine, for each other Engine API call, such as `info()` or `containers.find(id)`.                                                                                                             | `Docker` (from `@zukhruf/docker`) |
+| `image(tag, build)`                              | The image `tag` on the engine. When the engine has none, one process at a time holds the build lease of the tag and calls `build(docker)`, which must tag the image `tag`; the other processes wait for that lease and look again. | `void`                            |
+| `defaults()`                                     | The run's labels and the default resources, in the shape of a body: `{ Labels, HostConfig: { Memory, NanoCpus } }`. In a run, it holds the run's reaper first.                                                                     |                                   |
 
 The `body` is the body of a container create in the Engine API: `EngineApi.ContainerCreateRequest` of `@zukhruf/docker`. Write it with the fields of the Engine API, for example `Image`, `Cmd`, `Entrypoint`, `Env` (strings `KEY=value`), `Hostname`, `Labels`, and in `HostConfig`: `Binds`, `Tmpfs`, `Memory`, `NanoCpus`, `IpcMode` and `MemorySwappiness`. The testbed adds these values to each body before it creates the container:
 
@@ -322,7 +323,41 @@ test('counts the items', async (t) => {
 
 Step 2 of the disposal: it closes each connection that is checked out now (tedious `close()`, then waits for its `end`), gives it back to the pool, and then closes the pool. tarn reports a connection that it gives out only after mssql validated it, so the disposal also closes each connection that tarn reports while the pool closes. `close()` of mssql resolves once the socket of each connection has closed, but it waits with no limit for a connection that is checked out, so those close first. A test may close a pool itself: a second `close()` joins a close that runs, and resolves at once after one. SQL Server has no helper for a pool without a handle: no test of the three repositories needs one.
 
-Planned, not built: the SQL Server image has no Full-Text Search, so `CONTAINSTABLE` and `FREETEXTTABLE` fail on it. A `fullTextSearch: true` option is proposed, which builds an image with `mssql-server-fts` on the engine from the `image` option ([ADR 0027](./docs/adr/0027-a-sql-server-with-full-text-search-runs-an-image-that-the-fixture-builds-on-the-engine-from-the-plain-image.md), backlog #5439).
+##### Run SQL Server with Full-Text Search
+
+Microsoft's images have no Full-Text Search, so `CONTAINSTABLE` and `FREETEXTTABLE` fail on them. With `fullTextSearch: true`, the fixture runs an image that it builds on the engine from `image`: the plain image with the package `mssql-server-fts` of the same version ([ADR 0027](./docs/adr/0027-a-sql-server-with-full-text-search-runs-an-image-that-the-fixture-builds-on-the-engine-from-the-plain-image.md)). It works for SQL Server 2022 and 2025, and a 2025 server keeps `VECTOR` and `VECTOR_DISTANCE`.
+
+```ts
+import { SqlServer } from '@zukhruf/testing/sqlserver';
+
+const sqlServer = new SqlServer({
+  environment: process.env,
+  image: 'mcr.microsoft.com/mssql/server:2025-latest',
+  fullTextSearch: true,
+});
+
+test('finds a passage by a word', async (t) => {
+  await using database = await sqlServer.database();
+  const pool = await database.pool();
+  await pool.request().batch(`
+    CREATE TABLE passage (id int NOT NULL CONSTRAINT pk_passage PRIMARY KEY, body nvarchar(200));
+    INSERT INTO passage VALUES (1, N'The lease ends when the holder exits');
+    CREATE FULLTEXT CATALOG passage_catalog AS DEFAULT;
+    CREATE FULLTEXT INDEX ON passage (body) KEY INDEX pk_passage WITH CHANGE_TRACKING AUTO;
+  `);
+  // Wait until OBJECTPROPERTYEX(OBJECT_ID('passage'), 'TableFulltextPopulateStatus') is 0.
+  const { recordset } = await pool
+    .request()
+    .query(`SELECT [KEY], RANK FROM CONTAINSTABLE(passage, body, N'"lease"')`);
+  t.assert.equal(recordset.length, 1);
+});
+```
+
+- **The image follows its base.** The tag of the built image is `zukhruf-testing-sqlserver-fts:<version>-<hash>`: the version is the label `com.microsoft.version` of `image`, and the hash is the first 12 hex digits of the SHA-256 of the Dockerfile. The handle's `image` is that tag. A new `2022-latest` thus gets a new image, and a shared server of its own.
+- **The first acquisition on an engine builds it.** The fixture pulls `image` for `linux/amd64` when the engine has none, to read its label. When the engine has no image of the tag, it pulls `image` for `linux/amd64` again and builds: an image that the engine lists can lack the content of that platform, and the build pulls nothing. The build takes a few minutes under emulation, also in the time limit of the first test. The build downloads the package from `packages.microsoft.com`, so the engine needs network access. Test processes that start at the same time build once: one holds the build lease of the tag, and the others wait for it. The images stay on the engine, as a pulled image does.
+- **A build that fails rejects with `BuildFailedError`** of `@zukhruf/docker`. Its `vertex` is the step that failed and its `output` is the output of that step, for example the `apt-get download` of a version that has no `mssql-server-fts`. Only the server versions 16 (2022) and 17 (2025) have a repository; another version rejects before the build.
+- **The readiness includes Full-Text Search.** When `FULLTEXTSERVICEPROPERTY('IsFullTextInstalled')` is not 1, the acquisition fails at once with the image in the message.
+- **The test waits for its population.** A full-text index fills in the background. Read `OBJECTPROPERTYEX(OBJECT_ID('<table>'), 'TableFulltextPopulateStatus')` until it is 0, with `waitFor` (see [Waiting](#waiting)).
 
 Install the driver of the area next to this package: `pg` for `postgres`, `mysql2` for `mysql`, `mariadb` for `mariadb`, and `mssql` for `sqlserver`. Each is an optional peer dependency.
 
@@ -601,6 +636,10 @@ class DockerTestbed {
     body: EngineApi.ContainerCreateRequest,
     options?: { name?: string },
   ): Promise<ExecResult>;
+  image(
+    tag: string,
+    build: (docker: Docker) => Promise<unknown>,
+  ): Promise<void>;
 }
 class ServiceContainer implements AsyncDisposable {
   readonly container: Container;
@@ -710,8 +749,11 @@ type SqlServerPoolOptions = Omit<
 interface SqlServerDatabase extends Database {
   pool(options?: SqlServerPoolOptions): Promise<sql.ConnectionPool>;
 }
+interface SqlServerOptions extends DatabaseOptions {
+  fullTextSearch?: boolean; // builds an image with mssql-server-fts from image
+}
 class SqlServer {
-  constructor(options: DatabaseOptions); // image SQL_SERVER_FULL_IMAGE by default
+  constructor(options: SqlServerOptions); // image SQL_SERVER_FULL_IMAGE by default
   database(): Promise<SqlServerDatabase>;
   start(): Promise<SqlServerDatabase>;
 }

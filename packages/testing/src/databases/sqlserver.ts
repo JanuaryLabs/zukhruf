@@ -1,6 +1,11 @@
+import { hash } from 'node:crypto';
 import { once } from 'node:events';
+import { readFile } from 'node:fs/promises';
 
 import sql from 'mssql';
+import { AbortError } from 'p-retry';
+
+import { type Docker, ImageNotFoundError } from '@zukhruf/docker';
 
 import { retryUntilReady } from '../async/retry-until-ready.ts';
 import { readRun } from '../docker/run-records.ts';
@@ -19,6 +24,91 @@ export type { Database, DatabaseOptions } from './database.ts';
 
 export const SQL_SERVER_FULL_IMAGE =
   'mcr.microsoft.com/mssql/server:2022-latest';
+
+export interface SqlServerOptions extends DatabaseOptions {
+  /**
+   * Runs SQL Server with Full-Text Search: an image that the fixture builds
+   * on the engine from `image`, once for each version of the server (ADR 0027).
+   */
+  fullTextSearch?: boolean;
+}
+
+/** Microsoft builds SQL Server for amd64 only, and the Dockerfile installs an amd64 package. */
+const PLATFORM = 'linux/amd64';
+
+/** The label of Microsoft's image that holds the version of its server. */
+const VERSION_LABEL = 'com.microsoft.version';
+
+/** The repository of packages.microsoft.com for each major version of the server. */
+const REPOSITORIES = new Map([
+  ['16', 'mssql-server-2022'],
+  ['17', 'mssql-server-2025'],
+]);
+
+const FULL_TEXT_SEARCH_DOCKERFILE = new URL(
+  'sqlserver-full-text-search.Dockerfile',
+  import.meta.url,
+);
+
+/**
+ * Builds the image with Full-Text Search from `base` on the engine, unless
+ * the engine has it, and gives its tag. The tag holds the version of the
+ * server and the hash of the Dockerfile, so a new base or a new Dockerfile
+ * gives a new image.
+ */
+async function fullTextSearchImage(
+  testbed: DockerTestbed,
+  base: string,
+): Promise<string> {
+  const docker = await testbed.client();
+  const dockerfile = await readFile(FULL_TEXT_SEARCH_DOCKERFILE, 'utf8');
+  const version = (await baseImage(docker, base)).Config?.Labels?.[
+    VERSION_LABEL
+  ];
+  if (version === undefined)
+    throw new Error(
+      `The image ${base} has no label ${VERSION_LABEL}, so the fixture cannot find its mssql-server-fts package`,
+    );
+  const repository = REPOSITORIES.get(version.split('.')[0] ?? '');
+  if (repository === undefined)
+    throw new Error(
+      `The image ${base} runs SQL Server ${version}: Full-Text Search is built only for 16 (2022) and 17 (2025)`,
+    );
+  const tag = `zukhruf-testing-sqlserver-fts:${version}-${hash('sha256', dockerfile).slice(0, 12)}`;
+  await testbed.image(tag, async (client) => {
+    // The build pulls no image (`@zukhruf/docker` ADR 0016), and an image
+    // that the engine lists can lack the content of a platform: the
+    // containerd store answers an inspect for each platform of an index.
+    await client.images.pull(base, { platform: PLATFORM }).catch((error) => {
+      // A base built on this engine is in no registry: the build uses it.
+      if (!(error instanceof ImageNotFoundError)) throw error;
+    });
+    return client.images.build(
+      { files: [{ path: 'Dockerfile', data: dockerfile }] },
+      {
+        t: tag,
+        buildargs: {
+          BASE: base,
+          SERVER_VERSION: version,
+          REPOSITORY: repository,
+        },
+        platform: PLATFORM,
+      },
+    );
+  });
+  return tag;
+}
+
+/** The base image on the engine, pulled when it is missing, for the label of its version. */
+async function baseImage(docker: Docker, base: string) {
+  const present = await docker.images.inspect(base);
+  if (present !== undefined) return present;
+  await docker.images.pull(base, { platform: PLATFORM });
+  const pulled = await docker.images.inspect(base);
+  if (pulled === undefined)
+    throw new Error(`The engine has no image ${base} after its pull`);
+  return pulled;
+}
 
 /**
  * The options of a pool of a handle: the handle names the database and the
@@ -123,15 +213,16 @@ export class SqlServer {
     password = 'StrongP@ssw0rd123!',
     database = 'testdb',
     labels,
-  }: DatabaseOptions) {
+    fullTextSearch = false,
+  }: SqlServerOptions) {
     this.#docker = new DockerTestbed({ environment });
     this.#runId = readRun(environment)?.id;
-    this.#options = { image, password, database, labels };
+    this.#options = { image, password, database, labels, fullTextSearch };
   }
 
   /** Create an isolated database on the persistent shared server. */
   async database(): Promise<SqlServerDatabase> {
-    const { image } = this.#options;
+    const image = await this.#image();
     const container = await this.#acquire(image, 'reuse');
     const database = databaseName(this.#runId);
     try {
@@ -156,7 +247,8 @@ export class SqlServer {
 
   /** Start a dedicated server; the returned handle owns its container. */
   async start(): Promise<SqlServerDatabase> {
-    const { image, database } = this.#options;
+    const { database } = this.#options;
+    const image = await this.#image();
     const container = await this.#acquire(image, 'serve');
     try {
       await this.#createDatabase(container, database);
@@ -169,6 +261,13 @@ export class SqlServer {
     }
   }
 
+  /** The image of the server: the `image` option, or the image with Full-Text Search built from it. */
+  #image(): Promise<string> {
+    const { image, fullTextSearch } = this.#options;
+    if (!fullTextSearch) return Promise.resolve(image);
+    return fullTextSearchImage(this.#docker, image);
+  }
+
   #server({ host, port }: ServiceContainer): SqlServerServer {
     return { host, port, password: this.#options.password };
   }
@@ -177,13 +276,28 @@ export class SqlServer {
     return connectionString(this.#server(container), database);
   }
 
-  async #ping(container: ServiceContainer): Promise<void> {
+  /**
+   * Answers once the server runs a statement. With Full-Text Search, a server
+   * that has no full-text component fails at once: its image lacks it, and
+   * a wait cannot add it.
+   */
+  async #ping(container: ServiceContainer, image: string): Promise<void> {
     const pool = new sql.ConnectionPool(
       `${this.#connectionString(container, 'master')}connectionTimeout=1000;requestTimeout=1000;`,
     );
     try {
       await pool.connect();
       await pool.request().query('SELECT 1');
+      if (!this.#options.fullTextSearch) return;
+      const { recordset } = await pool
+        .request()
+        .query<{ installed: number | null }>(
+          "SELECT FULLTEXTSERVICEPROPERTY('IsFullTextInstalled') AS installed",
+        );
+      if (recordset[0]?.installed !== 1)
+        throw new AbortError(
+          `The server of the image ${image} has no Full-Text Search: FULLTEXTSERVICEPROPERTY('IsFullTextInstalled') is ${String(recordset[0]?.installed)}`,
+        );
     } finally {
       await pool.close();
     }
@@ -229,7 +343,7 @@ export class SqlServer {
       {
         internalPort: 1433,
         healthy: (container, signal) =>
-          retryUntilReady(() => this.#ping(container), {
+          retryUntilReady(() => this.#ping(container, image), {
             maxRetryTime: 180_000,
             signal,
           }),

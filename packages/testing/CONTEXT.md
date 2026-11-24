@@ -54,6 +54,14 @@ _Avoid_: Heartbeat, lock, Ryuk session
 The lease that a reaper holds while it looks for the process leases of one shared server and removes that server. Its name comes from the fingerprint of the server, so one reaper at a time sweeps a server. A test process of that server waits until the sweep lease is gone.
 _Avoid_: Sweep lock
 
+**Build lease**:
+The lease that a test process holds while it builds an image that the engine does not have, such as the image with Full-Text Search of `SqlServer`. Its name comes from the tag of the image, so one process at a time builds that image. Another process waits until the build lease is gone, and then finds the image.
+_Avoid_: Build lock
+
+**Full-Text Search image**:
+The image that `SqlServer` with `fullTextSearch: true` builds on the engine from its plain image: the plain image with the package `mssql-server-fts` of the same server version. Its tag holds that version and the hash of the Dockerfile (ADR 0027).
+_Avoid_: FTS variant, custom image
+
 **Run**:
 One `node --test` invocation with the Docker global setup. What its test processes create carries the run's label, or a record in the run's directory.
 _Avoid_: Session, scope
