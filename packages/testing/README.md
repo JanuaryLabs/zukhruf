@@ -383,7 +383,7 @@ Install the driver of the area next to this package: `pg` for `postgres`, `mysql
 
 ## HTTP servers and streams
 
-`new HttpServer().start(handler)` listens on `127.0.0.1` on a free port and resolves once it listens. The handle has `origin` and the native `server`. Disposal closes active connections and waits for the server to close.
+`new HttpServer().start(handler)` listens on `127.0.0.1` on a free port and resolves once it listens. The handle has `origin` and the native `server`. Disposal closes active connections, waits for the server to close, and then waits until a client of the same process, such as `fetch`, has closed each connection that the server closed. Thus the client clears its timers before the next test fakes them ([ADR 0030](./docs/adr/0030-an-http-servers-disposal-waits-until-a-client-of-the-process-has-closed-each-connection-that-the-server-closed.md)).
 
 The handler is a Node.js request listener. A web framework gives one for its fetch handler: `getRequestListener((request) => app.fetch(request))` from `@hono/node-server`, or `toNodeHandler((request) => auth.handler(request))` from `better-auth/node`. The handler can be async. When it rejects, the rejection stays unhandled and fails the process, as a throw does. The server never answers for a handler that failed. A handler that needs the origin can read a `const` that the test declares after the acquisition: no request arrives before the test gives the origin to a client.
 
@@ -913,6 +913,7 @@ function globalTeardown(): void;
 - [ADR 0026](./docs/adr/0026-a-database-handle-owns-its-pools-and-its-disposal-ends-them-before-it-drops-the-database.md): a database handle owns its pools, and its disposal ends them before it drops the database.
 - [ADR 0028](./docs/adr/0028-an-interceptions-disposal-waits-until-the-client-has-closed-each-connection-that-the-server-closed.md): an interception's disposal waits until the client has closed each connection that the server closed.
 - [ADR 0029](./docs/adr/0029-the-interceptions-of-a-process-share-one-msw-network-over-the-socket-interceptor-and-each-connection-to-an-address-that-is-not-a-loopback-address-fails.md): the interceptions of a process share one msw network over the socket interceptor, and each connection to an address that is not a loopback address fails.
+- [ADR 0030](./docs/adr/0030-an-http-servers-disposal-waits-until-a-client-of-the-process-has-closed-each-connection-that-the-server-closed.md): an HTTP server's disposal waits until a client of the process has closed each connection that the server closed (proposed).
 
 **Copied code**: [Code copied into this package](./docs/copied-code.md) records each copy of code in this package, as the Rule of Three asks.
 

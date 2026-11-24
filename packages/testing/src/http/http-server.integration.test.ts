@@ -134,3 +134,69 @@ test('HTTP servers listen on the IPv4 loopback interface only', async () => {
     port: Number(new URL(server.origin).port),
   });
 });
+
+const nextTestKeepsItsFakeTimer = (requests: string) =>
+  spawn(process.execPath, [
+    '--input-type=module',
+    '--eval',
+    `
+    import assert from 'node:assert/strict';
+    import { test } from 'node:test';
+    import { setImmediate } from 'node:timers/promises';
+    import { http, passthrough } from 'msw';
+    import { HttpServer } from ${JSON.stringify(import.meta.resolve('./http-server.ts'))};
+    import { Msw } from ${JSON.stringify(import.meta.resolve('../msw/msw.ts'))};
+
+    setTimeout(() => {
+      console.error('the child did not end in 20 s');
+      process.exit(124);
+    }, 20_000).unref();
+
+    const turns = async () => {
+      for (let turn = 0; turn < 5; turn += 1) {
+        await setImmediate();
+      }
+    };
+
+    test('a test that requests under fake timers', async (t) => {
+      ${requests}
+      t.mock.timers.tick(1_000);
+      await turns();
+    });
+
+    test('the next test fires its own fake timer', async (t) => {
+      t.mock.timers.enable({ apis: ['setTimeout'] });
+      let fired = false;
+      setTimeout(() => {
+        fired = true;
+      }, 1);
+      await turns();
+      t.mock.timers.tick(1);
+      assert.equal(fired, true);
+    });
+    `,
+  ]);
+
+test('disposal waits until fetch has closed each connection that the server closed, so the next test keeps the timers that it fakes', async () => {
+  await nextTestKeepsItsFakeTimer(`
+    await using server = await new HttpServer().start((_request, response) => {
+      response.end('ok');
+    });
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    assert.equal(await (await fetch(server.origin)).text(), 'ok');
+  `);
+});
+
+test('behind an msw passthrough, disposal settles after fetch has closed each connection that the server closed, so the next test keeps the timers that it fakes', async () => {
+  await nextTestKeepsItsFakeTimer(`
+    await using server = await new HttpServer().start((_request, response) => {
+      response.end('ok');
+    });
+    await using _interception = new Msw().intercept(
+      http.all(\`\${server.origin}/*\`, () => passthrough()),
+    );
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    assert.equal(await (await fetch(server.origin)).text(), 'ok');
+    assert.equal(await (await fetch(server.origin)).text(), 'ok');
+  `);
+});
