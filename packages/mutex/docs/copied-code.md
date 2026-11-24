@@ -161,13 +161,13 @@ Backlog #4919 extracts the predicate at a third place.
 
 The Rule of Three asks to extract the code below. It is not extracted yet. Until it is, a fix to one place goes into each place, and the commit names each file.
 
-**The warning of a failure that no caller hears.** Thirteen places, kept inline by the maintainer (#3619, backlog #4938; the shape of root ADR 0010, #5472; the helper waits as backlog #5474).
+**The warning of a failure that no caller hears.** Ten places, kept by the maintainer (#3619, backlog #4938).
 
-- Places: `#freeLost` of `Term` (`packages/election/src/term.ts`), `giveBack` (`packages/mutex/src/mutex/mutex.ts`), `#loop` of `LeaderSelector` (`packages/mutex/src/leader-selector/leader-selector.ts`), `#check` of the lock server (`socket/lock-server.ts`), `#removeLost` of the docker lock store (`docker/docker-engine-store.ts`), `ref` of the shared connection (`packages/ssh/src/control/shared-connection.ts`), the draft removal of `createExclusive` (`packages/fs/src/create-exclusive.ts`), the scheduled measurement and the exit handler of the CO₂ tracker (`packages/mteb/src/dependencies/codecarbon.ts`), the unheard error events of the SQLite queue (two in `packages/sqlite/queue/src/index.ts`, one in `timekeeper.ts`), and pool's `warn` for a background failure of its store (`packages/pool/src/store.ts`).
-- Same: ``process.emitWarning(Object.assign(new Error(`<what failed>, and <what next>: ${Error.isError(error) ? error.message : String(error)}`, { cause: error }), { name, code, detail }))``: the failure goes to the process, which keeps running, as the `cause` of a warning with its own type, code and subject. `zukhruf/require-warning-code` of `@zukhruf/eslint` holds each `emitWarning` place to a code.
-- Differs: the message, the type (`TermWarning`, `MutexWarning`, `PoolWarning` and the others of the ADR), the code and the detail of each place; the exit handler of the CO₂ tracker uses `process.emit('warning', …)`, because the next tick of `emitWarning` never runs at exit, so the lint rule does not see it; pool's `warn(error, { message, code, detail })` in `packages/pool/src/store.ts` builds the warning for its 10 callers; the SQLite queue has two places in `index.ts`, one for each code.
+- Places: `#freeLost` of `Term` (`packages/election/src/term.ts`), `giveBack` (`packages/mutex/src/mutex/mutex.ts`), `#removeLost` of the docker lock store (`docker/docker-engine-store.ts`), `ref` of the shared connection (`packages/ssh/src/control/shared-connection.ts`), the draft removal of `createExclusive` (`packages/fs/src/create-exclusive.ts`), the scheduled measurement and the exit handler of the CO₂ tracker (`packages/mteb/src/dependencies/codecarbon.ts`), the unheard error events of the SQLite queue (`packages/sqlite/queue/src/index.ts`, `timekeeper.ts`), and `warn` of `PoolWorkers` for a background failure of its store (`packages/pool/src/pool-workers.ts`).
+- Same: `process.emitWarning(Error.isError(error) ? error : new Error(String(error), { cause: error }))`: the failure goes to the process, which keeps running.
+- Differs: the exit handler of the CO₂ tracker uses `process.emit('warning', …)`, because the next tick of `emitWarning` never runs at exit; `PoolWorkers` names the expression `warn(error)`, a function of its own file.
 
-The maintainer chose the copies over a shared helper on 2026-11-20, and again on 2026-11-24 ("Inline now, file the helper"). A fix to the shape goes into each place.
+The maintainer chose the copies over a shared helper on 2026-11-20. A fix to the expression goes into each place.
 
 **The map of the requests that wait for an answer.** Three places.
 
