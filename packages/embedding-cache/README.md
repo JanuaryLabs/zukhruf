@@ -136,8 +136,7 @@ Checked on 2026-11-19: npm has no embedding cache for the AI SDK (searches "ai s
 
 ## Who moves onto it
 
-| Program                     | Its copy today                                                        | After                                                                                                    |
-| --------------------------- | --------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `@zukhruf/vector-decisions` | `src/reader/vector-cache.ts` (#4375)                                  | the middleware and `SqliteEmbeddingCacheStore`                                                           |
-| `@zukhruf/embeddings`       | `Collection` compares the hash of `[provider, modelId, text]` (#3134) | wraps its model; dropping the hash column of its table is its own migration                              |
-| `@deepagents/retrieval`     | `cid`, the sha256 of a document                                       | stays: it decides whether a document changed before it is split, and its embedder is not an AI SDK model |
+| Program                     | Its copy today                                                        | After                                                                       |
+| --------------------------- | --------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `@zukhruf/vector-decisions` | `src/reader/vector-cache.ts` (#4375)                                  | the middleware and `SqliteEmbeddingCacheStore`                              |
+| `@zukhruf/embeddings`       | `Collection` compares the hash of `[provider, modelId, text]` (#3134) | wraps its model; dropping the hash column of its table is its own migration |

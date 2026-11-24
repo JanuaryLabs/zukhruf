@@ -579,15 +579,15 @@ An error of the model, of the engine or of the reranking model reaches the calle
 
 No consumer uses it yet. These moves come next.
 
-| Consumer        | How                                                                                                                                                        | Record       |
-| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
-| deepagents      | `@deepagents/retrieval` goes; toolbox `search_content_tool` and the orchestrator move to this package and elt                                              | #5406        |
-| deepagents      | `ContextStore.searchMessages` (FTS5, `ts_rank`, `CONTAINSTABLE`) moves to the keyword retrievers, with one score direction                                 | #5417, #4884 |
-| April           | the TB2 explorer moves to an elt push source, the Vectorizer and `SqliteEmbeddingRetriever`; its hand collapse of passages to documents becomes `Collapse` | #5407        |
-| text2sql        | the two `toFtsQuery` copies move to the keyword retrievers                                                                                                 | #5410        |
-| datahub         | the planned third FTS5 BM25 place uses the keyword retrievers; its staff search fusion uses the fusions                                                    | #3451, #3426 |
-| Meddit          | its evidence layer moves onto the package after it ships                                                                                                   | #5378        |
-| `@zukhruf/mteb` | keeps its MTEB port of `HybridSearch`; it does not move                                                                                                    | #5400        |
+| Consumer        | How                                                                                                                                                                                                      | Record       |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
+| deepagents      | nothing moves: deepagents 9564ec80 (7.30.1, 2026-11-24) deleted `@deepagents/retrieval`, toolbox `search_content_tool` and the orchestrator code that used it, and no connector moved to elt (elt #5405) | #5406        |
+| deepagents      | `ContextStore.searchMessages` (FTS5, `ts_rank`, `CONTAINSTABLE`) moves to the keyword retrievers, with one score direction                                                                               | #5417, #4884 |
+| April           | the TB2 explorer moves to an elt push source, the Vectorizer and `SqliteEmbeddingRetriever`; its hand collapse of passages to documents becomes `Collapse`                                               | #5407        |
+| text2sql        | the two `toFtsQuery` copies move to the keyword retrievers                                                                                                                                               | #5410        |
+| datahub         | the planned third FTS5 BM25 place uses the keyword retrievers; its staff search fusion uses the fusions                                                                                                  | #3451, #3426 |
+| Meddit          | its evidence layer moves onto the package after it ships                                                                                                                                                 | #5378        |
+| `@zukhruf/mteb` | keeps its MTEB port of `HybridSearch`; it does not move                                                                                                                                                  | #5400        |
 
 ## The same concepts in other systems
 

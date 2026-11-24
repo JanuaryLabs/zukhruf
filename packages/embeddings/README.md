@@ -138,4 +138,4 @@ The calls of a collection take their names and rules from the vector stores ([AD
 - [ADR 0005: A vector search reads a vector table of unit vectors](./docs/adr/0005-a-vector-search-reads-a-vector-table-of-unit-vectors.md)
 - [ADR 0006: Query, fetch, delete and count follow the vector stores](./docs/adr/0006-query-fetch-delete-and-count-follow-the-vector-stores.md)
 - [ADR 0007: A query without a date range compares every document](./docs/adr/0007-a-query-without-a-date-range-compares-every-document.md)
-- [Code copied from @deepagents/retrieval](./docs/copied-from-deepagents-retrieval.md)
+- [Code copied from @deepagents/retrieval](./docs/copied-from-deepagents-retrieval.md) (the source is deleted, #5406)
