@@ -1,7 +1,7 @@
 import type { PassageStore } from '../passage-store.ts';
 import type { Passage } from '../passage.ts';
+import { identifier } from '../sql/identifier.ts';
 import { bind } from './bind.ts';
-import { identifier } from './identifier.ts';
 import { passage, passageJson } from './passage-row.ts';
 import type { PostgresSession } from './postgres-session.ts';
 

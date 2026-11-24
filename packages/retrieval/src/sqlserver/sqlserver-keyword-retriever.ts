@@ -1,15 +1,16 @@
 import type { RetrieveOptions } from '../retrieve-options.ts';
 import type { Retriever } from '../retriever.ts';
 import type { ScoredPassage } from '../scored-passage.ts';
+import { where } from '../sql/where.ts';
 import { binary } from './binary.ts';
 import { bind } from './bind.ts';
+import { dialect } from './dialect.ts';
 import { passage, passageJson } from './passage-row.ts';
 import {
   type SqlServerPassageStore,
   contractOf,
 } from './sqlserver-passage-store.ts';
 import type { SqlServerSession } from './sqlserver-session.ts';
-import { where } from './where.ts';
 
 /**
  * Ranks the passages by SQL Server full-text search over the keyword index
@@ -54,7 +55,7 @@ export class SqlServerKeywordRetriever implements Retriever {
     // Server's error 4110: the driver binds it as NVARCHAR(MAX), which
     // CONTAINSTABLE refuses.
     const condition = bind(parameters, words.join(` ${this.#operator} `));
-    const filter = where(options.filter, parameters);
+    const filter = where(dialect, options.filter, parameters);
     const topK = bind(parameters, options.topK ?? 10);
     const rows = await this.#session.query(
       `

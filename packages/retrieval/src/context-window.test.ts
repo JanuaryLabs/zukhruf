@@ -4,7 +4,7 @@ import { test } from 'node:test';
 
 import { open } from '@zukhruf/sqlite-open';
 
-import { ContextWindow } from './index.ts';
+import { ContextWindow, PassageGapError } from './index.ts';
 import { SqlitePassageStore } from './sqlite.ts';
 
 const guide = 'abcdefghijklmnopqrstuvwxyz0123456789';
@@ -139,6 +139,78 @@ test('the parts of a window merge in the order of start, and a part inside an ea
     results.map(({ passage }) => [passage.text, passage.start, passage.end]),
     [['abcdefghijklmn', 0, 14]],
   );
+});
+
+test('the parts of a window are cut in code points, as start and end count them, so text outside the Basic Multilingual Plane merges whole', async () => {
+  // Arrange: a source of 11 code points, 5 of them emoji of two UTF-16
+  // units each. 'keys-0' (0 to 4) and 'keys-1' (2 to 6) share 'b🔑';
+  // 'keys-2' (6 to 9) starts where 'keys-1' ends.
+  using database = passages();
+  const source = [...'a🔑b🔑c🗝d🔒e🔒f'];
+  const insert = database.prepare(
+    "INSERT INTO docs_passages VALUES (?, 'keys', ?, ?, ?, ?, 'vault')",
+  );
+  insert.run('keys-0', 0, 0, 4, source.slice(0, 4).join(''));
+  insert.run('keys-1', 1, 2, 6, source.slice(2, 6).join(''));
+  insert.run('keys-2', 2, 6, 9, source.slice(6, 9).join(''));
+  const store = new SqlitePassageStore({ database, passages: 'docs_passages' });
+  const window = new ContextWindow({ store });
+
+  // Act
+  const results = await window.postprocess(
+    await found(store, ['keys-1']),
+    'rotate a key',
+  );
+
+  // Assert: 'keys-1' adds its text past code point 4 - 2 = 2, 'c🗝', and
+  // 'keys-2' adds all of its text: the code points 0 to 9 of the source.
+  assert.deepEqual(
+    results.map(({ passage }) => [passage.text, passage.start, passage.end]),
+    [['a🔑b🔑c🗝d🔒e', 0, 9]],
+  );
+});
+
+test('a window whose passages leave a gap in their source fails with PassageGapError, which names the source and the offsets of the gap', async () => {
+  // Arrange: 'gap-1' (2 to 4) is inside 'gap-0' (0 to 8); 'gap-2' starts at
+  // 10, so the code points 8 to 10 of the source are in no passage.
+  using database = passages();
+  const insert = database.prepare(
+    "INSERT INTO docs_passages VALUES (?, 'gap', ?, ?, ?, ?, 'vault')",
+  );
+  insert.run('gap-0', 0, 0, 8, 'abcdefgh');
+  insert.run('gap-1', 1, 2, 4, 'cd');
+  insert.run('gap-2', 2, 10, 14, 'klmn');
+  const store = new SqlitePassageStore({ database, passages: 'docs_passages' });
+  const window = new ContextWindow({ store });
+
+  // Act
+  const result = window.postprocess(
+    await found(store, ['gap-1']),
+    'rotate a key',
+  );
+
+  // Assert
+  await assert.rejects(result, (error) => {
+    assert.ok(error instanceof PassageGapError);
+    assert.deepEqual(
+      {
+        name: error.name,
+        message: error.message,
+        source: error.source,
+        start: error.start,
+        end: error.end,
+      },
+      {
+        name: 'PassageGapError',
+        message:
+          'The passages of the source gap have a gap from 8 to 10: the passage contract requires that the passages of a source tile it',
+        source: 'gap',
+        start: 8,
+        end: 10,
+      },
+    );
+    return true;
+  });
 });
 
 test('a passage that the store has no window for stays as it is', async () => {

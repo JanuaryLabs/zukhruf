@@ -1,27 +1,27 @@
-import { type EmbeddingModel, embed, embedMany } from 'ai';
+import type { EmbeddingModel } from 'ai';
 
-import { DimensionMismatchError, Vector } from '@zukhruf/vectors';
+import { Vector } from '@zukhruf/vectors';
 import { fromSql, sqlType, toSql } from '@zukhruf/vectors/sqlserver';
 
 import type { BatchRetriever } from '../batch-retriever.ts';
+import { IdentityCheckedSearch } from '../identity-checked-search.ts';
 import {
   type ModelIdentity,
   describe,
-  modelName,
   parseModelIdentity,
 } from '../model-identity.ts';
-import { ModelMismatchError } from '../model-mismatch-error.ts';
 import type { RetrieveOptions } from '../retrieve-options.ts';
 import type { ScoredPassage } from '../scored-passage.ts';
+import { where } from '../sql/where.ts';
 import { binary } from './binary.ts';
 import { bind } from './bind.ts';
+import { dialect } from './dialect.ts';
 import { passage, passageJson } from './passage-row.ts';
 import {
   type SqlServerPassageStore,
   contractOf,
 } from './sqlserver-passage-store.ts';
 import type { SqlServerSession } from './sqlserver-session.ts';
-import { where } from './where.ts';
 
 /**
  * Ranks the passages by the cosine similarity of their vectors to the query,
@@ -32,7 +32,7 @@ export class SqlServerEmbeddingRetriever implements BatchRetriever {
   readonly #session: SqlServerSession;
   readonly #passages: string;
   readonly #vectors: string;
-  readonly #model: EmbeddingModel;
+  readonly #retrieval: IdentityCheckedSearch;
 
   constructor(options: {
     /** The store of the passages, whose session and schema the search uses. */
@@ -45,69 +45,26 @@ export class SqlServerEmbeddingRetriever implements BatchRetriever {
     this.#session = contract.session;
     this.#passages = contract.passages;
     this.#vectors = contract.relation(options.vectors);
-    this.#model = options.model;
+    this.#retrieval = new IdentityCheckedSearch({
+      model: options.model,
+      storedIdentities: () => this.#storedIdentities(),
+      search: (vectors, identity, retrieveOptions) =>
+        this.#search(vectors, identity, retrieveOptions),
+    });
   }
 
-  async retrieve(
+  retrieve(
     query: string,
     options: RetrieveOptions = {},
   ): Promise<ScoredPassage[]> {
-    const [passages] = await this.#retrieve(1, options, async (abortSignal) => {
-      const { embedding } = await embed({
-        model: this.#model,
-        value: query,
-        ...(abortSignal === undefined ? {} : { abortSignal }),
-      });
-      return [embedding];
-    });
-    return passages ?? [];
+    return this.#retrieval.retrieve(query, options);
   }
 
-  async retrieveMany(
+  retrieveMany(
     queries: readonly string[],
     options: RetrieveOptions = {},
   ): Promise<ScoredPassage[][]> {
-    if (queries.length === 0) return [];
-    return this.#retrieve(queries.length, options, async (abortSignal) => {
-      const { embeddings } = await embedMany({
-        model: this.#model,
-        values: [...queries],
-        ...(abortSignal === undefined ? {} : { abortSignal }),
-      });
-      return embeddings;
-    });
-  }
-
-  async #retrieve(
-    count: number,
-    options: RetrieveOptions,
-    embedQueries: (abortSignal?: AbortSignal) => Promise<readonly number[][]>,
-  ): Promise<ScoredPassage[][]> {
-    options.abortSignal?.throwIfAborted();
-    const query = modelName(this.#model);
-    const stored = await this.#storedIdentities();
-    const [first] = stored;
-    if (first === undefined) return Array.from({ length: count }, () => []);
-    // A vector column has its dimensions in its type, `VECTOR(n)`, so the
-    // table holds one identity of a model, unlike SQLite and Postgres.
-    const identity = stored.find(
-      ({ provider, modelId }) =>
-        provider === query.provider && modelId === query.modelId,
-    );
-    if (identity === undefined) {
-      throw new ModelMismatchError(
-        { provider: first.provider, modelId: first.modelId },
-        query,
-      );
-    }
-
-    const vectors = await embedQueries(options.abortSignal);
-    options.abortSignal?.throwIfAborted();
-    const dimensions = vectors[0]?.length ?? 0;
-    if (dimensions !== identity.dimensions) {
-      throw new DimensionMismatchError(identity.dimensions, dimensions);
-    }
-    return this.#search(vectors, identity, options);
+    return this.#retrieval.retrieveMany(queries, options);
   }
 
   /** The identities of the stored vectors, in binary order of their text, as SQLite orders text. */
@@ -138,7 +95,7 @@ export class SqlServerEmbeddingRetriever implements BatchRetriever {
       `[${vectors.map((vector) => toSql(Vector.from(vector))).join(',')}]`,
     );
     const model = bind(parameters, describe(identity));
-    const filter = where(options.filter, parameters);
+    const filter = where(dialect, options.filter, parameters);
     const topK = bind(parameters, options.topK ?? 10);
     // A CAST target cannot be a parameter; sqlType checks the dimensions.
     const type = sqlType(Vector, identity.dimensions);

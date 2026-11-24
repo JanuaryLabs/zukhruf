@@ -1,0 +1,102 @@
+import { type EmbeddingModel, embed, embedMany } from 'ai';
+
+import { DimensionMismatchError } from '@zukhruf/vectors';
+
+import { type ModelIdentity, modelName } from './model-identity.ts';
+import { ModelMismatchError } from './model-mismatch-error.ts';
+import type { RetrieveOptions } from './retrieve-options.ts';
+import type { ScoredPassage } from './scored-passage.ts';
+
+/** What the engine gives: the query model, its read of the stored identities, and its search. */
+type Engine = {
+  readonly model: EmbeddingModel;
+  /** The identities of the stored vectors, in the byte order of their text. */
+  readonly storedIdentities: () =>
+    readonly ModelIdentity[] | Promise<readonly ModelIdentity[]>;
+  /** One search for every query vector, among the vectors of the identity. */
+  readonly search: (
+    vectors: readonly (readonly number[])[],
+    identity: ModelIdentity,
+    options: RetrieveOptions,
+  ) => ScoredPassage[][] | Promise<ScoredPassage[][]>;
+};
+
+/**
+ * The steps that an embedding retriever of each engine takes around its own
+ * search (ADR 0010): no stored vectors give one empty list for each query and
+ * no model call; a query model of another provider or model id fails with
+ * ModelMismatchError before the model call; a query vector whose dimensions
+ * no stored identity of that model has fails with DimensionMismatchError
+ * after it. The engine reads the stored identities and runs the search.
+ */
+export class IdentityCheckedSearch {
+  readonly #engine: Engine;
+
+  constructor(engine: Engine) {
+    this.#engine = engine;
+  }
+
+  async retrieve(
+    query: string,
+    options: RetrieveOptions,
+  ): Promise<ScoredPassage[]> {
+    const [passages] = await this.#retrieve(1, options, async (abortSignal) => {
+      const { embedding } = await embed({
+        model: this.#engine.model,
+        value: query,
+        ...(abortSignal === undefined ? {} : { abortSignal }),
+      });
+      return [embedding];
+    });
+    return passages ?? [];
+  }
+
+  async retrieveMany(
+    queries: readonly string[],
+    options: RetrieveOptions,
+  ): Promise<ScoredPassage[][]> {
+    if (queries.length === 0) return [];
+    return this.#retrieve(queries.length, options, async (abortSignal) => {
+      const { embeddings } = await embedMany({
+        model: this.#engine.model,
+        values: [...queries],
+        ...(abortSignal === undefined ? {} : { abortSignal }),
+      });
+      return embeddings;
+    });
+  }
+
+  async #retrieve(
+    count: number,
+    options: RetrieveOptions,
+    embedQueries: (abortSignal?: AbortSignal) => Promise<readonly number[][]>,
+  ): Promise<ScoredPassage[][]> {
+    options.abortSignal?.throwIfAborted();
+    const query = modelName(this.#engine.model);
+    const stored = await this.#engine.storedIdentities();
+    const [first] = stored;
+    if (first === undefined) return Array.from({ length: count }, () => []);
+    const sameModel = stored.filter(
+      ({ provider, modelId }) =>
+        provider === query.provider && modelId === query.modelId,
+    );
+    const [nearest] = sameModel;
+    if (nearest === undefined) {
+      throw new ModelMismatchError(
+        { provider: first.provider, modelId: first.modelId },
+        query,
+      );
+    }
+
+    const vectors = await embedQueries(options.abortSignal);
+    options.abortSignal?.throwIfAborted();
+    const dimensions = vectors[0]?.length ?? 0;
+    const identity = sameModel.find(
+      (candidate) => candidate.dimensions === dimensions,
+    );
+    if (identity === undefined) {
+      throw new DimensionMismatchError(nearest.dimensions, dimensions);
+    }
+    return this.#engine.search(vectors, identity, options);
+  }
+}

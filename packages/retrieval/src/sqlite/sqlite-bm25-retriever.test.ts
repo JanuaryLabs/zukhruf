@@ -5,37 +5,15 @@ import { test } from 'node:test';
 import { open } from '@zukhruf/sqlite-open';
 
 import { SqliteBM25Retriever, SqlitePassageStore } from '../sqlite.ts';
+import {
+  type KeywordPassage,
+  keywordContractSchema,
+  writeKeywordContract,
+} from '../testing/keyword-contract.ts';
 
-type Row = {
-  readonly id: string;
-  readonly text: string;
-  readonly source?: string;
-  readonly product?: string;
-};
-
-// The passages and the keyword index as elt writes them: an FTS5 table with
-// the passages as its external content, rebuilt from them.
-function contract(rows: readonly Row[]): DatabaseSync {
+function contract(passages: readonly KeywordPassage[]): DatabaseSync {
   const database = open(':memory:');
-  database.exec(`
-    CREATE TABLE docs_passages (id TEXT PRIMARY KEY, source TEXT NOT NULL, seq INTEGER NOT NULL, start INTEGER NOT NULL, "end" INTEGER NOT NULL, text TEXT NOT NULL, product TEXT) STRICT;
-    CREATE VIRTUAL TABLE docs_passages_fts USING fts5(text, content = 'docs_passages');
-  `);
-  const insert = database.prepare(
-    'INSERT INTO docs_passages VALUES (?, ?, 0, 0, ?, ?, ?)',
-  );
-  for (const row of rows) {
-    insert.run(
-      row.id,
-      row.source ?? `doc-${row.id}`,
-      row.text.length,
-      row.text,
-      row.product ?? null,
-    );
-  }
-  database.exec(
-    `INSERT INTO docs_passages_fts (docs_passages_fts) VALUES ('rebuild')`,
-  );
+  writeKeywordContract(database, passages);
   return database;
 }
 
@@ -92,14 +70,12 @@ test('the passages come best first with -bm25() as the score, so a better match 
 });
 
 test('passages that are a view with an integer rowid column are searched through that rowid, and the rowid is not metadata', async () => {
-  // Arrange: the view's rowid is the key of the parts, in another order than their ids.
+  // Arrange: the rowid of the keywords is in another order than their ids.
   using database = open(':memory:');
   database.exec(`
-    CREATE TABLE docs_parts (n INTEGER PRIMARY KEY, id TEXT NOT NULL, source TEXT NOT NULL, seq INTEGER NOT NULL, start INTEGER NOT NULL, "end" INTEGER NOT NULL, text TEXT NOT NULL, product TEXT) STRICT;
-    CREATE VIEW docs_passages AS SELECT n AS rowid, id, source, seq, start, "end", text, product FROM docs_parts;
-    CREATE VIRTUAL TABLE docs_passages_fts USING fts5(text, content = 'docs_passages');
-    INSERT INTO docs_parts VALUES (70, 'a', 'doc-a', 0, 0, 13, 'compile C code', 'gcc'), (30, 'b', 'doc-b', 0, 0, 21, 'fix a broken git repo', 'git');
-    INSERT INTO docs_passages_fts (docs_passages_fts) VALUES ('rebuild');
+    ${keywordContractSchema}
+    INSERT INTO docs_parts VALUES ('doc-a', 0, 0, 13, 'compile C code', 'gcc'), ('doc-b', 0, 0, 21, 'fix a broken git repo', 'git');
+    INSERT INTO docs_keywords VALUES (70, 'a', 'doc-a', 0, 'compile C code'), (30, 'b', 'doc-b', 0, 'fix a broken git repo');
   `);
   const retriever = new SqliteBM25Retriever({
     store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
@@ -272,14 +248,15 @@ test('an aborted keyword search rejects with the reason of its signal', async ()
   await assert.rejects(result, (error) => error === reason);
 });
 
-test('a passages table and an index whose names need quoting are searched by those names', async () => {
+test('a passages relation and an index whose names need quoting are searched by those names', async () => {
   // Arrange
   using database = open(':memory:');
   database.exec(`
-    CREATE TABLE "docs ""passages""" (id TEXT PRIMARY KEY, source TEXT NOT NULL, seq INTEGER NOT NULL, start INTEGER NOT NULL, "end" INTEGER NOT NULL, text TEXT NOT NULL) STRICT;
-    CREATE VIRTUAL TABLE "docs ""fts""" USING fts5(text, content = 'docs "passages"');
-    INSERT INTO "docs ""passages""" VALUES ('a', 's', 0, 0, 14, 'rotate the key');
-    INSERT INTO "docs ""fts""" ("docs ""fts""") VALUES ('rebuild');
+    CREATE TABLE "docs ""keywords""" (rowid INTEGER PRIMARY KEY, id TEXT NOT NULL UNIQUE, source TEXT NOT NULL, seq INTEGER NOT NULL, start INTEGER NOT NULL, "end" INTEGER NOT NULL, text TEXT NOT NULL) STRICT;
+    CREATE VIRTUAL TABLE "docs ""fts""" USING fts5(text, content = 'docs "keywords"');
+    CREATE TRIGGER "docs ""keywords"" ai" AFTER INSERT ON "docs ""keywords""" BEGIN INSERT INTO "docs ""fts""" (rowid, text) VALUES (new.rowid, new.text); END;
+    CREATE VIEW "docs ""passages""" AS SELECT rowid AS rowid, id, source, seq, start, "end", text FROM "docs ""keywords""";
+    INSERT INTO "docs ""keywords""" (id, source, seq, start, "end", text) VALUES ('a', 's', 0, 0, 14, 'rotate the key');
   `);
   const retriever = new SqliteBM25Retriever({
     store: new SqlitePassageStore({ database, passages: 'docs "passages"' }),

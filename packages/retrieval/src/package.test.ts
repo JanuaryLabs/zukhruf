@@ -23,7 +23,7 @@ test('a consumer imports each subpath by its package name, and the package depen
   // Act
   const result = await run(`
     const core = await import('@zukhruf/retrieval');
-    const { ModelMismatchError, VectorMissingError } = core;
+    const { ModelMismatchError, PassageGapError, VectorMissingError } = core;
     const { SqliteBM25Retriever, SqliteEmbeddingRetriever, SqlitePassageStore } = await import('@zukhruf/retrieval/sqlite');
     const { PgvectorEmbeddingRetriever, PgvectorKeywordRetriever, PostgresPassageStore } = await import('@zukhruf/retrieval/postgres');
     const { SqlServerEmbeddingRetriever, SqlServerKeywordRetriever, SqlServerPassageStore } = await import('@zukhruf/retrieval/sqlserver');
@@ -34,6 +34,7 @@ test('a consumer imports each subpath by its package name, and the package depen
         { provider: 'openai', modelId: 'b' },
       ).name,
       vectorMissing: new VectorMissingError('p').name,
+      passageGap: new PassageGapError('s', 1, 2).name,
       retrievers: [core.FusionRetriever, core.HydeRetriever, core.MultiQueryRetriever].map((type) => type.name),
       fusions: [core.distributionBasedScoreFusion, core.reciprocalRankFusion, core.relativeScoreFusion].map((fusion) => typeof fusion().fuse),
       postprocessors: [core.Collapse, core.ContextWindow, core.LongContextReorder, core.MaximalMarginalRelevance, core.PostprocessingRetriever, core.Rerank, core.SimilarityCutoff].map((type) => type.name),
@@ -50,6 +51,7 @@ test('a consumer imports each subpath by its package name, and the package depen
   assert.deepEqual(result, {
     modelMismatch: 'ModelMismatchError',
     vectorMissing: 'VectorMissingError',
+    passageGap: 'PassageGapError',
     retrievers: ['FusionRetriever', 'HydeRetriever', 'MultiQueryRetriever'],
     fusions: ['function', 'function', 'function'],
     postprocessors: [

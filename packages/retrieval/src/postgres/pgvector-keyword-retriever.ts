@@ -1,15 +1,16 @@
 import type { RetrieveOptions } from '../retrieve-options.ts';
 import type { Retriever } from '../retriever.ts';
 import type { ScoredPassage } from '../scored-passage.ts';
+import { identifier } from '../sql/identifier.ts';
+import { where } from '../sql/where.ts';
 import { bind } from './bind.ts';
-import { identifier } from './identifier.ts';
+import { dialect } from './dialect.ts';
 import { passage, passageJson } from './passage-row.ts';
 import {
   type PostgresPassageStore,
   contractOf,
 } from './postgres-passage-store.ts';
 import type { PostgresSession } from './postgres-session.ts';
-import { where } from './where.ts';
 
 /**
  * Ranks the passages by Postgres full-text search over the keyword index
@@ -64,7 +65,7 @@ export class PgvectorKeywordRetriever implements Retriever {
       )
       .join(this.#operator === 'AND' ? ' && ' : ' || ');
     const row = passageJson(parameters, this.#passages);
-    const filter = where(options.filter, parameters);
+    const filter = where(dialect, options.filter, parameters);
     const topK = bind(parameters, options.topK ?? 10);
     const rows = await this.#session.query(
       `

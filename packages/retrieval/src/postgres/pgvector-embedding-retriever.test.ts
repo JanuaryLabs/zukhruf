@@ -501,6 +501,66 @@ test('retrieveMany embeds the queries in one model call, searches them in one SQ
   );
 });
 
+test('with an HNSW index, a search for an identity of few of the rows gives topK passages, for one query and a batch, and leaves the session as it was', async () => {
+  // Arrange: elt's HNSW index on the vectors of 4,000 passages; 1 in 20 is
+  // of the queried identity, spread among the others by angle. The index
+  // gives its 40 nearest (hnsw.ef_search) before the model filter, about 2 of
+  // them of that identity.
+  await using database = await server().database();
+  const pool = database.pool();
+  await pool.query(`
+    CREATE EXTENSION IF NOT EXISTS vector;
+    CREATE TABLE docs_passages (id text PRIMARY KEY, source text NOT NULL, seq integer NOT NULL, start integer NOT NULL, "end" integer NOT NULL, text text NOT NULL);
+    CREATE TABLE docs_passage_vectors (id text PRIMARY KEY REFERENCES docs_passages (id), vector vector(4) NOT NULL, model text NOT NULL);
+    INSERT INTO docs_passages SELECT 'p' || i, 'doc-' || i, 0, 0, 1, 'x' FROM generate_series(1, 4000) i;
+    INSERT INTO docs_passage_vectors
+    SELECT 'p' || i, ARRAY[cos(i * 2.399963), sin(i * 2.399963), 0.5, 0]::vector(4),
+      CASE WHEN i % 20 = 0 THEN 'test/mini (4 dimensions)' ELSE 'test/other (4 dimensions)' END
+    FROM generate_series(1, 4000) i;
+    CREATE INDEX docs_passage_vectors_hnsw ON docs_passage_vectors USING hnsw (vector vector_cosine_ops);
+    ANALYZE docs_passages, docs_passage_vectors;
+  `);
+  const client = await pool.connect();
+  try {
+    const retriever = new PgvectorEmbeddingRetriever({
+      store: new PostgresPassageStore({
+        session: {
+          query: async (sql, parameters) =>
+            (await client.query(sql, [...parameters])).rows,
+        },
+        passages: 'docs_passages',
+      }),
+      vectors: 'docs_passage_vectors',
+      model: embeddingModel({ 'rotate a key': [1, 0, 0.5, 0] }),
+    });
+
+    // Act
+    const one = await retriever.retrieve('rotate a key');
+    const batch = await retriever.retrieveMany([
+      'rotate a key',
+      'rotate a key',
+    ]);
+    const { rows } = await client.query(
+      "SELECT current_setting('hnsw.iterative_scan') AS scan",
+    );
+
+    // Assert
+    const queried = (list: readonly { passage: { id: string } }[]) =>
+      ids(list).filter((id) => Number(id.slice(1)) % 20 === 0).length;
+    assert.deepEqual(
+      [one, ...batch].map((list) => [list.length, queried(list)]),
+      [
+        [10, 10],
+        [10, 10],
+        [10, 10],
+      ],
+    );
+    assert.deepEqual(rows, [{ scan: 'off' }]);
+  } finally {
+    client.release();
+  }
+});
+
 test('an aborted call rejects with the reason of its signal, before the model call and after it', async () => {
   // Arrange
   await using database = await server().database();

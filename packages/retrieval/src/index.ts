@@ -10,6 +10,7 @@ export { LongContextReorder } from './long-context-reorder.ts';
 export { MaximalMarginalRelevance } from './maximal-marginal-relevance.ts';
 export { ModelMismatchError } from './model-mismatch-error.ts';
 export { MultiQueryRetriever } from './multi-query-retriever.ts';
+export { PassageGapError } from './passage-gap-error.ts';
 export type { PassageStore } from './passage-store.ts';
 export type { Passage } from './passage.ts';
 export { PostprocessingRetriever } from './postprocessing-retriever.ts';

@@ -1,26 +1,24 @@
-import { type EmbeddingModel, embed, embedMany } from 'ai';
+import type { EmbeddingModel } from 'ai';
 import { fromSql, toSql } from 'pgvector';
 
-import { DimensionMismatchError } from '@zukhruf/vectors';
-
 import type { BatchRetriever } from '../batch-retriever.ts';
+import { IdentityCheckedSearch } from '../identity-checked-search.ts';
 import {
   type ModelIdentity,
   describe,
-  modelName,
   parseModelIdentity,
 } from '../model-identity.ts';
-import { ModelMismatchError } from '../model-mismatch-error.ts';
 import type { RetrieveOptions } from '../retrieve-options.ts';
 import type { ScoredPassage } from '../scored-passage.ts';
+import { where } from '../sql/where.ts';
 import { bind } from './bind.ts';
+import { dialect } from './dialect.ts';
 import { passage, passageJson } from './passage-row.ts';
 import {
   type PostgresPassageStore,
   contractOf,
 } from './postgres-passage-store.ts';
 import type { PostgresSession } from './postgres-session.ts';
-import { where } from './where.ts';
 
 /**
  * Ranks the passages by the cosine similarity of their vectors to the query,
@@ -30,7 +28,7 @@ export class PgvectorEmbeddingRetriever implements BatchRetriever {
   readonly #session: PostgresSession;
   readonly #passages: string;
   readonly #vectors: string;
-  readonly #model: EmbeddingModel;
+  readonly #retrieval: IdentityCheckedSearch;
 
   constructor(options: {
     /** The store of the passages, whose session and schema the search uses. */
@@ -43,71 +41,26 @@ export class PgvectorEmbeddingRetriever implements BatchRetriever {
     this.#session = contract.session;
     this.#passages = contract.passages;
     this.#vectors = contract.relation(options.vectors);
-    this.#model = options.model;
+    this.#retrieval = new IdentityCheckedSearch({
+      model: options.model,
+      storedIdentities: () => this.#storedIdentities(),
+      search: (vectors, identity, retrieveOptions) =>
+        this.#search(vectors, identity, retrieveOptions),
+    });
   }
 
-  async retrieve(
+  retrieve(
     query: string,
     options: RetrieveOptions = {},
   ): Promise<ScoredPassage[]> {
-    const [passages] = await this.#retrieve(1, options, async (abortSignal) => {
-      const { embedding } = await embed({
-        model: this.#model,
-        value: query,
-        ...(abortSignal === undefined ? {} : { abortSignal }),
-      });
-      return [embedding];
-    });
-    return passages ?? [];
+    return this.#retrieval.retrieve(query, options);
   }
 
-  async retrieveMany(
+  retrieveMany(
     queries: readonly string[],
     options: RetrieveOptions = {},
   ): Promise<ScoredPassage[][]> {
-    if (queries.length === 0) return [];
-    return this.#retrieve(queries.length, options, async (abortSignal) => {
-      const { embeddings } = await embedMany({
-        model: this.#model,
-        values: [...queries],
-        ...(abortSignal === undefined ? {} : { abortSignal }),
-      });
-      return embeddings;
-    });
-  }
-
-  async #retrieve(
-    count: number,
-    options: RetrieveOptions,
-    embedQueries: (abortSignal?: AbortSignal) => Promise<readonly number[][]>,
-  ): Promise<ScoredPassage[][]> {
-    options.abortSignal?.throwIfAborted();
-    const query = modelName(this.#model);
-    const stored = await this.#storedIdentities();
-    const [first] = stored;
-    if (first === undefined) return Array.from({ length: count }, () => []);
-    const sameModel = stored.filter(
-      ({ provider, modelId }) =>
-        provider === query.provider && modelId === query.modelId,
-    );
-    const [nearest] = sameModel;
-    if (nearest === undefined) {
-      throw new ModelMismatchError(
-        { provider: first.provider, modelId: first.modelId },
-        query,
-      );
-    }
-
-    const vectors = await embedQueries(options.abortSignal);
-    options.abortSignal?.throwIfAborted();
-    const dimensions = vectors[0]?.length ?? 0;
-    const identity = sameModel.find(
-      (candidate) => candidate.dimensions === dimensions,
-    );
-    if (identity === undefined) {
-      throw new DimensionMismatchError(nearest.dimensions, dimensions);
-    }
-    return this.#search(vectors, identity, options);
+    return this.#retrieval.retrieveMany(queries, options);
   }
 
   /** The identities of the stored vectors, in the byte order of their text, as SQLite orders text. */
@@ -125,6 +78,13 @@ export class PgvectorEmbeddingRetriever implements BatchRetriever {
    * serves for each row of the queries. It compares a query only with the
    * vectors of its own model identity, and breaks a tie of distance by the
    * passage id, as `VectorSearch` of `@zukhruf/embeddings` does.
+   *
+   * An HNSW index gives its nearest vectors before the model filter runs, so
+   * a search for an identity of few rows would give fewer than topK. Each row
+   * of the materialized queries sets pgvector's `hnsw.iterative_scan` to
+   * `strict_order` for the transaction of the statement before the scan of
+   * that row starts, so the scan goes on until topK rows pass the filter, in
+   * the order of distance that the `LIMIT` of each row cuts (ADR 0003).
    */
   async #search(
     vectors: readonly (readonly number[])[],
@@ -140,11 +100,14 @@ export class PgvectorEmbeddingRetriever implements BatchRetriever {
       .join(', ');
     const model = bind(parameters, describe(identity));
     const row = passageJson(parameters, this.#passages);
-    const filter = where(options.filter, parameters);
+    const filter = where(dialect, options.filter, parameters);
     const topK = bind(parameters, options.topK ?? 10);
     const rows = await this.#session.query(
       `
-      WITH "queries" ("query", "vector") AS (VALUES ${queries})
+      WITH "queries" AS MATERIALIZED (
+        SELECT v."query", v."vector", set_config('hnsw.iterative_scan', 'strict_order', true) AS "scan"
+        FROM (VALUES ${queries}) v ("query", "vector")
+      )
       SELECT q."query", r."distance", r."vector", r."passage"
       FROM "queries" q CROSS JOIN LATERAL (
         SELECT v."vector" <=> q."vector" AS "distance", v."vector"::text AS "vector", ${row} AS "passage", p."id"::text COLLATE "C" AS "id"

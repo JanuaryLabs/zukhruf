@@ -1,24 +1,24 @@
-import type { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 
-import { type EmbeddingModel, embed, embedMany } from 'ai';
+import type { EmbeddingModel } from 'ai';
 
-import { DimensionMismatchError, Vector } from '@zukhruf/vectors';
+import { Vector } from '@zukhruf/vectors';
 import { fromSql, toSql } from '@zukhruf/vectors/sqlite';
 
 import type { BatchRetriever } from '../batch-retriever.ts';
+import { IdentityCheckedSearch } from '../identity-checked-search.ts';
 import {
   type ModelIdentity,
   describe,
-  modelName,
   parseModelIdentity,
 } from '../model-identity.ts';
-import { ModelMismatchError } from '../model-mismatch-error.ts';
 import type { RetrieveOptions } from '../retrieve-options.ts';
 import type { ScoredPassage } from '../scored-passage.ts';
-import { identifier } from './identifier.ts';
+import { identifier } from '../sql/identifier.ts';
+import { where } from '../sql/where.ts';
+import { dialect } from './dialect.ts';
 import { passageRows } from './passage-rows.ts';
 import { type SqlitePassageStore, contractOf } from './sqlite-passage-store.ts';
-import { where } from './where.ts';
 
 /**
  * Ranks the passages by the cosine similarity of their vectors to the query,
@@ -30,7 +30,7 @@ export class SqliteEmbeddingRetriever implements BatchRetriever {
   readonly #database: DatabaseSync;
   readonly #passages: string;
   readonly #vectors: string;
-  readonly #model: EmbeddingModel;
+  readonly #retrieval: IdentityCheckedSearch;
 
   constructor(options: {
     /** The store of the passages, whose connection the search runs on. */
@@ -43,71 +43,26 @@ export class SqliteEmbeddingRetriever implements BatchRetriever {
     this.#database = database;
     this.#passages = passages;
     this.#vectors = identifier(options.vectors);
-    this.#model = options.model;
+    this.#retrieval = new IdentityCheckedSearch({
+      model: options.model,
+      storedIdentities: () => this.#storedIdentities(),
+      search: (vectors, identity, retrieveOptions) =>
+        this.#search(vectors, identity, retrieveOptions),
+    });
   }
 
-  async retrieve(
+  retrieve(
     query: string,
     options: RetrieveOptions = {},
   ): Promise<ScoredPassage[]> {
-    const [passages] = await this.#retrieve(1, options, async (abortSignal) => {
-      const { embedding } = await embed({
-        model: this.#model,
-        value: query,
-        ...(abortSignal === undefined ? {} : { abortSignal }),
-      });
-      return [embedding];
-    });
-    return passages ?? [];
+    return this.#retrieval.retrieve(query, options);
   }
 
-  async retrieveMany(
+  retrieveMany(
     queries: readonly string[],
     options: RetrieveOptions = {},
   ): Promise<ScoredPassage[][]> {
-    if (queries.length === 0) return [];
-    return this.#retrieve(queries.length, options, async (abortSignal) => {
-      const { embeddings } = await embedMany({
-        model: this.#model,
-        values: [...queries],
-        ...(abortSignal === undefined ? {} : { abortSignal }),
-      });
-      return embeddings;
-    });
-  }
-
-  async #retrieve(
-    count: number,
-    options: RetrieveOptions,
-    embedQueries: (abortSignal?: AbortSignal) => Promise<readonly number[][]>,
-  ): Promise<ScoredPassage[][]> {
-    options.abortSignal?.throwIfAborted();
-    const query = modelName(this.#model);
-    const stored = this.#storedIdentities();
-    const [first] = stored;
-    if (first === undefined) return Array.from({ length: count }, () => []);
-    const sameModel = stored.filter(
-      ({ provider, modelId }) =>
-        provider === query.provider && modelId === query.modelId,
-    );
-    const [nearest] = sameModel;
-    if (nearest === undefined) {
-      throw new ModelMismatchError(
-        { provider: first.provider, modelId: first.modelId },
-        query,
-      );
-    }
-
-    const vectors = await embedQueries(options.abortSignal);
-    options.abortSignal?.throwIfAborted();
-    const dimensions = vectors[0]?.length ?? 0;
-    const identity = sameModel.find(
-      (candidate) => candidate.dimensions === dimensions,
-    );
-    if (identity === undefined) {
-      throw new DimensionMismatchError(nearest.dimensions, dimensions);
-    }
-    return this.#search(vectors, identity, options);
+    return this.#retrieval.retrieveMany(queries, options);
   }
 
   /** The identities of the stored vectors, in the order of their text. */
@@ -128,13 +83,21 @@ export class SqliteEmbeddingRetriever implements BatchRetriever {
     identity: ModelIdentity,
     options: RetrieveOptions,
   ): ScoredPassage[][] {
-    const filter = where(options.filter);
+    const parameters: SQLInputValue[] = [
+      ...vectors.flatMap((vector, index) => [
+        index,
+        toSql(Vector.from(vector)),
+      ]),
+      describe(identity),
+    ];
+    const filter = where(dialect, options.filter, parameters);
+    parameters.push(options.topK ?? 10);
     const statement = this.#database.prepare(`
       WITH "queries" ("query", "vector") AS (VALUES ${vectors.map(() => '(?, ?)').join(', ')}),
       "scored" AS (
         SELECT q."query", v."id", v."vector", vec_distance_cosine(v."vector", q."vector") AS "distance"
         FROM "queries" q CROSS JOIN ${this.#vectors} v JOIN ${this.#passages} p ON p."id" = v."id"
-        WHERE v."model" = ? AND ${filter.sql}
+        WHERE v."model" = ? AND ${filter}
       ),
       "ranked" AS (
         SELECT *, ROW_NUMBER() OVER (PARTITION BY "query" ORDER BY "distance", "id") AS "rank" FROM "scored"
@@ -143,15 +106,7 @@ export class SqliteEmbeddingRetriever implements BatchRetriever {
       FROM "ranked" r JOIN ${this.#passages} p ON p."id" = r."id"
       WHERE r."rank" <= ?
       ORDER BY r."query", r."rank"`);
-    const rows = passageRows(statement, 3, [
-      ...vectors.flatMap((vector, index) => [
-        index,
-        toSql(Vector.from(vector)),
-      ]),
-      describe(identity),
-      ...filter.parameters,
-      options.topK ?? 10,
-    ]);
+    const rows = passageRows(statement, 3, parameters);
     const lists = vectors.map((): ScoredPassage[] => []);
     for (const {
       cells: [query, distance, vector],

@@ -2,7 +2,7 @@ import type { DatabaseSync } from 'node:sqlite';
 
 import type { PassageStore } from '../passage-store.ts';
 import type { Passage } from '../passage.ts';
-import { identifier } from './identifier.ts';
+import { identifier } from '../sql/identifier.ts';
 import { passageRows } from './passage-rows.ts';
 
 /** The connection and the passages of a SqlitePassageStore, which the SQLite retrievers read through it. */

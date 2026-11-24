@@ -13,6 +13,7 @@ import {
   SqlitePassageStore,
 } from './sqlite.ts';
 import { embeddingModel } from './testing/embedding-model.ts';
+import { writeKeywordContract } from './testing/keyword-contract.ts';
 
 type Row = {
   readonly id: string;
@@ -22,34 +23,26 @@ type Row = {
 };
 
 // The passage contract as elt writes it: the passages, an FTS5 keyword index
-// with the passages as its external content, and the passage vectors.
+// with a keywords table as its external content, as ADR 0004 has it, and
+// the passage vectors.
 function contract(rows: readonly Row[]): DatabaseSync {
   const database = open(':memory:');
   install(database);
-  database.exec(`
-    CREATE TABLE docs_passages (id TEXT PRIMARY KEY, source TEXT NOT NULL, seq INTEGER NOT NULL, start INTEGER NOT NULL, "end" INTEGER NOT NULL, text TEXT NOT NULL, product TEXT) STRICT;
-    CREATE VIRTUAL TABLE docs_passages_fts USING fts5(text, content = 'docs_passages');
-    CREATE TABLE docs_passage_vectors (id TEXT PRIMARY KEY, vector BLOB NOT NULL, model TEXT NOT NULL) STRICT;
-  `);
-  const passage = database.prepare(
-    'INSERT INTO docs_passages VALUES (?, ?, 0, 0, ?, ?, ?)',
+  writeKeywordContract(
+    database,
+    rows.map(({ id, text, product }) => ({
+      id,
+      text,
+      product: product ?? 'a',
+    })),
+  );
+  database.exec(
+    'CREATE TABLE docs_passage_vectors (id TEXT PRIMARY KEY, vector BLOB NOT NULL, model TEXT NOT NULL) STRICT',
   );
   const vector = database.prepare(
     `INSERT INTO docs_passage_vectors VALUES (?, ?, 'test/mini (4 dimensions)')`,
   );
-  for (const row of rows) {
-    passage.run(
-      row.id,
-      `doc-${row.id}`,
-      row.text.length,
-      row.text,
-      row.product ?? 'a',
-    );
-    vector.run(row.id, toSql(Vector.from(row.vector)));
-  }
-  database.exec(
-    `INSERT INTO docs_passages_fts (docs_passages_fts) VALUES ('rebuild')`,
-  );
+  for (const row of rows) vector.run(row.id, toSql(Vector.from(row.vector)));
   return database;
 }
 

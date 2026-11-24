@@ -7,7 +7,7 @@ The query side of retrieval-augmented generation: a query goes in, and the best 
 ### Passages
 
 **Passage**:
-One part of a source that a search gives back: `{ id, text, source, seq, start, end, metadata }`. The term is the one of information retrieval for a part of a document ([ADR 0012](./docs/adr/0012-the-package-is-zukhruf-retrieval-and-its-port-is-retriever-with-retrieve-after-go.md)).
+One part of a source that a search gives back: `{ id, text, source, seq, start, end, metadata }`. `start` and `end` are offsets in code points in the text of the source, and `end` is exclusive, as elt's Chunking counts them (elt `packages/chunking/docs/adr/0006-each-chunk-gives-its-offsets-and-its-count-of-tokens.md`). The term is the one of information retrieval for a part of a document ([ADR 0012](./docs/adr/0012-the-package-is-zukhruf-retrieval-and-its-port-is-retriever-with-retrieve-after-go.md)).
 _Avoid_: Document (the whole source row), Node (LlamaIndex), Record (.NET), Chunk (the output of a cut, on the ingestion side), Hit
 
 **Source**:
@@ -15,7 +15,7 @@ The key of the row or file that a passage comes from. Two passages with the same
 _Avoid_: Parent, document id, origin
 
 **Passage contract**:
-The tables that elt writes and that the engine retrievers read: the passages (`id, source, seq, start, end, text` and the metadata columns of the source row), the passage vectors (`id, vector, model`) and a keyword index over the same passages ([ADR 0001](./docs/adr/0001-the-package-is-the-query-side-of-rag-and-reads-a-passage-contract-that-elt-writes.md)).
+The tables that elt writes and that the engine retrievers read: the passages (`id, source, seq, start, end, text` and the metadata columns of the source row; on SQLite also an integer `rowid`, which the keyword index joins on), the passage vectors (`id, vector, model`) and a keyword index over the same passages ([ADR 0001](./docs/adr/0001-the-package-is-the-query-side-of-rag-and-reads-a-passage-contract-that-elt-writes.md)).
 _Avoid_: Schema, store, collection, index (for the whole contract)
 
 **Passage store**:

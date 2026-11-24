@@ -1,12 +1,13 @@
-import type { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 
 import type { RetrieveOptions } from '../retrieve-options.ts';
 import type { Retriever } from '../retriever.ts';
 import type { ScoredPassage } from '../scored-passage.ts';
-import { identifier } from './identifier.ts';
+import { identifier } from '../sql/identifier.ts';
+import { where } from '../sql/where.ts';
+import { dialect } from './dialect.ts';
 import { passageRows } from './passage-rows.ts';
 import { type SqlitePassageStore, contractOf } from './sqlite-passage-store.ts';
-import { where } from './where.ts';
 
 /**
  * Ranks the passages by FTS5 `bm25()` over the keyword index that elt writes:
@@ -41,21 +42,21 @@ export class SqliteBM25Retriever implements Retriever {
     options.abortSignal?.throwIfAborted();
     const words = query.split(/\s+/).filter((word) => word !== '');
     if (words.length === 0) return [];
-    const filter = where(options.filter);
+    const parameters: SQLInputValue[] = [ftsQuery(words, this.#operator)];
+    const filter = where(dialect, options.filter, parameters);
+    parameters.push(options.topK ?? 10);
     const statement = this.#database.prepare(`
       SELECT -bm25(${this.#index}) AS "score", p.*
       FROM ${this.#index} JOIN ${this.#passages} p ON p.rowid = ${this.#index}.rowid
-      WHERE ${this.#index} MATCH ? AND ${filter.sql}
+      WHERE ${this.#index} MATCH ? AND ${filter}
       ORDER BY bm25(${this.#index}), p."id"
       LIMIT ?`);
-    return passageRows(statement, 1, [
-      ftsQuery(words, this.#operator),
-      ...filter.parameters,
-      options.topK ?? 10,
-    ]).map(({ cells: [score], passage }) => ({
-      passage,
-      score: Number(score),
-    }));
+    return passageRows(statement, 1, parameters).map(
+      ({ cells: [score], passage }) => ({
+        passage,
+        score: Number(score),
+      }),
+    );
   }
 }
 

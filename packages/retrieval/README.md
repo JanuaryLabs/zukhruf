@@ -1,117 +1,271 @@
 # @zukhruf/retrieval
 
-> Design on paper, for review: no code exists yet. Ezz approved the API on 2026-11-23 ("Approve, write the paper"). He ruled on each ADR the same day; all are accepted (backlog #5399). Each example below shows the planned API.
-
 This package is the query side of retrieval-augmented generation (RAG). A query goes in. The best passages come out, best first, each with a score that is higher for a better passage. The package never cuts or embeds documents: elt writes the passages, their vectors with the model identity, and a keyword index ([ADR 0001](./docs/adr/0001-the-package-is-the-query-side-of-rag-and-reads-a-passage-contract-that-elt-writes.md)).
 
 The port of the package is `Retriever`. The engine retrievers read that passage contract with the SQL of SQLite, Postgres or SQL Server. A host can implement `Retriever` over any other source, such as a web search. Composite retrievers fuse retrievers or rewrite the query, and postprocessors rerank, cut, diversify, group, reorder and widen the result.
+
+The package has four entry points. `@zukhruf/retrieval` has the port, the composite retrievers, the fusions, the postprocessors and the errors. `@zukhruf/retrieval/sqlite`, `@zukhruf/retrieval/postgres` and `@zukhruf/retrieval/sqlserver` each have the passage store and the engine retrievers of one engine.
 
 The words in these documents have one meaning each. See the glossary in [CONTEXT.md](./CONTEXT.md).
 
 ## Use it
 
 ```sh
-npm install @zukhruf/retrieval @zukhruf/vectors ai @ai-sdk/openai
+npm install @zukhruf/retrieval @zukhruf/vectors ai
 ```
 
+This program writes a small passage contract into an in-memory SQLite database and searches it by meaning. In production, elt writes the contract, and the model is an AI SDK embedding model. Here a stand-in model from `ai/test` counts three words, so the program runs offline.
+
 ```ts
-// Planned API.
 import { DatabaseSync } from 'node:sqlite';
 
-import { openai } from '@ai-sdk/openai';
+import { MockEmbeddingModelV4 } from 'ai/test';
 
 import {
   SqliteEmbeddingRetriever,
   SqlitePassageStore,
 } from '@zukhruf/retrieval/sqlite';
-import { install } from '@zukhruf/vectors/sqlite';
+import { Vector } from '@zukhruf/vectors';
+import { install, toSql } from '@zukhruf/vectors/sqlite';
 
-const database = new DatabaseSync('knowledge.db'); // elt wrote the passage contract here
-install(database); // or load sqlite-vec: the SQL is the same
+// A stand-in embedding model, so that the program runs offline: each vector
+// counts three words. Give an AI SDK model in its place, such as
+// openai.embedding('text-embedding-3-small').
+const words = ['key', 'token', 'backup'];
+const embedText = (text: string) =>
+  words.map(
+    (word) =>
+      text
+        .toLowerCase()
+        .split(/\W+/)
+        .filter((w) => w === word).length,
+  );
+const model = new MockEmbeddingModelV4({
+  provider: 'toy',
+  modelId: 'three-words',
+  maxEmbeddingsPerCall: 100,
+  doEmbed: async ({ values }) => ({
+    embeddings: values.map(embedText),
+    warnings: [],
+  }),
+});
+
+// The passage contract. elt writes it; this program writes it by hand.
+const database = new DatabaseSync(':memory:');
+install(database); // registers vec_distance_cosine; or load sqlite-vec
+database.exec(`
+  CREATE TABLE docs_passages (id TEXT PRIMARY KEY, source TEXT NOT NULL, seq INTEGER NOT NULL, start INTEGER NOT NULL, "end" INTEGER NOT NULL, text TEXT NOT NULL, product TEXT, year INTEGER);
+  CREATE TABLE docs_passage_vectors (id TEXT PRIMARY KEY, vector BLOB NOT NULL, model TEXT NOT NULL);
+`);
+const documents = [
+  [
+    'vault-guide',
+    'vault',
+    2025,
+    [
+      'Create a new key before you rotate the old key.',
+      'Then move each token to the new key.',
+      'Keep a backup of the old key for 30 days.',
+    ],
+  ],
+  [
+    'vault-faq',
+    'vault',
+    2024,
+    [
+      'A token expires after one hour.',
+      'Revoke a token when a device is lost.',
+    ],
+  ],
+  ['mail-guide', 'mail', 2025, ['Make a backup of each mailbox every night.']],
+] as const;
+const insertPassage = database.prepare(
+  'INSERT INTO docs_passages VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+);
+const insertVector = database.prepare(
+  'INSERT INTO docs_passage_vectors VALUES (?, ?, ?)',
+);
+for (const [source, product, year, sentences] of documents) {
+  let start = 0; // offsets count code points
+  for (const [seq, sentence] of sentences.entries()) {
+    // The passages tile their source: each keeps the space before it.
+    const text = seq === 0 ? sentence : ` ${sentence}`;
+    const id = `${source}#${seq}`;
+    const end = start + [...text].length;
+    insertPassage.run(id, source, seq, start, end, text, product, year);
+    insertVector.run(
+      id,
+      toSql(Vector.from(embedText(text))),
+      'toy/three-words (3 dimensions)',
+    );
+    start = end;
+  }
+}
 
 const store = new SqlitePassageStore({ database, passages: 'docs_passages' });
 const retriever = new SqliteEmbeddingRetriever({
   store,
   vectors: 'docs_passage_vectors',
-  model: openai.embedding('text-embedding-3-small'),
+  model,
 });
 
-const results = await retriever.retrieve('how do I rotate a key?');
-// 10 scored passages, best first: { passage: { id, text, source, seq, start, end, metadata }, score }
+const results = await retriever.retrieve('How do I rotate a key?', { topK: 3 });
+for (const { passage, score } of results) {
+  console.log(score.toFixed(3), passage.id, passage.text);
+}
 ```
+
+Output:
+
+```
+1.000 vault-guide#0 Create a new key before you rotate the old key.
+0.707 vault-guide#1  Then move each token to the new key.
+0.707 vault-guide#2  Keep a backup of the old key for 30 days.
+```
+
+The passages of one source tile it: each keeps its white space, two passages can overlap, and no passage starts after the end of the passages before it. `start` and `end` count code points, and `end` is exclusive ([ADR 0001](./docs/adr/0001-the-package-is-the-query-side-of-rag-and-reads-a-passage-contract-that-elt-writes.md), the amendment of 2026-11-24).
 
 The passage store is the root of the composition. It holds the connection and the passages, and on Postgres and SQL Server the schema of the contract. Each retriever and `ContextWindow` takes the store and only its own part: the vectors and the model, or the keyword index. So two retrievers of one search read one connection and one contract, as Haystack's retrievers take their `document_store`.
 
+Each program below continues this program: it uses its `database`, `store`, `retriever` and `model`.
+
 ## Search passages by meaning
 
-An embedding retriever embeds the query with its AI SDK model and sends one SQL query to the engine. The engine ranks the passages by cosine similarity: `vec_distance_cosine` on SQLite, pgvector's `<=>` on Postgres, `VECTOR_DISTANCE` on SQL Server ([ADR 0003](./docs/adr/0003-an-embedding-retriever-runs-the-vector-search-in-the-sql-of-its-engine-one-query-or-a-batch.md)). The score is `1 - cosine distance`.
+An embedding retriever embeds the query with its AI SDK model and sends one SQL query to the engine. The engine ranks the passages by cosine similarity: `vec_distance_cosine` on SQLite, pgvector's `<=>` on Postgres, `VECTOR_DISTANCE` on SQL Server ([ADR 0003](./docs/adr/0003-an-embedding-retriever-runs-the-vector-search-in-the-sql-of-its-engine-one-query-or-a-batch.md)). The score is `1 - cosine distance`. A tie goes to the smaller passage id.
+
+The retriever reads the model identity of the stored vectors first. When its query model has another provider or model id, the call fails with `ModelMismatchError` and sends no model call and no search. When the query vector has other dimensions than the stored vectors, the call fails with `DimensionMismatchError` of `@zukhruf/vectors` after the model call and sends no search ([ADR 0010](./docs/adr/0010-an-embedding-retriever-refuses-a-query-model-whose-identity-differs-from-the-stored-vectors.md)). The stand-in model below has no `doEmbed`, so a model call would fail with another error.
 
 ```ts
-// Planned API.
+import { ModelMismatchError } from '@zukhruf/retrieval';
+
+const other = new SqliteEmbeddingRetriever({
+  store,
+  vectors: 'docs_passage_vectors',
+  model: new MockEmbeddingModelV4({
+    provider: 'openai',
+    modelId: 'text-embedding-3-small',
+  }),
+});
+try {
+  await other.retrieve('How do I rotate a key?');
+} catch (error) {
+  if (!(error instanceof ModelMismatchError)) throw error;
+  console.log(error.message);
+}
+```
+
+Output:
+
+```
+The query model openai/text-embedding-3-small is not the model of the stored vectors, toy/three-words
+```
+
+On Postgres, the store takes a session: one `query(sql, parameters)` method over the driver of the host, with positional parameters, `$1` for the first. So the package imports no driver.
+
+<!-- Phase B (#5399): this program runs on the native Postgres engine of limerence-dokploy, with the contract of "Use it" in the schema rag and DATABASE_URL set. Paste its output then. -->
+
+```ts
+import pg from 'pg';
+
 import {
   PgvectorEmbeddingRetriever,
   PostgresPassageStore,
 } from '@zukhruf/retrieval/postgres';
 
-const store = new PostgresPassageStore({
+const pool = new pg.Pool({ connectionString: process.env['DATABASE_URL'] });
+const pgStore = new PostgresPassageStore({
   session: {
-    query: (sql, parameters) => pool.query(sql, parameters).then((r) => r.rows),
+    query: async (sql, parameters) =>
+      (await pool.query(sql, [...parameters])).rows,
   },
   schema: 'rag', // the search_path of the session finds the relations when absent
   passages: 'docs_passages',
 });
-const retriever = new PgvectorEmbeddingRetriever({
-  store,
+const pgRetriever = new PgvectorEmbeddingRetriever({
+  store: pgStore,
   vectors: 'docs_passage_vectors', // rag.docs_passage_vectors
   model,
 });
 
-const results = await retriever.retrieve('rotate a key', {
-  topK: 5,
-  abortSignal,
+const pgResults = await pgRetriever.retrieve('How do I rotate a key?', {
+  topK: 3,
+  abortSignal: AbortSignal.timeout(10_000),
 });
+for (const { passage, score } of pgResults) {
+  console.log(score.toFixed(3), passage.id, passage.text);
+}
 ```
-
-The retriever reads the model identity of the stored vectors first. When its query model has another provider or model id, the call fails with `ModelMismatchError` and sends no model call and no search. When the query vector has other dimensions than the stored vectors, the call fails with `DimensionMismatchError` of `@zukhruf/vectors` after the model call and sends no search ([ADR 0010](./docs/adr/0010-an-embedding-retriever-refuses-a-query-model-whose-identity-differs-from-the-stored-vectors.md)).
 
 ## Search by keywords
 
-A keyword retriever queries the keyword index that elt writes: FTS5 on SQLite, `tsvector` on Postgres, full-text on SQL Server. It quotes each word of the query, so a word of the user is never an operator of the engine. Its score is higher for a better match on every engine; `SqliteBM25Retriever` negates `bm25()` ([ADR 0004](./docs/adr/0004-a-keyword-retriever-queries-the-keyword-index-that-elt-writes.md)).
+A keyword retriever queries the keyword index that elt writes: FTS5 on SQLite, `tsvector` on Postgres, full-text on SQL Server. It quotes each word of the query, so a word of the user is never an operator of the engine. Its score is higher for a better match on every engine; `SqliteBM25Retriever` negates `bm25()` ([ADR 0004](./docs/adr/0004-a-keyword-retriever-queries-the-keyword-index-that-elt-writes.md)). The words join with `operator`: `'AND'` when absent, or `'OR'`.
+
+On SQLite the index is an FTS5 table whose external content is a keywords table, kept in step by triggers. The passages view gives the `rowid` of that table, and the retriever joins the passages on it ([ADR 0004](./docs/adr/0004-a-keyword-retriever-queries-the-keyword-index-that-elt-writes.md), the amendment of 2026-11-24).
 
 ```ts
-// Planned API.
 import { SqliteBM25Retriever } from '@zukhruf/retrieval/sqlite';
 
-const keywords = new SqliteBM25Retriever({
+// elt writes the keyword index: a keywords table with the rowid of each
+// passage, and an FTS5 table with it as external content, kept in step by
+// triggers. This program fills both once from the passages.
+database.exec(`
+  CREATE TABLE docs_keywords (rowid INTEGER PRIMARY KEY, id TEXT NOT NULL UNIQUE, source TEXT NOT NULL, seq INTEGER NOT NULL, text TEXT NOT NULL);
+  CREATE VIRTUAL TABLE docs_passages_fts USING fts5(text, content = 'docs_keywords');
+  INSERT INTO docs_keywords SELECT rowid, id, source, seq, text FROM docs_passages;
+  INSERT INTO docs_passages_fts (docs_passages_fts) VALUES ('rebuild');
+`);
+
+const keywords = new SqliteBM25Retriever({ store, index: 'docs_passages_fts' });
+const anyWord = new SqliteBM25Retriever({
   store,
   index: 'docs_passages_fts',
   operator: 'OR', // the default is 'AND', the implicit operator of FTS5
 });
 
-const results = await keywords.retrieve('rotate signing key');
+for (const search of [keywords, anyWord]) {
+  const found = await search.retrieve('backup mailbox');
+  console.log(
+    found.map(({ passage, score }) => `${passage.id} ${score.toFixed(3)}`),
+  );
+}
+```
+
+Output:
+
+```
+[ 'mail-guide#0 1.918' ]
+[ 'mail-guide#0 1.918', 'vault-guide#2 0.543' ]
 ```
 
 On Postgres the query has to use the text search configuration of the index. `PgvectorKeywordRetriever` takes it in the index value, `index: { column, configuration }`, `'english'` when absent, as Haystack's `language`, LlamaIndex's `text_search_config` and LangChain's `tsv_lang` do. The configuration is a parameter of the statement, never SQL.
 
+<!-- Phase B (#5399): this program continues the Postgres program of "Search passages by meaning", with a keywords column on rag.docs_passages. Paste its output then. -->
+
 ```ts
-// Planned API.
 import { PgvectorKeywordRetriever } from '@zukhruf/retrieval/postgres';
 
-const keywords = new PgvectorKeywordRetriever({
-  store,
+const pgKeywords = new PgvectorKeywordRetriever({
+  store: pgStore,
   index: {
     column: 'keywords', // GENERATED ALWAYS AS (to_tsvector('simple', text)) STORED
     configuration: 'simple', // keeps stop words and does not stem
   },
 });
+console.log(
+  (await pgKeywords.retrieve('backup mailbox')).map(
+    ({ passage }) => passage.id,
+  ),
+);
+await pool.end();
 ```
 
 ## Search SQL Server
 
 `@zukhruf/retrieval/sqlserver` needs SQL Server 2025 or Azure SQL for `VECTOR` and `VECTOR_DISTANCE`, and Full-Text Search for the keyword retriever. The session takes named parameters, `@p0` for the key `p0`, as the SQL Server store of `@zukhruf/embedding-cache` does, so the package imports no driver.
 
+<!-- Phase B (#5399): this program runs on the native SQL Server 2025 engine with Full-Text Search of limerence-dokploy, with the contract of "Use it" in the schema rag and SQLSERVER_URL set. Paste its output then. -->
+
 ```ts
-// Planned API.
 import mssql from 'mssql';
 
 import {
@@ -120,28 +274,43 @@ import {
   SqlServerPassageStore,
 } from '@zukhruf/retrieval/sqlserver';
 
-const pool = await new mssql.ConnectionPool(connectionString).connect();
-const store = new SqlServerPassageStore({
+const connection = await new mssql.ConnectionPool(
+  process.env['SQLSERVER_URL'] ?? '',
+).connect();
+const msStore = new SqlServerPassageStore({
   session: {
     async query(sql, parameters) {
-      const request = pool.request();
-      for (const [name, value] of Object.entries(parameters))
+      const request = connection.request();
+      for (const [name, value] of Object.entries(parameters)) {
         request.input(name, value);
+      }
       return (await request.query(sql)).recordset ?? [];
     },
   },
   schema: 'rag', // the default schema of the user when absent
   passages: 'docs_passages',
 });
-const meaning = new SqlServerEmbeddingRetriever({
-  store,
+const msMeaning = new SqlServerEmbeddingRetriever({
+  store: msStore,
   vectors: 'docs_passage_vectors', // [rag].[docs_passage_vectors]
   model,
 });
-const keywords = new SqlServerKeywordRetriever({
-  store,
+const msKeywords = new SqlServerKeywordRetriever({
+  store: msStore,
   index: { table: 'docs_passages' }, // the table with the full-text index on [text]
 });
+
+console.log(
+  (await msMeaning.retrieve('How do I rotate a key?', { topK: 3 })).map(
+    ({ passage }) => passage.id,
+  ),
+);
+console.log(
+  (await msKeywords.retrieve('backup mailbox')).map(
+    ({ passage }) => passage.id,
+  ),
+);
+await connection.close();
 ```
 
 - **The vector search is exact.** `VECTOR_DISTANCE` reads every vector of the identity of the query; it uses no DiskANN index. The approximate `VECTOR_SEARCH` waits: on SQL Server 2025 it is a preview, filters after the search and needs a read-only table with an INT key ([ADR 0003](./docs/adr/0003-an-embedding-retriever-runs-the-vector-search-in-the-sql-of-its-engine-one-query-or-a-batch.md)).
@@ -152,42 +321,110 @@ const keywords = new SqlServerKeywordRetriever({
 
 ## Combine searches
 
-`FusionRetriever` asks each retriever for `rankWindowSize` passages, fuses the lists on `Passage.id` and gives the best `topK`. The default fusion is reciprocal rank fusion with k 60 and ranks from 1; each retriever has a weight of 1 ([ADR 0007](./docs/adr/0007-reciprocal-rank-fusion-is-the-default-fusion-with-k-60-and-ranks-from-1.md)).
+`FusionRetriever` asks each retriever for `rankWindowSize` passages, fuses the lists on `Passage.id` and gives the best `topK`. The default fusion is reciprocal rank fusion with k 60 and ranks from 1; each retriever has a weight of 1 ([ADR 0007](./docs/adr/0007-reciprocal-rank-fusion-is-the-default-fusion-with-k-60-and-ranks-from-1.md)). `rankWindowSize` is the `topK` of the call when absent, and a `rankWindowSize` smaller than that `topK` is a `RangeError`. This program uses `keywords` of "Search by keywords".
 
 ```ts
-// Planned API.
-import {
-  FusionRetriever,
-  MultiQueryRetriever,
-  relativeScoreFusion,
-} from '@zukhruf/retrieval';
+import { FusionRetriever, relativeScoreFusion } from '@zukhruf/retrieval';
 
 const hybrid = new FusionRetriever({
-  retrievers: [meaning, keywords],
+  retrievers: [retriever, keywords],
   rankWindowSize: 50,
 });
-
 const minMax = new FusionRetriever({
-  retrievers: [meaning, keywords],
+  retrievers: [retriever, keywords],
   fusion: relativeScoreFusion(),
   weights: [0.75, 0.25],
 });
 
-// The language model writes 4 versions of the query; reciprocalRankFusion() fuses their lists, as in FusionRetriever.
+for (const search of [hybrid, minMax]) {
+  const found = await search.retrieve('rotate the old key', { topK: 3 });
+  console.log(
+    found.map(({ passage, score }) => `${passage.id} ${score.toFixed(4)}`),
+  );
+}
+```
+
+Output:
+
+```
+[
+  'vault-guide#0 0.0328',
+  'vault-guide#1 0.0161',
+  'vault-guide#2 0.0159'
+]
+[
+  'vault-guide#0 1.0000',
+  'vault-guide#1 0.0000',
+  'vault-guide#2 0.0000'
+]
+```
+
+`vault-guide#0` is first in both lists, so reciprocal rank fusion gives it `1/61 + 1/61`. `minMax` has no `rankWindowSize`, so each retriever gives 3 passages. Min-max scaling gives the worst passage of a list 0, and a list whose scores are all equal gives 1.
+
+`MultiQueryRetriever` asks a language model for `queryCount` other versions of the query, 4 when absent. It searches the query and each version, and fuses the lists with `reciprocalRankFusion()` when it has no `fusion` ([ADR 0008](./docs/adr/0008-a-search-is-composed-of-retrievers-that-wrap-retrievers-and-a-list-of-postprocessors.md)). This program continues the one above.
+
+```ts
+import { MockLanguageModelV4 } from 'ai/test';
+
+import { MultiQueryRetriever } from '@zukhruf/retrieval';
+
+// A stand-in language model that writes the versions of the query. Give an
+// AI SDK model in its place, such as openai('gpt-5-mini').
+const languageModel = new MockLanguageModelV4({
+  doGenerate: async () => ({
+    content: [
+      {
+        type: 'text',
+        text: JSON.stringify({
+          queries: [
+            'replace a key',
+            'key rotation',
+            'new key',
+            'token of a key',
+          ],
+        }),
+      },
+    ],
+    finishReason: { unified: 'stop', raw: 'stop' },
+    usage: {
+      inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 },
+      outputTokens: { total: 1, text: 1, reasoning: 0 },
+    },
+    warnings: [],
+  }),
+});
+
+// The query and the 4 versions that the model writes: 5 lists, which
+// reciprocalRankFusion() fuses.
 const expanded = new MultiQueryRetriever({
   retriever: hybrid,
   model: languageModel,
 });
+const found = await expanded.retrieve('rotate a key', { topK: 3 });
+console.log(
+  found.map(({ passage, score }) => `${passage.id} ${score.toFixed(4)}`),
+);
 ```
 
-`HydeRetriever { retriever, model }` asks the language model for an answer and searches with that answer as the query.
+Output:
+
+```
+[
+  'vault-guide#1 0.0809',
+  'vault-guide#0 0.0656',
+  'vault-guide#2 0.0635'
+]
+```
+
+`HydeRetriever { retriever, model }` asks the language model for a passage that answers the query, and searches with that passage as the query.
 
 ## Rerank and post-process the results
 
-`PostprocessingRetriever` runs a list of postprocessors, in order, on the result of its retriever ([ADR 0008](./docs/adr/0008-a-search-is-composed-of-retrievers-that-wrap-retrievers-and-a-list-of-postprocessors.md)).
+`PostprocessingRetriever` runs a list of postprocessors, in order, on the result of its retriever ([ADR 0008](./docs/adr/0008-a-search-is-composed-of-retrievers-that-wrap-retrievers-and-a-list-of-postprocessors.md)). Each postprocessor gets the list of the one before it, the query and the abort signal of the call. This program continues the one of "Combine searches".
 
 ```ts
-// Planned API.
+import { MockRerankingModelV4 } from 'ai/test';
+
 import {
   Collapse,
   ContextWindow,
@@ -198,49 +435,88 @@ import {
   SimilarityCutoff,
 } from '@zukhruf/retrieval';
 
+// A stand-in reranking model: the relevance is the share of the query's words
+// in the text. Give an AI SDK reranking model in its place, such as
+// cohere.reranking('rerank-v3.5').
+const rerankingModel = new MockRerankingModelV4({
+  doRerank: async ({ documents, query, topN }) => {
+    const asked = query.toLowerCase().split(/\W+/).filter(Boolean);
+    return {
+      ranking: documents.values
+        .map((text, index) => {
+          const said = String(text).toLowerCase().split(/\W+/);
+          const share =
+            asked.filter((word) => said.includes(word)).length / asked.length;
+          return { index, relevanceScore: share };
+        })
+        .toSorted((a, b) => b.relevanceScore - a.relevanceScore)
+        .slice(0, topN),
+    };
+  },
+});
+
 const search = new PostprocessingRetriever({
   retriever: hybrid,
   postprocessors: [
-    new Rerank({ model: rerankingModel, topN: 20 }), // AI SDK rerank
-    new SimilarityCutoff({ threshold: 0.3 }),
-    new MaximalMarginalRelevance({
-      model: embeddingModel,
-      lambda: 0.5,
-      topK: 8,
-    }), // lambda 1 = relevance only
-    new Collapse({ field: 'source', size: 1 }), // one passage per source
-    new ContextWindow({ store, windowSize: 3 }), // the store of the retrievers
+    new Rerank({ model: rerankingModel, topN: 20 }),
+    new SimilarityCutoff({ threshold: 0.2 }),
+    new MaximalMarginalRelevance({ model, lambda: 0.5, topK: 4 }), // lambda 1 = relevance only
+    new Collapse({ field: 'source', size: 1 }), // one passage for each source
+    new ContextWindow({ store, windowSize: 1 }), // the store of the retrievers
     new LongContextReorder(),
   ],
 });
 
-const results = await search.retrieve('rotate a key', {
-  topK: 50,
-  includeVectors: true,
+const widened = await search.retrieve('rotate the old key backup', {
+  topK: 10,
+  includeVectors: true, // MaximalMarginalRelevance compares the vectors
 });
+for (const { passage, score } of widened) {
+  console.log(
+    score.toFixed(2),
+    passage.id,
+    `[${passage.start}, ${passage.end})`,
+    passage.text,
+  );
+}
 ```
 
-`MaximalMarginalRelevance` compares the vectors of the passages, so its retriever runs with `includeVectors: true`. Its `model` embeds the query, and the relevance of a passage is the cosine similarity of the two vectors (ADR 0008, the proposed amendment of 2026-11-23).
+Output:
+
+```
+0.20 mail-guide#0 [0, 42) Make a backup of each mailbox every night.
+0.80 vault-guide#2 [47, 126)  Then move each token to the new key. Keep a backup of the old key for 30 days.
+```
+
+The score of each passage is the relevance of the reranking model. `Collapse` keeps one passage of each source. `ContextWindow` widens `vault-guide#2` to the passages of its source from `seq - 1` to `seq + 1`: its text is the exact part of the source from the `start` to the `end` of the window, because the passages of a source tile it. A window whose passages leave a gap fails with `PassageGapError`, which names the source and the offsets of the gap ([ADR 0008](./docs/adr/0008-a-search-is-composed-of-retrievers-that-wrap-retrievers-and-a-list-of-postprocessors.md), the amendment of 2026-11-24). `LongContextReorder` puts the best passage at the end of a list of two.
+
+`MaximalMarginalRelevance` compares the vectors of the passages, so its retriever runs with `includeVectors: true`. Its `model` embeds the query, and the relevance of a passage is the cosine similarity of the two vectors ([ADR 0008](./docs/adr/0008-a-search-is-composed-of-retrievers-that-wrap-retrievers-and-a-list-of-postprocessors.md), the amendment of 2026-11-23). It gives the passages in the order in which it picks them, so its list is not sorted by score, as after `LongContextReorder` ([ADR 0005](./docs/adr/0005-a-score-is-higher-for-a-better-passage.md)).
 
 ## Search many queries at once
 
-Batch search is part of vector search. Each embedding retriever has `retrieveMany` beside `retrieve`. It embeds the queries in one model call and runs one SQL query: `CROSS JOIN LATERAL` on Postgres, `CROSS APPLY` over the query vectors of one `OPENJSON` parameter on SQL Server. The SQLite form waits on a cost probe (#5422) ([ADR 0003](./docs/adr/0003-an-embedding-retriever-runs-the-vector-search-in-the-sql-of-its-engine-one-query-or-a-batch.md)).
+Batch search is part of vector search. Each embedding retriever has `retrieveMany` beside `retrieve`. It embeds the queries in one `embedMany` call and runs one SQL query: a `VALUES` table of the query vectors on SQLite, `CROSS JOIN LATERAL` on Postgres, `CROSS APPLY` over the query vectors of one `OPENJSON` parameter on SQL Server ([ADR 0003](./docs/adr/0003-an-embedding-retriever-runs-the-vector-search-in-the-sql-of-its-engine-one-query-or-a-batch.md)).
 
 ```ts
-// Planned API.
 const lists = await retriever.retrieveMany(['rotate a key', 'revoke a token'], {
-  topK: 5,
+  topK: 2,
 });
 // lists[0] is the result of 'rotate a key', lists[1] of 'revoke a token'
+for (const list of lists) console.log(list.map(({ passage }) => passage.id));
+```
+
+Output:
+
+```
+[ 'vault-guide#0', 'vault-guide#1' ]
+[ 'vault-faq#0', 'vault-faq#1' ]
 ```
 
 ## Filter by metadata
 
-A filter has Haystack's shape: AND, OR and NOT over `== != > >= < <= in "not in"` ([ADR 0009](./docs/adr/0009-a-filter-has-the-shape-of-haystacks-filters.md)). A field is a passage field (`source`, `seq`, `start`, `end`) or a metadata column, `metadata.<column>`. An engine retriever runs the filter as SQL `WHERE` in the same query.
+A filter has Haystack's shape: AND, OR and NOT over `== != > >= < <= in "not in"` ([ADR 0009](./docs/adr/0009-a-filter-has-the-shape-of-haystacks-filters.md)). A field is a passage field (`source`, `seq`, `start`, `end`) or a metadata column, `metadata.<column>`. A metadata column is each column of the passages other than `id, source, seq, start, end, text` (and `rowid` on SQLite). An engine retriever runs the filter as SQL `WHERE` in the same query.
 
 ```ts
-// Planned API.
-const results = await retriever.retrieve('rotate a key', {
+const filtered = await retriever.retrieve('rotate a key', {
   filter: {
     operator: 'AND',
     conditions: [
@@ -249,17 +525,31 @@ const results = await retriever.retrieve('rotate a key', {
     ],
   },
 });
+for (const { passage, score } of filtered) {
+  console.log(score.toFixed(3), passage.id, passage.metadata);
+}
+```
+
+Output:
+
+```
+1.000 vault-guide#0 { product: 'vault', year: 2025 }
+0.707 vault-guide#1 { product: 'vault', year: 2025 }
+0.707 vault-guide#2 { product: 'vault', year: 2025 }
 ```
 
 On Postgres, pgvector filters after the approximate index scan, so a filtered call can give fewer than `topK` passages ([pgvector README](https://github.com/pgvector/pgvector/blob/master/README.md)).
 
 ## Errors
 
-| Error                                         | When                                                                                                                      |
-| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `ModelMismatchError`                          | The query model of an embedding retriever has another provider or model id than the stored vectors, before the model call |
-| `DimensionMismatchError` (`@zukhruf/vectors`) | The query vector has other dimensions than the stored vectors, after the model call. `expected` and `actual`              |
-| `VectorMissingError`                          | `MaximalMarginalRelevance` gets a passage without a vector: the call did not ask for vectors                              |
+| Error                                         | When                                                                                                                                                                                                                                                          |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ModelMismatchError`                          | The query model of an embedding retriever has another provider or model id than the stored vectors, before the model call. `stored` and `query` are each `{ provider, modelId }`                                                                              |
+| `DimensionMismatchError` (`@zukhruf/vectors`) | The query vector has other dimensions than the stored vectors, after the model call. `expected` and `actual`                                                                                                                                                  |
+| `VectorMissingError`                          | `MaximalMarginalRelevance` gets a passage without a vector: the call did not ask for vectors. `passageId`                                                                                                                                                     |
+| `PassageGapError`                             | `ContextWindow` gets a window whose passages leave a gap in their source: the writer of the contract broke it. `source`, and `start` and `end` of the gap                                                                                                     |
+| `RangeError`                                  | An option out of its range: `FusionRetriever` weights that are not one for each retriever, or a `rankWindowSize` smaller than the `topK` of the call; a `queryCount`, `topK` of MMR or `windowSize` that is not a positive integer; a `lambda` outside 0 to 1 |
+| `TypeError`                                   | A filter field that is not a passage field or `metadata.<column>`, an `in` or `not in` value that is not an array, or a stored model identity that is not of the form `provider/model (n dimensions)`                                                         |
 
 An error of the model, of the engine or of the reranking model reaches the caller as it is. An aborted call rejects with the reason of its `abortSignal`.
 
@@ -272,7 +562,7 @@ An error of the model, of the engine or of the reranking model reaches the calle
 
 ## Who uses it
 
-No consumer uses it yet. These moves are forced onto it after it ships.
+No consumer uses it yet. These moves come next.
 
 | Consumer        | How                                                                                                                                                        | Record       |
 | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
@@ -322,23 +612,23 @@ Checked on 2026-11-23 with `npm pack` of each candidate and no install. The requ
 ## API
 
 ```ts
-// @zukhruf/retrieval (planned)
+// @zukhruf/retrieval
 import type { EmbeddingModel, LanguageModel, RerankingModel } from 'ai';
 
 type Passage = {
   readonly id: string;
   readonly text: string;
-  readonly source: string;
-  readonly seq: number;
-  readonly start: number;
+  readonly source: string; // the key of the row or file that the passage comes from
+  readonly seq: number; // the position of the passage in its source
+  readonly start: number; // offsets in code points, end exclusive (ADR 0001)
   readonly end: number;
   readonly metadata: Readonly<Record<string, unknown>>;
 };
 type ScoredPassage = {
   readonly passage: Passage;
-  readonly score: number;
+  readonly score: number; // higher is better (ADR 0005)
   readonly vector?: readonly number[];
-}; // higher is better
+};
 
 type Filter =
   | {
@@ -346,7 +636,7 @@ type Filter =
       readonly conditions: readonly Filter[];
     }
   | {
-      readonly field: string; // 'source' | 'seq' | 'start' | 'end' | `metadata.${string}`
+      readonly field: 'source' | 'seq' | 'start' | 'end' | `metadata.${string}`;
       readonly operator:
         '==' | '!=' | '>' | '>=' | '<' | '<=' | 'in' | 'not in';
       readonly value: unknown;
@@ -375,129 +665,152 @@ interface Fusion {
     weights: readonly number[],
   ): ScoredPassage[];
 }
-function reciprocalRankFusion(options?: { k?: number }): Fusion; // k 60, ranks from 1
+function reciprocalRankFusion(options?: { readonly k?: number }): Fusion; // k 60, ranks from 1
 function relativeScoreFusion(): Fusion; // min-max
 function distributionBasedScoreFusion(): Fusion; // mean ± 3σ
 
 class FusionRetriever implements Retriever {
   constructor(options: {
-    retrievers: readonly Retriever[];
-    fusion?: Fusion; // reciprocalRankFusion({ k: 60 })
-    weights?: readonly number[]; // 1 each
-    rankWindowSize?: number; // the topK of the call
+    readonly retrievers: readonly Retriever[];
+    readonly fusion?: Fusion; // reciprocalRankFusion()
+    readonly weights?: readonly number[]; // 1 each
+    readonly rankWindowSize?: number; // the topK of the call
   });
 }
 class MultiQueryRetriever implements Retriever {
   constructor(options: {
-    retriever: Retriever;
-    model: LanguageModel;
-    queryCount?: number; // 4
-    fusion?: Fusion; // reciprocalRankFusion({ k: 60 })
+    readonly retriever: Retriever;
+    readonly model: LanguageModel;
+    readonly queryCount?: number; // 4 versions, besides the query
+    readonly fusion?: Fusion; // reciprocalRankFusion()
   });
 }
 class HydeRetriever implements Retriever {
-  constructor(options: { retriever: Retriever; model: LanguageModel });
+  constructor(options: {
+    readonly retriever: Retriever;
+    readonly model: LanguageModel;
+  });
 }
 
 interface Postprocessor {
   postprocess(
     passages: readonly ScoredPassage[],
     query: string,
-    options?: { abortSignal?: AbortSignal },
+    options?: { readonly abortSignal?: AbortSignal },
   ): Promise<ScoredPassage[]>;
 }
 class PostprocessingRetriever implements Retriever {
   constructor(options: {
-    retriever: Retriever;
-    postprocessors: readonly Postprocessor[];
+    readonly retriever: Retriever;
+    readonly postprocessors: readonly Postprocessor[];
   });
 }
 class Rerank implements Postprocessor {
-  constructor(options: { model: RerankingModel; topN?: number }); // every passage when topN is absent
+  constructor(options: {
+    readonly model: RerankingModel;
+    readonly topN?: number; // every passage when absent
+  });
 }
 class SimilarityCutoff implements Postprocessor {
-  constructor(options: { threshold: number }); // keeps score >= threshold
+  constructor(options: { readonly threshold: number }); // keeps score >= threshold
 }
 class MaximalMarginalRelevance implements Postprocessor {
   constructor(options: {
-    model: EmbeddingModel; // embeds the query (proposed amendment of ADR 0008)
-    lambda?: number; // 0.5; 1 = relevance only
-    topK: number;
+    readonly model: EmbeddingModel; // the model of the passage vectors; it embeds the query
+    readonly lambda?: number; // 0.5; 1 = relevance only
+    readonly topK: number;
   });
 }
 class Collapse implements Postprocessor {
   constructor(options?: {
-    field?: 'source' | 'seq' | 'start' | 'end' | `metadata.${string}`; // 'source'
-    size?: number; // 1
+    readonly field?: 'source' | 'seq' | 'start' | 'end' | `metadata.${string}`; // 'source'
+    readonly size?: number; // 1
   });
 }
 class LongContextReorder implements Postprocessor {}
 class ContextWindow implements Postprocessor {
-  constructor(options: { store: PassageStore; windowSize?: number }); // 3
+  constructor(options: {
+    readonly store: PassageStore;
+    readonly windowSize?: number; // 3
+  });
 }
 
 interface PassageStore {
   get(ids: readonly string[]): Promise<ReadonlyMap<string, Passage>>;
   neighbours(options: {
-    source: string;
-    seq: number;
-    windowSize: number;
+    readonly source: string;
+    readonly seq: number;
+    readonly windowSize: number;
   }): Promise<Passage[]>;
 }
 
 class ModelMismatchError extends Error {
-  readonly stored: { provider: string; modelId: string };
-  readonly query: { provider: string; modelId: string }; // before the model call; other dimensions are DimensionMismatchError of @zukhruf/vectors (ADR 0010)
+  readonly name: 'ModelMismatchError';
+  readonly stored: { readonly provider: string; readonly modelId: string };
+  readonly query: { readonly provider: string; readonly modelId: string };
 }
 class VectorMissingError extends Error {
+  readonly name: 'VectorMissingError';
   readonly passageId: string;
+}
+class PassageGapError extends Error {
+  readonly name: 'PassageGapError';
+  readonly source: string;
+  readonly start: number; // the end of the passages before the gap
+  readonly end: number; // the start of the passage after it
 }
 
 // @zukhruf/retrieval/sqlite
+class SqlitePassageStore implements PassageStore {
+  constructor(options: {
+    readonly database: DatabaseSync; // node:sqlite
+    readonly passages: string;
+  });
+}
 class SqliteEmbeddingRetriever implements BatchRetriever {
   constructor(options: {
-    store: SqlitePassageStore;
-    vectors: string;
-    model: EmbeddingModel;
+    readonly store: SqlitePassageStore;
+    readonly vectors: string;
+    readonly model: EmbeddingModel;
   });
 }
 class SqliteBM25Retriever implements Retriever {
   constructor(options: {
-    store: SqlitePassageStore;
-    index: string; // the FTS5 table
-    operator?: 'AND' | 'OR';
-  }); // 'AND'
-}
-class SqlitePassageStore implements PassageStore {
-  constructor(options: { database: DatabaseSync; passages: string }); // SQLite has no schema
+    readonly store: SqlitePassageStore;
+    readonly index: string; // the FTS5 table
+    readonly operator?: 'AND' | 'OR'; // 'AND'
+  });
 }
 
 // @zukhruf/retrieval/postgres
 type PostgresSession = {
   query(
     sql: string,
-    parameters: readonly unknown[],
+    parameters: readonly unknown[], // $1 for the first
   ): Promise<readonly Record<string, unknown>[]>;
 };
+class PostgresPassageStore implements PassageStore {
+  constructor(options: {
+    readonly session: PostgresSession;
+    readonly schema?: string; // the search_path of the session when absent
+    readonly passages: string;
+  });
+}
 class PgvectorEmbeddingRetriever implements BatchRetriever {
   constructor(options: {
-    store: PostgresPassageStore;
-    vectors: string;
-    model: EmbeddingModel;
+    readonly store: PostgresPassageStore;
+    readonly vectors: string;
+    readonly model: EmbeddingModel;
   });
 }
 class PgvectorKeywordRetriever implements Retriever {
   constructor(options: {
-    store: PostgresPassageStore;
-    index: { column: string; configuration?: string }; // 'english'
-    operator?: 'AND' | 'OR';
-  }); // 'AND'
-}
-class PostgresPassageStore implements PassageStore {
-  constructor(options: {
-    session: PostgresSession;
-    schema?: string; // the search_path of the session when absent
-    passages: string;
+    readonly store: PostgresPassageStore;
+    readonly index: {
+      readonly column: string; // the tsvector column of the passages
+      readonly configuration?: string; // 'english'
+    };
+    readonly operator?: 'AND' | 'OR'; // 'AND'
   });
 }
 
@@ -505,28 +818,28 @@ class PostgresPassageStore implements PassageStore {
 type SqlServerSession = {
   query(
     sql: string,
-    parameters: Readonly<Record<string, unknown>>,
+    parameters: Readonly<Record<string, unknown>>, // @p0 for the key p0
   ): Promise<readonly Record<string, unknown>[]>;
 };
+class SqlServerPassageStore implements PassageStore {
+  constructor(options: {
+    readonly session: SqlServerSession;
+    readonly schema?: string; // the default schema of the user when absent
+    readonly passages: string;
+  });
+}
 class SqlServerEmbeddingRetriever implements BatchRetriever {
   constructor(options: {
-    store: SqlServerPassageStore;
-    vectors: string;
-    model: EmbeddingModel;
+    readonly store: SqlServerPassageStore;
+    readonly vectors: string;
+    readonly model: EmbeddingModel;
   });
 }
 class SqlServerKeywordRetriever implements Retriever {
   constructor(options: {
-    store: SqlServerPassageStore;
-    index: { table: string }; // the base table with the full-text index on [text]
-    operator?: 'AND' | 'OR';
-  }); // 'AND'
-}
-class SqlServerPassageStore implements PassageStore {
-  constructor(options: {
-    session: SqlServerSession;
-    schema?: string; // the default schema of the user when absent
-    passages: string;
+    readonly store: SqlServerPassageStore;
+    readonly index: { readonly table: string }; // the base table with the full-text index on [text]
+    readonly operator?: 'AND' | 'OR'; // 'AND'
   });
 }
 ```

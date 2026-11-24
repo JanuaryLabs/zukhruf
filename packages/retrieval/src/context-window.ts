@@ -1,3 +1,4 @@
+import { PassageGapError } from './passage-gap-error.ts';
 import type { PassageStore } from './passage-store.ts';
 import type { Passage } from './passage.ts';
 import type { Postprocessor } from './postprocessor.ts';
@@ -9,10 +10,13 @@ import type { ScoredPassage } from './scored-passage.ts';
  * The text of the passage becomes the text of its window, merged as
  * Haystack's `SentenceWindowRetriever.merge_documents_text` merges it: in the
  * order of `start`, each passage adds the part of its text past the end of
- * the text before, so an overlap is not repeated. `start` and `end` become
- * those of the window; the id, source, seq, metadata, score and vector stay.
- * A passage that the store gives no window for stays as it is (ADR 0008, the
- * proposed amendment of 2026-11-23).
+ * the text before, so an overlap is not repeated, cut in code points as
+ * `start` and `end` count them (ADR 0001). The passages of a source tile it
+ * by contract, so the text is the exact part of the source from `start` to
+ * `end` of the window; a passage that starts after the end of the text
+ * before is a `PassageGapError`. `start` and `end` become those of the
+ * window; the id, source, seq, metadata, score and vector stay. A passage
+ * that the store gives no window for stays as it is (ADR 0008).
  */
 export class ContextWindow implements Postprocessor {
   readonly #store: PassageStore;
@@ -54,17 +58,16 @@ export class ContextWindow implements Postprocessor {
 }
 
 function widen(passage: Passage, window: readonly Passage[]): Passage {
-  let text = '';
-  let end = 0;
   const ordered = window.toSorted((a, b) => a.start - b.start);
+  const start = ordered[0]?.start ?? passage.start;
+  let text = '';
+  let end = start;
   for (const part of ordered) {
-    text += part.text.slice(Math.max(0, end - part.start));
+    if (part.start > end) {
+      throw new PassageGapError(passage.source, end, part.start);
+    }
+    text += [...part.text].slice(end - part.start).join('');
     end = Math.max(end, part.end);
   }
-  return {
-    ...passage,
-    text,
-    start: Math.min(...ordered.map(({ start }) => start)),
-    end,
-  };
+  return { ...passage, text, start, end };
 }
