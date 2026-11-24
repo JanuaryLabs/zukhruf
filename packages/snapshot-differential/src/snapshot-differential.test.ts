@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
+import type { SQLOutputValue } from 'node:sqlite';
 import { test } from 'node:test';
 import { promisify } from 'node:util';
+
+import { open } from '@zukhruf/sqlite-open';
 
 import {
   ClosedWorld,
@@ -765,6 +768,10 @@ test('a record that holds a value JSON cannot hold with no change, other than by
     new Uint16Array([1]),
     new Uint8ClampedArray([1]),
     new Date(0),
+    new Map([['inner', 1]]),
+    new (class Inner {
+      inner = 1;
+    })(),
     -0,
     Number.NaN,
     { inner: undefined },
@@ -773,6 +780,50 @@ test('a record that holds a value JSON cannot hold with no change, other than by
       Array.fromAsync(loose.diff([{ id: 'a', value }], null)),
       /Snapshot loose records must be losslessly JSON serializable, or bytes/,
     );
+});
+
+test('rows that node:sqlite reads, whose prototype is null, diff as the same rows in plain objects do', async () => {
+  const rows = new SnapshotDifferential<Record<string, SQLOutputValue>>({
+    name: 'rows',
+    primaryKey: ['id'],
+    key: (record) => [record.id ?? ''],
+    policy: new ClosedWorld(),
+  });
+  const scan = async (
+    records: Iterable<Record<string, SQLOutputValue>>,
+    state: unknown,
+  ) => {
+    const yielded: string[] = [];
+    let saved: unknown = null;
+    for await (const change of rows.diff(records, state))
+      if (change.type === 'state') saved = change.state;
+      else if (change.type === 'delete')
+        yielded.push(`delete ${String(change.key.id)}`);
+      else yielded.push(`${change.type} ${String(change.record.id)}`);
+    return { yielded, saved };
+  };
+  using database = open(':memory:');
+  database.exec(
+    "CREATE TABLE rows (id TEXT, value TEXT); INSERT INTO rows VALUES ('a', 'Ada'), ('b', 'Grace')",
+  );
+  const read = () =>
+    database.prepare('SELECT id, value FROM rows ORDER BY id').iterate();
+
+  const first = await scan(read(), null);
+  const plain = await scan(
+    [
+      { id: 'a', value: 'Ada' },
+      { id: 'b', value: 'Grace' },
+    ],
+    first.saved,
+  );
+  database.exec("UPDATE rows SET value = 'Grace Hopper' WHERE id = 'b'");
+  const changed = await scan(read(), plain.saved);
+
+  assert.deepEqual(
+    [first.yielded, plain.yielded, changed.yielded],
+    [['insert a', 'insert b'], [], ['update b']],
+  );
 });
 
 test('a key of bytes survives the saved state: the next scan finds it, and a delete gives it back as bytes', async () => {

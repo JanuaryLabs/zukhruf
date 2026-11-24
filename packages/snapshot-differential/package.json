@@ -40,5 +40,8 @@
   ],
   "publishConfig": {
     "access": "public"
+  },
+  "devDependencies": {
+    "@zukhruf/sqlite-open": "^0.8.70"
   }
 }
