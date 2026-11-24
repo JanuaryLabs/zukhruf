@@ -138,12 +138,13 @@ test('disposal waits until fetch has closed each connection that the server clos
     `
     import assert from 'node:assert/strict';
     import { test } from 'node:test';
+    import { setImmediate } from 'node:timers/promises';
     import { HttpResponse, http } from 'msw';
     import { Msw } from ${JSON.stringify(msw)};
 
     const turns = async () => {
       for (let turn = 0; turn < 5; turn += 1) {
-        await new Promise((resolve) => setImmediate(resolve));
+        await setImmediate();
       }
     };
 
