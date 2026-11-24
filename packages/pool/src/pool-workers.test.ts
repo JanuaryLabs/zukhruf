@@ -5,7 +5,7 @@ import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import type { TestContext } from 'node:test';
-import { setTimeout } from 'node:timers/promises';
+import { setImmediate, setTimeout } from 'node:timers/promises';
 
 import { createClock } from '@sinonjs/fake-timers';
 import PQueue from 'p-queue';
@@ -2061,7 +2061,7 @@ describe('PoolWorkers backs off on a fake clock', { concurrency: true }, () => {
       // failed its warm-up: the test counts the workers the owner created.
       await clock.tickAsync(1);
       // The worker is created a microtask after its slot starts.
-      await new Promise((resolve) => setImmediate(resolve));
+      await setImmediate();
       assert.equal(
         created.length,
         started + 1,
@@ -2140,7 +2140,7 @@ describe('PoolWorkers backs off on a fake clock', { concurrency: true }, () => {
     // The Pool listens once its store started, and the owner rests on its
     // backstop once the event loop turns.
     await pool.stats();
-    await new Promise((resolve) => setImmediate(resolve));
+    await setImmediate();
     const quiet = clock.countTimers();
     // An early exit puts the slot in a back-off of 1 s.
     created[0]!.kill();
@@ -2202,7 +2202,7 @@ describe('PoolWorkers backs off on a fake clock', { concurrency: true }, () => {
       signal: t.signal,
       interval: 5,
     });
-    await new Promise((resolve) => setImmediate(resolve));
+    await setImmediate();
     const quiet = clock.countTimers() - 1;
 
     // The timers do not move, so the job cannot wait out the back-off.
@@ -2429,7 +2429,7 @@ describe('PoolWorkers backs off on a fake clock', { concurrency: true }, () => {
       waiting: 0,
     });
     // A stray worker would be created a microtask after its slot starts.
-    await new Promise((resolve) => setImmediate(resolve));
+    await setImmediate();
     assert.equal(created.length, 3);
   });
 });
@@ -2500,7 +2500,7 @@ describe('PoolWorkers evicts on a fake clock', { concurrency: true }, () => {
     // The Pool listens once its store started, and the owner rests on its
     // backstop once the event loop turns.
     await pool.stats();
-    await new Promise((resolve) => setImmediate(resolve));
+    await setImmediate();
     const quiet = clock.countTimers();
 
     await clock.tickAsync(999);
@@ -3037,7 +3037,7 @@ describe('PoolWorkers lends in order', { concurrency: true }, () => {
     await clock.tickAsync(1);
     assert.equal(holds(owner), 1, 'the owner starts at 1 s');
     // The worker is created a microtask after its slot starts.
-    await new Promise((resolve) => setImmediate(resolve));
+    await setImmediate();
     assert.equal(created.length, 2);
   });
 
@@ -3086,7 +3086,7 @@ describe('PoolWorkers lends in order', { concurrency: true }, () => {
     assert.equal(created.length, 3);
     await clock.tickAsync(1_000);
     // The worker is created a microtask after its slot starts.
-    await new Promise((resolve) => setImmediate(resolve));
+    await setImmediate();
     assert.equal(created.length, 4, 'the back-off starts its own worker');
   });
 });
@@ -4511,7 +4511,7 @@ async function runFor(clock: FakeClock, ms: number): Promise<void> {
   const end = clock.now + ms;
   while (clock.now < end) {
     await clock.tickAsync(10);
-    await new Promise((resolve) => setImmediate(resolve));
+    await setImmediate();
   }
 }
 
@@ -4775,7 +4775,7 @@ async function drive(
       throw new Error(`Not done after ${limit} ms on the clock`);
     if (owners.every((owner) => owner.stats.starting === 0))
       await clock.tickAsync(10);
-    await new Promise((resolve) => setImmediate(resolve));
+    await setImmediate();
   }
 }
 

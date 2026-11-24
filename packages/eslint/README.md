@@ -417,6 +417,7 @@ export default defineConfig({
 The config turns on:
 
 - `modern-node/crypto-hash`: `createHash(algorithm).update(data).digest(encoding)` becomes `hash(algorithm, data, encoding)` of `node:crypto`. `createHash` stays for several updates and for a stream. When the file already has a different `hash`, the rule reports and does not fix. Rename that `hash`, and the fix applies.
+- `modern-node/timers-promises-set-immediate`: `new Promise((resolve) => setImmediate(resolve))` becomes `setImmediate()` of `node:timers/promises`. The fix uses the import of `node:timers/promises` that the file has, or adds `setImmediate` to it. When the file also calls the global `setImmediate`, the rule reports and does not fix, because the import would capture those calls. Import `setImmediate` of `node:timers/promises` under another name, such as `nextTurn`, and the fix applies. A value, as in `setImmediate(resolve, 'pending')`, is left alone.
 - e18e's `modernization` config, without `prefer-array-fill`, `prefer-array-to-spliced` and `prefer-spread-syntax`;
 - `e18e/prefer-exponentiation-operator` and `e18e/prefer-flatmap-over-map-flat`;
 - `unicorn/no-new-buffer`, `prefer-abort-signal-any`, `prefer-array-from-async`, `prefer-error-is-error`, `prefer-group-by`, `prefer-import-meta-properties`, `prefer-iterator-helpers`, `prefer-promise-with-resolvers`, `prefer-set-methods`, `prefer-uint8array-hex` and `prefer-url-search-parameters`;

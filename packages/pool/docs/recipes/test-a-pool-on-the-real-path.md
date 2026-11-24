@@ -27,6 +27,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { describe, test } from 'node:test';
+import { setImmediate } from 'node:timers/promises';
 
 import { createClock } from '@sinonjs/fake-timers';
 import PQueue from 'p-queue';
@@ -101,7 +102,7 @@ async function drive(
   while (!done()) {
     if (clock.now >= end) throw new Error(`Not done after ${limit} ms`);
     if (workers.stats.starting === 0) await clock.tickAsync(10);
-    await new Promise((resolve) => setImmediate(resolve));
+    await setImmediate();
   }
 }
 

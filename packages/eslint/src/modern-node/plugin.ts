@@ -5,9 +5,11 @@ import { defineConfig } from 'eslint/config';
 
 import { SOURCE, TYPESCRIPT } from '../files.ts';
 import cryptoHash from './crypto-hash.ts';
+import timersPromisesSetImmediate from './timers-promises-set-immediate.ts';
 
 const rules = {
   'crypto-hash': cryptoHash,
+  'timers-promises-set-immediate': timersPromisesSetImmediate,
 };
 
 const configs: Record<string, Linter.Config[]> = {};
@@ -33,6 +35,7 @@ configs['recommended'] = defineConfig(
     extends: [e18e.configs.modernization],
     rules: {
       'modern-node/crypto-hash': 'error',
+      'modern-node/timers-promises-set-immediate': 'error',
       // The fixer changes a.concat(b) to [...a, b]. When b is an array, the
       // result changes and no error occurs.
       'e18e/prefer-spread-syntax': 'off',

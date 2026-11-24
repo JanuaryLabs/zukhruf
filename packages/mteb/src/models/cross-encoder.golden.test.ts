@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
+import { setImmediate } from 'node:timers/promises';
 
 import type { RerankingModelV4 } from '@ai-sdk/provider';
 
@@ -97,7 +98,7 @@ function fakeReranker(): {
         assert.equal(calls, 0, 'two calls at the same time');
         calls += 1;
         try {
-          await new Promise((resolve) => setImmediate(resolve));
+          await setImmediate();
           requests.push([query, documents.values]);
           const scores = documents.values.map(
             (document) =>

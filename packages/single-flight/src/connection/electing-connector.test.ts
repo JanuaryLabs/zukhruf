@@ -6,6 +6,7 @@ import { Socket, createServer } from 'node:net';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { describe, test } from 'node:test';
+import { setImmediate as nextTurn } from 'node:timers/promises';
 
 import { createClock } from '@sinonjs/fake-timers';
 
@@ -137,7 +138,7 @@ describe('Electing connector', () => {
         await held.resign();
         await observerClosed;
         // The observer reports the leave in the microtasks after its close.
-        await new Promise((resolve) => setImmediate(resolve));
+        await nextTurn();
 
         // Assert
         assert.equal(

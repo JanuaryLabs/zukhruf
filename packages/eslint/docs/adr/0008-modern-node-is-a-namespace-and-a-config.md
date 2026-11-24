@@ -71,6 +71,14 @@ On `package.json`, the measurement read 444 files in 24 repos with `jsonc-eslint
 
 The `allowed` option could hide these names, but each new measurement added more names to the list, and a list by hand does not tell a good use from a bad one.
 
+### `modern-node/timers-promises-set-immediate`
+
+`new Promise((resolve) => setImmediate(resolve))` becomes `setImmediate()` of `node:timers/promises` (#4065). No rule of unicorn 80.0.0, `@e18e/eslint-plugin` 0.8.1 or eslint-plugin-n 18.5.0 reports it. `unicorn/prefer-queue-microtask` asks for `queueMicrotask`, which runs before the turn ends, so it changes the behavior. `island/no-ambient-time` does not report this `setImmediate`, because a turn of the event loop is not a time. This is why the sleep form `new Promise((r) => setTimeout(r, ms))` stays a candidate below and this form is a rule.
+
+On 2026-11-24 the rule gave 35 hits in 12,733 files of 24 repos, in 7 repos. A reviewer that did not write the rule read 12 of them, and 0 are on good code. No file of a hit installs a fake clock on the globals. `createClock()` of `@sinonjs/fake-timers` does not change the global `setImmediate`, and an `install()` would change it but not a named import of `node:timers/promises`. A test proves that the fixed program runs its steps in the same order.
+
+The rule reports only the form with no value. The one form with a value in these repos is a marker in a `Promise.race`, which `zukhruf/no-timer-race` reads. In a file that also calls the global `setImmediate`, the fix would capture those calls, so the rule reports with no fix. When the fix adds the import, one fix replaces every site of the file: a site that stays would call the promise form with `resolve` as its value, and never resolve.
+
 ### Candidates for own rules
 
 A prototype of each candidate ran on 11,782 files in 24 repos, with a control for each. No candidate is built. A rule must have a rewrite that keeps the behavior, at most 1 hit in 10 on good code, and a replacement that no other rule of this package reports. Each candidate fails at least one of these conditions.
