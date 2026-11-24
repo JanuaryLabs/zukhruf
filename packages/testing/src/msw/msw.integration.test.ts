@@ -1,13 +1,19 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { once } from 'node:events';
+import * as nodeHttp from 'node:http';
 import { connect, createServer } from 'node:net';
+import { basename, join } from 'node:path';
+import { text } from 'node:stream/consumers';
 import { test } from 'node:test';
 import * as tls from 'node:tls';
 import { promisify } from 'node:util';
 
 import { HttpResponse, http, passthrough } from 'msw';
 
+import { TemporaryFiles } from '@zukhruf/fs';
+
+import { Postgres } from '../databases/postgres.ts';
 import { HttpServer } from '../http/http-server.ts';
 import { Msw } from './msw.ts';
 
@@ -114,6 +120,60 @@ test('server.use adds a handler for a part of the test', async () => {
 
   const response = await fetch('https://api.example.invalid/user');
   assert.deepEqual(await response.json(), { id: 2 });
+});
+
+test('an HTTP request over a Unix socket or a Windows named pipe reaches its server, and requests does not record it, since the interception owns the network and not the IPC of the process', async () => {
+  await using directory = await new TemporaryFiles().directory('msw-ipc-');
+  const path =
+    process.platform === 'win32'
+      ? `\\\\.\\pipe\\${basename(directory.path)}`
+      : join(directory.path, 'engine.sock');
+  await using engine = nodeHttp.createServer((request, response) => {
+    response.end(`engine ${request.method} ${request.url}`);
+  });
+  engine.listen(path);
+  await once(engine, 'listening');
+  await using interception = new Msw().intercept();
+
+  const response = await new Promise<nodeHttp.IncomingMessage>(
+    (resolve, reject) => {
+      nodeHttp
+        .get({ socketPath: path, path: '/_ping' }, resolve)
+        .once('error', reject);
+    },
+  );
+
+  assert.equal(await text(response), 'engine GET /_ping');
+  assert.deepEqual(interception.requests, []);
+});
+
+test('a request to a localhost port that no handler answers still rejects with the msw error, since only the origin of the IPC requests passes through', async () => {
+  let requests = 0;
+  await using local = await new HttpServer().start((_request, response) => {
+    requests += 1;
+    response.end('network');
+  });
+  const { port } = new URL(local.origin);
+  await using interception = new Msw().intercept();
+
+  await assert.rejects(fetch(`http://localhost:${port}/user`), bypassRejected);
+
+  assert.equal(requests, 0);
+  assert.deepEqual(
+    interception.requests.map(({ url }) => url),
+    [`http://localhost:${port}/user`],
+  );
+});
+
+test('a Postgres database of the package is acquired and answers a query while an interception is open, so the engine requests of the fixtures pass by the interception', async () => {
+  await using _interception = new Msw().intercept();
+
+  await using database = await new Postgres({
+    environment: process.env,
+  }).database();
+  const { rows } = await database.pool().query('SELECT 1 AS one');
+
+  assert.deepEqual(rows, [{ one: 1 }]);
 });
 
 test('disposal closes the server, so requests reach the network again', async () => {
@@ -289,6 +349,8 @@ const inChild = (body: string) =>
     import { once } from 'node:events';
     import { connect, createServer } from 'node:net';
     import { HttpResponse, http, passthrough } from 'msw';
+
+import { TemporaryFiles } from '@zukhruf/fs';
     import { request } from 'undici';
     import { Msw, NetConnectNotAllowedError } from ${JSON.stringify(import.meta.resolve('./msw.ts'))};
 

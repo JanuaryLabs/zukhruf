@@ -114,7 +114,7 @@ An empty directory that `TemporaryFiles` creates for one test, below a parent di
 _Avoid_: Scratch directory, tmpdir
 
 **Interception**:
-A set of the test's handlers on the one msw network of the test process. The network answers each request with the handlers of the open interceptions, the newest first, and fails each request that no handler answers. An interception records a clone of each request, and refuses each connection to an address that is not a loopback address.
+A set of the test's handlers on the one msw network of the test process. The network answers each request with the handlers of the open interceptions, the newest first, and fails each request that no handler answers. An interception records a clone of each request, and refuses each connection to an address that is not a loopback address. A request to the origin `http://localhost` (port 80), which is what an HTTP request over a Unix socket becomes, passes through, and the interception does not record it.
 _Avoid_: Mock server
 
 **Preload**:

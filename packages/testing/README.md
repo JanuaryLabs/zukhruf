@@ -539,6 +539,8 @@ test('sends the token', async (t) => {
 
 An interception is always strict: the network fails each request that no handler answers, with `onUnhandledFrame: 'error'`. A request that no handler answers fails: `fetch` rejects, and the cause is the msw error "Cannot bypass a request when using the "error" strategy". msw also prints the method and the URL of the request. There is no option for a different strategy. The network sees each HTTP client of the process: `fetch`, `http.request`, npm undici and a raw `node:net` socket (`HttpRequestInterceptor` of `@mswjs/interceptors`).
 
+An HTTP request over a Unix socket or a Windows named pipe, such as a request of the Docker fixtures of this package to the engine, gets the URL `http://localhost/` in msw. Thus each request to the origin `http://localhost` (port 80 only) passes through to its socket before the handlers of the test, and `requests` and `server.events` do not record it. A request to another port of `localhost`, such as the port of an `HttpServer`, still needs a handler ([ADR 0029](./docs/adr/0029-the-interceptions-of-a-process-share-one-msw-network-over-the-socket-interceptor-and-each-connection-to-an-address-that-is-not-a-loopback-address-fails.md), amendment for #5555).
+
 `requests` holds a clone of each request that the network receives while the interception is open, in the order of arrival. A clone keeps its body, so the test can read the body after a handler read the original.
 
 `server` holds the handlers and the events of the interception (type `MswServer`): `use`, `resetHandlers`, `restoreHandlers`, `listHandlers` and `events` of an msw network. Use `interception.server.use(...handlers)` to add handlers for a part of the test.

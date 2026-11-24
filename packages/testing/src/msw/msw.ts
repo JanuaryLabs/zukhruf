@@ -4,7 +4,7 @@ import { BlockList, Socket } from 'node:net';
 import { Interceptor } from '@mswjs/interceptors';
 import { WebSocketInterceptor } from '@mswjs/interceptors/WebSocket';
 import { HttpRequestInterceptor } from '@mswjs/interceptors/http';
-import type { AnyHandler } from 'msw';
+import { type AnyHandler, http, passthrough } from 'msw';
 import {
   HandlersController,
   InMemoryHandlersController,
@@ -61,7 +61,13 @@ notLoopback.addRange('128.0.0.0', '255.255.255.255', 'ipv4');
 notLoopback.addSubnet('2000::', 3, 'ipv6');
 notLoopback.addSubnet('fc00::', 7, 'ipv6');
 
-/** The handlers of each open interception, the newest interception first. */
+/** The origin of each HTTP request over a Unix socket or a Windows named pipe: the socket interceptor of @mswjs/interceptors 0.45.12 takes these connections too, and gives them the URL http://localhost/ (#5555). */
+const ipcOrigin = 'http://localhost';
+
+/** Each HTTP request to the IPC origin passes through, before the handlers of the interceptions, so the engine requests of the Docker fixtures reach the engine. */
+const ipcPassthrough = http.all(`${ipcOrigin}/*`, () => passthrough());
+
+/** The handlers of each open interception, the newest interception first, after the passthrough of the IPC origin. */
 class OpenHandlers extends HandlersController {
   readonly #open: readonly Open[];
 
@@ -71,11 +77,12 @@ class OpenHandlers extends HandlersController {
   }
 
   protected getState() {
-    return this.getInitialState(
-      this.#open
+    return this.getInitialState([
+      ipcPassthrough,
+      ...this.#open
         .toReversed()
         .flatMap(({ handlers }) => handlers.currentHandlers()),
-    );
+    ]);
   }
 
   protected setState(): void {}
@@ -109,6 +116,12 @@ class Interceptions {
       context: { quiet: true },
     });
     this.#network.events.on('*', (event) => {
+      if (
+        'request' in event &&
+        new URL(event.request.url).origin === ipcOrigin
+      ) {
+        return;
+      }
       for (const { server } of this.#open) {
         server.events.emit(event);
       }

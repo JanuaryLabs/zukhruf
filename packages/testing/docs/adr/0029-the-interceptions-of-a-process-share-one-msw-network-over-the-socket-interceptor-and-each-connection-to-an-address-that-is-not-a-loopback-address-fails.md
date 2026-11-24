@@ -46,3 +46,38 @@ Two parts make each interception strict again:
 - In the tests of the commit, a mutation of each claim made its test fail.
 - The block is what the top HTTP mock libraries do. nock 15 has `disableNetConnect()`, and `enableNetConnect('127.0.0.1')` to allow only local connections (README of nock 15.0.6, lines 1131-1182). It fails such a request with `NetConnectNotAllowedError`, code `ENETUNREACH` (`dist/lib/handle-request.js:91-102`). The `MockAgent` of undici has `disableNetConnect()` and `enableNetConnect()` (undici 7.30.2, `lib/mock/mock-agent.js:107-123`). It fails such a request with `MockNotMatchedError` (`lib/mock/mock-utils.js:411`, `:416`).
 - What `requests` records with two open interceptions follows the event model of msw. An msw network sends each event of each frame to its one `events` emitter (msw 3.0.7, `lib/_chunks/interceptor-source.js:207`, `:252-261`), and the emitter calls each listener of the event (rettime 0.11.12, `build/index.mjs:146-164`).
+
+## Amendment, 2026-11-24 (backlog #5555)
+
+Decision-makers: the zukhruf session mutex-07, which decided from the evidence; and Ezz, who chose on the split that no top performer settles, what to do with an HTTP request over a Unix socket ("Pass through localhost:80").
+
+The socket interceptor also takes the IPC of the process. The Docker client of the fixtures sends HTTP to the engine over a Unix socket (desktop-linux: `docker.sock`; an SSH engine: `/tmp/zukhruf-testing-<run>/docker.sock`). With an interception open, the network failed that request with the strict error on `GET http://localhost/_ping`, so a test that opened an interception and then acquired a Postgres or SQL Server database failed. The facts, on `@mswjs/interceptors` 0.45.12 and msw 3.0.7:
+
+- The socket interceptor patches path connections too (`lib/node/net-D5G58O2w.js:15-17`, the patch at `:1527-1650`). Its README says "every outgoing TCP and TLS connection" (`README.md:99`).
+- It gives a path connection the URL `http://localhost/` (`connectionOptionsToUrl`, `source-CWx94f2E.js:155-165`).
+- `HttpRequestInterceptor` takes no options, and its predicate is fixed (`lib/node/interceptors/http/index.js:11-25`). The ways to skip a connection are private: `kPatched` (`net-D5G58O2w.js:154`, `:1536`), `__MSW_INTERNAL_CONNECTION_CONTEXT` (`:1537`), and `runAsInternalConnection`, which the package does not export.
+- nock 15.0.6 intercepts IPC too (`dist/lib/interceptors/builtin.js:6-10`, `dist/lib/handle-request.js:7-93`). No top performer leaves IPC out.
+- 0.8.83 passed only by chance. `@zukhruf/docker` imports `request` as a named binding (`packages/docker/src/transport.ts:1-7`), and `ClientRequestInterceptor` never patched that binding (`interceptors/ClientRequest/index.js:27`, `:31-60`).
+
+### Decision
+
+The network has its own handler `http.all('http://localhost/*', () => passthrough())`, first in its list, before the handlers of the open interceptions. Thus each HTTP request to the origin `http://localhost` (port 80 only) passes through to its socket, and a handler of a test does not take it. The network does not send the events of a request to that origin to the open interceptions, so `requests` does not record it and `server.events` does not emit it. The design uses only the public API of msw.
+
+### Considered Options
+
+- **A `connection` listener placed before the listener of the HTTP source, which passes path connections through.** The test "an HTTP request on a raw TCP socket that no handler answers fails with the msw error" then hung: rettime awaits each listener in turn (rettime, `build/index.mjs:172-186`), and a write in the same turn as the connection is lost (`net-D5G58O2w.js:604-608`).
+- **A wrapper around the listener of the HTTP source.** The listener is internal to `InterceptorSource`, so the wrapper depends on its order and shape.
+- **Wait for upstream to leave IPC out, or to give the interceptor a predicate.** The fixtures stay broken until then, and nock shows that IPC interception is a choice, not a defect.
+- **The private symbols (`kPatched`, `__MSW_INTERNAL_CONNECTION_CONTEXT`).** They can change in any release of `@mswjs/interceptors`.
+
+### Consequences
+
+- A request of a test to `http://localhost` on port 80 over TCP, which no handler answers, passes through and usually fails with `ECONNREFUSED`, not with the strict error. A local test server listens on a random port, and a request to another port of `localhost` still fails with the strict error.
+- A handler of a test for `http://localhost/*` (port 80) gets no request.
+- An HTTP request over a Windows named pipe gets the same URL, so it passes through too.
+
+### Confirmation
+
+- Red before the change, on the code of HEAD 82482fa9: "an HTTP request over a Unix socket or a Windows named pipe reaches its server, and requests does not record it, since the interception owns the network and not the IPC of the process" and "a Postgres database of the package is acquired and answers a query while an interception is open, so the engine requests of the fixtures pass by the interception" failed with `[MSW] Cannot bypass a request when using the "error" strategy` on `GET http://localhost/_ping`. Green after it, with each other test of `msw.integration.test.ts`, also the raw TCP test above.
+- Mutations, each in memory with the `mutate.mjs` of write-test: no passthrough handler made the Unix socket test and the Postgres test fail; no filter of the events made the Unix socket test fail (`requests` held the request); a passthrough of each port of `localhost` made "a request to a localhost port that no handler answers still rejects with the msw error, since only the origin of the IPC requests passes through" fail. All three CAUGHT.
+- With the handler and the filter, a Postgres fixture came up in about 8 s with an interception open. Without the filter, `requests` held 25 Docker requests.
