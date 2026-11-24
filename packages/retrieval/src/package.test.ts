@@ -26,6 +26,7 @@ test('a consumer imports each subpath by its package name, and the package depen
     const { ModelMismatchError, VectorMissingError } = core;
     const { SqliteBM25Retriever, SqliteEmbeddingRetriever, SqlitePassageStore } = await import('@zukhruf/retrieval/sqlite');
     const { PgvectorEmbeddingRetriever, PgvectorKeywordRetriever, PostgresPassageStore } = await import('@zukhruf/retrieval/postgres');
+    const { SqlServerEmbeddingRetriever, SqlServerKeywordRetriever, SqlServerPassageStore } = await import('@zukhruf/retrieval/sqlserver');
     const { default: manifest } = await import('@zukhruf/retrieval/package.json', { with: { type: 'json' } });
     console.log(JSON.stringify({
       modelMismatch: new ModelMismatchError(
@@ -38,7 +39,9 @@ test('a consumer imports each subpath by its package name, and the package depen
       postprocessors: [core.Collapse, core.ContextWindow, core.LongContextReorder, core.MaximalMarginalRelevance, core.PostprocessingRetriever, core.Rerank, core.SimilarityCutoff].map((type) => type.name),
       sqlite: [SqliteBM25Retriever, SqliteEmbeddingRetriever, SqlitePassageStore].map((type) => type.name),
       postgres: [PgvectorEmbeddingRetriever, PgvectorKeywordRetriever, PostgresPassageStore].map((type) => type.name),
+      sqlserver: [SqlServerEmbeddingRetriever, SqlServerKeywordRetriever, SqlServerPassageStore].map((type) => type.name),
       postgresConditions: Object.keys(manifest.exports['./postgres']),
+      sqlserverConditions: Object.keys(manifest.exports['./sqlserver']),
       dependencies: Object.keys(manifest.dependencies ?? {}),
     }));
   `);
@@ -68,7 +71,13 @@ test('a consumer imports each subpath by its package name, and the package depen
       'PgvectorKeywordRetriever',
       'PostgresPassageStore',
     ],
+    sqlserver: [
+      'SqlServerEmbeddingRetriever',
+      'SqlServerKeywordRetriever',
+      'SqlServerPassageStore',
+    ],
     postgresConditions: ['@zukhruf/source', 'types', 'import', 'default'],
+    sqlserverConditions: ['@zukhruf/source', 'types', 'import', 'default'],
     dependencies: ['@zukhruf/statistics', '@zukhruf/vectors', 'ai', 'pgvector'],
   });
 });
@@ -106,6 +115,7 @@ test('the built package imports only node built-ins, its dependencies and its ow
       '@zukhruf/statistics',
       '@zukhruf/vectors',
       '@zukhruf/vectors/sqlite',
+      '@zukhruf/vectors/sqlserver',
       'ai',
       'pgvector',
     ],

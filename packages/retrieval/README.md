@@ -40,11 +40,11 @@ const results = await retriever.retrieve('how do I rotate a key?');
 // 10 scored passages, best first: { passage: { id, text, source, seq, start, end, metadata }, score }
 ```
 
-The passage store is the root of the composition. It holds the connection and the passages, and on Postgres the schema of the contract. Each retriever and `ContextWindow` takes the store and only its own part: the vectors and the model, or the keyword index. So two retrievers of one search read one connection and one contract, as Haystack's retrievers take their `document_store`.
+The passage store is the root of the composition. It holds the connection and the passages, and on Postgres and SQL Server the schema of the contract. Each retriever and `ContextWindow` takes the store and only its own part: the vectors and the model, or the keyword index. So two retrievers of one search read one connection and one contract, as Haystack's retrievers take their `document_store`.
 
 ## Search passages by meaning
 
-An embedding retriever embeds the query with its AI SDK model and sends one SQL query to the engine. The engine ranks the passages by cosine similarity: `vec_distance_cosine` on SQLite, pgvector's `<=>` on Postgres, `VECTOR_DISTANCE` or elt's `marts.<name>_nearest` on SQL Server ([ADR 0003](./docs/adr/0003-an-embedding-retriever-runs-the-vector-search-in-the-sql-of-its-engine-one-query-or-a-batch.md)). The score is `1 - cosine distance`.
+An embedding retriever embeds the query with its AI SDK model and sends one SQL query to the engine. The engine ranks the passages by cosine similarity: `vec_distance_cosine` on SQLite, pgvector's `<=>` on Postgres, `VECTOR_DISTANCE` on SQL Server ([ADR 0003](./docs/adr/0003-an-embedding-retriever-runs-the-vector-search-in-the-sql-of-its-engine-one-query-or-a-batch.md)). The score is `1 - cosine distance`.
 
 ```ts
 // Planned API.
@@ -105,6 +105,50 @@ const keywords = new PgvectorKeywordRetriever({
   },
 });
 ```
+
+## Search SQL Server
+
+`@zukhruf/retrieval/sqlserver` needs SQL Server 2025 or Azure SQL for `VECTOR` and `VECTOR_DISTANCE`, and Full-Text Search for the keyword retriever. The session takes named parameters, `@p0` for the key `p0`, as the SQL Server store of `@zukhruf/embedding-cache` does, so the package imports no driver.
+
+```ts
+// Planned API.
+import mssql from 'mssql';
+
+import {
+  SqlServerEmbeddingRetriever,
+  SqlServerKeywordRetriever,
+  SqlServerPassageStore,
+} from '@zukhruf/retrieval/sqlserver';
+
+const pool = await new mssql.ConnectionPool(connectionString).connect();
+const store = new SqlServerPassageStore({
+  session: {
+    async query(sql, parameters) {
+      const request = pool.request();
+      for (const [name, value] of Object.entries(parameters))
+        request.input(name, value);
+      return (await request.query(sql)).recordset ?? [];
+    },
+  },
+  schema: 'rag', // the default schema of the user when absent
+  passages: 'docs_passages',
+});
+const meaning = new SqlServerEmbeddingRetriever({
+  store,
+  vectors: 'docs_passage_vectors', // [rag].[docs_passage_vectors]
+  model,
+});
+const keywords = new SqlServerKeywordRetriever({
+  store,
+  index: { table: 'docs_passages' }, // the table with the full-text index on [text]
+});
+```
+
+- **The vector search is exact.** `VECTOR_DISTANCE` reads every vector of the identity of the query; it uses no DiskANN index. The approximate `VECTOR_SEARCH` waits: on SQL Server 2025 it is a preview, filters after the search and needs a read-only table with an INT key ([ADR 0003](./docs/adr/0003-an-embedding-retriever-runs-the-vector-search-in-the-sql-of-its-engine-one-query-or-a-batch.md)).
+- **Ids, sources and model identities compare in binary**, `Latin1_General_100_BIN2`, so `A` is not `a` and a tie orders as on SQLite and Postgres, whatever the collation of the database is. A filter compares in the collation of its column, usually case-insensitive.
+- **The keyword index is a table.** `CONTAINSTABLE` reads a full-text index of a base table, never of a view, so `index.table` names the table whose full-text key is the passage id; the passages can be a view over it ([ADR 0004](./docs/adr/0004-a-keyword-retriever-queries-the-keyword-index-that-elt-writes.md)). The score is `RANK`, from 0 to 1000.
+- **Make the index with `STOPLIST = OFF`.** With the system stoplist, a stop word or a single letter in an `AND` query gives no passages. A word of punctuation only is dropped from the query, because SQL Server reads it as a stop word under every stoplist.
+- **A query of more than 4,000 characters of condition fails** with SQL Server's error 4110: the driver binds the text as `NVARCHAR(MAX)`, which `CONTAINSTABLE` refuses.
 
 ## Combine searches
 
@@ -180,7 +224,7 @@ const results = await search.retrieve('rotate a key', {
 
 ## Search many queries at once
 
-Batch search is part of vector search. Each embedding retriever has `retrieveMany` beside `retrieve`. It embeds the queries in one model call and runs one SQL query: `CROSS JOIN LATERAL` on Postgres. The SQL Server form, `CROSS APPLY` over `VECTOR_SEARCH`, is to be probed, and the SQLite form waits on a cost probe (#5422) ([ADR 0003](./docs/adr/0003-an-embedding-retriever-runs-the-vector-search-in-the-sql-of-its-engine-one-query-or-a-batch.md)).
+Batch search is part of vector search. Each embedding retriever has `retrieveMany` beside `retrieve`. It embeds the queries in one model call and runs one SQL query: `CROSS JOIN LATERAL` on Postgres, `CROSS APPLY` over the query vectors of one `OPENJSON` parameter on SQL Server. The SQLite form waits on a cost probe (#5422) ([ADR 0003](./docs/adr/0003-an-embedding-retriever-runs-the-vector-search-in-the-sql-of-its-engine-one-query-or-a-batch.md)).
 
 ```ts
 // Planned API.
@@ -474,14 +518,14 @@ class SqlServerEmbeddingRetriever implements BatchRetriever {
 class SqlServerKeywordRetriever implements Retriever {
   constructor(options: {
     store: SqlServerPassageStore;
-    index: string;
+    index: { table: string }; // the base table with the full-text index on [text]
     operator?: 'AND' | 'OR';
-  });
+  }); // 'AND'
 }
 class SqlServerPassageStore implements PassageStore {
   constructor(options: {
     session: SqlServerSession;
-    schema?: string;
+    schema?: string; // the default schema of the user when absent
     passages: string;
   });
 }

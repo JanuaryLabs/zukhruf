@@ -45,7 +45,7 @@ An engine retriever that embeds the query and ranks the passages by the cosine s
 _Avoid_: Vector search (the engine's search that an embedding retriever runs, ADR 0003), semantic search, dense retriever
 
 **Keyword retriever**:
-An engine retriever that ranks the passages by the keyword index: FTS5 `bm25()` on SQLite, `ts_rank_cd` on Postgres, full-text on SQL Server.
+An engine retriever that ranks the passages by the keyword index: FTS5 `bm25()` on SQLite, `ts_rank_cd` on Postgres, `RANK` of `CONTAINSTABLE` on SQL Server.
 _Avoid_: Full-text search, lexical search, sparse retriever, BM25 (the name of one ranking function)
 
 **Batch search**:

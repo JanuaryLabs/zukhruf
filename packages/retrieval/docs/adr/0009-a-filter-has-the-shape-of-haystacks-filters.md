@@ -23,3 +23,7 @@ Accepted by Ezz on 2026-11-23 ("They stand"). A filter keeps Haystack's meaning 
 ## Amendment 2026-11-23: the filter on Postgres
 
 Accepted by Ezz on 2026-11-23 ("They stand"). Postgres has a boolean, so a boolean value compares with a boolean column, not as 1 or 0. Postgres refuses an empty list, `IN ()`, so an empty `in` selects no passage and an empty `not in` every passage, as on SQLite. A value is a string, a number, a bigint, a boolean or null; each value is a positional parameter, `$n`.
+
+## Amendment 2026-11-24: the filter on SQL Server
+
+Accepted by Ezz on 2026-11-24 ("They stand"). The SQL is the Postgres SQL: `==` is `IS NOT DISTINCT FROM` and `!=` is `IS DISTINCT FROM`, which T-SQL has since SQL Server 2022, and `not in` is `IS NULL OR NOT IN`. T-SQL has no `TRUE` or `FALSE` condition, so an empty `AND`, an empty `not in` and no filter are `1 = 1`, and an empty `OR` and an empty `in` are `1 = 0`; T-SQL refuses `IN ()`. Each value is a named parameter, `@pN`; a boolean stays a boolean, which the driver binds as a `BIT`, and a `bigint` value binds as an exact `BIGINT` (probe P6). A string compares in the collation of its column, usually case-insensitive.

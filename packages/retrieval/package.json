@@ -45,6 +45,12 @@
       "types": "./dist/postgres.d.ts",
       "import": "./dist/postgres.js",
       "default": "./dist/postgres.js"
+    },
+    "./sqlserver": {
+      "@zukhruf/source": "./src/sqlserver.ts",
+      "types": "./dist/sqlserver.d.ts",
+      "import": "./dist/sqlserver.js",
+      "default": "./dist/sqlserver.js"
     }
   },
   "files": [
@@ -63,9 +69,11 @@
     "pgvector": "^0.3.1"
   },
   "devDependencies": {
+    "@types/mssql": "^12.3.0",
     "@types/pg": "^8.23.1",
     "@zukhruf/sqlite-open": "^0.8.70",
     "@zukhruf/testing": "^0.8.70",
+    "mssql": "^12.8.0",
     "pg": "^8.23.1"
   }
 }
