@@ -354,10 +354,30 @@ test('finds a passage by a word', async (t) => {
 ```
 
 - **The image follows its base.** The tag of the built image is `zukhruf-testing-sqlserver-fts:<version>-<hash>`: the version is the label `com.microsoft.version` of `image`, and the hash is the first 12 hex digits of the SHA-256 of the Dockerfile. The handle's `image` is that tag. A new `2022-latest` thus gets a new image, and a shared server of its own.
-- **The first acquisition on an engine builds it.** The fixture pulls `image` for `linux/amd64` when the engine has none, to read its label. When the engine has no image of the tag, it pulls `image` for `linux/amd64` again and builds: an image that the engine lists can lack the content of that platform, and the build pulls nothing. The build takes a few minutes under emulation, also in the time limit of the first test. The build downloads the package from `packages.microsoft.com`, so the engine needs network access. Test processes that start at the same time build once: one holds the build lease of the tag, and the others wait for it. The images stay on the engine, as a pulled image does.
+- **The first acquisition on an engine builds it.** Each acquisition pulls `image` for `linux/amd64` first, also when the engine has it, and then reads its label: a tag such as `2022-latest` moves to a new server in its registry, and the build uses the pulled image. An `image` that was built on the engine is in no registry and is used as it is. When the engine has no image of the tag, the fixture builds it; the build pulls nothing. The build takes a few minutes under emulation, also in the time limit of the first test. The build downloads the package from `packages.microsoft.com`, so the engine needs network access. Test processes that start at the same time build once: one holds the build lease of the tag, and the others wait for it. The images stay on the engine, as a pulled image does.
 - **A build that fails rejects with `BuildFailedError`** of `@zukhruf/docker`. Its `vertex` is the step that failed and its `output` is the output of that step, for example the `apt-get download` of a version that has no `mssql-server-fts`. Only the server versions 16 (2022) and 17 (2025) have a repository; another version rejects before the build.
 - **The readiness includes Full-Text Search.** When `FULLTEXTSERVICEPROPERTY('IsFullTextInstalled')` is not 1, the acquisition fails at once with the image in the message.
 - **The test waits for its population.** A full-text index fills in the background. Read `OBJECTPROPERTYEX(OBJECT_ID('<table>'), 'TableFulltextPopulateStatus')` until it is 0, with `waitFor` (see [Waiting](#waiting)).
+
+##### Skip a claim where SQL Server runs under emulation
+
+Microsoft builds SQL Server only for `linux/amd64`, and it does not support SQL Server under emulation, such as QEMU or Rosetta 2 on an arm64 Mac. SQL Server 2025 crashes at start there about once in 41 starts (lsass, errno 11; #5469); SQL Server 2022 does not. `SqlServer.emulation({ environment })` asks the engine that `environment` selects for its architecture. It gives `false` when the engine runs amd64 itself, else the reason: the engine's architecture and the image's platform. Pass it as the `skip` option of a test that holds only where amd64 is native, as on CI:
+
+```ts
+import { SqlServer } from '@zukhruf/testing/sqlserver';
+
+const emulation = await SqlServer.emulation({ environment: process.env });
+
+test(
+  'a 2025 server sorts by VECTOR_DISTANCE',
+  { skip: emulation },
+  async () => {
+    // …
+  },
+);
+```
+
+On an arm64 Mac the test reports `# the engine runs aarch64 and emulates the linux/amd64 of SQL Server, which Microsoft does not support`. Run such a test natively before a commit, on an amd64 engine: `DOCKER_CONTEXT=<amd64 context>` on the command. The probe reads no variable of its own, so no environment turns a test into a skip.
 
 Install the driver of the area next to this package: `pg` for `postgres`, `mysql2` for `mysql`, `mariadb` for `mariadb`, and `mssql` for `sqlserver`. Each is an optional peer dependency.
 
@@ -753,6 +773,7 @@ interface SqlServerOptions extends DatabaseOptions {
   fullTextSearch?: boolean; // builds an image with mssql-server-fts from image
 }
 class SqlServer {
+  static emulation(options: DockerTestbedOptions): Promise<string | false>; // why amd64 is emulated, or false
   constructor(options: SqlServerOptions); // image SQL_SERVER_FULL_IMAGE by default
   database(): Promise<SqlServerDatabase>;
   start(): Promise<SqlServerDatabase>;

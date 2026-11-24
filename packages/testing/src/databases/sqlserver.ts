@@ -5,12 +5,12 @@ import { readFile } from 'node:fs/promises';
 import sql from 'mssql';
 import { AbortError } from 'p-retry';
 
-import { type Docker, ImageNotFoundError } from '@zukhruf/docker';
+import { Docker, ImageNotFoundError } from '@zukhruf/docker';
 
 import { retryUntilReady } from '../async/retry-until-ready.ts';
 import { readRun } from '../docker/run-records.ts';
 import type { ServiceContainer } from '../docker/service-container.ts';
-import { DockerTestbed } from '../docker/testbed.ts';
+import { DockerTestbed, type DockerTestbedOptions } from '../docker/testbed.ts';
 import { KIND_LABEL, databaseName, dropDatabase } from './collector.ts';
 import type { Database, DatabaseOptions } from './database.ts';
 import { type OwnedPool, OwnedPools } from './owned-pools.ts';
@@ -35,6 +35,9 @@ export interface SqlServerOptions extends DatabaseOptions {
 
 /** Microsoft builds SQL Server for amd64 only, and the Dockerfile installs an amd64 package. */
 const PLATFORM = 'linux/amd64';
+
+/** The architectures that an engine reports in its `Architecture` when it runs amd64 natively. */
+const NATIVE_ARCHITECTURES = new Set(['x86_64', 'amd64']);
 
 /** The label of Microsoft's image that holds the version of its server. */
 const VERSION_LABEL = 'com.microsoft.version';
@@ -62,7 +65,7 @@ async function fullTextSearchImage(
 ): Promise<string> {
   const docker = await testbed.client();
   const dockerfile = await readFile(FULL_TEXT_SEARCH_DOCKERFILE, 'utf8');
-  const version = (await baseImage(docker, base)).Config?.Labels?.[
+  const version = (await pulledBase(docker, base)).Config?.Labels?.[
     VERSION_LABEL
   ];
   if (version === undefined)
@@ -75,15 +78,8 @@ async function fullTextSearchImage(
       `The image ${base} runs SQL Server ${version}: Full-Text Search is built only for 16 (2022) and 17 (2025)`,
     );
   const tag = `zukhruf-testing-sqlserver-fts:${version}-${hash('sha256', dockerfile).slice(0, 12)}`;
-  await testbed.image(tag, async (client) => {
-    // The build pulls no image (`@zukhruf/docker` ADR 0016), and an image
-    // that the engine lists can lack the content of a platform: the
-    // containerd store answers an inspect for each platform of an index.
-    await client.images.pull(base, { platform: PLATFORM }).catch((error) => {
-      // A base built on this engine is in no registry: the build uses it.
-      if (!(error instanceof ImageNotFoundError)) throw error;
-    });
-    return client.images.build(
+  await testbed.image(tag, (client) =>
+    client.images.build(
       { files: [{ path: 'Dockerfile', data: dockerfile }] },
       {
         t: tag,
@@ -94,20 +90,28 @@ async function fullTextSearchImage(
         },
         platform: PLATFORM,
       },
-    );
-  });
+    ),
+  );
   return tag;
 }
 
-/** The base image on the engine, pulled when it is missing, for the label of its version. */
-async function baseImage(docker: Docker, base: string) {
-  const present = await docker.images.inspect(base);
-  if (present !== undefined) return present;
-  await docker.images.pull(base, { platform: PLATFORM });
-  const pulled = await docker.images.inspect(base);
-  if (pulled === undefined)
+/**
+ * The base image that the build uses, pulled first also when the engine has
+ * an image of that name: a tag in a registry moves to a new server, and the
+ * built tag must hold the label of that server, not of the stale local one.
+ * The build pulls no image (`@zukhruf/docker` ADR 0016), and an inspect is
+ * no presence check: the containerd store answers it for each platform of an
+ * index, also with no content of that platform (ADR 0027).
+ */
+async function pulledBase(docker: Docker, base: string) {
+  await docker.images.pull(base, { platform: PLATFORM }).catch((error) => {
+    // A base built on this engine is in no registry: the build uses it.
+    if (!(error instanceof ImageNotFoundError)) throw error;
+  });
+  const image = await docker.images.inspect(base);
+  if (image === undefined)
     throw new Error(`The engine has no image ${base} after its pull`);
-  return pulled;
+  return image;
 }
 
 /**
@@ -218,6 +222,26 @@ export class SqlServer {
     this.#docker = new DockerTestbed({ environment });
     this.#runId = readRun(environment)?.id;
     this.#options = { image, password, database, labels, fullTextSearch };
+  }
+
+  /**
+   * Why the engine that `environment` selects cannot run SQL Server natively:
+   * the engine's architecture and the image's platform, or `false` when the
+   * engine runs amd64 itself. A test passes it as its `skip` option, for a
+   * claim that holds only where amd64 is native: Microsoft does not support
+   * SQL Server under emulation, and SQL Server 2025 crashes at start about once
+   * in 41 starts on an arm64 Mac (#5469).
+   */
+  static async emulation({
+    environment,
+  }: DockerTestbedOptions): Promise<string | false> {
+    await using docker = await Docker.connect({
+      clock: globalThis,
+      environment,
+    });
+    const { Architecture } = await docker.info();
+    if (NATIVE_ARCHITECTURES.has(Architecture ?? '')) return false;
+    return `the engine runs ${Architecture} and emulates the ${PLATFORM} of SQL Server, which Microsoft does not support`;
   }
 
   /** Create an isolated database on the persistent shared server. */

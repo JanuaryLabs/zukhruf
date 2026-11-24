@@ -1,21 +1,29 @@
 import assert from 'node:assert/strict';
-import { hash, randomUUID } from 'node:crypto';
+import { hash, randomInt, randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 
 import { BuildFailedError, Docker } from '@zukhruf/docker';
 
 import { waitFor } from '../async/wait-for.ts';
+import { DockerTestbed } from '../docker/testbed.ts';
 import { test } from '../node/index.ts';
 import { SqlServer } from './sqlserver.ts';
+
+// SQL Server 2025 crashes at start about once in 41 starts when an arm64
+// engine emulates amd64 (lsass, errno 11; #5469), and 2022 does not, so the
+// 2025 claims run only where the engine runs amd64 natively, as on CI.
+const emulation = await SqlServer.emulation({ environment: process.env });
 
 const servers = [
   {
     name: 'SQL Server 2022',
     image: 'mcr.microsoft.com/mssql/server:2022-latest',
+    skip: false,
   },
   {
     name: 'SQL Server 2025',
     image: 'mcr.microsoft.com/mssql/server:2025-latest',
+    skip: emulation,
   },
 ] as const;
 
@@ -30,42 +38,49 @@ async function labelledVersion(image: string): Promise<string | undefined> {
   ];
 }
 
-void test.each(servers, ({ name, image }) =>
-  test(`${name} with fullTextSearch has the full-text component and runs the server of its base image`, async () => {
-    // Arrange
-    const sqlServer = new SqlServer({
-      environment: process.env,
-      image,
-      fullTextSearch: true,
-    });
+void test.each(servers, ({ name, image, skip }) =>
+  test(
+    `${name} with fullTextSearch has the full-text component and runs the server of its base image`,
+    { skip },
+    async () => {
+      // Arrange
+      const sqlServer = new SqlServer({
+        environment: process.env,
+        image,
+        fullTextSearch: true,
+      });
 
-    // Act
-    await using database = await sqlServer.start();
-    const pool = await database.pool();
-    const { recordset } = await pool
-      .request()
-      .query<{ installed: number; version: string }>(
-        "SELECT FULLTEXTSERVICEPROPERTY('IsFullTextInstalled') AS installed, CAST(SERVERPROPERTY('ProductVersion') AS nvarchar(32)) AS version",
-      );
+      // Act
+      await using database = await sqlServer.start();
+      const pool = await database.pool();
+      const { recordset } = await pool
+        .request()
+        .query<{ installed: number; version: string }>(
+          "SELECT FULLTEXTSERVICEPROPERTY('IsFullTextInstalled') AS installed, CAST(SERVERPROPERTY('ProductVersion') AS nvarchar(32)) AS version",
+        );
 
-    // Assert
-    assert.deepEqual(recordset[0], {
-      installed: 1,
-      version: await labelledVersion(image),
-    });
-  }),
+      // Assert
+      assert.deepEqual(recordset[0], {
+        installed: 1,
+        version: await labelledVersion(image),
+      });
+    },
+  ),
 );
 
-void test.each(servers, ({ name, image }) =>
-  test(`${name} with fullTextSearch answers CONTAINSTABLE over a full-text index with the matching keys and their rank`, async (t) => {
-    // Arrange
-    await using database = await new SqlServer({
-      environment: process.env,
-      image,
-      fullTextSearch: true,
-    }).start();
-    const pool = await database.pool();
-    await pool.request().batch(`
+void test.each(servers, ({ name, image, skip }) =>
+  test(
+    `${name} with fullTextSearch answers CONTAINSTABLE over a full-text index with the matching keys and their rank`,
+    { skip },
+    async (t) => {
+      // Arrange
+      await using database = await new SqlServer({
+        environment: process.env,
+        image,
+        fullTextSearch: true,
+      }).start();
+      const pool = await database.pool();
+      await pool.request().batch(`
       CREATE TABLE passage (id int NOT NULL CONSTRAINT pk_passage PRIMARY KEY, body nvarchar(200) NOT NULL);
       INSERT INTO passage VALUES
         (1, N'The quick brown fox jumps over the dog'),
@@ -74,68 +89,73 @@ void test.each(servers, ({ name, image }) =>
       CREATE FULLTEXT CATALOG passage_catalog AS DEFAULT;
       CREATE FULLTEXT INDEX ON passage (body LANGUAGE 1033) KEY INDEX pk_passage WITH CHANGE_TRACKING AUTO;
     `);
-    await waitFor(
-      async () => {
-        const { recordset } = await pool.request().query<{
-          status: number;
-          items: number;
-        }>("SELECT OBJECTPROPERTYEX(OBJECT_ID('passage'), 'TableFulltextPopulateStatus') AS status, OBJECTPROPERTYEX(OBJECT_ID('passage'), 'TableFulltextItemCount') AS items");
-        assert.deepEqual(recordset[0], { status: 0, items: 3 });
-      },
-      { signal: t.signal },
-    );
+      await waitFor(
+        async () => {
+          const { recordset } = await pool.request().query<{
+            status: number;
+            items: number;
+          }>("SELECT OBJECTPROPERTYEX(OBJECT_ID('passage'), 'TableFulltextPopulateStatus') AS status, OBJECTPROPERTYEX(OBJECT_ID('passage'), 'TableFulltextItemCount') AS items");
+          assert.deepEqual(recordset[0], { status: 0, items: 3 });
+        },
+        { signal: t.signal },
+      );
+
+      // Act
+      const { recordset } = await pool
+        .request()
+        .query<{ id: number; rank: number }>(
+          `SELECT [KEY] AS id, RANK AS rank FROM CONTAINSTABLE(passage, body, N'"passage" OR "lease"') ORDER BY [KEY]`,
+        );
+
+      // Assert
+      assert.deepEqual(
+        recordset.map(({ id }) => id),
+        [2, 3],
+      );
+      assert.ok(
+        recordset.every(({ rank }) => rank > 0),
+        `Each match has a rank: ${JSON.stringify(recordset)}`,
+      );
+    },
+  ),
+);
+
+test(
+  'SQL Server 2025 with fullTextSearch keeps VECTOR and VECTOR_DISTANCE on the same server',
+  { skip: emulation },
+  async () => {
+    // Arrange
+    await using database = await new SqlServer({
+      environment: process.env,
+      image: 'mcr.microsoft.com/mssql/server:2025-latest',
+      fullTextSearch: true,
+    }).start();
+    const pool = await database.pool();
+    await pool.request().batch(`
+    CREATE TABLE embedding (id int NOT NULL PRIMARY KEY, vector VECTOR(3) NOT NULL);
+    INSERT INTO embedding VALUES (1, '[0, 1, 0]'), (2, '[1, 0, 0]'), (3, '[0.7, 0.7, 0]');
+  `);
 
     // Act
     const { recordset } = await pool
       .request()
-      .query<{ id: number; rank: number }>(
-        `SELECT [KEY] AS id, RANK AS rank FROM CONTAINSTABLE(passage, body, N'"passage" OR "lease"') ORDER BY [KEY]`,
+      .query<{ id: number }>(
+        "SELECT id FROM embedding ORDER BY VECTOR_DISTANCE('cosine', vector, CAST('[1, 0, 0]' AS VECTOR(3)))",
+      );
+    const installed = await pool
+      .request()
+      .query<{ installed: number }>(
+        "SELECT FULLTEXTSERVICEPROPERTY('IsFullTextInstalled') AS installed",
       );
 
     // Assert
     assert.deepEqual(
       recordset.map(({ id }) => id),
-      [2, 3],
+      [2, 3, 1],
     );
-    assert.ok(
-      recordset.every(({ rank }) => rank > 0),
-      `Each match has a rank: ${JSON.stringify(recordset)}`,
-    );
-  }),
+    assert.deepEqual(installed.recordset, [{ installed: 1 }]);
+  },
 );
-
-test('SQL Server 2025 with fullTextSearch keeps VECTOR and VECTOR_DISTANCE on the same server', async () => {
-  // Arrange
-  await using database = await new SqlServer({
-    environment: process.env,
-    image: 'mcr.microsoft.com/mssql/server:2025-latest',
-    fullTextSearch: true,
-  }).start();
-  const pool = await database.pool();
-  await pool.request().batch(`
-    CREATE TABLE embedding (id int NOT NULL PRIMARY KEY, vector VECTOR(3) NOT NULL);
-    INSERT INTO embedding VALUES (1, '[0, 1, 0]'), (2, '[1, 0, 0]'), (3, '[0.7, 0.7, 0]');
-  `);
-
-  // Act
-  const { recordset } = await pool
-    .request()
-    .query<{ id: number }>(
-      "SELECT id FROM embedding ORDER BY VECTOR_DISTANCE('cosine', vector, CAST('[1, 0, 0]' AS VECTOR(3)))",
-    );
-  const installed = await pool
-    .request()
-    .query<{ installed: number }>(
-      "SELECT FULLTEXTSERVICEPROPERTY('IsFullTextInstalled') AS installed",
-    );
-
-  // Assert
-  assert.deepEqual(
-    recordset.map(({ id }) => id),
-    [2, 3, 1],
-  );
-  assert.deepEqual(installed.recordset, [{ installed: 1 }]);
-});
 
 test('a second start with fullTextSearch runs the image that the first one built, and builds none', async (t) => {
   // Arrange
@@ -254,5 +274,87 @@ test('a base image whose server version has no mssql-server-fts package rejects 
     });
   } finally {
     await docker.images.remove(base);
+  }
+});
+
+test('a base whose tag moved in its registry since the engine pulled it gives the tag of the moved server, and the built image holds that server', async (t) => {
+  // Arrange: a registry whose tag holds the label of 16.0.4305.5, and an
+  // engine that holds the same tag at 16.0.4295.3, as after a pull before the
+  // tag moved. Both are real versions of mssql-server-fts, so a build of
+  // either label succeeds.
+  const testbed = new DockerTestbed({ environment: process.env });
+  const docker = await testbed.client();
+  const scope = `zukhruf-testing-fts-moved=${randomUUID()}`;
+  try {
+    // The registry listens in the network of the engine's host, where the
+    // engine pulls and pushes: a published port of Docker Desktop answers on
+    // the Mac, not where the engine runs. 127.0.0.1 is an insecure registry
+    // by default, so it needs no TLS.
+    const port = 49152 + randomInt(16384);
+    await using _registry = await testbed.start({
+      Image: 'registry:2',
+      Env: [`REGISTRY_HTTP_ADDR=127.0.0.1:${port}`],
+      HostConfig: { NetworkMode: 'host' },
+    });
+    const base = `127.0.0.1:${port}/zukhruf-testing-fts-base:moving`;
+    const labelled = (version: string, tag: string) =>
+      docker.images.build(
+        {
+          files: [
+            {
+              path: 'Dockerfile',
+              data: `FROM mcr.microsoft.com/mssql/server:2022-latest\nLABEL com.microsoft.version=${version} ${scope}\n`,
+            },
+          ],
+        },
+        { t: tag, platform: 'linux/amd64' },
+      );
+    await docker.images.pull('mcr.microsoft.com/mssql/server:2022-latest', {
+      platform: 'linux/amd64',
+    });
+    await labelled('16.0.4305.5', base);
+    // The registry runs with no authentication and ignores the credentials.
+    const auth = { username: 'zukhruf', password: 'zukhruf' };
+    await waitFor(() => docker.images.push(base, { auth }), {
+      signal: t.signal,
+      interval: 250,
+    });
+    await labelled('16.0.4295.3', base);
+
+    // Act
+    let image: string;
+    {
+      await using database = await new SqlServer({
+        environment: process.env,
+        image: base,
+        fullTextSearch: true,
+      }).start();
+      image = database.image;
+    }
+
+    // Assert
+    const dockerfile = await readFile(
+      new URL('sqlserver-full-text-search.Dockerfile', import.meta.url),
+      'utf8',
+    );
+    assert.deepEqual(
+      {
+        image,
+        label: (await docker.images.inspect(image))?.Config?.Labels?.[
+          'com.microsoft.version'
+        ],
+      },
+      {
+        image: `zukhruf-testing-sqlserver-fts:16.0.4305.5-${hash('sha256', dockerfile).slice(0, 12)}`,
+        label: '16.0.4305.5',
+      },
+    );
+  } finally {
+    // The two bases, and each image built from them, carry the scope label.
+    const images = await docker.images.list({
+      filters: { label: [scope] },
+    });
+    for (const { Id } of images)
+      await docker.images.remove(Id, { force: true });
   }
 });

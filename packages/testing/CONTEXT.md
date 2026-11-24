@@ -62,6 +62,10 @@ _Avoid_: Build lock
 The image that `SqlServer` with `fullTextSearch: true` builds on the engine from its plain image: the plain image with the package `mssql-server-fts` of the same server version. Its tag holds that version and the hash of the Dockerfile (ADR 0027).
 _Avoid_: FTS variant, custom image
 
+**Emulation**:
+An engine whose architecture is not amd64 runs SQL Server's `linux/amd64` image through an emulator, such as QEMU or Rosetta 2 on an arm64 Mac. Microsoft does not support it. `SqlServer.emulation()` asks the engine and gives the reason, which a test passes as its `skip` when its claim holds only where amd64 is native (#5469).
+_Avoid_: ARM mode, slow mode
+
 **Run**:
 One `node --test` invocation with the Docker global setup. What its test processes create carries the run's label, or a record in the run's directory.
 _Avoid_: Session, scope
