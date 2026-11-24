@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
+import { once } from 'node:events';
 import { Server } from 'node:http';
 import { test } from 'node:test';
 import { promisify } from 'node:util';
@@ -201,4 +202,38 @@ test('behind an msw passthrough, disposal settles after fetch has closed each co
     assert.equal(await (await fetch(server.origin)).text(), 'ok');
     assert.equal(await (await fetch(server.origin)).text(), 'ok');
   `);
+});
+
+test('disposal settles while a client in another process holds its connection open', async () => {
+  await using server = await new HttpServer().start((_request, response) => {
+    response.end('ok');
+  });
+  const client = spawn(process.execPath, [
+    '--input-type=module',
+    '--eval',
+    `
+    setTimeout(() => {
+      console.error('the client did not end in 20 s');
+      process.exit(124);
+    }, 20_000);
+    await (await fetch(${JSON.stringify(server.origin)})).text();
+    console.log('connected');
+    `,
+  ]);
+  try {
+    await once(client.stdout, 'data');
+    const connections = await promisify(
+      server.server.getConnections.bind(server.server),
+    )();
+    assert.equal(connections, 1);
+
+    const first = await Promise.race([
+      server[Symbol.asyncDispose]().then(() => 'the disposal settled'),
+      once(client, 'exit').then(() => 'the client exited'),
+    ]);
+
+    assert.equal(first, 'the disposal settled');
+  } finally {
+    client.kill();
+  }
 });
