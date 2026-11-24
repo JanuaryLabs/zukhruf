@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import * as timers from 'node:timers/promises';
 
 import { PGlite } from '@electric-sql/pglite';
 import { type Clock, PgBoss, fromPglite, systemClock } from 'pg-boss';
+
+import { untilAborted } from '@zukhruf/async';
 
 import { type JobQueue, SqliteJobQueue } from '../index.ts';
 import { flush } from '../testing/flush.ts';
@@ -305,7 +306,7 @@ describe('workers', () => {
     });
   });
 
-  it('fetch one polling interval after a batch during which the clock was set back a day', async () => {
+  it('fetch one polling interval after a batch during which the clock was set back a day', async (t) => {
     // pg-boss times the round on real time, so the set-back cannot stretch
     // the wait by a day (12.38.1, #990, #987). A parity run's Date.now
     // follows its TestClock, which would hide that, so each engine gets a
@@ -315,7 +316,6 @@ describe('workers', () => {
       setBack: () => void,
     ): Promise<string> => {
       await queue.start();
-      const stopWaiting = new AbortController();
       try {
         await queue.createQueue('jobs');
         await queue.send('jobs', null, { id: id(1) });
@@ -334,14 +334,8 @@ describe('workers', () => {
             }
           },
         );
-        return await Promise.race([
-          next.promise,
-          timers.setTimeout(10_000, 'still waiting', {
-            signal: stopWaiting.signal,
-          }),
-        ]);
+        return await untilAborted(next.promise, t.signal);
       } finally {
-        stopWaiting.abort();
         await queue.stop({ graceful: false, close: true });
       }
     };

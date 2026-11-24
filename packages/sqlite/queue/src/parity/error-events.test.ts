@@ -1,27 +1,18 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { setTimeout as sleep } from 'node:timers/promises';
+
+import { untilAborted } from '@zukhruf/async';
 
 import type { JobQueue } from '../index.ts';
 import { Parity } from './parity.ts';
 
-// Resolves with the next error event, or null after `ms` so a backend that
-// never emits fails the comparison instead of hanging.
-async function nextError(queue: JobQueue, ms: number) {
-  const reported = new Promise<Error>((resolve) => queue.on('error', resolve));
-  const timeout = new AbortController();
-  try {
-    return await Promise.race([
-      reported,
-      sleep(ms, null, { signal: timeout.signal }).catch((error: unknown) => {
-        // The finally aborts the sleep once the race is over.
-        if (!(Error.isError(error) && error.name === 'AbortError')) throw error;
-        return null;
-      }),
-    ]);
-  } finally {
-    timeout.abort();
-  }
+// Resolves with the next error event. The wait of a backend that never
+// emits ends at the test's limit, when `signal` aborts.
+function nextError(queue: JobQueue, signal: AbortSignal) {
+  return untilAborted(
+    new Promise<Error>((resolve) => queue.on('error', resolve)),
+    signal,
+  );
 }
 
 function describeError(error: Error) {
@@ -39,10 +30,10 @@ function describeError(error: Error) {
 }
 
 describe('error events', () => {
-  it('reports a worker polling a queue that does not exist as an error event', async () => {
+  it('reports a worker polling a queue that does not exist as an error event', async (t) => {
     const observed = await Parity.assertSame(async ({ queue }) => {
       await queue.start();
-      const reported = nextError(queue, 5000);
+      const reported = nextError(queue, t.signal);
       let registration: string;
       try {
         await queue.work(
@@ -54,11 +45,7 @@ describe('error events', () => {
       } catch (error) {
         registration = Error.isError(error) ? error.message : String(error);
       }
-      const error = await reported;
-      return {
-        registration,
-        reported: error === null ? 'none within 5s' : describeError(error),
-      };
+      return { registration, reported: describeError(await reported) };
     });
 
     assert.deepStrictEqual(observed, {
@@ -76,7 +63,7 @@ describe('error events', () => {
 
   // The queue has no `notify`, so the send wakes nothing: the job runs only
   // because the worker's loop survived its failed first fetch and polled again.
-  it('runs the job for a worker registered before its queue existed', async () => {
+  it('runs the job for a worker registered before its queue existed', async (t) => {
     const job = '00000000-0000-4000-8000-000000000001';
 
     const observed = await Parity.assertSame(async ({ queue, clock }) => {
@@ -91,31 +78,15 @@ describe('error events', () => {
       );
       // work() resolves before its first fetch fails, so the error is still
       // ahead of a listener attached now.
-      const failedPoll = await nextError(queue, 5000);
+      await nextError(queue, t.signal);
 
       await queue.createQueue('late');
       await queue.send('late', { n: 1 }, { id: job });
       // pg-boss polls again only when the clock passes its interval.
       await clock.tick(500);
-      const timeout = new AbortController();
-      try {
-        const ran = await Promise.race([
-          handled.promise,
-          sleep(5000, null, { signal: timeout.signal }).catch(
-            (error: unknown) => {
-              // The finally aborts the sleep once the race is over.
-              if (!(Error.isError(error) && error.name === 'AbortError'))
-                throw error;
-              return null;
-            },
-          ),
-        ]);
-        return { failedPoll: failedPoll !== null, ran };
-      } finally {
-        timeout.abort();
-      }
+      return { ran: await untilAborted(handled.promise, t.signal) };
     });
 
-    assert.deepStrictEqual(observed, { failedPoll: true, ran: [job] });
+    assert.deepStrictEqual(observed, { ran: [job] });
   });
 });

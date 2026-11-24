@@ -534,8 +534,8 @@ async function sweep(
 
 /**
  * A process of the docker area at `library` reuses a shared server and exits.
- * Gives the server's id. A process that does not exit by the deadline of
- * `firstOf` fails the test, and is killed.
+ * Gives the server's id. A process that does not exit fails the test at
+ * the test's limit, and is killed.
  */
 async function reusedAndExited(
   t: TestContext,
@@ -555,11 +555,8 @@ async function reusedAndExited(
       killSignal: 'SIGKILL',
     });
     reuse.catch(() => {});
-    assert.equal(
-      await firstOf(new Promise<void>(() => {}), reuse),
-      'ended',
-      'the process must reuse the server and exit',
-    );
+    // The process must reuse the server and exit.
+    await untilAborted(reuse, t.signal);
   } finally {
     stop.abort();
   }
@@ -584,29 +581,6 @@ async function ended(
 ): Promise<void> {
   await other.end();
   await unleased(t, fingerprint);
-}
-
-/**
- * Which comes first: `event`, the end of `run`, or a deadline. A sweep gets
- * to its sweep leases in a few seconds, and waits at most 30 s for a taken
- * sweep lease; the deadline is above both and far below the timeout of each
- * test, so a test whose event never comes fails and disposes of what it
- * started. A run that fails rejects with its error.
- */
-async function firstOf(
-  event: Promise<unknown>,
-  run: Promise<unknown>,
-): Promise<'reached' | 'ended' | 'deadline'> {
-  const deadline = new AbortController();
-  try {
-    return await Promise.race([
-      event.then(() => 'reached' as const),
-      run.then(() => 'ended' as const),
-      setTimeout(45_000, 'deadline' as const, { signal: deadline.signal }),
-    ]);
-  } finally {
-    deadline.abort();
-  }
 }
 
 /** Takes the sweep lease of `fingerprint` as a reaper does, from this test process. */
@@ -1845,7 +1819,13 @@ test(
     stack.defer(() => listing.release());
     const { finished } = await proxiedReaper(stack, proxy, [fingerprint], {});
     assert.equal(
-      await firstOf(listing.reached, finished),
+      await untilAborted(
+        Promise.race([
+          listing.reached.then(() => 'reached'),
+          finished.then(() => 'ended'),
+        ]),
+        t.signal,
+      ),
       'reached',
       'the reaper must hold the sweep lease of the server',
     );

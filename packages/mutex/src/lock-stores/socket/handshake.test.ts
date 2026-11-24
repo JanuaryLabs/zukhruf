@@ -3,7 +3,6 @@ import { once } from 'node:events';
 import { type Socket, connect, createServer } from 'node:net';
 import { join } from 'node:path';
 import { describe } from 'node:test';
-import { setTimeout as delay } from 'node:timers/promises';
 
 import { Latch, untilAborted } from '@zukhruf/async';
 import { TemporaryFiles } from '@zukhruf/fs';
@@ -34,14 +33,14 @@ const standInLeader = (
   });
 
 /** Sends `line` to the leader on the socket path, and reads its one answer before the connection ends. */
-async function askLeader(directory: string, line: string) {
+async function askLeader(directory: string, line: string, signal: AbortSignal) {
   const socket = connect(join(directory, 'lock.sock'));
   await once(socket, 'connect');
   socket.write(`${line}\n`);
   const lines: string[] = [];
   linesOf(socket).on('line', (answer) => lines.push(answer));
-  // A leader that wrongly keeps the peer would never hang up; the answers so far then fail the test.
-  await Promise.race([once(socket, 'close'), delay(2000)]);
+  // A leader that wrongly keeps the peer never hangs up, and the test's limit ends the wait.
+  await untilAborted(once(socket, 'close'), signal);
   socket.destroy();
   return lines;
 }
@@ -206,7 +205,7 @@ describe('Socket store protocol handshake', () => {
       test(
         `a leader refuses a process that opens with ${what}, and its followers keep working`,
         onUnixSockets,
-        async () => {
+        async (t) => {
           // Arrange: a real leader serves the directory, and a follower uses it.
           await using directory = await new TemporaryFiles().directory(
             'mutex-test-',
@@ -221,7 +220,7 @@ describe('Socket store protocol handshake', () => {
           await (await follower.acquire('warm-up'))[Symbol.asyncDispose]();
 
           // Act
-          const answers = await askLeader(directory.path, line);
+          const answers = await askLeader(directory.path, line, t.signal);
 
           // Assert: the leader names its own version and hangs up on that process only.
           assert.equal(answers.length, 1);

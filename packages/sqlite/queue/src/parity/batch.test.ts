@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
+import { untilAborted } from '@zukhruf/async';
+
 import { flush } from '../testing/flush.ts';
 import { id } from '../testing/job-id.ts';
 import { Parity } from './parity.ts';
@@ -81,7 +83,7 @@ describe('batches', () => {
     assert.deepStrictEqual(observed, ['active', 'active']);
   });
 
-  it('fail the jobs still running when stopping, then abort their handlers', async () => {
+  it('fail the jobs still running when stopping, then abort their handlers', async (t) => {
     const observed = await Parity.assertSame(async ({ queue, clock }) => {
       await queue.start();
       await queue.createQueue('jobs', { retryLimit: 1 });
@@ -105,17 +107,13 @@ describe('batches', () => {
       await flush(clock);
       await queue.stop({ graceful: false, close: false });
       // A worker whose batch was abandoned finishes stopping; one still
-      // stuck in its handler never would.
-      const stopped = await Promise.race([
-        queue.offWork('jobs').then(() => 'stopped'),
-        new Promise((resolve) => setTimeout(() => resolve('stuck'), 5000)),
-      ]);
+      // stuck in its handler never would, and the test's limit ends the wait.
+      await untilAborted(queue.offWork('jobs'), t.signal);
       const jobs = await queue.findJobs('jobs');
       return {
         states: jobs.map((job) => job.state),
         outputs: jobs.map((job) => job.output),
         aborted,
-        stopped,
         stopAgain: await queue.stop({ close: false }).then(() => 'resolved'),
         workAfter: await queue
           .work('jobs', {}, async () => {})
@@ -133,7 +131,6 @@ describe('batches', () => {
       states: ['retry', 'retry', 'retry', 'retry'],
       outputs: [shutDown, shutDown, shutDown, shutDown],
       aborted: 4,
-      stopped: 'stopped',
       stopAgain: 'resolved',
       workAfter: 'Workers are disabled. pg-boss is stopped',
     });

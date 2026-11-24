@@ -8,6 +8,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
+import { untilAborted } from '@zukhruf/async';
 import { Docker } from '@zukhruf/docker';
 import { TemporaryFiles } from '@zukhruf/fs';
 import { waitFor } from '@zukhruf/testing/async';
@@ -27,11 +28,6 @@ import { DockerEngineStore } from './index.ts';
 
 const image = 'node:lts-alpine';
 const heartbeatInterval = 500;
-/**
- * The time limit of each wait that the engine must end. It is far above the
- * slowest engine under load, so a wait that reaches it never ends.
- */
-const engineBound = 10_000;
 const namespaceLabel = 'zukhruf.mutex.namespace';
 
 /**
@@ -99,15 +95,6 @@ const holderSource = (namespace: string, key: string) => `
 	});
 `;
 
-const outcomeOf = <T>(promise: Promise<T>, within: number) =>
-  Promise.race([
-    promise.then(
-      (value) => ({ settled: 'resolved' as const, value }),
-      (error: unknown) => ({ settled: 'rejected' as const, error }),
-    ),
-    delay(within, { settled: 'pending' as const }),
-  ]);
-
 test("a killed holder's key goes to the next waiter", async (t) => {
   // Arrange: another process holds the key.
   await using fixture = await engine();
@@ -123,18 +110,13 @@ test("a killed holder's key goes to the next waiter", async (t) => {
 
   // Act
   holder.child.kill('SIGKILL');
-  const outcome = await outcomeOf(waiting, engineBound);
+  const token = await untilAborted(waiting, t.signal);
 
-  // Assert
-  assert.equal(
-    outcome.settled,
-    'resolved',
-    'The end of the attach of a killed holder must end its claim',
-  );
-  assert.ok(outcome.value > BigInt(String(holder.find('holding')?.token)));
+  // Assert: the end of the attach of a killed holder ended its claim.
+  assert.ok(token > BigInt(String(holder.find('holding')?.token)));
 });
 
-test('a waiter wakes when the holder releases between the create of the waiter and its wait', async () => {
+test('a waiter wakes when the holder releases between the create of the waiter and its wait', async (t) => {
   // Arrange: the waiter reaches the engine through a proxy that holds its requests after its create gets the name conflict.
   await using fixture = await engine();
   await using proxy = await engineProxy(fixture.docker);
@@ -153,18 +135,13 @@ test('a waiter wakes when the holder releases between the create of the waiter a
   // Act: the release comes before the waiter starts its wait.
   await holder.release();
   afterConflict.release();
-  const outcome = await outcomeOf(waiting, engineBound);
+  const token = await untilAborted(waiting, t.signal);
 
-  // Assert
-  assert.equal(
-    outcome.settled,
-    'resolved',
-    'A release before the wait must not be lost',
-  );
-  assert.ok(outcome.value > holder.token);
+  // Assert: the release before the wait was not lost.
+  assert.ok(token > holder.token);
 });
 
-test('a key whose caller stopped between the create and the start goes to the next waiter after heartbeatInterval', async () => {
+test('a key whose caller stopped between the create and the start goes to the next waiter after heartbeatInterval', async (t) => {
   // Arrange: a caller created its claim, and the proxy keeps its start from the engine.
   await using fixture = await engine();
   await using proxy = await engineProxy(fixture.docker);
@@ -184,27 +161,23 @@ test('a key whose caller stopped between the create and the start goes to the ne
 
   // Act
   const started = performance.now();
-  const outcome = await outcomeOf(
+  const waited = await untilAborted(
     new Mutex(fixture.store()).acquire(
       'report:daily',
       async () => performance.now() - started,
     ),
-    heartbeatInterval + engineBound,
+    t.signal,
   );
 
-  // Assert: load on the engine can only make the wait longer.
-  assert.equal(
-    outcome.settled,
-    'resolved',
-    'A waiter must remove a created claim that nobody starts',
-  );
+  // Assert: the waiter removed the created claim that nobody starts, and not
+  // before heartbeatInterval; load on the engine can only make the wait longer.
   assert.ok(
-    outcome.value >= heartbeatInterval,
-    `The waiter got the key ${outcome.value.toFixed(0)} ms after it asked, before heartbeatInterval`,
+    waited >= heartbeatInterval,
+    `The waiter got the key ${waited.toFixed(0)} ms after it asked, before heartbeatInterval`,
   );
 });
 
-test('a caller whose claim a waiter removed before the start tries again', async () => {
+test('a caller whose claim a waiter removed before the start tries again', async (t) => {
   // Arrange: a slow caller's start is held until a waiter removed its created claim and took the key.
   await using fixture = await engine();
   await using proxy = await engineProxy(fixture.docker);
@@ -227,15 +200,10 @@ test('a caller whose claim a waiter removed before the start tries again', async
   beforeStart.release();
   await delay(heartbeatInterval);
   await waiter.release();
-  const outcome = await outcomeOf(slow, engineBound);
+  const token = await untilAborted(slow, t.signal);
 
-  // Assert
-  assert.equal(
-    outcome.settled,
-    'resolved',
-    'A start that lost to a removal must send the caller back to the create',
-  );
-  assert.ok(outcome.value > waiter.token);
+  // Assert: the start that lost to a removal sent the caller back to the create.
+  assert.ok(token > waiter.token);
 });
 
 /**
@@ -287,7 +255,9 @@ test('a caller whose claim a rival removed before its start takes the key with a
 
   // Act
   const settled = await caller.next('settled', { signal: t.signal });
-  const exit = await outcomeOf(caller.closed, engineBound);
+  // The attach of a claim whose start found no container ends, so the
+  // process exits once it released the key.
+  await untilAborted(caller.closed, t.signal);
 
   // Assert
   assert.equal(settled.error, undefined, caller.stderr);
@@ -295,11 +265,6 @@ test('a caller whose claim a rival removed before its start takes the key with a
     typeof settled.removed,
     'string',
     'The rival must remove the first claim at its start',
-  );
-  assert.equal(
-    exit.settled,
-    'resolved',
-    `The attach of a claim whose start found no container must end, so that the process exits once it released the key.\n${caller.stderr}`,
   );
   assert.deepEqual(caller.exit, { code: 0, signal: null }, caller.stderr);
 });
@@ -318,19 +283,16 @@ test('a caller whose start fails before it reaches the engine rejects with that 
 
   // Act
   const settled = await caller.next('settled', { signal: t.signal });
-  const exit = await outcomeOf(caller.closed, engineBound);
+  // The attach of a claim whose start failed ends, so the process exits once
+  // its acquire rejected.
+  await untilAborted(caller.closed, t.signal);
 
   // Assert
   assert.equal(settled.error, 'The connection dropped the start.');
-  assert.equal(
-    exit.settled,
-    'resolved',
-    `The attach of a claim whose start failed must end, so that the process exits once its acquire rejected.\n${caller.stderr}`,
-  );
   assert.deepEqual(caller.exit, { code: 0, signal: null }, caller.stderr);
 });
 
-test('a holder that lost its claim during the mint gets no token', async () => {
+test('a holder that lost its claim during the mint gets no token', async (t) => {
   // Arrange: a holder read the ladder, and the proxy keeps its create of a rung from the engine.
   await using fixture = await engine();
   await using proxy = await engineProxy(fixture.docker);
@@ -367,7 +329,7 @@ test('a holder that lost its claim during the mint gets no token', async () => {
   await delay(2 * heartbeatInterval);
   const whileNextHolds = [...ran];
   await next.release();
-  const outcome = await outcomeOf(stale, engineBound);
+  const token = await untilAborted(stale, t.signal);
 
   // Assert
   assert.deepEqual(
@@ -375,10 +337,9 @@ test('a holder that lost its claim during the mint gets no token', async () => {
     [`next ${next.token}`],
     'A holder whose claim is gone must not run with the token it minted',
   );
-  assert.equal(outcome.settled, 'resolved');
   assert.ok(
-    outcome.value > next.token,
-    `The stale caller got ${outcome.value} after ${next.token}`,
+    token > next.token,
+    `The stale caller got ${token} after ${next.token}`,
   );
 });
 
@@ -495,7 +456,7 @@ test('a token is the engine time of the claim in microseconds', async () => {
   );
 });
 
-test('a waiter gets the key when the released claim stays dead after a failed removal', async () => {
+test('a waiter gets the key when the released claim stays dead after a failed removal', async (t) => {
   // Arrange: a released claim whose removal failed stays on the engine and does not run.
   // The test makes it, because no operation of the store makes the removal of the engine fail.
   await using fixture = await engine();
@@ -522,21 +483,16 @@ test('a waiter gets the key when the released claim stays dead after a failed re
   await ended.wait({ condition: 'not-running' });
 
   // Act
-  const outcome = await outcomeOf(
+  const token = await untilAborted(
     new Mutex(fixture.store()).acquire(
       'report:daily',
       async (lease) => lease.token.value,
     ),
-    heartbeatInterval + engineBound,
+    t.signal,
   );
 
-  // Assert
-  assert.equal(
-    outcome.settled,
-    'resolved',
-    'A claim that ended must not keep the key from a waiter',
-  );
-  assert.ok(outcome.value > holder.token);
+  // Assert: the claim that ended did not keep the key from the waiter.
+  assert.ok(token > holder.token);
 });
 
 test("a holder whose list missed a stale minter's new rung still gets a token above the previous holder's", async (t) => {
@@ -605,16 +561,18 @@ test("a holder whose list missed a stale minter's new rung still gets a token ab
     signal: t.signal,
   });
   nextRung.release();
-  const outcome = await outcomeOf(next, engineBound);
+  const token = await untilAborted(next, t.signal);
 
   // Assert
-  assert.equal(outcome.settled, 'resolved');
   assert.ok(
-    outcome.value > previous,
-    `The next holder got ${outcome.value} after the previous holder got ${previous}`,
+    token > previous,
+    `The next holder got ${token} after the previous holder got ${previous}`,
   );
   // The stale minter takes the key after the next holder, so that no request of it is open at the disposal.
-  await outcomeOf(stale, engineBound);
+  await untilAborted(
+    stale.catch(() => {}),
+    t.signal,
+  );
 });
 
 test('two stores on one engine never run tasks of one key at the same time', async () => {
@@ -651,7 +609,7 @@ test('two stores on one engine never run tasks of one key at the same time', asy
   );
 });
 
-test('a waiter gets the key when the holder releases it', async () => {
+test('a waiter gets the key when the holder releases it', async (t) => {
   // Arrange
   await using fixture = await engine();
   await using other = await Docker.connect({
@@ -663,16 +621,18 @@ test('a waiter gets the key when the holder releases it', async () => {
     'report:daily',
     async (lease) => lease.token.value,
   );
-  const whileHeld = await outcomeOf(waiting, 500);
+  const whileHeld = await Promise.race([
+    waiting.then(() => 'settled'),
+    delay(500, 'pending'),
+  ]);
 
   // Act
   await holder.release();
-  const outcome = await outcomeOf(waiting, engineBound);
+  const token = await untilAborted(waiting, t.signal);
 
   // Assert
-  assert.deepEqual(whileHeld, { settled: 'pending' });
-  assert.equal(outcome.settled, 'resolved');
-  assert.ok(outcome.value > holder.token);
+  assert.equal(whileHeld, 'pending');
+  assert.ok(token > holder.token);
 });
 
 test('tryAcquire gives up on a held key and takes a free one', async () => {
@@ -758,7 +718,7 @@ test('the tokens of one key increase', async () => {
   );
 });
 
-test('a cancelled acquire rejects with the reason of its signal and leaves no claim', async () => {
+test('a cancelled acquire rejects with the reason of its signal and leaves no claim', async (t) => {
   // Arrange
   await using fixture = await engine();
   await using other = await Docker.connect({
@@ -777,15 +737,18 @@ test('a cancelled acquire rejects with the reason of its signal and leaves no cl
 
   // Act
   cancel.abort(reason);
-  const outcome = await outcomeOf(waiting, engineBound);
+  const failure = await untilAborted(waiting, t.signal).then(
+    () => undefined,
+    (error: unknown) => error,
+  );
   await holder.release();
 
   // Assert
-  assert.deepEqual(outcome, { settled: 'rejected', error: reason });
+  assert.equal(failure, reason);
   assert.equal(await fixture.store().isHeld('report:daily'), false);
 });
 
-test('two namespaces do not share a key or its tokens', async () => {
+test('two namespaces do not share a key or its tokens', async (t) => {
   // Arrange: the second namespace is on the same engine. The ladder of the first namespace has a rung far above the engine time.
   await using first = await engine();
   await using second = await engine();
@@ -803,12 +766,12 @@ test('two namespaces do not share a key or its tokens', async () => {
   const holder = await hold(firstMutex, 'report:daily');
 
   // Act
-  const other = await outcomeOf(
+  const other = await untilAborted(
     new Mutex(second.store()).acquire(
       'report:daily',
       async (lease) => lease.token.value,
     ),
-    engineBound,
+    t.signal,
   );
   await holder.release();
   const next = await firstMutex.acquire(
@@ -817,10 +780,9 @@ test('two namespaces do not share a key or its tokens', async () => {
   );
 
   // Assert
-  assert.equal(other.settled, 'resolved');
   assert.ok(
-    other.value < high,
-    `The second namespace got ${other.value}, above the ladder of the first`,
+    other < high,
+    `The second namespace got ${other}, above the ladder of the first`,
   );
   assert.equal(holder.token, high + 1n);
   assert.equal(next, high + 2n);

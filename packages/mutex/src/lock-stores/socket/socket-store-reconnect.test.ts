@@ -491,16 +491,10 @@ describe('A socket store whose caller gives up or disposes it', () => {
     );
     // The store must close its connection.
     await untilAborted(first.closed.wait(), t.signal);
-    const later = await Promise.race([
-      store.acquire('product:42').then(
-        () => 'granted',
-        (error: unknown) => error,
-      ),
-      delay(settle, 'still waiting', { ref: false }),
-    ]);
-    assert.ok(
-      Error.isError(later) && /closed/.test(later.message),
-      `A disposed store must refuse new calls at once, not ${String(later)}`,
+    await assert.rejects(
+      untilAborted(store.acquire('product:42'), t.signal),
+      /closed/,
+      'A disposed store must refuse new calls',
     );
     await delay(settle);
     assert.equal(

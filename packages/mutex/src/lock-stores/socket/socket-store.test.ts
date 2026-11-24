@@ -1033,18 +1033,22 @@ describe('Socket store sessions', () => {
         { signal: t.signal },
       );
       const whileFrozen = await grantedWithin(acquiring, settle);
+      const acquired = watch(acquiring);
 
-      // Act: the frozen holder is killed, and the clock moves by steps of the back-off.
+      // Act: the frozen holder is killed, and the clock moves by steps of the back-off until the key is granted.
       holder.child.kill('SIGKILL');
       await holder.closed;
       let moved = 0;
-      while (
-        moved < 1200 &&
-        (await grantedWithin(acquiring, pollInterval)) === 'waiting'
-      ) {
-        await clock.tickAsync(25);
-        moved += 25;
-      }
+      await waitFor(
+        async () => {
+          if (acquired.now.status === 'pending') {
+            await clock.tickAsync(25);
+            moved += 25;
+          }
+          assert.notEqual(acquired.now.status, 'pending');
+        },
+        { signal: t.signal, interval: pollInterval },
+      );
 
       // Assert: its recovery ends at a check of its presence, long before its
       // lease duration, so its key is free, and only the files of this store are left.
@@ -1053,9 +1057,8 @@ describe('Socket store sessions', () => {
         'waiting',
         'The new leader must wait for a recorded session that still runs',
       );
-      assert.equal(
-        await grantedWithin(acquiring, settle),
-        'granted',
+      assert.ok(
+        moved <= 1200,
         `The key of the killed holder must be granted within one step of the back-off, at most 1200 ms of the clock, not at its lease duration of 60 s; moved ${moved} ms`,
       );
       await (await acquiring)[Symbol.asyncDispose]();
