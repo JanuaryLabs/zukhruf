@@ -13,6 +13,7 @@ import {
 import {
   type PostgresSession,
   PostgresStore,
+  lockNumber,
 } from '../../lock-stores/postgres/postgres-store.ts';
 import type {
   Partitionable,
@@ -161,10 +162,13 @@ async function silentlyReconnectingSession(connectionString: string) {
     const client = new pg.Client({ connectionString });
     client.on('error', () => {});
     await client.connect();
-    return client;
+    const { rows } = await client.query<{ pid: number }>(
+      'SELECT pg_backend_pid() AS pid',
+    );
+    return Object.assign(client, { pid: Number(rows[0]?.pid) });
   };
   let current = await open();
-  const { rows } = await current.query('SELECT pg_backend_pid() AS pid');
+  const { pid } = current;
   const reconnected = Promise.withResolvers<void>();
   const resumed = Promise.withResolvers<void>();
   let reconnectedYet = false;
@@ -191,7 +195,9 @@ async function silentlyReconnectingSession(connectionString: string) {
   };
   return {
     session,
-    pid: Number(rows[0].pid),
+    pid,
+    /** The backend pid of the connection that the queries run on now. */
+    currentPid: () => current.pid,
     reconnected: reconnected.promise,
     resume: () => resumed.resolve(),
   };
@@ -233,6 +239,21 @@ export const sessionControl: SessionControl = {
       },
       reconnected: reconnecting.reconnected,
       resume: reconnecting.resume,
+      async holderOf(key) {
+        const { rows } = await admin.query<{ pid: number }>(
+          `SELECT pid FROM pg_catalog.pg_locks
+           WHERE locktype = 'advisory' AND granted AND objsubid = 1
+             AND database = (SELECT oid FROM pg_catalog.pg_database WHERE datname = pg_catalog.current_database())
+             AND ((classid::bigint << 32) | objid::bigint) = $1::bigint`,
+          [lockNumber(key)],
+        );
+        const holder = rows[0]?.pid;
+        return {
+          killed: reconnecting.pid,
+          reconnected: reconnecting.currentPid(),
+          holder: holder === undefined ? undefined : Number(holder),
+        };
+      },
       async [Symbol.asyncDispose]() {
         reconnecting.resume();
         await admin.end();

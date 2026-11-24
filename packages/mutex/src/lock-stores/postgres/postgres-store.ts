@@ -71,7 +71,7 @@ export class PostgresStore extends SessionLockStore<PostgresSession> {
  * digest, as a signed 64-bit integer. Sent as text, because a JavaScript
  * number cannot hold 64 bits.
  */
-function lockNumber(key: string): string {
+export function lockNumber(key: string): string {
   return keyDigest(key).readBigInt64BE(0).toString();
 }
 

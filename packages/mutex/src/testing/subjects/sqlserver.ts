@@ -10,6 +10,7 @@ import { SqlServer } from '@zukhruf/testing/sqlserver';
 import {
   type SqlServerSession,
   SqlServerStore,
+  resourceName,
 } from '../../lock-stores/sqlserver/sqlserver-store.ts';
 import type { Partitionable, SessionControl } from '../contract/sessions.ts';
 import {
@@ -136,10 +137,14 @@ const storeOn = (
   });
 
 /** Runs `text` on a session of the test, not of a store. */
-async function observe(location: string, text: string) {
+async function observe(
+  location: string,
+  text: string,
+  parameters: Record<string, string> = {},
+) {
   const session = await sqlServerSession(serverAt(location));
   try {
-    return await session.query(text, {});
+    return await session.query(text, parameters);
   } finally {
     session.close();
   }
@@ -176,10 +181,11 @@ async function silentlyReconnectingSession(server: Server) {
   const open = async () => {
     const connection = await sqlServerSession(server);
     connection.on('error', () => {});
-    return connection;
+    const [row] = await connection.query('SELECT @@SPID AS id', {});
+    return Object.assign(connection, { id: Number(row?.id) });
   };
   let current = await open();
-  const [first] = await current.query('SELECT @@SPID AS id', {});
+  const { id } = current;
   const reconnected = Promise.withResolvers<void>();
   const resumed = Promise.withResolvers<void>();
   let reconnectedYet = false;
@@ -205,7 +211,9 @@ async function silentlyReconnectingSession(server: Server) {
   };
   return {
     session,
-    id: Number(first?.id),
+    id,
+    /** The session id of the connection that the queries run on now. */
+    currentId: () => current.id,
     reconnected: reconnected.promise,
     resume: () => resumed.resolve(),
   };
@@ -245,6 +253,20 @@ export const sessionControl: SessionControl = {
       },
       reconnected: reconnecting.reconnected,
       resume: reconnecting.resume,
+      async holderOf(key) {
+        const [row] = await observe(
+          location,
+          `SELECT request_session_id AS id FROM sys.dm_tran_locks
+           WHERE resource_type = N'APPLICATION' AND resource_database_id = DB_ID() AND request_status = N'GRANT'
+             AND LEFT(resource_description, 36) = N'0:[' + @resource + N']'`,
+          { resource: resourceName(key) },
+        );
+        return {
+          killed: reconnecting.id,
+          reconnected: reconnecting.currentId(),
+          holder: row === undefined ? undefined : Number(row.id),
+        };
+      },
       async [Symbol.asyncDispose]() {
         reconnecting.resume();
       },

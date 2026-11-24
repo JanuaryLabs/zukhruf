@@ -8,6 +8,10 @@ import { Mysql, mysqlPool } from '@zukhruf/testing/mysql';
 import type { DatabaseOptions } from '@zukhruf/testing/postgres';
 
 import {
+  lockName,
+  lockNameArgument,
+} from '../../lock-stores/mysql/get-lock-dialect.ts';
+import {
   type MysqlSession,
   MysqlStore,
   type MysqlStoreOptions,
@@ -166,6 +170,8 @@ async function silentlyReconnectingSession(server: Server) {
   return {
     session,
     id,
+    /** The id of the connection that the queries run on now. */
+    currentId: () => current.threadId,
     reconnected: reconnected.promise,
     resume: () => resumed.resolve(),
   };
@@ -213,6 +219,21 @@ export const sessionControl: SessionControl = {
       },
       reconnected: reconnecting.reconnected,
       resume: reconnecting.resume,
+      async holderOf(key) {
+        const [rows] = await admin.query<mysql.RowDataPacket[]>(
+          `SELECT IS_USED_LOCK(${lockName}) AS holder`,
+          [lockNameArgument(key)],
+        );
+        const holder = rows[0]?.['holder'];
+        return {
+          killed: Number(reconnecting.id),
+          reconnected: Number(reconnecting.currentId()),
+          holder:
+            holder === null || holder === undefined
+              ? undefined
+              : Number(holder),
+        };
+      },
       async [Symbol.asyncDispose]() {
         reconnecting.resume();
         await admin.end();

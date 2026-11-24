@@ -47,6 +47,11 @@ export interface GetLockServer<Session extends GetLockSession> {
  */
 export const lockName = "SHA2(CONCAT(DATABASE(), ':', ?), 256)";
 
+/** The value of the one `?` of `lockName` for `key`: the key digest as 64 lowercase hex characters. */
+export function lockNameArgument(key: string): string {
+  return keyDigest(key).toHex();
+}
+
 /** `GET_LOCK` gives 1 for a grant and 0 for a timeout; NULL is an error, for example a killed statement. */
 function granted(row: Row | undefined, server: string): boolean {
   const locked = row?.['locked'];
@@ -78,7 +83,7 @@ export function getLockDialect<Session extends GetLockSession>(
     };
   return {
     server: server.server,
-    lockName: (key) => keyDigest(key).toHex(),
+    lockName: lockNameArgument,
     // A timeout of `GET_LOCK` (MariaDB's longest is one year) waits again.
     wait: async (session, { name }, signal) => {
       for (;;) {

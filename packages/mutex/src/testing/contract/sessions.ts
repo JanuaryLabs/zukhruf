@@ -47,6 +47,18 @@ export interface Reconnecting extends AsyncDisposable {
   readonly reconnected: Promise<void>;
   /** Lets the queries on the new connection run. */
   resume(): void;
+  /** Asks the server from another session which connection holds `key`, once the new connection is up. */
+  holderOf(key: string): Promise<ReconnectHolder>;
+}
+
+/** The connections of a silent reconnect, and the connection that the server reports as the holder of a key. */
+export interface ReconnectHolder {
+  /** The id of the connection that the server ended. */
+  readonly killed: number;
+  /** The id of the new connection. */
+  readonly reconnected: number;
+  /** The id of the connection that holds the key, or `undefined` for a free key. */
+  readonly holder: number | undefined;
 }
 
 /** What the session tests reach on the server of a session lock store. */
@@ -60,6 +72,18 @@ export interface SessionControl {
   ): Promise<Reconnecting>;
   /** Resolves once a session of the database at `location` waits in the server's lock queue. */
   untilASessionWaits(t: TestContext, location: string): Promise<void>;
+}
+
+function holderReport({ killed, reconnected, holder }: ReconnectHolder) {
+  const holds =
+    holder === undefined
+      ? 'no connection holds the key'
+      : `connection ${holder} holds the key`;
+  return `the server ended connection ${killed}, the session reconnected as connection ${reconnected}, and the server reports that ${holds}`;
+}
+
+function holderQueryFailed(error: unknown) {
+  return `the holder query failed: ${Error.isError(error) ? error.message : String(error)}`;
 }
 
 /** A store over a pool of sessions. */
@@ -184,6 +208,13 @@ export function sessions<H extends Host>(
         const heldAfterReconnect = !handle.signal.aborted;
         const lease = await other.store.tryAcquire(key);
         if (lease) taken.use(lease);
+        // Read before resume(), so the message tells who held the key at the take.
+        // A holder query that fails puts its own error in the message, so the assertion still fails with its own words.
+        const holder = lease
+          ? undefined
+          : await reconnecting
+              .holderOf(key)
+              .then(holderReport, holderQueryFailed);
         reconnecting.resume();
 
         // Assert: the heartbeat asks whether this session holds the lock, not whether any session does.
@@ -191,7 +222,10 @@ export function sessions<H extends Host>(
           heldAfterReconnect,
           'The reconnect itself must not lose the lease',
         );
-        assert.ok(lease, 'The ended connection must have freed the key');
+        assert.ok(
+          lease,
+          `The ended connection must have freed the key${holder === undefined ? '' : `: ${holder}`}`,
+        );
         // The lease of a session that no longer holds the lock aborts.
         await untilAborted(lost, t.signal);
         const reason: unknown = handle.signal.reason;

@@ -94,7 +94,7 @@ export class SqlServerStore extends SessionLockStore<SqlServerSession> {
  * `@Resource`, and `sys.dm_tran_locks` shows only the first 32 characters of
  * a resource, so the holder check sees the whole name.
  */
-function resourceName(key: string): string {
+export function resourceName(key: string): string {
   return keyDigest(key).subarray(0, 16).toHex();
 }
 
