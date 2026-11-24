@@ -34,3 +34,25 @@ The disposal waits, for each connection that the close destroyed, until the firs
 - The `fetch` case and the msw-passthrough case of the context failed in 3 of 3 runs before commit f38211cf, and they pass after it (released in 0.8.98).
 - A mutation that removes the wait made both cases fail. A mutation that changes `Promise.race` to `Promise.all` made the passthrough case hang.
 - The defect class and the mechanism are those of [ADR 0028](./0028-an-interceptions-disposal-waits-until-the-client-has-closed-each-connection-that-the-server-closed.md), which is accepted.
+
+## Amendment 2026-11-24 (#5542): the disposal destroys the client sockets that it waits for
+
+Decision-makers: the zukhruf session mutex-07, which decided from the evidence.
+
+After a `fetch`, the disposal did not settle when nothing else kept the event loop alive. undici keeps an idle keep-alive socket unref'd. After the server closed its side, the event loop ended before the client socket read the server's FIN, so the socket never emitted `close`, and the wait stayed pending. A script whose last await is the disposal ended with exit 13, "Detected unsettled top-level await", in 3 of 3 runs, also behind an msw passthrough. A `node --test` file that awaits each test, with the disposal as the last await of its second test, failed with "Promise resolution is still pending but the event loop has already resolved" in 3 of 3 runs. context-compiler's `apps/what-is-going-on/src/testing/reader-cases.ts` failed in the same way with `@zukhruf/testing` 0.8.100. The defect came with commit f38211cf (0.8.98). The msw disposal does not have it: `server.close()` of msw destroys its sockets, and a socket that closes keeps the event loop alive until it emits `close`.
+
+### Decision
+
+The disposal destroys each client socket of the process that it pairs with a connection that the close destroyed, and then waits, as before, for the first `close` of each pair. The server has already destroyed the other side of these connections, so a client can send no more requests on them. A request in flight fails in either case. undici sees the `close`, and its next request opens a new connection. The disposal settled in about 1 ms.
+
+### Considered Options
+
+- **Call `ref()` on each paired client socket for the wait.** undici owns the ref state of its sockets. After the response, undici resumes the client in an `Immediate`, and `resumeH1` calls `socket.unref()` on the idle socket after the disposal called `ref()` (Node 26.13, `node:internal/deps/undici/undici:8059`). At `beforeExit`, `hasRef()` of the socket was `false`, and the script still ended with exit 13 in 3 of 3 runs.
+- **Keep a timer or another handle of our own alive for the wait.** It keeps the event loop alive, but it does code by hand that `destroy()` already does, and the wait still depends on when the client reads the FIN.
+- **Destroy the client sockets in the disposal.** The first decision refused it because a request in flight would fail. That request fails anyway, because the server has destroyed its side. Its `close` came within the wait, so undici clears its timer before the next test fakes the timers. This option is now the decision.
+
+### Confirmation
+
+- Red before the fix, in `src/http/http-server.integration.test.ts`: "disposal after a fetch settles in a process that nothing else holds open" failed with exit 13 and "Detected unsettled top-level await". "in a file that awaits each test, a test whose last await is the disposal after a fetch passes" failed with "Promise resolution is still pending but the event loop has already resolved". Both pass after the fix, with the three guards of #5449: the `fetch` timer case, the msw-passthrough timer case, and the case of a client in another process.
+- Mutations, each in memory with the `mutate.mjs` of write-test: the fix removed made both new tests fail. `ref()` in place of `destroy()` made both new tests fail. No wait for `close` after `destroy()` made both timer cases fail. `Promise.all` in place of `Promise.race` made the passthrough case fail. A wait for connections with no client socket in the process made the out-of-process case fail. 7 of 7 caught.
+- The second copy of the socket-close tracking, in `src/msw/msw.ts`, does not get this fix: its `server.close()` destroys its sockets already, and a script whose last await is its disposal after a `fetch` of a mocked response ended with exit 0 in 3 of 3 runs. [Code copied into this package](../copied-code.md) records the difference.

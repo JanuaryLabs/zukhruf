@@ -21,7 +21,7 @@ export type HttpHandler = (
 export interface HttpServerHandle extends AsyncDisposable {
   origin: string;
   server: Server;
-  /** Stop accepting requests, close active HTTP connections, and wait until a client of this process has closed each of them. */
+  /** Stop accepting requests, close active HTTP connections, destroy the client sockets of this process that belong to them, and wait until a client socket of each has closed. */
   cleanup: () => Promise<void>;
 }
 
@@ -92,6 +92,7 @@ export class HttpServer {
                 (client) =>
                   new Promise((resolve) => {
                     client.once('close', resolve);
+                    client.destroy();
                   }),
               ),
             ),

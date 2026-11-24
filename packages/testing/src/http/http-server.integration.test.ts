@@ -1,9 +1,13 @@
 import assert from 'node:assert/strict';
 import { execFile, spawn } from 'node:child_process';
 import { once } from 'node:events';
+import { writeFile } from 'node:fs/promises';
 import { Server } from 'node:http';
+import { join } from 'node:path';
 import { test } from 'node:test';
-import { promisify } from 'node:util';
+import { promisify, stripVTControlCharacters } from 'node:util';
+
+import { TemporaryFiles } from '@zukhruf/fs';
 
 import { HttpServer } from './http-server.ts';
 
@@ -236,4 +240,65 @@ test('disposal settles while a client in another process holds its connection op
   } finally {
     client.kill();
   }
+});
+
+test('disposal after a fetch settles in a process that nothing else holds open', async () => {
+  const { stdout } = await promisify(execFile)(process.execPath, [
+    '--input-type=module',
+    '--eval',
+    `
+    import { HttpServer } from ${JSON.stringify(import.meta.resolve('./http-server.ts'))};
+
+    setTimeout(() => {
+      console.error('the child did not end in 20 s');
+      process.exit(124);
+    }, 20_000).unref();
+
+    const server = await new HttpServer().start((_request, response) => {
+      response.end('ok');
+    });
+    await (await fetch(server.origin)).text();
+    await server[Symbol.asyncDispose]();
+    console.log('settled');
+    `,
+  ]);
+
+  assert.equal(stdout, 'settled\n');
+});
+
+test('in a file that awaits each test, a test whose last await is the disposal after a fetch passes', async () => {
+  await using directory = await new TemporaryFiles().directory('http-server-');
+  const file = join(directory.path, 'disposal.test.mjs');
+  await writeFile(
+    file,
+    `
+    import { test } from 'node:test';
+    import { HttpServer } from ${JSON.stringify(import.meta.resolve('./http-server.ts'))};
+
+    setTimeout(() => {
+      console.error('the child did not end in 20 s');
+      process.exit(124);
+    }, 20_000).unref();
+
+    await test('a test before', () => {});
+
+    await test('a test that disposes its server last', async () => {
+      await using server = await new HttpServer().start((_request, response) => {
+        response.end('ok');
+      });
+      await (await fetch(server.origin)).text();
+    });
+    `,
+  );
+  // node:test marks its own test processes with NODE_TEST_CONTEXT, and a
+  // node --test that inherits it skips its files as a recursive run.
+  const { NODE_TEST_CONTEXT: _context, ...env } = process.env;
+
+  const { stdout } = await promisify(execFile)(
+    process.execPath,
+    ['--test', '--test-reporter=spec', file],
+    { env },
+  );
+
+  assert.match(stripVTControlCharacters(stdout), /^ℹ pass 2$/m);
 });
