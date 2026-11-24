@@ -47,7 +47,18 @@ test('a wait outlasts the max_execution_time of its session', async () => {
   const holderPool = database.pool();
   const waiterPool = database.pool();
   const key = uniqueKey();
-  const holder = await hold(new Mutex(storeOver(holderPool)), key);
+  // The holder's heartbeat outlasts the hold: under load, a late beat would lose its lease.
+  const holder = await hold(
+    new Mutex(
+      new MysqlStore({
+        connect: () => holderPool.getConnection(),
+        table,
+        heartbeatInterval: 10_000,
+        clock: globalThis,
+      }),
+    ),
+    key,
+  );
   const waiter = new MysqlStore({
     connect: async () => {
       const session = await waiterPool.getConnection();
@@ -62,9 +73,11 @@ test('a wait outlasts the max_execution_time of its session', async () => {
 
   // Act: the holder keeps the key longer than the time limit.
   await delay(1000);
-  await holder.release();
+  // The wait settles before the database's scope ends, also when the release throws.
+  const [released] = await Promise.allSettled([holder.release(), waiting]);
 
   // Assert
+  if (released.status === 'rejected') throw released.reason;
   assert.equal(
     await waiting,
     'ran',
