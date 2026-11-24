@@ -513,7 +513,7 @@ A call with no name does not compile. [ADR 0018](./docs/adr/0018-a-preload-is-a-
 
 ## Intercepted requests
 
-`new Msw().intercept(...handlers)` starts an msw server in this process with the handlers, and returns an interception. The handle has `server`, `requests` and `cleanup`. Disposal closes the server, and then waits until the client has closed each connection that the server closed. Write `await using`, or `await interception.cleanup()`: the handle has no `Symbol.dispose`, so `using` does not compile.
+`new Msw().intercept(...handlers)` adds the handlers to the msw network of this process, and returns an interception. The handle has `server`, `requests` and `cleanup`. Disposal removes the handlers, and then waits until the client has closed each connection that the close closed. Write `await using`, or `await interception.cleanup()`: the handle has no `Symbol.dispose`, so `using` does not compile.
 
 ```ts
 import { HttpResponse, http } from 'msw';
@@ -536,11 +536,15 @@ test('sends the token', async (t) => {
 });
 ```
 
-An interception is always strict: the server listens with `onUnhandledFrame: 'error'`. A request that no handler answers fails: `fetch` rejects, and the cause is the msw error "Cannot bypass a request when using the "error" strategy". msw also prints the method and the URL of the request. There is no option for a different strategy.
+An interception is always strict: the network fails each request that no handler answers, with `onUnhandledFrame: 'error'`. A request that no handler answers fails: `fetch` rejects, and the cause is the msw error "Cannot bypass a request when using the "error" strategy". msw also prints the method and the URL of the request. There is no option for a different strategy. The network sees each HTTP client of the process: `fetch`, `http.request`, npm undici and a raw `node:net` socket (`HttpRequestInterceptor` of `@mswjs/interceptors`).
 
-`requests` holds a clone of each request that the server receives, in the order of arrival. A clone keeps its body, so the test can read the body after a handler read the original.
+`requests` holds a clone of each request that the network receives while the interception is open, in the order of arrival. A clone keeps its body, so the test can read the body after a handler read the original.
 
-`server` is the msw server, of the type `SetupServer` from `msw/node`. Use `interception.server.use(...handlers)` to add handlers for a part of the test.
+`server` holds the handlers and the events of the interception (type `MswServer`): `use`, `resetHandlers`, `restoreHandlers`, `listHandlers` and `events` of an msw network. Use `interception.server.use(...handlers)` to add handlers for a part of the test.
+
+Two interceptions can be open at the same time, such as the interception of a helper and the interception of a test. The network asks the handlers of the newer interception first, and then the handlers of the older one. Each open interception records each request. When one interception closes, the others still answer ([ADR 0029](./docs/adr/0029-the-interceptions-of-a-process-share-one-msw-network-over-the-socket-interceptor-and-each-connection-to-an-address-that-is-not-a-loopback-address-fails.md)).
+
+From the first interception on, each connection of the process to an address that is not a loopback address fails with `ERR_IP_BLOCKED` before a byte leaves, also after the disposal. This covers a connection that msw passes through: a passthrough handler for a real host, a socket that reads first, a request that msw cannot parse, and a request that starts in the same turn as the disposal. The disposal then rejects with `NetConnectNotAllowedError` (code `ENETUNREACH`), whose message names each refused address and port: `Disallowed net connect for "192.0.2.1:80"`. A test that needs a real host runs in another process. A mock for a URL whose host is a public IP address fails too: use a host name.
 
 An interception also receives the requests to a local server, such as an `HttpServer` of the same test. To send them to that server, give a handler for the origin of that server. The handler passes each of its requests through:
 
@@ -558,9 +562,9 @@ await using interception = msw.intercept(
 
 Do not use a catch-all handler, such as `http.all('*', …)`, that returns nothing for some requests. msw then sends each of those requests to the network, and the strict strategy has no effect. msw 3.0.2 does this.
 
-`fetch` keeps each connection in its pool and clears the timer of the connection only when the connection emits `close`, a few turns after `server.close()`. In a test that fakes `setTimeout` with `t.mock.timers`, that timer comes from the fake. If the clear runs after node:test resets the fake timers, Node 26 removes a timer of the next test that fakes them. Thus the disposal waits for those `close` events ([ADR 0028](./docs/adr/0028-an-interceptions-disposal-waits-until-the-client-has-closed-each-connection-that-the-server-closed.md)). It does not close a passthrough connection, which the local server closes.
+`fetch` keeps each connection in its pool and clears the timer of the connection only when the connection emits `close`, a few turns after the network stops. In a test that fakes `setTimeout` with `t.mock.timers`, that timer comes from the fake. If the clear runs after node:test resets the fake timers, Node 26 removes a timer of the next test that fakes them. Thus the disposal waits for those `close` events ([ADR 0028](./docs/adr/0028-an-interceptions-disposal-waits-until-the-client-has-closed-each-connection-that-the-server-closed.md)). It does not close a passthrough connection, which the local server closes.
 
-The driver is msw 3 (`msw ^3.0.3`), which needs Node.js 22.12 or later. Install it next to this package.
+The driver is msw 3 (`msw ^3.0.7`, with its experimental `msw/experimental` API) and `@mswjs/interceptors` `^0.45.12`. msw needs Node.js 22.12 or later. Install both next to this package.
 
 ## API
 
@@ -850,10 +854,18 @@ class StreamHarness {
 }
 
 // @zukhruf/testing/msw
+type MswServer = Pick<
+  NetworkApi<[InterceptorSource]>,
+  'events' | 'use' | 'resetHandlers' | 'restoreHandlers' | 'listHandlers'
+>;
 interface MswInterception extends AsyncDisposable {
-  server: SetupServer;
+  server: MswServer;
   requests: Request[];
   cleanup: () => Promise<void>;
+}
+class NetConnectNotAllowedError extends Error {
+  readonly code: 'ENETUNREACH';
+  readonly hosts: readonly string[];
 }
 class Msw {
   intercept(...handlers: AnyHandler[]): MswInterception;
@@ -882,7 +894,7 @@ function globalTeardown(): void;
 - [ADR 0006](./docs/adr/0006-a-killed-run-is-cleaned-by-nodes-global-setup-and-teardown.md): a killed run is cleaned by Node's global setup and teardown.
 - [ADR 0007](./docs/adr/0007-a-database-fixture-takes-the-environment.md): a database fixture takes the environment.
 - [ADR 0009](./docs/adr/0009-a-test-never-changes-the-environment-of-its-process.md): a test never changes the environment of its process.
-- [ADR 0010](./docs/adr/0010-the-msw-area-is-always-strict-and-records-each-request.md): the msw area is always strict and records each request.
+- [ADR 0010](./docs/adr/0010-the-msw-area-is-always-strict-and-records-each-request.md): the msw area is always strict and records each request (superseded in part by ADR 0029).
 - [ADR 0011](./docs/adr/0011-the-run-id-in-a-databases-name-is-its-owner-reference-and-one-collector-for-each-kind-drops-a-dead-runs-databases.md): the run id in a database's name is its owner reference, and one collector for each kind drops a dead run's databases.
 - [ADR 0012](./docs/adr/0012-a-shared-server-belongs-to-one-version-of-the-package-and-the-global-teardown-removes-the-servers-of-every-other-version.md): a shared server belongs to one version of the package, and the global teardown removes the servers of every other version (superseded by ADR 0019).
 - [ADR 0013](./docs/adr/0013-the-docker-area-is-a-testbed-that-takes-engine-api-bodies-and-the-run-is-not-part-of-its-api.md): the Docker area is a testbed that takes Engine API bodies, and the run is not part of its API.
@@ -900,6 +912,7 @@ function globalTeardown(): void;
 - [ADR 0025](./docs/adr/0025-recovery-and-the-global-teardown-make-no-engine-call-and-a-test-process-has-no-process-record.md): recovery and the global teardown make no engine call, and a test process has no process record.
 - [ADR 0026](./docs/adr/0026-a-database-handle-owns-its-pools-and-its-disposal-ends-them-before-it-drops-the-database.md): a database handle owns its pools, and its disposal ends them before it drops the database.
 - [ADR 0028](./docs/adr/0028-an-interceptions-disposal-waits-until-the-client-has-closed-each-connection-that-the-server-closed.md): an interception's disposal waits until the client has closed each connection that the server closed.
+- [ADR 0029](./docs/adr/0029-the-interceptions-of-a-process-share-one-msw-network-over-the-socket-interceptor-and-each-connection-to-an-address-that-is-not-a-loopback-address-fails.md): the interceptions of a process share one msw network over the socket interceptor, and each connection to an address that is not a loopback address fails.
 
 **Copied code**: [Code copied into this package](./docs/copied-code.md) records each copy of code in this package, as the Rule of Three asks.
 
