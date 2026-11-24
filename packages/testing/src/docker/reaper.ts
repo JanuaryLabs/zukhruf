@@ -136,6 +136,15 @@ const CAME = '/tmp/came';
 const LIMITED = '/tmp/limited';
 
 /**
+ * The seconds between two keep-alive bytes of a holder (root ADR 0012): the
+ * keep-alive idle time and interval of Go, which the connections of Ryuk use.
+ * A byte comes at the status of `timeout` at its limit: 124 from GNU
+ * `timeout`, and 141 from BusyBox `timeout`, which gives the status of its
+ * program, here the SIGPIPE of `head`.
+ */
+const KEEP_ALIVE_INTERVAL = 15;
+
+/**
  * The exec of a holder. It waits for the check of the reaper's socket, and
  * ends with no answer when its input ends first: its owner went away (#4512).
  * BusyBox `read -t` gives 1 both at a timeout and at the end of the input, so
@@ -145,11 +154,21 @@ const LIMITED = '/tmp/limited';
  * engine, `held` once it holds the door shared and wrote the mark of a first
  * holder, then its `cat` keeps the lock until the hold ends, or `closing` when
  * the reaper closed its door.
+ *
+ * After `held`, the holder writes one keep-alive byte to its output each
+ * KEEP_ALIVE_INTERVAL seconds while its `cat` runs (root ADR 0012). The
+ * engine sends each byte to the owner, so the kernel of the engine's host
+ * ends the connection of an owner that went away with no close, and `cat`
+ * reads the end of its input. `cat` writes to `/dev/null`, and its fd 4 holds
+ * the pipe to the writer: the writer's `head` reads the end of that pipe when
+ * `cat` ends, and the writer ends. Any other status of `timeout`, such as 127
+ * for a missing command, stops the writer, and `cat` still holds. The writer
+ * closes the door's fd 8: only `cat` and its shell hold the lock.
  */
 const HOLD = [
   'sh',
   '-c',
-  `until [ -e ${BIND} ]; do timeout -s PIPE 0.05 head -c 1 > /dev/null && exit 0; done; read -r bind < ${BIND}; [ "$bind" = verified ] || { echo "unverified $bind"; exit 0; }; exec 8>>${DOOR}; flock -n -s 8 || { echo closing; exit 0; }; : > ${CAME}; echo held; exec cat`,
+  `until [ -e ${BIND} ]; do timeout -s PIPE 0.05 head -c 1 > /dev/null && exit 0; done; read -r bind < ${BIND}; [ "$bind" = verified ] || { echo "unverified $bind"; exit 0; }; exec 8>>${DOOR}; flock -n -s 8 || { echo closing; exit 0; }; : > ${CAME}; echo held; cat 4>&1 > /dev/null | { while :; do timeout -s PIPE ${KEEP_ALIVE_INTERVAL} head -c 1 > /dev/null; case $? in 124|141) printf . ;; *) break ;; esac; done; } 8>&-`,
 ];
 
 /** A word of `sh` in double quotes. Each `\u0000name\u0000` in `text` becomes the variable `name`. */

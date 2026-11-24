@@ -22,7 +22,7 @@ import { DockerEngineStoreWarning } from './docker-engine-store-warning.ts';
 export interface DockerEngineStoreOptions {
   /** The client of the engine. The caller owns it; its disposal ends each attach, so each held key is lost. */
   docker: Docker;
-  /** The image of each claim. It must be on the engine and have `cat` on its `PATH`; the store never pulls it. */
+  /** The image of each claim. It must be on the engine and have `sh`, `cat`, `head` and `timeout` on its `PATH`; the store never pulls it. */
   image: string;
   /** The first part of each name and the value of the label `zukhruf.mutex.namespace`. Stores with one namespace on one engine share their locks. */
   namespace: string;
@@ -47,13 +47,38 @@ const tokenLabel = 'zukhruf.mutex.token';
 /** The states of a claim that no other caller can take the key from. */
 const holdingStates = new Set(['created', 'running', 'paused', 'restarting']);
 
+/**
+ * The seconds between two keep-alive bytes of a claim (root ADR 0012): the
+ * keep-alive idle time and interval of Go, which the connections of Ryuk use.
+ */
+const keepAliveInterval = 15;
+/**
+ * The command of a claim. `cat` holds the claim until the attach ends. While
+ * `cat` runs, the shell writes one keep-alive byte to the attach each
+ * `keepAliveInterval` seconds, so the kernel of the engine's host ends the
+ * connection of a holder machine that went away with no close (root ADR
+ * 0012). `cat` writes to `/dev/null`, and its fd 4 holds the pipe to the
+ * writer: `head` reads the end of that pipe when `cat` ends, and the writer
+ * ends. A byte comes at the status of `timeout` at its limit: 124 from GNU
+ * `timeout`, 141 from BusyBox `timeout`, which gives the status of its
+ * program. Any other status stops the writer, and `cat` still holds.
+ *
+ * The status of a pipeline is the status of its last command, so a `cat`
+ * that is not found would end the claim with 0, as a release does. The shell
+ * has no `pipefail` everywhere (dash), so the command first looks for `cat`
+ * and exits with 127, the status of a command that is not found. When it
+ * finds `cat`, it writes one byte, so the holder knows before the mint
+ * whether the claim can hold (#5543).
+ */
+const claimCommand = `command -v cat > /dev/null || exit 127; printf .; cat 4>&1 > /dev/null | { while :; do timeout -s PIPE ${keepAliveInterval} head -c 1 > /dev/null; case $? in 124|141) printf . ;; *) break ;; esac; done; }`;
 /** The states of a claim that ended: no holder can have it, and only a removal makes its name free. */
 const endedStates = new Set(['exited', 'dead']);
 
 /**
  * Holds a key as a named container on one Docker engine: the claim. The claim
  * runs `cat` on the standard input of the attach of its holder, so it ends
- * and the engine removes it when the attach ends. Every process on every
+ * and the engine removes it when the attach ends. It also writes a keep-alive
+ * byte to the attach each 15 s, which the holder reads and drops. Every process on every
  * machine that reaches the engine shares the locks.
  *
  * Callers in this process first line up in a queue in memory, so one process
@@ -162,8 +187,8 @@ class Claims {
       container = await docker.containers.create(
         {
           Image: image,
-          Entrypoint: ['cat'],
-          Cmd: ['-'],
+          Entrypoint: ['sh'],
+          Cmd: ['-c', claimCommand],
           OpenStdin: true,
           StdinOnce: true,
           AttachStdin: true,
@@ -263,6 +288,11 @@ async function removeUnlessRunning(
   }
 }
 
+/** Reads the rest of the output of an attach to its end. */
+async function drained(output: AsyncIterator<unknown>): Promise<void> {
+  while ((await output.next()).done !== true);
+}
+
 /** A claim that this caller created: it attaches, starts, mints and confirms, then holds with a heartbeat. */
 class Claim {
   readonly #container: Container;
@@ -300,9 +330,27 @@ class Claim {
         stdin: true,
         signal: attachment.signal,
       });
-      const ended = attach.exitCode;
+      // The claim writes a ready byte and then keep-alive bytes to the attach:
+      // the store reads and drops them. A failed read ends the attach, and
+      // loses the lease with its error.
+      const output = attach[Symbol.asyncIterator]();
+      const ready = output.next();
+      ready.catch(() => {});
+      const ended = Promise.all([
+        attach.exitCode,
+        ready.then(() => drained(output)),
+      ]).then(([code]) => code);
       ended.catch(() => {});
       await this.#container.start();
+      if ((await ready).done === true) {
+        if ((await ended) === 127) {
+          throw new Error(
+            `The claim of the key ${JSON.stringify(this.#key)} exited with the code 127: the image ${JSON.stringify(this.#options.image)} has no \`cat\` on its PATH.`,
+          );
+        }
+        attachment.abort();
+        return undefined;
+      }
       token = await this.#mint();
       if ((await stateOf(this.#container)) === undefined) {
         attachment.abort();

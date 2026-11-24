@@ -90,6 +90,10 @@ _Avoid_: Dead reaper, stale reaper
 The one `cat` exec of a test process on the reaper of its run, that a `ReaperHold` takes before the process creates anything on the engine (ADR 0020). It ends when the process exits, for any reason, and it does not keep the process running. When it ends while the process lives, the process takes it again at once, on the same reaper or on the next reaper of the run.
 _Avoid_: Lease (a lease is a container), session
 
+**Keep-alive byte**:
+The one byte that a hold or a lease writes to the engine each 15 s while its `cat` runs (root ADR 0012). The engine sends it to the holder process. When the machine of that process went away with no close, nothing acknowledges the byte, so the kernel of the engine's host ends the connection, and the hold or the lease ends.
+_Avoid_: Heartbeat (a heartbeat asks a question and waits for its answer), ping
+
 **Runner**:
 The `node --test` process that runs the global setup, starts the test processes and runs the global teardown.
 

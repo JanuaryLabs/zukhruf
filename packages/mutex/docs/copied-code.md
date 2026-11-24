@@ -154,6 +154,8 @@ Backlog #4919 extracts the predicate at a third place.
 
 The Rule of Three asks to extract the code below. It is not extracted yet. Until it is, a fix to one place goes into each place, and the commit names each file.
 
+**The keep-alive byte of a holder on a Docker engine.** Three places in two packages, as copies by the owner's choice ("All three, as copies", root ADR 0012, #5543); the extraction waits for his go (#5575). The note of `@zukhruf/testing` records them ([copied-code.md](../../testing/docs/copied-code.md)). The place in this package is `claimCommand` and `drained` in `docker/docker-engine-store.ts`.
+
 **The class of a warning of a failure that no caller hears.** Twelve places, one class for each type, by the maintainer's choice (#3619, backlog #4938; the shape of root ADR 0010, #5472; a class for each type, root ADR 0011, #5474).
 
 - Places: `TermWarning` (`packages/election/src/term-warning.ts`), `CreateExclusiveWarning` (`packages/fs/src/create-exclusive-warning.ts`), `PeriodicSchedulerWarning` (`packages/mteb/src/dependencies/periodic-scheduler-warning.ts`), `LockWarning` (`packages/mteb/src/dependencies/lock-warning.ts`), `LeaderSelectorWarning` (`packages/mutex/src/leader-selector/leader-selector-warning.ts`), `MutexWarning` (`packages/mutex/src/mutex/mutex-warning.ts`), `DockerEngineStoreWarning` (`docker/docker-engine-store-warning.ts`), `LockServerWarning` (`socket/lock-server-warning.ts`), `PoolWarning` (`packages/pool/src/pool-warning.ts`), `SqliteJobQueueWarning` (`packages/sqlite/queue/src/sqlite-job-queue-warning.ts`), `TimekeeperWarning` (`packages/sqlite/queue/src/timekeeper-warning.ts`) and `SharedConnectionWarning` (`packages/ssh/src/control/shared-connection-warning.ts`).

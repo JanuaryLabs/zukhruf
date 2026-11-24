@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { once } from 'node:events';
 import { readFile, writeFile } from 'node:fs/promises';
+import { connect } from 'node:net';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -21,7 +23,7 @@ import { engineProxy } from '../../testing/subjects/docker-engine.ts';
 import { DockerEngineStore, DockerEngineStoreWarning } from './index.ts';
 
 /**
- * The first fourteen tests are the design errors that the probes of
+ * The first sixteen tests are the design errors that the probes of
  * DockerEngineStore found. The name of each test says what the wrong design
  * broke. The tests after them are the contract of a lock store.
  */
@@ -51,10 +53,11 @@ async function engine() {
   return {
     docker,
     namespace,
-    store: (client: Docker = docker) =>
+    labels,
+    store: (client: Docker = docker, claimImage = image) =>
       new DockerEngineStore({
         docker: client,
-        image,
+        image: claimImage,
         namespace,
         heartbeatInterval,
         labels,
@@ -114,6 +117,199 @@ test("a killed holder's key goes to the next waiter", async (t) => {
 
   // Assert: the end of the attach of a killed holder ended its claim.
   assert.ok(token > BigInt(String(holder.find('holding')?.token)));
+});
+
+/** The OpenSSH server of `droppableSshEngine`: a key login as root, with the defaults of sshd for a client that went away. Alpine's sshd_config sets `AllowTcpForwarding no`, which also denies the connect to the engine socket. */
+const sshdScript = [
+  'apk add --no-cache openssh-server iptables > /dev/null',
+  'ssh-keygen -A > /dev/null',
+  'mkdir -p /root/.ssh',
+  'printf "%s\\n" "$KEY" > /root/.ssh/authorized_keys',
+  'exec /usr/sbin/sshd -D -e -o ClientAliveInterval=0 -o TCPKeepAlive=yes -o AllowTcpForwarding=yes -o AllowStreamLocalForwarding=yes -o PermitRootLogin=prohibit-password',
+].join(' && ');
+
+/** The first bytes that the server on 127.0.0.1:`port` sends, or nothing when it closes first. */
+async function banner(port: number): Promise<string> {
+  const socket = connect(port, '127.0.0.1');
+  try {
+    const [data] = await Promise.race([
+      once(socket, 'data'),
+      once(socket, 'close').then(() => ['']),
+    ]);
+    return String(data);
+  } finally {
+    socket.destroy();
+  }
+}
+
+/**
+ * An SSH engine host whose network a test can cut (#5543): an OpenSSH server
+ * in a container of the local engine, which reaches that engine at
+ * /var/run/docker.sock. sshd sends no probe of its own (`ClientAliveInterval
+ * 0`, its default), and TCP keep-alive waits 2 h. `tcp_retries2=5` in the
+ * network namespace of the container ends a connection whose data gets no
+ * answer after about 12.6 s, instead of about 15.4 min. Platform setup that
+ * no product operation exposes: a holder machine that goes away with no
+ * close.
+ */
+async function droppableSshEngine() {
+  await using stack = new AsyncDisposableStack();
+  const directory = stack.use(
+    await new TemporaryFiles().directory('zukhruf-sshd-'),
+  );
+  const key = join(directory.path, 'id_ed25519');
+  await promisify(execFile)('ssh-keygen', [
+    '-q',
+    '-t',
+    'ed25519',
+    '-N',
+    '',
+    '-f',
+    key,
+  ]);
+  const service = stack.use(
+    await new DockerTestbed({ environment: process.env }).serve(
+      {
+        Image: 'alpine:latest',
+        Entrypoint: ['sh', '-c', sshdScript],
+        Env: [`KEY=${(await readFile(`${key}.pub`, 'utf8')).trim()}`],
+        HostConfig: {
+          CapAdd: ['NET_ADMIN'],
+          Sysctls: { 'net.ipv4.tcp_retries2': '5' },
+          Binds: ['/var/run/docker.sock:/var/run/docker.sock'],
+        },
+      },
+      {
+        internalPort: 22,
+        healthy: ({ port }, exited) =>
+          waitFor(async () => assert.match(await banner(port), /^SSH-2\.0-/), {
+            signal: exited,
+            interval: 200,
+          }),
+      },
+    ),
+  );
+  const hostKey = await service.container.exec({
+    Cmd: ['cat', '/etc/ssh/ssh_host_ed25519_key.pub'],
+  });
+  const knownHosts = join(directory.path, 'known_hosts');
+  await writeFile(
+    knownHosts,
+    `[${service.host}]:${service.port} ${hostKey.stdout.trim()}\n`,
+  );
+  const owned = stack.move();
+  return {
+    /** The ssh:// host of the local engine through the server. */
+    host: `ssh://root@${service.host}:${service.port}/var/run/docker.sock`,
+    /** The flags of `ssh` that log in with the test's key and trust only the server's host key. */
+    flags: [
+      '-F',
+      '/dev/null',
+      '-i',
+      key,
+      '-o',
+      'IdentitiesOnly=yes',
+      '-o',
+      'IdentityAgent=none',
+      '-o',
+      `UserKnownHostsFile=${knownHosts}`,
+      '-o',
+      'GlobalKnownHostsFile=/dev/null',
+      '-o',
+      'StrictHostKeyChecking=yes',
+    ],
+    /** Drops each packet of port 22 in the server's network namespace, both ways: no close and no answer reaches either side. */
+    async drop() {
+      const dropped = await service.container.exec({
+        Cmd: [
+          'sh',
+          '-c',
+          'iptables -I INPUT -p tcp --dport 22 -j DROP && iptables -I OUTPUT -p tcp --sport 22 -j DROP',
+        ],
+      });
+      assert.equal(dropped.exitCode, 0, dropped.stderr);
+    },
+    [Symbol.asyncDispose]: () => owned.disposeAsync(),
+  };
+}
+
+/** Takes the key in its own process through its own SSH connection to `host`, reports its token, and keeps the key until it is killed. */
+const sshHolderSource = (
+  namespace: string,
+  key: string,
+  { host, flags }: { host: string; flags: string[] },
+) => `
+	import { Docker } from ${JSON.stringify(import.meta.resolve('@zukhruf/docker'))};
+	import { Mutex } from ${JSON.stringify(new URL('../../index.ts', import.meta.url).href)};
+	import { DockerEngineStore } from ${JSON.stringify(new URL('./index.ts', import.meta.url).href)};
+	setInterval(() => {}, 1000);
+	const docker = await Docker.connect({ clock: globalThis, environment: { ...process.env, DOCKER_HOST: ${JSON.stringify(host)} }, sshFlags: ${JSON.stringify(flags)} });
+	const store = new DockerEngineStore({ docker, image: ${JSON.stringify(image)}, namespace: ${JSON.stringify(namespace)}, heartbeatInterval: ${heartbeatInterval}, clock: globalThis });
+	await new Mutex(store).acquire(${JSON.stringify(key)}, async (lease) => {
+		process.send({ type: 'holding', token: String(lease.token.value) });
+		await new Promise(() => {});
+	});
+`;
+
+// The wait ends at the time limit of the test target, 300 s, with the start of
+// the SSH server and the hold. With a keep-alive byte each 15 s, about 12.6 s of
+// retransmissions and the waits of the waiter, it ends in about 30 s; with no
+// keep-alive byte, TCP keep-alive of the engine's host waits 2 h.
+test("a key whose holder machine reaches the engine over SSH and goes away with no close goes to the next waiter within the keep-alive interval and the retransmission limit of the engine's host", async (t) => {
+  // Arrange: another process holds the key through an SSH server whose packets the test can drop.
+  await using fixture = await engine();
+  await using sshd = await droppableSshEngine();
+  await using holder = startWorker(
+    sshHolderSource(fixture.namespace, 'report:daily', sshd),
+    'holder',
+  );
+  await holder.next('holding', { signal: t.signal });
+  const waiting = new Mutex(fixture.store()).acquire(
+    'report:daily',
+    async (lease) => lease.token.value,
+  );
+
+  // Act: the network of the holder machine goes away, and then the holder, so no close reaches the engine's host.
+  await sshd.drop();
+  holder.child.kill('SIGKILL');
+  const token = await untilAborted(waiting, t.signal);
+
+  // Assert: the engine's host ended the connection of the gone holder, so its claim ended.
+  assert.ok(token > BigInt(String(holder.find('holding')?.token)));
+});
+
+test('an acquire whose claim image has sh and no cat rejects with the code 127 and the image', async (t) => {
+  // Arrange: an image that has sh and no cat.
+  await using fixture = await engine();
+  if (!(await fixture.docker.images.inspect('busybox:1.37.0'))) {
+    await fixture.docker.images.pull('busybox:1.37.0');
+  }
+  const noCat = `zukhruf-mutex-test-no-cat:${randomUUID()}`;
+  await fixture.docker.images.build(
+    {
+      files: [
+        { path: 'Dockerfile', data: 'FROM busybox:1.37.0\nRUN rm /bin/cat\n' },
+      ],
+    },
+    { t: noCat, labels: fixture.labels },
+  );
+  try {
+    // Act
+    const acquired = new Mutex(fixture.store(fixture.docker, noCat)).acquire(
+      'report:daily',
+      async () => {},
+    );
+    const settled = untilAborted(acquired, t.signal);
+
+    // Assert
+    await assert.rejects(settled, {
+      message: new RegExp(
+        `exited with the code 127: the image ${RegExp.escape(JSON.stringify(noCat))} `,
+      ),
+    });
+  } finally {
+    await fixture.docker.images.remove(noCat, { force: true });
+  }
 });
 
 test('a waiter wakes when the holder releases between the create of the waiter and its wait', async (t) => {

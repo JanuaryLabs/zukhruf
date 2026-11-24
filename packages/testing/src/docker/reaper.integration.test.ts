@@ -1,13 +1,14 @@
 import assert from 'node:assert/strict';
-import { type ChildProcess, spawn } from 'node:child_process';
+import { type ChildProcess, execFile, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
-import { chmod, mkdir } from 'node:fs/promises';
+import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { type Socket, connect, createServer } from 'node:net';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { type TestContext, describe, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
+import { promisify } from 'node:util';
 
 import { createClock } from '@sinonjs/fake-timers';
 
@@ -2230,4 +2231,210 @@ test('a holder holds the reaper of its run again after a kill of the reaper’s 
   } finally {
     await killed(child);
   }
+});
+
+/** The OpenSSH server of `droppableSshEngine`: a key login as root, with the defaults of sshd for a client that went away. Alpine's sshd_config sets `AllowTcpForwarding no`, which also denies the connect to the engine socket. */
+const sshdScript = [
+  'apk add --no-cache openssh-server iptables > /dev/null',
+  'ssh-keygen -A > /dev/null',
+  'mkdir -p /root/.ssh',
+  'printf "%s\\n" "$KEY" > /root/.ssh/authorized_keys',
+  'exec /usr/sbin/sshd -D -e -o ClientAliveInterval=0 -o TCPKeepAlive=yes -o AllowTcpForwarding=yes -o AllowStreamLocalForwarding=yes -o PermitRootLogin=prohibit-password',
+].join(' && ');
+
+/** The first bytes that the server on 127.0.0.1:`port` sends, or nothing when it closes first. */
+async function banner(port: number): Promise<string> {
+  const socket = connect(port, '127.0.0.1');
+  try {
+    const [data] = await Promise.race([
+      once(socket, 'data'),
+      once(socket, 'close').then(() => ['']),
+    ]);
+    return String(data);
+  } finally {
+    socket.destroy();
+  }
+}
+
+/**
+ * An SSH engine host whose network a test can cut (#5543): an OpenSSH server
+ * in a container of the local engine, which reaches that engine at
+ * /var/run/docker.sock. sshd sends no probe of its own (`ClientAliveInterval
+ * 0`, its default), and TCP keep-alive waits 2 h. `tcp_retries2=5` in the
+ * network namespace of the container ends a connection whose data gets no
+ * answer after about 12.6 s, instead of about 15.4 min. Platform setup that
+ * no product operation exposes: a holder machine that goes away with no
+ * close.
+ */
+async function droppableSshEngine() {
+  await using stack = new AsyncDisposableStack();
+  const directory = stack.use(
+    await new TemporaryFiles().directory('zukhruf-sshd-'),
+  );
+  const key = join(directory.path, 'id_ed25519');
+  await promisify(execFile)('ssh-keygen', [
+    '-q',
+    '-t',
+    'ed25519',
+    '-N',
+    '',
+    '-f',
+    key,
+  ]);
+  const service = stack.use(
+    await new DockerTestbed({ environment: process.env }).serve(
+      {
+        Image: 'alpine:latest',
+        Entrypoint: ['sh', '-c', sshdScript],
+        Env: [`KEY=${(await readFile(`${key}.pub`, 'utf8')).trim()}`],
+        HostConfig: {
+          CapAdd: ['NET_ADMIN'],
+          Sysctls: { 'net.ipv4.tcp_retries2': '5' },
+          Binds: ['/var/run/docker.sock:/var/run/docker.sock'],
+        },
+      },
+      {
+        internalPort: 22,
+        healthy: ({ port }, exited) =>
+          waitFor(async () => assert.match(await banner(port), /^SSH-2\.0-/), {
+            signal: exited,
+            interval: 200,
+          }),
+      },
+    ),
+  );
+  const hostKey = await service.container.exec({
+    Cmd: ['cat', '/etc/ssh/ssh_host_ed25519_key.pub'],
+  });
+  const knownHosts = join(directory.path, 'known_hosts');
+  await writeFile(
+    knownHosts,
+    `[${service.host}]:${service.port} ${hostKey.stdout.trim()}\n`,
+  );
+  const owned = stack.move();
+  return {
+    /** The ssh:// host of the local engine through the server. */
+    host: `ssh://root@${service.host}:${service.port}/var/run/docker.sock`,
+    /** The flags of `ssh` that log in with the test's key and trust only the server's host key. */
+    flags: [
+      '-F',
+      '/dev/null',
+      '-i',
+      key,
+      '-o',
+      'IdentitiesOnly=yes',
+      '-o',
+      'IdentityAgent=none',
+      '-o',
+      `UserKnownHostsFile=${knownHosts}`,
+      '-o',
+      'GlobalKnownHostsFile=/dev/null',
+      '-o',
+      'StrictHostKeyChecking=yes',
+    ],
+    /** Drops each packet of port 22 in the server's network namespace, both ways: no close and no answer reaches either side. */
+    async drop() {
+      const dropped = await service.container.exec({
+        Cmd: [
+          'sh',
+          '-c',
+          'iptables -I INPUT -p tcp --dport 22 -j DROP && iptables -I OUTPUT -p tcp --sport 22 -j DROP',
+        ],
+      });
+      assert.equal(dropped.exitCode, 0, dropped.stderr);
+    },
+    [Symbol.asyncDispose]: () => owned.disposeAsync(),
+  };
+}
+
+/**
+ * A process that holds the reaper of `run` with `settings` through its own
+ * SSH connection to `host`, prints `held`, and lives until it is killed. At
+ * the line `block`, it blocks its event loop for 60 s, as a busy test process
+ * can, and then prints `unblocked`.
+ */
+function sshHolder(
+  run: string,
+  settings: ReaperSettings,
+  { host, flags }: { host: string; flags: string[] },
+): Program {
+  return program(
+    `
+      import { createInterface } from 'node:readline';
+      const docker = await Docker.connect({ clock: globalThis, environment: process.env, sshFlags: ${JSON.stringify(flags)} });
+      await ReaperHold.take(docker, docker.host, ${JSON.stringify(run)}, ${JSON.stringify(settings)}, globalThis);
+      console.log('held');
+      for await (const command of createInterface({ input: process.stdin })) {
+        if (command !== 'block') continue;
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 60_000);
+        console.log('unblocked');
+      }
+    `,
+    { ...process.env, DOCKER_HOST: host },
+  );
+}
+
+describe('the reaper over SSH', { concurrency: 3 }, () => {
+  // The wait ends at the time limit of the test target, 300 s, with the start
+  // of the SSH server and the hold. With a keep-alive byte each 15 s, about 12.6 s of
+  // retransmissions, the grace and the passes, it ends in about 35 s; with no
+  // keep-alive byte, TCP keep-alive of the engine's host waits 2 h.
+  test('a holder whose network goes away with no close, and then the holder, ends its hold within the keep-alive interval and the retransmission limit of the engine’s host, and the reaper removes the run’s objects', async (t) => {
+    const run = randomUUID();
+    await present('alpine:latest');
+    await using sshd = await droppableSshEngine();
+    await using cleanup = new AsyncDisposableStack();
+    cleanup.defer(() => removeRun(run));
+    const held = sshHolder(run, quick, sshd);
+    cleanup.defer(() => killed(held.child));
+    assert.equal(await held.line(), 'held');
+    const id = await object(run);
+
+    await sshd.drop();
+    await killed(held.child);
+
+    await gone(t, async () => {
+      assert.equal(await exists(id), false);
+      assert.deepEqual(await reapers(run), []);
+    });
+  });
+
+  test('a holder that is killed with its network up ends its hold, and the reaper removes the run’s objects', async (t) => {
+    const run = randomUUID();
+    await present('alpine:latest');
+    await using sshd = await droppableSshEngine();
+    await using cleanup = new AsyncDisposableStack();
+    cleanup.defer(() => removeRun(run));
+    const held = sshHolder(run, quick, sshd);
+    cleanup.defer(() => killed(held.child));
+    assert.equal(await held.line(), 'held');
+    const id = await object(run);
+
+    await killed(held.child);
+
+    await gone(t, async () => {
+      assert.equal(await exists(id), false);
+      assert.deepEqual(await reapers(run), []);
+    });
+  });
+
+  test('a holder whose event loop is blocked for 60 s keeps its hold, and the reaper removes nothing', async () => {
+    const run = randomUUID();
+    await present('alpine:latest');
+    await using sshd = await droppableSshEngine();
+    await using cleanup = new AsyncDisposableStack();
+    cleanup.defer(() => removeRun(run));
+    const held = sshHolder(run, quick, sshd);
+    cleanup.defer(() => killed(held.child));
+    assert.equal(await held.line(), 'held');
+    const id = await object(run);
+    const reaper = await reapers(run);
+
+    held.send('block');
+    assert.equal(await held.line(), 'unblocked');
+
+    assert.equal(await exists(id), true);
+    assert.deepEqual(await reapers(run), reaper);
+    assert.equal(reaper.length, 1);
+  });
 });
