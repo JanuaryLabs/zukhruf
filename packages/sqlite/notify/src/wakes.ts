@@ -2,7 +2,10 @@ import { rm } from 'node:fs/promises';
 import type { Socket } from 'node:net';
 
 import { Latch, WaitGroup } from '@zukhruf/async';
+import { isErrno } from '@zukhruf/fs';
 import { NoServerError, PipeAddress } from '@zukhruf/pipes';
+
+import { ListenerPresence } from './listener-presence.ts';
 
 /** A listener as a sender reads it from its row. */
 export interface Addressed {
@@ -24,16 +27,20 @@ export class Wakes {
   // The wakes of the transactions of this turn; a microtask is queued while
   // the map is not empty.
   readonly #due = new Map<string, string>();
-  // The removals of socket files in flight, which close waits for.
+  // The removals of socket files and presence files in flight, which close
+  // waits for.
   readonly #removals = new WaitGroup();
+  readonly #database: string;
   readonly #wakeOwn: (id: string) => boolean;
   readonly #fail: (error: unknown) => void;
 
-  /** `wakeOwn` wakes the listener of the sending instance with no socket, and tells whether the id was its own. */
+  /** `database` is the path of the file. `wakeOwn` wakes the listener of the sending instance with no socket, and tells whether the id was its own. */
   constructor(
+    database: string,
     wakeOwn: (id: string) => boolean,
     fail: (error: unknown) => void,
   ) {
+    this.#database = database;
     this.#wakeOwn = wakeOwn;
     this.#fail = fail;
   }
@@ -50,11 +57,12 @@ export class Wakes {
     for (const { id, address } of listeners) this.#due.set(id, address);
   }
 
-  /** After a commit that removed their rows: the dead listeners are forgotten and lose their socket files. */
+  /** After a commit that removed their rows: the dead listeners are forgotten and lose their socket files and presence files. */
   removed(dead: ReadonlyMap<string, string>): void {
     for (const [id, address] of dead) {
       this.#dead.delete(id);
       this.#removeFile(address);
+      this.#track(ListenerPresence.removeIfFree(this.#database, id));
     }
   }
 
@@ -72,15 +80,27 @@ export class Wakes {
       if (this.#dead.has(id) || this.#wakeOwn(id)) continue;
       let connection = this.#connections.get(id);
       if (connection === undefined) {
+        const dead = () => {
+          this.#connections.delete(id);
+          this.#dead.set(id, address);
+        };
+        const lost = (error: unknown) => {
+          this.#connections.delete(id);
+          this.#fail(error);
+        };
         connection = new Connection(address, {
-          dead: () => {
-            this.#connections.delete(id);
-            this.#dead.set(id, address);
+          closed: dead,
+          // A presence that cannot be read keeps the listener: the next send
+          // asks again.
+          noServer: (error) => {
+            try {
+              if (this.#mayLive(id, error)) lost(error);
+              else dead();
+            } catch (checkError) {
+              lost(checkError);
+            }
           },
-          lost: (error) => {
-            this.#connections.delete(id);
-            this.#fail(error);
-          },
+          lost,
         });
         this.#connections.set(id, connection);
       }
@@ -89,21 +109,35 @@ export class Wakes {
     this.#due.clear();
   }
 
+  // A refused connect proves the listener dead on Linux, where a full listen
+  // queue gives EAGAIN. On macOS a live listener whose queue is full refuses
+  // too (kern.ipc.somaxconn, #5424), so its presence tells (ADR 0011). The
+  // other codes find no server at the address.
+  #mayLive(id: string, error: NoServerError): boolean {
+    if (process.platform === 'linux' || !isErrno(error.cause, 'ECONNREFUSED'))
+      return false;
+    return ListenerPresence.check(this.#database, id) === 'locked';
+  }
+
   // A killed listener's socket file stays (research 20a P1); the sender that
   // removes its row removes the file (research 20e R4, variant B). Windows
   // removes a pipe when its program exits.
   #removeFile(address: string): void {
     if (process.platform === 'win32') return;
+    this.#track(rm(address, { force: true }));
+  }
+
+  #track(removing: Promise<void>): void {
     const removal = this.#removals.add();
-    void rm(address, { force: true })
-      .catch(this.#fail)
-      .finally(() => removal[Symbol.dispose]());
+    void removing.catch(this.#fail).finally(() => removal[Symbol.dispose]());
   }
 }
 
 interface ConnectionEvents {
-  /** The connect was refused, or the listener closed the connection. */
-  readonly dead: () => void;
+  /** The listener closed the connection. */
+  readonly closed: () => void;
+  /** No server accepted the connect: a dead listener, or on macOS a live one whose listen queue is full. */
+  readonly noServer: (error: NoServerError) => void;
   /** The connect failed for another reason; the next send connects again. */
   readonly lost: (error: unknown) => void;
 }
@@ -133,9 +167,7 @@ class Connection {
         (error: unknown) => {
           if (this.#state.kind === 'ended') return;
           this.#state = { kind: 'ended' };
-          // Nobody serves the address any more: a killed listener's file, no
-          // file, or a listener that closed during the connect.
-          if (error instanceof NoServerError) events.dead();
+          if (error instanceof NoServerError) events.noServer(error);
           else events.lost(error);
         },
       )
@@ -184,7 +216,7 @@ class Connection {
     socket.on('close', () => {
       if (this.#state.kind === 'ended') return;
       this.#state = { kind: 'ended' };
-      events.dead();
+      events.closed();
     });
     const { owed } = this.#state;
     this.#state = { kind: 'open', socket, inFlight: false, owed: false };

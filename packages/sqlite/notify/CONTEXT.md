@@ -81,8 +81,12 @@ A queue with `maxQueuedNotifications` rows above the lowest position. `notify` t
 _Avoid_: Overflow, backpressure, limit reached
 
 **Dead listener**:
-A listener whose connect rejected with `NoServerError` of `@zukhruf/pipes` (cause `ECONNREFUSED`, `ENOENT`, `ENOTSOCK` or `ECONNRESET`), or that closed the sender's connection. The sender removes its rows in its next transaction, and again in each later one until the removal is known to have committed: at once after a transaction of its own, or by a read on the next microtask after the caller's transaction. Then it removes the socket file (ADR 0010).
+A listener whose connect rejected with `NoServerError` of `@zukhruf/pipes` (cause `ECONNREFUSED`, `ENOENT`, `ENOTSOCK` or `ECONNRESET`), or that closed the sender's connection. Outside Linux, an `ECONNREFUSED` makes it dead only when its presence is free or missing (ADR 0011). The sender removes its rows in its next transaction, and again in each later one until the removal is known to have committed: at once after a transaction of its own, or by a read on the next microtask after the caller's transaction. Then it removes the socket file and the presence file (ADR 0010).
 _Avoid_: Stale listener, zombie, orphan
+
+**Presence**:
+A listener's kernel lock (`FileLock` of `@zukhruf/fs`) on its file `<database>.listeners/<listener id>.presence`, held from before its row is inserted until after its row is removed. The kernel frees it when the listener's process stops. A sender reads it only after a refused connect outside Linux: locked, the listener lives and its wake is lost; free or missing, it is dead (ADR 0011).
+_Avoid_: Heartbeat, lock file, pid file
 
 **Laggard**:
 A listener at the lowest position, when that position is below the highest id. The trim waits for it. At its trim, a sender wakes each laggard, whatever its channels. Postgres's comment says a listener that is "far behind" (`SignalBackends`, `async.c`).

@@ -1,14 +1,18 @@
 import assert from 'node:assert/strict';
-import { stat } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { readdir, rm, stat, writeFile } from 'node:fs/promises';
 import type { Socket } from 'node:net';
 import { describe, test } from 'node:test';
+import { promisify } from 'node:util';
+import { Worker } from 'node:worker_threads';
 
 import { createClock } from '@sinonjs/fake-timers';
 
-import { TemporaryFiles } from '@zukhruf/fs';
+import { FileLock, TemporaryFiles } from '@zukhruf/fs';
 import { NoServerError, PipeAddress } from '@zukhruf/pipes';
 import { WriteAheadLog, open } from '@zukhruf/sqlite-open';
 import { transaction } from '@zukhruf/sqlite-transaction';
+import { waitFor } from '@zukhruf/testing/async';
 
 import { Notifications } from './index.ts';
 import { addressesOf, hear, startProgram } from './testing/program.ts';
@@ -46,6 +50,27 @@ async function connectAfterTheSender(address: string): Promise<string> {
     const failure = error instanceof NoServerError ? error.cause : error;
     return String(Reflect.get(Object(failure), 'code'));
   }
+}
+
+// The presence files of the listeners of the file at `path`: the folder
+// beside the database that a release with presences makes (ADR 0011).
+async function presencesOf(path: string): Promise<string[]> {
+  try {
+    return await readdir(`${path}.listeners`);
+  } catch (error) {
+    if (Reflect.get(Object(error), 'code') === 'ENOENT') return [];
+    throw error;
+  }
+}
+
+// What a sender in another program reads of a presence file.
+async function presenceInAnotherProgram(file: string): Promise<string> {
+  const { stdout } = await promisify(execFile)(process.execPath, [
+    '--input-type=module',
+    '--eval',
+    `import { FileLock } from '@zukhruf/fs'; process.stdout.write(FileLock.check(${JSON.stringify(file)}));`,
+  ]);
+  return stdout;
 }
 
 function jobsIn(path: string): string[] {
@@ -413,7 +438,6 @@ describe('a full listen queue', () => {
       skip:
         process.platform !== 'darwin' &&
         'only macOS refuses a connect to a live server whose listen queue is full, with the ECONNREFUSED of a dead server; Linux gives EAGAIN',
-      todo: '#5424',
     },
     async (t) => {
       await using folder = await new TemporaryFiles().directory('notify-');
@@ -454,6 +478,204 @@ describe('a full listen queue', () => {
         (await hung.heard(2)).map((n) => n.payload),
         ['n0', 'n1'],
       );
+    },
+  );
+});
+
+describe("a listener's presence beside the database", () => {
+  test('a listener holds a presence file while it listens; its last unlisten removes it, and so does its dispose', async () => {
+    await using folder = await new TemporaryFiles().directory('notify-');
+    const path = `${folder.path}/app.sqlite`;
+    {
+      await using listener = new Notifications({ path, clock: createClock() });
+      await listener.listen('jobs');
+      assert.equal((await presencesOf(path)).length, 1);
+      await listener.unlisten('jobs');
+      assert.deepEqual(await presencesOf(path), []);
+
+      await listener.listen('mail');
+      assert.equal((await presencesOf(path)).length, 1);
+    }
+
+    assert.deepEqual(await presencesOf(path), []);
+  });
+
+  test('a listener program takes its presence before its row: while another program holds the write lock, its presence is locked and it has no row yet', async (t) => {
+    await using folder = await new TemporaryFiles().directory('notify-');
+    const path = `${folder.path}/app.sqlite`;
+    await using listener = await startProgram(path, { signal: t.signal });
+    await using holder = await startProgram(path, { signal: t.signal });
+    holder.do({ do: 'hold the write lock' });
+    await holder.printedOne((p) => p.event === 'locked');
+
+    listener.do({ do: 'listen', channel: 'jobs' });
+    // Its row waits for the write lock; the listen fails after the busy
+    // timeout of 5 s, and prints its error.
+    const presences = await waitFor(
+      async () => {
+        const found = await presencesOf(path);
+        assert.ok(
+          found.length > 0 || listener.printed.some((p) => p.event !== 'ready'),
+        );
+        return found;
+      },
+      { signal: t.signal },
+    );
+
+    assert.equal(presences.length, 1);
+    assert.equal(FileLock.check(`${path}.listeners/${presences[0]}`), 'locked');
+    assert.deepEqual(addressesOf(path, listener.pid), []);
+    holder.do({ do: 'release the write lock' });
+    await listener.printedOne((p) => p.event === 'listened');
+    assert.equal(addressesOf(path, listener.pid).length, 1);
+  });
+
+  test("a killed listener program's presence file goes with its rows", async (t) => {
+    await using folder = await new TemporaryFiles().directory('notify-');
+    const path = `${folder.path}/app.sqlite`;
+    await using killed = await startProgram(path, { signal: t.signal });
+    killed.do({ do: 'listen', channel: 'jobs' });
+    await killed.printedOne((p) => p.event === 'listened');
+    const [address] = addressesOf(path, killed.pid);
+    assert.ok(address);
+    assert.equal((await presencesOf(path)).length, 1);
+    killed.child.kill('SIGKILL');
+    await killed.exited;
+    await using sender = new Notifications({ path, clock: createClock() });
+    const errors = hear(sender).errors;
+
+    sender.notify('jobs', 'n0');
+    await connectAfterTheSender(address);
+    sender.notify('jobs', 'n1');
+    await sender[Symbol.asyncDispose]();
+
+    assert.deepEqual(addressesOf(path, killed.pid), []);
+    assert.deepEqual(await presencesOf(path), []);
+    assert.deepEqual(errors, []);
+  });
+
+  test('a killed listener program with no presence file, as a release before presences leaves it, counts as dead on a refused connect: its rows and its socket file go', async (t) => {
+    await using folder = await new TemporaryFiles().directory('notify-');
+    const path = `${folder.path}/app.sqlite`;
+    await using killed = await startProgram(path, { signal: t.signal });
+    killed.do({ do: 'listen', channel: 'jobs' });
+    await killed.printedOne((p) => p.event === 'listened');
+    const [address] = addressesOf(path, killed.pid);
+    assert.ok(address);
+    killed.child.kill('SIGKILL');
+    await killed.exited;
+    // An older release makes no presence folder: platform setup that no
+    // operation of this release exposes.
+    await rm(`${path}.listeners`, { recursive: true });
+    await using sender = new Notifications({ path, clock: createClock() });
+    const errors = hear(sender).errors;
+
+    sender.notify('jobs', 'n0');
+    assert.equal(await connectAfterTheSender(address), 'ECONNREFUSED');
+    sender.notify('jobs', 'n1');
+    await sender[Symbol.asyncDispose]();
+
+    assert.deepEqual(addressesOf(path, killed.pid), []);
+    await assert.rejects(stat(address), { code: 'ENOENT' });
+    assert.deepEqual(errors, []);
+  });
+
+  test('a live listener program whose socket file is gone, or is not a socket, is removed by a send, though its presence is locked', async (t) => {
+    await using folder = await new TemporaryFiles().directory('notify-');
+    const path = `${folder.path}/app.sqlite`;
+    await using gone = await startProgram(path, { signal: t.signal });
+    await using replaced = await startProgram(path, { signal: t.signal });
+    gone.do({ do: 'listen', channel: 'jobs' });
+    replaced.do({ do: 'listen', channel: 'jobs' });
+    await gone.printedOne((p) => p.event === 'listened');
+    await replaced.printedOne((p) => p.event === 'listened');
+    const [goneAddress] = addressesOf(path, gone.pid);
+    const [replacedAddress] = addressesOf(path, replaced.pid);
+    assert.ok(goneAddress && replacedAddress);
+    // What a cleaner of the temporary folder does: platform setup that no
+    // operation exposes.
+    await rm(goneAddress);
+    await rm(replacedAddress);
+    await writeFile(replacedAddress, '');
+    await using sender = new Notifications({ path, clock: createClock() });
+    const errors = hear(sender).errors;
+
+    sender.notify('jobs', 'n0');
+    assert.equal(await connectAfterTheSender(goneAddress), 'ENOENT');
+    assert.equal(
+      await connectAfterTheSender(replacedAddress),
+      process.platform === 'darwin' ? 'ENOTSOCK' : 'ECONNREFUSED',
+    );
+    sender.notify('jobs', 'n1');
+    await sender[Symbol.asyncDispose]();
+
+    assert.deepEqual(addressesOf(path, gone.pid), []);
+    assert.deepEqual(addressesOf(path, replaced.pid), []);
+    assert.deepEqual(errors, []);
+  });
+
+  test(
+    'a sender in the process of a live listener whose listen queue is full asks its presence, which stays locked for every program: the listener keeps its rows, the lost wake goes to error, and it gets every notification',
+    {
+      skip:
+        process.platform !== 'darwin' &&
+        'only macOS refuses a connect to a live server whose listen queue is full, with the ECONNREFUSED of a dead server; Linux gives EAGAIN',
+    },
+    async (t) => {
+      await using folder = await new TemporaryFiles().directory('notify-');
+      const path = `${folder.path}/app.sqlite`;
+      await using listener = new Notifications({ path, clock: createClock() });
+      const heard = hear(listener);
+      await listener.listen('jobs');
+      const [address] = addressesOf(path, process.pid);
+      assert.ok(address);
+      const [presence] = await presencesOf(path);
+      assert.ok(presence);
+      await using sender = new Notifications({ path, clock: createClock() });
+      const errors = hear(sender).errors;
+      // A worker fills the listen queue while this thread waits and so
+      // accepts nothing, as a flood of new senders does: platform setup that
+      // no operation exposes.
+      const filled = new Int32Array(new SharedArrayBuffer(4));
+      const flood = new Worker(
+        `
+        const { workerData } = require('node:worker_threads');
+        const { connect } = require('node:net');
+        const sockets = [];
+        const next = () => {
+          const socket = connect({ path: workerData.address });
+          socket.once('connect', () => { sockets.push(socket); next(); });
+          socket.once('error', () => {
+            Atomics.store(workerData.filled, 0, 1);
+            Atomics.notify(workerData.filled, 0);
+          });
+        };
+        next();
+        `,
+        { eval: true, workerData: { address, filled } },
+      );
+      try {
+        assert.equal(Atomics.wait(filled, 0, 0, 30_000), 'ok');
+
+        sender.notify('jobs', 'n0');
+        assert.equal(await connectAfterTheSender(address), 'ECONNREFUSED');
+        await flood.terminate();
+        sender.notify('jobs', 'n1');
+
+        assert.equal(addressesOf(path, process.pid).length, 1);
+        assert.equal(
+          await presenceInAnotherProgram(`${path}.listeners/${presence}`),
+          'locked',
+        );
+        assert.deepEqual(
+          (await heard.count(2, { signal: t.signal })).map((n) => n.payload),
+          ['n0', 'n1'],
+        );
+        assert.equal(errors.length, 1);
+        assert.ok(errors[0] instanceof NoServerError);
+      } finally {
+        await flood.terminate();
+      }
     },
   );
 });

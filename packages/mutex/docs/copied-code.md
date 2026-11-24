@@ -49,7 +49,7 @@ Backlog #2544 is about this code: `close` stops the listeners, but it does not e
 
 **A presence that outlasts its record.**
 
-- Places: `Presence` (`file-system/presence.ts`: `claim`, `releaseAfter`), and `SessionDirectory.record` with `SessionRecord` (`socket/session-directory.ts`).
+- Places: `Presence` (`file-system/presence.ts`: `claim`, `releaseAfter`), and `SessionDirectory.record` with `SessionRecord` (`socket/session-directory.ts`). Outside this package: `ListenerPresence` of `@zukhruf/sqlite-notify` (`packages/sqlite/notify/src/listener-presence.ts`, its [ledger](../../sqlite/notify/docs/copied-code.md)), and the install lease of `@zukhruf/git-hooks` (`packages/git-hooks/src/snapshot/installs.ts`). The extraction of the four into `@zukhruf/fs` is #5463, and waits for Ezz's go. Until then, a fix to one goes into each, and the commit names the files.
 - Same: a caller takes a `FileLock` on a file of its own before its record appears. To leave, it removes its record first, then frees the lock, then deletes the presence file. A reader that finds the record and a free presence knows that the caller stopped ([ADR 0012](./adr/0012-a-file-store-holder-is-judged-by-its-presence.md)).
 - Differs: a session of a socket store has its own names, `sessions/<id>.json` and `sessions/<id>.presence`, and a record of its own content, so it cannot use the paths of `Presence`. A new leader also deletes a presence file that has no record and no lock, under its own lock, so a session that finds its locked file gone takes its presence again ([ADR 0033](./adr/0033-a-new-leader-grants-nothing-until-each-recorded-session-reasserted-its-keys-stopped-or-missed-its-lease.md)). `Presence` is never deleted by another caller before its record exists.
 

@@ -124,6 +124,7 @@ export class Notifications
       'DELETE FROM zukhruf_notify_listener WHERE id = ?',
     );
     this.#wakes = new Wakes(
+      path,
       (id) => {
         if (this.#listener.kind !== 'listening') return false;
         const { listening } = this.#listener;

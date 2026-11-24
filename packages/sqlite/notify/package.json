@@ -42,6 +42,7 @@
   },
   "dependencies": {
     "@zukhruf/async": "^0.8.70",
+    "@zukhruf/fs": "^0.8.70",
     "@zukhruf/pipes": "^0.8.70",
     "@zukhruf/sqlite-drift": "^0.8.70",
     "@zukhruf/sqlite-open": "^0.8.70",
@@ -49,7 +50,6 @@
   },
   "devDependencies": {
     "@sinonjs/fake-timers": "15.5.0",
-    "@zukhruf/fs": "^0.8.70",
     "@zukhruf/testing": "^0.8.70",
     "esbuild": "0.28.2"
   }

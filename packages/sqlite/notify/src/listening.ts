@@ -9,6 +9,7 @@ import { UnchangedJournal, open } from '@zukhruf/sqlite-open';
 import { transaction } from '@zukhruf/sqlite-transaction';
 
 import { integer, text } from './columns.ts';
+import { ListenerPresence } from './listener-presence.ts';
 import { HIGHEST_ID } from './schema.ts';
 
 /** One row of the notification queue, as the listener reads it. */
@@ -53,9 +54,9 @@ class Inbox extends EventEmitter<{ wake: [] }> {
 }
 
 /**
- * A listener from its registration to its last unlisten: its own connection
- * to the file, its socket, its row and the backstop. Each first `listen`
- * makes a new one, with a new listener id and a new socket.
+ * A listener from its registration to its last unlisten: its presence, its
+ * own connection to the file, its socket, its row and the backstop. Each
+ * first `listen` makes a new one, with a new listener id and a new socket.
  */
 export class Listening {
   /** 16 random bytes in hex: the name of the socket and the key of the row. */
@@ -63,6 +64,7 @@ export class Listening {
   readonly #database: DatabaseSync;
   readonly #server: PipeServer;
   readonly #inbox: Inbox;
+  readonly #presence: ListenerPresence;
   readonly #options: ListeningOptions;
   // Each channel, with the highest id at the commit of its listen: the
   // channel delivers only the rows above it (C3).
@@ -80,6 +82,7 @@ export class Listening {
     database: DatabaseSync,
     server: PipeServer,
     inbox: Inbox,
+    presence: ListenerPresence,
     registration: { channel: string; highest: number },
     options: ListeningOptions,
   ) {
@@ -87,6 +90,7 @@ export class Listening {
     this.#database = database;
     this.#server = server;
     this.#inbox = inbox;
+    this.#presence = presence;
     this.#options = options;
     this.#channels = new Map([[registration.channel, registration.highest]]);
     this.#last = registration.highest;
@@ -101,54 +105,57 @@ export class Listening {
   }
 
   /**
-   * The registration: opens the listener's own connection, serves a new
-   * socket, and in one BEGIN IMMEDIATE transaction inserts the listener row
-   * with its address and the highest id as its position, and the channel row.
+   * The registration: opens the listener's own connection, takes its
+   * presence, serves a new socket, and in one BEGIN IMMEDIATE transaction
+   * inserts the listener row with its address and the highest id as its
+   * position, and the channel row. The presence comes first, so a sender
+   * never finds the row of a live listener without it (ADR 0011).
    */
   static async register(
     channel: string,
     options: ListeningOptions,
   ): Promise<Listening> {
+    const id = randomBytes(16).toHex();
+    await using registering = new AsyncDisposableStack();
     // The listener never sets the journal: the sending connection did.
-    const database = open(options.path, { journal: new UnchangedJournal() });
-    try {
-      const id = randomBytes(16).toHex();
-      const endpoint = new PipeEndpoint(id, {
-        prefix: 'zukhruf-sqlite-notify',
-      });
-      const inbox = new Inbox();
-      const server = await endpoint.listen((socket) => inbox.accept(socket));
-      try {
-        const highest = transaction(
-          database,
-          () => {
-            const highest = highestId(database);
-            database
-              .prepare(
-                'INSERT INTO zukhruf_notify_listener (id, address, position, process_id) VALUES (?, ?, ?, ?)',
-              )
-              .run(id, endpoint.address.path, highest, process.pid);
-            insertChannel(database, channel, id);
-            return highest;
-          },
-          { mode: 'immediate' },
-        );
-        return new Listening(
-          id,
-          database,
-          server,
-          inbox,
-          { channel, highest },
-          options,
-        );
-      } catch (error) {
-        await closeSocket(server, inbox);
-        throw error;
-      }
-    } catch (error) {
-      database.close();
-      throw error;
-    }
+    const database = registering.adopt(
+      open(options.path, { journal: new UnchangedJournal() }),
+      (opened) => opened.close(),
+    );
+    const presence = registering.adopt(
+      await ListenerPresence.take(options.path, id),
+      (taken) => taken.end(),
+    );
+    const endpoint = new PipeEndpoint(id, { prefix: 'zukhruf-sqlite-notify' });
+    const inbox = new Inbox();
+    const server = registering.adopt(
+      await endpoint.listen((socket) => inbox.accept(socket)),
+      (served) => closeSocket(served, inbox),
+    );
+    const highest = transaction(
+      database,
+      () => {
+        const highest = highestId(database);
+        database
+          .prepare(
+            'INSERT INTO zukhruf_notify_listener (id, address, position, process_id) VALUES (?, ?, ?, ?)',
+          )
+          .run(id, endpoint.address.path, highest, process.pid);
+        insertChannel(database, channel, id);
+        return highest;
+      },
+      { mode: 'immediate' },
+    );
+    registering.move();
+    return new Listening(
+      id,
+      database,
+      server,
+      inbox,
+      presence,
+      { channel, highest },
+      options,
+    );
   }
 
   /** A later listen: one BEGIN IMMEDIATE transaction inserts the channel row and reads the highest id. */
@@ -181,31 +188,27 @@ export class Listening {
     return false;
   }
 
-  /** Removes this listener's rows, closes its socket, and closes its connection. */
+  /** Removes this listener's rows, closes its socket and its connection, and ends its presence last. */
   async end(): Promise<void> {
     if (this.#ended.signal.aborted) return;
     this.#ended.abort();
     this.#channels.clear();
-    try {
-      transaction(
-        this.#database,
-        () => {
-          this.#database
-            .prepare('DELETE FROM zukhruf_notify_channel WHERE listener = ?')
-            .run(this.id);
-          this.#database
-            .prepare('DELETE FROM zukhruf_notify_listener WHERE id = ?')
-            .run(this.id);
-        },
-        { mode: 'immediate' },
-      );
-    } finally {
-      try {
-        await closeSocket(this.#server, this.#inbox);
-      } finally {
-        this.#database.close();
-      }
-    }
+    await using ending = new AsyncDisposableStack();
+    ending.defer(() => this.#presence.end());
+    ending.defer(() => this.#database.close());
+    ending.defer(() => closeSocket(this.#server, this.#inbox));
+    transaction(
+      this.#database,
+      () => {
+        this.#database
+          .prepare('DELETE FROM zukhruf_notify_channel WHERE listener = ?')
+          .run(this.id);
+        this.#database
+          .prepare('DELETE FROM zukhruf_notify_listener WHERE id = ?')
+          .run(this.id);
+      },
+      { mode: 'immediate' },
+    );
   }
 
   /**
