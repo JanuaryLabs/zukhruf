@@ -1,6 +1,8 @@
 # An HTTP server's disposal waits until a client of the process has closed each connection that the server closed
 
-Status: Accepted 2026-11-24 (backlog #5449), on this evidence. The `fetch` case and the msw-passthrough case of the context below failed in 3 of 3 runs before commit f38211cf, and they pass after it (released in 0.8.98). A mutation that removes the wait made both cases fail. A mutation that changes `Promise.race` to `Promise.all` made the passthrough case hang. The defect class and the mechanism are those of [ADR 0028](./0028-an-interceptions-disposal-waits-until-the-client-has-closed-each-connection-that-the-server-closed.md), which is accepted.
+Status: Accepted 2026-11-24 (backlog #5449).
+
+Decision-makers: the zukhruf session mutex-07, which decided from the evidence.
 
 `HttpServer`'s disposal closes the server and each of its connections. It resolved when the server closed. On Node 26.13, `fetch` keeps the connection open after the response. When the server destroys its side, the client socket emits `close` some turns later. undici clears the timer of the socket in its `close` listener, with the global `clearTimeout` ([ADR 0028](./0028-an-interceptions-disposal-waits-until-the-client-has-closed-each-connection-that-the-server-closed.md) has the path). Thus in a test that fakes the timers with `t.mock.timers`, that `clearTimeout` ran under the fake timers of the next test, and Node removed one of that test's timers. A test that starts a server, fakes `setTimeout`, fetches once, moves its time by 1 s and yields 5 turns, followed by a test that sets a 1 ms timer, yields 5 turns and moves its time by 1 ms: the timer did not fire in 3 of 3 runs. With an msw passthrough for the origin of the server in front, the same test failed in 3 of 3 runs.
 
@@ -26,3 +28,9 @@ The disposal waits, for each connection that the close destroyed, until the firs
 - This is the second copy of the socket-close tracking of the msw area. [Code copied into this package](../copied-code.md) records it, and backlog #5498 extracts it when a third place needs it.
 - Node caches the local address of a socket at the first read. When code reads `localPort` of the socket of `fetch` before the interceptor gives it the real handle, the socket keeps no local port, and only the real socket pairs with the connection. The disposal then does not settle. Neither undici nor msw reads it then.
 - A test of another file that runs at the same time, in the same process, and that connects to this server, is a client of the process too. The disposal also waits for its `close`.
+
+## Confirmation
+
+- The `fetch` case and the msw-passthrough case of the context failed in 3 of 3 runs before commit f38211cf, and they pass after it (released in 0.8.98).
+- A mutation that removes the wait made both cases fail. A mutation that changes `Promise.race` to `Promise.all` made the passthrough case hang.
+- The defect class and the mechanism are those of [ADR 0028](./0028-an-interceptions-disposal-waits-until-the-client-has-closed-each-connection-that-the-server-closed.md), which is accepted.

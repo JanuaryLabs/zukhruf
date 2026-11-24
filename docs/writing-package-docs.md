@@ -4,7 +4,7 @@ Each `@zukhruf/*` package keeps its docs beside its code. This guide gives the k
 
 ## The kinds of doc
 
-The kinds follow [Diátaxis](https://diataxis.fr/), which sorts docs into tutorials, how-to guides, reference and explanation. The decision records follow Michael Nygard's [Documenting Architecture Decisions](https://cognitect.com/blog/2011/11/15/documenting-architecture-decisions) (2011), with the `Considered Options` section of [MADR](https://adr.github.io/madr/). The glossary is the ubiquitous language of one bounded context, from Eric Evans, _Domain-Driven Design_ (2003).
+The kinds follow [Diátaxis](https://diataxis.fr/), which sorts docs into tutorials, how-to guides, reference and explanation. The decision records follow Michael Nygard's [Documenting Architecture Decisions](https://cognitect.com/blog/2011/11/15/documenting-architecture-decisions) (2011), with the `decision-makers` field and the `Considered Options` and `Confirmation` sections of [MADR](https://adr.github.io/madr/). The glossary is the ubiquitous language of one bounded context, from Eric Evans, _Domain-Driven Design_ (2003).
 
 | Kind                  | Path in the package                                   | What it is for                                                                                                                                                                              | Diátaxis                   |
 | --------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------- |
@@ -13,7 +13,7 @@ The kinds follow [Diátaxis](https://diataxis.fr/), which sorts docs into tutori
 | Concept               | `docs/concepts/<topic>.md`                            | How one idea of the package works, and why.                                                                                                                                                 | explanation                |
 | Recipe                | `docs/recipes/<task>.md`                              | One use case, solved with a full program that runs.                                                                                                                                         | how-to guide               |
 | Reference page        | `docs/<group>/<name>.md`                              | One page for each member of a family, in one fixed shape ([memory-store.md](../packages/mutex/docs/stores/memory-store.md)).                                                                | reference                  |
-| Decision record (ADR) | `docs/adr/NNNN-<title>.md`                            | One decision of the owner, its reason, and the options that lost.                                                                                                                           | explanation                |
+| Decision record (ADR) | `docs/adr/NNNN-<title>.md`                            | One decision, who made it, its reason, its evidence, and the options that lost.                                                                                                             | explanation                |
 | Index                 | `docs/README.md`                                      | A list of all docs of the package.                                                                                                                                                          | none                       |
 | Copy ledger           | `docs/copied-code.md`, `docs/copied-from-<source>.md` | Each copy of code, as the Rule of Three asks. [tools/copy-check](../tools/copy-check/src/copy-ledgers.ts) reads `**/docs/copied-*.md` and owns their content. This guide does not cover it. | none                       |
 
@@ -161,7 +161,9 @@ Examples: [packages/async/docs/adr/0006](../packages/async/docs/adr/0006-a-timeo
 ```md
 # <The decision, as a sentence>
 
-<Status paragraph, only when one applies: line 3.>
+<Status line: line 3.>
+
+Decision-makers: <who decided, and on what>.
 
 <Context: the problem and the facts, as prose or a list. No heading.>
 
@@ -176,6 +178,10 @@ Examples: [packages/async/docs/adr/0006](../packages/async/docs/adr/0006-a-timeo
 ## Consequences
 
 <What changes, what it costs, what stays open.>
+
+## Confirmation
+
+<The evidence: the red and green tests, the mutation results, the measurements, and the sources of the top performers with file:line.>
 ```
 
 - The file is `docs/adr/NNNN-<title in lower case, words joined by hyphens>.md`. The numbers count from `0001` in each package. A new ADR takes the highest number plus one. A number is never used again.
@@ -183,9 +189,14 @@ Examples: [packages/async/docs/adr/0006](../packages/async/docs/adr/0006-a-timeo
 - A status paragraph starts on line 3. When there are more, the newest comes first. The forms are:
   - `Superseded on <date> (#NNNN) by [ADR NNNN](./NNNN-….md): <what is now true>.` Add "for <part>" when the rest stays true ([diagram 0001](../packages/diagram/docs/adr/0001-the-diagram-is-a-zukhruf-package.md)).
   - `Superseded in part on <date> (#NNNN) for <part>. <What is now true> ([ADR NNNN](./NNNN-….md)).`
-  - `Status: Proposed <date> for the owner's review (backlog #NNNN).`
+  - `Status: Accepted <date> (backlog #NNNN).`
+  - `Status: Proposed <date> (backlog #NNNN).`
 - To change a decision, write a new ADR. Add a status paragraph to the old one, and keep its text. Mark it in the README list: "(superseded by ADR 0014)" ([mutex docs/README.md](../packages/mutex/docs/README.md)).
-- **An ADR records a decision of the owner, in the owner's own words.** Quote those words when they decide it, as [election 0007](../packages/election/docs/adr/0007-a-candidate-waits-on-pushes-from-the-leaders-pipe-not-on-a-period.md) does. An agent never records its own recommendation as a decision. Without the owner's words, the ADR has the status `Proposed`.
+- **The status says whether the decision-makers agreed.** Nygard: "A decision may be 'proposed' if the project stakeholders haven't agreed with it yet, or 'accepted' once it is agreed." The status line has only the status, the date and the backlog items. The evidence is the reason for the decision, so it goes in the body, not in the status line.
+- **The `Decision-makers:` line, on line 5, names each one who decided, as the `decision-makers` field of [MADR](https://github.com/adr/madr/blob/main/template/adr-template.md) does.** A session or an agent that decided from the evidence is named by its session name ("the zukhruf session mutex-07"). The owner is a decision-maker only where the owner chose on a split that the evidence did not decide. Name each such split, and quote the owner's words for it.
+- **The owner is never asked to approve a design.** The evidence and the top performers decide it. Ask the owner only on a split that the evidence does not decide.
+- **`## Confirmation` gives the evidence, as the `Confirmation` section of MADR does: how the decision and its implementation are confirmed.** Give the red and green tests and their commit, the mutation results, the measurements with the versions, and the sources of the top performers with their file and lines.
+- Older ADRs have no `Decision-makers:` line or `## Confirmation`, and some carry the evidence in their status paragraph. Do not rewrite them. Bring an old ADR to this shape only when you edit it for another reason.
 - A decision for more than one package goes in the root [docs/adr](./adr), numbered there.
 
 ## Index and map
