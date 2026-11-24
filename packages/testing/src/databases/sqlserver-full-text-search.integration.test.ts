@@ -1,13 +1,16 @@
 import assert from 'node:assert/strict';
 import { hash, randomInt, randomUUID } from 'node:crypto';
+import { addAbortListener } from 'node:events';
 import { readFile } from 'node:fs/promises';
+
+import type sql from 'mssql';
 
 import { BuildFailedError, Docker } from '@zukhruf/docker';
 
 import { waitFor } from '../async/wait-for.ts';
 import { DockerTestbed } from '../docker/testbed.ts';
 import { test } from '../node/index.ts';
-import { SqlServer } from './sqlserver.ts';
+import { SqlServer, type SqlServerDatabase } from './sqlserver.ts';
 
 // SQL Server 2025 crashes at start about once in 41 starts when an arm64
 // engine emulates amd64 (lsass, errno 11; #5469), and 2022 does not, so the
@@ -27,6 +30,23 @@ const servers = [
   },
 ] as const;
 
+/**
+ * Gives a runner of requests to a pool of the database. Each request ends on
+ * the signal, the bound of the test, and not on mssql's 15 s requestTimeout:
+ * an emulated engine under load runs a batch longer.
+ */
+async function boundedRequests(
+  database: SqlServerDatabase,
+  signal: AbortSignal,
+) {
+  const pool = await database.pool({ requestTimeout: 0 });
+  return async <T>(run: (request: sql.Request) => Promise<T>): Promise<T> => {
+    const request = pool.request();
+    using _cancel = addAbortListener(signal, () => request.cancel());
+    return await run(request);
+  };
+}
+
 /** The version of the server of a Microsoft image, from its label. */
 async function labelledVersion(image: string): Promise<string | undefined> {
   await using docker = await Docker.connect({
@@ -42,7 +62,7 @@ void test.each(servers, ({ name, image, skip }) =>
   test(
     `${name} with fullTextSearch has the full-text component and runs the server of its base image`,
     { skip },
-    async () => {
+    async (t) => {
       // Arrange
       const sqlServer = new SqlServer({
         environment: process.env,
@@ -52,12 +72,12 @@ void test.each(servers, ({ name, image, skip }) =>
 
       // Act
       await using database = await sqlServer.start();
-      const pool = await database.pool();
-      const { recordset } = await pool
-        .request()
-        .query<{ installed: number; version: string }>(
+      const bounded = await boundedRequests(database, t.signal);
+      const { recordset } = await bounded((request) =>
+        request.query<{ installed: number; version: string }>(
           "SELECT FULLTEXTSERVICEPROPERTY('IsFullTextInstalled') AS installed, CAST(SERVERPROPERTY('ProductVersion') AS nvarchar(32)) AS version",
-        );
+        ),
+      );
 
       // Assert
       assert.deepEqual(recordset[0], {
@@ -79,8 +99,9 @@ void test.each(servers, ({ name, image, skip }) =>
         image,
         fullTextSearch: true,
       }).start();
-      const pool = await database.pool();
-      await pool.request().batch(`
+      const bounded = await boundedRequests(database, t.signal);
+      await bounded((request) =>
+        request.batch(`
       CREATE TABLE passage (id int NOT NULL CONSTRAINT pk_passage PRIMARY KEY, body nvarchar(200) NOT NULL);
       INSERT INTO passage VALUES
         (1, N'The quick brown fox jumps over the dog'),
@@ -88,24 +109,29 @@ void test.each(servers, ({ name, image, skip }) =>
         (3, N'The lease ends when the holder exits');
       CREATE FULLTEXT CATALOG passage_catalog AS DEFAULT;
       CREATE FULLTEXT INDEX ON passage (body LANGUAGE 1033) KEY INDEX pk_passage WITH CHANGE_TRACKING AUTO;
-    `);
+    `),
+      );
       await waitFor(
         async () => {
-          const { recordset } = await pool.request().query<{
-            status: number;
-            items: number;
-          }>("SELECT OBJECTPROPERTYEX(OBJECT_ID('passage'), 'TableFulltextPopulateStatus') AS status, OBJECTPROPERTYEX(OBJECT_ID('passage'), 'TableFulltextItemCount') AS items");
+          const { recordset } = await bounded((request) =>
+            request.query<{
+              status: number;
+              items: number;
+            }>(
+              "SELECT OBJECTPROPERTYEX(OBJECT_ID('passage'), 'TableFulltextPopulateStatus') AS status, OBJECTPROPERTYEX(OBJECT_ID('passage'), 'TableFulltextItemCount') AS items",
+            ),
+          );
           assert.deepEqual(recordset[0], { status: 0, items: 3 });
         },
         { signal: t.signal },
       );
 
       // Act
-      const { recordset } = await pool
-        .request()
-        .query<{ id: number; rank: number }>(
+      const { recordset } = await bounded((request) =>
+        request.query<{ id: number; rank: number }>(
           `SELECT [KEY] AS id, RANK AS rank FROM CONTAINSTABLE(passage, body, N'"passage" OR "lease"') ORDER BY [KEY]`,
-        );
+        ),
+      );
 
       // Assert
       assert.deepEqual(
@@ -123,30 +149,32 @@ void test.each(servers, ({ name, image, skip }) =>
 test(
   'SQL Server 2025 with fullTextSearch keeps VECTOR and VECTOR_DISTANCE on the same server',
   { skip: emulation },
-  async () => {
+  async (t) => {
     // Arrange
     await using database = await new SqlServer({
       environment: process.env,
       image: 'mcr.microsoft.com/mssql/server:2025-latest',
       fullTextSearch: true,
     }).start();
-    const pool = await database.pool();
-    await pool.request().batch(`
+    const bounded = await boundedRequests(database, t.signal);
+    await bounded((request) =>
+      request.batch(`
     CREATE TABLE embedding (id int NOT NULL PRIMARY KEY, vector VECTOR(3) NOT NULL);
     INSERT INTO embedding VALUES (1, '[0, 1, 0]'), (2, '[1, 0, 0]'), (3, '[0.7, 0.7, 0]');
-  `);
+  `),
+    );
 
     // Act
-    const { recordset } = await pool
-      .request()
-      .query<{ id: number }>(
+    const { recordset } = await bounded((request) =>
+      request.query<{ id: number }>(
         "SELECT id FROM embedding ORDER BY VECTOR_DISTANCE('cosine', vector, CAST('[1, 0, 0]' AS VECTOR(3)))",
-      );
-    const installed = await pool
-      .request()
-      .query<{ installed: number }>(
+      ),
+    );
+    const installed = await bounded((request) =>
+      request.query<{ installed: number }>(
         "SELECT FULLTEXTSERVICEPROPERTY('IsFullTextInstalled') AS installed",
-      );
+      ),
+    );
 
     // Assert
     assert.deepEqual(
