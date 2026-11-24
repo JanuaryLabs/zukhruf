@@ -162,8 +162,6 @@ The query model openai/text-embedding-3-small is not the model of the stored vec
 
 On Postgres, the store takes a session: one `query(sql, parameters)` method over the driver of the host, with positional parameters, `$1` for the first. So the package imports no driver.
 
-<!-- Phase B (#5399): this program runs on the native Postgres engine of limerence-dokploy, with the contract of "Use it" in the schema rag and DATABASE_URL set. Paste its output then. -->
-
 ```ts
 import pg from 'pg';
 
@@ -194,6 +192,14 @@ const pgResults = await pgRetriever.retrieve('How do I rotate a key?', {
 for (const { passage, score } of pgResults) {
   console.log(score.toFixed(3), passage.id, passage.text);
 }
+```
+
+Output:
+
+```
+1.000 vault-guide#0 Create a new key before you rotate the old key.
+0.707 vault-guide#1  Then move each token to the new key.
+0.707 vault-guide#2  Keep a backup of the old key for 30 days.
 ```
 
 ## Search by keywords
@@ -239,8 +245,6 @@ Output:
 
 On Postgres the query has to use the text search configuration of the index. `PgvectorKeywordRetriever` takes it in the index value, `index: { column, configuration }`, `'english'` when absent, as Haystack's `language`, LlamaIndex's `text_search_config` and LangChain's `tsv_lang` do. The configuration is a parameter of the statement, never SQL.
 
-<!-- Phase B (#5399): this program continues the Postgres program of "Search passages by meaning", with a keywords column on rag.docs_passages. Paste its output then. -->
-
 ```ts
 import { PgvectorKeywordRetriever } from '@zukhruf/retrieval/postgres';
 
@@ -259,11 +263,15 @@ console.log(
 await pool.end();
 ```
 
+Output:
+
+```
+[ 'mail-guide#0' ]
+```
+
 ## Search SQL Server
 
 `@zukhruf/retrieval/sqlserver` needs SQL Server 2025 or Azure SQL for `VECTOR` and `VECTOR_DISTANCE`, and Full-Text Search for the keyword retriever. The session takes named parameters, `@p0` for the key `p0`, as the SQL Server store of `@zukhruf/embedding-cache` does, so the package imports no driver.
-
-<!-- Phase B (#5399): this program runs on the native SQL Server 2025 engine with Full-Text Search of limerence-dokploy, with the contract of "Use it" in the schema rag and SQLSERVER_URL set. Paste its output then. -->
 
 ```ts
 import mssql from 'mssql';
@@ -311,6 +319,13 @@ console.log(
   ),
 );
 await connection.close();
+```
+
+Output:
+
+```
+[ 'vault-guide#0', 'vault-guide#1', 'vault-guide#2' ]
+[ 'mail-guide#0' ]
 ```
 
 - **The vector search is exact.** `VECTOR_DISTANCE` reads every vector of the identity of the query; it uses no DiskANN index. The approximate `VECTOR_SEARCH` waits: on SQL Server 2025 it is a preview, filters after the search and needs a read-only table with an INT key ([ADR 0003](./docs/adr/0003-an-embedding-retriever-runs-the-vector-search-in-the-sql-of-its-engine-one-query-or-a-batch.md)).
