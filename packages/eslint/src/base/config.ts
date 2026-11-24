@@ -13,6 +13,7 @@ import { type Concept, enable } from '../concept.ts';
 import noNodeEnv from '../environment/no-node-env.ts';
 import noSilentCatch from '../errors/no-silent-catch.ts';
 import noUnhandledReadlineError from '../errors/no-unhandled-readline-error.ts';
+import requireWarningCode from '../errors/require-warning-code.ts';
 import {
   BUILD_OUTPUT,
   COMMONJS,
@@ -64,6 +65,7 @@ const rules = {
   'no-add-issue-string': noAddIssueString,
   'no-silent-catch': noSilentCatch,
   'no-unhandled-readline-error': noUnhandledReadlineError,
+  'require-warning-code': requireWarningCode,
   'require-shadcn-config': requireShadcnConfig,
   ...importBans,
 };
@@ -308,6 +310,9 @@ export const base: Concept = {
           // readline emits a socket's errors again on its interface, so a
           // reset that Linux gives and macOS does not stops the process.
           'zukhruf/no-unhandled-readline-error': 'error',
+          // A warning with no code cannot be told apart or silenced by code,
+          // and Node ignores the options of an Error warning.
+          'zukhruf/require-warning-code': 'error',
           // zod 4 aborts every parent schema's checks on a string issue.
           'zukhruf/no-add-issue-string': 'error',
         },

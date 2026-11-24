@@ -117,18 +117,19 @@ export class Mutex {
     try {
       return await untilAborted(acquiring, signal);
     } catch (error) {
-      if (signal?.aborted) void giveBack(acquiring, signal.reason);
+      if (signal?.aborted) void giveBack(key, acquiring, signal.reason);
       throw error;
     }
   }
 }
 
 /**
- * Gives back the lease that an acquire got after its caller cancelled with
- * `reason`. The caller already rejected, so nobody is left to tell of a
- * failure here: it is a process warning.
+ * Gives back the lease of `key` that an acquire got after its caller
+ * cancelled with `reason`. The caller already rejected, so nobody is left to
+ * tell of a failure here: it is a process warning.
  */
 async function giveBack(
+  key: string,
   acquiring: Promise<LockHandle | undefined>,
   reason: unknown,
 ) {
@@ -140,7 +141,17 @@ async function giveBack(
     await handle?.[Symbol.asyncDispose]();
   } catch (error) {
     process.emitWarning(
-      Error.isError(error) ? error : new Error(String(error), { cause: error }),
+      Object.assign(
+        new Error(
+          `The give-back of a lease that a cancelled acquire got failed, and its caller already rejected: ${Error.isError(error) ? error.message : String(error)}`,
+          { cause: error },
+        ),
+        {
+          name: 'MutexWarning',
+          code: 'ZUKHRUF_MUTEX_GIVE_BACK_FAILED',
+          detail: `key: ${key}`,
+        },
+      ),
     );
   }
 }

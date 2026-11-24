@@ -87,8 +87,22 @@ export class Pool<Input, Output> implements AsyncDisposable {
     this.#kind = options.kind;
     this.#clock = options.clock;
     this.#store = new Store(options.store, options.clock);
-    this.#store.queue.on('error', warn);
-    this.#store.notifications.on('error', warn);
+    const queue = `queue: ${options.kind.queue}`;
+    this.#store.queue.on('error', (error) =>
+      warn(error, {
+        message: 'The queue of the store failed, and the pool goes on',
+        code: 'ZUKHRUF_POOL_QUEUE_ERROR',
+        detail: queue,
+      }),
+    );
+    this.#store.notifications.on('error', (error) =>
+      warn(error, {
+        message:
+          'The notifications of the store failed, and the backstop finds the lost wakes',
+        code: 'ZUKHRUF_POOL_NOTIFICATIONS_ERROR',
+        detail: queue,
+      }),
+    );
     const output = outputChannel(options.kind);
     this.#store.notifications.on('notification', ({ channel, payload }) => {
       if (channel !== output) return;
@@ -110,7 +124,14 @@ export class Pool<Input, Output> implements AsyncDisposable {
             }).listen((socket) => {
               socket.unref();
               this.#owners.add(socket);
-              socket.on('error', warn);
+              socket.on('error', (error) =>
+                warn(error, {
+                  message:
+                    'The connection of an owner broke, and the pool drops it',
+                  code: 'ZUKHRUF_POOL_OWNER_CONNECTION_ERROR',
+                  detail: queue,
+                }),
+              );
               socket.once('close', () => this.#owners.delete(socket));
             });
             return server.unref();

@@ -920,7 +920,7 @@ test(
 );
 
 test(
-  'an election that ref() starts after the master is killed with SIGKILL, and that fails while no channel waits for it, is a process warning',
+  'an election that ref() starts after the master is killed with SIGKILL, and that fails while no channel waits for it, is a SharedConnectionWarning with its code, the socket and the failure as its cause',
   { skip: noSshd },
   async (t) => {
     // Arrange: as above, this process joins the owner's master, unref'd, the
@@ -928,12 +928,17 @@ test(
     // socket that the owner left: platform setup, as no operation of the
     // package makes the removal fail. A session that fails to elect shows
     // that the connection knows its master is gone.
-    const warned = Promise.withResolvers<string | Error>();
-    const emitWarning = t.mock.method(
-      process,
-      'emitWarning',
-      (warning: string | Error) => warned.resolve(warning),
-    );
+    const warnings: Error[] = [];
+    const warned = Promise.withResolvers<void>();
+    const onWarning = (warning: Error) => {
+      if (warning.name !== 'SharedConnectionWarning') return;
+      warnings.push(warning);
+      warned.resolve();
+    };
+    process.on('warning', onWarning);
+    using _listening = {
+      [Symbol.dispose]: () => process.off('warning', onWarning),
+    };
     await using directory = await new TemporaryFiles().directory('ssh-', {
       parent: '/tmp',
     });
@@ -951,7 +956,6 @@ test(
     joined.unref();
     await owner[Symbol.asyncDispose]();
     await chmod(directory.path, 0o500);
-    let warning: string | Error;
     try {
       await assert.rejects(joined.newSession().output('echo ran'), {
         code: 'EACCES',
@@ -959,14 +963,25 @@ test(
 
       // Act
       joined.ref();
-      warning = await untilAborted(warned.promise, t.signal);
+      await untilAborted(warned.promise, t.signal);
     } finally {
       await chmod(directory.path, 0o700);
     }
 
     // Assert
-    assert.equal(emitWarning.mock.callCount(), 1);
-    assert.ok(isErrno(warning, 'EACCES'));
+    const [warning] = warnings;
+    assert.equal(warnings.length, 1);
+    assert.ok(warning);
+    assert.deepEqual(
+      { ...warning },
+      {
+        name: 'SharedConnectionWarning',
+        code: 'ZUKHRUF_SSH_SHARED_CONNECTION_ELECTION_FAILED',
+        detail: `socket: ${join(directory.path, 'cm')}.zukhruf`,
+      },
+    );
+    assert.ok(isErrno(warning.cause, 'EACCES'));
+    assert.match(warning.message, /: EACCES/);
   },
 );
 

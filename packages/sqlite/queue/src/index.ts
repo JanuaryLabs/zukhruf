@@ -627,12 +627,34 @@ export class SqliteJobQueue
               Error.isError(thrown) &&
               'code' in thrown &&
               thrown.code === 'ERR_UNHANDLED_ERROR';
-            if (unheard) process.emitWarning(toError(error));
+            const detail = `queue: ${worker.name}\nworker: ${worker.id}`;
+            if (unheard)
+              process.emitWarning(
+                Object.assign(
+                  new Error(
+                    `The fail of a worker's active jobs at stop failed, and nobody listens for 'error': ${Error.isError(error) ? error.message : String(error)}`,
+                    { cause: error },
+                  ),
+                  {
+                    name: 'SqliteJobQueueWarning',
+                    code: 'ZUKHRUF_SQLITE_QUEUE_STOP_FAIL_UNHEARD',
+                    detail,
+                  },
+                ),
+              );
             else
               process.emitWarning(
-                Error.isError(thrown)
-                  ? thrown
-                  : new Error(String(thrown), { cause: thrown }),
+                Object.assign(
+                  new Error(
+                    `The fail of a worker's active jobs at stop failed, and an 'error' listener threw: ${Error.isError(thrown) ? thrown.message : String(thrown)}`,
+                    { cause: thrown },
+                  ),
+                  {
+                    name: 'SqliteJobQueueWarning',
+                    code: 'ZUKHRUF_SQLITE_QUEUE_ERROR_LISTENER_THREW',
+                    detail,
+                  },
+                ),
               );
           }
         }

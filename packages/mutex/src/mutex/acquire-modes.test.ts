@@ -187,54 +187,71 @@ describe('Cancelling a wait', () => {
     assert.equal(ran, false, 'A caller that cancelled must not run its task');
   });
 
-  test('a key that arrives after its caller cancelled and whose give-back fails is a process warning, not an unhandled rejection', async (t) => {
+  test('a key that arrives after its caller cancelled and whose give-back fails is a MutexWarning with its code, the key and the failure as its cause, not an unhandled rejection', async (t) => {
     // Arrange: a lock store whose grant waits for the gate, and whose release
     // frees the key but then rejects, as a dead connection to a store can.
-    const emitWarning = t.mock.method(process, 'emitWarning', () => {});
-    const inner = new MemoryStore();
-    const gate = Promise.withResolvers<void>();
-    const failure = new Error('The lock store is gone');
-    const mutex = new Mutex({
-      acquire: async (key, options) => {
-        await gate.promise;
-        const handle = await inner.acquire(key, options);
-        return {
-          token: handle.token,
-          signal: handle.signal,
-          [Symbol.asyncDispose]: async () => {
-            await handle[Symbol.asyncDispose]();
-            throw failure;
-          },
-        };
-      },
-      tryAcquire: (key) => inner.tryAcquire(key),
-      isHeld: (key) => inner.isHeld(key),
-    });
-    const unheeding: AcquireMode<'always'> = {
-      outcome: 'always',
-      acquire: (store, key) => store.acquire(key),
+    const warnings: Error[] = [];
+    const onWarning = (warning: Error) => {
+      if (warning.name === 'MutexWarning') warnings.push(warning);
     };
-    const cancel = new AbortController();
-    const reason = new Error('cancelled');
-    const cancelled = mutex.acquire('report:daily', async () => {}, {
-      mode: unheeding,
-      signal: cancel.signal,
-    });
+    process.on('warning', onWarning);
+    try {
+      const inner = new MemoryStore();
+      const gate = Promise.withResolvers<void>();
+      const failure = new Error('The lock store is gone');
+      const mutex = new Mutex({
+        acquire: async (key, options) => {
+          await gate.promise;
+          const handle = await inner.acquire(key, options);
+          return {
+            token: handle.token,
+            signal: handle.signal,
+            [Symbol.asyncDispose]: async () => {
+              await handle[Symbol.asyncDispose]();
+              throw failure;
+            },
+          };
+        },
+        tryAcquire: (key) => inner.tryAcquire(key),
+        isHeld: (key) => inner.isHeld(key),
+      });
+      const unheeding: AcquireMode<'always'> = {
+        outcome: 'always',
+        acquire: (store, key) => store.acquire(key),
+      };
+      const cancel = new AbortController();
+      const reason = new Error('cancelled');
+      const cancelled = mutex.acquire('report:daily', async () => {}, {
+        mode: unheeding,
+        signal: cancel.signal,
+      });
 
-    // Act: the caller cancels, and then the key arrives.
-    cancel.abort(reason);
-    await assert.rejects(cancelled, (error) => error === reason);
-    gate.resolve();
+      // Act: the caller cancels, and then the key arrives.
+      cancel.abort(reason);
+      await assert.rejects(cancelled, (error) => error === reason);
+      gate.resolve();
 
-    // Assert
-    await waitFor(() => assert.equal(emitWarning.mock.callCount(), 1), {
-      signal: t.signal,
-    });
-    assert.deepEqual(
-      emitWarning.mock.calls.map((call) => call.arguments),
-      [[failure]],
-    );
-    assert.equal(await inner.isHeld('report:daily'), false);
+      // Assert
+      await waitFor(() => assert.equal(warnings.length, 1), {
+        signal: t.signal,
+      });
+      const [warning] = warnings;
+      assert.ok(warning);
+      assert.deepEqual(
+        { ...warning, message: warning.message },
+        {
+          name: 'MutexWarning',
+          code: 'ZUKHRUF_MUTEX_GIVE_BACK_FAILED',
+          detail: 'key: report:daily',
+          message:
+            'The give-back of a lease that a cancelled acquire got failed, and its caller already rejected: The lock store is gone',
+        },
+      );
+      assert.equal(warning.cause, failure);
+      assert.equal(await inner.isHeld('report:daily'), false);
+    } finally {
+      process.off('warning', onWarning);
+    }
   });
 
   test('an acquire that fails after its caller cancelled, with an error other than the reason, is a process warning', async (t) => {
@@ -267,8 +284,17 @@ describe('Cancelling a wait', () => {
       signal: t.signal,
     });
     assert.deepEqual(
-      emitWarning.mock.calls.map((call) => call.arguments),
-      [[failure]],
+      emitWarning.mock.calls.map(({ arguments: [warning] }) =>
+        Error.isError(warning) ? { ...warning, cause: warning.cause } : warning,
+      ),
+      [
+        {
+          name: 'MutexWarning',
+          code: 'ZUKHRUF_MUTEX_GIVE_BACK_FAILED',
+          detail: 'key: report:daily',
+          cause: failure,
+        },
+      ],
     );
   });
 

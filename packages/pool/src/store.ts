@@ -78,7 +78,11 @@ export class Store implements AsyncDisposable {
     try {
       this.notifications.notify(channel, payload);
     } catch (error) {
-      warn(error);
+      warn(error, {
+        message: 'A notify failed, and the backstop finds the lost wake',
+        code: 'ZUKHRUF_POOL_NOTIFY_FAILED',
+        detail: `channel: ${channel}`,
+      });
     }
   }
 
@@ -122,12 +126,22 @@ class Interval {
 }
 
 /**
- * A failure of the store that no caller waits for, as a process warning: the
- * host goes on, and the next pass, fetch, touch or backstop tries again, as
- * pg-boss emits the failure of a pass and keeps polling.
+ * A failure of the store that no caller waits for, as a `PoolWarning` with
+ * the caller's code and detail: the host goes on, and the next pass, fetch,
+ * touch or backstop tries again, as pg-boss emits the failure of a pass and
+ * keeps polling. `message` says what failed and what the pool does next.
  */
-export function warn(error: unknown): void {
+export function warn(
+  error: unknown,
+  { message, code, detail }: { message: string; code: string; detail: string },
+): void {
   process.emitWarning(
-    Error.isError(error) ? error : new Error(String(error), { cause: error }),
+    Object.assign(
+      new Error(
+        `${message}: ${Error.isError(error) ? error.message : String(error)}`,
+        { cause: error },
+      ),
+      { name: 'PoolWarning', code, detail },
+    ),
   );
 }

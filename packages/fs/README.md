@@ -279,6 +279,12 @@ try {
 | `SuppressedError`       | `createExclusive` rejects with it when the create fails and the removal of its draft fails too. Its `suppressed` is the failure of the create, and its `error` is the failure of the removal (`src/create-exclusive.test.ts`).                                                                                                                                                                             |
 | `ENAMETOOLONG`          | A write rejects with this error code when the name of its draft is too long for the file system (see "Keep room for the name of the draft", `src/draft.test.ts`). The removal of a draft that fails with `ENAMETOOLONG`, or with `ENOTDIR` for a parent that is a file, means that no draft is there. Thus `createExclusive` rejects with the error of its write, not with a `SuppressedError` (4494d9be). |
 
+A failure that no caller waits for is a process warning, in the shape of [root ADR 0010](../../docs/adr/0010-a-package-warning-names-its-type-code-and-subject-and-keeps-the-failure-as-its-cause.md). A `'warning'` listener reads its type as `name`, its `code`, and its subject in `detail`, one `<term>: <value>` line each. Its `cause` is the failure, and its message ends with the failure's message. `--disable-warning=<code or type>` stops the print.
+
+| Warning                  | Code                             | Detail          | When                                                                                   |
+| ------------------------ | -------------------------------- | --------------- | -------------------------------------------------------------------------------------- |
+| `CreateExclusiveWarning` | `ZUKHRUF_FS_DRAFT_REMOVE_FAILED` | `draft: <path>` | `createExclusive` has its answer, and the removal of its draft fails. The draft stays. |
+
 ## API
 
 ```ts

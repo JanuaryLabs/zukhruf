@@ -149,34 +149,54 @@ describe('A term that its backend takes away', () => {
     ]);
   });
 
-  test('a resign after a loss resolves, gives nothing up, and frees the claim once; a failure to free it is a process warning', async (t) => {
+  test('a resign after a loss resolves, gives nothing up, and frees the claim once; a failure to free it is a TermWarning with its code, the epoch and the failure as its cause', async (t) => {
     // Arrange: freeing the claim fails, as a dead connection to a backend can.
-    const emitWarning = t.mock.method(process, 'emitWarning', () => {});
-    const freeing = new Error('The connection to the backend is gone');
-    const lease = new AbortController();
-    const election = new ScriptedElection(globalThis, {
-      lose: lease.signal,
-      closeFails: freeing,
-    });
-    const term = await election.campaign();
-    assert.ok(term);
-    lease.abort();
+    const warnings: Error[] = [];
+    const onWarning = (warning: Error) => {
+      if (warning.name === 'TermWarning') warnings.push(warning);
+    };
+    process.on('warning', onWarning);
+    try {
+      const freeing = new Error('The connection to the backend is gone');
+      const lease = new AbortController();
+      const election = new ScriptedElection(globalThis, {
+        lose: lease.signal,
+        closeFails: freeing,
+      });
+      const term = await election.campaign();
+      assert.ok(term);
+      lease.abort();
 
-    // Act
-    const first = await settle(term.resign());
-    const second = await settle(term.resign());
+      // Act
+      const first = await settle(term.resign());
+      const second = await settle(term.resign());
 
-    // Assert
-    assert.deepEqual(first, { value: undefined });
-    assert.deepEqual(second, { value: undefined });
-    assert.deepEqual(
-      election.steps.filter((step) => /release|close/.test(step)),
-      ['close 1'],
-    );
-    assert.deepEqual(
-      emitWarning.mock.calls.map((call) => call.arguments),
-      [[freeing]],
-    );
+      // Assert
+      assert.deepEqual(first, { value: undefined });
+      assert.deepEqual(second, { value: undefined });
+      assert.deepEqual(
+        election.steps.filter((step) => /release|close/.test(step)),
+        ['close 1'],
+      );
+      await waitFor(() => assert.equal(warnings.length, 1), {
+        signal: t.signal,
+      });
+      const [warning] = warnings;
+      assert.ok(warning);
+      assert.deepEqual(
+        { ...warning, message: warning.message },
+        {
+          name: 'TermWarning',
+          code: 'ZUKHRUF_ELECTION_TERM_FREE_FAILED',
+          detail: `epoch: ${term.epoch}`,
+          message:
+            'The lost term failed to stop watching its claim or to free it, and it ends anyway: The connection to the backend is gone',
+        },
+      );
+      assert.equal(warning.cause, freeing);
+    } finally {
+      process.off('warning', onWarning);
+    }
   });
 
   test('a lost term whose watch fails to stop still ends: each resign resolves, gives nothing up, and frees the claim once; the watch’s failure is a process warning', async (t) => {
@@ -204,12 +224,21 @@ describe('A term that its backend takes away', () => {
       ['unwatch 1', 'close 1'],
     );
     assert.deepEqual(
-      emitWarning.mock.calls.map((call) => call.arguments),
-      [[unwatching]],
+      emitWarning.mock.calls.map(({ arguments: [warning] }) =>
+        Error.isError(warning) ? { ...warning, cause: warning.cause } : warning,
+      ),
+      [
+        {
+          name: 'TermWarning',
+          code: 'ZUKHRUF_ELECTION_TERM_FREE_FAILED',
+          detail: `epoch: ${term.epoch}`,
+          cause: unwatching,
+        },
+      ],
     );
   });
 
-  test('a lost term whose watch fails to stop and whose claim fails to free still ends, and its one warning is a SuppressedError of the close’s failure over the watch’s', async (t) => {
+  test('a lost term whose watch fails to stop and whose claim fails to free still ends, and its one warning is a TermWarning whose cause is a SuppressedError of the close’s failure over the watch’s', async (t) => {
     // Arrange: both steps fail, as they can when the connection to the backend is gone.
     const emitWarning = t.mock.method(process, 'emitWarning', () => {});
     const unwatching = new Error('The watcher of the claim already broke');
@@ -235,9 +264,11 @@ describe('A term that its backend takes away', () => {
     );
     assert.equal(emitWarning.mock.callCount(), 1);
     const [warning] = emitWarning.mock.calls[0]?.arguments ?? [];
-    assert.ok(warning instanceof SuppressedError);
-    assert.equal(warning.error, freeing);
-    assert.equal(warning.suppressed, unwatching);
+    assert.ok(Error.isError(warning));
+    assert.equal(warning.name, 'TermWarning');
+    assert.ok(warning.cause instanceof SuppressedError);
+    assert.equal(warning.cause.error, freeing);
+    assert.equal(warning.cause.suppressed, unwatching);
   });
 
   test('a loss that comes while the term resigns changes nothing: the signal stays quiet, and the claim is given up and freed once', async () => {

@@ -132,6 +132,15 @@ Other methods of `PgBoss` are not in the subset, for example `getQueue`, `getJob
 
 Code that runs on both engines examines `code`, not the class. On Postgres, the error comes from the driver, not from this package, and `instanceof DatabaseError` is false. The `code` is the same on both engines.
 
+A failure that no caller waits for is a process warning, in the shape of [root ADR 0010](../../../docs/adr/0010-a-package-warning-names-its-type-code-and-subject-and-keeps-the-failure-as-its-cause.md). A `'warning'` listener reads its type as `name`, its `code`, and its subject in `detail`, one `<term>: <value>` line each. Its `cause` is the failure, and its message ends with the failure's message. `--disable-warning=<code or type>` stops the print.
+
+| Warning                 | Code                                        | Detail                                                                               | When                                                                                                                                        |
+| ----------------------- | ------------------------------------------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SqliteJobQueueWarning` | `ZUKHRUF_SQLITE_QUEUE_STOP_FAIL_UNHEARD`    | `queue: <name>` and `worker: <id>`                                                   | At a stop, the fail of a worker's active jobs fails, and nothing listens for `'error'`. The `cause` is the failure of the fail.             |
+| `SqliteJobQueueWarning` | `ZUKHRUF_SQLITE_QUEUE_ERROR_LISTENER_THREW` | `queue: <name>` and `worker: <id>`                                                   | The same, and an `'error'` listener throws. The `cause` is what the listener threw.                                                         |
+| `TimekeeperWarning`     | `ZUKHRUF_SQLITE_QUEUE_SEND_IT_UNREPORTED`   | `schedule: <name>` and `key: <key>`, or `job: <id>` when the job's data is no object | A send-it job fails to forward an occurrence, and its `'error'` reaches no listener, or a listener throws. The send-it job still completes. |
+| `DeprecationWarning`    | `PGBOSS_DEP_FETCH_SORT`                     | none                                                                                 | A fetch gets `priority: false` or `orderByCreatedOn: false`. pg-boss's own code, once per option and instance.                              |
+
 ## The same concepts in other systems
 
 | System                                              | What it does                                                                                                                                                               |

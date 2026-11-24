@@ -424,9 +424,17 @@ class Claim {
         return;
       }
       process.emitWarning(
-        Error.isError(error)
-          ? error
-          : new Error(String(error), { cause: error }),
+        Object.assign(
+          new Error(
+            `The removal of a lost claim failed, and the claim ends with its attach: ${Error.isError(error) ? error.message : String(error)}`,
+            { cause: error },
+          ),
+          {
+            name: 'DockerEngineStoreWarning',
+            code: 'ZUKHRUF_MUTEX_DOCKER_CLAIM_REMOVE_FAILED',
+            detail: `key: ${this.#key}\ncontainer: ${this.#container.id}`,
+          },
+        ),
       );
     }
   }

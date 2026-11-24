@@ -108,8 +108,22 @@ export class PoolWorkers<Input, Output> implements AsyncDisposable {
     this.#startup = options.startup;
     this.#eviction = options.eviction;
     this.#store = new Store(options.store, options.clock);
-    this.#store.queue.on('error', warn);
-    this.#store.notifications.on('error', warn);
+    const queue = `queue: ${options.kind.queue}`;
+    this.#store.queue.on('error', (error) =>
+      warn(error, {
+        message: 'The queue of the store failed, and the pool goes on',
+        code: 'ZUKHRUF_POOL_QUEUE_ERROR',
+        detail: queue,
+      }),
+    );
+    this.#store.notifications.on('error', (error) =>
+      warn(error, {
+        message:
+          'The notifications of the store failed, and the backstop finds the lost wakes',
+        code: 'ZUKHRUF_POOL_NOTIFICATIONS_ERROR',
+        detail: queue,
+      }),
+    );
     const newJob = newJobChannel(options.kind);
     this.#store.notifications.on('notification', ({ channel }) => {
       if (channel !== newJob) return;
@@ -197,7 +211,11 @@ export class PoolWorkers<Input, Output> implements AsyncDisposable {
           const jobs = await this.#store.queue
             .fetch(this.#kind.queue, { batchSize: free })
             .catch((error: unknown) => {
-              warn(error);
+              warn(error, {
+                message: 'A fetch failed, and the owner waits for the backstop',
+                code: 'ZUKHRUF_POOL_FETCH_FAILED',
+                detail: `queue: ${this.#kind.queue}`,
+              });
               return [];
             });
           backlog = jobs.length === free;
@@ -205,7 +223,14 @@ export class PoolWorkers<Input, Output> implements AsyncDisposable {
             const run = this.#run(slots, job, () => backlog)
               // A settle that fails leaves the job to lapse by its heartbeat,
               // and the store runs it again by the kind's rules.
-              .catch(warn)
+              .catch((error: unknown) =>
+                warn(error, {
+                  message:
+                    'A settle failed, and the job lapses by its heartbeat',
+                  code: 'ZUKHRUF_POOL_SETTLE_FAILED',
+                  detail: `queue: ${this.#kind.queue}\njob: ${job.id}`,
+                }),
+              )
               .finally(() => {
                 running.delete(run);
                 this.#changed.broadcast();
@@ -282,7 +307,9 @@ export class PoolWorkers<Input, Output> implements AsyncDisposable {
       const outcome = await Promise.race([
         this.#work(slots, slot, job.data, backlog, ended.signal),
         this.#watch(attempt, ended.signal),
-        ...(connection === undefined ? [] : [left(connection)]),
+        ...(connection === undefined
+          ? []
+          : [left(connection, this.#kind.queue)]),
       ]);
       ended.abort();
       if ('left' in outcome)
@@ -376,7 +403,11 @@ export class PoolWorkers<Input, Output> implements AsyncDisposable {
         ));
       } catch (error) {
         // The job keeps its worker, and the next touch tries again.
-        warn(error);
+        warn(error, {
+          message: 'A touch failed, and the next touch tries again',
+          code: 'ZUKHRUF_POOL_TOUCH_FAILED',
+          detail: `queue: ${this.#kind.queue}\njob: ${attempt.id}`,
+        });
         continue;
       }
       if (affected === 0) return { gone: true };
@@ -413,9 +444,18 @@ function isGone(error: unknown): boolean {
 
 // Resolves when the connection to the caller closes: its program is gone, or
 // its Pool was disposed. A break of the connection only ends it.
-function left<Output>(connection: Socket): Promise<Outcome<Output>> {
+function left<Output>(
+  connection: Socket,
+  queue: string,
+): Promise<Outcome<Output>> {
   connection.on('error', (error) => {
-    if (!isGone(error)) warn(error);
+    if (!isGone(error))
+      warn(error, {
+        message:
+          'The connection to a caller broke, and the owner treats the caller as gone',
+        code: 'ZUKHRUF_POOL_CALLER_CONNECTION_ERROR',
+        detail: `queue: ${queue}`,
+      });
   });
   return new Promise((resolve) => {
     connection.once('close', () => resolve({ left: true }));

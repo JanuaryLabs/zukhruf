@@ -1,18 +1,9 @@
-import { createRequire } from 'node:module';
-import { dirname } from 'node:path';
 import { test } from 'node:test';
 
 import { fixtureWorkspace } from '../testing/fixture-workspace.ts';
+import { nodeTypeRoots } from '../testing/node-type-roots.ts';
 import { typedRuleTester } from '../testing/rule-tester.ts';
 import rule from './no-unhandled-readline-error.ts';
-
-// The fixture reads the real @types/node of this workspace, so the cases see
-// net.Socket, Readable and readline as a consumer's code does.
-const typeRoots = [
-  dirname(
-    dirname(createRequire(import.meta.url).resolve('@types/node/package.json')),
-  ),
-];
 
 const tsconfig = JSON.stringify({
   compilerOptions: {
@@ -23,7 +14,7 @@ const tsconfig = JSON.stringify({
     lib: ['esnext'],
     allowImportingTsExtensions: true,
     types: ['node'],
-    typeRoots,
+    typeRoots: nodeTypeRoots,
   },
   include: ['*.ts', '*.mts'],
 });

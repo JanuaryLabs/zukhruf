@@ -301,8 +301,18 @@ describe('An acquire that fails', () => {
     await waitFor(() => assert.equal(rounds, 2), { signal: t.signal });
 
     assert.deepEqual(
-      emitWarning.mock.calls.map((call) => call.arguments),
-      [[first], [second], [third]],
+      emitWarning.mock.calls.map(({ arguments: [warning] }) =>
+        Error.isError(warning)
+          ? { ...warning, message: warning.message, cause: warning.cause }
+          : warning,
+      ),
+      [first, second, third].map((failure) => ({
+        name: 'LeaderSelectorWarning',
+        code: 'ZUKHRUF_MUTEX_LEADER_SELECTOR_ACQUIRE_FAILED',
+        detail: 'key: warehouse-writer',
+        message: `The acquire failed, and the selector tries again: ${failure!.message}`,
+        cause: failure,
+      })),
     );
   });
 
@@ -999,7 +1009,17 @@ describe('Over an election', () => {
       },
       { signal: t.signal },
     );
-    assert.ok(Error.isError(emitWarning.mock.calls[0]!.arguments[0]));
+    const [warning] = emitWarning.mock.calls[0]!.arguments;
+    assert.ok(Error.isError(warning));
+    assert.deepEqual(
+      { ...warning },
+      {
+        name: 'LeaderSelectorWarning',
+        code: 'ZUKHRUF_MUTEX_LEADER_SELECTOR_ACQUIRE_FAILED',
+        detail: 'election: SqliteElection',
+      },
+    );
+    assert.ok(Error.isError(warning.cause));
 
     // Act: the directory can be made now, and the back-off ends.
     await rm(file);

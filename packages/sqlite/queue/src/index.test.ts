@@ -12,6 +12,7 @@ import { open } from '@zukhruf/sqlite-open';
 import { waitFor } from '@zukhruf/testing/async';
 
 import { SqliteJobQueue } from './index.ts';
+import { DateFollowsClock } from './testing/date-follows-clock.ts';
 import { id } from './testing/job-id.ts';
 
 // Lets what a tick fired finish: SQLite's fetch waits one event-loop turn.
@@ -603,5 +604,57 @@ describe('SqliteJobQueue', () => {
 
     resolveHandler();
     await queue.stop({ graceful: true, close: true });
+  });
+
+  // SQLite-only: pg-boss drops an 'error' event that nobody listens for in
+  // its send-it worker (ADR 0003).
+  it("reports a forward that its queue refuses, with no 'error' listener, as a TimekeeperWarning with its code, the schedule and the refusal as its cause", async () => {
+    // Arrange
+    const warnings: Error[] = [];
+    const onWarning = (warning: Error) => {
+      if (warning.name === 'TimekeeperWarning') warnings.push(warning);
+    };
+    process.on('warning', onWarning);
+    const clock = new TestClock('2026-01-01T00:00:00.000Z');
+    using _date = new DateFollowsClock(clock);
+    const queue = new SqliteJobQueue({
+      clock,
+      schedule: true,
+      supervise: false,
+    });
+    try {
+      await queue.start();
+      await clock.tick(0);
+      await queue.createQueue('fifo', { policy: 'key_strict_fifo' });
+      await queue.schedule('fifo', '* * * * *');
+
+      // Act: the cron pass at 30 s files the occurrence, and the send-it
+      // worker forwards it to a queue that refuses a job with no key.
+      await clock.tick(30_000);
+      await setImmediate();
+
+      // Assert
+      const [warning] = warnings;
+      assert.equal(warnings.length, 1);
+      assert.ok(warning);
+      assert.deepEqual(
+        { ...warning, message: warning.message },
+        {
+          name: 'TimekeeperWarning',
+          code: 'ZUKHRUF_SQLITE_QUEUE_SEND_IT_UNREPORTED',
+          detail: 'schedule: fifo\nkey: ',
+          message:
+            "A send-it job failed, and no 'error' listener took the failure: key_strict_fifo queues require a singletonKey",
+        },
+      );
+      assert.ok(Error.isError(warning.cause));
+      assert.equal(
+        warning.cause.message,
+        'key_strict_fifo queues require a singletonKey',
+      );
+    } finally {
+      process.off('warning', onWarning);
+      await queue.stop({ graceful: false, close: true });
+    }
   });
 });

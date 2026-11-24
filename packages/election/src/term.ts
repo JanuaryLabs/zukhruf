@@ -131,9 +131,17 @@ export class Term implements Lease, AsyncDisposable {
       this.#watching.dispose();
     } catch (error) {
       process.emitWarning(
-        Error.isError(error)
-          ? error
-          : new Error(String(error), { cause: error }),
+        Object.assign(
+          new Error(
+            `The lost term failed to stop watching its claim or to free it, and it ends anyway: ${Error.isError(error) ? error.message : String(error)}`,
+            { cause: error },
+          ),
+          {
+            name: 'TermWarning',
+            code: 'ZUKHRUF_ELECTION_TERM_FREE_FAILED',
+            detail: `epoch: ${this.epoch}`,
+          },
+        ),
       );
     }
   }

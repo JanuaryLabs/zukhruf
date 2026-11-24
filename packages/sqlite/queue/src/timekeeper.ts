@@ -918,7 +918,7 @@ export class Timekeeper extends EventEmitter<
 
   // timekeeper.js:1129-1136: an error event nobody listens for must not fail
   // the send-it job, which would replay every occurrence in its batch.
-  #reportSendItError(error: unknown): void {
+  #reportSendItError(error: unknown, { id, data }: Job<unknown>): void {
     const reported = Error.isError(error) ? error : new Error(String(error));
     try {
       this.emit('error', reported);
@@ -926,10 +926,25 @@ export class Timekeeper extends EventEmitter<
       // An Error nobody listens for, here or on the queue that re-emits it,
       // comes back out of emit() itself, and a listener that throws has no
       // caller either: nothing is left to tell, so it is a process warning.
+      // A send-it job's data names its schedule, unless the data is no object.
       process.emitWarning(
-        Error.isError(thrown)
-          ? thrown
-          : new Error(String(thrown), { cause: thrown }),
+        Object.assign(
+          new Error(
+            `A send-it job failed, and no 'error' listener took the failure: ${Error.isError(thrown) ? thrown.message : String(thrown)}`,
+            { cause: thrown },
+          ),
+          {
+            name: 'TimekeeperWarning',
+            code: 'ZUKHRUF_SQLITE_QUEUE_SEND_IT_UNREPORTED',
+            detail:
+              typeof data === 'object' &&
+              data !== null &&
+              'name' in data &&
+              'key' in data
+                ? `schedule: ${String(data.name)}\nkey: ${String(data.key)}`
+                : `job: ${id}`,
+          },
+        ),
       );
     }
   }
@@ -958,9 +973,9 @@ export class Timekeeper extends EventEmitter<
         return await this.#manager.send({ ...request, options });
       }),
     );
-    for (const result of results) {
+    for (const [index, result] of results.entries()) {
       if (result.status === 'rejected') {
-        this.#reportSendItError(result.reason);
+        this.#reportSendItError(result.reason, jobs[index]!);
       }
     }
   }

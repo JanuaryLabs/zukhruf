@@ -3135,7 +3135,7 @@ describe('PoolWorkers when its store fails', () => {
     }
   });
 
-  test('a touch that fails is a process warning, and the job keeps its worker', async (t) => {
+  test('a touch that fails is a PoolWarning with its code, the queue and the job, and the failure as its cause, and the job keeps its worker', async (t) => {
     await using folder = await new TemporaryFiles().directory('pool-');
     const store = join(folder.path, 'store.sqlite');
     const gate = new Latch();
@@ -3171,9 +3171,10 @@ describe('PoolWorkers when its store fails', () => {
       signal: t.signal,
       interval: 10,
     });
-    let warnings = 0;
+    const warnings: Error[] = [];
     const onWarning = (warning: Error) => {
-      if (/database is locked/.test(warning.message)) warnings++;
+      if ('code' in warning && warning.code === 'ZUKHRUF_POOL_TOUCH_FAILED')
+        warnings.push(warning);
     };
     process.on('warning', onWarning);
     const holder = open(store);
@@ -3181,14 +3182,26 @@ describe('PoolWorkers when its store fails', () => {
       holder.exec('BEGIN IMMEDIATE');
       // The first touch comes 5 s after the fetch. The lock outlasts it and
       // the wait of 5 s that the touch spends on the lock.
-      await waitFor(
-        () => {
-          assert.ok(warnings > 0, 'the store failed');
-          assert.ok(performance.now() - started > 11_000, 'a touch failed');
-        },
-        { signal: t.signal, interval: 50 },
-      );
+      await waitFor(() => assert.ok(warnings.length > 0, 'a touch failed'), {
+        signal: t.signal,
+        interval: 50,
+      });
       holder.exec('ROLLBACK');
+      const [warning] = warnings;
+      assert.ok(warning);
+      assert.deepEqual(
+        { ...warning },
+        {
+          name: 'PoolWarning',
+          code: 'ZUKHRUF_POOL_TOUCH_FAILED',
+          detail: `queue: ${echo().queue}\njob: ${kept}`,
+        },
+      );
+      assert.ok(Error.isError(warning.cause));
+      assert.match(
+        warning.message,
+        /^A touch failed, and the next touch tries again: .*database is locked/,
+      );
 
       // The touch spent the heartbeat's margin on the lock, so the store may
       // fail the job before its worker answers, as pg-boss does when a

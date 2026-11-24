@@ -126,6 +126,54 @@ describe('createExclusive', () => {
     });
   });
 
+  test('a create whose draft cannot be removed afterwards still resolves true, and the failed removal is a CreateExclusiveWarning with its code, the draft and the failure as its cause', async (t) => {
+    // Arrange: the disk refuses the removal of the draft after the link.
+    await using directory = await new TemporaryFiles().directory('zukhruf-fs-');
+    const path = join(directory.path, 'job.lock');
+    const removal = Object.assign(new Error('EIO: unlink failed'), {
+      code: 'EIO',
+      syscall: 'unlink',
+    });
+    const warned = Promise.withResolvers<Error>();
+    const onWarning = (warning: Error) => {
+      if (warning.name === 'CreateExclusiveWarning') warned.resolve(warning);
+    };
+    process.on('warning', onWarning);
+    t.mock.method(fsPromises, 'unlink', async () => {
+      throw removal;
+    });
+    syncBuiltinESMExports();
+    try {
+      // Act
+      const created = await createExclusive(path, 'pid 4242', {
+        clock: globalThis,
+      });
+
+      // Assert
+      assert.equal(created, true);
+      const warning = await warned.promise;
+      const [draft] = (await readdir(directory.path)).filter(
+        (name) => name !== 'job.lock',
+      );
+      assert.ok(draft, 'The draft that the disk refused to remove stays');
+      assert.deepEqual(
+        { ...warning, message: warning.message },
+        {
+          name: 'CreateExclusiveWarning',
+          code: 'ZUKHRUF_FS_DRAFT_REMOVE_FAILED',
+          detail: `draft: ${join(directory.path, draft)}`,
+          message:
+            'The removal of the draft failed, and the draft stays: EIO: unlink failed',
+        },
+      );
+      assert.equal(warning.cause, removal);
+    } finally {
+      process.off('warning', onWarning);
+      t.mock.restoreAll();
+      syncBuiltinESMExports();
+    }
+  });
+
   test('a link that fails for a reason other than an existing file rejects with that error and leaves no draft', async (t) => {
     // Arrange
     await using directory = await new TemporaryFiles().directory('zukhruf-fs-');

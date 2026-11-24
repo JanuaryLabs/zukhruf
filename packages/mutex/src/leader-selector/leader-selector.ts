@@ -45,13 +45,20 @@ type RoundEnd = { granted: true } | { granted: false; error: unknown };
  */
 export class LeaderSelector implements AsyncDisposable {
   readonly #lead: Lead;
+  /** The source in the detail of a warning: `key: <name>`, or `election: <its class>`. */
+  readonly #source: string;
   readonly #autoRequeue: LeaderSelectorOptions['autoRequeue'];
   readonly #disposed = new AbortController();
   #state: Queued | Leading | Idle | Ended = QUEUED;
   readonly #rounds: BackgroundService;
 
-  private constructor(lead: Lead, { autoRequeue }: LeaderSelectorOptions) {
+  private constructor(
+    lead: Lead,
+    source: string,
+    { autoRequeue }: LeaderSelectorOptions,
+  ) {
     this.#lead = lead;
+    this.#source = source;
     this.#autoRequeue = autoRequeue;
     this.#rounds = BackgroundService.start((stop) => this.#run(stop));
   }
@@ -75,12 +82,17 @@ export class LeaderSelector implements AsyncDisposable {
       LeaderSelectorListener<Term>,
     options: LeaderSelectorOptions = {},
   ): LeaderSelector {
-    return new LeaderSelector(
-      source instanceof Key
-        ? LeaderSelector.#overKey(source, listener)
-        : LeaderSelector.#overElection(source, listener),
-      options,
-    );
+    return source instanceof Key
+      ? new LeaderSelector(
+          LeaderSelector.#overKey(source, listener),
+          `key: ${source.name}`,
+          options,
+        )
+      : new LeaderSelector(
+          LeaderSelector.#overElection(source, listener),
+          `election: ${source.constructor.name}`,
+          options,
+        );
   }
 
   /** True while `takeLeadership` runs. */
@@ -140,9 +152,17 @@ export class LeaderSelector implements AsyncDisposable {
       if (this.#autoRequeue === undefined) throw end.error;
       const { backoff, clock } = this.#autoRequeue;
       process.emitWarning(
-        Error.isError(end.error)
-          ? end.error
-          : new Error(String(end.error), { cause: end.error }),
+        Object.assign(
+          new Error(
+            `The acquire failed, and the selector tries again: ${Error.isError(end.error) ? end.error.message : String(end.error)}`,
+            { cause: end.error },
+          ),
+          {
+            name: 'LeaderSelectorWarning',
+            code: 'ZUKHRUF_MUTEX_LEADER_SELECTOR_ACQUIRE_FAILED',
+            detail: this.#source,
+          },
+        ),
       );
       await delay(backoff.duration(retries++), { clock, signal: stop });
     }

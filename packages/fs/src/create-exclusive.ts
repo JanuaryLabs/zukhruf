@@ -23,7 +23,17 @@ export async function createExclusive(
   // A draft left behind has a unique name, so it never blocks a key; failing to remove it must not change whether `path` was created, so nobody is left to tell of it.
   await removeDraft(draft, clock).catch((error: unknown) => {
     process.emitWarning(
-      Error.isError(error) ? error : new Error(String(error), { cause: error }),
+      Object.assign(
+        new Error(
+          `The removal of the draft failed, and the draft stays: ${Error.isError(error) ? error.message : String(error)}`,
+          { cause: error },
+        ),
+        {
+          name: 'CreateExclusiveWarning',
+          code: 'ZUKHRUF_FS_DRAFT_REMOVE_FAILED',
+          detail: `draft: ${draft}`,
+        },
+      ),
     );
   });
   return created;

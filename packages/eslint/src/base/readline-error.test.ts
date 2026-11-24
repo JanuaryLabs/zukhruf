@@ -1,17 +1,9 @@
 import assert from 'node:assert/strict';
-import { createRequire } from 'node:module';
-import { dirname } from 'node:path';
 import { test } from 'node:test';
 
 import { fixtureWorkspace } from '../testing/fixture-workspace.ts';
+import { nodeTypeRoots } from '../testing/node-type-roots.ts';
 import { fixtureConfig, lint } from '../testing/run-eslint.ts';
-
-// The real @types/node of this workspace, so the fixture sees net.Socket.
-const typeRoots = [
-  dirname(
-    dirname(createRequire(import.meta.url).resolve('@types/node/package.json')),
-  ),
-];
 
 const tsconfig = JSON.stringify({
   compilerOptions: {
@@ -20,7 +12,7 @@ const tsconfig = JSON.stringify({
     target: 'esnext',
     module: 'nodenext',
     types: ['node'],
-    typeRoots,
+    typeRoots: nodeTypeRoots,
   },
   include: ['**/*.ts'],
 });

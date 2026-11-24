@@ -943,9 +943,17 @@ function releaseAll(): void {
       // next tick that never runs after 'exit', so the warning is emitted now.
       process.emit(
         'warning',
-        Error.isError(error)
-          ? error
-          : new Error(String(error), { cause: error }),
+        Object.assign(
+          new Error(
+            `The release of the lock at exit failed, and the next lock is released: ${Error.isError(error) ? error.message : String(error)}`,
+            { cause: error },
+          ),
+          {
+            name: 'LockWarning',
+            code: 'ZUKHRUF_MTEB_LOCK_RELEASE_FAILED',
+            detail: `lockfile: ${lock.lockfilePath}`,
+          },
+        ),
       );
     }
 }
@@ -1023,9 +1031,17 @@ class PeriodicScheduler {
       // and threading.excepthook prints it: no caller is left to tell.
       this.#function().catch((error: unknown) => {
         process.emitWarning(
-          Error.isError(error)
-            ? error
-            : new Error(String(error), { cause: error }),
+          Object.assign(
+            new Error(
+              `A call of the periodic scheduler failed, and the next call comes at the next interval: ${Error.isError(error) ? error.message : String(error)}`,
+              { cause: error },
+            ),
+            {
+              name: 'PeriodicSchedulerWarning',
+              code: 'ZUKHRUF_MTEB_PERIODIC_CALL_FAILED',
+              detail: `interval: ${this.#interval} s`,
+            },
+          ),
         );
       });
     }

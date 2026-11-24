@@ -305,6 +305,19 @@ The store keeps the wall time of each job, so `Pool` and `PoolWorkers` take a `W
 | The error of the warm-up | `workers.ready()` rejects with it when a worker that the startup of the owner starts fails its `ready()` ([src/pool-workers.test.ts](./src/pool-workers.test.ts)).                                                                                                                                      |
 | `AbortError`             | `workers.ready()` rejects with it when you dispose `PoolWorkers` before its host owns ([src/pool-workers.test.ts](./src/pool-workers.test.ts)).                                                                                                                                                         |
 
+A failure that no caller waits for is a process warning, in the shape of [root ADR 0010](../../docs/adr/0010-a-package-warning-names-its-type-code-and-subject-and-keeps-the-failure-as-its-cause.md). A `'warning'` listener reads its type as `name`, its `code`, and its subject in `detail`, one `<term>: <value>` line each. Its `cause` is the failure, and its message ends with the failure's message. `--disable-warning=<code or type>` stops the print.
+
+| Warning       | Code                                   | Detail                          | When                                                                                                                                          |
+| ------------- | -------------------------------------- | ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PoolWarning` | `ZUKHRUF_POOL_QUEUE_ERROR`             | `queue: <name>`                 | The queue of the store emits `'error'`. The pool goes on.                                                                                     |
+| `PoolWarning` | `ZUKHRUF_POOL_NOTIFICATIONS_ERROR`     | `queue: <name>`                 | The notifications of the store emit `'error'`. The backstop finds the lost wakes.                                                             |
+| `PoolWarning` | `ZUKHRUF_POOL_NOTIFY_FAILED`           | `channel: <channel>`            | A notify fails after its write committed. The backstop finds the lost wake.                                                                   |
+| `PoolWarning` | `ZUKHRUF_POOL_OWNER_CONNECTION_ERROR`  | `queue: <name>`                 | The connection of an owner to a `Pool` breaks. The pool drops it.                                                                             |
+| `PoolWarning` | `ZUKHRUF_POOL_FETCH_FAILED`            | `queue: <name>`                 | A fetch of the owner fails. The owner waits for the backstop.                                                                                 |
+| `PoolWarning` | `ZUKHRUF_POOL_SETTLE_FAILED`           | `queue: <name>` and `job: <id>` | The settle of a job fails. The job lapses by its heartbeat.                                                                                   |
+| `PoolWarning` | `ZUKHRUF_POOL_TOUCH_FAILED`            | `queue: <name>` and `job: <id>` | A touch of a job fails. The job keeps its worker, and the next touch tries again.                                                             |
+| `PoolWarning` | `ZUKHRUF_POOL_CALLER_CONNECTION_ERROR` | `queue: <name>`                 | The connection of the owner to the caller of a job breaks for a reason other than a caller that is gone. The owner treats the caller as gone. |
+
 ## API
 
 ```ts

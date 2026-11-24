@@ -158,9 +158,17 @@ export class LockServer {
       }
     } catch (error) {
       process.emitWarning(
-        Error.isError(error)
-          ? error
-          : new Error(String(error), { cause: error }),
+        Object.assign(
+          new Error(
+            `The recovery check of a session failed, and the server ends its term: ${Error.isError(error) ? error.message : String(error)}`,
+            { cause: error },
+          ),
+          {
+            name: 'LockServerWarning',
+            code: 'ZUKHRUF_MUTEX_LOCK_SERVER_RECOVERY_CHECK_FAILED',
+            detail: `session: ${session}`,
+          },
+        ),
       );
       await this.close();
     }

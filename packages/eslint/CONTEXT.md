@@ -47,7 +47,7 @@ A function that returns a rule's complete options, with a repo's entries added t
 _Avoid_: Options helper, builder
 
 **Typed lint**:
-The block `zukhruf/base/typed` of `base`, which sets `parserOptions.projectService`. It gives each TypeScript file the types of its nearest `tsconfig.json`. `zukhruf/no-promise-field`, `zukhruf/no-phase-flag`, `zukhruf/no-unhandled-readline-error`, the `recommended-type-checked` rules of `@zukhruf/eslint/react` and `unicorn/prefer-dispose` of `modern-node/recommended` need it, so a repo uses those configs together with `base`. Each linted TypeScript file must be in a tsconfig.
+The block `zukhruf/base/typed` of `base`, which sets `parserOptions.projectService`. It gives each TypeScript file the types of its nearest `tsconfig.json`. `zukhruf/no-promise-field`, `zukhruf/no-phase-flag`, `zukhruf/no-unhandled-readline-error`, `zukhruf/require-warning-code`, the `recommended-type-checked` rules of `@zukhruf/eslint/react` and `unicorn/prefer-dispose` of `modern-node/recommended` need it, so a repo uses those configs together with `base`. Each linted TypeScript file must be in a tsconfig.
 _Avoid_: Type-aware mode, type checking
 
 **Phase flag**:

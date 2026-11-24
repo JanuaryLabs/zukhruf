@@ -545,9 +545,17 @@ class ElectedConnection implements SharedConnection {
       ref: () =>
         void elect().catch((error: unknown) => {
           process.emitWarning(
-            Error.isError(error)
-              ? error
-              : new Error(String(error), { cause: error }),
+            Object.assign(
+              new Error(
+                `The election of a ref'd shared connection failed, and its next channel elects again: ${Error.isError(error) ? error.message : String(error)}`,
+                { cause: error },
+              ),
+              {
+                name: 'SharedConnectionWarning',
+                code: 'ZUKHRUF_SSH_SHARED_CONNECTION_ELECTION_FAILED',
+                detail: `socket: ${this.#socket}`,
+              },
+            ),
           );
         }),
       unref: () => undefined,
