@@ -962,7 +962,7 @@ describe('a run and its recovery', { concurrency: 4 }, () => {
       import { test } from 'node:test';
       import { writeFile } from 'node:fs/promises';
       import { DockerTestbed } from ${library};
-      test('a slow create', { timeout: 5000 }, async () => {
+      test('a slow create', { timeout: 150000 }, async () => {
         const testbed = new DockerTestbed({ environment: process.env });
         const early = await testbed.start({ Image: 'alpine:latest', Cmd: ['sleep', '600'] });
         await writeFile(${JSON.stringify(statePath)}, JSON.stringify({ run: process.env.ZUKHRUF_TESTING_RUN_ID, record: process.env.ZUKHRUF_TESTING_RUN_DIR, pid: process.pid, early: early.id }));
@@ -972,15 +972,25 @@ describe('a run and its recovery', { concurrency: 4 }, () => {
       );
       const env = proxiedEnvironment(join(directory.path, 'state'), proxy);
       let run: string | undefined;
+      const killed = started(runnerArgs(file), env);
+      let worker: number | undefined;
       try {
-        // The test times out, and --test-force-exit ends its process while
-        // the engine still has its create.
-        const killed = started(runnerArgs('--test-force-exit', file), env);
-        assert.notEqual(await killed.exited, 0, killed.output());
-        const state = await readState<
-          Omit<SmallState, 'id'> & { early: string }
-        >(t, statePath);
+        const ended = killed.exited.then((code) => {
+          throw new Error(
+            `the run ended with ${code} before its late create reached the engine:\n${killed.output()}`,
+          );
+        });
+        ended.catch(() => {});
+        const state = await Promise.race([
+          readState<Omit<SmallState, 'id'> & { early: string }>(t, statePath),
+          ended,
+        ]);
         run = state.run;
+        worker = state.pid;
+        // The kill comes while the engine still has the late create.
+        await Promise.race([gate.reached, ended]);
+        process.kill(worker, 'SIGKILL');
+        assert.notEqual(await killed.exited, 0, killed.output());
         const label = `dev.zukhruf.testing.run=${state.run}`;
         // The engine created the run's reaper before the early container, so
         // the events from that second of the engine's own clock on hold each
@@ -990,15 +1000,30 @@ describe('a run and its recovery', { concurrency: 4 }, () => {
           filters: { label: [`${REAPER_LABEL}=${state.run}`] },
         });
         const since = reaper?.Created;
-        assert.ok(since !== undefined, 'the run has its reaper');
+        assert.ok(
+          reaper !== undefined && since !== undefined,
+          'the run has its reaper',
+        );
 
+        // The engine filters labels with AND, so the stream has all
+        // containers and the loop picks the run's and its reaper's.
         const seen: { action: string | undefined; id: string | undefined }[] =
           [];
         for await (const { Action, Actor } of docker.events({
           since,
-          filters: { label: [label], event: ['create', 'destroy'] },
+          filters: { type: ['container'], event: ['create', 'destroy'] },
           signal: t.signal,
         })) {
+          if (Actor?.ID === reaper.Id) {
+            assert.notEqual(
+              Action,
+              'destroy',
+              `the reaper ended before it removed the late container: ${JSON.stringify(seen)}`,
+            );
+            continue;
+          }
+          if (Actor?.Attributes?.['dev.zukhruf.testing.run'] !== state.run)
+            continue;
           if (Actor?.ID === state.early) {
             if (Action === 'destroy') gate.release();
             continue;
@@ -1018,6 +1043,10 @@ describe('a run and its recovery', { concurrency: 4 }, () => {
         ]);
         assert.deepEqual(await labelled(label), []);
       } finally {
+        if (killed.child.exitCode === null && killed.child.signalCode === null)
+          killed.child.kill('SIGKILL');
+        if (worker !== undefined && alive(worker))
+          process.kill(worker, 'SIGKILL');
         // Never leave the create held.
         gate.release();
         leftovers.defer(async () => {
