@@ -9,6 +9,7 @@ export {
   SQLITE_CONSTRAINT_UNIQUE,
   SQLITE_ERROR,
   SQLITE_NOTADB,
+  SQLITE_READONLY,
   SQLITE_READONLY_DIRECTORY,
   type SqliteResultCode,
   sqliteResultCode,

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
 import { mkdir, readFile, readdir } from 'node:fs/promises';
 import { createServer } from 'node:net';
@@ -9,7 +10,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { createClock } from '@sinonjs/fake-timers';
 
 import { Latch, untilAborted } from '@zukhruf/async';
-import { FileLock, TemporaryFiles, isErrno } from '@zukhruf/fs';
+import { FileLock, Presence, TemporaryFiles, isErrno } from '@zukhruf/fs';
 import { waitFor } from '@zukhruf/testing/async';
 import { type WorkerMessage, startWorker } from '@zukhruf/testing/process';
 
@@ -1105,6 +1106,92 @@ describe('Socket store sessions', () => {
     // Assert
     assert.deepEqual(roles, ['leader']);
     const files = await sessionFiles(directory.path);
+    assert.equal(
+      files.length,
+      2,
+      `Only the record and the presence of this store may be left, got ${JSON.stringify(files)}`,
+    );
+  });
+
+  test('a presence file with no record, of a session that runs and has not written its record yet, stays after the recovery of the next leader', async (t) => {
+    // Arrange: a leader that is killed, so the next leader recovers.
+    await using directory = await new TemporaryFiles().directory('mutex-test-');
+    await using _successor = succeedLastLeader(directory.path);
+    await using leader = startWorker(
+      participant(directory.path, leaderBody),
+      'leader',
+    );
+    // The leader must start.
+    await leader.next('ready', { signal: t.signal });
+    // No operation holds a session between its presence and its record, so
+    // the test takes a presence at the path of a session and keeps it, as a
+    // session that is starting holds it.
+    const sessions = join(directory.path, 'sessions');
+    await mkdir(sessions, { recursive: true });
+    const starting = `${randomUUID()}.presence`;
+    using presence = Presence.tryOpen(join(sessions, starting));
+    assert.ok(presence, 'The starting session must get its presence');
+    leader.child.kill('SIGKILL');
+    await leader.closed;
+    // The clock of the new leader never moves, so no wait on it ends the recovery.
+    await using store = new SocketStore(directory.path, {
+      clock: createClock(),
+    });
+    const roles: SocketRole[] = [];
+    store.on('role', (role) => roles.push(role));
+
+    // Act
+    const lease = await store.acquire('product:42', { signal: t.signal });
+    await lease[Symbol.asyncDispose]();
+
+    // Assert
+    assert.deepEqual(roles, ['leader']);
+    const files = await sessionFiles(directory.path);
+    assert.ok(
+      files.includes(starting),
+      `The recovery must keep the presence file of a session that runs, got ${JSON.stringify(files)}`,
+    );
+  });
+
+  test('a presence file with no record, of a session that stopped after it took its presence and before it wrote its record, is deleted by the recovery of the next leader', async (t) => {
+    // Arrange: a leader that is killed, so the next leader recovers.
+    await using directory = await new TemporaryFiles().directory('mutex-test-');
+    await using _successor = succeedLastLeader(directory.path);
+    await using leader = startWorker(
+      participant(directory.path, leaderBody),
+      'leader',
+    );
+    // The leader must start.
+    await leader.next('ready', { signal: t.signal });
+    // No operation stops a session between its presence and its record, so
+    // the test takes and ends a presence at the path of a session, as a
+    // session that died at that step leaves it.
+    const sessions = join(directory.path, 'sessions');
+    await mkdir(sessions, { recursive: true });
+    const stopped = `${randomUUID()}.presence`;
+    const presence = Presence.tryOpen(join(sessions, stopped));
+    assert.ok(presence, 'The stopped session must get its presence');
+    presence[Symbol.dispose]();
+    leader.child.kill('SIGKILL');
+    await leader.closed;
+    // The clock of the new leader never moves, so no wait on it ends the recovery.
+    await using store = new SocketStore(directory.path, {
+      clock: createClock(),
+    });
+    const roles: SocketRole[] = [];
+    store.on('role', (role) => roles.push(role));
+
+    // Act
+    const lease = await store.acquire('product:42', { signal: t.signal });
+    await lease[Symbol.asyncDispose]();
+
+    // Assert
+    assert.deepEqual(roles, ['leader']);
+    const files = await sessionFiles(directory.path);
+    assert.ok(
+      !files.includes(stopped),
+      `The recovery must delete the presence file that has no record, got ${JSON.stringify(files)}`,
+    );
     assert.equal(
       files.length,
       2,

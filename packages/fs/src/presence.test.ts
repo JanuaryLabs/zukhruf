@@ -1,11 +1,14 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { readdir } from 'node:fs/promises';
+import { chmod, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { text } from 'node:stream/consumers';
 import { describe, test } from 'node:test';
+
+import { untilAborted } from '@zukhruf/async';
+import { DeniedError } from '@zukhruf/sqlite-open';
 
 import { Presence } from './presence.ts';
 import { TemporaryFiles } from './temporary-files.ts';
@@ -192,6 +195,49 @@ async function removeInTwoProcesses(
   } finally {
     for (const deleter of deleters) deleter.kill();
   }
+}
+
+/**
+ * Starts a process that reads the file at `path` as a check does, and keeps
+ * its read open until it is killed: a check that never pauses. No operation
+ * of `Presence` holds a check open, so it reads through `node:sqlite`, as
+ * `check` does. Resolves once the read holds the file.
+ */
+async function startEndlessCheck(path: string) {
+  const reader = spawn(
+    process.execPath,
+    [
+      '--input-type=module',
+      '--eval',
+      `
+        import { DatabaseSync } from 'node:sqlite';
+        const database = new DatabaseSync(${JSON.stringify(path)}, { readOnly: true });
+        database.exec('BEGIN');
+        database.prepare('SELECT count(*) FROM sqlite_schema').get();
+        setInterval(() => database, 1000);
+        console.log('reading');
+      `,
+    ],
+    { stdio: ['ignore', 'pipe', 'inherit'] },
+  );
+  const exited = once(reader, 'exit');
+  const stop = {
+    async [Symbol.asyncDispose]() {
+      reader.kill('SIGKILL');
+      await exited;
+    },
+  };
+  try {
+    const [line] = await once(
+      createInterface({ input: reader.stdout }),
+      'line',
+    );
+    assert.equal(line, 'reading');
+  } catch (error) {
+    await stop[Symbol.asyncDispose]();
+    throw error;
+  }
+  return stop;
 }
 
 describe('Presence', () => {
@@ -395,4 +441,118 @@ describe('Presence', () => {
       'A check or an open in the owner process dropped the kernel lock',
     );
   });
+
+  test('removeIfEnded of an ended presence that another process checks without a pause gives up after 1 second with its error, and the file stays', async (t) => {
+    // Arrange
+    await using directory = await new TemporaryFiles().directory('zukhruf-fs-');
+    const [path] = endedPresences(directory.path, 1);
+    assert.ok(path);
+    await using _check = await startEndlessCheck(path);
+    const started = performance.now();
+
+    // Act: a deleter that never gives up still waits when the test's limit
+    // ends; the end of the endless check then lets it remove the file.
+    const removing = Presence.removeIfEnded(path, { clock: globalThis });
+    await assert.rejects(untilAborted(removing, t.signal), {
+      message: `The presence ${JSON.stringify(path)} has ended, but other processes checked it without a pause for 1 second, so its file stays.`,
+    });
+    const waited = performance.now() - started;
+
+    // Assert
+    assert.ok(
+      waited >= 1000,
+      `The deleter must wait out checks for 1 second before it gives up; it gave up after ${Math.round(waited)} ms`,
+    );
+    assert.deepEqual(await readdir(directory.path), ['0.presence']);
+  });
+
+  test(
+    'a presence file that the process may not read makes check, tryOpen and removeIfEnded throw the DeniedError of the open, not read it as missing, and the file stays',
+    {
+      skip:
+        process.platform === 'win32'
+          ? 'Windows has no POSIX mode bits'
+          : process.getuid?.() === 0
+            ? 'root reads a file without read permission'
+            : false,
+    },
+    async () => {
+      // Arrange
+      await using directory = await new TemporaryFiles().directory(
+        'zukhruf-fs-',
+      );
+      const [path] = endedPresences(directory.path, 1);
+      assert.ok(path);
+      await chmod(path, 0o000);
+      try {
+        // Act
+        const checking = () => Presence.check(path);
+        const opening = () => Presence.tryOpen(path);
+        const removing = Presence.removeIfEnded(path, { clock: globalThis });
+
+        // Assert
+        assert.throws(checking, DeniedError);
+        assert.throws(opening, DeniedError);
+        await assert.rejects(removing, DeniedError);
+        assert.deepEqual(await readdir(directory.path), ['0.presence']);
+      } finally {
+        await chmod(path, 0o600);
+      }
+    },
+  );
+
+  test(
+    'a presence file that the process can read but not write makes tryOpen and removeIfEnded throw the DeniedError at once, and the file stays',
+    {
+      skip:
+        process.platform === 'win32'
+          ? 'Windows has no POSIX mode bits'
+          : process.getuid?.() === 0
+            ? 'root writes a file without write permission'
+            : false,
+    },
+    async () => {
+      // Arrange
+      await using directory = await new TemporaryFiles().directory(
+        'zukhruf-fs-',
+      );
+      const [path] = endedPresences(directory.path, 1);
+      assert.ok(path);
+      await chmod(path, 0o444);
+
+      // Act: tryOpen runs in another process, as a fault there loops without
+      // an end and blocks the process that calls it.
+      const opener = spawn(
+        process.execPath,
+        [
+          '--input-type=module',
+          '--eval',
+          `
+            ${importPresence}
+            try {
+              console.log(Presence.tryOpen(${JSON.stringify(path)}) ? 'opened' : 'refused');
+            } catch (error) {
+              console.log(error.name);
+            }
+          `,
+        ],
+        { stdio: ['ignore', 'pipe', 'inherit'], timeout: 5000 },
+      );
+      const [opened, [, signal]] = await Promise.all([
+        text(opener.stdout),
+        once(opener, 'exit'),
+      ]);
+      const removing = Presence.removeIfEnded(path, { clock: globalThis });
+
+      // Assert
+      await assert.rejects(removing, (error) => {
+        assert.ok(error instanceof DeniedError);
+        assert.equal(error.path, path);
+        return true;
+      });
+      assert.equal(signal, null, 'tryOpen must return, not loop');
+      assert.equal(opened.trimEnd(), 'DeniedError');
+      assert.deepEqual(await readdir(directory.path), ['0.presence']);
+    },
+  );
 });

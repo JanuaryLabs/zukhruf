@@ -107,11 +107,18 @@ export class Presence implements Disposable {
       // cannot tell a missing file from a denied one, so `check` tells it.
       lock = opened.use(FileLock.open(`${pathToFileURL(path).href}?mode=rw`));
     } catch (error) {
-      if (error instanceof UnavailableError && !(error instanceof DeniedError))
-        return undefined;
+      if (error instanceof UnavailableError) return undefined;
       throw error;
     }
-    if (!lock.tryLock()) return undefined;
+    let locked: boolean;
+    try {
+      locked = lock.tryLock();
+    } catch (error) {
+      // The error names the URI of the open; the caller passed the path.
+      if (error instanceof DeniedError) throw new DeniedError(path, error);
+      throw error;
+    }
+    if (!locked) return undefined;
     return new Presence(path, opened.move());
   }
 

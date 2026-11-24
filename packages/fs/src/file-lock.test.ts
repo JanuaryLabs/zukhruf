@@ -7,7 +7,12 @@ import { createInterface } from 'node:readline';
 import { text } from 'node:stream/consumers';
 import { describe, test } from 'node:test';
 
-import { UnavailableError, UnchangedJournal, open } from '@zukhruf/sqlite-open';
+import {
+  DeniedError,
+  UnavailableError,
+  UnchangedJournal,
+  open,
+} from '@zukhruf/sqlite-open';
 
 import { FileLock } from './file-lock.ts';
 import { TemporaryFiles } from './temporary-files.ts';
@@ -389,6 +394,96 @@ describe('FileLock', () => {
         assert.equal(error.cause.errcode, 14);
         return true;
       });
+    },
+  );
+
+  test(
+    'a file that the process can read but not write makes tryLock throw the DeniedError each time, not take a lock that no other process sees',
+    {
+      skip:
+        process.platform === 'win32' || process.getuid?.() === 0
+          ? 'Windows has no file modes, and root writes any file'
+          : false,
+    },
+    async () => {
+      // Arrange
+      await using directory = await new TemporaryFiles().directory(
+        'zukhruf-fs-',
+      );
+      const path = join(directory.path, 'job.lock');
+      await writeFile(path, '');
+      await chmod(path, 0o444);
+      using lock = FileLock.open(path);
+
+      // Act
+      const locking = () => lock.tryLock();
+
+      // Assert: SQLite opens such a file read-only, and its exclusive
+      // transaction then takes no lock that excludes another process.
+      const denied = (error: unknown) => {
+        assert.ok(error instanceof DeniedError, String(error));
+        assert.equal(error.path, path);
+        assert.ok(Error.isError(error.cause) && 'errcode' in error.cause);
+        assert.equal(error.cause.errcode, 8);
+        return true;
+      };
+      assert.throws(locking, denied);
+      assert.throws(locking, denied, 'A denied try must leave no transaction');
+    },
+  );
+
+  test(
+    'two processes never both hold the lock of a file that they can read but not write',
+    {
+      skip:
+        process.platform === 'win32' || process.getuid?.() === 0
+          ? 'Windows has no file modes, and root writes any file'
+          : false,
+    },
+    async () => {
+      // Arrange: the other process tries first and keeps what it got.
+      await using directory = await new TemporaryFiles().directory(
+        'zukhruf-fs-',
+      );
+      const path = join(directory.path, 'job.lock');
+      await writeFile(path, '');
+      await chmod(path, 0o444);
+      const other = spawn(
+        process.execPath,
+        [
+          '--input-type=module',
+          '--eval',
+          `
+            ${importFileLock}
+            const lock = FileLock.open(${JSON.stringify(path)});
+            try {
+              console.log(lock.tryLock() ? 'locked' : 'refused');
+            } catch (error) {
+              console.log(error.name);
+            }
+            setInterval(() => lock, 1000);
+          `,
+        ],
+        { stdio: ['ignore', 'pipe', 'inherit'] },
+      );
+      const exited = once(other, 'exit');
+      try {
+        const [otherOutcome] = await once(
+          createInterface({ input: other.stdout }),
+          'line',
+        );
+        using lock = FileLock.open(path);
+
+        // Act
+        const locking = () => lock.tryLock();
+
+        // Assert
+        assert.throws(locking, DeniedError);
+        assert.equal(otherOutcome, 'DeniedError');
+      } finally {
+        other.kill('SIGKILL');
+        await exited;
+      }
     },
   );
 

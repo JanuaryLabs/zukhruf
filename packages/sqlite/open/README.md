@@ -106,7 +106,7 @@ A write-ahead log syncs the `-wal` file to the disk before each checkpoint, not 
 
 ### Result codes
 
-`sqliteResultCode(error)` reads the result code of an error that `node:sqlite` threw, in the two parts that go-sqlite3 names: `code` is the primary code, the same for each variant, and `extendedCode` names the variant. It is `undefined` for any other value. `node:sqlite` puts only the extended code on the error's `errcode`, and Node names none of the codes, so this package exports the ones that zukhruf reads, by their names in [SQLite](https://www.sqlite.org/rescode.html): `SQLITE_ERROR`, `SQLITE_BUSY`, `SQLITE_CANTOPEN`, `SQLITE_NOTADB`, `SQLITE_CONSTRAINT_FOREIGNKEY`, `SQLITE_CONSTRAINT_NOTNULL`, `SQLITE_CONSTRAINT_UNIQUE` and `SQLITE_READONLY_DIRECTORY`.
+`sqliteResultCode(error)` reads the result code of an error that `node:sqlite` threw, in the two parts that go-sqlite3 names: `code` is the primary code, the same for each variant, and `extendedCode` names the variant. It is `undefined` for any other value. `node:sqlite` puts only the extended code on the error's `errcode`, and Node names none of the codes, so this package exports the ones that zukhruf reads, by their names in [SQLite](https://www.sqlite.org/rescode.html): `SQLITE_ERROR`, `SQLITE_BUSY`, `SQLITE_READONLY`, `SQLITE_CANTOPEN`, `SQLITE_NOTADB`, `SQLITE_CONSTRAINT_FOREIGNKEY`, `SQLITE_CONSTRAINT_NOTNULL`, `SQLITE_CONSTRAINT_UNIQUE` and `SQLITE_READONLY_DIRECTORY`.
 
 ```ts
 import {
@@ -223,6 +223,7 @@ function sqliteResultCode(error: unknown): SqliteResultCode | undefined;
 
 const SQLITE_ERROR = 1;
 const SQLITE_BUSY = 5;
+const SQLITE_READONLY = 8;
 const SQLITE_CANTOPEN = 14;
 const SQLITE_NOTADB = 26;
 const SQLITE_CONSTRAINT_FOREIGNKEY = 787;

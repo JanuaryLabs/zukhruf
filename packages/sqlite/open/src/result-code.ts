@@ -3,6 +3,7 @@
 // an extended code keeps its primary code in that byte.
 export const SQLITE_ERROR = 1;
 export const SQLITE_BUSY = 5;
+export const SQLITE_READONLY = 8;
 export const SQLITE_CANTOPEN = 14;
 export const SQLITE_NOTADB = 26;
 export const SQLITE_CONSTRAINT_FOREIGNKEY = 787;

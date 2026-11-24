@@ -1,8 +1,10 @@
 import type { DatabaseSync } from 'node:sqlite';
 
 import {
+  DeniedError,
   MissingError,
   SQLITE_BUSY,
+  SQLITE_READONLY,
   UnchangedJournal,
   open,
   sqliteResultCode,
@@ -69,7 +71,11 @@ export class FileLock implements Disposable {
     }
   }
 
-  /** Takes the lock without waiting. Returns `false` when another handle holds it. */
+  /**
+   * Takes the lock without waiting. Returns `false` when another handle holds
+   * it. Throws the `DeniedError` of `@zukhruf/sqlite-open` when the process
+   * cannot write the file, as such a file takes no lock that excludes others.
+   */
   tryLock(): boolean {
     if (this.#database.isTransaction) {
       throw new Error(
@@ -85,8 +91,25 @@ export class FileLock implements Disposable {
       if (sqliteResultCode(error)?.code === SQLITE_BUSY) return false;
       throw error;
     }
+    this.#refuseReadOnly();
     held.add(this.#database);
     return true;
+  }
+
+  /**
+   * SQLite opens a file that the process cannot write read-only, and then
+   * runs `BEGIN EXCLUSIVE` as a read: it takes a shared lock, which another
+   * read-only handle shares. A write in the transaction is the trial: a
+   * read-only connection refuses it, and the rollback of the lock undoes it.
+   */
+  #refuseReadOnly(): void {
+    try {
+      this.#database.exec('PRAGMA user_version = 0');
+    } catch (error) {
+      if (sqliteResultCode(error)?.code !== SQLITE_READONLY) throw error;
+      this.#database.exec('ROLLBACK');
+      throw new DeniedError(this.#path, error);
+    }
   }
 
   /** Lets the lock go. The handle stays open for the next `tryLock`. */

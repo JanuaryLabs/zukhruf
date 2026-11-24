@@ -331,6 +331,60 @@ test('a stray file in the installs folder, such as the .DS_Store of macOS, stays
   assert.ok(!existsSync(join(installs, 'unfinished')));
 });
 
+test('a push holds a lease on the install that it builds on while its hook runs, and leaves no lease after the hook ends', async (t) => {
+  // Arrange: the push has drift, as no packages are installed.
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
+  const repo = await workspace(folder.path, gatedInspect);
+  await repo.install({ 'probe-dep': repo.tarball.probe1 });
+  await repo.commit('one');
+  await rm(join(repo.root, 'node_modules'), { recursive: true });
+  const installs = join(repo.root, '.git/git-hooks/installs');
+  const gate = join(repo.top, 'gate');
+  const push = spawn(
+    'git',
+    ['-c', 'core.hooksPath=.husky', 'push', '--quiet', 'origin', 'main'],
+    { cwd: repo.root, env: repo.environment },
+  );
+  const stderr: string[] = [];
+  push.stderr.on('data', (chunk: Buffer) => stderr.push(chunk.toString()));
+  const exited = new Promise<number | null>((resolve) =>
+    push.once('close', resolve),
+  );
+  try {
+    await waitFor(
+      () => {
+        assert.ok(
+          existsSync(`${gate}.started`),
+          `The push did not reach its gate:\n${stderr.join('')}`,
+        );
+      },
+      { signal: t.signal, interval: 100 },
+    );
+    const [install, ...others] = await readdir(installs);
+    assert.ok(
+      install !== undefined && others.length === 0,
+      'The push made one install',
+    );
+    const leases = join(installs, install, 'leases');
+    const duringHook = await readdir(leases);
+
+    // Act
+    await writeFile(`${gate}.release`, 'go');
+    const code = await exited;
+
+    // Assert
+    assert.equal(code, 0, stderr.join(''));
+    assert.equal(duringHook.length, 1, 'The hook must hold one lease');
+    assert.deepEqual(
+      await readdir(leases),
+      [],
+      'The end of the hook must delete the lease file of its snapshot',
+    );
+  } finally {
+    push.kill();
+  }
+});
+
 // A pre-push step that opens the snapshot of the head with packages, writes
 // `<repo>/../gate.started`, waits for a write to `<repo>/../gate.release`,
 // and then reads the version of probe-dep from the node_modules of the
