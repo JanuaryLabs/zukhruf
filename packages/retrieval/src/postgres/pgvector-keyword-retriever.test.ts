@@ -5,7 +5,11 @@ import type pg from 'pg';
 
 import { Postgres } from '@zukhruf/testing/postgres';
 
-import { PgvectorKeywordRetriever, type PostgresSession } from '../postgres.ts';
+import {
+  PgvectorKeywordRetriever,
+  PostgresPassageStore,
+  type PostgresSession,
+} from '../postgres.ts';
 
 type Row = {
   readonly id: string;
@@ -66,9 +70,11 @@ test('the passages come best first with ts_rank_cd as the score, so a better mat
     { id: 'd', text: 'nothing here at all' },
   ]);
   const retriever = new PgvectorKeywordRetriever({
-    session: session(pool),
-    passages: 'docs_passages',
-    index: 'keywords',
+    store: new PostgresPassageStore({
+      session: session(pool),
+      passages: 'docs_passages',
+    }),
+    index: { column: 'keywords' },
   });
 
   // Act
@@ -111,9 +117,11 @@ test('the words of the query join with AND by default, and with OR when the oper
     { id: 'neither', text: 'nothing here' },
   ]);
   const options = {
-    session: session(pool),
-    passages: 'docs_passages',
-    index: 'keywords',
+    store: new PostgresPassageStore({
+      session: session(pool),
+      passages: 'docs_passages',
+    }),
+    index: { column: 'keywords' },
   };
 
   // Act
@@ -145,9 +153,11 @@ test('the query and the index use the english configuration: a word finds its ot
     { id: 'other', text: 'vault keeps secrets' },
   ]);
   const retriever = new PgvectorKeywordRetriever({
-    session: session(pool),
-    passages: 'docs_passages',
-    index: 'keywords',
+    store: new PostgresPassageStore({
+      session: session(pool),
+      passages: 'docs_passages',
+    }),
+    index: { column: 'keywords' },
   });
 
   // Act
@@ -167,7 +177,7 @@ test('the query and the index use the english configuration: a word finds its ot
   });
 });
 
-test('the configuration option names the configuration of the index: with simple, a stop word matches and a word finds no other form', async () => {
+test('the configuration of the index value reaches the query: with simple, a stop word matches and a word finds no other form', async () => {
   // Arrange
   await using database = await server().database();
   const pool = database.pool();
@@ -179,16 +189,18 @@ test('the configuration option names the configuration of the index: with simple
     ],
     'simple',
   );
-  const options = {
+  const store = new PostgresPassageStore({
     session: session(pool),
     passages: 'docs_passages',
-    index: 'keywords',
-  };
-  const simple = new PgvectorKeywordRetriever({
-    ...options,
-    configuration: 'simple',
   });
-  const english = new PgvectorKeywordRetriever(options);
+  const simple = new PgvectorKeywordRetriever({
+    store,
+    index: { column: 'keywords', configuration: 'simple' },
+  });
+  const english = new PgvectorKeywordRetriever({
+    store,
+    index: { column: 'keywords' },
+  });
 
   // Act
   const results = {
@@ -222,10 +234,11 @@ test('a configuration is a value, never SQL: a configuration that would change t
   const hostile =
     "english', 'x') || to_tsquery('english', 'vault') || plainto_tsquery('english";
   const retriever = new PgvectorKeywordRetriever({
-    session: session(pool),
-    passages: 'docs_passages',
-    index: 'keywords',
-    configuration: hostile,
+    store: new PostgresPassageStore({
+      session: session(pool),
+      passages: 'docs_passages',
+    }),
+    index: { column: 'keywords', configuration: hostile },
   });
 
   // Act
@@ -250,9 +263,11 @@ test('each word of the query is plain text, so tsquery syntax in it matches as t
     { id: 'keystone', text: 'keystone service' },
   ]);
   const retriever = new PgvectorKeywordRetriever({
-    session: session(pool),
-    passages: 'docs_passages',
-    index: 'keywords',
+    store: new PostgresPassageStore({
+      session: session(pool),
+      passages: 'docs_passages',
+    }),
+    index: { column: 'keywords' },
   });
 
   // Act
@@ -292,9 +307,11 @@ test('a query of no words gives no passages', async () => {
   const pool = database.pool();
   await contract(pool, [{ id: 'a', text: 'rotate the key' }]);
   const retriever = new PgvectorKeywordRetriever({
-    session: session(pool),
-    passages: 'docs_passages',
-    index: 'keywords',
+    store: new PostgresPassageStore({
+      session: session(pool),
+      passages: 'docs_passages',
+    }),
+    index: { column: 'keywords' },
   });
 
   // Act
@@ -317,9 +334,11 @@ test('a keyword search gives 10 passages when the call gives no topK, topK when 
     })),
   );
   const retriever = new PgvectorKeywordRetriever({
-    session: session(pool),
-    passages: 'docs_passages',
-    index: 'keywords',
+    store: new PostgresPassageStore({
+      session: session(pool),
+      passages: 'docs_passages',
+    }),
+    index: { column: 'keywords' },
   });
 
   // Act
@@ -350,9 +369,11 @@ test('an aborted keyword search rejects with the reason of its signal', async ()
   const pool = database.pool();
   await contract(pool, [{ id: 'a', text: 'rotate the key' }]);
   const retriever = new PgvectorKeywordRetriever({
-    session: session(pool),
-    passages: 'docs_passages',
-    index: 'keywords',
+    store: new PostgresPassageStore({
+      session: session(pool),
+      passages: 'docs_passages',
+    }),
+    index: { column: 'keywords' },
   });
   const reason = new Error('cancelled');
 
@@ -375,9 +396,11 @@ test('the search reads the index column that the retriever names, by a name that
     INSERT INTO "docs ""passages""" VALUES ('a', 's', 0, 0, 14, 'rotate the key', to_tsvector('english', 'vault secrets'), to_tsvector('english', 'rotate'));
   `);
   const retriever = new PgvectorKeywordRetriever({
-    session: session(pool),
-    passages: 'docs "passages"',
-    index: 'key "words"',
+    store: new PostgresPassageStore({
+      session: session(pool),
+      passages: 'docs "passages"',
+    }),
+    index: { column: 'key "words"' },
   });
 
   // Act
@@ -416,9 +439,11 @@ test('passages that are a view over the table that holds the index are searched 
     INSERT INTO docs_parts VALUES ('a', 'doc-a', 0, 0, 14, 'compile C code'), ('b', 'doc-b', 0, 0, 21, 'fix a broken git repo');
   `);
   const retriever = new PgvectorKeywordRetriever({
-    session: session(pool),
-    passages: 'docs_passages',
-    index: 'keywords',
+    store: new PostgresPassageStore({
+      session: session(pool),
+      passages: 'docs_passages',
+    }),
+    index: { column: 'keywords' },
   });
 
   // Act
@@ -441,4 +466,83 @@ test('passages that are a view over the table that holds the index are searched 
       },
     ],
   );
+});
+
+test('a store with a schema searches the keyword index of the passages of that schema, and a store without one finds them through the search_path of the session', async () => {
+  // Arrange: the same contract in public, which the search_path finds, and
+  // in a second schema, each with passages and a keyword index of its own.
+  await using database = await server().database();
+  const pool = database.pool();
+  await contract(pool, [{ id: 'public-a', text: 'rotate the key' }]);
+  await pool.query(`
+    CREATE SCHEMA rag;
+    CREATE TABLE rag.docs_passages (LIKE public.docs_passages INCLUDING ALL);
+    INSERT INTO rag.docs_passages (id, source, seq, start, "end", text) VALUES ('rag-a', 'doc-rag-a', 0, 0, 14, 'rotate the key');
+  `);
+  const retriever = (store: PostgresPassageStore) =>
+    new PgvectorKeywordRetriever({ store, index: { column: 'keywords' } });
+
+  // Act
+  const fromSchema = await retriever(
+    new PostgresPassageStore({
+      session: session(pool),
+      schema: 'rag',
+      passages: 'docs_passages',
+    }),
+  ).retrieve('key');
+  const fromSearchPath = await retriever(
+    new PostgresPassageStore({
+      session: session(pool),
+      passages: 'docs_passages',
+    }),
+  ).retrieve('key');
+
+  // Assert: the keyword column of the schema's passages is not metadata.
+  assert.deepEqual(
+    fromSchema.map(({ passage }) => passage),
+    [
+      {
+        id: 'rag-a',
+        text: 'rotate the key',
+        source: 'doc-rag-a',
+        seq: 0,
+        start: 0,
+        end: 14,
+        metadata: { product: null },
+      },
+    ],
+  );
+  assert.deepEqual(ids(fromSearchPath), ['public-a']);
+});
+
+test('two stores on two databases, alive at once, each search the keyword index of their own session', async () => {
+  // Arrange: both stores exist before either retriever, and their rows differ.
+  await using first = await server().database();
+  await using second = await server().database();
+  await contract(first.pool(), [{ id: 'first-a', text: 'rotate the key' }]);
+  await contract(second.pool(), [{ id: 'second-a', text: 'rotate the key' }]);
+  const firstStore = new PostgresPassageStore({
+    session: session(first.pool()),
+    passages: 'docs_passages',
+  });
+  const secondStore = new PostgresPassageStore({
+    session: session(second.pool()),
+    passages: 'docs_passages',
+  });
+  const fromFirst = new PgvectorKeywordRetriever({
+    store: firstStore,
+    index: { column: 'keywords' },
+  });
+  const fromSecond = new PgvectorKeywordRetriever({
+    store: secondStore,
+    index: { column: 'keywords' },
+  });
+
+  // Act
+  const firstResults = await fromFirst.retrieve('key');
+  const secondResults = await fromSecond.retrieve('key');
+
+  // Assert
+  assert.deepEqual(ids(firstResults), ['first-a']);
+  assert.deepEqual(ids(secondResults), ['second-a']);
 });

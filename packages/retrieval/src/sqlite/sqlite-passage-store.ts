@@ -5,10 +5,39 @@ import type { Passage } from '../passage.ts';
 import { identifier } from './identifier.ts';
 import { passageRows } from './passage-rows.ts';
 
-/** Reads the passages of the passage contract in SQLite by id, and the neighbours of a passage in its source. */
+/** The connection and the passages of a SqlitePassageStore, which the SQLite retrievers read through it. */
+export type SqliteContract = {
+  readonly database: DatabaseSync;
+  /** The passages as one SQLite identifier. */
+  readonly passages: string;
+};
+
+const bridge: { contractOf: (store: SqlitePassageStore) => SqliteContract } = {
+  contractOf: () => {
+    throw new Error('retrieval: the SqlitePassageStore class has not loaded');
+  },
+};
+
+/** The connection and the passages of a store, so a retriever states neither again. Not exported from the package. */
+export function contractOf(store: SqlitePassageStore): SqliteContract {
+  return bridge.contractOf(store);
+}
+
+/**
+ * The passage contract in SQLite: the connection and the passages, which the
+ * SQLite retrievers and ContextWindow compose with. It reads passages by id,
+ * and the neighbours of a passage in its source.
+ */
 export class SqlitePassageStore implements PassageStore {
   readonly #database: DatabaseSync;
   readonly #passages: string;
+
+  static {
+    bridge.contractOf = (store) => ({
+      database: store.#database,
+      passages: store.#passages,
+    });
+  }
 
   constructor(options: {
     readonly database: DatabaseSync;

@@ -19,7 +19,7 @@ The tables that elt writes and that the engine retrievers read: the passages (`i
 _Avoid_: Schema, store, collection, index (for the whole contract)
 
 **Passage store**:
-The object that reads passages of the contract by id and the neighbours of a passage in its source. `ContextWindow` uses it.
+The root of the composition of an engine: it holds the connection, the passages relation and, on Postgres and SQL Server, the schema of the contract, each in one place. The engine retrievers and `ContextWindow` take the store and add only their own part: the vectors and the model, or the keyword index. It reads passages of the contract by id and the neighbours of a passage in its source. Haystack's retrievers take a `document_store` the same way ([ADR 0001](./docs/adr/0001-the-package-is-the-query-side-of-rag-and-reads-a-passage-contract-that-elt-writes.md)).
 _Avoid_: Document store, repository
 
 **Model identity**:

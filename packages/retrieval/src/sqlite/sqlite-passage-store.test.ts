@@ -158,3 +158,20 @@ test('a passages table whose name needs quoting is read by that name', async () 
     ['a'],
   );
 });
+
+test('a SQLite store takes no schema, so no schema can name relations that the store would not read', async () => {
+  // Arrange
+  using database = contract([{ id: 'g0', source: 'guide', seq: 0 }]);
+
+  // Act
+  const store = new SqlitePassageStore({
+    database,
+    passages: 'docs_passages',
+    // @ts-expect-error SQLite has no schema: the store holds the database and the passages only
+    schema: 'rag',
+  });
+  const passages = await store.get(['g0']);
+
+  // Assert
+  assert.deepEqual([...passages.keys()], ['g0']);
+});

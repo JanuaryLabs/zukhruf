@@ -14,7 +14,7 @@ import {
   Rerank,
   SimilarityCutoff,
 } from './index.ts';
-import { SqliteEmbeddingRetriever } from './sqlite.ts';
+import { SqliteEmbeddingRetriever, SqlitePassageStore } from './sqlite.ts';
 import { embeddingModel } from './testing/embedding-model.ts';
 
 // The passages and their vectors, as elt writes them. Each vector has length
@@ -57,8 +57,7 @@ const search = (
   signals: (AbortSignal | undefined)[] = [],
 ) =>
   new SqliteEmbeddingRetriever({
-    database,
-    passages: 'kb_passages',
+    store: new SqlitePassageStore({ database, passages: 'kb_passages' }),
     vectors: 'kb_vectors',
     model: embeddings(signals),
   });

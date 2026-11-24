@@ -171,3 +171,67 @@ test('a passages table whose name needs quoting is read by that name', async () 
     ['a'],
   );
 });
+
+test('a store with a schema reads the passages and the neighbours of that schema, and a store without one reads them through the search_path of the session', async () => {
+  // Arrange: the same contract in public, which the search_path finds, and
+  // in a second schema, each with passages of its own.
+  await using database = await server().database();
+  const pool = database.pool();
+  await contract(pool, [{ id: 'public-g0', source: 'guide', seq: 0 }]);
+  await pool.query(`
+    CREATE SCHEMA rag;
+    CREATE TABLE rag.docs_passages (LIKE public.docs_passages INCLUDING ALL);
+    INSERT INTO rag.docs_passages (id, source, seq, start, "end", text, product) VALUES ('rag-g0', 'guide', 0, 0, 10, 'rag part 0', 'boundary');
+  `);
+  const inSchema = new PostgresPassageStore({
+    session: session(pool),
+    schema: 'rag',
+    passages: 'docs_passages',
+  });
+  const bySearchPath = new PostgresPassageStore({
+    session: session(pool),
+    passages: 'docs_passages',
+  });
+
+  // Act
+  const fromSchema = await inSchema.get(['rag-g0', 'public-g0']);
+  const schemaWindow = await inSchema.neighbours({
+    source: 'guide',
+    seq: 0,
+    windowSize: 1,
+  });
+  const fromSearchPath = await bySearchPath.get(['rag-g0', 'public-g0']);
+  const searchPathWindow = await bySearchPath.neighbours({
+    source: 'guide',
+    seq: 0,
+    windowSize: 1,
+  });
+
+  // Assert: the keyword column of the schema's passages is not metadata.
+  assert.deepEqual(
+    [...fromSchema],
+    [
+      [
+        'rag-g0',
+        {
+          id: 'rag-g0',
+          text: 'rag part 0',
+          source: 'guide',
+          seq: 0,
+          start: 0,
+          end: 10,
+          metadata: { product: 'boundary' },
+        },
+      ],
+    ],
+  );
+  assert.deepEqual(
+    schemaWindow.map(({ id }) => id),
+    ['rag-g0'],
+  );
+  assert.deepEqual([...fromSearchPath.keys()], ['public-g0']);
+  assert.deepEqual(
+    searchPathWindow.map(({ id }) => id),
+    ['public-g0'],
+  );
+});

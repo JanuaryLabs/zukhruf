@@ -4,6 +4,10 @@ import type { ScoredPassage } from '../scored-passage.ts';
 import { bind } from './bind.ts';
 import { identifier } from './identifier.ts';
 import { passage, passageJson } from './passage-row.ts';
+import {
+  type PostgresPassageStore,
+  contractOf,
+} from './postgres-passage-store.ts';
 import type { PostgresSession } from './postgres-session.ts';
 import { where } from './where.ts';
 
@@ -21,20 +25,24 @@ export class PgvectorKeywordRetriever implements Retriever {
   readonly #configuration: string;
 
   constructor(options: {
-    readonly session: PostgresSession;
-    readonly passages: string;
-    /** The `tsvector` column of the passages. */
-    readonly index: string;
+    /** The store of the passages, whose session and schema the search uses. */
+    readonly store: PostgresPassageStore;
+    /** The keyword index as elt writes it. */
+    readonly index: {
+      /** The `tsvector` column of the passages. */
+      readonly column: string;
+      /** The text search configuration that made the column, 'english' when absent. */
+      readonly configuration?: string;
+    };
     /** How the words of the query join: 'AND', as `plainto_tsquery` joins them, when absent. */
     readonly operator?: 'AND' | 'OR';
-    /** The text search configuration of the index, 'english' when absent. */
-    readonly configuration?: string;
   }) {
-    this.#session = options.session;
-    this.#passages = identifier(options.passages);
-    this.#index = identifier(options.index);
+    const contract = contractOf(options.store);
+    this.#session = contract.session;
+    this.#passages = contract.passages;
+    this.#index = identifier(options.index.column);
     this.#operator = options.operator ?? 'AND';
-    this.#configuration = options.configuration ?? 'english';
+    this.#configuration = options.index.configuration ?? 'english';
   }
 
   async retrieve(

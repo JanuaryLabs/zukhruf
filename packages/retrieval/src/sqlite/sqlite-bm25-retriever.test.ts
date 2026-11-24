@@ -4,7 +4,7 @@ import { test } from 'node:test';
 
 import { open } from '@zukhruf/sqlite-open';
 
-import { SqliteBM25Retriever } from '../sqlite.ts';
+import { SqliteBM25Retriever, SqlitePassageStore } from '../sqlite.ts';
 
 type Row = {
   readonly id: string;
@@ -62,8 +62,7 @@ test('the passages come best first with -bm25() as the score, so a better match 
     { id: 'd', text: 'nothing here at all' },
   ]);
   const retriever = new SqliteBM25Retriever({
-    database,
-    passages: 'docs_passages',
+    store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
     index: 'docs_passages_fts',
   });
 
@@ -103,8 +102,7 @@ test('passages that are a view with an integer rowid column are searched through
     INSERT INTO docs_passages_fts (docs_passages_fts) VALUES ('rebuild');
   `);
   const retriever = new SqliteBM25Retriever({
-    database,
-    passages: 'docs_passages',
+    store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
     index: 'docs_passages_fts',
   });
 
@@ -139,8 +137,7 @@ test('the words of the query join with AND by default, and with OR when the oper
     { id: 'neither', text: 'nothing here' },
   ]);
   const options = {
-    database,
-    passages: 'docs_passages',
+    store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
     index: 'docs_passages_fts',
   };
 
@@ -172,8 +169,7 @@ test('each word of the query is a phrase, so FTS5 syntax in it matches as text a
     { id: 'or', text: 'this or that' },
   ]);
   const retriever = new SqliteBM25Retriever({
-    database,
-    passages: 'docs_passages',
+    store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
     index: 'docs_passages_fts',
   });
 
@@ -211,8 +207,7 @@ test('a query of no words gives no passages', async () => {
   // Arrange
   using database = contract([{ id: 'a', text: 'rotate the key' }]);
   const retriever = new SqliteBM25Retriever({
-    database,
-    passages: 'docs_passages',
+    store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
     index: 'docs_passages_fts',
   });
 
@@ -233,8 +228,7 @@ test('a keyword search gives 10 passages when the call gives no topK, topK when 
     })),
   );
   const retriever = new SqliteBM25Retriever({
-    database,
-    passages: 'docs_passages',
+    store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
     index: 'docs_passages_fts',
   });
 
@@ -264,8 +258,7 @@ test('an aborted keyword search rejects with the reason of its signal', async ()
   // Arrange
   using database = contract([{ id: 'a', text: 'rotate the key' }]);
   const retriever = new SqliteBM25Retriever({
-    database,
-    passages: 'docs_passages',
+    store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
     index: 'docs_passages_fts',
   });
   const reason = new Error('cancelled');
@@ -289,8 +282,7 @@ test('a passages table and an index whose names need quoting are searched by tho
     INSERT INTO "docs ""fts""" ("docs ""fts""") VALUES ('rebuild');
   `);
   const retriever = new SqliteBM25Retriever({
-    database,
-    passages: 'docs "passages"',
+    store: new SqlitePassageStore({ database, passages: 'docs "passages"' }),
     index: 'docs "fts"',
   });
 

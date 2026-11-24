@@ -9,7 +9,7 @@ import { Vector } from '@zukhruf/vectors';
 import { install, toSql } from '@zukhruf/vectors/sqlite';
 
 import { HydeRetriever } from './index.ts';
-import { SqliteEmbeddingRetriever } from './sqlite.ts';
+import { SqliteEmbeddingRetriever, SqlitePassageStore } from './sqlite.ts';
 import { embeddingModel } from './testing/embedding-model.ts';
 
 // The passages and their vectors as elt's Vectorizer writes them.
@@ -47,8 +47,7 @@ const meaning = (
   signals: (AbortSignal | undefined)[] = [],
 ) =>
   new SqliteEmbeddingRetriever({
-    database,
-    passages: 'docs_passages',
+    store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
     vectors: 'docs_passage_vectors',
     model: embeddingModel({ [answer]: [1, 0] }, { signals }),
   });

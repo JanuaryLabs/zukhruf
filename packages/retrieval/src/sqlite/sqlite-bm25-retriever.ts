@@ -5,6 +5,7 @@ import type { Retriever } from '../retriever.ts';
 import type { ScoredPassage } from '../scored-passage.ts';
 import { identifier } from './identifier.ts';
 import { passageRows } from './passage-rows.ts';
+import { type SqlitePassageStore, contractOf } from './sqlite-passage-store.ts';
 import { where } from './where.ts';
 
 /**
@@ -19,14 +20,16 @@ export class SqliteBM25Retriever implements Retriever {
   readonly #operator: 'AND' | 'OR';
 
   constructor(options: {
-    readonly database: DatabaseSync;
-    readonly passages: string;
+    /** The store of the passages, whose connection the search runs on. */
+    readonly store: SqlitePassageStore;
+    /** The FTS5 table over the passages, in the database of the store. */
     readonly index: string;
     /** How the words of the query join: 'AND', the implicit operator of FTS5, when absent. */
     readonly operator?: 'AND' | 'OR';
   }) {
-    this.#database = options.database;
-    this.#passages = identifier(options.passages);
+    const { database, passages } = contractOf(options.store);
+    this.#database = database;
+    this.#passages = passages;
     this.#index = identifier(options.index);
     this.#operator = options.operator ?? 'AND';
   }

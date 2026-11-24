@@ -11,6 +11,7 @@ import { DimensionMismatchError } from '@zukhruf/vectors';
 import { ModelMismatchError } from '../index.ts';
 import {
   PgvectorEmbeddingRetriever,
+  PostgresPassageStore,
   type PostgresSession,
 } from '../postgres.ts';
 import { embeddingModel } from '../testing/embedding-model.ts';
@@ -90,8 +91,10 @@ test('the passages come best first, each with 1 - <=> as its score, and a tie go
     { id: 'e', vector: [-1, 1, 1, 1] },
   ]);
   const retriever = new PgvectorEmbeddingRetriever({
-    session: session(pool),
-    passages: 'docs_passages',
+    store: new PostgresPassageStore({
+      session: session(pool),
+      passages: 'docs_passages',
+    }),
     vectors: 'docs_passage_vectors',
     model: embeddingModel({ 'rotate a key': [1, 0, 0, 0] }),
   });
@@ -140,8 +143,10 @@ test('a call gives 10 passages when it gives no topK, and topK passages when it 
     })),
   );
   const retriever = new PgvectorEmbeddingRetriever({
-    session: session(pool),
-    passages: 'docs_passages',
+    store: new PostgresPassageStore({
+      session: session(pool),
+      passages: 'docs_passages',
+    }),
     vectors: 'docs_passage_vectors',
     model: embeddingModel({ q: [1, 0, 0, 0] }),
   });
@@ -173,8 +178,10 @@ test('a query model of another provider or model id fails with ModelMismatchErro
   );
   const retriever = (query: MockEmbeddingModelV4 | string) =>
     new PgvectorEmbeddingRetriever({
-      session: session(pool),
-      passages: 'docs_passages',
+      store: new PostgresPassageStore({
+        session: session(pool),
+        passages: 'docs_passages',
+      }),
       vectors: 'docs_passage_vectors',
       model: query,
     });
@@ -224,8 +231,10 @@ test('with two stored identities, ModelMismatchError names the first in the byte
     { id: 'b', vector: [1, 0, 0, 0], model: 'test/Mini (4 dimensions)' },
   ]);
   const retriever = new PgvectorEmbeddingRetriever({
-    session: session(pool),
-    passages: 'docs_passages',
+    store: new PostgresPassageStore({
+      session: session(pool),
+      passages: 'docs_passages',
+    }),
     vectors: 'docs_passage_vectors',
     model: embeddingModel(
       { q: [1, 0, 0, 0] },
@@ -255,13 +264,15 @@ test('a query vector of other dimensions fails with DimensionMismatchError after
   const query = embeddingModel({ q: [1, 0] });
   const sent: string[] = [];
   const retriever = new PgvectorEmbeddingRetriever({
-    session: {
-      query: (sql, parameters) => {
-        sent.push(sql);
-        return session(pool).query(sql, parameters);
+    store: new PostgresPassageStore({
+      session: {
+        query: (sql, parameters) => {
+          sent.push(sql);
+          return session(pool).query(sql, parameters);
+        },
       },
-    },
-    passages: 'docs_passages',
+      passages: 'docs_passages',
+    }),
     vectors: 'docs_passage_vectors',
     model: query,
   });
@@ -297,8 +308,10 @@ test('a query compares only with the vectors of its own model identity when the 
     { id: 'other', vector: [1, 0], model: 'test/large (2 dimensions)' },
   ]);
   const retriever = new PgvectorEmbeddingRetriever({
-    session: session(pool),
-    passages: 'docs_passages',
+    store: new PostgresPassageStore({
+      session: session(pool),
+      passages: 'docs_passages',
+    }),
     vectors: 'docs_passage_vectors',
     model: embeddingModel({ q: [1, 0] }),
   });
@@ -319,8 +332,10 @@ test('a stored model that is not a model identity, and a string model id without
   ]);
   const query = embeddingModel({ q: [1, 0, 0, 0] });
   const retriever = new PgvectorEmbeddingRetriever({
-    session: session(pool),
-    passages: 'docs_passages',
+    store: new PostgresPassageStore({
+      session: session(pool),
+      passages: 'docs_passages',
+    }),
     vectors: 'docs_passage_vectors',
     model: query,
   });
@@ -328,8 +343,10 @@ test('a stored model that is not a model identity, and a string model id without
   // Act
   const result = retriever.retrieve('q');
   const withoutProvider = new PgvectorEmbeddingRetriever({
-    session: session(pool),
-    passages: 'docs_passages',
+    store: new PostgresPassageStore({
+      session: session(pool),
+      passages: 'docs_passages',
+    }),
     vectors: 'docs_passage_vectors',
     model: 'mini',
   }).retrieve('q');
@@ -358,8 +375,10 @@ test('an empty vector table gives no passages and makes no model call', async ()
   await contract(pool, []);
   const query = embeddingModel({ q: [1, 0, 0, 0] });
   const retriever = new PgvectorEmbeddingRetriever({
-    session: session(pool),
-    passages: 'docs_passages',
+    store: new PostgresPassageStore({
+      session: session(pool),
+      passages: 'docs_passages',
+    }),
     vectors: 'docs_passage_vectors',
     model: query,
   });
@@ -381,8 +400,10 @@ test('retrieveMany of no queries gives no lists', async () => {
   await contract(pool, [{ id: 'x', vector: [1, 0, 0, 0] }]);
   const query = embeddingModel({});
   const retriever = new PgvectorEmbeddingRetriever({
-    session: session(pool),
-    passages: 'docs_passages',
+    store: new PostgresPassageStore({
+      session: session(pool),
+      passages: 'docs_passages',
+    }),
     vectors: 'docs_passage_vectors',
     model: query,
   });
@@ -404,8 +425,10 @@ test('includeVectors gives the stored vector of each passage, and no call gives 
     { id: 'b', vector: [0.5, -0.25, 1, 2] },
   ]);
   const retriever = new PgvectorEmbeddingRetriever({
-    session: session(pool),
-    passages: 'docs_passages',
+    store: new PostgresPassageStore({
+      session: session(pool),
+      passages: 'docs_passages',
+    }),
     vectors: 'docs_passage_vectors',
     model: embeddingModel({ q: [1, 0, 0, 0] }),
   });
@@ -443,13 +466,15 @@ test('retrieveMany embeds the queries in one model call, searches them in one SQ
   });
   const sent: string[] = [];
   const retriever = new PgvectorEmbeddingRetriever({
-    session: {
-      query: (sql, parameters) => {
-        sent.push(sql);
-        return session(pool).query(sql, parameters);
+    store: new PostgresPassageStore({
+      session: {
+        query: (sql, parameters) => {
+          sent.push(sql);
+          return session(pool).query(sql, parameters);
+        },
       },
-    },
-    passages: 'docs_passages',
+      passages: 'docs_passages',
+    }),
     vectors: 'docs_passage_vectors',
     model: query,
   });
@@ -494,8 +519,10 @@ test('an aborted call rejects with the reason of its signal, before the model ca
   });
   const retriever = (query: MockEmbeddingModelV4) =>
     new PgvectorEmbeddingRetriever({
-      session: session(pool),
-      passages: 'docs_passages',
+      store: new PostgresPassageStore({
+        session: session(pool),
+        passages: 'docs_passages',
+      }),
       vectors: 'docs_passage_vectors',
       model: query,
     });
@@ -559,8 +586,10 @@ test('each filter operator selects the passages it names, on passage fields and 
     },
   ]);
   const retriever = new PgvectorEmbeddingRetriever({
-    session: session(pool),
-    passages: 'docs_passages',
+    store: new PostgresPassageStore({
+      session: session(pool),
+      passages: 'docs_passages',
+    }),
     vectors: 'docs_passage_vectors',
     model: embeddingModel({ q: [1, 0, 0, 0] }),
   });
@@ -653,8 +682,10 @@ test('AND, OR and NOT nest, NOT negates all its conditions, and a boolean value 
     { id: 'd', vector: [1, 0, 0, 0], product: 'consul', year: 1, draft: true },
   ]);
   const retriever = new PgvectorEmbeddingRetriever({
-    session: session(pool),
-    passages: 'docs_passages',
+    store: new PostgresPassageStore({
+      session: session(pool),
+      passages: 'docs_passages',
+    }),
     vectors: 'docs_passage_vectors',
     model: embeddingModel({ q: [1, 0, 0, 0] }),
   });
@@ -726,8 +757,10 @@ test('SQL in a filter field stays one column name, and SQL in a filter value sta
   const pool = database.pool();
   await contract(pool, [{ id: 'a', vector: [1, 0, 0, 0], product: 'vault' }]);
   const retriever = new PgvectorEmbeddingRetriever({
-    session: session(pool),
-    passages: 'docs_passages',
+    store: new PostgresPassageStore({
+      session: session(pool),
+      passages: 'docs_passages',
+    }),
     vectors: 'docs_passage_vectors',
     model: embeddingModel({ q: [1, 0, 0, 0] }),
   });
@@ -770,8 +803,10 @@ test('a filter field that is not a passage field or a metadata column, a value S
   const pool = database.pool();
   await contract(pool, [{ id: 'a', vector: [1, 0, 0, 0] }]);
   const retriever = new PgvectorEmbeddingRetriever({
-    session: session(pool),
-    passages: 'docs_passages',
+    store: new PostgresPassageStore({
+      session: session(pool),
+      passages: 'docs_passages',
+    }),
     vectors: 'docs_passage_vectors',
     model: embeddingModel({ q: [1, 0, 0, 0] }),
   });
@@ -824,8 +859,10 @@ test('a metadata column keeps its name and value even when it has the name of a 
     INSERT INTO "docs vectors" VALUES ('a', '[1,0]', 'test/mini (2 dimensions)');
   `);
   const retriever = new PgvectorEmbeddingRetriever({
-    session: session(pool),
-    passages: 'docs "passages"',
+    store: new PostgresPassageStore({
+      session: session(pool),
+      passages: 'docs "passages"',
+    }),
     vectors: 'docs vectors',
     model: embeddingModel({ q: [1, 0] }),
   });
@@ -843,4 +880,89 @@ test('a metadata column keeps its name and value even when it has the name of a 
     query: 'who',
   });
   assert.equal(result?.score, 1);
+});
+
+test('a store with a schema searches the passages and the passage vectors of that schema, and a store without one finds them through the search_path of the session', async () => {
+  // Arrange: the same contract in public, which the search_path finds, and
+  // in a second schema, each with passages and vectors of its own.
+  await using database = await server().database();
+  const pool = database.pool();
+  await contract(pool, [{ id: 'public-a', vector: [1, 0, 0, 0] }]);
+  await pool.query(`
+    CREATE SCHEMA rag;
+    CREATE TABLE rag.docs_passages (LIKE public.docs_passages INCLUDING ALL);
+    CREATE TABLE rag.docs_passage_vectors (LIKE public.docs_passage_vectors INCLUDING ALL);
+    INSERT INTO rag.docs_passages (id, source, seq, start, "end", text) VALUES ('rag-a', 'doc-rag-a', 0, 0, 10, 'text of rag-a');
+    INSERT INTO rag.docs_passage_vectors VALUES ('rag-a', '[2,0,0,0]', 'test/mini (4 dimensions)');
+  `);
+  const retriever = (store: PostgresPassageStore) =>
+    new PgvectorEmbeddingRetriever({
+      store,
+      vectors: 'docs_passage_vectors',
+      model: embeddingModel({ q: [1, 0, 0, 0] }),
+    });
+
+  // Act
+  const fromSchema = await retriever(
+    new PostgresPassageStore({
+      session: session(pool),
+      schema: 'rag',
+      passages: 'docs_passages',
+    }),
+  ).retrieve('q');
+  const fromSearchPath = await retriever(
+    new PostgresPassageStore({
+      session: session(pool),
+      passages: 'docs_passages',
+    }),
+  ).retrieve('q');
+
+  // Assert
+  assert.deepEqual(fromSchema, [
+    {
+      passage: {
+        id: 'rag-a',
+        text: 'text of rag-a',
+        source: 'doc-rag-a',
+        seq: 0,
+        start: 0,
+        end: 10,
+        metadata: { product: null, year: null, draft: null },
+      },
+      score: 1,
+    },
+  ]);
+  assert.deepEqual(ids(fromSearchPath), ['public-a']);
+});
+
+test('two stores on two databases, alive at once, each search the passages of their own session', async () => {
+  // Arrange: both stores exist before either retriever, and their rows differ.
+  await using first = await server().database();
+  await using second = await server().database();
+  await contract(first.pool(), [{ id: 'first-a', vector: [1, 0, 0, 0] }]);
+  await contract(second.pool(), [{ id: 'second-a', vector: [1, 0, 0, 0] }]);
+  const firstStore = new PostgresPassageStore({
+    session: session(first.pool()),
+    passages: 'docs_passages',
+  });
+  const secondStore = new PostgresPassageStore({
+    session: session(second.pool()),
+    passages: 'docs_passages',
+  });
+  const retriever = (store: PostgresPassageStore) =>
+    new PgvectorEmbeddingRetriever({
+      store,
+      vectors: 'docs_passage_vectors',
+      model: embeddingModel({ q: [1, 0, 0, 0] }),
+    });
+  const fromFirst = retriever(firstStore);
+  const fromSecond = retriever(secondStore);
+
+  // Act
+  const firstResults = await fromFirst.retrieve('q');
+  const secondResults = await fromSecond.retrieve('q');
+
+  // Assert
+  assert.deepEqual(ids(firstResults), ['first-a']);
+  assert.deepEqual(ids(secondResults), ['second-a']);
 });

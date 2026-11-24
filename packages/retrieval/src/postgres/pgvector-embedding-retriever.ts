@@ -14,8 +14,11 @@ import { ModelMismatchError } from '../model-mismatch-error.ts';
 import type { RetrieveOptions } from '../retrieve-options.ts';
 import type { ScoredPassage } from '../scored-passage.ts';
 import { bind } from './bind.ts';
-import { identifier } from './identifier.ts';
 import { passage, passageJson } from './passage-row.ts';
+import {
+  type PostgresPassageStore,
+  contractOf,
+} from './postgres-passage-store.ts';
 import type { PostgresSession } from './postgres-session.ts';
 import { where } from './where.ts';
 
@@ -30,14 +33,16 @@ export class PgvectorEmbeddingRetriever implements BatchRetriever {
   readonly #model: EmbeddingModel;
 
   constructor(options: {
-    readonly session: PostgresSession;
-    readonly passages: string;
+    /** The store of the passages, whose session and schema the search uses. */
+    readonly store: PostgresPassageStore;
+    /** The passage vectors, in the schema of the store. */
     readonly vectors: string;
     readonly model: EmbeddingModel;
   }) {
-    this.#session = options.session;
-    this.#passages = identifier(options.passages);
-    this.#vectors = identifier(options.vectors);
+    const contract = contractOf(options.store);
+    this.#session = contract.session;
+    this.#passages = contract.passages;
+    this.#vectors = contract.relation(options.vectors);
     this.#model = options.model;
   }
 

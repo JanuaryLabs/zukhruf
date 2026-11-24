@@ -7,7 +7,11 @@ import { Vector } from '@zukhruf/vectors';
 import { install, toSql } from '@zukhruf/vectors/sqlite';
 
 import { FusionRetriever, relativeScoreFusion } from './index.ts';
-import { SqliteBM25Retriever, SqliteEmbeddingRetriever } from './sqlite.ts';
+import {
+  SqliteBM25Retriever,
+  SqliteEmbeddingRetriever,
+  SqlitePassageStore,
+} from './sqlite.ts';
 import { embeddingModel } from './testing/embedding-model.ts';
 
 type Row = {
@@ -64,8 +68,7 @@ const model = (signals: (AbortSignal | undefined)[]) =>
 
 const keywords = (database: DatabaseSync) =>
   new SqliteBM25Retriever({
-    database,
-    passages: 'docs_passages',
+    store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
     index: 'docs_passages_fts',
   });
 
@@ -75,8 +78,7 @@ const retrievers = (
 ) => [
   keywords(database),
   new SqliteEmbeddingRetriever({
-    database,
-    passages: 'docs_passages',
+    store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
     vectors: 'docs_passage_vectors',
     model: model(signals),
   }),

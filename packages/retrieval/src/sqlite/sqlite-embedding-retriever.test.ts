@@ -9,7 +9,7 @@ import { DimensionMismatchError, Vector } from '@zukhruf/vectors';
 import { install, toSql } from '@zukhruf/vectors/sqlite';
 
 import { ModelMismatchError } from '../index.ts';
-import { SqliteEmbeddingRetriever } from '../sqlite.ts';
+import { SqliteEmbeddingRetriever, SqlitePassageStore } from '../sqlite.ts';
 import { embeddingModel } from '../testing/embedding-model.ts';
 
 type Row = {
@@ -76,8 +76,7 @@ test('the passages come best first, each with the cosine similarity as its score
     { id: 'e', vector: [-1, 1, 1, 1] },
   ]);
   const retriever = new SqliteEmbeddingRetriever({
-    database,
-    passages: 'docs_passages',
+    store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
     vectors: 'docs_passage_vectors',
     model: embeddingModel({ 'rotate a key': [1, 0, 0, 0] }),
   });
@@ -120,8 +119,7 @@ test('a call gives 10 passages when it gives no topK, and topK passages when it 
     })),
   );
   const retriever = new SqliteEmbeddingRetriever({
-    database,
-    passages: 'docs_passages',
+    store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
     vectors: 'docs_passage_vectors',
     model: embeddingModel({ q: [1, 0, 0, 0] }),
   });
@@ -151,8 +149,7 @@ test('a query model of another provider or model id fails with ModelMismatchErro
   );
   const retriever = (query: MockEmbeddingModelV4 | string) =>
     new SqliteEmbeddingRetriever({
-      database,
-      passages: 'docs_passages',
+      store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
       vectors: 'docs_passage_vectors',
       model: query,
     });
@@ -195,8 +192,7 @@ test('with two stored identities, ModelMismatchError names the first in the orde
     { id: 'b', vector: [1, 0], model: 'test/large (2 dimensions)' },
   ]);
   const retriever = new SqliteEmbeddingRetriever({
-    database,
-    passages: 'docs_passages',
+    store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
     vectors: 'docs_passage_vectors',
     model: embeddingModel(
       { q: [1, 0, 0, 0] },
@@ -220,8 +216,7 @@ test('a query vector of other dimensions fails with DimensionMismatchError after
   using database = contract([{ id: 'a', vector: [1, 0, 0, 0] }]);
   const query = embeddingModel({ q: [1, 0] });
   const retriever = new SqliteEmbeddingRetriever({
-    database,
-    passages: 'docs_passages',
+    store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
     vectors: 'docs_passage_vectors',
     model: query,
   });
@@ -248,8 +243,7 @@ test('a query compares only with the vectors of its own model identity when the 
     { id: 'other', vector: [1, 0], model: 'test/large (2 dimensions)' },
   ]);
   const retriever = new SqliteEmbeddingRetriever({
-    database,
-    passages: 'docs_passages',
+    store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
     vectors: 'docs_passage_vectors',
     model: embeddingModel({ q: [1, 0] }),
   });
@@ -268,8 +262,7 @@ test('a stored model that is not a model identity, and a string model id without
   ]);
   const query = embeddingModel({ q: [1, 0, 0, 0] });
   const retriever = new SqliteEmbeddingRetriever({
-    database,
-    passages: 'docs_passages',
+    store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
     vectors: 'docs_passage_vectors',
     model: query,
   });
@@ -285,8 +278,7 @@ test('a stored model that is not a model identity, and a string model id without
   });
   await assert.rejects(
     new SqliteEmbeddingRetriever({
-      database,
-      passages: 'docs_passages',
+      store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
       vectors: 'docs_passage_vectors',
       model: 'mini',
     }).retrieve('q'),
@@ -303,8 +295,7 @@ test('an empty vector table gives no passages and makes no model call', async ()
   using database = contract([]);
   const query = embeddingModel({ q: [1, 0, 0, 0] });
   const retriever = new SqliteEmbeddingRetriever({
-    database,
-    passages: 'docs_passages',
+    store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
     vectors: 'docs_passage_vectors',
     model: query,
   });
@@ -326,8 +317,7 @@ test('includeVectors gives the stored vector of each passage, and no call gives 
     { id: 'b', vector: [0.5, -0.25, 1, 2] },
   ]);
   const retriever = new SqliteEmbeddingRetriever({
-    database,
-    passages: 'docs_passages',
+    store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
     vectors: 'docs_passage_vectors',
     model: embeddingModel({ q: [1, 0, 0, 0] }),
   });
@@ -362,8 +352,7 @@ test('retrieveMany embeds the queries in one model call and gives one list for e
     'toward z': [0, 0, 1, 0],
   });
   const retriever = new SqliteEmbeddingRetriever({
-    database,
-    passages: 'docs_passages',
+    store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
     vectors: 'docs_passage_vectors',
     model: query,
   });
@@ -393,8 +382,7 @@ test('retrieveMany of no queries gives no lists', async () => {
   using database = contract([{ id: 'x', vector: [1, 0, 0, 0] }]);
   const query = embeddingModel({});
   const retriever = new SqliteEmbeddingRetriever({
-    database,
-    passages: 'docs_passages',
+    store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
     vectors: 'docs_passage_vectors',
     model: query,
   });
@@ -423,8 +411,7 @@ test('an aborted call rejects with the reason of its signal, before the model ca
   });
   const retriever = (query: MockEmbeddingModelV4) =>
     new SqliteEmbeddingRetriever({
-      database,
-      passages: 'docs_passages',
+      store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
       vectors: 'docs_passage_vectors',
       model: query,
     });
@@ -482,8 +469,7 @@ test('each filter operator selects the passages it names, on passage fields and 
     },
   ]);
   const retriever = new SqliteEmbeddingRetriever({
-    database,
-    passages: 'docs_passages',
+    store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
     vectors: 'docs_passage_vectors',
     model: embeddingModel({ q: [1, 0, 0, 0] }),
   });
@@ -558,8 +544,7 @@ test('AND, OR and NOT nest, NOT negates all its conditions, and a boolean value 
     { id: 'd', vector: [1, 0, 0, 0], product: 'consul', year: 1 },
   ]);
   const retriever = new SqliteEmbeddingRetriever({
-    database,
-    passages: 'docs_passages',
+    store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
     vectors: 'docs_passage_vectors',
     model: embeddingModel({ q: [1, 0, 0, 0] }),
   });
@@ -627,8 +612,7 @@ test('SQL in a filter field stays one column name, and SQL in a filter value sta
     { id: 'a', vector: [1, 0, 0, 0], product: 'vault' },
   ]);
   const retriever = new SqliteEmbeddingRetriever({
-    database,
-    passages: 'docs_passages',
+    store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
     vectors: 'docs_passage_vectors',
     model: embeddingModel({ q: [1, 0, 0, 0] }),
   });
@@ -669,8 +653,7 @@ test('a filter field that is not a passage field or a metadata column, a value S
   // Arrange
   using database = contract([{ id: 'a', vector: [1, 0, 0, 0] }]);
   const retriever = new SqliteEmbeddingRetriever({
-    database,
-    passages: 'docs_passages',
+    store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
     vectors: 'docs_passage_vectors',
     model: embeddingModel({ q: [1, 0, 0, 0] }),
   });
@@ -719,8 +702,7 @@ test('a metadata column keeps its name and value even when it has the name of a 
     .prepare('INSERT INTO "docs vectors" VALUES (?, ?, ?)')
     .run('a', toSql(Vector.from([1, 0])), 'test/mini (2 dimensions)');
   const retriever = new SqliteEmbeddingRetriever({
-    database,
-    passages: 'docs "passages"',
+    store: new SqlitePassageStore({ database, passages: 'docs "passages"' }),
     vectors: 'docs vectors',
     model: embeddingModel({ q: [1, 0] }),
   });

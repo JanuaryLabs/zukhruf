@@ -17,6 +17,7 @@ import type { RetrieveOptions } from '../retrieve-options.ts';
 import type { ScoredPassage } from '../scored-passage.ts';
 import { identifier } from './identifier.ts';
 import { passageRows } from './passage-rows.ts';
+import { type SqlitePassageStore, contractOf } from './sqlite-passage-store.ts';
 import { where } from './where.ts';
 
 /**
@@ -32,13 +33,15 @@ export class SqliteEmbeddingRetriever implements BatchRetriever {
   readonly #model: EmbeddingModel;
 
   constructor(options: {
-    readonly database: DatabaseSync;
-    readonly passages: string;
+    /** The store of the passages, whose connection the search runs on. */
+    readonly store: SqlitePassageStore;
+    /** The passage vectors, in the database of the store. */
     readonly vectors: string;
     readonly model: EmbeddingModel;
   }) {
-    this.#database = options.database;
-    this.#passages = identifier(options.passages);
+    const { database, passages } = contractOf(options.store);
+    this.#database = database;
+    this.#passages = passages;
     this.#vectors = identifier(options.vectors);
     this.#model = options.model;
   }

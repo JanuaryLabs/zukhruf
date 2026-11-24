@@ -9,7 +9,11 @@ import { Vector } from '@zukhruf/vectors';
 import { install, toSql } from '@zukhruf/vectors/sqlite';
 
 import { MultiQueryRetriever, relativeScoreFusion } from './index.ts';
-import { SqliteBM25Retriever, SqliteEmbeddingRetriever } from './sqlite.ts';
+import {
+  SqliteBM25Retriever,
+  SqliteEmbeddingRetriever,
+  SqlitePassageStore,
+} from './sqlite.ts';
 import { embeddingModel } from './testing/embedding-model.ts';
 
 // Each passage matches one query of the tests, and its vector is the one
@@ -62,8 +66,7 @@ function contract(
 
 const keywords = (database: DatabaseSync) =>
   new SqliteBM25Retriever({
-    database,
-    passages: 'docs_passages',
+    store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
     index: 'docs_passages_fts',
   });
 
@@ -291,8 +294,7 @@ test('the filter and includeVectors of the call reach each search, and its abort
     rows.map(({ text, vector }) => [text, vector]),
   );
   const meaning = new SqliteEmbeddingRetriever({
-    database,
-    passages: 'docs_passages',
+    store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
     vectors: 'docs_passage_vectors',
     model: embeddingModel(embeddings, { signals }),
   });

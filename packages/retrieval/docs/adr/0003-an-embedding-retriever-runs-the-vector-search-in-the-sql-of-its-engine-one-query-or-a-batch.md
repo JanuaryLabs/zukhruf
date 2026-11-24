@@ -31,3 +31,7 @@ Accepted by Ezz on 2026-11-23 ("They stand"). On SQLite, `retrieve` and `retriev
 ## Amendment 2026-11-23: the batch on Postgres
 
 Accepted by Ezz on 2026-11-23 ("They stand"). On Postgres, `retrieve` and `retrieveMany` run one statement: a `VALUES` table of the query vectors `CROSS JOIN LATERAL` an ordered, limited scan of the passage vectors of the identity of the query, `ORDER BY "vector" <=> query, id LIMIT topK`. The ids order in bytes (`COLLATE "C"`), and the stored identities too, so a tie and `ModelMismatchError.stored` are the same as on SQLite whatever the collation of the database is. None of the leaders has a batch search on Postgres: Haystack, LlamaIndex and LangChain send one query for each search.
+
+## Amendment 2026-11-24: an embedding retriever takes its store
+
+Accepted by Ezz on 2026-11-24 ("Store as composition root (Recommended)"). An embedding retriever takes `{ store, vectors, model }`: the passage store of its engine gives the connection and the passages, and `vectors` names the passage vectors, which the schema of a Postgres store qualifies too ([ADR 0001](./0001-the-package-is-the-query-side-of-rag-and-reads-a-passage-contract-that-elt-writes.md), the amendment of 2026-11-24). `SqliteEmbeddingRetriever { store: SqlitePassageStore, vectors, model }`, `PgvectorEmbeddingRetriever { store: PostgresPassageStore, vectors, model }`, and `SqlServerEmbeddingRetriever { store: SqlServerPassageStore, vectors, model }` when S7 builds it.

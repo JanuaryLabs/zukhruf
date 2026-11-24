@@ -20,15 +20,18 @@ import { DatabaseSync } from 'node:sqlite';
 
 import { openai } from '@ai-sdk/openai';
 
-import { SqliteEmbeddingRetriever } from '@zukhruf/retrieval/sqlite';
+import {
+  SqliteEmbeddingRetriever,
+  SqlitePassageStore,
+} from '@zukhruf/retrieval/sqlite';
 import { install } from '@zukhruf/vectors/sqlite';
 
 const database = new DatabaseSync('knowledge.db'); // elt wrote the passage contract here
 install(database); // or load sqlite-vec: the SQL is the same
 
+const store = new SqlitePassageStore({ database, passages: 'docs_passages' });
 const retriever = new SqliteEmbeddingRetriever({
-  database,
-  passages: 'docs_passages',
+  store,
   vectors: 'docs_passage_vectors',
   model: openai.embedding('text-embedding-3-small'),
 });
@@ -37,20 +40,29 @@ const results = await retriever.retrieve('how do I rotate a key?');
 // 10 scored passages, best first: { passage: { id, text, source, seq, start, end, metadata }, score }
 ```
 
+The passage store is the root of the composition. It holds the connection and the passages, and on Postgres the schema of the contract. Each retriever and `ContextWindow` takes the store and only its own part: the vectors and the model, or the keyword index. So two retrievers of one search read one connection and one contract, as Haystack's retrievers take their `document_store`.
+
 ## Search passages by meaning
 
 An embedding retriever embeds the query with its AI SDK model and sends one SQL query to the engine. The engine ranks the passages by cosine similarity: `vec_distance_cosine` on SQLite, pgvector's `<=>` on Postgres, `VECTOR_DISTANCE` or elt's `marts.<name>_nearest` on SQL Server ([ADR 0003](./docs/adr/0003-an-embedding-retriever-runs-the-vector-search-in-the-sql-of-its-engine-one-query-or-a-batch.md)). The score is `1 - cosine distance`.
 
 ```ts
 // Planned API.
-import { PgvectorEmbeddingRetriever } from '@zukhruf/retrieval/postgres';
+import {
+  PgvectorEmbeddingRetriever,
+  PostgresPassageStore,
+} from '@zukhruf/retrieval/postgres';
 
-const retriever = new PgvectorEmbeddingRetriever({
+const store = new PostgresPassageStore({
   session: {
     query: (sql, parameters) => pool.query(sql, parameters).then((r) => r.rows),
   },
+  schema: 'rag', // the search_path of the session finds the relations when absent
   passages: 'docs_passages',
-  vectors: 'docs_passage_vectors',
+});
+const retriever = new PgvectorEmbeddingRetriever({
+  store,
+  vectors: 'docs_passage_vectors', // rag.docs_passage_vectors
   model,
 });
 
@@ -71,8 +83,7 @@ A keyword retriever queries the keyword index that elt writes: FTS5 on SQLite, `
 import { SqliteBM25Retriever } from '@zukhruf/retrieval/sqlite';
 
 const keywords = new SqliteBM25Retriever({
-  database,
-  passages: 'docs_passages',
+  store,
   index: 'docs_passages_fts',
   operator: 'OR', // the default is 'AND', the implicit operator of FTS5
 });
@@ -80,17 +91,18 @@ const keywords = new SqliteBM25Retriever({
 const results = await keywords.retrieve('rotate signing key');
 ```
 
-On Postgres the query has to use the text search configuration of the index. `PgvectorKeywordRetriever` takes it as `configuration`, `'english'` when absent, as Haystack's `language`, LlamaIndex's `text_search_config` and LangChain's `tsv_lang` do. The configuration is a parameter of the statement, never SQL.
+On Postgres the query has to use the text search configuration of the index. `PgvectorKeywordRetriever` takes it in the index value, `index: { column, configuration }`, `'english'` when absent, as Haystack's `language`, LlamaIndex's `text_search_config` and LangChain's `tsv_lang` do. The configuration is a parameter of the statement, never SQL.
 
 ```ts
 // Planned API.
 import { PgvectorKeywordRetriever } from '@zukhruf/retrieval/postgres';
 
 const keywords = new PgvectorKeywordRetriever({
-  session,
-  passages: 'docs_passages',
-  index: 'keywords', // GENERATED ALWAYS AS (to_tsvector('simple', text)) STORED
-  configuration: 'simple', // keeps stop words and does not stem
+  store,
+  index: {
+    column: 'keywords', // GENERATED ALWAYS AS (to_tsvector('simple', text)) STORED
+    configuration: 'simple', // keeps stop words and does not stem
+  },
 });
 ```
 
@@ -141,7 +153,6 @@ import {
   Rerank,
   SimilarityCutoff,
 } from '@zukhruf/retrieval';
-import { SqlitePassageStore } from '@zukhruf/retrieval/sqlite';
 
 const search = new PostprocessingRetriever({
   retriever: hybrid,
@@ -154,10 +165,7 @@ const search = new PostprocessingRetriever({
       topK: 8,
     }), // lambda 1 = relevance only
     new Collapse({ field: 'source', size: 1 }), // one passage per source
-    new ContextWindow({
-      store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
-      windowSize: 3,
-    }),
+    new ContextWindow({ store, windowSize: 3 }), // the store of the retrievers
     new LongContextReorder(),
   ],
 });
@@ -240,6 +248,7 @@ No consumer uses it yet. These moves are forced onto it after it ships.
 | `ScoredPassage`             | LlamaIndex `NodeWithScore`; .NET `VectorSearchResult<TRecord>{Record, Score}` ([vector search](https://learn.microsoft.com/en-us/dotnet/ai/vector-stores/vector-search))                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | `Retriever.retrieve`        | LlamaIndex `BaseRetriever.retrieve` ([base_retriever.py](https://raw.githubusercontent.com/run-llama/llama_index/main/llama-index-core/llama_index/core/base/base_retriever.py)); LangChain `BaseRetriever` ([retrievers/index.ts](https://raw.githubusercontent.com/langchain-ai/langchainjs/main/libs/langchain-core/src/retrievers/index.ts)); Semantic Kernel `ITextSearch` ([text search](https://learn.microsoft.com/en-us/semantic-kernel/concepts/text-search/text-search-abstractions))                                                                                            |
 | engine retrievers           | Haystack's retrievers for each document store ([retrievers](https://docs.haystack.deepset.ai/docs/retrievers))                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| passage store as the root   | Haystack `PgvectorEmbeddingRetriever(document_store=...)` and `PgvectorKeywordRetriever(document_store=...)` over `PgvectorDocumentStore(schema_name, table_name, language)` ([embedding_retriever.py](https://raw.githubusercontent.com/deepset-ai/haystack-core-integrations/main/integrations/pgvector/src/haystack_integrations/components/retrievers/pgvector/embedding_retriever.py)); LlamaIndex `VectorStoreIndex.as_retriever()`; LangChain `VectorStore.asRetriever()`                                                                                                            |
 | `topK`, `includeVectors`    | Haystack `top_k` = 10 ([document_store.py](https://raw.githubusercontent.com/deepset-ai/haystack/main/haystack/document_stores/in_memory/document_store.py)), `return_embedding`; Mastra `topK` = 10 ([pg](https://mastra.ai/reference/vectors/pg)); .NET `IncludeVectors` ([VectorSearchOptions](https://learn.microsoft.com/en-us/dotnet/api/microsoft.extensions.vectordata.vectorsearchoptions-1))                                                                                                                                                                                      |
 | `Filter`                    | Haystack filters ([metadata filtering](https://docs.haystack.deepset.ai/docs/metadata-filtering)); LlamaIndex `MetadataFilters` ([types.py](https://raw.githubusercontent.com/run-llama/llama_index/main/llama-index-core/llama_index/core/vector_stores/types.py)); Qdrant `filter` ([search](https://qdrant.tech/documentation/search/search/))                                                                                                                                                                                                                                           |
 | `FusionRetriever`           | LlamaIndex `QueryFusionRetriever` ([fusion_retriever.py](https://raw.githubusercontent.com/run-llama/llama_index/main/llama-index-core/llama_index/core/retrievers/fusion_retriever.py)); LangChain `EnsembleRetriever` ([ensemble.ts](https://raw.githubusercontent.com/langchain-ai/langchainjs/main/libs/langchain-classic/src/retrievers/ensemble.ts)); Elasticsearch `rrf` ([rrf retriever](https://www.elastic.co/docs/reference/elasticsearch/rest-apis/retrievers/rrf-retriever)); Qdrant `prefetch` ([hybrid queries](https://qdrant.tech/documentation/concepts/hybrid-queries/)) |
@@ -403,22 +412,20 @@ class VectorMissingError extends Error {
 // @zukhruf/retrieval/sqlite
 class SqliteEmbeddingRetriever implements BatchRetriever {
   constructor(options: {
-    database: DatabaseSync;
-    passages: string;
+    store: SqlitePassageStore;
     vectors: string;
     model: EmbeddingModel;
   });
 }
 class SqliteBM25Retriever implements Retriever {
   constructor(options: {
-    database: DatabaseSync;
-    passages: string;
-    index: string;
+    store: SqlitePassageStore;
+    index: string; // the FTS5 table
     operator?: 'AND' | 'OR';
   }); // 'AND'
 }
 class SqlitePassageStore implements PassageStore {
-  constructor(options: { database: DatabaseSync; passages: string });
+  constructor(options: { database: DatabaseSync; passages: string }); // SQLite has no schema
 }
 
 // @zukhruf/retrieval/postgres
@@ -430,23 +437,24 @@ type PostgresSession = {
 };
 class PgvectorEmbeddingRetriever implements BatchRetriever {
   constructor(options: {
-    session: PostgresSession;
-    passages: string;
+    store: PostgresPassageStore;
     vectors: string;
     model: EmbeddingModel;
   });
 }
 class PgvectorKeywordRetriever implements Retriever {
   constructor(options: {
-    session: PostgresSession;
-    passages: string;
-    index: string;
+    store: PostgresPassageStore;
+    index: { column: string; configuration?: string }; // 'english'
     operator?: 'AND' | 'OR';
-    configuration?: string;
-  }); // 'AND', 'english'
+  }); // 'AND'
 }
 class PostgresPassageStore implements PassageStore {
-  constructor(options: { session: PostgresSession; passages: string });
+  constructor(options: {
+    session: PostgresSession;
+    schema?: string; // the search_path of the session when absent
+    passages: string;
+  });
 }
 
 // @zukhruf/retrieval/sqlserver
@@ -458,22 +466,24 @@ type SqlServerSession = {
 };
 class SqlServerEmbeddingRetriever implements BatchRetriever {
   constructor(options: {
-    session: SqlServerSession;
-    passages: string;
+    store: SqlServerPassageStore;
     vectors: string;
     model: EmbeddingModel;
   });
 }
 class SqlServerKeywordRetriever implements Retriever {
   constructor(options: {
-    session: SqlServerSession;
-    passages: string;
+    store: SqlServerPassageStore;
     index: string;
     operator?: 'AND' | 'OR';
   });
 }
 class SqlServerPassageStore implements PassageStore {
-  constructor(options: { session: SqlServerSession; passages: string });
+  constructor(options: {
+    session: SqlServerSession;
+    schema?: string;
+    passages: string;
+  });
 }
 ```
 
