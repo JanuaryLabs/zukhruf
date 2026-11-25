@@ -45,7 +45,7 @@ The target `test` that the `test` area gives. It runs `node --test` in the proje
 _Avoid_: Unit target, node test target, `test:node` (that is an old tag)
 
 **Test selection**:
-The files that the test target runs, in `options.args`. By default it is one glob for each top-level folder that has test files, for example `"src/**/*.test.ts"`, and a glob with no `**` for test files directly in the project root. `--args` replaces it. A Node flag on the CLI, for example `--test-name-pattern`, keeps it.
+The files that the test target runs, as the `--selection="<glob>"` words of its command. By default it is one glob for each top-level folder that has test files, for example `"src/**/*.test.ts"`, and a glob with no `**` for test files directly in the project root. A word after `--` or in `--args` that names test files replaces it. A Node flag, for example `--test-name-pattern`, keeps it, before or after the files.
 _Avoid_: Test pattern (Node's default pattern is a different thing), filter
 
 **Docker test**:
