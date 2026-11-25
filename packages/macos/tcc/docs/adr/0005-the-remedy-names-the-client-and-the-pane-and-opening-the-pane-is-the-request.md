@@ -1,6 +1,8 @@
 # The remedy names the client and the pane, and opening the pane is the request
 
-> **Design for review.**
+Status: Accepted 2026-11-26 (backlog #5747).
+
+Decision-makers: the context-compiler session context-compiler-99, from the four copies and the leaders below.
 
 Each consumer writes the same sentence today: elt's `macOSAccess.remedy()` ("Turn on <program> in System Settings › Privacy & Security › <pane>."), context-compiler's `Connector.guidance()` ("… then quit and reopen <grantee>. macOS does not ask for this access."), its Calendar, Contacts and Reminders connectors, and its `sync watch start` text. Four places hold one piece of knowledge.
 
@@ -20,3 +22,8 @@ macOS shows no prompt for Full Disk Access. The leaders open its pane in place o
 
 - The sentence of elt's stores for Contacts no longer says "or › Full Disk Access".
 - The context-compiler connectors keep only what is theirs to say, such as "Mail's local store is read even while Mail is closed".
+
+## Confirmation
+
+- The pane names and anchors of `Localizable.loctable` and `TCCServiceList.plist` in `SecurityPrivacyExtension.appex` (macOS 27.2), such as `ACCESSIBILITY` = "Device Control and Data Access" and `ALL_FILES` = "Full Disk Access", and the strings `ALL_FILES_QUIT_ALLOW_TITLE` = "“%@” will not have full disk access until it is quit."
+- node-mac-permissions `permissions.mm:140`, tauri-plugin-macos-permissions `full_disk_access.rs:60`.

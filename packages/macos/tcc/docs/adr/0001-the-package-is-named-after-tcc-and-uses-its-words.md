@@ -1,6 +1,8 @@
 # The package is named after TCC and uses its words
 
-> **Design for review.**
+Status: Accepted 2026-11-26 (backlog #5747).
+
+Decision-makers: the maintainer, on the prefix ("don't publish it as @zukhruf/macos-\* — we prefix by platform/tool only to give it namespace", 2026-11-26); the context-compiler session context-compiler-99 on the name, from the survey below.
 
 The concept needs a name with no platform prefix: "we prefix by platform/tool only to give it namespace" (the maintainer, 2026-11-26; [root ADR 0013](../../../../../docs/adr/0013-macos-packages-share-one-folder-and-keep-their-names.md)).
 
@@ -31,3 +33,8 @@ The package is `@zukhruf/tcc`. Its words come from TCC: a **service** is a kind 
 
 - A reader who knows `tccutil reset SystemPolicyAllFiles` finds the same words in the code.
 - "Grant" names the user's decision, not the kind (CONTEXT.md).
+
+## Confirmation
+
+- The survey of 2026-11-26: dotnet/maui `src/Essentials/src/Permissions/`, node-mac-permissions 2.5.0, tauri-plugin-macos-permissions 2.3.0, Electron `systemPreferences`, Flutter permission_handler, react-native-permissions, pkg.go.dev and crates.io, Apple Platform Security, tccutil(1) and the schema of `/Library/Application Support/com.apple.TCC/TCC.db` (table `access`: `service`, `client`, `client_type`, `auth_value`).
+- `TCCServiceList.plist` of `SecurityPrivacyExtension.appex` (macOS 27.2) names each pane with its `tcc` service.

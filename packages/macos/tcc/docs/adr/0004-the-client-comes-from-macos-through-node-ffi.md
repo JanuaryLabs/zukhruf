@@ -1,6 +1,8 @@
 # The client comes from macOS, through node:ffi
 
-> **Design for review.**
+Status: Accepted 2026-11-26 (backlog #5747).
+
+Decision-makers: the maintainer, on `node:ffi` over a native addon (he chose "node:ffi now", 2026-11-26); the context-compiler session context-compiler-99 on the rest.
 
 The remedy must name the client that the user turns on. Today the hosts find it. elt's `macOSAccess` keeps a name that the host installs once per process (`packages/sdks/macos/app-database/src/macos-access.ts`). The context-compiler CLI finds the name from `__CFBundleIdentifier` and Spotlight, or takes its own `node` when `XPC_SERVICE_NAME` says that launchd started it (`apps/cli/src/main.ts:39-57`). That is a decision of the host about a fact of macOS: "when a host must decide something that means our packages are wrong or not extensible enough" (the maintainer, 2026-10-07).
 
@@ -23,3 +25,8 @@ The maintainer chose `node:ffi` over a native addon on 2026-11-26.
 
 - The name of a bundle is the name of its folder. System Settings can show a localized name, such as "Terminal" for `Terminal.app`, which is the same in English.
 - The tests run on the macOS job of CI ([root ADR 0005](../../../../../docs/adr/0005-a-project-that-needs-macos-runs-its-targets-on-a-macos-runner.md)), so a change of the private function shows on the next macOS.
+
+## Confirmation
+
+- Probe of 2026-11-26 (Node 26.13.1, macOS 27.2): `responsibility_get_pid_responsible_for_pid` and `proc_pidpath` through `node:ffi` gave `/Applications/cmux.app/Contents/MacOS/cmux` for a process in the terminal app, and the `node` of the launchd job of the context-compiler watch for that job. `node:ffi` loaded with no flag and wrote one `ExperimentalWarning`.
+- `responsibility_get_pid_responsible_for_pid` is in `libSystem.B.tbd` of MacOSX27.2.sdk and in no header.
