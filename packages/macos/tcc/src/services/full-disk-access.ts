@@ -1,8 +1,8 @@
 import { open } from 'node:fs/promises';
 
-import type { Client } from './client.ts';
-import { Preflight } from './preflight.ts';
-import { Service } from './service.ts';
+import type { Client } from '../client.ts';
+import { Preflight } from '../preflight.ts';
+import { Service } from '../service.ts';
 
 const denials = new Set(['EPERM', 'EACCES']);
 const absences = new Set(['ENOENT', 'ENOTDIR']);
