@@ -37,6 +37,7 @@ import noTsBesideDts from '../language/no-ts-beside-dts.ts';
 import noReflectGetChain from '../payloads/no-reflect-get-chain.ts';
 import noProcessGlobalWrite from '../process-state/no-process-global-write.ts';
 import requireShadcnConfig from '../react/require-shadcn-config.ts';
+import noAllowDefaultProject from '../typed-lint/no-allow-default-project.ts';
 import { workspaceRootOf } from '../workspace/workspace-root.ts';
 import noAddIssueString from '../zod/no-add-issue-string.ts';
 import { noFloatingPromises, noLet, noUnassignedImport } from './options.ts';
@@ -67,6 +68,7 @@ const rules = {
   'no-unhandled-readline-error': noUnhandledReadlineError,
   'require-warning-code': requireWarningCode,
   'require-shadcn-config': requireShadcnConfig,
+  'no-allow-default-project': noAllowDefaultProject,
   ...importBans,
 };
 
@@ -259,6 +261,13 @@ export const base: Concept = {
         name: 'zukhruf/base/closure-state',
         files: SOURCE,
         rules: { 'zukhruf/no-captured-assignment': 'off' },
+      },
+      {
+        // A file that allowDefaultProject lets typed lint parse is in no
+        // tsconfig, so tsc never type-checks it and lint still passes.
+        name: 'zukhruf/base/default-project',
+        files: SOURCE,
+        rules: { 'zukhruf/no-allow-default-project': 'error' },
       },
       {
         // Typed lint: the project service gives each file its nearest

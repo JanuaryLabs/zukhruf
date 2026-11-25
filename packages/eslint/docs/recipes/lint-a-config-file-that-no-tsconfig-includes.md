@@ -1,50 +1,83 @@
 # Recipe: Lint a config file that no tsconfig includes
 
-**Use case.** A repo uses the `base` config, which turns on typed lint. Typed lint gives each TypeScript file the types of its nearest `tsconfig.json`, so each linted TypeScript file must be in a tsconfig (see [Configs](../../README.md#configs)). A tsconfig usually includes only `src`. The config files at the workspace root, such as `vite.config.ts`, and the hook scripts in `.husky/` are in no tsconfig. ESLint then stops on each of them with a parsing error, and lints nothing in them.
+**Use case.** A repo uses the `base` config, which turns on typed lint. Typed lint gives each TypeScript file the types of its nearest `tsconfig.json`, so each linted TypeScript file must be in a tsconfig (see [Configs](../../README.md#configs)). A tsconfig usually includes only `src`. The config files at the workspace root, such as `vite.config.ts`, and the hook scripts in `.husky/` are in no tsconfig. ESLint then stops on each of them with "was not found by the project service". typescript-eslint's `allowDefaultProject` makes that error go away, but then tsc never type-checks the files, so `base` refuses it with `zukhruf/no-allow-default-project`. Put the files in a tsconfig instead.
 
 **What you need.** `@zukhruf/eslint` with the `base` config, and its peers `typescript-eslint` and `typescript` (see [Use it](../../README.md#use-it)).
 
 ## The steps
 
 1. Find the TypeScript files that ESLint lints and that no tsconfig includes. ESLint reports each one with "was not found by the project service".
-2. In the root `eslint.config.mjs`, add a block after `zukhruf/base` for `files: ['**/*.ts']`. Set `languageOptions.parserOptions.projectService.allowDefaultProject` to a list of globs for those files.
-3. Write each glob relative to the workspace root, with a single `*` for each folder level, such as `'*.config.ts'`, `'.husky/*.ts'` and `'apps/*/sdk-it.config.ts'`. Do not write `**`.
+2. Next to the project's `tsconfig.json`, add a type-check-only `tsconfig.scripts.json` that includes those files, such as `'*.config.ts'` and `'.husky/*.ts'`. Give it an `outDir` under `out-tsc`, never `dist`, so no build ships its output.
+3. Add `{ "path": "./tsconfig.scripts.json" }` to the `references` of the project's `tsconfig.json`.
+4. Remove every `allowDefaultProject` block from the ESLint config.
 
 ## The program
 
-The program makes a small workspace three times. Its tsconfig includes only `src`. The workspace also has `vite.config.ts` and `.husky/pre-commit.ts`. The program lints the three files with the `base` config, first with no `allowDefaultProject`, then with single-`*` globs, then with a `**` glob. Each run has its own process, because typescript-eslint keeps one project service for each process.
+The program makes a small workspace twice, with `src/index.ts`, `vite.config.ts` and `.husky/pre-commit.ts`. `vite.config.ts` has a type error. The first run includes only `src` in its tsconfig and gives the other two files `allowDefaultProject`. The second run references a `tsconfig.scripts.json` that includes them. Each run lints the three files with the `base` config and then runs `tsc --build`. Each run has its own process, because typescript-eslint keeps one project service for each process.
 
 ```ts title="config-file-outside-tsconfig.ts"
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import { dirname, join, relative } from 'node:path';
 
 import { ESLint } from 'eslint';
 
-// The repo's own block for the files that no tsconfig includes. Each run
-// gives it a different value, or leaves it out.
-const runs: Record<string, string[] | undefined> = {
-  'no allowDefaultProject': undefined,
-  "allowDefaultProject ['*.config.ts', '.husky/*.ts']": [
-    '*.config.ts',
-    '.husky/*.ts',
-  ],
-  "allowDefaultProject ['**/*.config.ts']": ['**/*.config.ts'],
+// TypeScript names its compiler in the bin of its manifest (tsc6 in 6.0).
+const require = createRequire(import.meta.url);
+const manifest = require.resolve('typescript/package.json');
+const [bin] = Object.values(require(manifest).bin);
+const tsc = join(dirname(manifest), bin);
+
+const compilerOptions = {
+  strict: true,
+  module: 'nodenext',
+  composite: true,
+  emitDeclarationOnly: true,
 };
 
-function rootConfig(allowDefaultProject?: string[]): string {
-  const block = allowDefaultProject
-    ? `{
+// Two ways to lint vite.config.ts and .husky/pre-commit.ts, which the
+// tsconfig of src does not include. Each run gives the files of the workspace
+// that differ.
+const runs: Record<string, Record<string, string>> = {
+  allowDefaultProject: {
+    'tsconfig.json': JSON.stringify({
+      compilerOptions: { ...compilerOptions, outDir: 'out-tsc' },
+      include: ['src'],
+    }),
+    'eslint.config.mjs': rootConfig(`{
     files: ['**/*.ts'],
     languageOptions: {
       parserOptions: {
-        projectService: {
-          allowDefaultProject: ${JSON.stringify(allowDefaultProject)},
-        },
+        projectService: { allowDefaultProject: ['*.config.ts', '.husky/*.ts'] },
       },
     },
-  },`
-    : '';
+  }`),
+  },
+  'tsconfig.scripts.json': {
+    // A solution-style tsconfig.json: the project service and tsc --build
+    // both follow its references.
+    'tsconfig.json': JSON.stringify({
+      files: [],
+      references: [
+        { path: './tsconfig.lib.json' },
+        { path: './tsconfig.scripts.json' },
+      ],
+    }),
+    'tsconfig.lib.json': JSON.stringify({
+      compilerOptions: { ...compilerOptions, outDir: 'out-tsc/lib' },
+      include: ['src'],
+    }),
+    // Type-check only: its output goes to out-tsc, never to dist.
+    'tsconfig.scripts.json': JSON.stringify({
+      compilerOptions: { ...compilerOptions, outDir: 'out-tsc/scripts' },
+      include: ['*.config.ts', '.husky/*.ts'],
+    }),
+    'eslint.config.mjs': rootConfig(''),
+  },
+};
+
+function rootConfig(block: string): string {
   return [
     "import zukhruf from '@zukhruf/eslint';",
     "import { defineConfig } from 'eslint/config';",
@@ -62,15 +95,12 @@ async function lint(run: string): Promise<void> {
   try {
     const workspace: Record<string, string> = {
       'package.json': JSON.stringify({ type: 'module', workspaces: [] }),
-      // The tsconfig includes only src, as in most projects.
-      'tsconfig.json': JSON.stringify({
-        compilerOptions: { strict: true, module: 'nodenext', noEmit: true },
-        include: ['src'],
-      }),
       'src/index.ts': 'export const answer = 42;\n',
-      'vite.config.ts': "export default { root: 'src' };\n",
+      // A type error that only tsc reports.
+      'vite.config.ts':
+        "const port: number = '5173';\nexport default { server: { port } };\n",
       '.husky/pre-commit.ts': "console.log('pre-commit');\n",
-      'eslint.config.mjs': rootConfig(runs[run]),
+      ...runs[run],
     };
     for (const [path, text] of Object.entries(workspace)) {
       await mkdir(dirname(join(root, path)), { recursive: true });
@@ -89,15 +119,21 @@ async function lint(run: string): Promise<void> {
     for (const result of results.toSorted((a, b) =>
       a.filePath.localeCompare(b.filePath),
     )) {
-      // A parsing error has no rule. Print its first line without the path.
       const messages = result.messages.map(
-        ({ ruleId, message }) =>
-          ruleId ?? message.split('\n')[0].replace(result.filePath, '<file>'),
+        ({ ruleId, message }) => ruleId ?? message.split('\n')[0],
       );
       console.log(
-        `  ${relative(root, result.filePath)}: ${messages.join('; ') || 'no finding'}`,
+        `  lint ${relative(root, result.filePath)}: ${messages.join('; ') || 'no finding'}`,
       );
     }
+    const typecheck = spawnSync(process.execPath, [tsc, '--build'], {
+      cwd: root,
+      encoding: 'utf8',
+    });
+    // 0: no error, 2: errors in the projects; anything else is a broken run.
+    if (typecheck.status !== 0 && typecheck.status !== 2)
+      throw new Error(`tsc --build failed: ${typecheck.stderr}`);
+    console.log(`  tsc --build: ${typecheck.stdout.trim() || 'no error'}`);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -123,39 +159,32 @@ if (run === undefined) {
 
 Run it from a folder that has the workspace's `node_modules`, as `node --conditions=@zukhruf/source config-file-outside-tsconfig.ts`.
 
-Output with ESLint 10.12.0, typescript-eslint 8.72.1 and Node 26.13.0:
+Output with ESLint 10.15.0, typescript-eslint 8.73.0, TypeScript 6.0.2 and Node 26.13.0:
 
 ```
-no allowDefaultProject:
-  .husky/pre-commit.ts: Parsing error: <file> was not found by the project service. Consider either including it in the tsconfig.json or including it in allowDefaultProject.
-  src/index.ts: no finding
-  vite.config.ts: Parsing error: <file> was not found by the project service. Consider either including it in the tsconfig.json or including it in allowDefaultProject.
-allowDefaultProject ['*.config.ts', '.husky/*.ts']:
-  .husky/pre-commit.ts: no finding
-  src/index.ts: no finding
-  vite.config.ts: no finding
-allowDefaultProject ['**/*.config.ts']:
-  .husky/pre-commit.ts: Parsing error: allowDefaultProject glob '**/*.config.ts' contains a disallowed '**'.
-  src/index.ts: Parsing error: allowDefaultProject glob '**/*.config.ts' contains a disallowed '**'.
-  vite.config.ts: Parsing error: allowDefaultProject glob '**/*.config.ts' contains a disallowed '**'.
+allowDefaultProject:
+  lint .husky/pre-commit.ts: zukhruf/no-allow-default-project
+  lint src/index.ts: zukhruf/no-allow-default-project
+  lint vite.config.ts: zukhruf/no-allow-default-project
+  tsc --build: no error
+tsconfig.scripts.json:
+  lint .husky/pre-commit.ts: no finding
+  lint src/index.ts: no finding
+  lint vite.config.ts: no finding
+  tsc --build: vite.config.ts(1,7): error TS2322: Type 'string' is not assignable to type 'number'.
 ```
 
 ## What the output shows
 
-- **With no `allowDefaultProject`, ESLint lints only the files in the tsconfig.** `vite.config.ts` and `.husky/pre-commit.ts` get a parsing error, and no rule runs on them.
-- **Single-`*` globs give the two files the default project.** ESLint lints all three files, and finds nothing.
-- **A `**` glob stops typed lint for every file.** typescript-eslint refuses the glob, so each file gets the parsing error, also `src/index.ts`, which is in the tsconfig.
+- **With `allowDefaultProject`, lint passes on the type error and tsc never sees it.** typescript-eslint parses `vite.config.ts` through its default project, so lint runs on it, but no tsconfig includes the file, so `tsc --build` reports no error. `zukhruf/no-allow-default-project` reports each file whose parser options carry the list. The block covers `**/*.ts`, so `src/index.ts` is reported too.
+- **With `tsconfig.scripts.json`, lint and tsc both see the files.** Lint finds nothing, and `tsc --build` reports the type error in `vite.config.ts`.
 
 ## Why it works
 
-The project service of typescript-eslint finds the nearest tsconfig of each file. When no tsconfig includes the file, the service gives the file its default project only when a glob of `allowDefaultProject` matches it ([`allowDefaultProject`](https://typescript-eslint.io/packages/parser/#allowdefaultproject)). The default project has the types of the file, with default compiler options.
-
-`base` sets `projectService: true` and `tsconfigRootDir` to the workspace root of the folder where ESLint runs (`src/base/config.ts`, the block `zukhruf/base/typed`). The globs of `allowDefaultProject` resolve from `tsconfigRootDir`, so a glob such as `'.husky/*.ts'` names a path from the workspace root. ESLint merges the `parserOptions` of the two blocks, so the repo's block keeps the `tsconfigRootDir` of `base`.
-
-typescript-eslint refuses `**` in a glob of `allowDefaultProject`: the default project is slow when many files use it ([allowdefaultproject-glob-too-wide](https://tseslint.com/allowdefaultproject-glob-too-wide)). Thus each folder level needs its own single-`*` glob.
+The project service of typescript-eslint finds the nearest tsconfig of each file, and follows the `references` of a solution-style `tsconfig.json` (one with `"files": []`) to the tsconfig that includes the file. `tsc --build` follows the same references, and so does the `typecheck` target that `@nx/js/typescript` infers from `tsconfig.json`, which lists the files in its inputs. A file in `allowDefaultProject` gets the types of typescript-eslint's default project instead ([`allowDefaultProject`](https://typescript-eslint.io/packages/parser/#allowdefaultproject)). No tsconfig includes it, so tsc never checks it, and a change to it does not invalidate the `typecheck` cache. In Meddit this hid a live type error (`packages/db/scripts/rxnav-concepts.ts`, TS2536) until its commit 3b389d6 gave each such file a `tsconfig.scripts.json`.
 
 ## Things to know
 
-- **Six repos of the rollout write this block.** elt (`eslint.config.mjs`, line 157), context-compiler (line 126) and offers-evals (line 203) give `.husky/*.ts`. april (line 87) gives `.husky/*.mts` and `vitest.workspace.ts`. factory (line 78) and whatisgoingon (line 63) give `*.config.ts`, `.husky/*.ts` and a glob for each folder level of their nested config files, such as `apps/*/sdk-it.config.ts` and `apps/*/*/sdk-it.config.ts`; their comment says that typescript-eslint rejects `**`.
-- **The default project takes at most 8 files.** When more files match the globs, typescript-eslint stops with "Too many files (>8) have matched the default project" (`DEFAULT_PROJECT_MATCHED_FILES_THRESHOLD` in `@typescript-eslint/project-service`). Put a group of such files in a tsconfig of their own.
-- **typescript-eslint keeps one project service for each process.** The service has the options of the first file that it parses (`createParseSettings.js` of `@typescript-eslint/typescript-estree`). A program that lints with different `allowDefaultProject` values must use one process for each value, as the program above does.
+- **Without `allowDefaultProject`, typescript-eslint already refuses a file in no tsconfig.** It stops with "was not found by the project service" (`useProgramFromProjectService.js` of `@typescript-eslint/typescript-estree`, line 95). `zukhruf/no-allow-default-project` closes the one way around that error.
+- **typescript-eslint keeps one project service for each process.** The service has the options of the first file that it parses (`createParseSettings.js` of `@typescript-eslint/typescript-estree`, line 323). The rule reads the parser options of each file, so it reports every file that a block with `allowDefaultProject` covers, whichever file the service saw first.
+- **The rule tester of this package keeps its default project.** `typedRuleTester()` in `src/testing/rule-tester.ts` gives the virtual files of rule tests `allowDefaultProject: ['*.ts']`. A rule test runs only its own rule, so `zukhruf/no-allow-default-project` never sees those options.
