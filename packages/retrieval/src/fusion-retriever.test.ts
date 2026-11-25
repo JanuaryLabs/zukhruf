@@ -11,6 +11,7 @@ import { install, toSql } from '@zukhruf/vectors/sqlite';
 import {
   FusionRetriever,
   MultiQueryRetriever,
+  distributionBasedScoreFusion,
   relativeScoreFusion,
 } from './index.ts';
 import {
@@ -20,6 +21,7 @@ import {
 } from './sqlite.ts';
 import { embeddingModel } from './testing/embedding-model.ts';
 import { writeKeywordContract } from './testing/keyword-contract.ts';
+import { LiveRetriever } from './testing/live-retriever.ts';
 import {
   type EntrezQueryBundle,
   RecordingRetriever,
@@ -392,4 +394,43 @@ test('a fusion of plain retrievers takes a string as a query bundle with only qu
     }),
   ];
   assert.equal(typeof refused, 'function');
+});
+
+test('a live source of order only fuses beside an engine search by reciprocal rank fusion, and a score fusion over it rejects with a TypeError, where it ranked NaN scores above the scored list (#5583)', async () => {
+  // Arrange
+  using database = contract(rows);
+  const web = () => new LiveRetriever(['web-1', 'web-2']);
+  const byRank = new FusionRetriever({
+    retrievers: [web(), keywords(database)],
+  });
+  const minMax = new FusionRetriever({
+    retrievers: [keywords(database), web()],
+    fusion: relativeScoreFusion(),
+  });
+  const distribution = new FusionRetriever({
+    retrievers: [keywords(database), web()],
+    fusion: distributionBasedScoreFusion(),
+  });
+
+  // Act
+  const ranked = (await byRank.retrieve('rotate key')).passages;
+
+  // Assert: the keyword search ranks kw, both; each list's rank 1 gives
+  // 1 / 61 and rank 2 1 / 62, and a tie keeps the order of the lists.
+  assert.deepEqual(scores(ranked), [
+    ['web-1', 1 / 61],
+    ['kw', 1 / 61],
+    ['web-2', 1 / 62],
+    ['both', 1 / 62],
+  ]);
+  await assert.rejects(minMax.retrieve('rotate key'), {
+    name: 'TypeError',
+    message:
+      'relativeScoreFusion reads scores, and the passage web-1 of list 1 has none: fuse a list of order only with reciprocalRankFusion',
+  });
+  await assert.rejects(distribution.retrieve('rotate key'), {
+    name: 'TypeError',
+    message:
+      'distributionBasedScoreFusion reads scores, and the passage web-1 of list 1 has none: fuse a list of order only with reciprocalRankFusion',
+  });
 });

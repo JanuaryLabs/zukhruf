@@ -14,9 +14,11 @@ import {
   PostprocessingRetriever,
   type QueryBundle,
   Rerank,
+  RetrieverUnavailableError,
 } from './index.ts';
 import { SqliteEmbeddingRetriever, SqlitePassageStore } from './sqlite.ts';
 import { embeddingModel } from './testing/embedding-model.ts';
+import { LiveRetriever } from './testing/live-retriever.ts';
 import {
   type EntrezQueryBundle,
   RecordingRetriever,
@@ -263,4 +265,31 @@ test('a failed model call rejects', async () => {
   await assert.rejects(failing.retrieve('rotate a key'), {
     message: 'The model is down',
   });
+});
+
+test('the failures of the retriever pass up unchanged, and its list of order only keeps no score', async () => {
+  // Arrange
+  const unavailable = new RetrieverUnavailableError('HTTP 503');
+  const live = new LiveRetriever<QueryBundle>(
+    ['web-1', 'web-2'],
+    new Map([['news', unavailable]]),
+  );
+  const retriever = new HydeRetriever({
+    retriever: live,
+    model: languageModel(),
+  });
+
+  // Act
+  const result = await retriever.retrieve('how do I change my signing key?');
+
+  // Assert
+  assert.deepEqual(
+    result.passages.map((scored) => [scored.passage.id, 'score' in scored]),
+    [
+      ['web-1', false],
+      ['web-2', false],
+    ],
+  );
+  assert.deepEqual([...result.failures], [['news', unavailable]]);
+  assert.equal(result.failures.get('news'), unavailable);
 });

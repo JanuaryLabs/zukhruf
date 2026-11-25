@@ -108,3 +108,36 @@ test('a Collapse on a passage field groups by the value of that field', async ()
   // Assert: guide-0 and notes-0 share seq 0, from different sources.
   assert.deepEqual(ids(results), ['guide-0', 'notes-1']);
 });
+
+test('a Collapse keeps the order of the list when a passage has no score, and sorts by score only when every passage has one', async () => {
+  // Arrange: each passage has its own source, so each is kept; the second
+  // list gives the last passage a score as well.
+  const collapse = new Collapse();
+  const unscored = {
+    passage: {
+      id: 'web',
+      text: 'web',
+      source: 'web',
+      seq: 0,
+      start: 0,
+      end: 0,
+      metadata: {},
+    },
+  };
+
+  // Act
+  const mixed = await collapse.postprocess([
+    unscored,
+    scored('low', 'low', 0.1),
+    scored('high', 'high', 0.9),
+  ]);
+  const all = await collapse.postprocess([
+    { ...unscored, score: 0.5 },
+    scored('low', 'low', 0.1),
+    scored('high', 'high', 0.9),
+  ]);
+
+  // Assert
+  assert.deepEqual(ids(mixed), ['web', 'low', 'high']);
+  assert.deepEqual(ids(all), ['high', 'web', 'low']);
+});

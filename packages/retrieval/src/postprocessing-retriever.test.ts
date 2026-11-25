@@ -12,10 +12,12 @@ import {
   MaximalMarginalRelevance,
   PostprocessingRetriever,
   Rerank,
+  RetrieverUnavailableError,
   SimilarityCutoff,
 } from './index.ts';
 import { SqliteEmbeddingRetriever, SqlitePassageStore } from './sqlite.ts';
 import { embeddingModel } from './testing/embedding-model.ts';
+import { LiveRetriever } from './testing/live-retriever.ts';
 import {
   type EntrezQueryBundle,
   RecordingRetriever,
@@ -232,4 +234,38 @@ test('MaximalMarginalRelevance diversifies with the stored vectors when the call
     passageId: 'alpha',
   });
   assert.equal(diversified.length, 1);
+});
+
+test('the failures of the retriever pass up unchanged, and a list of order only leaves a SimilarityCutoff empty and a Rerank with a score on every passage', async () => {
+  // Arrange: a live source that gives an order only and names one child
+  // that was unavailable.
+  const unavailable = new RetrieverUnavailableError('HTTP 503');
+  const failures = new Map([['news', unavailable]]);
+  const live = () =>
+    new LiveRetriever(['alpha', 'beta', 'gamma', 'delta'], failures);
+  const reranked = new PostprocessingRetriever({
+    retriever: live(),
+    postprocessors: [new Rerank({ model: reranker() })],
+  });
+  const cut = new PostprocessingRetriever({
+    retriever: live(),
+    postprocessors: [new SimilarityCutoff({ threshold: 0 })],
+  });
+
+  // Act
+  const rerankedResult = await reranked.retrieve('rotate a key');
+  const cutResult = await cut.retrieve('rotate a key');
+
+  // Assert
+  assert.deepEqual(scores(rerankedResult.passages), [
+    ['delta', 0.9],
+    ['beta', 0.4],
+    ['gamma', 0.3],
+    ['alpha', 0.1],
+  ]);
+  assert.deepEqual(cutResult.passages, []);
+  for (const result of [rerankedResult, cutResult]) {
+    assert.deepEqual([...result.failures], [['news', unavailable]]);
+    assert.equal(result.failures.get('news'), unavailable);
+  }
 });

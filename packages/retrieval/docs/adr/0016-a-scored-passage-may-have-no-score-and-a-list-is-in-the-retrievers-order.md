@@ -9,8 +9,8 @@ A live source can give an order and no score, such as a web search or PubMed's B
 Supersedes in part:
 
 - [ADR 0005](./0005-a-score-is-higher-for-a-better-passage.md), for "`ScoredPassage.score` … for every retriever" and "a result list is sorted by score". The direction, higher for a better passage, stays. Shipped for the type.
-- [ADR 0007](./0007-reciprocal-rank-fusion-is-the-default-fusion-with-k-60-and-ranks-from-1.md), for rsf and dbsf over a list without scores. Not shipped yet.
-- [ADR 0008](./0008-a-search-is-composed-of-retrievers-that-wrap-retrievers-and-a-list-of-postprocessors.md), for `SimilarityCutoff` and `Collapse`. Not shipped yet.
+- [ADR 0007](./0007-reciprocal-rank-fusion-is-the-default-fusion-with-k-60-and-ranks-from-1.md), for rsf and dbsf over a list without scores. Shipped.
+- [ADR 0008](./0008-a-search-is-composed-of-retrievers-that-wrap-retrievers-and-a-list-of-postprocessors.md), for `SimilarityCutoff` and `Collapse`. Shipped.
 
 ## Decision
 
@@ -28,4 +28,4 @@ Supersedes in part:
 
 `probes/run-rank-only.out` and `probes/types-fusion.ts` of paper #5638 (a live source with no score compiles). `type-tests/published-types.ts` has a live source whose passage has no score, and it compiles against `dist`.
 
-Shipped so far (#5639, the types step): the optional `score`. Every retriever of the package still writes a score. A passage without a score still gives `NaN` to `relativeScoreFusion` and `distributionBasedScoreFusion`, sorts as `NaN` in `Collapse`, and fails `score >= threshold` in `SimilarityCutoff`, as it did before. The `TypeError`, the rules of `Collapse` and their tests come in a later step of #5639.
+Shipped (#5639): the optional `score` in the types step; the rest in the scores step. Every retriever of the package still writes a score; a host's live source may write none. The fusion tests show `reciprocalRankFusion` fusing a list of order only beside a scored list by their order, and `relativeScoreFusion` and `distributionBasedScoreFusion` refusing it with the `TypeError`, directly and through a `FusionRetriever` over a SQLite keyword search, where they gave `NaN` scores ranked above the scored list (#5583). The postprocessor tests show `SimilarityCutoff` dropping a passage without a score under any threshold, `Collapse` keeping the order of a list with one passage unscored and sorting a list scored throughout, and `Rerank` scoring every passage of a list of order only.

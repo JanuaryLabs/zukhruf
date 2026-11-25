@@ -141,3 +141,24 @@ test('an error of the reranking model reaches the caller as it is', async () => 
     (error) => error === failure,
   );
 });
+
+test('a list of order only comes back with a score on every passage: the relevance that the reranking model gives it, best first', async () => {
+  // Arrange
+  const rerank = new Rerank({ model: reranker(relevance) });
+  const ordered = ['alpha', 'beta', 'gamma'].map((text) => ({
+    passage: { id: text, text, metadata: {} },
+  }));
+
+  // Act
+  const results = await rerank.postprocess(ordered, 'rotate a key');
+
+  // Assert
+  assert.deepEqual(
+    results.map(({ passage, score }) => [passage.id, score]),
+    [
+      ['beta', 0.8],
+      ['gamma', 0.5],
+      ['alpha', 0.2],
+    ],
+  );
+});

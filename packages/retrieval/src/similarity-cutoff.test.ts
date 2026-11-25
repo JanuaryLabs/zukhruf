@@ -30,3 +30,24 @@ test('a SimilarityCutoff keeps the passages whose score is at least the threshol
     ],
   );
 });
+
+test('a SimilarityCutoff drops a passage without a score, as LlamaIndex drops a node whose score is None, even under a threshold that every score passes', async () => {
+  // Arrange
+  const cutoff = new SimilarityCutoff({ threshold: Number.NEGATIVE_INFINITY });
+  const unscored = {
+    passage: { id: 'web', text: 'web', metadata: {} },
+  };
+
+  // Act
+  const results = await cutoff.postprocess([
+    scored('a', -5),
+    unscored,
+    scored('b', 0),
+  ]);
+
+  // Assert
+  assert.deepEqual(
+    results.map(({ passage }) => passage.id),
+    ['a', 'b'],
+  );
+});

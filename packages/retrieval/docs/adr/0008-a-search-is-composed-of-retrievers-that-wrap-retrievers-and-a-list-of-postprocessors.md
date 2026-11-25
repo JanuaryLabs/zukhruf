@@ -2,7 +2,9 @@
 
 Superseded in part on 2026-11-25 (#5579, #5580) for what the composites pass down. `FusionRetriever` gives each retriever the query unchanged; `HydeRetriever` passes the bundle with `customEmbeddings: [passage]` and keeps `query` and `keywords`; `MultiQueryRetriever` searches the query as given, then each version as a plain string; `PostprocessingRetriever` gives each postprocessor the `query` of the bundle ([ADR 0013](./0013-a-query-is-a-string-or-a-query-bundle-with-a-text-for-each-kind-of-search.md)). The rest of the decision below stays true.
 
-Superseded in part on 2026-11-25 (#5582) for what a composite gives back. `retrieve` gives a `RetrievalResult`, and `PostprocessingRetriever` and `HydeRetriever` pass the failures of their retriever up unchanged ([ADR 0014](./0014-a-retrieve-call-answers-with-the-retrievers-that-answered-and-names-those-that-were-unavailable.md)). The failures of `FusionRetriever` and `MultiQueryRetriever` come in a later step of #5639.
+Superseded in part on 2026-11-25 (#5582) for what a composite gives back. `retrieve` gives a `RetrievalResult`, and `PostprocessingRetriever` and `HydeRetriever` pass the failures of their retriever up unchanged ([ADR 0014](./0014-a-retrieve-call-answers-with-the-retrievers-that-answered-and-names-those-that-were-unavailable.md)). `MultiQueryRetriever` merges the failures of its searches by name, keeping the first. The failures of `FusionRetriever` come in a later step of #5639.
+
+Superseded in part on 2026-11-25 (#5583) for a passage without a score. `SimilarityCutoff` drops it, `Collapse` sorts by score only when every passage has one and otherwise keeps the order of the list, and `Rerank` gives every passage a score ([ADR 0016](./0016-a-scored-passage-may-have-no-score-and-a-list-is-in-the-retrievers-order.md)).
 
 Status: accepted by Ezz on 2026-11-23 ("Approve, write the paper").
 

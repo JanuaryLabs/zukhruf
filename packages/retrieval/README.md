@@ -391,6 +391,8 @@ Output:
 
 `vault-guide#0` is first in both lists, so reciprocal rank fusion gives it `1/61 + 1/61`. `minMax` has no `rankWindowSize`, so each retriever gives 3 passages. Min-max scaling gives the worst passage of a list 0, and a list whose scores are all equal gives 1.
 
+A retriever that gives an order only, such as a host's web search, writes no score ([ADR 0016](./docs/adr/0016-a-scored-passage-may-have-no-score-and-a-list-is-in-the-retrievers-order.md)). Reciprocal rank fusion reads the order only, so its list fuses like any other. `relativeScoreFusion` and `distributionBasedScoreFusion` read scores, so a passage without one is a `TypeError` that names the passage and the index of its list, and says to fuse a list of order only with `reciprocalRankFusion`. A missing score taken as 0, as LlamaIndex, Haystack and Eino take it, would tie every passage of that list with the best scored passage. `SimilarityCutoff` drops a passage without a score, as LlamaIndex's `SimilarityPostprocessor` does, `Collapse` sorts by score only when every passage has one, and `Rerank` gives every passage a score.
+
 `MultiQueryRetriever` asks a language model for `queryCount` other versions of the query, 4 when absent. It searches the query and each version, and fuses the lists with `reciprocalRankFusion()` when it has no `fusion` ([ADR 0008](./docs/adr/0008-a-search-is-composed-of-retrievers-that-wrap-retrievers-and-a-list-of-postprocessors.md)). It searches a query bundle as the caller gives it, first, and each version as a plain string, so its retriever takes a plain query ([ADR 0013](./docs/adr/0013-a-query-is-a-string-or-a-query-bundle-with-a-text-for-each-kind-of-search.md)). This program continues the one above.
 
 ```ts
@@ -674,14 +676,14 @@ On Postgres, pgvector filters after the approximate index scan, so a filtered ca
 
 ## Errors
 
-| Error                                         | When                                                                                                                                                                                                                                                          |
-| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ModelMismatchError`                          | The query model of an embedding retriever has another provider or model id than the stored vectors, before the model call. `stored` and `query` are each `{ provider, modelId }`                                                                              |
-| `DimensionMismatchError` (`@zukhruf/vectors`) | The query vector has other dimensions than the stored vectors, after the model call. `expected` and `actual`                                                                                                                                                  |
-| `VectorMissingError`                          | `MaximalMarginalRelevance` gets a passage without a vector: the call did not ask for vectors. `passageId`                                                                                                                                                     |
-| `PassageGapError`                             | `ContextWindow` gets a window whose passages leave a gap in their source: the writer of the contract broke it. `source`, and `start` and `end` of the gap                                                                                                     |
-| `RangeError`                                  | An option out of its range: `FusionRetriever` weights that are not one for each retriever, or a `rankWindowSize` smaller than the `topK` of the call; a `queryCount`, `topK` of MMR or `windowSize` that is not a positive integer; a `lambda` outside 0 to 1 |
-| `TypeError`                                   | A filter field that is not a passage field or `metadata.<column>`, an `in` or `not in` value that is not an array, or a stored model identity that is not of the form `provider/model (n dimensions)`                                                         |
+| Error                                         | When                                                                                                                                                                                                                                                                                        |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ModelMismatchError`                          | The query model of an embedding retriever has another provider or model id than the stored vectors, before the model call. `stored` and `query` are each `{ provider, modelId }`                                                                                                            |
+| `DimensionMismatchError` (`@zukhruf/vectors`) | The query vector has other dimensions than the stored vectors, after the model call. `expected` and `actual`                                                                                                                                                                                |
+| `VectorMissingError`                          | `MaximalMarginalRelevance` gets a passage without a vector: the call did not ask for vectors. `passageId`                                                                                                                                                                                   |
+| `PassageGapError`                             | `ContextWindow` gets a window whose passages leave a gap in their source: the writer of the contract broke it. `source`, and `start` and `end` of the gap                                                                                                                                   |
+| `RangeError`                                  | An option out of its range: `FusionRetriever` weights that are not one for each retriever, or a `rankWindowSize` smaller than the `topK` of the call; a `queryCount`, `topK` of MMR or `windowSize` that is not a positive integer; a `lambda` outside 0 to 1                               |
+| `TypeError`                                   | A filter field that is not a passage field or `metadata.<column>`, an `in` or `not in` value that is not an array, a stored model identity that is not of the form `provider/model (n dimensions)`, or a passage without a score in `relativeScoreFusion` or `distributionBasedScoreFusion` |
 
 An error of the model, of the engine, of the store's `metadata` or of the reranking model reaches the caller as it is. An aborted call rejects with the reason of its `abortSignal`.
 
@@ -841,9 +843,9 @@ interface Fusion<in out P extends Passage = Passage> {
   ) => ScoredPassage<P>[];
 }
 // Each returns { readonly fuse: <P extends Passage>(lists, weights) => ScoredPassage<P>[] }.
-function reciprocalRankFusion(options?: { readonly k?: number }); // k 60, ranks from 1
-function relativeScoreFusion(); // min-max
-function distributionBasedScoreFusion(); // mean ± 3σ
+function reciprocalRankFusion(options?: { readonly k?: number }); // k 60, ranks from 1; reads the order only
+function relativeScoreFusion(); // min-max; a passage without a score is a TypeError
+function distributionBasedScoreFusion(); // mean ± 3σ; a passage without a score is a TypeError
 
 class FusionRetriever<
   in Q extends QueryType = QueryType,
@@ -864,14 +866,14 @@ class MultiQueryRetriever<
     readonly model: LanguageModel;
     readonly queryCount?: number; // 4 versions, besides the query
     readonly fusion?: Fusion<NoInfer<P>>; // reciprocalRankFusion()
-  });
+  }); // the failures of the searches merge by name; the first search's failure of a name is kept
 }
 class HydeRetriever<in out P extends Passage = Passage> implements Retriever<
   QueryType,
   P
 > {
   constructor(options: {
-    readonly retriever: Retriever<QueryBundle, P>; // gets the query bundle with customEmbeddings: [passage]
+    readonly retriever: Retriever<QueryBundle, P>; // gets the query bundle with customEmbeddings: [passage]; its failures pass up
     readonly model: LanguageModel;
   });
 }
@@ -899,10 +901,10 @@ class Rerank implements Postprocessor<Passage> {
   constructor(options: {
     readonly model: RerankingModel;
     readonly topN?: number; // every passage when absent
-  });
+  }); // gives every passage it keeps a score, best first
 }
 class SimilarityCutoff implements Postprocessor<Passage> {
-  constructor(options: { readonly threshold: number }); // keeps score >= threshold
+  constructor(options: { readonly threshold: number }); // keeps score >= threshold; drops a passage without a score
 }
 class MaximalMarginalRelevance implements Postprocessor<Passage> {
   constructor(options: {
@@ -916,7 +918,8 @@ class Collapse<
   F extends keyof FilterFields<P> = keyof FilterFields<P>, // the field as written
 > {
   // A stored passage type: options?, field 'source' when absent. A live one:
-  // options with the field, since its passages have no source.
+  // options with the field, since its passages have no source. Sorts by score
+  // when every passage has one; otherwise keeps the order of the list.
   constructor(options?: {
     readonly field?: F; // a field of P, as in a filter
     readonly size?: number; // 1

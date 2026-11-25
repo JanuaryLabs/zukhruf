@@ -220,3 +220,51 @@ test('distribution-based score fusion does not clip a score beyond mean + 3σ to
     new Set([11 / 24]),
   );
 });
+
+// A list of order only, as a web search gives it: no passage has a score.
+const ordered = (...ids: readonly string[]): ScoredPassage[] =>
+  ids.map((id) => ({ passage: passage(id) }));
+
+test('reciprocal rank fusion fuses a list of order only beside a scored list by their order, so its passages take their places among the scored ones', () => {
+  // Arrange
+  const web = ordered('p1', 'p2', 'p3');
+  const labels = list(['l1', 0.9], ['l2', 0.1]);
+
+  // Act
+  const fused = reciprocalRankFusion().fuse([web, labels], [1, 1]);
+
+  // Assert: rank 1 of each list gives 1 / 61, rank 2 1 / 62 and rank 3
+  // 1 / 63; a tie keeps the order in which the ids first appear.
+  assert.deepEqual(scores(fused), [
+    ['p1', 1 / 61],
+    ['l1', 1 / 61],
+    ['p2', 1 / 62],
+    ['l2', 1 / 62],
+    ['p3', 1 / 63],
+  ]);
+});
+
+for (const [name, fusion] of [
+  ['relativeScoreFusion', relativeScoreFusion()],
+  ['distributionBasedScoreFusion', distributionBasedScoreFusion()],
+] as const) {
+  test(`${name} refuses a passage without a score with a TypeError that names the passage and its list, and says to fuse a list of order only with reciprocalRankFusion, where it gave NaN scores ranked above the scored list (#5583)`, () => {
+    // Arrange
+    const labels = list(['l1', 0.9], ['l2', 0.1]);
+    const web = ordered('p1', 'p2');
+    const gap: ScoredPassage[] = [
+      { passage: passage('g1'), score: 3 },
+      { passage: passage('g2') },
+    ];
+
+    // Act and Assert
+    assert.throws(() => fusion.fuse([labels, web], [1, 1]), {
+      name: 'TypeError',
+      message: `${name} reads scores, and the passage p1 of list 1 has none: fuse a list of order only with reciprocalRankFusion`,
+    });
+    assert.throws(() => fusion.fuse([gap, labels], [1, 1]), {
+      name: 'TypeError',
+      message: `${name} reads scores, and the passage g2 of list 0 has none: fuse a list of order only with reciprocalRankFusion`,
+    });
+  });
+}

@@ -1,6 +1,6 @@
 # A score is higher for a better passage
 
-Superseded in part on 2026-11-25 (#5583) for a score on every passage. `ScoredPassage.score` is optional: a retriever that gives an order only writes none, and its list is in its own order. A score, when there is one, is still higher for a better passage ([ADR 0016](./0016-a-scored-passage-may-have-no-score-and-a-list-is-in-the-retrievers-order.md)).
+Superseded in part on 2026-11-25 (#5583) for a score on every passage. `ScoredPassage.score` is optional: a retriever that gives an order only writes none, and its list is in its own order. A score, when there is one, is still higher for a better passage. `SimilarityCutoff` drops a passage without a score, and `Collapse` sorts by score only when every passage has one ([ADR 0016](./0016-a-scored-passage-may-have-no-score-and-a-list-is-in-the-retrievers-order.md)).
 
 Status: accepted by Ezz on 2026-11-23 ("Approve, write the paper").
 

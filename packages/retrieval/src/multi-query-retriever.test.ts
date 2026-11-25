@@ -8,7 +8,14 @@ import { open } from '@zukhruf/sqlite-open';
 import { Vector } from '@zukhruf/vectors';
 import { install, toSql } from '@zukhruf/vectors/sqlite';
 
-import { MultiQueryRetriever, relativeScoreFusion } from './index.ts';
+import {
+  MultiQueryRetriever,
+  type Passage,
+  type QueryType,
+  type RetrievalResult,
+  RetrieverUnavailableError,
+  relativeScoreFusion,
+} from './index.ts';
 import {
   SqliteBM25Retriever,
   SqliteEmbeddingRetriever,
@@ -390,4 +397,48 @@ test('ten passages come back when the call gives no topK', async () => {
     scores(results),
     topics.slice(0, 10).map((topic) => [topic, 1 / 61]),
   );
+});
+
+test('the failures of the searches merge by name, in the order of the searches, and a name that two searches give keeps the failure of the first', async () => {
+  // Arrange: a host fusion that names the children it could not reach; the
+  // query and the second version reach no news, and the first version no
+  // wiki.
+  const first = new RetrieverUnavailableError('news: HTTP 503');
+  const wiki = new RetrieverUnavailableError('wiki: HTTP 429');
+  const second = new RetrieverUnavailableError('news: timeout');
+  const failures = new Map<
+    string,
+    ReadonlyMap<string, RetrieverUnavailableError>
+  >([
+    ['rotate key', new Map([['news', first]])],
+    ['revoke token', new Map([['wiki', wiki]])],
+    ['renew certificate', new Map([['news', second]])],
+  ]);
+  const federation = {
+    retrieve: async (query: QueryType): Promise<RetrievalResult<Passage>> => {
+      const text = typeof query === 'string' ? query : query.query;
+      return {
+        passages: [{ passage: { id: text, text, metadata: {} } }],
+        failures: failures.get(text) ?? new Map(),
+      };
+    },
+  };
+  const retriever = new MultiQueryRetriever({
+    retriever: federation,
+    model: languageModel(queries('revoke token', 'renew certificate')),
+    queryCount: 2,
+  });
+
+  // Act
+  const result = await retriever.retrieve('rotate key');
+
+  // Assert
+  assert.deepEqual(
+    [...result.failures],
+    [
+      ['news', first],
+      ['wiki', wiki],
+    ],
+  );
+  assert.equal(result.failures.get('news'), first);
 });

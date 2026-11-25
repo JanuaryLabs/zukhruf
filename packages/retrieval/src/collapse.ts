@@ -30,7 +30,10 @@ type Arguments<P extends Passage, F extends string> = [P] extends [
  * `metadata.<key>` of the passage type, as in a filter, so a field that the
  * passages lack does not compile: neither in the constructor with a type
  * argument `P`, nor in `postprocess`, which takes only passages that have the
- * field `F` (ADR 0015). Equal scores keep the order of the list. The passages
+ * field `F` (ADR 0015). It sorts by score only when every passage has one,
+ * and otherwise keeps the order of the list, which is then the retriever's
+ * order (ADR 0016); Elasticsearch has no such case, as its hits always have
+ * a score. Equal scores keep the order of the list. The passages
  * without a value for the field (absent or null) are one group, as
  * Elasticsearch groups a missing value under the key null (ADR 0008, the
  * proposed amendment of 2026-11-23).
@@ -60,14 +63,12 @@ export class Collapse<
       (F extends FieldOf<R> ? unknown : never),
   ): Promise<ScoredPassage<R>[]> {
     const kept = new Map<unknown, number>();
-    return passages
-      .toSorted((a, b) => (b.score ?? Number.NaN) - (a.score ?? Number.NaN))
-      .filter(({ passage }) => {
-        const key = this.#value(passage) ?? null;
-        const count = kept.get(key) ?? 0;
-        kept.set(key, count + 1);
-        return count < this.#size;
-      });
+    return bestFirst(passages).filter(({ passage }) => {
+      const key = this.#value(passage) ?? null;
+      const count = kept.get(key) ?? 0;
+      kept.set(key, count + 1);
+      return count < this.#size;
+    });
   }
 
   #value(passage: Passage): unknown {
@@ -82,4 +83,17 @@ export class Collapse<
       ? fields[field]
       : passage.metadata[field.slice('metadata.'.length)];
   }
+}
+
+/** By score when every passage has one; otherwise in the order of the list. */
+function bestFirst<S extends ScoredPassage>(
+  passages: readonly S[],
+): readonly S[] {
+  const scored = passages.filter(
+    (passage): passage is S & { readonly score: number } =>
+      passage.score !== undefined,
+  );
+  return scored.length === passages.length
+    ? scored.toSorted((a, b) => b.score - a.score)
+    : passages;
 }

@@ -6,6 +6,7 @@ import { type QueryType, needOf } from './query-bundle.ts';
 import { reciprocalRankFusion } from './reciprocal-rank-fusion.ts';
 import type { RetrievalResult } from './retrieval-result.ts';
 import type { RetrieveOptions } from './retrieve-options.ts';
+import type { RetrieverUnavailableError } from './retriever-unavailable-error.ts';
 import type { Retriever } from './retriever.ts';
 
 /**
@@ -19,7 +20,9 @@ import type { Retriever } from './retriever.ts';
  * puts the query first, so a tie goes to a passage that the query found.
  * The query is searched as the caller gives it, and each version as a plain
  * string: a version replaces the whole query, as in LlamaIndex, LangChain
- * and Haystack. So the retriever takes a plain query (ADR 0013).
+ * and Haystack. So the retriever takes a plain query (ADR 0013). The
+ * failures of the searches merge by name, in the order of the searches, and
+ * a name that two searches give keeps the failure of the first (ADR 0014).
  */
 export class MultiQueryRetriever<
   // `in out P`: a filter puts P in a parameter as well, so TypeScript cannot
@@ -81,10 +84,20 @@ export class MultiQueryRetriever<
           results.map(() => 1),
         )
         .slice(0, options.topK ?? 10),
-      failures: new Map(),
+      failures: firstByName(results.map(({ failures }) => failures)),
     };
   }
 }
+
+const firstByName = (
+  each: readonly ReadonlyMap<string, RetrieverUnavailableError>[],
+): ReadonlyMap<string, RetrieverUnavailableError> => {
+  const failures = new Map<string, RetrieverUnavailableError>();
+  for (const [name, error] of each.flatMap((map) => [...map])) {
+    if (!failures.has(name)) failures.set(name, error);
+  }
+  return failures;
+};
 
 const expansions = jsonSchema<{ readonly queries: readonly string[] }>(
   {

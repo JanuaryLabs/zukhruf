@@ -1,5 +1,7 @@
 # Reciprocal rank fusion is the default fusion, with k 60 and ranks from 1
 
+Superseded in part on 2026-11-25 (#5583) for a list without scores. Reciprocal rank fusion reads the order only, so such a list fuses like any other; `relativeScoreFusion` and `distributionBasedScoreFusion` refuse a passage without a score with a `TypeError` that names the passage and its list, and says to fuse a list of order only with `reciprocalRankFusion` ([ADR 0016](./0016-a-scored-passage-may-have-no-score-and-a-list-is-in-the-retrievers-order.md)).
+
 Status: accepted by Ezz on 2026-11-23 ("Approve, write the paper").
 
 Reciprocal rank fusion (RRF; Cormack, Clarke and Büttcher, SIGIR 2009) gives each passage the sum of `weight / (k + rank)` over the lists that hold it. The leaders agree on k 60 with ranks from 1:
