@@ -1,5 +1,6 @@
 export { Client } from './client.ts';
 export { Preflight } from './preflight.ts';
+export { PromptedService } from './prompted-service.ts';
 export { Service } from './service.ts';
 export { Accessibility } from './services/accessibility.ts';
 export { Automation } from './services/automation.ts';

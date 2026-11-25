@@ -1,7 +1,28 @@
-import { Service } from '../service.ts';
+import { ObjectiveCClass } from '../native/objective-c-class.ts';
+import { PromptedService } from '../prompted-service.ts';
 
-export class Bluetooth extends Service {
+// CBManagerAuthorization (CoreBluetooth/CBManager.h:62-67).
+const values = [
+  'notDetermined',
+  'restricted',
+  'denied',
+  'allowedAlways',
+] as const;
+type BluetoothStatus = (typeof values)[number];
+
+export class Bluetooth extends PromptedService<BluetoothStatus> {
   readonly name = 'kTCCServiceBluetoothAlways';
   readonly pane = 'Bluetooth';
   protected readonly anchor = 'Privacy_Bluetooth';
+
+  status(): BluetoothStatus {
+    // The class property CBManager.authorization (CoreBluetooth/CBManager.h:86)
+    return this.named(
+      values,
+      new ObjectiveCClass(
+        '/System/Library/Frameworks/CoreBluetooth.framework/CoreBluetooth',
+        'CBManager',
+      ).integer('authorization'),
+    );
+  }
 }

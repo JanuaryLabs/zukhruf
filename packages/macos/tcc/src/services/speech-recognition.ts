@@ -1,7 +1,23 @@
-import { Service } from '../service.ts';
+import { ObjectiveCClass } from '../native/objective-c-class.ts';
+import { PromptedService } from '../prompted-service.ts';
 
-export class SpeechRecognition extends Service {
+// SFSpeechRecognizerAuthorizationStatus (Speech/SFSpeechRecognizer.h:25-39):
+// Denied is 1 and Restricted is 2, unlike the other frameworks.
+const values = ['notDetermined', 'denied', 'restricted', 'authorized'] as const;
+type SpeechStatus = (typeof values)[number];
+
+export class SpeechRecognition extends PromptedService<SpeechStatus> {
   readonly name = 'kTCCServiceSpeechRecognition';
   readonly pane = 'Speech Recognition';
   protected readonly anchor = 'Privacy_SpeechRecognition';
+
+  status(): SpeechStatus {
+    return this.named(
+      values,
+      new ObjectiveCClass(
+        '/System/Library/Frameworks/Speech.framework/Speech',
+        'SFSpeechRecognizer',
+      ).integer('authorizationStatus'),
+    );
+  }
 }
