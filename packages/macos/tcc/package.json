@@ -1,7 +1,6 @@
 {
   "name": "@zukhruf/tcc",
   "version": "0.8.70",
-  "private": true,
   "description": "The privacy grants of macOS in TCC's words: the status, request, remedy and System Settings pane of each service, a Full Disk Access preflight, and the client macOS charges. After .NET MAUI Permissions.",
   "license": "MIT",
   "repository": {
@@ -41,8 +40,8 @@
     "access": "public"
   },
   "devDependencies": {
-    "@zukhruf/fs": "*",
-    "@zukhruf/launchd": "*",
-    "@zukhruf/testing": "*"
+    "@zukhruf/fs": "^0.8.70",
+    "@zukhruf/launchd": "^0.8.70",
+    "@zukhruf/testing": "^0.8.70"
   }
 }
