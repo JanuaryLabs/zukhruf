@@ -62,29 +62,105 @@ export class ContainsAny<M extends Metadata> implements SqlServerMatch<M> {
 }
 
 /**
+ * SQL Server's natural-language form: a text goes whole to `FREETEXTTABLE`,
+ * whose word breaker reads it, adds the inflections of its words, ORs them
+ * and ranks with Okapi BM25, so CONTAINS syntax in it is text. FREETEXT has
+ * no phrase, so each keyword is a `FORMSOF(INFLECTIONAL, "…")` phrase of an
+ * `ISABOUT` in `CONTAINSTABLE`, which a passage that holds any keyword
+ * matches. With no filter, when the passages are the table of the index,
+ * `top_n_by_rank` is the call's `topK`, so the engine stops ranking there;
+ * with a filter, or passages that are another relation such as a view, it is
+ * left out, because it cuts before the join and the filter and would give
+ * fewer than `topK` passages (ADR 0018).
+ */
+export class FreeText<M extends Metadata> implements SqlServerMatch<M> {
+  readonly #index: FullTextIndex<M>;
+
+  constructor(index: FullTextIndex<M>) {
+    this.#index = index;
+  }
+
+  retrieve(
+    query: KeywordQuery,
+    options: RetrieveOptions<StoredPassage<M>>,
+  ): Promise<RetrievalResult<StoredPassage<M>>> {
+    const cut = options.filter === undefined;
+    if (query.kind === 'text') {
+      // A blank text is SQL Server's error 7645, and the session rejects
+      // with its host's driver error, whose shape the package does not
+      // know, so the check comes before the statement.
+      if (!/[\p{L}\p{N}]/u.test(query.text)) return nothing();
+      return ranked(this.#index, 'FREETEXTTABLE', query.text, cut, options);
+    }
+    const terms = phrases(query.keywords);
+    if (terms.length === 0) return nothing();
+    const condition = `ISABOUT(${terms
+      .map((term) => `FORMSOF(INFLECTIONAL, ${term})`)
+      .join(', ')})`;
+    return ranked(this.#index, 'CONTAINSTABLE', condition, cut, options);
+  }
+}
+
+const nothing = <M extends Metadata>(): Promise<
+  RetrievalResult<StoredPassage<M>>
+> => Promise.resolve({ passages: [], failures: new Map() });
+
+/**
  * `CONTAINSTABLE` with each term one phrase, joined by `operator`; the score
  * is its `RANK`.
  */
-async function containsTable<M extends Metadata>(
+function containsTable<M extends Metadata>(
   index: FullTextIndex<M>,
   query: KeywordQuery,
   operator: 'AND' | 'OR',
   options: RetrieveOptions<StoredPassage<M>>,
 ): Promise<RetrievalResult<StoredPassage<M>>> {
-  const { session, passages, metadata, table } = index;
   const terms = phrases(termsOf(query));
-  if (terms.length === 0) return { passages: [], failures: new Map() };
+  if (terms.length === 0) return nothing();
+  return ranked(
+    index,
+    'CONTAINSTABLE',
+    terms.join(` ${operator} `),
+    false,
+    options,
+  );
+}
+
+/**
+ * The passages of a full-text table function, best first by its `RANK`,
+ * which is the score, and a tie in binary order of the id. With `cut`, the
+ * function's `top_n_by_rank` is the call's `topK` when the engine finds that
+ * the passages are the table of the index: a view of fewer rows would lose
+ * matches after the cut. Which tied matches survive the cut follows the
+ * engine (ADR 0018).
+ */
+async function ranked<M extends Metadata>(
+  index: FullTextIndex<M>,
+  from: 'CONTAINSTABLE' | 'FREETEXTTABLE',
+  search: string,
+  cut: boolean,
+  options: RetrieveOptions<StoredPassage<M>>,
+): Promise<RetrievalResult<StoredPassage<M>>> {
+  const { session, passages, metadata, table } = index;
   const parameters: Record<string, unknown> = {};
   // A condition longer than 4,000 characters reaches the caller as SQL
   // Server's error 4110: the driver binds it as NVARCHAR(MAX), which
-  // CONTAINSTABLE refuses.
-  const condition = bind(parameters, terms.join(` ${operator} `));
+  // CONTAINSTABLE and FREETEXTTABLE refuse.
+  const condition = bind(parameters, search);
   const filter = where(dialect, options.filter, parameters);
   const topK = bind(parameters, options.topK ?? 10);
+  const matches = (top: string) =>
+    `SELECT [KEY], [RANK] FROM ${from}(${table}, [text], ${condition}${top})`;
+  // `top_n_by_rank` takes a literal or a variable, never an expression, so
+  // the engine picks one branch by a startup filter on its own answer.
+  const same = `IIF(OBJECT_ID(${bind(parameters, passages)}) = OBJECT_ID(${bind(parameters, table)}), 1, 0)`;
+  const source = cut
+    ? `(${matches(`, ${topK}`)} WHERE ${same} = 1 UNION ALL ${matches('')} WHERE ${same} = 0)`
+    : `(${matches('')})`;
   const rows = await session.query(
     `
       SELECT TOP (${topK}) k.[RANK] AS [score], ${passageJson} AS [passage]
-      FROM CONTAINSTABLE(${table}, [text], ${condition}) k
+      FROM ${source} k
       JOIN ${passages} p ON p.[id] = k.[KEY] ${binary}
       WHERE ${filter}
       ORDER BY k.[RANK] DESC, p.[id] ${binary}`,

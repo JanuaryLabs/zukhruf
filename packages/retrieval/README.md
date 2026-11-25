@@ -241,7 +241,7 @@ Output:
 
 ## Search by keywords
 
-A keyword retriever queries the keyword index that elt writes: FTS5 on SQLite, `tsvector` on Postgres, full-text on SQL Server. It quotes each word of the query, so a word of the user is never an operator of the engine. A query bundle can give it whole keywords in `keywords` (see "Give each search its own text"): each keyword is one phrase in the syntax of the engine, an FTS5 phrase, a `phraseto_tsquery` or a CONTAINS phrase, so `'heart failure'` matches those words side by side and in order, and not "failure of the heart". Its score is higher for a better match on every engine; `SqliteBM25Retriever` negates `bm25()` ([ADR 0004](./docs/adr/0004-a-keyword-retriever-queries-the-keyword-index-that-elt-writes.md)). How the words match is each engine's own `matching` option, a union typed for that engine only ([ADR 0018](./docs/adr/0018-each-keyword-retriever-matches-in-the-strongest-form-of-its-engine.md)): `{ operator: 'OR', cutoffFrequency? } | { operator: 'AND' }` on SQLite, `{ strategy: 'frequency', dropTokensThreshold? } | { strategy: 'all' }` on Postgres, which has no OR, and `{ predicate: 'CONTAINS', operator: 'AND' | 'OR' }` on SQL Server. SQL Server is AND when absent. Postgres is `{ strategy: 'frequency', dropTokensThreshold: 10 }` when absent (Meilisearch `matchingStrategy: 'frequency'`, Typesense `drop_tokens_threshold`): the AND of the lexemes of the text, as `to_tsvector` reads it, and while fewer than 10 passages match, the AND without the most frequent lexeme, by `pg_stats` of the column; a passage scores the lexemes it holds plus `ts_rank(…, 33)`. Through the retriever it gives nDCG@10 0.518 on SciFact, 0.295 on NFCorpus and 0.430 on TREC-COVID (AND 0.070, 0.206, 0.270), with a TREC-COVID p95 of 51 ms. SQLite is `{ operator: 'OR', cutoffFrequency: 20_000 }` when absent (Elasticsearch `cutoff_frequency`, Lucene `CommonTermsQuery`): a word in more than 20,000 passages only adds to the score of the passages that rarer words find, a query of only such words runs as their AND, and a word that no passage holds is left out. A `cutoffFrequency` under 1 is a share of the passages. Below 20,000 passages the default is plain OR. Through the retriever, with porter, it gives nDCG@10 0.686 on SciFact, 0.317 on NFCorpus and 0.545 on TREC-COVID (OR 0.585), and on TREC-COVID repeated four times (685,328 passages) a p95 of 200 to 247 ms against OR's 1,190 ms. OR alone has no bound, and `node:sqlite` cannot stop a running statement.
+A keyword retriever queries the keyword index that elt writes: FTS5 on SQLite, `tsvector` on Postgres, full-text on SQL Server. A word of the user is never an operator of the engine. SQLite quotes each word as an FTS5 phrase. Postgres reads the text as `to_tsvector` does, so tsquery syntax is text. SQL Server's FREETEXT takes the text whole and has no operators, and CONTAINS quotes each word as a phrase. A query bundle can give it whole keywords in `keywords` (see "Give each search its own text"): each keyword is one phrase in the syntax of the engine, an FTS5 phrase, a `phraseto_tsquery` or a CONTAINS phrase, so `'heart failure'` matches those words side by side and in order, and not "failure of the heart". Its score is higher for a better match on every engine; `SqliteBM25Retriever` negates `bm25()` ([ADR 0004](./docs/adr/0004-a-keyword-retriever-queries-the-keyword-index-that-elt-writes.md)). How the words match is each engine's own `matching` option, a union typed for that engine only ([ADR 0018](./docs/adr/0018-each-keyword-retriever-matches-in-the-strongest-form-of-its-engine.md)): `{ operator: 'OR', cutoffFrequency? } | { operator: 'AND' }` on SQLite, `{ strategy: 'frequency', dropTokensThreshold? } | { strategy: 'all' }` on Postgres, which has no OR, and `{ predicate: 'FREETEXT' } | { predicate: 'CONTAINS', operator: 'AND' | 'OR' }` on SQL Server, where FREETEXT has no operator. SQL Server is `{ predicate: 'FREETEXT' }` when absent, its own natural-language form: a text goes whole to `FREETEXTTABLE`, which word-breaks it, adds the inflections of its words, ORs them and ranks with BM25, so CONTAINS syntax in it is text, and each keyword is a `FORMSOF(INFLECTIONAL, "…")` phrase of an `ISABOUT`, which a passage that holds any keyword matches. With no filter, when the passages are the table of the index, the engine stops ranking at `topK` (`top_n_by_rank`); with a filter, or passages that are a view, it ranks every match, because that cut comes before the join and the filter. Which passages of a tie at the cut survive follows the engine. Postgres is `{ strategy: 'frequency', dropTokensThreshold: 10 }` when absent (Meilisearch `matchingStrategy: 'frequency'`, Typesense `drop_tokens_threshold`): the AND of the lexemes of the text, as `to_tsvector` reads it, and while fewer than 10 passages match, the AND without the most frequent lexeme, by `pg_stats` of the column; a passage scores the lexemes it holds plus `ts_rank(…, 33)`. Through the retriever it gives nDCG@10 0.518 on SciFact, 0.295 on NFCorpus and 0.430 on TREC-COVID (AND 0.070, 0.206, 0.270), with a TREC-COVID p95 of 51 ms. SQLite is `{ operator: 'OR', cutoffFrequency: 20_000 }` when absent (Elasticsearch `cutoff_frequency`, Lucene `CommonTermsQuery`): a word in more than 20,000 passages only adds to the score of the passages that rarer words find, a query of only such words runs as their AND, and a word that no passage holds is left out. A `cutoffFrequency` under 1 is a share of the passages. Below 20,000 passages the default is plain OR. Through the retriever, with porter, it gives nDCG@10 0.686 on SciFact, 0.317 on NFCorpus and 0.545 on TREC-COVID (OR 0.585), and on TREC-COVID repeated four times (685,328 passages) a p95 of 200 to 247 ms against OR's 1,190 ms. OR alone has no bound, and `node:sqlite` cannot stop a running statement.
 
 On SQLite the index is an FTS5 table whose external content is a keywords table, kept in step by triggers. The passages view gives the `rowid` of that table, and the retriever joins the passages on it ([ADR 0004](./docs/adr/0004-a-keyword-retriever-queries-the-keyword-index-that-elt-writes.md), the amendment of 2026-11-24).
 
@@ -363,14 +363,14 @@ Output:
 
 ```
 [ 'vault-guide#0', 'vault-guide#1', 'vault-guide#2' ]
-[ 'mail-guide#0' ]
+[ 'mail-guide#0', 'vault-guide#2' ]
 ```
 
 - **The vector search is exact.** `VECTOR_DISTANCE` reads every vector of the identity of the query; it uses no DiskANN index. The approximate `VECTOR_SEARCH` waits: on SQL Server 2025 it is a preview, filters after the search and needs a read-only table with an INT key ([ADR 0003](./docs/adr/0003-an-embedding-retriever-runs-the-vector-search-in-the-sql-of-its-engine-one-query-or-a-batch.md)).
 - **Ids, sources and model identities compare in binary**, `Latin1_General_100_BIN2`, so `A` is not `a` and a tie orders as on SQLite and Postgres, whatever the collation of the database is. A filter compares in the collation of its column, usually case-insensitive.
-- **The keyword index is a table.** `CONTAINSTABLE` reads a full-text index of a base table, never of a view, so `index.table` names the table whose full-text key is the passage id; the passages can be a view over it ([ADR 0004](./docs/adr/0004-a-keyword-retriever-queries-the-keyword-index-that-elt-writes.md)). The score is `RANK`, from 0 to 1000.
-- **Make the index with `STOPLIST = OFF`.** With the system stoplist, a stop word or a single letter in an `AND` query gives no passages. A word of punctuation only is dropped from the query, because SQL Server reads it as a stop word under every stoplist.
-- **A query of more than 4,000 characters of condition fails** with SQL Server's error 4110: the driver binds the text as `NVARCHAR(MAX)`, which `CONTAINSTABLE` refuses.
+- **The keyword index is a table.** `FREETEXTTABLE` and `CONTAINSTABLE` read a full-text index of a base table, never of a view, so `index.table` names the table whose full-text key is the passage id; the passages can be a view over it ([ADR 0004](./docs/adr/0004-a-keyword-retriever-queries-the-keyword-index-that-elt-writes.md)), and then the search ranks every match, since a cut before the join would drop passages. The score is `RANK`, from 0 to 1000 ([Limit search results with RANK](https://learn.microsoft.com/en-us/sql/relational-databases/search/limit-search-results-with-rank)).
+- **Make the index with `STOPLIST = OFF`.** With the system stoplist, a stop word or a single letter in a CONTAINS `AND` query gives no passages. A word of punctuation only is dropped from the query, because SQL Server reads it as a stop word under every stoplist.
+- **A query of more than 4,000 characters of condition fails** with SQL Server's error 4110: the driver binds the text as `NVARCHAR(MAX)`, which `FREETEXTTABLE` and `CONTAINSTABLE` refuse.
 
 ## Combine searches
 
@@ -1164,17 +1164,16 @@ class SqlServerEmbeddingRetriever<
     readonly scoreThreshold?: number; // keeps a score >= it, from -1 to 1; not finite is a RangeError
   });
 }
-type SqlServerMatching = {
-  readonly predicate: 'CONTAINS';
-  readonly operator: 'AND' | 'OR';
-};
+type SqlServerMatching =
+  | { readonly predicate: 'FREETEXT' }
+  | { readonly predicate: 'CONTAINS'; readonly operator: 'AND' | 'OR' };
 class SqlServerKeywordRetriever<
   in out M extends Metadata = Metadata,
 > implements Retriever<QueryType, StoredPassage<M>> {
   constructor(options: {
     readonly store: SqlServerPassageStore<M>;
     readonly index: { readonly table: string }; // the base table with the full-text index on [text]
-    readonly matching?: SqlServerMatching; // { predicate: 'CONTAINS', operator: 'AND' }
+    readonly matching?: SqlServerMatching; // { predicate: 'FREETEXT' }
   });
 }
 ```

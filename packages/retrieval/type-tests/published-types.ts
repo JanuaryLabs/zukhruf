@@ -541,7 +541,7 @@ export const postgresGivenSqlServer = new PgvectorKeywordRetriever({
 export const sqlServerGivenSqlite = new SqlServerKeywordRetriever({
   store: documents,
   index: { table: 'documents' },
-  matching: anyWord, // TS2741
+  matching: anyWord, // TS2322
 });
 export const andWithCutoff: SqliteMatching = {
   operator: 'AND',
@@ -557,7 +557,12 @@ export const frequencyWithCutoff: PostgresMatching = {
   cutoffFrequency: 20_000, // TS2353
 };
 // CONTAINS takes its Boolean operator.
-export const contains: SqlServerMatching = { predicate: 'CONTAINS' }; // TS2741
+export const contains: SqlServerMatching = { predicate: 'CONTAINS' }; // TS2322
+// FREETEXT has no operator.
+export const freeTextWithOperator: SqlServerMatching = {
+  predicate: 'FREETEXT',
+  operator: 'AND', // TS2353
+};
 
 // A score threshold is an option of the object that knows the scale of its
 // scores: each embedding retriever, with the cosine similarity, and Rerank,

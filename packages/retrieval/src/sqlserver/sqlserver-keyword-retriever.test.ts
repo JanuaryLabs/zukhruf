@@ -46,18 +46,7 @@ async function contract(
     .batch(
       `CREATE TABLE [${schema}].docs_passages (id NVARCHAR(450) COLLATE Latin1_General_100_BIN2 NOT NULL CONSTRAINT pk_${schema}_docs_passages PRIMARY KEY, source NVARCHAR(400) NOT NULL, seq INT NOT NULL, start INT NOT NULL, [end] INT NOT NULL, text NVARCHAR(MAX) NOT NULL, product NVARCHAR(100))`,
     );
-  for (const row of rows) {
-    await pool
-      .request()
-      .input('id', row.id)
-      .input('source', row.source ?? `doc-${row.id}`)
-      .input('end', row.text.length)
-      .input('text', row.text)
-      .input('product', row.product ?? null)
-      .query(
-        `INSERT INTO [${schema}].docs_passages VALUES (@id, @source, 0, 0, @end, @text, @product)`,
-      );
-  }
+  await insert(pool, `[${schema}].docs_passages`, rows);
   await fullTextIndex(
     pool,
     `[${schema}].docs_passages`,
@@ -67,11 +56,26 @@ async function contract(
   );
 }
 
-// A full-text index fills in the background. It is ready when it has no
-// population running and no change waiting (with a change waiting, the
-// status is 0 before the rows are visible), and when a search for the words
-// of the table finds every row: before the population starts, the status
-// and the changes are 0 too.
+// Each row in its own INSERT, in the order given.
+async function insert(
+  pool: mssql.ConnectionPool,
+  table: string,
+  rows: readonly Row[],
+): Promise<void> {
+  for (const row of rows) {
+    await pool
+      .request()
+      .input('id', row.id)
+      .input('source', row.source ?? `doc-${row.id}`)
+      .input('end', row.text.length)
+      .input('text', row.text)
+      .input('product', row.product ?? null)
+      .query(
+        `INSERT INTO ${table} VALUES (@id, @source, 0, 0, @end, @text, @product)`,
+      );
+  }
+}
+
 async function fullTextIndex(
   pool: mssql.ConnectionPool,
   table: string,
@@ -83,6 +87,19 @@ async function fullTextIndex(
     IF NOT EXISTS (SELECT 1 FROM sys.fulltext_catalogs WHERE name = N'docs_catalog') CREATE FULLTEXT CATALOG docs_catalog AS DEFAULT;
     CREATE FULLTEXT INDEX ON ${table} ([text] LANGUAGE 1033) KEY INDEX ${key} WITH STOPLIST = ${stoplist}, CHANGE_TRACKING AUTO;
   `);
+  await populated(pool, table, signal);
+}
+
+// A full-text index fills in the background. It is ready when it has no
+// population running and no change waiting (with a change waiting, the
+// status is 0 before the rows are visible), and when a search for the words
+// of the table finds every row: before the population starts, the status
+// and the changes are 0 too.
+async function populated(
+  pool: mssql.ConnectionPool,
+  table: string,
+  signal: AbortSignal,
+): Promise<void> {
   await waitFor(
     async () => {
       const { recordset } = await pool
@@ -129,7 +146,7 @@ const ids = (
 ) => results.map(({ passage }) => passage.id);
 
 test(
-  'the passages come best first with RANK of CONTAINSTABLE as the score, so a better match has a higher score, and a tie goes to the smaller id in binary order',
+  'under matching { predicate: CONTAINS, operator: AND } the passages come best first with RANK of CONTAINSTABLE as the score, so a better match has a higher score, and a tie goes to the smaller id in binary order',
   { skip: emulation },
   async (t) => {
     // Arrange: `K` sorts before `k` in binary order, and after it in the
@@ -156,6 +173,7 @@ test(
         metadata: (columns) => columns,
       }),
       index: { table: 'docs_passages' },
+      matching: { predicate: 'CONTAINS', operator: 'AND' },
     });
 
     // Act
@@ -242,7 +260,7 @@ test(
 );
 
 test(
-  'the words of the query join with AND by default and under matching { predicate: CONTAINS, operator: AND }, and with OR under operator OR',
+  'the words of the query join with AND under matching { predicate: CONTAINS, operator: AND }, and with OR under operator OR',
   { skip: emulation },
   async (t) => {
     // Arrange
@@ -269,9 +287,6 @@ test(
 
     // Act
     const and = (
-      await new SqlServerKeywordRetriever(options).retrieve('rotate signing')
-    ).passages;
-    const explicitAnd = (
       await new SqlServerKeywordRetriever({
         ...options,
         matching: { predicate: 'CONTAINS', operator: 'AND' },
@@ -286,7 +301,6 @@ test(
 
     // Assert
     assert.deepEqual(ids(and), ['both']);
-    assert.deepEqual(ids(explicitAnd), ['both']);
     assert.deepEqual(ids(or).toSorted(), ['both', 'rotate', 'signing']);
     assert.equal(ids(or)[0], 'both');
   },
@@ -335,7 +349,7 @@ test(
 );
 
 test(
-  'each keyword is one phrase, so its words match side by side and in order, under AND and under OR, while each word of a text matches anywhere',
+  'under CONTAINS each keyword is one phrase, so its words match side by side and in order, under AND and under OR, while each word of a text matches anywhere',
   { skip: emulation },
   async (t) => {
     // Arrange: 'reversed' and 'apart' hold every word of the keywords, but
@@ -361,7 +375,10 @@ test(
       }),
       index: { table: 'docs_passages' },
     };
-    const and = new SqlServerKeywordRetriever(options);
+    const and = new SqlServerKeywordRetriever({
+      ...options,
+      matching: { predicate: 'CONTAINS', operator: 'AND' },
+    });
     const or = new SqlServerKeywordRetriever({
       ...options,
       matching: { predicate: 'CONTAINS', operator: 'OR' },
@@ -448,7 +465,7 @@ test(
 );
 
 test(
-  'the stoplist of the index decides a stop word: without one it matches, and with the system stoplist an AND with a stop word gives no passages while an OR still matches',
+  'under CONTAINS the stoplist of the index decides a stop word: without one it matches, and with the system stoplist an AND with a stop word gives no passages while an OR still matches',
   { skip: emulation },
   async (t) => {
     // Arrange: the same passages under an index without a stoplist and under
@@ -465,7 +482,7 @@ test(
       schema: 'stop',
       stoplist: 'SYSTEM',
     });
-    const retriever = (schema: string, operator?: 'AND' | 'OR') =>
+    const retriever = (schema: string, operator: 'AND' | 'OR' = 'AND') =>
       new SqlServerKeywordRetriever({
         store: new SqlServerPassageStore({
           session: session(pool),
@@ -474,9 +491,7 @@ test(
           metadata: (columns) => columns,
         }),
         index: { table: 'docs_passages' },
-        ...(operator === undefined
-          ? {}
-          : { matching: { predicate: 'CONTAINS', operator } }),
+        matching: { predicate: 'CONTAINS', operator },
       });
 
     // Act
@@ -502,7 +517,7 @@ test(
 );
 
 test(
-  'each word of the query is one phrase, so CONTAINS syntax in it matches as text and never runs as an operator',
+  'under CONTAINS each word of the query is one phrase, so CONTAINS syntax in it matches as text and never runs as an operator',
   { skip: emulation },
   async (t) => {
     // Arrange
@@ -540,6 +555,7 @@ test(
         metadata: (columns) => columns,
       }),
       index: { table: 'docs_passages' },
+      matching: { predicate: 'CONTAINS', operator: 'AND' },
     });
     const asText = new SqlServerKeywordRetriever({
       store: new SqlServerPassageStore({
@@ -549,6 +565,7 @@ test(
         metadata: (columns) => columns,
       }),
       index: { table: 'docs_passages' },
+      matching: { predicate: 'CONTAINS', operator: 'AND' },
     });
 
     // Act
@@ -602,64 +619,92 @@ test(
 );
 
 test(
-  'a word of punctuation only is dropped, so it does not stop an AND from matching, and a query of no words gives no passages',
+  'a word of punctuation only is dropped, so it does not stop an AND from matching, and a query of no words gives no passages, by default and under CONTAINS',
   { skip: emulation },
   async (t) => {
     // Arrange: SQL Server reads a phrase of punctuation only as a noise word,
-    // which gives an AND no rows, and refuses an empty condition.
+    // which gives an AND no rows, and refuses an empty or blank condition of
+    // CONTAINSTABLE and of FREETEXTTABLE (error 7645).
     await using database = await server().database();
     const pool = await database.pool();
     await contract(pool, [{ id: 'a', text: 'rotate the key' }], t.signal);
-    const retriever = new SqlServerKeywordRetriever({
+    const options = {
       store: new SqlServerPassageStore({
         session: session(pool),
         passages: 'docs_passages',
         metadata: (columns) => columns,
       }),
       index: { table: 'docs_passages' },
-    });
-
-    // Act
-    const results = {
+    };
+    const results = async (retriever: SqlServerKeywordRetriever) => ({
       punctuation: ids(
         (await retriever.retrieve('rotate & | ! ~ ( key')).passages,
       ),
       punctuationOnly: ids((await retriever.retrieve('& | "*"')).passages),
       whitespace: ids((await retriever.retrieve(' \t\n ')).passages),
-    };
+      keywords: ids(
+        (await retriever.retrieve({ query: 'q', keywords: ['&', 'key'] }))
+          .passages,
+      ),
+      punctuationKeywords: ids(
+        (await retriever.retrieve({ query: 'q', keywords: ['&', '"*"'] }))
+          .passages,
+      ),
+    });
+
+    // Act
+    const byDefault = await results(new SqlServerKeywordRetriever(options));
+    const contains = await results(
+      new SqlServerKeywordRetriever({
+        ...options,
+        matching: { predicate: 'CONTAINS', operator: 'AND' },
+      }),
+    );
 
     // Assert
-    assert.deepEqual(results, {
+    const expected = {
       punctuation: ['a'],
       punctuationOnly: [],
       whitespace: [],
-    });
+      keywords: ['a'],
+      punctuationKeywords: [],
+    };
+    assert.deepEqual(
+      { byDefault, contains },
+      { byDefault: expected, contains: expected },
+    );
   },
 );
 
 test(
-  'a condition over 4,000 characters reaches the caller as the error 4110 of SQL Server',
+  'a condition over 4,000 characters reaches the caller as the error 4110 of SQL Server, by default and under CONTAINS',
   { skip: emulation },
   async (t) => {
     // Arrange: the driver binds a text over 4,000 characters as NVARCHAR(MAX),
-    // which CONTAINSTABLE refuses.
+    // which CONTAINSTABLE and FREETEXTTABLE refuse.
     await using database = await server().database();
     const pool = await database.pool();
     await contract(pool, [{ id: 'a', text: 'rotate the key' }], t.signal);
-    const retriever = new SqlServerKeywordRetriever({
+    const options = {
       store: new SqlServerPassageStore({
         session: session(pool),
         passages: 'docs_passages',
         metadata: (columns) => columns,
       }),
       index: { table: 'docs_passages' },
-    });
+    };
+    const text = Array(600).fill('rotate').join(' ');
 
     // Act
-    const result = retriever.retrieve(Array(400).fill('rotate').join(' '));
+    const byDefault = new SqlServerKeywordRetriever(options).retrieve(text);
+    const contains = new SqlServerKeywordRetriever({
+      ...options,
+      matching: { predicate: 'CONTAINS', operator: 'AND' },
+    }).retrieve(text);
 
     // Assert
-    await assert.rejects(result, { number: 4110 });
+    await assert.rejects(byDefault, { number: 4110 });
+    await assert.rejects(contains, { number: 4110 });
   },
 );
 
@@ -999,7 +1044,7 @@ test(
   },
 );
 
-test('a matching predicate other than CONTAINS, or a CONTAINS operator other than AND or OR, is refused with a RangeError when the retriever is made', () => {
+test('a matching predicate other than FREETEXT or CONTAINS, or a CONTAINS operator other than AND or OR, is refused with a RangeError when the retriever is made', () => {
   // Arrange
   const store = new SqlServerPassageStore({
     session: { query: () => Promise.reject(new Error('no query runs')) },
@@ -1027,7 +1072,7 @@ test('a matching predicate other than CONTAINS, or a CONTAINS operator other tha
   assert.throws(
     predicate,
     new RangeError(
-      "The predicate of matching is 'CONTAINS', not CONTAINSTABLE",
+      "The predicate of matching is 'FREETEXT' or 'CONTAINS', not CONTAINSTABLE",
     ),
   );
   assert.throws(
@@ -1036,7 +1081,7 @@ test('a matching predicate other than CONTAINS, or a CONTAINS operator other tha
   );
 });
 
-test('the CONTAINS condition that the session receives joins the phrases with AND by default and under matching { predicate: CONTAINS, operator: AND }, and with OR under operator OR', async () => {
+test('the CONTAINS condition that the session receives joins the phrases with AND under matching { predicate: CONTAINS, operator: AND }, and with OR under operator OR', async () => {
   // Arrange: the session records the parameters of each query and gives no row.
   const conditions: unknown[] = [];
   const store = new SqlServerPassageStore({
@@ -1056,9 +1101,6 @@ test('the CONTAINS condition that the session receives joins the phrases with AN
   const index = { table: 'docs_passages' };
 
   // Act
-  await new SqlServerKeywordRetriever({ store, index }).retrieve(
-    'rotate signing',
-  );
   await new SqlServerKeywordRetriever({
     store,
     index,
@@ -1073,12 +1115,11 @@ test('the CONTAINS condition that the session receives joins the phrases with AN
   // Assert
   assert.deepEqual(conditions, [
     '"rotate" AND "signing"',
-    '"rotate" AND "signing"',
     '"rotate" OR "signing"',
   ]);
 });
 
-test('the CONTAINS condition that the session receives has each keyword as one phrase, joined by the operator, and each word of a text as its own phrase', async () => {
+test('under CONTAINS the condition that the session receives has each keyword as one phrase, joined by the operator, and each word of a text as its own phrase', async () => {
   // Arrange: the session records the parameters of each query and gives no row.
   const conditions: unknown[] = [];
   const store = new SqlServerPassageStore({
@@ -1096,7 +1137,11 @@ test('the CONTAINS condition that the session receives has each keyword as one p
     metadata: (columns) => columns,
   });
   const index = { table: 'docs_passages' };
-  const and = new SqlServerKeywordRetriever({ store, index });
+  const and = new SqlServerKeywordRetriever({
+    store,
+    index,
+    matching: { predicate: 'CONTAINS', operator: 'AND' },
+  });
   const or = new SqlServerKeywordRetriever({
     store,
     index,
@@ -1118,3 +1163,461 @@ test('the CONTAINS condition that the session receives has each keyword as one p
     '"heart" AND "failure"',
   ]);
 });
+
+test('by default the session receives a text whole as the condition of FREETEXTTABLE, each keyword as a FORMSOF(INFLECTIONAL) phrase of an ISABOUT in CONTAINSTABLE, with top_n_by_rank equal to topK only when the call has no filter and only in the branch the engine runs when OBJECT_ID of the passages is OBJECT_ID of the index table, and a query of no words sends no statement', async () => {
+  // Arrange: the session records the table functions of each statement with
+  // the values of their arguments and the branch each runs in: when OBJECT_ID
+  // of the passages is OBJECT_ID of the index table, when it is not, or
+  // always. It records the names that the guard compares, and gives no row.
+  // The passages are a view, so the two names differ.
+  const calls: { functions: unknown[][]; same: unknown[] }[] = [];
+  const store = new SqlServerPassageStore({
+    session: {
+      query: async (sql, parameters) => {
+        const value = (argument: string) => parameters[argument.slice(1)];
+        const [, passages = '', table = ''] =
+          /OBJECT_ID\((@\w+)\) = OBJECT_ID\((@\w+)\)/.exec(sql) ?? [];
+        calls.push({
+          functions: [
+            ...sql.matchAll(
+              /(FREETEXTTABLE|CONTAINSTABLE)\((.*?)\)(?: WHERE IIF\(.*?, 1, 0\) = ([01]))?/gs,
+            ),
+          ].map(([, from, list = '', branch]) => [
+            from,
+            ...list.split(', ').slice(2).map(value),
+            { '1': 'same', '0': 'other' }[branch ?? ''] ?? 'always',
+          ]),
+          same: passages === '' ? [] : [value(passages), value(table)],
+        });
+        return [];
+      },
+    },
+    passages: 'docs_view',
+    metadata: (columns) => columns,
+  });
+  const retriever = new SqlServerKeywordRetriever({
+    store,
+    index: { table: 'docs_passages' },
+  });
+  const filter = {
+    field: 'metadata.product',
+    operator: '==',
+    value: 'vault',
+  } as const;
+
+  // Act
+  const results = [
+    await retriever.retrieve('is lisinopril "safe" OR (in) pregnancy*?'),
+    await retriever.retrieve('key', { topK: 3 }),
+    await retriever.retrieve('key', { filter }),
+    await retriever.retrieve({
+      query: 'q',
+      keywords: ['heart failure', 'ACE inhibitor'],
+    }),
+    await retriever.retrieve(
+      { query: 'q', keywords: ['heart" OR "failure*', '&'] },
+      { filter },
+    ),
+    await retriever.retrieve(' \t\n '),
+    await retriever.retrieve({ query: 'q', keywords: ['&', '"*"'] }),
+  ];
+
+  // Assert
+  const guard = ['[docs_view]', '[docs_passages]'];
+  const isabout =
+    'ISABOUT(FORMSOF(INFLECTIONAL, "heart failure"), FORMSOF(INFLECTIONAL, "ACE inhibitor"))';
+  const question = 'is lisinopril "safe" OR (in) pregnancy*?';
+  assert.deepEqual(calls, [
+    {
+      functions: [
+        ['FREETEXTTABLE', question, 10, 'same'],
+        ['FREETEXTTABLE', question, 'other'],
+      ],
+      same: guard,
+    },
+    {
+      functions: [
+        ['FREETEXTTABLE', 'key', 3, 'same'],
+        ['FREETEXTTABLE', 'key', 'other'],
+      ],
+      same: guard,
+    },
+    { functions: [['FREETEXTTABLE', 'key', 'always']], same: [] },
+    {
+      functions: [
+        ['CONTAINSTABLE', isabout, 10, 'same'],
+        ['CONTAINSTABLE', isabout, 'other'],
+      ],
+      same: guard,
+    },
+    {
+      functions: [
+        [
+          'CONTAINSTABLE',
+          'ISABOUT(FORMSOF(INFLECTIONAL, "heart  OR  failure"))',
+          'always',
+        ],
+      ],
+      same: [],
+    },
+  ]);
+  assert.deepEqual(
+    results.map(({ passages }) => passages),
+    Array(7).fill([]),
+  );
+});
+
+test(
+  'by default a question finds a passage by an inflection of its word, through FREETEXTTABLE, whose RANK is the score, while CONTAINS AND finds none',
+  { skip: emulation },
+  async (t) => {
+    // Arrange
+    await using database = await server().database();
+    const pool = await database.pool();
+    await contract(
+      pool,
+      [
+        { id: 'ran', text: 'he ran a mile' },
+        { id: 'runs', text: 'she runs every morning' },
+        { id: 'mice', text: 'the mice escaped' },
+        { id: 'none', text: 'nothing here at all' },
+      ],
+      t.signal,
+    );
+    const options = {
+      store: new SqlServerPassageStore({
+        session: session(pool),
+        passages: 'docs_passages',
+        metadata: (columns) => columns,
+      }),
+      index: { table: 'docs_passages' },
+    };
+    const retriever = new SqlServerKeywordRetriever(options);
+
+    // Act
+    const running = (await retriever.retrieve('running')).passages;
+    const mouse = (await retriever.retrieve('mouse')).passages;
+    const contains = (
+      await new SqlServerKeywordRetriever({
+        ...options,
+        matching: { predicate: 'CONTAINS', operator: 'AND' },
+      }).retrieve('running')
+    ).passages;
+
+    // Assert
+    // The value of SQL Server's own ranking for the same text.
+    const { recordset: engine } = await pool
+      .request()
+      .query(
+        `SELECT [KEY] AS id, RANK AS rank FROM FREETEXTTABLE(docs_passages, text, N'running')`,
+      );
+    assert.deepEqual(ids(running).toSorted(), ['ran', 'runs']);
+    assert.deepEqual(
+      running.map(({ passage, score }) => [passage.id, score]),
+      ids(running).map((id) => [id, engine.find((row) => row.id === id)?.rank]),
+    );
+    assert.ok(
+      running.every(({ score }) => Number.isFinite(score) && (score ?? 0) > 0),
+    );
+    assert.deepEqual(ids(mouse), ['mice']);
+    assert.deepEqual(ids(contains), []);
+  },
+);
+
+test(
+  'by default CONTAINS syntax in a text is text: OR and NEAR are words, and an open quote, parenthesis or prefix star is no error',
+  { skip: emulation },
+  async (t) => {
+    // Arrange
+    await using database = await server().database();
+    const pool = await database.pool();
+    await contract(
+      pool,
+      [
+        { id: 'or', text: 'heart or failure' },
+        { id: 'near', text: 'heart near failure' },
+        { id: 'hf', text: 'chronic heart failure' },
+        { id: 'none', text: 'nothing here at all' },
+      ],
+      t.signal,
+    );
+    const retriever = new SqlServerKeywordRetriever({
+      store: new SqlServerPassageStore({
+        session: session(pool),
+        passages: 'docs_passages',
+        metadata: (columns) => columns,
+      }),
+      index: { table: 'docs_passages' },
+    });
+
+    // Act
+    const or = (await retriever.retrieve('heart OR failure')).passages;
+    const near = (await retriever.retrieve('heart NEAR failure')).passages;
+    const open = (await retriever.retrieve('"heart NEAR (fail*')).passages;
+
+    // Assert: the passage that holds the word or (near) ranks first.
+    assert.deepEqual(
+      { or: ids(or).toSorted(), near: ids(near).toSorted() },
+      { or: ['hf', 'near', 'or'], near: ['hf', 'near', 'or'] },
+    );
+    assert.equal(ids(or)[0], 'or');
+    assert.equal(ids(near)[0], 'near');
+    assert.ok(ids(open).includes('near'));
+  },
+);
+
+test(
+  'by default each keyword is one phrase with its inflections, a passage that holds any keyword matches, and words of a keyword apart or out of order do not',
+  { skip: emulation },
+  async (t) => {
+    // Arrange
+    await using database = await server().database();
+    const pool = await database.pool();
+    await contract(
+      pool,
+      [
+        { id: 'hf', text: 'chronic heart failure in adults' },
+        { id: 'reversed', text: 'failure of the heart muscle' },
+        { id: 'ace', text: 'an ACE inhibitor lowers pressure' },
+        { id: 'apart', text: 'an inhibitor of ACE' },
+      ],
+      t.signal,
+    );
+    const retriever = new SqlServerKeywordRetriever({
+      store: new SqlServerPassageStore({
+        session: session(pool),
+        passages: 'docs_passages',
+        metadata: (columns) => columns,
+      }),
+      index: { table: 'docs_passages' },
+    });
+
+    // Act
+    const results = (
+      await retriever.retrieve({
+        query: 'q',
+        keywords: ['heart failures', 'ACE inhibitors'],
+      })
+    ).passages;
+
+    // Assert
+    assert.deepEqual(ids(results).toSorted(), ['ace', 'hf']);
+    assert.ok(
+      results.every(({ score }) => Number.isFinite(score) && (score ?? 0) > 0),
+    );
+  },
+);
+
+test(
+  'by default a call with a filter still gives topK passages that pass it when the passages that rank higher fail it',
+  { skip: emulation },
+  async (t) => {
+    // Arrange: the vault passages hold key twice and rank above the consul
+    // ones, so a cut to the two best matches before the filter keeps none.
+    await using database = await server().database();
+    const pool = await database.pool();
+    await contract(
+      pool,
+      Array.from({ length: 8 }, (_, i) => ({
+        id: `p${i}`,
+        text: i % 2 === 0 ? 'rotate the key, the key' : 'rotate the key',
+        product: i % 2 === 0 ? 'vault' : 'consul',
+      })),
+      t.signal,
+    );
+    const retriever = new SqlServerKeywordRetriever({
+      store: new SqlServerPassageStore({
+        session: session(pool),
+        passages: 'docs_passages',
+        metadata: (columns) => columns,
+      }),
+      index: { table: 'docs_passages' },
+    });
+    const filter = {
+      field: 'metadata.product',
+      operator: '==',
+      value: 'consul',
+    } as const;
+
+    // Act
+    const text = (await retriever.retrieve('key', { topK: 2, filter }))
+      .passages;
+    const keywords = (
+      await retriever.retrieve(
+        { query: 'q', keywords: ['key'] },
+        { topK: 2, filter },
+      )
+    ).passages;
+    const best = (await retriever.retrieve('key', { topK: 2 })).passages;
+
+    // Assert
+    assert.deepEqual(ids(best), ['p0', 'p2']);
+    assert.deepEqual(ids(text), ['p1', 'p3']);
+    assert.deepEqual(ids(keywords), ['p1', 'p3']);
+  },
+);
+
+test(
+  'by default a call with no filter still gives topK passages when the passages are a view that hides the passages that rank higher',
+  { skip: emulation },
+  async (t) => {
+    // Arrange: the vault passages hold key twice and rank above the consul
+    // ones, and the view of the passages shows only consul, so a cut to the
+    // two best matches of the table before the join keeps none.
+    await using database = await server().database();
+    const pool = await database.pool();
+    await contract(
+      pool,
+      Array.from({ length: 8 }, (_, i) => ({
+        id: `p${i}`,
+        text: i % 2 === 0 ? 'rotate the key, the key' : 'rotate the key',
+        product: i % 2 === 0 ? 'vault' : 'consul',
+      })),
+      t.signal,
+    );
+    await pool
+      .request()
+      .batch(
+        "CREATE VIEW docs_consul AS SELECT * FROM docs_passages WHERE product = N'consul'",
+      );
+    const retriever = new SqlServerKeywordRetriever({
+      store: new SqlServerPassageStore({
+        session: session(pool),
+        passages: 'docs_consul',
+        metadata: (columns) => columns,
+      }),
+      index: { table: 'docs_passages' },
+    });
+
+    // Act
+    const text = (await retriever.retrieve('key', { topK: 2 })).passages;
+    const keywords = (
+      await retriever.retrieve({ query: 'q', keywords: ['key'] }, { topK: 2 })
+    ).passages;
+
+    // Assert
+    assert.deepEqual(ids(text), ['p1', 'p3']);
+    assert.deepEqual(ids(keywords), ['p1', 'p3']);
+  },
+);
+
+test(
+  'by default a call with no filter gives topK passages with the best scores that FREETEXTTABLE and the ISABOUT of CONTAINSTABLE give with no cut, each a match with its uncut score, best first and a tie in binary order of the id',
+  { skip: emulation },
+  async (t) => {
+    // Arrange: the full-text index exists on the empty table, and change
+    // tracking indexes each row as it comes, in reverse binary order of the
+    // id, so the smallest id is the last the index sees. Several tie. A full
+    // population of a filled table would see the rows in the order of the
+    // clustered key, the binary id, whatever order they came in.
+    await using database = await server().database();
+    const pool = await database.pool();
+    await contract(pool, [], t.signal);
+    await insert(
+      pool,
+      '[dbo].docs_passages',
+      [
+        ...Array.from({ length: 6 }, (_, i) => ({
+          id: `p${i}`,
+          text: 'rotate the key',
+        })),
+        { id: 'b', text: 'key key key rotation' },
+        { id: 'a', text: 'rotate the key' },
+        { id: 'A', text: 'rotate the key' },
+        { id: 'B', text: 'rotate the signing key' },
+      ].sort((x, y) => (x.id < y.id ? 1 : -1)),
+    );
+    await populated(pool, '[dbo].docs_passages', t.signal);
+    const retriever = new SqlServerKeywordRetriever({
+      store: new SqlServerPassageStore({
+        session: session(pool),
+        passages: 'docs_passages',
+        metadata: (columns) => columns,
+      }),
+      index: { table: 'docs_passages' },
+    });
+    const uncut = async (from: string, condition: string) =>
+      (
+        await pool
+          .request()
+          .input('condition', condition)
+          .query(
+            `SELECT [KEY] AS id, RANK AS score FROM ${from}(docs_passages, text, @condition) ORDER BY RANK DESC, [KEY]`,
+          )
+      ).recordset.map(({ id, score }): [string, number] => [id, score]);
+    const scored = (
+      passages: readonly {
+        readonly passage: { readonly id: string };
+        readonly score?: number;
+      }[],
+    ) =>
+      passages.map(({ passage, score }): [string, number | undefined] => [
+        passage.id,
+        score,
+      ]);
+
+    // Act
+    const results = {
+      three: scored((await retriever.retrieve('key', { topK: 3 })).passages),
+      five: scored(
+        (await retriever.retrieve('rotate key', { topK: 5 })).passages,
+      ),
+      keywords: scored(
+        (
+          await retriever.retrieve(
+            { query: 'q', keywords: ['rotate', 'signing key'] },
+            { topK: 4 },
+          )
+        ).passages,
+      ),
+    };
+
+    // Assert: which tied passages survive the cut follows the engine, which
+    // keeps none in binary order of the id when the index saw the smallest
+    // id last (ADR 0018), so the test asserts the scores, not the ids.
+    const matches = {
+      three: await uncut('FREETEXTTABLE', 'key'),
+      five: await uncut('FREETEXTTABLE', 'rotate key'),
+      keywords: await uncut(
+        'CONTAINSTABLE',
+        'ISABOUT(FORMSOF(INFLECTIONAL, "rotate"), FORMSOF(INFLECTIONAL, "signing key"))',
+      ),
+    };
+    const scores = (pairs: readonly (readonly [string, unknown])[]) =>
+      pairs.map(([, score]) => score);
+    assert.deepEqual(
+      {
+        three: scores(results.three),
+        five: scores(results.five),
+        keywords: scores(results.keywords),
+      },
+      {
+        three: scores(matches.three.slice(0, 3)),
+        five: scores(matches.five.slice(0, 5)),
+        keywords: scores(matches.keywords.slice(0, 4)),
+      },
+    );
+    // Each passage given that is a match with its uncut score, in the order
+    // of best first and a tie in binary order of the id.
+    const kept = (
+      got: readonly [string, number | undefined][],
+      all: readonly [string, number][],
+    ) =>
+      got
+        .filter(([id, score]) =>
+          all.some((match) => match[0] === id && match[1] === score),
+        )
+        .toSorted(
+          ([a, x = 0], [b, y = 0]) => y - x || (a < b ? -1 : a > b ? 1 : 0),
+        );
+    assert.deepEqual(
+      {
+        three: kept(results.three, matches.three),
+        five: kept(results.five, matches.five),
+        keywords: kept(results.keywords, matches.keywords),
+      },
+      results,
+    );
+    assert.equal(results.three.length, 3);
+  },
+);

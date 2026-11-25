@@ -6,6 +6,7 @@ import type { Retriever } from '../retriever.ts';
 import {
   ContainsAll,
   ContainsAny,
+  FreeText,
   type SqlServerMatch,
 } from './sqlserver-match.ts';
 import {
@@ -15,24 +16,25 @@ import {
 
 /**
  * How `SqlServerKeywordRetriever` matches the words of a query, under
- * Microsoft's T-SQL names (ADR 0018): `{ predicate: 'CONTAINS', operator }`
- * is the `CONTAINS` predicate with its Boolean operator, `'AND'` for the
- * passages that hold every word and `'OR'` for those that hold any. Each
- * member holds only the fields that mean something for it, so the SQL Server
- * forms that follow have their place.
+ * Microsoft's T-SQL names (ADR 0018). `{ predicate: 'FREETEXT' }`, the
+ * default, is SQL Server's natural-language form: `FREETEXTTABLE` over a
+ * text, ranked by BM25, and an `ISABOUT` of each keyword with its inflections.
+ * `{ predicate: 'CONTAINS', operator }` is the `CONTAINS` predicate with its
+ * Boolean operator, `'AND'` for the passages that hold every word and `'OR'`
+ * for those that hold any. Each member holds only the fields that mean
+ * something for it: FREETEXT has no operator.
  */
-export type SqlServerMatching = {
-  readonly predicate: 'CONTAINS';
-  readonly operator: 'AND' | 'OR';
-};
+export type SqlServerMatching =
+  | { readonly predicate: 'FREETEXT' }
+  | { readonly predicate: 'CONTAINS'; readonly operator: 'AND' | 'OR' };
 
 /**
  * Ranks the passages by SQL Server full-text search over the keyword index
  * that elt writes: a full-text index on the `[text]` column of a base table
  * whose full-text key is the passage id (ADR 0004). The search is
- * `CONTAINSTABLE`, and the score is its `RANK`, which is higher for a better
- * match (ADR 0005). It matches each keyword of `keywords` as one CONTAINS
- * phrase, or the words of `query` when the bundle has none (ADR 0013,
+ * `FREETEXTTABLE` or `CONTAINSTABLE`, and the score is its `RANK`, which is
+ * higher for a better match (ADR 0005). It matches each keyword of
+ * `keywords` as one phrase, or `query` when the bundle has none (ADR 0013,
  * ADR 0018).
  * It gives the passages with the metadata that its store reads (ADR 0015).
  */
@@ -51,7 +53,7 @@ export class SqlServerKeywordRetriever<
       /** The base table, in the schema of the store, that holds the full-text index on `[text]` with the passage id as its key. */
       readonly table: string;
     };
-    /** How the words of the query match: `{ predicate: 'CONTAINS', operator: 'AND' }` when absent. */
+    /** How the words of the query match: `{ predicate: 'FREETEXT' }` when absent. */
     readonly matching?: SqlServerMatching;
   }) {
     const contract = contractOf(options.store);
@@ -61,15 +63,20 @@ export class SqlServerKeywordRetriever<
       metadata: contract.metadata,
       table: contract.relation(options.index.table),
     };
-    const { predicate, operator } = options.matching ?? {
-      predicate: 'CONTAINS',
-      operator: 'AND',
+    const matching: SqlServerMatching = options.matching ?? {
+      predicate: 'FREETEXT',
     };
+    const { predicate } = matching;
+    if (predicate === 'FREETEXT') {
+      this.#match = new FreeText(index);
+      return;
+    }
     if (predicate !== 'CONTAINS') {
       throw new RangeError(
-        `The predicate of matching is 'CONTAINS', not ${String(predicate satisfies never)}`,
+        `The predicate of matching is 'FREETEXT' or 'CONTAINS', not ${String(predicate satisfies never)}`,
       );
     }
+    const { operator } = matching;
     switch (operator) {
       case 'AND':
         this.#match = new ContainsAll(index);
