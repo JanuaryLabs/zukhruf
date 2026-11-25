@@ -128,6 +128,27 @@ const sshdScript = [
   'exec /usr/sbin/sshd -D -e -o ClientAliveInterval=0 -o TCPKeepAlive=yes -o AllowTcpForwarding=yes -o AllowStreamLocalForwarding=yes -o PermitRootLogin=prohibit-password',
 ].join(' && ');
 
+/** The exit status of `dropWhenQuiet` while sshd has a byte that its client did not acknowledge. */
+const unacknowledged = 3;
+
+/**
+ * Drops each packet of port 22 in the network namespace of sshd, both ways,
+ * once each established connection of port 22 has no byte that sshd sent and
+ * its client did not acknowledge, and exits `unacknowledged` before that
+ * (#5612). Such a byte gets retransmitted after the drop, so `tcp_retries2`
+ * ends the connection with no keep-alive byte. In /proc/net/tcp and
+ * /proc/net/tcp6, column 4 is the state (`01` is ESTABLISHED) and column 5 is
+ * `tx_queue:rx_queue` in hex; for an established socket, tx_queue is
+ * `write_seq - snd_una`: the bytes that sshd wrote and its client did not
+ * acknowledge yet. The check needs one established connection at least, so a
+ * table that it cannot read never passes it.
+ */
+const dropWhenQuiet = [
+  `awk '$4 == "01" && $2 ~ /:0016$/ { seen = 1; if ($5 !~ /^0+:/) sent = 1 } END { exit seen && !sent ? 0 : ${unacknowledged} }' /proc/net/tcp /proc/net/tcp6`,
+  'iptables -I INPUT -p tcp --dport 22 -j DROP',
+  'iptables -I OUTPUT -p tcp --sport 22 -j DROP',
+].join(' && ');
+
 /** The first bytes that the server on 127.0.0.1:`port` sends, or nothing when it closes first. */
 async function banner(port: number): Promise<string> {
   const socket = connect(port, '127.0.0.1');
@@ -218,15 +239,23 @@ async function droppableSshEngine() {
       '-o',
       'StrictHostKeyChecking=yes',
     ],
-    /** Drops each packet of port 22 in the server's network namespace, both ways: no close and no answer reaches either side. */
-    async drop() {
-      const dropped = await service.container.exec({
-        Cmd: [
-          'sh',
-          '-c',
-          'iptables -I INPUT -p tcp --dport 22 -j DROP && iptables -I OUTPUT -p tcp --sport 22 -j DROP',
-        ],
-      });
+    /** Drops each packet of port 22 in the server's network namespace, both ways, once the client acknowledged each byte of sshd: no close, no answer and no retransmission reaches either side. */
+    async drop(signal: AbortSignal) {
+      const dropped = await waitFor(
+        async () => {
+          const tried = await service.container.exec(
+            { Cmd: ['sh', '-c', dropWhenQuiet] },
+            { signal },
+          );
+          assert.notEqual(
+            tried.exitCode,
+            unacknowledged,
+            'sshd has a byte on port 22 that its client did not acknowledge',
+          );
+          return tried;
+        },
+        { signal },
+      );
       assert.equal(dropped.exitCode, 0, dropped.stderr);
     },
     [Symbol.asyncDispose]: () => owned.disposeAsync(),
@@ -270,7 +299,7 @@ test("a key whose holder machine reaches the engine over SSH and goes away with 
   );
 
   // Act: the network of the holder machine goes away, and then the holder, so no close reaches the engine's host.
-  await sshd.drop();
+  await sshd.drop(t.signal);
   holder.child.kill('SIGKILL');
   const token = await untilAborted(waiting, t.signal);
 

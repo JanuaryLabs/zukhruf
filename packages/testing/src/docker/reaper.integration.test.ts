@@ -26,6 +26,7 @@ import { waitFor } from '../async/wait-for.ts';
 import { engine, proxyless } from '../testing/current-engine.ts';
 import { docker } from '../testing/engine-client.ts';
 import { EngineProxy } from '../testing/engine-proxy.ts';
+import { LEASE_IMAGE } from './engine-lease.ts';
 import { DockerTestbed } from './index.ts';
 import {
   REAPER_DEFAULTS,
@@ -2242,6 +2243,27 @@ const sshdScript = [
   'exec /usr/sbin/sshd -D -e -o ClientAliveInterval=0 -o TCPKeepAlive=yes -o AllowTcpForwarding=yes -o AllowStreamLocalForwarding=yes -o PermitRootLogin=prohibit-password',
 ].join(' && ');
 
+/** The exit status of `dropWhenQuiet` while sshd has a byte that its client did not acknowledge. */
+const unacknowledged = 3;
+
+/**
+ * Drops each packet of port 22 in the network namespace of sshd, both ways,
+ * once each established connection of port 22 has no byte that sshd sent and
+ * its client did not acknowledge, and exits `unacknowledged` before that
+ * (#5612). Such a byte gets retransmitted after the drop, so `tcp_retries2`
+ * ends the connection with no keep-alive byte. In /proc/net/tcp and
+ * /proc/net/tcp6, column 4 is the state (`01` is ESTABLISHED) and column 5 is
+ * `tx_queue:rx_queue` in hex; for an established socket, tx_queue is
+ * `write_seq - snd_una`: the bytes that sshd wrote and its client did not
+ * acknowledge yet. The check needs one established connection at least, so a
+ * table that it cannot read never passes it.
+ */
+const dropWhenQuiet = [
+  `awk '$4 == "01" && $2 ~ /:0016$/ { seen = 1; if ($5 !~ /^0+:/) sent = 1 } END { exit seen && !sent ? 0 : ${unacknowledged} }' /proc/net/tcp /proc/net/tcp6`,
+  'iptables -I INPUT -p tcp --dport 22 -j DROP',
+  'iptables -I OUTPUT -p tcp --sport 22 -j DROP',
+].join(' && ');
+
 /** The first bytes that the server on 127.0.0.1:`port` sends, or nothing when it closes first. */
 async function banner(port: number): Promise<string> {
   const socket = connect(port, '127.0.0.1');
@@ -2332,15 +2354,23 @@ async function droppableSshEngine() {
       '-o',
       'StrictHostKeyChecking=yes',
     ],
-    /** Drops each packet of port 22 in the server's network namespace, both ways: no close and no answer reaches either side. */
-    async drop() {
-      const dropped = await service.container.exec({
-        Cmd: [
-          'sh',
-          '-c',
-          'iptables -I INPUT -p tcp --dport 22 -j DROP && iptables -I OUTPUT -p tcp --sport 22 -j DROP',
-        ],
-      });
+    /** Drops each packet of port 22 in the server's network namespace, both ways, once the client acknowledged each byte of sshd: no close, no answer and no retransmission reaches either side. */
+    async drop(signal: AbortSignal) {
+      const dropped = await waitFor(
+        async () => {
+          const tried = await service.container.exec(
+            { Cmd: ['sh', '-c', dropWhenQuiet] },
+            { signal },
+          );
+          assert.notEqual(
+            tried.exitCode,
+            unacknowledged,
+            'sshd has a byte on port 22 that its client did not acknowledge',
+          );
+          return tried;
+        },
+        { signal },
+      );
       assert.equal(dropped.exitCode, 0, dropped.stderr);
     },
     [Symbol.asyncDispose]: () => owned.disposeAsync(),
@@ -2390,7 +2420,7 @@ describe('the reaper over SSH', { concurrency: 3 }, () => {
     assert.equal(await held.line(), 'held');
     const id = await object(run);
 
-    await sshd.drop();
+    await sshd.drop(t.signal);
     await killed(held.child);
 
     await gone(t, async () => {
@@ -2437,4 +2467,49 @@ describe('the reaper over SSH', { concurrency: 3 }, () => {
     assert.deepEqual(await reapers(run), reaper);
     assert.equal(reaper.length, 1);
   });
+});
+
+/**
+ * A process that takes the engine lease `name`, with the run label of `run`,
+ * through its own SSH connection to `host`, as a `DockerTestbed` outside a run
+ * does, prints `held`, and lives until it is killed. No reaper holds `run`, so
+ * only the end of the lease's attach ends the lease.
+ */
+function sshLeaseHolder(
+  run: string,
+  name: string,
+  { host, flags }: { host: string; flags: string[] },
+): Program {
+  return program(
+    `
+      import { EngineLease } from ${JSON.stringify(new URL('./engine-lease.ts', import.meta.url).href)};
+      const docker = await Docker.connect({ clock: globalThis, environment: process.env, sshFlags: ${JSON.stringify(flags)} });
+      const lease = await EngineLease.take(docker, { ${JSON.stringify(RUN_LABEL)}: ${JSON.stringify(run)} }, { name: ${JSON.stringify(name)} });
+      if (lease === undefined) throw new Error('Another holder has the lease');
+      console.log('held');
+      setInterval(() => {}, 60_000);
+    `,
+    { ...process.env, DOCKER_HOST: host },
+  );
+}
+
+// The wait ends at the time limit of the test target, 300 s, with the start of
+// the SSH server and the lease. With a keep-alive byte each 15 s and about
+// 12.6 s of retransmissions, it ends in about 30 s; with no keep-alive byte,
+// TCP keep-alive of the engine's host waits 2 h.
+test('an engine lease whose holder reaches the engine over SSH outside a run, and whose network and then holder go away with no close, ends within the keep-alive interval and the retransmission limit of the engine’s host', async (t) => {
+  const run = randomUUID();
+  const name = `zukhruf-testing-lease-${run}`;
+  await present(LEASE_IMAGE);
+  await using sshd = await droppableSshEngine();
+  await using cleanup = new AsyncDisposableStack();
+  cleanup.defer(() => removeRun(run));
+  const held = sshLeaseHolder(run, name, sshd);
+  cleanup.defer(() => killed(held.child));
+  assert.equal(await held.line(), 'held');
+
+  await sshd.drop(t.signal);
+  await killed(held.child);
+
+  await gone(t, async () => assert.equal(await exists(name), false));
 });
