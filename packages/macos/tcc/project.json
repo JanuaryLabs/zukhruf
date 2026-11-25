@@ -1,0 +1,7 @@
+{
+  "name": "tcc",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/macos/tcc/src",
+  "projectType": "library",
+  "tags": ["layer:island", "std:base", "platform:darwin"]
+}
