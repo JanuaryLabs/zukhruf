@@ -10,11 +10,6 @@ import { type QueryType, embeddingsOf } from './query-bundle.ts';
 import type { RetrieveOptions } from './retrieve-options.ts';
 import type { ScoredPassage } from './scored-passage.ts';
 
-/** A passage that an engine's search scored: an embedding retriever gives every passage a score. */
-export type EngineScoredPassage<P extends StoredPassage> = ScoredPassage<P> & {
-  readonly score: number;
-};
-
 /** What the engine gives: the query model, its read of the stored identities, and its search. */
 type Engine<P extends StoredPassage> = {
   readonly model: EmbeddingModel;
@@ -27,7 +22,7 @@ type Engine<P extends StoredPassage> = {
     vectors: readonly (readonly number[])[],
     identity: ModelIdentity,
     options: RetrieveOptions<P>,
-  ) => EngineScoredPassage<P>[][] | Promise<EngineScoredPassage<P>[][]>;
+  ) => ScoredPassage<P>[][] | Promise<ScoredPassage<P>[][]>;
   /** The least score that a passage of a list keeps: every passage when undefined (ADR 0019). */
   readonly scoreThreshold: number | undefined;
 };

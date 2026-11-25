@@ -1,5 +1,7 @@
 # A retrieve call answers with the retrievers that answered and names those that were unavailable
 
+Superseded in part on 2026-11-26 (#5400) for `weights: { [name]: number }` and the considered option "a list of children with a weight beside each". `FusionRetriever` takes `retrievers: { [name]: { retriever, weight? } }`, a record by name with the weight on each entry, as Elasticsearch's rrf and linear retrievers take `{ retriever, weight }`; a weight for a name that is no retriever cannot be written. The record by name and the failures by name stay ([ADR 0020](./0020-a-fusion-is-a-rank-fusion-or-a-score-fusion-over-ids-with-a-normalizer-for-each-list-and-a-combination.md)).
+
 Status: Accepted 2026-11-25 (backlog #5582, #5588; paper #5638).
 
 Decision-makers: Ezz. He ruled on 2026-11-24 that the package takes partial results (#5582), and on 2026-11-25 he approved the paper of #5638 with its open questions answered; for this decision: "the list field is 'passages'". The leader tables of the paper decided the rest.

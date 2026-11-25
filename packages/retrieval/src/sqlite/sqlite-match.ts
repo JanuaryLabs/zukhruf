@@ -4,6 +4,7 @@ import type { Metadata, StoredPassage } from '../passage.ts';
 import type { KeywordQuery } from '../query-bundle.ts';
 import type { RetrievalResult } from '../retrieval-result.ts';
 import type { RetrieveOptions } from '../retrieve-options.ts';
+import type { ScoredPassage } from '../scored-passage.ts';
 import { where } from '../sql/where.ts';
 import { dialect } from './dialect.ts';
 import { passageRows } from './passage-rows.ts';
@@ -24,7 +25,7 @@ export interface SqliteMatch<M extends Metadata> {
   retrieve(
     query: KeywordQuery,
     options: RetrieveOptions<StoredPassage<M>>,
-  ): RetrievalResult<StoredPassage<M>>;
+  ): RetrievalResult<StoredPassage<M>, ScoredPassage<StoredPassage<M>>>;
 }
 
 /** A passage matches when it holds every term: the implicit operator of FTS5. */
@@ -38,7 +39,7 @@ export class AndMatch<M extends Metadata> implements SqliteMatch<M> {
   retrieve(
     query: KeywordQuery,
     options: RetrieveOptions<StoredPassage<M>>,
-  ): RetrievalResult<StoredPassage<M>> {
+  ): RetrievalResult<StoredPassage<M>, ScoredPassage<StoredPassage<M>>> {
     return bm25(this.#index, ftsPhrases(termsOf(query)).join(' AND '), options);
   }
 }
@@ -54,7 +55,7 @@ export class OrMatch<M extends Metadata> implements SqliteMatch<M> {
   retrieve(
     query: KeywordQuery,
     options: RetrieveOptions<StoredPassage<M>>,
-  ): RetrievalResult<StoredPassage<M>> {
+  ): RetrievalResult<StoredPassage<M>, ScoredPassage<StoredPassage<M>>> {
     return bm25(this.#index, ftsPhrases(termsOf(query)).join(' OR '), options);
   }
 }
@@ -81,7 +82,7 @@ export class CommonTermsMatch<M extends Metadata> implements SqliteMatch<M> {
   retrieve(
     query: KeywordQuery,
     options: RetrieveOptions<StoredPassage<M>>,
-  ): RetrievalResult<StoredPassage<M>> {
+  ): RetrievalResult<StoredPassage<M>, ScoredPassage<StoredPassage<M>>> {
     const { database, index } = this.#index;
     const cutoff =
       this.#cutoff >= 1
@@ -132,7 +133,7 @@ function bm25<M extends Metadata>(
   { database, passages, index, metadata }: Fts5Index<M>,
   match: string,
   options: RetrieveOptions<StoredPassage<M>>,
-): RetrievalResult<StoredPassage<M>> {
+): RetrievalResult<StoredPassage<M>, ScoredPassage<StoredPassage<M>>> {
   if (match === '') return { passages: [], failures: new Map() };
   const parameters: SQLInputValue[] = [match];
   const filter = where(dialect, options.filter, parameters);

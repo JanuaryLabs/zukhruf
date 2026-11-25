@@ -1,5 +1,7 @@
 # The package is in the base layer
 
+Superseded in part on 2026-11-26 (#5400) for the name of the fusion that needs `std`. `distributionBasedScoreFusion` is gone; the normalizer `distributionBased()` of a `ScoreFusion` reads `std` of `@zukhruf/statistics` through `ListScores` ([ADR 0020](./0020-a-fusion-is-a-rank-fusion-or-a-score-fusion-over-ids-with-a-normalizer-for-each-list-and-a-combination.md)). The rest of the decision below stays true.
+
 Status: accepted by Ezz on 2026-11-23 ("this is base layer").
 
 Root ADR 0001 sorts the packages into layers by their imports: shipped code of a `std:base` package imports only `std:base` packages, and shipped domain code imports only base and coordination packages (`eslint.config.mjs`, lines 26-38). Ezz ruled on the same day that a layer follows the imports ("Imports decide: base"), and five packages moved to base (e130cccd, #5418). `@zukhruf/mteb` is base since e130cccd, and its `HybridSearch` can move onto the fusions of this package (#5400).

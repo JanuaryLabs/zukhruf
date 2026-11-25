@@ -1,5 +1,7 @@
 # A retriever is a port for any source
 
+Superseded in part on 2026-11-26 (#5400) for the item of the port. `Retriever<in Q, P, out I extends RankedPassage<P> = RankedPassage<P>>` gives ranked passages, an order only, or scored passages, whose score is required ([ADR 0021](./0021-a-retriever-says-whether-it-gives-scores-a-ranked-passage-has-none-and-a-scored-passage-always-has-one.md)).
+
 Superseded in part on 2026-11-25 (#5584) for the passage of a live source. A host adapter gives `Passage<M>`, with no `source`, `seq`, `start` or `end`, and writes no `seq` 0; the port is `Retriever<in Q, P extends Passage>` ([ADR 0015](./0015-a-passage-is-typed-by-its-metadata-and-only-a-stored-passage-has-source-seq-start-and-end.md)).
 
 Superseded in part on 2026-11-25 (#5582) for the return of the port. `retrieve` gives a `RetrievalResult`, `{ passages, failures }`, and `failures` is empty when nothing failed ([ADR 0014](./0014-a-retrieve-call-answers-with-the-retrievers-that-answered-and-names-those-that-were-unavailable.md)).

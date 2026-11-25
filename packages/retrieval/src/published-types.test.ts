@@ -37,7 +37,7 @@ const compile = async (): Promise<string> => {
   }
 };
 
-test('a consumer of the built declarations gets exactly the errors marked in type-tests: a host-typed FusionRetriever or PostprocessingRetriever does not widen to a plain one, the weights of a fusion take only the names of its retrievers and its record holds at least one name and none with a colon, the passage type keeps live passages from stored ones and checks the metadata and the filter, and the built-in postprocessors and fusions take the passage type of the retriever while a host postprocessor or fusion of one passage type needs no assertion, and every async port takes signal, not abortSignal, and each keyword retriever takes only the matching of its own engine, with no operator and no contradictory combination, and a score threshold is an option of each embedding retriever and of Rerank, never of a call', async () => {
+test('a consumer of the built declarations gets exactly the errors marked in type-tests: a host-typed FusionRetriever or PostprocessingRetriever does not widen to a plain one, each retriever of a fusion carries its weight in its entry and the record holds at least one name and none with a colon, a score fusion takes only retrievers and docs that give scores, in a FusionRetriever, a MultiQueryRetriever and the fusion itself, the passage type keeps live passages from stored ones and checks the metadata and the filter, and the built-in postprocessors and fusions take the passage type of the retriever while a host postprocessor of one passage type and a host fusion over ids need no assertion, a PostprocessingRetriever gives the kind of its retriever, the built-in postprocessors keep it, a host postprocessor of order only does not go over a scored retriever nor one that reads scores over a list of order only, and a RerankRetriever gives scores over a list of order only, and every async port takes signal, not abortSignal, and each keyword retriever takes only the matching of its own engine, with no operator and no contradictory combination, and a score threshold is an option of each embedding retriever and of RerankRetriever, never of a call', async () => {
   // Arrange
   const source = await readFile(join(fixture, 'published-types.ts'), 'utf8');
   const expected = source
@@ -57,7 +57,7 @@ test('a consumer of the built declarations gets exactly the errors marked in typ
     ...stdout.matchAll(/^(?:(.+?)\((\d+),\d+\): )?error (TS\d+):/gm),
   ].map(([, file = '', line = '', error]) => `${file}:${line} ${error}`);
   const files = stdout.split('\n').filter((line) => line.startsWith(root));
-  assert.equal(expected.length, 49, 'the fixture marks its 49 errors');
+  assert.equal(expected.length, 54, 'the fixture marks its 54 errors');
   assert.deepEqual(errors, expected);
   assert.ok(files.includes(join(root, 'dist', 'index.d.ts')));
   assert.deepEqual(

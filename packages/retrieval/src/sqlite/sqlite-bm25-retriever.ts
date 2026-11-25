@@ -3,6 +3,7 @@ import { type QueryType, keywordQueryOf } from '../query-bundle.ts';
 import type { RetrievalResult } from '../retrieval-result.ts';
 import type { RetrieveOptions } from '../retrieve-options.ts';
 import type { Retriever } from '../retriever.ts';
+import type { ScoredPassage } from '../scored-passage.ts';
 import { identifier } from '../sql/identifier.ts';
 import {
   AndMatch,
@@ -46,7 +47,11 @@ export class SqliteBM25Retriever<
   // `in out M`: TypeScript cannot measure M through the filter's mapped keys,
   // and a class method checks its parameters both ways (ADR 0015).
   in out M extends Metadata = Metadata,
-> implements Retriever<QueryType, StoredPassage<M>> {
+> implements Retriever<
+  QueryType,
+  StoredPassage<M>,
+  ScoredPassage<StoredPassage<M>>
+> {
   readonly #match: SqliteMatch<M>;
 
   constructor(options: {
@@ -92,7 +97,9 @@ export class SqliteBM25Retriever<
   async retrieve(
     query: QueryType,
     options: RetrieveOptions<StoredPassage<M>> = {},
-  ): Promise<RetrievalResult<StoredPassage<M>>> {
+  ): Promise<
+    RetrievalResult<StoredPassage<M>, ScoredPassage<StoredPassage<M>>>
+  > {
     options.signal?.throwIfAborted();
     return this.#match.retrieve(keywordQueryOf(query), options);
   }

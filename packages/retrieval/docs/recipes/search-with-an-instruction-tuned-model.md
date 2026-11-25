@@ -111,7 +111,7 @@ const { passages } = await retriever.retrieve('How do I rotate a key?', {
   topK: 2,
 });
 for (const { passage, score } of passages) {
-  console.log(score?.toFixed(3), passage.id, passage.text);
+  console.log(score.toFixed(3), passage.id, passage.text);
 }
 ```
 

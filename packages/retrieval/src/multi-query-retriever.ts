@@ -2,14 +2,17 @@ import { type LanguageModel, Output, generateText, jsonSchema } from 'ai';
 
 import { untilAborted } from '@zukhruf/async';
 
-import type { Fusion } from './fusion.ts';
+import { fusePassages } from './fuse-passages.ts';
+import type { Fusion, RankedDoc } from './fusion.ts';
 import type { Passage } from './passage.ts';
 import { type QueryType, needOf } from './query-bundle.ts';
-import { reciprocalRankFusion } from './reciprocal-rank-fusion.ts';
+import { RankFusion } from './rank-fusion.ts';
+import type { RankedPassage } from './ranked-passage.ts';
 import type { RetrievalResult } from './retrieval-result.ts';
 import type { RetrieveOptions } from './retrieve-options.ts';
 import type { RetrieverUnavailableError } from './retriever-unavailable-error.ts';
 import type { Retriever } from './retriever.ts';
+import type { ScoredPassage } from './scored-passage.ts';
 
 /**
  * Asks the language model for `queryCount` other versions of the query,
@@ -25,6 +28,10 @@ import type { Retriever } from './retriever.ts';
  * and Haystack. So the retriever takes a plain query (ADR 0013). The
  * failures of the searches merge by name, in the order of the searches, and
  * a name that two searches give keeps the failure of the first (ADR 0014).
+ * The lists fuse as the inputs `query`, `version 1` … `version n`, each with
+ * the weight 1, so an error of the fusion names the search. It always gives
+ * scored passages, the fused scores; under a `ScoreFusion` its retriever
+ * gives scored passages, as a `FusionRetriever`'s retrievers do.
  *
  * The searches fan out as the retrievers of a `FusionRetriever` do: an
  * error of one search aborts the signal of the others, with the error as
@@ -40,25 +47,27 @@ export class MultiQueryRetriever<
   // measure its variance and compares two composites by structure, where a
   // method checks its parameters both ways (ADR 0015).
   in out P extends Passage = Passage,
-> implements Retriever<QueryType, P> {
-  readonly #retriever: Retriever<QueryType, P>;
+  /** The fields a doc of the fusion has besides its id: unknown for a rank fusion, `{ score: number }` for a score fusion. */
+  F = unknown,
+> implements Retriever<QueryType, P, ScoredPassage<P>> {
+  readonly #retriever: Retriever<QueryType, P, RankedPassage<P> & F>;
   readonly #model: LanguageModel;
   readonly #queryCount: number;
-  readonly #fusion: Fusion<P>;
+  readonly #fusion: Fusion<RankedDoc & F>;
 
   constructor(options: {
-    readonly retriever: Retriever<QueryType, P>;
+    // `NoInfer`: F comes from the fusion only.
+    readonly retriever: Retriever<QueryType, P, RankedPassage<P> & NoInfer<F>>;
     readonly model: LanguageModel;
     /** How many versions the model writes, besides the query: 4 when absent. */
     readonly queryCount?: number;
-    // `NoInfer`: P comes from the retriever only (ADR 0015).
-    /** `reciprocalRankFusion()` when absent. */
-    readonly fusion?: Fusion<NoInfer<P>>;
+    /** `new RankFusion()` when absent. */
+    readonly fusion?: Fusion<RankedDoc & F>;
   }) {
     this.#retriever = options.retriever;
     this.#model = options.model;
     this.#queryCount = options.queryCount ?? 4;
-    this.#fusion = options.fusion ?? reciprocalRankFusion();
+    this.#fusion = options.fusion ?? new RankFusion();
     if (!Number.isInteger(this.#queryCount) || this.#queryCount < 1) {
       throw new RangeError(
         `The queryCount is a positive integer, not ${this.#queryCount}`,
@@ -69,7 +78,7 @@ export class MultiQueryRetriever<
   async retrieve(
     query: QueryType,
     options: RetrieveOptions<P> = {},
-  ): Promise<RetrievalResult<P>> {
+  ): Promise<RetrievalResult<P, ScoredPassage<P>>> {
     const need = needOf(query);
     const caller = options.signal;
     caller?.throwIfAborted();
@@ -117,12 +126,14 @@ export class MultiQueryRetriever<
       caller,
     );
     return {
-      passages: this.#fusion
-        .fuse(
-          results.map(({ passages }) => passages),
-          results.map(() => 1),
-        )
-        .slice(0, options.topK ?? 10),
+      passages: fusePassages(
+        this.#fusion,
+        results.map(({ passages }, index) => ({
+          name: index === 0 ? 'query' : `version ${index}`,
+          weight: 1,
+          passages,
+        })),
+      ).slice(0, options.topK ?? 10),
       failures: firstByName(results.map(({ failures }) => failures)),
     };
   }

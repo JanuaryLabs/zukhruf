@@ -49,11 +49,11 @@ The `customEmbeddings` of a query bundle: the texts that an embedding retriever 
 _Avoid_: Embedding text, embedding strs, vector query
 
 **Retriever**:
-The port of the package: an object with `retrieve(query, options)` that gives a retrieval result. Any source can implement it (Eino `Retriever.Retrieve`, Genkit `Retriever`). `Retriever<Q, P>` takes the query type `Q` and gives the passage type `P`: an engine gives stored passages, a live source passages ([ADR 0015](./docs/adr/0015-a-passage-is-typed-by-its-metadata-and-only-a-stored-passage-has-source-seq-start-and-end.md)).
+The port of the package: an object with `retrieve(query, options)` that gives a retrieval result. Any source can implement it (Eino `Retriever.Retrieve`, Genkit `Retriever`). `Retriever<Q, P, I>` takes the query type `Q`, gives the passage type `P` and gives items of the kind `I`: an engine gives scored stored passages, a live source of order only ranked passages ([ADR 0015](./docs/adr/0015-a-passage-is-typed-by-its-metadata-and-only-a-stored-passage-has-source-seq-start-and-end.md), [ADR 0021](./docs/adr/0021-a-retriever-says-whether-it-gives-scores-a-ranked-passage-has-none-and-a-scored-passage-always-has-one.md)). A scored retriever is a ranked one; a ranked retriever is not a scored one.
 _Avoid_: Searcher, text search, index, store
 
 **Retrieval result**:
-What a retrieve call gives: `{ passages, failures }`, the scored passages, best first, and the failures. Every retriever gives it, as every Elasticsearch response has `_shards` and every bleve `SearchResult` has `Status` ([ADR 0014](./docs/adr/0014-a-retrieve-call-answers-with-the-retrievers-that-answered-and-names-those-that-were-unavailable.md)).
+What a retrieve call gives: `{ passages, failures }`, the ranked or scored passages, best first, and the failures. Every retriever gives it, as every Elasticsearch response has `_shards` and every bleve `SearchResult` has `Status` ([ADR 0014](./docs/adr/0014-a-retrieve-call-answers-with-the-retrievers-that-answered-and-names-those-that-were-unavailable.md)).
 _Avoid_: Response, search result, hits
 
 **Failures**:
@@ -99,25 +99,49 @@ _Avoid_: Where, predicate, query (for the condition)
 ### Scores
 
 **Score**:
-The number that a retriever or a postprocessor gives a passage. A higher score is a better passage, for every retriever that gives one ([ADR 0005](./docs/adr/0005-a-score-is-higher-for-a-better-passage.md)). A retriever that gives an order only, such as a web search, gives none ([ADR 0016](./docs/adr/0016-a-scored-passage-may-have-no-score-and-a-list-is-in-the-retrievers-order.md)).
+The number that a retriever, a fusion or a reranker gives a passage: a finite number, higher for a better passage ([ADR 0005](./docs/adr/0005-a-score-is-higher-for-a-better-passage.md)). A retriever that gives an order only, such as a web search, gives none ([ADR 0021](./docs/adr/0021-a-retriever-says-whether-it-gives-scores-a-ranked-passage-has-none-and-a-scored-passage-always-has-one.md)).
 _Avoid_: Distance (lower is better), rank (a position), relevance, similarity (for the score of a keyword retriever)
 
+**Ranked passage**:
+A passage in a list of order only, and its vector when the call asks for it: `RankedPassage<P> = { passage, vector? }`. Its place in the list is its rank, and a list is best first. A live source that gives an order only, such as a web search or PubMed's Best Match, gives it (MongoDB's "Ranked Pipeline"; [ADR 0021](./docs/adr/0021-a-retriever-says-whether-it-gives-scores-a-ranked-passage-has-none-and-a-scored-passage-always-has-one.md)). The name is coined: no leader names the unit of order only.
+_Avoid_: Unscored passage, hit, rank (a position)
+
 **Scored passage**:
-A passage with its score when the retriever gives one, and its vector when the call asks for it: `{ passage, score?, vector? }`. LlamaIndex calls it `NodeWithScore`, .NET `VectorSearchResult`; both make the score optional.
+A ranked passage with its score: `ScoredPassage<P> = RankedPassage<P> & { score }`, and the score is required. Every engine retriever, fusion and rerank retriever gives it. A scored passage is a ranked passage, so a scored list goes where an order is accepted. LlamaIndex calls it `NodeWithScore`, .NET `VectorSearchResult` ([ADR 0021](./docs/adr/0021-a-retriever-says-whether-it-gives-scores-a-ranked-passage-has-none-and-a-scored-passage-always-has-one.md)).
 _Avoid_: Result, hit, match, search result
 
 **Score threshold**:
-The least score that a passage keeps. Only an object that knows the scale of its scores takes one: an embedding retriever, for the cosine similarity from -1 to 1, and `Rerank`, for the score of its model. The scores of a keyword retriever and of a fusion change their scale with the engine and the query, so they take none ([ADR 0019](./docs/adr/0019-a-score-threshold-belongs-to-the-embedding-retriever-or-to-rerank-where-the-scale-of-the-score-is-known.md)). Qdrant and Haystack call it `score_threshold`, Elasticsearch's knn retriever `similarity`.
+The least score that a passage keeps. Only an object that knows the scale of its scores takes one: an embedding retriever, for the cosine similarity from -1 to 1, and `RerankRetriever`, for the score of its model. The scores of a keyword retriever and of a fusion change their scale with the engine and the query, so they take none ([ADR 0019](./docs/adr/0019-a-score-threshold-belongs-to-the-embedding-retriever-or-to-rerank-where-the-scale-of-the-score-is-known.md)). Qdrant and Haystack call it `score_threshold`, Elasticsearch's knn retriever `similarity`.
 _Avoid_: Cutoff, similarity cutoff, minimum score
 
 ### Composition
 
 **Fusion**:
-The combination of the result lists of several retrievers into one list, on `Passage.id`. Three fusions ship: reciprocal rank fusion, relative score fusion (min-max) and distribution-based score fusion (mean ± 3σ). Reciprocal rank fusion reads the order of each list only; the two score fusions read the scores, and refuse a passage without a score, or with a score that is not finite, with a `TypeError` ([ADR 0016](./docs/adr/0016-a-scored-passage-may-have-no-score-and-a-list-is-in-the-retrievers-order.md)).
+The combination of several lists of ids into one scored list, best first: `Fusion<D>` with `fuse(inputs)`. It fuses ids, as Elasticsearch, OpenSearch and Qdrant do, and `FusionRetriever` gives each fused id its passage after. A fusion is a rank fusion or a score fusion ([ADR 0020](./docs/adr/0020-a-fusion-is-a-rank-fusion-or-a-score-fusion-over-ids-with-a-normalizer-for-each-list-and-a-combination.md)).
 _Avoid_: Hybrid search (one use of fusion), ensemble, join, merge
 
+**Fusion input**:
+One list of a fusion, with its name and its weight: `FusionInput<D> = { name, docs, weight }`. Every error of the fusion names the input. A weight is a finite number of 0 or more, and at least one input has a weight above 0 (MongoDB `$rankFusion` and `$scoreFusion` take each pipeline by name with its weight).
+_Avoid_: List (alone), source (a glossary word for the row key), pipeline
+
+**Rank fusion**:
+A fusion that reads the order of each list only: `RankFusion`, a rank normalizer for each list and a combination, after MongoDB's `$rankFusion`. With no options it is reciprocal rank fusion. It fuses a list of order only beside a scored one.
+_Avoid_: Rank merge, RRF (for every rank fusion)
+
+**Score fusion**:
+A fusion that reads the scores of each list: `ScoreFusion`, a score normalizer for each list and a combination, both required, after MongoDB's `$scoreFusion`. Each input is scored, so a retriever of order only does not compile under it.
+_Avoid_: Linear fusion, relative score fusion (one normalizer of it), convex combination
+
+**Normalizer**:
+The strategy that gives each item of one list its score before the combination. A rank normalizer reads the rank from 1 and the length of the list (`reciprocalRank`). A score normalizer reads the score and the statistics of its list, `ListScores { min, max, mean, std, l2 }` (`minMax`, `distributionBased`, `none`). Elasticsearch calls it `ScoreNormalizer`, OpenSearch a normalization technique. `ListScores` is a coined name: the leaders pass the whole list.
+_Avoid_: Scaler, transform
+
+**Combination**:
+The strategy that joins the normalized scores of one id, each with the weight of its input, into its fused score: `sum` (CombSUM), `max` (CombMAX) or `arithmeticMean`. MongoDB calls it `combination`, OpenSearch a combination technique.
+_Avoid_: Aggregation, merge function, reducer
+
 **Reciprocal rank fusion**:
-A fusion that gives each passage the sum of `weight / (k + rank)` over the lists that hold it, with k 60 and ranks from 1 (Cormack, Clarke and Büttcher, SIGIR 2009; [Elasticsearch rrf](https://www.elastic.co/docs/reference/elasticsearch/rest-apis/retrievers/rrf-retriever)).
+The rank fusion that gives each passage the sum of `weight / (k + rank)` over the lists that hold it, with k 60 and ranks from 1 (Cormack, Clarke and Büttcher, SIGIR 2009; [Elasticsearch rrf](https://www.elastic.co/docs/reference/elasticsearch/rest-apis/retrievers/rrf-retriever)). It is `new RankFusion()`, the default fusion of `FusionRetriever` and `MultiQueryRetriever`.
 _Avoid_: RRF score (for the fused score), reciprocal rerank (LlamaIndex's name)
 
 **Rank window**:
@@ -125,9 +149,9 @@ How many passages a fusion asks of each of its retrievers before it fuses. Elast
 _Avoid_: Prefetch, candidate count, fetch-k
 
 **Postprocessor**:
-An object that changes a result list after the search: it reranks, cuts, diversifies, groups, reorders or widens the passages. LlamaIndex calls it `BaseNodePostprocessor`. `Postprocessor<R>` needs passages of at least `R` and gives back the passage type it got: `ContextWindow` needs stored passages of the metadata of its store ([ADR 0015](./docs/adr/0015-a-passage-is-typed-by-its-metadata-and-only-a-stored-passage-has-source-seq-start-and-end.md)).
+An object that changes a result list after the search: it cuts, diversifies, groups, reorders or widens the passages. LlamaIndex calls it `BaseNodePostprocessor`. `Postprocessor<P, I>` takes items of the kind `I` of passages `P` and gives back that kind: a postprocessor of order only does not go over a scored list. The package's postprocessors keep the kind they get, and `ContextWindow` needs stored passages of the metadata of its store ([ADR 0015](./docs/adr/0015-a-passage-is-typed-by-its-metadata-and-only-a-stored-passage-has-source-seq-start-and-end.md), [ADR 0021](./docs/adr/0021-a-retriever-says-whether-it-gives-scores-a-ranked-passage-has-none-and-a-scored-passage-always-has-one.md)).
 _Avoid_: Compressor (LangChain), ranker (Haystack), filter (for a postprocessor)
 
-**Rerank**:
-The postprocessor that scores each passage again with an AI SDK reranking model and keeps the best `topN`.
-_Avoid_: Cross-encoder (one kind of model), re-score
+**Rerank retriever**:
+The retriever that scores the passages of its retriever again with an AI SDK reranking model and keeps the best `topN`: `RerankRetriever`, as Elasticsearch's `text_similarity_reranker` wraps a child retriever. Its retriever may give an order only; it gives scored passages ([ADR 0021](./docs/adr/0021-a-retriever-says-whether-it-gives-scores-a-ranked-passage-has-none-and-a-scored-passage-always-has-one.md)).
+_Avoid_: Rerank postprocessor, cross-encoder (one kind of model), re-score

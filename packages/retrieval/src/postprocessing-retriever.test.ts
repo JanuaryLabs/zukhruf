@@ -10,12 +10,14 @@ import { Vector } from '@zukhruf/vectors';
 import { install, toSql } from '@zukhruf/vectors/sqlite';
 
 import {
+  Collapse,
   MaximalMarginalRelevance,
   PostprocessingRetriever,
   type Postprocessor,
   type QueryType,
-  Rerank,
+  RerankRetriever,
   RetrieverUnavailableError,
+  type ScoredPassage,
   type StoredPassage,
 } from './index.ts';
 import { SqliteEmbeddingRetriever, SqlitePassageStore } from './sqlite.ts';
@@ -116,20 +118,26 @@ const scores = (
   }[],
 ) => results.map(({ passage, score }) => [passage.id, score]);
 
-test('the postprocessors run in their order, each on the list of the one before it', async () => {
+test('a cutoff over a RerankRetriever cuts the scores of the reranking model, and one under it cuts the scores of the search, which the RerankRetriever then reranks', async () => {
   // Arrange: a host's cutoff for a score whose scale it knows.
   using database = knowledge();
-  const cutoff: Postprocessor<StoredPassage> = {
+  const cutoff: Postprocessor<StoredPassage, ScoredPassage<StoredPassage>> = {
     postprocess: async (passages) =>
-      passages.filter(({ score }) => score !== undefined && score >= 0.5),
+      passages.filter(({ score }) => score >= 0.5),
   };
   const rerankThenCut = new PostprocessingRetriever({
-    retriever: search(database),
-    postprocessors: [new Rerank({ model: reranker() }), cutoff],
+    retriever: new RerankRetriever({
+      retriever: search(database),
+      model: reranker(),
+    }),
+    postprocessors: [cutoff],
   });
-  const cutThenRerank = new PostprocessingRetriever({
-    retriever: search(database),
-    postprocessors: [cutoff, new Rerank({ model: reranker() })],
+  const cutThenRerank = new RerankRetriever({
+    retriever: new PostprocessingRetriever({
+      retriever: search(database),
+      postprocessors: [cutoff],
+    }),
+    model: reranker(),
   });
 
   // Act
@@ -151,13 +159,16 @@ test('the query and the abort signal of the call reach the retriever and each po
   // Arrange
   using database = knowledge();
   const searched: (AbortSignal | undefined)[] = [];
-  const reranked: Seen[] = [];
+  const seen: Seen[] = [];
+  const recorder: Postprocessor<StoredPassage, ScoredPassage<StoredPassage>> = {
+    postprocess: async (passages, query, options) => {
+      seen.push({ query, abortSignal: options?.signal });
+      return [...passages];
+    },
+  };
   const retriever = new PostprocessingRetriever({
     retriever: search(database, searched),
-    postprocessors: [
-      new Rerank({ model: reranker(reranked) }),
-      new Rerank({ model: reranker(reranked) }),
-    ],
+    postprocessors: [recorder, recorder],
   });
   const controller = new AbortController();
 
@@ -166,7 +177,7 @@ test('the query and the abort signal of the call reach the retriever and each po
 
   // Assert
   assert.deepEqual(searched, [controller.signal]);
-  assert.deepEqual(reranked, [
+  assert.deepEqual(seen, [
     { query: 'rotate a key', abortSignal: controller.signal },
     { query: 'rotate a key', abortSignal: controller.signal },
   ]);
@@ -174,12 +185,23 @@ test('the query and the abort signal of the call reach the retriever and each po
 
 test('a retriever that needs its own field gets the query bundle unchanged, while each postprocessor gets its query, the information need', async () => {
   // Arrange: the source records what it gets; its passages have the texts
-  // alpha and delta, which the reranker scores.
+  // alpha and delta, which the reranker under the postprocessor scores.
   const source = new RecordingRetriever<EntrezQueryBundle>(['alpha', 'delta']);
   const reranked: Seen[] = [];
+  const postprocessed: string[] = [];
   const retriever = new PostprocessingRetriever({
-    retriever: source,
-    postprocessors: [new Rerank({ model: reranker(reranked) })],
+    retriever: new RerankRetriever({
+      retriever: source,
+      model: reranker(reranked),
+    }),
+    postprocessors: [
+      {
+        postprocess: async (passages, query) => {
+          postprocessed.push(query);
+          return [...passages];
+        },
+      },
+    ],
   });
   const query: EntrezQueryBundle = {
     query: 'What dose of apixaban for a patient with renal insufficiency?',
@@ -196,6 +218,9 @@ test('a retriever that needs its own field gets the query bundle unchanged, whil
     reranked.map(({ query }) => query),
     ['What dose of apixaban for a patient with renal insufficiency?'],
   );
+  assert.deepEqual(postprocessed, [
+    'What dose of apixaban for a patient with renal insufficiency?',
+  ]);
   assert.deepEqual(scores(results), [
     ['delta', 0.9],
     ['alpha', 0.1],
@@ -238,14 +263,45 @@ test('MaximalMarginalRelevance diversifies with the stored vectors when the call
   assert.equal(diversified.length, 1);
 });
 
-test('the failures of the retriever pass up unchanged, and a Rerank gives a score to every passage of a list of order only', async () => {
+test('a Collapse after MaximalMarginalRelevance keeps the order of its picks, not the order of the scores', async () => {
+  // Arrange: four picks, then the first three of the one source.
+  using database = knowledge();
+  const retriever = new PostprocessingRetriever({
+    retriever: search(database),
+    postprocessors: [
+      new MaximalMarginalRelevance({ model: embeddings([]), topK: 4 }),
+      new Collapse({ size: 3 }),
+    ],
+  });
+
+  // Act
+  const results = (
+    await retriever.retrieve('rotate a key', { includeVectors: true })
+  ).passages;
+
+  // Assert: MMR picks alpha, then beta 0.3 over delta -0.08, then gamma 0
+  // (redundancy 0) over delta 0.32 - 0.5 * 0.8 = -0.08, then delta; by score
+  // the three would be alpha 0.8, delta 0.64, beta 0.6.
+  assert.deepEqual(
+    results.map(({ passage }) => passage.id),
+    ['alpha', 'beta', 'gamma'],
+  );
+});
+
+test('the failures of the retriever pass up unchanged, and a RerankRetriever under it gives a score to every passage of a list of order only', async () => {
   // Arrange: a live source that gives an order only and names one child
   // that was unavailable.
   const unavailable = new RetrieverUnavailableError('HTTP 503');
   const failures = new Map([['news', unavailable]]);
   const reranked = new PostprocessingRetriever({
-    retriever: new LiveRetriever(['alpha', 'beta', 'gamma', 'delta'], failures),
-    postprocessors: [new Rerank({ model: reranker() })],
+    retriever: new RerankRetriever({
+      retriever: new LiveRetriever(
+        ['alpha', 'beta', 'gamma', 'delta'],
+        failures,
+      ),
+      model: reranker(),
+    }),
+    postprocessors: [],
   });
 
   // Act
@@ -265,7 +321,10 @@ test('the failures of the retriever pass up unchanged, and a Rerank gives a scor
 test("the caller's abort rejects the call at once with the signal's reason, while a postprocessor ignores its signal and never settles", async () => {
   // Arrange
   const started = Promise.withResolvers<void>();
-  const postprocessor: Postprocessor<StoredPassage> = {
+  const postprocessor: Postprocessor<
+    StoredPassage,
+    ScoredPassage<StoredPassage>
+  > = {
     postprocess: () => {
       started.resolve();
       return new Promise(() => {});

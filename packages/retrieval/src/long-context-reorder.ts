@@ -1,6 +1,6 @@
 import type { Passage } from './passage.ts';
 import type { Postprocessor } from './postprocessor.ts';
-import type { ScoredPassage } from './scored-passage.ts';
+import type { RankedPassage } from './ranked-passage.ts';
 
 /**
  * Puts the best passages at the two ends of the list and the worst in the
@@ -15,13 +15,13 @@ import type { ScoredPassage } from './scored-passage.ts';
  * longer sorted by them.
  */
 export class LongContextReorder implements Postprocessor<Passage> {
-  async postprocess<P extends Passage>(
-    passages: readonly ScoredPassage<P>[],
+  async postprocess<I extends RankedPassage>(
+    passages: readonly I[],
     _query?: string,
     options: { readonly signal?: AbortSignal } = {},
-  ): Promise<ScoredPassage<P>[]> {
+  ): Promise<I[]> {
     options.signal?.throwIfAborted();
-    const reordered: ScoredPassage<P>[] = [];
+    const reordered: I[] = [];
     for (const [index, passage] of passages.toReversed().entries()) {
       if (index % 2 === 1) reordered.push(passage);
       else reordered.unshift(passage);

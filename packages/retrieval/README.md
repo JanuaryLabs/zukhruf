@@ -1,10 +1,10 @@
 # @zukhruf/retrieval
 
-This package is the query side of retrieval-augmented generation (RAG). A query goes in. A retrieval result comes out: the best passages, best first, each with a score that is higher for a better passage when its retriever gives one, and the failures. The package never cuts or embeds documents: elt writes the passages, their vectors with the model identity, and a keyword index ([ADR 0001](./docs/adr/0001-the-package-is-the-query-side-of-rag-and-reads-a-passage-contract-that-elt-writes.md)).
+This package is the query side of retrieval-augmented generation (RAG). A query goes in. A retrieval result comes out: the best passages, best first, and the failures. An engine retriever, a fusion and a reranker give each passage a score, which is higher for a better passage; a host's source of order only, such as a web search, gives ranked passages with no score ([ADR 0021](./docs/adr/0021-a-retriever-says-whether-it-gives-scores-a-ranked-passage-has-none-and-a-scored-passage-always-has-one.md)). The package never cuts or embeds documents: elt writes the passages, their vectors with the model identity, and a keyword index ([ADR 0001](./docs/adr/0001-the-package-is-the-query-side-of-rag-and-reads-a-passage-contract-that-elt-writes.md)).
 
-The port of the package is `Retriever`. A query is a string, or a query bundle with a text for each kind of search ([ADR 0013](./docs/adr/0013-a-query-is-a-string-or-a-query-bundle-with-a-text-for-each-kind-of-search.md)). The engine retrievers read that passage contract with the SQL of SQLite, Postgres or SQL Server. A host can implement `Retriever` over any other source, such as a web search. Composite retrievers fuse retrievers or rewrite the query, and postprocessors rerank, cut, diversify, group, reorder and widen the result.
+The port of the package is `Retriever`. A query is a string, or a query bundle with a text for each kind of search ([ADR 0013](./docs/adr/0013-a-query-is-a-string-or-a-query-bundle-with-a-text-for-each-kind-of-search.md)). The engine retrievers read that passage contract with the SQL of SQLite, Postgres or SQL Server. A host can implement `Retriever` over any other source, such as a web search. Composite retrievers fuse retrievers, rerank or rewrite the query, and postprocessors cut, diversify, group, reorder and widen the result.
 
-The package has four entry points. `@zukhruf/retrieval` has the port, the composite retrievers, the fusions, the postprocessors and the errors. `@zukhruf/retrieval/sqlite`, `@zukhruf/retrieval/postgres` and `@zukhruf/retrieval/sqlserver` each have the passage store and the engine retrievers of one engine.
+The package has four entry points. `@zukhruf/retrieval` has the port, the composite retrievers, the fusions and their strategies, the postprocessors and the errors. `@zukhruf/retrieval/sqlite`, `@zukhruf/retrieval/postgres` and `@zukhruf/retrieval/sqlserver` each have the passage store and the engine retrievers of one engine.
 
 The words in these documents have one meaning each. See the glossary in [CONTEXT.md](./CONTEXT.md).
 
@@ -120,7 +120,7 @@ const { passages } = await retriever.retrieve('How do I rotate a key?', {
   topK: 3,
 });
 for (const { passage, score } of passages) {
-  console.log(score?.toFixed(3), passage.id, passage.text);
+  console.log(score.toFixed(3), passage.id, passage.text);
 }
 ```
 
@@ -155,7 +155,7 @@ const close = new SqliteEmbeddingRetriever({
 });
 const { passages: closest } = await close.retrieve('How do I rotate a key?');
 for (const { passage, score } of closest) {
-  console.log(score?.toFixed(3), passage.id);
+  console.log(score.toFixed(3), passage.id);
 }
 ```
 
@@ -227,7 +227,7 @@ const pgResults = await pgRetriever.retrieve('How do I rotate a key?', {
   signal: AbortSignal.timeout(10_000),
 });
 for (const { passage, score } of pgResults.passages) {
-  console.log(score?.toFixed(3), passage.id, passage.text);
+  console.log(score.toFixed(3), passage.id, passage.text);
 }
 ```
 
@@ -268,7 +268,7 @@ const everyWord = new SqliteBM25Retriever({
 for (const search of [keywords, everyWord]) {
   const { passages } = await search.retrieve('backup mailbox');
   console.log(
-    passages.map(({ passage, score }) => `${passage.id} ${score?.toFixed(3)}`),
+    passages.map(({ passage, score }) => `${passage.id} ${score.toFixed(3)}`),
   );
 }
 ```
@@ -374,27 +374,29 @@ Output:
 
 ## Combine searches
 
-`FusionRetriever` takes its retrievers by name. It asks each retriever for `rankWindowSize` passages, fuses the lists on `Passage.id`, in the order of the names, and gives the best `topK`. The default fusion is reciprocal rank fusion with k 60 and ranks from 1. `weights` gives a weight by name, and each name that it does not give has a weight of 1 ([ADR 0007](./docs/adr/0007-reciprocal-rank-fusion-is-the-default-fusion-with-k-60-and-ranks-from-1.md), [ADR 0014](./docs/adr/0014-a-retrieve-call-answers-with-the-retrievers-that-answered-and-names-those-that-were-unavailable.md)). A weight is a finite number of 0 or more, and at least one weight is above 0, as Haystack, Elasticsearch and LangChain require; else the `FusionRetriever` throws a `RangeError` when it is made. A weight of 0 gives its retriever no part in a score. A retriever that did not answer gives the fusion an empty list. A weight for a name that is no retriever, a record of no retriever, and a name that holds `:` do not compile; a record typed by `string` gets a `RangeError` for them at construction. `rankWindowSize` is the `topK` of the call when absent, and a `rankWindowSize` smaller than that `topK` is a `RangeError`. This program uses `keywords` of "Search by keywords".
+`FusionRetriever` takes its retrievers by name, each with its weight: `retrievers: { [name]: { retriever, weight? } }`, as the `retrievers` of Elasticsearch's rrf and linear retrievers. It asks each retriever for `rankWindowSize` passages, fuses the lists on `Passage.id`, in the order of the names, and gives the best `topK`, each with its fused score ([ADR 0020](./docs/adr/0020-a-fusion-is-a-rank-fusion-or-a-score-fusion-over-ids-with-a-normalizer-for-each-list-and-a-combination.md), [ADR 0014](./docs/adr/0014-a-retrieve-call-answers-with-the-retrievers-that-answered-and-names-those-that-were-unavailable.md)). The fusion gets one input for each retriever, with its name and its weight. A weight is 1 when absent. A weight is a finite number of 0 or more, and at least one weight is above 0, as Haystack, Elasticsearch and LangChain require; else the `FusionRetriever` throws a `RangeError` that names the retriever when it is made ([ADR 0007](./docs/adr/0007-reciprocal-rank-fusion-is-the-default-fusion-with-k-60-and-ranks-from-1.md), the amendment of 2026-11-25). A weight of 0 gives its retriever no part in a score. A retriever that did not answer gives the fusion an empty list. A record of no retriever and a name that holds `:` do not compile; a record typed by `string` gets a `RangeError` for them at construction. `rankWindowSize` is the `topK` of the call when absent, and a `rankWindowSize` smaller than that `topK` is a `RangeError`. This program uses `keywords` of "Search by keywords".
 
 ```ts
-import { FusionRetriever, relativeScoreFusion } from '@zukhruf/retrieval';
+import { FusionRetriever, ScoreFusion, minMax, sum } from '@zukhruf/retrieval';
 
 const hybrid = new FusionRetriever({
-  retrievers: { meaning: retriever, keywords },
+  retrievers: { meaning: { retriever }, keywords: { retriever: keywords } },
   rankWindowSize: 50,
 });
-const minMax = new FusionRetriever({
-  retrievers: { meaning: retriever, keywords },
-  fusion: relativeScoreFusion(),
-  weights: { meaning: 0.75, keywords: 0.25 },
+const scaled = new FusionRetriever({
+  retrievers: {
+    meaning: { retriever, weight: 0.75 },
+    keywords: { retriever: keywords, weight: 0.25 },
+  },
+  fusion: new ScoreFusion({ normalizer: minMax(), combination: sum() }),
 });
 
-for (const search of [hybrid, minMax]) {
+for (const search of [hybrid, scaled]) {
   const { passages } = await search.retrieve('rotate the old key', {
     topK: 3,
   });
   console.log(
-    passages.map(({ passage, score }) => `${passage.id} ${score?.toFixed(4)}`),
+    passages.map(({ passage, score }) => `${passage.id} ${score.toFixed(4)}`),
   );
 }
 ```
@@ -404,17 +406,95 @@ Output:
 ```
 [
   'vault-guide#0 0.0328',
-  'vault-guide#1 0.0161',
-  'vault-guide#2 0.0159'
+  'vault-guide#1 0.0320',
+  'vault-guide#2 0.0320'
 ]
 [
   'vault-guide#0 1.0000',
-  'vault-guide#1 0.0000',
-  'vault-guide#2 0.0000'
+  'vault-guide#2 0.0779',
+  'vault-guide#1 0.0000'
 ]
 ```
 
-`vault-guide#0` is first in both lists, so reciprocal rank fusion gives it `1/61 + 1/61`. `minMax` has no `rankWindowSize`, so each retriever gives 3 passages. Min-max scaling gives the worst passage of a list 0, and a list whose scores are all equal gives 1.
+`hybrid` has no `fusion`, so it fuses with `new RankFusion()`: reciprocal rank fusion with k 60 and ranks from 1. `vault-guide#0` is first in both lists, so it gets `1/61 + 1/61`. `scaled` has no `rankWindowSize`, so each retriever gives 3 passages. Min-max scaling gives the best passage of a list 1 and the worst 0, and a list whose scores are all equal gives 1.
+
+A fusion is a rank fusion or a score fusion, after MongoDB's `$rankFusion` and `$scoreFusion` ([ADR 0020](./docs/adr/0020-a-fusion-is-a-rank-fusion-or-a-score-fusion-over-ids-with-a-normalizer-for-each-list-and-a-combination.md)):
+
+- **`RankFusion` reads the order of each list only.** A rank normalizer gives each place its score, and a combination joins the weighted scores of an id. With no options it is reciprocal rank fusion, `reciprocalRank({ k: 60 })` and `sum()`, as `$rankFusion` is.
+- **`ScoreFusion` reads the scores.** A score normalizer rescales each list from the statistics of its scores, `ListScores { min, max, mean, std, l2 }`, and a combination joins the weighted scores of an id. It takes both, with no default, because the leaders split on both: MongoDB `avg`, Elasticsearch and Qdrant `sum`, OpenSearch `arithmetic_mean`.
+
+The package ships these strategies. A host writes its own as an object with `normalize` or `combine`.
+
+| Strategy                | Kind             | Score                                                                                                         |
+| ----------------------- | ---------------- | ------------------------------------------------------------------------------------------------------------- |
+| `reciprocalRank({ k })` | rank normalizer  | `1 / (k + rank)`, ranks from 1; `k` is 60 when absent, and an integer of 1 or more                            |
+| `minMax()`              | score normalizer | `(s - min) / (max - min)`; 1 when every score of the list is equal                                            |
+| `distributionBased()`   | score normalizer | `(s - (mean - 3σ)) / ((mean + 3σ) - (mean - 3σ))`, with the population σ, not clipped; 0.5 when σ is 0        |
+| `none()`                | score normalizer | `s`, as it is                                                                                                 |
+| `sum()`                 | combination      | `Σ w·s` (CombSUM)                                                                                             |
+| `max()`                 | combination      | the greatest `w·s` (CombMAX), so a weight of 0 gives 0 (#5585)                                                |
+| `arithmeticMean()`      | combination      | `Σ w·s / Σ w` over the inputs that hold the id; 0 when `Σ w` is 0, as OpenSearch's `arithmetic_mean` gives it |
+
+A retriever that gives an order only, such as a host's web search, gives ranked passages, with no score ([ADR 0021](./docs/adr/0021-a-retriever-says-whether-it-gives-scores-a-ranked-passage-has-none-and-a-scored-passage-always-has-one.md)). A `RankFusion` fuses its list beside a scored one by their order. Under a `ScoreFusion`, each retriever must give scored passages, or the `FusionRetriever` does not compile, as MongoDB's `$scoreFusion` refuses an input pipeline that gives no score. A missing score taken as 0, as LlamaIndex, Haystack and Eino take it, would tie every passage of that list with the best scored passage. A `ScoreFusion` refuses a score that is not finite with a `TypeError` that names the id and its input, and the core refuses a normalized or a fused score that is not finite, so a host strategy that gives NaN fails at once.
+
+A fusion fuses ids, not passages, as Elasticsearch, OpenSearch and Qdrant do. So a host that holds only ids and scores calls `fuse` itself, as `@zukhruf/mteb` does for MTEB's hybrid search (#5400). Each input has a `name`, which every error names, its `docs`, best first, and its `weight`. This program fuses two lists on one scale with the greatest weighted score of each id (#5585), then with a host normalizer that divides each score by the L2 norm of its list, as Elasticsearch's `l2_norm` does, and the arithmetic mean.
+
+```ts
+import {
+  type FusionInput,
+  type ScoreDoc,
+  type ScoreNormalizer,
+  arithmeticMean,
+  max,
+  none,
+} from '@zukhruf/retrieval';
+
+const inputs: FusionInput<ScoreDoc>[] = [
+  {
+    name: 'labels',
+    weight: 1,
+    docs: [
+      { id: 'd1', score: 0.9 },
+      { id: 'd2', score: 0.5 },
+    ],
+  },
+  {
+    name: 'trials',
+    weight: 2,
+    docs: [
+      { id: 'd2', score: 0.3 },
+      { id: 'd3', score: 0.2 },
+    ],
+  },
+];
+
+const greatest = new ScoreFusion({ normalizer: none(), combination: max() });
+console.log(greatest.fuse(inputs));
+
+const byNorm: ScoreNormalizer = { normalize: (score, list) => score / list.l2 };
+const averaged = new ScoreFusion({
+  normalizer: byNorm,
+  combination: arithmeticMean(),
+});
+console.log(averaged.fuse(inputs));
+```
+
+Output:
+
+```
+[
+  { id: 'd1', score: 0.9 },
+  { id: 'd2', score: 0.6 },
+  { id: 'd3', score: 0.4 }
+]
+[
+  { id: 'd1', score: 0.8741572761215378 },
+  { id: 'd2', score: 0.7165811732847732 },
+  { id: 'd3', score: 0.5547001962252291 }
+]
+```
+
+Under `max()`, `d2` gets 0.6, the 0.3 of `trials` times its weight 2, which is more than its 0.5 of `labels`; a sum would give it 1.1. `arithmeticMean()` divides by the weights of the inputs that hold the id, so `d3`, which only `trials` holds, keeps its normalized score, 0.555.
 
 The retrievers run at once, and the call answers with the retrievers that answered ([ADR 0014](./docs/adr/0014-a-retrieve-call-answers-with-the-retrievers-that-answered-and-names-those-that-were-unavailable.md)):
 
@@ -424,9 +504,7 @@ The retrievers run at once, and the call answers with the retrievers that answer
 - **Any other error is a bug.** It aborts the signal of every other retriever, with the error as the reason, as Go's `errgroup.WithContext` cancels with its cause, and the call rejects with it.
 - **When the caller aborts, the call rejects at once with the signal's reason**, even while a retriever ignores its signal.
 
-A retriever that gives an order only, such as a host's web search, writes no score ([ADR 0016](./docs/adr/0016-a-scored-passage-may-have-no-score-and-a-list-is-in-the-retrievers-order.md)). Reciprocal rank fusion reads the order only, so its list fuses like any other. `relativeScoreFusion` and `distributionBasedScoreFusion` read scores, so a passage without one is a `TypeError` that names the passage and the index of its list, and says to fuse a list of order only with `reciprocalRankFusion`. A missing score taken as 0, as LlamaIndex, Haystack and Eino take it, would tie every passage of that list with the best scored passage. `Collapse` sorts by score only when every passage has one, and `Rerank` gives every passage a score.
-
-`MultiQueryRetriever` asks a language model for `queryCount` other versions of the query, 4 when absent. It searches the query and each version, and fuses the lists with `reciprocalRankFusion()` when it has no `fusion` ([ADR 0008](./docs/adr/0008-a-search-is-composed-of-retrievers-that-wrap-retrievers-and-a-list-of-postprocessors.md)). It searches a query bundle as the caller gives it, first, and each version as a plain string, so its retriever takes a plain query ([ADR 0013](./docs/adr/0013-a-query-is-a-string-or-a-query-bundle-with-a-text-for-each-kind-of-search.md)). The searches run at once as the retrievers of a `FusionRetriever` do: an error of one search aborts the others with the error as the reason, and an abort of the caller rejects at once. It catches no error, a `RetrieverUnavailableError` too: every search reads the one retriever, so the call rejects with it. This program continues the one above.
+`MultiQueryRetriever` asks a language model for `queryCount` other versions of the query, 4 when absent. It searches the query and each version, and fuses the lists as the inputs `query`, `version 1` … `version n`, each with a weight of 1, with `new RankFusion()` when it has no `fusion` ([ADR 0008](./docs/adr/0008-a-search-is-composed-of-retrievers-that-wrap-retrievers-and-a-list-of-postprocessors.md)). It searches a query bundle as the caller gives it, first, and each version as a plain string, so its retriever takes a plain query ([ADR 0013](./docs/adr/0013-a-query-is-a-string-or-a-query-bundle-with-a-text-for-each-kind-of-search.md)). It gives scored passages, the fused scores, and its retriever follows the rule of `FusionRetriever`: any retriever under a `RankFusion`, a scored one under a `ScoreFusion`. The searches run at once as the retrievers of a `FusionRetriever` do: an error of one search aborts the others with the error as the reason, and an abort of the caller rejects at once. It catches no error, a `RetrieverUnavailableError` too: every search reads the one retriever, so the call rejects with it. This program continues the one above.
 
 ```ts
 import { MockLanguageModelV4 } from 'ai/test';
@@ -460,7 +538,7 @@ const languageModel = new MockLanguageModelV4({
 });
 
 // The query and the 4 versions that the model writes: 5 lists, which
-// reciprocalRankFusion() fuses.
+// new RankFusion() fuses.
 const expanded = new MultiQueryRetriever({
   retriever: hybrid,
   model: languageModel,
@@ -468,7 +546,7 @@ const expanded = new MultiQueryRetriever({
 const found = await expanded.retrieve('rotate a key', { topK: 3 });
 console.log(
   found.passages.map(
-    ({ passage, score }) => `${passage.id} ${score?.toFixed(4)}`,
+    ({ passage, score }) => `${passage.id} ${score.toFixed(4)}`,
   ),
 );
 ```
@@ -477,17 +555,19 @@ Output:
 
 ```
 [
-  'vault-guide#1 0.0809',
+  'vault-guide#1 0.0799',
   'vault-guide#0 0.0656',
-  'vault-guide#2 0.0635'
+  'vault-guide#2 0.0640'
 ]
 ```
 
-`HydeRetriever { retriever, model }` asks the language model for a passage that answers the `query`, and gives that passage to the embedding search only, as `customEmbeddings: [passage]`. The `query` and the `keywords` stay, so a reranker below it still ranks against the question. Its retriever takes any query bundle: a host source that needs its own field is fused beside it, `new FusionRetriever({ retrievers: { issues: new IssueRetriever(), hyde: new HydeRetriever({ retriever: embeddings, model }) } })`, since only an embedding search reads the passage ([ADR 0013](./docs/adr/0013-a-query-is-a-string-or-a-query-bundle-with-a-text-for-each-kind-of-search.md)). The passage replaces any `customEmbeddings` of the caller, so the embedding search reads the passage alone, as LangChain's [`HydeRetriever`](https://raw.githubusercontent.com/langchain-ai/langchainjs/main/libs/langchain-classic/src/retrievers/hyde.ts) and Haystack's [HyDE recipe](https://docs.haystack.deepset.ai/docs/hypothetical-document-embeddings-hyde) do; LlamaIndex's [`HyDEQueryTransform`](https://raw.githubusercontent.com/run-llama/llama_index/main/llama-index-core/llama_index/core/indices/query/query_transform/base.py) keeps them by default (`include_original=True`).
+`HydeRetriever { retriever, model }` asks the language model for a passage that answers the `query`, and gives that passage to the embedding search only, as `customEmbeddings: [passage]`. The `query` and the `keywords` stay, so a reranker below it still ranks against the question. Its retriever takes any query bundle: a host source that needs its own field is fused beside it, `new FusionRetriever({ retrievers: { issues: { retriever: new IssueRetriever() }, hyde: { retriever: new HydeRetriever({ retriever: embeddings, model }) } } })`, since only an embedding search reads the passage ([ADR 0013](./docs/adr/0013-a-query-is-a-string-or-a-query-bundle-with-a-text-for-each-kind-of-search.md)). The passage replaces any `customEmbeddings` of the caller, so the embedding search reads the passage alone, as LangChain's [`HydeRetriever`](https://raw.githubusercontent.com/langchain-ai/langchainjs/main/libs/langchain-classic/src/retrievers/hyde.ts) and Haystack's [HyDE recipe](https://docs.haystack.deepset.ai/docs/hypothetical-document-embeddings-hyde) do; LlamaIndex's [`HyDEQueryTransform`](https://raw.githubusercontent.com/run-llama/llama_index/main/llama-index-core/llama_index/core/indices/query/query_transform/base.py) keeps them by default (`include_original=True`). A `HydeRetriever` gives the kind of passage that its retriever gives: scored over an engine, ranked over a host's retriever of order only ([ADR 0021](./docs/adr/0021-a-retriever-says-whether-it-gives-scores-a-ranked-passage-has-none-and-a-scored-passage-always-has-one.md)).
 
 ## Rerank and post-process the results
 
-`PostprocessingRetriever` runs a list of postprocessors, in order, on the result of its retriever ([ADR 0008](./docs/adr/0008-a-search-is-composed-of-retrievers-that-wrap-retrievers-and-a-list-of-postprocessors.md)). Each postprocessor gets the list of the one before it, the `query` of the query bundle (the information need, a string) and the abort signal of the call. This program continues the one of "Combine searches".
+`RerankRetriever { retriever, model, topN?, scoreThreshold? }` reranks the passages of its retriever with an AI SDK reranking model, as Elasticsearch's `text_similarity_reranker` retriever reranks a child retriever and LangChain's `ContextualCompressionRetriever` runs a reranker over its base retriever ([ADR 0021](./docs/adr/0021-a-retriever-says-whether-it-gives-scores-a-ranked-passage-has-none-and-a-scored-passage-always-has-one.md)). Its retriever may give an order only. Each passage that the model ranks gets the relevance of the model as its score, best first, so a `RerankRetriever` gives scored passages over any retriever. A passage that the model leaves out, past `topN`, is dropped.
+
+`PostprocessingRetriever` runs a list of postprocessors, in order, on the result of its retriever ([ADR 0008](./docs/adr/0008-a-search-is-composed-of-retrievers-that-wrap-retrievers-and-a-list-of-postprocessors.md)). Each postprocessor gets the list of the one before it, the `query` of the query bundle (the information need, a string) and the abort signal of the call. It gives the kind of passage that its retriever gives, and each postprocessor takes that kind: over a `RerankRetriever` the list stays scored. This program continues the one of "Combine searches".
 
 ```ts
 import { MockRerankingModelV4 } from 'ai/test';
@@ -498,7 +578,7 @@ import {
   LongContextReorder,
   MaximalMarginalRelevance,
   PostprocessingRetriever,
-  Rerank,
+  RerankRetriever,
 } from '@zukhruf/retrieval';
 
 // A stand-in reranking model: the relevance is the share of the query's words
@@ -522,9 +602,13 @@ const rerankingModel = new MockRerankingModelV4({
 });
 
 const search = new PostprocessingRetriever({
-  retriever: hybrid,
+  retriever: new RerankRetriever({
+    retriever: hybrid,
+    model: rerankingModel,
+    topN: 20,
+    scoreThreshold: 0.2, // keeps a relevance of 0.2 or more
+  }),
   postprocessors: [
-    new Rerank({ model: rerankingModel, topN: 20, scoreThreshold: 0.2 }), // keeps a relevance of 0.2 or more
     new MaximalMarginalRelevance({ model, lambda: 0.5, topK: 4 }), // lambda 1 = relevance only
     new Collapse({ field: 'source', size: 1 }), // one passage for each source
     new ContextWindow({ store, windowSize: 1 }), // the store of the retrievers
@@ -538,7 +622,7 @@ const widened = await search.retrieve('rotate the old key backup', {
 });
 for (const { passage, score } of widened.passages) {
   console.log(
-    score?.toFixed(2),
+    score.toFixed(2),
     passage.id,
     `[${passage.start}, ${passage.end})`,
     passage.text,
@@ -553,9 +637,11 @@ Output:
 0.80 vault-guide#2 [47, 126)  Then move each token to the new key. Keep a backup of the old key for 30 days.
 ```
 
-The score of each passage is the relevance of the reranking model. `Rerank` keeps a passage only when that relevance is equal to or more than its `scoreThreshold`, 0.2 here: the threshold reads the scale of its model, as the `score_threshold` of Haystack's rankers does ([ADR 0019](./docs/adr/0019-a-score-threshold-belongs-to-the-embedding-retriever-or-to-rerank-where-the-scale-of-the-score-is-known.md)). `Collapse` keeps one passage of each source. A `Collapse` keeps the field as written, and its `postprocess` takes only passages that have that field, so the list checks the field against the passages of its retriever: over an engine of `z.infer<typeof Doc>`, `new Collapse({ field: 'metadata.prodcut' })` does not compile, while a key of the metadata, a stored field such as `seq`, and `new Collapse()` (the `source`) do; over a store whose `metadata` is the bag `(columns) => columns`, any key compiles. Over a live retriever, name the passage type, `new Collapse<Passage<z.infer<typeof Doc>>>({ field: 'metadata.product' })`: without a type argument a `Collapse` is one of stored passages. `ContextWindow` takes the `M` of its store, so the store of another typed `M` does not compile; the bag store compiles, since every `M` is a bag, and it does no harm: a window keeps the passage's own metadata. `ContextWindow` widens `vault-guide#2` to the passages of its source from `seq - 1` to `seq + 1`: its text is the exact part of the source from the `start` to the `end` of the window, because the passages of a source tile it. A window whose passages leave a gap fails with `PassageGapError`, which names the source and the offsets of the gap ([ADR 0008](./docs/adr/0008-a-search-is-composed-of-retrievers-that-wrap-retrievers-and-a-list-of-postprocessors.md), the amendment of 2026-11-24). `LongContextReorder` puts the best passage at the end of a list of two.
+The score of each passage is the relevance of the reranking model. `RerankRetriever` keeps a passage only when that relevance is equal to or more than its `scoreThreshold`, 0.2 here: the threshold reads the scale of its model, as the `score_threshold` of Haystack's rankers does ([ADR 0019](./docs/adr/0019-a-score-threshold-belongs-to-the-embedding-retriever-or-to-rerank-where-the-scale-of-the-score-is-known.md)). `Collapse` keeps the first passage of each source, in the order of the list: a list is best first, so the first passage of a source is its best. It reads no score, so it keeps the order in which `MaximalMarginalRelevance` picked the passages, as Elasticsearch's `collapse` keeps the top hit of each key in the order of the search's sort ([ADR 0021](./docs/adr/0021-a-retriever-says-whether-it-gives-scores-a-ranked-passage-has-none-and-a-scored-passage-always-has-one.md)). A `Collapse` keeps the field as written, and its `postprocess` takes only passages that have that field, so the list checks the field against the passages of its retriever: over an engine of `z.infer<typeof Doc>`, `new Collapse({ field: 'metadata.prodcut' })` does not compile, while a key of the metadata, a stored field such as `seq`, and `new Collapse()` (the `source`) do; over a store whose `metadata` is the bag `(columns) => columns`, any key compiles. Over a live retriever, name the passage type, `new Collapse<Passage<z.infer<typeof Doc>>>({ field: 'metadata.product' })`: without a type argument a `Collapse` is one of stored passages. `ContextWindow` takes the `M` of its store, so the store of another typed `M` does not compile; the bag store compiles, since every `M` is a bag, and it does no harm: a window keeps the passage's own metadata. `ContextWindow` widens `vault-guide#2` to the passages of its source from `seq - 1` to `seq + 1`: its text is the exact part of the source from the `start` to the `end` of the window, because the passages of a source tile it. A window whose passages leave a gap fails with `PassageGapError`, which names the source and the offsets of the gap ([ADR 0008](./docs/adr/0008-a-search-is-composed-of-retrievers-that-wrap-retrievers-and-a-list-of-postprocessors.md), the amendment of 2026-11-24). `LongContextReorder` puts the best passage at the end of a list of two.
 
 `MaximalMarginalRelevance` compares the vectors of the passages, so its retriever runs with `includeVectors: true`. Its `model` embeds the query, and the relevance of a passage is the cosine similarity of the two vectors ([ADR 0008](./docs/adr/0008-a-search-is-composed-of-retrievers-that-wrap-retrievers-and-a-list-of-postprocessors.md), the amendment of 2026-11-23). It gives the passages in the order in which it picks them, so its list is not sorted by score, as after `LongContextReorder` ([ADR 0005](./docs/adr/0005-a-score-is-higher-for-a-better-passage.md)).
+
+A host writes its own postprocessor for its passage type and kind: `Postprocessor<P, I>`, where `I` is `RankedPassage<P>` or `ScoredPassage<P>`. A postprocessor of order only, such as a pin that adds a passage without a score, does not compile over a scored retriever, because a scored list would then hold a passage without a score. Type the retriever as `Retriever<Q, P>` first, an order only, and then it compiles. The package's postprocessors keep the kind they get, so they go over a list of either kind.
 
 ## Give each search its own text
 
@@ -563,51 +649,54 @@ A query is a string or a query bundle, `{ query, keywords?, customEmbeddings? }`
 
 ```ts
 import type {
+  Passage,
   QueryBundle,
   RetrievalResult,
   RetrieveOptions,
   Retriever,
 } from '@zukhruf/retrieval';
 
-// The words of a question join with AND, and no passage has "How" or "do",
-// so a keyword search of the question finds nothing.
+// A keyword search of the question matches any of its words, "How" and
+// "do" too.
 const question = 'How do I rotate the old key?';
 console.log(
   'keywords of the question:',
   (await keywords.retrieve(question)).passages.length,
 );
 
-const reranked = new PostprocessingRetriever({
+const reranked = new RerankRetriever({
   retriever: hybrid, // the fusion of the embedding and the keyword retriever
-  postprocessors: [new Rerank({ model: rerankingModel, topN: 2 })],
+  model: rerankingModel,
+  topN: 2,
 });
 const own = await reranked.retrieve({
   query: question, // the reranker ranks against it; the embedding search embeds it
   keywords: ['rotate', 'key'], // the keyword search matches these
 });
 console.log(
-  own.passages.map(
-    ({ passage, score }) => `${passage.id} ${score?.toFixed(2)}`,
-  ),
+  own.passages.map(({ passage, score }) => `${passage.id} ${score.toFixed(2)}`),
 );
 
 // A host adapter for a source with its own syntax declares its field in its
 // own bundle type. Then it takes no string. Its passage is not a row of the
-// passage contract, so it has no source, seq, start or end.
+// passage contract, so it has no source, seq, start or end. Its source gives
+// an order only, so its passages have no score. Its metadata has the type of
+// the store's, so it fuses with the keyword retriever.
 type IssueQueryBundle = QueryBundle & { readonly jql: string };
-class IssueRetriever implements Retriever<IssueQueryBundle> {
+type Issue = Passage<z.infer<typeof Doc>>;
+class IssueRetriever implements Retriever<IssueQueryBundle, Issue> {
   async retrieve(
     query: IssueQueryBundle,
-    options: RetrieveOptions = {},
-  ): Promise<RetrievalResult> {
+    options: RetrieveOptions<Issue> = {},
+  ): Promise<RetrievalResult<Issue>> {
     console.log('issues got:', query.jql);
     const passage = {
       id: 'VAULT-12',
       text: 'Rotate the signing key of the vault after a leak.',
-      metadata: {},
+      metadata: { product: 'vault', year: 2025 },
     };
     return {
-      passages: [{ passage, score: 1 }].slice(0, options.topK ?? 10),
+      passages: [{ passage }].slice(0, options.topK ?? 10),
       failures: new Map(),
     };
   }
@@ -621,11 +710,15 @@ const told = new MockRerankingModelV4({
     return rerankingModel.doRerank(options);
   },
 });
-const federation = new PostprocessingRetriever({
+const federation = new RerankRetriever({
   retriever: new FusionRetriever({
-    retrievers: { issues: new IssueRetriever(), keywords },
+    retrievers: {
+      issues: { retriever: new IssueRetriever() },
+      keywords: { retriever: keywords },
+    },
   }),
-  postprocessors: [new Rerank({ model: told, topN: 2 })],
+  model: told,
+  topN: 2,
 });
 const answers = await federation.retrieve({
   query: question,
@@ -634,7 +727,7 @@ const answers = await federation.retrieve({
 });
 console.log(
   answers.passages.map(
-    ({ passage, score }) => `${passage.id} ${score?.toFixed(2)}`,
+    ({ passage, score }) => `${passage.id} ${score.toFixed(2)}`,
   ),
 );
 ```
@@ -642,14 +735,14 @@ console.log(
 Output:
 
 ```
-keywords of the question: 0
+keywords of the question: 3
 [ 'vault-guide#0 0.57', 'vault-guide#2 0.43' ]
 issues got: project = VAULT AND text ~ "rotate key"
 reranker got: How do I rotate the old key?
 [ 'vault-guide#0 0.57', 'VAULT-12 0.43' ]
 ```
 
-`federation.retrieve(question)` does not compile: the issue search needs `jql`, and a string has none. `new MultiQueryRetriever({ retriever: federation, model })` does not compile either: a version of the query is a plain string. TypeScript infers the query type of a fusion from its retrievers. Two retrievers that each need a field of their own take the type argument: `new FusionRetriever<A & B>({ retrievers })`. A type argument makes the names `string`, as TypeScript infers all type arguments or none, so the constructor checks the names of the weights.
+`federation.retrieve(question)` does not compile: the issue search needs `jql`, and a string has none. `new MultiQueryRetriever({ retriever: federation, model })` does not compile either: a version of the query is a plain string. TypeScript infers the query type of a fusion from its retrievers. Two retrievers that each need a field of their own take the type argument: `new FusionRetriever<A & B>({ retrievers })`. A type argument makes the names `string`, as TypeScript infers all type arguments or none, so the constructor checks the names at run time.
 
 ## Search many queries at once
 
@@ -691,7 +784,7 @@ const filtered = await retriever.retrieve('rotate a key', {
   },
 });
 for (const { passage, score } of filtered.passages) {
-  console.log(score?.toFixed(3), passage.id, passage.metadata);
+  console.log(score.toFixed(3), passage.id, passage.metadata);
 }
 ```
 
@@ -707,7 +800,7 @@ On Postgres, pgvector filters after the approximate index scan, so a filtered ca
 
 ## Cancel a search
 
-Every async call of the package takes an optional `signal`, the name of `fetch` and Node ([ADR 0017](./docs/adr/0017-every-async-port-takes-an-optional-abort-signal-and-a-composite-rejects-at-once-when-it-aborts.md)): `retrieve`, `retrieveMany`, `postprocess`, the store's `get` and `neighbours`, and the session's `query`. Each built-in passes the signal to every async call it makes: an engine retriever and a store to the session, `ContextWindow` to the store, and each composite to its retrievers, postprocessors and model. The AI SDK names it `abortSignal`, and the package maps `signal` onto it at its own model calls. An aborted call rejects with the signal's reason. A composite (`FusionRetriever`, `MultiQueryRetriever`, `PostprocessingRetriever`, `HydeRetriever`) rejects at once when the signal aborts, even while a part of it ignores its signal. An abort is never a failure in `failures`.
+Every async call of the package takes an optional `signal`, the name of `fetch` and Node ([ADR 0017](./docs/adr/0017-every-async-port-takes-an-optional-abort-signal-and-a-composite-rejects-at-once-when-it-aborts.md)): `retrieve`, `retrieveMany`, `postprocess`, the store's `get` and `neighbours`, and the session's `query`. Each built-in passes the signal to every async call it makes: an engine retriever and a store to the session, `ContextWindow` to the store, and each composite to its retrievers, postprocessors and model. The AI SDK names it `abortSignal`, and the package maps `signal` onto it at its own model calls. An aborted call rejects with the signal's reason. A composite (`FusionRetriever`, `MultiQueryRetriever`, `RerankRetriever`, `PostprocessingRetriever`, `HydeRetriever`) rejects at once when the signal aborts, even while a part of it ignores its signal. An abort is never a failure in `failures`.
 
 A session cancels its query on the server. node-postgres takes no signal, so this session cancels with `pg_cancel_backend`:
 
@@ -754,15 +847,15 @@ On SQL Server, the session cancels with mssql's `request.cancel()` in the same w
 
 ## Errors
 
-| Error                                         | When                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ModelMismatchError`                          | The query model of an embedding retriever has another provider or model id than the stored vectors, before the model call. `stored` and `query` are each `{ provider, modelId }`                                                                                                                                                                                                                                                                                                                                                                                                   |
-| `DimensionMismatchError` (`@zukhruf/vectors`) | The query vector has other dimensions than the stored vectors, after the model call. `expected` and `actual`                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| `VectorMissingError`                          | `MaximalMarginalRelevance` gets a passage without a vector: the call did not ask for vectors. `passageId`                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| `PassageGapError`                             | `ContextWindow` gets a window whose passages leave a gap in their source: the writer of the contract broke it. `source`, and `start` and `end` of the gap                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| `NoRetrieverAnsweredError`                    | No retriever of a `FusionRetriever` answered: each threw `RetrieverUnavailableError`. `failures` names each, by path when nested, and the cause is an `AggregateError` of them. It is a `RetrieverUnavailableError`, so the fusion above leaves it out                                                                                                                                                                                                                                                                                                                             |
-| `RangeError`                                  | An option out of its range: a `FusionRetriever` of no retriever, with a name that holds `:` or with a weight for a name that is no retriever, or a `rankWindowSize` smaller than the `topK` of the call; a `queryCount`, `topK` of MMR or `windowSize` that is not a positive integer; a `lambda` outside 0 to 1; a `scoreThreshold` of an embedding retriever or of `Rerank` that is not a finite number; a weight of a fusion that is not a finite number of 0 or more, or weights of which none is above 0; a `k` of `reciprocalRankFusion` that is not an integer of 1 or more |
-| `TypeError`                                   | A filter field that is not a passage field or `metadata.<column>`, an `in` or `not in` value that is not an array, a stored model identity that is not of the form `provider/model (n dimensions)`, a passage without a score in `relativeScoreFusion` or `distributionBasedScoreFusion`, or a score that is not finite (NaN or an infinity) in those fusions, `Rerank` or a `Collapse` that sorts by score                                                                                                                                                                        |
+| Error                                         | When                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ModelMismatchError`                          | The query model of an embedding retriever has another provider or model id than the stored vectors, before the model call. `stored` and `query` are each `{ provider, modelId }`                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `DimensionMismatchError` (`@zukhruf/vectors`) | The query vector has other dimensions than the stored vectors, after the model call. `expected` and `actual`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `VectorMissingError`                          | `MaximalMarginalRelevance` gets a passage without a vector: the call did not ask for vectors. `passageId`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `PassageGapError`                             | `ContextWindow` gets a window whose passages leave a gap in their source: the writer of the contract broke it. `source`, and `start` and `end` of the gap                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `NoRetrieverAnsweredError`                    | No retriever of a `FusionRetriever` answered: each threw `RetrieverUnavailableError`. `failures` names each, by path when nested, and the cause is an `AggregateError` of them. It is a `RetrieverUnavailableError`, so the fusion above leaves it out                                                                                                                                                                                                                                                                                                                                                                      |
+| `RangeError`                                  | An option out of its range: a `FusionRetriever` of no retriever or with a name that holds `:`, or a `rankWindowSize` smaller than the `topK` of the call; a `queryCount`, `topK` of MMR or `windowSize` that is not a positive integer; a `lambda` outside 0 to 1; a `scoreThreshold` of an embedding retriever or of `RerankRetriever` that is not a finite number; a weight of a fusion input or of a `FusionRetriever` entry that is not a finite number of 0 or more (the message names the input or the retriever), or weights of which none is above 0; a `k` of `reciprocalRank` that is not an integer of 1 or more |
+| `TypeError`                                   | A filter field that is not a passage field or `metadata.<column>`, an `in` or `not in` value that is not an array, or a stored model identity that is not of the form `provider/model (n dimensions)`. A score that is not finite (NaN or an infinity): in an input of `ScoreFusion` (the message names the id and its input), from a normalizer (the id and its input) or a combination (the id and the inputs that hold it) of either fusion, or from the model of `RerankRetriever`. A host fusion in a `FusionRetriever` or a `MultiQueryRetriever` that gives an id of no input                                        |
 
 An error of the model, of the engine, of the store's `metadata` or of the reranking model reaches the caller as it is. An aborted call rejects with the reason of its `signal` ("Cancel a search").
 
@@ -775,43 +868,47 @@ An error of the model, of the engine, of the store's `metadata` or of the rerank
 
 ## Who uses it
 
-No consumer uses it yet. These moves come next.
+Each consumer moves to the fusions and the ranked and scored passages of #5400 when it takes this release.
 
-| Consumer        | How                                                                                                                                                                                                      | Record       |
-| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
-| deepagents      | nothing moves: deepagents 9564ec80 (7.30.1, 2026-11-24) deleted `@deepagents/retrieval`, toolbox `search_content_tool` and the orchestrator code that used it, and no connector moved to elt (elt #5405) | #5406        |
-| deepagents      | `ContextStore.searchMessages` (FTS5, `ts_rank`, `CONTAINSTABLE`) moves to the keyword retrievers, with one score direction                                                                               | #5417, #4884 |
-| April           | the TB2 explorer moves to an elt push source, the Vectorizer and `SqliteEmbeddingRetriever`; its hand collapse of passages to documents becomes `Collapse`                                               | #5407        |
-| text2sql        | the two `toFtsQuery` copies move to the keyword retrievers                                                                                                                                               | #5410        |
-| datahub         | the planned third FTS5 BM25 place uses the keyword retrievers; its staff search fusion uses the fusions                                                                                                  | #3451, #3426 |
-| Meddit          | its evidence layer moves onto the package after it ships                                                                                                                                                 | #5378        |
-| `@zukhruf/mteb` | keeps its MTEB port of `HybridSearch`; it does not move                                                                                                                                                  | #5400        |
+| Consumer        | How                                                                                                                                                                                                                                                             | Record       |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
+| April           | its bridge's task search fuses `SqliteEmbeddingRetriever` and `SqliteBM25Retriever` with `FusionRetriever` over an elt Vectorizer's contract, then keeps one passage of each task with `Collapse`; its hand collapse of passages to documents became `Collapse` | #5407        |
+| text2sql        | the google-tasks and agent-backlog searches of its playground fuse the SQLite keyword and embedding retrievers with `FusionRetriever`, in place of the two `toFtsQuery` copies                                                                                  | #5410        |
+| elt             | the tests of `@eltjs/vectorizer` read the passage contract that it writes with the retrievers of each engine                                                                                                                                                    | elt #5401    |
+| deepagents      | nothing moves: deepagents 9564ec80 (7.30.1, 2026-11-24) deleted `@deepagents/retrieval`, toolbox `search_content_tool` and the orchestrator code that used it, and no connector moved to elt (elt #5405)                                                        | #5406        |
+| deepagents      | `ContextStore.searchMessages` (FTS5, `ts_rank`, `CONTAINSTABLE`) moves to the keyword retrievers, with one score direction                                                                                                                                      | #5417, #4884 |
+| datahub         | the planned third FTS5 BM25 place uses the keyword retrievers; its staff search fusion uses `RankFusion` or `ScoreFusion`                                                                                                                                       | #3451, #3426 |
+| Meddit          | its evidence layer moves onto the package after it ships: PubMed's Best Match gives ranked passages, and its federation's max merge is `ScoreFusion` with `none()` and `max()`                                                                                  | #5378, #5585 |
+| `@zukhruf/mteb` | its hybrid search (`fuseRrf`, rsf, dbsf) moves onto `RankFusion`, `ScoreFusion` and `sum()` over ids after this release; MTEB's own edge values stay in its host normalizers                                                                                    | #5400        |
 
 ## The same concepts in other systems
 
-| Concept                     | Other systems                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Passage`                   | LlamaIndex `TextNode` ([schema.py](https://raw.githubusercontent.com/run-llama/llama_index/main/llama-index-core/llama_index/core/schema.py)); LangChain `Document` ([document.ts](https://raw.githubusercontent.com/langchain-ai/langchainjs/main/libs/langchain-core/src/documents/document.ts)); Haystack `Document` ([document.py](https://raw.githubusercontent.com/deepset-ai/haystack/main/haystack/dataclasses/document.py))                                                                                                                                                                                                                                                                                                      |
-| `ScoredPassage`             | LlamaIndex `NodeWithScore`; .NET `VectorSearchResult<TRecord>{Record, Score}` ([vector search](https://learn.microsoft.com/en-us/dotnet/ai/vector-stores/vector-search))                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| `Retriever.retrieve`        | LlamaIndex `BaseRetriever.retrieve` ([base_retriever.py](https://raw.githubusercontent.com/run-llama/llama_index/main/llama-index-core/llama_index/core/base/base_retriever.py)); LangChain `BaseRetriever` ([retrievers/index.ts](https://raw.githubusercontent.com/langchain-ai/langchainjs/main/libs/langchain-core/src/retrievers/index.ts)); Semantic Kernel `ITextSearch` ([text search](https://learn.microsoft.com/en-us/semantic-kernel/concepts/text-search/text-search-abstractions))                                                                                                                                                                                                                                          |
-| `QueryBundle`, `QueryType`  | LlamaIndex `QueryBundle` and `QueryType` (LlamaIndex.TS `@llamaindex/core` 0.6.22, `query-engine/dist/index.d.ts`; [schema.py](https://raw.githubusercontent.com/run-llama/llama_index/main/llama-index-core/llama_index/core/schema.py))                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| `keywords`                  | .NET `HybridSearchAsync(searchValue, keywords)` ([IKeywordHybridSearchable.cs](https://raw.githubusercontent.com/dotnet/extensions/main/src/Libraries/Microsoft.Extensions.VectorData.Abstractions/IKeywordHybridSearchable.cs))                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| `customEmbeddings`          | LlamaIndex.TS `QueryBundle.customEmbeddings`; LlamaIndex `custom_embedding_strs`, whose mean the vector retriever searches ([schema.py](https://raw.githubusercontent.com/run-llama/llama_index/main/llama-index-core/llama_index/core/schema.py))                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| engine retrievers           | Haystack's retrievers for each document store ([retrievers](https://docs.haystack.deepset.ai/docs/retrievers))                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| passage store as the root   | Haystack `PgvectorEmbeddingRetriever(document_store=...)` and `PgvectorKeywordRetriever(document_store=...)` over `PgvectorDocumentStore(schema_name, table_name, language)` ([embedding_retriever.py](https://raw.githubusercontent.com/deepset-ai/haystack-core-integrations/main/integrations/pgvector/src/haystack_integrations/components/retrievers/pgvector/embedding_retriever.py)); LlamaIndex `VectorStoreIndex.as_retriever()`; LangChain `VectorStore.asRetriever()`                                                                                                                                                                                                                                                          |
-| `topK`, `includeVectors`    | Haystack `top_k` = 10 ([document_store.py](https://raw.githubusercontent.com/deepset-ai/haystack/main/haystack/document_stores/in_memory/document_store.py)), `return_embedding`; Mastra `topK` = 10 ([pg](https://mastra.ai/reference/vectors/pg)); .NET `IncludeVectors` ([VectorSearchOptions](https://learn.microsoft.com/en-us/dotnet/api/microsoft.extensions.vectordata.vectorsearchoptions-1))                                                                                                                                                                                                                                                                                                                                    |
-| `Filter`                    | Haystack filters ([metadata filtering](https://docs.haystack.deepset.ai/docs/metadata-filtering)); LlamaIndex `MetadataFilters` ([types.py](https://raw.githubusercontent.com/run-llama/llama_index/main/llama-index-core/llama_index/core/vector_stores/types.py)); Qdrant `filter` ([search](https://qdrant.tech/documentation/search/search/))                                                                                                                                                                                                                                                                                                                                                                                         |
-| `FusionRetriever`           | LlamaIndex `QueryFusionRetriever` ([fusion_retriever.py](https://raw.githubusercontent.com/run-llama/llama_index/main/llama-index-core/llama_index/core/retrievers/fusion_retriever.py)); LangChain `EnsembleRetriever` ([ensemble.ts](https://raw.githubusercontent.com/langchain-ai/langchainjs/main/libs/langchain-classic/src/retrievers/ensemble.ts)); Elasticsearch `rrf` ([rrf retriever](https://www.elastic.co/docs/reference/elasticsearch/rest-apis/retrievers/rrf-retriever)); Qdrant `prefetch` ([hybrid queries](https://qdrant.tech/documentation/concepts/hybrid-queries/))                                                                                                                                               |
-| score fusions               | Weaviate `relativeScoreFusion` ([hybrid](https://docs.weaviate.io/weaviate/search/hybrid)); OpenSearch `min_max` ([normalization processor](https://docs.opensearch.org/latest/search-plugins/search-pipelines/normalization-processor/)); Haystack `distribution_based_rank_fusion` ([document_joiner.py](https://raw.githubusercontent.com/deepset-ai/haystack/main/haystack/components/joiners/document_joiner.py)); Qdrant `dbsf`                                                                                                                                                                                                                                                                                                     |
-| `MultiQueryRetriever`, HyDE | LangChain `MultiQueryRetriever` ([multi_query.ts](https://raw.githubusercontent.com/langchain-ai/langchainjs/main/libs/langchain-classic/src/retrievers/multi_query.ts)), `HydeRetriever` ([HyDE](https://docs.langchain.com/oss/javascript/integrations/retrievers/hyde))                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| `scoreThreshold`            | Qdrant `score_threshold` of a search ([search](https://qdrant.tech/documentation/search/search/)); Elasticsearch knn retriever `similarity` ([knn retriever](https://www.elastic.co/docs/reference/elasticsearch/rest-apis/retrievers/knn-retriever)); LangChain `similarity_score_threshold` with `score_threshold` ([base.py](https://raw.githubusercontent.com/langchain-ai/langchain/master/libs/core/langchain_core/vectorstores/base.py)); Haystack rankers `score_threshold` ([sentence_transformers_similarity.py](https://github.com/deepset-ai/haystack-core-integrations/blob/main/integrations/sentence_transformers/src/haystack_integrations/components/rankers/sentence_transformers/sentence_transformers_similarity.py)) |
-| `PostprocessingRetriever`   | LangChain `ContextualCompressionRetriever` ([contextual_compression.ts](https://raw.githubusercontent.com/langchain-ai/langchainjs/main/libs/langchain-classic/src/retrievers/contextual_compression.ts)); LlamaIndex `node_postprocessors` ([types.py](https://raw.githubusercontent.com/run-llama/llama_index/main/llama-index-core/llama_index/core/postprocessor/types.py))                                                                                                                                                                                                                                                                                                                                                           |
-| `MaximalMarginalRelevance`  | Elasticsearch `diversify` `lambda` ([diversify retriever](https://www.elastic.co/docs/reference/elasticsearch/rest-apis/retrievers/diversify-retriever)); Weaviate `balance` ([1.39](https://weaviate.io/blog/weaviate-1-39-release)); Qdrant `mmr` `diversity`, 1 = diverse ([search relevance](https://qdrant.tech/documentation/search/search-relevance/))                                                                                                                                                                                                                                                                                                                                                                             |
-| `Collapse`                  | Elasticsearch `collapse` ([standard retriever](https://www.elastic.co/docs/reference/elasticsearch/rest-apis/retrievers/standard-retriever)); Vespa `collapsesize` ([query API](https://docs.vespa.ai/en/reference/api/query.html)); Qdrant `query_points_groups` ([search](https://qdrant.tech/documentation/search/search/))                                                                                                                                                                                                                                                                                                                                                                                                            |
-| `ContextWindow`             | Haystack `SentenceWindowRetriever` ([sentence_window_retriever.py](https://raw.githubusercontent.com/deepset-ai/haystack/main/haystack/components/retrievers/sentence_window_retriever.py)); LlamaIndex `PrevNextNodePostprocessor`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| `LongContextReorder`        | LangChain `LongContextReorder` ([reference](https://reference.langchain.com/python/langchain-community/document_transformers/long_context_reorder/LongContextReorder)); Haystack `LostInTheMiddleRanker` ([rankers](https://docs.haystack.deepset.ai/docs/rankers))                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| hybrid search in SQL        | Alex Garcia's sqlite-vec recipe, RRF k 60 in SQL ([hybrid search](https://alexgarcia.xyz/blog/2024/sqlite-vec-hybrid-search/index.html))                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| passage contract            | pgai `create_vectorizer` ([API reference](https://raw.githubusercontent.com/timescale/pgai/main/docs/vectorizer/api-reference.md)); Airbyte pgvector ([destination](https://docs.airbyte.com/integrations/destinations/pgvector))                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| Concept                                                 | Other systems                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `Passage`                                               | LlamaIndex `TextNode` ([schema.py](https://raw.githubusercontent.com/run-llama/llama_index/main/llama-index-core/llama_index/core/schema.py)); LangChain `Document` ([document.ts](https://raw.githubusercontent.com/langchain-ai/langchainjs/main/libs/langchain-core/src/documents/document.ts)); Haystack `Document` ([document.py](https://raw.githubusercontent.com/deepset-ai/haystack/main/haystack/dataclasses/document.py))                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `RankedPassage`, `ScoredPassage`                        | MongoDB's "Ranked Pipeline" of `$rankFusion` and the `$score` that `$scoreFusion` requires ([$rankFusion](https://www.mongodb.com/docs/manual/reference/operator/aggregation/rankFusion/), [$scoreFusion](https://www.mongodb.com/docs/manual/reference/operator/aggregation/scoreFusion/)); Lucene `ScoreDoc`; LlamaIndex `NodeWithScore`; .NET `VectorSearchResult<TRecord>{Record, Score}` ([vector search](https://learn.microsoft.com/en-us/dotnet/ai/vector-stores/vector-search))                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `Retriever.retrieve`                                    | LlamaIndex `BaseRetriever.retrieve` ([base_retriever.py](https://raw.githubusercontent.com/run-llama/llama_index/main/llama-index-core/llama_index/core/base/base_retriever.py)); LangChain `BaseRetriever` ([retrievers/index.ts](https://raw.githubusercontent.com/langchain-ai/langchainjs/main/libs/langchain-core/src/retrievers/index.ts)); Semantic Kernel `ITextSearch` ([text search](https://learn.microsoft.com/en-us/semantic-kernel/concepts/text-search/text-search-abstractions))                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `QueryBundle`, `QueryType`                              | LlamaIndex `QueryBundle` and `QueryType` (LlamaIndex.TS `@llamaindex/core` 0.6.22, `query-engine/dist/index.d.ts`; [schema.py](https://raw.githubusercontent.com/run-llama/llama_index/main/llama-index-core/llama_index/core/schema.py))                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `keywords`                                              | .NET `HybridSearchAsync(searchValue, keywords)` ([IKeywordHybridSearchable.cs](https://raw.githubusercontent.com/dotnet/extensions/main/src/Libraries/Microsoft.Extensions.VectorData.Abstractions/IKeywordHybridSearchable.cs))                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `customEmbeddings`                                      | LlamaIndex.TS `QueryBundle.customEmbeddings`; LlamaIndex `custom_embedding_strs`, whose mean the vector retriever searches ([schema.py](https://raw.githubusercontent.com/run-llama/llama_index/main/llama-index-core/llama_index/core/schema.py))                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| engine retrievers                                       | Haystack's retrievers for each document store ([retrievers](https://docs.haystack.deepset.ai/docs/retrievers))                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| passage store as the root                               | Haystack `PgvectorEmbeddingRetriever(document_store=...)` and `PgvectorKeywordRetriever(document_store=...)` over `PgvectorDocumentStore(schema_name, table_name, language)` ([embedding_retriever.py](https://raw.githubusercontent.com/deepset-ai/haystack-core-integrations/main/integrations/pgvector/src/haystack_integrations/components/retrievers/pgvector/embedding_retriever.py)); LlamaIndex `VectorStoreIndex.as_retriever()`; LangChain `VectorStore.asRetriever()`                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `topK`, `includeVectors`                                | Haystack `top_k` = 10 ([document_store.py](https://raw.githubusercontent.com/deepset-ai/haystack/main/haystack/document_stores/in_memory/document_store.py)), `return_embedding`; Mastra `topK` = 10 ([pg](https://mastra.ai/reference/vectors/pg)); .NET `IncludeVectors` ([VectorSearchOptions](https://learn.microsoft.com/en-us/dotnet/api/microsoft.extensions.vectordata.vectorsearchoptions-1))                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `Filter`                                                | Haystack filters ([metadata filtering](https://docs.haystack.deepset.ai/docs/metadata-filtering)); LlamaIndex `MetadataFilters` ([types.py](https://raw.githubusercontent.com/run-llama/llama_index/main/llama-index-core/llama_index/core/vector_stores/types.py)); Qdrant `filter` ([search](https://qdrant.tech/documentation/search/search/))                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `FusionRetriever`                                       | LlamaIndex `QueryFusionRetriever` ([fusion_retriever.py](https://raw.githubusercontent.com/run-llama/llama_index/main/llama-index-core/llama_index/core/retrievers/fusion_retriever.py)); LangChain `EnsembleRetriever` ([ensemble.ts](https://raw.githubusercontent.com/langchain-ai/langchainjs/main/libs/langchain-classic/src/retrievers/ensemble.ts)); Elasticsearch `rrf` ([rrf retriever](https://www.elastic.co/docs/reference/elasticsearch/rest-apis/retrievers/rrf-retriever)); Qdrant `prefetch` ([hybrid queries](https://qdrant.tech/documentation/concepts/hybrid-queries/))                                                                                                                                                                                                                                                                                                                                                            |
+| `RankFusion`, `ScoreFusion`, `FusionInput`              | MongoDB `$rankFusion` and `$scoreFusion`, each input pipeline by name with its weight ([$rankFusion](https://www.mongodb.com/docs/manual/reference/operator/aggregation/rankFusion/), [$scoreFusion](https://www.mongodb.com/docs/manual/reference/operator/aggregation/scoreFusion/)); Elasticsearch `rrf` and `linear` retrievers, `retrievers: [{ retriever, weight }]` ([rrf](https://www.elastic.co/docs/reference/elasticsearch/rest-apis/retrievers/rrf-retriever), [linear](https://www.elastic.co/docs/reference/elasticsearch/rest-apis/retrievers/linear-retriever)); OpenSearch normalization processor, a normalization and a combination ([normalization processor](https://docs.opensearch.org/latest/search-plugins/search-pipelines/normalization-processor/)); Qdrant `rrf` and `dbsf` ([hybrid queries](https://qdrant.tech/documentation/concepts/hybrid-queries/)); ranx `fuse` ([fusion](https://amenra.github.io/ranx/fusion/)) |
+| `minMax`, `distributionBased`, `none`, `reciprocalRank` | Elasticsearch linear `normalizer` `minmax`, `l2_norm`, `none` ([linear](https://www.elastic.co/docs/reference/elasticsearch/rest-apis/retrievers/linear-retriever)); OpenSearch `min_max`, `l2`, `z_score` and the `rrf` technique ([normalization processor](https://docs.opensearch.org/latest/search-plugins/search-pipelines/normalization-processor/)); MongoDB `minMaxScaler`, `sigmoid`, `none`; Weaviate `relativeScoreFusion` ([hybrid](https://docs.weaviate.io/weaviate/search/hybrid)); Qdrant `dbsf`; Haystack `distribution_based_rank_fusion` ([document_joiner.py](https://raw.githubusercontent.com/deepset-ai/haystack/main/haystack/components/joiners/document_joiner.py)); Vespa `reciprocal_rank` ([phased ranking](https://docs.vespa.ai/en/ranking/phased-ranking.html))                                                                                                                                                       |
+| `sum`, `max`, `arithmeticMean`                          | OpenSearch `arithmetic_mean`, `geometric_mean`, `harmonic_mean` ([normalization processor](https://docs.opensearch.org/latest/search-plugins/search-pipelines/normalization-processor/)); MongoDB `combination.method` `avg`; Milvus `sum`, `max`, `avg` ([multi-vector search](https://milvus.io/docs/multi-vector-search.md)); ranx `comb_sum`, `comb_max` ([fusion](https://amenra.github.io/ranx/fusion/)); the greatest score of an id: LlamaIndex `QueryFusionRetriever` `simple` mode, Haystack `DocumentJoiner` `concatenate`                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `MultiQueryRetriever`, HyDE                             | LangChain `MultiQueryRetriever` ([multi_query.ts](https://raw.githubusercontent.com/langchain-ai/langchainjs/main/libs/langchain-classic/src/retrievers/multi_query.ts)), `HydeRetriever` ([HyDE](https://docs.langchain.com/oss/javascript/integrations/retrievers/hyde))                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `scoreThreshold`                                        | Qdrant `score_threshold` of a search ([search](https://qdrant.tech/documentation/search/search/)); Elasticsearch knn retriever `similarity` ([knn retriever](https://www.elastic.co/docs/reference/elasticsearch/rest-apis/retrievers/knn-retriever)); LangChain `similarity_score_threshold` with `score_threshold` ([base.py](https://raw.githubusercontent.com/langchain-ai/langchain/master/libs/core/langchain_core/vectorstores/base.py)); Haystack rankers `score_threshold` ([sentence_transformers_similarity.py](https://github.com/deepset-ai/haystack-core-integrations/blob/main/integrations/sentence_transformers/src/haystack_integrations/components/rankers/sentence_transformers/sentence_transformers_similarity.py))                                                                                                                                                                                                              |
+| `RerankRetriever`                                       | Elasticsearch `text_similarity_reranker` around a child retriever ([text similarity reranker](https://www.elastic.co/docs/reference/elasticsearch/rest-apis/retrievers/text-similarity-reranker-retriever)); LangChain `ContextualCompressionRetriever` with `CohereRerank` as its `baseCompressor` ([contextual_compression.ts](https://raw.githubusercontent.com/langchain-ai/langchainjs/main/libs/langchain-classic/src/retrievers/contextual_compression.ts))                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `PostprocessingRetriever`                               | LangChain `ContextualCompressionRetriever` ([contextual_compression.ts](https://raw.githubusercontent.com/langchain-ai/langchainjs/main/libs/langchain-classic/src/retrievers/contextual_compression.ts)); LlamaIndex `node_postprocessors` ([types.py](https://raw.githubusercontent.com/run-llama/llama_index/main/llama-index-core/llama_index/core/postprocessor/types.py))                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `MaximalMarginalRelevance`                              | Elasticsearch `diversify` `lambda` ([diversify retriever](https://www.elastic.co/docs/reference/elasticsearch/rest-apis/retrievers/diversify-retriever)); Weaviate `balance` ([1.39](https://weaviate.io/blog/weaviate-1-39-release)); Qdrant `mmr` `diversity`, 1 = diverse ([search relevance](https://qdrant.tech/documentation/search/search-relevance/))                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `Collapse`                                              | Elasticsearch `collapse` ([standard retriever](https://www.elastic.co/docs/reference/elasticsearch/rest-apis/retrievers/standard-retriever)); Vespa `collapsesize` ([query API](https://docs.vespa.ai/en/reference/api/query.html)); Qdrant `query_points_groups` ([search](https://qdrant.tech/documentation/search/search/))                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `ContextWindow`                                         | Haystack `SentenceWindowRetriever` ([sentence_window_retriever.py](https://raw.githubusercontent.com/deepset-ai/haystack/main/haystack/components/retrievers/sentence_window_retriever.py)); LlamaIndex `PrevNextNodePostprocessor`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `LongContextReorder`                                    | LangChain `LongContextReorder` ([reference](https://reference.langchain.com/python/langchain-community/document_transformers/long_context_reorder/LongContextReorder)); Haystack `LostInTheMiddleRanker` ([rankers](https://docs.haystack.deepset.ai/docs/rankers))                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| hybrid search in SQL                                    | Alex Garcia's sqlite-vec recipe, RRF k 60 in SQL ([hybrid search](https://alexgarcia.xyz/blog/2024/sqlite-vec-hybrid-search/index.html))                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| passage contract                                        | pgai `create_vectorizer` ([API reference](https://raw.githubusercontent.com/timescale/pgai/main/docs/vectorizer/api-reference.md)); Airbyte pgvector ([destination](https://docs.airbyte.com/integrations/destinations/pgvector))                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 
 ## Why not an npm package
 
@@ -844,13 +941,19 @@ type StoredPassage<M extends Metadata = Metadata> = Passage<M> & {
   readonly start: number; // offsets in code points, end exclusive (ADR 0001)
   readonly end: number;
 }; // the engine retrievers and the passage stores give it (ADR 0015)
-type ScoredPassage<P extends Passage = Passage> = {
+// A list is best first; the place of a passage is its rank (ADR 0021).
+type RankedPassage<P extends Passage = Passage> = {
   readonly passage: P;
-  readonly score?: number; // finite, higher is better (ADR 0005); absent for an order only (ADR 0016)
   readonly vector?: readonly number[];
-};
-type RetrievalResult<P extends Passage = Passage> = {
-  readonly passages: readonly ScoredPassage<P>[]; // best first
+}; // an order only, such as a web search
+type ScoredPassage<P extends Passage = Passage> = RankedPassage<P> & {
+  readonly score: number; // finite, higher is better (ADR 0005)
+}; // a scored passage is a ranked passage
+type RetrievalResult<
+  P extends Passage = Passage,
+  I extends RankedPassage<P> = RankedPassage<P>, // the item of the list
+> = {
+  readonly passages: readonly I[]; // best first
   readonly failures: ReadonlyMap<string, RetrieverUnavailableError>; // by name; empty when none failed (ADR 0014)
 };
 
@@ -896,95 +999,155 @@ type QueryType = string | QueryBundle; // a string is { query }
 interface Retriever<
   in Q extends QueryType = QueryType,
   P extends Passage = Passage,
+  out I extends RankedPassage<P> = RankedPassage<P>, // RankedPassage<P> or ScoredPassage<P>
 > {
   readonly retrieve: (
     query: Q,
     options?: RetrieveOptions<P>,
-  ) => Promise<RetrievalResult<P>>;
-}
-interface BatchRetriever<P extends Passage = Passage> extends Retriever<
-  QueryType,
-  P
-> {
+  ) => Promise<RetrievalResult<P, I>>;
+} // a scored retriever is a ranked one; a ranked retriever is not a scored one
+interface BatchRetriever<
+  P extends Passage = Passage,
+  I extends RankedPassage<P> = RankedPassage<P>,
+> extends Retriever<QueryType, P, I> {
   readonly retrieveMany: (
     queries: readonly QueryType[],
     options?: RetrieveOptions<P>,
-  ) => Promise<RetrievalResult<P>[]>; // one for each query, in their order
+  ) => Promise<RetrievalResult<P, I>[]>; // one for each query, in their order
 }
 
-// The ports are generic in their parameter only, not in their member (the
-// island rule): a host's fusion or postprocessor is written for its own P and
-// gives back that P with no assertion. The package's fusions and
-// postprocessors are generic in their member, so they serve any P.
-interface Fusion<in out P extends Passage = Passage> {
-  readonly fuse: (
-    lists: readonly (readonly ScoredPassage<P>[])[],
-    weights: readonly number[], // one for each list; each finite and 0 or more, at least one above 0
-  ) => ScoredPassage<P>[];
+// A fusion fuses ids (ADR 0020). The ports are generic in their parameter
+// only, not in their member (the island rule): a host's fusion, strategy or
+// postprocessor is written for its own types with no assertion.
+type RankedDoc = { readonly id: string }; // its place in the list is its rank
+type ScoreDoc = RankedDoc & { readonly score: number }; // Lucene ScoreDoc
+type FusionInput<D extends RankedDoc> = {
+  readonly name: string; // every error names it
+  readonly docs: readonly D[]; // best first
+  readonly weight: number; // finite and 0 or more; at least one input above 0
+};
+interface Fusion<in D extends RankedDoc> {
+  readonly fuse: (inputs: readonly FusionInput<D>[]) => ScoreDoc[]; // best first; a tie keeps the order of first appearance
+} // a Fusion<RankedDoc> is a Fusion<ScoreDoc>
+
+interface ListScores {
+  readonly min: number;
+  readonly max: number;
+  readonly mean: number;
+  readonly std: number; // population (ddof 0)
+  readonly l2: number; // sqrt(Σ s²)
+} // each computed on its first read, in the order of the list
+interface ScoreNormalizer {
+  readonly normalize: (score: number, list: ListScores) => number;
 }
-// Each returns { readonly fuse: <P extends Passage>(lists, weights) => ScoredPassage<P>[] }.
-function reciprocalRankFusion(options?: { readonly k?: number }); // k 60, an integer of 1 or more; ranks from 1; reads the order only
-function relativeScoreFusion(); // min-max; a passage without a finite score is a TypeError
-function distributionBasedScoreFusion(); // mean ± 3σ; a passage without a finite score is a TypeError
+interface RankNormalizer {
+  readonly normalize: (rank: number, length: number) => number; // rank from 1
+}
+interface Combination {
+  readonly combine: (
+    contributions: readonly {
+      readonly score: number;
+      readonly weight: number;
+    }[], // the inputs that hold the id, in input order
+  ) => number;
+}
+function reciprocalRank(options?: { readonly k?: number }): RankNormalizer; // 1 / (k + rank); k 60, an integer of 1 or more
+function minMax(): ScoreNormalizer; // (s - min) / (max - min); 1 when all are equal
+function distributionBased(): ScoreNormalizer; // mean ± 3σ, not clipped; 0.5 when σ is 0
+function none(): ScoreNormalizer; // s
+function sum(): Combination; // Σ w·s
+function max(): Combination; // the greatest w·s
+function arithmeticMean(): Combination; // Σ w·s / Σ w; 0 when Σ w is 0
+
+// A normalized or a combined score that is not finite is a TypeError.
+class RankFusion implements Fusion<RankedDoc> {
+  constructor(options?: {
+    readonly normalizer?: RankNormalizer; // reciprocalRank({ k: 60 })
+    readonly combination?: Combination; // sum()
+  }); // reads no score
+}
+class ScoreFusion implements Fusion<ScoreDoc> {
+  constructor(options: {
+    readonly normalizer: ScoreNormalizer;
+    readonly combination: Combination;
+  }); // an input score that is not finite is a TypeError
+}
 
 class FusionRetriever<
   in Q extends QueryType = QueryType,
   in out P extends Passage = Passage,
+  F = unknown, // the fields of a doc besides its id: unknown under a RankFusion, { score: number } under a ScoreFusion
   K extends string = string, // the names of the retrievers
-> implements Retriever<Q, P> {
+> implements Retriever<Q, P, ScoredPassage<P>> {
   constructor(options: {
-    readonly retrievers: Readonly<Record<K, Retriever<Q, P>>>; // at least one; no name holds ':'; each gets the query unchanged
-    readonly fusion?: Fusion<NoInfer<P>>; // reciprocalRankFusion()
-    readonly weights?: Readonly<Partial<Record<NoInfer<K>, number>>>; // 1 for each name that is absent; each finite and 0 or more, at least one above 0
+    readonly retrievers: Readonly<
+      Record<
+        K,
+        {
+          readonly retriever: Retriever<Q, P, RankedPassage<P> & F>; // each gets the query unchanged
+          readonly weight?: number; // 1; finite and 0 or more, at least one above 0
+        }
+      >
+    >; // at least one; no name holds ':'; the lists fuse in the order of the names
+    readonly fusion?: Fusion<RankedDoc & F>; // new RankFusion()
     readonly rankWindowSize?: number; // the topK of the call
   }); // an unavailable retriever is named in failures, 'outer:inner' when nested; none answered: NoRetrieverAnsweredError; a bug aborts the others and rejects; the caller's abort rejects at once
 }
 class MultiQueryRetriever<
   in out P extends Passage = Passage,
-> implements Retriever<QueryType, P> {
+  F = unknown, // as for FusionRetriever
+> implements Retriever<QueryType, P, ScoredPassage<P>> {
   constructor(options: {
-    readonly retriever: Retriever<QueryType, P>; // gets the query, then each version as a string
+    readonly retriever: Retriever<QueryType, P, RankedPassage<P> & F>; // gets the query, then each version as a string
     readonly model: LanguageModel;
     readonly queryCount?: number; // 4 versions, besides the query
-    readonly fusion?: Fusion<NoInfer<P>>; // reciprocalRankFusion()
+    readonly fusion?: Fusion<RankedDoc & F>; // new RankFusion(); inputs 'query', 'version 1' … with weight 1
   }); // the failures of the searches merge by name, the first kept; an error of a search aborts the others and rejects; the caller's abort rejects at once
 }
-class HydeRetriever<in out P extends Passage = Passage> implements Retriever<
-  QueryType,
-  P
-> {
+class HydeRetriever<
+  in out P extends Passage = Passage,
+  out I extends RankedPassage<P> = RankedPassage<P>, // the kind of its retriever
+> implements Retriever<QueryType, P, I> {
   constructor(options: {
-    readonly retriever: Retriever<QueryBundle, P>; // gets the query bundle with customEmbeddings: [passage]; its failures pass up
+    readonly retriever: Retriever<QueryBundle, P, I>; // gets the query bundle with customEmbeddings: [passage]; its failures pass up
     readonly model: LanguageModel;
   });
 }
+class RerankRetriever<
+  in Q extends QueryType = QueryType,
+  in out P extends Passage = Passage,
+> implements Retriever<Q, P, ScoredPassage<P>> {
+  constructor(options: {
+    readonly retriever: Retriever<Q, P>; // any kind; its failures pass up
+    readonly model: RerankingModel;
+    readonly topN?: number; // every passage when absent
+    readonly scoreThreshold?: number; // keeps a relevance >= it; not finite is a RangeError
+  }); // the relevance of the model is the score, best first; a relevance that is not finite is a TypeError
+}
 
-interface Postprocessor<in out P extends Passage = Passage> {
+interface Postprocessor<
+  in out P extends Passage = Passage,
+  in out I extends RankedPassage<P> = RankedPassage<P>, // the kind it takes and gives
+> {
   readonly postprocess: (
-    passages: readonly ScoredPassage<P>[],
+    passages: readonly I[],
     query: string, // the query of the query bundle
     options?: { readonly signal?: AbortSignal },
-  ) => Promise<ScoredPassage<P>[]>;
+  ) => Promise<I[]>;
 }
 class PostprocessingRetriever<
   in Q extends QueryType = QueryType,
   in out P extends Passage = Passage,
-> implements Retriever<Q, P> {
+  in out I extends RankedPassage<P> = RankedPassage<P>,
+> implements Retriever<Q, P, I> {
   constructor(options: {
-    readonly retriever: Retriever<Q, P>; // its failures pass up
-    readonly postprocessors: readonly Postprocessor<NoInfer<P>>[]; // P comes from the retriever
+    readonly retriever: Retriever<Q, P, I>; // its failures pass up
+    readonly postprocessors: readonly Postprocessor<NoInfer<P>, NoInfer<I>>[]; // P and I come from the retriever
   });
 }
-// Each built-in has postprocess<P extends Passage>(…): Promise<ScoredPassage<P>[]>,
-// ContextWindow<M> postprocess<P extends StoredPassage<M>>(…), and Collapse<P, F>
-// postprocess<R extends P>(…) of passages that have F.
-class Rerank implements Postprocessor<Passage> {
-  constructor(options: {
-    readonly model: RerankingModel;
-    readonly topN?: number; // every passage when absent
-    readonly scoreThreshold?: number; // keeps a relevance >= it; not finite is a RangeError
-  }); // gives every passage it keeps a score, best first; a relevance that is not finite is a TypeError
-}
+// Each built-in keeps the kind it gets: postprocess<I extends RankedPassage>(…):
+// Promise<I[]>, ContextWindow<M> postprocess<I extends RankedPassage<StoredPassage<M>>>(…),
+// and Collapse<P, F> postprocess<I extends RankedPassage<P>>(…) of passages that have F.
 class MaximalMarginalRelevance implements Postprocessor<Passage> {
   constructor(options: {
     readonly model: EmbeddingModel; // the model of the passage vectors; it embeds the query
@@ -997,18 +1160,18 @@ class Collapse<
   F extends keyof FilterFields<P> = keyof FilterFields<P>, // the field as written
 > {
   // A stored passage type: options?, field 'source' when absent. A live one:
-  // options with the field, since its passages have no source. Sorts by score
-  // when every passage has one, and a score that is not finite is then a
-  // TypeError; otherwise keeps the order of the list.
+  // options with the field, since its passages have no source. Keeps the
+  // first size passages of each value, in the order of the list; reads no
+  // score.
   constructor(options?: {
     readonly field?: F; // a field of P, as in a filter
     readonly size?: number; // 1
   });
-  // Only passages that have F: a Postprocessor<R> for each such R.
-  postprocess<R extends P>(
-    passages: readonly ScoredPassage<R>[] &
-      (F extends keyof FilterFields<R> ? unknown : never),
-  ): Promise<ScoredPassage<R>[]>;
+  // Only passages that have F, of either kind.
+  postprocess<I extends RankedPassage<P>>(
+    passages: readonly I[] &
+      (F extends keyof FilterFields<I['passage']> ? unknown : never),
+  ): Promise<I[]>;
 }
 class LongContextReorder implements Postprocessor<Passage> {}
 class ContextWindow<M extends Metadata = Metadata> implements Postprocessor<
@@ -1070,7 +1233,7 @@ class SqlitePassageStore<
 }
 class SqliteEmbeddingRetriever<
   in out M extends Metadata = Metadata,
-> implements BatchRetriever<StoredPassage<M>> {
+> implements BatchRetriever<StoredPassage<M>, ScoredPassage<StoredPassage<M>>> {
   constructor(options: {
     readonly store: SqlitePassageStore<M>;
     readonly vectors: string;
@@ -1083,7 +1246,11 @@ type SqliteMatching =
   | { readonly operator: 'AND' };
 class SqliteBM25Retriever<
   in out M extends Metadata = Metadata,
-> implements Retriever<QueryType, StoredPassage<M>> {
+> implements Retriever<
+  QueryType,
+  StoredPassage<M>,
+  ScoredPassage<StoredPassage<M>>
+> {
   constructor(options: {
     readonly store: SqlitePassageStore<M>;
     readonly index: string; // the FTS5 table
@@ -1111,7 +1278,7 @@ class PostgresPassageStore<
 }
 class PgvectorEmbeddingRetriever<
   in out M extends Metadata = Metadata,
-> implements BatchRetriever<StoredPassage<M>> {
+> implements BatchRetriever<StoredPassage<M>, ScoredPassage<StoredPassage<M>>> {
   constructor(options: {
     readonly store: PostgresPassageStore<M>;
     readonly vectors: string;
@@ -1125,7 +1292,11 @@ type PostgresMatching =
   | { readonly strategy: 'all' };
 class PgvectorKeywordRetriever<
   in out M extends Metadata = Metadata,
-> implements Retriever<QueryType, StoredPassage<M>> {
+> implements Retriever<
+  QueryType,
+  StoredPassage<M>,
+  ScoredPassage<StoredPassage<M>>
+> {
   constructor(options: {
     readonly store: PostgresPassageStore<M>;
     readonly index: {
@@ -1156,7 +1327,7 @@ class SqlServerPassageStore<
 }
 class SqlServerEmbeddingRetriever<
   in out M extends Metadata = Metadata,
-> implements BatchRetriever<StoredPassage<M>> {
+> implements BatchRetriever<StoredPassage<M>, ScoredPassage<StoredPassage<M>>> {
   constructor(options: {
     readonly store: SqlServerPassageStore<M>;
     readonly vectors: string;
@@ -1169,7 +1340,11 @@ type SqlServerMatching =
   | { readonly predicate: 'CONTAINS'; readonly operator: 'AND' | 'OR' };
 class SqlServerKeywordRetriever<
   in out M extends Metadata = Metadata,
-> implements Retriever<QueryType, StoredPassage<M>> {
+> implements Retriever<
+  QueryType,
+  StoredPassage<M>,
+  ScoredPassage<StoredPassage<M>>
+> {
   constructor(options: {
     readonly store: SqlServerPassageStore<M>;
     readonly index: { readonly table: string }; // the base table with the full-text index on [text]
@@ -1187,21 +1362,23 @@ class SqlServerKeywordRetriever<
 **Decisions**
 
 - [ADR 0001](./docs/adr/0001-the-package-is-the-query-side-of-rag-and-reads-a-passage-contract-that-elt-writes.md): the package is the query side of RAG and reads a passage contract that elt writes (superseded in part by ADR 0015).
-- [ADR 0002](./docs/adr/0002-a-retriever-is-a-port-for-any-source.md): a retriever is a port for any source (superseded in part by ADR 0013, ADR 0014 and ADR 0015).
+- [ADR 0002](./docs/adr/0002-a-retriever-is-a-port-for-any-source.md): a retriever is a port for any source (superseded in part by ADR 0013, ADR 0014, ADR 0015 and ADR 0021).
 - [ADR 0003](./docs/adr/0003-an-embedding-retriever-runs-the-vector-search-in-the-sql-of-its-engine-one-query-or-a-batch.md): an embedding retriever runs the vector search in the SQL of its engine, one query or a batch (superseded in part by ADR 0013 and ADR 0014).
 - [ADR 0004](./docs/adr/0004-a-keyword-retriever-queries-the-keyword-index-that-elt-writes.md): a keyword retriever queries the keyword index that elt writes (superseded in part by ADR 0013 and ADR 0018).
-- [ADR 0005](./docs/adr/0005-a-score-is-higher-for-a-better-passage.md): a score is higher for a better passage (superseded in part by ADR 0016).
+- [ADR 0005](./docs/adr/0005-a-score-is-higher-for-a-better-passage.md): a score is higher for a better passage (superseded in part by ADR 0016, ADR 0019 and ADR 0021).
 - [ADR 0006](./docs/adr/0006-a-retriever-gives-10-passages-when-the-caller-gives-no-topk.md): a retriever gives 10 passages when the caller gives no topK.
-- [ADR 0007](./docs/adr/0007-reciprocal-rank-fusion-is-the-default-fusion-with-k-60-and-ranks-from-1.md): reciprocal rank fusion is the default fusion, with k 60 and ranks from 1.
-- [ADR 0008](./docs/adr/0008-a-search-is-composed-of-retrievers-that-wrap-retrievers-and-a-list-of-postprocessors.md): a search is composed of retrievers that wrap retrievers and a list of postprocessors (superseded in part by ADR 0013).
+- [ADR 0007](./docs/adr/0007-reciprocal-rank-fusion-is-the-default-fusion-with-k-60-and-ranks-from-1.md): reciprocal rank fusion is the default fusion, with k 60 and ranks from 1 (superseded in part by ADR 0014, ADR 0016 and ADR 0020).
+- [ADR 0008](./docs/adr/0008-a-search-is-composed-of-retrievers-that-wrap-retrievers-and-a-list-of-postprocessors.md): a search is composed of retrievers that wrap retrievers and a list of postprocessors (superseded in part by ADR 0013, ADR 0014, ADR 0016, ADR 0017, ADR 0019, ADR 0020 and ADR 0021).
 - [ADR 0009](./docs/adr/0009-a-filter-has-the-shape-of-haystacks-filters.md): a filter has the shape of Haystack's filters (superseded in part by ADR 0015).
 - [ADR 0010](./docs/adr/0010-an-embedding-retriever-refuses-a-query-model-whose-identity-differs-from-the-stored-vectors.md): an embedding retriever refuses a query model whose identity differs from the stored vectors.
-- [ADR 0011](./docs/adr/0011-the-package-is-in-the-base-layer.md): the package is in the base layer.
+- [ADR 0011](./docs/adr/0011-the-package-is-in-the-base-layer.md): the package is in the base layer (superseded in part by ADR 0020).
 - [ADR 0012](./docs/adr/0012-the-package-is-zukhruf-retrieval-and-its-port-is-retriever-with-retrieve-after-go.md): the package is @zukhruf/retrieval, and its port is Retriever with retrieve, after Go.
-- [ADR 0013](./docs/adr/0013-a-query-is-a-string-or-a-query-bundle-with-a-text-for-each-kind-of-search.md): a query is a string or a query bundle, with a text for each kind of search (superseded in part by ADR 0015 and ADR 0018).
-- [ADR 0014](./docs/adr/0014-a-retrieve-call-answers-with-the-retrievers-that-answered-and-names-those-that-were-unavailable.md): a retrieve call answers with the retrievers that answered and names those that were unavailable.
-- [ADR 0015](./docs/adr/0015-a-passage-is-typed-by-its-metadata-and-only-a-stored-passage-has-source-seq-start-and-end.md): a passage is typed by its metadata, and only a stored passage has source, seq, start and end.
-- [ADR 0016](./docs/adr/0016-a-scored-passage-may-have-no-score-and-a-list-is-in-the-retrievers-order.md): a scored passage may have no score, and a list is in the retriever's order.
-- [ADR 0017](./docs/adr/0017-every-async-port-takes-an-optional-abort-signal-and-a-composite-rejects-at-once-when-it-aborts.md): every async port takes an optional abort signal, and a composite rejects at once when it aborts.
+- [ADR 0013](./docs/adr/0013-a-query-is-a-string-or-a-query-bundle-with-a-text-for-each-kind-of-search.md): a query is a string or a query bundle, with a text for each kind of search (superseded in part by ADR 0015, ADR 0018, ADR 0020 and ADR 0021).
+- [ADR 0014](./docs/adr/0014-a-retrieve-call-answers-with-the-retrievers-that-answered-and-names-those-that-were-unavailable.md): a retrieve call answers with the retrievers that answered and names those that were unavailable (superseded in part by ADR 0020).
+- [ADR 0015](./docs/adr/0015-a-passage-is-typed-by-its-metadata-and-only-a-stored-passage-has-source-seq-start-and-end.md): a passage is typed by its metadata, and only a stored passage has source, seq, start and end (superseded in part by ADR 0020 and ADR 0021).
+- [ADR 0016](./docs/adr/0016-a-scored-passage-may-have-no-score-and-a-list-is-in-the-retrievers-order.md): a scored passage may have no score, and a list is in the retriever's order (superseded by ADR 0021).
+- [ADR 0017](./docs/adr/0017-every-async-port-takes-an-optional-abort-signal-and-a-composite-rejects-at-once-when-it-aborts.md): every async port takes an optional abort signal, and a composite rejects at once when it aborts (superseded in part by ADR 0021).
 - [ADR 0018](./docs/adr/0018-each-keyword-retriever-matches-in-the-strongest-form-of-its-engine.md): each keyword retriever matches in the strongest form of its engine.
-- [ADR 0019](./docs/adr/0019-a-score-threshold-belongs-to-the-embedding-retriever-or-to-rerank-where-the-scale-of-the-score-is-known.md): a score threshold belongs to the embedding retriever or to Rerank, where the scale of the score is known.
+- [ADR 0019](./docs/adr/0019-a-score-threshold-belongs-to-the-embedding-retriever-or-to-rerank-where-the-scale-of-the-score-is-known.md): a score threshold belongs to the embedding retriever or to Rerank, where the scale of the score is known (superseded in part by ADR 0021).
+- [ADR 0020](./docs/adr/0020-a-fusion-is-a-rank-fusion-or-a-score-fusion-over-ids-with-a-normalizer-for-each-list-and-a-combination.md): a fusion is a rank fusion or a score fusion over ids, with a normalizer for each list and a combination.
+- [ADR 0021](./docs/adr/0021-a-retriever-says-whether-it-gives-scores-a-ranked-passage-has-none-and-a-scored-passage-always-has-one.md): a retriever says whether it gives scores: a ranked passage has none, and a scored passage always has one.

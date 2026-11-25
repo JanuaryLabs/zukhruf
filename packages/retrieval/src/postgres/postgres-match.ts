@@ -2,6 +2,7 @@ import type { Metadata, StoredPassage } from '../passage.ts';
 import type { KeywordQuery } from '../query-bundle.ts';
 import type { RetrievalResult } from '../retrieval-result.ts';
 import type { RetrieveOptions } from '../retrieve-options.ts';
+import type { ScoredPassage } from '../scored-passage.ts';
 import { where } from '../sql/where.ts';
 import { bind } from './bind.ts';
 import { dialect } from './dialect.ts';
@@ -29,7 +30,9 @@ export interface PostgresMatch<M extends Metadata> {
   retrieve(
     query: KeywordQuery,
     options: RetrieveOptions<StoredPassage<M>>,
-  ): Promise<RetrievalResult<StoredPassage<M>>>;
+  ): Promise<
+    RetrievalResult<StoredPassage<M>, ScoredPassage<StoredPassage<M>>>
+  >;
 }
 
 /** A passage matches when it holds every keyword as a phrase, or every lexeme of a text. */
@@ -43,7 +46,9 @@ export class AllWords<M extends Metadata> implements PostgresMatch<M> {
   retrieve(
     query: KeywordQuery,
     options: RetrieveOptions<StoredPassage<M>>,
-  ): Promise<RetrievalResult<StoredPassage<M>>> {
+  ): Promise<
+    RetrievalResult<StoredPassage<M>, ScoredPassage<StoredPassage<M>>>
+  > {
     return tsRankCd(this.#index, query, options);
   }
 }
@@ -74,7 +79,9 @@ export class DropMostFrequent<M extends Metadata> implements PostgresMatch<M> {
   async retrieve(
     query: KeywordQuery,
     options: RetrieveOptions<StoredPassage<M>>,
-  ): Promise<RetrievalResult<StoredPassage<M>>> {
+  ): Promise<
+    RetrievalResult<StoredPassage<M>, ScoredPassage<StoredPassage<M>>>
+  > {
     const terms = await this.#rarestFirst(query, options.signal);
     let kept = terms.length;
     while (
@@ -247,7 +254,9 @@ export class DropMostFrequent<M extends Metadata> implements PostgresMatch<M> {
     kept: readonly string[],
     terms: readonly string[],
     options: RetrieveOptions<StoredPassage<M>>,
-  ): Promise<RetrievalResult<StoredPassage<M>>> {
+  ): Promise<
+    RetrievalResult<StoredPassage<M>, ScoredPassage<StoredPassage<M>>>
+  > {
     const { session, passages, metadata, column } = this.#index;
     const parameters: unknown[] = [];
     const every = bind(parameters, terms);
@@ -304,7 +313,7 @@ async function tsRankCd<M extends Metadata>(
   { session, passages, metadata, column, configuration }: TsvectorIndex<M>,
   query: KeywordQuery,
   options: RetrieveOptions<StoredPassage<M>>,
-): Promise<RetrievalResult<StoredPassage<M>>> {
+): Promise<RetrievalResult<StoredPassage<M>, ScoredPassage<StoredPassage<M>>>> {
   if (query.kind === 'text' && query.text.trim() === '') {
     return { passages: [], failures: new Map() };
   }

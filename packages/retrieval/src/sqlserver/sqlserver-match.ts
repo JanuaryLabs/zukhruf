@@ -2,6 +2,7 @@ import type { Metadata, StoredPassage } from '../passage.ts';
 import type { KeywordQuery } from '../query-bundle.ts';
 import type { RetrievalResult } from '../retrieval-result.ts';
 import type { RetrieveOptions } from '../retrieve-options.ts';
+import type { ScoredPassage } from '../scored-passage.ts';
 import { where } from '../sql/where.ts';
 import { binary } from './binary.ts';
 import { bind } from './bind.ts';
@@ -26,7 +27,9 @@ export interface SqlServerMatch<M extends Metadata> {
   retrieve(
     query: KeywordQuery,
     options: RetrieveOptions<StoredPassage<M>>,
-  ): Promise<RetrievalResult<StoredPassage<M>>>;
+  ): Promise<
+    RetrievalResult<StoredPassage<M>, ScoredPassage<StoredPassage<M>>>
+  >;
 }
 
 /** A passage matches when it holds every phrase: they join with `AND`. */
@@ -40,7 +43,9 @@ export class ContainsAll<M extends Metadata> implements SqlServerMatch<M> {
   retrieve(
     query: KeywordQuery,
     options: RetrieveOptions<StoredPassage<M>>,
-  ): Promise<RetrievalResult<StoredPassage<M>>> {
+  ): Promise<
+    RetrievalResult<StoredPassage<M>, ScoredPassage<StoredPassage<M>>>
+  > {
     return containsTable(this.#index, query, 'AND', options);
   }
 }
@@ -56,7 +61,9 @@ export class ContainsAny<M extends Metadata> implements SqlServerMatch<M> {
   retrieve(
     query: KeywordQuery,
     options: RetrieveOptions<StoredPassage<M>>,
-  ): Promise<RetrievalResult<StoredPassage<M>>> {
+  ): Promise<
+    RetrievalResult<StoredPassage<M>, ScoredPassage<StoredPassage<M>>>
+  > {
     return containsTable(this.#index, query, 'OR', options);
   }
 }
@@ -83,7 +90,9 @@ export class FreeText<M extends Metadata> implements SqlServerMatch<M> {
   retrieve(
     query: KeywordQuery,
     options: RetrieveOptions<StoredPassage<M>>,
-  ): Promise<RetrievalResult<StoredPassage<M>>> {
+  ): Promise<
+    RetrievalResult<StoredPassage<M>, ScoredPassage<StoredPassage<M>>>
+  > {
     const cut = options.filter === undefined;
     if (query.kind === 'text') {
       // A blank text is SQL Server's error 7645, and the session rejects
@@ -102,7 +111,7 @@ export class FreeText<M extends Metadata> implements SqlServerMatch<M> {
 }
 
 const nothing = <M extends Metadata>(): Promise<
-  RetrievalResult<StoredPassage<M>>
+  RetrievalResult<StoredPassage<M>, ScoredPassage<StoredPassage<M>>>
 > => Promise.resolve({ passages: [], failures: new Map() });
 
 /**
@@ -114,7 +123,7 @@ function containsTable<M extends Metadata>(
   query: KeywordQuery,
   operator: 'AND' | 'OR',
   options: RetrieveOptions<StoredPassage<M>>,
-): Promise<RetrievalResult<StoredPassage<M>>> {
+): Promise<RetrievalResult<StoredPassage<M>, ScoredPassage<StoredPassage<M>>>> {
   const terms = phrases(termsOf(query));
   if (terms.length === 0) return nothing();
   return ranked(
@@ -140,7 +149,7 @@ async function ranked<M extends Metadata>(
   search: string,
   cut: boolean,
   options: RetrieveOptions<StoredPassage<M>>,
-): Promise<RetrievalResult<StoredPassage<M>>> {
+): Promise<RetrievalResult<StoredPassage<M>, ScoredPassage<StoredPassage<M>>>> {
   const { session, passages, metadata, table } = index;
   const parameters: Record<string, unknown> = {};
   // A condition longer than 4,000 characters reaches the caller as SQL

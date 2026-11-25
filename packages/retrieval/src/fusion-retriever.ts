@@ -1,15 +1,18 @@
 import { untilAborted } from '@zukhruf/async';
 
-import type { Fusion } from './fusion.ts';
+import { fusePassages } from './fuse-passages.ts';
+import { checkWeights } from './fuse.ts';
+import type { Fusion, RankedDoc } from './fusion.ts';
 import { NoRetrieverAnsweredError } from './no-retriever-answered-error.ts';
 import type { Passage } from './passage.ts';
 import type { QueryType } from './query-bundle.ts';
-import { reciprocalRankFusion } from './reciprocal-rank-fusion.ts';
+import { RankFusion } from './rank-fusion.ts';
+import type { RankedPassage } from './ranked-passage.ts';
 import type { RetrievalResult } from './retrieval-result.ts';
 import type { RetrieveOptions } from './retrieve-options.ts';
 import { RetrieverUnavailableError } from './retriever-unavailable-error.ts';
 import type { Retriever } from './retriever.ts';
-import { checkWeights } from './sum-on-id.ts';
+import type { ScoredPassage } from './scored-passage.ts';
 
 /**
  * The names of a fusion's retrievers, as the compiler checks them: at least
@@ -35,29 +38,41 @@ type Gives<P extends Passage> = {
   ) => Promise<RetrievalResult<P>>;
 };
 
+/** A retriever of the fusion by its name, with its weight. */
+type Weighted<Q extends QueryType, P extends Passage, F> = {
+  readonly retriever: Retriever<Q, P, RankedPassage<P> & F>;
+  /** 1 when absent, as Elasticsearch's rrf `weight` and MongoDB's `weights`. A finite number of 0 or more, and at least one retriever's is above 0 (ADR 0007, amendment 2026-11-25). */
+  readonly weight?: number;
+};
+
 /** What a retriever gave: its result, or the error that left it out. */
-type Answer<P extends Passage> =
-  | Answered<P>
+type Answer<P extends Passage, F> =
+  | Answered<P, F>
   | {
       readonly name: string;
+      readonly weight: number;
       readonly error: RetrieverUnavailableError;
     };
 
-type Answered<P extends Passage> = {
+type Answered<P extends Passage, F> = {
   readonly name: string;
-  readonly result: RetrievalResult<P>;
+  readonly weight: number;
+  readonly result: RetrievalResult<P, RankedPassage<P> & F>;
 };
 
 /**
  * Asks each named retriever for `rankWindowSize` passages, fuses the lists on
- * `Passage.id` and gives the best `topK` (ADR 0007). Each retriever gets the
+ * `Passage.id` and gives the best `topK` with their fused scores (ADR 0007). Each retriever gets the
  * query unchanged and reads its own text, as LlamaIndex's
  * `QueryFusionRetriever` gives each retriever the same `QueryBundle`. So the
  * query type of the fusion is one that each retriever takes: TypeScript
  * infers the narrowest query type of the retrievers, and retrievers that
  * need two other fields take `new FusionRetriever<A & B>(…)` (ADR 0013). Its
  * passage type is one that each retriever gives: a fusion of engines gives
- * `StoredPassage`, and a fusion with a live source `Passage` (ADR 0015).
+ * `StoredPassage`, and a fusion with a live source `Passage` (ADR 0015). A
+ * score fusion reads scores, so under a `ScoreFusion` each retriever gives
+ * scored passages, and a retriever of order only does not compile, as
+ * MongoDB's `$scoreFusion` refuses an input pipeline that gives no score.
  *
  * The retrievers run at once, with one signal linked to the caller's (ADR
  * 0014). A retriever that throws `RetrieverUnavailableError` is left out and
@@ -75,32 +90,36 @@ export class FusionRetriever<
   // measure its variance and compares two composites by structure, where a
   // method checks its parameters both ways (ADR 0015).
   in out P extends Passage = Passage,
-  // The names of the retrievers, which type the weights. A type argument
-  // for Q or P makes it `string`: TypeScript infers all or none.
+  /** The fields a doc of the fusion has besides its id: unknown for a rank fusion, `{ score: number }` for a score fusion. */
+  F = unknown,
+  // The names of the retrievers. A type argument for Q or P makes it
+  // `string`: TypeScript infers all or none.
   K extends string = string,
-> implements Retriever<Q, P> {
+> implements Retriever<Q, P, ScoredPassage<P>> {
   readonly #retrievers: readonly (readonly [
     name: string,
-    retriever: Retriever<Q, P>,
+    retriever: Retriever<Q, P, RankedPassage<P> & F>,
     weight: number,
   ])[];
-  readonly #fusion: Fusion<P>;
+  readonly #fusion: Fusion<RankedDoc & F>;
   readonly #rankWindowSize: number | undefined;
 
   constructor(options: {
     /**
-     * Each retriever by its name, the name that `failures` gives. The lists
-     * fuse in the order of the record's keys.
+     * Each retriever by its name, the name that `failures` and the errors of
+     * the fusion give, with its weight. The lists fuse in the order of the
+     * record's keys.
      */
-    readonly retrievers: Readonly<Record<K, Retriever<Q, NoInfer<P>>>> &
-      Readonly<Record<K, Gives<P>>> &
+    // `NoInfer`: P comes from the passages that each retriever gives (Gives),
+    // and F from the fusion only. Gives comes first: after Weighted, a
+    // retriever made in place with a query type of its own, such as
+    // `new LiveRetriever(ids)`, took `never` from the `query: never` of Gives,
+    // and so did Q.
+    readonly retrievers: Readonly<Record<K, { readonly retriever: Gives<P> }>> &
+      Readonly<Record<K, Weighted<Q, NoInfer<P>, NoInfer<F>>>> &
       Names<K>;
-    // `NoInfer`: P comes from the retrievers only. A fusion of the package
-    // is generic in its `fuse`, so it takes P from there (ADR 0015).
-    /** `reciprocalRankFusion()` when absent: k 60, ranks from 1. */
-    readonly fusion?: Fusion<NoInfer<P>>;
-    /** A weight for a retriever by its name: 1 for each name that is absent. Each is a finite number of 0 or more, and at least one is above 0 (ADR 0007, amendment 2026-11-25). */
-    readonly weights?: Readonly<Partial<Record<NoInfer<K>, number>>>;
+    /** `new RankFusion()` when absent: reciprocal rank fusion, k 60, ranks from 1. */
+    readonly fusion?: Fusion<RankedDoc & F>;
     /**
      * How many passages each retriever gives to the fusion: the `topK` of
      * the call when absent. It is at least that `topK`, as Elasticsearch's
@@ -108,10 +127,8 @@ export class FusionRetriever<
      */
     readonly rankWindowSize?: number;
   }) {
-    const retrievers: Readonly<Record<string, Retriever<Q, P>>> =
+    const retrievers: Readonly<Record<string, Weighted<Q, P, F>>> =
       options.retrievers;
-    const weights: Readonly<Partial<Record<string, number>>> =
-      options.weights ?? {};
     const names = Object.keys(retrievers);
     if (names.length === 0) {
       throw new RangeError('A FusionRetriever takes at least one retriever');
@@ -123,30 +140,20 @@ export class FusionRetriever<
         );
       }
     }
-    for (const name of Object.keys(weights)) {
-      if (!Object.hasOwn(retrievers, name)) {
-        throw new RangeError(
-          `A FusionRetriever has no retriever named ${name} to weight: its retrievers are ${names.join(', ')}`,
-        );
-      }
-    }
     this.#retrievers = Object.entries(retrievers).map(
-      ([name, retriever]) =>
-        [
-          name,
-          retriever,
-          (Object.hasOwn(weights, name) ? weights[name] : undefined) ?? 1,
-        ] as const,
+      ([name, { retriever, weight = 1 }]) => [name, retriever, weight],
     );
-    checkWeights(this.#retrievers.map(([name, , weight]) => [name, weight]));
-    this.#fusion = options.fusion ?? reciprocalRankFusion();
+    checkWeights(
+      this.#retrievers.map(([name, , weight]) => ({ name, weight })),
+    );
+    this.#fusion = options.fusion ?? new RankFusion();
     this.#rankWindowSize = options.rankWindowSize;
   }
 
   async retrieve(
     query: Q,
     options: RetrieveOptions<P> = {},
-  ): Promise<RetrievalResult<P>> {
+  ): Promise<RetrievalResult<P, ScoredPassage<P>>> {
     const topK = options.topK ?? 10;
     const rankWindowSize = this.#rankWindowSize ?? topK;
     if (rankWindowSize < topK) {
@@ -165,27 +172,29 @@ export class FusionRetriever<
         : AbortSignal.any([caller, siblings.signal]);
     const answers = await untilAborted(
       Promise.all(
-        this.#retrievers.map(async ([name, retriever]): Promise<Answer<P>> => {
-          try {
-            const result = await retriever.retrieve(query, {
-              ...options,
-              topK: rankWindowSize,
-              signal,
-            });
-            return { name, result };
-          } catch (error) {
-            if (error instanceof RetrieverUnavailableError) {
-              return { name, error };
+        this.#retrievers.map(
+          async ([name, retriever, weight]): Promise<Answer<P, F>> => {
+            try {
+              const result = await retriever.retrieve(query, {
+                ...options,
+                topK: rankWindowSize,
+                signal,
+              });
+              return { name, weight, result };
+            } catch (error) {
+              if (error instanceof RetrieverUnavailableError) {
+                return { name, weight, error };
+              }
+              siblings.abort(error);
+              throw error;
             }
-            siblings.abort(error);
-            throw error;
-          }
-        }),
+          },
+        ),
       ),
       caller,
     );
     const failures = new Map<string, RetrieverUnavailableError>();
-    const answered: Answered<P>[] = [];
+    const answered: Answered<P, F>[] = [];
     for (const answer of answers) {
       if ('result' in answer) {
         answered.push(answer);
@@ -207,14 +216,14 @@ export class FusionRetriever<
     // One list for each retriever, empty for one that did not answer, so the
     // fusion gets the weights that the constructor checked (#5720).
     return {
-      passages: this.#fusion
-        .fuse(
-          answers.map((answer) =>
-            'result' in answer ? answer.result.passages : [],
-          ),
-          this.#retrievers.map(([, , weight]) => weight),
-        )
-        .slice(0, topK),
+      passages: fusePassages(
+        this.#fusion,
+        answers.map((answer) => ({
+          name: answer.name,
+          weight: answer.weight,
+          passages: 'result' in answer ? answer.result.passages : [],
+        })),
+      ).slice(0, topK),
       failures,
     };
   }

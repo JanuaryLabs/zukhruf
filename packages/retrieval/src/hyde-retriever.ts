@@ -4,6 +4,7 @@ import { untilAborted } from '@zukhruf/async';
 
 import type { Passage } from './passage.ts';
 import { type QueryBundle, type QueryType, bundleOf } from './query-bundle.ts';
+import type { RankedPassage } from './ranked-passage.ts';
 import type { RetrievalResult } from './retrieval-result.ts';
 import type { RetrieveOptions } from './retrieve-options.ts';
 import type { Retriever } from './retriever.ts';
@@ -22,18 +23,21 @@ import type { Retriever } from './retriever.ts';
  * (libs/langchain-classic/src/retrievers/hyde.ts, getPromptTemplateFromKey).
  * The model and the retriever get the signal of the call; when it aborts,
  * the call rejects at once with its reason, whatever they do (ADR 0017).
+ * It gives the item of its retriever: scored passages over an engine, an
+ * order only over a host's bundle retriever of order only.
  */
 export class HydeRetriever<
   // `in out P`: a filter puts P in a parameter as well, so TypeScript cannot
   // measure its variance and compares two composites by structure, where a
   // method checks its parameters both ways (ADR 0015).
   in out P extends Passage = Passage,
-> implements Retriever<QueryType, P> {
-  readonly #retriever: Retriever<QueryBundle, P>;
+  out I extends RankedPassage<P> = RankedPassage<P>,
+> implements Retriever<QueryType, P, I> {
+  readonly #retriever: Retriever<QueryBundle, P, I>;
   readonly #model: LanguageModel;
 
   constructor(options: {
-    readonly retriever: Retriever<QueryBundle, P>;
+    readonly retriever: Retriever<QueryBundle, P, I>;
     readonly model: LanguageModel;
   }) {
     this.#retriever = options.retriever;
@@ -43,7 +47,7 @@ export class HydeRetriever<
   async retrieve(
     query: QueryType,
     options: RetrieveOptions<P> = {},
-  ): Promise<RetrievalResult<P>> {
+  ): Promise<RetrievalResult<P, I>> {
     const { signal } = options;
     // Not redundant: generateText calls the model with an aborted signal.
     signal?.throwIfAborted();
@@ -53,7 +57,7 @@ export class HydeRetriever<
   async #search(
     query: QueryType,
     options: RetrieveOptions<P>,
-  ): Promise<RetrievalResult<P>> {
+  ): Promise<RetrievalResult<P, I>> {
     const bundle = bundleOf(query);
     const { text } = await generateText({
       model: this.#model,

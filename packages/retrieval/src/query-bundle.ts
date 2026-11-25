@@ -4,9 +4,9 @@
  */
 export type QueryBundle = {
   /**
-   * The information need. Rerank, MaximalMarginalRelevance and the language
-   * models of HydeRetriever and MultiQueryRetriever read it, and so does
-   * every search that has no text of its own.
+   * The information need. RerankRetriever, MaximalMarginalRelevance and the
+   * language models of HydeRetriever and MultiQueryRetriever read it, and so
+   * does every search that has no text of its own.
    */
   readonly query: string;
   /** What a keyword retriever matches: the words of `query` when absent (.NET `keywords`). */

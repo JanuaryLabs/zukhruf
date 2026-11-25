@@ -1,5 +1,7 @@
 # A scored passage may have no score, and a list is in the retriever's order
 
+Superseded on 2026-11-26 (#5400) by [ADR 0021](./0021-a-retriever-says-whether-it-gives-scores-a-ranked-passage-has-none-and-a-scored-passage-always-has-one.md): a retriever says whether it gives scores. A ranked passage, `RankedPassage<P> = { passage, vector? }`, has no score, and a scored passage, `ScoredPassage<P> = RankedPassage<P> & { score }`, always has one; `Retriever<Q, P, I>` names the kind it gives. A score fusion over a retriever of order only does not compile, so its `TypeError` is gone. A list is still best first, the place in it is the rank, and a score is a finite number (#5700). `Collapse` keeps the order of the list, and `Rerank` is `RerankRetriever`.
+
 Superseded in part on 2026-11-25 (#5734) for `SimilarityCutoff`, which is gone. Each embedding retriever and `Rerank` take `scoreThreshold`, and both give every passage a score ([ADR 0019](./0019-a-score-threshold-belongs-to-the-embedding-retriever-or-to-rerank-where-the-scale-of-the-score-is-known.md)).
 
 Status: Accepted 2026-11-25 (backlog #5583; paper #5638).

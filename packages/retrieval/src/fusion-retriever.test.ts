@@ -10,16 +10,27 @@ import { Vector } from '@zukhruf/vectors';
 import { install, toSql } from '@zukhruf/vectors/sqlite';
 
 import {
+  type Fusion,
+  type FusionInput,
   FusionRetriever,
   MultiQueryRetriever,
   NoRetrieverAnsweredError,
+  type Passage,
   type QueryType,
+  RankFusion,
+  type RankedDoc,
   type RetrievalResult,
   type RetrieveOptions,
   type Retriever,
   RetrieverUnavailableError,
-  distributionBasedScoreFusion,
-  relativeScoreFusion,
+  type ScoreDoc,
+  ScoreFusion,
+  type ScoredPassage,
+  distributionBased,
+  max,
+  minMax,
+  none,
+  sum,
 } from './index.ts';
 import {
   SqliteBM25Retriever,
@@ -93,16 +104,18 @@ const retrievers = (
   database: DatabaseSync,
   signals: (AbortSignal | undefined)[] = [],
 ) => ({
-  keywords: keywords(database),
-  meaning: new SqliteEmbeddingRetriever({
-    store: new SqlitePassageStore({
-      database,
-      passages: 'docs_passages',
-      metadata: (columns) => columns,
+  keywords: { retriever: keywords(database) },
+  meaning: {
+    retriever: new SqliteEmbeddingRetriever({
+      store: new SqlitePassageStore({
+        database,
+        passages: 'docs_passages',
+        metadata: (columns) => columns,
+      }),
+      vectors: 'docs_passage_vectors',
+      model: model(signals),
     }),
-    vectors: 'docs_passage_vectors',
-    model: model(signals),
-  }),
+  },
 });
 
 const scores = (
@@ -132,19 +145,17 @@ class SignalRecordingRetriever implements Retriever {
   };
 }
 
-test('a FusionRetriever refuses a record of no retriever, a name that holds the path separator ":", and a weight for a name that is no retriever, by type for a literal record and at construction for a record typed by string', () => {
+test('a FusionRetriever refuses a record of no retriever and a name that holds the path separator ":", by type for a literal record and at construction for a record typed by string', () => {
   // Arrange
   using database = contract(rows);
-  const none: Readonly<Record<string, Retriever>> = {};
-  const nested: Readonly<Record<string, Retriever>> = {
-    keywords: keywords(database),
-    'labels:dailymed': keywords(database),
+  const empty: Readonly<Record<string, { readonly retriever: Retriever }>> = {};
+  const nested: Readonly<Record<string, { readonly retriever: Retriever }>> = {
+    keywords: { retriever: keywords(database) },
+    'labels:dailymed': { retriever: keywords(database) },
   };
-  const named: Readonly<Record<string, Retriever>> = retrievers(database);
-  const typo: Readonly<Record<string, number>> = { meanng: 2 };
 
   // Act and Assert
-  assert.throws(() => new FusionRetriever({ retrievers: none }), {
+  assert.throws(() => new FusionRetriever({ retrievers: empty }), {
     name: 'RangeError',
     message: 'A FusionRetriever takes at least one retriever',
   });
@@ -153,14 +164,6 @@ test('a FusionRetriever refuses a record of no retriever, a name that holds the 
     message:
       "A retriever's name holds no ':', the separator of a nested failure's path: labels:dailymed",
   });
-  assert.throws(
-    () => new FusionRetriever({ retrievers: named, weights: typo }),
-    {
-      name: 'RangeError',
-      message:
-        'A FusionRetriever has no retriever named meanng to weight: its retrievers are keywords, meaning',
-    },
-  );
   // Each line after a directive is a compile error, which the typecheck
   // target proves; the function never runs.
   const refused = () => [
@@ -168,26 +171,21 @@ test('a FusionRetriever refuses a record of no retriever, a name that holds the 
     new FusionRetriever({ retrievers: {} }),
     new FusionRetriever({
       retrievers: {
-        keywords: keywords(database),
+        keywords: { retriever: keywords(database) },
         // @ts-expect-error: ':' separates the names of a nested failure
-        'labels:dailymed': keywords(database),
+        'labels:dailymed': { retriever: keywords(database) },
       },
-    }),
-    new FusionRetriever({
-      retrievers: retrievers(database),
-      // @ts-expect-error: no retriever is named meanng
-      weights: { meanng: 2 },
     }),
   ];
   assert.equal(typeof refused, 'function');
 });
 
-test('the weights are by name, 1 for each name that is absent', async () => {
+test('each retriever takes its weight in its entry, 1 when absent', async () => {
   // Arrange
   using database = contract(rows);
+  const { keywords, meaning } = retrievers(database);
   const retriever = new FusionRetriever({
-    retrievers: retrievers(database),
-    weights: { meaning: 3 },
+    retrievers: { keywords, meaning: { ...meaning, weight: 3 } },
   });
 
   // Act
@@ -212,7 +210,10 @@ test('a retriever that throws RetrieverUnavailableError is left out and named in
   using database = contract(rows);
   const down = new RetrieverUnavailableError('web search answered HTTP 503');
   const retriever = new FusionRetriever({
-    retrievers: { web: unavailable(down), keywords: keywords(database) },
+    retrievers: {
+      web: { retriever: unavailable(down) },
+      keywords: { retriever: keywords(database) },
+    },
   });
 
   // Act
@@ -240,7 +241,10 @@ test('a RetrieverUnavailableError leaves its siblings running: a sibling that an
     },
   };
   const retriever = new FusionRetriever({
-    retrievers: { web: unavailable(down), late },
+    retrievers: {
+      web: { retriever: unavailable(down) },
+      late: { retriever: late },
+    },
   });
 
   // Act
@@ -262,13 +266,15 @@ test("a nested fusion's failure beside a failure of the outer fusion: each is na
   const web = new RetrieverUnavailableError('HTTP 503');
   const retriever = new FusionRetriever({
     retrievers: {
-      literature: new FusionRetriever({
-        retrievers: {
-          pubmed: unavailable(pubmed),
-          crossref: new LiveRetriever(['doi-1']),
-        },
-      }),
-      web: unavailable(web),
+      literature: {
+        retriever: new FusionRetriever({
+          retrievers: {
+            pubmed: { retriever: unavailable(pubmed) },
+            crossref: { retriever: new LiveRetriever(['doi-1']) },
+          },
+        }),
+      },
+      web: { retriever: unavailable(web) },
     },
   });
 
@@ -294,19 +300,23 @@ test('a nested fusion names each failure by its path, outer:inner, for an inner 
   const preprints = new RetrieverUnavailableError('HTTP 503');
   const retriever = new FusionRetriever({
     retrievers: {
-      literature: new FusionRetriever({
-        retrievers: {
-          pubmed: unavailable(pubmed),
-          crossref: new LiveRetriever(['doi-1']),
-        },
-      }),
-      registries: new FusionRetriever({
-        retrievers: {
-          trials: unavailable(trials),
-          preprints: unavailable(preprints),
-        },
-      }),
-      keywords: keywords(database),
+      literature: {
+        retriever: new FusionRetriever({
+          retrievers: {
+            pubmed: { retriever: unavailable(pubmed) },
+            crossref: { retriever: new LiveRetriever(['doi-1']) },
+          },
+        }),
+      },
+      registries: {
+        retriever: new FusionRetriever({
+          retrievers: {
+            trials: { retriever: unavailable(trials) },
+            preprints: { retriever: unavailable(preprints) },
+          },
+        }),
+      },
+      keywords: { retriever: keywords(database) },
     },
   });
 
@@ -335,7 +345,10 @@ test('when no retriever answered, the call throws NoRetrieverAnsweredError, a Re
   const pubmed = new RetrieverUnavailableError('HTTP 429');
   const web = new RetrieverUnavailableError('HTTP 503');
   const retriever = new FusionRetriever({
-    retrievers: { pubmed: unavailable(pubmed), web: unavailable(web) },
+    retrievers: {
+      pubmed: { retriever: unavailable(pubmed) },
+      web: { retriever: unavailable(web) },
+    },
   });
 
   // Act
@@ -367,8 +380,8 @@ test('an error that is no RetrieverUnavailableError is a bug: it aborts the sign
   const sibling = new SignalRecordingRetriever();
   const retriever = new FusionRetriever({
     retrievers: {
-      slow: sibling,
-      buggy: { retrieve: () => Promise.reject(bug) },
+      slow: { retriever: sibling },
+      buggy: { retriever: { retrieve: () => Promise.reject(bug) } },
     },
   });
 
@@ -389,8 +402,8 @@ test("the caller's abort rejects the call at once with the signal's reason, whil
   const recording = new SignalRecordingRetriever();
   const retriever = new FusionRetriever({
     retrievers: {
-      deaf: { retrieve: () => new Promise(() => {}) },
-      recording,
+      deaf: { retriever: { retrieve: () => new Promise(() => {}) } },
+      recording: { retriever: recording },
     },
   });
 
@@ -526,7 +539,7 @@ test("each retriever gets a signal that aborts when the call's signal aborts, wi
     retrievers: retrievers(database, signals),
   });
   const keywordsOnly = new FusionRetriever({
-    retrievers: { keywords: keywords(database) },
+    retrievers: { keywords: { retriever: keywords(database) } },
   });
   const given = new AbortController();
   const reason = new Error('the turn ended');
@@ -552,10 +565,13 @@ test("each retriever gets a signal that aborts when the call's signal aborts, wi
 test('the fusion and the weights that the caller gives fuse the lists', async () => {
   // Arrange
   using database = contract(rows);
+  const { keywords, meaning } = retrievers(database);
   const retriever = new FusionRetriever({
-    retrievers: retrievers(database),
-    fusion: relativeScoreFusion(),
-    weights: { keywords: 0.75, meaning: 0.25 },
+    retrievers: {
+      keywords: { ...keywords, weight: 0.75 },
+      meaning: { ...meaning, weight: 0.25 },
+    },
+    fusion: new ScoreFusion({ normalizer: minMax(), combination: sum() }),
   });
 
   // Act
@@ -586,25 +602,29 @@ test('each retriever gets the query bundle unchanged and reads its own text: the
   const source = new RecordingRetriever<EntrezQueryBundle>(['pmid-1']);
   const federation = new FusionRetriever({
     retrievers: {
-      source,
-      keywords: new SqliteBM25Retriever({
-        store: new SqlitePassageStore({
-          database,
-          passages: 'docs_passages',
-          metadata: (columns) => columns,
+      source: { retriever: source },
+      keywords: {
+        retriever: new SqliteBM25Retriever({
+          store: new SqlitePassageStore({
+            database,
+            passages: 'docs_passages',
+            metadata: (columns) => columns,
+          }),
+          index: 'docs_passages_fts',
+          matching: { operator: 'AND' },
         }),
-        index: 'docs_passages_fts',
-        matching: { operator: 'AND' },
-      }),
-      meaning: new SqliteEmbeddingRetriever({
-        store: new SqlitePassageStore({
-          database,
-          passages: 'docs_passages',
-          metadata: (columns) => columns,
+      },
+      meaning: {
+        retriever: new SqliteEmbeddingRetriever({
+          store: new SqlitePassageStore({
+            database,
+            passages: 'docs_passages',
+            metadata: (columns) => columns,
+          }),
+          vectors: 'docs_passage_vectors',
+          model: embeddings,
         }),
-        vectors: 'docs_passage_vectors',
-        model: embeddings,
-      }),
+      },
     },
   });
   const question = {
@@ -668,8 +688,8 @@ test('a fusion of plain retrievers takes a string as a query bundle with only qu
   const plain = new FusionRetriever({ retrievers: retrievers(database) });
   const federation = new FusionRetriever({
     retrievers: {
-      source: new RecordingRetriever<EntrezQueryBundle>([]),
-      keywords: keywords(database),
+      source: { retriever: new RecordingRetriever<EntrezQueryBundle>([]) },
+      keywords: { retriever: keywords(database) },
     },
   });
 
@@ -697,20 +717,14 @@ test('a fusion of plain retrievers takes a string as a query bundle with only qu
   assert.equal(typeof refused, 'function');
 });
 
-test('a live source of order only fuses beside an engine search by reciprocal rank fusion, and a score fusion over it rejects with a TypeError, where it ranked NaN scores above the scored list (#5583)', async () => {
+test('a live source of order only fuses beside an engine search by reciprocal rank fusion, so its passages take their places among the scored ones (#5583); a score fusion over it does not compile (type-tests)', async () => {
   // Arrange
   using database = contract(rows);
-  const web = () => new LiveRetriever(['web-1', 'web-2']);
   const byRank = new FusionRetriever({
-    retrievers: { web: web(), keywords: keywords(database) },
-  });
-  const minMax = new FusionRetriever({
-    retrievers: { keywords: keywords(database), web: web() },
-    fusion: relativeScoreFusion(),
-  });
-  const distribution = new FusionRetriever({
-    retrievers: { keywords: keywords(database), web: web() },
-    fusion: distributionBasedScoreFusion(),
+    retrievers: {
+      web: { retriever: new LiveRetriever(['web-1', 'web-2']) },
+      keywords: { retriever: keywords(database) },
+    },
   });
 
   // Act
@@ -724,16 +738,6 @@ test('a live source of order only fuses beside an engine search by reciprocal ra
     ['web-2', 1 / 62],
     ['both', 1 / 62],
   ]);
-  await assert.rejects(minMax.retrieve('rotate key'), {
-    name: 'TypeError',
-    message:
-      'relativeScoreFusion reads scores, and the passage web-1 of list 1 has none: fuse a list of order only with reciprocalRankFusion',
-  });
-  await assert.rejects(distribution.retrieve('rotate key'), {
-    name: 'TypeError',
-    message:
-      'distributionBasedScoreFusion reads scores, and the passage web-1 of list 1 has none: fuse a list of order only with reciprocalRankFusion',
-  });
 });
 
 test('a FusionRetriever whose only retriever with a weight above 0 is unavailable answers with the passages of the other retrievers, which add nothing to a score, and names the failure (#5720)', async () => {
@@ -741,10 +745,9 @@ test('a FusionRetriever whose only retriever with a weight above 0 is unavailabl
   const down = new RetrieverUnavailableError('HTTP 503');
   const retriever = new FusionRetriever({
     retrievers: {
-      kept: new LiveRetriever(['a', 'b']),
-      weighted: unavailable(down),
+      kept: { retriever: new LiveRetriever(['a', 'b']), weight: 0 },
+      weighted: { retriever: unavailable(down) },
     },
-    weights: { kept: 0 },
   });
 
   // Act
@@ -769,48 +772,39 @@ void test.each(
     test(`a FusionRetriever refuses a weight of ${weight} when it is made, with a RangeError that names the retriever (#5720)`, () => {
       // Arrange
       const retrievers = {
-        kept: new LiveRetriever(['a']),
-        weighted: new LiveRetriever(['b']),
+        kept: { retriever: new LiveRetriever(['a']) },
+        weighted: { retriever: new LiveRetriever(['b']), weight },
       };
 
       // Act and Assert
-      assert.throws(
-        () =>
-          new FusionRetriever({ retrievers, weights: { weighted: weight } }),
-        {
-          name: 'RangeError',
-          message: `The weight of weighted is a finite number of 0 or more, not ${weight}`,
-        },
-      );
+      assert.throws(() => new FusionRetriever({ retrievers }), {
+        name: 'RangeError',
+        message: `The weight of weighted is a finite number of 0 or more, not ${weight}`,
+      });
     }),
 );
 
 test('a FusionRetriever refuses weights of which none is above 0 when it is made (#5720)', () => {
   // Arrange
   const retrievers = {
-    kept: new LiveRetriever(['a']),
-    weighted: new LiveRetriever(['b']),
+    kept: { retriever: new LiveRetriever(['a']), weight: 0 },
+    weighted: { retriever: new LiveRetriever(['b']), weight: 0 },
   };
 
   // Act and Assert
-  assert.throws(
-    () =>
-      new FusionRetriever({ retrievers, weights: { kept: 0, weighted: 0 } }),
-    {
-      name: 'RangeError',
-      message: 'A fusion takes at least one weight above 0: every weight is 0',
-    },
-  );
+  assert.throws(() => new FusionRetriever({ retrievers }), {
+    name: 'RangeError',
+    message: 'A fusion takes at least one weight above 0: every weight is 0',
+  });
 });
 
 test('a FusionRetriever takes a weight of 0 beside a weight above 0, and the retriever of weight 0 adds nothing to a score (#5720)', async () => {
   // Arrange
   const retriever = new FusionRetriever({
     retrievers: {
-      kept: new LiveRetriever(['x']),
-      weighted: new LiveRetriever(['y', 'z']),
+      kept: { retriever: new LiveRetriever(['x']), weight: 0 },
+      weighted: { retriever: new LiveRetriever(['y', 'z']) },
     },
-    weights: { kept: 0 },
   });
 
   // Act
@@ -821,5 +815,194 @@ test('a FusionRetriever takes a weight of 0 beside a weight above 0, and the ret
     ['y', 1 / 61],
     ['z', 1 / 62],
     ['x', 0],
+  ]);
+});
+
+// A host retriever that gives the scored passages it is made with, as an
+// engine of the host would.
+const giving = (
+  ...passages: readonly ScoredPassage[]
+): Retriever<QueryType, Passage, ScoredPassage> => ({
+  retrieve: async () => ({ passages, failures: new Map() }),
+});
+
+const passageOf = (id: string, text = `text of ${id}`): Passage => ({
+  id,
+  text,
+  metadata: {},
+});
+
+void test.each(
+  [
+    ['new RankFusion()', new RankFusion()],
+    [
+      'ScoreFusion(minMax, sum)',
+      new ScoreFusion({ normalizer: minMax(), combination: sum() }),
+    ],
+    [
+      'ScoreFusion(distributionBased, sum)',
+      new ScoreFusion({ normalizer: distributionBased(), combination: sum() }),
+    ],
+  ] satisfies readonly (readonly [string, Fusion<ScoreDoc>])[],
+  ([name, fusion]) =>
+    test(`under ${name}, equal fused scores keep the order in which their ids first appear, a passage is the one of the first retriever that gives it, and its vector the first that a retriever gives`, async () => {
+      // Arrange: q and p swap ranks and scores, so each fusion gives them
+      // equal sums; q comes first, against the order of the ids. The core's
+      // tie order has its own test in fusion.test.ts, both ways. Both
+      // retrievers give q a vector; only meaning gives p one.
+      const retriever = new FusionRetriever({
+        retrievers: {
+          keywords: {
+            retriever: giving(
+              { passage: passageOf('q'), score: 9, vector: [5, 5] },
+              {
+                passage: passageOf('p', 'p as the keywords list has it'),
+                score: 8,
+              },
+            ),
+          },
+          meaning: {
+            retriever: giving(
+              {
+                passage: passageOf('p', 'p as the meaning list has it'),
+                score: 9,
+                vector: [1, 0],
+              },
+              { passage: passageOf('q'), score: 8, vector: [0, 1] },
+            ),
+          },
+        },
+        fusion,
+      });
+
+      // Act
+      const { passages } = await retriever.retrieve('rotate key');
+
+      // Assert
+      assert.deepEqual(
+        passages.map(({ passage, vector }) => ({ passage, vector })),
+        [
+          { passage: passageOf('q'), vector: [5, 5] },
+          {
+            passage: passageOf('p', 'p as the keywords list has it'),
+            vector: [1, 0],
+          },
+        ],
+      );
+      assert.equal(passages[0]?.score, passages[1]?.score);
+    }),
+);
+
+test('a host Fusion<RankedDoc> gets one input for each retriever, named by it, with its weight, 1 when absent, and its passages as docs with their ids, and an empty input for a retriever that was unavailable; the call gives the passages in the order and with the scores of the fusion', async () => {
+  // Arrange: the host fusion ranks the ids in the reverse order of their
+  // first appearance.
+  const down = new RetrieverUnavailableError('HTTP 503');
+  const inputs: FusionInput<RankedDoc>[] = [];
+  const reversed: Fusion<RankedDoc> = {
+    fuse: (given) => {
+      inputs.push(...given);
+      return given
+        .flatMap(({ docs }) => docs)
+        .toReversed()
+        .map(({ id }, index) => ({ id, score: 10 - index }));
+    },
+  };
+  const retriever = new FusionRetriever({
+    retrievers: {
+      labels: {
+        retriever: giving(
+          { passage: passageOf('a'), score: 0.9 },
+          { passage: passageOf('b'), score: 0.4 },
+        ),
+        weight: 2,
+      },
+      web: { retriever: new LiveRetriever(['c']) },
+      pubmed: { retriever: unavailable(down) },
+    },
+    fusion: reversed,
+  });
+
+  // Act
+  const result = await retriever.retrieve('rotate key');
+
+  // Assert
+  assert.deepEqual(inputs, [
+    {
+      name: 'labels',
+      weight: 2,
+      docs: [
+        { id: 'a', passage: passageOf('a'), score: 0.9 },
+        { id: 'b', passage: passageOf('b'), score: 0.4 },
+      ],
+    },
+    {
+      name: 'web',
+      weight: 1,
+      docs: [{ id: 'c', passage: { id: 'c', text: 'c', metadata: {} } }],
+    },
+    { name: 'pubmed', weight: 1, docs: [] },
+  ]);
+  assert.deepEqual(result.passages, [
+    { passage: { id: 'c', text: 'c', metadata: {} }, score: 10 },
+    { passage: passageOf('b'), score: 9 },
+    { passage: passageOf('a'), score: 8 },
+  ]);
+  assert.deepEqual([...result.failures], [['pubmed', down]]);
+});
+
+test('a host fusion that gives an id that no retriever gave rejects the call with a TypeError that names the id, as no passage can go with it', async () => {
+  // Arrange
+  const invented: Fusion<RankedDoc> = {
+    fuse: () => [{ id: 'x', score: 1 }],
+  };
+  const retriever = new FusionRetriever({
+    retrievers: { web: { retriever: new LiveRetriever(['a']) } },
+    fusion: invented,
+  });
+
+  // Act and Assert
+  await assert.rejects(retriever.retrieve('rotate key'), {
+    name: 'TypeError',
+    message:
+      'The fusion gave x, which no list holds: a fusion gives only the ids of its inputs',
+  });
+});
+
+test('under ScoreFusion(none, max), a passage that two retrievers give keeps its greatest weighted score, not the sum, and a weight of 2 on 0.3 ranks above 0.5; the passage is the one of the first retriever that gives it, and its vector the first that a retriever gives (#5585)', async () => {
+  // Arrange
+  const retriever = new FusionRetriever({
+    retrievers: {
+      labels: {
+        retriever: giving({
+          passage: passageOf('x', 'x as the labels have it'),
+          score: 0.3,
+        }),
+        weight: 2,
+      },
+      pubmed: {
+        retriever: giving(
+          { passage: passageOf('y'), score: 0.5, vector: [0, 1] },
+          {
+            passage: passageOf('x', 'x as pubmed has it'),
+            score: 0.4,
+            vector: [1, 0],
+          },
+        ),
+      },
+    },
+    fusion: new ScoreFusion({ normalizer: none(), combination: max() }),
+  });
+
+  // Act
+  const { passages } = await retriever.retrieve('rotate key');
+
+  // Assert: x = max(2 * 0.3, 1 * 0.4) = 0.6; the sum would be 1.
+  assert.deepEqual(passages, [
+    {
+      passage: passageOf('x', 'x as the labels have it'),
+      score: 0.6,
+      vector: [1, 0],
+    },
+    { passage: passageOf('y'), score: 0.5, vector: [0, 1] },
   ]);
 });

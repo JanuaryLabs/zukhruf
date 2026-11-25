@@ -1,13 +1,11 @@
 import type { Passage } from './passage.ts';
+import type { RankedPassage } from './ranked-passage.ts';
 
-/** A passage with its score when the retriever gives one, and its vector when the call asks for it. */
-export type ScoredPassage<P extends Passage = Passage> = {
-  readonly passage: P;
-  /**
-   * A finite number, higher is better (ADR 0005). Absent when the retriever
-   * gives an order only, as LlamaIndex's `NodeWithScore.score` is optional
-   * (ADR 0016).
-   */
-  readonly score?: number;
-  readonly vector?: readonly number[];
+/**
+ * A passage with its score: a finite number, higher is better (ADR 0005). A
+ * scored passage is a ranked passage, so a scored list goes where an order
+ * is accepted.
+ */
+export type ScoredPassage<P extends Passage = Passage> = RankedPassage<P> & {
+  readonly score: number;
 };

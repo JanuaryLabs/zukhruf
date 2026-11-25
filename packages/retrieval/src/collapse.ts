@@ -1,7 +1,6 @@
 import type { FilterFields } from './filter.ts';
-import { finiteScore } from './finite-score.ts';
 import type { Passage, StoredPassage } from './passage.ts';
-import type { ScoredPassage } from './scored-passage.ts';
+import type { RankedPassage } from './ranked-passage.ts';
 
 /** A passage field or `metadata.<key>` of the passage type, as in a filter. */
 type FieldOf<P extends Passage> = keyof FilterFields<P> & string;
@@ -25,20 +24,19 @@ type Arguments<P extends Passage, F extends string> = [P] extends [
   : [options: Options<F>];
 
 /**
- * Keeps the best `size` passages of each value of a field, best first, as
- * Elasticsearch's `collapse` keeps the top hit of each key and Vespa's
- * `collapsesize` keeps that many (ADR 0008). The field is a passage field or
+ * Keeps the first `size` passages of each value of a field, in the order of
+ * the list, as Elasticsearch's `collapse` keeps the top hit of each key in
+ * the order of the search's sort and Vespa's `collapsesize` keeps that many
+ * (ADR 0008). A list is best first, so the first passages of a value are its
+ * best; it reads no score, so it keeps the order of a postprocessor before
+ * it, such as the picks of `MaximalMarginalRelevance`, and serves a list of
+ * order only as a scored one (#5400). The field is a passage field or
  * `metadata.<key>` of the passage type, as in a filter, so a field that the
  * passages lack does not compile: neither in the constructor with a type
  * argument `P`, nor in `postprocess`, which takes only passages that have the
- * field `F` (ADR 0015). It sorts by score only when every passage has one,
- * and otherwise keeps the order of the list, which is then the retriever's
- * order (ADR 0016); Elasticsearch has no such case, as its hits always have
- * a score. When it sorts, a score that is not finite is a `TypeError`
- * (`finiteScore`). Equal scores keep the order of the list. The passages
- * without a value for the field (absent or null) are one group, as
- * Elasticsearch groups a missing value under the key null (ADR 0008, the
- * proposed amendment of 2026-11-23).
+ * field `F` (ADR 0015). The passages without a value for the field (absent
+ * or null) are one group, as Elasticsearch groups a missing value under the
+ * key null (ADR 0008, the proposed amendment of 2026-11-23).
  *
  * A Collapse is a `Postprocessor<P>` for every passage type that has its
  * field, but it declares no `implements`: TypeScript defers the check of `F`
@@ -60,15 +58,15 @@ export class Collapse<
     this.#size = options?.size ?? 1;
   }
 
-  async postprocess<R extends P>(
-    passages: readonly ScoredPassage<R>[] &
-      (F extends FieldOf<R> ? unknown : never),
+  async postprocess<I extends RankedPassage<P>>(
+    passages: readonly I[] &
+      (F extends FieldOf<I['passage']> ? unknown : never),
     _query?: string,
     options: { readonly signal?: AbortSignal } = {},
-  ): Promise<ScoredPassage<R>[]> {
+  ): Promise<I[]> {
     options.signal?.throwIfAborted();
     const kept = new Map<unknown, number>();
-    return bestFirst(passages).filter(({ passage }) => {
+    return passages.filter(({ passage }) => {
       const key = this.#value(passage) ?? null;
       const count = kept.get(key) ?? 0;
       kept.set(key, count + 1);
@@ -88,19 +86,4 @@ export class Collapse<
       ? fields[field]
       : passage.metadata[field.slice('metadata.'.length)];
   }
-}
-
-/** By score when every passage has one; otherwise in the order of the list. */
-function bestFirst<S extends ScoredPassage>(
-  passages: readonly S[],
-): readonly S[] {
-  const scored = passages.filter(
-    (passage): passage is S & { readonly score: number } =>
-      passage.score !== undefined,
-  );
-  if (scored.length !== passages.length) return passages;
-  for (const { passage, score } of scored) {
-    finiteScore('Collapse', passage, score);
-  }
-  return scored.toSorted((a, b) => b.score - a.score);
 }

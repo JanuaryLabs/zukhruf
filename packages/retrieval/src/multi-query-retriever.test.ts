@@ -9,13 +9,21 @@ import { Vector } from '@zukhruf/vectors';
 import { install, toSql } from '@zukhruf/vectors/sqlite';
 
 import {
+  type Fusion,
+  type FusionInput,
   MultiQueryRetriever,
   type Passage,
   type QueryType,
+  type RankedDoc,
   type RetrievalResult,
   type RetrieveOptions,
   RetrieverUnavailableError,
-  relativeScoreFusion,
+  ScoreFusion,
+  type ScoredPassage,
+  max,
+  minMax,
+  none,
+  sum,
 } from './index.ts';
 import {
   SqliteBM25Retriever,
@@ -273,7 +281,7 @@ test('the versions past queryCount are cut, a version equal to the query is sear
       calls,
     ),
     queryCount: 3,
-    fusion: relativeScoreFusion(),
+    fusion: new ScoreFusion({ normalizer: minMax(), combination: sum() }),
   });
 
   // Act
@@ -574,4 +582,96 @@ test("the caller's abort rejects the call at once with the signal's reason, whil
   // Assert
   assert.equal(outcome, reason);
   assert.deepEqual(source.queries, []);
+});
+
+test('the lists fuse as the inputs query, version 1 and version 2, in the order of the searches, each with the weight 1', async () => {
+  // Arrange
+  const inputs: FusionInput<RankedDoc>[] = [];
+  const recording: Fusion<RankedDoc> = {
+    fuse: (given) => {
+      inputs.push(...given);
+      return [];
+    },
+  };
+  const retriever = new MultiQueryRetriever({
+    retriever: new RecordingRetriever(['alpha']),
+    model: languageModel(queries('revoke token', 'renew certificate')),
+    queryCount: 2,
+    fusion: recording,
+  });
+
+  // Act
+  await retriever.retrieve('rotate key');
+
+  // Assert
+  assert.deepEqual(
+    inputs.map(({ name, weight }) => [name, weight]),
+    [
+      ['query', 1],
+      ['version 1', 1],
+      ['version 2', 1],
+    ],
+  );
+});
+
+test('under ScoreFusion(none, max), a passage that two searches find keeps its greatest score, not the sum; the passage is the one of the first search that finds it, and its vector the first that a search gives (#5585)', async () => {
+  // Arrange: a host engine that gives each query its own scored passages.
+  const found = new Map<string, readonly ScoredPassage[]>([
+    [
+      'rotate key',
+      [
+        {
+          passage: { id: 'x', text: 'x as the query found it', metadata: {} },
+          score: 0.3,
+        },
+      ],
+    ],
+    [
+      'revoke token',
+      [
+        {
+          passage: { id: 'y', text: 'y', metadata: {} },
+          score: 0.5,
+          vector: [0, 1],
+        },
+        {
+          passage: { id: 'x', text: 'x as the version found it', metadata: {} },
+          score: 0.4,
+          vector: [1, 0],
+        },
+      ],
+    ],
+  ]);
+  const engine = {
+    retrieve: async (
+      query: QueryType,
+    ): Promise<RetrievalResult<Passage, ScoredPassage>> => ({
+      passages:
+        found.get(typeof query === 'string' ? query : query.query) ?? [],
+      failures: new Map(),
+    }),
+  };
+  const retriever = new MultiQueryRetriever({
+    retriever: engine,
+    model: languageModel(queries('revoke token')),
+    queryCount: 1,
+    fusion: new ScoreFusion({ normalizer: none(), combination: max() }),
+  });
+
+  // Act
+  const { passages } = await retriever.retrieve('rotate key');
+
+  // Assert: y = 0.5; x = max(0.3, 0.4) = 0.4, where the sum would be 0.7.
+  assert.deepEqual(passages, [
+    {
+      passage: { id: 'y', text: 'y', metadata: {} },
+      score: 0.5,
+      vector: [0, 1],
+    },
+    {
+      passage: { id: 'x', text: 'x as the query found it', metadata: {} },
+      score: 0.4,
+      vector: [1, 0],
+    },
+  ]);
 });

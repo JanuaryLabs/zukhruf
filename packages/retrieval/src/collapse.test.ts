@@ -18,7 +18,7 @@ const ids = (
   results: readonly { readonly passage: { readonly id: string } }[],
 ) => results.map(({ passage }) => passage.id);
 
-test('by default a Collapse keeps the best passage of each source, best first, when the list is not sorted by score', async () => {
+test('by default a Collapse keeps the first passage of each source, in the order of the list', async () => {
   // Arrange
   const collapse = new Collapse();
 
@@ -31,13 +31,14 @@ test('by default a Collapse keeps the best passage of each source, best first, w
     scored('faq-1', 'faq', 0.7),
   ]);
 
-  // Assert: guide 0.9 > 0.2, notes 0.5 > 0.4, faq alone.
+  // Assert: guide-1 and notes-1 come first of their source, faq alone; the
+  // scores are not read.
   assert.deepEqual(
     results.map(({ passage, score }) => [passage.id, score]),
     [
-      ['guide-2', 0.9],
-      ['faq-1', 0.7],
+      ['guide-1', 0.2],
       ['notes-1', 0.5],
+      ['faq-1', 0.7],
     ],
   );
 });
@@ -110,55 +111,35 @@ test('a Collapse on a passage field groups by the value of that field', async ()
   assert.deepEqual(ids(results), ['guide-0', 'notes-1']);
 });
 
-test('a Collapse keeps the order of the list when a passage has no score, and sorts by score only when every passage has one', async () => {
+test('a Collapse keeps the order of the list, of a list of order only and of a scored list alike', async () => {
   // Arrange: each passage has its own source, so each is kept; the second
-  // list gives the last passage a score as well.
+  // list gives each passage a score that its place does not follow.
   const collapse = new Collapse();
-  const unscored = {
+  const ranked = (id: string) => ({
     passage: {
-      id: 'web',
-      text: 'web',
-      source: 'web',
+      id,
+      text: id,
+      source: id,
       seq: 0,
       start: 0,
       end: 0,
       metadata: {},
     },
-  };
+  });
 
   // Act
-  const mixed = await collapse.postprocess([
-    unscored,
-    scored('low', 'low', 0.1),
-    scored('high', 'high', 0.9),
+  const order = await collapse.postprocess([
+    ranked('web'),
+    ranked('low'),
+    ranked('high'),
   ]);
   const all = await collapse.postprocess([
-    { ...unscored, score: 0.5 },
+    { ...ranked('web'), score: 0.5 },
     scored('low', 'low', 0.1),
     scored('high', 'high', 0.9),
   ]);
 
   // Assert
-  assert.deepEqual(ids(mixed), ['web', 'low', 'high']);
-  assert.deepEqual(ids(all), ['high', 'web', 'low']);
+  assert.deepEqual(ids(order), ['web', 'low', 'high']);
+  assert.deepEqual(ids(all), ['web', 'low', 'high']);
 });
-
-void test.each(
-  [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY],
-  (score) =>
-    test(`a Collapse refuses a passage whose score is ${score} with a TypeError that names the passage, where it sorted [0.1, NaN, 0.9] as 0.1, NaN, 0.9 (#5700)`, async () => {
-      // Arrange
-      const collapse = new Collapse();
-      const passages = [
-        scored('low', 'low', 0.1),
-        scored('broken', 'broken', score),
-        scored('high', 'high', 0.9),
-      ];
-
-      // Act and Assert
-      await assert.rejects(collapse.postprocess(passages), {
-        name: 'TypeError',
-        message: `Collapse reads scores, and the passage broken has the score ${score}: a score is a finite number`,
-      });
-    }),
-);

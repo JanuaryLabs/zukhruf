@@ -11,16 +11,23 @@ import {
   FusionRetriever,
   LongContextReorder,
   type Metadata,
+  MultiQueryRetriever,
   type Passage,
   type PassageStore,
   PostprocessingRetriever,
   type Postprocessor,
   type QueryBundle,
-  Rerank,
+  type QueryType,
+  RankFusion,
+  type RankedDoc,
+  RerankRetriever,
   type RetrievalResult,
   type Retriever,
+  ScoreFusion,
+  type ScoredPassage,
   type StoredPassage,
-  reciprocalRankFusion,
+  minMax,
+  sum,
 } from '../dist/index.js';
 import {
   PgvectorEmbeddingRetriever,
@@ -48,7 +55,9 @@ type IssueQueryBundle = QueryBundle & { readonly jql: string };
 declare const plain: Retriever;
 declare const issues: Retriever<IssueQueryBundle>;
 
-const federation = new FusionRetriever({ retrievers: { plain, issues } });
+const federation = new FusionRetriever({
+  retrievers: { plain: { retriever: plain }, issues: { retriever: issues } },
+});
 const postprocessed = new PostprocessingRetriever({
   retriever: issues,
   postprocessors: [],
@@ -59,7 +68,7 @@ export const fused: FusionRetriever<IssueQueryBundle> = federation;
 export const kept: PostprocessingRetriever<IssueQueryBundle> = postprocessed;
 // A composite of plain retrievers serves a host query too (contravariance).
 export const served: FusionRetriever<IssueQueryBundle> = new FusionRetriever({
-  retrievers: { plain },
+  retrievers: { plain: { retriever: plain } },
 });
 
 // A host composite does not widen to a plain one: a string has no jql.
@@ -67,33 +76,29 @@ export const widened: FusionRetriever = federation; // TS2322
 export const widenedPostprocessing: PostprocessingRetriever = postprocessed; // TS2322
 export const widenedPort: Retriever = federation; // TS2322
 
-// The retrievers of a fusion are named, and its weights take those names: a
-// weight for a name that is no retriever, a record of no retriever and a
-// name that holds ':', the separator of a nested failure's path, do not
-// compile (ADR 0014).
+// The retrievers of a fusion are named, each with its weight: a record of no
+// retriever and a name that holds ':', the separator of a nested failure's
+// path, do not compile (ADR 0014).
 export const weighted = new FusionRetriever({
-  retrievers: { plain, issues },
-  weights: { issues: 2 },
-});
-export const unknownWeight = new FusionRetriever({
-  retrievers: { plain, issues },
-  weights: { isues: 2 }, // TS2561
+  retrievers: {
+    plain: { retriever: plain },
+    issues: { retriever: issues, weight: 2 },
+  },
 });
 export const noRetriever = new FusionRetriever({
   retrievers: {}, // TS2322
 });
 export const pathName = new FusionRetriever({
   retrievers: {
-    plain,
-    'labels:dailymed': plain, // TS2322
+    plain: { retriever: plain },
+    'labels:dailymed': { retriever: plain }, // TS2322
   },
 });
 // A record typed by string compiles, and the constructor checks it.
-declare const dynamic: Readonly<Record<string, Retriever>>;
-export const fromConfig = new FusionRetriever({
-  retrievers: dynamic,
-  weights: { any: 2 },
-});
+declare const dynamic: Readonly<
+  Record<string, { readonly retriever: Retriever; readonly weight?: number }>
+>;
+export const fromConfig = new FusionRetriever({ retrievers: dynamic });
 
 // The passage type, the second parameter of the port (ADR 0015).
 type Label = { readonly setid: string; readonly year: number };
@@ -153,7 +158,7 @@ export const bag: Filter = { field: 'metadata.x', operator: '==', value: 1 };
 // ContextWindow needs stored passages: it goes over an engine and over a
 // fusion of engines, and not over a live source.
 const engines = new FusionRetriever({
-  retrievers: { labels: engine, more: engine },
+  retrievers: { labels: { retriever: engine }, more: { retriever: engine } },
 });
 export const fusedEngines: Of<StoredPassage<Label>> = engines.retrieve('q');
 export const overEngines = new PostprocessingRetriever({
@@ -171,7 +176,9 @@ export const reorderLive = new PostprocessingRetriever({
 
 // A fusion of a live source and an engine gives their common type,
 // Passage<Label>, so it takes no ContextWindow.
-const mixed = new FusionRetriever({ retrievers: { live, engine } });
+const mixed = new FusionRetriever({
+  retrievers: { live: { retriever: live }, engine: { retriever: engine } },
+});
 export const common: Of<Passage<Label>> = mixed.retrieve('q');
 export const stored: Of<StoredPassage<Label>> = mixed.retrieve('q'); // TS2322
 export const mixedWindow = new PostprocessingRetriever({
@@ -180,24 +187,24 @@ export const mixedWindow = new PostprocessingRetriever({
 });
 // Two metadata types fuse only with a type argument that names their union.
 export const two = new FusionRetriever({
-  retrievers: { engine, pubmed }, // TS2322
+  retrievers: { engine: { retriever: engine }, pubmed: { retriever: pubmed } }, // TS2322
 });
 type Both = StoredPassage<Label> | StoredPassage<{ readonly pmid: string }>;
 export const both = new FusionRetriever<string, Both>({
-  retrievers: { engine, pubmed },
+  retrievers: { engine: { retriever: engine }, pubmed: { retriever: pubmed } },
 });
 
 // The ports are generic in their parameter, not in their method (the island
 // rule): P comes from the retriever, and each built-in takes it with no type
 // argument, as its method is generic.
-declare const model: ConstructorParameters<typeof Rerank>[0]['model'];
+declare const model: ConstructorParameters<typeof RerankRetriever>[0]['model'];
 export const reranked: Of<StoredPassage<Label>> = new PostprocessingRetriever({
-  retriever: engine,
-  postprocessors: [new Rerank({ model }), new ContextWindow({ store })],
+  retriever: new RerankRetriever({ retriever: engine, model }),
+  postprocessors: [new ContextWindow({ store })],
 }).retrieve('q');
 export const ranked: Of<StoredPassage<Label>> = new FusionRetriever({
-  retrievers: { labels: engine, more: engine },
-  fusion: reciprocalRankFusion(),
+  retrievers: { labels: { retriever: engine }, more: { retriever: engine } },
+  fusion: new RankFusion(),
 }).retrieve('q');
 // A host writes a postprocessor or a fusion for its own passage type, and
 // gives back passages of that type with no assertion.
@@ -213,16 +220,125 @@ const pinned: StoredPassage<Label> = {
 const pin: Postprocessor<StoredPassage<Label>> = {
   postprocess: async (passages) => [{ passage: pinned }, ...passages],
 };
-const firstList: Fusion<StoredPassage<Label>> = {
-  fuse: (lists) => [...(lists[0] ?? [])],
+const firstList: Fusion<RankedDoc> = {
+  fuse: (inputs) =>
+    (inputs[0]?.docs ?? []).map(({ id }, rank) => ({
+      id,
+      score: 1 / (rank + 1),
+    })),
 };
-export const hosted: Of<StoredPassage<Label>> = new PostprocessingRetriever({
-  retriever: new FusionRetriever({
-    retrievers: { labels: engine, more: engine },
+// A pin adds a passage without a score, so it goes over a list of order
+// only: a fusion gives scores, and the host types it as a retriever of order
+// first (#5400).
+const hostFusion: Retriever<string, StoredPassage<Label>> = new FusionRetriever(
+  {
+    retrievers: { labels: { retriever: engine }, more: { retriever: engine } },
     fusion: firstList,
-  }),
+  },
+);
+export const hosted: Of<StoredPassage<Label>> = new PostprocessingRetriever({
+  retriever: hostFusion,
   postprocessors: [pin, new LongContextReorder()],
 }).retrieve('q');
+
+// A score fusion reads scores, so each retriever under it gives scored
+// passages: a live source of order only does not compile under a
+// ScoreFusion, in a FusionRetriever and a MultiQueryRetriever, nor do its
+// docs in the fusion itself (#5400). Engines, and a fusion, which gives
+// fused scores, compile under it. Both composites give scored passages.
+declare const languageModel: ConstructorParameters<
+  typeof MultiQueryRetriever
+>[0]['model'];
+declare const scoredEngine: Retriever<
+  string,
+  StoredPassage<Label>,
+  ScoredPassage<StoredPassage<Label>>
+>;
+declare const liveSearch: Retriever<QueryType, Passage<Label>>;
+const byScore = () =>
+  new ScoreFusion({ normalizer: minMax(), combination: sum() });
+export const scoredEngines: Promise<
+  RetrievalResult<StoredPassage<Label>, ScoredPassage<StoredPassage<Label>>>
+> = new FusionRetriever({
+  retrievers: {
+    labels: { retriever: scoredEngine },
+    more: { retriever: scoredEngine },
+  },
+  fusion: byScore(),
+}).retrieve('q');
+export const scoredFusion = new FusionRetriever({
+  retrievers: {
+    mixed: { retriever: mixed },
+    engine: { retriever: scoredEngine },
+  },
+  fusion: byScore(),
+});
+export const scoredLive = new FusionRetriever({
+  retrievers: {
+    live: { retriever: live }, // TS2322
+    engine: { retriever: scoredEngine },
+  },
+  fusion: byScore(),
+});
+export const multiScored: Promise<
+  RetrievalResult<Passage<Label>, ScoredPassage<Passage<Label>>>
+> = new MultiQueryRetriever({
+  retriever: liveSearch,
+  model: languageModel,
+}).retrieve('q');
+export const multiScoredLive = new MultiQueryRetriever({
+  retriever: liveSearch, // TS2322
+  model: languageModel,
+  fusion: byScore(),
+});
+// A PostprocessingRetriever gives the kind of its retriever, and each of its
+// postprocessors takes that kind (#5400). The built-ins keep the kind they
+// get. A host postprocessor of order only, such as the pin, does not go over
+// a scored retriever, nor one that reads scores over a list of order only.
+// A RerankRetriever gives scores over a list of order only, so it goes under
+// a score fusion.
+const cutoff: Postprocessor<
+  StoredPassage<Label>,
+  ScoredPassage<StoredPassage<Label>>
+> = {
+  postprocess: async (passages) => passages.filter(({ score }) => score >= 0.5),
+};
+type ScoredLabels = Promise<
+  RetrievalResult<StoredPassage<Label>, ScoredPassage<StoredPassage<Label>>>
+>;
+export const keptScores: ScoredLabels = new PostprocessingRetriever({
+  retriever: scoredEngine,
+  postprocessors: [
+    cutoff,
+    new Collapse(),
+    new LongContextReorder(),
+    new ContextWindow({ store }),
+  ],
+}).retrieve('q');
+const orderOnly = new PostprocessingRetriever({
+  retriever: engine,
+  postprocessors: [new Collapse(), new LongContextReorder()],
+});
+export const keptOrder: Of<StoredPassage<Label>> = orderOnly.retrieve('q');
+export const notScored: ScoredLabels = orderOnly.retrieve('q'); // TS2322
+export const pinnedScores = new PostprocessingRetriever({
+  retriever: scoredEngine,
+  postprocessors: [pin], // TS2322
+});
+export const cutOrder = new PostprocessingRetriever({
+  retriever: engine,
+  postprocessors: [cutoff], // TS2322
+});
+export const rerankedLive = new FusionRetriever({
+  retrievers: {
+    live: { retriever: new RerankRetriever({ retriever: live, model }) },
+    engine: { retriever: scoredEngine },
+  },
+  fusion: byScore(),
+});
+export const unscoredDocs = byScore().fuse([
+  { name: 'web', weight: 1, docs: [{ id: 'u1' }] }, // TS2322
+]);
 
 // An engine is typed by the metadata that its store reads from each row: the
 // store's required `metadata` gives M, and every retriever over the store
@@ -272,10 +388,10 @@ export const typedKeyword: Of<StoredPassage<Label>> = keyword.retrieve('q');
 // A live source beside an engine class of one metadata type fuses to their
 // common passage type, in either order, as an array of both did.
 export const liveFirst: Of<Passage<Label>> = new FusionRetriever({
-  retrievers: { live, keyword },
+  retrievers: { live: { retriever: live }, keyword: { retriever: keyword } },
 }).retrieve('q');
 export const engineFirst: Of<Passage<Label>> = new FusionRetriever({
-  retrievers: { keyword, live },
+  retrievers: { keyword: { retriever: keyword }, live: { retriever: live } },
 }).retrieve('q');
 export const typedMany: Promise<RetrievalResult<StoredPassage<Label>>[]> =
   embedding.retrieveMany(['q']);
@@ -318,7 +434,10 @@ export const anyYear: SqliteBM25Retriever<Year<number>> = year2026; // TS2322
 // names their union, as the paper wants: no inferred type covers both, and
 // the union is not the intersection.
 const sameM = new FusionRetriever({
-  retrievers: { keyword, embedding },
+  retrievers: {
+    keyword: { retriever: keyword },
+    embedding: { retriever: embedding },
+  },
 });
 export const sameMetadata: Of<StoredPassage<Label>> = sameM.retrieve('q');
 export const sameWindow = new PostprocessingRetriever({
@@ -326,11 +445,17 @@ export const sameWindow = new PostprocessingRetriever({
   postprocessors: [new ContextWindow({ store: labels })],
 });
 export const twoM = new FusionRetriever({
-  retrievers: { keyword, articleKeyword }, // TS2322
+  retrievers: {
+    keyword: { retriever: keyword },
+    articleKeyword: { retriever: articleKeyword }, // TS2322
+  },
 });
 type Either = StoredPassage<Label> | StoredPassage<Article>;
 const eitherM = new FusionRetriever<string, Either>({
-  retrievers: { keyword, articleKeyword },
+  retrievers: {
+    keyword: { retriever: keyword },
+    articleKeyword: { retriever: articleKeyword },
+  },
 });
 export const either: Of<Either> = eitherM.retrieve('q');
 type LabelAndArticle = StoredPassage<Label & Article>;
@@ -565,8 +690,8 @@ export const freeTextWithOperator: SqlServerMatching = {
 };
 
 // A score threshold is an option of the object that knows the scale of its
-// scores: each embedding retriever, with the cosine similarity, and Rerank,
-// with the score of its model. A call does not take one, so a fusion never
+// scores: each embedding retriever, with the cosine similarity, and
+// RerankRetriever, with the score of its model. A call does not take one, so a fusion never
 // gives it to a keyword retriever (ADR 0019).
 export const thresholds = [
   new SqliteEmbeddingRetriever({
@@ -587,7 +712,7 @@ export const thresholds = [
     model: embeddings,
     scoreThreshold: 0.5,
   }),
-  new Rerank({ model, scoreThreshold: 0.5 }),
+  new RerankRetriever({ retriever: plain, model, scoreThreshold: 0.5 }),
 ];
 export const perCall = embedding.retrieve('q', {
   scoreThreshold: 0.5, // TS2353

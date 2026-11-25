@@ -1,5 +1,7 @@
 # A passage is typed by its metadata, and only a stored passage has source, seq, start and end
 
+Superseded in part on 2026-11-26 (#5400) for `Fusion<in out P>`, its `NoInfer` slot and `Postprocessor<in out P>`. A fusion fuses ids, `Fusion<in D extends RankedDoc>`, with no passage type, and the composites infer the fields of its docs, `F`, from the fusion ([ADR 0020](./0020-a-fusion-is-a-rank-fusion-or-a-score-fusion-over-ids-with-a-normalizer-for-each-list-and-a-combination.md)). A postprocessor is `Postprocessor<in out P, in out I>`, and `Rerank` is `RerankRetriever` ([ADR 0021](./0021-a-retriever-says-whether-it-gives-scores-a-ranked-passage-has-none-and-a-scored-passage-always-has-one.md)). The rest of the decision below stays true.
+
 Status: Accepted 2026-11-25 (backlog #5584; paper #5638).
 
 Decision-makers: Ezz, who approved the paper of #5638 on 2026-11-25 and accepted its one deviation from the leaders for this decision: "P (Retriever<in Q, P extends Passage>, StoredPassage keeps offsets through a fusion)". The leader tables of the paper decided the rest.

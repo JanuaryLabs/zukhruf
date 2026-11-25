@@ -4,6 +4,7 @@ import type {
   RetrievalResult,
   RetrieveOptions,
   Retriever,
+  ScoredPassage,
   StoredPassage,
 } from '../index.ts';
 
@@ -22,7 +23,7 @@ export type EntrezQueryBundle = QueryBundle & { readonly entrez: string };
  */
 export class RecordingRetriever<
   in out Q extends QueryType = QueryType,
-> implements Retriever<Q, StoredPassage> {
+> implements Retriever<Q, StoredPassage, ScoredPassage<StoredPassage>> {
   readonly queries: Q[] = [];
   readonly #ids: readonly string[];
 
@@ -33,7 +34,7 @@ export class RecordingRetriever<
   async retrieve(
     query: Q,
     options: RetrieveOptions<StoredPassage> = {},
-  ): Promise<RetrievalResult<StoredPassage>> {
+  ): Promise<RetrievalResult<StoredPassage, ScoredPassage<StoredPassage>>> {
     this.queries.push(query);
     return {
       passages: this.#ids.slice(0, options.topK ?? 10).map((id, index) => ({

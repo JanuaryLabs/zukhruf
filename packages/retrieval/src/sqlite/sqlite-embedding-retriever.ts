@@ -6,10 +6,7 @@ import { Vector } from '@zukhruf/vectors';
 import { fromSql, toSql } from '@zukhruf/vectors/sqlite';
 
 import type { BatchRetriever } from '../batch-retriever.ts';
-import {
-  type EngineScoredPassage,
-  IdentityCheckedSearch,
-} from '../identity-checked-search.ts';
+import { IdentityCheckedSearch } from '../identity-checked-search.ts';
 import {
   type ModelIdentity,
   describe,
@@ -19,6 +16,7 @@ import type { Metadata, StoredPassage } from '../passage.ts';
 import type { QueryType } from '../query-bundle.ts';
 import type { RetrievalResult } from '../retrieval-result.ts';
 import type { RetrieveOptions } from '../retrieve-options.ts';
+import type { ScoredPassage } from '../scored-passage.ts';
 import { identifier } from '../sql/identifier.ts';
 import { where } from '../sql/where.ts';
 import { dialect } from './dialect.ts';
@@ -36,7 +34,7 @@ export class SqliteEmbeddingRetriever<
   // `in out M`: TypeScript cannot measure M through the filter's mapped keys,
   // and a class method checks its parameters both ways (ADR 0015).
   in out M extends Metadata = Metadata,
-> implements BatchRetriever<StoredPassage<M>> {
+> implements BatchRetriever<StoredPassage<M>, ScoredPassage<StoredPassage<M>>> {
   readonly #database: DatabaseSync;
   readonly #passages: string;
   readonly #metadata: (columns: Metadata) => M;
@@ -69,7 +67,9 @@ export class SqliteEmbeddingRetriever<
   async retrieve(
     query: QueryType,
     options: RetrieveOptions<StoredPassage<M>> = {},
-  ): Promise<RetrievalResult<StoredPassage<M>>> {
+  ): Promise<
+    RetrievalResult<StoredPassage<M>, ScoredPassage<StoredPassage<M>>>
+  > {
     return {
       passages: await this.#retrieval.retrieve(query, options),
       failures: new Map(),
@@ -79,7 +79,9 @@ export class SqliteEmbeddingRetriever<
   async retrieveMany(
     queries: readonly QueryType[],
     options: RetrieveOptions<StoredPassage<M>> = {},
-  ): Promise<RetrievalResult<StoredPassage<M>>[]> {
+  ): Promise<
+    RetrievalResult<StoredPassage<M>, ScoredPassage<StoredPassage<M>>>[]
+  > {
     const lists = await this.#retrieval.retrieveMany(queries, options);
     return lists.map((passages) => ({ passages, failures: new Map() }));
   }
@@ -101,7 +103,7 @@ export class SqliteEmbeddingRetriever<
     vectors: readonly (readonly number[])[],
     identity: ModelIdentity,
     options: RetrieveOptions<StoredPassage<M>>,
-  ): EngineScoredPassage<StoredPassage<M>>[][] {
+  ): ScoredPassage<StoredPassage<M>>[][] {
     const parameters: SQLInputValue[] = [
       ...vectors.flatMap((vector, index) => [
         index,
@@ -126,9 +128,7 @@ export class SqliteEmbeddingRetriever<
       WHERE r."rank" <= ?
       ORDER BY r."query", r."rank"`);
     const rows = passageRows(statement, 3, parameters, this.#metadata);
-    const lists = vectors.map(
-      (): EngineScoredPassage<StoredPassage<M>>[] => [],
-    );
+    const lists = vectors.map((): ScoredPassage<StoredPassage<M>>[] => []);
     for (const {
       cells: [query, distance, vector],
       passage,

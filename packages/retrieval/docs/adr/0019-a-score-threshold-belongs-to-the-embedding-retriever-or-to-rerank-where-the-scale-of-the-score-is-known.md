@@ -1,5 +1,7 @@
 # A score threshold belongs to the embedding retriever or to Rerank, where the scale of the score is known
 
+Superseded in part on 2026-11-26 (#5400) for the class that takes the threshold of a reranking model. `Rerank` is `RerankRetriever`, a retriever around a retriever, and it takes `scoreThreshold` as `Rerank` did. `EngineScoredPassage` is gone: every engine retriever gives `ScoredPassage`, whose score is required ([ADR 0021](./0021-a-retriever-says-whether-it-gives-scores-a-ranked-passage-has-none-and-a-scored-passage-always-has-one.md)).
+
 Status: Accepted 2026-11-25 (backlog #5734).
 
 Decision-makers: the zukhruf session mutex-63, from the leaders (four of five) and the probes of #5734. Ezz agreed on 2026-11-25 when he picked the option "Embedding retrievers and Rerank take scoreThreshold. SimilarityCutoff goes": "first option".

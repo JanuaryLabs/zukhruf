@@ -2,7 +2,7 @@ import { PassageGapError } from './passage-gap-error.ts';
 import type { PassageStore } from './passage-store.ts';
 import type { Metadata, StoredPassage } from './passage.ts';
 import type { Postprocessor } from './postprocessor.ts';
-import type { ScoredPassage } from './scored-passage.ts';
+import type { RankedPassage } from './ranked-passage.ts';
 
 /**
  * Widens each passage to its window: the passages of its source from
@@ -43,11 +43,11 @@ export class ContextWindow<
     }
   }
 
-  async postprocess<P extends StoredPassage<M>>(
-    passages: readonly ScoredPassage<P>[],
+  async postprocess<I extends RankedPassage<StoredPassage<M>>>(
+    passages: readonly I[],
     _query: string,
     options: { readonly signal?: AbortSignal } = {},
-  ): Promise<ScoredPassage<P>[]> {
+  ): Promise<I[]> {
     const { signal } = options;
     signal?.throwIfAborted();
     return Promise.all(

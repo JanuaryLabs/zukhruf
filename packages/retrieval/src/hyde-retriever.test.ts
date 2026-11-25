@@ -12,9 +12,8 @@ import { install, toSql } from '@zukhruf/vectors/sqlite';
 import {
   FusionRetriever,
   HydeRetriever,
-  PostprocessingRetriever,
   type QueryBundle,
-  Rerank,
+  RerankRetriever,
   RetrieverUnavailableError,
 } from './index.ts';
 import { SqliteEmbeddingRetriever, SqlitePassageStore } from './sqlite.ts';
@@ -145,25 +144,24 @@ test('the passage reaches the embedding search only, as customEmbeddings: the qu
   using database = contract();
   const source = new RecordingRetriever(['kw-1']);
   const reranked: string[] = [];
-  const stack = new PostprocessingRetriever({
+  const stack = new RerankRetriever({
     retriever: new FusionRetriever({
-      retrievers: { source, meaning: meaning(database) },
+      retrievers: {
+        source: { retriever: source },
+        meaning: { retriever: meaning(database) },
+      },
     }),
-    postprocessors: [
-      new Rerank({
-        model: new MockRerankingModelV4({
-          doRerank: async ({ documents, query }) => {
-            reranked.push(query);
-            return {
-              ranking: documents.values.map((_, index) => ({
-                index,
-                relevanceScore: 1 / (index + 1),
-              })),
-            };
-          },
-        }),
-      }),
-    ],
+    model: new MockRerankingModelV4({
+      doRerank: async ({ documents, query }) => {
+        reranked.push(query);
+        return {
+          ranking: documents.values.map((_, index) => ({
+            index,
+            relevanceScore: 1 / (index + 1),
+          })),
+        };
+      },
+    }),
   });
   const retriever = new HydeRetriever({
     retriever: stack,
@@ -194,11 +192,13 @@ test('HyDE takes a retriever of any query bundle: not one of strings only, nor a
   const host = new RecordingRetriever<EntrezQueryBundle>(['pmid-1']);
   const federation = new FusionRetriever({
     retrievers: {
-      host,
-      hyde: new HydeRetriever({
-        retriever: meaning(database),
-        model: languageModel(),
-      }),
+      host: { retriever: host },
+      hyde: {
+        retriever: new HydeRetriever({
+          retriever: meaning(database),
+          model: languageModel(),
+        }),
+      },
     },
   });
   const query: EntrezQueryBundle = {

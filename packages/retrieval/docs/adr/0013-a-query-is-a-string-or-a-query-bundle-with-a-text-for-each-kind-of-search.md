@@ -1,5 +1,7 @@
 # A query is a string or a query bundle, with a text for each kind of search
 
+Superseded in part on 2026-11-26 (#5400) for the ports named in the line below. `Fusion<in D extends RankedDoc>` fuses ids, with no passage type ([ADR 0020](./0020-a-fusion-is-a-rank-fusion-or-a-score-fusion-over-ids-with-a-normalizer-for-each-list-and-a-combination.md)), and `Postprocessor<in out P, in out I>` takes the kind of its retriever ([ADR 0021](./0021-a-retriever-says-whether-it-gives-scores-a-ranked-passage-has-none-and-a-scored-passage-always-has-one.md)).
+
 Superseded in part on 2026-11-25 (#5584) for its consequence `Retriever<Q, M>`. The second type parameter is the passage type: `Retriever<in Q, P extends Passage>`, with `Postprocessor<in out P extends Passage>` and `Fusion<in out P extends Passage>` ([ADR 0015](./0015-a-passage-is-typed-by-its-metadata-and-only-a-stored-passage-has-source-seq-start-and-end.md)).
 
 Superseded in part on 2026-11-25 (#5669) for what a keyword retriever matches: [ADR 0018](./0018-each-keyword-retriever-matches-in-the-strongest-form-of-its-engine.md) decides that each keyword is one phrase and a text goes to the engine's tokenizer. Until that step of #5669 ships, each word is still quoted. Its Consequences line on the AND default is answered there.

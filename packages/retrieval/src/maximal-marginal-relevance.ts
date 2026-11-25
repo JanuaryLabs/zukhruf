@@ -4,7 +4,7 @@ import { Vector, cosineSimilarity } from '@zukhruf/vectors';
 
 import type { Passage } from './passage.ts';
 import type { Postprocessor } from './postprocessor.ts';
-import type { ScoredPassage } from './scored-passage.ts';
+import type { RankedPassage } from './ranked-passage.ts';
 import { VectorMissingError } from './vector-missing-error.ts';
 
 /**
@@ -45,11 +45,11 @@ export class MaximalMarginalRelevance implements Postprocessor<Passage> {
     }
   }
 
-  async postprocess<P extends Passage>(
-    passages: readonly ScoredPassage<P>[],
+  async postprocess<I extends RankedPassage>(
+    passages: readonly I[],
     query: string,
     options: { readonly signal?: AbortSignal } = {},
-  ): Promise<ScoredPassage<P>[]> {
+  ): Promise<I[]> {
     options.signal?.throwIfAborted();
     const candidates = passages.map((scored) => {
       if (scored.vector === undefined) {

@@ -1,5 +1,7 @@
 # Every async port takes an optional abort signal, and a composite rejects at once when it aborts
 
+Superseded in part on 2026-11-26 (#5400) for the list of composites. `Rerank`, a postprocessor, is now `RerankRetriever`, a composite: it passes the signal to its retriever and its model, and rejects at once with its reason when it aborts, as the other composites do ([ADR 0021](./0021-a-retriever-says-whether-it-gives-scores-a-ranked-passage-has-none-and-a-scored-passage-always-has-one.md)).
+
 Status: Accepted 2026-11-25 (backlog #5587, #5588; paper #5638).
 
 Decision-makers: Ezz, who approved the paper of #5638 on 2026-11-25 and answered its open question on the name: "the abort option is renamed abortSignal -> signal, as every other zukhruf package". The leader tables of the paper decided the rest.
