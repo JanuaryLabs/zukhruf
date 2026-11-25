@@ -10,13 +10,7 @@ import {
 import { isRecord, stringsAt } from '../unknown-values.ts';
 import { reachableProjects } from '../workspace/cached-project-graph.ts';
 import { readJson } from '../workspace/project-manifest.ts';
-
-/** The file paths a manifest's `exports` maps to, in any of its forms. */
-function exportTargets(exports: unknown): string[] {
-  if (typeof exports === 'string') return [exports];
-  if (Array.isArray(exports)) return exports.flatMap(exportTargets);
-  return isRecord(exports) ? Object.values(exports).flatMap(exportTargets) : [];
-}
+import { exportTargets } from './package-exports.ts';
 
 /** Whether `folder` is the folder `entry` names or lies inside it. */
 function isInside(folder: string, entry: string): boolean {

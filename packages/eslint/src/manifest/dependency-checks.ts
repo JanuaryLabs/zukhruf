@@ -9,12 +9,14 @@ import {
   cachedProjectGraph,
   projectNodeAt,
 } from '../workspace/cached-project-graph.ts';
+import { cachedFileMap } from '../workspace/nx-file-map.ts';
 import { projectOf } from '../workspace/project-manifest.ts';
 import {
   type ManifestPolicyOptions,
   type ProjectExtras,
   manifestPolicy,
 } from './manifest-policy.ts';
+import { ProjectBuild } from './project-build.ts';
 
 const nxDependencyChecks = withInstalledAliasVersions(
   ruleOf(nx, 'dependency-checks'),
@@ -104,7 +106,14 @@ const rule: Rule.RuleModule = {
     const graph = cachedProjectGraph();
     const node = graph && projectNodeAt(graph, project.root);
     if (!graph || !node) return {};
-    const options = manifestPolicy(graph, node, optionsOf(context.options[0]));
+    // Only a bundled app reads the file map, which is large in a big workspace.
+    const bundled = new ProjectBuild(graph, node).shape === 'bundled';
+    const options = manifestPolicy(
+      graph,
+      node,
+      optionsOf(context.options[0]),
+      bundled ? cachedFileMap() : {},
+    );
     const projectContext: Rule.RuleContext = Object.create(context, {
       options: { value: [options] },
     });

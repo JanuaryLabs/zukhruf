@@ -17,8 +17,12 @@ export interface Finding {
   readonly line: number;
 }
 
-function eslint(cwd: string, args: string[]): string {
-  const run = spawnSync(process.execPath, [eslintBin, ...args], {
+function eslint(
+  cwd: string,
+  args: string[],
+  nodeArgs: readonly string[] = [],
+): string {
+  const run = spawnSync(process.execPath, [...nodeArgs, eslintBin, ...args], {
     cwd,
     encoding: 'utf8',
   });
@@ -31,11 +35,16 @@ function eslint(cwd: string, args: string[]): string {
 
 /**
  * Runs the real ESLint CLI in its own process from `cwd`, the way `nx lint`
- * runs it from a project folder, and returns every finding.
+ * runs it from a project folder, and returns every finding. `nodeArgs` go to
+ * Node before the CLI, such as an `--import` of module hooks.
  */
-export function lint(cwd: string, paths: string[]): Finding[] {
+export function lint(
+  cwd: string,
+  paths: string[],
+  nodeArgs: readonly string[] = [],
+): Finding[] {
   const results: unknown = JSON.parse(
-    eslint(cwd, ['--format', 'json', ...paths]),
+    eslint(cwd, ['--format', 'json', ...paths], nodeArgs),
   );
   if (!Array.isArray(results)) throw new Error('ESLint printed no results.');
   return results.flatMap((result: unknown) => {
