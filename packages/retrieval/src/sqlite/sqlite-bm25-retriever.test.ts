@@ -45,7 +45,7 @@ test('the passages come best first with -bm25() as the score, so a better match 
   });
 
   // Act
-  const results = await retriever.retrieve('rotate key');
+  const results = (await retriever.retrieve('rotate key')).passages;
 
   // Assert
   assert.deepEqual(ids(results), ['b', 'k1', 'k2']);
@@ -56,7 +56,7 @@ test('the passages come best first with -bm25() as the score, so a better match 
         Number(y) - Number(x) || String(a).localeCompare(String(b)),
     ),
   );
-  assert.ok(results.every(({ score }) => score > 0));
+  assert.ok(results.every(({ score }) => (score ?? 0) > 0));
   assert.ok((results[0]?.score ?? 0) > (results[1]?.score ?? 0));
   assert.deepEqual(results[1]?.passage, {
     id: 'k1',
@@ -83,8 +83,8 @@ test('passages that are a view with an integer rowid column are searched through
   });
 
   // Act
-  const git = await retriever.retrieve('git');
-  const compile = await retriever.retrieve('compile');
+  const git = (await retriever.retrieve('git')).passages;
+  const compile = (await retriever.retrieve('compile')).passages;
 
   // Assert
   assert.deepEqual(
@@ -118,15 +118,21 @@ test('the words of the query join with AND by default, and with OR when the oper
   };
 
   // Act
-  const and = await new SqliteBM25Retriever(options).retrieve('rotate signing');
-  const explicitAnd = await new SqliteBM25Retriever({
-    ...options,
-    operator: 'AND',
-  }).retrieve('rotate signing');
-  const or = await new SqliteBM25Retriever({
-    ...options,
-    operator: 'OR',
-  }).retrieve('rotate signing');
+  const and = (
+    await new SqliteBM25Retriever(options).retrieve('rotate signing')
+  ).passages;
+  const explicitAnd = (
+    await new SqliteBM25Retriever({
+      ...options,
+      operator: 'AND',
+    }).retrieve('rotate signing')
+  ).passages;
+  const or = (
+    await new SqliteBM25Retriever({
+      ...options,
+      operator: 'OR',
+    }).retrieve('rotate signing')
+  ).passages;
 
   // Assert
   assert.deepEqual(ids(and), ['both']);
@@ -147,12 +153,15 @@ test('the words of keywords are quoted in place of the words of query, and the w
   });
 
   // Act
-  const byKeywords = await retriever.retrieve({
-    query: 'renew certificate',
-    keywords: ['rotate', 'signing key'],
-  });
-  const byQuery = await retriever.retrieve({ query: 'renew certificate' });
-  const byString = await retriever.retrieve('renew certificate');
+  const byKeywords = (
+    await retriever.retrieve({
+      query: 'renew certificate',
+      keywords: ['rotate', 'signing key'],
+    })
+  ).passages;
+  const byQuery = (await retriever.retrieve({ query: 'renew certificate' }))
+    .passages;
+  const byString = (await retriever.retrieve('renew certificate')).passages;
 
   // Assert: 'signing key' is two words, each quoted.
   assert.deepEqual(ids(byKeywords), ['both']);
@@ -177,18 +186,18 @@ test('each word of the query is a phrase, so FTS5 syntax in it matches as text a
   // Act
   const results = {
     // Unquoted, `-` opens a column filter: "no such column: rotation".
-    hyphen: ids(await retriever.retrieve('key-rotation')),
+    hyphen: ids((await retriever.retrieve('key-rotation')).passages),
     // Unquoted, `text:` filters the column text.
-    column: ids(await retriever.retrieve('text: title')),
+    column: ids((await retriever.retrieve('text: title')).passages),
     // A `"` in a word is doubled, so it cannot end the phrase.
-    quote: ids(await retriever.retrieve('said "hi"')),
-    near: ids(await retriever.retrieve('NEAR(key points)')),
+    quote: ids((await retriever.retrieve('said "hi"')).passages),
+    near: ids((await retriever.retrieve('NEAR(key points)')).passages),
     // Unquoted, OR would join "this" and "nothing" and match.
-    or: ids(await retriever.retrieve('this OR nothing')),
-    orAlone: ids(await retriever.retrieve('or')),
-    star: ids(await retriever.retrieve('*')),
+    or: ids((await retriever.retrieve('this OR nothing')).passages),
+    orAlone: ids((await retriever.retrieve('or')).passages),
+    star: ids((await retriever.retrieve('*')).passages),
     // Not doubled, the quotes would close the phrase and run OR: "nothing"OR"key".
-    closingQuote: ids(await retriever.retrieve('nothing"OR"key')),
+    closingQuote: ids((await retriever.retrieve('nothing"OR"key')).passages),
   };
 
   // Assert
@@ -213,7 +222,7 @@ test('a query of no words gives no passages', async () => {
   });
 
   // Act
-  const results = await retriever.retrieve(' \t\n ');
+  const results = (await retriever.retrieve(' \t\n ')).passages;
 
   // Assert
   assert.deepEqual(results, []);
@@ -255,17 +264,19 @@ test('a keyword search gives 10 passages when the call gives no topK, topK when 
   });
 
   // Act
-  const byDefault = await retriever.retrieve('key');
-  const two = await retriever.retrieve('key', { topK: 2 });
-  const filtered = await retriever.retrieve('key', {
-    filter: {
-      operator: 'AND',
-      conditions: [
-        { field: 'metadata.product', operator: '==', value: 'consul' },
-        { field: 'source', operator: 'not in', value: ['doc-p01'] },
-      ],
-    },
-  });
+  const byDefault = (await retriever.retrieve('key')).passages;
+  const two = (await retriever.retrieve('key', { topK: 2 })).passages;
+  const filtered = (
+    await retriever.retrieve('key', {
+      filter: {
+        operator: 'AND',
+        conditions: [
+          { field: 'metadata.product', operator: '==', value: 'consul' },
+          { field: 'source', operator: 'not in', value: ['doc-p01'] },
+        ],
+      },
+    })
+  ).passages;
 
   // Assert
   assert.deepEqual(
@@ -310,7 +321,7 @@ test('a passages relation and an index whose names need quoting are searched by 
   });
 
   // Act
-  const results = await retriever.retrieve('key');
+  const results = (await retriever.retrieve('key')).passages;
 
   // Assert
   assert.deepEqual(ids(results), ['a']);

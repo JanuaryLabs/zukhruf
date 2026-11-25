@@ -10,7 +10,9 @@ import {
   describe,
   parseModelIdentity,
 } from '../model-identity.ts';
+import type { StoredPassage } from '../passage.ts';
 import type { QueryType } from '../query-bundle.ts';
+import type { RetrievalResult } from '../retrieval-result.ts';
 import type { RetrieveOptions } from '../retrieve-options.ts';
 import type { ScoredPassage } from '../scored-passage.ts';
 import { where } from '../sql/where.ts';
@@ -29,7 +31,7 @@ import type { SqlServerSession } from './sqlserver-session.ts';
  * with `VECTOR_DISTANCE` in the SQL of SQL Server 2025 (ADR 0003). The search
  * is exact: `VECTOR_DISTANCE` uses no vector index.
  */
-export class SqlServerEmbeddingRetriever implements BatchRetriever {
+export class SqlServerEmbeddingRetriever implements BatchRetriever<StoredPassage> {
   readonly #session: SqlServerSession;
   readonly #passages: string;
   readonly #vectors: string;
@@ -54,18 +56,22 @@ export class SqlServerEmbeddingRetriever implements BatchRetriever {
     });
   }
 
-  retrieve(
+  async retrieve(
     query: QueryType,
-    options: RetrieveOptions = {},
-  ): Promise<ScoredPassage[]> {
-    return this.#retrieval.retrieve(query, options);
+    options: RetrieveOptions<StoredPassage> = {},
+  ): Promise<RetrievalResult<StoredPassage>> {
+    return {
+      passages: await this.#retrieval.retrieve(query, options),
+      failures: new Map(),
+    };
   }
 
-  retrieveMany(
+  async retrieveMany(
     queries: readonly QueryType[],
-    options: RetrieveOptions = {},
-  ): Promise<ScoredPassage[][]> {
-    return this.#retrieval.retrieveMany(queries, options);
+    options: RetrieveOptions<StoredPassage> = {},
+  ): Promise<RetrievalResult<StoredPassage>[]> {
+    const lists = await this.#retrieval.retrieveMany(queries, options);
+    return lists.map((passages) => ({ passages, failures: new Map() }));
   }
 
   /** The identities of the stored vectors, in binary order of their text, as SQLite orders text. */
@@ -88,8 +94,8 @@ export class SqlServerEmbeddingRetriever implements BatchRetriever {
   async #search(
     vectors: readonly (readonly number[])[],
     identity: ModelIdentity,
-    options: RetrieveOptions,
-  ): Promise<ScoredPassage[][]> {
+    options: RetrieveOptions<StoredPassage>,
+  ): Promise<ScoredPassage<StoredPassage>[][]> {
     const parameters: Record<string, unknown> = {};
     const queries = bind(
       parameters,
@@ -120,7 +126,7 @@ export class SqlServerEmbeddingRetriever implements BatchRetriever {
       ORDER BY q.[query], r.[distance], r.[id]`,
       parameters,
     );
-    const lists = vectors.map((): ScoredPassage[] => []);
+    const lists = vectors.map((): ScoredPassage<StoredPassage>[] => []);
     for (const cells of rows) {
       lists[Number(cells['query'])]?.push({
         passage: passage(cells['passage']),

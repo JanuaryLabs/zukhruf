@@ -1,5 +1,5 @@
 import type { PassageStore } from '../passage-store.ts';
-import type { Passage } from '../passage.ts';
+import type { StoredPassage } from '../passage.ts';
 import { binary } from './binary.ts';
 import { bind } from './bind.ts';
 import { identifier } from './identifier.ts';
@@ -69,7 +69,9 @@ export class SqlServerPassageStore implements PassageStore {
       : `${identifier(this.#schema)}.${identifier(name)}`;
   }
 
-  async get(ids: readonly string[]): Promise<ReadonlyMap<string, Passage>> {
+  async get(
+    ids: readonly string[],
+  ): Promise<ReadonlyMap<string, StoredPassage>> {
     const parameters: Record<string, unknown> = {};
     const list = bind(parameters, JSON.stringify(ids));
     const rows = await this.#session.query(
@@ -93,7 +95,7 @@ export class SqlServerPassageStore implements PassageStore {
     readonly source: string;
     readonly seq: number;
     readonly windowSize: number;
-  }): Promise<Passage[]> {
+  }): Promise<StoredPassage[]> {
     const parameters: Record<string, unknown> = {};
     const source = bind(parameters, options.source);
     const from = bind(parameters, options.seq - options.windowSize);

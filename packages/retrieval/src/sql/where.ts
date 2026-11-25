@@ -1,4 +1,5 @@
 import type { Filter } from '../filter.ts';
+import type { StoredPassage } from '../passage.ts';
 
 /**
  * What the filter SQL of one engine needs: how it quotes a column, how it
@@ -30,7 +31,7 @@ const none = '1 = 0';
  */
 export function where<Parameters, Value>(
   dialect: SqlDialect<Parameters, Value>,
-  filter: Filter | undefined,
+  filter: Filter<StoredPassage> | undefined,
   parameters: Parameters,
 ): string {
   return filter === undefined ? all : condition(dialect, filter, parameters);
@@ -38,7 +39,7 @@ export function where<Parameters, Value>(
 
 function condition<Parameters, Value>(
   dialect: SqlDialect<Parameters, Value>,
-  filter: Filter,
+  filter: Filter<StoredPassage>,
   parameters: Parameters,
 ): string {
   if ('conditions' in filter) {

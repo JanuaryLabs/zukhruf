@@ -1,6 +1,6 @@
 import { PassageGapError } from './passage-gap-error.ts';
 import type { PassageStore } from './passage-store.ts';
-import type { Passage } from './passage.ts';
+import type { StoredPassage } from './passage.ts';
 import type { Postprocessor } from './postprocessor.ts';
 import type { ScoredPassage } from './scored-passage.ts';
 
@@ -16,9 +16,11 @@ import type { ScoredPassage } from './scored-passage.ts';
  * `end` of the window; a passage that starts after the end of the text
  * before is a `PassageGapError`. `start` and `end` become those of the
  * window; the id, source, seq, metadata, score and vector stay. A passage
- * that the store gives no window for stays as it is (ADR 0008).
+ * that the store gives no window for stays as it is (ADR 0008). It needs
+ * stored passages: a live source's passage has no source or seq to widen
+ * (ADR 0015).
  */
-export class ContextWindow implements Postprocessor {
+export class ContextWindow implements Postprocessor<StoredPassage> {
   readonly #store: PassageStore;
   readonly #windowSize: number;
 
@@ -36,11 +38,11 @@ export class ContextWindow implements Postprocessor {
     }
   }
 
-  async postprocess(
-    passages: readonly ScoredPassage[],
+  async postprocess<P extends StoredPassage>(
+    passages: readonly ScoredPassage<P>[],
     _query: string,
     options: { readonly abortSignal?: AbortSignal } = {},
-  ): Promise<ScoredPassage[]> {
+  ): Promise<ScoredPassage<P>[]> {
     options.abortSignal?.throwIfAborted();
     return Promise.all(
       passages.map(async (scored) => {
@@ -57,7 +59,10 @@ export class ContextWindow implements Postprocessor {
   }
 }
 
-function widen(passage: Passage, window: readonly Passage[]): Passage {
+function widen<P extends StoredPassage>(
+  passage: P,
+  window: readonly StoredPassage[],
+): P {
   const ordered = window.toSorted((a, b) => a.start - b.start);
   const start = ordered[0]?.start ?? passage.start;
   let text = '';

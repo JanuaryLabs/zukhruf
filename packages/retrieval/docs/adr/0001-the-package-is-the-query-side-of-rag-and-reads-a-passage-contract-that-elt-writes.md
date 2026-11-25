@@ -1,5 +1,7 @@
 # The package is the query side of RAG and reads a passage contract that elt writes
 
+Superseded in part on 2026-11-25 (#5584) for the type of a passage of the contract. It is `StoredPassage<M>`, a `Passage<M>` with `source`, `seq`, `start` and `end`; a passage of any other source has only `id`, `text` and `metadata` ([ADR 0015](./0015-a-passage-is-typed-by-its-metadata-and-only-a-stored-passage-has-source-seq-start-and-end.md)). The rest of the decision below stays true.
+
 Status: accepted by Ezz on 2026-11-23 ("Approve, write the paper"). Before that, Ezz set the scope: "focusing on the search aspect only not ingestion. this elt job?", and for the keyword index: "Index in elt, query in retrieval".
 
 A RAG system has two sides. The ingestion side loads documents, cuts them into passages, embeds the passages and writes indexes. The query side takes a query and gives back the best passages. `@deepagents/retrieval` did both, with its own store, embedder and connectors (backlog #5406). elt already does the ingestion side: it loads sources, cuts text (`@eltjs/chunking`) and embeds it (`@eltjs/embedding`), and on SQL Server it writes a vector index and a search function `marts.<name>_nearest` (ADR 0014 of elt-sqlserver, `packages/destinations/sqlserver/docs/adr/0014-each-vector-index-has-a-search-function-in-marts.md` in the elt repository, #5125).

@@ -1,5 +1,7 @@
 # A query is a string or a query bundle, with a text for each kind of search
 
+Superseded in part on 2026-11-25 (#5584) for its consequence `Retriever<Q, M>`. The second type parameter is the passage type: `Retriever<in Q, P extends Passage>`, with `Postprocessor<in out P extends Passage>` and `Fusion<in out P extends Passage>` ([ADR 0015](./0015-a-passage-is-typed-by-its-metadata-and-only-a-stored-passage-has-source-seq-start-and-end.md)).
+
 Status: Accepted 2026-11-25 (backlog #5579, #5580).
 
 Decision-makers: the meddit session meddit-7a, which decided each question from the leader tables of `paper-v2.md` and `leaders-broad.md` (see Confirmation). Ezz set the method: "I want to follow the leaders" (2026-11-24, after he did not approve the first paper, whose names came from no leader). He ruled that `MultiQueryRetriever` is not shaped around the limits of one host's source: "we should not design around pubmed limit. zukhruf is std package" (2026-11-24). On 2026-11-25 he gave the go: "Go: build both, commit each".

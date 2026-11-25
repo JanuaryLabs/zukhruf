@@ -1,5 +1,6 @@
 import { type RerankingModel, rerank } from 'ai';
 
+import type { Passage } from './passage.ts';
 import type { Postprocessor } from './postprocessor.ts';
 import type { ScoredPassage } from './scored-passage.ts';
 
@@ -11,7 +12,7 @@ import type { ScoredPassage } from './scored-passage.ts';
  * first; a passage that the model leaves out is dropped. An empty list makes
  * no model call, as the AI SDK's `rerank` sends none.
  */
-export class Rerank implements Postprocessor {
+export class Rerank implements Postprocessor<Passage> {
   readonly #model: RerankingModel;
   readonly #topN: number | undefined;
 
@@ -24,11 +25,11 @@ export class Rerank implements Postprocessor {
     this.#topN = options.topN;
   }
 
-  async postprocess(
-    passages: readonly ScoredPassage[],
+  async postprocess<P extends Passage>(
+    passages: readonly ScoredPassage<P>[],
     query: string,
     options: { readonly abortSignal?: AbortSignal } = {},
-  ): Promise<ScoredPassage[]> {
+  ): Promise<ScoredPassage<P>[]> {
     const { ranking } = await rerank({
       model: this.#model,
       documents: passages.map(({ passage }) => passage.text),

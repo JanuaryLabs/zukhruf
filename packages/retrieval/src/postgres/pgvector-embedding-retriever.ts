@@ -8,7 +8,9 @@ import {
   describe,
   parseModelIdentity,
 } from '../model-identity.ts';
+import type { StoredPassage } from '../passage.ts';
 import type { QueryType } from '../query-bundle.ts';
+import type { RetrievalResult } from '../retrieval-result.ts';
 import type { RetrieveOptions } from '../retrieve-options.ts';
 import type { ScoredPassage } from '../scored-passage.ts';
 import { where } from '../sql/where.ts';
@@ -25,7 +27,7 @@ import type { PostgresSession } from './postgres-session.ts';
  * Ranks the passages by the cosine similarity of their vectors to the query,
  * with pgvector's `<=>` in the SQL of Postgres (ADR 0003).
  */
-export class PgvectorEmbeddingRetriever implements BatchRetriever {
+export class PgvectorEmbeddingRetriever implements BatchRetriever<StoredPassage> {
   readonly #session: PostgresSession;
   readonly #passages: string;
   readonly #vectors: string;
@@ -50,18 +52,22 @@ export class PgvectorEmbeddingRetriever implements BatchRetriever {
     });
   }
 
-  retrieve(
+  async retrieve(
     query: QueryType,
-    options: RetrieveOptions = {},
-  ): Promise<ScoredPassage[]> {
-    return this.#retrieval.retrieve(query, options);
+    options: RetrieveOptions<StoredPassage> = {},
+  ): Promise<RetrievalResult<StoredPassage>> {
+    return {
+      passages: await this.#retrieval.retrieve(query, options),
+      failures: new Map(),
+    };
   }
 
-  retrieveMany(
+  async retrieveMany(
     queries: readonly QueryType[],
-    options: RetrieveOptions = {},
-  ): Promise<ScoredPassage[][]> {
-    return this.#retrieval.retrieveMany(queries, options);
+    options: RetrieveOptions<StoredPassage> = {},
+  ): Promise<RetrievalResult<StoredPassage>[]> {
+    const lists = await this.#retrieval.retrieveMany(queries, options);
+    return lists.map((passages) => ({ passages, failures: new Map() }));
   }
 
   /** The identities of the stored vectors, in the byte order of their text, as SQLite orders text. */
@@ -90,8 +96,8 @@ export class PgvectorEmbeddingRetriever implements BatchRetriever {
   async #search(
     vectors: readonly (readonly number[])[],
     identity: ModelIdentity,
-    options: RetrieveOptions,
-  ): Promise<ScoredPassage[][]> {
+    options: RetrieveOptions<StoredPassage>,
+  ): Promise<ScoredPassage<StoredPassage>[][]> {
     const parameters: unknown[] = [];
     const queries = vectors
       .map(
@@ -120,7 +126,7 @@ export class PgvectorEmbeddingRetriever implements BatchRetriever {
       ORDER BY q."query", r."distance", r."id"`,
       parameters,
     );
-    const lists = vectors.map((): ScoredPassage[] => []);
+    const lists = vectors.map((): ScoredPassage<StoredPassage>[] => []);
     for (const cells of rows) {
       lists[Number(cells['query'])]?.push({
         passage: passage(cells['passage']),

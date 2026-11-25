@@ -1,4 +1,4 @@
-import type { Passage } from '../passage.ts';
+import type { StoredPassage } from '../passage.ts';
 
 const passageColumns = new Set(['id', 'source', 'seq', 'start', 'end', 'text']);
 
@@ -12,7 +12,7 @@ export const passageJson =
   '(SELECT p.* FOR JSON PATH, WITHOUT_ARRAY_WRAPPER, INCLUDE_NULL_VALUES)';
 
 /** The passage of a cell that `passageJson` gave. A metadata column is any other column of the passages, under its own name. */
-export function passage(cell: unknown): Passage {
+export function passage(cell: unknown): StoredPassage {
   const row: Record<string, unknown> = JSON.parse(String(cell));
   return {
     id: String(row['id']),

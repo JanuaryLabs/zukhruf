@@ -5,6 +5,7 @@ import { DimensionMismatchError } from '@zukhruf/vectors';
 
 import { type ModelIdentity, modelName } from './model-identity.ts';
 import { ModelMismatchError } from './model-mismatch-error.ts';
+import type { StoredPassage } from './passage.ts';
 import { type QueryType, embeddingsOf } from './query-bundle.ts';
 import type { RetrieveOptions } from './retrieve-options.ts';
 import type { ScoredPassage } from './scored-passage.ts';
@@ -19,8 +20,10 @@ type Engine = {
   readonly search: (
     vectors: readonly (readonly number[])[],
     identity: ModelIdentity,
-    options: RetrieveOptions,
-  ) => ScoredPassage[][] | Promise<ScoredPassage[][]>;
+    options: RetrieveOptions<StoredPassage>,
+  ) =>
+    | ScoredPassage<StoredPassage>[][]
+    | Promise<ScoredPassage<StoredPassage>[][]>;
 };
 
 /**
@@ -44,8 +47,8 @@ export class IdentityCheckedSearch {
 
   async retrieve(
     query: QueryType,
-    options: RetrieveOptions,
-  ): Promise<ScoredPassage[]> {
+    options: RetrieveOptions<StoredPassage>,
+  ): Promise<ScoredPassage<StoredPassage>[]> {
     const [text, ...more] = embeddingsOf(query);
     const [passages] = await this.#retrieve(1, options, async (abortSignal) => {
       const signal = abortSignal === undefined ? {} : { abortSignal };
@@ -69,8 +72,8 @@ export class IdentityCheckedSearch {
 
   async retrieveMany(
     queries: readonly QueryType[],
-    options: RetrieveOptions,
-  ): Promise<ScoredPassage[][]> {
+    options: RetrieveOptions<StoredPassage>,
+  ): Promise<ScoredPassage<StoredPassage>[][]> {
     if (queries.length === 0) return [];
     const texts = queries.map(embeddingsOf);
     return this.#retrieve(queries.length, options, async (abortSignal) => {
@@ -88,9 +91,9 @@ export class IdentityCheckedSearch {
 
   async #retrieve(
     count: number,
-    options: RetrieveOptions,
+    options: RetrieveOptions<StoredPassage>,
     embedQueries: (abortSignal?: AbortSignal) => Promise<readonly number[][]>,
-  ): Promise<ScoredPassage[][]> {
+  ): Promise<ScoredPassage<StoredPassage>[][]> {
     options.abortSignal?.throwIfAborted();
     const query = modelName(this.#engine.model);
     const stored = await this.#engine.storedIdentities();

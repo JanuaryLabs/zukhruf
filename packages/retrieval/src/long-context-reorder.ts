@@ -1,3 +1,4 @@
+import type { Passage } from './passage.ts';
 import type { Postprocessor } from './postprocessor.ts';
 import type { ScoredPassage } from './scored-passage.ts';
 
@@ -13,11 +14,11 @@ import type { ScoredPassage } from './scored-passage.ts';
  * same order for a list sorted best first. The scores stay; the list is no
  * longer sorted by them.
  */
-export class LongContextReorder implements Postprocessor {
-  async postprocess(
-    passages: readonly ScoredPassage[],
-  ): Promise<ScoredPassage[]> {
-    const reordered: ScoredPassage[] = [];
+export class LongContextReorder implements Postprocessor<Passage> {
+  async postprocess<P extends Passage>(
+    passages: readonly ScoredPassage<P>[],
+  ): Promise<ScoredPassage<P>[]> {
+    const reordered: ScoredPassage<P>[] = [];
     for (const [index, passage] of passages.toReversed().entries()) {
       if (index % 2 === 1) reordered.push(passage);
       else reordered.unshift(passage);

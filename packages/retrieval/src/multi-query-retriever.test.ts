@@ -109,7 +109,7 @@ const queries = (...versions: readonly string[]) =>
 const scores = (
   results: readonly {
     readonly passage: { readonly id: string };
-    readonly score: number;
+    readonly score?: number;
   }[],
 ) => results.map(({ passage, score }) => [passage.id, score]);
 
@@ -227,7 +227,8 @@ test("the model writes 4 versions of the query with Haystack's prompt, each vers
   });
 
   // Act
-  const results = await retriever.retrieve('  rotate key ', { topK: 4 });
+  const results = (await retriever.retrieve('  rotate key ', { topK: 4 }))
+    .passages;
 
   // Assert: each of the 5 lists has one passage at rank 1, 1 / (60 + 1), and
   // the list of the query comes first.
@@ -263,7 +264,7 @@ test('the versions past queryCount are cut, a version equal to the query is sear
   });
 
   // Act
-  const results = await retriever.retrieve('rotate key');
+  const results = (await retriever.retrieve('rotate key')).passages;
 
   // Assert: the lists of 'rotate key', 'revoke token' and 'renew
   // certificate'; a list of one passage gives it 1 in relative score fusion,
@@ -333,12 +334,14 @@ test('the filter and includeVectors of the call reach each search, and its abort
   });
 
   // Act
-  const results = await retriever.retrieve('rotate key', {
-    topK: 2,
-    filter: { field: 'metadata.product', operator: '==', value: 'a' },
-    includeVectors: true,
-    abortSignal: given.signal,
-  });
+  const results = (
+    await retriever.retrieve('rotate key', {
+      topK: 2,
+      filter: { field: 'metadata.product', operator: '==', value: 'a' },
+      includeVectors: true,
+      abortSignal: given.signal,
+    })
+  ).passages;
 
   // Assert: each search gives topK 2 passages. The filter takes beta out of
   // the list of 'revoke token', where alpha, delta, eps and gamma tie at
@@ -371,7 +374,7 @@ test('ten passages come back when the call gives no topK', async () => {
   });
 
   // Act
-  const results = await retriever.retrieve('topic0');
+  const results = (await retriever.retrieve('topic0')).passages;
 
   // Assert: each of the 12 lists has one passage at rank 1, in the order of
   // the queries.

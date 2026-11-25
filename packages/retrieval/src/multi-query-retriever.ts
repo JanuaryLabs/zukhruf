@@ -1,11 +1,12 @@
 import { type LanguageModel, Output, generateText, jsonSchema } from 'ai';
 
 import type { Fusion } from './fusion.ts';
+import type { Passage } from './passage.ts';
 import { type QueryType, needOf } from './query-bundle.ts';
 import { reciprocalRankFusion } from './reciprocal-rank-fusion.ts';
+import type { RetrievalResult } from './retrieval-result.ts';
 import type { RetrieveOptions } from './retrieve-options.ts';
 import type { Retriever } from './retriever.ts';
-import type { ScoredPassage } from './scored-passage.ts';
 
 /**
  * Asks the language model for `queryCount` other versions of the query,
@@ -20,19 +21,25 @@ import type { ScoredPassage } from './scored-passage.ts';
  * string: a version replaces the whole query, as in LlamaIndex, LangChain
  * and Haystack. So the retriever takes a plain query (ADR 0013).
  */
-export class MultiQueryRetriever implements Retriever {
-  readonly #retriever: Retriever;
+export class MultiQueryRetriever<
+  // `in out P`: a filter puts P in a parameter as well, so TypeScript cannot
+  // measure its variance and compares two composites by structure, where a
+  // method checks its parameters both ways (ADR 0015).
+  in out P extends Passage = Passage,
+> implements Retriever<QueryType, P> {
+  readonly #retriever: Retriever<QueryType, P>;
   readonly #model: LanguageModel;
   readonly #queryCount: number;
-  readonly #fusion: Fusion;
+  readonly #fusion: Fusion<P>;
 
   constructor(options: {
-    readonly retriever: Retriever;
+    readonly retriever: Retriever<QueryType, P>;
     readonly model: LanguageModel;
     /** How many versions the model writes, besides the query: 4 when absent. */
     readonly queryCount?: number;
+    // `NoInfer`: P comes from the retriever only (ADR 0015).
     /** `reciprocalRankFusion()` when absent. */
-    readonly fusion?: Fusion;
+    readonly fusion?: Fusion<NoInfer<P>>;
   }) {
     this.#retriever = options.retriever;
     this.#model = options.model;
@@ -47,8 +54,8 @@ export class MultiQueryRetriever implements Retriever {
 
   async retrieve(
     query: QueryType,
-    options: RetrieveOptions = {},
-  ): Promise<ScoredPassage[]> {
+    options: RetrieveOptions<P> = {},
+  ): Promise<RetrievalResult<P>> {
     const need = needOf(query);
     const { output } = await generateText({
       model: this.#model,
@@ -64,15 +71,18 @@ export class MultiQueryRetriever implements Retriever {
         .slice(0, this.#queryCount)
         .filter((version) => version.toLowerCase() !== need.toLowerCase()),
     ];
-    const lists = await Promise.all(
+    const results = await Promise.all(
       queries.map((version) => this.#retriever.retrieve(version, options)),
     );
-    return this.#fusion
-      .fuse(
-        lists,
-        lists.map(() => 1),
-      )
-      .slice(0, options.topK ?? 10);
+    return {
+      passages: this.#fusion
+        .fuse(
+          results.map(({ passages }) => passages),
+          results.map(() => 1),
+        )
+        .slice(0, options.topK ?? 10),
+      failures: new Map(),
+    };
   }
 }
 

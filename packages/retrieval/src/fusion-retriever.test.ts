@@ -90,7 +90,7 @@ const retrievers = (
 const scores = (
   results: readonly {
     readonly passage: { readonly id: string };
-    readonly score: number;
+    readonly score?: number;
   }[],
 ) => results.map(({ passage, score }) => [passage.id, score]);
 
@@ -131,7 +131,7 @@ test('by default the lists are fused by reciprocal rank fusion with k 60 and a w
   const retriever = new FusionRetriever({ retrievers: retrievers(database) });
 
   // Act
-  const results = await retriever.retrieve('rotate key');
+  const results = (await retriever.retrieve('rotate key')).passages;
 
   // Assert: keywords [kw, both], meaning [vec, both, kw, far].
   //   kw   = 1 / 61 + 1 / 63 = 0.032266
@@ -158,8 +158,10 @@ test('each retriever gives rankWindowSize passages, the topK of the call when ab
   });
 
   // Act
-  const fromTops = await windowOfTopK.retrieve('rotate key', { topK: 1 });
-  const fromTwo = await windowOfTwo.retrieve('rotate key', { topK: 1 });
+  const fromTops = (await windowOfTopK.retrieve('rotate key', { topK: 1 }))
+    .passages;
+  const fromTwo = (await windowOfTwo.retrieve('rotate key', { topK: 1 }))
+    .passages;
 
   // Assert: with one passage each, kw and vec tie at 1 / 61 and kw comes
   // first; with two each, both is second in each list: 2 / 62 > 1 / 61.
@@ -179,7 +181,7 @@ test('ten passages come back when the call gives no topK', async () => {
   const retriever = new FusionRetriever({ retrievers: retrievers(database) });
 
   // Act
-  const results = await retriever.retrieve('rotate key');
+  const results = (await retriever.retrieve('rotate key')).passages;
 
   // Assert: both lists rank p00 to p11 in the same order.
   assert.deepEqual(
@@ -199,10 +201,12 @@ test('the filter and includeVectors of the call reach each retriever, and a pass
   const retriever = new FusionRetriever({ retrievers: retrievers(database) });
 
   // Act
-  const results = await retriever.retrieve('rotate key', {
-    filter: { field: 'metadata.product', operator: '==', value: 'a' },
-    includeVectors: true,
-  });
+  const results = (
+    await retriever.retrieve('rotate key', {
+      filter: { field: 'metadata.product', operator: '==', value: 'a' },
+      includeVectors: true,
+    })
+  ).passages;
 
   // Assert: keywords [kw], meaning [vec, kw, far]; the keyword list gives no
   // vectors, so kw has the one of the meaning list.
@@ -252,7 +256,7 @@ test('the fusion and the weights that the caller gives fuse the lists', async ()
   });
 
   // Act
-  const results = await retriever.retrieve('rotate key');
+  const results = (await retriever.retrieve('rotate key')).passages;
 
   // Assert: keywords kw 1, both 0 after min-max; meaning 1, 0.5, 0, -1
   // become vec 1, both 0.75, kw 0.5, far 0.
@@ -302,9 +306,9 @@ test('each retriever gets the query bundle unchanged and reads its own text: the
   };
 
   // Act
-  const byKeywords = await federation.retrieve(withKeywords);
-  const byQuery = await federation.retrieve(question);
-  const byEmbeddings = await federation.retrieve(withEmbeddings);
+  const byKeywords = (await federation.retrieve(withKeywords)).passages;
+  const byQuery = (await federation.retrieve(question)).passages;
+  const byEmbeddings = (await federation.retrieve(withEmbeddings)).passages;
 
   // Assert
   assert.deepEqual(source.queries, [withKeywords, question, withEmbeddings]);
@@ -355,8 +359,8 @@ test('a fusion of plain retrievers takes a string as a query bundle with only qu
   });
 
   // Act
-  const byString = await plain.retrieve('rotate key');
-  const byBundle = await plain.retrieve({ query: 'rotate key' });
+  const byString = (await plain.retrieve('rotate key')).passages;
+  const byBundle = (await plain.retrieve({ query: 'rotate key' })).passages;
 
   // Assert
   assert.deepEqual(byString, byBundle);

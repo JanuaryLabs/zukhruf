@@ -78,7 +78,7 @@ test('the passages come best first with ts_rank_cd as the score, so a better mat
   });
 
   // Act
-  const results = await retriever.retrieve('rotate key');
+  const results = (await retriever.retrieve('rotate key')).passages;
 
   // Assert
   // The value of Postgres's own ranking function for the same query.
@@ -93,7 +93,7 @@ test('the passages come best first with ts_rank_cd as the score, so a better mat
       engine.find((row) => row.id === id)?.rank,
     ]),
   );
-  assert.ok(results.every(({ score }) => score > 0));
+  assert.ok(results.every(({ score }) => (score ?? 0) > 0));
   assert.ok((results[0]?.score ?? 0) > (results[1]?.score ?? 0));
   assert.deepEqual(results[1]?.passage, {
     id: 'K',
@@ -125,17 +125,21 @@ test('the words of the query join with AND by default, and with OR when the oper
   };
 
   // Act
-  const and = await new PgvectorKeywordRetriever(options).retrieve(
-    'rotate signing',
-  );
-  const explicitAnd = await new PgvectorKeywordRetriever({
-    ...options,
-    operator: 'AND',
-  }).retrieve('rotate signing');
-  const or = await new PgvectorKeywordRetriever({
-    ...options,
-    operator: 'OR',
-  }).retrieve('rotate signing');
+  const and = (
+    await new PgvectorKeywordRetriever(options).retrieve('rotate signing')
+  ).passages;
+  const explicitAnd = (
+    await new PgvectorKeywordRetriever({
+      ...options,
+      operator: 'AND',
+    }).retrieve('rotate signing')
+  ).passages;
+  const or = (
+    await new PgvectorKeywordRetriever({
+      ...options,
+      operator: 'OR',
+    }).retrieve('rotate signing')
+  ).passages;
 
   // Assert
   assert.deepEqual(ids(and), ['both']);
@@ -161,12 +165,15 @@ test('the words of keywords are quoted in place of the words of query, and the w
   });
 
   // Act
-  const byKeywords = await retriever.retrieve({
-    query: 'renew certificate',
-    keywords: ['rotate', 'signing key'],
-  });
-  const byQuery = await retriever.retrieve({ query: 'renew certificate' });
-  const byString = await retriever.retrieve('renew certificate');
+  const byKeywords = (
+    await retriever.retrieve({
+      query: 'renew certificate',
+      keywords: ['rotate', 'signing key'],
+    })
+  ).passages;
+  const byQuery = (await retriever.retrieve({ query: 'renew certificate' }))
+    .passages;
+  const byString = (await retriever.retrieve('renew certificate')).passages;
 
   // Assert: 'signing key' is two words, each its own plainto_tsquery.
   assert.deepEqual(ids(byKeywords), ['both']);
@@ -192,11 +199,11 @@ test('the query and the index use the english configuration: a word finds its ot
 
   // Act
   const results = {
-    stem: ids(await retriever.retrieve('rotating keys')),
+    stem: ids((await retriever.retrieve('rotating keys')).passages),
     // "the" and "a" are english stop words: they leave no word to match.
-    stopWordsOnly: ids(await retriever.retrieve('the a')),
+    stopWordsOnly: ids((await retriever.retrieve('the a')).passages),
     // "of" is dropped, so the AND of the other words still matches.
-    stopWordInside: ids(await retriever.retrieve('rotate of key')),
+    stopWordInside: ids((await retriever.retrieve('rotate of key')).passages),
   };
 
   // Assert
@@ -235,11 +242,11 @@ test('the configuration of the index value reaches the query: with simple, a sto
   // Act
   const results = {
     // simple keeps "the"; english drops it from the query.
-    simpleStopWord: ids(await simple.retrieve('the')),
-    englishStopWord: ids(await english.retrieve('the')),
+    simpleStopWord: ids((await simple.retrieve('the')).passages),
+    englishStopWord: ids((await english.retrieve('the')).passages),
     // simple does not stem, so "rotating" is not "rotate".
-    simpleStem: ids(await simple.retrieve('rotating')),
-    simpleWord: ids(await simple.retrieve('rotate')),
+    simpleStem: ids((await simple.retrieve('rotating')).passages),
+    simpleWord: ids((await simple.retrieve('rotate')).passages),
   };
 
   // Assert
@@ -302,20 +309,20 @@ test('each word of the query is plain text, so tsquery syntax in it matches as t
 
   // Act
   const results = {
-    hyphen: ids(await retriever.retrieve('key-rotation')),
+    hyphen: ids((await retriever.retrieve('key-rotation')).passages),
     // As tsquery, `!vault` is every passage without vault.
-    not: ids(await retriever.retrieve('!vault')),
+    not: ids((await retriever.retrieve('!vault')).passages),
     // As tsquery, `vault|consul` is vault or consul.
-    or: ids(await retriever.retrieve('vault|consul')),
+    or: ids((await retriever.retrieve('vault|consul')).passages),
     // As tsquery, `&` joins and `!` negates: consul and not vault.
-    andNot: ids(await retriever.retrieve('consul&!vault')),
+    andNot: ids((await retriever.retrieve('consul&!vault')).passages),
     // As tsquery, `key:*` is every word that starts with key.
-    prefix: ids(await retriever.retrieve('key:*')),
+    prefix: ids((await retriever.retrieve('key:*')).passages),
     // As tsquery, `<->` needs secrets right before vault.
-    phrase: ids(await retriever.retrieve('secrets<->vault')),
+    phrase: ids((await retriever.retrieve('secrets<->vault')).passages),
     // As tsquery, an open quote or parenthesis is a syntax error.
-    quote: ids(await retriever.retrieve("vault'")),
-    parenthesis: ids(await retriever.retrieve('(vault')),
+    quote: ids((await retriever.retrieve("vault'")).passages),
+    parenthesis: ids((await retriever.retrieve('(vault')).passages),
   };
 
   // Assert
@@ -345,7 +352,7 @@ test('a query of no words gives no passages', async () => {
   });
 
   // Act
-  const results = await retriever.retrieve(' \t\n ');
+  const results = (await retriever.retrieve(' \t\n ')).passages;
 
   // Assert
   assert.deepEqual(results, []);
@@ -372,17 +379,19 @@ test('a keyword search gives 10 passages when the call gives no topK, topK when 
   });
 
   // Act
-  const byDefault = await retriever.retrieve('key');
-  const two = await retriever.retrieve('key', { topK: 2 });
-  const filtered = await retriever.retrieve('key', {
-    filter: {
-      operator: 'AND',
-      conditions: [
-        { field: 'metadata.product', operator: '==', value: 'consul' },
-        { field: 'source', operator: 'not in', value: ['doc-p01'] },
-      ],
-    },
-  });
+  const byDefault = (await retriever.retrieve('key')).passages;
+  const two = (await retriever.retrieve('key', { topK: 2 })).passages;
+  const filtered = (
+    await retriever.retrieve('key', {
+      filter: {
+        operator: 'AND',
+        conditions: [
+          { field: 'metadata.product', operator: '==', value: 'consul' },
+          { field: 'source', operator: 'not in', value: ['doc-p01'] },
+        ],
+      },
+    })
+  ).passages;
 
   // Assert
   assert.deepEqual(
@@ -434,8 +443,8 @@ test('the search reads the index column that the retriever names, by a name that
   });
 
   // Act
-  const byIndex = await retriever.retrieve('secrets');
-  const byText = await retriever.retrieve('rotate');
+  const byIndex = (await retriever.retrieve('secrets')).passages;
+  const byText = (await retriever.retrieve('rotate')).passages;
 
   // Assert
   assert.deepEqual(
@@ -477,9 +486,11 @@ test('passages that are a view over the table that holds the index are searched 
   });
 
   // Act
-  const git = await retriever.retrieve('git', {
-    filter: { field: 'metadata.product', operator: '==', value: 'git' },
-  });
+  const git = (
+    await retriever.retrieve('git', {
+      filter: { field: 'metadata.product', operator: '==', value: 'git' },
+    })
+  ).passages;
 
   // Assert
   assert.deepEqual(
@@ -513,19 +524,23 @@ test('a store with a schema searches the keyword index of the passages of that s
     new PgvectorKeywordRetriever({ store, index: { column: 'keywords' } });
 
   // Act
-  const fromSchema = await retriever(
-    new PostgresPassageStore({
-      session: session(pool),
-      schema: 'rag',
-      passages: 'docs_passages',
-    }),
-  ).retrieve('key');
-  const fromSearchPath = await retriever(
-    new PostgresPassageStore({
-      session: session(pool),
-      passages: 'docs_passages',
-    }),
-  ).retrieve('key');
+  const fromSchema = (
+    await retriever(
+      new PostgresPassageStore({
+        session: session(pool),
+        schema: 'rag',
+        passages: 'docs_passages',
+      }),
+    ).retrieve('key')
+  ).passages;
+  const fromSearchPath = (
+    await retriever(
+      new PostgresPassageStore({
+        session: session(pool),
+        passages: 'docs_passages',
+      }),
+    ).retrieve('key')
+  ).passages;
 
   // Assert: the keyword column of the schema's passages is not metadata.
   assert.deepEqual(
@@ -569,8 +584,8 @@ test('two stores on two databases, alive at once, each search the keyword index 
   });
 
   // Act
-  const firstResults = await fromFirst.retrieve('key');
-  const secondResults = await fromSecond.retrieve('key');
+  const firstResults = (await fromFirst.retrieve('key')).passages;
+  const secondResults = (await fromSecond.retrieve('key')).passages;
 
   // Assert
   assert.deepEqual(ids(firstResults), ['first-a']);

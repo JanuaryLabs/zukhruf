@@ -1,9 +1,10 @@
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 
+import type { StoredPassage } from '../passage.ts';
 import { type QueryType, keywordsOf } from '../query-bundle.ts';
+import type { RetrievalResult } from '../retrieval-result.ts';
 import type { RetrieveOptions } from '../retrieve-options.ts';
 import type { Retriever } from '../retriever.ts';
-import type { ScoredPassage } from '../scored-passage.ts';
 import { identifier } from '../sql/identifier.ts';
 import { where } from '../sql/where.ts';
 import { dialect } from './dialect.ts';
@@ -17,7 +18,10 @@ import { type SqlitePassageStore, contractOf } from './sqlite-passage-store.ts';
  * matches the words of `keywords`, or of `query` when the bundle has none
  * (ADR 0013).
  */
-export class SqliteBM25Retriever implements Retriever {
+export class SqliteBM25Retriever implements Retriever<
+  QueryType,
+  StoredPassage
+> {
   readonly #database: DatabaseSync;
   readonly #passages: string;
   readonly #index: string;
@@ -40,11 +44,11 @@ export class SqliteBM25Retriever implements Retriever {
 
   async retrieve(
     query: QueryType,
-    options: RetrieveOptions = {},
-  ): Promise<ScoredPassage[]> {
+    options: RetrieveOptions<StoredPassage> = {},
+  ): Promise<RetrievalResult<StoredPassage>> {
     options.abortSignal?.throwIfAborted();
     const words = keywordsOf(query);
-    if (words.length === 0) return [];
+    if (words.length === 0) return { passages: [], failures: new Map() };
     const parameters: SQLInputValue[] = [ftsQuery(words, this.#operator)];
     const filter = where(dialect, options.filter, parameters);
     parameters.push(options.topK ?? 10);
@@ -54,12 +58,15 @@ export class SqliteBM25Retriever implements Retriever {
       WHERE ${this.#index} MATCH ? AND ${filter}
       ORDER BY bm25(${this.#index}), p."id"
       LIMIT ?`);
-    return passageRows(statement, 1, parameters).map(
-      ({ cells: [score], passage }) => ({
-        passage,
-        score: Number(score),
-      }),
-    );
+    return {
+      passages: passageRows(statement, 1, parameters).map(
+        ({ cells: [score], passage }) => ({
+          passage,
+          score: Number(score),
+        }),
+      ),
+      failures: new Map(),
+    };
   }
 }
 

@@ -1,5 +1,7 @@
 # An embedding retriever runs the vector search in the SQL of its engine, one query or a batch
 
+Superseded in part on 2026-11-25 (#5582) for what `retrieveMany` gives: one `RetrievalResult` for each query, in the order of the queries ([ADR 0014](./0014-a-retrieve-call-answers-with-the-retrievers-that-answered-and-names-those-that-were-unavailable.md)).
+
 Superseded in part on 2026-11-25 (#5579, #5580) for what an embedding retriever embeds. It embeds the `customEmbeddings` of a query bundle, or its `query`, and searches with the mean of the vectors; `retrieveMany` takes `QueryType` values and embeds the texts of every query in one `embedMany` call ([ADR 0013](./0013-a-query-is-a-string-or-a-query-bundle-with-a-text-for-each-kind-of-search.md)). The rest of the decision below stays true.
 
 Status: accepted by Ezz on 2026-11-23 ("The engine's SQL"; for the batch: "Yes, part of search").

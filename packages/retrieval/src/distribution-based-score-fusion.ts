@@ -1,6 +1,5 @@
 import { mean, std } from '@zukhruf/statistics';
 
-import type { Fusion } from './fusion.ts';
 import { sumOnId } from './sum-on-id.ts';
 
 /**
@@ -10,17 +9,14 @@ import { sumOnId } from './sum-on-id.ts';
  * (Qdrant `dbsf`, LlamaIndex `dist_based_score`). A list with σ 0 gives each
  * passage 0.5, as Qdrant gives it (ADR 0007, amendment 2026-11-23).
  */
-export function distributionBasedScoreFusion(): Fusion {
-  return {
-    fuse: (lists, weights) =>
-      sumOnId(lists, weights, (scores) => {
-        const average = mean(scores);
-        const deviation = std(scores);
-        const lowest = average - 3 * deviation;
-        const highest = average + 3 * deviation;
-        return scores.map((score) =>
-          deviation === 0 ? 0.5 : (score - lowest) / (highest - lowest),
-        );
-      }),
-  };
+export function distributionBasedScoreFusion() {
+  return sumOnId((scores) => {
+    const average = mean(scores);
+    const deviation = std(scores);
+    const lowest = average - 3 * deviation;
+    const highest = average + 3 * deviation;
+    return scores.map((score) =>
+      deviation === 0 ? 0.5 : (score - lowest) / (highest - lowest),
+    );
+  });
 }

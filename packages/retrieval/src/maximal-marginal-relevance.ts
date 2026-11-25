@@ -2,6 +2,7 @@ import { type EmbeddingModel, embed } from 'ai';
 
 import { Vector, cosineSimilarity } from '@zukhruf/vectors';
 
+import type { Passage } from './passage.ts';
 import type { Postprocessor } from './postprocessor.ts';
 import type { ScoredPassage } from './scored-passage.ts';
 import { VectorMissingError } from './vector-missing-error.ts';
@@ -21,7 +22,7 @@ import { VectorMissingError } from './vector-missing-error.ts';
  * The passages come back in the order of the picks, with the scores they had.
  * They need their vectors: a retriever gives them with `includeVectors: true`.
  */
-export class MaximalMarginalRelevance implements Postprocessor {
+export class MaximalMarginalRelevance implements Postprocessor<Passage> {
   readonly #model: EmbeddingModel;
   readonly #lambda: number;
   readonly #topK: number;
@@ -44,11 +45,11 @@ export class MaximalMarginalRelevance implements Postprocessor {
     }
   }
 
-  async postprocess(
-    passages: readonly ScoredPassage[],
+  async postprocess<P extends Passage>(
+    passages: readonly ScoredPassage<P>[],
     query: string,
     options: { readonly abortSignal?: AbortSignal } = {},
-  ): Promise<ScoredPassage[]> {
+  ): Promise<ScoredPassage<P>[]> {
     const candidates = passages.map((scored) => {
       if (scored.vector === undefined) {
         throw new VectorMissingError(scored.passage.id);

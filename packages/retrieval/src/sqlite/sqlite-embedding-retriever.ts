@@ -12,7 +12,9 @@ import {
   describe,
   parseModelIdentity,
 } from '../model-identity.ts';
+import type { StoredPassage } from '../passage.ts';
 import type { QueryType } from '../query-bundle.ts';
+import type { RetrievalResult } from '../retrieval-result.ts';
 import type { RetrieveOptions } from '../retrieve-options.ts';
 import type { ScoredPassage } from '../scored-passage.ts';
 import { identifier } from '../sql/identifier.ts';
@@ -27,7 +29,7 @@ import { type SqlitePassageStore, contractOf } from './sqlite-passage-store.ts';
  * registers that function: it loads sqlite-vec, or calls `install()` of
  * `@zukhruf/vectors/sqlite`.
  */
-export class SqliteEmbeddingRetriever implements BatchRetriever {
+export class SqliteEmbeddingRetriever implements BatchRetriever<StoredPassage> {
   readonly #database: DatabaseSync;
   readonly #passages: string;
   readonly #vectors: string;
@@ -52,18 +54,22 @@ export class SqliteEmbeddingRetriever implements BatchRetriever {
     });
   }
 
-  retrieve(
+  async retrieve(
     query: QueryType,
-    options: RetrieveOptions = {},
-  ): Promise<ScoredPassage[]> {
-    return this.#retrieval.retrieve(query, options);
+    options: RetrieveOptions<StoredPassage> = {},
+  ): Promise<RetrievalResult<StoredPassage>> {
+    return {
+      passages: await this.#retrieval.retrieve(query, options),
+      failures: new Map(),
+    };
   }
 
-  retrieveMany(
+  async retrieveMany(
     queries: readonly QueryType[],
-    options: RetrieveOptions = {},
-  ): Promise<ScoredPassage[][]> {
-    return this.#retrieval.retrieveMany(queries, options);
+    options: RetrieveOptions<StoredPassage> = {},
+  ): Promise<RetrievalResult<StoredPassage>[]> {
+    const lists = await this.#retrieval.retrieveMany(queries, options);
+    return lists.map((passages) => ({ passages, failures: new Map() }));
   }
 
   /** The identities of the stored vectors, in the order of their text. */
@@ -82,8 +88,8 @@ export class SqliteEmbeddingRetriever implements BatchRetriever {
   #search(
     vectors: readonly (readonly number[])[],
     identity: ModelIdentity,
-    options: RetrieveOptions,
-  ): ScoredPassage[][] {
+    options: RetrieveOptions<StoredPassage>,
+  ): ScoredPassage<StoredPassage>[][] {
     const parameters: SQLInputValue[] = [
       ...vectors.flatMap((vector, index) => [
         index,
@@ -108,7 +114,7 @@ export class SqliteEmbeddingRetriever implements BatchRetriever {
       WHERE r."rank" <= ?
       ORDER BY r."query", r."rank"`);
     const rows = passageRows(statement, 3, parameters);
-    const lists = vectors.map((): ScoredPassage[] => []);
+    const lists = vectors.map((): ScoredPassage<StoredPassage>[] => []);
     for (const {
       cells: [query, distance, vector],
       passage,

@@ -1,9 +1,10 @@
 import type { Fusion } from './fusion.ts';
+import type { Passage } from './passage.ts';
 import type { QueryType } from './query-bundle.ts';
 import { reciprocalRankFusion } from './reciprocal-rank-fusion.ts';
+import type { RetrievalResult } from './retrieval-result.ts';
 import type { RetrieveOptions } from './retrieve-options.ts';
 import type { Retriever } from './retriever.ts';
-import type { ScoredPassage } from './scored-passage.ts';
 
 /**
  * Asks each retriever for `rankWindowSize` passages, fuses the lists on
@@ -12,20 +13,28 @@ import type { ScoredPassage } from './scored-passage.ts';
  * `QueryFusionRetriever` gives each retriever the same `QueryBundle`. So the
  * query type of the fusion is one that each retriever takes: TypeScript
  * infers the narrowest query type of the retrievers, and retrievers that
- * need two other fields take `new FusionRetriever<A & B>(…)` (ADR 0013).
+ * need two other fields take `new FusionRetriever<A & B>(…)` (ADR 0013). Its
+ * passage type is one that each retriever gives: a fusion of engines gives
+ * `StoredPassage`, and a fusion with a live source `Passage` (ADR 0015).
  */
 export class FusionRetriever<
   in Q extends QueryType = QueryType,
-> implements Retriever<Q> {
-  readonly #retrievers: readonly Retriever<Q>[];
-  readonly #fusion: Fusion;
+  // `in out P`: a filter puts P in a parameter as well, so TypeScript cannot
+  // measure its variance and compares two composites by structure, where a
+  // method checks its parameters both ways (ADR 0015).
+  in out P extends Passage = Passage,
+> implements Retriever<Q, P> {
+  readonly #retrievers: readonly Retriever<Q, P>[];
+  readonly #fusion: Fusion<P>;
   readonly #weights: readonly number[];
   readonly #rankWindowSize: number | undefined;
 
   constructor(options: {
-    readonly retrievers: readonly Retriever<Q>[];
+    readonly retrievers: readonly Retriever<Q, P>[];
+    // `NoInfer`: P comes from the retrievers only. A fusion of the package
+    // is generic in its `fuse`, so it takes P from there (ADR 0015).
     /** `reciprocalRankFusion()` when absent: k 60, ranks from 1. */
-    readonly fusion?: Fusion;
+    readonly fusion?: Fusion<NoInfer<P>>;
     /** One weight for each retriever, in their order: 1 each when absent. */
     readonly weights?: readonly number[];
     /**
@@ -48,8 +57,8 @@ export class FusionRetriever<
 
   async retrieve(
     query: Q,
-    options: RetrieveOptions = {},
-  ): Promise<ScoredPassage[]> {
+    options: RetrieveOptions<P> = {},
+  ): Promise<RetrievalResult<P>> {
     const topK = options.topK ?? 10;
     const rankWindowSize = this.#rankWindowSize ?? topK;
     if (rankWindowSize < topK) {
@@ -62,6 +71,14 @@ export class FusionRetriever<
         retriever.retrieve(query, { ...options, topK: rankWindowSize }),
       ),
     );
-    return this.#fusion.fuse(lists, this.#weights).slice(0, topK);
+    return {
+      passages: this.#fusion
+        .fuse(
+          lists.map(({ passages }) => passages),
+          this.#weights,
+        )
+        .slice(0, topK),
+      failures: new Map(),
+    };
   }
 }

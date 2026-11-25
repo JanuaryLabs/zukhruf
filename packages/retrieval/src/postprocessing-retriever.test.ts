@@ -102,7 +102,7 @@ const reranker = (seen: Seen[] = []): RerankingModel => ({
 const scores = (
   results: readonly {
     readonly passage: { readonly id: string };
-    readonly score: number;
+    readonly score?: number;
   }[],
 ) => results.map(({ passage, score }) => [passage.id, score]);
 
@@ -125,8 +125,8 @@ test('the postprocessors run in their order, each on the list of the one before 
   });
 
   // Act
-  const reranked = await rerankThenCut.retrieve('rotate a key');
-  const cut = await cutThenRerank.retrieve('rotate a key');
+  const reranked = (await rerankThenCut.retrieve('rotate a key')).passages;
+  const cut = (await cutThenRerank.retrieve('rotate a key')).passages;
 
   // Assert: the cutoff after the reranker keeps delta 0.9 only; the cutoff
   // before it keeps alpha 0.8, delta 0.64 and beta 0.6 of the cosines, which
@@ -180,7 +180,7 @@ test('a retriever that needs its own field gets the query bundle unchanged, whil
   };
 
   // Act
-  const results = await retriever.retrieve(query);
+  const results = (await retriever.retrieve(query)).passages;
 
   // Assert
   assert.deepEqual(source.queries, [query]);
@@ -206,9 +206,11 @@ test('MaximalMarginalRelevance diversifies with the stored vectors when the call
   });
 
   // Act
-  const results = await retriever.retrieve('rotate a key', {
-    includeVectors: true,
-  });
+  const results = (
+    await retriever.retrieve('rotate a key', {
+      includeVectors: true,
+    })
+  ).passages;
 
   // Assert: the most relevant is alpha; then 0.5 * relevance - 0.5 *
   // similarity to alpha: beta 0.3 - 0 = 0.3, gamma 0 - 0 = 0, delta 0.32 -

@@ -1,9 +1,10 @@
 import { type LanguageModel, generateText } from 'ai';
 
+import type { Passage } from './passage.ts';
 import { type QueryBundle, type QueryType, bundleOf } from './query-bundle.ts';
+import type { RetrievalResult } from './retrieval-result.ts';
 import type { RetrieveOptions } from './retrieve-options.ts';
 import type { Retriever } from './retriever.ts';
-import type { ScoredPassage } from './scored-passage.ts';
 
 /**
  * Hypothetical document embeddings (HyDE; Gao, Ma, Lin and Callan, 2022):
@@ -18,12 +19,17 @@ import type { ScoredPassage } from './scored-passage.ts';
  * prompt of LangChain's `HydeRetriever`
  * (libs/langchain-classic/src/retrievers/hyde.ts, getPromptTemplateFromKey).
  */
-export class HydeRetriever implements Retriever {
-  readonly #retriever: Retriever<QueryBundle>;
+export class HydeRetriever<
+  // `in out P`: a filter puts P in a parameter as well, so TypeScript cannot
+  // measure its variance and compares two composites by structure, where a
+  // method checks its parameters both ways (ADR 0015).
+  in out P extends Passage = Passage,
+> implements Retriever<QueryType, P> {
+  readonly #retriever: Retriever<QueryBundle, P>;
   readonly #model: LanguageModel;
 
   constructor(options: {
-    readonly retriever: Retriever<QueryBundle>;
+    readonly retriever: Retriever<QueryBundle, P>;
     readonly model: LanguageModel;
   }) {
     this.#retriever = options.retriever;
@@ -32,8 +38,8 @@ export class HydeRetriever implements Retriever {
 
   async retrieve(
     query: QueryType,
-    options: RetrieveOptions = {},
-  ): Promise<ScoredPassage[]> {
+    options: RetrieveOptions<P> = {},
+  ): Promise<RetrievalResult<P>> {
     const bundle = bundleOf(query);
     const { text } = await generateText({
       model: this.#model,

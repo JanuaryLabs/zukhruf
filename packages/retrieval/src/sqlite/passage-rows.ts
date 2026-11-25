@@ -1,6 +1,6 @@
 import type { SQLInputValue, SQLOutputValue, StatementSync } from 'node:sqlite';
 
-import type { Passage } from '../passage.ts';
+import type { StoredPassage } from '../passage.ts';
 
 // `rowid` is the integer key that the keyword index joins on (ADR 0004): a
 // view of the passages exposes it as a column, and it is not metadata.
@@ -24,7 +24,10 @@ export function passageRows(
   statement: StatementSync,
   cellsBefore: number,
   parameters: readonly SQLInputValue[],
-): { readonly cells: readonly SQLOutputValue[]; readonly passage: Passage }[] {
+): {
+  readonly cells: readonly SQLOutputValue[];
+  readonly passage: StoredPassage;
+}[] {
   statement.setReturnArrays(true);
   const names = statement
     .columns()

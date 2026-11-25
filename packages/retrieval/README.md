@@ -1,6 +1,6 @@
 # @zukhruf/retrieval
 
-This package is the query side of retrieval-augmented generation (RAG). A query goes in. The best passages come out, best first, each with a score that is higher for a better passage. The package never cuts or embeds documents: elt writes the passages, their vectors with the model identity, and a keyword index ([ADR 0001](./docs/adr/0001-the-package-is-the-query-side-of-rag-and-reads-a-passage-contract-that-elt-writes.md)).
+This package is the query side of retrieval-augmented generation (RAG). A query goes in. A retrieval result comes out: the best passages, best first, each with a score that is higher for a better passage when its retriever gives one, and the failures. The package never cuts or embeds documents: elt writes the passages, their vectors with the model identity, and a keyword index ([ADR 0001](./docs/adr/0001-the-package-is-the-query-side-of-rag-and-reads-a-passage-contract-that-elt-writes.md)).
 
 The port of the package is `Retriever`. A query is a string, or a query bundle with a text for each kind of search ([ADR 0013](./docs/adr/0013-a-query-is-a-string-or-a-query-bundle-with-a-text-for-each-kind-of-search.md)). The engine retrievers read that passage contract with the SQL of SQLite, Postgres or SQL Server. A host can implement `Retriever` over any other source, such as a web search. Composite retrievers fuse retrievers or rewrite the query, and postprocessors rerank, cut, diversify, group, reorder and widen the result.
 
@@ -109,9 +109,11 @@ const retriever = new SqliteEmbeddingRetriever({
   model,
 });
 
-const results = await retriever.retrieve('How do I rotate a key?', { topK: 3 });
-for (const { passage, score } of results) {
-  console.log(score.toFixed(3), passage.id, passage.text);
+const { passages } = await retriever.retrieve('How do I rotate a key?', {
+  topK: 3,
+});
+for (const { passage, score } of passages) {
+  console.log(score?.toFixed(3), passage.id, passage.text);
 }
 ```
 
@@ -189,8 +191,8 @@ const pgResults = await pgRetriever.retrieve('How do I rotate a key?', {
   topK: 3,
   abortSignal: AbortSignal.timeout(10_000),
 });
-for (const { passage, score } of pgResults) {
-  console.log(score.toFixed(3), passage.id, passage.text);
+for (const { passage, score } of pgResults.passages) {
+  console.log(score?.toFixed(3), passage.id, passage.text);
 }
 ```
 
@@ -229,9 +231,9 @@ const anyWord = new SqliteBM25Retriever({
 });
 
 for (const search of [keywords, anyWord]) {
-  const found = await search.retrieve('backup mailbox');
+  const { passages } = await search.retrieve('backup mailbox');
   console.log(
-    found.map(({ passage, score }) => `${passage.id} ${score.toFixed(3)}`),
+    passages.map(({ passage, score }) => `${passage.id} ${score?.toFixed(3)}`),
   );
 }
 ```
@@ -256,7 +258,7 @@ const pgKeywords = new PgvectorKeywordRetriever({
   },
 });
 console.log(
-  (await pgKeywords.retrieve('backup mailbox')).map(
+  (await pgKeywords.retrieve('backup mailbox')).passages.map(
     ({ passage }) => passage.id,
   ),
 );
@@ -309,12 +311,12 @@ const msKeywords = new SqlServerKeywordRetriever({
 });
 
 console.log(
-  (await msMeaning.retrieve('How do I rotate a key?', { topK: 3 })).map(
-    ({ passage }) => passage.id,
-  ),
+  (
+    await msMeaning.retrieve('How do I rotate a key?', { topK: 3 })
+  ).passages.map(({ passage }) => passage.id),
 );
 console.log(
-  (await msKeywords.retrieve('backup mailbox')).map(
+  (await msKeywords.retrieve('backup mailbox')).passages.map(
     ({ passage }) => passage.id,
   ),
 );
@@ -352,9 +354,11 @@ const minMax = new FusionRetriever({
 });
 
 for (const search of [hybrid, minMax]) {
-  const found = await search.retrieve('rotate the old key', { topK: 3 });
+  const { passages } = await search.retrieve('rotate the old key', {
+    topK: 3,
+  });
   console.log(
-    found.map(({ passage, score }) => `${passage.id} ${score.toFixed(4)}`),
+    passages.map(({ passage, score }) => `${passage.id} ${score?.toFixed(4)}`),
   );
 }
 ```
@@ -417,7 +421,9 @@ const expanded = new MultiQueryRetriever({
 });
 const found = await expanded.retrieve('rotate a key', { topK: 3 });
 console.log(
-  found.map(({ passage, score }) => `${passage.id} ${score.toFixed(4)}`),
+  found.passages.map(
+    ({ passage, score }) => `${passage.id} ${score?.toFixed(4)}`,
+  ),
 );
 ```
 
@@ -486,9 +492,9 @@ const widened = await search.retrieve('rotate the old key backup', {
   topK: 10,
   includeVectors: true, // MaximalMarginalRelevance compares the vectors
 });
-for (const { passage, score } of widened) {
+for (const { passage, score } of widened.passages) {
   console.log(
-    score.toFixed(2),
+    score?.toFixed(2),
     passage.id,
     `[${passage.start}, ${passage.end})`,
     passage.text,
@@ -514,9 +520,9 @@ A query is a string or a query bundle, `{ query, keywords?, customEmbeddings? }`
 ```ts
 import type {
   QueryBundle,
+  RetrievalResult,
   RetrieveOptions,
   Retriever,
-  ScoredPassage,
 } from '@zukhruf/retrieval';
 
 // The words of a question join with AND, and no passage has "How" or "do",
@@ -524,7 +530,7 @@ import type {
 const question = 'How do I rotate the old key?';
 console.log(
   'keywords of the question:',
-  (await keywords.retrieve(question)).length,
+  (await keywords.retrieve(question)).passages.length,
 );
 
 const reranked = new PostprocessingRetriever({
@@ -536,29 +542,30 @@ const own = await reranked.retrieve({
   keywords: ['rotate', 'key'], // the keyword search matches these
 });
 console.log(
-  own.map(({ passage, score }) => `${passage.id} ${score.toFixed(2)}`),
+  own.passages.map(
+    ({ passage, score }) => `${passage.id} ${score?.toFixed(2)}`,
+  ),
 );
 
 // A host adapter for a source with its own syntax declares its field in its
-// own bundle type. Then it takes no string.
+// own bundle type. Then it takes no string. Its passage is not a row of the
+// passage contract, so it has no source, seq, start or end.
 type IssueQueryBundle = QueryBundle & { readonly jql: string };
 class IssueRetriever implements Retriever<IssueQueryBundle> {
   async retrieve(
     query: IssueQueryBundle,
     options: RetrieveOptions = {},
-  ): Promise<ScoredPassage[]> {
+  ): Promise<RetrievalResult> {
     console.log('issues got:', query.jql);
-    const text = 'Rotate the signing key of the vault after a leak.';
     const passage = {
       id: 'VAULT-12',
-      text,
-      source: 'VAULT-12',
-      seq: 0,
-      start: 0,
-      end: text.length,
+      text: 'Rotate the signing key of the vault after a leak.',
       metadata: {},
     };
-    return [{ passage, score: 1 }].slice(0, options.topK ?? 10);
+    return {
+      passages: [{ passage, score: 1 }].slice(0, options.topK ?? 10),
+      failures: new Map(),
+    };
   }
 }
 
@@ -582,7 +589,9 @@ const answers = await federation.retrieve({
   jql: 'project = VAULT AND text ~ "rotate key"',
 });
 console.log(
-  answers.map(({ passage, score }) => `${passage.id} ${score.toFixed(2)}`),
+  answers.passages.map(
+    ({ passage, score }) => `${passage.id} ${score?.toFixed(2)}`,
+  ),
 );
 ```
 
@@ -611,7 +620,9 @@ const lists = await retriever.retrieveMany(
   { topK: 2 },
 );
 // lists[0] is the result of 'rotate a key', lists[1] of 'revoke a token'
-for (const list of lists) console.log(list.map(({ passage }) => passage.id));
+for (const { passages } of lists) {
+  console.log(passages.map(({ passage }) => passage.id));
+}
 ```
 
 Output:
@@ -623,7 +634,7 @@ Output:
 
 ## Filter by metadata
 
-A filter has Haystack's shape: AND, OR and NOT over `== != > >= < <= in "not in"` ([ADR 0009](./docs/adr/0009-a-filter-has-the-shape-of-haystacks-filters.md)). A field is a passage field (`source`, `seq`, `start`, `end`) or a metadata column, `metadata.<column>`. A metadata column is each column of the passages other than `id, source, seq, start, end, text` (and `rowid` on SQLite). An engine retriever runs the filter as SQL `WHERE` in the same query.
+A filter has Haystack's shape: AND, OR and NOT over `== != > >= < <= in "not in"` ([ADR 0009](./docs/adr/0009-a-filter-has-the-shape-of-haystacks-filters.md)). A field is a passage field (`source`, `seq`, `start`, `end`) or a metadata column, `metadata.<column>`. A metadata column is each column of the passages other than `id, source, seq, start, end, text` (and `rowid` on SQLite). An engine retriever runs the filter as SQL `WHERE` in the same query. The filter is typed by the passage type of its retriever, `Filter<P>`: an engine retriever's filter can name `source`, `seq`, `start` and `end`, and a live source's cannot, since its passages have none ([ADR 0015](./docs/adr/0015-a-passage-is-typed-by-its-metadata-and-only-a-stored-passage-has-source-seq-start-and-end.md)).
 
 ```ts
 const filtered = await retriever.retrieve('rotate a key', {
@@ -635,8 +646,8 @@ const filtered = await retriever.retrieve('rotate a key', {
     ],
   },
 });
-for (const { passage, score } of filtered) {
-  console.log(score.toFixed(3), passage.id, passage.metadata);
+for (const { passage, score } of filtered.passages) {
+  console.log(score?.toFixed(3), passage.id, passage.metadata);
 }
 ```
 
@@ -728,36 +739,56 @@ Checked on 2026-11-23 with `npm pack` of each candidate and no install. The requ
 // @zukhruf/retrieval
 import type { EmbeddingModel, LanguageModel, RerankingModel } from 'ai';
 
-type Passage = {
+type Metadata = Readonly<Record<string, unknown>>; // the host's own fields
+type Passage<M extends Metadata = Metadata> = {
   readonly id: string;
   readonly text: string;
+  readonly metadata: M;
+};
+type StoredPassage<M extends Metadata = Metadata> = Passage<M> & {
   readonly source: string; // the key of the row or file that the passage comes from
   readonly seq: number; // the position of the passage in its source
   readonly start: number; // offsets in code points, end exclusive (ADR 0001)
   readonly end: number;
-  readonly metadata: Readonly<Record<string, unknown>>;
-};
-type ScoredPassage = {
-  readonly passage: Passage;
-  readonly score: number; // higher is better (ADR 0005)
+}; // the engine retrievers and the passage stores give it (ADR 0015)
+type ScoredPassage<P extends Passage = Passage> = {
+  readonly passage: P;
+  readonly score?: number; // higher is better (ADR 0005); absent for an order only (ADR 0016)
   readonly vector?: readonly number[];
 };
+type RetrievalResult<P extends Passage = Passage> = {
+  readonly passages: readonly ScoredPassage<P>[]; // best first
+  readonly failures: ReadonlyMap<string, RetrieverUnavailableError>; // by name; empty when none failed (ADR 0014)
+};
 
-type Filter =
+// The stored fields of P and metadata.<key> of its metadata, with their types.
+type FilterFields<P extends Passage> = {
+  readonly [F in keyof P & ('source' | 'seq' | 'start' | 'end')]: P[F];
+} & {
+  readonly [
+    K in keyof P['metadata'] & string as `metadata.${K}`
+  ]: P['metadata'][K];
+};
+type Filter<P extends Passage = Passage> =
   | {
       readonly operator: 'AND' | 'OR' | 'NOT';
-      readonly conditions: readonly Filter[];
+      readonly conditions: readonly Filter<P>[];
     }
   | {
-      readonly field: 'source' | 'seq' | 'start' | 'end' | `metadata.${string}`;
-      readonly operator:
-        '==' | '!=' | '>' | '>=' | '<' | '<=' | 'in' | 'not in';
-      readonly value: unknown;
+      // for each field F of FilterFields<P>:
+      readonly field: F;
+      readonly operator: '==' | '!=' | '>' | '>=' | '<' | '<=';
+      readonly value: FilterFields<P>[F] | null;
+    }
+  | {
+      readonly field: F;
+      readonly operator: 'in' | 'not in';
+      readonly value: readonly FilterFields<P>[F][];
     };
 
-type RetrieveOptions = {
+type RetrieveOptions<P extends Passage = Passage> = {
   readonly topK?: number; // 10
-  readonly filter?: Filter;
+  readonly filter?: Filter<P>;
   readonly includeVectors?: boolean; // false
   readonly abortSignal?: AbortSignal;
 };
@@ -769,104 +800,126 @@ type QueryBundle = {
 };
 type QueryType = string | QueryBundle; // a string is { query }
 
-interface Retriever<in Q extends QueryType = QueryType> {
+interface Retriever<
+  in Q extends QueryType = QueryType,
+  P extends Passage = Passage,
+> {
   readonly retrieve: (
     query: Q,
-    options?: RetrieveOptions,
-  ) => Promise<ScoredPassage[]>;
+    options?: RetrieveOptions<P>,
+  ) => Promise<RetrievalResult<P>>;
 }
-interface BatchRetriever extends Retriever {
+interface BatchRetriever<P extends Passage = Passage> extends Retriever<
+  QueryType,
+  P
+> {
   readonly retrieveMany: (
     queries: readonly QueryType[],
-    options?: RetrieveOptions,
-  ) => Promise<ScoredPassage[][]>; // in the order of the queries
+    options?: RetrieveOptions<P>,
+  ) => Promise<RetrievalResult<P>[]>; // one for each query, in their order
 }
 
-interface Fusion {
-  fuse(
-    lists: readonly (readonly ScoredPassage[])[],
+// The ports are generic in their parameter only, not in their member (the
+// island rule): a host's fusion or postprocessor is written for its own P and
+// gives back that P with no assertion. The package's fusions and
+// postprocessors are generic in their member, so they serve any P.
+interface Fusion<in out P extends Passage = Passage> {
+  readonly fuse: (
+    lists: readonly (readonly ScoredPassage<P>[])[],
     weights: readonly number[],
-  ): ScoredPassage[];
+  ) => ScoredPassage<P>[];
 }
-function reciprocalRankFusion(options?: { readonly k?: number }): Fusion; // k 60, ranks from 1
-function relativeScoreFusion(): Fusion; // min-max
-function distributionBasedScoreFusion(): Fusion; // mean ± 3σ
+// Each returns { readonly fuse: <P extends Passage>(lists, weights) => ScoredPassage<P>[] }.
+function reciprocalRankFusion(options?: { readonly k?: number }); // k 60, ranks from 1
+function relativeScoreFusion(); // min-max
+function distributionBasedScoreFusion(); // mean ± 3σ
 
-class FusionRetriever<Q extends QueryType = QueryType> implements Retriever<Q> {
+class FusionRetriever<
+  in Q extends QueryType = QueryType,
+  in out P extends Passage = Passage,
+> implements Retriever<Q, P> {
   constructor(options: {
-    readonly retrievers: readonly Retriever<Q>[]; // each gets the query unchanged
-    readonly fusion?: Fusion; // reciprocalRankFusion()
+    readonly retrievers: readonly Retriever<Q, P>[]; // each gets the query unchanged
+    readonly fusion?: Fusion<NoInfer<P>>; // reciprocalRankFusion()
     readonly weights?: readonly number[]; // 1 each
     readonly rankWindowSize?: number; // the topK of the call
   });
 }
-class MultiQueryRetriever implements Retriever {
+class MultiQueryRetriever<
+  in out P extends Passage = Passage,
+> implements Retriever<QueryType, P> {
   constructor(options: {
-    readonly retriever: Retriever; // gets the query, then each version as a string
+    readonly retriever: Retriever<QueryType, P>; // gets the query, then each version as a string
     readonly model: LanguageModel;
     readonly queryCount?: number; // 4 versions, besides the query
-    readonly fusion?: Fusion; // reciprocalRankFusion()
+    readonly fusion?: Fusion<NoInfer<P>>; // reciprocalRankFusion()
   });
 }
-class HydeRetriever implements Retriever {
+class HydeRetriever<in out P extends Passage = Passage> implements Retriever<
+  QueryType,
+  P
+> {
   constructor(options: {
-    readonly retriever: Retriever<QueryBundle>; // gets the query bundle with customEmbeddings: [passage]
+    readonly retriever: Retriever<QueryBundle, P>; // gets the query bundle with customEmbeddings: [passage]
     readonly model: LanguageModel;
   });
 }
 
-interface Postprocessor {
-  postprocess(
-    passages: readonly ScoredPassage[],
+interface Postprocessor<in out P extends Passage = Passage> {
+  readonly postprocess: (
+    passages: readonly ScoredPassage<P>[],
     query: string, // the query of the query bundle
     options?: { readonly abortSignal?: AbortSignal },
-  ): Promise<ScoredPassage[]>;
+  ) => Promise<ScoredPassage<P>[]>;
 }
 class PostprocessingRetriever<
-  Q extends QueryType = QueryType,
-> implements Retriever<Q> {
+  in Q extends QueryType = QueryType,
+  in out P extends Passage = Passage,
+> implements Retriever<Q, P> {
   constructor(options: {
-    readonly retriever: Retriever<Q>;
-    readonly postprocessors: readonly Postprocessor[];
+    readonly retriever: Retriever<Q, P>; // its failures pass up
+    readonly postprocessors: readonly Postprocessor<NoInfer<P>>[]; // P comes from the retriever
   });
 }
-class Rerank implements Postprocessor {
+// Each built-in has postprocess<P extends Passage>(…): Promise<ScoredPassage<P>[]>,
+// and Collapse and ContextWindow postprocess<P extends StoredPassage>(…).
+class Rerank implements Postprocessor<Passage> {
   constructor(options: {
     readonly model: RerankingModel;
     readonly topN?: number; // every passage when absent
   });
 }
-class SimilarityCutoff implements Postprocessor {
+class SimilarityCutoff implements Postprocessor<Passage> {
   constructor(options: { readonly threshold: number }); // keeps score >= threshold
 }
-class MaximalMarginalRelevance implements Postprocessor {
+class MaximalMarginalRelevance implements Postprocessor<Passage> {
   constructor(options: {
     readonly model: EmbeddingModel; // the model of the passage vectors; it embeds the query
     readonly lambda?: number; // 0.5; 1 = relevance only
     readonly topK: number;
   });
 }
-class Collapse implements Postprocessor {
+class Collapse implements Postprocessor<StoredPassage> {
   constructor(options?: {
-    readonly field?: 'source' | 'seq' | 'start' | 'end' | `metadata.${string}`; // 'source'
+    readonly field?: keyof FilterFields<StoredPassage>; // 'source'
     readonly size?: number; // 1
   });
 }
-class LongContextReorder implements Postprocessor {}
-class ContextWindow implements Postprocessor {
+class LongContextReorder implements Postprocessor<Passage> {}
+class ContextWindow implements Postprocessor<StoredPassage> {
   constructor(options: {
     readonly store: PassageStore;
     readonly windowSize?: number; // 3
   });
 }
 
-interface PassageStore {
-  get(ids: readonly string[]): Promise<ReadonlyMap<string, Passage>>;
+interface PassageStore<M extends Metadata = Metadata> {
+  get(ids: readonly string[]): Promise<ReadonlyMap<string, StoredPassage<M>>>;
   neighbours(options: {
     readonly source: string;
     readonly seq: number;
     readonly windowSize: number;
-  }): Promise<Passage[]>;
+  }): Promise<StoredPassage<M>[]>;
 }
 
 class ModelMismatchError extends Error {
@@ -884,6 +937,15 @@ class PassageGapError extends Error {
   readonly start: number; // the end of the passages before the gap
   readonly end: number; // the start of the passage after it
 }
+// A host adapter throws it, or a subclass, when its source cannot answer (ADR 0014).
+class RetrieverUnavailableError extends Error {
+  readonly name: string; // 'RetrieverUnavailableError'
+}
+class NoRetrieverAnsweredError extends RetrieverUnavailableError {
+  readonly name: 'NoRetrieverAnsweredError';
+  readonly failures: ReadonlyMap<string, RetrieverUnavailableError>; // cause: an AggregateError of them
+  constructor(failures: ReadonlyMap<string, RetrieverUnavailableError>);
+}
 
 // @zukhruf/retrieval/sqlite
 class SqlitePassageStore implements PassageStore {
@@ -892,14 +954,14 @@ class SqlitePassageStore implements PassageStore {
     readonly passages: string;
   });
 }
-class SqliteEmbeddingRetriever implements BatchRetriever {
+class SqliteEmbeddingRetriever implements BatchRetriever<StoredPassage> {
   constructor(options: {
     readonly store: SqlitePassageStore;
     readonly vectors: string;
     readonly model: EmbeddingModel;
   });
 }
-class SqliteBM25Retriever implements Retriever {
+class SqliteBM25Retriever implements Retriever<QueryType, StoredPassage> {
   constructor(options: {
     readonly store: SqlitePassageStore;
     readonly index: string; // the FTS5 table
@@ -921,14 +983,14 @@ class PostgresPassageStore implements PassageStore {
     readonly passages: string;
   });
 }
-class PgvectorEmbeddingRetriever implements BatchRetriever {
+class PgvectorEmbeddingRetriever implements BatchRetriever<StoredPassage> {
   constructor(options: {
     readonly store: PostgresPassageStore;
     readonly vectors: string;
     readonly model: EmbeddingModel;
   });
 }
-class PgvectorKeywordRetriever implements Retriever {
+class PgvectorKeywordRetriever implements Retriever<QueryType, StoredPassage> {
   constructor(options: {
     readonly store: PostgresPassageStore;
     readonly index: {
@@ -953,14 +1015,14 @@ class SqlServerPassageStore implements PassageStore {
     readonly passages: string;
   });
 }
-class SqlServerEmbeddingRetriever implements BatchRetriever {
+class SqlServerEmbeddingRetriever implements BatchRetriever<StoredPassage> {
   constructor(options: {
     readonly store: SqlServerPassageStore;
     readonly vectors: string;
     readonly model: EmbeddingModel;
   });
 }
-class SqlServerKeywordRetriever implements Retriever {
+class SqlServerKeywordRetriever implements Retriever<QueryType, StoredPassage> {
   constructor(options: {
     readonly store: SqlServerPassageStore;
     readonly index: { readonly table: string }; // the base table with the full-text index on [text]
@@ -973,16 +1035,20 @@ class SqlServerKeywordRetriever implements Retriever {
 
 **Decisions**
 
-- [ADR 0001](./docs/adr/0001-the-package-is-the-query-side-of-rag-and-reads-a-passage-contract-that-elt-writes.md): the package is the query side of RAG and reads a passage contract that elt writes.
-- [ADR 0002](./docs/adr/0002-a-retriever-is-a-port-for-any-source.md): a retriever is a port for any source (superseded in part by ADR 0013).
-- [ADR 0003](./docs/adr/0003-an-embedding-retriever-runs-the-vector-search-in-the-sql-of-its-engine-one-query-or-a-batch.md): an embedding retriever runs the vector search in the SQL of its engine, one query or a batch (superseded in part by ADR 0013).
+- [ADR 0001](./docs/adr/0001-the-package-is-the-query-side-of-rag-and-reads-a-passage-contract-that-elt-writes.md): the package is the query side of RAG and reads a passage contract that elt writes (superseded in part by ADR 0015).
+- [ADR 0002](./docs/adr/0002-a-retriever-is-a-port-for-any-source.md): a retriever is a port for any source (superseded in part by ADR 0013, ADR 0014 and ADR 0015).
+- [ADR 0003](./docs/adr/0003-an-embedding-retriever-runs-the-vector-search-in-the-sql-of-its-engine-one-query-or-a-batch.md): an embedding retriever runs the vector search in the SQL of its engine, one query or a batch (superseded in part by ADR 0013 and ADR 0014).
 - [ADR 0004](./docs/adr/0004-a-keyword-retriever-queries-the-keyword-index-that-elt-writes.md): a keyword retriever queries the keyword index that elt writes (superseded in part by ADR 0013).
-- [ADR 0005](./docs/adr/0005-a-score-is-higher-for-a-better-passage.md): a score is higher for a better passage.
+- [ADR 0005](./docs/adr/0005-a-score-is-higher-for-a-better-passage.md): a score is higher for a better passage (superseded in part by ADR 0016).
 - [ADR 0006](./docs/adr/0006-a-retriever-gives-10-passages-when-the-caller-gives-no-topk.md): a retriever gives 10 passages when the caller gives no topK.
 - [ADR 0007](./docs/adr/0007-reciprocal-rank-fusion-is-the-default-fusion-with-k-60-and-ranks-from-1.md): reciprocal rank fusion is the default fusion, with k 60 and ranks from 1.
 - [ADR 0008](./docs/adr/0008-a-search-is-composed-of-retrievers-that-wrap-retrievers-and-a-list-of-postprocessors.md): a search is composed of retrievers that wrap retrievers and a list of postprocessors (superseded in part by ADR 0013).
-- [ADR 0009](./docs/adr/0009-a-filter-has-the-shape-of-haystacks-filters.md): a filter has the shape of Haystack's filters.
+- [ADR 0009](./docs/adr/0009-a-filter-has-the-shape-of-haystacks-filters.md): a filter has the shape of Haystack's filters (superseded in part by ADR 0015).
 - [ADR 0010](./docs/adr/0010-an-embedding-retriever-refuses-a-query-model-whose-identity-differs-from-the-stored-vectors.md): an embedding retriever refuses a query model whose identity differs from the stored vectors.
 - [ADR 0011](./docs/adr/0011-the-package-is-in-the-base-layer.md): the package is in the base layer.
 - [ADR 0012](./docs/adr/0012-the-package-is-zukhruf-retrieval-and-its-port-is-retriever-with-retrieve-after-go.md): the package is @zukhruf/retrieval, and its port is Retriever with retrieve, after Go.
-- [ADR 0013](./docs/adr/0013-a-query-is-a-string-or-a-query-bundle-with-a-text-for-each-kind-of-search.md): a query is a string or a query bundle, with a text for each kind of search.
+- [ADR 0013](./docs/adr/0013-a-query-is-a-string-or-a-query-bundle-with-a-text-for-each-kind-of-search (superseded in part by ADR 0015).md): a query is a string or a query bundle, with a text for each kind of search (superseded in part by ADR 0015).
+- [ADR 0014](./docs/adr/0014-a-retrieve-call-answers-with-the-retrievers-that-answered-and-names-those-that-were-unavailable.md): a retrieve call answers with the retrievers that answered and names those that were unavailable.
+- [ADR 0015](./docs/adr/0015-a-passage-is-typed-by-its-metadata-and-only-a-stored-passage-has-source-seq-start-and-end.md): a passage is typed by its metadata, and only a stored passage has source, seq, start and end.
+- [ADR 0016](./docs/adr/0016-a-scored-passage-may-have-no-score-and-a-list-is-in-the-retrievers-order.md): a scored passage may have no score, and a list is in the retriever's order.
+- [ADR 0017](./docs/adr/0017-every-async-port-takes-an-optional-abort-signal-and-a-composite-rejects-at-once-when-it-aborts.md): every async port takes an optional abort signal, and a composite rejects at once when it aborts.

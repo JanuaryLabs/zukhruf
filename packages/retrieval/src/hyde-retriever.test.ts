@@ -107,11 +107,13 @@ test("the model writes a passage that answers the query with LangChain's websear
   });
 
   // Act
-  const results = await retriever.retrieve('how do I change my signing key?', {
-    topK: 1,
-    filter: { field: 'metadata.product', operator: '==', value: 'a' },
-    includeVectors: true,
-  });
+  const results = (
+    await retriever.retrieve('how do I change my signing key?', {
+      topK: 1,
+      filter: { field: 'metadata.product', operator: '==', value: 'a' },
+      includeVectors: true,
+    })
+  ).passages;
 
   // Assert: the "websearch" template of getPromptTemplateFromKey in
   // LangChain's hyde.ts. exact-b is nearest but the filter leaves it out;
@@ -163,7 +165,7 @@ test('the passage reaches the embedding search only, as customEmbeddings: the qu
   };
 
   // Act
-  const results = await retriever.retrieve(query);
+  const results = (await retriever.retrieve(query)).passages;
 
   // Assert
   assert.deepEqual(source.queries, [{ ...query, customEmbeddings: [answer] }]);
@@ -195,7 +197,7 @@ test('HyDE takes a retriever of any query bundle: not one of strings only, nor a
   };
 
   // Act
-  const results = await federation.retrieve(query);
+  const results = (await federation.retrieve(query)).passages;
 
   // Assert: the host gets its field and no passage; the passage finds exact-b.
   assert.deepEqual(host.queries, [query]);

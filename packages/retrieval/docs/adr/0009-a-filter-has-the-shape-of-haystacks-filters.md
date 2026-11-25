@@ -1,5 +1,7 @@
 # A filter has the shape of Haystack's filters
 
+Superseded in part on 2026-11-25 (#5584) for the type of a field and a value. `Filter<P>` names the stored fields of the passage type and `metadata.<key>` of its metadata, each with its value type; the default metadata keeps any `metadata.<column>` with any value ([ADR 0015](./0015-a-passage-is-typed-by-its-metadata-and-only-a-stored-passage-has-source-seq-start-and-end.md)). The shape of Haystack's filters stays.
+
 Status: accepted by Ezz on 2026-11-23 ("Approve, write the paper").
 
 Most leaders give a structured filter of AND, OR and NOT over comparisons. Haystack: `{ operator: "AND" | "OR" | "NOT", conditions }` and `{ field, operator, value }` with `== != > >= < <= in "not in"` ([metadata filtering](https://docs.haystack.deepset.ai/docs/metadata-filtering)). LlamaIndex: `MetadataFilters { filters, condition }` with more operators ([vector_stores/types.py](https://raw.githubusercontent.com/run-llama/llama_index/main/llama-index-core/llama_index/core/vector_stores/types.py)). Qdrant: `filter { must, should, must_not }` ([Qdrant search](https://qdrant.tech/documentation/search/search/)). .NET takes a LINQ expression ([vector search](https://learn.microsoft.com/en-us/dotnet/ai/vector-stores/vector-search)); Mastra takes MongoDB operators.

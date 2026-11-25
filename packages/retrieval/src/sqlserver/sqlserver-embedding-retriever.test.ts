@@ -139,9 +139,10 @@ test(
     });
 
     // Act
-    const results = await retriever.retrieve('rotate a key');
+    const results = (await retriever.retrieve('rotate a key')).passages;
     // The cut of topK 2 goes through the tie of B and a.
-    const cut = await retriever.retrieve('rotate a key', { topK: 2 });
+    const cut = (await retriever.retrieve('rotate a key', { topK: 2 }))
+      .passages;
 
     // Assert
     assert.deepEqual(
@@ -198,10 +199,12 @@ test(
     });
 
     // Act
-    const results = await retriever.retrieve('q');
+    const results = (await retriever.retrieve('q')).passages;
     // The cut of topK 2 goes through the tie of B and a.
-    const cut = await retriever.retrieve('q', { topK: 2 });
-    const [many] = await retriever.retrieveMany(['q'], { topK: 2 });
+    const cut = (await retriever.retrieve('q', { topK: 2 })).passages;
+    const [many] = (await retriever.retrieveMany(['q'], { topK: 2 })).map(
+      ({ passages }) => passages,
+    );
 
     // Assert
     assert.deepEqual(
@@ -241,9 +244,9 @@ test(
     });
 
     // Act
-    const byDefault = await retriever.retrieve('q');
-    const three = await retriever.retrieve('q', { topK: 3 });
-    const none = await retriever.retrieve('q', { topK: 0 });
+    const byDefault = (await retriever.retrieve('q')).passages;
+    const three = (await retriever.retrieve('q', { topK: 3 })).passages;
+    const none = (await retriever.retrieve('q', { topK: 0 })).passages;
 
     // Assert
     assert.deepEqual(
@@ -420,7 +423,7 @@ test(
     });
 
     // Act
-    const results = await retriever.retrieve('q');
+    const results = (await retriever.retrieve('q')).passages;
 
     // Assert
     assert.deepEqual(ids(results), ['near', 'far']);
@@ -496,8 +499,10 @@ test(
     });
 
     // Act
-    const one = await retriever.retrieve('q');
-    const many = await retriever.retrieveMany(['q', 'q']);
+    const one = (await retriever.retrieve('q')).passages;
+    const many = (await retriever.retrieveMany(['q', 'q'])).map(
+      ({ passages }) => passages,
+    );
 
     // Assert
     assert.deepEqual(one, []);
@@ -525,7 +530,9 @@ test(
     });
 
     // Act
-    const lists = await retriever.retrieveMany([]);
+    const lists = (await retriever.retrieveMany([])).map(
+      ({ passages }) => passages,
+    );
 
     // Assert
     assert.deepEqual(lists, []);
@@ -554,11 +561,15 @@ test(
     });
 
     // Act
-    const withVectors = await retriever.retrieve('q', { includeVectors: true });
-    const without = await retriever.retrieve('q');
-    const [many] = await retriever.retrieveMany(['q'], {
-      includeVectors: true,
-    });
+    const withVectors = (
+      await retriever.retrieve('q', { includeVectors: true })
+    ).passages;
+    const without = (await retriever.retrieve('q')).passages;
+    const [many] = (
+      await retriever.retrieveMany(['q'], {
+        includeVectors: true,
+      })
+    ).map(({ passages }) => passages);
 
     // Assert
     assert.deepEqual(
@@ -606,14 +617,15 @@ test(
     });
 
     // Act
-    const lists = await retriever.retrieveMany(
-      ['toward y', 'toward x', 'toward z'],
-      { topK: 2 },
-    );
+    const lists = (
+      await retriever.retrieveMany(['toward y', 'toward x', 'toward z'], {
+        topK: 2,
+      })
+    ).map(({ passages }) => passages);
     const searches = sent.filter((sql) =>
       sql.includes('VECTOR_DISTANCE'),
     ).length;
-    const one = await retriever.retrieve('toward x', { topK: 2 });
+    const one = (await retriever.retrieve('toward x', { topK: 2 })).passages;
 
     // Assert
     assert.deepEqual(lists.map(ids), [
@@ -660,12 +672,14 @@ test(
       query: 'how do I rotate a key?',
       customEmbeddings: ['toward x', 'toward y'],
     } as const;
-    const one = await retriever.retrieve(both);
-    const lists = await retriever.retrieveMany([
-      both,
-      { query: 'how do I rotate a key?', customEmbeddings: ['toward y'] },
-      'toward x',
-    ]);
+    const one = (await retriever.retrieve(both)).passages;
+    const lists = (
+      await retriever.retrieveMany([
+        both,
+        { query: 'how do I rotate a key?', customEmbeddings: ['toward y'] },
+        'toward x',
+      ])
+    ).map(({ passages }) => passages);
 
     // Assert: the mean [1, 1, 0, 0] is xy itself; x and y tie at 1 / sqrt(2).
     assert.deepEqual(ids(one), ['xy', 'x', 'y']);
@@ -718,7 +732,9 @@ test(
     });
 
     // Act
-    const lists = await retriever.retrieveMany(queries, { topK: 2 });
+    const lists = (await retriever.retrieveMany(queries, { topK: 2 })).map(
+      ({ passages }) => passages,
+    );
 
     // Assert
     // The cosine of query i to x and to y. float32 keeps them to about 1e-7,
@@ -739,7 +755,8 @@ test(
         list.every(
           ({ passage, score }, rank) =>
             passage.id === want[rank]?.[0] &&
-            Math.abs(score - (want[rank]?.[1] ?? Number.NaN)) < 1e-5,
+            Math.abs((score ?? Number.NaN) - (want[rank]?.[1] ?? Number.NaN)) <
+              1e-5,
         );
       return right ? [] : [i];
     });
@@ -852,7 +869,7 @@ test(
       model: embeddingModel({ q: [1, 0, 0, 0] }),
     });
     const filtered = async (filter: Parameters<typeof retriever.retrieve>[1]) =>
-      ids(await retriever.retrieve('q', filter)).toSorted();
+      ids((await retriever.retrieve('q', filter)).passages).toSorted();
 
     // Act
     const results = {
@@ -955,9 +972,11 @@ test(
     } as const;
 
     // Act
-    const byDefault = await retriever.retrieve('q', { filter });
-    const one = await retriever.retrieve('q', { filter, topK: 1 });
-    const [many] = await retriever.retrieveMany(['q'], { filter, topK: 2 });
+    const byDefault = (await retriever.retrieve('q', { filter })).passages;
+    const one = (await retriever.retrieve('q', { filter, topK: 1 })).passages;
+    const [many] = (
+      await retriever.retrieveMany(['q'], { filter, topK: 2 })
+    ).map(({ passages }) => passages);
 
     // Assert
     assert.deepEqual(ids(byDefault), ['v1', 'v2']);
@@ -1006,7 +1025,7 @@ test(
       model: embeddingModel({ q: [1, 0, 0, 0] }),
     });
     const filtered = async (filter: Parameters<typeof retriever.retrieve>[1]) =>
-      ids(await retriever.retrieve('q', filter)).toSorted();
+      ids((await retriever.retrieve('q', filter)).passages).toSorted();
 
     // Act
     const results = {
@@ -1097,20 +1116,24 @@ test(
     });
 
     // Act
-    const byValue = await retriever.retrieve('q', {
-      filter: {
-        field: 'metadata.product',
-        operator: '==',
-        value: "none' OR 1 = 1 OR product = '",
-      },
-    });
-    const bySetValue = await retriever.retrieve('q', {
-      filter: {
-        field: 'metadata.product',
-        operator: 'in',
-        value: ["x') OR 1 = 1 --"],
-      },
-    });
+    const byValue = (
+      await retriever.retrieve('q', {
+        filter: {
+          field: 'metadata.product',
+          operator: '==',
+          value: "none' OR 1 = 1 OR product = '",
+        },
+      })
+    ).passages;
+    const bySetValue = (
+      await retriever.retrieve('q', {
+        filter: {
+          field: 'metadata.product',
+          operator: 'in',
+          value: ["x') OR 1 = 1 --"],
+        },
+      })
+    ).passages;
     const byField = retriever.retrieve('q', {
       filter: {
         field: 'metadata.product] IS NOT NULL OR [1',
@@ -1148,15 +1171,18 @@ test(
     });
 
     // Act
-    // A caller without the types of the package can pass any field and value.
-    const byField = Reflect.apply(retriever.retrieve, retriever, [
-      'q',
-      { filter: { field: 'text', operator: '==', value: 'x' } },
-    ]);
+    // A caller without the types of the package can pass any field and value,
+    // where the types refuse it.
+    const byField = retriever.retrieve('q', {
+      // @ts-expect-error text is not a filter field
+      filter: { field: 'text', operator: '==', value: 'x' },
+    });
     const byObject = retriever.retrieve('q', {
+      // @ts-expect-error a filter value is not an object
       filter: { field: 'source', operator: '==', value: { id: 'x' } },
     });
     const byValue = retriever.retrieve('q', {
+      // @ts-expect-error an in filter takes a list
       filter: { field: 'source', operator: 'not in', value: 'doc-a' },
     });
 
@@ -1207,9 +1233,11 @@ test(
     });
 
     // Act
-    const [result] = await retriever.retrieve('q', {
-      filter: { field: 'metadata.distance', operator: '==', value: 'far' },
-    });
+    const [result] = (
+      await retriever.retrieve('q', {
+        filter: { field: 'metadata.distance', operator: '==', value: 'far' },
+      })
+    ).passages;
 
     // Assert
     assert.deepEqual(result?.passage.metadata, {
@@ -1244,19 +1272,23 @@ test(
       });
 
     // Act
-    const fromSchema = await retriever(
-      new SqlServerPassageStore({
-        session: session(pool),
-        schema: 'rag',
-        passages: 'docs_passages',
-      }),
-    ).retrieve('q');
-    const fromDefault = await retriever(
-      new SqlServerPassageStore({
-        session: session(pool),
-        passages: 'docs_passages',
-      }),
-    ).retrieve('q');
+    const fromSchema = (
+      await retriever(
+        new SqlServerPassageStore({
+          session: session(pool),
+          schema: 'rag',
+          passages: 'docs_passages',
+        }),
+      ).retrieve('q')
+    ).passages;
+    const fromDefault = (
+      await retriever(
+        new SqlServerPassageStore({
+          session: session(pool),
+          passages: 'docs_passages',
+        }),
+      ).retrieve('q')
+    ).passages;
 
     // Assert
     assert.deepEqual(fromSchema, [
@@ -1306,8 +1338,8 @@ test(
     const fromSecond = retriever(secondStore);
 
     // Act
-    const firstResults = await fromFirst.retrieve('q');
-    const secondResults = await fromSecond.retrieve('q');
+    const firstResults = (await fromFirst.retrieve('q')).passages;
+    const secondResults = (await fromSecond.retrieve('q')).passages;
 
     // Assert
     assert.deepEqual(ids(firstResults), ['first-a']);

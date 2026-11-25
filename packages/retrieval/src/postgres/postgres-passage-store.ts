@@ -1,5 +1,5 @@
 import type { PassageStore } from '../passage-store.ts';
-import type { Passage } from '../passage.ts';
+import type { StoredPassage } from '../passage.ts';
 import { identifier } from '../sql/identifier.ts';
 import { bind } from './bind.ts';
 import { passage, passageJson } from './passage-row.ts';
@@ -65,7 +65,9 @@ export class PostgresPassageStore implements PassageStore {
       : `${identifier(this.#schema)}.${identifier(name)}`;
   }
 
-  async get(ids: readonly string[]): Promise<ReadonlyMap<string, Passage>> {
+  async get(
+    ids: readonly string[],
+  ): Promise<ReadonlyMap<string, StoredPassage>> {
     const parameters: unknown[] = [];
     const row = passageJson(parameters, this.#passages);
     const list = bind(parameters, JSON.stringify(ids));
@@ -90,7 +92,7 @@ export class PostgresPassageStore implements PassageStore {
     readonly source: string;
     readonly seq: number;
     readonly windowSize: number;
-  }): Promise<Passage[]> {
+  }): Promise<StoredPassage[]> {
     const parameters: unknown[] = [];
     const row = passageJson(parameters, this.#passages);
     const source = bind(parameters, options.source);

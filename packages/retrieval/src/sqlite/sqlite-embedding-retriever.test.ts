@@ -82,7 +82,7 @@ test('the passages come best first, each with the cosine similarity as its score
   });
 
   // Act
-  const results = await retriever.retrieve('rotate a key');
+  const results = (await retriever.retrieve('rotate a key')).passages;
 
   // Assert
   assert.deepEqual(
@@ -125,8 +125,8 @@ test('a call gives 10 passages when it gives no topK, and topK passages when it 
   });
 
   // Act
-  const byDefault = await retriever.retrieve('q');
-  const three = await retriever.retrieve('q', { topK: 3 });
+  const byDefault = (await retriever.retrieve('q')).passages;
+  const three = (await retriever.retrieve('q', { topK: 3 })).passages;
 
   // Assert
   assert.deepEqual(
@@ -249,7 +249,7 @@ test('a query compares only with the vectors of its own model identity when the 
   });
 
   // Act
-  const results = await retriever.retrieve('q');
+  const results = (await retriever.retrieve('q')).passages;
 
   // Assert
   assert.deepEqual(ids(results), ['new-near', 'new-far']);
@@ -301,8 +301,10 @@ test('an empty vector table gives no passages and makes no model call', async ()
   });
 
   // Act
-  const one = await retriever.retrieve('q');
-  const many = await retriever.retrieveMany(['q', 'q']);
+  const one = (await retriever.retrieve('q')).passages;
+  const many = (await retriever.retrieveMany(['q', 'q'])).map(
+    ({ passages }) => passages,
+  );
 
   // Assert
   assert.deepEqual(one, []);
@@ -323,9 +325,12 @@ test('includeVectors gives the stored vector of each passage, and no call gives 
   });
 
   // Act
-  const withVectors = await retriever.retrieve('q', { includeVectors: true });
-  const without = await retriever.retrieve('q');
-  const [many] = await retriever.retrieveMany(['q'], { includeVectors: true });
+  const withVectors = (await retriever.retrieve('q', { includeVectors: true }))
+    .passages;
+  const without = (await retriever.retrieve('q')).passages;
+  const [many] = (
+    await retriever.retrieveMany(['q'], { includeVectors: true })
+  ).map(({ passages }) => passages);
 
   // Assert
   assert.deepEqual(
@@ -358,11 +363,12 @@ test('retrieveMany embeds the queries in one model call and gives one list for e
   });
 
   // Act
-  const lists = await retriever.retrieveMany(
-    ['toward y', 'toward x', 'toward z'],
-    { topK: 2 },
-  );
-  const one = await retriever.retrieve('toward x', { topK: 2 });
+  const lists = (
+    await retriever.retrieveMany(['toward y', 'toward x', 'toward z'], {
+      topK: 2,
+    })
+  ).map(({ passages }) => passages);
+  const one = (await retriever.retrieve('toward x', { topK: 2 })).passages;
 
   // Assert
   assert.deepEqual(lists.map(ids), [
@@ -399,12 +405,14 @@ test('the texts of customEmbeddings are embedded in place of query, and two text
     query: 'how do I rotate a key?',
     customEmbeddings: ['toward x', 'toward y'],
   } as const;
-  const one = await retriever.retrieve(both);
-  const lists = await retriever.retrieveMany([
-    both,
-    { query: 'how do I rotate a key?', customEmbeddings: ['toward y'] },
-    'toward x',
-  ]);
+  const one = (await retriever.retrieve(both)).passages;
+  const lists = (
+    await retriever.retrieveMany([
+      both,
+      { query: 'how do I rotate a key?', customEmbeddings: ['toward y'] },
+      'toward x',
+    ])
+  ).map(({ passages }) => passages);
 
   // Assert: the mean [1, 1, 0, 0] is xy itself; x and y tie at 1 / sqrt(2).
   assert.deepEqual(ids(one), ['xy', 'x', 'y']);
@@ -472,7 +480,9 @@ test('retrieveMany of no queries gives no lists', async () => {
   });
 
   // Act
-  const lists = await retriever.retrieveMany([]);
+  const lists = (await retriever.retrieveMany([])).map(
+    ({ passages }) => passages,
+  );
 
   // Assert
   assert.deepEqual(lists, []);
@@ -558,7 +568,7 @@ test('each filter operator selects the passages it names, on passage fields and 
     model: embeddingModel({ q: [1, 0, 0, 0] }),
   });
   const filtered = async (filter: Parameters<typeof retriever.retrieve>[1]) =>
-    ids(await retriever.retrieve('q', filter)).toSorted();
+    ids((await retriever.retrieve('q', filter)).passages).toSorted();
 
   // Act
   const results = {
@@ -633,7 +643,7 @@ test('AND, OR and NOT nest, NOT negates all its conditions, and a boolean value 
     model: embeddingModel({ q: [1, 0, 0, 0] }),
   });
   const filtered = async (filter: Parameters<typeof retriever.retrieve>[1]) =>
-    ids(await retriever.retrieve('q', filter)).toSorted();
+    ids((await retriever.retrieve('q', filter)).passages).toSorted();
 
   // Act
   const results = {
@@ -709,20 +719,24 @@ test('SQL in a filter field stays one column name, and SQL in a filter value sta
       value: 'none',
     },
   });
-  const byValue = await retriever.retrieve('q', {
-    filter: {
-      field: 'metadata.product',
-      operator: '==',
-      value: "none' OR 1 = 1 OR product = '",
-    },
-  });
-  const bySetValue = await retriever.retrieve('q', {
-    filter: {
-      field: 'metadata.product',
-      operator: 'in',
-      value: ["x') OR 1 = 1 --"],
-    },
-  });
+  const byValue = (
+    await retriever.retrieve('q', {
+      filter: {
+        field: 'metadata.product',
+        operator: '==',
+        value: "none' OR 1 = 1 OR product = '",
+      },
+    })
+  ).passages;
+  const bySetValue = (
+    await retriever.retrieve('q', {
+      filter: {
+        field: 'metadata.product',
+        operator: 'in',
+        value: ["x') OR 1 = 1 --"],
+      },
+    })
+  ).passages;
 
   // Assert
   // The engine looks for one column with the whole field as its name.
@@ -743,15 +757,18 @@ test('a filter field that is not a passage field or a metadata column, a value S
   });
 
   // Act
-  // A caller without the types of the package can pass any field and value.
-  const byField = Reflect.apply(retriever.retrieve, retriever, [
-    'q',
-    { filter: { field: 'text', operator: '==', value: 'x' } },
-  ]);
+  // A caller without the types of the package can pass any field and value,
+  // where the types refuse it.
+  const byField = retriever.retrieve('q', {
+    // @ts-expect-error text is not a filter field
+    filter: { field: 'text', operator: '==', value: 'x' },
+  });
   const byObject = retriever.retrieve('q', {
+    // @ts-expect-error a filter value is not an object
     filter: { field: 'source', operator: '==', value: { id: 'x' } },
   });
   const byValue = retriever.retrieve('q', {
+    // @ts-expect-error an in filter takes a list
     filter: { field: 'source', operator: 'not in', value: 'doc-a' },
   });
 
@@ -792,9 +809,11 @@ test('a metadata column keeps its name and value even when it has the name of a 
   });
 
   // Act
-  const [result] = await retriever.retrieve('q', {
-    filter: { field: 'metadata.distance', operator: '==', value: 'far' },
-  });
+  const [result] = (
+    await retriever.retrieve('q', {
+      filter: { field: 'metadata.distance', operator: '==', value: 'far' },
+    })
+  ).passages;
 
   // Assert
   assert.deepEqual(result?.passage.metadata, {

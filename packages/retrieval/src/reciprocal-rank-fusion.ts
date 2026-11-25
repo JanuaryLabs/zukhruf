@@ -1,4 +1,3 @@
-import type { Fusion } from './fusion.ts';
 import { sumOnId } from './sum-on-id.ts';
 
 /**
@@ -7,13 +6,6 @@ import { sumOnId } from './sum-on-id.ts';
  * LangChain `EnsembleRetriever`, `weight / (rank + this.c)`). The scores of
  * the lists are not read, only their order (ADR 0007).
  */
-export function reciprocalRankFusion({
-  k = 60,
-}: { readonly k?: number } = {}): Fusion {
-  return {
-    fuse: (lists, weights) =>
-      sumOnId(lists, weights, (scores) =>
-        scores.map((_, index) => 1 / (k + index + 1)),
-      ),
-  };
+export function reciprocalRankFusion({ k = 60 }: { readonly k?: number } = {}) {
+  return sumOnId((scores) => scores.map((_, index) => 1 / (k + index + 1)));
 }

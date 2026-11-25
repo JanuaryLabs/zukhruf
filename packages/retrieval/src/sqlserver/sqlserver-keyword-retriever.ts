@@ -1,7 +1,8 @@
+import type { StoredPassage } from '../passage.ts';
 import { type QueryType, keywordsOf } from '../query-bundle.ts';
+import type { RetrievalResult } from '../retrieval-result.ts';
 import type { RetrieveOptions } from '../retrieve-options.ts';
 import type { Retriever } from '../retriever.ts';
-import type { ScoredPassage } from '../scored-passage.ts';
 import { where } from '../sql/where.ts';
 import { binary } from './binary.ts';
 import { bind } from './bind.ts';
@@ -21,7 +22,10 @@ import type { SqlServerSession } from './sqlserver-session.ts';
  * match (ADR 0005). It matches the words of `keywords`, or of `query` when
  * the bundle has none (ADR 0013).
  */
-export class SqlServerKeywordRetriever implements Retriever {
+export class SqlServerKeywordRetriever implements Retriever<
+  QueryType,
+  StoredPassage
+> {
   readonly #session: SqlServerSession;
   readonly #passages: string;
   readonly #index: string;
@@ -47,11 +51,11 @@ export class SqlServerKeywordRetriever implements Retriever {
 
   async retrieve(
     query: QueryType,
-    options: RetrieveOptions = {},
-  ): Promise<ScoredPassage[]> {
+    options: RetrieveOptions<StoredPassage> = {},
+  ): Promise<RetrievalResult<StoredPassage>> {
     options.abortSignal?.throwIfAborted();
     const words = phrases(keywordsOf(query));
-    if (words.length === 0) return [];
+    if (words.length === 0) return { passages: [], failures: new Map() };
     const parameters: Record<string, unknown> = {};
     // A condition longer than 4,000 characters reaches the caller as SQL
     // Server's error 4110: the driver binds it as NVARCHAR(MAX), which
@@ -68,10 +72,13 @@ export class SqlServerKeywordRetriever implements Retriever {
       ORDER BY k.[RANK] DESC, p.[id] ${binary}`,
       parameters,
     );
-    return rows.map((cells) => ({
-      passage: passage(cells['passage']),
-      score: Number(cells['score']),
-    }));
+    return {
+      passages: rows.map((cells) => ({
+        passage: passage(cells['passage']),
+        score: Number(cells['score']),
+      })),
+      failures: new Map(),
+    };
   }
 }
 

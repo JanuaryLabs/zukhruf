@@ -1,7 +1,8 @@
+import type { StoredPassage } from '../passage.ts';
 import { type QueryType, keywordsOf } from '../query-bundle.ts';
+import type { RetrievalResult } from '../retrieval-result.ts';
 import type { RetrieveOptions } from '../retrieve-options.ts';
 import type { Retriever } from '../retriever.ts';
-import type { ScoredPassage } from '../scored-passage.ts';
 import { identifier } from '../sql/identifier.ts';
 import { where } from '../sql/where.ts';
 import { bind } from './bind.ts';
@@ -20,7 +21,10 @@ import type { PostgresSession } from './postgres-session.ts';
  * higher for a better match (ADR 0005). It matches the words of `keywords`,
  * or of `query` when the bundle has none (ADR 0013).
  */
-export class PgvectorKeywordRetriever implements Retriever {
+export class PgvectorKeywordRetriever implements Retriever<
+  QueryType,
+  StoredPassage
+> {
   readonly #session: PostgresSession;
   readonly #passages: string;
   readonly #index: string;
@@ -50,11 +54,11 @@ export class PgvectorKeywordRetriever implements Retriever {
 
   async retrieve(
     query: QueryType,
-    options: RetrieveOptions = {},
-  ): Promise<ScoredPassage[]> {
+    options: RetrieveOptions<StoredPassage> = {},
+  ): Promise<RetrievalResult<StoredPassage>> {
     options.abortSignal?.throwIfAborted();
     const words = keywordsOf(query);
-    if (words.length === 0) return [];
+    if (words.length === 0) return { passages: [], failures: new Map() };
     const parameters: unknown[] = [];
     // The configuration is a parameter too, so its text is never SQL.
     const configuration = `${bind(parameters, this.#configuration)}::regconfig`;
@@ -78,9 +82,12 @@ export class PgvectorKeywordRetriever implements Retriever {
       LIMIT ${topK}`,
       parameters,
     );
-    return rows.map((cells) => ({
-      passage: passage(cells['passage']),
-      score: Number(cells['score']),
-    }));
+    return {
+      passages: rows.map((cells) => ({
+        passage: passage(cells['passage']),
+        score: Number(cells['score']),
+      })),
+      failures: new Map(),
+    };
   }
 }

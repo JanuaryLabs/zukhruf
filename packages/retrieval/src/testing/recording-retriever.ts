@@ -1,9 +1,10 @@
 import type {
   QueryBundle,
   QueryType,
+  RetrievalResult,
   RetrieveOptions,
   Retriever,
-  ScoredPassage,
+  StoredPassage,
 } from '../index.ts';
 
 /**
@@ -15,12 +16,13 @@ export type EntrezQueryBundle = QueryBundle & { readonly entrez: string };
 /**
  * A host adapter for a live source cannot run in CI. This retriever records
  * each query it gets and gives its passages, in their order, with the scores
- * 1, 1/2, 1/3 and so on. The text of each passage is its id. It takes its
- * query type and gives it back in `queries`, so `Q` is `in out`.
+ * 1, 1/2, 1/3 and so on, and no failures. The text of each passage is its
+ * id. It takes its query type and gives it back in `queries`, so `Q` is
+ * `in out`.
  */
 export class RecordingRetriever<
   in out Q extends QueryType = QueryType,
-> implements Retriever<Q> {
+> implements Retriever<Q, StoredPassage> {
   readonly queries: Q[] = [];
   readonly #ids: readonly string[];
 
@@ -30,20 +32,23 @@ export class RecordingRetriever<
 
   async retrieve(
     query: Q,
-    options: RetrieveOptions = {},
-  ): Promise<ScoredPassage[]> {
+    options: RetrieveOptions<StoredPassage> = {},
+  ): Promise<RetrievalResult<StoredPassage>> {
     this.queries.push(query);
-    return this.#ids.slice(0, options.topK ?? 10).map((id, index) => ({
-      passage: {
-        id,
-        text: id,
-        source: `source-${id}`,
-        seq: 0,
-        start: 0,
-        end: id.length,
-        metadata: {},
-      },
-      score: 1 / (index + 1),
-    }));
+    return {
+      passages: this.#ids.slice(0, options.topK ?? 10).map((id, index) => ({
+        passage: {
+          id,
+          text: id,
+          source: `source-${id}`,
+          seq: 0,
+          start: 0,
+          end: id.length,
+          metadata: {},
+        },
+        score: 1 / (index + 1),
+      })),
+      failures: new Map(),
+    };
   }
 }

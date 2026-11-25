@@ -1,7 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 
 import type { PassageStore } from '../passage-store.ts';
-import type { Passage } from '../passage.ts';
+import type { StoredPassage } from '../passage.ts';
 import { identifier } from '../sql/identifier.ts';
 import { passageRows } from './passage-rows.ts';
 
@@ -47,7 +47,9 @@ export class SqlitePassageStore implements PassageStore {
     this.#passages = identifier(options.passages);
   }
 
-  async get(ids: readonly string[]): Promise<ReadonlyMap<string, Passage>> {
+  async get(
+    ids: readonly string[],
+  ): Promise<ReadonlyMap<string, StoredPassage>> {
     const statement = this.#database.prepare(
       `SELECT p.* FROM ${this.#passages} p WHERE p."id" IN (SELECT "value" FROM json_each(?))`,
     );
@@ -68,7 +70,7 @@ export class SqlitePassageStore implements PassageStore {
     readonly source: string;
     readonly seq: number;
     readonly windowSize: number;
-  }): Promise<Passage[]> {
+  }): Promise<StoredPassage[]> {
     const statement = this.#database.prepare(
       `SELECT p.* FROM ${this.#passages} p WHERE p."source" = ? AND p."seq" BETWEEN ? AND ? ORDER BY p."seq", p."id"`,
     );

@@ -157,7 +157,7 @@ test(
     });
 
     // Act
-    const results = await retriever.retrieve('rotate key');
+    const results = (await retriever.retrieve('rotate key')).passages;
 
     // Assert
     // The value of SQL Server's own ranking for the same condition.
@@ -173,12 +173,13 @@ test(
     );
     assert.ok(
       results.every(
-        ({ score }, i) => i === 0 || score <= (results[i - 1]?.score ?? 0),
+        ({ score }, i) =>
+          i === 0 || (score ?? 0) <= (results[i - 1]?.score ?? 0),
       ),
     );
     assert.deepEqual(ids(results), ['b', 'K', 'k']);
     assert.ok((results[0]?.score ?? 0) > (results[1]?.score ?? 0));
-    assert.ok(results.every(({ score }) => score > 0));
+    assert.ok(results.every(({ score }) => (score ?? 0) > 0));
     assert.deepEqual(
       results.find(({ passage }) => passage.id === 'K')?.passage,
       {
@@ -221,8 +222,8 @@ test(
     });
 
     // Act
-    const results = await retriever.retrieve('key');
-    const cut = await retriever.retrieve('key', { topK: 1 });
+    const results = (await retriever.retrieve('key')).passages;
+    const cut = (await retriever.retrieve('key', { topK: 1 })).passages;
 
     // Assert
     assert.deepEqual(
@@ -263,17 +264,21 @@ test(
     };
 
     // Act
-    const and = await new SqlServerKeywordRetriever(options).retrieve(
-      'rotate signing',
-    );
-    const explicitAnd = await new SqlServerKeywordRetriever({
-      ...options,
-      operator: 'AND',
-    }).retrieve('rotate signing');
-    const or = await new SqlServerKeywordRetriever({
-      ...options,
-      operator: 'OR',
-    }).retrieve('rotate signing');
+    const and = (
+      await new SqlServerKeywordRetriever(options).retrieve('rotate signing')
+    ).passages;
+    const explicitAnd = (
+      await new SqlServerKeywordRetriever({
+        ...options,
+        operator: 'AND',
+      }).retrieve('rotate signing')
+    ).passages;
+    const or = (
+      await new SqlServerKeywordRetriever({
+        ...options,
+        operator: 'OR',
+      }).retrieve('rotate signing')
+    ).passages;
 
     // Assert
     assert.deepEqual(ids(and), ['both']);
@@ -307,12 +312,15 @@ test(
     });
 
     // Act
-    const byKeywords = await retriever.retrieve({
-      query: 'renew certificate',
-      keywords: ['rotate', 'signing key'],
-    });
-    const byQuery = await retriever.retrieve({ query: 'renew certificate' });
-    const byString = await retriever.retrieve('renew certificate');
+    const byKeywords = (
+      await retriever.retrieve({
+        query: 'renew certificate',
+        keywords: ['rotate', 'signing key'],
+      })
+    ).passages;
+    const byQuery = (await retriever.retrieve({ query: 'renew certificate' }))
+      .passages;
+    const byString = (await retriever.retrieve('renew certificate')).passages;
 
     // Assert: 'signing key' is two words, each its own CONTAINS phrase.
     assert.deepEqual(ids(byKeywords), ['both']);
@@ -352,11 +360,13 @@ test(
 
     // Act
     const results = {
-      off: ids(await retriever('dbo').retrieve('the cat')),
-      offStopWordOnly: ids(await retriever('dbo').retrieve('the')),
-      system: ids(await retriever('stop').retrieve('the cat')),
-      systemOr: ids(await retriever('stop', 'OR').retrieve('the cat')),
-      systemWord: ids(await retriever('stop').retrieve('cat')),
+      off: ids((await retriever('dbo').retrieve('the cat')).passages),
+      offStopWordOnly: ids((await retriever('dbo').retrieve('the')).passages),
+      system: ids((await retriever('stop').retrieve('the cat')).passages),
+      systemOr: ids(
+        (await retriever('stop', 'OR').retrieve('the cat')).passages,
+      ),
+      systemWord: ids((await retriever('stop').retrieve('cat')).passages),
     };
 
     // Assert
@@ -420,30 +430,30 @@ test(
 
     // Act
     const matches = {
-      or: ids(await asText.retrieve('vault|consul')),
-      andNot: ids(await asText.retrieve('consul&!vault')),
-      near: ids(await asText.retrieve('keeps NEAR secrets')),
+      or: ids((await asText.retrieve('vault|consul')).passages),
+      andNot: ids((await asText.retrieve('consul&!vault')).passages),
+      near: ids((await asText.retrieve('keeps NEAR secrets')).passages),
       // `*` becomes a space, so the word is keyst and not a prefix.
-      prefix: ids(await asText.retrieve('keyst*')),
+      prefix: ids((await asText.retrieve('keyst*')).passages),
       // `"` becomes a space inside the word and does not end its phrase.
-      innerQuote: ids(await asText.retrieve('va"ult')),
+      innerQuote: ids((await asText.retrieve('va"ult')).passages),
     };
     const results = {
-      hyphen: ids(await retriever.retrieve('key-rotation')),
+      hyphen: ids((await retriever.retrieve('key-rotation')).passages),
       // As CONTAINS, `vault|consul` is vault or consul.
-      or: ids(await retriever.retrieve('vault|consul')),
+      or: ids((await retriever.retrieve('vault|consul')).passages),
       // As CONTAINS, `&` joins and `!` negates: consul and not vault.
-      andNot: ids(await retriever.retrieve('consul&!vault')),
+      andNot: ids((await retriever.retrieve('consul&!vault')).passages),
       // As CONTAINS, `NEAR` is an operator: keeps near secrets.
-      near: ids(await retriever.retrieve('keeps NEAR secrets')),
+      near: ids((await retriever.retrieve('keeps NEAR secrets')).passages),
       // A word that is an operator of CONTAINS is a word.
-      operatorWord: ids(await retriever.retrieve('AND')),
+      operatorWord: ids((await retriever.retrieve('AND')).passages),
       // As CONTAINS, `"keyst*"` is every word that starts with keyst.
-      prefix: ids(await retriever.retrieve('keyst*')),
+      prefix: ids((await retriever.retrieve('keyst*')).passages),
       // As CONTAINS, an open quote or parenthesis is a syntax error.
-      quote: ids(await retriever.retrieve('vault"')),
-      innerQuote: ids(await retriever.retrieve('va"ult')),
-      parenthesis: ids(await retriever.retrieve('(vault')),
+      quote: ids((await retriever.retrieve('vault"')).passages),
+      innerQuote: ids((await retriever.retrieve('va"ult')).passages),
+      parenthesis: ids((await retriever.retrieve('(vault')).passages),
     };
 
     // Assert
@@ -487,9 +497,11 @@ test(
 
     // Act
     const results = {
-      punctuation: ids(await retriever.retrieve('rotate & | ! ~ ( key')),
-      punctuationOnly: ids(await retriever.retrieve('& | "*"')),
-      whitespace: ids(await retriever.retrieve(' \t\n ')),
+      punctuation: ids(
+        (await retriever.retrieve('rotate & | ! ~ ( key')).passages,
+      ),
+      punctuationOnly: ids((await retriever.retrieve('& | "*"')).passages),
+      whitespace: ids((await retriever.retrieve(' \t\n ')).passages),
     };
 
     // Assert
@@ -551,17 +563,19 @@ test(
     });
 
     // Act
-    const byDefault = await retriever.retrieve('key');
-    const two = await retriever.retrieve('key', { topK: 2 });
-    const filtered = await retriever.retrieve('key', {
-      filter: {
-        operator: 'AND',
-        conditions: [
-          { field: 'metadata.product', operator: '==', value: 'consul' },
-          { field: 'source', operator: 'not in', value: ['doc-p01'] },
-        ],
-      },
-    });
+    const byDefault = (await retriever.retrieve('key')).passages;
+    const two = (await retriever.retrieve('key', { topK: 2 })).passages;
+    const filtered = (
+      await retriever.retrieve('key', {
+        filter: {
+          operator: 'AND',
+          conditions: [
+            { field: 'metadata.product', operator: '==', value: 'consul' },
+            { field: 'source', operator: 'not in', value: ['doc-p01'] },
+          ],
+        },
+      })
+    ).passages;
 
     // Assert
     assert.deepEqual(
@@ -630,9 +644,11 @@ test(
     });
 
     // Act
-    const git = await retriever.retrieve('git', {
-      filter: { field: 'metadata.product', operator: '==', value: 'git' },
-    });
+    const git = (
+      await retriever.retrieve('git', {
+        filter: { field: 'metadata.product', operator: '==', value: 'git' },
+      })
+    ).passages;
 
     // Assert
     assert.deepEqual(
@@ -673,19 +689,23 @@ test(
       });
 
     // Act
-    const fromSchema = await retriever(
-      new SqlServerPassageStore({
-        session: session(pool),
-        schema: 'rag',
-        passages: 'docs_passages',
-      }),
-    ).retrieve('key');
-    const fromDefault = await retriever(
-      new SqlServerPassageStore({
-        session: session(pool),
-        passages: 'docs_passages',
-      }),
-    ).retrieve('key');
+    const fromSchema = (
+      await retriever(
+        new SqlServerPassageStore({
+          session: session(pool),
+          schema: 'rag',
+          passages: 'docs_passages',
+        }),
+      ).retrieve('key')
+    ).passages;
+    const fromDefault = (
+      await retriever(
+        new SqlServerPassageStore({
+          session: session(pool),
+          passages: 'docs_passages',
+        }),
+      ).retrieve('key')
+    ).passages;
 
     // Assert
     assert.deepEqual(
@@ -741,8 +761,8 @@ test(
     });
 
     // Act
-    const firstResults = await fromFirst.retrieve('key');
-    const secondResults = await fromSecond.retrieve('key');
+    const firstResults = (await fromFirst.retrieve('key')).passages;
+    const secondResults = (await fromSecond.retrieve('key')).passages;
 
     // Assert
     assert.deepEqual(ids(firstResults), ['first-a']);

@@ -1,8 +1,9 @@
-import type { Filter } from './filter.ts';
+import type { FilterFields } from './filter.ts';
+import type { StoredPassage } from './passage.ts';
 import type { Postprocessor } from './postprocessor.ts';
 import type { ScoredPassage } from './scored-passage.ts';
 
-type Field = Extract<Filter, { readonly field: string }>['field'];
+type Field = keyof FilterFields<StoredPassage>;
 
 /**
  * Keeps the best `size` passages of each value of a field, best first, as
@@ -13,7 +14,7 @@ type Field = Extract<Filter, { readonly field: string }>['field'];
  * group, as Elasticsearch groups a missing value under the key null (ADR
  * 0008, the proposed amendment of 2026-11-23).
  */
-export class Collapse implements Postprocessor {
+export class Collapse implements Postprocessor<StoredPassage> {
   readonly #field: Field;
   readonly #size: number;
 
@@ -29,12 +30,12 @@ export class Collapse implements Postprocessor {
     this.#size = options.size ?? 1;
   }
 
-  async postprocess(
-    passages: readonly ScoredPassage[],
-  ): Promise<ScoredPassage[]> {
+  async postprocess<P extends StoredPassage>(
+    passages: readonly ScoredPassage<P>[],
+  ): Promise<ScoredPassage<P>[]> {
     const kept = new Map<unknown, number>();
     return passages
-      .toSorted((a, b) => b.score - a.score)
+      .toSorted((a, b) => (b.score ?? Number.NaN) - (a.score ?? Number.NaN))
       .filter(({ passage }) => {
         const key = this.#value(passage) ?? null;
         const count = kept.get(key) ?? 0;
@@ -43,7 +44,7 @@ export class Collapse implements Postprocessor {
       });
   }
 
-  #value(passage: ScoredPassage['passage']): unknown {
+  #value(passage: StoredPassage): unknown {
     const field = this.#field;
     return field === 'source' ||
       field === 'seq' ||

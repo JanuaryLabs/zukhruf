@@ -36,7 +36,7 @@ const list = [
 const picks = (
   results: readonly {
     readonly passage: { readonly id: string };
-    readonly score: number;
+    readonly score?: number;
   }[],
 ) => results.map(({ passage, score }) => [passage.id, score]);
 
