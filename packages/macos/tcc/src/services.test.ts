@@ -186,3 +186,16 @@ describe('the remedy of Full Disk Access', () => {
     );
   });
 });
+
+describe('Full Disk Access', () => {
+  test('has no status and no request', () => {
+    // Arrange
+    const service = new FullDiskAccess();
+
+    // Act and assert
+    // @ts-expect-error: macOS gives Full Disk Access no status (ADR 0003).
+    assert.equal(service.status, undefined);
+    // @ts-expect-error: macOS shows no prompt for Full Disk Access.
+    assert.equal(service.request, undefined);
+  });
+});
