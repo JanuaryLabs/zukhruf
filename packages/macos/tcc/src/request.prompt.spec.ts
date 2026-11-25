@@ -25,10 +25,24 @@ import {
 
 const run = promisify(execFile);
 
-// These tests need a person at the Mac: macOS shows a prompt for each service
-// whose status is not decided, and the person answers it. Allow and Don't
-// Allow both decide the status.
+// These tests need a person at the Mac. Each one says the status that it
+// needs; `tccutil reset <service> <bundle id of the terminal app>` makes a
+// service not determined again.
 describe('a request that a person answers', { concurrency: false }, () => {
+  void test.each([new SpeechRecognition(), new Bluetooth()], (service) =>
+    test(`of ${service.constructor.name} shows the prompt, and the answer decides the status`, async (t) => {
+      // Arrange
+      assert.equal(service.status(), 'notDetermined', service.name);
+
+      // Act
+      const answered = await service.request({ signal: t.signal });
+
+      // Assert
+      assert.notEqual(answered, 'notDetermined');
+      assert.equal(answered, service.status());
+    }),
+  );
+
   void test.each(
     [
       new Contacts(),
@@ -38,40 +52,37 @@ describe('a request that a person answers', { concurrency: false }, () => {
       new Microphone(),
       new Photos(),
       new PhotosAdd(),
-      new SpeechRecognition(),
-      new Bluetooth(),
-    ],
-    (service) =>
-      test(`of ${service.constructor.name} resolves with a decided status`, async (t) => {
-        // Act
-        const answered = await service.request({ signal: t.signal });
-
-        // Assert
-        assert.notEqual(answered, 'notDetermined');
-        assert.equal(answered, service.status());
-      }),
-  );
-
-  void test.each(
-    [
       new Accessibility(),
       new ScreenRecording(),
       new InputMonitoring(),
       new Automation('com.apple.finder'),
     ],
     (service) =>
-      test(`of ${service.constructor.name} resolves with the status that it then has`, async (t) => {
+      test(`of ${service.constructor.name} that is decided shows nothing and keeps its status`, async (t) => {
+        // Arrange
+        const before = service.status();
+        assert.notEqual(before, 'notDetermined', service.name);
+
         // Act
         const answered = await service.request({ signal: t.signal });
 
         // Assert
-        assert.equal(answered, service.status());
+        assert.equal(answered, before);
       }),
   );
 });
 
 describe('the pane of a service', () => {
-  test('opens in System Settings', async (t) => {
+  test('opens System Settings', async (t) => {
+    // Arrange
+    await run('/usr/bin/osascript', ['-e', 'quit app "System Settings"']);
+    await waitFor(
+      async () => {
+        await assert.rejects(run('/usr/bin/pgrep', ['-x', 'System Settings']));
+      },
+      { signal: t.signal, interval: 100 },
+    );
+
     // Act
     await new FullDiskAccess().openSettings();
 

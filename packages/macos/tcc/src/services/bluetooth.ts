@@ -13,7 +13,7 @@ type BluetoothStatus = (typeof values)[number];
 
 export class Bluetooth extends PromptedService<BluetoothStatus> {
   readonly name = 'kTCCServiceBluetoothAlways';
-  readonly pane = 'Bluetooth';
+  protected readonly paneKey = 'BLUETOOTH';
   protected readonly anchor = 'Privacy_Bluetooth';
 
   protected readonly requestScript = JxaRequest.decided(

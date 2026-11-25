@@ -2,7 +2,13 @@ import assert from 'node:assert/strict';
 import { execFile, spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { constants } from 'node:fs';
-import { copyFile, mkdir, realpath, writeFile } from 'node:fs/promises';
+import {
+  copyFile,
+  mkdir,
+  readFile,
+  realpath,
+  writeFile,
+} from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe } from 'node:test';
 import { promisify } from 'node:util';
@@ -140,4 +146,51 @@ describe('the client of a process', () => {
         }
       }),
   );
+
+  test('a process that an app starts has the app as its client', async (t) => {
+    // Arrange: the app starts /bin/sleep and writes its pid to a file.
+    await using scratch = await new TemporaryFiles().directory('tcc-');
+    const folder = await realpath(scratch.path);
+    const bundle = join(folder, 'Probe.app');
+    const executable = await app(bundle);
+    const pidFile = join(folder, 'child.pid');
+    await run('/usr/bin/open', [
+      '-g',
+      '-n',
+      bundle,
+      '--args',
+      '--eval',
+      `const child = require('node:child_process').spawn('/bin/sleep', ['600'], { stdio: 'ignore' });
+require('node:fs').writeFileSync(process.argv[1], String(child.pid));
+setTimeout(() => {}, 600_000);`,
+      pidFile,
+    ]);
+    const parent = await waitFor(
+      async () =>
+        Number((await run('/usr/bin/pgrep', ['-f', executable])).stdout.trim()),
+      { signal: t.signal, interval: 100 },
+    );
+    const child = await waitFor(
+      async () => {
+        const pid = Number(await readFile(pidFile, 'utf8'));
+        assert.ok(pid > 0);
+        return pid;
+      },
+      { signal: t.signal, interval: 100 },
+    );
+
+    try {
+      // Act
+      const client = Client.responsibleFor(child);
+
+      // Assert
+      assert.deepEqual(
+        { type: client.type, path: client.path, name: client.name },
+        { type: 'bundle', path: bundle, name: 'Probe' },
+      );
+    } finally {
+      process.kill(child);
+      process.kill(parent);
+    }
+  });
 });

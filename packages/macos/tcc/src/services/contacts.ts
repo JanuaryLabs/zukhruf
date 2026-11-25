@@ -5,7 +5,7 @@ import { PromptedService } from '../prompted-service.ts';
 
 export class Contacts extends PromptedService<Authorized> {
   readonly name = 'kTCCServiceAddressBook';
-  readonly pane = 'Contacts';
+  protected readonly paneKey = 'CONTACTS';
   protected readonly anchor = 'Privacy_Contacts';
 
   protected readonly requestScript = JxaRequest.decided(

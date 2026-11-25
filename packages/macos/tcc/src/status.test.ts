@@ -190,7 +190,9 @@ new Contacts().status();`;
         '--eval',
         program,
       ]),
-      ({ stderr }: { stderr: string }) => stderr.includes('ERR_ACCESS_DENIED'),
+      ({ stderr }: { stderr: string }) =>
+        stderr.includes('ERR_ACCESS_DENIED') &&
+        stderr.includes('Use --allow-ffi to manage permissions'),
     );
   });
 });

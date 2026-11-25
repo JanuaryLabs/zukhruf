@@ -8,7 +8,7 @@ type InputMonitoringStatus = (typeof values)[number];
 
 export class InputMonitoring extends PromptedService<InputMonitoringStatus> {
   readonly name = 'kTCCServiceListenEvent';
-  readonly pane = 'Input Monitoring';
+  protected readonly paneKey = 'LISTEN_EVENT';
   protected readonly anchor = 'Privacy_ListenEvent';
 
   protected readonly requestScript = JxaRequest.direct(

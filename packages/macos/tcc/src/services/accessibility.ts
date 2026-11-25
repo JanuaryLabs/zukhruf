@@ -8,7 +8,7 @@ type AccessibilityStatus = 'trusted' | 'notTrusted';
 
 export class Accessibility extends PromptedService<AccessibilityStatus> {
   readonly name = 'kTCCServiceAccessibility';
-  readonly pane = 'Device Control and Data Access';
+  protected readonly paneKey = 'ACCESSIBILITY';
   protected readonly anchor = 'Privacy_Accessibility';
 
   protected readonly requestScript = JxaRequest.direct(

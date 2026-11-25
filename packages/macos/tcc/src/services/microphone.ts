@@ -5,7 +5,7 @@ import { PromptedService } from '../prompted-service.ts';
 
 export class Microphone extends PromptedService<Authorized> {
   readonly name = 'kTCCServiceMicrophone';
-  readonly pane = 'Microphone';
+  protected readonly paneKey = 'MICROPHONE';
   protected readonly anchor = 'Privacy_Microphone';
 
   protected readonly requestScript = JxaRequest.decided(

@@ -9,7 +9,7 @@ type SpeechStatus = (typeof values)[number];
 
 export class SpeechRecognition extends PromptedService<SpeechStatus> {
   readonly name = 'kTCCServiceSpeechRecognition';
-  readonly pane = 'Speech Recognition';
+  protected readonly paneKey = 'SPEECH_RECOGNITION';
   protected readonly anchor = 'Privacy_SpeechRecognition';
 
   protected readonly requestScript = JxaRequest.decided(

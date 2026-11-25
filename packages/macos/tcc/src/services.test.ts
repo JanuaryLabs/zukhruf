@@ -53,12 +53,18 @@ async function titles(): Promise<Record<string, string>> {
   );
 }
 
-async function anchors(): Promise<Set<string>> {
+// The search terms of System Settings for each anchor, in lower case.
+async function anchors(): Promise<Map<string, string>> {
   const terms = await plist(
     `${extension}/en.lproj/PrivacySecurity.searchTerms`,
   );
   assert.ok(terms !== null && typeof terms === 'object');
-  return new Set(Object.keys(terms));
+  return new Map(
+    Object.entries(terms).map(([anchor, entry]) => [
+      anchor,
+      JSON.stringify(entry).toLowerCase(),
+    ]),
+  );
 }
 
 async function listed(): Promise<Map<string, string>> {
@@ -149,11 +155,21 @@ describe('each service names its pane as System Settings does', () => {
 
       // Act and assert
       assert.ok(stdout.split('\n').includes(service.name), service.name);
-      // Only the panes that TCCServiceList.plist defines by data give a tcc
-      // and an anchor; the panes of a Swift class (Camera, Photos) give none.
-      const anchor = pairs.get(service.name);
-      if (anchor !== undefined)
-        assert.equal(service.url.search.slice(1), anchor);
+      // The panes that TCCServiceList.plist defines by data pair a tcc with an
+      // anchor. The panes of a Swift class (Camera, Photos) are paired by none,
+      // so their anchor must be one whose search terms name the service: the
+      // first word of its pane, or its TCC name without kTCCService.
+      const anchor = service.url.search.slice(1);
+      const paired = pairs.get(service.name);
+      if (paired !== undefined) assert.equal(anchor, paired);
+      else {
+        const terms = (await anchors()).get(anchor);
+        assert.ok(terms !== undefined, anchor);
+        const [word] = service.pane.toLowerCase().split(' ');
+        assert.ok(word !== undefined);
+        const suffix = service.name.replace('kTCCService', '').toLowerCase();
+        assert.ok(terms.includes(word) || terms.includes(suffix), anchor);
+      }
     }),
   );
 });

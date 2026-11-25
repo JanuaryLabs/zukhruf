@@ -5,7 +5,7 @@ import { PromptedService } from '../prompted-service.ts';
 
 export class PhotosAdd extends PromptedService<Limited> {
   readonly name = 'kTCCServicePhotosAdd';
-  readonly pane = 'Photos';
+  protected readonly paneKey = 'PHOTOS';
   protected readonly anchor = 'Privacy_Photos';
 
   protected readonly requestScript = JxaRequest.decided(

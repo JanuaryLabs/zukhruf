@@ -5,7 +5,7 @@ import { PromptedService } from '../prompted-service.ts';
 
 export class Calendars extends PromptedService<FullAccess> {
   readonly name = 'kTCCServiceCalendar';
-  readonly pane = 'Calendars';
+  protected readonly paneKey = 'CALENDARS';
   protected readonly anchor = 'Privacy_Calendars';
 
   protected readonly requestScript = JxaRequest.decided(

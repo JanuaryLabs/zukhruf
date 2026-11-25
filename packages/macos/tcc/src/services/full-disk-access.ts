@@ -13,7 +13,7 @@ type Outcome = 'readable' | 'denied' | 'missing';
 // proves the grant (ADR 0003). The caller preflights the paths of its work.
 export class FullDiskAccess extends Service {
   readonly name = 'kTCCServiceSystemPolicyAllFiles';
-  readonly pane = 'Full Disk Access';
+  protected readonly paneKey = 'ALL_FILES';
   protected readonly anchor = 'Privacy_AllFiles';
 
   // A grant of Full Disk Access applies to the processes that start after it.

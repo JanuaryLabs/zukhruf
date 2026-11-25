@@ -8,7 +8,7 @@ type ScreenRecordingStatus = 'granted' | 'notGranted';
 
 export class ScreenRecording extends PromptedService<ScreenRecordingStatus> {
   readonly name = 'kTCCServiceScreenCapture';
-  readonly pane = 'Screen Recording';
+  protected readonly paneKey = 'SCREEN_CAPTURE';
   protected readonly anchor = 'Privacy_ScreenCapture';
 
   protected readonly requestScript = JxaRequest.direct(

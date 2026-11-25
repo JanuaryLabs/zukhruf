@@ -5,7 +5,7 @@ import { PromptedService } from '../prompted-service.ts';
 
 export class Camera extends PromptedService<Authorized> {
   readonly name = 'kTCCServiceCamera';
-  readonly pane = 'Camera';
+  protected readonly paneKey = 'CAMERA';
   protected readonly anchor = 'Privacy_Camera';
 
   protected readonly requestScript = JxaRequest.decided(

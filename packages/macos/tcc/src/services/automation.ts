@@ -22,7 +22,7 @@ const bundleIdentifier = 0x62756e64; // 'bund'
 // The grant to send Apple events to one target app.
 export class Automation extends PromptedService<AutomationStatus> {
   readonly name = 'kTCCServiceAppleEvents';
-  readonly pane = 'Automation';
+  protected readonly paneKey = 'AUTOMATION';
   protected readonly anchor = 'Privacy_Automation';
   // The bundle identifier of the target app.
   readonly target: string;

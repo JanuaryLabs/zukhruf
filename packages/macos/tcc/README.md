@@ -101,7 +101,7 @@ new Contacts().remedy(client);
 // 'Turn on cmux in System Settings › Privacy & Security › Contacts.'
 
 new Accessibility().remedy(client);
-// 'Turn on cmux in System Settings › Privacy & Security › Device Control and Data Access.'
+// on macOS 27: 'Turn on cmux in System Settings › Privacy & Security › Device Control and Data Access.'
 
 new FullDiskAccess().remedy(client);
 // 'Turn on cmux in System Settings › Privacy & Security › Full Disk Access, then quit and reopen cmux. macOS does not ask for this access.'
@@ -110,7 +110,7 @@ new FullDiskAccess().remedy(Client.executable(node));
 // 'Turn on /Users/me/.nvm/versions/node/v26.13.1/bin/node in System Settings › Privacy & Security › Full Disk Access, then start it again. macOS does not ask for this access.'
 ```
 
-The pane names are the ones of System Settings on macOS 27: Accessibility is "Device Control and Data Access" there (`SecurityPrivacyExtension.appex`, `Localizable.loctable`, key `ACCESSIBILITY`). A grant of Full Disk Access applies to the processes that start after it, so its remedy tells the user to start the client again. A host that has its own command for that, such as a restart of a launchd job, writes its command after the remedy.
+The pane titles are read from System Settings of the Mac at each call (`SecurityPrivacyExtension.appex`, `Localizable.loctable`, in English), because macOS renames panes: Accessibility on macOS 26 is "Device Control and Data Access" on macOS 27 ([ADR 0005](./docs/adr/0005-the-remedy-names-the-client-and-the-pane-and-opening-the-pane-is-the-request.md)). A grant of Full Disk Access applies to the processes that start after it, so its remedy tells the user to start the client again. A host that has its own command for that, such as a restart of a launchd job, writes its command after the remedy.
 
 ## Open the pane
 
@@ -154,12 +154,12 @@ A preflight gives a denied path and a missing path as data, because the caller d
 
 ## Who uses it
 
-| Consumer                                | How                                                                                                                                                                                                                                                                                                            | Record |
-| --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
-| elt `@eltjs/sdk-macos-app-database`     | Each `Store` names a service class; `StoreUnavailableError` writes `store.service.remedy(Client.responsibleFor(process.pid))`. Replaces `macOSAccess`, an instance with an `install({ program })` slot, its `Grant` type and its pane names (`src/macos-access.ts`, `src/store.ts:5-18`, `src/unavailable.ts`) | #5747  |
-| elt `@eltjs/sdk-apple-eventkit`         | `Calendars` and `Reminders` give the remedy of its errors (`src/errors.ts:8,19`), and their `request()` replaces the request through `osascript` of its Swift helper (`src/helper/Access.swift:44-68`)                                                                                                         | #5747  |
-| context-compiler `apps/cli`             | Nothing at its entry point: `responsibleProgram()` and its `macOSAccess.install()` go (`src/main.ts:39-59`). `sync watch start` writes `new FullDiskAccess().remedy(Client.executable(node))` (`src/commands/sync-watch-start.ts:18`)                                                                          | #5747  |
-| context-compiler `@workspace/connector` | Each connector names the services of its stores in place of `guidance()`, `access()` and `fullDiskAccess` (27 classes, `packages/connectors/connector/src/connector.ts`)                                                                                                                                       | #5747  |
+| Consumer                                | How                                                                                                                                                                                                                                                                                                            | Record                 |
+| --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
+| elt `@eltjs/sdk-macos-app-database`     | Each `Store` names a service class; `StoreUnavailableError` writes `store.service.remedy(Client.responsibleFor(process.pid))`. Replaces `macOSAccess`, an instance with an `install({ program })` slot, its `Grant` type and its pane names (`src/macos-access.ts`, `src/store.ts:5-18`, `src/unavailable.ts`) | elt #5754              |
+| elt `@eltjs/sdk-apple-eventkit`         | `Calendars` and `Reminders` give the remedy of its errors (`src/errors.ts:8,19`), and their `request()` replaces the request through `osascript` of its Swift helper (`src/helper/Access.swift:44-68`)                                                                                                         | elt #5754              |
+| context-compiler `apps/cli`             | Nothing at its entry point: `responsibleProgram()` and its `macOSAccess.install()` go (`src/main.ts:39-59`). `sync watch start` writes `new FullDiskAccess().remedy(Client.executable(node))` (`src/commands/sync-watch-start.ts:18`)                                                                          | context-compiler #5755 |
+| context-compiler `@workspace/connector` | Each connector names the services of its stores in place of `guidance()`, `access()` and `fullDiskAccess` (27 classes, `packages/connectors/connector/src/connector.ts`)                                                                                                                                       | context-compiler #5755 |
 
 ## The same concepts in other systems
 
@@ -195,7 +195,7 @@ Node has no API for TCC: `process.permission` is the permission model of Node, n
 ```ts
 export abstract class Service {
   readonly name: string; // the TCC service, e.g. 'kTCCServiceCamera'
-  readonly pane: string; // the pane as System Settings names it, e.g. 'Camera'
+  readonly pane: string; // the pane's title, read from System Settings of this Mac, e.g. 'Camera'
   readonly url: URL; // x-apple.systempreferences:com.apple.preference.security?Privacy_Camera
   remedy(client: Client): string;
   openSettings(): Promise<void>;
@@ -276,7 +276,8 @@ export class Client {
 | `request({ signal })`                   | Runs `/usr/bin/osascript -l JavaScript` with a script that sends the framework's request and turns its run loop in 50 ms slices until the status is decided, or that calls the C function of the request; then reads the status again. The signal ends `osascript`. |
 | `new FullDiskAccess().preflight(paths)` | Opens each path read-only with `node:fs` and closes it at once: EPERM and EACCES are denied, ENOENT and ENOTDIR are missing, any other code is thrown.                                                                                                              |
 | `Client.responsibleFor(pid)`            | Calls `responsibility_get_pid_responsible_for_pid(pid)` and `proc_pidpath()` in libSystem through `node:ffi`. A path inside a `.app` folder gives a bundle; any other path gives an executable.                                                                     |
-| `remedy(client)`                        | Writes the sentence of the service with `client.name` and `service.pane`.                                                                                                                                                                                           |
+| `service.pane`                          | Runs `/usr/bin/plutil -extract en.<key> raw` on the `Localizable.loctable` of System Settings' Privacy & Security extension.                                                                                                                                        |
+| \1                                      |
 | `openSettings()`                        | Runs `/usr/bin/open` with `service.url`.                                                                                                                                                                                                                            |
 
 ## Documentation

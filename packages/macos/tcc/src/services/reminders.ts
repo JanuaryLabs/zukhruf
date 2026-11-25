@@ -5,7 +5,7 @@ import { PromptedService } from '../prompted-service.ts';
 
 export class Reminders extends PromptedService<FullAccess> {
   readonly name = 'kTCCServiceReminders';
-  readonly pane = 'Reminders';
+  protected readonly paneKey = 'REMINDERS';
   protected readonly anchor = 'Privacy_Reminders';
 
   protected readonly requestScript = JxaRequest.decided(
