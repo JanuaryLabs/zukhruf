@@ -7,8 +7,7 @@ import {
   isType,
 } from '../authoring/ast.ts';
 import { isRecord } from '../unknown-values.ts';
-
-const DECLARATIONS = new Set(['test', 'it', 'describe', 'suite']);
+import { DECLARATIONS, rootName } from './declarations.ts';
 
 /** The name at the root of `test.each(rows)` or `describe.skip`, or `test` for `t.test`. */
 function declarationName(callee: unknown): string | undefined {
@@ -18,11 +17,7 @@ function declarationName(callee: unknown): string | undefined {
   ) {
     return identifierName(callee['property']);
   }
-  let root = callee;
-  while (isType(root, 'MemberExpression') || isType(root, 'CallExpression')) {
-    root = isType(root, 'MemberExpression') ? root['object'] : root['callee'];
-  }
-  return identifierName(root);
+  return rootName(callee);
 }
 
 function timeoutOption(options: AstNode): AstNode | undefined {

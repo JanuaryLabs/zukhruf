@@ -14,6 +14,7 @@ import noTimerRace from './no-timer-race.ts';
 import noVitestGlobals from './no-vitest-globals.ts';
 import noWallClockBound from './no-wall-clock-bound.ts';
 import oneTestRunner from './one-test-runner.ts';
+import preferEach from './prefer-each.ts';
 
 const testFileRules = {
   'no-test-lifecycle-hooks': noTestLifecycleHooks,
@@ -31,7 +32,11 @@ const testFileRules = {
   'one-test-runner': oneTestRunner,
 };
 
-const rules = { ...testFileRules, 'no-vitest-globals': noVitestGlobals };
+const rules = {
+  ...testFileRules,
+  'prefer-each': preferEach,
+  'no-vitest-globals': noVitestGlobals,
+};
 
 export const tests: Concept = {
   name: 'tests',
@@ -41,7 +46,9 @@ export const tests: Concept = {
     {
       name: 'zukhruf/tests',
       files: [...TESTS, ...TEST_SUPPORT],
-      rules: enable(testFileRules),
+      // prefer-each warns: repositories hold loops of tests that move to
+      // test.each one by one (Ezz, 2026-11-25).
+      rules: { ...enable(testFileRules), 'zukhruf/prefer-each': 'warn' },
     },
     {
       // A global setup runs before any test process, and process.env is its only channel to them.

@@ -6,8 +6,7 @@ import {
 } from '@typescript-eslint/utils';
 
 import { eslintRule } from '../authoring/rule-module.ts';
-
-const DECLARATIONS = new Set(['test', 'it', 'describe', 'suite']);
+import { DECLARATIONS, rootName } from './declarations.ts';
 
 function nameOf(node: TSESTree.Node | undefined): string | undefined {
   return node?.type === AST_NODE_TYPES.Identifier ? node.name : undefined;
@@ -16,23 +15,14 @@ function nameOf(node: TSESTree.Node | undefined): string | undefined {
 /** `test(…)`, `describe.skip(…)`, `test.each(rows)(…)` or `t.test(…)`. */
 function declares(node: TSESTree.Node | undefined): boolean {
   if (node?.type !== AST_NODE_TYPES.CallExpression) return false;
-  let callee: TSESTree.Node = node.callee;
+  const { callee } = node;
   if (
     callee.type === AST_NODE_TYPES.MemberExpression &&
     DECLARATIONS.has(nameOf(callee.property) ?? '')
   ) {
     return true;
   }
-  while (
-    callee.type === AST_NODE_TYPES.MemberExpression ||
-    callee.type === AST_NODE_TYPES.CallExpression
-  ) {
-    callee =
-      callee.type === AST_NODE_TYPES.MemberExpression
-        ? callee.object
-        : callee.callee;
-  }
-  return DECLARATIONS.has(nameOf(callee) ?? '');
+  return DECLARATIONS.has(rootName(callee) ?? '');
 }
 
 function namesTestContext(annotation: TSESTree.TypeNode | undefined): boolean {
