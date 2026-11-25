@@ -49,6 +49,11 @@
       "version": "0.8.116",
       "description": "tsc type-checks the config files and Git hooks that typed lint gave to its default project: each node-app and db package with no tsconfig.scripts.json gets the one node-app or prisma writes (sdk-it.config.ts or prisma.config.ts) and its reference in the project's tsconfig.json, .ts hooks with no .husky/project.json get the hooks project of init and the './.husky' reference of the root tsconfig.json, and an allowDefaultProject block a generator wrote is deleted once a tsconfig covers its files; a file that a block which stays names gets no tsconfig, because typed lint refuses a file both cover, and each block no generator wrote stays and is logged with its file and line (#5649, ADR 0022).",
       "implementation": "./dist/migrations/update-0-8-116/type-check-config-files.js"
+    },
+    "move-zukhruf-pins-in-project-manifests": {
+      "version": "0.8.117",
+      "description": "A @zukhruf package that nx migrate moves with @zukhruf/nx (packageGroup) moves in each project's package.json that pins it in dependencies or devDependencies too, to the version the root package.json now has for @zukhruf/nx and in the style of its pin (exact stays exact, ^ stays ^), because nx migrate writes the root package.json only; a peer range is left and logged when it excludes that version, and each move is logged (#5688).",
+      "implementation": "./dist/migrations/update-0-8-117/move-zukhruf-pins-in-project-manifests.js"
     }
   },
   "packageJsonUpdates": {
