@@ -9,11 +9,13 @@ import { open } from '@zukhruf/sqlite-open';
 import {
   ClosedWorld,
   Coverage,
-  type DeletionPolicy,
+  DeletionPolicy,
   Retention,
   type SnapshotChange,
   SnapshotDifferential,
   type SnapshotGroup,
+  type VanishedRecord,
+  type Verdict,
 } from './index.ts';
 
 const execFileAsync = promisify(execFile);
@@ -505,6 +507,66 @@ test('a grouped scan in parts keeps the groups it has not reached and, at its la
   assert.deepEqual(first.deleted, []);
   assert.deepEqual(last.deleted, ['c']);
   assert.deepEqual(Object.keys(last.state.groups), ['one', 'two']);
+});
+
+// A source whose groups are complete partitions, such as the pages of a web
+// crawl: a key that vanished from a group the scan listed again is deleted,
+// and the key of a group the scan did not list expires. It keeps what each
+// vanished key told it.
+class ListedGroups extends DeletionPolicy {
+  readonly vanishedRecords: VanishedRecord[] = [];
+  override vanished(record: VanishedRecord): Verdict {
+    this.vanishedRecords.push(record);
+    return record.group?.listed === true ? 'deleted' : 'expired';
+  }
+}
+
+test('a vanished key names the group that held it and whether the scan listed that group, also in a scan in parts, and a key of an ungrouped scan names no group', async () => {
+  const loaded = await changes(
+    items(new ClosedWorld()).diffGroups(
+      [
+        group('one', 'v1', [
+          { id: 'a', value: '1' },
+          { id: 'b', value: '1' },
+        ]),
+        group('two', 'v1', [{ id: 'c', value: '1' }]),
+        group('three', 'v1', [{ id: 'd', value: '1' }]),
+      ],
+      null,
+    ),
+  );
+  const policy = new ListedGroups();
+
+  const first = await changes(
+    items(policy).diffGroups(
+      [group('one', 'v2', [{ id: 'a', value: '1' }])],
+      loaded.state,
+      { continues: true },
+    ),
+  );
+  const last = await changes(
+    items(policy).diffGroups(
+      [group('two', 'v1', [{ id: 'c', value: '1' }])],
+      first.state,
+    ),
+  );
+
+  assert.deepEqual(last.deleted, ['b']);
+  assert.deepEqual(
+    policy.vanishedRecords.toSorted((left, right) =>
+      String(left.key.id).localeCompare(String(right.key.id)),
+    ),
+    [
+      { key: { id: 'b' }, group: { key: 'one', listed: true } },
+      { key: { id: 'd' }, group: { key: 'three', listed: false } },
+    ],
+  );
+  const ungrouped = new ListedGroups();
+  const scanned = await changes(
+    items(ungrouped).diff([{ id: 'a', value: '1' }], null),
+  );
+  await changes(items(ungrouped).diff([], scanned.state));
+  assert.deepEqual(ungrouped.vanishedRecords, [{ key: { id: 'a' } }]);
 });
 
 test('a record that vanishes from a group a continuing part reads again is deleted when the scan ends', async () => {

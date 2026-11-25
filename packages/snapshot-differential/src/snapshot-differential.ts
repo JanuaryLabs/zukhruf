@@ -165,9 +165,14 @@ export class SnapshotDifferential<Data extends Record<string, unknown>> {
     // Every saved entry by key, so a record that moves between groups or
     // comes back from unknown is compared with its previous fingerprint.
     const saved = new Map<string, SavedEntry>();
-    for (const { snapshot } of previous.groups.values())
-      for (const [key, entry] of Object.entries(snapshot))
+    // The group that held each saved key, for the policy's judgment, also of
+    // a key that vanished in an earlier part of an open scan.
+    const holders = new Map(previous.holders);
+    for (const [groupKey, { snapshot }] of previous.groups)
+      for (const [key, entry] of Object.entries(snapshot)) {
         saved.set(key, entry);
+        holders.set(key, groupKey);
+      }
     for (const [key, entry] of previous.unknown) saved.set(key, entry);
     const seen = new Set<string>();
     const current = new Map<string, SavedGroup>();
@@ -227,6 +232,7 @@ export class SnapshotDifferential<Data extends Record<string, unknown>> {
       });
     }
     const unknown = new Map<string, SavedEntry>();
+    const waiting = new Map<string, string>();
     if (continues) {
       // A key no group holds any more, such as one that vanished from a
       // group this part read again, waits for the last part's judgment.
@@ -234,9 +240,18 @@ export class SnapshotDifferential<Data extends Record<string, unknown>> {
         [...current.values()].flatMap(({ snapshot }) => Object.keys(snapshot)),
       );
       for (const [key, entry] of saved)
-        if (!seen.has(key) && !grouped.has(key)) unknown.set(key, entry);
+        if (!seen.has(key) && !grouped.has(key)) {
+          unknown.set(key, entry);
+          const holder = holders.get(key);
+          if (holder !== undefined) waiting.set(key, holder);
+        }
     } else {
-      yield* this.#judge(saved, seen, unknown);
+      yield* this.#judge(saved, seen, unknown, (key) => {
+        const holder = holders.get(key);
+        return holder === undefined
+          ? undefined
+          : { key: holder, listed: listedSoFar.has(holder) };
+      });
     }
     yield {
       type: 'state',
@@ -244,6 +259,7 @@ export class SnapshotDifferential<Data extends Record<string, unknown>> {
         groups: sorted(current),
         ...(unknown.size === 0 ? {} : { unknown: sorted(unknown) }),
         ...(continues ? { listed: [...listedSoFar].sort() } : {}),
+        ...(waiting.size === 0 ? {} : { holders: sorted(waiting) }),
       },
     };
   }
@@ -254,13 +270,16 @@ export class SnapshotDifferential<Data extends Record<string, unknown>> {
     saved: ReadonlyMap<string, SavedEntry>,
     seen: ReadonlySet<string>,
     kept: Map<string, SavedEntry>,
+    groupOf: (key: string) => VanishedRecord['group'] = () => undefined,
   ): Generator<SnapshotChange<Data, never>> {
     for (const [key, entry] of saved) {
       if (seen.has(key)) continue;
-      const record: VanishedRecord =
-        typeof entry === 'string'
-          ? { key: this.#keyObject(key) }
-          : { key: this.#keyObject(key), expiresBy: entry[1] };
+      const group = groupOf(key);
+      const record: VanishedRecord = {
+        key: this.#keyObject(key),
+        ...(typeof entry === 'string' ? {} : { expiresBy: entry[1] }),
+        ...(group === undefined ? {} : { group }),
+      };
       const verdict = this.policy.vanished(record);
       if (verdict === 'deleted') yield { type: 'delete', key: record.key };
       else if (verdict === 'unknown') kept.set(key, entry);

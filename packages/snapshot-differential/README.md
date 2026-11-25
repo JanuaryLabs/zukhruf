@@ -155,6 +155,16 @@ class OpenChannels extends DeletionPolicy {
 }
 ```
 
+In a grouped scan, a vanished key also names the group that held it in the last committed scan, and whether the scan listed that group, also when an earlier part of a scan in parts listed it ([ADR 0009](./docs/adr/0009-a-vanished-key-names-the-group-that-held-it.md)). A source whose groups are complete partitions, such as the pages of a web crawl, deletes a key that vanished from a group it listed again and lets the key of a group it did not list expire:
+
+```ts
+class ListedGroups extends DeletionPolicy {
+  override vanished({ group }: VanishedRecord): Verdict {
+    return group?.listed === true ? 'deleted' : 'expired';
+  }
+}
+```
+
 ## An unknown key stays until a scan can tell
 
 The policy judges an unknown key again at each scan:
@@ -304,6 +314,8 @@ type KeyValue = string | number | bigint | boolean | Uint8Array;
 type VanishedRecord = {
   readonly key: Readonly<Record<string, KeyValue>>;
   readonly expiresBy?: string; // only when the differential has expiresBy
+  // only in a grouped scan, for a key a group held: that group, and whether the scan listed it
+  readonly group?: { readonly key: string; readonly listed: boolean };
 };
 
 type Verdict = 'deleted' | 'unknown' | 'expired';

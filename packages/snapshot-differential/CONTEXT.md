@@ -52,6 +52,10 @@ _Avoid_: Binary, blob (a blob is the SQLite type), buffer (a buffer is one kind 
 A key that the snapshot has and the scan does not list.
 _Avoid_: Missing key, removed key, gone
 
+**Group**:
+The records that one input of a grouped scan produced, such as one page, under the group's key. A scan lists a group when it reads it, keeps it unread, or finds its fingerprint unchanged. A vanished key names the group that held it in the last committed scan.
+_Avoid_: Partition, batch, bucket
+
 **Deletion policy**:
 The Strategy that judges each vanished key. It gives one verdict for each key.
 _Avoid_: Filter, rule, covers

@@ -23,11 +23,14 @@ export type SavedGroup = {
 // Each group's input fingerprint and the snapshot of the records it produced,
 // and the keys that belong to no group any more: those judged unknown and,
 // while a scan in parts is open, those waiting for its last part's
-// judgment. listed holds the groups the open scan's earlier parts listed.
+// judgment. listed holds the groups the open scan's earlier parts listed, and
+// holders the group that held each key waiting for that judgment, which the
+// deletion policy is told.
 export type GroupedSnapshotState = {
   readonly groups: Readonly<Record<string, SavedGroup>>;
   readonly unknown?: Readonly<Record<string, SavedEntry>>;
   readonly listed?: readonly string[];
+  readonly holders?: Readonly<Record<string, string>>;
 };
 
 // The previous snapshot and the keys the open scan's earlier parts listed,
@@ -44,6 +47,17 @@ export function readSnapshot(
   };
 }
 
+function holdersOf(name: string, holders: unknown): Map<string, string> {
+  if (holders === undefined) return new Map();
+  if (!isPlainObject(holders)) throw invalid(name);
+  const map = new Map<string, string>();
+  for (const [key, group] of Object.entries(holders)) {
+    if (typeof group !== 'string') throw invalid(name);
+    map.set(key, group);
+  }
+  return map;
+}
+
 // The previous groups, unknown keys and the groups the open scan's earlier
 // parts listed, as diffGroups wrote them. Each group keeps the snapshot
 // object the state holds, so a state as large as a mailbox is not copied.
@@ -54,9 +68,15 @@ export function readGroups(
   groups: Map<string, SavedGroup>;
   unknown: Map<string, SavedEntry>;
   listed: Set<string>;
+  holders: Map<string, string>;
 } {
   if (state === null)
-    return { groups: new Map(), unknown: new Map(), listed: new Set() };
+    return {
+      groups: new Map(),
+      unknown: new Map(),
+      listed: new Set(),
+      holders: new Map(),
+    };
   if (!isPlainObject(state) || !isPlainObject(state.groups))
     throw invalid(name);
   const groups = new Map<string, SavedGroup>();
@@ -77,6 +97,7 @@ export function readGroups(
     unknown:
       state.unknown === undefined ? new Map() : entries(name, state.unknown),
     listed: listedKeys(name, state.listed),
+    holders: holdersOf(name, state.holders),
   };
 }
 

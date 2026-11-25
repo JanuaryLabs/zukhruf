@@ -5,6 +5,12 @@ export type VanishedRecord = {
   readonly key: Readonly<Record<string, KeyValue>>;
   // When the upstream drops the record, as last seen, when the snapshot keeps it.
   readonly expiresBy?: string;
+  // In a grouped scan, the group that held the key in the last committed
+  // scan, and whether this scan listed that group: a group listed again
+  // without the key dropped it, and a group not listed was not read. Absent
+  // in an ungrouped scan, and for a key that a policy judged unknown, which
+  // no group holds.
+  readonly group?: { readonly key: string; readonly listed: boolean };
 };
 
 // deleted: the upstream deleted the record (the closed-world assumption).
