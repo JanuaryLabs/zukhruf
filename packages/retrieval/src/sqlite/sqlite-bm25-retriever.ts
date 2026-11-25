@@ -4,19 +4,35 @@ import type { RetrievalResult } from '../retrieval-result.ts';
 import type { RetrieveOptions } from '../retrieve-options.ts';
 import type { Retriever } from '../retriever.ts';
 import { identifier } from '../sql/identifier.ts';
-import { AndMatch, OrMatch, type SqliteMatch } from './sqlite-match.ts';
+import {
+  AndMatch,
+  CommonTermsMatch,
+  OrMatch,
+  type SqliteMatch,
+} from './sqlite-match.ts';
 import { type SqlitePassageStore, contractOf } from './sqlite-passage-store.ts';
 
 /**
- * How `SqliteBM25Retriever` matches the words of a query, under
- * Elasticsearch's name for a `match` query's `operator` (ADR 0018):
- * `{ operator: 'AND' }` finds the passages that hold every word, the implicit
- * operator of FTS5; `{ operator: 'OR' }` finds those that hold any word, and
- * bm25 ranks the rarer words first. Each member holds only the fields that
- * mean something for it, so the SQLite forms that follow have their place.
+ * How `SqliteBM25Retriever` matches the terms of a query, under
+ * Elasticsearch's names for a `match` query's `operator` and
+ * `cutoff_frequency` (ADR 0018): `{ operator: 'AND' }` finds the passages
+ * that hold every term, the implicit operator of FTS5; `{ operator: 'OR' }`
+ * finds those that hold any term, and bm25 ranks the rarer terms first. Each
+ * member holds only the fields that mean something for it.
  */
 export type SqliteMatching =
-  { readonly operator: 'OR' } | { readonly operator: 'AND' };
+  | {
+      readonly operator: 'OR';
+      /**
+       * A term in more passages than this only adds to the score of the
+       * passages that rarer terms find, and a query of only such terms runs
+       * as their AND (Lucene `CommonTermsQuery`). A count of passages (1 or
+       * more) or a share of the passages (under 1). Absent: every term
+       * matches.
+       */
+      readonly cutoffFrequency?: number;
+    }
+  | { readonly operator: 'AND' };
 
 /**
  * Ranks the passages by FTS5 `bm25()` over the keyword index that elt writes:
@@ -38,7 +54,10 @@ export class SqliteBM25Retriever<
     readonly store: SqlitePassageStore<M>;
     /** The FTS5 table over the passages, in the database of the store. */
     readonly index: string;
-    /** How the words of the query match: `{ operator: 'AND' }` when absent. */
+    /**
+     * How the terms of the query match: `{ operator: 'OR', cutoffFrequency:
+     * 20_000 }` when absent, so below 20,000 passages it is plain OR.
+     */
     readonly matching?: SqliteMatching;
   }) {
     const { database, passages, metadata } = contractOf(options.store);
@@ -48,13 +67,20 @@ export class SqliteBM25Retriever<
       metadata,
       index: identifier(options.index),
     };
-    const { operator } = options.matching ?? { operator: 'AND' };
+    const matching: SqliteMatching = options.matching ?? {
+      operator: 'OR',
+      cutoffFrequency: 20_000,
+    };
+    const { operator } = matching;
     switch (operator) {
       case 'AND':
         this.#match = new AndMatch(index);
         break;
       case 'OR':
-        this.#match = new OrMatch(index);
+        this.#match =
+          matching.operator === 'OR' && matching.cutoffFrequency !== undefined
+            ? new CommonTermsMatch(index, cutoffOf(matching.cutoffFrequency))
+            : new OrMatch(index);
         break;
       default:
         throw new RangeError(
@@ -70,4 +96,14 @@ export class SqliteBM25Retriever<
     options.signal?.throwIfAborted();
     return this.#match.retrieve(keywordQueryOf(query), options);
   }
+}
+
+/** A cutoff the type cannot refuse: NaN, an infinity, zero or less. */
+function cutoffOf(cutoffFrequency: number): number {
+  if (Number.isFinite(cutoffFrequency) && cutoffFrequency > 0) {
+    return cutoffFrequency;
+  }
+  throw new RangeError(
+    `The cutoffFrequency of matching is a positive finite number, not ${String(cutoffFrequency)}`,
+  );
 }

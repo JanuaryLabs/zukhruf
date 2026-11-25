@@ -587,7 +587,15 @@ test('each retriever gets the query bundle unchanged and reads its own text: the
   const federation = new FusionRetriever({
     retrievers: {
       source,
-      keywords: keywords(database),
+      keywords: new SqliteBM25Retriever({
+        store: new SqlitePassageStore({
+          database,
+          passages: 'docs_passages',
+          metadata: (columns) => columns,
+        }),
+        index: 'docs_passages_fts',
+        matching: { operator: 'AND' },
+      }),
       meaning: new SqliteEmbeddingRetriever({
         store: new SqlitePassageStore({
           database,

@@ -480,6 +480,7 @@ const documents = new SqlServerPassageStore({
   metadata: (columns) => columns,
 });
 const anyWord: SqliteMatching = { operator: 'OR' };
+const commonTerms: SqliteMatching = { operator: 'OR', cutoffFrequency: 20_000 };
 const allLexemes: PostgresMatching = { strategy: 'all' };
 const containsAny: SqlServerMatching = {
   predicate: 'CONTAINS',
@@ -489,6 +490,11 @@ export const sqliteMatching = new SqliteBM25Retriever({
   store: labels,
   index: 'labels_fts',
   matching: anyWord,
+});
+export const sqliteCommonTerms = new SqliteBM25Retriever({
+  store: labels,
+  index: 'labels_fts',
+  matching: commonTerms,
 });
 export const postgresMatching = new PgvectorKeywordRetriever({
   store: articles,

@@ -4,7 +4,11 @@ import { test } from 'node:test';
 
 import { open } from '@zukhruf/sqlite-open';
 
-import { SqliteBM25Retriever, SqlitePassageStore } from '../sqlite.ts';
+import {
+  SqliteBM25Retriever,
+  type SqliteMatching,
+  SqlitePassageStore,
+} from '../sqlite.ts';
 import {
   type KeywordPassage,
   keywordContractSchema,
@@ -113,7 +117,7 @@ test('passages that are a view with an integer rowid column are searched through
   assert.deepEqual(ids(compile), ['a']);
 });
 
-test('the words of the query join with AND by default and under matching { operator: AND }, and with OR under matching { operator: OR }', async () => {
+test('the words of the query join with OR by default and under matching { operator: OR }, where no word is in more than 20,000 passages, and with AND under matching { operator: AND }', async () => {
   // Arrange
   using database = contract([
     { id: 'both', text: 'rotate the signing key' },
@@ -131,10 +135,10 @@ test('the words of the query join with AND by default and under matching { opera
   };
 
   // Act
-  const and = (
+  const byDefault = (
     await new SqliteBM25Retriever(options).retrieve('rotate signing')
   ).passages;
-  const explicitAnd = (
+  const and = (
     await new SqliteBM25Retriever({
       ...options,
       matching: { operator: 'AND' },
@@ -149,9 +153,9 @@ test('the words of the query join with AND by default and under matching { opera
 
   // Assert
   assert.deepEqual(ids(and), ['both']);
-  assert.deepEqual(ids(explicitAnd), ['both']);
   assert.deepEqual(ids(or).toSorted(), ['both', 'rotate', 'signing']);
   assert.equal(ids(or)[0], 'both');
+  assert.deepEqual(byDefault, or);
 });
 
 test('keywords are matched in place of the words of query, and the words of query when the bundle has no keywords, as when the query is a string', async () => {
@@ -204,7 +208,10 @@ test('each keyword is one phrase, so its words match side by side and in order, 
     }),
     index: 'docs_passages_fts',
   };
-  const and = new SqliteBM25Retriever(options);
+  const and = new SqliteBM25Retriever({
+    ...options,
+    matching: { operator: 'AND' },
+  });
   const or = new SqliteBM25Retriever({
     ...options,
     matching: { operator: 'OR' },
@@ -283,6 +290,7 @@ test('each word of the query is a phrase, so FTS5 syntax in it matches as text a
     { id: 'near', text: 'stay near key points' },
     { id: 'or', text: 'this or that' },
   ]);
+  // Under AND, a word that runs as an operator would change what matches.
   const retriever = new SqliteBM25Retriever({
     store: new SqlitePassageStore({
       database,
@@ -290,6 +298,7 @@ test('each word of the query is a phrase, so FTS5 syntax in it matches as text a
       metadata: (columns) => columns,
     }),
     index: 'docs_passages_fts',
+    matching: { operator: 'AND' },
   });
 
   // Act
@@ -525,4 +534,202 @@ test('a matching operator other than AND or OR is refused with a RangeError when
     make,
     new RangeError("The operator of matching is 'AND' or 'OR', not XOR"),
   );
+});
+
+// A keyword retriever over the contract's index, with the matching given.
+const keywordsOf = (database: DatabaseSync, matching?: SqliteMatching) =>
+  new SqliteBM25Retriever({
+    store: new SqlitePassageStore({
+      database,
+      passages: 'docs_passages',
+      metadata: (columns) => columns,
+    }),
+    index: 'docs_passages_fts',
+    ...(matching === undefined ? {} : { matching }),
+  });
+
+test('a question with a word that no passage holds still finds the passages of its other words, by default and when its other words are all common', async () => {
+  // Arrange
+  using database = contract([
+    { id: 'r1', text: 'rotate the key' },
+    { id: 'r2', text: 'rotate logs' },
+    { id: 'k', text: 'signing key' },
+  ]);
+
+  // Act
+  const byDefault = (await keywordsOf(database).retrieve('rotate zzyzx'))
+    .passages;
+  // 'rotate' is in 2 passages, so with a cutoff of 1 it is common.
+  const common = (
+    await keywordsOf(database, {
+      operator: 'OR',
+      cutoffFrequency: 1,
+    }).retrieve('rotate zzyzx')
+  ).passages;
+
+  // Assert
+  assert.deepEqual(ids(byDefault).toSorted(), ['r1', 'r2']);
+  assert.deepEqual(ids(common).toSorted(), ['r1', 'r2']);
+});
+
+test('with a count cutoffFrequency, a passage that holds only words in more passages than the cutoff is not returned while a passage with a rarer word is, and a common word raises the score of the passage that holds it', async () => {
+  // Arrange: 'dose' is in 4 passages, 'apixaban' in 2; r1 and r2 have the
+  // same length, so only 'dose' can tell their scores apart.
+  using database = contract([
+    { id: 'r1', text: 'apixaban dose' },
+    { id: 'r2', text: 'apixaban twice' },
+    { id: 'c1', text: 'dose adjusted' },
+    { id: 'c2', text: 'dose missed' },
+    { id: 'c3', text: 'dose timing' },
+  ]);
+
+  // Act
+  const results = (
+    await keywordsOf(database, {
+      operator: 'OR',
+      cutoffFrequency: 2,
+    }).retrieve('apixaban dose')
+  ).passages;
+  const or = (
+    await keywordsOf(database, { operator: 'OR' }).retrieve('apixaban dose')
+  ).passages;
+
+  // Assert
+  assert.deepEqual(ids(results), ['r1', 'r2']);
+  assert.ok((results[0]?.score ?? 0) > (results[1]?.score ?? 0));
+  assert.ok(results.every(({ score }) => Number.isFinite(score)));
+  assert.deepEqual(ids(or).toSorted(), ['c1', 'c2', 'c3', 'r1', 'r2']);
+});
+
+test('a word in as many passages as cutoffFrequency is rare and a word in one more passage is common', async () => {
+  // Arrange: 'twice' is in 2 passages, 'thrice' in 3.
+  using database = contract([
+    { id: 't1', text: 'twice thrice' },
+    { id: 't2', text: 'twice' },
+    { id: 'h1', text: 'thrice' },
+    { id: 'h2', text: 'thrice' },
+  ]);
+
+  // Act
+  const results = (
+    await keywordsOf(database, {
+      operator: 'OR',
+      cutoffFrequency: 2,
+    }).retrieve('twice thrice')
+  ).passages;
+
+  // Assert: 'twice' finds, 'thrice' only scores.
+  assert.deepEqual(ids(results), ['t1', 't2']);
+});
+
+test('a query of only words in more passages than cutoffFrequency runs as their AND', async () => {
+  // Arrange: 'rotate' and 'signing' are in 2 passages each.
+  using database = contract([
+    { id: 'both', text: 'rotate the signing key' },
+    { id: 'rotate', text: 'rotate logs daily' },
+    { id: 'signing', text: 'signing certificates' },
+  ]);
+
+  // Act
+  const results = (
+    await keywordsOf(database, {
+      operator: 'OR',
+      cutoffFrequency: 1,
+    }).retrieve('rotate signing')
+  ).passages;
+
+  // Assert
+  assert.deepEqual(ids(results), ['both']);
+});
+
+test('a keyword is counted as one phrase, so a phrase in no more passages than cutoffFrequency is rare though each of its words is common', async () => {
+  // Arrange: 'heart' and 'failure' are in 4 passages each, the phrase
+  // 'heart failure' in 2, and 'dose' in 3.
+  using database = contract([
+    { id: 'p1', text: 'heart failure dose' },
+    { id: 'p2', text: 'heart failure treated' },
+    { id: 'p3', text: 'failure of the heart dose' },
+    { id: 'p4', text: 'heart and failure dose' },
+  ]);
+
+  // Act
+  const results = (
+    await keywordsOf(database, {
+      operator: 'OR',
+      cutoffFrequency: 2,
+    }).retrieve({ query: 'q', keywords: ['heart failure', 'dose'] })
+  ).passages;
+
+  // Assert
+  assert.deepEqual(ids(results), ['p1', 'p2']);
+});
+
+test('a cutoffFrequency under 1 is a share of the passages that the index holds', async () => {
+  // Arrange: 4 passages; 'twice' is in 2, 'thrice' in 3.
+  using database = contract([
+    { id: 't1', text: 'twice thrice' },
+    { id: 't2', text: 'twice' },
+    { id: 'h1', text: 'thrice' },
+    { id: 'h2', text: 'thrice' },
+  ]);
+  const search = async (cutoffFrequency: number) =>
+    ids(
+      (
+        await keywordsOf(database, {
+          operator: 'OR',
+          cutoffFrequency,
+        }).retrieve('twice thrice')
+      ).passages,
+    );
+
+  // Act
+  const results = { half: await search(0.5), most: await search(0.75) };
+
+  // Assert: half is 2 passages, so 'thrice' is common; 3 of 4 holds both.
+  assert.deepEqual(results, {
+    half: ['t1', 't2'],
+    most: ['t1', 'h1', 'h2', 't2'],
+  });
+});
+
+test('by default a word in 20,000 passages is rare and a word in 20,001 is common', async () => {
+  // Arrange: 'common' is in 20,001 passages, 'edge' in 20,000, 'rare' in 2.
+  using database = contract([
+    { id: 'rare', text: 'rare words' },
+    { id: 'rare common', text: 'rare common' },
+    ...Array.from({ length: 20_000 }, (_, i) => ({
+      id: `c${String(i)}`,
+      text: 'common edge',
+    })),
+  ]);
+  const retriever = keywordsOf(database);
+
+  // Act
+  const common = (await retriever.retrieve('rare common')).passages;
+  const edge = (await retriever.retrieve('rare edge')).passages;
+
+  // Assert: 'common' only adds to the score of the passages 'rare' finds;
+  // 'edge' finds passages of its own, so the OR fills the 10 of topK.
+  assert.deepEqual(ids(common), ['rare common', 'rare']);
+  assert.equal(edge.length, 10);
+});
+
+test('a cutoffFrequency that is not a positive finite number is refused with a RangeError when the retriever is made', () => {
+  // Arrange
+  using database = contract([]);
+  const values = [0, -1, Number.NaN, Number.POSITIVE_INFINITY];
+
+  // Act
+  const make = (cutoffFrequency: number) => () =>
+    keywordsOf(database, { operator: 'OR', cutoffFrequency });
+
+  // Assert
+  for (const value of values) {
+    assert.throws(
+      make(value),
+      new RangeError(
+        `The cutoffFrequency of matching is a positive finite number, not ${String(value)}`,
+      ),
+    );
+  }
 });

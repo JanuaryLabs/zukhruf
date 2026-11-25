@@ -144,6 +144,8 @@ Each program below continues this program: it uses its `database`, `store`, `ret
 
 An embedding retriever embeds the query with its AI SDK model and sends one SQL query to the engine. The engine ranks the passages by cosine similarity: `vec_distance_cosine` on SQLite, pgvector's `<=>` on Postgres, `VECTOR_DISTANCE` on SQL Server ([ADR 0003](./docs/adr/0003-an-embedding-retriever-runs-the-vector-search-in-the-sql-of-its-engine-one-query-or-a-batch.md)). The score is `1 - cosine distance`. A tie goes to the smaller passage id.
 
+An instruction-tuned model, such as Qwen3-Embedding, expects a task instruction before each query and none before a document. Wrap the model for the queries with the AI SDK's `wrapEmbeddingModel`, which keeps its provider and model id, so the stored vectors still match ([recipe](./docs/recipes/search-with-an-instruction-tuned-model.md)).
+
 The retriever reads the model identity of the stored vectors first. When its query model has another provider or model id, the call fails with `ModelMismatchError` and sends no model call and no search. When the query vector has other dimensions than the stored vectors, the call fails with `DimensionMismatchError` of `@zukhruf/vectors` after the model call and sends no search ([ADR 0010](./docs/adr/0010-an-embedding-retriever-refuses-a-query-model-whose-identity-differs-from-the-stored-vectors.md)). The stand-in model below has no `doEmbed`, so a model call would fail with another error.
 
 ```ts
@@ -216,7 +218,7 @@ Output:
 
 ## Search by keywords
 
-A keyword retriever queries the keyword index that elt writes: FTS5 on SQLite, `tsvector` on Postgres, full-text on SQL Server. It quotes each word of the query, so a word of the user is never an operator of the engine. A query bundle can give it whole keywords in `keywords` (see "Give each search its own text"): each keyword is one phrase in the syntax of the engine, an FTS5 phrase, a `phraseto_tsquery` or a CONTAINS phrase, so `'heart failure'` matches those words side by side and in order, and not "failure of the heart". Its score is higher for a better match on every engine; `SqliteBM25Retriever` negates `bm25()` ([ADR 0004](./docs/adr/0004-a-keyword-retriever-queries-the-keyword-index-that-elt-writes.md)). How the words match is each engine's own `matching` option, a union typed for that engine only ([ADR 0018](./docs/adr/0018-each-keyword-retriever-matches-in-the-strongest-form-of-its-engine.md)): `{ operator: 'AND' | 'OR' }` on SQLite, `{ strategy: 'all' }` on Postgres, which has no OR, and `{ predicate: 'CONTAINS', operator: 'AND' | 'OR' }` on SQL Server. Each is AND when absent.
+A keyword retriever queries the keyword index that elt writes: FTS5 on SQLite, `tsvector` on Postgres, full-text on SQL Server. It quotes each word of the query, so a word of the user is never an operator of the engine. A query bundle can give it whole keywords in `keywords` (see "Give each search its own text"): each keyword is one phrase in the syntax of the engine, an FTS5 phrase, a `phraseto_tsquery` or a CONTAINS phrase, so `'heart failure'` matches those words side by side and in order, and not "failure of the heart". Its score is higher for a better match on every engine; `SqliteBM25Retriever` negates `bm25()` ([ADR 0004](./docs/adr/0004-a-keyword-retriever-queries-the-keyword-index-that-elt-writes.md)). How the words match is each engine's own `matching` option, a union typed for that engine only ([ADR 0018](./docs/adr/0018-each-keyword-retriever-matches-in-the-strongest-form-of-its-engine.md)): `{ operator: 'OR', cutoffFrequency? } | { operator: 'AND' }` on SQLite, `{ strategy: 'all' }` on Postgres, which has no OR, and `{ predicate: 'CONTAINS', operator: 'AND' | 'OR' }` on SQL Server. Postgres and SQL Server are AND when absent. SQLite is `{ operator: 'OR', cutoffFrequency: 20_000 }` when absent (Elasticsearch `cutoff_frequency`, Lucene `CommonTermsQuery`): a word in more than 20,000 passages only adds to the score of the passages that rarer words find, a query of only such words runs as their AND, and a word that no passage holds is left out. A `cutoffFrequency` under 1 is a share of the passages. Below 20,000 passages the default is plain OR. Through the retriever, with porter, it gives nDCG@10 0.686 on SciFact, 0.317 on NFCorpus and 0.545 on TREC-COVID (OR 0.585), and on TREC-COVID repeated four times (685,328 passages) a p95 of 200 to 247 ms against OR's 1,190 ms. OR alone has no bound, and `node:sqlite` cannot stop a running statement.
 
 On SQLite the index is an FTS5 table whose external content is a keywords table, kept in step by triggers. The passages view gives the `rowid` of that table, and the retriever joins the passages on it ([ADR 0004](./docs/adr/0004-a-keyword-retriever-queries-the-keyword-index-that-elt-writes.md), the amendment of 2026-11-24).
 
@@ -234,13 +236,13 @@ database.exec(`
 `);
 
 const keywords = new SqliteBM25Retriever({ store, index: 'docs_passages_fts' });
-const anyWord = new SqliteBM25Retriever({
+const everyWord = new SqliteBM25Retriever({
   store,
   index: 'docs_passages_fts',
-  matching: { operator: 'OR' }, // the default is { operator: 'AND' }, the implicit operator of FTS5
+  matching: { operator: 'AND' }, // the default is { operator: 'OR', cutoffFrequency: 20_000 }
 });
 
-for (const search of [keywords, anyWord]) {
+for (const search of [keywords, everyWord]) {
   const { passages } = await search.retrieve('backup mailbox');
   console.log(
     passages.map(({ passage, score }) => `${passage.id} ${score?.toFixed(3)}`),
@@ -251,8 +253,8 @@ for (const search of [keywords, anyWord]) {
 Output:
 
 ```
-[ 'mail-guide#0 1.918' ]
 [ 'mail-guide#0 1.918', 'vault-guide#2 0.543' ]
+[ 'mail-guide#0 1.918' ]
 ```
 
 On Postgres the query has to use the text search configuration of the index. `PgvectorKeywordRetriever` takes it in the index value, `index: { column, configuration }`, `'english'` when absent, as Haystack's `language`, LlamaIndex's `text_search_config` and LangChain's `tsv_lang` do. The configuration is a parameter of the statement, never SQL.
@@ -1056,14 +1058,15 @@ class SqliteEmbeddingRetriever<
   });
 }
 type SqliteMatching =
-  { readonly operator: 'OR' } | { readonly operator: 'AND' };
+  | { readonly operator: 'OR'; readonly cutoffFrequency?: number } // a count, or a share under 1
+  | { readonly operator: 'AND' };
 class SqliteBM25Retriever<
   in out M extends Metadata = Metadata,
 > implements Retriever<QueryType, StoredPassage<M>> {
   constructor(options: {
     readonly store: SqlitePassageStore<M>;
     readonly index: string; // the FTS5 table
-    readonly matching?: SqliteMatching; // { operator: 'AND' }
+    readonly matching?: SqliteMatching; // { operator: 'OR', cutoffFrequency: 20_000 }
   });
 }
 
@@ -1151,6 +1154,10 @@ class SqlServerKeywordRetriever<
 ```
 
 ## Documentation
+
+**Recipes**
+
+- [Search with an instruction-tuned embedding model](./docs/recipes/search-with-an-instruction-tuned-model.md)
 
 **Decisions**
 
