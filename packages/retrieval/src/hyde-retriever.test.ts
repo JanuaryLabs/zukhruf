@@ -57,7 +57,11 @@ const meaning = (
   signals: (AbortSignal | undefined)[] = [],
 ) =>
   new SqliteEmbeddingRetriever({
-    store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
+    store: new SqlitePassageStore({
+      database,
+      passages: 'docs_passages',
+      metadata: (columns) => columns,
+    }),
     vectors: 'docs_passage_vectors',
     model: embeddingModel({ [answer]: [1, 0] }, { signals }),
   });

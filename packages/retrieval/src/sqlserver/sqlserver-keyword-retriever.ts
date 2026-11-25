@@ -1,4 +1,4 @@
-import type { StoredPassage } from '../passage.ts';
+import type { Metadata, StoredPassage } from '../passage.ts';
 import { type QueryType, keywordsOf } from '../query-bundle.ts';
 import type { RetrievalResult } from '../retrieval-result.ts';
 import type { RetrieveOptions } from '../retrieve-options.ts';
@@ -21,19 +21,22 @@ import type { SqlServerSession } from './sqlserver-session.ts';
  * `CONTAINSTABLE`, and the score is its `RANK`, which is higher for a better
  * match (ADR 0005). It matches the words of `keywords`, or of `query` when
  * the bundle has none (ADR 0013).
+ * It gives the passages with the metadata that its store reads (ADR 0015).
  */
-export class SqlServerKeywordRetriever implements Retriever<
-  QueryType,
-  StoredPassage
-> {
+export class SqlServerKeywordRetriever<
+  // `in out M`: TypeScript cannot measure M through the filter's mapped keys,
+  // and a class method checks its parameters both ways (ADR 0015).
+  in out M extends Metadata = Metadata,
+> implements Retriever<QueryType, StoredPassage<M>> {
   readonly #session: SqlServerSession;
   readonly #passages: string;
+  readonly #metadata: (columns: Metadata) => M;
   readonly #index: string;
   readonly #operator: 'AND' | 'OR';
 
   constructor(options: {
     /** The store of the passages, whose session and schema the search uses. */
-    readonly store: SqlServerPassageStore;
+    readonly store: SqlServerPassageStore<M>;
     /** The keyword index as elt writes it. */
     readonly index: {
       /** The base table, in the schema of the store, that holds the full-text index on `[text]` with the passage id as its key. */
@@ -45,14 +48,15 @@ export class SqlServerKeywordRetriever implements Retriever<
     const contract = contractOf(options.store);
     this.#session = contract.session;
     this.#passages = contract.passages;
+    this.#metadata = contract.metadata;
     this.#index = contract.relation(options.index.table);
     this.#operator = options.operator ?? 'AND';
   }
 
   async retrieve(
     query: QueryType,
-    options: RetrieveOptions<StoredPassage> = {},
-  ): Promise<RetrievalResult<StoredPassage>> {
+    options: RetrieveOptions<StoredPassage<M>> = {},
+  ): Promise<RetrievalResult<StoredPassage<M>>> {
     options.abortSignal?.throwIfAborted();
     const words = phrases(keywordsOf(query));
     if (words.length === 0) return { passages: [], failures: new Map() };
@@ -74,7 +78,7 @@ export class SqlServerKeywordRetriever implements Retriever<
     );
     return {
       passages: rows.map((cells) => ({
-        passage: passage(cells['passage']),
+        passage: passage(cells['passage'], this.#metadata),
         score: Number(cells['score']),
       })),
       failures: new Map(),

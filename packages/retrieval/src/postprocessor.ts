@@ -7,8 +7,8 @@ import type { ScoredPassage } from './scored-passage.ts';
  * the port, not of `postprocess`: a host's postprocessor is written for its
  * own passage type and gives back passages of that type with no assertion.
  * The package's postprocessors take any passage type they can serve, as
- * their `postprocess` is generic: `ContextWindow` and `Collapse` any
- * `StoredPassage`, the others any `Passage` (ADR 0015).
+ * their `postprocess` is generic: `ContextWindow<M>` any `StoredPassage<M>`
+ * of its store, `Collapse<P>` any `P`, the others any `Passage` (ADR 0015).
  */
 export interface Postprocessor<in out P extends Passage = Passage> {
   readonly postprocess: (

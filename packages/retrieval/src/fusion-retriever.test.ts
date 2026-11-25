@@ -71,7 +71,11 @@ const model = (signals: (AbortSignal | undefined)[]) =>
 
 const keywords = (database: DatabaseSync) =>
   new SqliteBM25Retriever({
-    store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
+    store: new SqlitePassageStore({
+      database,
+      passages: 'docs_passages',
+      metadata: (columns) => columns,
+    }),
     index: 'docs_passages_fts',
   });
 
@@ -81,7 +85,11 @@ const retrievers = (
 ) => [
   keywords(database),
   new SqliteEmbeddingRetriever({
-    store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
+    store: new SqlitePassageStore({
+      database,
+      passages: 'docs_passages',
+      metadata: (columns) => columns,
+    }),
     vectors: 'docs_passage_vectors',
     model: model(signals),
   }),
@@ -286,7 +294,11 @@ test('each retriever gets the query bundle unchanged and reads its own text: the
       source,
       keywords(database),
       new SqliteEmbeddingRetriever({
-        store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
+        store: new SqlitePassageStore({
+          database,
+          passages: 'docs_passages',
+          metadata: (columns) => columns,
+        }),
         vectors: 'docs_passage_vectors',
         model: embeddings,
       }),

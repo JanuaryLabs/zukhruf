@@ -61,7 +61,11 @@ const search = (
   signals: (AbortSignal | undefined)[] = [],
 ) =>
   new SqliteEmbeddingRetriever({
-    store: new SqlitePassageStore({ database, passages: 'kb_passages' }),
+    store: new SqlitePassageStore({
+      database,
+      passages: 'kb_passages',
+      metadata: (columns) => columns,
+    }),
     vectors: 'kb_vectors',
     model: embeddings(signals),
   });

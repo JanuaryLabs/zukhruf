@@ -1,4 +1,4 @@
-import type { StoredPassage } from '../passage.ts';
+import type { Metadata, StoredPassage } from '../passage.ts';
 import { type QueryType, keywordsOf } from '../query-bundle.ts';
 import type { RetrievalResult } from '../retrieval-result.ts';
 import type { RetrieveOptions } from '../retrieve-options.ts';
@@ -20,20 +20,23 @@ import type { PostgresSession } from './postgres-session.ts';
  * text)`, with a GIN index (ADR 0004). The score is `ts_rank_cd`, which is
  * higher for a better match (ADR 0005). It matches the words of `keywords`,
  * or of `query` when the bundle has none (ADR 0013).
+ * It gives the passages with the metadata that its store reads (ADR 0015).
  */
-export class PgvectorKeywordRetriever implements Retriever<
-  QueryType,
-  StoredPassage
-> {
+export class PgvectorKeywordRetriever<
+  // `in out M`: TypeScript cannot measure M through the filter's mapped keys,
+  // and a class method checks its parameters both ways (ADR 0015).
+  in out M extends Metadata = Metadata,
+> implements Retriever<QueryType, StoredPassage<M>> {
   readonly #session: PostgresSession;
   readonly #passages: string;
+  readonly #metadata: (columns: Metadata) => M;
   readonly #index: string;
   readonly #operator: 'AND' | 'OR';
   readonly #configuration: string;
 
   constructor(options: {
     /** The store of the passages, whose session and schema the search uses. */
-    readonly store: PostgresPassageStore;
+    readonly store: PostgresPassageStore<M>;
     /** The keyword index as elt writes it. */
     readonly index: {
       /** The `tsvector` column of the passages. */
@@ -47,6 +50,7 @@ export class PgvectorKeywordRetriever implements Retriever<
     const contract = contractOf(options.store);
     this.#session = contract.session;
     this.#passages = contract.passages;
+    this.#metadata = contract.metadata;
     this.#index = identifier(options.index.column);
     this.#operator = options.operator ?? 'AND';
     this.#configuration = options.index.configuration ?? 'english';
@@ -54,8 +58,8 @@ export class PgvectorKeywordRetriever implements Retriever<
 
   async retrieve(
     query: QueryType,
-    options: RetrieveOptions<StoredPassage> = {},
-  ): Promise<RetrievalResult<StoredPassage>> {
+    options: RetrieveOptions<StoredPassage<M>> = {},
+  ): Promise<RetrievalResult<StoredPassage<M>>> {
     options.abortSignal?.throwIfAborted();
     const words = keywordsOf(query);
     if (words.length === 0) return { passages: [], failures: new Map() };
@@ -84,7 +88,7 @@ export class PgvectorKeywordRetriever implements Retriever<
     );
     return {
       passages: rows.map((cells) => ({
-        passage: passage(cells['passage']),
+        passage: passage(cells['passage'], this.#metadata),
         score: Number(cells['score']),
       })),
       failures: new Map(),

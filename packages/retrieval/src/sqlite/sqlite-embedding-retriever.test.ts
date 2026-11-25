@@ -8,9 +8,10 @@ import { open } from '@zukhruf/sqlite-open';
 import { DimensionMismatchError, Vector } from '@zukhruf/vectors';
 import { install, toSql } from '@zukhruf/vectors/sqlite';
 
-import { ModelMismatchError } from '../index.ts';
+import { type Metadata, ModelMismatchError } from '../index.ts';
 import { SqliteEmbeddingRetriever, SqlitePassageStore } from '../sqlite.ts';
 import { embeddingModel } from '../testing/embedding-model.ts';
+import { RecordingMetadata } from '../testing/recording-metadata.ts';
 
 type Row = {
   readonly id: string;
@@ -76,7 +77,11 @@ test('the passages come best first, each with the cosine similarity as its score
     { id: 'e', vector: [-1, 1, 1, 1] },
   ]);
   const retriever = new SqliteEmbeddingRetriever({
-    store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
+    store: new SqlitePassageStore({
+      database,
+      passages: 'docs_passages',
+      metadata: (columns) => columns,
+    }),
     vectors: 'docs_passage_vectors',
     model: embeddingModel({ 'rotate a key': [1, 0, 0, 0] }),
   });
@@ -119,7 +124,11 @@ test('a call gives 10 passages when it gives no topK, and topK passages when it 
     })),
   );
   const retriever = new SqliteEmbeddingRetriever({
-    store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
+    store: new SqlitePassageStore({
+      database,
+      passages: 'docs_passages',
+      metadata: (columns) => columns,
+    }),
     vectors: 'docs_passage_vectors',
     model: embeddingModel({ q: [1, 0, 0, 0] }),
   });
@@ -149,7 +158,11 @@ test('a query model of another provider or model id fails with ModelMismatchErro
   );
   const retriever = (query: MockEmbeddingModelV4 | string) =>
     new SqliteEmbeddingRetriever({
-      store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
+      store: new SqlitePassageStore({
+        database,
+        passages: 'docs_passages',
+        metadata: (columns) => columns,
+      }),
       vectors: 'docs_passage_vectors',
       model: query,
     });
@@ -192,7 +205,11 @@ test('with two stored identities, ModelMismatchError names the first in the orde
     { id: 'b', vector: [1, 0], model: 'test/large (2 dimensions)' },
   ]);
   const retriever = new SqliteEmbeddingRetriever({
-    store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
+    store: new SqlitePassageStore({
+      database,
+      passages: 'docs_passages',
+      metadata: (columns) => columns,
+    }),
     vectors: 'docs_passage_vectors',
     model: embeddingModel(
       { q: [1, 0, 0, 0] },
@@ -216,7 +233,11 @@ test('a query vector of other dimensions fails with DimensionMismatchError after
   using database = contract([{ id: 'a', vector: [1, 0, 0, 0] }]);
   const query = embeddingModel({ q: [1, 0] });
   const retriever = new SqliteEmbeddingRetriever({
-    store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
+    store: new SqlitePassageStore({
+      database,
+      passages: 'docs_passages',
+      metadata: (columns) => columns,
+    }),
     vectors: 'docs_passage_vectors',
     model: query,
   });
@@ -243,7 +264,11 @@ test('a query compares only with the vectors of its own model identity when the 
     { id: 'other', vector: [1, 0], model: 'test/large (2 dimensions)' },
   ]);
   const retriever = new SqliteEmbeddingRetriever({
-    store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
+    store: new SqlitePassageStore({
+      database,
+      passages: 'docs_passages',
+      metadata: (columns) => columns,
+    }),
     vectors: 'docs_passage_vectors',
     model: embeddingModel({ q: [1, 0] }),
   });
@@ -262,7 +287,11 @@ test('a stored model that is not a model identity, and a string model id without
   ]);
   const query = embeddingModel({ q: [1, 0, 0, 0] });
   const retriever = new SqliteEmbeddingRetriever({
-    store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
+    store: new SqlitePassageStore({
+      database,
+      passages: 'docs_passages',
+      metadata: (columns) => columns,
+    }),
     vectors: 'docs_passage_vectors',
     model: query,
   });
@@ -278,7 +307,11 @@ test('a stored model that is not a model identity, and a string model id without
   });
   await assert.rejects(
     new SqliteEmbeddingRetriever({
-      store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
+      store: new SqlitePassageStore({
+        database,
+        passages: 'docs_passages',
+        metadata: (columns) => columns,
+      }),
       vectors: 'docs_passage_vectors',
       model: 'mini',
     }).retrieve('q'),
@@ -295,7 +328,11 @@ test('an empty vector table gives no passages and makes no model call', async ()
   using database = contract([]);
   const query = embeddingModel({ q: [1, 0, 0, 0] });
   const retriever = new SqliteEmbeddingRetriever({
-    store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
+    store: new SqlitePassageStore({
+      database,
+      passages: 'docs_passages',
+      metadata: (columns) => columns,
+    }),
     vectors: 'docs_passage_vectors',
     model: query,
   });
@@ -319,7 +356,11 @@ test('includeVectors gives the stored vector of each passage, and no call gives 
     { id: 'b', vector: [0.5, -0.25, 1, 2] },
   ]);
   const retriever = new SqliteEmbeddingRetriever({
-    store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
+    store: new SqlitePassageStore({
+      database,
+      passages: 'docs_passages',
+      metadata: (columns) => columns,
+    }),
     vectors: 'docs_passage_vectors',
     model: embeddingModel({ q: [1, 0, 0, 0] }),
   });
@@ -357,7 +398,11 @@ test('retrieveMany embeds the queries in one model call and gives one list for e
     'toward z': [0, 0, 1, 0],
   });
   const retriever = new SqliteEmbeddingRetriever({
-    store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
+    store: new SqlitePassageStore({
+      database,
+      passages: 'docs_passages',
+      metadata: (columns) => columns,
+    }),
     vectors: 'docs_passage_vectors',
     model: query,
   });
@@ -395,7 +440,11 @@ test('the texts of customEmbeddings are embedded in place of query, and two text
     'toward y': [0, 2, 0, 0],
   });
   const retriever = new SqliteEmbeddingRetriever({
-    store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
+    store: new SqlitePassageStore({
+      database,
+      passages: 'docs_passages',
+      metadata: (columns) => columns,
+    }),
     vectors: 'docs_passage_vectors',
     model: query,
   });
@@ -439,7 +488,11 @@ test('texts of one query whose vectors have different dimensions fail with Dimen
     other: [0, 1, 0, 0],
   });
   const retriever = new SqliteEmbeddingRetriever({
-    store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
+    store: new SqlitePassageStore({
+      database,
+      passages: 'docs_passages',
+      metadata: (columns) => columns,
+    }),
     vectors: 'docs_passage_vectors',
     model: query,
   });
@@ -474,7 +527,11 @@ test('retrieveMany of no queries gives no lists', async () => {
   using database = contract([{ id: 'x', vector: [1, 0, 0, 0] }]);
   const query = embeddingModel({});
   const retriever = new SqliteEmbeddingRetriever({
-    store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
+    store: new SqlitePassageStore({
+      database,
+      passages: 'docs_passages',
+      metadata: (columns) => columns,
+    }),
     vectors: 'docs_passage_vectors',
     model: query,
   });
@@ -505,7 +562,11 @@ test('an aborted call rejects with the reason of its signal, before the model ca
   });
   const retriever = (query: MockEmbeddingModelV4) =>
     new SqliteEmbeddingRetriever({
-      store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
+      store: new SqlitePassageStore({
+        database,
+        passages: 'docs_passages',
+        metadata: (columns) => columns,
+      }),
       vectors: 'docs_passage_vectors',
       model: query,
     });
@@ -563,7 +624,11 @@ test('each filter operator selects the passages it names, on passage fields and 
     },
   ]);
   const retriever = new SqliteEmbeddingRetriever({
-    store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
+    store: new SqlitePassageStore({
+      database,
+      passages: 'docs_passages',
+      metadata: (columns) => columns,
+    }),
     vectors: 'docs_passage_vectors',
     model: embeddingModel({ q: [1, 0, 0, 0] }),
   });
@@ -638,7 +703,11 @@ test('AND, OR and NOT nest, NOT negates all its conditions, and a boolean value 
     { id: 'd', vector: [1, 0, 0, 0], product: 'consul', year: 1 },
   ]);
   const retriever = new SqliteEmbeddingRetriever({
-    store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
+    store: new SqlitePassageStore({
+      database,
+      passages: 'docs_passages',
+      metadata: (columns) => columns,
+    }),
     vectors: 'docs_passage_vectors',
     model: embeddingModel({ q: [1, 0, 0, 0] }),
   });
@@ -706,7 +775,11 @@ test('SQL in a filter field stays one column name, and SQL in a filter value sta
     { id: 'a', vector: [1, 0, 0, 0], product: 'vault' },
   ]);
   const retriever = new SqliteEmbeddingRetriever({
-    store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
+    store: new SqlitePassageStore({
+      database,
+      passages: 'docs_passages',
+      metadata: (columns) => columns,
+    }),
     vectors: 'docs_passage_vectors',
     model: embeddingModel({ q: [1, 0, 0, 0] }),
   });
@@ -751,7 +824,11 @@ test('a filter field that is not a passage field or a metadata column, a value S
   // Arrange
   using database = contract([{ id: 'a', vector: [1, 0, 0, 0] }]);
   const retriever = new SqliteEmbeddingRetriever({
-    store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
+    store: new SqlitePassageStore({
+      database,
+      passages: 'docs_passages',
+      metadata: (columns) => columns,
+    }),
     vectors: 'docs_passage_vectors',
     model: embeddingModel({ q: [1, 0, 0, 0] }),
   });
@@ -803,7 +880,11 @@ test('a metadata column keeps its name and value even when it has the name of a 
     .prepare('INSERT INTO "docs vectors" VALUES (?, ?, ?)')
     .run('a', toSql(Vector.from([1, 0])), 'test/mini (2 dimensions)');
   const retriever = new SqliteEmbeddingRetriever({
-    store: new SqlitePassageStore({ database, passages: 'docs "passages"' }),
+    store: new SqlitePassageStore({
+      database,
+      passages: 'docs "passages"',
+      metadata: (columns) => columns,
+    }),
     vectors: 'docs vectors',
     model: embeddingModel({ q: [1, 0] }),
   });
@@ -822,4 +903,115 @@ test('a metadata column keeps its name and value even when it has the name of a 
     query: 'who',
   });
   assert.equal(result?.score, 1);
+});
+
+// A host's metadata: the year of the source row, a number, and no other
+// column.
+const year = ({ year }: Metadata): { readonly year: number } => {
+  if (typeof year !== 'number') {
+    throw new TypeError(`A passage has a year, not ${String(year)}`);
+  }
+  return { year };
+};
+
+test('the metadata of each passage is what the metadata of its store reads from the other columns of its row, through get, neighbours, retrieve, retrieveMany and a filter on it', async () => {
+  // Arrange
+  using database = contract([
+    { id: 'a', source: 'guide', seq: 0, vector: [1, 0, 0, 0], year: 2024 },
+    {
+      id: 'b',
+      source: 'guide',
+      seq: 1,
+      vector: [0, 1, 0, 0],
+      product: 'vault',
+      year: 2025,
+    },
+  ]);
+  const metadata = new RecordingMetadata(year);
+  const store = new SqlitePassageStore({
+    database,
+    passages: 'docs_passages',
+    metadata: metadata.read,
+  });
+  const retriever = new SqliteEmbeddingRetriever({
+    store,
+    vectors: 'docs_passage_vectors',
+    model: embeddingModel({ a: [1, 0, 0, 0], b: [0, 1, 0, 0] }),
+  });
+
+  // Act
+  const byId = await store.get(['b']);
+  const window = await store.neighbours({
+    source: 'guide',
+    seq: 0,
+    windowSize: 1,
+  });
+  const retrieved = await retriever.retrieve('a', { topK: 1 });
+  const many = await retriever.retrieveMany(['a', 'b'], { topK: 1 });
+  const filtered = await retriever.retrieve('a', {
+    filter: { field: 'metadata.year', operator: '>=', value: 2025 },
+  });
+
+  // Assert
+  const passages = [
+    ...byId.values(),
+    ...window,
+    ...[retrieved, ...many, filtered].flatMap(({ passages }) =>
+      passages.map(({ passage }) => passage),
+    ),
+  ];
+  assert.deepEqual(
+    passages.map(({ id, metadata }) => [id, metadata]),
+    [
+      ['b', { year: 2025 }],
+      ['a', { year: 2024 }],
+      ['b', { year: 2025 }],
+      ['a', { year: 2024 }],
+      ['a', { year: 2024 }],
+      ['b', { year: 2025 }],
+      ['b', { year: 2025 }],
+    ],
+  );
+  assert.ok(passages.every((passage) => metadata.gave(passage.metadata)));
+  assert.deepEqual(metadata.columns[0], { product: 'vault', year: 2025 });
+});
+
+test('an error that the metadata of a store throws for a row is the error of each read of that row: get, neighbours, retrieve and retrieveMany reject with it', async () => {
+  // Arrange
+  const refused = new TypeError('A passage has no year');
+  using database = contract([
+    { id: 'a', vector: [1, 0, 0, 0], year: 2024 },
+    { id: 'b', vector: [0, 1, 0, 0] },
+  ]);
+  const store = new SqlitePassageStore({
+    database,
+    passages: 'docs_passages',
+    metadata: (columns) => {
+      if (columns.year === null) throw refused;
+      return year(columns);
+    },
+  });
+  const retriever = new SqliteEmbeddingRetriever({
+    store,
+    vectors: 'docs_passage_vectors',
+    model: embeddingModel({ a: [1, 0, 0, 0], b: [0, 1, 0, 0] }),
+  });
+
+  // Act
+  const reads = await Promise.allSettled([
+    store.get(['b']),
+    store.neighbours({ source: 'doc-b', seq: 0, windowSize: 1 }),
+    retriever.retrieve('b'),
+    retriever.retrieveMany(['a', 'b'], { topK: 1 }),
+  ]);
+  const read = await store.get(['a']);
+
+  // Assert
+  for (const settled of reads) {
+    assert.equal(
+      settled.status === 'rejected' ? settled.reason : settled.value,
+      refused,
+    );
+  }
+  assert.deepEqual(read.get('a')?.metadata, { year: 2024 });
 });

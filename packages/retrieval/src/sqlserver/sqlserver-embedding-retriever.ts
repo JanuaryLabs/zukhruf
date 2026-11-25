@@ -10,7 +10,7 @@ import {
   describe,
   parseModelIdentity,
 } from '../model-identity.ts';
-import type { StoredPassage } from '../passage.ts';
+import type { Metadata, StoredPassage } from '../passage.ts';
 import type { QueryType } from '../query-bundle.ts';
 import type { RetrievalResult } from '../retrieval-result.ts';
 import type { RetrieveOptions } from '../retrieve-options.ts';
@@ -30,16 +30,22 @@ import type { SqlServerSession } from './sqlserver-session.ts';
  * Ranks the passages by the cosine similarity of their vectors to the query,
  * with `VECTOR_DISTANCE` in the SQL of SQL Server 2025 (ADR 0003). The search
  * is exact: `VECTOR_DISTANCE` uses no vector index.
+ * It gives the passages with the metadata that its store reads (ADR 0015).
  */
-export class SqlServerEmbeddingRetriever implements BatchRetriever<StoredPassage> {
+export class SqlServerEmbeddingRetriever<
+  // `in out M`: TypeScript cannot measure M through the filter's mapped keys,
+  // and a class method checks its parameters both ways (ADR 0015).
+  in out M extends Metadata = Metadata,
+> implements BatchRetriever<StoredPassage<M>> {
   readonly #session: SqlServerSession;
   readonly #passages: string;
+  readonly #metadata: (columns: Metadata) => M;
   readonly #vectors: string;
-  readonly #retrieval: IdentityCheckedSearch;
+  readonly #retrieval: IdentityCheckedSearch<StoredPassage<M>>;
 
   constructor(options: {
     /** The store of the passages, whose session and schema the search uses. */
-    readonly store: SqlServerPassageStore;
+    readonly store: SqlServerPassageStore<M>;
     /** The passage vectors, in the schema of the store. */
     readonly vectors: string;
     readonly model: EmbeddingModel;
@@ -47,6 +53,7 @@ export class SqlServerEmbeddingRetriever implements BatchRetriever<StoredPassage
     const contract = contractOf(options.store);
     this.#session = contract.session;
     this.#passages = contract.passages;
+    this.#metadata = contract.metadata;
     this.#vectors = contract.relation(options.vectors);
     this.#retrieval = new IdentityCheckedSearch({
       model: options.model,
@@ -58,8 +65,8 @@ export class SqlServerEmbeddingRetriever implements BatchRetriever<StoredPassage
 
   async retrieve(
     query: QueryType,
-    options: RetrieveOptions<StoredPassage> = {},
-  ): Promise<RetrievalResult<StoredPassage>> {
+    options: RetrieveOptions<StoredPassage<M>> = {},
+  ): Promise<RetrievalResult<StoredPassage<M>>> {
     return {
       passages: await this.#retrieval.retrieve(query, options),
       failures: new Map(),
@@ -68,8 +75,8 @@ export class SqlServerEmbeddingRetriever implements BatchRetriever<StoredPassage
 
   async retrieveMany(
     queries: readonly QueryType[],
-    options: RetrieveOptions<StoredPassage> = {},
-  ): Promise<RetrievalResult<StoredPassage>[]> {
+    options: RetrieveOptions<StoredPassage<M>> = {},
+  ): Promise<RetrievalResult<StoredPassage<M>>[]> {
     const lists = await this.#retrieval.retrieveMany(queries, options);
     return lists.map((passages) => ({ passages, failures: new Map() }));
   }
@@ -94,8 +101,8 @@ export class SqlServerEmbeddingRetriever implements BatchRetriever<StoredPassage
   async #search(
     vectors: readonly (readonly number[])[],
     identity: ModelIdentity,
-    options: RetrieveOptions<StoredPassage>,
-  ): Promise<ScoredPassage<StoredPassage>[][]> {
+    options: RetrieveOptions<StoredPassage<M>>,
+  ): Promise<ScoredPassage<StoredPassage<M>>[][]> {
     const parameters: Record<string, unknown> = {};
     const queries = bind(
       parameters,
@@ -126,10 +133,10 @@ export class SqlServerEmbeddingRetriever implements BatchRetriever<StoredPassage
       ORDER BY q.[query], r.[distance], r.[id]`,
       parameters,
     );
-    const lists = vectors.map((): ScoredPassage<StoredPassage>[] => []);
+    const lists = vectors.map((): ScoredPassage<StoredPassage<M>>[] => []);
     for (const cells of rows) {
       lists[Number(cells['query'])]?.push({
-        passage: passage(cells['passage']),
+        passage: passage(cells['passage'], this.#metadata),
         score: 1 - Number(cells['distance']),
         ...(options.includeVectors === true
           ? {

@@ -61,7 +61,11 @@ function contract(
 
 const keywords = (database: DatabaseSync) =>
   new SqliteBM25Retriever({
-    store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
+    store: new SqlitePassageStore({
+      database,
+      passages: 'docs_passages',
+      metadata: (columns) => columns,
+    }),
     index: 'docs_passages_fts',
   });
 
@@ -323,7 +327,11 @@ test('the filter and includeVectors of the call reach each search, and its abort
     rows.map(({ text, vector }) => [text, vector]),
   );
   const meaning = new SqliteEmbeddingRetriever({
-    store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
+    store: new SqlitePassageStore({
+      database,
+      passages: 'docs_passages',
+      metadata: (columns) => columns,
+    }),
     vectors: 'docs_passage_vectors',
     model: embeddingModel(embeddings, { signals }),
   });

@@ -1,4 +1,4 @@
-import type { StoredPassage } from '../passage.ts';
+import type { Metadata, StoredPassage } from '../passage.ts';
 import { bind } from './bind.ts';
 
 const passageColumns = new Set(['id', 'source', 'seq', 'start', 'end', 'text']);
@@ -15,8 +15,15 @@ export function passageJson(parameters: unknown[], passages: string): string {
   return `(to_jsonb(p) - ARRAY(SELECT a."attname"::text FROM pg_attribute a WHERE a."attrelid" = ${relation}::regclass AND a."atttypid" = 'tsvector'::regtype AND a."attnum" > 0 AND NOT a."attisdropped"))::text`;
 }
 
-/** The passage of a cell that `passageJson` gave. A metadata column is any other column of the passages, under its own name. */
-export function passage(cell: unknown): StoredPassage {
+/**
+ * The passage of a cell that `passageJson` gave. A metadata column is any
+ * other column of the passages, under its own name, and the store's
+ * `metadata` reads the metadata of the passage from them (ADR 0015).
+ */
+export function passage<M extends Metadata>(
+  cell: unknown,
+  metadata: (columns: Metadata) => M,
+): StoredPassage<M> {
   const row: Record<string, unknown> = JSON.parse(String(cell));
   return {
     id: String(row['id']),
@@ -25,8 +32,10 @@ export function passage(cell: unknown): StoredPassage {
     seq: Number(row['seq']),
     start: Number(row['start']),
     end: Number(row['end']),
-    metadata: Object.fromEntries(
-      Object.entries(row).filter(([name]) => !passageColumns.has(name)),
+    metadata: metadata(
+      Object.fromEntries(
+        Object.entries(row).filter(([name]) => !passageColumns.has(name)),
+      ),
     ),
   };
 }

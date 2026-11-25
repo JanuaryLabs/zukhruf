@@ -10,6 +10,7 @@ import {
   keywordContractSchema,
   writeKeywordContract,
 } from '../testing/keyword-contract.ts';
+import { RecordingMetadata } from '../testing/recording-metadata.ts';
 
 function contract(passages: readonly KeywordPassage[]): DatabaseSync {
   const database = open(':memory:');
@@ -40,7 +41,11 @@ test('the passages come best first with -bm25() as the score, so a better match 
     { id: 'd', text: 'nothing here at all' },
   ]);
   const retriever = new SqliteBM25Retriever({
-    store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
+    store: new SqlitePassageStore({
+      database,
+      passages: 'docs_passages',
+      metadata: (columns) => columns,
+    }),
     index: 'docs_passages_fts',
   });
 
@@ -78,7 +83,11 @@ test('passages that are a view with an integer rowid column are searched through
     INSERT INTO docs_keywords VALUES (70, 'a', 'doc-a', 0, 'compile C code'), (30, 'b', 'doc-b', 0, 'fix a broken git repo');
   `);
   const retriever = new SqliteBM25Retriever({
-    store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
+    store: new SqlitePassageStore({
+      database,
+      passages: 'docs_passages',
+      metadata: (columns) => columns,
+    }),
     index: 'docs_passages_fts',
   });
 
@@ -113,7 +122,11 @@ test('the words of the query join with AND by default, and with OR when the oper
     { id: 'neither', text: 'nothing here' },
   ]);
   const options = {
-    store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
+    store: new SqlitePassageStore({
+      database,
+      passages: 'docs_passages',
+      metadata: (columns) => columns,
+    }),
     index: 'docs_passages_fts',
   };
 
@@ -148,7 +161,11 @@ test('the words of keywords are quoted in place of the words of query, and the w
     { id: 'renew', text: 'renew the certificate' },
   ]);
   const retriever = new SqliteBM25Retriever({
-    store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
+    store: new SqlitePassageStore({
+      database,
+      passages: 'docs_passages',
+      metadata: (columns) => columns,
+    }),
     index: 'docs_passages_fts',
   });
 
@@ -179,7 +196,11 @@ test('each word of the query is a phrase, so FTS5 syntax in it matches as text a
     { id: 'or', text: 'this or that' },
   ]);
   const retriever = new SqliteBM25Retriever({
-    store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
+    store: new SqlitePassageStore({
+      database,
+      passages: 'docs_passages',
+      metadata: (columns) => columns,
+    }),
     index: 'docs_passages_fts',
   });
 
@@ -217,7 +238,11 @@ test('a query of no words gives no passages', async () => {
   // Arrange
   using database = contract([{ id: 'a', text: 'rotate the key' }]);
   const retriever = new SqliteBM25Retriever({
-    store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
+    store: new SqlitePassageStore({
+      database,
+      passages: 'docs_passages',
+      metadata: (columns) => columns,
+    }),
     index: 'docs_passages_fts',
   });
 
@@ -232,7 +257,11 @@ test('keywords of no words reject with a RangeError that names keywords, since a
   // Arrange
   using database = contract([{ id: 'a', text: 'rotate the key' }]);
   const retriever = new SqliteBM25Retriever({
-    store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
+    store: new SqlitePassageStore({
+      database,
+      passages: 'docs_passages',
+      metadata: (columns) => columns,
+    }),
     index: 'docs_passages_fts',
   });
 
@@ -259,7 +288,11 @@ test('a keyword search gives 10 passages when the call gives no topK, topK when 
     })),
   );
   const retriever = new SqliteBM25Retriever({
-    store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
+    store: new SqlitePassageStore({
+      database,
+      passages: 'docs_passages',
+      metadata: (columns) => columns,
+    }),
     index: 'docs_passages_fts',
   });
 
@@ -291,7 +324,11 @@ test('an aborted keyword search rejects with the reason of its signal', async ()
   // Arrange
   using database = contract([{ id: 'a', text: 'rotate the key' }]);
   const retriever = new SqliteBM25Retriever({
-    store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
+    store: new SqlitePassageStore({
+      database,
+      passages: 'docs_passages',
+      metadata: (columns) => columns,
+    }),
     index: 'docs_passages_fts',
   });
   const reason = new Error('cancelled');
@@ -316,7 +353,11 @@ test('a passages relation and an index whose names need quoting are searched by 
     INSERT INTO "docs ""keywords""" (id, source, seq, start, "end", text) VALUES ('a', 's', 0, 0, 14, 'rotate the key');
   `);
   const retriever = new SqliteBM25Retriever({
-    store: new SqlitePassageStore({ database, passages: 'docs "passages"' }),
+    store: new SqlitePassageStore({
+      database,
+      passages: 'docs "passages"',
+      metadata: (columns) => columns,
+    }),
     index: 'docs "fts"',
   });
 
@@ -325,4 +366,50 @@ test('a passages relation and an index whose names need quoting are searched by 
 
   // Assert
   assert.deepEqual(ids(results), ['a']);
+});
+
+test('the metadata of each passage is what the metadata of its store reads from the other columns of its row, through retrieve and a filter on it', async () => {
+  // Arrange
+  using database = contract([
+    { id: 'k', text: 'rotate the key', product: 'kms' },
+    { id: 'v', text: 'rotate the vault key', product: 'vault' },
+  ]);
+  const metadata = new RecordingMetadata(({ product }) => {
+    if (product !== 'kms' && product !== 'vault') {
+      throw new TypeError(
+        `A passage is of kms or vault, not ${String(product)}`,
+      );
+    }
+    return { product };
+  });
+  const retriever = new SqliteBM25Retriever({
+    store: new SqlitePassageStore({
+      database,
+      passages: 'docs_passages',
+      metadata: metadata.read,
+    }),
+    index: 'docs_passages_fts',
+  });
+
+  // Act
+  const all = (await retriever.retrieve('rotate key')).passages;
+  const vault = (
+    await retriever.retrieve('rotate key', {
+      filter: { field: 'metadata.product', operator: '==', value: 'vault' },
+    })
+  ).passages;
+
+  // Assert
+  const passages = [...all, ...vault].map(({ passage }) => passage);
+  assert.deepEqual(
+    passages.map(({ id, metadata }) => [id, metadata]),
+    [
+      ['k', { product: 'kms' }],
+      ['v', { product: 'vault' }],
+      ['v', { product: 'vault' }],
+    ],
+  );
+  assert.ok(passages.every((passage) => metadata.gave(passage.metadata)));
+  // The rowid that the index joins on is no metadata column (ADR 0004).
+  assert.deepEqual(metadata.columns[0], { product: 'kms' });
 });

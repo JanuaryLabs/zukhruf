@@ -54,7 +54,11 @@ async function found(
 test('with the default windowSize 3 a passage takes the text of its window, merged without repeating an overlap, and keeps its id, seq, metadata, score and vector', async () => {
   // Arrange
   using database = passages();
-  const store = new SqlitePassageStore({ database, passages: 'docs_passages' });
+  const store = new SqlitePassageStore({
+    database,
+    passages: 'docs_passages',
+    metadata: (columns) => columns,
+  });
   const window = new ContextWindow({ store });
 
   // Act
@@ -86,7 +90,11 @@ test('with the default windowSize 3 a passage takes the text of its window, merg
 test('a window of the given windowSize stops at the edges of its source and holds only the passages of that source', async () => {
   // Arrange
   using database = passages();
-  const store = new SqlitePassageStore({ database, passages: 'docs_passages' });
+  const store = new SqlitePassageStore({
+    database,
+    passages: 'docs_passages',
+    metadata: (columns) => columns,
+  });
   const window = new ContextWindow({ store, windowSize: 1 });
 
   // Act
@@ -123,7 +131,11 @@ test('the parts of a window merge in the order of start, and a part inside an ea
   insert.run('faq-0', 0, 8, 14, 'ijklmn');
   insert.run('faq-1', 1, 0, 10, 'abcdefghij');
   insert.run('faq-2', 2, 2, 5, 'cde');
-  const store = new SqlitePassageStore({ database, passages: 'docs_passages' });
+  const store = new SqlitePassageStore({
+    database,
+    passages: 'docs_passages',
+    metadata: (columns) => columns,
+  });
   const window = new ContextWindow({ store });
 
   // Act
@@ -153,7 +165,11 @@ test('the parts of a window are cut in code points, as start and end count them,
   insert.run('keys-0', 0, 0, 4, source.slice(0, 4).join(''));
   insert.run('keys-1', 1, 2, 6, source.slice(2, 6).join(''));
   insert.run('keys-2', 2, 6, 9, source.slice(6, 9).join(''));
-  const store = new SqlitePassageStore({ database, passages: 'docs_passages' });
+  const store = new SqlitePassageStore({
+    database,
+    passages: 'docs_passages',
+    metadata: (columns) => columns,
+  });
   const window = new ContextWindow({ store });
 
   // Act
@@ -180,7 +196,11 @@ test('a window whose passages leave a gap in their source fails with PassageGapE
   insert.run('gap-0', 0, 0, 8, 'abcdefgh');
   insert.run('gap-1', 1, 2, 4, 'cd');
   insert.run('gap-2', 2, 10, 14, 'klmn');
-  const store = new SqlitePassageStore({ database, passages: 'docs_passages' });
+  const store = new SqlitePassageStore({
+    database,
+    passages: 'docs_passages',
+    metadata: (columns) => columns,
+  });
   const window = new ContextWindow({ store });
 
   // Act
@@ -216,7 +236,11 @@ test('a window whose passages leave a gap in their source fails with PassageGapE
 test('a passage that the store has no window for stays as it is', async () => {
   // Arrange
   using database = passages();
-  const store = new SqlitePassageStore({ database, passages: 'docs_passages' });
+  const store = new SqlitePassageStore({
+    database,
+    passages: 'docs_passages',
+    metadata: (columns) => columns,
+  });
   const window = new ContextWindow({ store });
   const web = {
     passage: {
@@ -241,7 +265,11 @@ test('a passage that the store has no window for stays as it is', async () => {
 test('a windowSize that is not a positive integer is refused, as Haystack refuses a window_size below 1', () => {
   // Arrange
   using database = passages();
-  const store = new SqlitePassageStore({ database, passages: 'docs_passages' });
+  const store = new SqlitePassageStore({
+    database,
+    passages: 'docs_passages',
+    metadata: (columns) => columns,
+  });
 
   // Act and Assert
   for (const windowSize of [0, 1.5]) {
@@ -255,7 +283,11 @@ test('a windowSize that is not a positive integer is refused, as Haystack refuse
 test('an aborted call rejects with the reason of its signal', async () => {
   // Arrange
   using database = passages();
-  const store = new SqlitePassageStore({ database, passages: 'docs_passages' });
+  const store = new SqlitePassageStore({
+    database,
+    passages: 'docs_passages',
+    metadata: (columns) => columns,
+  });
   const window = new ContextWindow({ store });
   const controller = new AbortController();
   const reason = new Error('the caller left');

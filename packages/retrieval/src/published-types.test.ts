@@ -57,7 +57,7 @@ test('a consumer of the built declarations gets exactly the errors marked in typ
     ...stdout.matchAll(/^(?:(.+?)\((\d+),\d+\): )?error (TS\d+):/gm),
   ].map(([, file = '', line = '', error]) => `${file}:${line} ${error}`);
   const files = stdout.split('\n').filter((line) => line.startsWith(root));
-  assert.equal(expected.length, 14, 'the fixture marks its 14 errors');
+  assert.equal(expected.length, 28, 'the fixture marks its 28 errors');
   assert.deepEqual(errors, expected);
   assert.ok(files.includes(join(root, 'dist', 'index.d.ts')));
   assert.deepEqual(

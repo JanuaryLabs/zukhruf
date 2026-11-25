@@ -42,7 +42,11 @@ test('get gives each passage it holds by id, with its metadata, and leaves out a
     { id: 'g1', source: 'guide', seq: 1 },
     { id: 'n0', source: 'notes', seq: 0 },
   ]);
-  const store = new SqlitePassageStore({ database, passages: 'docs_passages' });
+  const store = new SqlitePassageStore({
+    database,
+    passages: 'docs_passages',
+    metadata: (columns) => columns,
+  });
 
   // Act
   const passages = await store.get(['n0', 'missing', 'g1']);
@@ -92,7 +96,11 @@ test('neighbours gives the passages of the source from seq - windowSize to seq +
     { id: 'g2', source: 'guide', seq: 2 },
     { id: 'n2', source: 'notes', seq: 2 },
   ]);
-  const store = new SqlitePassageStore({ database, passages: 'docs_passages' });
+  const store = new SqlitePassageStore({
+    database,
+    passages: 'docs_passages',
+    metadata: (columns) => columns,
+  });
 
   // Act
   const middle = await store.neighbours({
@@ -145,6 +153,7 @@ test('a passages table whose name needs quoting is read by that name', async () 
   const store = new SqlitePassageStore({
     database,
     passages: 'docs "passages"',
+    metadata: (columns) => columns,
   });
 
   // Act
@@ -169,6 +178,7 @@ test('a SQLite store takes no schema, so no schema can name relations that the s
     passages: 'docs_passages',
     // @ts-expect-error SQLite has no schema: the store holds the database and the passages only
     schema: 'rag',
+    metadata: (columns) => columns,
   });
   const passages = await store.get(['g0']);
 

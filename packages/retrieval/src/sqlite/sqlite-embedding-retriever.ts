@@ -12,7 +12,7 @@ import {
   describe,
   parseModelIdentity,
 } from '../model-identity.ts';
-import type { StoredPassage } from '../passage.ts';
+import type { Metadata, StoredPassage } from '../passage.ts';
 import type { QueryType } from '../query-bundle.ts';
 import type { RetrievalResult } from '../retrieval-result.ts';
 import type { RetrieveOptions } from '../retrieve-options.ts';
@@ -27,24 +27,31 @@ import { type SqlitePassageStore, contractOf } from './sqlite-passage-store.ts';
  * Ranks the passages by the cosine similarity of their vectors to the query,
  * with `vec_distance_cosine` in the SQL of SQLite (ADR 0003). The host
  * registers that function: it loads sqlite-vec, or calls `install()` of
- * `@zukhruf/vectors/sqlite`.
+ * `@zukhruf/vectors/sqlite`. It gives the passages with the metadata that its
+ * store reads (ADR 0015).
  */
-export class SqliteEmbeddingRetriever implements BatchRetriever<StoredPassage> {
+export class SqliteEmbeddingRetriever<
+  // `in out M`: TypeScript cannot measure M through the filter's mapped keys,
+  // and a class method checks its parameters both ways (ADR 0015).
+  in out M extends Metadata = Metadata,
+> implements BatchRetriever<StoredPassage<M>> {
   readonly #database: DatabaseSync;
   readonly #passages: string;
+  readonly #metadata: (columns: Metadata) => M;
   readonly #vectors: string;
-  readonly #retrieval: IdentityCheckedSearch;
+  readonly #retrieval: IdentityCheckedSearch<StoredPassage<M>>;
 
   constructor(options: {
     /** The store of the passages, whose connection the search runs on. */
-    readonly store: SqlitePassageStore;
+    readonly store: SqlitePassageStore<M>;
     /** The passage vectors, in the database of the store. */
     readonly vectors: string;
     readonly model: EmbeddingModel;
   }) {
-    const { database, passages } = contractOf(options.store);
+    const { database, passages, metadata } = contractOf(options.store);
     this.#database = database;
     this.#passages = passages;
+    this.#metadata = metadata;
     this.#vectors = identifier(options.vectors);
     this.#retrieval = new IdentityCheckedSearch({
       model: options.model,
@@ -56,8 +63,8 @@ export class SqliteEmbeddingRetriever implements BatchRetriever<StoredPassage> {
 
   async retrieve(
     query: QueryType,
-    options: RetrieveOptions<StoredPassage> = {},
-  ): Promise<RetrievalResult<StoredPassage>> {
+    options: RetrieveOptions<StoredPassage<M>> = {},
+  ): Promise<RetrievalResult<StoredPassage<M>>> {
     return {
       passages: await this.#retrieval.retrieve(query, options),
       failures: new Map(),
@@ -66,8 +73,8 @@ export class SqliteEmbeddingRetriever implements BatchRetriever<StoredPassage> {
 
   async retrieveMany(
     queries: readonly QueryType[],
-    options: RetrieveOptions<StoredPassage> = {},
-  ): Promise<RetrievalResult<StoredPassage>[]> {
+    options: RetrieveOptions<StoredPassage<M>> = {},
+  ): Promise<RetrievalResult<StoredPassage<M>>[]> {
     const lists = await this.#retrieval.retrieveMany(queries, options);
     return lists.map((passages) => ({ passages, failures: new Map() }));
   }
@@ -88,8 +95,8 @@ export class SqliteEmbeddingRetriever implements BatchRetriever<StoredPassage> {
   #search(
     vectors: readonly (readonly number[])[],
     identity: ModelIdentity,
-    options: RetrieveOptions<StoredPassage>,
-  ): ScoredPassage<StoredPassage>[][] {
+    options: RetrieveOptions<StoredPassage<M>>,
+  ): ScoredPassage<StoredPassage<M>>[][] {
     const parameters: SQLInputValue[] = [
       ...vectors.flatMap((vector, index) => [
         index,
@@ -113,8 +120,8 @@ export class SqliteEmbeddingRetriever implements BatchRetriever<StoredPassage> {
       FROM "ranked" r JOIN ${this.#passages} p ON p."id" = r."id"
       WHERE r."rank" <= ?
       ORDER BY r."query", r."rank"`);
-    const rows = passageRows(statement, 3, parameters);
-    const lists = vectors.map((): ScoredPassage<StoredPassage>[] => []);
+    const rows = passageRows(statement, 3, parameters, this.#metadata);
+    const lists = vectors.map((): ScoredPassage<StoredPassage<M>>[] => []);
     for (const {
       cells: [query, distance, vector],
       passage,

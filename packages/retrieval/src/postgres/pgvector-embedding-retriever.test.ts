@@ -8,13 +8,14 @@ import { toSql } from 'pgvector';
 import { Postgres } from '@zukhruf/testing/postgres';
 import { DimensionMismatchError } from '@zukhruf/vectors';
 
-import { ModelMismatchError } from '../index.ts';
+import { type Metadata, ModelMismatchError } from '../index.ts';
 import {
   PgvectorEmbeddingRetriever,
   PostgresPassageStore,
   type PostgresSession,
 } from '../postgres.ts';
 import { embeddingModel } from '../testing/embedding-model.ts';
+import { RecordingMetadata } from '../testing/recording-metadata.ts';
 
 type Row = {
   readonly id: string;
@@ -94,6 +95,7 @@ test('the passages come best first, each with 1 - <=> as its score, and a tie go
     store: new PostgresPassageStore({
       session: session(pool),
       passages: 'docs_passages',
+      metadata: (columns) => columns,
     }),
     vectors: 'docs_passage_vectors',
     model: embeddingModel({ 'rotate a key': [1, 0, 0, 0] }),
@@ -146,6 +148,7 @@ test('a call gives 10 passages when it gives no topK, and topK passages when it 
     store: new PostgresPassageStore({
       session: session(pool),
       passages: 'docs_passages',
+      metadata: (columns) => columns,
     }),
     vectors: 'docs_passage_vectors',
     model: embeddingModel({ q: [1, 0, 0, 0] }),
@@ -181,6 +184,7 @@ test('a query model of another provider or model id fails with ModelMismatchErro
       store: new PostgresPassageStore({
         session: session(pool),
         passages: 'docs_passages',
+        metadata: (columns) => columns,
       }),
       vectors: 'docs_passage_vectors',
       model: query,
@@ -234,6 +238,7 @@ test('with two stored identities, ModelMismatchError names the first in the byte
     store: new PostgresPassageStore({
       session: session(pool),
       passages: 'docs_passages',
+      metadata: (columns) => columns,
     }),
     vectors: 'docs_passage_vectors',
     model: embeddingModel(
@@ -272,6 +277,7 @@ test('a query vector of other dimensions fails with DimensionMismatchError after
         },
       },
       passages: 'docs_passages',
+      metadata: (columns) => columns,
     }),
     vectors: 'docs_passage_vectors',
     model: query,
@@ -311,6 +317,7 @@ test('a query compares only with the vectors of its own model identity when the 
     store: new PostgresPassageStore({
       session: session(pool),
       passages: 'docs_passages',
+      metadata: (columns) => columns,
     }),
     vectors: 'docs_passage_vectors',
     model: embeddingModel({ q: [1, 0] }),
@@ -335,6 +342,7 @@ test('a stored model that is not a model identity, and a string model id without
     store: new PostgresPassageStore({
       session: session(pool),
       passages: 'docs_passages',
+      metadata: (columns) => columns,
     }),
     vectors: 'docs_passage_vectors',
     model: query,
@@ -346,6 +354,7 @@ test('a stored model that is not a model identity, and a string model id without
     store: new PostgresPassageStore({
       session: session(pool),
       passages: 'docs_passages',
+      metadata: (columns) => columns,
     }),
     vectors: 'docs_passage_vectors',
     model: 'mini',
@@ -378,6 +387,7 @@ test('an empty vector table gives no passages and makes no model call', async ()
     store: new PostgresPassageStore({
       session: session(pool),
       passages: 'docs_passages',
+      metadata: (columns) => columns,
     }),
     vectors: 'docs_passage_vectors',
     model: query,
@@ -405,6 +415,7 @@ test('retrieveMany of no queries gives no lists', async () => {
     store: new PostgresPassageStore({
       session: session(pool),
       passages: 'docs_passages',
+      metadata: (columns) => columns,
     }),
     vectors: 'docs_passage_vectors',
     model: query,
@@ -432,6 +443,7 @@ test('includeVectors gives the stored vector of each passage, and no call gives 
     store: new PostgresPassageStore({
       session: session(pool),
       passages: 'docs_passages',
+      metadata: (columns) => columns,
     }),
     vectors: 'docs_passage_vectors',
     model: embeddingModel({ q: [1, 0, 0, 0] }),
@@ -481,6 +493,7 @@ test('retrieveMany embeds the queries in one model call, searches them in one SQ
         },
       },
       passages: 'docs_passages',
+      metadata: (columns) => columns,
     }),
     vectors: 'docs_passage_vectors',
     model: query,
@@ -526,6 +539,7 @@ test('the texts of customEmbeddings are embedded in place of query, and two text
     store: new PostgresPassageStore({
       session: session(pool),
       passages: 'docs_passages',
+      metadata: (columns) => columns,
     }),
     vectors: 'docs_passage_vectors',
     model: query,
@@ -589,6 +603,7 @@ test('with an HNSW index, a search for an identity of few of the rows gives topK
             (await client.query(sql, [...parameters])).rows,
         },
         passages: 'docs_passages',
+        metadata: (columns) => columns,
       }),
       vectors: 'docs_passage_vectors',
       model: embeddingModel({ 'rotate a key': [1, 0, 0.5, 0] }),
@@ -641,6 +656,7 @@ test('an aborted call rejects with the reason of its signal, before the model ca
       store: new PostgresPassageStore({
         session: session(pool),
         passages: 'docs_passages',
+        metadata: (columns) => columns,
       }),
       vectors: 'docs_passage_vectors',
       model: query,
@@ -708,6 +724,7 @@ test('each filter operator selects the passages it names, on passage fields and 
     store: new PostgresPassageStore({
       session: session(pool),
       passages: 'docs_passages',
+      metadata: (columns) => columns,
     }),
     vectors: 'docs_passage_vectors',
     model: embeddingModel({ q: [1, 0, 0, 0] }),
@@ -804,6 +821,7 @@ test('AND, OR and NOT nest, NOT negates all its conditions, and a boolean value 
     store: new PostgresPassageStore({
       session: session(pool),
       passages: 'docs_passages',
+      metadata: (columns) => columns,
     }),
     vectors: 'docs_passage_vectors',
     model: embeddingModel({ q: [1, 0, 0, 0] }),
@@ -879,6 +897,7 @@ test('SQL in a filter field stays one column name, and SQL in a filter value sta
     store: new PostgresPassageStore({
       session: session(pool),
       passages: 'docs_passages',
+      metadata: (columns) => columns,
     }),
     vectors: 'docs_passage_vectors',
     model: embeddingModel({ q: [1, 0, 0, 0] }),
@@ -929,6 +948,7 @@ test('a filter field that is not a passage field or a metadata column, a value S
     store: new PostgresPassageStore({
       session: session(pool),
       passages: 'docs_passages',
+      metadata: (columns) => columns,
     }),
     vectors: 'docs_passage_vectors',
     model: embeddingModel({ q: [1, 0, 0, 0] }),
@@ -988,6 +1008,7 @@ test('a metadata column keeps its name and value even when it has the name of a 
     store: new PostgresPassageStore({
       session: session(pool),
       passages: 'docs "passages"',
+      metadata: (columns) => columns,
     }),
     vectors: 'docs vectors',
     model: embeddingModel({ q: [1, 0] }),
@@ -1037,6 +1058,7 @@ test('a store with a schema searches the passages and the passage vectors of tha
         session: session(pool),
         schema: 'rag',
         passages: 'docs_passages',
+        metadata: (columns) => columns,
       }),
     ).retrieve('q')
   ).passages;
@@ -1045,6 +1067,7 @@ test('a store with a schema searches the passages and the passage vectors of tha
       new PostgresPassageStore({
         session: session(pool),
         passages: 'docs_passages',
+        metadata: (columns) => columns,
       }),
     ).retrieve('q')
   ).passages;
@@ -1076,10 +1099,12 @@ test('two stores on two databases, alive at once, each search the passages of th
   const firstStore = new PostgresPassageStore({
     session: session(first.pool()),
     passages: 'docs_passages',
+    metadata: (columns) => columns,
   });
   const secondStore = new PostgresPassageStore({
     session: session(second.pool()),
     passages: 'docs_passages',
+    metadata: (columns) => columns,
   });
   const retriever = (store: PostgresPassageStore) =>
     new PgvectorEmbeddingRetriever({
@@ -1097,4 +1122,138 @@ test('two stores on two databases, alive at once, each search the passages of th
   // Assert
   assert.deepEqual(ids(firstResults), ['first-a']);
   assert.deepEqual(ids(secondResults), ['second-a']);
+});
+
+// A host's metadata: the year and the draft flag of the source row, a
+// number and a boolean, and no other column.
+const release = ({
+  year,
+  draft,
+}: Metadata): { readonly year: number; readonly draft: boolean } => {
+  if (typeof year !== 'number' || typeof draft !== 'boolean') {
+    throw new TypeError(
+      `A passage has a year and a draft flag, not ${String(year)} and ${String(draft)}`,
+    );
+  }
+  return { year, draft };
+};
+
+test('the metadata of each passage is what the metadata of its store reads from the other columns of its row, through get, neighbours, retrieve, retrieveMany and a filter on it', async () => {
+  // Arrange
+  await using database = await server().database();
+  const pool = database.pool();
+  await contract(pool, [
+    {
+      id: 'a',
+      source: 'guide',
+      seq: 0,
+      vector: [1, 0, 0, 0],
+      year: 2024,
+      draft: false,
+    },
+    {
+      id: 'b',
+      source: 'guide',
+      seq: 1,
+      vector: [0, 1, 0, 0],
+      product: 'vault',
+      year: 2025,
+      draft: true,
+    },
+  ]);
+  const metadata = new RecordingMetadata(release);
+  const store = new PostgresPassageStore({
+    session: session(pool),
+    passages: 'docs_passages',
+    metadata: metadata.read,
+  });
+  const retriever = new PgvectorEmbeddingRetriever({
+    store,
+    vectors: 'docs_passage_vectors',
+    model: embeddingModel({ a: [1, 0, 0, 0], b: [0, 1, 0, 0] }),
+  });
+
+  // Act
+  const byId = await store.get(['b']);
+  const window = await store.neighbours({
+    source: 'guide',
+    seq: 0,
+    windowSize: 1,
+  });
+  const retrieved = await retriever.retrieve('a', { topK: 1 });
+  const many = await retriever.retrieveMany(['a', 'b'], { topK: 1 });
+  const filtered = await retriever.retrieve('a', {
+    filter: { field: 'metadata.draft', operator: '==', value: true },
+  });
+
+  // Assert
+  const passages = [
+    ...byId.values(),
+    ...window,
+    ...[retrieved, ...many, filtered].flatMap(({ passages }) =>
+      passages.map(({ passage }) => passage),
+    ),
+  ];
+  const a = { year: 2024, draft: false };
+  const b = { year: 2025, draft: true };
+  assert.deepEqual(
+    passages.map(({ id, metadata }) => [id, metadata]),
+    [
+      ['b', b],
+      ['a', a],
+      ['b', b],
+      ['a', a],
+      ['a', a],
+      ['b', b],
+      ['b', b],
+    ],
+  );
+  assert.ok(passages.every((passage) => metadata.gave(passage.metadata)));
+  assert.deepEqual(metadata.columns[0], {
+    product: 'vault',
+    year: 2025,
+    draft: true,
+  });
+});
+
+test('an error that the metadata of a store throws for a row is the error of each read of that row: get, neighbours, retrieve and retrieveMany reject with it', async () => {
+  // Arrange
+  const refused = new TypeError('A passage has no draft flag');
+  await using database = await server().database();
+  const pool = database.pool();
+  await contract(pool, [
+    { id: 'a', vector: [1, 0, 0, 0], year: 2024, draft: false },
+    { id: 'b', vector: [0, 1, 0, 0], year: 2025 },
+  ]);
+  const store = new PostgresPassageStore({
+    session: session(pool),
+    passages: 'docs_passages',
+    metadata: (columns) => {
+      if (columns.draft === null) throw refused;
+      return release(columns);
+    },
+  });
+  const retriever = new PgvectorEmbeddingRetriever({
+    store,
+    vectors: 'docs_passage_vectors',
+    model: embeddingModel({ a: [1, 0, 0, 0], b: [0, 1, 0, 0] }),
+  });
+
+  // Act
+  const reads = await Promise.allSettled([
+    store.get(['b']),
+    store.neighbours({ source: 'doc-b', seq: 0, windowSize: 1 }),
+    retriever.retrieve('b'),
+    retriever.retrieveMany(['a', 'b'], { topK: 1 }),
+  ]);
+  const read = await store.get(['a']);
+
+  // Assert
+  for (const settled of reads) {
+    assert.equal(
+      settled.status === 'rejected' ? settled.reason : settled.value,
+      refused,
+    );
+  }
+  assert.deepEqual(read.get('a')?.metadata, { year: 2024, draft: false });
 });

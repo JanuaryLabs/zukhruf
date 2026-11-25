@@ -1,6 +1,6 @@
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 
-import type { StoredPassage } from '../passage.ts';
+import type { Metadata, StoredPassage } from '../passage.ts';
 import { type QueryType, keywordsOf } from '../query-bundle.ts';
 import type { RetrievalResult } from '../retrieval-result.ts';
 import type { RetrieveOptions } from '../retrieve-options.ts';
@@ -16,36 +16,40 @@ import { type SqlitePassageStore, contractOf } from './sqlite-passage-store.ts';
  * an FTS5 table with the passages as its external content (ADR 0004). The
  * score is `-bm25()`, so a better match has a higher score (ADR 0005). It
  * matches the words of `keywords`, or of `query` when the bundle has none
- * (ADR 0013).
+ * (ADR 0013). It gives the passages with the metadata that its store
+ * reads (ADR 0015).
  */
-export class SqliteBM25Retriever implements Retriever<
-  QueryType,
-  StoredPassage
-> {
+export class SqliteBM25Retriever<
+  // `in out M`: TypeScript cannot measure M through the filter's mapped keys,
+  // and a class method checks its parameters both ways (ADR 0015).
+  in out M extends Metadata = Metadata,
+> implements Retriever<QueryType, StoredPassage<M>> {
   readonly #database: DatabaseSync;
   readonly #passages: string;
+  readonly #metadata: (columns: Metadata) => M;
   readonly #index: string;
   readonly #operator: 'AND' | 'OR';
 
   constructor(options: {
     /** The store of the passages, whose connection the search runs on. */
-    readonly store: SqlitePassageStore;
+    readonly store: SqlitePassageStore<M>;
     /** The FTS5 table over the passages, in the database of the store. */
     readonly index: string;
     /** How the words of the query join: 'AND', the implicit operator of FTS5, when absent. */
     readonly operator?: 'AND' | 'OR';
   }) {
-    const { database, passages } = contractOf(options.store);
+    const { database, passages, metadata } = contractOf(options.store);
     this.#database = database;
     this.#passages = passages;
+    this.#metadata = metadata;
     this.#index = identifier(options.index);
     this.#operator = options.operator ?? 'AND';
   }
 
   async retrieve(
     query: QueryType,
-    options: RetrieveOptions<StoredPassage> = {},
-  ): Promise<RetrievalResult<StoredPassage>> {
+    options: RetrieveOptions<StoredPassage<M>> = {},
+  ): Promise<RetrievalResult<StoredPassage<M>>> {
     options.abortSignal?.throwIfAborted();
     const words = keywordsOf(query);
     if (words.length === 0) return { passages: [], failures: new Map() };
@@ -59,7 +63,7 @@ export class SqliteBM25Retriever implements Retriever<
       ORDER BY bm25(${this.#index}), p."id"
       LIMIT ?`);
     return {
-      passages: passageRows(statement, 1, parameters).map(
+      passages: passageRows(statement, 1, parameters, this.#metadata).map(
         ({ cells: [score], passage }) => ({
           passage,
           score: Number(score),

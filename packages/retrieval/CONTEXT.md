@@ -23,7 +23,7 @@ The tables that elt writes and that the engine retrievers read: the passages (`i
 _Avoid_: Schema, store, collection, index (for the whole contract)
 
 **Passage store**:
-The root of the composition of an engine: it holds the connection, the passages relation and, on Postgres and SQL Server, the schema of the contract, each in one place. The engine retrievers and `ContextWindow` take the store and add only their own part: the vectors and the model, or the keyword index. It reads stored passages by id and the neighbours of a passage in its source. Haystack's retrievers take a `document_store` the same way ([ADR 0001](./docs/adr/0001-the-package-is-the-query-side-of-rag-and-reads-a-passage-contract-that-elt-writes.md)).
+The root of the composition of an engine: it holds the connection, the passages relation and, on Postgres and SQL Server, the schema of the contract, each in one place. The engine retrievers and `ContextWindow` take the store and add only their own part: the vectors and the model, or the keyword index. It reads stored passages by id and the neighbours of a passage in its source. Haystack's retrievers take a `document_store` the same way ([ADR 0001](./docs/adr/0001-the-package-is-the-query-side-of-rag-and-reads-a-passage-contract-that-elt-writes.md)). Its `metadata` reads the metadata `M` of each passage from the other columns of its row, so the store and every retriever over it give `StoredPassage<M>` ([ADR 0015](./docs/adr/0015-a-passage-is-typed-by-its-metadata-and-only-a-stored-passage-has-source-seq-start-and-end.md)).
 _Avoid_: Document store, repository
 
 **Model identity**:
@@ -113,7 +113,7 @@ How many passages a fusion asks of each of its retrievers before it fuses. Elast
 _Avoid_: Prefetch, candidate count, fetch-k
 
 **Postprocessor**:
-An object that changes a result list after the search: it reranks, cuts, diversifies, groups, reorders or widens the passages. LlamaIndex calls it `BaseNodePostprocessor`. `Postprocessor<R>` needs passages of at least `R` and gives back the passage type it got: `ContextWindow` needs stored passages ([ADR 0015](./docs/adr/0015-a-passage-is-typed-by-its-metadata-and-only-a-stored-passage-has-source-seq-start-and-end.md)).
+An object that changes a result list after the search: it reranks, cuts, diversifies, groups, reorders or widens the passages. LlamaIndex calls it `BaseNodePostprocessor`. `Postprocessor<R>` needs passages of at least `R` and gives back the passage type it got: `ContextWindow` needs stored passages of the metadata of its store ([ADR 0015](./docs/adr/0015-a-passage-is-typed-by-its-metadata-and-only-a-stored-passage-has-source-seq-start-and-end.md)).
 _Avoid_: Compressor (LangChain), ranker (Haystack), filter (for a postprocessor)
 
 **Rerank**:

@@ -1,6 +1,6 @@
 import type { SQLInputValue, SQLOutputValue, StatementSync } from 'node:sqlite';
 
-import type { StoredPassage } from '../passage.ts';
+import type { Metadata, StoredPassage } from '../passage.ts';
 
 // `rowid` is the integer key that the keyword index joins on (ADR 0004): a
 // view of the passages exposes it as a column, and it is not metadata.
@@ -18,15 +18,17 @@ const passageColumns = new Set([
  * Runs a statement whose result ends with `p.*`, the columns of the passages,
  * and gives the cells before them and the passage of each row. A metadata
  * column is any other column of the passages, under its own name, even when
- * it has the name of a cell before it.
+ * it has the name of a cell before it. The store's `metadata` reads the
+ * metadata of the passage from those columns (ADR 0015).
  */
-export function passageRows(
+export function passageRows<M extends Metadata>(
   statement: StatementSync,
   cellsBefore: number,
   parameters: readonly SQLInputValue[],
+  metadata: (columns: Metadata) => M,
 ): {
   readonly cells: readonly SQLOutputValue[];
-  readonly passage: StoredPassage;
+  readonly passage: StoredPassage<M>;
 }[] {
   statement.setReturnArrays(true);
   const names = statement
@@ -48,9 +50,11 @@ export function passageRows(
         seq: Number(cell('seq')),
         start: Number(cell('start')),
         end: Number(cell('end')),
-        metadata: Object.fromEntries(
-          names.flatMap((name, index) =>
-            passageColumns.has(name) ? [] : [[name, values[index]]],
+        metadata: metadata(
+          Object.fromEntries(
+            names.flatMap((name, index) =>
+              passageColumns.has(name) ? [] : [[name, values[index]]],
+            ),
           ),
         ),
       },

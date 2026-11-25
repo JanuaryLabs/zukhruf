@@ -11,7 +11,7 @@ import type { RetrieveOptions } from './retrieve-options.ts';
 import type { ScoredPassage } from './scored-passage.ts';
 
 /** What the engine gives: the query model, its read of the stored identities, and its search. */
-type Engine = {
+type Engine<P extends StoredPassage> = {
   readonly model: EmbeddingModel;
   /** The identities of the stored vectors, in the byte order of their text. */
   readonly storedIdentities: () =>
@@ -20,10 +20,8 @@ type Engine = {
   readonly search: (
     vectors: readonly (readonly number[])[],
     identity: ModelIdentity,
-    options: RetrieveOptions<StoredPassage>,
-  ) =>
-    | ScoredPassage<StoredPassage>[][]
-    | Promise<ScoredPassage<StoredPassage>[][]>;
+    options: RetrieveOptions<P>,
+  ) => ScoredPassage<P>[][] | Promise<ScoredPassage<P>[][]>;
 };
 
 /**
@@ -38,17 +36,17 @@ type Engine = {
  * it has none, and several texts search with the mean of their vectors, as
  * LlamaIndex's vector retriever does (ADR 0013).
  */
-export class IdentityCheckedSearch {
-  readonly #engine: Engine;
+export class IdentityCheckedSearch<P extends StoredPassage> {
+  readonly #engine: Engine<P>;
 
-  constructor(engine: Engine) {
+  constructor(engine: Engine<P>) {
     this.#engine = engine;
   }
 
   async retrieve(
     query: QueryType,
-    options: RetrieveOptions<StoredPassage>,
-  ): Promise<ScoredPassage<StoredPassage>[]> {
+    options: RetrieveOptions<P>,
+  ): Promise<ScoredPassage<P>[]> {
     const [text, ...more] = embeddingsOf(query);
     const [passages] = await this.#retrieve(1, options, async (abortSignal) => {
       const signal = abortSignal === undefined ? {} : { abortSignal };
@@ -72,8 +70,8 @@ export class IdentityCheckedSearch {
 
   async retrieveMany(
     queries: readonly QueryType[],
-    options: RetrieveOptions<StoredPassage>,
-  ): Promise<ScoredPassage<StoredPassage>[][]> {
+    options: RetrieveOptions<P>,
+  ): Promise<ScoredPassage<P>[][]> {
     if (queries.length === 0) return [];
     const texts = queries.map(embeddingsOf);
     return this.#retrieve(queries.length, options, async (abortSignal) => {
@@ -91,9 +89,9 @@ export class IdentityCheckedSearch {
 
   async #retrieve(
     count: number,
-    options: RetrieveOptions<StoredPassage>,
+    options: RetrieveOptions<P>,
     embedQueries: (abortSignal?: AbortSignal) => Promise<readonly number[][]>,
-  ): Promise<ScoredPassage<StoredPassage>[][]> {
+  ): Promise<ScoredPassage<P>[][]> {
     options.abortSignal?.throwIfAborted();
     const query = modelName(this.#engine.model);
     const stored = await this.#engine.storedIdentities();

@@ -77,6 +77,7 @@ test(
     const store = new SqlServerPassageStore({
       session: session(pool),
       passages: 'docs_passages',
+      metadata: (columns) => columns,
     });
 
     // Act
@@ -138,6 +139,7 @@ test(
     const store = new SqlServerPassageStore({
       session: session(pool),
       passages: 'docs_passages',
+      metadata: (columns) => columns,
     });
 
     // Act
@@ -198,6 +200,7 @@ test(
     const store = new SqlServerPassageStore({
       session: session(pool),
       passages: 'docs_passages',
+      metadata: (columns) => columns,
     });
 
     // Act
@@ -234,6 +237,7 @@ test(
     const store = new SqlServerPassageStore({
       session: session(pool),
       passages: 'docs ]passages]',
+      metadata: (columns) => columns,
     });
 
     // Act
@@ -269,10 +273,12 @@ test(
       session: session(pool),
       schema: 'rag',
       passages: 'docs_passages',
+      metadata: (columns) => columns,
     });
     const byDefaultSchema = new SqlServerPassageStore({
       session: session(pool),
       passages: 'docs_passages',
+      metadata: (columns) => columns,
     });
 
     // Act

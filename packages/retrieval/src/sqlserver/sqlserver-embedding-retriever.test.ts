@@ -7,13 +7,14 @@ import type mssql from 'mssql';
 import { SqlServer } from '@zukhruf/testing/sqlserver';
 import { DimensionMismatchError } from '@zukhruf/vectors';
 
-import { ModelMismatchError } from '../index.ts';
+import { type Metadata, ModelMismatchError } from '../index.ts';
 import {
   SqlServerEmbeddingRetriever,
   SqlServerPassageStore,
   type SqlServerSession,
 } from '../sqlserver.ts';
 import { embeddingModel } from '../testing/embedding-model.ts';
+import { RecordingMetadata } from '../testing/recording-metadata.ts';
 
 type Row = {
   readonly id: string;
@@ -133,6 +134,7 @@ test(
       store: new SqlServerPassageStore({
         session: session(pool),
         passages: 'docs_passages',
+        metadata: (columns) => columns,
       }),
       vectors: 'docs_passage_vectors',
       model: embeddingModel({ 'rotate a key': [1, 0, 0, 0] }),
@@ -193,6 +195,7 @@ test(
       store: new SqlServerPassageStore({
         session: session(pool),
         passages: 'docs_passages',
+        metadata: (columns) => columns,
       }),
       vectors: 'docs_passage_vectors',
       model: embeddingModel({ q: [1, 0, 0, 0] }),
@@ -238,6 +241,7 @@ test(
       store: new SqlServerPassageStore({
         session: session(pool),
         passages: 'docs_passages',
+        metadata: (columns) => columns,
       }),
       vectors: 'docs_passage_vectors',
       model: embeddingModel({ q: [1, 0, 0, 0] }),
@@ -279,6 +283,7 @@ test(
         store: new SqlServerPassageStore({
           session: session(pool),
           passages: 'docs_passages',
+          metadata: (columns) => columns,
         }),
         vectors: 'docs_passage_vectors',
         model: query,
@@ -336,6 +341,7 @@ test(
       store: new SqlServerPassageStore({
         session: session(pool),
         passages: 'docs_passages',
+        metadata: (columns) => columns,
       }),
       vectors: 'docs_passage_vectors',
       model: embeddingModel(
@@ -375,6 +381,7 @@ test(
           },
         },
         passages: 'docs_passages',
+        metadata: (columns) => columns,
       }),
       vectors: 'docs_passage_vectors',
       model: query,
@@ -417,6 +424,7 @@ test(
       store: new SqlServerPassageStore({
         session: session(pool),
         passages: 'docs_passages',
+        metadata: (columns) => columns,
       }),
       vectors: 'docs_passage_vectors',
       model: embeddingModel({ q: [1, 0, 0, 0] }),
@@ -445,6 +453,7 @@ test(
       store: new SqlServerPassageStore({
         session: session(pool),
         passages: 'docs_passages',
+        metadata: (columns) => columns,
       }),
       vectors: 'docs_passage_vectors',
       model: query,
@@ -456,6 +465,7 @@ test(
       store: new SqlServerPassageStore({
         session: session(pool),
         passages: 'docs_passages',
+        metadata: (columns) => columns,
       }),
       vectors: 'docs_passage_vectors',
       model: 'mini',
@@ -493,6 +503,7 @@ test(
       store: new SqlServerPassageStore({
         session: session(pool),
         passages: 'docs_passages',
+        metadata: (columns) => columns,
       }),
       vectors: 'docs_passage_vectors',
       model: query,
@@ -524,6 +535,7 @@ test(
       store: new SqlServerPassageStore({
         session: session(pool),
         passages: 'docs_passages',
+        metadata: (columns) => columns,
       }),
       vectors: 'docs_passage_vectors',
       model: query,
@@ -555,6 +567,7 @@ test(
       store: new SqlServerPassageStore({
         session: session(pool),
         passages: 'docs_passages',
+        metadata: (columns) => columns,
       }),
       vectors: 'docs_passage_vectors',
       model: embeddingModel({ q: [1, 0, 0, 0] }),
@@ -611,6 +624,7 @@ test(
           },
         },
         passages: 'docs_passages',
+        metadata: (columns) => columns,
       }),
       vectors: 'docs_passage_vectors',
       model: query,
@@ -662,6 +676,7 @@ test(
       store: new SqlServerPassageStore({
         session: session(pool),
         passages: 'docs_passages',
+        metadata: (columns) => columns,
       }),
       vectors: 'docs_passage_vectors',
       model: query,
@@ -724,6 +739,7 @@ test(
           },
         },
         passages: 'docs_passages',
+        metadata: (columns) => columns,
       }),
       vectors: 'docs_passage_vectors',
       model: embeddingModel(
@@ -793,6 +809,7 @@ test(
         store: new SqlServerPassageStore({
           session: session(pool),
           passages: 'docs_passages',
+          metadata: (columns) => columns,
         }),
         vectors: 'docs_passage_vectors',
         model: query,
@@ -864,6 +881,7 @@ test(
       store: new SqlServerPassageStore({
         session: session(pool),
         passages: 'docs_passages',
+        metadata: (columns) => columns,
       }),
       vectors: 'docs_passage_vectors',
       model: embeddingModel({ q: [1, 0, 0, 0] }),
@@ -961,6 +979,7 @@ test(
       store: new SqlServerPassageStore({
         session: session(pool),
         passages: 'docs_passages',
+        metadata: (columns) => columns,
       }),
       vectors: 'docs_passage_vectors',
       model: embeddingModel({ q: [1, 0, 0, 0] }),
@@ -1020,6 +1039,7 @@ test(
       store: new SqlServerPassageStore({
         session: session(pool),
         passages: 'docs_passages',
+        metadata: (columns) => columns,
       }),
       vectors: 'docs_passage_vectors',
       model: embeddingModel({ q: [1, 0, 0, 0] }),
@@ -1110,6 +1130,7 @@ test(
       store: new SqlServerPassageStore({
         session: session(pool),
         passages: 'docs_passages',
+        metadata: (columns) => columns,
       }),
       vectors: 'docs_passage_vectors',
       model: embeddingModel({ q: [1, 0, 0, 0] }),
@@ -1165,6 +1186,7 @@ test(
       store: new SqlServerPassageStore({
         session: session(pool),
         passages: 'docs_passages',
+        metadata: (columns) => columns,
       }),
       vectors: 'docs_passage_vectors',
       model: embeddingModel({ q: [1, 0, 0, 0] }),
@@ -1227,6 +1249,7 @@ test(
       store: new SqlServerPassageStore({
         session: session(pool),
         passages: 'docs ]passages]',
+        metadata: (columns) => columns,
       }),
       vectors: 'docs vectors',
       model: embeddingModel({ q: [1, 0] }),
@@ -1278,6 +1301,7 @@ test(
           session: session(pool),
           schema: 'rag',
           passages: 'docs_passages',
+          metadata: (columns) => columns,
         }),
       ).retrieve('q')
     ).passages;
@@ -1286,6 +1310,7 @@ test(
         new SqlServerPassageStore({
           session: session(pool),
           passages: 'docs_passages',
+          metadata: (columns) => columns,
         }),
       ).retrieve('q')
     ).passages;
@@ -1323,10 +1348,12 @@ test(
     const firstStore = new SqlServerPassageStore({
       session: session(firstPool),
       passages: 'docs_passages',
+      metadata: (columns) => columns,
     });
     const secondStore = new SqlServerPassageStore({
       session: session(secondPool),
       passages: 'docs_passages',
+      metadata: (columns) => columns,
     });
     const retriever = (store: SqlServerPassageStore) =>
       new SqlServerEmbeddingRetriever({
@@ -1344,5 +1371,147 @@ test(
     // Assert
     assert.deepEqual(ids(firstResults), ['first-a']);
     assert.deepEqual(ids(secondResults), ['second-a']);
+  },
+);
+
+// A host's metadata: the year and the draft flag of the source row, a
+// number and a boolean (a BIT), and no other column.
+const release = ({
+  year,
+  draft,
+}: Metadata): { readonly year: number; readonly draft: boolean } => {
+  if (typeof year !== 'number' || typeof draft !== 'boolean') {
+    throw new TypeError(
+      `A passage has a year and a draft flag, not ${String(year)} and ${String(draft)}`,
+    );
+  }
+  return { year, draft };
+};
+
+test(
+  'the metadata of each passage is what the metadata of its store reads from the other columns of its row, through get, neighbours, retrieve, retrieveMany and a filter on it',
+  { skip: emulation },
+  async () => {
+    // Arrange
+    await using database = await server().database();
+    const pool = await database.pool();
+    await contract(pool, [
+      {
+        id: 'a',
+        source: 'guide',
+        seq: 0,
+        vector: [1, 0, 0, 0],
+        year: 2024,
+        draft: false,
+      },
+      {
+        id: 'b',
+        source: 'guide',
+        seq: 1,
+        vector: [0, 1, 0, 0],
+        product: 'vault',
+        year: 2025,
+        draft: true,
+      },
+    ]);
+    const metadata = new RecordingMetadata(release);
+    const store = new SqlServerPassageStore({
+      session: session(pool),
+      passages: 'docs_passages',
+      metadata: metadata.read,
+    });
+    const retriever = new SqlServerEmbeddingRetriever({
+      store,
+      vectors: 'docs_passage_vectors',
+      model: embeddingModel({ a: [1, 0, 0, 0], b: [0, 1, 0, 0] }),
+    });
+
+    // Act
+    const byId = await store.get(['b']);
+    const window = await store.neighbours({
+      source: 'guide',
+      seq: 0,
+      windowSize: 1,
+    });
+    const retrieved = await retriever.retrieve('a', { topK: 1 });
+    const many = await retriever.retrieveMany(['a', 'b'], { topK: 1 });
+    const filtered = await retriever.retrieve('a', {
+      filter: { field: 'metadata.draft', operator: '==', value: true },
+    });
+
+    // Assert
+    const passages = [
+      ...byId.values(),
+      ...window,
+      ...[retrieved, ...many, filtered].flatMap(({ passages }) =>
+        passages.map(({ passage }) => passage),
+      ),
+    ];
+    const a = { year: 2024, draft: false };
+    const b = { year: 2025, draft: true };
+    assert.deepEqual(
+      passages.map(({ id, metadata }) => [id, metadata]),
+      [
+        ['b', b],
+        ['a', a],
+        ['b', b],
+        ['a', a],
+        ['a', a],
+        ['b', b],
+        ['b', b],
+      ],
+    );
+    assert.ok(passages.every((passage) => metadata.gave(passage.metadata)));
+    assert.deepEqual(metadata.columns[0], {
+      product: 'vault',
+      year: 2025,
+      draft: true,
+    });
+  },
+);
+
+test(
+  'an error that the metadata of a store throws for a row is the error of each read of that row: get, neighbours, retrieve and retrieveMany reject with it',
+  { skip: emulation },
+  async () => {
+    // Arrange
+    const refused = new TypeError('A passage has no draft flag');
+    await using database = await server().database();
+    const pool = await database.pool();
+    await contract(pool, [
+      { id: 'a', vector: [1, 0, 0, 0], year: 2024, draft: false },
+      { id: 'b', vector: [0, 1, 0, 0], year: 2025 },
+    ]);
+    const store = new SqlServerPassageStore({
+      session: session(pool),
+      passages: 'docs_passages',
+      metadata: (columns) => {
+        if (columns.draft === null) throw refused;
+        return release(columns);
+      },
+    });
+    const retriever = new SqlServerEmbeddingRetriever({
+      store,
+      vectors: 'docs_passage_vectors',
+      model: embeddingModel({ a: [1, 0, 0, 0], b: [0, 1, 0, 0] }),
+    });
+
+    // Act
+    const reads = await Promise.allSettled([
+      store.get(['b']),
+      store.neighbours({ source: 'doc-b', seq: 0, windowSize: 1 }),
+      retriever.retrieve('b'),
+      retriever.retrieveMany(['a', 'b'], { topK: 1 }),
+    ]);
+    const read = await store.get(['a']);
+
+    // Assert
+    for (const settled of reads) {
+      assert.equal(
+        settled.status === 'rejected' ? settled.reason : settled.value,
+        refused,
+      );
+    }
+    assert.deepEqual(read.get('a')?.metadata, { year: 2024, draft: false });
   },
 );

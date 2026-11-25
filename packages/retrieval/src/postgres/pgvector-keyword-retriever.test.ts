@@ -10,6 +10,7 @@ import {
   PostgresPassageStore,
   type PostgresSession,
 } from '../postgres.ts';
+import { RecordingMetadata } from '../testing/recording-metadata.ts';
 
 type Row = {
   readonly id: string;
@@ -73,6 +74,7 @@ test('the passages come best first with ts_rank_cd as the score, so a better mat
     store: new PostgresPassageStore({
       session: session(pool),
       passages: 'docs_passages',
+      metadata: (columns) => columns,
     }),
     index: { column: 'keywords' },
   });
@@ -120,6 +122,7 @@ test('the words of the query join with AND by default, and with OR when the oper
     store: new PostgresPassageStore({
       session: session(pool),
       passages: 'docs_passages',
+      metadata: (columns) => columns,
     }),
     index: { column: 'keywords' },
   };
@@ -160,6 +163,7 @@ test('the words of keywords are quoted in place of the words of query, and the w
     store: new PostgresPassageStore({
       session: session(pool),
       passages: 'docs_passages',
+      metadata: (columns) => columns,
     }),
     index: { column: 'keywords' },
   });
@@ -193,6 +197,7 @@ test('the query and the index use the english configuration: a word finds its ot
     store: new PostgresPassageStore({
       session: session(pool),
       passages: 'docs_passages',
+      metadata: (columns) => columns,
     }),
     index: { column: 'keywords' },
   });
@@ -229,6 +234,7 @@ test('the configuration of the index value reaches the query: with simple, a sto
   const store = new PostgresPassageStore({
     session: session(pool),
     passages: 'docs_passages',
+    metadata: (columns) => columns,
   });
   const simple = new PgvectorKeywordRetriever({
     store,
@@ -274,6 +280,7 @@ test('a configuration is a value, never SQL: a configuration that would change t
     store: new PostgresPassageStore({
       session: session(pool),
       passages: 'docs_passages',
+      metadata: (columns) => columns,
     }),
     index: { column: 'keywords', configuration: hostile },
   });
@@ -303,6 +310,7 @@ test('each word of the query is plain text, so tsquery syntax in it matches as t
     store: new PostgresPassageStore({
       session: session(pool),
       passages: 'docs_passages',
+      metadata: (columns) => columns,
     }),
     index: { column: 'keywords' },
   });
@@ -347,6 +355,7 @@ test('a query of no words gives no passages', async () => {
     store: new PostgresPassageStore({
       session: session(pool),
       passages: 'docs_passages',
+      metadata: (columns) => columns,
     }),
     index: { column: 'keywords' },
   });
@@ -374,6 +383,7 @@ test('a keyword search gives 10 passages when the call gives no topK, topK when 
     store: new PostgresPassageStore({
       session: session(pool),
       passages: 'docs_passages',
+      metadata: (columns) => columns,
     }),
     index: { column: 'keywords' },
   });
@@ -411,6 +421,7 @@ test('an aborted keyword search rejects with the reason of its signal', async ()
     store: new PostgresPassageStore({
       session: session(pool),
       passages: 'docs_passages',
+      metadata: (columns) => columns,
     }),
     index: { column: 'keywords' },
   });
@@ -438,6 +449,7 @@ test('the search reads the index column that the retriever names, by a name that
     store: new PostgresPassageStore({
       session: session(pool),
       passages: 'docs "passages"',
+      metadata: (columns) => columns,
     }),
     index: { column: 'key "words"' },
   });
@@ -481,6 +493,7 @@ test('passages that are a view over the table that holds the index are searched 
     store: new PostgresPassageStore({
       session: session(pool),
       passages: 'docs_passages',
+      metadata: (columns) => columns,
     }),
     index: { column: 'keywords' },
   });
@@ -530,6 +543,7 @@ test('a store with a schema searches the keyword index of the passages of that s
         session: session(pool),
         schema: 'rag',
         passages: 'docs_passages',
+        metadata: (columns) => columns,
       }),
     ).retrieve('key')
   ).passages;
@@ -538,6 +552,7 @@ test('a store with a schema searches the keyword index of the passages of that s
       new PostgresPassageStore({
         session: session(pool),
         passages: 'docs_passages',
+        metadata: (columns) => columns,
       }),
     ).retrieve('key')
   ).passages;
@@ -569,10 +584,12 @@ test('two stores on two databases, alive at once, each search the keyword index 
   const firstStore = new PostgresPassageStore({
     session: session(first.pool()),
     passages: 'docs_passages',
+    metadata: (columns) => columns,
   });
   const secondStore = new PostgresPassageStore({
     session: session(second.pool()),
     passages: 'docs_passages',
+    metadata: (columns) => columns,
   });
   const fromFirst = new PgvectorKeywordRetriever({
     store: firstStore,
@@ -590,4 +607,51 @@ test('two stores on two databases, alive at once, each search the keyword index 
   // Assert
   assert.deepEqual(ids(firstResults), ['first-a']);
   assert.deepEqual(ids(secondResults), ['second-a']);
+});
+
+test('the metadata of each passage is what the metadata of its store reads from the other columns of its row, without the tsvector of the index, through retrieve and a filter on it', async () => {
+  // Arrange
+  await using database = await server().database();
+  const pool = database.pool();
+  await contract(pool, [
+    { id: 'k', text: 'rotate the key', product: 'kms' },
+    { id: 'v', text: 'rotate the vault key', product: 'vault' },
+  ]);
+  const metadata = new RecordingMetadata(({ product }) => {
+    if (product !== 'kms' && product !== 'vault') {
+      throw new TypeError(
+        `A passage is of kms or vault, not ${String(product)}`,
+      );
+    }
+    return { product };
+  });
+  const retriever = new PgvectorKeywordRetriever({
+    store: new PostgresPassageStore({
+      session: session(pool),
+      passages: 'docs_passages',
+      metadata: metadata.read,
+    }),
+    index: { column: 'keywords' },
+  });
+
+  // Act
+  const all = (await retriever.retrieve('rotate key')).passages;
+  const vault = (
+    await retriever.retrieve('rotate key', {
+      filter: { field: 'metadata.product', operator: 'in', value: ['vault'] },
+    })
+  ).passages;
+
+  // Assert
+  const passages = [...all, ...vault].map(({ passage }) => passage);
+  assert.deepEqual(
+    passages.map(({ id, metadata }) => [id, metadata]),
+    [
+      ['k', { product: 'kms' }],
+      ['v', { product: 'vault' }],
+      ['v', { product: 'vault' }],
+    ],
+  );
+  assert.ok(passages.every((passage) => metadata.gave(passage.metadata)));
+  assert.deepEqual(metadata.columns[0], { product: 'kms' });
 });

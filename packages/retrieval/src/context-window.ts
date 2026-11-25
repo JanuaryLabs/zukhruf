@@ -1,6 +1,6 @@
 import { PassageGapError } from './passage-gap-error.ts';
 import type { PassageStore } from './passage-store.ts';
-import type { StoredPassage } from './passage.ts';
+import type { Metadata, StoredPassage } from './passage.ts';
 import type { Postprocessor } from './postprocessor.ts';
 import type { ScoredPassage } from './scored-passage.ts';
 
@@ -18,14 +18,18 @@ import type { ScoredPassage } from './scored-passage.ts';
  * window; the id, source, seq, metadata, score and vector stay. A passage
  * that the store gives no window for stays as it is (ADR 0008). It needs
  * stored passages: a live source's passage has no source or seq to widen
- * (ADR 0015).
+ * (ADR 0015). `M` is the metadata of its store, so a store of another typed
+ * `M` does not compile; a bag store goes over any passages, which is harmless,
+ * since a window keeps the passage's own metadata.
  */
-export class ContextWindow implements Postprocessor<StoredPassage> {
-  readonly #store: PassageStore;
+export class ContextWindow<
+  M extends Metadata = Metadata,
+> implements Postprocessor<StoredPassage<M>> {
+  readonly #store: PassageStore<M>;
   readonly #windowSize: number;
 
   constructor(options: {
-    readonly store: PassageStore;
+    readonly store: PassageStore<M>;
     /** How many passages before and after: 3 when absent, as Haystack's `window_size`. */
     readonly windowSize?: number;
   }) {
@@ -38,7 +42,7 @@ export class ContextWindow implements Postprocessor<StoredPassage> {
     }
   }
 
-  async postprocess<P extends StoredPassage>(
+  async postprocess<P extends StoredPassage<M>>(
     passages: readonly ScoredPassage<P>[],
     _query: string,
     options: { readonly abortSignal?: AbortSignal } = {},

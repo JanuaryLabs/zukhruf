@@ -11,6 +11,7 @@ import {
   SqlServerPassageStore,
   type SqlServerSession,
 } from '../sqlserver.ts';
+import { RecordingMetadata } from '../testing/recording-metadata.ts';
 
 type Row = {
   readonly id: string;
@@ -152,6 +153,7 @@ test(
       store: new SqlServerPassageStore({
         session: session(pool),
         passages: 'docs_passages',
+        metadata: (columns) => columns,
       }),
       index: { table: 'docs_passages' },
     });
@@ -217,6 +219,7 @@ test(
       store: new SqlServerPassageStore({
         session: session(pool),
         passages: 'docs_passages',
+        metadata: (columns) => columns,
       }),
       index: { table: 'docs_index' },
     });
@@ -259,6 +262,7 @@ test(
       store: new SqlServerPassageStore({
         session: session(pool),
         passages: 'docs_passages',
+        metadata: (columns) => columns,
       }),
       index: { table: 'docs_passages' },
     };
@@ -307,6 +311,7 @@ test(
       store: new SqlServerPassageStore({
         session: session(pool),
         passages: 'docs_passages',
+        metadata: (columns) => columns,
       }),
       index: { table: 'docs_passages' },
     });
@@ -353,6 +358,7 @@ test(
           session: session(pool),
           schema,
           passages: 'docs_passages',
+          metadata: (columns) => columns,
         }),
         index: { table: 'docs_passages' },
         ...(operator === undefined ? {} : { operator }),
@@ -416,6 +422,7 @@ test(
       store: new SqlServerPassageStore({
         session: session(pool),
         passages: 'docs_passages',
+        metadata: (columns) => columns,
       }),
       index: { table: 'docs_passages' },
     });
@@ -424,6 +431,7 @@ test(
         session: session(pool),
         schema: 'phrases',
         passages: 'docs_passages',
+        metadata: (columns) => columns,
       }),
       index: { table: 'docs_passages' },
     });
@@ -491,6 +499,7 @@ test(
       store: new SqlServerPassageStore({
         session: session(pool),
         passages: 'docs_passages',
+        metadata: (columns) => columns,
       }),
       index: { table: 'docs_passages' },
     });
@@ -526,6 +535,7 @@ test(
       store: new SqlServerPassageStore({
         session: session(pool),
         passages: 'docs_passages',
+        metadata: (columns) => columns,
       }),
       index: { table: 'docs_passages' },
     });
@@ -558,6 +568,7 @@ test(
       store: new SqlServerPassageStore({
         session: session(pool),
         passages: 'docs_passages',
+        metadata: (columns) => columns,
       }),
       index: { table: 'docs_passages' },
     });
@@ -599,6 +610,7 @@ test(
       store: new SqlServerPassageStore({
         session: session(pool),
         passages: 'docs_passages',
+        metadata: (columns) => columns,
       }),
       index: { table: 'docs_passages' },
     });
@@ -639,6 +651,7 @@ test(
       store: new SqlServerPassageStore({
         session: session(pool),
         passages: 'docs passages',
+        metadata: (columns) => columns,
       }),
       index: { table: 'docs ]parts]' },
     });
@@ -695,6 +708,7 @@ test(
           session: session(pool),
           schema: 'rag',
           passages: 'docs_passages',
+          metadata: (columns) => columns,
         }),
       ).retrieve('key')
     ).passages;
@@ -703,6 +717,7 @@ test(
         new SqlServerPassageStore({
           session: session(pool),
           passages: 'docs_passages',
+          metadata: (columns) => columns,
         }),
       ).retrieve('key')
     ).passages;
@@ -749,6 +764,7 @@ test(
       store: new SqlServerPassageStore({
         session: session(firstPool),
         passages: 'docs_passages',
+        metadata: (columns) => columns,
       }),
       index: { table: 'docs_passages' },
     });
@@ -756,6 +772,7 @@ test(
       store: new SqlServerPassageStore({
         session: session(secondPool),
         passages: 'docs_passages',
+        metadata: (columns) => columns,
       }),
       index: { table: 'docs_passages' },
     });
@@ -767,5 +784,67 @@ test(
     // Assert
     assert.deepEqual(ids(firstResults), ['first-a']);
     assert.deepEqual(ids(secondResults), ['second-a']);
+  },
+);
+
+test(
+  'the metadata of each passage is what the metadata of its store reads from the other columns of its row, through retrieve and a filter on it',
+  { skip: emulation },
+  async (t) => {
+    // Arrange
+    await using database = await server().database();
+    const pool = await database.pool();
+    await contract(
+      pool,
+      [
+        { id: 'k', text: 'rotate the key', product: 'kms' },
+        { id: 'v', text: 'rotate the vault key', product: 'vault' },
+      ],
+      t.signal,
+    );
+    const metadata = new RecordingMetadata(({ product }) => {
+      if (product !== 'kms' && product !== 'vault') {
+        throw new TypeError(
+          `A passage is of kms or vault, not ${String(product)}`,
+        );
+      }
+      return { product };
+    });
+    const retriever = new SqlServerKeywordRetriever({
+      store: new SqlServerPassageStore({
+        session: session(pool),
+        passages: 'docs_passages',
+        metadata: metadata.read,
+      }),
+      index: { table: 'docs_passages' },
+    });
+
+    // Act
+    const all = (await retriever.retrieve('rotate key')).passages;
+    const vault = (
+      await retriever.retrieve('rotate key', {
+        filter: { field: 'metadata.product', operator: '!=', value: 'kms' },
+      })
+    ).passages;
+
+    // Assert
+    const passages = [...all, ...vault].map(({ passage }) => passage);
+    assert.deepEqual(
+      passages
+        .map(({ id, metadata }) => [id, metadata])
+        .toSorted(([a], [b]) => String(a).localeCompare(String(b))),
+      [
+        ['k', { product: 'kms' }],
+        ['v', { product: 'vault' }],
+        ['v', { product: 'vault' }],
+      ],
+    );
+    assert.ok(passages.every((passage) => metadata.gave(passage.metadata)));
+    assert.deepEqual(
+      metadata.columns.toSorted((a, b) =>
+        String(a['product']).localeCompare(String(b['product'])),
+      )[0],
+      { product: 'kms' },
+    );
   },
 );

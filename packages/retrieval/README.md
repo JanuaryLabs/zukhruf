@@ -11,7 +11,7 @@ The words in these documents have one meaning each. See the glossary in [CONTEXT
 ## Use it
 
 ```sh
-npm install @zukhruf/retrieval @zukhruf/vectors ai
+npm install @zukhruf/retrieval @zukhruf/vectors ai zod
 ```
 
 This program writes a small passage contract into an in-memory SQLite database and searches it by meaning. In production, elt writes the contract, and the model is an AI SDK embedding model. Here a stand-in model from `ai/test` counts three words, so the program runs offline.
@@ -20,6 +20,7 @@ This program writes a small passage contract into an in-memory SQLite database a
 import { DatabaseSync } from 'node:sqlite';
 
 import { MockEmbeddingModelV4 } from 'ai/test';
+import { z } from 'zod';
 
 import {
   SqliteEmbeddingRetriever,
@@ -102,7 +103,13 @@ for (const [source, product, year, sentences] of documents) {
   }
 }
 
-const store = new SqlitePassageStore({ database, passages: 'docs_passages' });
+// The metadata of a passage: the columns of its row beside the passage's own.
+const Doc = z.object({ product: z.string(), year: z.number() });
+const store = new SqlitePassageStore({
+  database,
+  passages: 'docs_passages',
+  metadata: Doc.parse,
+});
 const retriever = new SqliteEmbeddingRetriever({
   store,
   vectors: 'docs_passage_vectors',
@@ -128,6 +135,8 @@ Output:
 The passages of one source tile it: each keeps its white space, two passages can overlap, and no passage starts after the end of the passages before it. `start` and `end` count code points, and `end` is exclusive ([ADR 0001](./docs/adr/0001-the-package-is-the-query-side-of-rag-and-reads-a-passage-contract-that-elt-writes.md), the amendment of 2026-11-24).
 
 The passage store is the root of the composition. It holds the connection and the passages, and on Postgres and SQL Server the schema of the contract. Each retriever and `ContextWindow` takes the store and only its own part: the vectors and the model, or the keyword index. So two retrievers of one search read one connection and one contract, as Haystack's retrievers take their `document_store`.
+
+The store's `metadata` reads the metadata of each passage from the other columns of its row, here with a zod schema's `parse`. Its result type `M` types the passages of the store and of every retriever over it, `StoredPassage<M>`, and their filters ([ADR 0015](./docs/adr/0015-a-passage-is-typed-by-its-metadata-and-only-a-stored-passage-has-source-seq-start-and-end.md)). A row that it refuses fails the call with its error. `metadata: (columns) => columns` keeps every column, untyped. The filter runs as SQL on the columns, so the reader may check, narrow or drop columns, but never rename them or convert their values: after a zod `.transform` that renames `set_id` to `setId` or turns a column into a `Date`, a filter on `metadata.setId` or on a `Date` compiles and fails at run time.
 
 Each program below continues this program: it uses its `database`, `store`, `retriever` and `model`.
 
@@ -180,6 +189,7 @@ const pgStore = new PostgresPassageStore({
   },
   schema: 'rag', // the search_path of the session finds the relations when absent
   passages: 'docs_passages',
+  metadata: Doc.parse,
 });
 const pgRetriever = new PgvectorEmbeddingRetriever({
   store: pgStore,
@@ -299,6 +309,7 @@ const msStore = new SqlServerPassageStore({
   },
   schema: 'rag', // the default schema of the user when absent
   passages: 'docs_passages',
+  metadata: Doc.parse,
 });
 const msMeaning = new SqlServerEmbeddingRetriever({
   store: msStore,
@@ -509,7 +520,7 @@ Output:
 0.80 vault-guide#2 [47, 126)  Then move each token to the new key. Keep a backup of the old key for 30 days.
 ```
 
-The score of each passage is the relevance of the reranking model. `Collapse` keeps one passage of each source. `ContextWindow` widens `vault-guide#2` to the passages of its source from `seq - 1` to `seq + 1`: its text is the exact part of the source from the `start` to the `end` of the window, because the passages of a source tile it. A window whose passages leave a gap fails with `PassageGapError`, which names the source and the offsets of the gap ([ADR 0008](./docs/adr/0008-a-search-is-composed-of-retrievers-that-wrap-retrievers-and-a-list-of-postprocessors.md), the amendment of 2026-11-24). `LongContextReorder` puts the best passage at the end of a list of two.
+The score of each passage is the relevance of the reranking model. `Collapse` keeps one passage of each source. A `Collapse` keeps the field as written, and its `postprocess` takes only passages that have that field, so the list checks the field against the passages of its retriever: over an engine of `z.infer<typeof Doc>`, `new Collapse({ field: 'metadata.prodcut' })` does not compile, while a key of the metadata, a stored field such as `seq`, and `new Collapse()` (the `source`) do; over a store whose `metadata` is the bag `(columns) => columns`, any key compiles. Over a live retriever, name the passage type, `new Collapse<Passage<z.infer<typeof Doc>>>({ field: 'metadata.product' })`: without a type argument a `Collapse` is one of stored passages. `ContextWindow` takes the `M` of its store, so the store of another typed `M` does not compile; the bag store compiles, since every `M` is a bag, and it does no harm: a window keeps the passage's own metadata. `ContextWindow` widens `vault-guide#2` to the passages of its source from `seq - 1` to `seq + 1`: its text is the exact part of the source from the `start` to the `end` of the window, because the passages of a source tile it. A window whose passages leave a gap fails with `PassageGapError`, which names the source and the offsets of the gap ([ADR 0008](./docs/adr/0008-a-search-is-composed-of-retrievers-that-wrap-retrievers-and-a-list-of-postprocessors.md), the amendment of 2026-11-24). `LongContextReorder` puts the best passage at the end of a list of two.
 
 `MaximalMarginalRelevance` compares the vectors of the passages, so its retriever runs with `includeVectors: true`. Its `model` embeds the query, and the relevance of a passage is the cosine similarity of the two vectors ([ADR 0008](./docs/adr/0008-a-search-is-composed-of-retrievers-that-wrap-retrievers-and-a-list-of-postprocessors.md), the amendment of 2026-11-23). It gives the passages in the order in which it picks them, so its list is not sorted by score, as after `LongContextReorder` ([ADR 0005](./docs/adr/0005-a-score-is-higher-for-a-better-passage.md)).
 
@@ -634,7 +645,7 @@ Output:
 
 ## Filter by metadata
 
-A filter has Haystack's shape: AND, OR and NOT over `== != > >= < <= in "not in"` ([ADR 0009](./docs/adr/0009-a-filter-has-the-shape-of-haystacks-filters.md)). A field is a passage field (`source`, `seq`, `start`, `end`) or a metadata column, `metadata.<column>`. A metadata column is each column of the passages other than `id, source, seq, start, end, text` (and `rowid` on SQLite). An engine retriever runs the filter as SQL `WHERE` in the same query. The filter is typed by the passage type of its retriever, `Filter<P>`: an engine retriever's filter can name `source`, `seq`, `start` and `end`, and a live source's cannot, since its passages have none ([ADR 0015](./docs/adr/0015-a-passage-is-typed-by-its-metadata-and-only-a-stored-passage-has-source-seq-start-and-end.md)).
+A filter has Haystack's shape: AND, OR and NOT over `== != > >= < <= in "not in"` ([ADR 0009](./docs/adr/0009-a-filter-has-the-shape-of-haystacks-filters.md)). A field is a passage field (`source`, `seq`, `start`, `end`) or a metadata column, `metadata.<column>`. A metadata column is each column of the passages other than `id, source, seq, start, end, text` (and `rowid` on SQLite). An engine retriever runs the filter as SQL `WHERE` in the same query. The filter is typed by the passage type of its retriever, `Filter<P>`: an engine retriever's filter can name `source`, `seq`, `start` and `end`, and a live source's cannot, since its passages have none. Its metadata fields are those of the store's `M`, each with its type, so with `Doc.parse` a filter on `metadata.yaer` (TS2820) or on a `year` of `'2025'` (TS2322) does not compile. `M` names the columns as they are, since the SQL reads them: a reader that renames a column or converts its value types a filter that the SQL cannot run ([ADR 0015](./docs/adr/0015-a-passage-is-typed-by-its-metadata-and-only-a-stored-passage-has-source-seq-start-and-end.md)).
 
 ```ts
 const filtered = await retriever.retrieve('rotate a key', {
@@ -672,7 +683,7 @@ On Postgres, pgvector filters after the approximate index scan, so a filtered ca
 | `RangeError`                                  | An option out of its range: `FusionRetriever` weights that are not one for each retriever, or a `rankWindowSize` smaller than the `topK` of the call; a `queryCount`, `topK` of MMR or `windowSize` that is not a positive integer; a `lambda` outside 0 to 1 |
 | `TypeError`                                   | A filter field that is not a passage field or `metadata.<column>`, an `in` or `not in` value that is not an array, or a stored model identity that is not of the form `provider/model (n dimensions)`                                                         |
 
-An error of the model, of the engine or of the reranking model reaches the caller as it is. An aborted call rejects with the reason of its `abortSignal`.
+An error of the model, of the engine, of the store's `metadata` or of the reranking model reaches the caller as it is. An aborted call rejects with the reason of its `abortSignal`.
 
 ## What the package does not do
 
@@ -882,7 +893,8 @@ class PostprocessingRetriever<
   });
 }
 // Each built-in has postprocess<P extends Passage>(…): Promise<ScoredPassage<P>[]>,
-// and Collapse and ContextWindow postprocess<P extends StoredPassage>(…).
+// ContextWindow<M> postprocess<P extends StoredPassage<M>>(…), and Collapse<P, F>
+// postprocess<R extends P>(…) of passages that have F.
 class Rerank implements Postprocessor<Passage> {
   constructor(options: {
     readonly model: RerankingModel;
@@ -899,16 +911,28 @@ class MaximalMarginalRelevance implements Postprocessor<Passage> {
     readonly topK: number;
   });
 }
-class Collapse implements Postprocessor<StoredPassage> {
+class Collapse<
+  P extends Passage = StoredPassage,
+  F extends keyof FilterFields<P> = keyof FilterFields<P>, // the field as written
+> {
+  // A stored passage type: options?, field 'source' when absent. A live one:
+  // options with the field, since its passages have no source.
   constructor(options?: {
-    readonly field?: keyof FilterFields<StoredPassage>; // 'source'
+    readonly field?: F; // a field of P, as in a filter
     readonly size?: number; // 1
   });
+  // Only passages that have F: a Postprocessor<R> for each such R.
+  postprocess<R extends P>(
+    passages: readonly ScoredPassage<R>[] &
+      (F extends keyof FilterFields<R> ? unknown : never),
+  ): Promise<ScoredPassage<R>[]>;
 }
 class LongContextReorder implements Postprocessor<Passage> {}
-class ContextWindow implements Postprocessor<StoredPassage> {
+class ContextWindow<M extends Metadata = Metadata> implements Postprocessor<
+  StoredPassage<M>
+> {
   constructor(options: {
-    readonly store: PassageStore;
+    readonly store: PassageStore<M>; // M comes from the store
     readonly windowSize?: number; // 3
   });
 }
@@ -948,22 +972,29 @@ class NoRetrieverAnsweredError extends RetrieverUnavailableError {
 }
 
 // @zukhruf/retrieval/sqlite
-class SqlitePassageStore implements PassageStore {
+class SqlitePassageStore<
+  M extends Metadata = Metadata,
+> implements PassageStore<M> {
   constructor(options: {
     readonly database: DatabaseSync; // node:sqlite
     readonly passages: string;
+    readonly metadata: (columns: Metadata) => M; // the other columns of a row; (columns) => columns keeps them
   });
 }
-class SqliteEmbeddingRetriever implements BatchRetriever<StoredPassage> {
+class SqliteEmbeddingRetriever<
+  in out M extends Metadata = Metadata,
+> implements BatchRetriever<StoredPassage<M>> {
   constructor(options: {
-    readonly store: SqlitePassageStore;
+    readonly store: SqlitePassageStore<M>;
     readonly vectors: string;
     readonly model: EmbeddingModel;
   });
 }
-class SqliteBM25Retriever implements Retriever<QueryType, StoredPassage> {
+class SqliteBM25Retriever<
+  in out M extends Metadata = Metadata,
+> implements Retriever<QueryType, StoredPassage<M>> {
   constructor(options: {
-    readonly store: SqlitePassageStore;
+    readonly store: SqlitePassageStore<M>;
     readonly index: string; // the FTS5 table
     readonly operator?: 'AND' | 'OR'; // 'AND'
   });
@@ -976,23 +1007,30 @@ type PostgresSession = {
     parameters: readonly unknown[], // $1 for the first
   ): Promise<readonly Record<string, unknown>[]>;
 };
-class PostgresPassageStore implements PassageStore {
+class PostgresPassageStore<
+  M extends Metadata = Metadata,
+> implements PassageStore<M> {
   constructor(options: {
     readonly session: PostgresSession;
     readonly schema?: string; // the search_path of the session when absent
     readonly passages: string;
+    readonly metadata: (columns: Metadata) => M; // the other columns of a row; (columns) => columns keeps them
   });
 }
-class PgvectorEmbeddingRetriever implements BatchRetriever<StoredPassage> {
+class PgvectorEmbeddingRetriever<
+  in out M extends Metadata = Metadata,
+> implements BatchRetriever<StoredPassage<M>> {
   constructor(options: {
-    readonly store: PostgresPassageStore;
+    readonly store: PostgresPassageStore<M>;
     readonly vectors: string;
     readonly model: EmbeddingModel;
   });
 }
-class PgvectorKeywordRetriever implements Retriever<QueryType, StoredPassage> {
+class PgvectorKeywordRetriever<
+  in out M extends Metadata = Metadata,
+> implements Retriever<QueryType, StoredPassage<M>> {
   constructor(options: {
-    readonly store: PostgresPassageStore;
+    readonly store: PostgresPassageStore<M>;
     readonly index: {
       readonly column: string; // the tsvector column of the passages
       readonly configuration?: string; // 'english'
@@ -1008,23 +1046,30 @@ type SqlServerSession = {
     parameters: Readonly<Record<string, unknown>>, // @p0 for the key p0
   ): Promise<readonly Record<string, unknown>[]>;
 };
-class SqlServerPassageStore implements PassageStore {
+class SqlServerPassageStore<
+  M extends Metadata = Metadata,
+> implements PassageStore<M> {
   constructor(options: {
     readonly session: SqlServerSession;
     readonly schema?: string; // the default schema of the user when absent
     readonly passages: string;
+    readonly metadata: (columns: Metadata) => M; // the other columns of a row; (columns) => columns keeps them
   });
 }
-class SqlServerEmbeddingRetriever implements BatchRetriever<StoredPassage> {
+class SqlServerEmbeddingRetriever<
+  in out M extends Metadata = Metadata,
+> implements BatchRetriever<StoredPassage<M>> {
   constructor(options: {
-    readonly store: SqlServerPassageStore;
+    readonly store: SqlServerPassageStore<M>;
     readonly vectors: string;
     readonly model: EmbeddingModel;
   });
 }
-class SqlServerKeywordRetriever implements Retriever<QueryType, StoredPassage> {
+class SqlServerKeywordRetriever<
+  in out M extends Metadata = Metadata,
+> implements Retriever<QueryType, StoredPassage<M>> {
   constructor(options: {
-    readonly store: SqlServerPassageStore;
+    readonly store: SqlServerPassageStore<M>;
     readonly index: { readonly table: string }; // the base table with the full-text index on [text]
     readonly operator?: 'AND' | 'OR'; // 'AND'
   });

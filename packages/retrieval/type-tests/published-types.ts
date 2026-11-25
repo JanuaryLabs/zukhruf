@@ -4,10 +4,12 @@
 // src/published-types.test.ts compiles this file and expects, on each line
 // marked `// TS<code>`, exactly that error, and no other error.
 import {
+  Collapse,
   ContextWindow,
   type Filter,
   type Fusion,
   FusionRetriever,
+  type Metadata,
   type Passage,
   type PassageStore,
   PostprocessingRetriever,
@@ -20,6 +22,17 @@ import {
   type StoredPassage,
   reciprocalRankFusion,
 } from '../dist/index.js';
+import {
+  PgvectorEmbeddingRetriever,
+  PgvectorKeywordRetriever,
+  PostgresPassageStore,
+  type PostgresSession,
+} from '../dist/postgres.js';
+import {
+  SqliteBM25Retriever,
+  SqliteEmbeddingRetriever,
+  SqlitePassageStore,
+} from '../dist/sqlite.js';
 
 type IssueQueryBundle = QueryBundle & { readonly jql: string };
 
@@ -172,3 +185,197 @@ export const hosted: Of<StoredPassage<Label>> = new PostprocessingRetriever({
   }),
   postprocessors: [pin, new SimilarityCutoff({ threshold: 0.2 })],
 }).retrieve('q');
+
+// An engine is typed by the metadata that its store reads from each row: the
+// store's required `metadata` gives M, and every retriever over the store
+// gives StoredPassage<M> (ADR 0015).
+const label = (columns: Metadata): Label => {
+  const { setid, year } = columns;
+  if (typeof setid !== 'string' || typeof year !== 'number') {
+    throw new TypeError('A label has a setid and a year');
+  }
+  return { setid, year };
+};
+type Article = { readonly pmid: string };
+const article = (columns: Metadata): Article => {
+  const { pmid } = columns;
+  if (typeof pmid !== 'string') throw new TypeError('An article has a pmid');
+  return { pmid };
+};
+type SqliteOptions = ConstructorParameters<typeof SqlitePassageStore>[0];
+declare const database: SqliteOptions['database'];
+declare const session: PostgresSession;
+declare const embeddings: ConstructorParameters<
+  typeof SqliteEmbeddingRetriever
+>[0]['model'];
+const labels = new SqlitePassageStore({
+  database,
+  passages: 'labels',
+  metadata: label,
+});
+const keyword = new SqliteBM25Retriever({ store: labels, index: 'labels_fts' });
+const embedding = new SqliteEmbeddingRetriever({
+  store: labels,
+  vectors: 'label_vectors',
+  model: embeddings,
+});
+const articles = new PostgresPassageStore({
+  session,
+  passages: 'articles',
+  metadata: article,
+});
+const articleKeyword = new PgvectorKeywordRetriever({
+  store: articles,
+  index: { column: 'search' },
+});
+export const typedStore: Promise<ReadonlyMap<string, StoredPassage<Label>>> =
+  labels.get(['p1']);
+export const typedKeyword: Of<StoredPassage<Label>> = keyword.retrieve('q');
+export const typedMany: Promise<RetrievalResult<StoredPassage<Label>>[]> =
+  embedding.retrieveMany(['q']);
+export const typedArticles: Of<StoredPassage<Article>> =
+  new PgvectorEmbeddingRetriever({
+    store: articles,
+    vectors: 'article_vectors',
+    model: embeddings,
+  }).retrieve('q');
+// The store's metadata is required: the bag is `(columns) => columns`.
+export const untyped = new SqlitePassageStore({ database, passages: 'x' }); // TS2741
+export const bagged: Of<StoredPassage> = new SqliteBM25Retriever({
+  store: new SqlitePassageStore({
+    database,
+    passages: 'x',
+    metadata: (columns) => columns,
+  }),
+  index: 'x_fts',
+}).retrieve('q', {
+  filter: { field: 'metadata.any', operator: '==', value: 1 },
+});
+
+// The filter of an engine is checked against its M: a field that M lacks and
+// a value of the wrong type do not compile.
+export const lacking = keyword.retrieve('q', {
+  filter: { field: 'metadata.setId', operator: '==', value: 's' }, // TS2820
+});
+export const wrongValue = embedding.retrieve('q', {
+  filter: { field: 'metadata.year', operator: '>=', value: '2020' }, // TS2322
+});
+export const articleFilter = articleKeyword.retrieve('q', {
+  filter: { field: 'metadata.pmid', operator: 'in', value: ['1', '2'] },
+});
+// An engine of a narrower metadata value is not one of a wider value.
+declare const year2026: SqliteBM25Retriever<Year<2026>>;
+export const anyYear: SqliteBM25Retriever<Year<number>> = year2026; // TS2322
+
+// A fusion of two engines of one M keeps StoredPassage<M>, so ContextWindow
+// follows it. Two engines of different M fuse only when the type argument
+// names their union, as the paper wants: no inferred type covers both, and
+// the union is not the intersection.
+const sameM = new FusionRetriever({ retrievers: [keyword, embedding] });
+export const sameMetadata: Of<StoredPassage<Label>> = sameM.retrieve('q');
+export const sameWindow = new PostprocessingRetriever({
+  retriever: sameM,
+  postprocessors: [new ContextWindow({ store: labels })],
+});
+export const twoM = new FusionRetriever({
+  retrievers: [keyword, articleKeyword], // TS2322
+});
+type Either = StoredPassage<Label> | StoredPassage<Article>;
+const eitherM = new FusionRetriever<string, Either>({
+  retrievers: [keyword, articleKeyword],
+});
+export const either: Of<Either> = eitherM.retrieve('q');
+type LabelAndArticle = StoredPassage<Label & Article>;
+export const intersection: Of<LabelAndArticle> = eitherM.retrieve('q'); // TS2322
+// ContextWindow takes the M of its store: the store of articles widens no
+// label, and the store of labels widens no article of a fusion of both.
+export const otherStore = new PostprocessingRetriever({
+  retriever: keyword,
+  postprocessors: [new ContextWindow({ store: articles })], // TS2322
+});
+export const oneStoreOfTwo = new PostprocessingRetriever({
+  retriever: eitherM,
+  postprocessors: [new ContextWindow({ store: labels })], // TS2322
+});
+
+// A Collapse names a field of its passage type: any metadata key of the
+// default StoredPassage, the keys of M with a type argument, and a live
+// passage type needs the field, since it has no source.
+export const bySource = new Collapse();
+export const byLabel = new Collapse<StoredPassage<Label>>({
+  field: 'metadata.setid',
+});
+export const byTypo = new Collapse<StoredPassage<Label>>({
+  field: 'metadata.setId', // TS2820
+});
+export const liveDefault = new Collapse<Passage<Label>>(); // TS2554
+export const liveSource = new Collapse<Passage<Label>>({ field: 'source' }); // TS2322
+export const liveField = new Collapse<Passage<Label>>({
+  field: 'metadata.year',
+});
+export const collapsed: Of<StoredPassage<Label>> = new PostprocessingRetriever({
+  retriever: keyword,
+  postprocessors: [
+    new Collapse<StoredPassage<Label>>({ field: 'metadata.year', size: 2 }),
+  ],
+}).retrieve('q');
+// With no type argument, the passages of the retriever check the field: a
+// key that M lacks does not compile over the Label engine, while a key of M
+// and a stored field do; a bag engine takes any key. A live retriever takes
+// no default source: its Collapse names its passage type.
+export const untypedField: Of<StoredPassage<Label>> =
+  new PostprocessingRetriever({
+    retriever: keyword,
+    postprocessors: [
+      new Collapse({ field: 'metadata.year' }),
+      new Collapse({ field: 'seq' }),
+      new Collapse({ field: 'source' }),
+      new Collapse(),
+    ],
+  }).retrieve('q');
+export const untypedLacking = new PostprocessingRetriever({
+  retriever: keyword,
+  postprocessors: [new Collapse({ field: 'metadata.setId' })], // TS2322
+});
+export const bagField: Of<StoredPassage> = new PostprocessingRetriever({
+  retriever: new SqliteBM25Retriever({
+    store: new SqlitePassageStore({
+      database,
+      passages: 'x',
+      metadata: (columns) => columns,
+    }),
+    index: 'x_fts',
+  }),
+  postprocessors: [new Collapse({ field: 'metadata.anything' })],
+}).retrieve('q');
+export const liveNoSource = new PostprocessingRetriever({
+  retriever: live,
+  postprocessors: [new Collapse()], // TS2322
+});
+export const liveYear: Of<Passage<Label>> = new PostprocessingRetriever({
+  retriever: live,
+  postprocessors: [new Collapse<Passage<Label>>({ field: 'metadata.year' })],
+}).retrieve('q');
+declare const scoredLabels: Parameters<
+  Postprocessor<StoredPassage<Label>>['postprocess']
+>[0];
+export const direct = new Collapse({ field: 'metadata.setid' }).postprocess(
+  scoredLabels,
+);
+export const directLacking = new Collapse({
+  field: 'metadata.nope',
+}).postprocess(scoredLabels); // TS2345
+// A Collapse declares no `implements`, so these prove it is a Postprocessor
+// of a typed and of a bag passage type.
+export const typedPort: Postprocessor<StoredPassage<Label>> = new Collapse({
+  field: 'metadata.year',
+});
+export const typedPortOfP: Postprocessor<StoredPassage<Label>> = new Collapse<
+  StoredPassage<Label>
+>({ field: 'metadata.setid' });
+export const bagPort: Postprocessor<StoredPassage> = new Collapse({
+  field: 'metadata.anything',
+});
+export const livePort: Postprocessor<Passage<Label>> = new Collapse<
+  Passage<Label>
+>({ field: 'metadata.year' });

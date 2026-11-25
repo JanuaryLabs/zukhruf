@@ -49,6 +49,7 @@ test('get gives each passage it holds by id, with its metadata and without the k
   const store = new PostgresPassageStore({
     session: session(pool),
     passages: 'docs_passages',
+    metadata: (columns) => columns,
   });
 
   // Act
@@ -104,6 +105,7 @@ test('neighbours gives the passages of the source from seq - windowSize to seq +
   const store = new PostgresPassageStore({
     session: session(pool),
     passages: 'docs_passages',
+    metadata: (columns) => columns,
   });
 
   // Act
@@ -158,6 +160,7 @@ test('a passages table whose name needs quoting is read by that name', async () 
   const store = new PostgresPassageStore({
     session: session(pool),
     passages: 'docs "passages"',
+    metadata: (columns) => columns,
   });
 
   // Act
@@ -187,10 +190,12 @@ test('a store with a schema reads the passages and the neighbours of that schema
     session: session(pool),
     schema: 'rag',
     passages: 'docs_passages',
+    metadata: (columns) => columns,
   });
   const bySearchPath = new PostgresPassageStore({
     session: session(pool),
     passages: 'docs_passages',
+    metadata: (columns) => columns,
   });
 
   // Act
