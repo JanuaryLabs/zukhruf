@@ -317,7 +317,7 @@ Thus a file outside these globs does not run, for example a build output or a `t
 
 ### Run one file or one test
 
-`<run.js>` is `dist/test/run.js` of this package, written relative to the project root. It starts `node` with the words of the command in their order. Each `--selection="<glob>"` is a glob of the test selection (see above).
+`<run.js>` is `dist/test/run.js` of this package, written relative to the project root. It starts `node` with the words of the command, the files last. Each `--selection="<glob>"` is a glob of the test selection (see above).
 
 Put the test files after `--` to run only them, as with `@nx/jest` and `@nx/vite`. A word that does not start with `-` and ends with `.test.{ts,mts,cts,js,mjs}` names test files, and a glob does too. Then the selection goes:
 
@@ -334,7 +334,7 @@ A Node flag keeps the selection. Use it to run the tests with a name:
 nx run mutex:test --test-name-pattern=login
 ```
 
-Put a flag before the files, because Node reads a flag after a file as a file name. `node --test "x.test.ts" --test-timeout=1` stops with exit code 1: `Could not find 'x.test.ts, --test-timeout=1'`. Thus `nx run mutex:test -- --test-name-pattern=login src/login.test.ts` runs the tests named `login` in `src/login.test.ts`. When the run names no files, `run.js` puts the selection after all the words, so a flag on the CLI, after `--` or in `--args` always comes before the globs.
+A flag can come before or after the files. `run.js` puts the files after all the other words, because Node reads a flag after a file as one more file pattern. When another pattern matches a file, Node ignores that flag and exits with code 0: `node --test src/login.test.ts --test-name-pattern=login` runs every test in `src/login.test.ts`. The other words keep their order, so a value in its own word stays after its flag. Thus `nx run mutex:test -- src/login.test.ts --test-name-pattern=login` and `nx run mutex:test -- --test-name-pattern login src/login.test.ts` run the tests named `login` in `src/login.test.ts`. When the run names no files, `run.js` puts the selection after all the words.
 
 The selection is in the command, not in `args`, because `--args` replaces `args`. Then `--args=--test-name-pattern=login` would leave Node with no file, and Node's own default pattern would run `test/helpers/*` too.
 

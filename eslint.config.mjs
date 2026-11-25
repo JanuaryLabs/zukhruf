@@ -535,6 +535,11 @@ function moduleBoundaryRule(files, allow = []) {
     'error',
     moduleBoundaries({
       allow,
+      // Nx forbids a static import of a package that shipped code of the
+      // project loads lazily, to keep it out of the first bundle. A test is
+      // never bundled, so it imports such a package statically (#5743: the
+      // tests of @zukhruf/nx and the optional peer @zukhruf/testing).
+      ...(files === 'tests' && { checkDynamicDependenciesExceptions: ['.*'] }),
       depConstraints: [
         islandConstraint([]),
         ...LAYERS.map((layer) => ({

@@ -2,8 +2,10 @@
 // `node run.js --test <flags> --selection=<glob>… <forwarded words>`. A
 // forwarded word that names test files narrows the run, as
 // `nx test <project> -- <file>` does with `@nx/jest` and `@nx/vite`, and then
-// the selection goes. Else the selection comes last, after the forwarded
-// flags, because Node reads a flag after a file as a file (ADR 0004).
+// the selection goes. The files, the named ones or else the selection, come
+// after every other word, because Node reads a flag after a file as a file
+// pattern and drops it with exit code 0 when another pattern matches (ADR
+// 0004). The other words keep their order, so a value stays after its flag.
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 
@@ -15,13 +17,14 @@ const forwarded = words.filter((word) => !word.startsWith(marker));
 const selection = words
   .filter((word) => word.startsWith(marker))
   .map((word) => word.slice(marker.length));
-const narrowed = forwarded.some(
-  (word) => !word.startsWith('-') && testFile.test(word),
-);
+const namesTestFile = (word: string) =>
+  !word.startsWith('-') && testFile.test(word);
+const named = forwarded.filter(namesTestFile);
+const others = forwarded.filter((word) => !namesTestFile(word));
 
 const node = spawn(
   process.execPath,
-  narrowed ? forwarded : [...forwarded, ...selection],
+  [...others, ...(named.length > 0 ? named : selection)],
   { stdio: 'inherit' },
 );
 const signals = ['SIGINT', 'SIGTERM', 'SIGHUP'] as const;

@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import { mkdir, readFile, realpath, symlink } from 'node:fs/promises';
 import { dirname, extname, join, relative } from 'node:path';
-import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import { TemporaryFiles } from '@zukhruf/fs';
+import { test } from '@zukhruf/testing/node';
 
 import {
   workspace as temporaryWorkspace,
@@ -341,6 +341,61 @@ test('a flag before a file after -- selects by name in that file only', async ()
   assert.equal(run.code, 0, run.output);
   assert.deepEqual(testCases(report), ['login']);
 });
+
+void test.each(
+  [
+    [
+      'after the file',
+      ['src/auth.test.ts', '--test-name-pattern=login'],
+      ['login'],
+    ],
+    [
+      'after the file, with its value as a separate word',
+      ['src/auth.test.ts', '--test-name-pattern', 'login'],
+      ['login'],
+    ],
+    [
+      'after the file, another flag',
+      ['src/auth.test.ts', '--test-skip-pattern=logout'],
+      ['login'],
+    ],
+    [
+      'before the file',
+      ['--test-name-pattern=login', 'src/auth.test.ts'],
+      ['login'],
+    ],
+    [
+      'between two files',
+      [
+        'src/auth.test.ts',
+        '--test-name-pattern=login',
+        'src/ok.test.ts',
+        '--test-name-pattern=ok',
+      ],
+      ['login', 'ok'],
+    ],
+  ] as const,
+  ([where, words, names]) =>
+    test(`a flag after -- applies to the files after -- wherever it stands: ${where}`, async () => {
+      await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
+      const probe = await workspace(folder.path, {
+        'packages/a/package.json': packageJson('a'),
+        'packages/a/src/ok.test.ts': passing('ok'),
+        'packages/a/src/auth.test.ts':
+          "import { test } from 'node:test';\ntest('login', () => {});\ntest('logout', () => {});\n",
+        // Outside the selection, but in Node's own default pattern: its `login`
+        // test fails when it runs.
+        'packages/a/test/helpers/login.ts':
+          "import { test } from 'node:test';\ntest('login', () => { throw new Error('a helper ran'); });\n",
+      });
+
+      const run = await probe.nx('run', 'a:test', '--', ...words);
+      const report = await probe.read('packages/a/test-results.xml');
+
+      assert.equal(run.code, 0, run.output);
+      assert.deepEqual(testCases(report), names);
+    }),
+);
 
 test('a flag alone keeps the selection: in --args, after -- with its value as a separate word, or with a value that ends like a test file', async () => {
   await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
