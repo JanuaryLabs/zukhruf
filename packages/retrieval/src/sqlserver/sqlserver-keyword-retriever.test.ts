@@ -293,7 +293,7 @@ test(
 );
 
 test(
-  'the words of keywords are quoted in place of the words of query, and the words of query when the bundle has no keywords, as when the query is a string',
+  'keywords are matched in place of the words of query, and the words of query when the bundle has no keywords, as when the query is a string',
   { skip: emulation },
   async (t) => {
     // Arrange
@@ -327,10 +327,123 @@ test(
       .passages;
     const byString = (await retriever.retrieve('renew certificate')).passages;
 
-    // Assert: 'signing key' is two words, each its own CONTAINS phrase.
+    // Assert: 'signing key' is one CONTAINS phrase, which 'both' holds.
     assert.deepEqual(ids(byKeywords), ['both']);
     assert.deepEqual(ids(byQuery), ['renew']);
     assert.deepEqual(byString, byQuery);
+  },
+);
+
+test(
+  'each keyword is one phrase, so its words match side by side and in order, under AND and under OR, while each word of a text matches anywhere',
+  { skip: emulation },
+  async (t) => {
+    // Arrange: 'reversed' and 'apart' hold every word of the keywords, but
+    // not side by side in their order.
+    await using database = await server().database();
+    const pool = await database.pool();
+    await contract(
+      pool,
+      [
+        { id: 'hf', text: 'chronic heart failure in adults' },
+        { id: 'reversed', text: 'failure of the heart muscle' },
+        { id: 'ace', text: 'an ACE inhibitor lowers pressure' },
+        { id: 'both', text: 'heart failure treated with an ACE inhibitor' },
+        { id: 'apart', text: 'failure of the heart and an inhibitor of ACE' },
+      ],
+      t.signal,
+    );
+    const options = {
+      store: new SqlServerPassageStore({
+        session: session(pool),
+        passages: 'docs_passages',
+        metadata: (columns) => columns,
+      }),
+      index: { table: 'docs_passages' },
+    };
+    const and = new SqlServerKeywordRetriever(options);
+    const or = new SqlServerKeywordRetriever({
+      ...options,
+      matching: { predicate: 'CONTAINS', operator: 'OR' },
+    });
+    const keywords = ['heart failure', 'ACE inhibitor'] as const;
+
+    // Act
+    const results = {
+      one: ids(
+        (await and.retrieve({ query: 'hf', keywords: ['heart failure'] }))
+          .passages,
+      ),
+      and: ids((await and.retrieve({ query: 'hf', keywords })).passages),
+      or: ids((await or.retrieve({ query: 'hf', keywords })).passages),
+      text: ids((await and.retrieve('heart failure')).passages),
+    };
+
+    // Assert
+    assert.deepEqual(
+      Object.fromEntries(
+        Object.entries(results).map(([name, found]) => [
+          name,
+          found.toSorted(),
+        ]),
+      ),
+      {
+        one: ['both', 'hf'],
+        and: ['both'],
+        or: ['ace', 'both', 'hf'],
+        text: ['apart', 'both', 'hf', 'reversed'],
+      },
+    );
+  },
+);
+
+test(
+  'a keyword with CONTAINS syntax in it is one phrase of text: its OR, NEAR and quotes are part of the phrase and never run as operators',
+  { skip: emulation },
+  async (t) => {
+    // Arrange
+    await using database = await server().database();
+    const pool = await database.pool();
+    await contract(
+      pool,
+      [
+        { id: 'or', text: 'heart or failure' },
+        { id: 'reversed', text: 'failure or heart' },
+        { id: 'near', text: 'heart near failure' },
+        { id: 'hf', text: 'heart failure' },
+      ],
+      t.signal,
+    );
+    const retriever = new SqlServerKeywordRetriever({
+      store: new SqlServerPassageStore({
+        session: session(pool),
+        passages: 'docs_passages',
+        metadata: (columns) => columns,
+      }),
+      index: { table: 'docs_passages' },
+    });
+    const byKeyword = async (keyword: string) =>
+      ids(
+        (await retriever.retrieve({ query: 'q', keywords: [keyword] }))
+          .passages,
+      ).toSorted();
+
+    // Act
+    const results = {
+      // As CONTAINS, OR would join heart and failure: every passage.
+      or: await byKeyword('heart OR failure'),
+      // As CONTAINS, NEAR would match heart close to failure.
+      near: await byKeyword('heart NEAR failure'),
+      // A `"` becomes a space, so it does not end the phrase.
+      quotes: await byKeyword('heart" OR "failure'),
+    };
+
+    // Assert
+    assert.deepEqual(results, {
+      or: ['or'],
+      near: ['near'],
+      quotes: ['or'],
+    });
   },
 );
 
@@ -962,5 +1075,46 @@ test('the CONTAINS condition that the session receives joins the phrases with AN
     '"rotate" AND "signing"',
     '"rotate" AND "signing"',
     '"rotate" OR "signing"',
+  ]);
+});
+
+test('the CONTAINS condition that the session receives has each keyword as one phrase, joined by the operator, and each word of a text as its own phrase', async () => {
+  // Arrange: the session records the parameters of each query and gives no row.
+  const conditions: unknown[] = [];
+  const store = new SqlServerPassageStore({
+    session: {
+      query: async (_sql, parameters) => {
+        conditions.push(
+          ...Object.values(parameters).filter(
+            (value) => typeof value === 'string' && value.includes('heart'),
+          ),
+        );
+        return [];
+      },
+    },
+    passages: 'docs_passages',
+    metadata: (columns) => columns,
+  });
+  const index = { table: 'docs_passages' };
+  const and = new SqlServerKeywordRetriever({ store, index });
+  const or = new SqlServerKeywordRetriever({
+    store,
+    index,
+    matching: { predicate: 'CONTAINS', operator: 'OR' },
+  });
+  const keywords = ['heart failure', 'ACE inhibitor'] as const;
+
+  // Act
+  await and.retrieve({ query: 'q', keywords });
+  await or.retrieve({ query: 'q', keywords });
+  await and.retrieve({ query: 'q', keywords: ['heart" OR "failure*'] });
+  await and.retrieve('heart failure');
+
+  // Assert
+  assert.deepEqual(conditions, [
+    '"heart failure" AND "ACE inhibitor"',
+    '"heart failure" OR "ACE inhibitor"',
+    '"heart  OR  failure"',
+    '"heart" AND "failure"',
   ]);
 });

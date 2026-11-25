@@ -41,7 +41,7 @@ One search request with a text for each kind of search that needs other words: `
 _Avoid_: Query object, request, search input
 
 **Keywords**:
-The `keywords` of a query bundle: the list of words that a keyword retriever quotes in place of the words of `query` (.NET `HybridSearchAsync(searchValue, keywords)`). It is never empty.
+The `keywords` of a query bundle: the list of whole keywords that a keyword retriever matches in place of the words of `query` (.NET `HybridSearchAsync(searchValue, keywords)`). Each keyword is one phrase in the syntax of the engine, so `'heart failure'` matches those words side by side and in order. It is never empty.
 _Avoid_: Terms, keyword text, search string
 
 **Custom embeddings**:

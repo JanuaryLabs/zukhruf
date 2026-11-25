@@ -216,7 +216,7 @@ Output:
 
 ## Search by keywords
 
-A keyword retriever queries the keyword index that elt writes: FTS5 on SQLite, `tsvector` on Postgres, full-text on SQL Server. It quotes each word of the query, so a word of the user is never an operator of the engine. A query bundle can give it other words in `keywords` (see "Give each search its own text"). Its score is higher for a better match on every engine; `SqliteBM25Retriever` negates `bm25()` ([ADR 0004](./docs/adr/0004-a-keyword-retriever-queries-the-keyword-index-that-elt-writes.md)). How the words match is each engine's own `matching` option, a union typed for that engine only ([ADR 0018](./docs/adr/0018-each-keyword-retriever-matches-in-the-strongest-form-of-its-engine.md)): `{ operator: 'AND' | 'OR' }` on SQLite, `{ strategy: 'all' }` on Postgres, which has no OR, and `{ predicate: 'CONTAINS', operator: 'AND' | 'OR' }` on SQL Server. Each is AND when absent.
+A keyword retriever queries the keyword index that elt writes: FTS5 on SQLite, `tsvector` on Postgres, full-text on SQL Server. It quotes each word of the query, so a word of the user is never an operator of the engine. A query bundle can give it whole keywords in `keywords` (see "Give each search its own text"): each keyword is one phrase in the syntax of the engine, an FTS5 phrase, a `phraseto_tsquery` or a CONTAINS phrase, so `'heart failure'` matches those words side by side and in order, and not "failure of the heart". Its score is higher for a better match on every engine; `SqliteBM25Retriever` negates `bm25()` ([ADR 0004](./docs/adr/0004-a-keyword-retriever-queries-the-keyword-index-that-elt-writes.md)). How the words match is each engine's own `matching` option, a union typed for that engine only ([ADR 0018](./docs/adr/0018-each-keyword-retriever-matches-in-the-strongest-form-of-its-engine.md)): `{ operator: 'AND' | 'OR' }` on SQLite, `{ strategy: 'all' }` on Postgres, which has no OR, and `{ predicate: 'CONTAINS', operator: 'AND' | 'OR' }` on SQL Server. Each is AND when absent.
 
 On SQLite the index is an FTS5 table whose external content is a keywords table, kept in step by triggers. The passages view gives the `rowid` of that table, and the retriever joins the passages on it ([ADR 0004](./docs/adr/0004-a-keyword-retriever-queries-the-keyword-index-that-elt-writes.md), the amendment of 2026-11-24).
 
@@ -536,7 +536,7 @@ The score of each passage is the relevance of the reranking model. `Collapse` ke
 
 ## Give each search its own text
 
-A query is a string or a query bundle, `{ query, keywords?, customEmbeddings? }`, after LlamaIndex's `QueryBundle` ([ADR 0013](./docs/adr/0013-a-query-is-a-string-or-a-query-bundle-with-a-text-for-each-kind-of-search.md)). `query` is the information need: the reranker reads it, and so does every search that has no text of its own. A keyword retriever quotes the words of `keywords` in place of the words of `query`. An embedding retriever embeds the texts of `customEmbeddings` in place of `query`, and searches with the mean of their vectors. `FusionRetriever` gives each retriever the bundle unchanged, so each reads its own text. A string is a bundle with only `query`. This program continues the one of "Rerank and post-process the results".
+A query is a string or a query bundle, `{ query, keywords?, customEmbeddings? }`, after LlamaIndex's `QueryBundle` ([ADR 0013](./docs/adr/0013-a-query-is-a-string-or-a-query-bundle-with-a-text-for-each-kind-of-search.md)). `query` is the information need: the reranker reads it, and so does every search that has no text of its own. A keyword retriever matches each keyword of `keywords` as one phrase in place of the words of `query`. An embedding retriever embeds the texts of `customEmbeddings` in place of `query`, and searches with the mean of their vectors. `FusionRetriever` gives each retriever the bundle unchanged, so each reads its own text. A string is a bundle with only `query`. This program continues the one of "Rerank and post-process the results".
 
 ```ts
 import type {
@@ -864,7 +864,7 @@ type RetrieveOptions<P extends Passage = Passage> = {
 
 type QueryBundle = {
   readonly query: string; // the information need
-  readonly keywords?: readonly [string, ...string[]]; // the words of query when absent
+  readonly keywords?: readonly [string, ...string[]]; // each one phrase; the words of query when absent
   readonly customEmbeddings?: readonly [string, ...string[]]; // [query] when absent; the mean of their vectors
 };
 type QueryType = string | QueryBundle; // a string is { query }

@@ -25,8 +25,9 @@ export type PostgresMatching = { readonly strategy: 'all' };
  * Ranks the passages by Postgres full-text search over the keyword index
  * that elt writes: a `tsvector` column of the passages, `to_tsvector(configuration,
  * text)`, with a GIN index (ADR 0004). The score is `ts_rank_cd`, which is
- * higher for a better match (ADR 0005). It matches the words of `keywords`,
- * or of `query` when the bundle has none (ADR 0013).
+ * higher for a better match (ADR 0005). It matches each keyword of
+ * `keywords` as one `phraseto_tsquery`, or the words of `query` when the
+ * bundle has none (ADR 0013, ADR 0018).
  * It gives the passages with the metadata that its store reads (ADR 0015).
  */
 export class PgvectorKeywordRetriever<

@@ -29,7 +29,7 @@ export interface SqlServerMatch<M extends Metadata> {
   ): Promise<RetrievalResult<StoredPassage<M>>>;
 }
 
-/** A passage matches when it holds every word: the phrases join with `AND`. */
+/** A passage matches when it holds every phrase: they join with `AND`. */
 export class ContainsAll<M extends Metadata> implements SqlServerMatch<M> {
   readonly #index: FullTextIndex<M>;
 
@@ -45,7 +45,7 @@ export class ContainsAll<M extends Metadata> implements SqlServerMatch<M> {
   }
 }
 
-/** A passage matches when it holds any word: the phrases join with `OR`. */
+/** A passage matches when it holds any phrase: they join with `OR`. */
 export class ContainsAny<M extends Metadata> implements SqlServerMatch<M> {
   readonly #index: FullTextIndex<M>;
 
@@ -62,7 +62,7 @@ export class ContainsAny<M extends Metadata> implements SqlServerMatch<M> {
 }
 
 /**
- * `CONTAINSTABLE` with each word one phrase, joined by `operator`; the score
+ * `CONTAINSTABLE` with each term one phrase, joined by `operator`; the score
  * is its `RANK`.
  */
 async function containsTable<M extends Metadata>(
@@ -72,13 +72,13 @@ async function containsTable<M extends Metadata>(
   options: RetrieveOptions<StoredPassage<M>>,
 ): Promise<RetrievalResult<StoredPassage<M>>> {
   const { session, passages, metadata, table } = index;
-  const words = phrases(wordsOf(query));
-  if (words.length === 0) return { passages: [], failures: new Map() };
+  const terms = phrases(termsOf(query));
+  if (terms.length === 0) return { passages: [], failures: new Map() };
   const parameters: Record<string, unknown> = {};
   // A condition longer than 4,000 characters reaches the caller as SQL
   // Server's error 4110: the driver binds it as NVARCHAR(MAX), which
   // CONTAINSTABLE refuses.
-  const condition = bind(parameters, words.join(` ${operator} `));
+  const condition = bind(parameters, terms.join(` ${operator} `));
   const filter = where(dialect, options.filter, parameters);
   const topK = bind(parameters, options.topK ?? 10);
   const rows = await session.query(
@@ -101,25 +101,25 @@ async function containsTable<M extends Metadata>(
 }
 
 /**
- * Each word as one CONTAINS phrase, `"…"`. A `"` would end the
+ * Each term as one CONTAINS phrase, `"…"`. A `"` would end the
  * phrase and a `*` before its end makes a prefix term, so each becomes a
- * space, which the word breaker reads as it reads the punctuation. A word
+ * space, which the word breaker reads as it reads the punctuation. A term
  * with no letter or digit makes no token and acts as a noise word, which
  * gives an AND no rows, so it is dropped. `AND`, `OR`, `NEAR`, `&`, `|`, `!`,
  * `~` and parentheses inside a phrase are text.
  */
-function phrases(words: readonly string[]): string[] {
-  return words
-    .map((word) => word.replaceAll(/["*]/g, ' ').trim())
-    .filter((word) => /[\p{L}\p{N}]/u.test(word))
-    .map((word) => `"${word}"`);
+function phrases(terms: readonly string[]): string[] {
+  return terms
+    .map((term) => term.replaceAll(/["*]/g, ' ').trim())
+    .filter((term) => /[\p{L}\p{N}]/u.test(term))
+    .map((term) => `"${term}"`);
 }
 
 /**
- * The white-space words of each keyword, or of the text: today's split, the
- * same on every engine until each one tokenizes its own way (#5669).
+ * What CONTAINS matches, each one phrase: a keyword whole, so its words match
+ * side by side and in order (ADR 0018), or each white-space word of a text.
  */
-const wordsOf = (query: KeywordQuery): string[] =>
-  (query.kind === 'keywords' ? query.keywords : [query.text])
-    .flatMap((text) => text.split(/\s+/))
-    .filter((word) => word !== '');
+const termsOf = (query: KeywordQuery): readonly string[] =>
+  query.kind === 'keywords'
+    ? query.keywords
+    : query.text.split(/\s+/).filter((word) => word !== '');

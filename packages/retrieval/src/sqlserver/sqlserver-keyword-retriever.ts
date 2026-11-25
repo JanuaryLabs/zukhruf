@@ -31,8 +31,9 @@ export type SqlServerMatching = {
  * that elt writes: a full-text index on the `[text]` column of a base table
  * whose full-text key is the passage id (ADR 0004). The search is
  * `CONTAINSTABLE`, and the score is its `RANK`, which is higher for a better
- * match (ADR 0005). It matches the words of `keywords`, or of `query` when
- * the bundle has none (ADR 0013).
+ * match (ADR 0005). It matches each keyword of `keywords` as one CONTAINS
+ * phrase, or the words of `query` when the bundle has none (ADR 0013,
+ * ADR 0018).
  * It gives the passages with the metadata that its store reads (ADR 0015).
  */
 export class SqlServerKeywordRetriever<

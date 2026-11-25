@@ -22,9 +22,9 @@ export type SqliteMatching =
  * Ranks the passages by FTS5 `bm25()` over the keyword index that elt writes:
  * an FTS5 table with the passages as its external content (ADR 0004). The
  * score is `-bm25()`, so a better match has a higher score (ADR 0005). It
- * matches the words of `keywords`, or of `query` when the bundle has none
- * (ADR 0013). It gives the passages with the metadata that its store
- * reads (ADR 0015).
+ * matches each keyword of `keywords` as one FTS5 phrase, or the words of
+ * `query` when the bundle has none (ADR 0013, ADR 0018). It gives the
+ * passages with the metadata that its store reads (ADR 0015).
  */
 export class SqliteBM25Retriever<
   // `in out M`: TypeScript cannot measure M through the filter's mapped keys,

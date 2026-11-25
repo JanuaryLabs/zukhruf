@@ -145,7 +145,7 @@ test("the words of the query join with AND by default and under matching { strat
   assert.deepEqual(ids(all), ['both']);
 });
 
-test('the words of keywords are quoted in place of the words of query, and the words of query when the bundle has no keywords, as when the query is a string', async () => {
+test('keywords are matched in place of the words of query, and the words of query when the bundle has no keywords, as when the query is a string', async () => {
   // Arrange
   await using database = await server().database();
   const pool = database.pool();
@@ -173,10 +173,107 @@ test('the words of keywords are quoted in place of the words of query, and the w
     .passages;
   const byString = (await retriever.retrieve('renew certificate')).passages;
 
-  // Assert: 'signing key' is two words, each its own plainto_tsquery.
+  // Assert: 'signing key' is one phraseto_tsquery, which 'both' holds.
   assert.deepEqual(ids(byKeywords), ['both']);
   assert.deepEqual(ids(byQuery), ['renew']);
   assert.deepEqual(byString, byQuery);
+});
+
+test('each keyword is one phrase, so its lexemes match side by side and in order, while each word of a text matches anywhere', async () => {
+  // Arrange: 'reversed' and 'apart' hold every lexeme of the keywords, but
+  // not side by side in their order.
+  await using database = await server().database();
+  const pool = database.pool();
+  await contract(pool, [
+    { id: 'hf', text: 'chronic heart failure in adults' },
+    { id: 'reversed', text: 'failure of the heart muscle' },
+    { id: 'ace', text: 'an ACE inhibitor lowers pressure' },
+    { id: 'both', text: 'heart failure treated with an ACE inhibitor' },
+    { id: 'apart', text: 'failure of the heart and an inhibitor of ACE' },
+  ]);
+  const retriever = new PgvectorKeywordRetriever({
+    store: new PostgresPassageStore({
+      session: session(pool),
+      passages: 'docs_passages',
+      metadata: (columns) => columns,
+    }),
+    index: { column: 'keywords' },
+  });
+
+  // Act
+  const results = {
+    one: ids(
+      (await retriever.retrieve({ query: 'hf', keywords: ['heart failure'] }))
+        .passages,
+    ),
+    // The english configuration stems the phrase: failures is failure.
+    stemmed: ids(
+      (await retriever.retrieve({ query: 'hf', keywords: ['heart failures'] }))
+        .passages,
+    ),
+    two: ids(
+      (
+        await retriever.retrieve({
+          query: 'hf',
+          keywords: ['heart failure', 'ACE inhibitor'],
+        })
+      ).passages,
+    ),
+    text: ids((await retriever.retrieve('heart failure')).passages),
+  };
+
+  // Assert
+  assert.deepEqual(
+    Object.fromEntries(
+      Object.entries(results).map(([name, found]) => [name, found.toSorted()]),
+    ),
+    {
+      one: ['both', 'hf'],
+      stemmed: ['both', 'hf'],
+      two: ['both'],
+      text: ['apart', 'both', 'hf', 'reversed'],
+    },
+  );
+});
+
+test('a keyword with tsquery syntax in it is one phrase of plain text: its operators never run', async () => {
+  // Arrange
+  await using database = await server().database();
+  const pool = database.pool();
+  await contract(pool, [
+    { id: 'hf', text: 'chronic heart failure' },
+    { id: 'reversed', text: 'failure of the heart' },
+    { id: 'heart', text: 'a healthy heart' },
+  ]);
+  const retriever = new PgvectorKeywordRetriever({
+    store: new PostgresPassageStore({
+      session: session(pool),
+      passages: 'docs_passages',
+      metadata: (columns) => columns,
+    }),
+    index: { column: 'keywords' },
+  });
+  const byKeyword = async (keyword: string) =>
+    ids(
+      (await retriever.retrieve({ query: 'q', keywords: [keyword] })).passages,
+    ).toSorted();
+
+  // Act
+  const results = {
+    // As tsquery, `|` is heart or failure: every passage.
+    or: await byKeyword('heart | failure'),
+    // As tsquery, `& !` is heart and not failure: 'heart'.
+    andNot: await byKeyword('heart & !failure'),
+    // As tsquery, `<3>` is failure three positions before heart: 'reversed'.
+    distance: await byKeyword('failure <3> heart'),
+  };
+
+  // Assert
+  assert.deepEqual(results, {
+    or: ['hf'],
+    andNot: ['hf'],
+    distance: [],
+  });
 });
 
 test('the query and the index use the english configuration: a word finds its other forms, and a stop word neither matches nor stops a match', async () => {

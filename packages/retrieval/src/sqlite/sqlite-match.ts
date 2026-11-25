@@ -27,7 +27,7 @@ export interface SqliteMatch<M extends Metadata> {
   ): RetrievalResult<StoredPassage<M>>;
 }
 
-/** A passage matches when it holds every word: the implicit operator of FTS5. */
+/** A passage matches when it holds every term: the implicit operator of FTS5. */
 export class AndMatch<M extends Metadata> implements SqliteMatch<M> {
   readonly #index: Fts5Index<M>;
 
@@ -43,7 +43,7 @@ export class AndMatch<M extends Metadata> implements SqliteMatch<M> {
   }
 }
 
-/** A passage matches when it holds any word. */
+/** A passage matches when it holds any term. */
 export class OrMatch<M extends Metadata> implements SqliteMatch<M> {
   readonly #index: Fts5Index<M>;
 
@@ -59,16 +59,16 @@ export class OrMatch<M extends Metadata> implements SqliteMatch<M> {
   }
 }
 
-/** The passages that match the words joined by `operator`, best `-bm25()` first. */
+/** The passages that match the terms joined by `operator`, best `-bm25()` first. */
 function bm25<M extends Metadata>(
   { database, passages, index, metadata }: Fts5Index<M>,
   query: KeywordQuery,
   operator: ' AND ' | ' OR ',
   options: RetrieveOptions<StoredPassage<M>>,
 ): RetrievalResult<StoredPassage<M>> {
-  const words = wordsOf(query);
-  if (words.length === 0) return { passages: [], failures: new Map() };
-  const parameters: SQLInputValue[] = [ftsPhrases(words).join(operator)];
+  const terms = termsOf(query);
+  if (terms.length === 0) return { passages: [], failures: new Map() };
+  const parameters: SQLInputValue[] = [ftsPhrases(terms).join(operator)];
   const filter = where(dialect, options.filter, parameters);
   parameters.push(options.topK ?? 10);
   const statement = database.prepare(`
@@ -89,18 +89,20 @@ function bm25<M extends Metadata>(
 }
 
 /**
- * Each word as an FTS5 phrase, with a `"` in it doubled, so no word of the
+ * Each term as an FTS5 phrase, with a `"` in it doubled, so no term of the
  * query is FTS5 syntax: `-`, `:`, `*`, `NEAR` and `OR` stay words
  * (sqlite.org/fts5.html §3), as text2sql's `toFtsQuery` quotes them (#5410).
  */
-const ftsPhrases = (words: readonly string[]): string[] =>
-  words.map((word) => `"${word.replaceAll('"', '""')}"`);
+const ftsPhrases = (terms: readonly string[]): string[] =>
+  terms.map((term) => `"${term.replaceAll('"', '""')}"`);
 
 /**
- * The white-space words of each keyword, or of the text: today's split, the
- * same on every engine until each one tokenizes its own way (#5669).
+ * What FTS5 matches, each one phrase: a keyword whole, so its words match
+ * side by side and in order (ADR 0018), or each white-space word of a text,
+ * since FTS5 has no free-text parser and a phrase gives the word to the
+ * tokenizer of the index.
  */
-const wordsOf = (query: KeywordQuery): string[] =>
-  (query.kind === 'keywords' ? query.keywords : [query.text])
-    .flatMap((text) => text.split(/\s+/))
-    .filter((word) => word !== '');
+const termsOf = (query: KeywordQuery): readonly string[] =>
+  query.kind === 'keywords'
+    ? query.keywords
+    : query.text.split(/\s+/).filter((word) => word !== '');

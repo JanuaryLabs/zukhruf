@@ -29,7 +29,7 @@ export interface PostgresMatch<M extends Metadata> {
   ): Promise<RetrievalResult<StoredPassage<M>>>;
 }
 
-/** A passage matches when it holds every word, as `plainto_tsquery` joins them. */
+/** A passage matches when it holds every keyword as a phrase, or every word of a text. */
 export class AllWords<M extends Metadata> implements PostgresMatch<M> {
   readonly #index: TsvectorIndex<M>;
 
@@ -45,21 +45,24 @@ export class AllWords<M extends Metadata> implements PostgresMatch<M> {
   }
 }
 
-/** The passages that hold every word, best `ts_rank_cd` first. */
+/** The passages that hold every term, best `ts_rank_cd` first. */
 async function tsRankCd<M extends Metadata>(
   { session, passages, metadata, column, configuration }: TsvectorIndex<M>,
   query: KeywordQuery,
   options: RetrieveOptions<StoredPassage<M>>,
 ): Promise<RetrievalResult<StoredPassage<M>>> {
-  const words = wordsOf(query);
-  if (words.length === 0) return { passages: [], failures: new Map() };
+  const terms = termsOf(query);
+  if (terms.length === 0) return { passages: [], failures: new Map() };
   const parameters: unknown[] = [];
   // The configuration is a parameter too, so its text is never SQL.
   const regconfig = `${bind(parameters, configuration)}::regconfig`;
-  // Each word is its own plainto_tsquery, which reads it as plain text:
-  // `&`, `|`, `!`, `<->`, `:*` and quotes stay text, never operators.
-  const tsquery = words
-    .map((word) => `plainto_tsquery(${regconfig}, ${bind(parameters, word)})`)
+  // Each term is its own tsquery, read as plain text: `&`, `|`, `!`, `<->`,
+  // `:*` and quotes stay text, never operators.
+  const tsquery = terms
+    .map(
+      ({ parser, text }) =>
+        `${parser}(${regconfig}, ${bind(parameters, text)})`,
+    )
     .join(' && ');
   const row = passageJson(parameters, passages);
   const filter = where(dialect, options.filter, parameters);
@@ -84,10 +87,20 @@ async function tsRankCd<M extends Metadata>(
 }
 
 /**
- * The white-space words of each keyword, or of the text: today's split, the
- * same on every engine until each one tokenizes its own way (#5669).
+ * What Postgres matches, each one tsquery: a keyword whole, which
+ * `phraseto_tsquery` reads as its lexemes in order (ADR 0018), or each
+ * white-space word of a text, which `plainto_tsquery` reads as plain text.
  */
-const wordsOf = (query: KeywordQuery): string[] =>
-  (query.kind === 'keywords' ? query.keywords : [query.text])
-    .flatMap((text) => text.split(/\s+/))
-    .filter((word) => word !== '');
+const termsOf = (query: KeywordQuery): readonly Term[] =>
+  query.kind === 'keywords'
+    ? query.keywords.map((text) => ({ parser: 'phraseto_tsquery', text }))
+    : query.text
+        .split(/\s+/)
+        .filter((word) => word !== '')
+        .map((text) => ({ parser: 'plainto_tsquery', text }));
+
+/** A text and the function that reads it as plain text into a tsquery. */
+interface Term {
+  readonly parser: 'phraseto_tsquery' | 'plainto_tsquery';
+  readonly text: string;
+}

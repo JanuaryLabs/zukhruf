@@ -154,7 +154,7 @@ test('the words of the query join with AND by default and under matching { opera
   assert.equal(ids(or)[0], 'both');
 });
 
-test('the words of keywords are quoted in place of the words of query, and the words of query when the bundle has no keywords, as when the query is a string', async () => {
+test('keywords are matched in place of the words of query, and the words of query when the bundle has no keywords, as when the query is a string', async () => {
   // Arrange
   using database = contract([
     { id: 'both', text: 'rotate the signing key' },
@@ -180,10 +180,98 @@ test('the words of keywords are quoted in place of the words of query, and the w
     .passages;
   const byString = (await retriever.retrieve('renew certificate')).passages;
 
-  // Assert: 'signing key' is two words, each quoted.
+  // Assert: 'signing key' is one phrase, which 'both' holds.
   assert.deepEqual(ids(byKeywords), ['both']);
   assert.deepEqual(ids(byQuery), ['renew']);
   assert.deepEqual(byString, byQuery);
+});
+
+test('each keyword is one phrase, so its words match side by side and in order, under AND and under OR, while each word of a text matches anywhere', async () => {
+  // Arrange: 'reversed' and 'apart' hold every word of the keywords, but
+  // not side by side in their order.
+  using database = contract([
+    { id: 'hf', text: 'chronic heart failure in adults' },
+    { id: 'reversed', text: 'failure of the heart muscle' },
+    { id: 'ace', text: 'an ACE inhibitor lowers pressure' },
+    { id: 'both', text: 'heart failure treated with an ACE inhibitor' },
+    { id: 'apart', text: 'failure of the heart and an inhibitor of ACE' },
+  ]);
+  const options = {
+    store: new SqlitePassageStore({
+      database,
+      passages: 'docs_passages',
+      metadata: (columns) => columns,
+    }),
+    index: 'docs_passages_fts',
+  };
+  const and = new SqliteBM25Retriever(options);
+  const or = new SqliteBM25Retriever({
+    ...options,
+    matching: { operator: 'OR' },
+  });
+  const keywords = ['heart failure', 'ACE inhibitor'] as const;
+
+  // Act
+  const results = {
+    one: ids(
+      (await and.retrieve({ query: 'hf', keywords: ['heart failure'] }))
+        .passages,
+    ),
+    and: ids((await and.retrieve({ query: 'hf', keywords })).passages),
+    or: ids((await or.retrieve({ query: 'hf', keywords })).passages),
+    text: ids((await and.retrieve('heart failure')).passages),
+  };
+
+  // Assert
+  assert.deepEqual(
+    Object.fromEntries(
+      Object.entries(results).map(([name, found]) => [name, found.toSorted()]),
+    ),
+    {
+      one: ['both', 'hf'],
+      and: ['both'],
+      or: ['ace', 'both', 'hf'],
+      text: ['apart', 'both', 'hf', 'reversed'],
+    },
+  );
+});
+
+test('a keyword with FTS5 syntax in it is one phrase of text: its OR, quotes and hyphen are part of the phrase and never run as operators', async () => {
+  // Arrange
+  using database = contract([
+    { id: 'or', text: 'heart or failure' },
+    { id: 'reversed', text: 'failure or heart' },
+    { id: 'hf', text: 'heart failure' },
+  ]);
+  const retriever = new SqliteBM25Retriever({
+    store: new SqlitePassageStore({
+      database,
+      passages: 'docs_passages',
+      metadata: (columns) => columns,
+    }),
+    index: 'docs_passages_fts',
+  });
+  const byKeyword = async (keyword: string) =>
+    ids(
+      (await retriever.retrieve({ query: 'q', keywords: [keyword] })).passages,
+    );
+
+  // Act
+  const results = {
+    // As FTS5, OR would join heart and failure and match every passage.
+    or: await byKeyword('heart OR failure'),
+    // Not doubled, the quotes would end the phrase and run OR.
+    quotes: await byKeyword('heart" OR "failure'),
+    // Unquoted, `-` opens a column filter: "no such column: failure".
+    hyphen: await byKeyword('heart-failure'),
+  };
+
+  // Assert
+  assert.deepEqual(results, {
+    or: ['or'],
+    quotes: ['or'],
+    hyphen: ['hf'],
+  });
 });
 
 test('each word of the query is a phrase, so FTS5 syntax in it matches as text and never runs as an operator', async () => {
