@@ -19,15 +19,21 @@ export type ProjectShape = 'bundled' | 'unbundled';
 
 /**
  * The patterns esbuild leaves to node_modules, as Nx hands them over:
- * `esbuildOptions.external` and `external`, less `excludeFromExternal`.
+ * `esbuildOptions.external` and `external`, less `excludeFromExternal`, and
+ * every package (`*`) when `esbuildOptions.packages` is `'external'`, which
+ * `excludeFromExternal` does not reach.
  */
 function esbuildExternals(options: unknown): string[] {
   if (!isRecord(options)) return [];
   const excluded = new Set(stringsAt(options, 'excludeFromExternal'));
-  return [
-    ...stringsAt(options['esbuildOptions'], 'external'),
+  const esbuildOptions = options['esbuildOptions'];
+  const listed = [
+    ...stringsAt(esbuildOptions, 'external'),
     ...stringsAt(options, 'external'),
   ].filter((pattern) => !excluded.has(pattern));
+  return isRecord(esbuildOptions) && esbuildOptions['packages'] === 'external'
+    ? ['*', ...listed]
+    : listed;
 }
 
 /** esbuild's rule: a pattern has at most one `*`, which stands for any text. */
@@ -53,8 +59,8 @@ function matchesExternal(name: string, pattern: string): boolean {
  * that the `@nx/js/typescript` plugin infers, is `nx:noop` (it ships what
  * other projects built), esbuild with `bundle: false` (it transpiles file by
  * file), or esbuild that leaves a workspace package it imports to
- * node_modules (it installs that package, and inlines only the others).
- * esbuild bundles by default.
+ * node_modules (it installs that package, and inlines only the others), as
+ * `packages: 'external'` does for every package. esbuild bundles by default.
  */
 export class ProjectBuild {
   readonly shape: ProjectShape;

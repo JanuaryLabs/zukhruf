@@ -113,11 +113,11 @@ What a project's `package.json` must declare, decided by its build target as Nx 
 _Avoid_: Project kind, inline/external
 
 **Bundled project**:
-An application whose build inlines all the workspace packages it imports, such as a Vite app, or esbuild with `bundle` on and none of those packages in `external`. Its manifest declares every npm package those packages pull in, but not the workspace packages themselves.
+An application whose build inlines all the workspace packages it imports, such as a Vite app, or esbuild with `bundle` on, none of those packages in `external`, and no `packages: 'external'`. Its manifest declares every npm package those packages pull in, but not the workspace packages themselves.
 _Avoid_: Inline project
 
 **Unbundled project**:
-Every project that is not bundled: libraries, an app that compiles with tsc, an `nx:noop` shell, esbuild with `bundle: false`, esbuild that names a workspace package it imports in `external`. Its manifest declares what its own code imports, but not the workspace packages that its build inlines.
+Every project that is not bundled: libraries, an app that compiles with tsc, an `nx:noop` shell, esbuild with `bundle: false`, esbuild that names a workspace package it imports in `external`, esbuild with `packages: 'external'`. Its manifest declares what its own code imports, but not the workspace packages that its build inlines.
 _Avoid_: Library (when shape is meant)
 
 **Test file**:

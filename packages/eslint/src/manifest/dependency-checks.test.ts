@@ -577,11 +577,17 @@ test('an app declares the workspace packages its build leaves to node_modules, a
     },
     'prefix-wildcard': { build: esbuild({ external: ['@fx/*'] }) },
     'suffix-wildcard': { build: esbuild({ external: ['*/greet'] }) },
+    'packages-external': {
+      build: esbuild({ esbuildOptions: { packages: 'external' } }),
+    },
   };
   const inlinesGreet = {
     vite: { build: VITE_BUILD },
     scripted: { buildScript: 'vite build' },
     'esbuild-default': { build: esbuild() },
+    'packages-bundle': {
+      build: esbuild({ esbuildOptions: { packages: 'bundle' } }),
+    },
     excluded: {
       build: esbuild({
         external: ['@fx/greet'],
@@ -632,6 +638,29 @@ test('an esbuild app takes its external list from the target defaults in nx.json
       apps: { api: { build: esbuild() } },
       targetDefaults: {
         '@nx/esbuild:esbuild': { options: { external: ['@fx/greet'] } },
+      },
+    }),
+  );
+  buildProjectGraph(workspace.root);
+
+  // Act
+  const findings = lint(workspace.root, ['apps/api/package.json']);
+
+  // Assert
+  assert.equal(findings.length, 1);
+  assert.match(findings[0]?.message ?? '', /@fx\/greet/);
+  assert.doesNotMatch(findings[0]?.message ?? '', /left-pad/);
+});
+
+test("an esbuild app takes esbuild's packages: 'external' from the target defaults in nx.json", async () => {
+  // Arrange
+  await using workspace = await fixtureWorkspace(
+    workspaceFiles({
+      apps: { api: { build: esbuild() } },
+      targetDefaults: {
+        '@nx/esbuild:esbuild': {
+          options: { esbuildOptions: { packages: 'external' } },
+        },
       },
     }),
   );
