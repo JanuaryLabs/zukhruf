@@ -1,7 +1,7 @@
 // The content of each file that node-app writes into the project. Each is a
 // string in a .ts module, so tsc puts it in dist with no copy step (ADR 0009).
 
-export function eslintConfig(projectRoot: string, rootOffset: string): string {
+export function eslintConfig(rootOffset: string): string {
   return `import zukhruf from '@zukhruf/eslint';
 
 import baseConfig, { modernNodeRecommended } from '${rootOffset}eslint.config.mjs';
@@ -11,23 +11,26 @@ export default [
   ...zukhruf.configs['hono'],
   ...modernNodeRecommended,
   { settings: { env: { startupFile: 'src/env.ts' } } },
-  // No tsconfig of the project includes sdk-it.config.ts, so typed lint gives
-  // it the default project. The path is relative to the workspace root, the
-  // tsconfigRootDir of @zukhruf/eslint. The block takes each .ts file, as the
-  // root block does: one project service serves the process, with the options
-  // of the first file it parses.
-  {
-    files: ['**/*.ts'],
-    languageOptions: {
-      parserOptions: {
-        projectService: {
-          allowDefaultProject: ['${projectRoot}/sdk-it.config.ts'],
-        },
-      },
-    },
-  },
 ];
 `;
+}
+
+/**
+ * The type-check-only tsconfig of sdk-it.config.ts: it is outside src, so this
+ * tsconfig is what type-checks it, and the project's tsconfig.json references
+ * it (ADR 0022).
+ */
+export function scriptsTsconfig(rootOffset: string) {
+  return {
+    extends: `${rootOffset}tsconfig.base.json`,
+    compilerOptions: {
+      outDir: 'out-tsc/scripts',
+      rootDir: '.',
+      tsBuildInfoFile: 'out-tsc/tsconfig.scripts.tsbuildinfo',
+      types: ['node'],
+    },
+    include: ['sdk-it.config.ts'],
+  };
 }
 
 export const appTs = `import { evlog } from 'evlog/hono';

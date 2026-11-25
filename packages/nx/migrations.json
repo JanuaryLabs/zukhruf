@@ -44,6 +44,11 @@
       "version": "0.8.70",
       "description": "A package that packageJsonUpdates moves in the root package.json moves in each project's package.json that declares it too, in the section that declares it, never down and never into a project that does not declare it, so the root and the apps install one copy, one React; each move is logged (#5296).",
       "implementation": "./dist/migrations/update-0-8-70/move-peers-in-project-manifests.js"
+    },
+    "type-check-config-files": {
+      "version": "0.8.116",
+      "description": "tsc type-checks the config files and Git hooks that typed lint gave to its default project: each node-app and db package with no tsconfig.scripts.json gets the one node-app or prisma writes (sdk-it.config.ts or prisma.config.ts) and its reference in the project's tsconfig.json, .ts hooks with no .husky/project.json get the hooks project of init and the './.husky' reference of the root tsconfig.json, and an allowDefaultProject block a generator wrote is deleted once a tsconfig covers its files; a file that a block which stays names gets no tsconfig, because typed lint refuses a file both cover, and each block no generator wrote stays and is logged with its file and line (#5649, ADR 0022).",
+      "implementation": "./dist/migrations/update-0-8-116/type-check-config-files.js"
     }
   },
   "packageJsonUpdates": {

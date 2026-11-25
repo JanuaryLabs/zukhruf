@@ -50,11 +50,32 @@ test('writes a db package whose client is generated into src/prisma and not comm
   );
   const eslint = tree.read('packages/db/eslint.config.mjs', 'utf-8') ?? '';
   assert.match(eslint, /ignores: \['src\/prisma\/\*\*'\]/);
-  assert.match(
-    eslint,
-    /allowDefaultProject: \['packages\/db\/prisma\.config\.ts'\]/,
-  );
+  assert.doesNotMatch(eslint, /allowDefaultProject/);
   assert.ok(!tree.exists('packages/db/project.json'));
+});
+
+test('prisma.config.ts is type-checked by tsconfig.scripts.json, not by the default project of typed lint', async () => {
+  const tree = generatorTree();
+
+  await prismaGenerator(tree, { directory: 'packages/db' });
+
+  assert.ok(tree.exists('packages/db/prisma.config.ts'));
+  const scripts = readJson(tree, 'packages/db/tsconfig.scripts.json');
+  assert.deepEqual(scripts.include, ['prisma.config.ts']);
+  assert.match(scripts.compilerOptions.outDir, /^out-tsc\//);
+  assert.match(scripts.compilerOptions.tsBuildInfoFile, /^out-tsc\//);
+  assert.deepEqual(readJson(tree, 'packages/db/tsconfig.json').references, [
+    { path: './tsconfig.lib.json' },
+    { path: './tsconfig.test.json' },
+    { path: './tsconfig.scripts.json' },
+  ]);
+  for (const config of ['eslint.config.mjs', 'packages/db/eslint.config.mjs']) {
+    assert.doesNotMatch(
+      tree.read(config, 'utf-8') ?? '',
+      /allowDefaultProject/,
+      config,
+    );
+  }
 });
 
 test('the manifest exports the client and the test helper, and writes no Prisma target', async () => {

@@ -6,3 +6,8 @@ The Rule of Three counts places, not packages. Code that a second place needs is
 
 **`src/test/plugin.ts` (`root !== '.'`) → `src/format/plugin.ts` (`dirname(file) !== '.'`).**
 The workspace root is an Nx project when its `package.json` has an `nx` key or it has a `project.json`, but a plugin area gives it no targets (ADR 0003). The test area leaves out the test files that the root owns. The format area leaves out the root's own config file, so the root gets no `prettier --check .`. A third area that gives targets extracts the rule (backlog #4019).
+
+## The type-check-only tsconfig of a config file outside src
+
+**`src/generators/node-app/files.ts` (`scriptsTsconfig`, `include: ['sdk-it.config.ts']`) → `src/generators/prisma/files.ts` (`scriptsTsconfig`, `include: ['prisma.config.ts']`).**
+A node-app and a db package each type-check a config file outside `src` with a `tsconfig.scripts.json` that writes to `out-tsc/scripts` (ADR 0022). The two differ only in the file they include. The `type-check-config-files` migration imports both, so it is no third copy. A third generator that writes one extracts the function, with the file as its parameter (#5649).

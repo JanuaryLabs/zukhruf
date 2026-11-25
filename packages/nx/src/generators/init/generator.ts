@@ -20,6 +20,8 @@ import {
   gitattributes,
   gitignore,
   hooks,
+  hooksProjectJson,
+  hooksTsconfig,
   npmrc,
   nvmrc,
   prettierignore,
@@ -68,6 +70,8 @@ export default async function initGenerator(
   const newHooks = Object.entries(hooks)
     .filter(([path, content]) => create(tree, path, content))
     .map(([path]) => path);
+  create(tree, '.husky/project.json', hooksProjectJson);
+  create(tree, '.husky/tsconfig.json', hooksTsconfig);
   create(tree, '.vscode/settings.json', vscodeSettings);
   create(tree, '.vscode/extensions.json', vscodeExtensions);
   create(tree, 'AGENTS.md', agents);

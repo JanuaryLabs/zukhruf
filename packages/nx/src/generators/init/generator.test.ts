@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { matchesGlob } from 'node:path';
 import { test } from 'node:test';
 
 import { type Tree, readJson, writeJson } from '@nx/devkit';
@@ -156,6 +157,30 @@ test('a fresh workspace gets each root file of the standard', async () => {
   );
 });
 
+test('the hooks are the Nx project hooks, which the solution references, and no file gets the default project of typed lint', async () => {
+  const tree = workspace();
+
+  await initGenerator(tree);
+
+  assert.equal(readJson(tree, '.husky/project.json').name, 'hooks');
+  const tsconfig = readJson(tree, '.husky/tsconfig.json');
+  for (const hook of ['pre-commit.ts', 'pre-push.ts', 'commit-msg.ts']) {
+    assert.ok(
+      tsconfig.include.some((glob: string) => matchesGlob(hook, glob)),
+      hook,
+    );
+  }
+  assert.match(tsconfig.compilerOptions.outDir, /^out-tsc/);
+  assert.match(tsconfig.compilerOptions.tsBuildInfoFile, /^out-tsc\//);
+  assert.deepEqual(readJson(tree, 'tsconfig.json').references, [
+    { path: './.husky' },
+  ]);
+  assert.doesNotMatch(
+    tree.read('eslint.config.mjs', 'utf-8') ?? '',
+    /allowDefaultProject/,
+  );
+});
+
 test('each hook that the generator creates is executable', async () => {
   const tree = workspace();
 
@@ -163,7 +188,7 @@ test('each hook that the generator creates is executable', async () => {
 
   const modes = tree
     .listChanges()
-    .filter((change) => change.path.startsWith('.husky/'))
+    .filter((change) => matchesGlob(change.path, '.husky/*.ts'))
     .map((change) => [change.path, change.options?.mode]);
   assert.deepEqual(modes.toSorted(), [
     ['.husky/commit-msg.ts', '755'],

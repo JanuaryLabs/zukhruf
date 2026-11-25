@@ -1,5 +1,7 @@
 # The prisma generator writes a Postgres db package and wires a backend
 
+Superseded in part on 2026-11-25 (#5649) for decision 14. `prisma` writes `tsconfig.scripts.json` for `prisma.config.ts`, and no `allowDefaultProject` ([ADR 0022](./0022-a-tsconfig-type-checks-every-generated-ts-file-and-typed-lint-has-no-default-project.md)).
+
 Superseded in part on 2026-11-22 (#5219) for the `generate` entries and the client input of decision 6. `init` writes them for every reader, and the prisma generator writes only `migrate:check` ([ADR 0019](./0019-a-task-that-reads-generated-code-runs-its-generator-first-and-hashes-its-output.md)).
 
 Status: Accepted 2026-11-18 by the owner (backlog #4604), decisions 1 to 15; decisions 16 and 17 on 2026-11-19 (#4792). meddit runs on it in production.

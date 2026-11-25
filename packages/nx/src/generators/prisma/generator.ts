@@ -36,6 +36,7 @@ import {
   migrationLockToml,
   prismaConfigTs,
   schemaPrisma,
+  scriptsTsconfig,
   startupClientTs,
   testingTs,
 } from './files.ts';
@@ -232,6 +233,7 @@ function writePackage(tree: Tree, identity: PackageIdentity): void {
     references: [
       { path: './tsconfig.lib.json' },
       { path: './tsconfig.test.json' },
+      { path: './tsconfig.scripts.json' },
     ],
   });
   // The base emits declarations only. The build emits JavaScript too, and
@@ -260,10 +262,12 @@ function writePackage(tree: Tree, identity: PackageIdentity): void {
     include: ['src/**/*.test.ts'],
     references: [{ path: './tsconfig.lib.json' }],
   });
-  tree.write(
-    `${projectRoot}/eslint.config.mjs`,
-    eslintConfig(projectRoot, rootOffset),
+  writeJson(
+    tree,
+    `${projectRoot}/tsconfig.scripts.json`,
+    scriptsTsconfig(rootOffset),
   );
+  tree.write(`${projectRoot}/eslint.config.mjs`, eslintConfig(rootOffset));
   tree.write(`${projectRoot}/prisma.config.ts`, prismaConfigTs);
   tree.write(`${projectRoot}/schema.prisma`, schemaPrisma);
   // The migration image copies models/, so it is in Git before the first model.

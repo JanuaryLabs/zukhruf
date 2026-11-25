@@ -42,6 +42,7 @@ import {
   eslintConfig,
   healthzRouteTs,
   loggingTs,
+  scriptsTsconfig,
   sdkItConfig,
   serverTs,
   startupTs,
@@ -131,10 +132,7 @@ export default async function nodeAppGenerator(
     { projectRoot, name, projectName, port, scope },
     previousServe,
   );
-  tree.write(
-    `${projectRoot}/eslint.config.mjs`,
-    eslintConfig(projectRoot, rootOffset),
-  );
+  tree.write(`${projectRoot}/eslint.config.mjs`, eslintConfig(rootOffset));
   tree.write(`${projectRoot}/src/app.ts`, appTs);
   tree.write(`${projectRoot}/src/app.test.ts`, appTestTs);
   tree.write(`${projectRoot}/src/env.ts`, envTs(port));
@@ -206,6 +204,7 @@ function writeTsconfigs(
     references: [
       { path: './tsconfig.app.json' },
       { path: './tsconfig.test.json' },
+      { path: './tsconfig.scripts.json' },
     ],
   });
   writeJson(tree, `${projectRoot}/tsconfig.app.json`, {
@@ -230,6 +229,11 @@ function writeTsconfigs(
     include: ['src/**/*.test.ts'],
     references: [{ path: './tsconfig.app.json' }],
   });
+  writeJson(
+    tree,
+    `${projectRoot}/tsconfig.scripts.json`,
+    scriptsTsconfig(rootOffset),
+  );
 }
 
 /** The image tag of a project name, as @nx/node sanitizes it: `@acme/backend` gives `acme-backend`. */

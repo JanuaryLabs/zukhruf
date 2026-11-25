@@ -1,5 +1,7 @@
 # The app generators move here and call the generators of Nx
 
+Superseded in part on 2026-11-25 (#5649) for the sdk-it `allowDefaultProject` of decision 6. `node-app` writes `tsconfig.scripts.json` for `sdk-it.config.ts`, and no `allowDefaultProject` ([ADR 0022](./0022-a-tsconfig-type-checks-every-generated-ts-file-and-typed-lint-has-no-default-project.md)).
+
 Superseded in part on 2026-11-22 (#5219) for `^sdk` in decision 6. `init` writes it for every reader, and `node-app` gives the rule to the `@nx/esbuild:esbuild` default ([ADR 0019](./0019-a-task-that-reads-generated-code-runs-its-generator-first-and-hashes-its-output.md)).
 
 Status: Accepted 2026-11-18 by the owner (backlog #3338), with decision 1 changed: the generated web app keeps the theme script and the `dark` variant of the monorepo standard §10.

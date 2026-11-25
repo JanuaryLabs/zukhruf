@@ -1,15 +1,16 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { basename, dirname, join, matchesGlob } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { isDeepStrictEqual } from 'node:util';
+import { isDeepStrictEqual, stripVTControlCharacters } from 'node:util';
 
 import type { NxJsonConfiguration, PluginConfiguration } from '@nx/devkit';
 
 import { TemporaryFiles } from '@zukhruf/fs';
 
 import { changes, generatorTree } from '../testing/generator-tree.ts';
-import { workspace } from '../testing/workspace.ts';
+import { workspace, zukhrufModules } from '../testing/workspace.ts';
 import authGenerator from './auth/generator.ts';
 import { pluginName } from './init/nx-json.ts';
 import nodeAppGenerator from './node-app/generator.ts';
@@ -158,6 +159,8 @@ async function generatedWorkspace(root: string) {
       '@zukhruf/eslint',
       '@zukhruf/testing',
       'vite',
+      '@typescript/native',
+      '@types/node',
     ],
     packages: {},
   });
@@ -358,5 +361,96 @@ test('a change of the backend or the db schema affects the client and the web', 
     for (const project of ['@acme/backend-client', '@acme/web']) {
       assert.ok(affected.includes(project), `${file}: ${affected.join(', ')}`);
     }
+  }
+});
+
+/** Each file that no tsconfig of src includes, by the project that type-checks it. */
+const configFiles = [
+  { project: '@acme/db', file: 'packages/db/prisma.config.ts' },
+  { project: '@acme/backend', file: 'apps/backend/sdk-it.config.ts' },
+  { project: 'hooks', file: '.husky/pre-push.ts' },
+];
+
+test('the typecheck of each project hashes its config files and fails on a type error in one', async () => {
+  await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
+  const { probe } = await generatedWorkspace(folder.path);
+  for (const { file } of configFiles) {
+    await probe.write(
+      file,
+      `${await probe.read(file)}export const probe: number = 'text';\n`,
+    );
+  }
+
+  for (const { project, file } of configFiles) {
+    const planned = await probe.nx(
+      'run',
+      `${project}:typecheck`,
+      '--graph=stdout',
+      '--skip-sync',
+    );
+    const run = await probe.nx(
+      'run',
+      `${project}:typecheck`,
+      '--excludeTaskDependencies',
+      '--skip-sync',
+      '--skip-nx-cache',
+    );
+
+    assert.equal(planned.code, 0, planned.output);
+    const { taskPlans }: { taskPlans: Record<string, string[]> } = JSON.parse(
+      planned.stdout,
+    );
+    // A plan line of the project's files is `<project>:<glob>,<glob>,…`.
+    const plan =
+      taskPlans[`${project}:typecheck`] ??
+      assert.fail(`nx prints no plan of ${project}:typecheck`);
+    const globs = plan
+      .filter((line) => line.startsWith(`${project}:`))
+      .flatMap((line) => line.slice(project.length + 1).split(','));
+    assert.ok(
+      globs.some((glob) => matchesGlob(file, glob)),
+      `${project}:typecheck does not hash ${file}:\n${plan.join('\n')}`,
+    );
+    assert.notEqual(run.code, 0, run.output);
+    assert.match(
+      stripVTControlCharacters(run.output),
+      new RegExp(
+        `${basename(file).replaceAll('.', '\\.')}:\\d+:\\d+ - error TS2322`,
+      ),
+    );
+  }
+});
+
+test('typed lint finds each config file in a tsconfig of its project, with no default project', async () => {
+  await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
+  await generatedWorkspace(folder.path);
+
+  for (const { file } of configFiles) {
+    const cwd = join(folder.path, dirname(file));
+    const run = spawnSync(
+      process.execPath,
+      [
+        join(zukhrufModules, 'eslint/bin/eslint.js'),
+        '--format',
+        'json',
+        basename(file),
+      ],
+      {
+        cwd,
+        encoding: 'utf8',
+        env: { PATH: process.env['PATH'] },
+        timeout: 60_000,
+      },
+    );
+
+    assert.notEqual(run.stdout, '', run.stderr);
+    const [result]: { messages: { fatal?: boolean; message: string }[] }[] =
+      JSON.parse(run.stdout);
+    assert.ok(result !== undefined, run.stdout);
+    assert.deepEqual(
+      result.messages.filter((message) => message.fatal === true),
+      [],
+      file,
+    );
   }
 });

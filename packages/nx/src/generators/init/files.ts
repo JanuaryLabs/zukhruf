@@ -96,7 +96,7 @@ export const tsconfigSolution = {
   extends: './tsconfig.base.json',
   compileOnSave: false,
   files: [],
-  references: [],
+  references: [{ path: './.husky' }],
 };
 
 export function prettierrc(scope: string) {
@@ -181,18 +181,6 @@ export default [
     files: ['*.config.{ts,mjs}', '.husky/*.ts', 'tools/*.mjs'],
     extends: [modernNodeRecommended],
   }),
-  // Files that no tsconfig includes get the default project of typed lint,
-  // not a parse error. typescript-eslint refuses '**' here.
-  {
-    files: ['**/*.ts'],
-    languageOptions: {
-      parserOptions: {
-        projectService: {
-          allowDefaultProject: ['*.config.ts', '.husky/*.ts'],
-        },
-      },
-    },
-  },
 ];
 `;
 
@@ -252,6 +240,28 @@ import { NxReleaseScope, commitMsg } from '@zukhruf/git-hooks';
 
 await commitMsg([new NxReleaseScope()]);
 `,
+};
+
+/**
+ * The hooks are the Nx project `hooks`, so its typecheck and lint targets
+ * read them: a hook is a file that git runs, not a package, and no other
+ * tsconfig includes it.
+ */
+export const hooksProjectJson = {
+  name: 'hooks',
+  $schema: '../node_modules/nx/schemas/project-schema.json',
+  sourceRoot: '.husky',
+  projectType: 'application',
+};
+
+export const hooksTsconfig = {
+  extends: '../tsconfig.base.json',
+  compilerOptions: {
+    rootDir: '.',
+    outDir: 'out-tsc',
+    tsBuildInfoFile: 'out-tsc/tsconfig.tsbuildinfo',
+  },
+  include: ['*.ts'],
 };
 
 export const vscodeSettings = {
