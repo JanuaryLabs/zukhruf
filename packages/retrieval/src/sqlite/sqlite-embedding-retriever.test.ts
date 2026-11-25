@@ -1076,3 +1076,129 @@ void test.each(
       );
     }),
 );
+
+void test.each(
+  [
+    [Number.NaN],
+    [Number.POSITIVE_INFINITY],
+    [Number.NEGATIVE_INFINITY],
+  ] as const,
+  ([scoreThreshold]) =>
+    test(`a scoreThreshold of ${scoreThreshold} is a RangeError when the retriever is made, as no score is at least NaN and a threshold that is not finite cuts no list the way the caller meant (#5734)`, () => {
+      // Arrange
+      using database = contract([]);
+      const store = new SqlitePassageStore({
+        database,
+        passages: 'docs_passages',
+        metadata: (columns) => columns,
+      });
+
+      // Act and Assert
+      assert.throws(
+        () =>
+          new SqliteEmbeddingRetriever({
+            store,
+            vectors: 'docs_passage_vectors',
+            model: embeddingModel({}),
+            scoreThreshold,
+          }),
+        {
+          name: 'RangeError',
+          message: `The scoreThreshold is a finite number, not ${scoreThreshold}`,
+        },
+      );
+    }),
+);
+
+void test.each(
+  [
+    [
+      0.5,
+      [
+        ['a', 1],
+        ['b', 0.5],
+      ],
+    ],
+    [
+      0,
+      [
+        ['a', 1],
+        ['b', 0.5],
+        ['c', 0],
+      ],
+    ],
+  ] as const,
+  ([scoreThreshold, kept]) =>
+    test(`retrieve with a scoreThreshold of ${scoreThreshold} keeps the passages whose score is at least the threshold, an equal score too, best first (#5734)`, async () => {
+      // Arrange: the scores are 1, 0.5, 0 and -1 for the query.
+      using database = contract([
+        { id: 'a', vector: [3, 0, 0, 0] },
+        { id: 'b', vector: [1, 1, 1, 1] },
+        { id: 'c', vector: [0, 1, 0, 0] },
+        { id: 'd', vector: [-1, 0, 0, 0] },
+      ]);
+      const retriever = new SqliteEmbeddingRetriever({
+        store: new SqlitePassageStore({
+          database,
+          passages: 'docs_passages',
+          metadata: (columns) => columns,
+        }),
+        vectors: 'docs_passage_vectors',
+        model: embeddingModel({ 'rotate a key': [1, 0, 0, 0] }),
+        scoreThreshold,
+      });
+
+      // Act
+      const { passages } = await retriever.retrieve('rotate a key');
+
+      // Assert
+      assert.deepEqual(
+        passages.map(({ passage, score }) => [passage.id, score]),
+        kept,
+      );
+    }),
+);
+
+test('retrieveMany with a scoreThreshold cuts the list of each query by the threshold (#5734)', async () => {
+  // Arrange: for "rotate a key" the scores are a 1, b 0.5, c 0 and d -1;
+  // for "toward c" they are c 1, b 0.5, a 0 and d 0.
+  using database = contract([
+    { id: 'a', vector: [3, 0, 0, 0] },
+    { id: 'b', vector: [1, 1, 1, 1] },
+    { id: 'c', vector: [0, 1, 0, 0] },
+    { id: 'd', vector: [-1, 0, 0, 0] },
+  ]);
+  const retriever = new SqliteEmbeddingRetriever({
+    store: new SqlitePassageStore({
+      database,
+      passages: 'docs_passages',
+      metadata: (columns) => columns,
+    }),
+    vectors: 'docs_passage_vectors',
+    model: embeddingModel({
+      'rotate a key': [1, 0, 0, 0],
+      'toward c': [0, 1, 0, 0],
+    }),
+    scoreThreshold: 0.5,
+  });
+
+  // Act
+  const lists = await retriever.retrieveMany(['rotate a key', 'toward c']);
+
+  // Assert
+  assert.deepEqual(
+    lists.map(({ passages }) =>
+      passages.map(({ passage, score }) => [passage.id, score]),
+    ),
+    [
+      [
+        ['a', 1],
+        ['b', 0.5],
+      ],
+      [
+        ['c', 1],
+        ['b', 0.5],
+      ],
+    ],
+  );
+});

@@ -1,5 +1,7 @@
 # A scored passage may have no score, and a list is in the retriever's order
 
+Superseded in part on 2026-11-25 (#5734) for `SimilarityCutoff`, which is gone. Each embedding retriever and `Rerank` take `scoreThreshold`, and both give every passage a score ([ADR 0019](./0019-a-score-threshold-belongs-to-the-embedding-retriever-or-to-rerank-where-the-scale-of-the-score-is-known.md)).
+
 Status: Accepted 2026-11-25 (backlog #5583; paper #5638).
 
 Decision-makers: Ezz, who approved the paper of #5638 on 2026-11-25 and chose, against the leaders' majority: "a missing score in rsf/dbsf throws a TypeError naming reciprocalRankFusion". The leader tables of the paper decided the rest.

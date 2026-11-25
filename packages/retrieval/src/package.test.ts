@@ -37,7 +37,7 @@ test('a consumer imports each subpath by its package name, and the package depen
       passageGap: new PassageGapError('s', 1, 2).name,
       retrievers: [core.FusionRetriever, core.HydeRetriever, core.MultiQueryRetriever].map((type) => type.name),
       fusions: [core.distributionBasedScoreFusion, core.reciprocalRankFusion, core.relativeScoreFusion].map((fusion) => typeof fusion().fuse),
-      postprocessors: [core.Collapse, core.ContextWindow, core.LongContextReorder, core.MaximalMarginalRelevance, core.PostprocessingRetriever, core.Rerank, core.SimilarityCutoff].map((type) => type.name),
+      postprocessors: [core.Collapse, core.ContextWindow, core.LongContextReorder, core.MaximalMarginalRelevance, core.PostprocessingRetriever, core.Rerank].map((type) => type.name),
       sqlite: [SqliteBM25Retriever, SqliteEmbeddingRetriever, SqlitePassageStore].map((type) => type.name),
       postgres: [PgvectorEmbeddingRetriever, PgvectorKeywordRetriever, PostgresPassageStore].map((type) => type.name),
       sqlserver: [SqlServerEmbeddingRetriever, SqlServerKeywordRetriever, SqlServerPassageStore].map((type) => type.name),
@@ -61,7 +61,6 @@ test('a consumer imports each subpath by its package name, and the package depen
       'MaximalMarginalRelevance',
       'PostprocessingRetriever',
       'Rerank',
-      'SimilarityCutoff',
     ],
     sqlite: [
       'SqliteBM25Retriever',

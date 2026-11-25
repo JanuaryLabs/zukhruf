@@ -205,3 +205,64 @@ void test.each(
       });
     }),
 );
+
+void test.each(
+  [
+    [Number.NaN],
+    [Number.POSITIVE_INFINITY],
+    [Number.NEGATIVE_INFINITY],
+  ] as const,
+  ([scoreThreshold]) =>
+    test(`a scoreThreshold of ${scoreThreshold} is a RangeError when the Rerank is made, as a threshold that is not finite cuts no list the way the caller meant (#5734)`, () => {
+      assert.throws(
+        () => new Rerank({ model: reranker(relevance), scoreThreshold }),
+        {
+          name: 'RangeError',
+          message: `The scoreThreshold is a finite number, not ${scoreThreshold}`,
+        },
+      );
+    }),
+);
+
+void test.each(
+  [
+    [
+      undefined,
+      0.5,
+      relevance,
+      [
+        ['beta', 0.8],
+        ['gamma', 0.5],
+      ],
+    ],
+    [2, 0.6, relevance, [['beta', 0.8]]],
+    [
+      undefined,
+      0,
+      { alpha: -0.2, beta: 0.8, gamma: 0 },
+      [
+        ['beta', 0.8],
+        ['gamma', 0],
+      ],
+    ],
+  ] as const,
+  ([topN, scoreThreshold, given, kept]) =>
+    test(`with topN ${topN} and a scoreThreshold of ${scoreThreshold}, a Rerank keeps the passages whose score from the reranking model is at least the threshold, best first, whatever score they had before (#5734)`, async () => {
+      // Arrange: before the rerank, alpha has 0.9 and gamma 0.1; the model
+      // gives the relevance of the case.
+      const rerank = new Rerank({
+        model: reranker(given),
+        ...(topN === undefined ? {} : { topN }),
+        scoreThreshold,
+      });
+
+      // Act
+      const results = await rerank.postprocess(passages, 'rotate a key');
+
+      // Assert
+      assert.deepEqual(
+        results.map(({ passage, score }) => [passage.id, score]),
+        kept,
+      );
+    }),
+);

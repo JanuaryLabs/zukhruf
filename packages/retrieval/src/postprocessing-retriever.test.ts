@@ -16,7 +16,6 @@ import {
   type QueryType,
   Rerank,
   RetrieverUnavailableError,
-  SimilarityCutoff,
   type StoredPassage,
 } from './index.ts';
 import { SqliteEmbeddingRetriever, SqlitePassageStore } from './sqlite.ts';
@@ -118,21 +117,19 @@ const scores = (
 ) => results.map(({ passage, score }) => [passage.id, score]);
 
 test('the postprocessors run in their order, each on the list of the one before it', async () => {
-  // Arrange
+  // Arrange: a host's cutoff for a score whose scale it knows.
   using database = knowledge();
+  const cutoff: Postprocessor<StoredPassage> = {
+    postprocess: async (passages) =>
+      passages.filter(({ score }) => score !== undefined && score >= 0.5),
+  };
   const rerankThenCut = new PostprocessingRetriever({
     retriever: search(database),
-    postprocessors: [
-      new Rerank({ model: reranker() }),
-      new SimilarityCutoff({ threshold: 0.5 }),
-    ],
+    postprocessors: [new Rerank({ model: reranker() }), cutoff],
   });
   const cutThenRerank = new PostprocessingRetriever({
     retriever: search(database),
-    postprocessors: [
-      new SimilarityCutoff({ threshold: 0.5 }),
-      new Rerank({ model: reranker() }),
-    ],
+    postprocessors: [cutoff, new Rerank({ model: reranker() })],
   });
 
   // Act
@@ -241,25 +238,18 @@ test('MaximalMarginalRelevance diversifies with the stored vectors when the call
   assert.equal(diversified.length, 1);
 });
 
-test('the failures of the retriever pass up unchanged, and a list of order only leaves a SimilarityCutoff empty and a Rerank with a score on every passage', async () => {
+test('the failures of the retriever pass up unchanged, and a Rerank gives a score to every passage of a list of order only', async () => {
   // Arrange: a live source that gives an order only and names one child
   // that was unavailable.
   const unavailable = new RetrieverUnavailableError('HTTP 503');
   const failures = new Map([['news', unavailable]]);
-  const live = () =>
-    new LiveRetriever(['alpha', 'beta', 'gamma', 'delta'], failures);
   const reranked = new PostprocessingRetriever({
-    retriever: live(),
+    retriever: new LiveRetriever(['alpha', 'beta', 'gamma', 'delta'], failures),
     postprocessors: [new Rerank({ model: reranker() })],
-  });
-  const cut = new PostprocessingRetriever({
-    retriever: live(),
-    postprocessors: [new SimilarityCutoff({ threshold: 0 })],
   });
 
   // Act
   const rerankedResult = await reranked.retrieve('rotate a key');
-  const cutResult = await cut.retrieve('rotate a key');
 
   // Assert
   assert.deepEqual(scores(rerankedResult.passages), [
@@ -268,11 +258,8 @@ test('the failures of the retriever pass up unchanged, and a list of order only 
     ['gamma', 0.3],
     ['alpha', 0.1],
   ]);
-  assert.deepEqual(cutResult.passages, []);
-  for (const result of [rerankedResult, cutResult]) {
-    assert.deepEqual([...result.failures], [['news', unavailable]]);
-    assert.equal(result.failures.get('news'), unavailable);
-  }
+  assert.deepEqual([...rerankedResult.failures], [['news', unavailable]]);
+  assert.equal(rerankedResult.failures.get('news'), unavailable);
 });
 
 test("the caller's abort rejects the call at once with the signal's reason, while a postprocessor ignores its signal and never settles", async () => {

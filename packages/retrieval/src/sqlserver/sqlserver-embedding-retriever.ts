@@ -4,7 +4,10 @@ import { Vector } from '@zukhruf/vectors';
 import { fromSql, sqlType, toSql } from '@zukhruf/vectors/sqlserver';
 
 import type { BatchRetriever } from '../batch-retriever.ts';
-import { IdentityCheckedSearch } from '../identity-checked-search.ts';
+import {
+  type EngineScoredPassage,
+  IdentityCheckedSearch,
+} from '../identity-checked-search.ts';
 import {
   type ModelIdentity,
   describe,
@@ -14,7 +17,6 @@ import type { Metadata, StoredPassage } from '../passage.ts';
 import type { QueryType } from '../query-bundle.ts';
 import type { RetrievalResult } from '../retrieval-result.ts';
 import type { RetrieveOptions } from '../retrieve-options.ts';
-import type { ScoredPassage } from '../scored-passage.ts';
 import { where } from '../sql/where.ts';
 import { binary } from './binary.ts';
 import { bind } from './bind.ts';
@@ -49,6 +51,8 @@ export class SqlServerEmbeddingRetriever<
     /** The passage vectors, in the schema of the store. */
     readonly vectors: string;
     readonly model: EmbeddingModel;
+    /** The least score, a cosine similarity from -1 to 1, that a passage keeps: every passage when absent (ADR 0019). */
+    readonly scoreThreshold?: number;
   }) {
     const contract = contractOf(options.store);
     this.#session = contract.session;
@@ -60,6 +64,7 @@ export class SqlServerEmbeddingRetriever<
       storedIdentities: (signal) => this.#storedIdentities(signal),
       search: (vectors, identity, retrieveOptions) =>
         this.#search(vectors, identity, retrieveOptions),
+      scoreThreshold: options.scoreThreshold,
     });
   }
 
@@ -105,7 +110,7 @@ export class SqlServerEmbeddingRetriever<
     vectors: readonly (readonly number[])[],
     identity: ModelIdentity,
     options: RetrieveOptions<StoredPassage<M>>,
-  ): Promise<ScoredPassage<StoredPassage<M>>[][]> {
+  ): Promise<EngineScoredPassage<StoredPassage<M>>[][]> {
     const parameters: Record<string, unknown> = {};
     const queries = bind(
       parameters,
@@ -137,7 +142,9 @@ export class SqlServerEmbeddingRetriever<
       parameters,
       options.signal === undefined ? {} : { signal: options.signal },
     );
-    const lists = vectors.map((): ScoredPassage<StoredPassage<M>>[] => []);
+    const lists = vectors.map(
+      (): EngineScoredPassage<StoredPassage<M>>[] => [],
+    );
     for (const cells of rows) {
       lists[Number(cells['query'])]?.push({
         passage: passage(cells['passage'], this.#metadata),

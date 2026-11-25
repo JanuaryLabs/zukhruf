@@ -9,6 +9,7 @@ import {
   type Filter,
   type Fusion,
   FusionRetriever,
+  LongContextReorder,
   type Metadata,
   type Passage,
   type PassageStore,
@@ -18,7 +19,6 @@ import {
   Rerank,
   type RetrievalResult,
   type Retriever,
-  SimilarityCutoff,
   type StoredPassage,
   reciprocalRankFusion,
 } from '../dist/index.js';
@@ -36,6 +36,7 @@ import {
   SqlitePassageStore,
 } from '../dist/sqlite.js';
 import {
+  SqlServerEmbeddingRetriever,
   SqlServerKeywordRetriever,
   type SqlServerMatching,
   SqlServerPassageStore,
@@ -157,18 +158,15 @@ const engines = new FusionRetriever({
 export const fusedEngines: Of<StoredPassage<Label>> = engines.retrieve('q');
 export const overEngines = new PostprocessingRetriever({
   retriever: engines,
-  postprocessors: [
-    new SimilarityCutoff({ threshold: 0.2 }),
-    new ContextWindow({ store }),
-  ],
+  postprocessors: [new LongContextReorder(), new ContextWindow({ store })],
 });
 export const overLive = new PostprocessingRetriever({
   retriever: web,
   postprocessors: [new ContextWindow({ store })], // TS2322
 });
-export const cutLive = new PostprocessingRetriever({
+export const reorderLive = new PostprocessingRetriever({
   retriever: web,
-  postprocessors: [new SimilarityCutoff({ threshold: 0.2 })],
+  postprocessors: [new LongContextReorder()],
 });
 
 // A fusion of a live source and an engine gives their common type,
@@ -223,7 +221,7 @@ export const hosted: Of<StoredPassage<Label>> = new PostprocessingRetriever({
     retrievers: { labels: engine, more: engine },
     fusion: firstList,
   }),
-  postprocessors: [pin, new SimilarityCutoff({ threshold: 0.2 })],
+  postprocessors: [pin, new LongContextReorder()],
 }).retrieve('q');
 
 // An engine is typed by the metadata that its store reads from each row: the
@@ -547,3 +545,32 @@ export const allWithThreshold: PostgresMatching = {
 export const postgresOr: PostgresMatching = { strategy: 'all', operator: 'OR' }; // TS2353
 // CONTAINS takes its Boolean operator.
 export const contains: SqlServerMatching = { predicate: 'CONTAINS' }; // TS2741
+
+// A score threshold is an option of the object that knows the scale of its
+// scores: each embedding retriever, with the cosine similarity, and Rerank,
+// with the score of its model. A call does not take one, so a fusion never
+// gives it to a keyword retriever (ADR 0019).
+export const thresholds = [
+  new SqliteEmbeddingRetriever({
+    store: labels,
+    vectors: 'label_vectors',
+    model: embeddings,
+    scoreThreshold: 0.5,
+  }),
+  new PgvectorEmbeddingRetriever({
+    store: articles,
+    vectors: 'article_vectors',
+    model: embeddings,
+    scoreThreshold: 0.5,
+  }),
+  new SqlServerEmbeddingRetriever({
+    store: documents,
+    vectors: 'document_vectors',
+    model: embeddings,
+    scoreThreshold: 0.5,
+  }),
+  new Rerank({ model, scoreThreshold: 0.5 }),
+];
+export const perCall = embedding.retrieve('q', {
+  scoreThreshold: 0.5, // TS2353
+});

@@ -25,5 +25,4 @@ export type { RetrieveOptions } from './retrieve-options.ts';
 export type { Retriever } from './retriever.ts';
 export { RetrieverUnavailableError } from './retriever-unavailable-error.ts';
 export type { ScoredPassage } from './scored-passage.ts';
-export { SimilarityCutoff } from './similarity-cutoff.ts';
 export { VectorMissingError } from './vector-missing-error.ts';

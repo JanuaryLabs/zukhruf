@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
 
 import { MockEmbeddingModelV4 } from 'ai/test';
 import type mssql from 'mssql';
 
+import { test } from '@zukhruf/testing/node';
 import { SqlServer } from '@zukhruf/testing/sqlserver';
 import { DimensionMismatchError } from '@zukhruf/vectors';
 
@@ -1555,4 +1555,57 @@ test(
     );
     assert.deepEqual(signals, [signal, signal, signal, signal]);
   },
+);
+
+void test.each(
+  [
+    [
+      'retrieve',
+      async (retriever: SqlServerEmbeddingRetriever) =>
+        (await retriever.retrieve('rotate a key')).passages,
+    ],
+    [
+      'retrieveMany',
+      async (retriever: SqlServerEmbeddingRetriever) =>
+        (await retriever.retrieveMany(['rotate a key']))[0]?.passages,
+    ],
+  ] as const,
+  ([call, act]) =>
+    test(
+      `${call} with a scoreThreshold keeps the passages whose score is at least the threshold, an equal score too, best first (#5734)`,
+      { skip: emulation },
+      async () => {
+        // Arrange: the scores are 1, 0.5, 0 and -1 for the query.
+        await using database = await server().database();
+        const pool = await database.pool();
+        await contract(pool, [
+          { id: 'a', vector: [3, 0, 0, 0] },
+          { id: 'b', vector: [1, 1, 1, 1] },
+          { id: 'c', vector: [0, 1, 0, 0] },
+          { id: 'd', vector: [-1, 0, 0, 0] },
+        ]);
+        const retriever = new SqlServerEmbeddingRetriever({
+          store: new SqlServerPassageStore({
+            session: session(pool),
+            passages: 'docs_passages',
+            metadata: (columns) => columns,
+          }),
+          vectors: 'docs_passage_vectors',
+          model: embeddingModel({ 'rotate a key': [1, 0, 0, 0] }),
+          scoreThreshold: 0.5,
+        });
+
+        // Act
+        const passages = await act(retriever);
+
+        // Assert
+        assert.deepEqual(
+          passages?.map(({ passage, score }) => [passage.id, score]),
+          [
+            ['a', 1],
+            ['b', 0.5],
+          ],
+        );
+      },
+    ),
 );

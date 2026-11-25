@@ -73,11 +73,11 @@ An engine retriever that embeds the query and ranks the passages by the cosine s
 _Avoid_: Vector search (the engine's search that an embedding retriever runs, ADR 0003), semantic search, dense retriever
 
 **Keyword retriever**:
-An engine retriever that ranks the passages by the keyword index: FTS5 `bm25()` on SQLite, `ts_rank_cd` on Postgres, `RANK` of `CONTAINSTABLE` on SQL Server.
+An engine retriever that ranks the passages by the keyword index: FTS5 `bm25()` on SQLite, the lexemes held plus `ts_rank` (or `ts_rank_cd` under `'all'`) on Postgres, `RANK` of `CONTAINSTABLE` on SQL Server.
 _Avoid_: Full-text search, lexical search, sparse retriever, BM25 (the name of one ranking function)
 
 **Matching**:
-The `matching` option of a keyword retriever: how the words of a query find and rank passages, as a discriminated union of that engine only, under the leaders' names for the engine's own mechanism. SQLite `{ operator: 'OR', cutoffFrequency? } | { operator: 'AND' }` (Elasticsearch `operator` and `cutoff_frequency`; `{ operator: 'OR', cutoffFrequency: 20_000 }` when absent), Postgres `{ strategy: 'all' }` (Meilisearch `matchingStrategy`; Postgres has no OR), SQL Server `{ predicate: 'CONTAINS', operator: 'AND' | 'OR' }` (T-SQL). No form is shared across engines ([ADR 0018](./docs/adr/0018-each-keyword-retriever-matches-in-the-strongest-form-of-its-engine.md)).
+The `matching` option of a keyword retriever: how the words of a query find and rank passages, as a discriminated union of that engine only, under the leaders' names for the engine's own mechanism. SQLite `{ operator: 'OR', cutoffFrequency? } | { operator: 'AND' }` (Elasticsearch `operator` and `cutoff_frequency`; `{ operator: 'OR', cutoffFrequency: 20_000 }` when absent), Postgres `{ strategy: 'frequency', dropTokensThreshold? } | { strategy: 'all' }` (Meilisearch `matchingStrategy`, Typesense `drop_tokens_threshold`; `{ strategy: 'frequency', dropTokensThreshold: 10 }` when absent; Postgres has no OR), SQL Server `{ predicate: 'CONTAINS', operator: 'AND' | 'OR' }` (T-SQL). No form is shared across engines ([ADR 0018](./docs/adr/0018-each-keyword-retriever-matches-in-the-strongest-form-of-its-engine.md)).
 _Avoid_: Operator as the name of the option (the filter's word, ADR 0009; `operator` stays a field of the SQLite and SQL Server unions), mode, match type
 
 **Batch search**:
@@ -105,6 +105,10 @@ _Avoid_: Distance (lower is better), rank (a position), relevance, similarity (f
 **Scored passage**:
 A passage with its score when the retriever gives one, and its vector when the call asks for it: `{ passage, score?, vector? }`. LlamaIndex calls it `NodeWithScore`, .NET `VectorSearchResult`; both make the score optional.
 _Avoid_: Result, hit, match, search result
+
+**Score threshold**:
+The least score that a passage keeps. Only an object that knows the scale of its scores takes one: an embedding retriever, for the cosine similarity from -1 to 1, and `Rerank`, for the score of its model. The scores of a keyword retriever and of a fusion change their scale with the engine and the query, so they take none ([ADR 0019](./docs/adr/0019-a-score-threshold-belongs-to-the-embedding-retriever-or-to-rerank-where-the-scale-of-the-score-is-known.md)). Qdrant and Haystack call it `score_threshold`, Elasticsearch's knn retriever `similarity`.
+_Avoid_: Cutoff, similarity cutoff, minimum score
 
 ### Composition
 

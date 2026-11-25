@@ -6,7 +6,10 @@ import { Vector } from '@zukhruf/vectors';
 import { fromSql, toSql } from '@zukhruf/vectors/sqlite';
 
 import type { BatchRetriever } from '../batch-retriever.ts';
-import { IdentityCheckedSearch } from '../identity-checked-search.ts';
+import {
+  type EngineScoredPassage,
+  IdentityCheckedSearch,
+} from '../identity-checked-search.ts';
 import {
   type ModelIdentity,
   describe,
@@ -16,7 +19,6 @@ import type { Metadata, StoredPassage } from '../passage.ts';
 import type { QueryType } from '../query-bundle.ts';
 import type { RetrievalResult } from '../retrieval-result.ts';
 import type { RetrieveOptions } from '../retrieve-options.ts';
-import type { ScoredPassage } from '../scored-passage.ts';
 import { identifier } from '../sql/identifier.ts';
 import { where } from '../sql/where.ts';
 import { dialect } from './dialect.ts';
@@ -47,6 +49,8 @@ export class SqliteEmbeddingRetriever<
     /** The passage vectors, in the database of the store. */
     readonly vectors: string;
     readonly model: EmbeddingModel;
+    /** The least score, a cosine similarity from -1 to 1, that a passage keeps: every passage when absent (ADR 0019). */
+    readonly scoreThreshold?: number;
   }) {
     const { database, passages, metadata } = contractOf(options.store);
     this.#database = database;
@@ -58,6 +62,7 @@ export class SqliteEmbeddingRetriever<
       storedIdentities: () => this.#storedIdentities(),
       search: (vectors, identity, retrieveOptions) =>
         this.#search(vectors, identity, retrieveOptions),
+      scoreThreshold: options.scoreThreshold,
     });
   }
 
@@ -96,7 +101,7 @@ export class SqliteEmbeddingRetriever<
     vectors: readonly (readonly number[])[],
     identity: ModelIdentity,
     options: RetrieveOptions<StoredPassage<M>>,
-  ): ScoredPassage<StoredPassage<M>>[][] {
+  ): EngineScoredPassage<StoredPassage<M>>[][] {
     const parameters: SQLInputValue[] = [
       ...vectors.flatMap((vector, index) => [
         index,
@@ -121,7 +126,9 @@ export class SqliteEmbeddingRetriever<
       WHERE r."rank" <= ?
       ORDER BY r."query", r."rank"`);
     const rows = passageRows(statement, 3, parameters, this.#metadata);
-    const lists = vectors.map((): ScoredPassage<StoredPassage<M>>[] => []);
+    const lists = vectors.map(
+      (): EngineScoredPassage<StoredPassage<M>>[] => [],
+    );
     for (const {
       cells: [query, distance, vector],
       passage,

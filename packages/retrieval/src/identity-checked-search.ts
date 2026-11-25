@@ -10,6 +10,11 @@ import { type QueryType, embeddingsOf } from './query-bundle.ts';
 import type { RetrieveOptions } from './retrieve-options.ts';
 import type { ScoredPassage } from './scored-passage.ts';
 
+/** A passage that an engine's search scored: an embedding retriever gives every passage a score. */
+export type EngineScoredPassage<P extends StoredPassage> = ScoredPassage<P> & {
+  readonly score: number;
+};
+
 /** What the engine gives: the query model, its read of the stored identities, and its search. */
 type Engine<P extends StoredPassage> = {
   readonly model: EmbeddingModel;
@@ -22,7 +27,9 @@ type Engine<P extends StoredPassage> = {
     vectors: readonly (readonly number[])[],
     identity: ModelIdentity,
     options: RetrieveOptions<P>,
-  ) => ScoredPassage<P>[][] | Promise<ScoredPassage<P>[][]>;
+  ) => EngineScoredPassage<P>[][] | Promise<EngineScoredPassage<P>[][]>;
+  /** The least score that a passage of a list keeps: every passage when undefined (ADR 0019). */
+  readonly scoreThreshold: number | undefined;
 };
 
 /**
@@ -32,7 +39,9 @@ type Engine<P extends StoredPassage> = {
  * ModelMismatchError before the model call; a query vector whose dimensions
  * no stored identity of that model has fails with DimensionMismatchError
  * after it, and so do texts of one query whose vectors have different
- * dimensions. The engine reads the stored identities and runs the search.
+ * dimensions. The engine reads the stored identities and runs the search;
+ * with a `scoreThreshold`, each list then keeps the passages whose score is
+ * at least it, the score that the caller gets (ADR 0019).
  * Each query is embedded as its `customEmbeddings`, or as its `query` when
  * it has none, and several texts search with the mean of their vectors, as
  * LlamaIndex's vector retriever does (ADR 0013).
@@ -41,6 +50,12 @@ export class IdentityCheckedSearch<P extends StoredPassage> {
   readonly #engine: Engine<P>;
 
   constructor(engine: Engine<P>) {
+    const { scoreThreshold } = engine;
+    if (scoreThreshold !== undefined && !Number.isFinite(scoreThreshold)) {
+      throw new RangeError(
+        `The scoreThreshold is a finite number, not ${scoreThreshold}`,
+      );
+    }
     this.#engine = engine;
   }
 
@@ -121,7 +136,12 @@ export class IdentityCheckedSearch<P extends StoredPassage> {
     if (identity === undefined) {
       throw new DimensionMismatchError(nearest.dimensions, dimensions);
     }
-    return this.#engine.search(vectors, identity, options);
+    const lists = await this.#engine.search(vectors, identity, options);
+    const { scoreThreshold } = this.#engine;
+    if (scoreThreshold === undefined) return lists;
+    return lists.map((passages) =>
+      passages.filter(({ score }) => score >= scoreThreshold),
+    );
   }
 }
 

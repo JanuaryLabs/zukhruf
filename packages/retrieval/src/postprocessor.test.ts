@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { Collapse, LongContextReorder, SimilarityCutoff } from './index.ts';
+import { Collapse, LongContextReorder } from './index.ts';
 
-test('an aborted signal rejects a LongContextReorder, a SimilarityCutoff and a Collapse with its reason, as every postprocessor obeys the port', async () => {
+test('an aborted signal rejects a LongContextReorder and a Collapse with its reason, as every postprocessor obeys the port', async () => {
   // Arrange
   const passages = [
     {
@@ -30,14 +30,9 @@ test('an aborted signal rejects a LongContextReorder, a SimilarityCutoff and a C
   // Act
   const outcomes = await Promise.all([
     settled(new LongContextReorder().postprocess(passages, 'q', { signal })),
-    settled(
-      new SimilarityCutoff({ threshold: 0 }).postprocess(passages, 'q', {
-        signal,
-      }),
-    ),
     settled(new Collapse().postprocess(passages, 'q', { signal })),
   ]);
 
   // Assert
-  assert.deepEqual(outcomes, [reason, reason, reason]);
+  assert.deepEqual(outcomes, [reason, reason]);
 });
