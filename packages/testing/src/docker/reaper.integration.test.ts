@@ -210,24 +210,32 @@ const volumeExists = async (name: string): Promise<boolean> =>
   (await docker.volumes.find(name)) !== undefined;
 
 /**
- * True when the reaper `id` of `run` ended: it is gone, or it is a kept
- * reaper (ADR 0031), which exited with 0 under the name
+ * True when the reaper `id` of `run` on the engine of `client` is a kept
+ * reaper (ADR 0031): it exited with 0 under the name
  * `<reaperName(run)>-<self>` after a call hit its request time limit, as
  * endedOnce reads it.
  */
-const reaperEnded = async (id: string, run: string): Promise<boolean> => {
-  const reaper = await (await docker.containers.find(id))?.inspect();
+const keptReaper = async (
+  id: string,
+  run: string,
+  client = docker,
+): Promise<boolean> => {
+  const reaper = await (await client.containers.find(id))?.inspect();
   return (
-    reaper === undefined ||
-    (reaper.State?.Status === 'exited' &&
-      reaper.State.ExitCode === 0 &&
-      reaper.Name?.startsWith(`/${reaperName(run)}-`) === true)
+    reaper?.State?.Status === 'exited' &&
+    reaper.State.ExitCode === 0 &&
+    reaper.Name?.startsWith(`/${reaperName(run)}-`) === true
   );
 };
 
-const reapers = async (run: string): Promise<string[]> =>
+/** True when the reaper `id` of `run` ended: it is gone, or it is a kept reaper. */
+const reaperEnded = async (id: string, run: string): Promise<boolean> =>
+  (await docker.containers.find(id)) === undefined ||
+  (await keptReaper(id, run));
+
+const reapers = async (run: string, client = docker): Promise<string[]> =>
   (
-    await docker.containers.list({
+    await client.containers.list({
       all: true,
       filters: { label: [`${REAPER_LABEL}=${run}`] },
     })
@@ -268,6 +276,32 @@ async function removeRun(run: string, others: string[] = []): Promise<void> {
 
 const gone = (t: TestContext, check: () => Promise<void>) =>
   waitFor(check, { signal: t.signal, interval: 100 });
+
+/**
+ * Waits until `check` passes and the engine of `client` has no reaper of
+ * `run`: the reaper removed itself. A kept reaper of the run never goes, so
+ * it fails the wait at once, with what that reaper wrote.
+ */
+async function reaperRemoved(
+  t: TestContext,
+  run: string,
+  check: () => Promise<void>,
+  client = docker,
+): Promise<void> {
+  const kept = await waitFor(
+    async () => {
+      for (const id of await reapers(run, client))
+        if (await keptReaper(id, run, client)) return id;
+      await check();
+      assert.deepEqual(await reapers(run, client), []);
+      return undefined;
+    },
+    { signal: t.signal, interval: 100 },
+  );
+  if (kept === undefined) return;
+  const logs = await (await client.containers.find(kept))?.logs();
+  assert.fail(`the reaper ${kept} kept its container:\n${logs?.stderr ?? ''}`);
+}
 
 /**
  * Gives the id of the exec of the next `event` in the container `id`, from
@@ -697,12 +731,11 @@ describe('the reaper of a run', { concurrency: 4 }, () => {
 
     assert.equal(reapersWhileHeld.length, 1);
     assert.deepEqual(keptWhileOneHolds, [true, true]);
-    await gone(t, async () => {
+    await reaperRemoved(t, run, async () => {
       assert.equal(await exists(id), false);
       assert.equal(await volumeExists(volume), false);
       for (const name of anonymous)
         assert.equal(await volumeExists(name), false);
-      assert.deepEqual(await reapers(run), []);
     });
   });
 
@@ -719,10 +752,9 @@ describe('the reaper of a run', { concurrency: 4 }, () => {
 
     await killed(child);
 
-    await gone(t, async () => {
-      assert.equal(await exists(owned), false);
-      assert.deepEqual(await reapers(run), []);
-    });
+    await reaperRemoved(t, run, async () =>
+      assert.equal(await exists(owned), false),
+    );
     assert.equal(await exists(server), true);
   });
 
@@ -800,10 +832,9 @@ describe('the reaper of a run', { concurrency: 4 }, () => {
         retries: 8,
       });
 
-      await gone(t, async () => {
-        assert.equal(await volumeExists(volume), false);
-        assert.deepEqual(await reapers(run), []);
-      });
+      await reaperRemoved(t, run, async () =>
+        assert.equal(await volumeExists(volume), false),
+      );
       const deletes = proxy.requests.filter(
         ({ method, path }) => method === 'DELETE' && path === removal,
       );
@@ -978,10 +1009,9 @@ exec sleep 3600`,
 
     await reaper.start();
 
-    await gone(t, async () => {
-      assert.equal(await exists(ids[0]!), false);
-      assert.deepEqual(await reapers(run), []);
-    });
+    await reaperRemoved(t, run, async () =>
+      assert.equal(await exists(ids[0]!), false),
+    );
   });
 
   test('a reaper whose socket does not reach its engine exits 1, and the engine does not start it again', async () => {
@@ -1059,10 +1089,9 @@ exec sleep 3600`,
     ids.push(await launched.line());
     await killed(launched.child);
 
-    await gone(t, async () => {
-      assert.equal(await exists(ids[0]!), false);
-      assert.deepEqual(await reapers(run), []);
-    });
+    await reaperRemoved(t, run, async () =>
+      assert.equal(await exists(ids[0]!), false),
+    );
   });
 
   test('a test process whose reaper was removed holds a new reaper at once, and that reaper removes what it creates after that, once it exits', async (t) => {
@@ -1093,10 +1122,9 @@ exec sleep 3600`,
     ids.push(await launched.line());
     await killed(launched.child);
 
-    await gone(t, async () => {
-      assert.equal(await exists(ids[0]!), false);
-      assert.deepEqual(await reapers(run), []);
-    });
+    await reaperRemoved(t, run, async () =>
+      assert.equal(await exists(ids[0]!), false),
+    );
   });
 
   test('a hold on a reaper that is closing waits until the engine removed it, and holds the next reaper of the run', async (t) => {
@@ -1423,10 +1451,9 @@ exec sleep 3600`,
       );
       await killed(late.child);
 
-      await gone(t, async () => {
-        assert.equal(await exists(ids[1]!), false);
-        assert.deepEqual(await reapers(run), []);
-      });
+      await reaperRemoved(t, run, async () =>
+        assert.equal(await exists(ids[1]!), false),
+      );
     },
   );
 
@@ -1928,11 +1955,15 @@ describe('the reaper on a second engine of its own', { concurrency: 2 }, () => {
       await killed(launched.child);
 
       assert.deepEqual(held, [relay]);
-      await gone(t, async () => {
-        assert.deepEqual(removed.sockets, ['/var/run/docker.sock', relay]);
-        assert.equal(await second.client.containers.find(id), undefined);
-        assert.deepEqual(await reaperSockets(second.client, run), []);
-      });
+      await reaperRemoved(
+        t,
+        run,
+        async () => {
+          assert.deepEqual(removed.sockets, ['/var/run/docker.sock', relay]);
+          assert.equal(await second.client.containers.find(id), undefined);
+        },
+        second.client,
+      );
     } finally {
       await killed(launched.child);
     }
@@ -2073,14 +2104,17 @@ describe('the reaper on a second engine of its own', { concurrency: 2 }, () => {
 
       // A kill before the new hold attached leaves the reaper waiting for a
       // first holder: 60 s by default.
-      await gone(t, async () => {
-        assert.deepEqual(removed.sockets, [
-          '/var/run/docker.sock',
-          relay,
-          relay,
-        ]);
-        assert.deepEqual(await reaperSockets(second.client, run), []);
-      });
+      await reaperRemoved(
+        t,
+        run,
+        async () =>
+          assert.deepEqual(removed.sockets, [
+            '/var/run/docker.sock',
+            relay,
+            relay,
+          ]),
+        second.client,
+      );
     } finally {
       await killed(launched.child);
     }
@@ -2218,12 +2252,12 @@ test('a reaper whose engine restarts after its last holder was killed starts aga
       (await second.client.containers.find(owned)) !== undefined;
 
     assert.equal(keptUntilTheRestart, true);
-    await waitFor(
-      async () => {
-        assert.equal(await second.client.containers.find(owned), undefined);
-        assert.deepEqual(await reaperSockets(second.client, run), []);
-      },
-      { signal: t.signal, interval: 100 },
+    await reaperRemoved(
+      t,
+      run,
+      async () =>
+        assert.equal(await second.client.containers.find(owned), undefined),
+      second.client,
     );
   } finally {
     await killed(child);
@@ -2461,10 +2495,9 @@ describe('the reaper over SSH', { concurrency: 3 }, () => {
     await sshd.drop(t.signal);
     await killed(held.child);
 
-    await gone(t, async () => {
-      assert.equal(await exists(id), false);
-      assert.deepEqual(await reapers(run), []);
-    });
+    await reaperRemoved(t, run, async () =>
+      assert.equal(await exists(id), false),
+    );
   });
 
   test('a holder that is killed with its network up ends its hold, and the reaper removes the run’s objects', async (t) => {
@@ -2480,10 +2513,9 @@ describe('the reaper over SSH', { concurrency: 3 }, () => {
 
     await killed(held.child);
 
-    await gone(t, async () => {
-      assert.equal(await exists(id), false);
-      assert.deepEqual(await reapers(run), []);
-    });
+    await reaperRemoved(t, run, async () =>
+      assert.equal(await exists(id), false),
+    );
   });
 
   test('a holder whose event loop is blocked for 60 s keeps its hold, and the reaper removes nothing', async () => {
