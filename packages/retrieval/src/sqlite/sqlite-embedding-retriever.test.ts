@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import type { DatabaseSync } from 'node:sqlite';
-import { test } from 'node:test';
 
+import { wrapEmbeddingModel } from 'ai';
 import { MockEmbeddingModelV4 } from 'ai/test';
 
 import { open } from '@zukhruf/sqlite-open';
+import { test } from '@zukhruf/testing/node';
 import { DimensionMismatchError, Vector } from '@zukhruf/vectors';
 import { install, toSql } from '@zukhruf/vectors/sqlite';
 
@@ -1015,3 +1016,63 @@ test('an error that the metadata of a store throws for a row is the error of eac
   }
   assert.deepEqual(read.get('a')?.metadata, { year: 2024 });
 });
+
+void test.each(
+  [
+    [
+      'retrieve',
+      async (retriever: SqliteEmbeddingRetriever) =>
+        (await retriever.retrieve('toward y', { topK: 1 })).passages,
+    ],
+    [
+      'retrieveMany',
+      async (retriever: SqliteEmbeddingRetriever) =>
+        (await retriever.retrieveMany(['toward y'], { topK: 1 }))[0]?.passages,
+    ],
+  ] as const,
+  ([call, act]) =>
+    test(`${call} with a model that the AI SDK's wrapEmbeddingModel gives an instruction sends the model each query after the instruction, and searches the vectors stored under the model it wraps (#5596)`, async () => {
+      // Arrange: the stored vectors are of test/mini, embedded without the
+      // instruction, as elt's Vectorizer embeds documents.
+      using database = contract([
+        { id: 'x', vector: [1, 0, 0, 0] },
+        { id: 'y', vector: [0, 1, 0, 0] },
+      ]);
+      const instruction =
+        'Instruct: Given a question, retrieve passages that answer it\nQuery:';
+      const model = embeddingModel({
+        [`${instruction}toward y`]: [0, 2, 1, 0],
+      });
+      const retriever = new SqliteEmbeddingRetriever({
+        store: new SqlitePassageStore({
+          database,
+          passages: 'docs_passages',
+          metadata: (columns) => columns,
+        }),
+        vectors: 'docs_passage_vectors',
+        model: wrapEmbeddingModel({
+          model,
+          middleware: {
+            specificationVersion: 'v4',
+            transformParams: async ({ params }) => ({
+              ...params,
+              values: params.values.map((value) => `${instruction}${value}`),
+            }),
+          },
+        }),
+      });
+
+      // Act
+      const passages = await act(retriever);
+
+      // Assert
+      assert.deepEqual(
+        passages?.map(({ passage }) => passage.id),
+        ['y'],
+      );
+      assert.deepEqual(
+        model.doEmbedCalls.map(({ values }) => values),
+        [[`${instruction}toward y`]],
+      );
+    }),
+);
