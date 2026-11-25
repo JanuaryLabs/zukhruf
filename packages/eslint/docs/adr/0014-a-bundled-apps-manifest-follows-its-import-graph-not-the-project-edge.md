@@ -1,6 +1,6 @@
 # A bundled app's manifest follows its import graph, not the project edge
 
-Status: Proposed (#5565). Ezz accepts zukhruf ADRs himself.
+Status: Accepted on 2026-11-25 (#5565). Ezz chose "Accept it".
 
 A bundled app's manifest declares the npm packages that its bundle loads (ADR 0005). `manifest/dependency-checks` gave Nx's rule `includeTransitiveDependencies` for such an app. Nx then reads every file of each project that a project edge reaches (`@nx/js` `find-npm-dependencies.js:13-36`). A bundler does not load a package that way. It loads modules one at a time, from the app's own files and through the `exports` subpath that each import names. Meddit's backend imports `@meddit/evidence-retrieval` and its `./pubmed` subpath. Only `./dailymed` imports `yauzl` and `@xmldom/xmldom`, which that package lists as optional peers of the subpath. The rule still demanded both in `apps/backend/package.json` (Meddit #5507).
 
