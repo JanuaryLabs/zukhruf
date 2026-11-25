@@ -1,18 +1,14 @@
-import assert from 'node:assert/strict';
-
 import { Connection, Request, TYPES } from 'tedious';
 
 import type { Clock } from '@zukhruf/async';
-import { waitFor } from '@zukhruf/testing/async';
 import type { DatabaseOptions } from '@zukhruf/testing/postgres';
 import { SqlServer } from '@zukhruf/testing/sqlserver';
 
 import {
   type SqlServerSession,
   SqlServerStore,
-  resourceName,
 } from '../../lock-stores/sqlserver/sqlserver-store.ts';
-import type { Partitionable, SessionControl } from '../contract/sessions.ts';
+import type { Partitionable } from '../contract/sessions.ts';
 import {
   type Fixture,
   type Host,
@@ -74,7 +70,7 @@ export async function sqlServerSession(
   });
 }
 
-/** A new database with the token sequence that the app creates before it starts. */
+/** A new database with the lease table and the token sequence that the app creates before it starts. */
 export async function sqlServerFixture(
   environment: DatabaseOptions['environment'],
 ): Promise<Fixture> {
@@ -83,7 +79,8 @@ export async function sqlServerFixture(
     const owner = await sqlServerSession(database);
     try {
       await owner.query(
-        'CREATE SEQUENCE dbo.mutex_tokens AS bigint START WITH 1 NO CACHE',
+        `CREATE TABLE dbo.mutex_leases (name binary(16) NOT NULL PRIMARY KEY, holder uniqueidentifier NULL, token bigint NOT NULL, renewed datetime2 NOT NULL, duration int NOT NULL);
+         CREATE SEQUENCE dbo.mutex_tokens AS bigint START WITH 1 NO CACHE;`,
         {},
       );
     } finally {
@@ -92,12 +89,31 @@ export async function sqlServerFixture(
   });
 }
 
-/** The store gets a new connection for each session and closes each one, so nothing is left to end. */
-export const sqlServerStore = (location: string) =>
+/** A store over `connect` with the table and the sequence of the fixture. */
+export const sqlServerStoreOn = (
+  connect: () => Promise<SqlServerSession>,
+  options: {
+    heartbeatInterval: number;
+    leaseDuration?: number;
+    clock: Clock;
+  },
+) =>
   new SqlServerStore({
-    connect: () => sqlServerSession(serverAt(location)),
+    connect,
+    table: 'dbo.mutex_leases',
     sequence: 'dbo.mutex_tokens',
-    heartbeatInterval: 5_000,
+    ...options,
+  });
+
+/**
+ * The store gets a new connection for each statement and closes each one, so
+ * nothing is left to end. A waiter tries each 500 ms, and the key of a killed
+ * holder is free 2 s after its last renewal.
+ */
+export const sqlServerStore = (location: string) =>
+  sqlServerStoreOn(() => sqlServerSession(serverAt(location)), {
+    heartbeatInterval: 500,
+    leaseDuration: 2_000,
     clock: globalThis,
   });
 
@@ -117,38 +133,13 @@ export const subject: Subject<Host> = {
     async [Symbol.asyncDispose]() {},
   }),
   process: { module, admit() {} },
-  grantLatency: 20,
+  // A waiter sees a release only at its next try.
+  grantLatency: 500,
 };
 
 export const sharing = sharesWithProcesses(subject.process);
 
 export const threadSharing = sharesWithThreads<Host>({ module, admit() {} });
-
-const storeOn = (
-  connect: () => Promise<SqlServerSession>,
-  heartbeatInterval: number,
-  clock: Clock,
-) =>
-  new SqlServerStore({
-    connect,
-    sequence: 'dbo.mutex_tokens',
-    heartbeatInterval,
-    clock,
-  });
-
-/** Runs `text` on a session of the test, not of a store. */
-async function observe(
-  location: string,
-  text: string,
-  parameters: Record<string, string> = {},
-) {
-  const session = await sqlServerSession(serverAt(location));
-  try {
-    return await session.query(text, parameters);
-  } finally {
-    session.close();
-  }
-}
 
 export const partitionable: Partitionable = {
   heartbeatInterval: 200,
@@ -156,133 +147,13 @@ export const partitionable: Partitionable = {
     const server = serverAt(location);
     const proxy = await proxyTo(server);
     return {
-      store: storeOn(
+      store: sqlServerStoreOn(
         () =>
           sqlServerSession({ ...server, host: proxy.host, port: proxy.port }),
-        this.heartbeatInterval,
-        clock,
+        { heartbeatInterval: this.heartbeatInterval, clock },
       ),
       partition: () => proxy.partition(),
       [Symbol.asyncDispose]: () => proxy[Symbol.asyncDispose](),
     };
-  },
-};
-
-/**
- * A session that connects again by itself when the server ends its
- * connection, and tells the store nothing, as the `ConnectionPool` of mssql
- * does. The store's listeners hear nothing. A query that fails on the ended
- * connection runs again on the new one. `reconnected` resolves once the new
- * connection is up.
- * Queries on the new connection wait until `resume()`, so the test
- * decides when the store sees it.
- */
-async function silentlyReconnectingSession(server: Server) {
-  const open = async () => {
-    const connection = await sqlServerSession(server);
-    connection.on('error', () => {});
-    const [row] = await connection.query('SELECT @@SPID AS id', {});
-    return Object.assign(connection, { id: Number(row?.id) });
-  };
-  let current = await open();
-  const { id } = current;
-  const reconnected = Promise.withResolvers<void>();
-  const resumed = Promise.withResolvers<void>();
-  let reconnectedYet = false;
-  current.on('end', () => {
-    open().then((next) => {
-      current = next;
-      reconnectedYet = true;
-      reconnected.resolve();
-    }, reconnected.reject);
-  });
-  const session: SqlServerSession = {
-    query: async (text, parameters) => {
-      try {
-        if (!reconnectedYet) return await current.query(text, parameters);
-      } catch {
-        await reconnected.promise;
-      }
-      await resumed.promise;
-      return current.query(text, parameters);
-    },
-    on: () => session,
-    close: () => current.close(),
-  };
-  return {
-    session,
-    id,
-    /** The session id of the connection that the queries run on now. */
-    currentId: () => current.id,
-    reconnected: reconnected.promise,
-    resume: () => resumed.resolve(),
-  };
-}
-
-export const sessionControl: SessionControl = {
-  async watched(location, heartbeatInterval) {
-    const server = serverAt(location);
-    return {
-      store: storeOn(
-        () => sqlServerSession(server),
-        heartbeatInterval,
-        globalThis,
-      ),
-      async killHolder() {
-        const [holder] = await observe(
-          location,
-          `SELECT request_session_id AS id FROM sys.dm_tran_locks
-           WHERE resource_type = N'APPLICATION' AND resource_database_id = DB_ID() AND request_status = N'GRANT'`,
-        );
-        assert.ok(holder, 'A session must hold an application lock');
-        await observe(location, `KILL ${Number(holder.id)}`);
-      },
-      async [Symbol.asyncDispose]() {},
-    };
-  },
-  async silentlyReconnecting(location, heartbeatInterval) {
-    const reconnecting = await silentlyReconnectingSession(serverAt(location));
-    return {
-      store: storeOn(
-        async () => reconnecting.session,
-        heartbeatInterval,
-        globalThis,
-      ),
-      async kill() {
-        await observe(location, `KILL ${reconnecting.id}`);
-      },
-      reconnected: reconnecting.reconnected,
-      resume: reconnecting.resume,
-      async holderOf(key) {
-        const [row] = await observe(
-          location,
-          `SELECT request_session_id AS id FROM sys.dm_tran_locks
-           WHERE resource_type = N'APPLICATION' AND resource_database_id = DB_ID() AND request_status = N'GRANT'
-             AND LEFT(resource_description, 36) = N'0:[' + @resource + N']'`,
-          { resource: resourceName(key) },
-        );
-        return {
-          killed: reconnecting.id,
-          reconnected: reconnecting.currentId(),
-          holder: row === undefined ? undefined : Number(row.id),
-        };
-      },
-      async [Symbol.asyncDispose]() {
-        reconnecting.resume();
-      },
-    };
-  },
-  async untilASessionWaits(t, location) {
-    await waitFor(
-      async () => {
-        const rows = await observe(
-          location,
-          `SELECT count(*) AS waiting FROM sys.dm_tran_locks
-           WHERE resource_type = N'APPLICATION' AND resource_database_id = DB_ID() AND request_status = N'WAIT'`,
-        );
-        assert.ok(Number(rows[0]?.waiting) > 0, 'No session waits for a lock.');
-      },
-      { interval: 10, signal: t.signal },
-    );
   },
 };

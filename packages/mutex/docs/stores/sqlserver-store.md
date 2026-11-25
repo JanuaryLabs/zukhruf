@@ -1,16 +1,16 @@
 # SqlServerStore
 
-A network lock store that uses a SQL Server application lock as the lock. Each process on each machine that reaches one SQL Server database shares the locks. The server releases the lock when the session of the holder ends.
+A network lock store that keeps a lease row in a SQL Server table for each key. Each process on each machine that reaches one SQL Server database shares the keys. The holder renews its row, and the lease ends `leaseDuration` after the last renewal, on the server's clock. Thus a holder that stops, also with no goodbye, loses its key after about `leaseDuration`.
 
-| Reach   | Order                                                                                           | Holder stops                   | Token source          |
-| ------- | ----------------------------------------------------------------------------------------------- | ------------------------------ | --------------------- |
-| Network | First come, first served in one process; the order of SQL Server's lock queue between processes | Released when its session ends | A SQL Server sequence |
+| Reach   | Order                                                                   | Holder stops                                     | Token source          |
+| ------- | ----------------------------------------------------------------------- | ------------------------------------------------ | --------------------- |
+| Network | First come, first served in one process; the next try between processes | Its lease ends `leaseDuration` after its renewal | A SQL Server sequence |
 
 ## What
 
-Each held key has one session: one connection to SQL Server. The session holds an application lock of SQL Server (`sp_getapplock` with `@LockOwner = 'Session'`) on a name that the store makes from the key. To release the key, the session runs `sp_releaseapplock`, and then the store closes the session. The store does not import a SQL Server driver. You give it a `connect` function, and the store gets each session from that function ([ADR 0022](../adr/0022-a-database-lock-store-takes-its-session-from-the-caller.md)).
+Each key has one row in a table that you create. A grant writes a random holder ID, a new fencing token and the server's time into the row. The holder writes the server's time again each `heartbeatInterval` milliseconds. Another store takes the key when the row has no holder, or when `leaseDuration` milliseconds passed since the last renewal on the server's clock. To release the key, the holder clears the holder ID of its row. The store does not import a SQL Server driver. You give it a `connect` function, and the store gets a session from that function for each statement ([ADR 0022](../adr/0022-a-database-lock-store-takes-its-session-from-the-caller.md)).
 
-No driver object fits the session as it is. A `Connection` of [tedious](https://tediousjs.github.io/tedious/) has `on('error' | 'end')` and `close()`, so your wrapper adds only `query`:
+No driver object fits the session as it is. A `Connection` of [tedious](https://tediousjs.github.io/tedious/) has `on('error')` and `close()`, so your wrapper adds only `query`:
 
 ```ts
 import { Connection, Request, TYPES } from 'tedious';
@@ -31,8 +31,7 @@ async function connect(): Promise<SqlServerSession> {
         password: process.env.DATABASE_PASSWORD,
       },
     },
-    // A wait can be longer than the 15 seconds that tedious gives each request.
-    options: { database: 'app', requestTimeout: 0 },
+    options: { database: 'app' },
   });
   await new Promise<void>((resolve, reject) =>
     connection.connect((error) => (error ? reject(error) : resolve())),
@@ -67,6 +66,7 @@ async function connect(): Promise<SqlServerSession> {
 const mutex = new Mutex(
   new SqlServerStore({
     connect,
+    table: 'dbo.app_leases',
     sequence: 'dbo.app_lock_tokens',
     heartbeatInterval: 5_000,
     clock: globalThis,
@@ -76,130 +76,132 @@ const mutex = new Mutex(
 
 ## Why
 
-The host lock stores share a lock only between processes on one machine. When your app runs on many machines, they must ask one place for each key. Many apps already have a SQL Server database, and SQL Server has application locks. The server keeps a session-owned application lock while its session lasts. It releases the lock when the session ends, also when the client disconnects without a goodbye. Thus no caller must find or remove a holder that stopped. See [ADR 0021](../adr/0021-a-lock-store-can-reach-every-machine-that-reaches-one-server.md).
+The host lock stores share a lock only between processes on one machine. When your app runs on many machines, they must ask one place for each key. Many apps already have a SQL Server database. See [ADR 0021](../adr/0021-a-lock-store-can-reach-every-machine-that-reaches-one-server.md).
+
+A lock that lives on a session ends only when the server learns that the session ended. A holder that vanishes tells the server nothing. Behind the gateway of Azure SQL Database with the Proxy connection policy, the server talks to the gateway, not to the client, so it does not see the client go. In production, a session lock of a container that an App Service slot swap stopped stayed for 51 minutes. A lease that ends unless its holder renews it does not depend on the server's view of the session. The server's clock decides the end, so every store uses one clock, and one `tryAcquire` can take a lease that ended. See [ADR 0035](../adr/0035-a-sql-server-key-is-a-lease-that-ends-unless-its-holder-renews-it.md).
 
 ## When
 
 - Processes on more than one machine write to the resource.
 - These processes already reach one SQL Server database.
-- Holder processes can crash, and you want no manual cleanup.
-- The role of the app can get `VIEW SERVER STATE`, or you do not use holder checks. See [Holder check](#holder-check).
+- Holder processes can crash or vanish, and you want no manual cleanup.
+- A wait of up to `leaseDuration` for the key of a holder that vanished is acceptable.
 
 ## When not
 
 - All callers are on one host. A [host lock store](../concepts/reach.md) needs no server and no round trip.
-- You can give the store only sessions that connect again by themselves, for example an mssql `ConnectionPool`. See [Failure modes](#failure-modes).
-- You cannot let the store open one connection for each key that is held or waited for. See [Sessions](#sessions).
+- A waiter must get the key at once after a release. A waiter in another process sees a release only at its next try, at most `heartbeatInterval` later.
+- The order between processes must be first come, first served. Each waiter tries on its own interval, and the first try after a release wins.
 
 ## How it works
 
-**The name of a key.** `sp_getapplock` takes the name of the lock in `@Resource`, an `nvarchar(255)`. SQL Server cuts a longer name to 255 characters with no error, so two long keys with the same first 255 characters would be one lock (see [Evidence](#evidence)). Thus the store calculates the SHA-256 digest of the UTF-16 code units of the key (`Buffer.from(key, 'utf16le')`), as `PostgresStore` does. It uses the first 16 bytes of the digest as 32 hex characters. `sys.dm_tran_locks` shows only the first 32 characters of the name, so the [holder check](#holder-check) sees the full name. The name is the same on each machine and in each version.
+**The table.** You create one table for the leases, one time, before the app starts, for example in a migration. The store runs no DDL:
 
-**One session for each held key.** SQL Server grants an application lock again to a session that already holds it. The locks stack, and each lock needs its own release. Thus a session that holds a key never asks for a second key, and a second caller of a key never uses the session of the holder.
+```sql
+CREATE TABLE dbo.app_leases (
+  name binary(16) NOT NULL PRIMARY KEY,
+  holder uniqueidentifier NULL,
+  token bigint NOT NULL,
+  renewed datetime2 NOT NULL,
+  duration int NOT NULL
+);
+GRANT SELECT, INSERT, UPDATE ON OBJECT::dbo.app_leases TO app_role;
+```
 
-1. Callers in one process first line up in a queue in memory, in the order of their calls. Only the first caller in that queue continues to the next step. Thus one process uses at most one session for each key, however many callers wait.
-2. That caller gets a session from `connect`. The store attaches its own `error` and `end` listeners at once.
-3. The session runs `sp_getapplock` with `@LockMode = 'Exclusive'`, `@LockOwner = 'Session'` and `@LockTimeout = -1`. The batch waits in SQL Server's lock queue until the server grants the lock. The store does not poll. A result of `0` or `1` is a grant. A negative result is an error, and the call rejects.
-4. After the grant, the session runs `NEXT VALUE FOR` on the sequence. The store reads the result with `BigInt` and makes the fencing token from it. A later grant always runs `NEXT VALUE FOR` later, so it gets a larger number.
-5. While the key is held, the session asks `APPLOCK_MODE` each `heartbeatInterval` milliseconds whether it still holds the lock. See [The heartbeat](#the-heartbeat).
-6. To release the key, the session runs `sp_releaseapplock`. If the result is `0`, the store closes the session. Then the next caller in the in-process queue continues.
+Each column has one job:
 
-The store runs `sp_releaseapplock` before the close, because the server sees a closed connection a little later than the close. In a test, another session tried the key right after a close, and the key was still busy in 2 of 30 tries (see [Evidence](#evidence)).
+- `name`: the key. The store calculates the SHA-256 digest of the UTF-16 code units of the key (`Buffer.from(key, 'utf16le')`), as `PostgresStore` does, and keeps the first 16 bytes. Thus a key of any length fits, and the name is the same on each machine and in each version.
+- `holder`: a random UUID for each grant, or `NULL` when the key is free.
+- `token`: the fencing token of the last grant.
+- `renewed`: the server's time (`SYSUTCDATETIME()`) of the grant or of the last renewal.
+- `duration`: the `leaseDuration` of the holder, in milliseconds. The holder writes it, so the stores of one key can have different values, and the row tells each store when the lease ends.
 
-**A cancel.** A caller cancels its wait with a signal. The store then closes the waiting session, and the call rejects with `signal.reason` at once. The store needs no second session. SQL Server removes the waiter from its lock queue when the connection closes, so a cancelled waiter leaves no phantom waiter, as Postgres does ([ADR 0023](../adr/0023-a-postgres-waiter-is-cancelled-by-closing-its-session.md)). If the server grants the lock just before the close, the end of the session releases it.
+`OBJECT_ID` finds the table and the sequence by name, with or without a schema, and `QUOTENAME` quotes them. A name cannot be a parameter of a statement.
 
-### The heartbeat
+**A grant.** One compare and set, in one batch:
 
-A holder must know when its session ends. A session that ends with a reset or a close emits `end` and `error`. But a network that stops silently sends nothing. Thus the session of each holder runs `APPLOCK_MODE('public', @resource, 'Session')` each `heartbeatInterval` milliseconds. The heartbeat asks about the lock, not about the connection. A session that connects again by itself answers a query, but it does not hold the lock. If the query fails, if the mode is `NoLock`, or if no answer arrives within `heartbeatInterval`, the store aborts the signal of the lease with `LeaseLostError` and closes the session. `APPLOCK_MODE` only reads the mode of the lock, so it acquires nothing, and a heartbeat that timed out leaves no lock behind.
+```sql
+UPDATE <table>
+SET holder = @holder, token = NEXT VALUE FOR <sequence>, renewed = SYSUTCDATETIME(), duration = @duration
+OUTPUT inserted.token INTO @granted
+WHERE name = @name AND (holder IS NULL OR DATEADD(millisecond, duration, renewed) <= SYSUTCDATETIME());
+```
 
-`heartbeatInterval` is the longest time that a holder can work after its session ended, before its signal aborts. Until then, only the [fencing token](../concepts/fencing-tokens.md) protects the resource.
+When the statement changes no row and the key has no row, the batch adds the row with the same values. Of two stores that add the row of one key at the same time, the second gets a duplicate key (error 2627, or 2601 for a unique index), the batch catches only these two errors, and the store gets no grant. A grant is the token that `OUTPUT` gives. The token comes from the sequence in the same statement, so a later grant always has a larger token.
 
-**The token.** The tokens come from one SQL Server sequence that you name with `sequence`, for example `dbo.app_lock_tokens`. The store runs no DDL. Create the sequence one time before the app starts, for example in a migration, and give the role of the app `UPDATE` on it:
+**The heartbeat.** Each `heartbeatInterval` milliseconds, the holder renews its row: `UPDATE <table> SET renewed = SYSUTCDATETIME() WHERE name = @name AND holder = @holder`. A renewal that changes no row means that another store took the key after the lease ended. The store then aborts the signal of the lease with `LeaseLostError` ([ADR 0013](../adr/0013-a-lost-lease-aborts-the-signal-of-the-lease.md)). A renewal that fails, or that gets no answer before two intervals passed since the start of the last renewal that succeeded, also aborts the signal. The holder counts on its `clock`, from a time before the server writes `renewed`. `leaseDuration` is larger than two intervals, so the holder stops before another store can take its key, when the two clocks run at the same rate.
+
+**A wait.** Callers in one process first line up in a queue in memory, in the order of their calls. Only the first caller in that queue tries the key. If the key is busy, that caller tries again each `heartbeatInterval` milliseconds on its `clock`, until a grant. The other callers of this process wait in the queue. The server keeps no queue.
+
+**A cancel.** A caller cancels its wait with a signal. The call rejects with `signal.reason` at once. If a try was running, and the server granted the key to it, the store releases that grant when its answer arrives.
+
+**A release.** The holder runs `UPDATE <table> SET holder = NULL WHERE name = @name AND holder = @holder`. When it changes no row, another store took the key after the lease ended, and the store aborts the signal of the lease with `LeaseLostError`. Then the next caller in the in-process queue continues. A waiter in another process gets the key at its next try.
+
+**The token.** The tokens come from one SQL Server sequence that you name with `sequence`, for example `dbo.app_lock_tokens`. Create it one time before the app starts, and give the role of the app `UPDATE` on it:
 
 ```sql
 CREATE SEQUENCE dbo.app_lock_tokens AS bigint START WITH 1 NO CACHE;
 GRANT UPDATE ON OBJECT::dbo.app_lock_tokens TO app_role;
 ```
 
-`NEXT VALUE FOR` takes no parameter, so the store finds the sequence with `OBJECT_ID(@sequence, 'SO')` and quotes its schema and name with `QUOTENAME`. A name with a schema and a name without one both work. SQL Server keeps one counter for each sequence in the server, so the numbers come in the order of the calls, also with a cache. With a cache, SQL Server writes the numbers to disk in blocks. An unexpected stop of the server loses the numbers of the block that were not used. The next numbers are still larger, so only gaps occur. `NO CACHE` writes each number to disk. Gaps between tokens are normal.
+SQL Server keeps one counter for each sequence in the server, so the numbers come in the order of the calls, also with a cache. With a cache, SQL Server writes the numbers to disk in blocks. An unexpected stop of the server loses the numbers of the block that were not used. The next numbers are still larger, so only gaps occur. `NO CACHE` writes each number to disk. Gaps between tokens are normal.
 
 ### Sessions
 
-The store keeps a session for each key that this process holds or waits for. A holder check gets one more session for one query. A cancel needs no session. The store closes each session that it gets, also after a clean release, so `connect` must give a new connection each time. A connection costs one login on the server.
+The store gets a session from `connect` for each statement, and closes it when the statement ends: a grant, a renewal, a release, or a holder check. Thus a wait or a held key keeps no session open on the server, and a session can come from a pool: `close()` can give the connection back to its pool. A session can also connect again by itself, as an mssql `ConnectionPool` does: the lease is in the row, not on the session. A new connection for each statement costs one login on the server. With a `heartbeatInterval` of 5 seconds, a holder costs one login each 5 seconds.
 
-A session must be one connection that never connects again by itself. An mssql `ConnectionPool` with `max: 1` is not a session. After `KILL`, its next query ran on a new connection with the same session ID, and the application lock was gone. The pool emitted no event (see [Evidence](#evidence)). Thus a holder would see the end of its session only at its next heartbeat, not at once.
+The store attaches an `error` listener to each session, because a driver can emit `error` after the close, and an `error` with no listener stops the process.
 
 ## Acquire modes
 
-`tryAcquire` gives up at once if another caller in this process holds or waits for the key. Otherwise it gets a session and runs `sp_getapplock` with `@LockTimeout = 0` once. If the result is `-1`, the session holds nothing, and the store closes it. A waiter that gives up closes its session as a cancel does, or leaves the in-process queue. See [acquire modes](../concepts/acquire-modes.md).
+`tryAcquire` gives up at once if another caller in this process holds or waits for the key. Otherwise it runs the grant one time. If the grant changes no row, the call gives `undefined`. A lease that ended is free, so one `tryAcquire` takes the key of a holder that vanished. A waiter that gives up leaves the in-process queue. See [acquire modes](../concepts/acquire-modes.md).
 
 ## Holder check
 
-`isHeld(key)` gets a session, reads `sys.dm_tran_locks`, and closes the session. It never runs `sp_getapplock` or `APPLOCK_TEST`, so it never acquires the key ([ADR 0015](../adr/0015-a-holder-check-never-acquires-the-key.md)). `APPLOCK_TEST` takes the lock for an instant on a free key. See [ADR 0024](../adr/0024-a-sql-server-holder-check-reads-the-lock-view.md).
-
-```sql
-SELECT CASE WHEN EXISTS (
-  SELECT 1 FROM sys.dm_tran_locks
-  WHERE resource_type = N'APPLICATION'
-    AND resource_database_id = DB_ID()
-    AND request_status = N'GRANT'
-    AND LEFT(resource_description, 36) = N'0:[' + @resource + N']'
-) THEN 1 ELSE 0 END AS held
-```
-
-The view shows an application lock as `<principal ID>:[<first 32 characters of the name>]:(<hash>)`. `0` is the principal ID of `public`, the principal that `sp_getapplock` uses. A waiter has a row with `request_status` equal to `WAIT`, so it does not count as a holder.
-
-The view needs `VIEW SERVER STATE` on SQL Server 2019 and earlier, and `VIEW SERVER PERFORMANCE STATE` on SQL Server 2022. Without it, the holder check rejects with error 300. `acquire` and `tryAcquire` do not need it. The holder can change before the answer arrives. Show the answer, but do not acquire a key because of it.
+`isHeld(key)` reads the row: the key is held when `holder` is not `NULL` and the lease did not end on the server's clock. It changes nothing, so it never acquires the key ([ADR 0015](../adr/0015-a-holder-check-never-acquires-the-key.md)). It needs only `SELECT` on the table. The holder can change before the answer arrives. Show the answer, but do not acquire a key because of it.
 
 ## Failure modes
 
-- **A holder process stops:** its kernel closes the connection. The server ends the session and releases the key. The next waiter gets the key.
-- **A session ends while the holder runs:** the server releases the key at once, and another holder can get it. Causes: the network drops the connection, `KILL`, and a restart or failover of the server. The session emits `end` and `error`. The store then aborts the signal of the lease with `LeaseLostError` ([ADR 0013](../adr/0013-a-lost-lease-aborts-the-signal-of-the-lease.md)). The lease is lost only one time.
-- **The server restarts, or an availability group fails over:** each session ends, so each key is released and each holder gets a lost lease.
-- **A silent partition:** the network stops and sends no reset. The server can release the key, and the holder does not see the end of its session. The [heartbeat](#the-heartbeat) finds it within `heartbeatInterval`, and the signal of the lease aborts. Until then, only the [fencing token](../concepts/fencing-tokens.md) protects the resource. A waiting session has no heartbeat. tedious turns on TCP keep-alive with an idle time of 30 seconds (`KEEP_ALIVE_INITIAL_DELAY` in `tedious/lib/connection.js`), so the operating system finds a dead connection of a waiter after that time and its probes.
-- **A holder machine stops with no reset:** the server sees the end of the session only through its own TCP keep-alive. Until then, the key stays held, and waiters wait.
-- **A holder freezes:** waiters wait. If the server ends the session meanwhile, another holder can get the key. The frozen holder sees the lost lease only when it runs again. A [fenced resource](../concepts/fencing-tokens.md) refuses its late writes.
-- **A session that connects again by itself:** not supported. The new connection does not hold the lock. The next [heartbeat](#the-heartbeat) finds that the session holds no lock, and the signal of the lease aborts. Until then, the holder has a lease on a key that is free. See [Sessions](#sessions).
-- **The request timeout of the driver:** tedious stops each request after `requestTimeout`, 15 seconds by default. Then a wait rejects with `ETIMEOUT`, and the call rejects. Set `requestTimeout: 0` on the connections that `connect` gives. The server removes a waiter that timed out from its lock queue, so the timeout leaves no lock behind.
-- **The sequence does not exist, or the role has no permission on it:** the first grant fails with `The sequence <name> does not exist, or the role has no permission on it.`, and the call rejects. The store releases the key when it cannot make the token.
+- **A holder process stops, also with no goodbye:** its row stays until the lease ends, `leaseDuration` after its last renewal. Then the next try of a waiter gets the key. Thus a vanished holder costs at most `leaseDuration` plus one `heartbeatInterval` of the waiter, whatever the network between the holder and the server does: a gateway, a proxy, or a machine that stopped with no reset.
+- **The server or the network is slow or stops answering while a holder runs:** the renewal fails or is late, and the store aborts the signal of the lease within two intervals. The row stays until the lease ends, so no other store can take the key before the holder stops. A holder that lost its lease does not clear its row.
+- **A session ends while the holder runs:** nothing changes. The lease does not live on a session, and the next renewal uses a new session. Causes: the network drops the connection, `KILL`, and a restart or failover of the server.
+- **A holder freezes:** its renewals stop. Another store takes the key when the lease ended. The frozen holder sees the lost lease only when it runs again, at its next renewal. A [fenced resource](../concepts/fencing-tokens.md) refuses its late writes.
+- **The wall clock of the server jumps forward:** leases end early, and another store can take a key while its holder still works. The fencing token is the protection for that case.
+- **The table or the sequence does not exist, or the role has no permission on it:** the statement fails with `The table <name> does not exist, or the role has no permission on it.` or `The sequence <name> does not exist, or the role has no permission on it.`, and the call rejects.
 - **The tokens after a failover:** with a cache, a new primary can start after the last block that was written to disk. We did not test this. Use `NO CACHE` if your fenced resource must never see a smaller token.
 
 See [failure modes](../concepts/failure-modes.md).
 
 ## Options
 
-| Option              | Default | Description                                                                                                                                                                                                                                                                                |
-| ------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `connect`           | —       | A function that gives a new session: one connection that never connects again by itself. A session has `query(text, parameters)`, `on('error' \| 'end')`, and `close()`. The store owns and closes each session that it gets.                                                              |
-| `sequence`          | —       | The name of an existing sequence for the fencing tokens, with or without its schema. Create it before the app starts; the store runs no DDL.                                                                                                                                               |
-| `heartbeatInterval` | —       | Milliseconds between two heartbeats of a holder, and the time limit of each heartbeat. It is the longest time that a holder can work after its session ended, before its signal aborts.                                                                                                    |
-| `clock`             | —       | The clock of the heartbeat: the wait between two heartbeats, and the time limit of each heartbeat. Give `globalThis` in production; a test gives a fake clock, for example `createClock()` of `@sinonjs/fake-timers` ([`@zukhruf/async`](../../../async/README.md#run-a-wait-on-a-clock)). |
-
-All three options are required. No option has a default.
+| Option              | Default | Description                                                                                                                                                                                                                                                           |
+| ------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `connect`           | —       | A function that gives a session. A session has `query(text, parameters)`, `on('error')`, and `close()`. The store runs one statement on each session, and then closes it.                                                                                             |
+| `table`             | —       | The name of an existing table for the leases, with or without its schema. Create it before the app starts; the store runs no DDL. See [How it works](#how-it-works).                                                                                                  |
+| `sequence`          | —       | The name of an existing sequence for the fencing tokens, with or without its schema. Create it before the app starts; the store runs no DDL.                                                                                                                          |
+| `heartbeatInterval` | —       | Milliseconds between two renewals of a holder, and between two tries of a waiter. A holder whose renewals fail for two intervals stops: its signal aborts.                                                                                                            |
+| `leaseDuration`     | 30,000  | Milliseconds after its last renewal, on the server's clock, at which the lease of a holder ends and another store can take the key. The constructor throws a `RangeError` when it is not larger than two heartbeat intervals.                                         |
+| `clock`             | —       | The clock of the heartbeat and of the tries. Give `globalThis` in production; a test gives a fake clock, for example `createClock()` of `@sinonjs/fake-timers` ([`@zukhruf/async`](../../../async/README.md#run-a-wait-on-a-clock)). The server's clock ends a lease. |
 
 ## Evidence
 
-Each design error that the review found has a test in [`src/lock-stores/sqlserver/sqlserver-store.test.ts`](../../src/lock-stores/sqlserver/sqlserver-store.test.ts). The name of the test says what the wrong design broke:
+Each design error and each rule of the lease has a test in [`src/lock-stores/sqlserver/sqlserver-store.test.ts`](../../src/lock-stores/sqlserver/sqlserver-store.test.ts). The name of the test says what the wrong design broke:
 
-- **A key is free for another store as soon as its release resolves.** In 200 rounds, a store releases a key, and another store with an open session tries it at once. Wrong design: a release that only closes the session.
-- **A cancelled waiter that the server grants later gives the key to the next waiter.** After the holder releases, a caller in another store gets the key. Wrong design: a cancel that does not close the waiting session.
-- **Two keys that differ only after 255 characters are two locks.** Wrong design: the key itself as the name of the lock.
-- **A held key is lost within heartbeatInterval when the server stops answering.** A TCP proxy stops forwarding and closes no socket. The signal of the lease aborts with `LeaseLostError` within two intervals. Wrong design: no heartbeat.
-- **A held key is lost at once when the server kills its session.** `KILL` ends the session of the holder, and the heartbeat is 30 seconds away. Wrong design: no `end` or `error` listener.
-- **A session that reconnects silently loses its lease.** The session of the holder hides the end of its connection after `KILL`, and connects again, as an mssql `ConnectionPool` does. The signal of the lease aborts within two intervals. Wrong design: a heartbeat that asks about the connection (`SELECT 1`), not the lock.
+- **A waiter gets the key of a holder that vanished with no close, though the server never sees the session end** ([`sqlserver-store.vanished-holder.test.ts`](../../src/lock-stores/sqlserver/sqlserver-store.vanished-holder.test.ts)). A TCP hop between the holder and the server stops forwarding and keeps its connections to the server open, as the gateway of Azure SQL does. Wrong design: a session lock, which the server keeps while the session lasts.
+- **A holder that stops renewing loses its key to a waiter leaseDuration after its last renewal, on the clock of the server.** Wrong design: an end that does not count from the last renewal.
+- **A holder whose key another store took loses its lease at its next renewal.** Wrong design: a renewal that does not compare the holder.
+- **The release of a holder whose key another store took leaves the key with the new holder.** Wrong design: a release that does not compare the holder.
+- **Of stores that race for a key with no row, one gets the key and the others get no error**, under locking read committed and under read committed snapshot. Wrong design: an insert that does not catch the duplicate key.
+- **Of stores that race for a free key, one gets the key**, under both isolation levels. Wrong design: a read of the row, and then a write.
+- **A key is free for another store as soon as its release resolves.** Wrong design: a release that does not wait for the server.
+- **Two keys that differ only after 255 characters are two locks.** Wrong design: the key itself as the name.
+- **The store refuses a lease duration that is not larger than two heartbeat intervals.** Wrong design: a holder that can work after another store took its key.
 
-The same file has the contract tests of a lock store: two stores never hold one key at the same time, a waiter gets the key after the release, `tryAcquire` gives up on a held key, the holder check answers `true` and `false`, the tokens increase across stores, and a cancelled acquire rejects with the reason of its signal.
+The contract tests of a lock store run in [`sqlserver-store.contract.test.ts`](../../src/lock-stores/sqlserver/sqlserver-store.contract.test.ts): two stores never hold one key at the same time, a waiter gets the key after the release, `tryAcquire` gives up on a held key, the holder check answers `true` and `false`, the tokens increase across stores and processes, a killed holder process or thread does not block the next caller, and a held key is lost two heartbeat intervals after the server stops answering.
 
-These facts come from probes before the design. Each probe used tedious 20.3.3 and mssql 12.7.4. The server was Azure SQL Edge 15.0.2000 (ARM64), except where the item says SQL Server 2022 (16.0.4305, x64):
+These facts come from probes of the statements on SQL Server 2022 (16.0.4325.4) with tedious 20. [ADR 0035](../adr/0035-a-sql-server-key-is-a-lease-that-ends-unless-its-holder-renews-it.md#probes) gives the details:
 
-- **Locks stack in one session.** One session ran `sp_getapplock` two times, and each result was `0`. After one `sp_releaseapplock`, another session still got `-1` with `@LockTimeout = 0`. After the second, it got `0`. A third release failed with error 1223 (`Cannot release the application lock ... because it is not currently held`).
-- **A long name is cut with no error.** `sp_getapplock` with a name of 256 characters succeeded.
-- **`APPLOCK_TEST` acquires the lock for an instant** (also on SQL Server 2022). An Extended Events session recorded `lock_acquired` with mode `X` on the `APPLICATION` resource for each `APPLOCK_TEST` on a free key, and no event on a held key. In 166,170 calls of `APPLOCK_TEST` from 12 sessions, 3,784 tries of the free key by another session never got `-1`. `APPLOCK_TEST` also answers `1` (free) in the session of the holder.
-- **`sys.dm_tran_locks` shows the first 32 characters of the name.** A lock on a 64-character name showed as `0:[<first 32 characters>]:(81b4e65e)`, with a `GRANT` row for the holder and a `WAIT` row for the waiter. A user without `VIEW SERVER STATE` got error 300. On SQL Server 2022, `VIEW SERVER PERFORMANCE STATE` was enough.
-- **A closed waiter leaves the lock queue.** A waiter in `sp_getapplock` was closed. Its request rejected at once with `Connection closed before request completed.` 200 ms later, `sys.dm_tran_locks` showed only the holder, and `sys.dm_exec_sessions` did not show the session. After the release, the next waiter got the key 1 ms later. In 20 races of a release and a close, the next waiter always got the key.
-- **A release by close alone leaves the key busy for a short time.** In 30 rounds, after the `end` event of the closed holder, another open session got `-1` from `sp_getapplock` with `@LockTimeout = 0` 2 times.
-- **An ended session emits its events.** After `KILL`, the tedious connection emitted `end` and then `error` (`ESOCKET`, `Connection lost - socket hang up`), each one time. Its next request failed with `EINVALIDSTATE`. Another session got the key at once.
-- **The request timeout of tedious cancels the wait on the server.** A waiter with `requestTimeout: 500` rejected with `ETIMEOUT`. `sys.dm_tran_locks` then showed only the holder, and after the release another session got the key.
-- **An mssql `ConnectionPool` connects again silently.** In a pool with `max: 1`, the session 53 acquired a lock and was killed. The next query ran with `@@SPID` 53 again, and `APPLOCK_MODE` answered `NoLock`. The pool emitted no `error`.
-- **The sequence gives numbers in the order of the calls.** With `CACHE 50`, two sessions called `NEXT VALUE FOR` in turn and got 1 to 6. tedious returned a `bigint` as a string.
-- **`UPDATE` on the sequence is enough** (also on SQL Server 2022). A user with no permission got `NULL` from `OBJECT_ID`. After `GRANT UPDATE ON OBJECT::dbo.mutex_tokens`, the token batch worked with `mutex_tokens` and with `dbo.mutex_tokens`. The same user could not run `CREATE SEQUENCE`, and `sp_getapplock` needed no grant.
+- **`NEXT VALUE FOR` works in the `UPDATE` and in the `INSERT` of the grant.** An `UPDATE` that changes no row takes no number from the sequence.
+- **The server's clock ends the lease.** With a duration of 1,000 ms, a try 700 ms after a renewal got no grant, and a try 1,100 ms after it got the key.
+- **One grant in each race.** 16 sessions raced 200 times for a key with no row and 200 times for a released row, under locking read committed and under read committed snapshot. Each race had exactly one grant and no error.
+- **The grants that the role needs.** `SELECT`, `INSERT` and `UPDATE` on the table, and `UPDATE` on the sequence. With less, the call rejects with the message of the missing object.

@@ -59,7 +59,7 @@ Start with the [project README](../README.md). The glossary is in [CONTEXT.md](.
 21. [A lock store can reach every machine that reaches one server](./adr/0021-a-lock-store-can-reach-every-machine-that-reaches-one-server.md)
 22. [A database lock store takes its session from the caller](./adr/0022-a-database-lock-store-takes-its-session-from-the-caller.md)
 23. [A Postgres waiter is cancelled by closing its session](./adr/0023-a-postgres-waiter-is-cancelled-by-closing-its-session.md)
-24. [A SQL Server holder check reads the lock view](./adr/0024-a-sql-server-holder-check-reads-the-lock-view.md)
+24. [A SQL Server holder check reads the lock view](./adr/0024-a-sql-server-holder-check-reads-the-lock-view.md) (superseded by ADR 0035)
 25. [A MySQL-family lock belongs to one database](./adr/0025-a-mysql-family-lock-belongs-to-one-database.md)
 26. [A Docker engine key is a named container that lives while its holder attaches](./adr/0026-a-docker-engine-key-is-a-named-container-that-lives-while-its-holder-attaches.md)
 27. [Docker engine tokens come from a ladder of named volumes](./adr/0027-docker-engine-tokens-come-from-a-ladder-of-named-volumes.md)
@@ -70,6 +70,7 @@ Start with the [project README](../README.md). The glossary is in [CONTEXT.md](.
 32. [A cancelled waiter of the memory store leaves the line](./adr/0032-a-cancelled-waiter-of-the-memory-store-leaves-the-line.md)
 33. [A new leader grants nothing until each recorded session reasserted its keys, stopped, or missed its lease](./adr/0033-a-new-leader-grants-nothing-until-each-recorded-session-reasserted-its-keys-stopped-or-missed-its-lease.md)
 34. [A leader selector of the mutex runs a task each time it leads, and requeues as Apache Curator does](./adr/0034-a-leader-selector-of-the-mutex-runs-a-task-each-time-it-leads-and-requeues-as-apache-curator-does.md)
+35. [A SQL Server key is a lease that ends unless its holder renews it](./adr/0035-a-sql-server-key-is-a-lease-that-ends-unless-its-holder-renews-it.md)
 
 ## Copied code
 

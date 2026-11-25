@@ -35,7 +35,7 @@ A larger reach costs more:
 - **Things on disk.** Host lock stores keep files in a directory that you give them.
 - **A round trip for each acquire.** A network lock store sends each acquire, each release, and each fencing token to its server over the network.
 - **A server to run.** A network lock store works only while its server works. When the server restarts, all holders lose their keys.
-- **A lease that can be lost.** A network lock store holds a key only while its session lasts. When the session ends, the server releases the key, and the signal of the lease aborts. See [ADR 0021](../adr/0021-a-lock-store-can-reach-every-machine-that-reaches-one-server.md).
+- **A lease that can be lost.** A network lock store holds a key only while its session lasts, or, for `SqlServerStore`, while it renews its lease row. When the session ends, the server releases the key, and the signal of the lease aborts. See [ADR 0021](../adr/0021-a-lock-store-can-reach-every-machine-that-reaches-one-server.md).
 - **More failure modes.** A host lock store or a network lock store must recover when another process stops. See [failure modes](./failure-modes.md).
 
 ## A wrong reach is a silent bug

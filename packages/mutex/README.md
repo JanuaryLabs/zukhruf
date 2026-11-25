@@ -63,7 +63,7 @@ First find who writes to the resource. Then select the lock store with that [rea
 | [SqliteStore](./docs/stores/sqlite-store.md)                     | `@zukhruf/mutex/sqlite`      | One host                                     | First come, first served in one process | Released by the kernel                        | A shared directory                                          |
 | [SocketStore](./docs/stores/socket-store.md)                     | `@zukhruf/mutex/socket`      | One host                                     | First come, first served                | Released in approximately 2 ms                | A shared directory                                          |
 | [PostgresStore](./docs/stores/postgres-store.md)                 | `@zukhruf/mutex/postgres`    | Every machine that reaches the database      | Postgres' lock queue                    | Released when its session ends                | A Postgres database and a `connect` function                |
-| [SqlServerStore](./docs/stores/sqlserver-store.md)               | `@zukhruf/mutex/sqlserver`   | Every machine that reaches the database      | SQL Server's lock queue                 | Released when its session ends                | A SQL Server database and a `connect` function              |
+| [SqlServerStore](./docs/stores/sqlserver-store.md)               | `@zukhruf/mutex/sqlserver`   | Every machine that reaches the database      | First come, first served in one process | Released when its lease ends                  | A SQL Server table, a sequence and a `connect` function     |
 | [MysqlStore](./docs/stores/mysql-store.md)                       | `@zukhruf/mutex/mysql`       | Every machine that reaches the database      | MySQL's lock queue                      | Released when its session ends                | A MySQL database and a `connect` function                   |
 | [MariadbStore](./docs/stores/mariadb-store.md)                   | `@zukhruf/mutex/mariadb`     | Every machine that reaches the database      | MariaDB's lock queue                    | Released when its session ends                | A MariaDB database and a `connect` function                 |
 | [DockerEngineStore](./docs/stores/docker-engine-store.md)        | `@zukhruf/mutex/docker`      | Every machine that reaches the Docker engine | No order between processes              | Released when its attach ends                 | A Docker engine, an image with `cat`, and `@zukhruf/docker` |
@@ -457,7 +457,7 @@ class LockServerWarning extends Error {
 - [ADR 0021](./docs/adr/0021-a-lock-store-can-reach-every-machine-that-reaches-one-server.md): a lock store can reach every machine that reaches one server.
 - [ADR 0022](./docs/adr/0022-a-database-lock-store-takes-its-session-from-the-caller.md): a database lock store takes its session from the caller.
 - [ADR 0023](./docs/adr/0023-a-postgres-waiter-is-cancelled-by-closing-its-session.md): a Postgres waiter is cancelled by closing its session.
-- [ADR 0024](./docs/adr/0024-a-sql-server-holder-check-reads-the-lock-view.md): a SQL Server holder check reads the lock view.
+- [ADR 0024](./docs/adr/0024-a-sql-server-holder-check-reads-the-lock-view.md): a SQL Server holder check reads the lock view (superseded by ADR 0035).
 - [ADR 0025](./docs/adr/0025-a-mysql-family-lock-belongs-to-one-database.md): a MySQL-family lock belongs to one database.
 - [ADR 0026](./docs/adr/0026-a-docker-engine-key-is-a-named-container-that-lives-while-its-holder-attaches.md): a Docker engine key is a named container that lives while its holder attaches.
 - [ADR 0027](./docs/adr/0027-docker-engine-tokens-come-from-a-ladder-of-named-volumes.md): Docker engine tokens come from a ladder of named volumes (superseded in part by ADR 0028).
@@ -468,6 +468,7 @@ class LockServerWarning extends Error {
 - [ADR 0032](./docs/adr/0032-a-cancelled-waiter-of-the-memory-store-leaves-the-line.md): a cancelled waiter of the memory store leaves the line.
 - [ADR 0033](./docs/adr/0033-a-new-leader-grants-nothing-until-each-recorded-session-reasserted-its-keys-stopped-or-missed-its-lease.md): a new leader grants nothing until each recorded session reasserted its keys, stopped, or missed its lease.
 - [ADR 0034](./docs/adr/0034-a-leader-selector-of-the-mutex-runs-a-task-each-time-it-leads-and-requeues-as-apache-curator-does.md): a leader selector of the mutex runs a task each time it leads, and requeues as Apache Curator does.
+- [ADR 0035](./docs/adr/0035-a-sql-server-key-is-a-lease-that-ends-unless-its-holder-renews-it.md): a SQL Server key is a lease that ends unless its holder renews it.
 
 **Copied code**: [Code that is in two places](./docs/copied-code.md) records each copy of code in this package, as the Rule of Three asks.
 

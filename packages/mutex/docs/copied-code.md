@@ -70,7 +70,7 @@ Backlog #2544 is about this code: `close` stops the listeners, but it does not e
 
 - Places: `detach` of the Postgres dialect (`postgres/postgres-store.ts`), and of the `GET_LOCK` dialect of MySQL and MariaDB (`mysql/get-lock-dialect.ts`).
 - Same: `off('error', …)` and `off('end', …)` with the two listeners of the session core (`session/session-lock-store.ts`).
-- Differs: nothing but the type of the session. The SQL Server dialect does nothing in `detach`: it closes each session, and a closed session keeps its listeners, because a driver can emit `error` after the close.
+- Differs: nothing but the type of the session.
 
 Backlog #2899 is about this code. A third dialect with a pool is the time to move it into the session core.
 
@@ -119,12 +119,6 @@ Backlog #2899 is about this code. A third dialect with a pool is the time to mov
 - Places: `mariadb/mariadb-store.test.ts` and `mysql/mysql-store.test.ts`.
 - Same: the act and the assert. The token is 1 for a user that has only the grants that the store page names.
 - Differs: the grants. MariaDB gives `SELECT` and `INSERT` on the sequence. MySQL gives `SELECT` and `UPDATE` on the token table.
-
-**The connection of a SQL Server session (test helper).**
-
-- Places: `sessionTo` in `sqlserver/sqlserver-store.test.ts`, and `sqlServerSession` in `packages/mutex/src/testing/subjects/sqlserver.ts`.
-- Same: the `Connection` of `tedious` with its options, and the session that wraps it.
-- Differs: the names, and the source of the host and the user: an endpoint and a database, or a server.
 
 **The arrange step of a look at a holder in another process or thread.**
 

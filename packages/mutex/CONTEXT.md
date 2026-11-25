@@ -97,15 +97,23 @@ A reach that includes all processes on all machines that reach one server, for e
 _Avoid_: Distributed, global, cluster, remote
 
 **Session**:
-A connection to the server of a network lock store. The server keeps the lock of a key while the session that holds it lasts, and releases the lock when the session ends. For a Docker engine lock store, the session of a holder is its attach to its claim. For a socket lock store, a session is one `SocketStore` object across failovers: a random id, a record in the folder `sessions` of the directory and a presence, from before its first connection until the store is disposed. Each new leader waits for the recorded sessions in its recovery (see [ADR 0033](docs/adr/0033-a-new-leader-grants-nothing-until-each-recorded-session-reasserted-its-keys-stopped-or-missed-its-lease.md)).
+A connection to the server of a network lock store. The server keeps the lock of a key while the session that holds it lasts, and releases the lock when the session ends. `SqlServerStore` keeps no lock on a session: it runs each statement on a session of its own, and its keys are lease rows. For a Docker engine lock store, the session of a holder is its attach to its claim. For a socket lock store, a session is one `SocketStore` object across failovers: a random id, a record in the folder `sessions` of the directory and a presence, from before its first connection until the store is disposed. Each new leader waits for the recorded sessions in its recovery (see [ADR 0033](docs/adr/0033-a-new-leader-grants-nothing-until-each-recorded-session-reasserted-its-keys-stopped-or-missed-its-lease.md)).
 _Avoid_: Connection pool, client
+
+**Lease row**:
+The row of a key in the table of `SqlServerStore`: the holder ID of the grant, the fencing token, the server's time of the last renewal, and the lease duration. The lease ends when the lease duration passed since the last renewal, on the server's clock, and another store can then take the key. See [ADR 0035](docs/adr/0035-a-sql-server-key-is-a-lease-that-ends-unless-its-holder-renews-it.md).
+_Avoid_: Lock row, application lock
+
+**Lease duration**:
+The longest silence that the others accept from a holder or a process before it loses what it holds. For `SqlServerStore`, the time since the last renewal of a lease row, on the server's clock; it is longer than two heartbeat intervals, so the holder stops first. For `SocketStore`, the silence after which a follower ends a leader, or a new leader ends the recovery of a session (ADR 0033).
+_Avoid_: TTL, timeout
 
 **Claim**:
 The named container that holds a key on a Docker engine. Its name comes from the namespace and the key, so one key has at most one claim. The claim lasts while the attach of its holder lasts. When the attach ends, the claim stops and the engine removes it.
 _Avoid_: Lock container, lock file, marker
 
 **Heartbeat**:
-A short query that the session of a holder sends at a fixed interval, with a time limit. It asks whether the session still holds the lock of its key. For a Docker engine lock store, the heartbeat is an inspect of the claim. A failed or late heartbeat tells the network lock store that the session ended, and the lease is lost.
+A short query that the session of a holder sends at a fixed interval, with a time limit. It asks whether the session still holds the lock of its key. For a Docker engine lock store, the heartbeat is an inspect of the claim. For `SqlServerStore`, the heartbeat is the renewal of the lease row. A failed or late heartbeat tells the network lock store that the session ended, and the lease is lost.
 _Avoid_: Ping, keep-alive (TCP keep-alive is a different mechanism), presence
 
 **Presence**:

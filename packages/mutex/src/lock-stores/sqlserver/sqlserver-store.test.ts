@@ -1,102 +1,70 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { Connection, Request, TYPES } from 'tedious';
+import { createClock } from '@sinonjs/fake-timers';
 
-import { type Database, SqlServer } from '@zukhruf/testing/sqlserver';
+import type { Clock } from '@zukhruf/async';
+import { waitFor } from '@zukhruf/testing/async';
 
-import { type Endpoint } from '../../testing/tcp-proxy.ts';
-import { type SqlServerSession, SqlServerStore } from './index.ts';
+import { LeaseLostError } from '../../index.ts';
+import { uniqueKey } from '../../testing/contract/keys.ts';
+import { type Server, serverAt } from '../../testing/subjects/server.ts';
+import {
+  sqlServerFixture,
+  sqlServerSession,
+  sqlServerStoreOn,
+} from '../../testing/subjects/sqlserver.ts';
+import { SqlServerStore, leaseName } from './sqlserver-store.ts';
 
 /**
  * The first tests are the contract of a lock store. Each test after them is a
- * design error that a probe of SQL Server found. The name of the test says
- * what the wrong design broke.
+ * design error that a probe of SQL Server found, or a rule of the lease (ADR
+ * 0035). The name of the test says what the wrong design broke.
  */
 
-const sequence = 'dbo.mutex_tokens';
 const heartbeatInterval = 200;
+const leaseDuration = 1_000;
 
-/** A column of a row that tedious gives with `useColumnNames` off, its default. */
-interface Column {
-  metadata: { colName: string };
-  value: unknown;
-}
-
-/** A new database with the token sequence that the app creates before it starts. */
-async function sqlServerDatabase() {
-  const database = await new SqlServer({
-    environment: process.env,
-  }).database();
-  const owner = await sessionTo(database, database);
-  try {
-    await owner.query(
-      `CREATE SEQUENCE ${sequence} AS bigint START WITH 1 NO CACHE`,
-      {},
-    );
-  } finally {
-    owner.close();
-  }
-  return database;
-}
-
-/** The caller's wrapper that the SqlServerStore page shows: one tedious connection is one session. */
-async function sessionTo(
-  database: Database,
-  endpoint: Endpoint,
-): Promise<SqlServerSession> {
-  const connection = new Connection({
-    server: endpoint.host,
-    authentication: {
-      type: 'default',
-      options: { userName: database.user, password: database.password },
-    },
-    options: {
-      port: endpoint.port,
-      database: database.database,
-      encrypt: false,
-      trustServerCertificate: true,
-      requestTimeout: 0,
-    },
-  });
-  await new Promise<void>((resolve, reject) =>
-    connection.connect((error) => (error ? reject(error) : resolve())),
-  );
-  // A connection already has `on` and `close`, so the session only adds `query`.
-  return Object.assign(connection, {
-    query: (text: string, parameters: Record<string, string>) =>
-      new Promise<Record<string, unknown>[]>((resolve, reject) => {
-        const rows: Record<string, unknown>[] = [];
-        const request = new Request(text, (error) =>
-          error ? reject(error) : resolve(rows),
-        );
-        for (const [name, value] of Object.entries(parameters)) {
-          request.addParameter(name, TYPES.NVarChar, value);
-        }
-        request.on('row', (columns: Column[]) =>
-          rows.push(
-            Object.fromEntries(
-              columns.map((column) => [column.metadata.colName, column.value]),
-            ),
-          ),
-        );
-        connection.execSql(request);
-      }),
-  });
-}
-
-const storeOver = (database: Database, endpoint: Endpoint = database) =>
-  new SqlServerStore({
-    connect: () => sessionTo(database, endpoint),
-    sequence,
+/** A store over the fixture's database whose heartbeat and tries run on `clock`. */
+const storeOver = (server: Server, clock: Clock = globalThis) =>
+  sqlServerStoreOn(() => sqlServerSession(server), {
     heartbeatInterval,
-    clock: globalThis,
+    leaseDuration,
+    clock,
   });
+
+/** Runs `text` on a session of the test, not of a store. */
+async function observe(
+  server: Server,
+  text: string,
+  parameters: Record<string, string> = {},
+) {
+  const session = await sqlServerSession(server);
+  try {
+    return await session.query(text, parameters);
+  } finally {
+    session.close();
+  }
+}
+
+/**
+ * A holder whose heartbeat runs on a clock that the test never moves, so it
+ * never renews, and a store on the real clock that takes the key once the
+ * lease ended.
+ */
+async function takenOver(server: Server, signal: AbortSignal) {
+  const clock = createClock();
+  const key = uniqueKey();
+  const held = await storeOver(server, clock).acquire(key);
+  const taken = await storeOver(server).acquire(key, { signal });
+  return { key, clock, held, taken };
+}
 
 test('the tokens of later grants are larger, across stores', async () => {
   // Arrange
-  await using database = await sqlServerDatabase();
-  const stores = [storeOver(database), storeOver(database)];
+  await using fixture = await sqlServerFixture(process.env);
+  const server = serverAt(fixture.location);
+  const stores = [storeOver(server), storeOver(server)];
   const tokens: bigint[] = [];
 
   // Act
@@ -112,21 +80,15 @@ test('the tokens of later grants are larger, across stores', async () => {
 });
 
 test('a key is free for another store as soon as its release resolves', async () => {
-  // Arrange: the server sees a closed connection a little later than the
-  // close. The other store gets sessions that are already open, as from a pool.
-  await using database = await sqlServerDatabase();
-  const holder = storeOver(database);
+  // Arrange
+  await using fixture = await sqlServerFixture(process.env);
+  const server = serverAt(fixture.location);
+  const holder = storeOver(server);
+  const other = storeOver(server);
   let busy = 0;
 
   // Act
-  for (let round = 0; round < 200; round++) {
-    const open = await sessionTo(database, database);
-    const other = new SqlServerStore({
-      connect: async () => open,
-      sequence,
-      heartbeatInterval,
-      clock: globalThis,
-    });
+  for (let round = 0; round < 20; round++) {
     const handle = await holder.acquire(`report:${round}`);
     await handle[Symbol.asyncDispose]();
     const attempt = await other.tryAcquire(`report:${round}`);
@@ -143,15 +105,188 @@ test('a key is free for another store as soon as its release resolves', async ()
 });
 
 test('two keys that differ only after 255 characters are two locks', async () => {
-  // Arrange: sp_getapplock cuts a longer resource name to 255 characters.
-  await using database = await sqlServerDatabase();
+  // Arrange: a name column of 255 characters would cut a longer key.
+  await using fixture = await sqlServerFixture(process.env);
+  const server = serverAt(fixture.location);
   const prefix = 'k'.repeat(255);
-  await using _ = await storeOver(database).acquire(`${prefix}:a`);
+  await using _ = await storeOver(server).acquire(`${prefix}:a`);
 
   // Act
-  const other = await storeOver(database).tryAcquire(`${prefix}:b`);
+  const other = await storeOver(server).tryAcquire(`${prefix}:b`);
 
   // Assert
   assert.ok(other, 'A key must not wait for another key');
   await other[Symbol.asyncDispose]();
 });
+
+const unconnected = {
+  connect: () => assert.fail('The constructor must not connect'),
+  table: 'dbo.mutex_leases',
+  sequence: 'dbo.mutex_tokens',
+  clock: globalThis,
+};
+
+test('the store refuses a lease duration that is not larger than two heartbeat intervals', () => {
+  // Arrange
+  const options = { ...unconnected, heartbeatInterval: 500 };
+
+  // Act
+  const atTwo = () => new SqlServerStore({ ...options, leaseDuration: 1_000 });
+  const aboveTwo = () =>
+    new SqlServerStore({ ...options, leaseDuration: 1_001 });
+
+  // Assert: a holder must stop before another store can take its key.
+  assert.throws(atTwo, RangeError);
+  assert.doesNotThrow(aboveTwo);
+});
+
+test('the default lease duration is 30 seconds', () => {
+  // Arrange, Act
+  const atTwo = () =>
+    new SqlServerStore({ ...unconnected, heartbeatInterval: 15_000 });
+  const belowTwo = () =>
+    new SqlServerStore({ ...unconnected, heartbeatInterval: 14_999 });
+
+  // Assert
+  assert.throws(atTwo, RangeError);
+  assert.doesNotThrow(belowTwo);
+});
+
+test('a holder that stops renewing loses its key to a waiter leaseDuration after its last renewal, on the clock of the server', async (t) => {
+  // Arrange: the holder's heartbeat runs on a clock that never moves.
+  await using fixture = await sqlServerFixture(process.env);
+  const server = serverAt(fixture.location);
+  const key = uniqueKey();
+  const held = await storeOver(server, createClock()).acquire(key);
+  const [before] = await observe(
+    server,
+    `SELECT CONVERT(nvarchar(27), renewed, 121) AS renewed FROM dbo.mutex_leases WHERE name = CONVERT(binary(16), @name, 2)`,
+    { name: leaseName(key) },
+  );
+  assert.ok(typeof before?.renewed === 'string');
+
+  // Act
+  await using _taken = await storeOver(server).acquire(key, {
+    signal: t.signal,
+  });
+
+  // Assert: the server counts the wait from the last renewal of the holder.
+  const [after] = await observe(
+    server,
+    `SELECT DATEDIFF(millisecond, CAST(@before AS datetime2), renewed) AS waited FROM dbo.mutex_leases WHERE name = CONVERT(binary(16), @name, 2)`,
+    { name: leaseName(key), before: before.renewed },
+  );
+  assert.ok(
+    Number(after?.waited) >= leaseDuration,
+    `The waiter got the key ${String(after?.waited)} ms after the last renewal, before the lease of ${leaseDuration} ms ended`,
+  );
+  await held[Symbol.asyncDispose]();
+});
+
+test('a holder whose key another store took loses its lease at its next renewal', async (t) => {
+  // Arrange
+  await using fixture = await sqlServerFixture(process.env);
+  const { clock, held, taken } = await takenOver(
+    serverAt(fixture.location),
+    t.signal,
+  );
+  await using _taken = taken;
+
+  // Act: the heartbeat of the holder renews.
+  await clock.tickAsync(heartbeatInterval);
+
+  // Assert
+  await waitFor(() => assert.ok(held.signal.aborted), { signal: t.signal });
+  const reason: unknown = held.signal.reason;
+  assert.ok(reason instanceof LeaseLostError);
+  assert.match(String(reason.cause), /Another store took the key/);
+  await held[Symbol.asyncDispose]();
+});
+
+test('the release of a holder whose key another store took leaves the key with the new holder', async (t) => {
+  // Arrange
+  await using fixture = await sqlServerFixture(process.env);
+  const server = serverAt(fixture.location);
+  const { key, held, taken } = await takenOver(server, t.signal);
+  await using _taken = taken;
+
+  // Act
+  await held[Symbol.asyncDispose]();
+
+  // Assert
+  const third = await storeOver(server).tryAcquire(key);
+  await using _third = third;
+  assert.equal(
+    third,
+    undefined,
+    'A late release must not free the key of the new holder',
+  );
+});
+
+/** Sets read committed snapshot, the default of Azure SQL Database, on the database of `server`. */
+async function readCommittedSnapshot(server: Server) {
+  await observe(
+    server,
+    'ALTER DATABASE CURRENT SET READ_COMMITTED_SNAPSHOT ON WITH ROLLBACK IMMEDIATE',
+  );
+}
+
+for (const snapshot of [false, true]) {
+  const isolation = snapshot
+    ? 'read committed snapshot'
+    : 'locking read committed';
+
+  test(`under ${isolation}, of stores that race for a key with no row, one gets the key and the others get no error`, async () => {
+    // Arrange
+    await using fixture = await sqlServerFixture(process.env);
+    const server = serverAt(fixture.location);
+    if (snapshot) await readCommittedSnapshot(server);
+    const stores = Array.from({ length: 8 }, () => storeOver(server));
+    const winners: number[] = [];
+
+    // Act
+    for (let round = 0; round < 20; round++) {
+      const key = uniqueKey();
+      const handles = await Promise.all(
+        stores.map((store) => store.tryAcquire(key)),
+      );
+      winners.push(handles.filter(Boolean).length);
+      for (const handle of handles) await handle?.[Symbol.asyncDispose]();
+    }
+
+    // Assert
+    assert.deepEqual(
+      winners,
+      winners.map(() => 1),
+      'Exactly one store must add the row of a new key',
+    );
+  });
+
+  test(`under ${isolation}, of stores that race for a free key, one gets the key`, async () => {
+    // Arrange: each key has a row that a holder released.
+    await using fixture = await sqlServerFixture(process.env);
+    const server = serverAt(fixture.location);
+    if (snapshot) await readCommittedSnapshot(server);
+    const stores = Array.from({ length: 8 }, () => storeOver(server));
+    const winners: number[] = [];
+
+    // Act
+    for (let round = 0; round < 20; round++) {
+      const key = uniqueKey();
+      const first = await storeOver(server).acquire(key);
+      await first[Symbol.asyncDispose]();
+      const handles = await Promise.all(
+        stores.map((store) => store.tryAcquire(key)),
+      );
+      winners.push(handles.filter(Boolean).length);
+      for (const handle of handles) await handle?.[Symbol.asyncDispose]();
+    }
+
+    // Assert
+    assert.deepEqual(
+      winners,
+      winners.map(() => 1),
+      'Exactly one store must take a free key',
+    );
+  });
+}
