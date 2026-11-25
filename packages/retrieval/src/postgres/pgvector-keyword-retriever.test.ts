@@ -747,3 +747,24 @@ test("the keyword search passes the call's signal to the session, which cancels 
     locker.release();
   }
 });
+
+test('an operator other than AND or OR is refused with a RangeError when the retriever is made', () => {
+  // Arrange
+  const store = new PostgresPassageStore({
+    session: { query: () => Promise.reject(new Error('no query runs')) },
+    passages: 'docs_passages',
+    metadata: (columns) => columns,
+  });
+
+  // Act
+  const make = () =>
+    new PgvectorKeywordRetriever({
+      store,
+      index: { column: 'keywords' },
+      // @ts-expect-error: a JavaScript caller can pass any operator
+      operator: 'XOR',
+    });
+
+  // Assert
+  assert.throws(make, new RangeError("The operator is 'AND' or 'OR', not XOR"));
+});

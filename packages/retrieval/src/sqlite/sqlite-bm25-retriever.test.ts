@@ -413,3 +413,25 @@ test('the metadata of each passage is what the metadata of its store reads from 
   // The rowid that the index joins on is no metadata column (ADR 0004).
   assert.deepEqual(metadata.columns[0], { product: 'kms' });
 });
+
+test('an operator other than AND or OR is refused with a RangeError when the retriever is made', () => {
+  // Arrange
+  using database = contract([]);
+  const store = new SqlitePassageStore({
+    database,
+    passages: 'docs_passages',
+    metadata: (columns) => columns,
+  });
+
+  // Act
+  const make = () =>
+    new SqliteBM25Retriever({
+      store,
+      index: 'docs_passages_fts',
+      // @ts-expect-error: a JavaScript caller can pass any operator
+      operator: 'XOR',
+    });
+
+  // Assert
+  assert.throws(make, new RangeError("The operator is 'AND' or 'OR', not XOR"));
+});

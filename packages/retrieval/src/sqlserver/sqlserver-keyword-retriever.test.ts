@@ -883,3 +883,24 @@ test(
     assert.deepEqual(signals, [signal]);
   },
 );
+
+test('an operator other than AND or OR is refused with a RangeError when the retriever is made', () => {
+  // Arrange
+  const store = new SqlServerPassageStore({
+    session: { query: () => Promise.reject(new Error('no query runs')) },
+    passages: 'docs_passages',
+    metadata: (columns) => columns,
+  });
+
+  // Act
+  const make = () =>
+    new SqlServerKeywordRetriever({
+      store,
+      index: { table: 'docs_passages' },
+      // @ts-expect-error: a JavaScript caller can pass any operator
+      operator: 'XOR',
+    });
+
+  // Assert
+  assert.throws(make, new RangeError("The operator is 'AND' or 'OR', not XOR"));
+});

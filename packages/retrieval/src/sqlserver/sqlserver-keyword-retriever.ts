@@ -1,22 +1,17 @@
 import type { Metadata, StoredPassage } from '../passage.ts';
-import {
-  type KeywordQuery,
-  type QueryType,
-  keywordQueryOf,
-} from '../query-bundle.ts';
+import { type QueryType, keywordQueryOf } from '../query-bundle.ts';
 import type { RetrievalResult } from '../retrieval-result.ts';
 import type { RetrieveOptions } from '../retrieve-options.ts';
 import type { Retriever } from '../retriever.ts';
-import { where } from '../sql/where.ts';
-import { binary } from './binary.ts';
-import { bind } from './bind.ts';
-import { dialect } from './dialect.ts';
-import { passage, passageJson } from './passage-row.ts';
+import {
+  ContainsAll,
+  ContainsAny,
+  type SqlServerMatch,
+} from './sqlserver-match.ts';
 import {
   type SqlServerPassageStore,
   contractOf,
 } from './sqlserver-passage-store.ts';
-import type { SqlServerSession } from './sqlserver-session.ts';
 
 /**
  * Ranks the passages by SQL Server full-text search over the keyword index
@@ -32,11 +27,7 @@ export class SqlServerKeywordRetriever<
   // and a class method checks its parameters both ways (ADR 0015).
   in out M extends Metadata = Metadata,
 > implements Retriever<QueryType, StoredPassage<M>> {
-  readonly #session: SqlServerSession;
-  readonly #passages: string;
-  readonly #metadata: (columns: Metadata) => M;
-  readonly #index: string;
-  readonly #operator: 'AND' | 'OR';
+  readonly #match: SqlServerMatch<M>;
 
   constructor(options: {
     /** The store of the passages, whose session and schema the search uses. */
@@ -50,11 +41,25 @@ export class SqlServerKeywordRetriever<
     readonly operator?: 'AND' | 'OR';
   }) {
     const contract = contractOf(options.store);
-    this.#session = contract.session;
-    this.#passages = contract.passages;
-    this.#metadata = contract.metadata;
-    this.#index = contract.relation(options.index.table);
-    this.#operator = options.operator ?? 'AND';
+    const index = {
+      session: contract.session,
+      passages: contract.passages,
+      metadata: contract.metadata,
+      table: contract.relation(options.index.table),
+    };
+    const operator = options.operator ?? 'AND';
+    switch (operator) {
+      case 'AND':
+        this.#match = new ContainsAll(index);
+        break;
+      case 'OR':
+        this.#match = new ContainsAny(index);
+        break;
+      default:
+        throw new RangeError(
+          `The operator is 'AND' or 'OR', not ${String(operator satisfies never)}`,
+        );
+    }
   }
 
   async retrieve(
@@ -62,55 +67,6 @@ export class SqlServerKeywordRetriever<
     options: RetrieveOptions<StoredPassage<M>> = {},
   ): Promise<RetrievalResult<StoredPassage<M>>> {
     options.signal?.throwIfAborted();
-    const words = phrases(wordsOf(keywordQueryOf(query)));
-    if (words.length === 0) return { passages: [], failures: new Map() };
-    const parameters: Record<string, unknown> = {};
-    // A condition longer than 4,000 characters reaches the caller as SQL
-    // Server's error 4110: the driver binds it as NVARCHAR(MAX), which
-    // CONTAINSTABLE refuses.
-    const condition = bind(parameters, words.join(` ${this.#operator} `));
-    const filter = where(dialect, options.filter, parameters);
-    const topK = bind(parameters, options.topK ?? 10);
-    const rows = await this.#session.query(
-      `
-      SELECT TOP (${topK}) k.[RANK] AS [score], ${passageJson} AS [passage]
-      FROM CONTAINSTABLE(${this.#index}, [text], ${condition}) k
-      JOIN ${this.#passages} p ON p.[id] = k.[KEY] ${binary}
-      WHERE ${filter}
-      ORDER BY k.[RANK] DESC, p.[id] ${binary}`,
-      parameters,
-      options.signal === undefined ? {} : { signal: options.signal },
-    );
-    return {
-      passages: rows.map((cells) => ({
-        passage: passage(cells['passage'], this.#metadata),
-        score: Number(cells['score']),
-      })),
-      failures: new Map(),
-    };
+    return this.#match.retrieve(keywordQueryOf(query), options);
   }
 }
-
-/**
- * Each word as one CONTAINS phrase, `"…"`. A `"` would end the
- * phrase and a `*` before its end makes a prefix term, so each becomes a
- * space, which the word breaker reads as it reads the punctuation. A word
- * with no letter or digit makes no token and acts as a noise word, which
- * gives an AND no rows, so it is dropped. `AND`, `OR`, `NEAR`, `&`, `|`, `!`,
- * `~` and parentheses inside a phrase are text.
- */
-function phrases(words: readonly string[]): string[] {
-  return words
-    .map((word) => word.replaceAll(/["*]/g, ' ').trim())
-    .filter((word) => /[\p{L}\p{N}]/u.test(word))
-    .map((word) => `"${word}"`);
-}
-
-/**
- * The white-space words of each keyword, or of the text: today's split, the
- * same on every engine until each one tokenizes its own way (#5669).
- */
-const wordsOf = (query: KeywordQuery): string[] =>
-  (query.kind === 'keywords' ? query.keywords : [query.text])
-    .flatMap((text) => text.split(/\s+/))
-    .filter((word) => word !== '');

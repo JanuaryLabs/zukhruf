@@ -1,22 +1,14 @@
 import type { Metadata, StoredPassage } from '../passage.ts';
-import {
-  type KeywordQuery,
-  type QueryType,
-  keywordQueryOf,
-} from '../query-bundle.ts';
+import { type QueryType, keywordQueryOf } from '../query-bundle.ts';
 import type { RetrievalResult } from '../retrieval-result.ts';
 import type { RetrieveOptions } from '../retrieve-options.ts';
 import type { Retriever } from '../retriever.ts';
 import { identifier } from '../sql/identifier.ts';
-import { where } from '../sql/where.ts';
-import { bind } from './bind.ts';
-import { dialect } from './dialect.ts';
-import { passage, passageJson } from './passage-row.ts';
+import { AllWords, AnyWord, type PostgresMatch } from './postgres-match.ts';
 import {
   type PostgresPassageStore,
   contractOf,
 } from './postgres-passage-store.ts';
-import type { PostgresSession } from './postgres-session.ts';
 
 /**
  * Ranks the passages by Postgres full-text search over the keyword index
@@ -31,12 +23,7 @@ export class PgvectorKeywordRetriever<
   // and a class method checks its parameters both ways (ADR 0015).
   in out M extends Metadata = Metadata,
 > implements Retriever<QueryType, StoredPassage<M>> {
-  readonly #session: PostgresSession;
-  readonly #passages: string;
-  readonly #metadata: (columns: Metadata) => M;
-  readonly #index: string;
-  readonly #operator: 'AND' | 'OR';
-  readonly #configuration: string;
+  readonly #match: PostgresMatch<M>;
 
   constructor(options: {
     /** The store of the passages, whose session and schema the search uses. */
@@ -51,13 +38,27 @@ export class PgvectorKeywordRetriever<
     /** How the words of the query join: 'AND', as `plainto_tsquery` joins them, when absent. */
     readonly operator?: 'AND' | 'OR';
   }) {
-    const contract = contractOf(options.store);
-    this.#session = contract.session;
-    this.#passages = contract.passages;
-    this.#metadata = contract.metadata;
-    this.#index = identifier(options.index.column);
-    this.#operator = options.operator ?? 'AND';
-    this.#configuration = options.index.configuration ?? 'english';
+    const { session, passages, metadata } = contractOf(options.store);
+    const index = {
+      session,
+      passages,
+      metadata,
+      column: identifier(options.index.column),
+      configuration: options.index.configuration ?? 'english',
+    };
+    const operator = options.operator ?? 'AND';
+    switch (operator) {
+      case 'AND':
+        this.#match = new AllWords(index);
+        break;
+      case 'OR':
+        this.#match = new AnyWord(index);
+        break;
+      default:
+        throw new RangeError(
+          `The operator is 'AND' or 'OR', not ${String(operator satisfies never)}`,
+        );
+    }
   }
 
   async retrieve(
@@ -65,47 +66,6 @@ export class PgvectorKeywordRetriever<
     options: RetrieveOptions<StoredPassage<M>> = {},
   ): Promise<RetrievalResult<StoredPassage<M>>> {
     options.signal?.throwIfAborted();
-    const words = wordsOf(keywordQueryOf(query));
-    if (words.length === 0) return { passages: [], failures: new Map() };
-    const parameters: unknown[] = [];
-    // The configuration is a parameter too, so its text is never SQL.
-    const configuration = `${bind(parameters, this.#configuration)}::regconfig`;
-    // Each word is its own plainto_tsquery, which reads it as plain text:
-    // `&`, `|`, `!`, `<->`, `:*` and quotes stay text, never operators.
-    const tsquery = words
-      .map(
-        (word) =>
-          `plainto_tsquery(${configuration}, ${bind(parameters, word)})`,
-      )
-      .join(this.#operator === 'AND' ? ' && ' : ' || ');
-    const row = passageJson(parameters, this.#passages);
-    const filter = where(dialect, options.filter, parameters);
-    const topK = bind(parameters, options.topK ?? 10);
-    const rows = await this.#session.query(
-      `
-      SELECT ts_rank_cd(p.${this.#index}, q."query") AS "score", ${row} AS "passage"
-      FROM ${this.#passages} p CROSS JOIN (SELECT ${tsquery} AS "query") q
-      WHERE p.${this.#index} @@ q."query" AND ${filter}
-      ORDER BY 1 DESC, p."id"::text COLLATE "C"
-      LIMIT ${topK}`,
-      parameters,
-      options.signal === undefined ? {} : { signal: options.signal },
-    );
-    return {
-      passages: rows.map((cells) => ({
-        passage: passage(cells['passage'], this.#metadata),
-        score: Number(cells['score']),
-      })),
-      failures: new Map(),
-    };
+    return this.#match.retrieve(keywordQueryOf(query), options);
   }
 }
-
-/**
- * The white-space words of each keyword, or of the text: today's split, the
- * same on every engine until each one tokenizes its own way (#5669).
- */
-const wordsOf = (query: KeywordQuery): string[] =>
-  (query.kind === 'keywords' ? query.keywords : [query.text])
-    .flatMap((text) => text.split(/\s+/))
-    .filter((word) => word !== '');
