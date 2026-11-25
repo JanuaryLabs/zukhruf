@@ -107,3 +107,7 @@ _Avoid_: Batch, partition (an ELT pipeline uses partition for its own concept)
 **Kept group**:
 A group that the scan lists by its key only, because the source knows that its input did not change. The diff keeps its saved fingerprint and records, and does not read it.
 _Avoid_: Skipped group, cached group, deferred group (deferred is the reason of one source, not the concept)
+
+**Failed group**:
+A group that the scan lists by its key only, because the source could not read its input, such as a page that answered 503. The diff keeps the saved fingerprint and records of the group, so its keys do not vanish, apart from a record that another group of the scan gives, which moved. When the snapshot does not have the group, the diff keeps nothing.
+_Avoid_: Errored group, skipped group, retried group (a retry is what the source does next, not the concept)

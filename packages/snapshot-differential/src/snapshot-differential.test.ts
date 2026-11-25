@@ -569,6 +569,139 @@ test('a vanished key names the group that held it and whether the scan listed th
   assert.deepEqual(ungrouped.vanishedRecords, [{ key: { id: 'a' } }]);
 });
 
+test('a group the scan failed to read keeps its saved fingerprint and records, so its keys neither vanish nor expire, and the scan that reads it again deletes only what it no longer gives', async () => {
+  const policy = new ListedGroups();
+  const loaded = await changes(
+    items(policy).diffGroups(
+      [
+        group('one', 'v1', [
+          { id: 'a', value: '1' },
+          { id: 'b', value: '1' },
+        ]),
+        group('two', 'v1', [{ id: 'c', value: '1' }]),
+      ],
+      null,
+    ),
+  );
+
+  const failed = await changes(
+    items(policy).diffGroups(
+      [{ key: 'one', failed: true }, group('two', 'v1', [])],
+      loaded.state,
+    ),
+  );
+  const read = await changes(
+    items(policy).diffGroups(
+      [group('one', 'v2', [{ id: 'a', value: '1' }]), group('two', 'v1', [])],
+      failed.state,
+    ),
+  );
+
+  assert.deepEqual(
+    [failed.inserted, failed.updated, failed.deleted],
+    [[], [], []],
+  );
+  assert.deepEqual(failed.state, loaded.state);
+  assert.deepEqual(read.deleted, ['b']);
+});
+
+test('a failed group that the snapshot does not have keeps nothing and is no error, so the scan that reads it inserts its records', async () => {
+  const policy = new ListedGroups();
+  const loaded = await changes(
+    items(policy).diffGroups(
+      [group('two', 'v1', [{ id: 'c', value: '1' }])],
+      null,
+    ),
+  );
+
+  const failed = await changes(
+    items(policy).diffGroups(
+      [{ key: 'one', failed: true }, group('two', 'v1', [])],
+      loaded.state,
+    ),
+  );
+  const read = await changes(
+    items(policy).diffGroups(
+      [group('one', 'v1', [{ id: 'a', value: '1' }]), group('two', 'v1', [])],
+      failed.state,
+    ),
+  );
+
+  assert.deepEqual(failed.state, loaded.state);
+  assert.deepEqual([read.inserted, read.deleted], [['a'], []]);
+});
+
+test('a group failed in a part of a scan in parts keeps its keys through the part that ends the scan', async () => {
+  const policy = new ListedGroups();
+  const loaded = await changes(
+    items(policy).diffGroups(
+      [
+        group('one', 'v1', [{ id: 'a', value: '1' }]),
+        group('two', 'v1', [{ id: 'b', value: '1' }]),
+      ],
+      null,
+    ),
+  );
+
+  const first = await changes(
+    items(policy).diffGroups([{ key: 'one', failed: true }], loaded.state, {
+      continues: true,
+    }),
+  );
+  const last = await changes(
+    items(policy).diffGroups(
+      [group('two', 'v1', [{ id: 'b', value: '1' }])],
+      first.state,
+    ),
+  );
+
+  assert.deepEqual(last.deleted, []);
+  assert.deepEqual(last.state, loaded.state);
+});
+
+test('a record that a read group gives, which a failed group of the same scan held, moved: it leaves the failed group with no change, before or after that group', async () => {
+  const policy = new ListedGroups();
+  const loaded = await changes(
+    items(policy).diffGroups(
+      [
+        group('one', 'v1', [{ id: 'a', value: '1' }]),
+        group('two', 'v1', [
+          { id: 'b', value: '1' },
+          { id: 'c', value: '1' },
+        ]),
+      ],
+      null,
+    ),
+  );
+  const shifted = group('one', 'v2', [
+    { id: 'a', value: '1' },
+    { id: 'b', value: '1' },
+  ]);
+  const scans = [];
+
+  for (const groups of [
+    [shifted, { key: 'two', failed: true } as const],
+    [{ key: 'two', failed: true } as const, shifted],
+  ]) {
+    const scan = await changes(items(policy).diffGroups(groups, loaded.state));
+    scans.push({
+      changed: [scan.inserted, scan.updated, scan.deleted],
+      groups: Object.fromEntries(
+        Object.entries(scan.state.groups).map(([key, saved]) => [
+          key,
+          Object.keys(saved.snapshot),
+        ]),
+      ),
+    });
+  }
+
+  const moved = {
+    changed: [[], [], []],
+    groups: { one: ['["a"]', '["b"]'], two: ['["c"]'] },
+  };
+  assert.deepEqual(scans, [moved, moved]);
+});
+
 test('a record that vanishes from a group a continuing part reads again is deleted when the scan ends', async () => {
   const policy = new ClosedWorld();
   const loaded = await changes(
@@ -1045,6 +1178,23 @@ test('a scan that lists a key or a group twice, holds a record JSON cannot hold,
     [
       items(policy).diffGroups(
         [group('g', 'v1', []), group('g', 'v1', [])],
+        null,
+      ),
+      /Snapshot items returned group g twice in one scan/,
+    ],
+    [
+      items(policy).diffGroups(
+        [
+          { key: 'g', failed: true },
+          { key: 'g', failed: true },
+        ],
+        null,
+      ),
+      /Snapshot items returned group g twice in one scan/,
+    ],
+    [
+      items(policy).diffGroups(
+        [{ key: 'g', failed: true }, group('g', 'v1', [])],
         null,
       ),
       /Snapshot items returned group g twice in one scan/,

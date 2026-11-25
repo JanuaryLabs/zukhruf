@@ -50,6 +50,16 @@ export type KeptGroup = {
   readonly kept: true;
 };
 
+// A group whose input the source could not read in this scan, such as a page
+// that answered 503 or a file it could not open. It keeps what the snapshot
+// has of it, so its keys neither vanish nor expire until a scan reads it,
+// apart from a record that another group of the scan gives, which moved; a
+// group the snapshot does not have keeps nothing.
+export type FailedGroup = {
+  readonly key: string;
+  readonly failed: true;
+};
+
 export type SnapshotChange<Data, State> =
   | { readonly type: 'insert'; readonly record: Data }
   | {
@@ -149,15 +159,15 @@ export class SnapshotDifferential<Data extends Record<string, unknown>> {
   }
 
   // diff for a scan whose records come from inputs the source fingerprints
-  // cheaply. A group whose fingerprint matches the last committed scan, and a
-  // kept group, keep their records without reading them; every other group is
-  // read and diffed record by record. Vanished keys are judged over the
-  // complete scan. continues makes this call one part of a scan in parts, as
-  // for diff.
+  // cheaply. A group whose fingerprint matches the last committed scan, a
+  // kept group and a failed group keep their records without reading them;
+  // every other group is read and diffed record by record. Vanished keys are
+  // judged over the complete scan. continues makes this call one part of a
+  // scan in parts, as for diff.
   async *diffGroups(
     groups:
-      | AsyncIterable<SnapshotGroup<Data> | KeptGroup>
-      | Iterable<SnapshotGroup<Data> | KeptGroup>,
+      | AsyncIterable<SnapshotGroup<Data> | KeptGroup | FailedGroup>
+      | Iterable<SnapshotGroup<Data> | KeptGroup | FailedGroup>,
     state: unknown,
     { continues = false }: { readonly continues?: boolean } = {},
   ): AsyncGenerator<SnapshotChange<Data, GroupedSnapshotState>> {
@@ -176,11 +186,18 @@ export class SnapshotDifferential<Data extends Record<string, unknown>> {
     for (const [key, entry] of previous.unknown) saved.set(key, entry);
     const seen = new Set<string>();
     const current = new Map<string, SavedGroup>();
+    // The groups this call failed to read: listed, and kept as the groups an
+    // open scan has not reached are, after the groups it read.
+    const failed = new Set<string>();
     for await (const group of groups) {
-      if (current.has(group.key))
+      if (current.has(group.key) || failed.has(group.key))
         throw new TypeError(
           `Snapshot ${this.name} returned group ${group.key} twice in one scan`,
         );
+      if ('failed' in group) {
+        failed.add(group.key);
+        continue;
+      }
       const before = previous.groups.get(group.key);
       if (
         'kept' in group ||
@@ -215,12 +232,19 @@ export class SnapshotDifferential<Data extends Record<string, unknown>> {
         snapshot: sorted(snapshot),
       });
     }
-    const listedSoFar = new Set([...previous.listed, ...current.keys()]);
-    // A group this call did not list keeps what the scan saw of it while the
-    // scan goes on, or when an earlier part listed it; a record that moved
-    // into a group this call listed leaves it.
+    const listedSoFar = new Set([
+      ...previous.listed,
+      ...current.keys(),
+      ...failed,
+    ]);
+    // A group this call did not read keeps what the scan saw of it while the
+    // scan goes on, when an earlier part listed it, or when this call failed
+    // to read it; a record that moved into a group this call read leaves it.
     for (const [key, before] of previous.groups) {
-      if (current.has(key) || !(continues || previous.listed.has(key)))
+      if (
+        current.has(key) ||
+        !(continues || previous.listed.has(key) || failed.has(key))
+      )
         continue;
       const snapshot = Object.entries(before.snapshot).filter(
         ([recordKey]) => !seen.has(recordKey),

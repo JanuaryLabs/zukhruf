@@ -197,6 +197,7 @@ for await (const change of differential.diffGroups(
 - A group with the same fingerprint as in the snapshot keeps its records. The diff does not call its `records`.
 - A group with a `null` fingerprint is always read.
 - A kept group, `{ key, kept: true }`, keeps its saved fingerprint and records. Give it when you know that the input did not change but you cannot fingerprint it, such as a page that a crawl did not request. A kept group that the snapshot does not have is an error ([ADR 0004](./docs/adr/0004-a-scan-can-keep-a-group-without-reading-it.md)).
+- A failed group, `{ key, failed: true }`, keeps its saved fingerprint and records too. Give it when you could not read the input, such as a page that answered 503. Its keys do not vanish, so a scan that reads the group again deletes only what it no longer gives. A record that another group of the scan gives moved, and leaves the failed group with no change. A failed group that the snapshot does not have keeps nothing and is no error ([ADR 0010](./docs/adr/0010-a-scan-keeps-a-group-that-it-failed-to-read.md)).
 - A record that moves to a different group, with the same fingerprint, gets no change. With a different fingerprint, it gets an update.
 - The policy judges the vanished keys of the complete scan, also the keys of groups that are not in the scan.
 
@@ -355,6 +356,11 @@ type KeptGroup = {
   readonly kept: true;
 };
 
+type FailedGroup = {
+  readonly key: string;
+  readonly failed: true;
+};
+
 type SnapshotChange<Data, State> =
   | { readonly type: 'insert'; readonly record: Data }
   | {
@@ -395,8 +401,8 @@ class SnapshotDifferential<Data extends Record<string, unknown>> {
   ): AsyncGenerator<SnapshotChange<Data, SnapshotState>>;
   diffGroups(
     groups:
-      | AsyncIterable<SnapshotGroup<Data> | KeptGroup>
-      | Iterable<SnapshotGroup<Data> | KeptGroup>,
+      | AsyncIterable<SnapshotGroup<Data> | KeptGroup | FailedGroup>
+      | Iterable<SnapshotGroup<Data> | KeptGroup | FailedGroup>,
     state: unknown, // null for the first scan
     options?: { readonly continues?: boolean }, // default: false
   ): AsyncGenerator<SnapshotChange<Data, GroupedSnapshotState>>;
@@ -421,6 +427,8 @@ class SnapshotDifferential<Data extends Record<string, unknown>> {
 - [ADR 0006: A record and a key can hold bytes](./docs/adr/0006-a-record-and-a-key-can-hold-bytes.md)
 - [ADR 0007: A record and a key can hold a bigint](./docs/adr/0007-a-record-and-a-key-can-hold-a-bigint.md)
 - [ADR 0008: The caller can give the fingerprint](./docs/adr/0008-the-caller-can-give-the-fingerprint.md)
+- [ADR 0009: A vanished key names the group that held it](./docs/adr/0009-a-vanished-key-names-the-group-that-held-it.md)
+- [ADR 0010: A scan keeps a group that it failed to read](./docs/adr/0010-a-scan-keeps-a-group-that-it-failed-to-read.md)
 
 ## Development
 
