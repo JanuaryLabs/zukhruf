@@ -4,8 +4,9 @@ import type { Passage } from './passage.ts';
 export type ScoredPassage<P extends Passage = Passage> = {
   readonly passage: P;
   /**
-   * Higher is better (ADR 0005). Absent when the retriever gives an order
-   * only, as LlamaIndex's `NodeWithScore.score` is optional (ADR 0016).
+   * A finite number, higher is better (ADR 0005). Absent when the retriever
+   * gives an order only, as LlamaIndex's `NodeWithScore.score` is optional
+   * (ADR 0016).
    */
   readonly score?: number;
   readonly vector?: readonly number[];

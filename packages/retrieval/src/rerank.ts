@@ -1,5 +1,6 @@
 import { type RerankingModel, rerank } from 'ai';
 
+import { finiteScore } from './finite-score.ts';
 import type { Passage } from './passage.ts';
 import type { Postprocessor } from './postprocessor.ts';
 import type { ScoredPassage } from './scored-passage.ts';
@@ -9,8 +10,10 @@ import type { ScoredPassage } from './scored-passage.ts';
  * (ADR 0008). The model gets the text of each passage and `topN`; without
  * `topN` it ranks every passage. Each passage that the model ranks gets the
  * relevance that the model gives it as its score, higher is better, best
- * first; a passage that the model leaves out is dropped. An empty list makes
- * no model call, as the AI SDK's `rerank` sends none.
+ * first; a passage that the model leaves out is dropped. A relevance that is
+ * not finite is a `TypeError` (`finiteScore`): the AI SDK passes the model's
+ * `relevanceScore` on unchecked. An empty list makes no model call, as the AI
+ * SDK's `rerank` sends none.
  */
 export class Rerank implements Postprocessor<Passage> {
   readonly #model: RerankingModel;
@@ -44,8 +47,9 @@ export class Rerank implements Postprocessor<Passage> {
     );
     return passages
       .flatMap(({ passage, vector }, index) => {
-        const score = relevance.get(index);
-        if (score === undefined) return [];
+        const relevant = relevance.get(index);
+        if (relevant === undefined) return [];
+        const score = finiteScore('Rerank', passage, relevant);
         return [
           vector === undefined
             ? { passage, score }

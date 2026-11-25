@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+
+import { test } from '@zukhruf/testing/node';
 
 import {
   type ScoredPassage,
@@ -268,3 +269,32 @@ for (const [name, fusion] of [
     });
   });
 }
+
+void test.each(
+  (
+    [
+      ['relativeScoreFusion', relativeScoreFusion()],
+      ['distributionBasedScoreFusion', distributionBasedScoreFusion()],
+    ] as const
+  ).flatMap(([name, fusion]) =>
+    (
+      [
+        [Number.NaN, 1],
+        [Number.POSITIVE_INFINITY, 0],
+        [Number.NEGATIVE_INFINITY, 1],
+      ] as const
+    ).map(([score, at]) => ({ name, fusion, score, at })),
+  ),
+  ({ name, fusion, score, at }) =>
+    test(`${name} refuses a passage whose score is ${score} with a TypeError that names the passage and its list, where it gave NaN to that passage or to every passage of its list (#5700)`, () => {
+      // Arrange
+      const labels = list(['l1', 0.9], ['l2', 0.1]);
+      const lists = [labels].toSpliced(at, 0, list(['b1', 3], ['b2', score]));
+
+      // Act and Assert
+      assert.throws(() => fusion.fuse(lists, [1, 1]), {
+        name: 'TypeError',
+        message: `${name} reads scores, and the passage b2 of list ${at} has the score ${score}: a score is a finite number`,
+      });
+    }),
+);

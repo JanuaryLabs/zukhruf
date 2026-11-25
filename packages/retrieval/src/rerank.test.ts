@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
 
 import type { RerankingModel } from 'ai';
+
+import { test } from '@zukhruf/testing/node';
 
 import { Rerank } from './index.ts';
 
@@ -183,3 +184,24 @@ test('an aborted signal rejects with its reason and makes no call to the reranki
   assert.equal(outcome, reason);
   assert.deepEqual(calls, []);
 });
+
+void test.each(
+  [
+    [Number.NaN, 'beta'],
+    [Number.POSITIVE_INFINITY, 'alpha'],
+    [Number.NEGATIVE_INFINITY, 'gamma'],
+  ] as const,
+  ([score, broken]) =>
+    test(`a Rerank refuses a relevance of ${score} that its reranking model gives a passage, with a TypeError that names the passage, where it sorted by it and passed it on (#5700)`, async () => {
+      // Arrange
+      const rerank = new Rerank({
+        model: reranker({ ...relevance, [broken]: score }),
+      });
+
+      // Act and Assert
+      await assert.rejects(rerank.postprocess(passages, 'rotate a key'), {
+        name: 'TypeError',
+        message: `Rerank reads scores, and the passage ${broken} has the score ${score}: a score is a finite number`,
+      });
+    }),
+);

@@ -731,15 +731,15 @@ On SQL Server, the session cancels with mssql's `request.cancel()` in the same w
 
 ## Errors
 
-| Error                                         | When                                                                                                                                                                                                                                                                                                             |
-| --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ModelMismatchError`                          | The query model of an embedding retriever has another provider or model id than the stored vectors, before the model call. `stored` and `query` are each `{ provider, modelId }`                                                                                                                                 |
-| `DimensionMismatchError` (`@zukhruf/vectors`) | The query vector has other dimensions than the stored vectors, after the model call. `expected` and `actual`                                                                                                                                                                                                     |
-| `VectorMissingError`                          | `MaximalMarginalRelevance` gets a passage without a vector: the call did not ask for vectors. `passageId`                                                                                                                                                                                                        |
-| `PassageGapError`                             | `ContextWindow` gets a window whose passages leave a gap in their source: the writer of the contract broke it. `source`, and `start` and `end` of the gap                                                                                                                                                        |
-| `NoRetrieverAnsweredError`                    | No retriever of a `FusionRetriever` answered: each threw `RetrieverUnavailableError`. `failures` names each, by path when nested, and the cause is an `AggregateError` of them. It is a `RetrieverUnavailableError`, so the fusion above leaves it out                                                           |
-| `RangeError`                                  | An option out of its range: a `FusionRetriever` of no retriever, with a name that holds `:` or with a weight for a name that is no retriever, or a `rankWindowSize` smaller than the `topK` of the call; a `queryCount`, `topK` of MMR or `windowSize` that is not a positive integer; a `lambda` outside 0 to 1 |
-| `TypeError`                                   | A filter field that is not a passage field or `metadata.<column>`, an `in` or `not in` value that is not an array, a stored model identity that is not of the form `provider/model (n dimensions)`, or a passage without a score in `relativeScoreFusion` or `distributionBasedScoreFusion`                      |
+| Error                                         | When                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ModelMismatchError`                          | The query model of an embedding retriever has another provider or model id than the stored vectors, before the model call. `stored` and `query` are each `{ provider, modelId }`                                                                                                                                                                                                                                                |
+| `DimensionMismatchError` (`@zukhruf/vectors`) | The query vector has other dimensions than the stored vectors, after the model call. `expected` and `actual`                                                                                                                                                                                                                                                                                                                    |
+| `VectorMissingError`                          | `MaximalMarginalRelevance` gets a passage without a vector: the call did not ask for vectors. `passageId`                                                                                                                                                                                                                                                                                                                       |
+| `PassageGapError`                             | `ContextWindow` gets a window whose passages leave a gap in their source: the writer of the contract broke it. `source`, and `start` and `end` of the gap                                                                                                                                                                                                                                                                       |
+| `NoRetrieverAnsweredError`                    | No retriever of a `FusionRetriever` answered: each threw `RetrieverUnavailableError`. `failures` names each, by path when nested, and the cause is an `AggregateError` of them. It is a `RetrieverUnavailableError`, so the fusion above leaves it out                                                                                                                                                                          |
+| `RangeError`                                  | An option out of its range: a `FusionRetriever` of no retriever, with a name that holds `:` or with a weight for a name that is no retriever, or a `rankWindowSize` smaller than the `topK` of the call; a `queryCount`, `topK` of MMR or `windowSize` that is not a positive integer; a `lambda` outside 0 to 1                                                                                                                |
+| `TypeError`                                   | A filter field that is not a passage field or `metadata.<column>`, an `in` or `not in` value that is not an array, a stored model identity that is not of the form `provider/model (n dimensions)`, a passage without a score in `relativeScoreFusion` or `distributionBasedScoreFusion`, or a score that is not finite (NaN or an infinity) in those fusions, `SimilarityCutoff`, `Rerank` or a `Collapse` that sorts by score |
 
 An error of the model, of the engine, of the store's `metadata` or of the reranking model reaches the caller as it is. An aborted call rejects with the reason of its `signal` ("Cancel a search").
 
@@ -822,7 +822,7 @@ type StoredPassage<M extends Metadata = Metadata> = Passage<M> & {
 }; // the engine retrievers and the passage stores give it (ADR 0015)
 type ScoredPassage<P extends Passage = Passage> = {
   readonly passage: P;
-  readonly score?: number; // higher is better (ADR 0005); absent for an order only (ADR 0016)
+  readonly score?: number; // finite, higher is better (ADR 0005); absent for an order only (ADR 0016)
   readonly vector?: readonly number[];
 };
 type RetrievalResult<P extends Passage = Passage> = {
@@ -900,8 +900,8 @@ interface Fusion<in out P extends Passage = Passage> {
 }
 // Each returns { readonly fuse: <P extends Passage>(lists, weights) => ScoredPassage<P>[] }.
 function reciprocalRankFusion(options?: { readonly k?: number }); // k 60, ranks from 1; reads the order only
-function relativeScoreFusion(); // min-max; a passage without a score is a TypeError
-function distributionBasedScoreFusion(); // mean ± 3σ; a passage without a score is a TypeError
+function relativeScoreFusion(); // min-max; a passage without a finite score is a TypeError
+function distributionBasedScoreFusion(); // mean ± 3σ; a passage without a finite score is a TypeError
 
 class FusionRetriever<
   in Q extends QueryType = QueryType,
@@ -958,10 +958,10 @@ class Rerank implements Postprocessor<Passage> {
   constructor(options: {
     readonly model: RerankingModel;
     readonly topN?: number; // every passage when absent
-  }); // gives every passage it keeps a score, best first
+  }); // gives every passage it keeps a score, best first; a relevance that is not finite is a TypeError
 }
 class SimilarityCutoff implements Postprocessor<Passage> {
-  constructor(options: { readonly threshold: number }); // keeps score >= threshold; drops a passage without a score
+  constructor(options: { readonly threshold: number }); // keeps score >= threshold; drops a passage without a score; a score that is not finite is a TypeError
 }
 class MaximalMarginalRelevance implements Postprocessor<Passage> {
   constructor(options: {
@@ -976,7 +976,8 @@ class Collapse<
 > {
   // A stored passage type: options?, field 'source' when absent. A live one:
   // options with the field, since its passages have no source. Sorts by score
-  // when every passage has one; otherwise keeps the order of the list.
+  // when every passage has one, and a score that is not finite is then a
+  // TypeError; otherwise keeps the order of the list.
   constructor(options?: {
     readonly field?: F; // a field of P, as in a filter
     readonly size?: number; // 1

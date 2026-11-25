@@ -29,3 +29,15 @@ Supersedes in part:
 `probes/run-rank-only.out` and `probes/types-fusion.ts` of paper #5638 (a live source with no score compiles). `type-tests/published-types.ts` has a live source whose passage has no score, and it compiles against `dist`.
 
 Shipped (#5639): the optional `score` in the types step; the rest in the scores step. Every retriever of the package still writes a score; a host's live source may write none. The fusion tests show `reciprocalRankFusion` fusing a list of order only beside a scored list by their order, and `relativeScoreFusion` and `distributionBasedScoreFusion` refusing it with the `TypeError`, directly and through a `FusionRetriever` over a SQLite keyword search, where they gave `NaN` scores ranked above the scored list (#5583). The postprocessor tests show `SimilarityCutoff` dropping a passage without a score under any threshold, `Collapse` keeping the order of a list with one passage unscored and sorting a list scored throughout, and `Rerank` scoring every passage of a list of order only.
+
+## Amendment 2026-11-25: a score is a finite number (#5700)
+
+Ezz picked the fix of #5700 on 2026-11-25. The rule is the one of this ADR: a bug rejects.
+
+A score is a finite number. Each built-in that reads the value of a score throws a `TypeError` for NaN, Infinity or -Infinity, which names the built-in, the passage and, for a fusion, the index of its list (`src/finite-score.ts`): `relativeScoreFusion`, `distributionBasedScoreFusion`, `SimilarityCutoff`, `Collapse` when it sorts by score, and `Rerank` for the relevance that its model gives. Before, rsf gave `[Infinity, 0]` the scores `[NaN, 0]`, dbsf gave them `[NaN, NaN]`, a NaN went through both fusions, `Collapse` sorted `[0.1, NaN, 0.9]` as 0.1, NaN, 0.9, `SimilarityCutoff` dropped a NaN and kept an Infinity, and `Rerank` sorted by any relevance, because the AI SDK's `rerank` passes the model's `relevanceScore` on unchecked (ai 7.0.179).
+
+Haystack's `DocumentJoiner` takes a score that is not finite as 0 and logs a warning (`_finite_score`). LlamaIndex's fusion has no check, so a NaN goes into its sums. Both lost for the reason that a missing score as 0 lost above: the list is wrong, and the caller does not see it.
+
+`reciprocalRankFusion`, `MaximalMarginalRelevance`, `LongContextReorder` and `ContextWindow` read no score value, and do not check it. `Collapse` over a list that has a passage without a score keeps the order of the list, and reads no score value either.
+
+Confirmation: the tests named #5700 in `fusion.test.ts`, `collapse.test.ts`, `similarity-cutoff.test.ts` and `rerank.test.ts`, one test for each of NaN, Infinity and -Infinity, failed before the change. Mutation proof: each of the 27 mutants was caught (the check removed, a NaN-only or an infinity-only check, a wrong reader, passage or list in the message, a check of only some passages).

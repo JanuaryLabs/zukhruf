@@ -1,4 +1,5 @@
 import type { FilterFields } from './filter.ts';
+import { finiteScore } from './finite-score.ts';
 import type { Passage, StoredPassage } from './passage.ts';
 import type { ScoredPassage } from './scored-passage.ts';
 
@@ -33,7 +34,8 @@ type Arguments<P extends Passage, F extends string> = [P] extends [
  * field `F` (ADR 0015). It sorts by score only when every passage has one,
  * and otherwise keeps the order of the list, which is then the retriever's
  * order (ADR 0016); Elasticsearch has no such case, as its hits always have
- * a score. Equal scores keep the order of the list. The passages
+ * a score. When it sorts, a score that is not finite is a `TypeError`
+ * (`finiteScore`). Equal scores keep the order of the list. The passages
  * without a value for the field (absent or null) are one group, as
  * Elasticsearch groups a missing value under the key null (ADR 0008, the
  * proposed amendment of 2026-11-23).
@@ -96,7 +98,9 @@ function bestFirst<S extends ScoredPassage>(
     (passage): passage is S & { readonly score: number } =>
       passage.score !== undefined,
   );
-  return scored.length === passages.length
-    ? scored.toSorted((a, b) => b.score - a.score)
-    : passages;
+  if (scored.length !== passages.length) return passages;
+  for (const { passage, score } of scored) {
+    finiteScore('Collapse', passage, score);
+  }
+  return scored.toSorted((a, b) => b.score - a.score);
 }

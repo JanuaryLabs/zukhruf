@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+
+import { test } from '@zukhruf/testing/node';
 
 import { SimilarityCutoff } from './index.ts';
 
@@ -51,3 +52,23 @@ test('a SimilarityCutoff drops a passage without a score, as LlamaIndex drops a 
     ['a', 'b'],
   );
 });
+
+void test.each(
+  [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY],
+  (score) =>
+    test(`a SimilarityCutoff refuses a passage whose score is ${score} with a TypeError that names the passage, where it dropped NaN and kept Infinity (#5700)`, async () => {
+      // Arrange
+      const cutoff = new SimilarityCutoff({ threshold: 0.5 });
+      const passages = [
+        scored('a', 0.9),
+        scored('broken', score),
+        scored('b', 0.1),
+      ];
+
+      // Act and Assert
+      await assert.rejects(cutoff.postprocess(passages), {
+        name: 'TypeError',
+        message: `SimilarityCutoff reads scores, and the passage broken has the score ${score}: a score is a finite number`,
+      });
+    }),
+);

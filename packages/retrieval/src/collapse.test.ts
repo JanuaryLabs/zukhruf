@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+
+import { test } from '@zukhruf/testing/node';
 
 import { Collapse } from './index.ts';
 
@@ -141,3 +142,23 @@ test('a Collapse keeps the order of the list when a passage has no score, and so
   assert.deepEqual(ids(mixed), ['web', 'low', 'high']);
   assert.deepEqual(ids(all), ['high', 'web', 'low']);
 });
+
+void test.each(
+  [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY],
+  (score) =>
+    test(`a Collapse refuses a passage whose score is ${score} with a TypeError that names the passage, where it sorted [0.1, NaN, 0.9] as 0.1, NaN, 0.9 (#5700)`, async () => {
+      // Arrange
+      const collapse = new Collapse();
+      const passages = [
+        scored('low', 'low', 0.1),
+        scored('broken', 'broken', score),
+        scored('high', 'high', 0.9),
+      ];
+
+      // Act and Assert
+      await assert.rejects(collapse.postprocess(passages), {
+        name: 'TypeError',
+        message: `Collapse reads scores, and the passage broken has the score ${score}: a score is a finite number`,
+      });
+    }),
+);

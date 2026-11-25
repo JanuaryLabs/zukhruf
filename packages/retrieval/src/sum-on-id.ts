@@ -1,3 +1,4 @@
+import { finiteScore } from './finite-score.ts';
 import type { Passage } from './passage.ts';
 import type { ScoredPassage } from './scored-passage.ts';
 
@@ -74,7 +75,8 @@ type Fused<P extends Passage> = {
  * `lists`: a score fusion over a source of order only is a bug of its caller,
  * and reciprocal rank fusion fuses such a list (ADR 0016). Taking a missing
  * score as 0, as LlamaIndex, Haystack and Eino do, would tie each passage of
- * that list with the best scored passage.
+ * that list with the best scored passage. A score that is not finite is a
+ * `TypeError` too (`finiteScore`).
  */
 export function scoresOf(
   fusion: string,
@@ -87,6 +89,6 @@ export function scoresOf(
         `${fusion} reads scores, and the passage ${passage.id} of list ${index} has none: fuse a list of order only with reciprocalRankFusion`,
       );
     }
-    return score;
+    return finiteScore(fusion, passage, score, index);
   });
 }

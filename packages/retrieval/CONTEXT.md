@@ -109,7 +109,7 @@ _Avoid_: Result, hit, match, search result
 ### Composition
 
 **Fusion**:
-The combination of the result lists of several retrievers into one list, on `Passage.id`. Three fusions ship: reciprocal rank fusion, relative score fusion (min-max) and distribution-based score fusion (mean ± 3σ). Reciprocal rank fusion reads the order of each list only; the two score fusions read the scores, and refuse a passage without a score with a `TypeError` ([ADR 0016](./docs/adr/0016-a-scored-passage-may-have-no-score-and-a-list-is-in-the-retrievers-order.md)).
+The combination of the result lists of several retrievers into one list, on `Passage.id`. Three fusions ship: reciprocal rank fusion, relative score fusion (min-max) and distribution-based score fusion (mean ± 3σ). Reciprocal rank fusion reads the order of each list only; the two score fusions read the scores, and refuse a passage without a score, or with a score that is not finite, with a `TypeError` ([ADR 0016](./docs/adr/0016-a-scored-passage-may-have-no-score-and-a-list-is-in-the-retrievers-order.md)).
 _Avoid_: Hybrid search (one use of fusion), ensemble, join, merge
 
 **Reciprocal rank fusion**:
