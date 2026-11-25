@@ -76,6 +76,10 @@ _Avoid_: Vector search (the engine's search that an embedding retriever runs, AD
 An engine retriever that ranks the passages by the keyword index: FTS5 `bm25()` on SQLite, `ts_rank_cd` on Postgres, `RANK` of `CONTAINSTABLE` on SQL Server.
 _Avoid_: Full-text search, lexical search, sparse retriever, BM25 (the name of one ranking function)
 
+**Matching**:
+The `matching` option of a keyword retriever: how the words of a query find and rank passages, as a discriminated union of that engine only, under the leaders' names for the engine's own mechanism. SQLite `{ operator: 'AND' | 'OR' }` (Elasticsearch), Postgres `{ strategy: 'all' }` (Meilisearch `matchingStrategy`; Postgres has no OR), SQL Server `{ predicate: 'CONTAINS', operator: 'AND' | 'OR' }` (T-SQL). No form is shared across engines ([ADR 0018](./docs/adr/0018-each-keyword-retriever-matches-in-the-strongest-form-of-its-engine.md)).
+_Avoid_: Operator as the name of the option (the filter's word, ADR 0009; `operator` stays a field of the SQLite and SQL Server unions), mode, match type
+
 **Batch search**:
 One call that searches many queries at once, `retrieveMany(queries, options)`, as one model call and one SQL query. Each query is a string or a query bundle. It gives one retrieval result for each query, in the order of the queries.
 _Avoid_: Bulk search, multi-search, multi-query (a multi-query is one query rewritten many times)

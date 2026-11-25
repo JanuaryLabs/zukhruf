@@ -2,6 +2,8 @@
 
 Superseded in part on 2026-11-25 (#5580) for the text a keyword retriever quotes: the words of the `keywords` of a query bundle, or the words of its `query` ([ADR 0013](./0013-a-query-is-a-string-or-a-query-bundle-with-a-text-for-each-kind-of-search.md)). The rest of the decision below stays true.
 
+Superseded in part on 2026-11-25 (#5669) for how the words match: each keyword retriever takes `matching`, a discriminated union of its own engine, in place of `operator`, which is gone with no alias; Postgres has no OR ([ADR 0018](./0018-each-keyword-retriever-matches-in-the-strongest-form-of-its-engine.md)). The defaults stay AND until the later steps of #5669 change them as ADR 0018 decides.
+
 Status: accepted by Ezz on 2026-11-23 ("Index in elt, query in retrieval").
 
 Five or more places run FTS5 BM25 by hand, each with its own way to quote the words of the user: text2sql `toFtsQuery` (#5410), its google-tasks copy, datahub search (#3451), and deepagents `ContextStore.searchMessages` on three engines (#4884, #5417). `ContextStore` ranks with FTS5, `ts_rank` and `CONTAINSTABLE`, and its score direction differs across the engines (#4884). SQLite FTS5 `bm25()` is negative: "the better the match, the numerically smaller" ([FTS5](https://www.sqlite.org/fts5.html)). elt core has no search, and its README leaves FTS5 to the app (`packages/elt/README.md:704` in the elt repository).

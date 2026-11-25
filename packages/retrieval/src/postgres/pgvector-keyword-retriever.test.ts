@@ -110,7 +110,7 @@ test('the passages come best first with ts_rank_cd as the score, so a better mat
   });
 });
 
-test('the words of the query join with AND by default, and with OR when the operator is OR', async () => {
+test("the words of the query join with AND by default and under matching { strategy: 'all' }", async () => {
   // Arrange
   await using database = await server().database();
   const pool = database.pool();
@@ -133,24 +133,16 @@ test('the words of the query join with AND by default, and with OR when the oper
   const and = (
     await new PgvectorKeywordRetriever(options).retrieve('rotate signing')
   ).passages;
-  const explicitAnd = (
+  const all = (
     await new PgvectorKeywordRetriever({
       ...options,
-      operator: 'AND',
-    }).retrieve('rotate signing')
-  ).passages;
-  const or = (
-    await new PgvectorKeywordRetriever({
-      ...options,
-      operator: 'OR',
+      matching: { strategy: 'all' },
     }).retrieve('rotate signing')
   ).passages;
 
   // Assert
   assert.deepEqual(ids(and), ['both']);
-  assert.deepEqual(ids(explicitAnd), ['both']);
-  assert.deepEqual(ids(or).toSorted(), ['both', 'rotate', 'signing']);
-  assert.equal(ids(or)[0], 'both');
+  assert.deepEqual(ids(all), ['both']);
 });
 
 test('the words of keywords are quoted in place of the words of query, and the words of query when the bundle has no keywords, as when the query is a string', async () => {
@@ -748,7 +740,7 @@ test("the keyword search passes the call's signal to the session, which cancels 
   }
 });
 
-test('an operator other than AND or OR is refused with a RangeError when the retriever is made', () => {
+test("a matching strategy other than 'all' is refused with a RangeError when the retriever is made", () => {
   // Arrange
   const store = new PostgresPassageStore({
     session: { query: () => Promise.reject(new Error('no query runs')) },
@@ -761,10 +753,13 @@ test('an operator other than AND or OR is refused with a RangeError when the ret
     new PgvectorKeywordRetriever({
       store,
       index: { column: 'keywords' },
-      // @ts-expect-error: a JavaScript caller can pass any operator
-      operator: 'XOR',
+      // @ts-expect-error: Postgres has no OR (ADR 0018)
+      matching: { strategy: 'any' },
     });
 
   // Assert
-  assert.throws(make, new RangeError("The operator is 'AND' or 'OR', not XOR"));
+  assert.throws(
+    make,
+    new RangeError("The strategy of matching is 'all', not any"),
+  );
 });

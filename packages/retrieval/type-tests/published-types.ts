@@ -25,14 +25,22 @@ import {
 import {
   PgvectorEmbeddingRetriever,
   PgvectorKeywordRetriever,
+  type PostgresMatching,
   PostgresPassageStore,
   type PostgresSession,
 } from '../dist/postgres.js';
 import {
   SqliteBM25Retriever,
   SqliteEmbeddingRetriever,
+  type SqliteMatching,
   SqlitePassageStore,
 } from '../dist/sqlite.js';
+import {
+  SqlServerKeywordRetriever,
+  type SqlServerMatching,
+  SqlServerPassageStore,
+  type SqlServerSession,
+} from '../dist/sqlserver.js';
 
 type IssueQueryBundle = QueryBundle & { readonly jql: string };
 
@@ -460,3 +468,76 @@ export const oldSession: PostgresSession = {
     return [];
   },
 };
+
+// Each keyword retriever takes the matching of its own engine, a
+// discriminated union with no shared form (ADR 0018). The old `operator` is
+// gone, with no alias; another engine's matching and a contradictory
+// combination do not compile.
+declare const sqlServerSession: SqlServerSession;
+const documents = new SqlServerPassageStore({
+  session: sqlServerSession,
+  passages: 'documents',
+  metadata: (columns) => columns,
+});
+const anyWord: SqliteMatching = { operator: 'OR' };
+const allLexemes: PostgresMatching = { strategy: 'all' };
+const containsAny: SqlServerMatching = {
+  predicate: 'CONTAINS',
+  operator: 'OR',
+};
+export const sqliteMatching = new SqliteBM25Retriever({
+  store: labels,
+  index: 'labels_fts',
+  matching: anyWord,
+});
+export const postgresMatching = new PgvectorKeywordRetriever({
+  store: articles,
+  index: { column: 'search' },
+  matching: allLexemes,
+});
+export const sqlServerMatching = new SqlServerKeywordRetriever({
+  store: documents,
+  index: { table: 'documents' },
+  matching: containsAny,
+});
+export const sqliteOperator = new SqliteBM25Retriever({
+  store: labels,
+  index: 'labels_fts',
+  operator: 'OR', // TS2353
+});
+export const postgresOperator = new PgvectorKeywordRetriever({
+  store: articles,
+  index: { column: 'search' },
+  operator: 'AND', // TS2353
+});
+export const sqlServerOperator = new SqlServerKeywordRetriever({
+  store: documents,
+  index: { table: 'documents' },
+  operator: 'OR', // TS2353
+});
+export const sqliteGivenPostgres = new SqliteBM25Retriever({
+  store: labels,
+  index: 'labels_fts',
+  matching: allLexemes, // TS2322
+});
+export const postgresGivenSqlServer = new PgvectorKeywordRetriever({
+  store: articles,
+  index: { column: 'search' },
+  matching: containsAny, // TS2741
+});
+export const sqlServerGivenSqlite = new SqlServerKeywordRetriever({
+  store: documents,
+  index: { table: 'documents' },
+  matching: anyWord, // TS2741
+});
+export const andWithCutoff: SqliteMatching = {
+  operator: 'AND',
+  cutoffFrequency: 20_000, // TS2353
+};
+export const allWithThreshold: PostgresMatching = {
+  strategy: 'all',
+  dropTokensThreshold: 10, // TS2353
+};
+export const postgresOr: PostgresMatching = { strategy: 'all', operator: 'OR' }; // TS2353
+// CONTAINS takes its Boolean operator.
+export const contains: SqlServerMatching = { predicate: 'CONTAINS' }; // TS2741

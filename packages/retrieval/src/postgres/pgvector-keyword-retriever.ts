@@ -4,11 +4,22 @@ import type { RetrievalResult } from '../retrieval-result.ts';
 import type { RetrieveOptions } from '../retrieve-options.ts';
 import type { Retriever } from '../retriever.ts';
 import { identifier } from '../sql/identifier.ts';
-import { AllWords, AnyWord, type PostgresMatch } from './postgres-match.ts';
+import { AllWords, type PostgresMatch } from './postgres-match.ts';
 import {
   type PostgresPassageStore,
   contractOf,
 } from './postgres-passage-store.ts';
+
+/**
+ * How `PgvectorKeywordRetriever` matches the words of a query, under
+ * Meilisearch's name, `matchingStrategy` (ADR 0018): `{ strategy: 'all' }`
+ * finds the passages that hold every word, as `plainto_tsquery` joins them.
+ * Postgres has no OR: `ts_rank_cd` has no IDF and ranks every matched row, so
+ * an OR cannot be ranked well or in time at scale. Each member holds only the
+ * fields that mean something for it, so the Postgres forms that follow have
+ * their place.
+ */
+export type PostgresMatching = { readonly strategy: 'all' };
 
 /**
  * Ranks the passages by Postgres full-text search over the keyword index
@@ -35,8 +46,8 @@ export class PgvectorKeywordRetriever<
       /** The text search configuration that made the column, 'english' when absent. */
       readonly configuration?: string;
     };
-    /** How the words of the query join: 'AND', as `plainto_tsquery` joins them, when absent. */
-    readonly operator?: 'AND' | 'OR';
+    /** How the words of the query match: `{ strategy: 'all' }` when absent. */
+    readonly matching?: PostgresMatching;
   }) {
     const { session, passages, metadata } = contractOf(options.store);
     const index = {
@@ -46,17 +57,14 @@ export class PgvectorKeywordRetriever<
       column: identifier(options.index.column),
       configuration: options.index.configuration ?? 'english',
     };
-    const operator = options.operator ?? 'AND';
-    switch (operator) {
-      case 'AND':
+    const { strategy } = options.matching ?? { strategy: 'all' };
+    switch (strategy) {
+      case 'all':
         this.#match = new AllWords(index);
-        break;
-      case 'OR':
-        this.#match = new AnyWord(index);
         break;
       default:
         throw new RangeError(
-          `The operator is 'AND' or 'OR', not ${String(operator satisfies never)}`,
+          `The strategy of matching is 'all', not ${String(strategy satisfies never)}`,
         );
     }
   }

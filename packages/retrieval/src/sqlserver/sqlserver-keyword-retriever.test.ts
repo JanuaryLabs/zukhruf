@@ -242,7 +242,7 @@ test(
 );
 
 test(
-  'the words of the query join with AND by default, and with OR when the operator is OR',
+  'the words of the query join with AND by default and under matching { predicate: CONTAINS, operator: AND }, and with OR under operator OR',
   { skip: emulation },
   async (t) => {
     // Arrange
@@ -274,13 +274,13 @@ test(
     const explicitAnd = (
       await new SqlServerKeywordRetriever({
         ...options,
-        operator: 'AND',
+        matching: { predicate: 'CONTAINS', operator: 'AND' },
       }).retrieve('rotate signing')
     ).passages;
     const or = (
       await new SqlServerKeywordRetriever({
         ...options,
-        operator: 'OR',
+        matching: { predicate: 'CONTAINS', operator: 'OR' },
       }).retrieve('rotate signing')
     ).passages;
 
@@ -361,7 +361,9 @@ test(
           metadata: (columns) => columns,
         }),
         index: { table: 'docs_passages' },
-        ...(operator === undefined ? {} : { operator }),
+        ...(operator === undefined
+          ? {}
+          : { matching: { predicate: 'CONTAINS', operator } }),
       });
 
     // Act
@@ -884,7 +886,7 @@ test(
   },
 );
 
-test('an operator other than AND or OR is refused with a RangeError when the retriever is made', () => {
+test('a matching predicate other than CONTAINS, or a CONTAINS operator other than AND or OR, is refused with a RangeError when the retriever is made', () => {
   // Arrange
   const store = new SqlServerPassageStore({
     session: { query: () => Promise.reject(new Error('no query runs')) },
@@ -893,14 +895,72 @@ test('an operator other than AND or OR is refused with a RangeError when the ret
   });
 
   // Act
-  const make = () =>
+  const predicate = () =>
+    new SqlServerKeywordRetriever({
+      store,
+      index: { table: 'docs_passages' },
+      // @ts-expect-error: a JavaScript caller can pass any predicate
+      matching: { predicate: 'CONTAINSTABLE', operator: 'AND' },
+    });
+  const operator = () =>
     new SqlServerKeywordRetriever({
       store,
       index: { table: 'docs_passages' },
       // @ts-expect-error: a JavaScript caller can pass any operator
-      operator: 'XOR',
+      matching: { predicate: 'CONTAINS', operator: 'XOR' },
     });
 
   // Assert
-  assert.throws(make, new RangeError("The operator is 'AND' or 'OR', not XOR"));
+  assert.throws(
+    predicate,
+    new RangeError(
+      "The predicate of matching is 'CONTAINS', not CONTAINSTABLE",
+    ),
+  );
+  assert.throws(
+    operator,
+    new RangeError("The operator of matching is 'AND' or 'OR', not XOR"),
+  );
+});
+
+test('the CONTAINS condition that the session receives joins the phrases with AND by default and under matching { predicate: CONTAINS, operator: AND }, and with OR under operator OR', async () => {
+  // Arrange: the session records the parameters of each query and gives no row.
+  const conditions: unknown[] = [];
+  const store = new SqlServerPassageStore({
+    session: {
+      query: async (_sql, parameters) => {
+        conditions.push(
+          ...Object.values(parameters).filter(
+            (value) => typeof value === 'string' && value.includes('rotate'),
+          ),
+        );
+        return [];
+      },
+    },
+    passages: 'docs_passages',
+    metadata: (columns) => columns,
+  });
+  const index = { table: 'docs_passages' };
+
+  // Act
+  await new SqlServerKeywordRetriever({ store, index }).retrieve(
+    'rotate signing',
+  );
+  await new SqlServerKeywordRetriever({
+    store,
+    index,
+    matching: { predicate: 'CONTAINS', operator: 'AND' },
+  }).retrieve('rotate signing');
+  await new SqlServerKeywordRetriever({
+    store,
+    index,
+    matching: { predicate: 'CONTAINS', operator: 'OR' },
+  }).retrieve('rotate signing');
+
+  // Assert
+  assert.deepEqual(conditions, [
+    '"rotate" AND "signing"',
+    '"rotate" AND "signing"',
+    '"rotate" OR "signing"',
+  ]);
 });

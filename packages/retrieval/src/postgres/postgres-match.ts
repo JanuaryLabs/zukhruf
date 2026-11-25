@@ -41,31 +41,14 @@ export class AllWords<M extends Metadata> implements PostgresMatch<M> {
     query: KeywordQuery,
     options: RetrieveOptions<StoredPassage<M>>,
   ): Promise<RetrievalResult<StoredPassage<M>>> {
-    return tsRankCd(this.#index, query, ' && ', options);
+    return tsRankCd(this.#index, query, options);
   }
 }
 
-/** A passage matches when it holds any word. */
-export class AnyWord<M extends Metadata> implements PostgresMatch<M> {
-  readonly #index: TsvectorIndex<M>;
-
-  constructor(index: TsvectorIndex<M>) {
-    this.#index = index;
-  }
-
-  retrieve(
-    query: KeywordQuery,
-    options: RetrieveOptions<StoredPassage<M>>,
-  ): Promise<RetrievalResult<StoredPassage<M>>> {
-    return tsRankCd(this.#index, query, ' || ', options);
-  }
-}
-
-/** The passages that match the words joined by `operator`, best `ts_rank_cd` first. */
+/** The passages that hold every word, best `ts_rank_cd` first. */
 async function tsRankCd<M extends Metadata>(
   { session, passages, metadata, column, configuration }: TsvectorIndex<M>,
   query: KeywordQuery,
-  operator: ' && ' | ' || ',
   options: RetrieveOptions<StoredPassage<M>>,
 ): Promise<RetrievalResult<StoredPassage<M>>> {
   const words = wordsOf(query);
@@ -77,7 +60,7 @@ async function tsRankCd<M extends Metadata>(
   // `&`, `|`, `!`, `<->`, `:*` and quotes stay text, never operators.
   const tsquery = words
     .map((word) => `plainto_tsquery(${regconfig}, ${bind(parameters, word)})`)
-    .join(operator);
+    .join(' && ');
   const row = passageJson(parameters, passages);
   const filter = where(dialect, options.filter, parameters);
   const topK = bind(parameters, options.topK ?? 10);

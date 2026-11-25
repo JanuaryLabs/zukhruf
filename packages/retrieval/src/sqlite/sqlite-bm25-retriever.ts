@@ -8,6 +8,17 @@ import { AndMatch, OrMatch, type SqliteMatch } from './sqlite-match.ts';
 import { type SqlitePassageStore, contractOf } from './sqlite-passage-store.ts';
 
 /**
+ * How `SqliteBM25Retriever` matches the words of a query, under
+ * Elasticsearch's name for a `match` query's `operator` (ADR 0018):
+ * `{ operator: 'AND' }` finds the passages that hold every word, the implicit
+ * operator of FTS5; `{ operator: 'OR' }` finds those that hold any word, and
+ * bm25 ranks the rarer words first. Each member holds only the fields that
+ * mean something for it, so the SQLite forms that follow have their place.
+ */
+export type SqliteMatching =
+  { readonly operator: 'OR' } | { readonly operator: 'AND' };
+
+/**
  * Ranks the passages by FTS5 `bm25()` over the keyword index that elt writes:
  * an FTS5 table with the passages as its external content (ADR 0004). The
  * score is `-bm25()`, so a better match has a higher score (ADR 0005). It
@@ -27,8 +38,8 @@ export class SqliteBM25Retriever<
     readonly store: SqlitePassageStore<M>;
     /** The FTS5 table over the passages, in the database of the store. */
     readonly index: string;
-    /** How the words of the query join: 'AND', the implicit operator of FTS5, when absent. */
-    readonly operator?: 'AND' | 'OR';
+    /** How the words of the query match: `{ operator: 'AND' }` when absent. */
+    readonly matching?: SqliteMatching;
   }) {
     const { database, passages, metadata } = contractOf(options.store);
     const index = {
@@ -37,7 +48,7 @@ export class SqliteBM25Retriever<
       metadata,
       index: identifier(options.index),
     };
-    const operator = options.operator ?? 'AND';
+    const { operator } = options.matching ?? { operator: 'AND' };
     switch (operator) {
       case 'AND':
         this.#match = new AndMatch(index);
@@ -47,7 +58,7 @@ export class SqliteBM25Retriever<
         break;
       default:
         throw new RangeError(
-          `The operator is 'AND' or 'OR', not ${String(operator satisfies never)}`,
+          `The operator of matching is 'AND' or 'OR', not ${String(operator satisfies never)}`,
         );
     }
   }

@@ -14,6 +14,19 @@ import {
 } from './sqlserver-passage-store.ts';
 
 /**
+ * How `SqlServerKeywordRetriever` matches the words of a query, under
+ * Microsoft's T-SQL names (ADR 0018): `{ predicate: 'CONTAINS', operator }`
+ * is the `CONTAINS` predicate with its Boolean operator, `'AND'` for the
+ * passages that hold every word and `'OR'` for those that hold any. Each
+ * member holds only the fields that mean something for it, so the SQL Server
+ * forms that follow have their place.
+ */
+export type SqlServerMatching = {
+  readonly predicate: 'CONTAINS';
+  readonly operator: 'AND' | 'OR';
+};
+
+/**
  * Ranks the passages by SQL Server full-text search over the keyword index
  * that elt writes: a full-text index on the `[text]` column of a base table
  * whose full-text key is the passage id (ADR 0004). The search is
@@ -37,8 +50,8 @@ export class SqlServerKeywordRetriever<
       /** The base table, in the schema of the store, that holds the full-text index on `[text]` with the passage id as its key. */
       readonly table: string;
     };
-    /** How the words of the query join: 'AND' when absent. */
-    readonly operator?: 'AND' | 'OR';
+    /** How the words of the query match: `{ predicate: 'CONTAINS', operator: 'AND' }` when absent. */
+    readonly matching?: SqlServerMatching;
   }) {
     const contract = contractOf(options.store);
     const index = {
@@ -47,7 +60,15 @@ export class SqlServerKeywordRetriever<
       metadata: contract.metadata,
       table: contract.relation(options.index.table),
     };
-    const operator = options.operator ?? 'AND';
+    const { predicate, operator } = options.matching ?? {
+      predicate: 'CONTAINS',
+      operator: 'AND',
+    };
+    if (predicate !== 'CONTAINS') {
+      throw new RangeError(
+        `The predicate of matching is 'CONTAINS', not ${String(predicate satisfies never)}`,
+      );
+    }
     switch (operator) {
       case 'AND':
         this.#match = new ContainsAll(index);
@@ -57,7 +78,7 @@ export class SqlServerKeywordRetriever<
         break;
       default:
         throw new RangeError(
-          `The operator is 'AND' or 'OR', not ${String(operator satisfies never)}`,
+          `The operator of matching is 'AND' or 'OR', not ${String(operator satisfies never)}`,
         );
     }
   }

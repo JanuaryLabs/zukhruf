@@ -113,7 +113,7 @@ test('passages that are a view with an integer rowid column are searched through
   assert.deepEqual(ids(compile), ['a']);
 });
 
-test('the words of the query join with AND by default, and with OR when the operator is OR', async () => {
+test('the words of the query join with AND by default and under matching { operator: AND }, and with OR under matching { operator: OR }', async () => {
   // Arrange
   using database = contract([
     { id: 'both', text: 'rotate the signing key' },
@@ -137,13 +137,13 @@ test('the words of the query join with AND by default, and with OR when the oper
   const explicitAnd = (
     await new SqliteBM25Retriever({
       ...options,
-      operator: 'AND',
+      matching: { operator: 'AND' },
     }).retrieve('rotate signing')
   ).passages;
   const or = (
     await new SqliteBM25Retriever({
       ...options,
-      operator: 'OR',
+      matching: { operator: 'OR' },
     }).retrieve('rotate signing')
   ).passages;
 
@@ -414,7 +414,7 @@ test('the metadata of each passage is what the metadata of its store reads from 
   assert.deepEqual(metadata.columns[0], { product: 'kms' });
 });
 
-test('an operator other than AND or OR is refused with a RangeError when the retriever is made', () => {
+test('a matching operator other than AND or OR is refused with a RangeError when the retriever is made', () => {
   // Arrange
   using database = contract([]);
   const store = new SqlitePassageStore({
@@ -429,9 +429,12 @@ test('an operator other than AND or OR is refused with a RangeError when the ret
       store,
       index: 'docs_passages_fts',
       // @ts-expect-error: a JavaScript caller can pass any operator
-      operator: 'XOR',
+      matching: { operator: 'XOR' },
     });
 
   // Assert
-  assert.throws(make, new RangeError("The operator is 'AND' or 'OR', not XOR"));
+  assert.throws(
+    make,
+    new RangeError("The operator of matching is 'AND' or 'OR', not XOR"),
+  );
 });

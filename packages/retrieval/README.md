@@ -216,7 +216,7 @@ Output:
 
 ## Search by keywords
 
-A keyword retriever queries the keyword index that elt writes: FTS5 on SQLite, `tsvector` on Postgres, full-text on SQL Server. It quotes each word of the query, so a word of the user is never an operator of the engine. A query bundle can give it other words in `keywords` (see "Give each search its own text"). Its score is higher for a better match on every engine; `SqliteBM25Retriever` negates `bm25()` ([ADR 0004](./docs/adr/0004-a-keyword-retriever-queries-the-keyword-index-that-elt-writes.md)). The words join with `operator`: `'AND'` when absent, or `'OR'`.
+A keyword retriever queries the keyword index that elt writes: FTS5 on SQLite, `tsvector` on Postgres, full-text on SQL Server. It quotes each word of the query, so a word of the user is never an operator of the engine. A query bundle can give it other words in `keywords` (see "Give each search its own text"). Its score is higher for a better match on every engine; `SqliteBM25Retriever` negates `bm25()` ([ADR 0004](./docs/adr/0004-a-keyword-retriever-queries-the-keyword-index-that-elt-writes.md)). How the words match is each engine's own `matching` option, a union typed for that engine only ([ADR 0018](./docs/adr/0018-each-keyword-retriever-matches-in-the-strongest-form-of-its-engine.md)): `{ operator: 'AND' | 'OR' }` on SQLite, `{ strategy: 'all' }` on Postgres, which has no OR, and `{ predicate: 'CONTAINS', operator: 'AND' | 'OR' }` on SQL Server. Each is AND when absent.
 
 On SQLite the index is an FTS5 table whose external content is a keywords table, kept in step by triggers. The passages view gives the `rowid` of that table, and the retriever joins the passages on it ([ADR 0004](./docs/adr/0004-a-keyword-retriever-queries-the-keyword-index-that-elt-writes.md), the amendment of 2026-11-24).
 
@@ -237,7 +237,7 @@ const keywords = new SqliteBM25Retriever({ store, index: 'docs_passages_fts' });
 const anyWord = new SqliteBM25Retriever({
   store,
   index: 'docs_passages_fts',
-  operator: 'OR', // the default is 'AND', the implicit operator of FTS5
+  matching: { operator: 'OR' }, // the default is { operator: 'AND' }, the implicit operator of FTS5
 });
 
 for (const search of [keywords, anyWord]) {
@@ -1054,13 +1054,15 @@ class SqliteEmbeddingRetriever<
     readonly model: EmbeddingModel;
   });
 }
+type SqliteMatching =
+  { readonly operator: 'OR' } | { readonly operator: 'AND' };
 class SqliteBM25Retriever<
   in out M extends Metadata = Metadata,
 > implements Retriever<QueryType, StoredPassage<M>> {
   constructor(options: {
     readonly store: SqlitePassageStore<M>;
     readonly index: string; // the FTS5 table
-    readonly operator?: 'AND' | 'OR'; // 'AND'
+    readonly matching?: SqliteMatching; // { operator: 'AND' }
   });
 }
 
@@ -1091,6 +1093,7 @@ class PgvectorEmbeddingRetriever<
     readonly model: EmbeddingModel;
   });
 }
+type PostgresMatching = { readonly strategy: 'all' }; // no OR on Postgres
 class PgvectorKeywordRetriever<
   in out M extends Metadata = Metadata,
 > implements Retriever<QueryType, StoredPassage<M>> {
@@ -1100,7 +1103,7 @@ class PgvectorKeywordRetriever<
       readonly column: string; // the tsvector column of the passages
       readonly configuration?: string; // 'english'
     };
-    readonly operator?: 'AND' | 'OR'; // 'AND'
+    readonly matching?: PostgresMatching; // { strategy: 'all' }
   });
 }
 
@@ -1131,13 +1134,17 @@ class SqlServerEmbeddingRetriever<
     readonly model: EmbeddingModel;
   });
 }
+type SqlServerMatching = {
+  readonly predicate: 'CONTAINS';
+  readonly operator: 'AND' | 'OR';
+};
 class SqlServerKeywordRetriever<
   in out M extends Metadata = Metadata,
 > implements Retriever<QueryType, StoredPassage<M>> {
   constructor(options: {
     readonly store: SqlServerPassageStore<M>;
     readonly index: { readonly table: string }; // the base table with the full-text index on [text]
-    readonly operator?: 'AND' | 'OR'; // 'AND'
+    readonly matching?: SqlServerMatching; // { predicate: 'CONTAINS', operator: 'AND' }
   });
 }
 ```
@@ -1149,7 +1156,7 @@ class SqlServerKeywordRetriever<
 - [ADR 0001](./docs/adr/0001-the-package-is-the-query-side-of-rag-and-reads-a-passage-contract-that-elt-writes.md): the package is the query side of RAG and reads a passage contract that elt writes (superseded in part by ADR 0015).
 - [ADR 0002](./docs/adr/0002-a-retriever-is-a-port-for-any-source.md): a retriever is a port for any source (superseded in part by ADR 0013, ADR 0014 and ADR 0015).
 - [ADR 0003](./docs/adr/0003-an-embedding-retriever-runs-the-vector-search-in-the-sql-of-its-engine-one-query-or-a-batch.md): an embedding retriever runs the vector search in the SQL of its engine, one query or a batch (superseded in part by ADR 0013 and ADR 0014).
-- [ADR 0004](./docs/adr/0004-a-keyword-retriever-queries-the-keyword-index-that-elt-writes.md): a keyword retriever queries the keyword index that elt writes (superseded in part by ADR 0013).
+- [ADR 0004](./docs/adr/0004-a-keyword-retriever-queries-the-keyword-index-that-elt-writes.md): a keyword retriever queries the keyword index that elt writes (superseded in part by ADR 0013 and ADR 0018).
 - [ADR 0005](./docs/adr/0005-a-score-is-higher-for-a-better-passage.md): a score is higher for a better passage (superseded in part by ADR 0016).
 - [ADR 0006](./docs/adr/0006-a-retriever-gives-10-passages-when-the-caller-gives-no-topk.md): a retriever gives 10 passages when the caller gives no topK.
 - [ADR 0007](./docs/adr/0007-reciprocal-rank-fusion-is-the-default-fusion-with-k-60-and-ranks-from-1.md): reciprocal rank fusion is the default fusion, with k 60 and ranks from 1.
@@ -1158,8 +1165,9 @@ class SqlServerKeywordRetriever<
 - [ADR 0010](./docs/adr/0010-an-embedding-retriever-refuses-a-query-model-whose-identity-differs-from-the-stored-vectors.md): an embedding retriever refuses a query model whose identity differs from the stored vectors.
 - [ADR 0011](./docs/adr/0011-the-package-is-in-the-base-layer.md): the package is in the base layer.
 - [ADR 0012](./docs/adr/0012-the-package-is-zukhruf-retrieval-and-its-port-is-retriever-with-retrieve-after-go.md): the package is @zukhruf/retrieval, and its port is Retriever with retrieve, after Go.
-- [ADR 0013](./docs/adr/0013-a-query-is-a-string-or-a-query-bundle-with-a-text-for-each-kind-of-search (superseded in part by ADR 0015).md): a query is a string or a query bundle, with a text for each kind of search (superseded in part by ADR 0015).
+- [ADR 0013](./docs/adr/0013-a-query-is-a-string-or-a-query-bundle-with-a-text-for-each-kind-of-search.md): a query is a string or a query bundle, with a text for each kind of search (superseded in part by ADR 0015 and ADR 0018).
 - [ADR 0014](./docs/adr/0014-a-retrieve-call-answers-with-the-retrievers-that-answered-and-names-those-that-were-unavailable.md): a retrieve call answers with the retrievers that answered and names those that were unavailable.
 - [ADR 0015](./docs/adr/0015-a-passage-is-typed-by-its-metadata-and-only-a-stored-passage-has-source-seq-start-and-end.md): a passage is typed by its metadata, and only a stored passage has source, seq, start and end.
 - [ADR 0016](./docs/adr/0016-a-scored-passage-may-have-no-score-and-a-list-is-in-the-retrievers-order.md): a scored passage may have no score, and a list is in the retriever's order.
 - [ADR 0017](./docs/adr/0017-every-async-port-takes-an-optional-abort-signal-and-a-composite-rejects-at-once-when-it-aborts.md): every async port takes an optional abort signal, and a composite rejects at once when it aborts.
+- [ADR 0018](./docs/adr/0018-each-keyword-retriever-matches-in-the-strongest-form-of-its-engine.md): each keyword retriever matches in the strongest form of its engine.
