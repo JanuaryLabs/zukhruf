@@ -18,7 +18,7 @@ export class Bluetooth extends PromptedService<BluetoothStatus> {
 
   protected readonly requestScript = JxaRequest.decided(
     ['CoreBluetooth'],
-    "// macOS asks for Bluetooth when a central manager is created.\nconst manager = C('CBCentralManager').alloc.initWithDelegateQueue(null, null);",
+    "// macOS asks for Bluetooth when a central manager is created. A queue\n// argument from JXA crashes osascript (libdispatch: 'Cannot target object to\n// cooperative root queue'), so init takes the main queue.\nconst manager = C('CBCentralManager').alloc.init;",
     "Number(C('CBManager').authorization) === 0",
   ).source;
 
