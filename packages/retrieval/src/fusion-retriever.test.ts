@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import type { DatabaseSync } from 'node:sqlite';
-import { test } from 'node:test';
 import { setImmediate as nextTurn } from 'node:timers/promises';
 
 import { MockLanguageModelV4 } from 'ai/test';
 
 import { open } from '@zukhruf/sqlite-open';
+import { test } from '@zukhruf/testing/node';
 import { Vector } from '@zukhruf/vectors';
 import { install, toSql } from '@zukhruf/vectors/sqlite';
 
@@ -734,4 +734,92 @@ test('a live source of order only fuses beside an engine search by reciprocal ra
     message:
       'distributionBasedScoreFusion reads scores, and the passage web-1 of list 1 has none: fuse a list of order only with reciprocalRankFusion',
   });
+});
+
+test('a FusionRetriever whose only retriever with a weight above 0 is unavailable answers with the passages of the other retrievers, which add nothing to a score, and names the failure (#5720)', async () => {
+  // Arrange
+  const down = new RetrieverUnavailableError('HTTP 503');
+  const retriever = new FusionRetriever({
+    retrievers: {
+      kept: new LiveRetriever(['a', 'b']),
+      weighted: unavailable(down),
+    },
+    weights: { kept: 0 },
+  });
+
+  // Act
+  const result = await retriever.retrieve('rotate key');
+
+  // Assert
+  assert.deepEqual(scores(result.passages), [
+    ['a', 0],
+    ['b', 0],
+  ]);
+  assert.deepEqual([...result.failures], [['weighted', down]]);
+});
+
+void test.each(
+  [
+    [Number.NaN],
+    [Number.POSITIVE_INFINITY],
+    [Number.NEGATIVE_INFINITY],
+    [-1],
+  ] as const,
+  ([weight]) =>
+    test(`a FusionRetriever refuses a weight of ${weight} when it is made, with a RangeError that names the retriever (#5720)`, () => {
+      // Arrange
+      const retrievers = {
+        kept: new LiveRetriever(['a']),
+        weighted: new LiveRetriever(['b']),
+      };
+
+      // Act and Assert
+      assert.throws(
+        () =>
+          new FusionRetriever({ retrievers, weights: { weighted: weight } }),
+        {
+          name: 'RangeError',
+          message: `The weight of weighted is a finite number of 0 or more, not ${weight}`,
+        },
+      );
+    }),
+);
+
+test('a FusionRetriever refuses weights of which none is above 0 when it is made (#5720)', () => {
+  // Arrange
+  const retrievers = {
+    kept: new LiveRetriever(['a']),
+    weighted: new LiveRetriever(['b']),
+  };
+
+  // Act and Assert
+  assert.throws(
+    () =>
+      new FusionRetriever({ retrievers, weights: { kept: 0, weighted: 0 } }),
+    {
+      name: 'RangeError',
+      message: 'A fusion takes at least one weight above 0: every weight is 0',
+    },
+  );
+});
+
+test('a FusionRetriever takes a weight of 0 beside a weight above 0, and the retriever of weight 0 adds nothing to a score (#5720)', async () => {
+  // Arrange
+  const retriever = new FusionRetriever({
+    retrievers: {
+      kept: new LiveRetriever(['x']),
+      weighted: new LiveRetriever(['y', 'z']),
+    },
+    weights: { kept: 0 },
+  });
+
+  // Act
+  const result = await retriever.retrieve('rotate key');
+
+  // Assert
+  assert.deepEqual(scores(result.passages), [
+    ['y', 1 / 61],
+    ['z', 1 / 62],
+    ['x', 0],
+  ]);
 });

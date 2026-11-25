@@ -9,7 +9,7 @@ import type { ScoredPassage } from './scored-passage.ts';
  * passage type, as their `fuse` is generic.
  */
 export interface Fusion<in out P extends Passage = Passage> {
-  /** `weights` has one weight for each list, in the order of the lists. */
+  /** `weights` has one weight for each list, in the order of the lists: each a finite number of 0 or more, at least one above 0 (ADR 0007, amendment 2026-11-25). */
   readonly fuse: (
     lists: readonly (readonly ScoredPassage<P>[])[],
     weights: readonly number[],

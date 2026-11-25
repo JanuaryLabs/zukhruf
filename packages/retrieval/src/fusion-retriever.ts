@@ -9,6 +9,7 @@ import type { RetrievalResult } from './retrieval-result.ts';
 import type { RetrieveOptions } from './retrieve-options.ts';
 import { RetrieverUnavailableError } from './retriever-unavailable-error.ts';
 import type { Retriever } from './retriever.ts';
+import { checkWeights } from './sum-on-id.ts';
 
 /**
  * The names of a fusion's retrievers, as the compiler checks them: at least
@@ -44,7 +45,6 @@ type Answer<P extends Passage> =
 
 type Answered<P extends Passage> = {
   readonly name: string;
-  readonly weight: number;
   readonly result: RetrievalResult<P>;
 };
 
@@ -99,7 +99,7 @@ export class FusionRetriever<
     // is generic in its `fuse`, so it takes P from there (ADR 0015).
     /** `reciprocalRankFusion()` when absent: k 60, ranks from 1. */
     readonly fusion?: Fusion<NoInfer<P>>;
-    /** A weight for a retriever by its name: 1 for each name that is absent. */
+    /** A weight for a retriever by its name: 1 for each name that is absent. Each is a finite number of 0 or more, and at least one is above 0 (ADR 0007, amendment 2026-11-25). */
     readonly weights?: Readonly<Partial<Record<NoInfer<K>, number>>>;
     /**
      * How many passages each retriever gives to the fusion: the `topK` of
@@ -138,6 +138,7 @@ export class FusionRetriever<
           (Object.hasOwn(weights, name) ? weights[name] : undefined) ?? 1,
         ] as const,
     );
+    checkWeights(this.#retrievers.map(([name, , weight]) => [name, weight]));
     this.#fusion = options.fusion ?? reciprocalRankFusion();
     this.#rankWindowSize = options.rankWindowSize;
   }
@@ -164,24 +165,22 @@ export class FusionRetriever<
         : AbortSignal.any([caller, siblings.signal]);
     const answers = await untilAborted(
       Promise.all(
-        this.#retrievers.map(
-          async ([name, retriever, weight]): Promise<Answer<P>> => {
-            try {
-              const result = await retriever.retrieve(query, {
-                ...options,
-                topK: rankWindowSize,
-                signal,
-              });
-              return { name, weight, result };
-            } catch (error) {
-              if (error instanceof RetrieverUnavailableError) {
-                return { name, error };
-              }
-              siblings.abort(error);
-              throw error;
+        this.#retrievers.map(async ([name, retriever]): Promise<Answer<P>> => {
+          try {
+            const result = await retriever.retrieve(query, {
+              ...options,
+              topK: rankWindowSize,
+              signal,
+            });
+            return { name, result };
+          } catch (error) {
+            if (error instanceof RetrieverUnavailableError) {
+              return { name, error };
             }
-          },
-        ),
+            siblings.abort(error);
+            throw error;
+          }
+        }),
       ),
       caller,
     );
@@ -205,11 +204,15 @@ export class FusionRetriever<
       }
     }
     if (answered.length === 0) throw new NoRetrieverAnsweredError(failures);
+    // One list for each retriever, empty for one that did not answer, so the
+    // fusion gets the weights that the constructor checked (#5720).
     return {
       passages: this.#fusion
         .fuse(
-          answered.map(({ result }) => result.passages),
-          answered.map(({ weight }) => weight),
+          answers.map((answer) =>
+            'result' in answer ? answer.result.passages : [],
+          ),
+          this.#retrievers.map(([, , weight]) => weight),
         )
         .slice(0, topK),
       failures,

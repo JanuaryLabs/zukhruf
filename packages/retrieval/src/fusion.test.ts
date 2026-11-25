@@ -298,3 +298,76 @@ void test.each(
       });
     }),
 );
+
+void test.each(
+  fusions.flatMap(([name, fusion]) =>
+    [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, -1].map(
+      (weight) => ({ name, fusion, weight }),
+    ),
+  ),
+  ({ name, fusion, weight }) =>
+    test(`${name} refuses a weight of ${weight} with a RangeError that names its list (#5720)`, () => {
+      // Arrange
+      const lists = [list(['a', 2]), list(['b', 1])];
+
+      // Act and Assert
+      assert.throws(() => fusion.fuse(lists, [1, weight]), {
+        name: 'RangeError',
+        message: `The weight of list 1 is a finite number of 0 or more, not ${weight}`,
+      });
+    }),
+);
+
+void test.each(
+  fusions.map(([name, fusion]) => ({ name, fusion })),
+  ({ name, fusion }) =>
+    test(`${name} refuses weights of which none is above 0 (#5720)`, () => {
+      // Arrange
+      const lists = [list(['a', 2]), list(['b', 1])];
+
+      // Act and Assert
+      assert.throws(() => fusion.fuse(lists, [0, 0]), {
+        name: 'RangeError',
+        message:
+          'A fusion takes at least one weight above 0: every weight is 0',
+      });
+    }),
+);
+
+void test.each(
+  fusions.map(([name, fusion]) => ({ name, fusion })),
+  ({ name, fusion }) =>
+    test(`${name} takes a weight of 0 beside a weight above 0, and the list of weight 0 adds nothing to a score (#5720)`, () => {
+      // Arrange
+      const weighted = list(['b', 1], ['c', 0.5]);
+
+      // Act
+      const fused = fusion.fuse([list(['a', 2], ['b', 1]), weighted], [0, 1]);
+      const alone = fusion.fuse([weighted], [1]);
+
+      // Assert
+      assert.deepEqual(Object.fromEntries(scores(fused)), {
+        ...Object.fromEntries(scores(alone)),
+        a: 0,
+      });
+    }),
+);
+
+void test.each(
+  [[Number.NaN], [Number.POSITIVE_INFINITY], [0], [-1], [1.5]] as const,
+  ([k]) =>
+    test(`reciprocalRankFusion refuses a k of ${k} when it is made, as Elasticsearch's rank_constant is an integer of 1 or more (#5720)`, () => {
+      assert.throws(() => reciprocalRankFusion({ k }), {
+        name: 'RangeError',
+        message: `The k of reciprocal rank fusion is an integer of 1 or more, not ${k}`,
+      });
+    }),
+);
+
+void test.each(
+  fusions.map(([name, fusion]) => ({ name, fusion })),
+  ({ name, fusion }) =>
+    test(`${name} fuses no list into no passage, as there is no weight to be above 0 (#5720)`, () => {
+      assert.deepEqual(fusion.fuse([], []), []);
+    }),
+);

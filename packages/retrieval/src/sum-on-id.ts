@@ -3,6 +3,31 @@ import type { Passage } from './passage.ts';
 import type { ScoredPassage } from './scored-passage.ts';
 
 /**
+ * Refuses the weights that would make a fused list wrong with no error: each
+ * weight is a finite number of 0 or more, and when there is a list, at least
+ * one weight is above 0, as Haystack's `DocumentJoiner`, Elasticsearch's rrf
+ * and linear retrievers and LangChain's `EnsembleRetriever` require (ADR
+ * 0007, amendment 2026-11-25). Each weight comes with the name of its list or
+ * retriever, which the `RangeError` gives.
+ */
+export function checkWeights(
+  weights: readonly (readonly [name: string, weight: number])[],
+): void {
+  for (const [name, weight] of weights) {
+    if (!Number.isFinite(weight) || weight < 0) {
+      throw new RangeError(
+        `The weight of ${name} is a finite number of 0 or more, not ${weight}`,
+      );
+    }
+  }
+  if (weights.length > 0 && !weights.some(([, weight]) => weight > 0)) {
+    throw new RangeError(
+      'A fusion takes at least one weight above 0: every weight is 0',
+    );
+  }
+}
+
+/**
  * The part that the three fusions share: each list becomes new scores by the
  * fusion's own rule, each new score is multiplied by the weight of its list,
  * and the products of one `Passage.id` are added, best first. A
@@ -41,6 +66,7 @@ function fuseOnId<P extends Passage>(
       `A fusion takes one weight for each list: got ${weights.length} weights for ${lists.length} lists`,
     );
   }
+  checkWeights(weights.map((weight, index) => [`list ${index}`, weight]));
   const fused = new Map<string, Fused<P>>();
   for (const [index, list] of lists.entries()) {
     const weight = weights[index] ?? 1;
