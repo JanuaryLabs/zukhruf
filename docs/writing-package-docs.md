@@ -50,10 +50,10 @@ The words in these documents have one meaning each. See the glossary in [CONTEXT
 ````
 
 - The title is the npm name: `# @zukhruf/sqlite-open` for the folder `packages/sqlite/open` ([README](../packages/sqlite/open/README.md)).
-- A task section title is an imperative sentence: "Install a job", "Send a process signal" ([launchd](../packages/launchd/README.md)), "Lend a worker to a job" ([pool](../packages/pool/README.md)).
+- A task section title is an imperative sentence: "Install a job", "Send a process signal" ([launchd](../packages/macos/launchd/README.md)), "Lend a worker to a job" ([pool](../packages/pool/README.md)).
 - A fixed section has a fixed title: `## Use it`, `## Errors`, `## What the package does not do`, `## Who uses it`, `## The same concepts in other systems`, `## API`, `## Documentation`, `## Development`. Write only the sections that have content. Keep the order above.
 - `## Errors` lists each error class that a caller handles differently, in a table with the columns `Error` and `When` ([sqlite-queue](../packages/sqlite/queue/README.md)). launchd and docker use the title "Catch the errors that change what you do next" for the same section.
-- `## What the package does not do` is a list. Each item starts with a bold sentence, then gives the reason or the ADR ([launchd](../packages/launchd/README.md)).
+- `## What the package does not do` is a list. Each item starts with a bold sentence, then gives the reason or the ADR ([launchd](../packages/macos/launchd/README.md)).
 - `## Who uses it` is optional. It is a table with the columns `Consumer`, `How` and `Record`: each package or app that uses this one, the call it makes and the code it replaced, and the backlog item or ADR of that move ([pipes](../packages/pipes/README.md), [sqlite-notify](../packages/sqlite/notify/README.md)). A package whose parts have different users writes `## Who uses each part` ([random](../packages/random/README.md)). Keep it out of `## Documentation`, which only links.
 - `## The same concepts in other systems` names each system with its file, line or link ([docker](../packages/docker/README.md)).
 - `## Documentation` links each concept, each recipe and each ADR. When it links more than one kind, group the links under the bold labels `**Concepts**`, `**Recipes**` and `**Decisions**` ([mutex](../packages/mutex/README.md)). A recipe link drops the word "Recipe:". An ADR link is `- [ADR NNNN](./docs/adr/NNNN-….md): <title, first word in lower case>.` ([pool](../packages/pool/README.md)). pool and relevance-filtering write `## Recipes` and `## Decisions` as two sections; this is allowed.
@@ -62,7 +62,7 @@ The words in these documents have one meaning each. See the glossary in [CONTEXT
 
 ## Glossary: CONTEXT.md
 
-Examples: [packages/mutex/CONTEXT.md](../packages/mutex/CONTEXT.md) (with groups), [packages/launchd/CONTEXT.md](../packages/launchd/CONTEXT.md) (with sources).
+Examples: [packages/mutex/CONTEXT.md](../packages/mutex/CONTEXT.md) (with groups), [packages/macos/launchd/CONTEXT.md](../packages/macos/launchd/CONTEXT.md) (with sources).
 
 ```md
 # <Context name>

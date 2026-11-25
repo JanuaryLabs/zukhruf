@@ -1,6 +1,6 @@
 # launchd
 
-A client for launchd, the service manager of macOS. It installs jobs, and it drives their services with the current subcommands of launchctl(1). The words are Apple's, from launchd.plist(5), launchctl(1) and xpc_events(3). It owns no policy: what a job runs, and when, stay in the program that installs it. Cancel and signal have the meanings that [the async glossary](../async/CONTEXT.md) gives them.
+A client for launchd, the service manager of macOS. It installs jobs, and it drives their services with the current subcommands of launchctl(1). The words are Apple's, from launchd.plist(5), launchctl(1) and xpc_events(3). It owns no policy: what a job runs, and when, stay in the program that installs it. Cancel and signal have the meanings that [the async glossary](../../async/CONTEXT.md) gives them.
 
 ## Language
 

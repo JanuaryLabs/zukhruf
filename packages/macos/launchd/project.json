@@ -1,0 +1,7 @@
+{
+  "name": "launchd",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/macos/launchd/src",
+  "projectType": "library",
+  "tags": ["layer:island", "std:base", "platform:darwin"]
+}

@@ -44,7 +44,7 @@ console.log(launchd.domain, service.target, service.file);
 // gui/501 gui/501/com.example.sync /Users/me/Library/LaunchAgents/com.example.sync.plist
 ```
 
-`clock` is the clock of the waits of the package: the wait between two bootouts, and the wait of the atomic write of `@zukhruf/fs`. Give `globalThis` in production. It has no default ([root ADR 0004](../../docs/adr/0004-a-library-that-waits-takes-the-clock-as-an-input.md)).
+`clock` is the clock of the waits of the package: the wait between two bootouts, and the wait of the atomic write of `@zukhruf/fs`. Give `globalThis` in production. It has no default ([root ADR 0004](../../../docs/adr/0004-a-library-that-waits-takes-the-clock-as-an-input.md)).
 
 An install is a reconcile. It renders the job to the bytes of its job file, and compares them with the file that is there:
 
@@ -314,7 +314,7 @@ An error has its own class when a caller does something different after it ([ADR
 
 Each class extends a base class, so a broad catch still works. `LaunchdError` is the base of every error of the package. `LaunchctlError` is the base of every answer of launchctl that is an error: it has `args`, `exitCode` and `stderr`. An exit code with no class of its own is a `LaunchctlError`. For example, a bootstrap that launchd refuses often exits 5 (Input/output error) with no reason, and stderr says "Try re-running the command as root for richer errors." A bootstrap of a disabled service exits 5 too, not 119 (Service is disabled), so a disabled service has no class of its own. `launchctl error <code>` decodes each code.
 
-`PermissionDeniedError` comes from the file or from launchctl, so it extends `LaunchdError`. Its `cause` is the error of Node.js or the `LaunchctlError`. Another error of the file system, such as `ENOSPC`, stays the error of Node.js. A cancel rejects with the reason of the signal, as each cancel does ([the async glossary](../async/CONTEXT.md)).
+`PermissionDeniedError` comes from the file or from launchctl, so it extends `LaunchdError`. Its `cause` is the error of Node.js or the `LaunchctlError`. Another error of the file system, such as `ENOSPC`, stays the error of Node.js. A cancel rejects with the reason of the signal, as each cancel does ([the async glossary](../../async/CONTEXT.md)).
 
 Some answers of launchctl are not errors here:
 

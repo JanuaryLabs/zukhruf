@@ -34,6 +34,6 @@ The maintainer chose on 2026-11-15: "macOS job for darwin projects".
 
 - The change of the workflow ships in the same push as the first tagged project. Without the exclusion, the ubuntu job runs the tests of the project, and they fail. Without the macOS job, CI never tests it.
 - macOS minutes cost nothing on a public repository.
-- The macOS job runs on each new image of the runner. A change of `launchctl` in a new macOS fails a test there first ([launchd ADR 0006](../../packages/launchd/docs/adr/0006-the-state-of-one-service-comes-from-print-and-only-two-of-its-lines.md)).
+- The macOS job runs on each new image of the runner. A change of `launchctl` in a new macOS fails a test there first ([launchd ADR 0006](../../packages/macos/launchd/docs/adr/0006-the-state-of-one-service-comes-from-print-and-only-two-of-its-lines.md)).
 - A developer on Linux or Windows sees the tests of a tagged project fail with `LaunchdUnavailableError`. Run them on a Mac, or leave out the tag as CI does.
 - A project that works on each system does not get the tag. The tag is for a project that cannot run its tests anywhere but on macOS.

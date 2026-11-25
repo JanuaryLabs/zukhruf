@@ -8,6 +8,7 @@
     "packages/*",
     "packages/sqlite/*",
     "packages/information-filtering/*",
+    "packages/macos/*",
     "apps/*"
   ],
   "scripts": {

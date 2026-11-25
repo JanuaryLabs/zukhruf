@@ -1,6 +1,6 @@
 # An error has its own class when the caller handles it differently
 
-The maintainer's rule for errors is in [docker ADR 0007](../../../docker/docs/adr/0007-an-error-has-its-own-class-when-the-caller-handles-it-differently.md): "I prefer naunced error classes for cases where an error expcetion actually make a differnce." (2026-10-20). A class for each exit code of launchctl would give classes that no caller handles. One class with the exit code would make each caller decode the code again.
+The maintainer's rule for errors is in [docker ADR 0007](../../../../docker/docs/adr/0007-an-error-has-its-own-class-when-the-caller-handles-it-differently.md): "I prefer naunced error classes for cases where an error expcetion actually make a differnce." (2026-10-20). A class for each exit code of launchctl would give classes that no caller handles. One class with the exit code would make each caller decode the code again.
 
 The exit codes of launchctl, decoded with `launchctl error` on macOS 27.2 (research record, 2026-11-15):
 
@@ -38,5 +38,5 @@ What the consumers do with them:
 - Exit code 5 has no class. Its next step is the next step of the base class: read `stderr`, and try again as root for "richer errors". A class would add a name and no handling.
 - `PermissionDeniedError` comes from two places, the file and launchctl, so it extends `LaunchdError`, not `LaunchctlError`. Its `cause` is the error of Node.js or the `LaunchctlError`.
 - The package has no class for a job that another program installed, for a job file that launchd cannot read, or for a failed bootstrap. The package does not record who installed a job. The type of a job keeps out a job that launchd.plist(5) does not allow ([ADR 0002](./0002-a-job-is-the-typed-launchd-plist-with-apples-key-names.md)). A failed bootstrap is a `LaunchctlError` with its exit code.
-- A cancel rejects with the reason of the signal, not with a `LaunchdError` ([the async glossary](../../../async/CONTEXT.md)).
+- A cancel rejects with the reason of the signal, not with a `LaunchdError` ([the async glossary](../../../../async/CONTEXT.md)).
 - Another error of the file system, such as `ENOSPC`, stays the error of Node.js with its `code`.

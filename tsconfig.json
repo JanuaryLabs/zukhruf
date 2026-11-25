@@ -141,7 +141,7 @@
       "path": "./.husky"
     },
     {
-      "path": "./packages/launchd"
+      "path": "./packages/macos/launchd"
     },
     {
       "path": "./packages/vectors"

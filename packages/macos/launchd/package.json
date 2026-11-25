@@ -6,12 +6,12 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/JanuaryLabs/zukhruf",
-    "directory": "packages/launchd"
+    "directory": "packages/macos/launchd"
   },
   "bugs": {
     "url": "https://github.com/JanuaryLabs/zukhruf/issues"
   },
-  "homepage": "https://github.com/JanuaryLabs/zukhruf/tree/main/packages/launchd#readme",
+  "homepage": "https://github.com/JanuaryLabs/zukhruf/tree/main/packages/macos/launchd#readme",
   "keywords": [
     "launchd",
     "launchctl",
