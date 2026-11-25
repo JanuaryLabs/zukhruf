@@ -82,6 +82,9 @@
   "overrides": {
     "@nx/react": {
       "express": "5.3.0"
+    },
+    "@sdk-it/hono": {
+      "typescript": "$typescript"
     }
   }
 }

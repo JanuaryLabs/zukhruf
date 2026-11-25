@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { mkdir, readFile, readdir, symlink, writeFile } from 'node:fs/promises';
+import { findPackageJSON } from 'node:module';
+import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 
 import { readJson, writeJson } from '@nx/devkit';
+
+import { TemporaryFiles } from '@zukhruf/fs';
 
 import {
   generatorTree,
@@ -520,12 +526,117 @@ test('a 500 answers with a fixed body, and the error goes only to the log', asyn
   await nodeAppGenerator(tree, { directory: 'apps/backend' });
 
   const app = tree.read('apps/backend/src/app.ts', 'utf-8') ?? '';
-  const fallback = app.slice(app.lastIndexOf("c.get('log')?.error(error);"));
+  const fallback = app.slice(
+    app.lastIndexOf('// The log has the error; the response never carries it.'),
+  );
   assert.match(
     fallback,
-    /^c\.get\('log'\)\?\.error\(error\);\n\s+return c\.json\(\n\s+\{\n\s+error: 'Internal Server Error',\n\s+cause: \{ code: 'api\/internal', detail: 'Unexpected error' \},\n\s+\},\n\s+500,\n\s+\);/,
+    /^\/\/ The log has the error; the response never carries it\.\n\s+return c\.json\(\n\s+\{\n\s+error: 'Internal Server Error',\n\s+cause: \{ code: 'api\/internal', detail: 'Unexpected error' \},\n\s+\},\n\s+500,\n\s+\);/,
   );
   assert.doesNotMatch(app, /String\(error\)/);
+  // The evlog middleware logs c.error; a log call in onError would add a
+  // second copy of the error, or a cause and a requestLogs entry beside it.
+  assert.doesNotMatch(app, /c\.get\('log'\)/);
+});
+
+// The wide event of one request to the app and logging modules that node-app
+// writes, run in a child process on the packages they import: a probe route
+// throws `thrown`, an expression with HTTPException in scope, and the event
+// is read back from the log file in LOG_DIR. NODE_ENV is production, as the
+// generated serve and image set it (ADR 0016), so evlog keeps whole stacks.
+async function wideEventOfThrow(
+  thrown: string,
+): Promise<Record<string, unknown>> {
+  const tree = generatorTree();
+  await nodeAppGenerator(tree, { directory: 'apps/backend' });
+  await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
+  const files = {
+    'package.json': tree.read('apps/backend/package.json', 'utf-8'),
+    'src/app.ts': tree.read('apps/backend/src/app.ts', 'utf-8'),
+    'src/logging.ts': tree.read('apps/backend/src/logging.ts', 'utf-8'),
+    'src/routes/healthz.route.ts': tree.read(
+      'apps/backend/src/routes/healthz.route.ts',
+      'utf-8',
+    ),
+    'probe.ts': `import { HTTPException } from 'hono/http-exception';
+
+import app from './src/app.ts';
+import { flushLogs } from './src/logging.ts';
+
+app.get('/api/probe', () => {
+  throw ${thrown};
+});
+await app.request('/api/probe');
+await flushLogs();
+`,
+  };
+  for (const [file, content] of Object.entries(files)) {
+    const path = join(folder.path, file);
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(path, content ?? '');
+  }
+  for (const name of ['evlog', 'hono', '@sdk-it/hono']) {
+    const manifest =
+      findPackageJSON(import.meta.resolve(name)) ??
+      assert.fail(`${name} is not installed`);
+    const link = join(folder.path, 'node_modules', name);
+    await mkdir(dirname(link), { recursive: true });
+    await symlink(dirname(manifest), link);
+  }
+  const logDir = join(folder.path, 'logs');
+
+  const run = spawnSync(process.execPath, ['probe.ts'], {
+    cwd: folder.path,
+    encoding: 'utf8',
+    env: { LOG_DIR: logDir, NODE_ENV: 'production' },
+  });
+
+  assert.equal(run.status, 0, run.stderr);
+  const events: unknown[] = [];
+  // The drain also writes a .gitignore beside its .jsonl files.
+  const logFiles = (await readdir(logDir)).filter((file) =>
+    file.endsWith('.jsonl'),
+  );
+  for (const file of logFiles) {
+    for (const line of (await readFile(join(logDir, file), 'utf8')).split(
+      '\n',
+    )) {
+      if (line !== '') events.push(JSON.parse(line));
+    }
+  }
+  assert.equal(events.length, 1, JSON.stringify(events));
+  const [event] = events;
+  assert.ok(typeof event === 'object' && event !== null);
+  return { ...event };
+}
+
+test('a thrown 4xx logs at warn, its error with no stack, and nothing beside it', async () => {
+  const event = await wideEventOfThrow(
+    "new HTTPException(422, { message: 'The dose is not a number', cause: { code: 'api/invalid-dose' } })",
+  );
+
+  assert.equal(event['level'], 'warn');
+  assert.equal(event['status'], 422);
+  assert.deepEqual(event['error'], {
+    name: 'Error',
+    message: 'The dose is not a number',
+    status: 422,
+    cause: { code: 'api/invalid-dose' },
+  });
+  assert.equal(event['cause'], undefined);
+  assert.equal(event['requestLogs'], undefined);
+});
+
+test('a thrown 500 logs at error, its error with the stack', async () => {
+  const event = await wideEventOfThrow("new Error('The pool is closed')");
+
+  assert.equal(event['level'], 'error');
+  assert.equal(event['status'], 500);
+  const { error } = event;
+  assert.ok(typeof error === 'object' && error !== null);
+  assert.ok('message' in error && 'stack' in error);
+  assert.equal(error.message, 'The pool is closed');
+  assert.match(String(error.stack), /^Error: The pool is closed\n\s+at /);
 });
 
 test('the log files go to LOG_DIR, and pretty output follows LOG_PRETTY, with no environment label', async () => {

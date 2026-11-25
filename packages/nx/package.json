@@ -155,9 +155,12 @@
     }
   },
   "devDependencies": {
+    "@sdk-it/hono": "0.46.11",
     "@zukhruf/eslint": "^0.8.70",
     "@zukhruf/fs": "^0.8.70",
     "@zukhruf/testing": "^0.8.70",
+    "evlog": "2.35.1",
+    "hono": "4.13.20",
     "semver": "^7.8.5"
   }
 }

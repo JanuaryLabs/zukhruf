@@ -86,18 +86,13 @@ app.notFound((c) =>
   ),
 );
 
+// The evlog middleware logs the error that reaches here, its cause included,
+// and logging.ts sets the level from the status.
 app.onError((error, c) => {
   if (error instanceof HTTPException) {
-    if (error.status >= 500) {
-      c.get('log')?.error(error);
-    } else {
-      // A bare \`status: 400\` in telemetry is undiagnosable; keep the cause.
-      c.get('log')?.warn(error.message, { cause: error.cause });
-    }
     return c.json({ error: error.message, cause: error.cause }, error.status);
   }
   // The log has the error; the response never carries it.
-  c.get('log')?.error(error);
   return c.json(
     {
       error: 'Internal Server Error',
@@ -219,12 +214,23 @@ const fileDrain =
         }),
       );
 
-// evlog derives no level from the response status, so a handler that
-// *returns* a 5xx (rather than throwing) would log at info. Enrichment runs
-// after emit and before drain with a mutable event.
-function promoteServerErrors(context: EnrichContext): void {
-  if ((context.response?.status ?? 0) >= 500) {
-    context.event.level = 'error';
+// evlog derives the level from the log calls, not from the response status:
+// its Hono middleware logs each error that onError handled at error, and a
+// handler that *returns* a 5xx logs at info. Enrichment runs after emit and
+// before output and drain, with a mutable event. As the OpenTelemetry HTTP
+// conventions treat a server span, a 4xx is the client's error: it logs at
+// warn, and its error keeps the name, message, status and cause, not the
+// stack.
+function levelFromStatus({ event, response }: EnrichContext): void {
+  const status = response?.status;
+  if (status === undefined) return;
+  if (status >= 500) {
+    event.level = 'error';
+  } else if (status >= 400 && event.level === 'error') {
+    event.level = 'warn';
+    if (typeof event.error === 'object' && event.error !== null) {
+      Reflect.deleteProperty(event.error, 'stack');
+    }
   }
 }
 
@@ -247,7 +253,7 @@ const config = defineEvlog({
   drain: fileDrain,
   // evlog globs: \`*\` stops at \`/\`, \`**\` crosses it.
   exclude: ['/api/healthz', '/assets/**'],
-  enrich: promoteServerErrors,
+  enrich: levelFromStatus,
 });
 
 initLogger(toLoggerConfig(config));
