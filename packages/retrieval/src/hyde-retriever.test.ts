@@ -2,15 +2,25 @@ import assert from 'node:assert/strict';
 import type { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 
-import { MockLanguageModelV4 } from 'ai/test';
+import { MockLanguageModelV4, MockRerankingModelV4 } from 'ai/test';
 
 import { open } from '@zukhruf/sqlite-open';
 import { Vector } from '@zukhruf/vectors';
 import { install, toSql } from '@zukhruf/vectors/sqlite';
 
-import { HydeRetriever } from './index.ts';
+import {
+  FusionRetriever,
+  HydeRetriever,
+  PostprocessingRetriever,
+  type QueryBundle,
+  Rerank,
+} from './index.ts';
 import { SqliteEmbeddingRetriever, SqlitePassageStore } from './sqlite.ts';
 import { embeddingModel } from './testing/embedding-model.ts';
+import {
+  type EntrezQueryBundle,
+  RecordingRetriever,
+} from './testing/recording-retriever.ts';
 
 // The passages and their vectors as elt's Vectorizer writes them.
 function contract(): DatabaseSync {
@@ -117,6 +127,99 @@ test("the model writes a passage that answers the query with LangChain's websear
     [['near-a', [2, 1]]],
   );
   assert.ok(Math.abs((results[0]?.score ?? 0) - 2 / Math.sqrt(5)) < 1e-6);
+});
+
+test('the passage reaches the embedding search only, as customEmbeddings: the query and its keywords stay, and a reranker below ranks against the query', async () => {
+  // Arrange: a reranking stack over a fusion of a recording source and an
+  // embedding search, whose model knows a vector only for the passage.
+  using database = contract();
+  const source = new RecordingRetriever(['kw-1']);
+  const reranked: string[] = [];
+  const stack = new PostprocessingRetriever({
+    retriever: new FusionRetriever({ retrievers: [source, meaning(database)] }),
+    postprocessors: [
+      new Rerank({
+        model: new MockRerankingModelV4({
+          doRerank: async ({ documents, query }) => {
+            reranked.push(query);
+            return {
+              ranking: documents.values.map((_, index) => ({
+                index,
+                relevanceScore: 1 / (index + 1),
+              })),
+            };
+          },
+        }),
+      }),
+    ],
+  });
+  const retriever = new HydeRetriever({
+    retriever: stack,
+    model: languageModel(),
+  });
+  const query: QueryBundle = {
+    query: 'how do I change my signing key?',
+    keywords: ['signing', 'key'],
+  };
+
+  // Act
+  const results = await retriever.retrieve(query);
+
+  // Assert
+  assert.deepEqual(source.queries, [{ ...query, customEmbeddings: [answer] }]);
+  assert.deepEqual(reranked, ['how do I change my signing key?']);
+  assert.deepEqual(results.map(({ passage }) => passage.id).toSorted(), [
+    'exact-b',
+    'far-a',
+    'kw-1',
+    'near-a',
+  ]);
+});
+
+test('HyDE takes a retriever of any query bundle: not one of strings only, nor a host source that needs its own field, which is fused beside HyDE', async () => {
+  // Arrange
+  using database = contract();
+  const host = new RecordingRetriever<EntrezQueryBundle>(['pmid-1']);
+  const federation = new FusionRetriever({
+    retrievers: [
+      host,
+      new HydeRetriever({
+        retriever: meaning(database),
+        model: languageModel(),
+      }),
+    ],
+  });
+  const query: EntrezQueryBundle = {
+    query: 'how do I change my signing key?',
+    entrez: 'signing AND key[Title]',
+  };
+
+  // Act
+  const results = await federation.retrieve(query);
+
+  // Assert: the host gets its field and no passage; the passage finds exact-b.
+  assert.deepEqual(host.queries, [query]);
+  assert.deepEqual(results.map(({ passage }) => passage.id).toSorted(), [
+    'exact-b',
+    'far-a',
+    'near-a',
+    'pmid-1',
+  ]);
+  // Each line after a directive is a compile error, which the typecheck
+  // target proves; the function never runs.
+  const refused = () => [
+    new HydeRetriever({
+      // @ts-expect-error: HyDE sends a query bundle, which a retriever of strings only cannot take
+      retriever: new RecordingRetriever<string>([]),
+      model: languageModel(),
+    }),
+    new HydeRetriever({
+      // @ts-expect-error: HyDE sends a query bundle without entrez
+      retriever: host,
+      model: languageModel(),
+    }),
+  ];
+  assert.equal(typeof refused, 'function');
 });
 
 test('the abort signal of the call reaches the model and the search', async () => {

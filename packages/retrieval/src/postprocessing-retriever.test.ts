@@ -16,6 +16,10 @@ import {
 } from './index.ts';
 import { SqliteEmbeddingRetriever, SqlitePassageStore } from './sqlite.ts';
 import { embeddingModel } from './testing/embedding-model.ts';
+import {
+  type EntrezQueryBundle,
+  RecordingRetriever,
+} from './testing/recording-retriever.ts';
 
 // The passages and their vectors, as elt writes them. Each vector has length
 // 5; the cosine similarities to the query [4, 3, 0] are alpha 20/25 = 0.8,
@@ -157,6 +161,36 @@ test('the query and the abort signal of the call reach the retriever and each po
   assert.deepEqual(reranked, [
     { query: 'rotate a key', abortSignal: controller.signal },
     { query: 'rotate a key', abortSignal: controller.signal },
+  ]);
+});
+
+test('a retriever that needs its own field gets the query bundle unchanged, while each postprocessor gets its query, the information need', async () => {
+  // Arrange: the source records what it gets; its passages have the texts
+  // alpha and delta, which the reranker scores.
+  const source = new RecordingRetriever<EntrezQueryBundle>(['alpha', 'delta']);
+  const reranked: Seen[] = [];
+  const retriever = new PostprocessingRetriever({
+    retriever: source,
+    postprocessors: [new Rerank({ model: reranker(reranked) })],
+  });
+  const query: EntrezQueryBundle = {
+    query: 'What dose of apixaban for a patient with renal insufficiency?',
+    keywords: ['apixaban', 'renal', 'insufficiency'],
+    entrez: 'apixaban AND "renal insufficiency"[MeSH Terms]',
+  };
+
+  // Act
+  const results = await retriever.retrieve(query);
+
+  // Assert
+  assert.deepEqual(source.queries, [query]);
+  assert.deepEqual(
+    reranked.map(({ query }) => query),
+    ['What dose of apixaban for a patient with renal insufficiency?'],
+  );
+  assert.deepEqual(scores(results), [
+    ['delta', 0.9],
+    ['alpha', 0.1],
   ]);
 });
 

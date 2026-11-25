@@ -135,6 +135,31 @@ test('the words of the query join with AND by default, and with OR when the oper
   assert.equal(ids(or)[0], 'both');
 });
 
+test('the words of keywords are quoted in place of the words of query, and the words of query when the bundle has no keywords, as when the query is a string', async () => {
+  // Arrange
+  using database = contract([
+    { id: 'both', text: 'rotate the signing key' },
+    { id: 'renew', text: 'renew the certificate' },
+  ]);
+  const retriever = new SqliteBM25Retriever({
+    store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
+    index: 'docs_passages_fts',
+  });
+
+  // Act
+  const byKeywords = await retriever.retrieve({
+    query: 'renew certificate',
+    keywords: ['rotate', 'signing key'],
+  });
+  const byQuery = await retriever.retrieve({ query: 'renew certificate' });
+  const byString = await retriever.retrieve('renew certificate');
+
+  // Assert: 'signing key' is two words, each quoted.
+  assert.deepEqual(ids(byKeywords), ['both']);
+  assert.deepEqual(ids(byQuery), ['renew']);
+  assert.deepEqual(byString, byQuery);
+});
+
 test('each word of the query is a phrase, so FTS5 syntax in it matches as text and never runs as an operator', async () => {
   // Arrange
   using database = contract([

@@ -1,3 +1,4 @@
+import { type QueryType, keywordsOf } from '../query-bundle.ts';
 import type { RetrieveOptions } from '../retrieve-options.ts';
 import type { Retriever } from '../retriever.ts';
 import type { ScoredPassage } from '../scored-passage.ts';
@@ -17,7 +18,8 @@ import type { SqlServerSession } from './sqlserver-session.ts';
  * that elt writes: a full-text index on the `[text]` column of a base table
  * whose full-text key is the passage id (ADR 0004). The search is
  * `CONTAINSTABLE`, and the score is its `RANK`, which is higher for a better
- * match (ADR 0005).
+ * match (ADR 0005). It matches the words of `keywords`, or of `query` when
+ * the bundle has none (ADR 0013).
  */
 export class SqlServerKeywordRetriever implements Retriever {
   readonly #session: SqlServerSession;
@@ -44,11 +46,11 @@ export class SqlServerKeywordRetriever implements Retriever {
   }
 
   async retrieve(
-    query: string,
+    query: QueryType,
     options: RetrieveOptions = {},
   ): Promise<ScoredPassage[]> {
     options.abortSignal?.throwIfAborted();
-    const words = phrases(query);
+    const words = phrases(keywordsOf(query));
     if (words.length === 0) return [];
     const parameters: Record<string, unknown> = {};
     // A condition longer than 4,000 characters reaches the caller as SQL
@@ -74,16 +76,15 @@ export class SqlServerKeywordRetriever implements Retriever {
 }
 
 /**
- * Each word of the query as one CONTAINS phrase, `"…"`. A `"` would end the
+ * Each word as one CONTAINS phrase, `"…"`. A `"` would end the
  * phrase and a `*` before its end makes a prefix term, so each becomes a
  * space, which the word breaker reads as it reads the punctuation. A word
  * with no letter or digit makes no token and acts as a noise word, which
  * gives an AND no rows, so it is dropped. `AND`, `OR`, `NEAR`, `&`, `|`, `!`,
  * `~` and parentheses inside a phrase are text.
  */
-function phrases(query: string): string[] {
-  return query
-    .split(/\s+/)
+function phrases(words: readonly string[]): string[] {
+  return words
     .map((word) => word.replaceAll(/["*]/g, ' ').trim())
     .filter((word) => /[\p{L}\p{N}]/u.test(word))
     .map((word) => `"${word}"`);

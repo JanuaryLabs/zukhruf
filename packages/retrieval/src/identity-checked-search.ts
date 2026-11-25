@@ -1,9 +1,11 @@
 import { type EmbeddingModel, embed, embedMany } from 'ai';
 
+import { mean } from '@zukhruf/statistics';
 import { DimensionMismatchError } from '@zukhruf/vectors';
 
 import { type ModelIdentity, modelName } from './model-identity.ts';
 import { ModelMismatchError } from './model-mismatch-error.ts';
+import { type QueryType, embeddingsOf } from './query-bundle.ts';
 import type { RetrieveOptions } from './retrieve-options.ts';
 import type { ScoredPassage } from './scored-passage.ts';
 
@@ -28,6 +30,9 @@ type Engine = {
  * ModelMismatchError before the model call; a query vector whose dimensions
  * no stored identity of that model has fails with DimensionMismatchError
  * after it. The engine reads the stored identities and runs the search.
+ * Each query is embedded as its `customEmbeddings`, or as its `query` when
+ * it has none, and several texts search with the mean of their vectors, as
+ * LlamaIndex's vector retriever does (ADR 0013).
  */
 export class IdentityCheckedSearch {
   readonly #engine: Engine;
@@ -37,32 +42,46 @@ export class IdentityCheckedSearch {
   }
 
   async retrieve(
-    query: string,
+    query: QueryType,
     options: RetrieveOptions,
   ): Promise<ScoredPassage[]> {
+    const [text, ...more] = embeddingsOf(query);
     const [passages] = await this.#retrieve(1, options, async (abortSignal) => {
-      const { embedding } = await embed({
+      const signal = abortSignal === undefined ? {} : { abortSignal };
+      if (more.length === 0) {
+        const { embedding } = await embed({
+          model: this.#engine.model,
+          value: text,
+          ...signal,
+        });
+        return [embedding];
+      }
+      const { embeddings } = await embedMany({
         model: this.#engine.model,
-        value: query,
-        ...(abortSignal === undefined ? {} : { abortSignal }),
+        values: [text, ...more],
+        ...signal,
       });
-      return [embedding];
+      return [meanVector(embeddings)];
     });
     return passages ?? [];
   }
 
   async retrieveMany(
-    queries: readonly string[],
+    queries: readonly QueryType[],
     options: RetrieveOptions,
   ): Promise<ScoredPassage[][]> {
     if (queries.length === 0) return [];
+    const texts = queries.map(embeddingsOf);
     return this.#retrieve(queries.length, options, async (abortSignal) => {
       const { embeddings } = await embedMany({
         model: this.#engine.model,
-        values: [...queries],
+        values: texts.flat(),
         ...(abortSignal === undefined ? {} : { abortSignal }),
       });
-      return embeddings;
+      const vectors = embeddings.values();
+      return texts.map(({ length }) =>
+        meanVector(vectors.take(length).toArray()),
+      );
     });
   }
 
@@ -99,4 +118,15 @@ export class IdentityCheckedSearch {
     }
     return this.#engine.search(vectors, identity, options);
   }
+}
+
+/**
+ * The mean of vectors of one length, component by component, as LlamaIndex's
+ * `mean_agg` takes `np.array(embeddings).mean(axis=0)`.
+ */
+function meanVector(vectors: readonly (readonly number[])[]): number[] {
+  const [first] = vectors;
+  return (first ?? []).map((_, index) =>
+    mean(vectors.map((vector) => vector[index] ?? 0)),
+  );
 }

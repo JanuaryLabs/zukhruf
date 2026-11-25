@@ -631,6 +631,60 @@ test(
 );
 
 test(
+  'the texts of customEmbeddings are embedded in place of query, and two texts search with the mean of their vectors, in retrieve and in each query of retrieveMany',
+  { skip: emulation },
+  async () => {
+    // Arrange
+    await using database = await server().database();
+    const pool = await database.pool();
+    await contract(pool, [
+      { id: 'x', vector: [1, 0, 0, 0] },
+      { id: 'xy', vector: [1, 1, 0, 0] },
+      { id: 'y', vector: [0, 1, 0, 0] },
+    ]);
+    const query = embeddingModel({
+      'toward x': [2, 0, 0, 0],
+      'toward y': [0, 2, 0, 0],
+    });
+    const retriever = new SqlServerEmbeddingRetriever({
+      store: new SqlServerPassageStore({
+        session: session(pool),
+        passages: 'docs_passages',
+      }),
+      vectors: 'docs_passage_vectors',
+      model: query,
+    });
+
+    // Act: the model knows no vector for the query of a bundle.
+    const both = {
+      query: 'how do I rotate a key?',
+      customEmbeddings: ['toward x', 'toward y'],
+    } as const;
+    const one = await retriever.retrieve(both);
+    const lists = await retriever.retrieveMany([
+      both,
+      { query: 'how do I rotate a key?', customEmbeddings: ['toward y'] },
+      'toward x',
+    ]);
+
+    // Assert: the mean [1, 1, 0, 0] is xy itself; x and y tie at 1 / sqrt(2).
+    assert.deepEqual(ids(one), ['xy', 'x', 'y']);
+    assert.deepEqual(lists.map(ids), [
+      ['xy', 'x', 'y'],
+      ['y', 'xy', 'x'],
+      ['x', 'xy', 'y'],
+    ]);
+    assert.deepEqual(
+      query.doEmbedCalls.map(({ values }) => values),
+      [
+        ['toward x', 'toward y'],
+        ['toward x', 'toward y', 'toward y', 'toward x'],
+      ],
+    );
+  },
+);
+
+test(
   'a batch of more queries than SQL Server takes parameters searches in one statement',
   { skip: emulation },
   async () => {

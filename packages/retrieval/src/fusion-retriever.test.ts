@@ -2,11 +2,17 @@ import assert from 'node:assert/strict';
 import type { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 
+import { MockLanguageModelV4 } from 'ai/test';
+
 import { open } from '@zukhruf/sqlite-open';
 import { Vector } from '@zukhruf/vectors';
 import { install, toSql } from '@zukhruf/vectors/sqlite';
 
-import { FusionRetriever, relativeScoreFusion } from './index.ts';
+import {
+  FusionRetriever,
+  MultiQueryRetriever,
+  relativeScoreFusion,
+} from './index.ts';
 import {
   SqliteBM25Retriever,
   SqliteEmbeddingRetriever,
@@ -14,6 +20,10 @@ import {
 } from './sqlite.ts';
 import { embeddingModel } from './testing/embedding-model.ts';
 import { writeKeywordContract } from './testing/keyword-contract.ts';
+import {
+  type EntrezQueryBundle,
+  RecordingRetriever,
+} from './testing/recording-retriever.ts';
 
 type Row = {
   readonly id: string;
@@ -256,4 +266,114 @@ test('the fusion and the weights that the caller gives fuse the lists', async ()
     ['both', 0.1875],
     ['far', 0],
   ]);
+});
+
+test('each retriever gets the query bundle unchanged and reads its own text: the keyword search its keywords, the embedding search its query or its customEmbeddings, and a host source its own field', async () => {
+  // Arrange: no passage has the words "how" or "do" of the question, so a
+  // keyword search of its words finds nothing.
+  using database = contract(rows);
+  const embeddings = embeddingModel({
+    'how do I rotate the key?': [1, 0, 0, 0],
+    'A key is rotated with a new one.': [0, 1, 0, 0],
+  });
+  const source = new RecordingRetriever<EntrezQueryBundle>(['pmid-1']);
+  const federation = new FusionRetriever({
+    retrievers: [
+      source,
+      keywords(database),
+      new SqliteEmbeddingRetriever({
+        store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
+        vectors: 'docs_passage_vectors',
+        model: embeddings,
+      }),
+    ],
+  });
+  const question = {
+    query: 'how do I rotate the key?',
+    entrez: 'rotate AND key[Title]',
+  };
+  const withKeywords: EntrezQueryBundle = {
+    ...question,
+    keywords: ['rotate', 'key'],
+  };
+  const withEmbeddings: EntrezQueryBundle = {
+    ...withKeywords,
+    customEmbeddings: ['A key is rotated with a new one.'],
+  };
+
+  // Act
+  const byKeywords = await federation.retrieve(withKeywords);
+  const byQuery = await federation.retrieve(question);
+  const byEmbeddings = await federation.retrieve(withEmbeddings);
+
+  // Assert
+  assert.deepEqual(source.queries, [withKeywords, question, withEmbeddings]);
+  assert.deepEqual(
+    embeddings.doEmbedCalls.map(({ values }) => values),
+    [
+      ['how do I rotate the key?'],
+      ['how do I rotate the key?'],
+      ['A key is rotated with a new one.'],
+    ],
+  );
+  // keywords [kw, both]; meaning of the query [vec, both, kw, far]; the
+  // source [pmid-1].
+  assert.deepEqual(scores(byKeywords), [
+    ['kw', 1 / 61 + 1 / 63],
+    ['both', 1 / 62 + 1 / 62],
+    ['pmid-1', 1 / 61],
+    ['vec', 1 / 61],
+    ['far', 1 / 64],
+  ]);
+  // keywords of the words of the question []; the rest as above.
+  assert.deepEqual(scores(byQuery), [
+    ['pmid-1', 1 / 61],
+    ['vec', 1 / 61],
+    ['both', 1 / 62],
+    ['kw', 1 / 63],
+    ['far', 1 / 64],
+  ]);
+  // meaning of the custom embedding [0, 1, 0, 0]: [kw, both, far, vec].
+  assert.deepEqual(scores(byEmbeddings), [
+    ['kw', 1 / 61 + 1 / 61],
+    ['both', 1 / 62 + 1 / 62],
+    ['pmid-1', 1 / 61],
+    ['far', 1 / 63],
+    ['vec', 1 / 64],
+  ]);
+});
+
+test('a fusion of plain retrievers takes a string as a query bundle with only query, and a fusion with a retriever that needs its own field takes neither, nor goes under MultiQueryRetriever', async () => {
+  // Arrange
+  using database = contract(rows);
+  const plain = new FusionRetriever({ retrievers: retrievers(database) });
+  const federation = new FusionRetriever({
+    retrievers: [
+      new RecordingRetriever<EntrezQueryBundle>([]),
+      keywords(database),
+    ],
+  });
+
+  // Act
+  const byString = await plain.retrieve('rotate key');
+  const byBundle = await plain.retrieve({ query: 'rotate key' });
+
+  // Assert
+  assert.deepEqual(byString, byBundle);
+  // Each line after a directive is a compile error, which the typecheck
+  // target proves; the function never runs.
+  const refused = () => [
+    // @ts-expect-error: the source needs entrez, and a string has none
+    federation.retrieve('rotate key'),
+    // @ts-expect-error: the source needs entrez
+    federation.retrieve({ query: 'rotate key', keywords: ['rotate'] }),
+    // @ts-expect-error: keywords is a list of one or more words
+    plain.retrieve({ query: 'rotate key', keywords: [] }),
+    new MultiQueryRetriever({
+      // @ts-expect-error: a version carries only query, so entrez is missing
+      retriever: federation,
+      model: new MockLanguageModelV4(),
+    }),
+  ];
+  assert.equal(typeof refused, 'function');
 });

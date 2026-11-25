@@ -1,6 +1,7 @@
 import { type LanguageModel, Output, generateText, jsonSchema } from 'ai';
 
 import type { Fusion } from './fusion.ts';
+import { type QueryType, needOf } from './query-bundle.ts';
 import { reciprocalRankFusion } from './reciprocal-rank-fusion.ts';
 import type { RetrieveOptions } from './retrieve-options.ts';
 import type { Retriever } from './retriever.ts';
@@ -15,6 +16,9 @@ import type { ScoredPassage } from './scored-passage.ts';
  * DEFAULT_PROMPT_TEMPLATE, `n_expansions` 4, `include_original_query` True).
  * The list of the query comes first, as LlamaIndex's `QueryFusionRetriever`
  * puts the query first, so a tie goes to a passage that the query found.
+ * The query is searched as the caller gives it, and each version as a plain
+ * string: a version replaces the whole query, as in LlamaIndex, LangChain
+ * and Haystack. So the retriever takes a plain query (ADR 0013).
  */
 export class MultiQueryRetriever implements Retriever {
   readonly #retriever: Retriever;
@@ -42,22 +46,23 @@ export class MultiQueryRetriever implements Retriever {
   }
 
   async retrieve(
-    query: string,
+    query: QueryType,
     options: RetrieveOptions = {},
   ): Promise<ScoredPassage[]> {
+    const need = needOf(query);
     const { output } = await generateText({
       model: this.#model,
-      prompt: expansionPrompt(query.trim(), this.#queryCount),
+      prompt: expansionPrompt(need.trim(), this.#queryCount),
       output: Output.object({ schema: expansions }),
       ...(options.abortSignal === undefined
         ? {}
         : { abortSignal: options.abortSignal }),
     });
-    const queries = [
+    const queries: QueryType[] = [
       query,
       ...output.queries
         .slice(0, this.#queryCount)
-        .filter((version) => version.toLowerCase() !== query.toLowerCase()),
+        .filter((version) => version.toLowerCase() !== need.toLowerCase()),
     ];
     const lists = await Promise.all(
       queries.map((version) => this.#retriever.retrieve(version, options)),

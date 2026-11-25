@@ -16,6 +16,7 @@ import {
 } from './sqlite.ts';
 import { embeddingModel } from './testing/embedding-model.ts';
 import { writeKeywordContract } from './testing/keyword-contract.ts';
+import { RecordingRetriever } from './testing/recording-retriever.ts';
 
 // Each passage matches one query of the tests, and its vector is the one
 // that the embedding model gives for that query.
@@ -275,6 +276,39 @@ test('the versions past queryCount are cut, a version equal to the query is sear
     ['alpha', 1],
     ['beta', 1],
     ['gamma', 1],
+  ]);
+});
+
+test('a query bundle is searched as the caller gives it, first, and each version as a plain string; the model and the check of the versions read its query', async () => {
+  // Arrange
+  const calls: Call[] = [];
+  const source = new RecordingRetriever(['alpha']);
+  const retriever = new MultiQueryRetriever({
+    retriever: source,
+    model: languageModel(
+      queries('ROTATE KEY', 'revoke token', 'renew certificate'),
+      calls,
+    ),
+    queryCount: 3,
+  });
+  const query = {
+    query: 'rotate key',
+    keywords: ['rotate', 'signing', 'key'],
+    customEmbeddings: ['To rotate a key, create a new one.'],
+  } as const;
+
+  // Act
+  await retriever.retrieve(query);
+
+  // Assert: 'ROTATE KEY' is the query in other case, so it is not searched.
+  assert.deepEqual(
+    calls.map(({ prompt }) => prompt),
+    [haystackPrompt(3, 'rotate key')],
+  );
+  assert.deepEqual(source.queries, [
+    query,
+    'revoke token',
+    'renew certificate',
   ]);
 });
 

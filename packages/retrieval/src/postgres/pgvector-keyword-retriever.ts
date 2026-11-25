@@ -1,3 +1,4 @@
+import { type QueryType, keywordsOf } from '../query-bundle.ts';
 import type { RetrieveOptions } from '../retrieve-options.ts';
 import type { Retriever } from '../retriever.ts';
 import type { ScoredPassage } from '../scored-passage.ts';
@@ -16,7 +17,8 @@ import type { PostgresSession } from './postgres-session.ts';
  * Ranks the passages by Postgres full-text search over the keyword index
  * that elt writes: a `tsvector` column of the passages, `to_tsvector(configuration,
  * text)`, with a GIN index (ADR 0004). The score is `ts_rank_cd`, which is
- * higher for a better match (ADR 0005).
+ * higher for a better match (ADR 0005). It matches the words of `keywords`,
+ * or of `query` when the bundle has none (ADR 0013).
  */
 export class PgvectorKeywordRetriever implements Retriever {
   readonly #session: PostgresSession;
@@ -47,11 +49,11 @@ export class PgvectorKeywordRetriever implements Retriever {
   }
 
   async retrieve(
-    query: string,
+    query: QueryType,
     options: RetrieveOptions = {},
   ): Promise<ScoredPassage[]> {
     options.abortSignal?.throwIfAborted();
-    const words = query.split(/\s+/).filter((word) => word !== '');
+    const words = keywordsOf(query);
     if (words.length === 0) return [];
     const parameters: unknown[] = [];
     // The configuration is a parameter too, so its text is never SQL.

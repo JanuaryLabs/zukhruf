@@ -1,5 +1,6 @@
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 
+import { type QueryType, keywordsOf } from '../query-bundle.ts';
 import type { RetrieveOptions } from '../retrieve-options.ts';
 import type { Retriever } from '../retriever.ts';
 import type { ScoredPassage } from '../scored-passage.ts';
@@ -12,7 +13,9 @@ import { type SqlitePassageStore, contractOf } from './sqlite-passage-store.ts';
 /**
  * Ranks the passages by FTS5 `bm25()` over the keyword index that elt writes:
  * an FTS5 table with the passages as its external content (ADR 0004). The
- * score is `-bm25()`, so a better match has a higher score (ADR 0005).
+ * score is `-bm25()`, so a better match has a higher score (ADR 0005). It
+ * matches the words of `keywords`, or of `query` when the bundle has none
+ * (ADR 0013).
  */
 export class SqliteBM25Retriever implements Retriever {
   readonly #database: DatabaseSync;
@@ -36,11 +39,11 @@ export class SqliteBM25Retriever implements Retriever {
   }
 
   async retrieve(
-    query: string,
+    query: QueryType,
     options: RetrieveOptions = {},
   ): Promise<ScoredPassage[]> {
     options.abortSignal?.throwIfAborted();
-    const words = query.split(/\s+/).filter((word) => word !== '');
+    const words = keywordsOf(query);
     if (words.length === 0) return [];
     const parameters: SQLInputValue[] = [ftsQuery(words, this.#operator)];
     const filter = where(dialect, options.filter, parameters);

@@ -2,7 +2,7 @@
 
 This package is the query side of retrieval-augmented generation (RAG). A query goes in. The best passages come out, best first, each with a score that is higher for a better passage. The package never cuts or embeds documents: elt writes the passages, their vectors with the model identity, and a keyword index ([ADR 0001](./docs/adr/0001-the-package-is-the-query-side-of-rag-and-reads-a-passage-contract-that-elt-writes.md)).
 
-The port of the package is `Retriever`. The engine retrievers read that passage contract with the SQL of SQLite, Postgres or SQL Server. A host can implement `Retriever` over any other source, such as a web search. Composite retrievers fuse retrievers or rewrite the query, and postprocessors rerank, cut, diversify, group, reorder and widen the result.
+The port of the package is `Retriever`. A query is a string, or a query bundle with a text for each kind of search ([ADR 0013](./docs/adr/0013-a-query-is-a-string-or-a-query-bundle-with-a-text-for-each-kind-of-search.md)). The engine retrievers read that passage contract with the SQL of SQLite, Postgres or SQL Server. A host can implement `Retriever` over any other source, such as a web search. Composite retrievers fuse retrievers or rewrite the query, and postprocessors rerank, cut, diversify, group, reorder and widen the result.
 
 The package has four entry points. `@zukhruf/retrieval` has the port, the composite retrievers, the fusions, the postprocessors and the errors. `@zukhruf/retrieval/sqlite`, `@zukhruf/retrieval/postgres` and `@zukhruf/retrieval/sqlserver` each have the passage store and the engine retrievers of one engine.
 
@@ -204,7 +204,7 @@ Output:
 
 ## Search by keywords
 
-A keyword retriever queries the keyword index that elt writes: FTS5 on SQLite, `tsvector` on Postgres, full-text on SQL Server. It quotes each word of the query, so a word of the user is never an operator of the engine. Its score is higher for a better match on every engine; `SqliteBM25Retriever` negates `bm25()` ([ADR 0004](./docs/adr/0004-a-keyword-retriever-queries-the-keyword-index-that-elt-writes.md)). The words join with `operator`: `'AND'` when absent, or `'OR'`.
+A keyword retriever queries the keyword index that elt writes: FTS5 on SQLite, `tsvector` on Postgres, full-text on SQL Server. It quotes each word of the query, so a word of the user is never an operator of the engine. A query bundle can give it other words in `keywords` (see "Give each search its own text"). Its score is higher for a better match on every engine; `SqliteBM25Retriever` negates `bm25()` ([ADR 0004](./docs/adr/0004-a-keyword-retriever-queries-the-keyword-index-that-elt-writes.md)). The words join with `operator`: `'AND'` when absent, or `'OR'`.
 
 On SQLite the index is an FTS5 table whose external content is a keywords table, kept in step by triggers. The passages view gives the `rowid` of that table, and the retriever joins the passages on it ([ADR 0004](./docs/adr/0004-a-keyword-retriever-queries-the-keyword-index-that-elt-writes.md), the amendment of 2026-11-24).
 
@@ -376,7 +376,7 @@ Output:
 
 `vault-guide#0` is first in both lists, so reciprocal rank fusion gives it `1/61 + 1/61`. `minMax` has no `rankWindowSize`, so each retriever gives 3 passages. Min-max scaling gives the worst passage of a list 0, and a list whose scores are all equal gives 1.
 
-`MultiQueryRetriever` asks a language model for `queryCount` other versions of the query, 4 when absent. It searches the query and each version, and fuses the lists with `reciprocalRankFusion()` when it has no `fusion` ([ADR 0008](./docs/adr/0008-a-search-is-composed-of-retrievers-that-wrap-retrievers-and-a-list-of-postprocessors.md)). This program continues the one above.
+`MultiQueryRetriever` asks a language model for `queryCount` other versions of the query, 4 when absent. It searches the query and each version, and fuses the lists with `reciprocalRankFusion()` when it has no `fusion` ([ADR 0008](./docs/adr/0008-a-search-is-composed-of-retrievers-that-wrap-retrievers-and-a-list-of-postprocessors.md)). It searches a query bundle as the caller gives it, first, and each version as a plain string, so its retriever takes a plain query ([ADR 0013](./docs/adr/0013-a-query-is-a-string-or-a-query-bundle-with-a-text-for-each-kind-of-search.md)). This program continues the one above.
 
 ```ts
 import { MockLanguageModelV4 } from 'ai/test';
@@ -431,11 +431,11 @@ Output:
 ]
 ```
 
-`HydeRetriever { retriever, model }` asks the language model for a passage that answers the query, and searches with that passage as the query.
+`HydeRetriever { retriever, model }` asks the language model for a passage that answers the `query`, and gives that passage to the embedding search only, as `customEmbeddings: [passage]`. The `query` and the `keywords` stay, so a reranker below it still ranks against the question. Its retriever takes any query bundle: a host source that needs its own field is fused beside it, `new FusionRetriever({ retrievers: [pubmed, new HydeRetriever({ retriever: embeddings, model })] })`, since only an embedding search reads the passage ([ADR 0013](./docs/adr/0013-a-query-is-a-string-or-a-query-bundle-with-a-text-for-each-kind-of-search.md)).
 
 ## Rerank and post-process the results
 
-`PostprocessingRetriever` runs a list of postprocessors, in order, on the result of its retriever ([ADR 0008](./docs/adr/0008-a-search-is-composed-of-retrievers-that-wrap-retrievers-and-a-list-of-postprocessors.md)). Each postprocessor gets the list of the one before it, the query and the abort signal of the call. This program continues the one of "Combine searches".
+`PostprocessingRetriever` runs a list of postprocessors, in order, on the result of its retriever ([ADR 0008](./docs/adr/0008-a-search-is-composed-of-retrievers-that-wrap-retrievers-and-a-list-of-postprocessors.md)). Each postprocessor gets the list of the one before it, the `query` of the query bundle (the information need, a string) and the abort signal of the call. This program continues the one of "Combine searches".
 
 ```ts
 import { MockRerankingModelV4 } from 'ai/test';
@@ -507,14 +507,109 @@ The score of each passage is the relevance of the reranking model. `Collapse` ke
 
 `MaximalMarginalRelevance` compares the vectors of the passages, so its retriever runs with `includeVectors: true`. Its `model` embeds the query, and the relevance of a passage is the cosine similarity of the two vectors ([ADR 0008](./docs/adr/0008-a-search-is-composed-of-retrievers-that-wrap-retrievers-and-a-list-of-postprocessors.md), the amendment of 2026-11-23). It gives the passages in the order in which it picks them, so its list is not sorted by score, as after `LongContextReorder` ([ADR 0005](./docs/adr/0005-a-score-is-higher-for-a-better-passage.md)).
 
-## Search many queries at once
+## Give each search its own text
 
-Batch search is part of vector search. Each embedding retriever has `retrieveMany` beside `retrieve`. It embeds the queries in one `embedMany` call and runs one SQL query: a `VALUES` table of the query vectors on SQLite, `CROSS JOIN LATERAL` on Postgres, `CROSS APPLY` over the query vectors of one `OPENJSON` parameter on SQL Server ([ADR 0003](./docs/adr/0003-an-embedding-retriever-runs-the-vector-search-in-the-sql-of-its-engine-one-query-or-a-batch.md)).
+A query is a string or a query bundle, `{ query, keywords?, customEmbeddings? }`, after LlamaIndex's `QueryBundle` ([ADR 0013](./docs/adr/0013-a-query-is-a-string-or-a-query-bundle-with-a-text-for-each-kind-of-search.md)). `query` is the information need: the reranker reads it, and so does every search that has no text of its own. A keyword retriever quotes the words of `keywords` in place of the words of `query`. An embedding retriever embeds the texts of `customEmbeddings` in place of `query`, and searches with the mean of their vectors. `FusionRetriever` gives each retriever the bundle unchanged, so each reads its own text. A string is a bundle with only `query`. This program continues the one of "Rerank and post-process the results".
 
 ```ts
-const lists = await retriever.retrieveMany(['rotate a key', 'revoke a token'], {
-  topK: 2,
+import type {
+  QueryBundle,
+  RetrieveOptions,
+  Retriever,
+  ScoredPassage,
+} from '@zukhruf/retrieval';
+
+// The words of a question join with AND, and no passage has "How" or "do",
+// so a keyword search of the question finds nothing.
+const question = 'How do I rotate the old key?';
+console.log(
+  'keywords of the question:',
+  (await keywords.retrieve(question)).length,
+);
+
+const reranked = new PostprocessingRetriever({
+  retriever: hybrid, // the fusion of the embedding and the keyword retriever
+  postprocessors: [new Rerank({ model: rerankingModel, topN: 2 })],
 });
+const own = await reranked.retrieve({
+  query: question, // the reranker ranks against it; the embedding search embeds it
+  keywords: ['rotate', 'key'], // the keyword search matches these
+});
+console.log(
+  own.map(({ passage, score }) => `${passage.id} ${score.toFixed(2)}`),
+);
+
+// A host adapter for a source with its own syntax declares its field in its
+// own bundle type. Then it takes no string.
+type IssueQueryBundle = QueryBundle & { readonly jql: string };
+class IssueRetriever implements Retriever<IssueQueryBundle> {
+  async retrieve(
+    query: IssueQueryBundle,
+    options: RetrieveOptions = {},
+  ): Promise<ScoredPassage[]> {
+    console.log('issues got:', query.jql);
+    const text = 'Rotate the signing key of the vault after a leak.';
+    const passage = {
+      id: 'VAULT-12',
+      text,
+      source: 'VAULT-12',
+      seq: 0,
+      start: 0,
+      end: text.length,
+      metadata: {},
+    };
+    return [{ passage, score: 1 }].slice(0, options.topK ?? 10);
+  }
+}
+
+// The reranking model of "Rerank and post-process the results", which also
+// says what it ranks against.
+const told = new MockRerankingModelV4({
+  doRerank: async (options) => {
+    console.log('reranker got:', options.query);
+    return rerankingModel.doRerank(options);
+  },
+});
+const federation = new PostprocessingRetriever({
+  retriever: new FusionRetriever({
+    retrievers: [new IssueRetriever(), keywords],
+  }),
+  postprocessors: [new Rerank({ model: told, topN: 2 })],
+});
+const answers = await federation.retrieve({
+  query: question,
+  keywords: ['rotate', 'key'],
+  jql: 'project = VAULT AND text ~ "rotate key"',
+});
+console.log(
+  answers.map(({ passage, score }) => `${passage.id} ${score.toFixed(2)}`),
+);
+```
+
+Output:
+
+```
+keywords of the question: 0
+[ 'vault-guide#0 0.57', 'vault-guide#2 0.43' ]
+issues got: project = VAULT AND text ~ "rotate key"
+reranker got: How do I rotate the old key?
+[ 'vault-guide#0 0.57', 'VAULT-12 0.43' ]
+```
+
+`federation.retrieve(question)` does not compile: the issue search needs `jql`, and a string has none. `new MultiQueryRetriever({ retriever: federation, model })` does not compile either: a version of the query is a plain string. TypeScript infers the query type of a fusion from its retrievers. Two retrievers that each need a field of their own take the type argument: `new FusionRetriever<A & B>({ retrievers })`.
+
+## Search many queries at once
+
+Batch search is part of vector search. Each embedding retriever has `retrieveMany` beside `retrieve`. Each query is a string or a query bundle. It embeds the texts of the queries in one `embedMany` call and runs one SQL query: a `VALUES` table of the query vectors on SQLite, `CROSS JOIN LATERAL` on Postgres, `CROSS APPLY` over the query vectors of one `OPENJSON` parameter on SQL Server ([ADR 0003](./docs/adr/0003-an-embedding-retriever-runs-the-vector-search-in-the-sql-of-its-engine-one-query-or-a-batch.md)).
+
+```ts
+const lists = await retriever.retrieveMany(
+  [
+    'rotate a key',
+    { query: 'I lost my phone', customEmbeddings: ['revoke a token'] },
+  ],
+  { topK: 2 },
+);
 // lists[0] is the result of 'rotate a key', lists[1] of 'revoke a token'
 for (const list of lists) console.log(list.map(({ passage }) => passage.id));
 ```
@@ -571,7 +666,7 @@ An error of the model, of the engine or of the reranking model reaches the calle
 ## What the package does not do
 
 - **It does not cut or embed documents.** elt loads, cuts and embeds them, and writes the passage contract (elt #5401). Cutting text moves to its own zukhruf package (#5414) ([ADR 0001](./docs/adr/0001-the-package-is-the-query-side-of-rag-and-reads-a-passage-contract-that-elt-writes.md)).
-- **It does not ship adapters for live sources.** A web search or the API of a product is an adapter of the host that implements `Retriever` ([ADR 0002](./docs/adr/0002-a-retriever-is-a-port-for-any-source.md)).
+- **It does not ship adapters for live sources.** A web search or the API of a product is an adapter of the host that implements `Retriever`, with its own fields in its own query bundle type ([ADR 0002](./docs/adr/0002-a-retriever-is-a-port-for-any-source.md), [ADR 0013](./docs/adr/0013-a-query-is-a-string-or-a-query-bundle-with-a-text-for-each-kind-of-search.md)).
 - **It does not make agent tools.** An AI SDK tool over a retriever is the consumer's code.
 - **It does not write the keyword index or the vector index.** elt writes both; this package only queries them ([ADR 0004](./docs/adr/0004-a-keyword-retriever-queries-the-keyword-index-that-elt-writes.md)).
 
@@ -596,6 +691,9 @@ No consumer uses it yet. These moves come next.
 | `Passage`                   | LlamaIndex `TextNode` ([schema.py](https://raw.githubusercontent.com/run-llama/llama_index/main/llama-index-core/llama_index/core/schema.py)); LangChain `Document` ([document.ts](https://raw.githubusercontent.com/langchain-ai/langchainjs/main/libs/langchain-core/src/documents/document.ts)); Haystack `Document` ([document.py](https://raw.githubusercontent.com/deepset-ai/haystack/main/haystack/dataclasses/document.py))                                                                                                                                                        |
 | `ScoredPassage`             | LlamaIndex `NodeWithScore`; .NET `VectorSearchResult<TRecord>{Record, Score}` ([vector search](https://learn.microsoft.com/en-us/dotnet/ai/vector-stores/vector-search))                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | `Retriever.retrieve`        | LlamaIndex `BaseRetriever.retrieve` ([base_retriever.py](https://raw.githubusercontent.com/run-llama/llama_index/main/llama-index-core/llama_index/core/base/base_retriever.py)); LangChain `BaseRetriever` ([retrievers/index.ts](https://raw.githubusercontent.com/langchain-ai/langchainjs/main/libs/langchain-core/src/retrievers/index.ts)); Semantic Kernel `ITextSearch` ([text search](https://learn.microsoft.com/en-us/semantic-kernel/concepts/text-search/text-search-abstractions))                                                                                            |
+| `QueryBundle`, `QueryType`  | LlamaIndex `QueryBundle` and `QueryType` (LlamaIndex.TS `@llamaindex/core` 0.6.22, `query-engine/dist/index.d.ts`; [schema.py](https://raw.githubusercontent.com/run-llama/llama_index/main/llama-index-core/llama_index/core/schema.py))                                                                                                                                                                                                                                                                                                                                                   |
+| `keywords`                  | .NET `HybridSearchAsync(searchValue, keywords)` ([IKeywordHybridSearchable.cs](https://raw.githubusercontent.com/dotnet/extensions/main/src/Libraries/Microsoft.Extensions.VectorData.Abstractions/IKeywordHybridSearchable.cs))                                                                                                                                                                                                                                                                                                                                                            |
+| `customEmbeddings`          | LlamaIndex.TS `QueryBundle.customEmbeddings`; LlamaIndex `custom_embedding_strs`, whose mean the vector retriever searches ([schema.py](https://raw.githubusercontent.com/run-llama/llama_index/main/llama-index-core/llama_index/core/schema.py))                                                                                                                                                                                                                                                                                                                                          |
 | engine retrievers           | Haystack's retrievers for each document store ([retrievers](https://docs.haystack.deepset.ai/docs/retrievers))                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | passage store as the root   | Haystack `PgvectorEmbeddingRetriever(document_store=...)` and `PgvectorKeywordRetriever(document_store=...)` over `PgvectorDocumentStore(schema_name, table_name, language)` ([embedding_retriever.py](https://raw.githubusercontent.com/deepset-ai/haystack-core-integrations/main/integrations/pgvector/src/haystack_integrations/components/retrievers/pgvector/embedding_retriever.py)); LlamaIndex `VectorStoreIndex.as_retriever()`; LangChain `VectorStore.asRetriever()`                                                                                                            |
 | `topK`, `includeVectors`    | Haystack `top_k` = 10 ([document_store.py](https://raw.githubusercontent.com/deepset-ai/haystack/main/haystack/document_stores/in_memory/document_store.py)), `return_embedding`; Mastra `topK` = 10 ([pg](https://mastra.ai/reference/vectors/pg)); .NET `IncludeVectors` ([VectorSearchOptions](https://learn.microsoft.com/en-us/dotnet/api/microsoft.extensions.vectordata.vectorsearchoptions-1))                                                                                                                                                                                      |
@@ -664,14 +762,24 @@ type RetrieveOptions = {
   readonly abortSignal?: AbortSignal;
 };
 
-interface Retriever {
-  retrieve(query: string, options?: RetrieveOptions): Promise<ScoredPassage[]>;
+type QueryBundle = {
+  readonly query: string; // the information need
+  readonly keywords?: readonly [string, ...string[]]; // the words of query when absent
+  readonly customEmbeddings?: readonly [string, ...string[]]; // [query] when absent; the mean of their vectors
+};
+type QueryType = string | QueryBundle; // a string is { query }
+
+interface Retriever<in Q extends QueryType = QueryType> {
+  readonly retrieve: (
+    query: Q,
+    options?: RetrieveOptions,
+  ) => Promise<ScoredPassage[]>;
 }
 interface BatchRetriever extends Retriever {
-  retrieveMany(
-    queries: readonly string[],
+  readonly retrieveMany: (
+    queries: readonly QueryType[],
     options?: RetrieveOptions,
-  ): Promise<ScoredPassage[][]>; // in the order of the queries
+  ) => Promise<ScoredPassage[][]>; // in the order of the queries
 }
 
 interface Fusion {
@@ -684,9 +792,9 @@ function reciprocalRankFusion(options?: { readonly k?: number }): Fusion; // k 6
 function relativeScoreFusion(): Fusion; // min-max
 function distributionBasedScoreFusion(): Fusion; // mean ± 3σ
 
-class FusionRetriever implements Retriever {
+class FusionRetriever<Q extends QueryType = QueryType> implements Retriever<Q> {
   constructor(options: {
-    readonly retrievers: readonly Retriever[];
+    readonly retrievers: readonly Retriever<Q>[]; // each gets the query unchanged
     readonly fusion?: Fusion; // reciprocalRankFusion()
     readonly weights?: readonly number[]; // 1 each
     readonly rankWindowSize?: number; // the topK of the call
@@ -694,7 +802,7 @@ class FusionRetriever implements Retriever {
 }
 class MultiQueryRetriever implements Retriever {
   constructor(options: {
-    readonly retriever: Retriever;
+    readonly retriever: Retriever; // gets the query, then each version as a string
     readonly model: LanguageModel;
     readonly queryCount?: number; // 4 versions, besides the query
     readonly fusion?: Fusion; // reciprocalRankFusion()
@@ -702,7 +810,7 @@ class MultiQueryRetriever implements Retriever {
 }
 class HydeRetriever implements Retriever {
   constructor(options: {
-    readonly retriever: Retriever;
+    readonly retriever: Retriever<QueryBundle>; // gets the query bundle with customEmbeddings: [passage]
     readonly model: LanguageModel;
   });
 }
@@ -710,13 +818,15 @@ class HydeRetriever implements Retriever {
 interface Postprocessor {
   postprocess(
     passages: readonly ScoredPassage[],
-    query: string,
+    query: string, // the query of the query bundle
     options?: { readonly abortSignal?: AbortSignal },
   ): Promise<ScoredPassage[]>;
 }
-class PostprocessingRetriever implements Retriever {
+class PostprocessingRetriever<
+  Q extends QueryType = QueryType,
+> implements Retriever<Q> {
   constructor(options: {
-    readonly retriever: Retriever;
+    readonly retriever: Retriever<Q>;
     readonly postprocessors: readonly Postprocessor[];
   });
 }
@@ -864,14 +974,15 @@ class SqlServerKeywordRetriever implements Retriever {
 **Decisions**
 
 - [ADR 0001](./docs/adr/0001-the-package-is-the-query-side-of-rag-and-reads-a-passage-contract-that-elt-writes.md): the package is the query side of RAG and reads a passage contract that elt writes.
-- [ADR 0002](./docs/adr/0002-a-retriever-is-a-port-for-any-source.md): a retriever is a port for any source.
-- [ADR 0003](./docs/adr/0003-an-embedding-retriever-runs-the-vector-search-in-the-sql-of-its-engine-one-query-or-a-batch.md): an embedding retriever runs the vector search in the SQL of its engine, one query or a batch.
-- [ADR 0004](./docs/adr/0004-a-keyword-retriever-queries-the-keyword-index-that-elt-writes.md): a keyword retriever queries the keyword index that elt writes.
+- [ADR 0002](./docs/adr/0002-a-retriever-is-a-port-for-any-source.md): a retriever is a port for any source (superseded in part by ADR 0013).
+- [ADR 0003](./docs/adr/0003-an-embedding-retriever-runs-the-vector-search-in-the-sql-of-its-engine-one-query-or-a-batch.md): an embedding retriever runs the vector search in the SQL of its engine, one query or a batch (superseded in part by ADR 0013).
+- [ADR 0004](./docs/adr/0004-a-keyword-retriever-queries-the-keyword-index-that-elt-writes.md): a keyword retriever queries the keyword index that elt writes (superseded in part by ADR 0013).
 - [ADR 0005](./docs/adr/0005-a-score-is-higher-for-a-better-passage.md): a score is higher for a better passage.
 - [ADR 0006](./docs/adr/0006-a-retriever-gives-10-passages-when-the-caller-gives-no-topk.md): a retriever gives 10 passages when the caller gives no topK.
 - [ADR 0007](./docs/adr/0007-reciprocal-rank-fusion-is-the-default-fusion-with-k-60-and-ranks-from-1.md): reciprocal rank fusion is the default fusion, with k 60 and ranks from 1.
-- [ADR 0008](./docs/adr/0008-a-search-is-composed-of-retrievers-that-wrap-retrievers-and-a-list-of-postprocessors.md): a search is composed of retrievers that wrap retrievers and a list of postprocessors.
+- [ADR 0008](./docs/adr/0008-a-search-is-composed-of-retrievers-that-wrap-retrievers-and-a-list-of-postprocessors.md): a search is composed of retrievers that wrap retrievers and a list of postprocessors (superseded in part by ADR 0013).
 - [ADR 0009](./docs/adr/0009-a-filter-has-the-shape-of-haystacks-filters.md): a filter has the shape of Haystack's filters.
 - [ADR 0010](./docs/adr/0010-an-embedding-retriever-refuses-a-query-model-whose-identity-differs-from-the-stored-vectors.md): an embedding retriever refuses a query model whose identity differs from the stored vectors.
 - [ADR 0011](./docs/adr/0011-the-package-is-in-the-base-layer.md): the package is in the base layer.
 - [ADR 0012](./docs/adr/0012-the-package-is-zukhruf-retrieval-and-its-port-is-retriever-with-retrieve-after-go.md): the package is @zukhruf/retrieval, and its port is Retriever with retrieve, after Go.
+- [ADR 0013](./docs/adr/0013-a-query-is-a-string-or-a-query-bundle-with-a-text-for-each-kind-of-search.md): a query is a string or a query bundle, with a text for each kind of search.

@@ -377,6 +377,51 @@ test('retrieveMany embeds the queries in one model call and gives one list for e
   );
 });
 
+test('the texts of customEmbeddings are embedded in place of query, and two texts search with the mean of their vectors, in retrieve and in each query of retrieveMany', async () => {
+  // Arrange
+  using database = contract([
+    { id: 'x', vector: [1, 0, 0, 0] },
+    { id: 'xy', vector: [1, 1, 0, 0] },
+    { id: 'y', vector: [0, 1, 0, 0] },
+  ]);
+  const query = embeddingModel({
+    'toward x': [2, 0, 0, 0],
+    'toward y': [0, 2, 0, 0],
+  });
+  const retriever = new SqliteEmbeddingRetriever({
+    store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
+    vectors: 'docs_passage_vectors',
+    model: query,
+  });
+
+  // Act: the model knows no vector for the query of a bundle.
+  const both = {
+    query: 'how do I rotate a key?',
+    customEmbeddings: ['toward x', 'toward y'],
+  } as const;
+  const one = await retriever.retrieve(both);
+  const lists = await retriever.retrieveMany([
+    both,
+    { query: 'how do I rotate a key?', customEmbeddings: ['toward y'] },
+    'toward x',
+  ]);
+
+  // Assert: the mean [1, 1, 0, 0] is xy itself; x and y tie at 1 / sqrt(2).
+  assert.deepEqual(ids(one), ['xy', 'x', 'y']);
+  assert.deepEqual(lists.map(ids), [
+    ['xy', 'x', 'y'],
+    ['y', 'xy', 'x'],
+    ['x', 'xy', 'y'],
+  ]);
+  assert.deepEqual(
+    query.doEmbedCalls.map(({ values }) => values),
+    [
+      ['toward x', 'toward y'],
+      ['toward x', 'toward y', 'toward y', 'toward x'],
+    ],
+  );
+});
+
 test('retrieveMany of no queries gives no lists', async () => {
   // Arrange
   using database = contract([{ id: 'x', vector: [1, 0, 0, 0] }]);

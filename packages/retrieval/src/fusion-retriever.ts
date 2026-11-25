@@ -1,4 +1,5 @@
 import type { Fusion } from './fusion.ts';
+import type { QueryType } from './query-bundle.ts';
 import { reciprocalRankFusion } from './reciprocal-rank-fusion.ts';
 import type { RetrieveOptions } from './retrieve-options.ts';
 import type { Retriever } from './retriever.ts';
@@ -6,16 +7,23 @@ import type { ScoredPassage } from './scored-passage.ts';
 
 /**
  * Asks each retriever for `rankWindowSize` passages, fuses the lists on
- * `Passage.id` and gives the best `topK` (ADR 0007).
+ * `Passage.id` and gives the best `topK` (ADR 0007). Each retriever gets the
+ * query unchanged and reads its own text, as LlamaIndex's
+ * `QueryFusionRetriever` gives each retriever the same `QueryBundle`. So the
+ * query type of the fusion is one that each retriever takes: TypeScript
+ * infers the narrowest query type of the retrievers, and retrievers that
+ * need two other fields take `new FusionRetriever<A & B>(…)` (ADR 0013).
  */
-export class FusionRetriever implements Retriever {
-  readonly #retrievers: readonly Retriever[];
+export class FusionRetriever<
+  Q extends QueryType = QueryType,
+> implements Retriever<Q> {
+  readonly #retrievers: readonly Retriever<Q>[];
   readonly #fusion: Fusion;
   readonly #weights: readonly number[];
   readonly #rankWindowSize: number | undefined;
 
   constructor(options: {
-    readonly retrievers: readonly Retriever[];
+    readonly retrievers: readonly Retriever<Q>[];
     /** `reciprocalRankFusion()` when absent: k 60, ranks from 1. */
     readonly fusion?: Fusion;
     /** One weight for each retriever, in their order: 1 each when absent. */
@@ -39,7 +47,7 @@ export class FusionRetriever implements Retriever {
   }
 
   async retrieve(
-    query: string,
+    query: Q,
     options: RetrieveOptions = {},
   ): Promise<ScoredPassage[]> {
     const topK = options.topK ?? 10;

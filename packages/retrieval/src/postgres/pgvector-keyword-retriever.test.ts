@@ -144,6 +144,36 @@ test('the words of the query join with AND by default, and with OR when the oper
   assert.equal(ids(or)[0], 'both');
 });
 
+test('the words of keywords are quoted in place of the words of query, and the words of query when the bundle has no keywords, as when the query is a string', async () => {
+  // Arrange
+  await using database = await server().database();
+  const pool = database.pool();
+  await contract(pool, [
+    { id: 'both', text: 'rotate the signing key' },
+    { id: 'renew', text: 'renew the certificate' },
+  ]);
+  const retriever = new PgvectorKeywordRetriever({
+    store: new PostgresPassageStore({
+      session: session(pool),
+      passages: 'docs_passages',
+    }),
+    index: { column: 'keywords' },
+  });
+
+  // Act
+  const byKeywords = await retriever.retrieve({
+    query: 'renew certificate',
+    keywords: ['rotate', 'signing key'],
+  });
+  const byQuery = await retriever.retrieve({ query: 'renew certificate' });
+  const byString = await retriever.retrieve('renew certificate');
+
+  // Assert: 'signing key' is two words, each its own plainto_tsquery.
+  assert.deepEqual(ids(byKeywords), ['both']);
+  assert.deepEqual(ids(byQuery), ['renew']);
+  assert.deepEqual(byString, byQuery);
+});
+
 test('the query and the index use the english configuration: a word finds its other forms, and a stop word neither matches nor stops a match', async () => {
   // Arrange
   await using database = await server().database();

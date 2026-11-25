@@ -12,6 +12,7 @@ import {
   describe,
   parseModelIdentity,
 } from '../model-identity.ts';
+import type { QueryType } from '../query-bundle.ts';
 import type { RetrieveOptions } from '../retrieve-options.ts';
 import type { ScoredPassage } from '../scored-passage.ts';
 import { identifier } from '../sql/identifier.ts';
@@ -52,14 +53,14 @@ export class SqliteEmbeddingRetriever implements BatchRetriever {
   }
 
   retrieve(
-    query: string,
+    query: QueryType,
     options: RetrieveOptions = {},
   ): Promise<ScoredPassage[]> {
     return this.#retrieval.retrieve(query, options);
   }
 
   retrieveMany(
-    queries: readonly string[],
+    queries: readonly QueryType[],
     options: RetrieveOptions = {},
   ): Promise<ScoredPassage[][]> {
     return this.#retrieval.retrieveMany(queries, options);

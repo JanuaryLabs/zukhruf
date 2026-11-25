@@ -15,6 +15,7 @@ export type { PassageStore } from './passage-store.ts';
 export type { Passage } from './passage.ts';
 export { PostprocessingRetriever } from './postprocessing-retriever.ts';
 export type { Postprocessor } from './postprocessor.ts';
+export type { QueryBundle, QueryType } from './query-bundle.ts';
 export { reciprocalRankFusion } from './reciprocal-rank-fusion.ts';
 export { relativeScoreFusion } from './relative-score-fusion.ts';
 export { Rerank } from './rerank.ts';

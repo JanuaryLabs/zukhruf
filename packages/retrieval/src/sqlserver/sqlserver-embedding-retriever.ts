@@ -10,6 +10,7 @@ import {
   describe,
   parseModelIdentity,
 } from '../model-identity.ts';
+import type { QueryType } from '../query-bundle.ts';
 import type { RetrieveOptions } from '../retrieve-options.ts';
 import type { ScoredPassage } from '../scored-passage.ts';
 import { where } from '../sql/where.ts';
@@ -54,14 +55,14 @@ export class SqlServerEmbeddingRetriever implements BatchRetriever {
   }
 
   retrieve(
-    query: string,
+    query: QueryType,
     options: RetrieveOptions = {},
   ): Promise<ScoredPassage[]> {
     return this.#retrieval.retrieve(query, options);
   }
 
   retrieveMany(
-    queries: readonly string[],
+    queries: readonly QueryType[],
     options: RetrieveOptions = {},
   ): Promise<ScoredPassage[][]> {
     return this.#retrieval.retrieveMany(queries, options);

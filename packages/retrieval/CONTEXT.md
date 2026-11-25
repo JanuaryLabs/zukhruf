@@ -29,8 +29,20 @@ _Avoid_: Model name, dimension (alone: two models can have the same dimension)
 ### Searches
 
 **Query**:
-The text that a caller searches with. An embedding retriever embeds it; a keyword retriever quotes its words.
+What a caller searches with: a string, or a query bundle. A string is a query bundle with only `query` (LlamaIndex `QueryType = string | QueryBundle`). The `query` of a bundle is the information need: the reranker and the language models read it, and so does every search that has no text of its own ([ADR 0013](./docs/adr/0013-a-query-is-a-string-or-a-query-bundle-with-a-text-for-each-kind-of-search.md)).
 _Avoid_: Question, prompt, search term
+
+**Query bundle**:
+One search request with a text for each kind of search that needs other words: `{ query, keywords?, customEmbeddings? }`, after LlamaIndex's `QueryBundle`. A host adapter adds its own fields in its own bundle type, `QueryBundle & { readonly entrez: string }`, and then takes no string.
+_Avoid_: Query object, request, search input
+
+**Keywords**:
+The `keywords` of a query bundle: the list of words that a keyword retriever quotes in place of the words of `query` (.NET `HybridSearchAsync(searchValue, keywords)`). It is never empty.
+_Avoid_: Terms, keyword text, search string
+
+**Custom embeddings**:
+The `customEmbeddings` of a query bundle: the texts that an embedding retriever embeds in place of `query`. It searches with the mean of their vectors. `HydeRetriever` writes its passage here (LlamaIndex.TS `customEmbeddings`). It is never empty.
+_Avoid_: Embedding text, embedding strs, vector query
 
 **Retriever**:
 The port of the package: an object with `retrieve(query, options)` that gives scored passages, best first. Any source can implement it (Eino `Retriever.Retrieve`, Genkit `Retriever`).
@@ -49,7 +61,7 @@ An engine retriever that ranks the passages by the keyword index: FTS5 `bm25()` 
 _Avoid_: Full-text search, lexical search, sparse retriever, BM25 (the name of one ranking function)
 
 **Batch search**:
-One call that searches many queries at once, `retrieveMany(queries, options)`, as one model call and one SQL query. It gives one result list for each query, in the order of the queries.
+One call that searches many queries at once, `retrieveMany(queries, options)`, as one model call and one SQL query. Each query is a string or a query bundle. It gives one result list for each query, in the order of the queries.
 _Avoid_: Bulk search, multi-search, multi-query (a multi-query is one query rewritten many times)
 
 **topK**:
