@@ -241,7 +241,7 @@ Output:
 
 ## Search by keywords
 
-A keyword retriever queries the keyword index that elt writes: FTS5 on SQLite, `tsvector` on Postgres, full-text on SQL Server. It quotes each word of the query, so a word of the user is never an operator of the engine. A query bundle can give it whole keywords in `keywords` (see "Give each search its own text"): each keyword is one phrase in the syntax of the engine, an FTS5 phrase, a `phraseto_tsquery` or a CONTAINS phrase, so `'heart failure'` matches those words side by side and in order, and not "failure of the heart". Its score is higher for a better match on every engine; `SqliteBM25Retriever` negates `bm25()` ([ADR 0004](./docs/adr/0004-a-keyword-retriever-queries-the-keyword-index-that-elt-writes.md)). How the words match is each engine's own `matching` option, a union typed for that engine only ([ADR 0018](./docs/adr/0018-each-keyword-retriever-matches-in-the-strongest-form-of-its-engine.md)): `{ operator: 'OR', cutoffFrequency? } | { operator: 'AND' }` on SQLite, `{ strategy: 'all' }` on Postgres, which has no OR, and `{ predicate: 'CONTAINS', operator: 'AND' | 'OR' }` on SQL Server. Postgres and SQL Server are AND when absent. SQLite is `{ operator: 'OR', cutoffFrequency: 20_000 }` when absent (Elasticsearch `cutoff_frequency`, Lucene `CommonTermsQuery`): a word in more than 20,000 passages only adds to the score of the passages that rarer words find, a query of only such words runs as their AND, and a word that no passage holds is left out. A `cutoffFrequency` under 1 is a share of the passages. Below 20,000 passages the default is plain OR. Through the retriever, with porter, it gives nDCG@10 0.686 on SciFact, 0.317 on NFCorpus and 0.545 on TREC-COVID (OR 0.585), and on TREC-COVID repeated four times (685,328 passages) a p95 of 200 to 247 ms against OR's 1,190 ms. OR alone has no bound, and `node:sqlite` cannot stop a running statement.
+A keyword retriever queries the keyword index that elt writes: FTS5 on SQLite, `tsvector` on Postgres, full-text on SQL Server. It quotes each word of the query, so a word of the user is never an operator of the engine. A query bundle can give it whole keywords in `keywords` (see "Give each search its own text"): each keyword is one phrase in the syntax of the engine, an FTS5 phrase, a `phraseto_tsquery` or a CONTAINS phrase, so `'heart failure'` matches those words side by side and in order, and not "failure of the heart". Its score is higher for a better match on every engine; `SqliteBM25Retriever` negates `bm25()` ([ADR 0004](./docs/adr/0004-a-keyword-retriever-queries-the-keyword-index-that-elt-writes.md)). How the words match is each engine's own `matching` option, a union typed for that engine only ([ADR 0018](./docs/adr/0018-each-keyword-retriever-matches-in-the-strongest-form-of-its-engine.md)): `{ operator: 'OR', cutoffFrequency? } | { operator: 'AND' }` on SQLite, `{ strategy: 'frequency', dropTokensThreshold? } | { strategy: 'all' }` on Postgres, which has no OR, and `{ predicate: 'CONTAINS', operator: 'AND' | 'OR' }` on SQL Server. SQL Server is AND when absent. Postgres is `{ strategy: 'frequency', dropTokensThreshold: 10 }` when absent (Meilisearch `matchingStrategy: 'frequency'`, Typesense `drop_tokens_threshold`): the AND of the lexemes of the text, as `to_tsvector` reads it, and while fewer than 10 passages match, the AND without the most frequent lexeme, by `pg_stats` of the column; a passage scores the lexemes it holds plus `ts_rank(…, 33)`. Through the retriever it gives nDCG@10 0.518 on SciFact, 0.295 on NFCorpus and 0.430 on TREC-COVID (AND 0.070, 0.206, 0.270), with a TREC-COVID p95 of 51 ms. SQLite is `{ operator: 'OR', cutoffFrequency: 20_000 }` when absent (Elasticsearch `cutoff_frequency`, Lucene `CommonTermsQuery`): a word in more than 20,000 passages only adds to the score of the passages that rarer words find, a query of only such words runs as their AND, and a word that no passage holds is left out. A `cutoffFrequency` under 1 is a share of the passages. Below 20,000 passages the default is plain OR. Through the retriever, with porter, it gives nDCG@10 0.686 on SciFact, 0.317 on NFCorpus and 0.545 on TREC-COVID (OR 0.585), and on TREC-COVID repeated four times (685,328 passages) a p95 of 200 to 247 ms against OR's 1,190 ms. OR alone has no bound, and `node:sqlite` cannot stop a running statement.
 
 On SQLite the index is an FTS5 table whose external content is a keywords table, kept in step by triggers. The passages view gives the `rowid` of that table, and the retriever joins the passages on it ([ADR 0004](./docs/adr/0004-a-keyword-retriever-queries-the-keyword-index-that-elt-writes.md), the amendment of 2026-11-24).
 
@@ -1119,7 +1119,10 @@ class PgvectorEmbeddingRetriever<
     readonly scoreThreshold?: number; // keeps a score >= it, from -1 to 1; not finite is a RangeError
   });
 }
-type PostgresMatching = { readonly strategy: 'all' }; // no OR on Postgres
+type PostgresMatching =
+  // no OR on Postgres
+  | { readonly strategy: 'frequency'; readonly dropTokensThreshold?: number }
+  | { readonly strategy: 'all' };
 class PgvectorKeywordRetriever<
   in out M extends Metadata = Metadata,
 > implements Retriever<QueryType, StoredPassage<M>> {
@@ -1129,7 +1132,7 @@ class PgvectorKeywordRetriever<
       readonly column: string; // the tsvector column of the passages
       readonly configuration?: string; // 'english'
     };
-    readonly matching?: PostgresMatching; // { strategy: 'all' }
+    readonly matching?: PostgresMatching; // { strategy: 'frequency', dropTokensThreshold: 10 }
   });
 }
 

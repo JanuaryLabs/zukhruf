@@ -4,7 +4,11 @@ import type { RetrievalResult } from '../retrieval-result.ts';
 import type { RetrieveOptions } from '../retrieve-options.ts';
 import type { Retriever } from '../retriever.ts';
 import { identifier } from '../sql/identifier.ts';
-import { AllWords, type PostgresMatch } from './postgres-match.ts';
+import {
+  AllWords,
+  DropMostFrequent,
+  type PostgresMatch,
+} from './postgres-match.ts';
 import {
   type PostgresPassageStore,
   contractOf,
@@ -12,21 +16,29 @@ import {
 
 /**
  * How `PgvectorKeywordRetriever` matches the words of a query, under
- * Meilisearch's name, `matchingStrategy` (ADR 0018): `{ strategy: 'all' }`
- * finds the passages that hold every word, as `plainto_tsquery` joins them.
- * Postgres has no OR: `ts_rank_cd` has no IDF and ranks every matched row, so
- * an OR cannot be ranked well or in time at scale. Each member holds only the
- * fields that mean something for it, so the Postgres forms that follow have
- * their place.
+ * Meilisearch's `matchingStrategy` and Typesense's `drop_tokens_threshold`
+ * (ADR 0018). `{ strategy: 'frequency' }` finds the passages that hold every
+ * word and, while fewer than `dropTokensThreshold` passages match, drops the
+ * most frequent word and tries again; a passage scores the number of the
+ * query's words it holds plus `ts_rank(index, OR of the words, 33)`.
+ * `{ strategy: 'all' }` finds the passages that hold every word, ranked by
+ * `ts_rank_cd`. Postgres has no OR: it has no IDF and ranks every matched
+ * row, so an OR cannot be ranked well or in time at scale.
  */
-export type PostgresMatching = { readonly strategy: 'all' };
+export type PostgresMatching =
+  | {
+      readonly strategy: 'frequency';
+      /** Drop the most frequent word while fewer than this many passages match: 10 when absent. */
+      readonly dropTokensThreshold?: number;
+    }
+  | { readonly strategy: 'all' };
 
 /**
  * Ranks the passages by Postgres full-text search over the keyword index
  * that elt writes: a `tsvector` column of the passages, `to_tsvector(configuration,
- * text)`, with a GIN index (ADR 0004). The score is `ts_rank_cd`, which is
- * higher for a better match (ADR 0005). It matches each keyword of
- * `keywords` as one `phraseto_tsquery`, or the words of `query` when the
+ * text)`, with a GIN index (ADR 0004). The score is higher for a better match
+ * (ADR 0005). It matches each keyword of `keywords` as one
+ * `phraseto_tsquery`, or the lexemes of `query` in the configuration when the
  * bundle has none (ADR 0013, ADR 0018).
  * It gives the passages with the metadata that its store reads (ADR 0015).
  */
@@ -47,7 +59,7 @@ export class PgvectorKeywordRetriever<
       /** The text search configuration that made the column, 'english' when absent. */
       readonly configuration?: string;
     };
-    /** How the words of the query match: `{ strategy: 'all' }` when absent. */
+    /** How the words of the query match: `{ strategy: 'frequency', dropTokensThreshold: 10 }` when absent. */
     readonly matching?: PostgresMatching;
   }) {
     const { session, passages, metadata } = contractOf(options.store);
@@ -56,16 +68,27 @@ export class PgvectorKeywordRetriever<
       passages,
       metadata,
       column: identifier(options.index.column),
+      columnName: options.index.column,
       configuration: options.index.configuration ?? 'english',
     };
-    const { strategy } = options.matching ?? { strategy: 'all' };
+    const matching: PostgresMatching = options.matching ?? {
+      strategy: 'frequency',
+      dropTokensThreshold: 10,
+    };
+    const { strategy } = matching;
     switch (strategy) {
       case 'all':
         this.#match = new AllWords(index);
         break;
+      case 'frequency':
+        this.#match = new DropMostFrequent(
+          index,
+          thresholdOf(matching.dropTokensThreshold ?? 10),
+        );
+        break;
       default:
         throw new RangeError(
-          `The strategy of matching is 'all', not ${String(strategy satisfies never)}`,
+          `The strategy of matching is 'all' or 'frequency', not ${String(strategy satisfies never)}`,
         );
     }
   }
@@ -77,4 +100,14 @@ export class PgvectorKeywordRetriever<
     options.signal?.throwIfAborted();
     return this.#match.retrieve(keywordQueryOf(query), options);
   }
+}
+
+/** A threshold the type cannot refuse: NaN, an infinity, zero or less. */
+function thresholdOf(dropTokensThreshold: number): number {
+  if (Number.isFinite(dropTokensThreshold) && dropTokensThreshold > 0) {
+    return dropTokensThreshold;
+  }
+  throw new RangeError(
+    `The dropTokensThreshold of matching is a positive finite number, not ${String(dropTokensThreshold)}`,
+  );
 }

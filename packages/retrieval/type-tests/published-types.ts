@@ -480,6 +480,10 @@ const documents = new SqlServerPassageStore({
 const anyWord: SqliteMatching = { operator: 'OR' };
 const commonTerms: SqliteMatching = { operator: 'OR', cutoffFrequency: 20_000 };
 const allLexemes: PostgresMatching = { strategy: 'all' };
+const dropMostFrequent: PostgresMatching = {
+  strategy: 'frequency',
+  dropTokensThreshold: 10,
+};
 const containsAny: SqlServerMatching = {
   predicate: 'CONTAINS',
   operator: 'OR',
@@ -498,6 +502,11 @@ export const postgresMatching = new PgvectorKeywordRetriever({
   store: articles,
   index: { column: 'search' },
   matching: allLexemes,
+});
+export const postgresFrequency = new PgvectorKeywordRetriever({
+  store: articles,
+  index: { column: 'search' },
+  matching: dropMostFrequent,
 });
 export const sqlServerMatching = new SqlServerKeywordRetriever({
   store: documents,
@@ -527,7 +536,7 @@ export const sqliteGivenPostgres = new SqliteBM25Retriever({
 export const postgresGivenSqlServer = new PgvectorKeywordRetriever({
   store: articles,
   index: { column: 'search' },
-  matching: containsAny, // TS2741
+  matching: containsAny, // TS2322
 });
 export const sqlServerGivenSqlite = new SqlServerKeywordRetriever({
   store: documents,
@@ -543,6 +552,10 @@ export const allWithThreshold: PostgresMatching = {
   dropTokensThreshold: 10, // TS2353
 };
 export const postgresOr: PostgresMatching = { strategy: 'all', operator: 'OR' }; // TS2353
+export const frequencyWithCutoff: PostgresMatching = {
+  strategy: 'frequency',
+  cutoffFrequency: 20_000, // TS2353
+};
 // CONTAINS takes its Boolean operator.
 export const contains: SqlServerMatching = { predicate: 'CONTAINS' }; // TS2741
 

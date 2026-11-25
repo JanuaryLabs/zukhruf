@@ -9,6 +9,7 @@ import { Postgres } from '@zukhruf/testing/postgres';
 
 import {
   PgvectorKeywordRetriever,
+  type PostgresMatching,
   PostgresPassageStore,
   type PostgresSession,
 } from '../postgres.ts';
@@ -60,7 +61,7 @@ const ids = (
   results: readonly { readonly passage: { readonly id: string } }[],
 ) => results.map(({ passage }) => passage.id);
 
-test('the passages come best first with ts_rank_cd as the score, so a better match has a higher score, and a tie goes to the smaller id in byte order', async () => {
+test("under matching { strategy: 'all' } the passages come best first with ts_rank_cd as the score, so a better match has a higher score, and a tie goes to the smaller id in byte order", async () => {
   // Arrange: `K` sorts before `k` in byte order, and after it in the en_US
   // collation of the server.
   await using database = await server().database();
@@ -79,6 +80,7 @@ test('the passages come best first with ts_rank_cd as the score, so a better mat
       metadata: (columns) => columns,
     }),
     index: { column: 'keywords' },
+    matching: { strategy: 'all' },
   });
 
   // Act
@@ -110,7 +112,7 @@ test('the passages come best first with ts_rank_cd as the score, so a better mat
   });
 });
 
-test("the words of the query join with AND by default and under matching { strategy: 'all' }", async () => {
+test("the words of the query join with AND under matching { strategy: 'all' }, and by default, where AND matches fewer than 10 passages, the most frequent word is dropped", async () => {
   // Arrange
   await using database = await server().database();
   const pool = database.pool();
@@ -130,7 +132,7 @@ test("the words of the query join with AND by default and under matching { strat
   };
 
   // Act
-  const and = (
+  const byDefault = (
     await new PgvectorKeywordRetriever(options).retrieve('rotate signing')
   ).passages;
   const all = (
@@ -140,9 +142,10 @@ test("the words of the query join with AND by default and under matching { strat
     }).retrieve('rotate signing')
   ).passages;
 
-  // Assert
-  assert.deepEqual(ids(and), ['both']);
+  // Assert: 'rotate' and 'signing' are each in 2 passages; the tie drops
+  // 'signing', whose lexeme sorts after 'rotat'.
   assert.deepEqual(ids(all), ['both']);
+  assert.deepEqual(ids(byDefault), ['both', 'rotate']);
 });
 
 test('keywords are matched in place of the words of query, and the words of query when the bundle has no keywords, as when the query is a string', async () => {
@@ -191,6 +194,8 @@ test('each keyword is one phrase, so its lexemes match side by side and in order
     { id: 'both', text: 'heart failure treated with an ACE inhibitor' },
     { id: 'apart', text: 'failure of the heart and an inhibitor of ACE' },
   ]);
+  // Under AND, every keyword must match, so a keyword split into words
+  // would change what matches.
   const retriever = new PgvectorKeywordRetriever({
     store: new PostgresPassageStore({
       session: session(pool),
@@ -198,6 +203,7 @@ test('each keyword is one phrase, so its lexemes match side by side and in order
       metadata: (columns) => columns,
     }),
     index: { column: 'keywords' },
+    matching: { strategy: 'all' },
   });
 
   // Act
@@ -397,6 +403,7 @@ test('each word of the query is plain text, so tsquery syntax in it matches as t
     { id: 'consul', text: 'consul keeps services' },
     { id: 'keystone', text: 'keystone service' },
   ]);
+  // Under AND, a word that runs as an operator would change what matches.
   const retriever = new PgvectorKeywordRetriever({
     store: new PostgresPassageStore({
       session: session(pool),
@@ -404,6 +411,7 @@ test('each word of the query is plain text, so tsquery syntax in it matches as t
       metadata: (columns) => columns,
     }),
     index: { column: 'keywords' },
+    matching: { strategy: 'all' },
   });
 
   // Act
@@ -837,7 +845,7 @@ test("the keyword search passes the call's signal to the session, which cancels 
   }
 });
 
-test("a matching strategy other than 'all' is refused with a RangeError when the retriever is made", () => {
+test("a matching strategy other than 'all' or 'frequency' is refused with a RangeError when the retriever is made", () => {
   // Arrange
   const store = new PostgresPassageStore({
     session: { query: () => Promise.reject(new Error('no query runs')) },
@@ -857,6 +865,430 @@ test("a matching strategy other than 'all' is refused with a RangeError when the
   // Assert
   assert.throws(
     make,
-    new RangeError("The strategy of matching is 'all', not any"),
+    new RangeError("The strategy of matching is 'all' or 'frequency', not any"),
+  );
+});
+
+// A keyword retriever over the contract's index, with the matching and the
+// configuration given.
+const keywordsOf = (
+  pool: pg.Pool,
+  matching?: PostgresMatching,
+  configuration?: string,
+) =>
+  new PgvectorKeywordRetriever({
+    store: new PostgresPassageStore({
+      session: session(pool),
+      passages: 'docs_passages',
+      metadata: (columns) => columns,
+    }),
+    index: {
+      column: 'keywords',
+      ...(configuration === undefined ? {} : { configuration }),
+    },
+    ...(matching === undefined ? {} : { matching }),
+  });
+
+test("by default, a question that AND answers with at least 10 passages gives AND's passages in AND's order", async () => {
+  // Arrange: passage n has n words between 'rotate' and 'key', and every
+  // passage has 14 words, so a passage whose words are closer is the better
+  // match under either ranking.
+  await using database = await server().database();
+  const pool = database.pool();
+  await contract(pool, [
+    ...Array.from({ length: 12 }, (_, n) => ({
+      id: `p${String(n + 1).padStart(2, '0')}`,
+      text: [
+        'rotate',
+        ...Array.from({ length: n + 1 }, () => 'filler'),
+        'key',
+        ...Array.from({ length: 11 - n }, () => 'filler'),
+      ].join(' '),
+    })),
+    { id: 'rotate', text: 'rotate logs' },
+    { id: 'key', text: 'a signing key' },
+  ]);
+
+  // Act
+  const byDefault = (
+    await keywordsOf(pool).retrieve('rotate key', { topK: 20 })
+  ).passages;
+  const and = (
+    await keywordsOf(pool, { strategy: 'all' }).retrieve('rotate key', {
+      topK: 20,
+    })
+  ).passages;
+
+  // Assert
+  assert.equal(and.length, 12);
+  assert.deepEqual(ids(byDefault), ids(and));
+});
+
+test('by default, a question with a word that no passage holds still finds the passages of its other words', async () => {
+  // Arrange
+  await using database = await server().database();
+  const pool = database.pool();
+  await contract(pool, [
+    { id: 'r1', text: 'rotate the key' },
+    { id: 'r2', text: 'rotate logs' },
+    { id: 'k', text: 'signing key' },
+  ]);
+
+  // Act
+  const results = (await keywordsOf(pool).retrieve('rotate zzyzx')).passages;
+
+  // Assert
+  assert.deepEqual(ids(results).toSorted(), ['r1', 'r2']);
+});
+
+test('by default, where AND matches fewer than 10 passages, the most frequent word is dropped first, by the statistics of the column after ANALYZE and by a count of each word before it, and a passage that holds more of the words ranks first', async () => {
+  // Arrange: 'dose' is in 30 passages, 'renal' in 14, 'apixaban' in 12.
+  // All three are in 2 passages; without 'dose', 12 match. The question
+  // names 'apixaban' last, so a drop by position would keep 'dose'.
+  await using database = await server().database();
+  const pool = database.pool();
+  const numbered = (prefix: string, count: number, text: string) =>
+    Array.from({ length: count }, (_, n) => ({
+      id: `${prefix}${String(n + 1).padStart(2, '0')}`,
+      text,
+    }));
+  await contract(pool, [
+    ...numbered('a', 2, 'apixaban renal dose'),
+    ...numbered('b', 10, 'apixaban renal'),
+    ...numbered('r', 2, 'renal dose'),
+    ...numbered('d', 26, 'dose'),
+  ]);
+  const retriever = keywordsOf(pool);
+  const statistics = async () =>
+    (
+      await pool.query<{ lexemes: string[] | null }>(
+        `SELECT (SELECT most_common_elems::text::text[] FROM pg_stats WHERE tablename = 'docs_passages' AND attname = 'keywords') AS lexemes`,
+      )
+    ).rows[0]?.lexemes;
+
+  // Act
+  const before = ids(
+    (await retriever.retrieve('renal dose of apixaban', { topK: 20 })).passages,
+  );
+  const withoutStatistics = await statistics();
+  await pool.query('ANALYZE docs_passages');
+  const after = ids(
+    (await retriever.retrieve('renal dose of apixaban', { topK: 20 })).passages,
+  );
+
+  // Assert
+  assert.equal(withoutStatistics, null);
+  assert.deepEqual((await statistics())?.toSorted(), [
+    'apixaban',
+    'dose',
+    'renal',
+  ]);
+  const expected = [
+    'a01',
+    'a02',
+    ...Array.from(
+      { length: 10 },
+      (_, n) => `b${String(n + 1).padStart(2, '0')}`,
+    ),
+  ];
+  assert.deepEqual(before, expected);
+  assert.deepEqual(after, expected);
+});
+
+test("by default, a doctor's 'or', '-' and quotes are words of the question, never operators", async () => {
+  // Arrange: the simple configuration keeps 'or' as a word.
+  await using database = await server().database();
+  const pool = database.pool();
+  await contract(
+    pool,
+    [
+      { id: 'x', text: 'heart or failure' },
+      { id: 'y', text: 'heart failure' },
+      { id: 'z', text: 'heart' },
+    ],
+    'simple',
+  );
+
+  // Act: as websearch_to_tsquery, this is 'heart' OR NOT 'failure': 'z'.
+  const results = (
+    await keywordsOf(pool, undefined, 'simple').retrieve('"heart" or -failure')
+  ).passages;
+
+  // Assert: 'or' is the rarest word, and 'x' holds it.
+  assert.deepEqual(ids(results), ['x']);
+});
+
+test("by default, the score is the number of the question's words that a passage holds plus ts_rank with normalization 33 against the OR of its words, so a passage that holds more of them ranks first", async () => {
+  // Arrange: 'fewer' is short and repeats its words, so ts_rank alone ranks
+  // it above 'more', which holds every word of the question.
+  await using database = await server().database();
+  const pool = database.pool();
+  await contract(pool, [
+    {
+      id: 'more',
+      text: 'apixaban for renal impairment: the dose and the storage, handling and disposal of the tablets',
+    },
+    { id: 'fewer', text: 'apixaban dose, apixaban dose' },
+    { id: 'r1', text: 'renal function' },
+    { id: 'r2', text: 'renal failure' },
+    { id: 'd1', text: 'dose missed' },
+    { id: 'd2', text: 'dose adjusted' },
+    { id: 'd3', text: 'dose timing' },
+  ]);
+
+  // Act
+  const results = (await keywordsOf(pool).retrieve('apixaban renal dose'))
+    .passages;
+
+  // Assert
+  const { rows: engine } = await pool.query<{ id: string; rank: number }>(
+    `SELECT id, ts_rank(keywords, to_tsquery('english', 'apixaban | renal | dose'), 33)::float8 AS rank FROM docs_passages WHERE id IN ('more', 'fewer')`,
+  );
+  const rank = (id: string) => engine.find((row) => row.id === id)?.rank ?? 0;
+  assert.ok(rank('fewer') > rank('more'));
+  assert.deepEqual(
+    results.map(({ passage, score }) => [passage.id, score]),
+    [
+      ['more', 3 + rank('more')],
+      ['fewer', 2 + rank('fewer')],
+    ],
+  );
+});
+
+test('a dropTokensThreshold that is not a positive finite number is refused with a RangeError when the retriever is made', () => {
+  // Arrange
+  const store = new PostgresPassageStore({
+    session: { query: () => Promise.reject(new Error('no query runs')) },
+    passages: 'docs_passages',
+    metadata: (columns) => columns,
+  });
+  const values = [0, -1, Number.NaN, Number.POSITIVE_INFINITY];
+
+  for (const value of values) {
+    // Act
+    const make = () =>
+      new PgvectorKeywordRetriever({
+        store,
+        index: { column: 'keywords' },
+        matching: { strategy: 'frequency', dropTokensThreshold: value },
+      });
+
+    // Assert
+    assert.throws(
+      make,
+      new RangeError(
+        `The dropTokensThreshold of matching is a positive finite number, not ${String(value)}`,
+      ),
+    );
+  }
+});
+
+test('by default, on a column whose statistics track 1,000 lexemes, every statement reads the passages through the GIN index, for a word that the statistics do not track and for words they do, only a word they do not track is counted, and each drop is one statement', async () => {
+  // Arrange: 20,000 passages of 30 words of a skewed vocabulary, on a
+  // server of their own. VACUUM empties the pending list of the GIN index,
+  // as autovacuum does on a live table; ANALYZE tracks the 1,000 most
+  // common lexemes, so 'apixaban' and 'zzyzx' are not tracked.
+  await using database = await new Postgres({
+    environment: process.env,
+    image: 'pgvector/pgvector:pg18',
+    tmpFs: { '/var/lib/postgresql': 'rw,size=256m' },
+  }).start();
+  const pool = database.pool();
+  await contract(pool, [
+    { id: 'rare1', text: 'apixaban v3' },
+    { id: 'rare2', text: 'apixaban v5' },
+  ]);
+  await pool.query(`
+    INSERT INTO docs_passages (id, source, seq, start, "end", text)
+    SELECT 'g' || g, 'generated', g, 0, 0, (
+      SELECT string_agg('v' || floor(power(((g * 7919 + j * 104729) % 10007) / 10007.0, 3) * 5000)::int, ' ')
+      FROM generate_series(1, 30) AS j)
+    FROM generate_series(1, 20000) AS g`);
+  await pool.query('VACUUM ANALYZE docs_passages');
+  const {
+    rows: [tracked],
+  } = await pool.query<{ lexemes: string[] }>(
+    `SELECT most_common_elems::text::text[] AS lexemes FROM pg_stats WHERE tablename = 'docs_passages' AND attname = 'keywords'`,
+  );
+  // The plan of each statement the retriever sends, as the nodes that read
+  // the passages, from EXPLAIN of the statement with its parameters.
+  const plans: string[][] = [];
+  const reads = (node: Record<string, unknown>): string[] => {
+    const children = node['Plans'];
+    return [
+      ...(node['Relation Name'] === 'docs_passages'
+        ? [String(node['Node Type'])]
+        : []),
+      ...(Array.isArray(children) ? children.flatMap(reads) : []),
+    ];
+  };
+  const explaining: PostgresSession = {
+    query: async (sql, parameters) => {
+      const { rows } = await pool.query(`EXPLAIN (FORMAT JSON) ${sql}`, [
+        ...parameters,
+      ]);
+      plans.push(reads(rows[0]['QUERY PLAN'][0]['Plan']));
+      return (await pool.query(sql, [...parameters])).rows;
+    },
+  };
+  const retriever = new PgvectorKeywordRetriever({
+    store: new PostgresPassageStore({
+      session: explaining,
+      passages: 'docs_passages',
+      metadata: (columns) => columns,
+    }),
+    index: { column: 'keywords' },
+  });
+
+  // Act
+  const untracked = (await retriever.retrieve('apixaban zzyzx v3 v5')).passages;
+  const untrackedPlans = plans.splice(0);
+  const common = (await retriever.retrieve('v3 v5')).passages;
+  const commonPlans = plans.splice(0);
+
+  // Assert
+  assert.equal(tracked?.lexemes.length, 1000);
+  assert.ok(tracked?.lexemes.includes('v3') && tracked.lexemes.includes('v5'));
+  assert.ok(!tracked?.lexemes.includes('apixaban'));
+  assert.deepEqual(ids(untracked), ['rare1', 'rare2']);
+  assert.equal(common.length, 10);
+  assert.ok(common.every(({ score }) => Number.isFinite(score)));
+  // The words, the count of the untracked words, AND of all three held
+  // words, AND without 'v3', then the ranking of 'apixaban'.
+  assert.deepEqual(untrackedPlans, [
+    [],
+    ['Bitmap Heap Scan', 'Bitmap Heap Scan'],
+    ['Bitmap Heap Scan'],
+    ['Bitmap Heap Scan'],
+    ['Bitmap Heap Scan'],
+  ]);
+  // The words, AND of both, then its ranking: no word is counted.
+  assert.deepEqual(commonPlans, [
+    [],
+    ['Bitmap Heap Scan'],
+    ['Bitmap Heap Scan'],
+  ]);
+});
+
+test('by default, passages that are a view read the statistics of the table that holds the index column, so after ANALYZE no word that the statistics track is counted', async () => {
+  // Arrange: elt's view over the table of the index, with 'dose' in 30
+  // parts, 'renal' in 14 and 'apixaban' in 12, as the statistics after
+  // ANALYZE of the table track them. A view has no statistics of its own.
+  await using database = await server().database();
+  const pool = database.pool();
+  await pool.query(`
+    CREATE TABLE docs_parts (id text PRIMARY KEY, source text NOT NULL, seq integer NOT NULL, start integer NOT NULL, "end" integer NOT NULL, text text NOT NULL, keywords tsvector GENERATED ALWAYS AS (to_tsvector('english', text)) STORED);
+    CREATE INDEX ON docs_parts USING GIN (keywords);
+    CREATE TABLE docs_sources (source text PRIMARY KEY, product text NOT NULL);
+    CREATE VIEW docs_passages AS SELECT p.*, s.product FROM docs_parts p JOIN docs_sources s USING (source);
+    INSERT INTO docs_sources VALUES ('doc', 'gcc');
+    INSERT INTO docs_parts (id, source, seq, start, "end", text)
+    SELECT prefix || lpad(n::text, 2, '0'), 'doc', 0, 0, 0, text
+    FROM (VALUES ('a', 2, 'apixaban renal dose'), ('b', 10, 'apixaban renal'), ('r', 2, 'renal dose'), ('d', 26, 'dose')) AS v(prefix, count, text),
+      generate_series(1, count) AS n;
+    ANALYZE docs_parts;
+  `);
+  const statements: string[] = [];
+  const retriever = new PgvectorKeywordRetriever({
+    store: new PostgresPassageStore({
+      session: {
+        query: async (sql, parameters) => {
+          statements.push(sql);
+          return (await pool.query(sql, [...parameters])).rows;
+        },
+      },
+      passages: 'docs_passages',
+      metadata: (columns) => columns,
+    }),
+    index: { column: 'keywords' },
+  });
+
+  // Act
+  const results = (
+    await retriever.retrieve('renal dose of apixaban', { topK: 20 })
+  ).passages;
+
+  // Assert
+  const {
+    rows: [tracked],
+  } = await pool.query<{ lexemes: string[] }>(
+    `SELECT most_common_elems::text::text[] AS lexemes FROM pg_stats WHERE tablename = 'docs_parts' AND attname = 'keywords'`,
+  );
+  assert.deepEqual(tracked?.lexemes.toSorted(), ['apixaban', 'dose', 'renal']);
+  assert.deepEqual(ids(results), [
+    'a01',
+    'a02',
+    ...Array.from(
+      { length: 10 },
+      (_, n) => `b${String(n + 1).padStart(2, '0')}`,
+    ),
+  ]);
+  // The words, AND of all three, AND without 'dose', then the ranking: no
+  // word is counted.
+  assert.equal(statements.length, 4);
+});
+
+test("by default, the call's filter selects the passages that the AND is counted in, so a two-word question whose AND the filter brings below 10 passages drops its most frequent word", async () => {
+  // Arrange: 'rotate' is in 17 passages and 'key' in 16. AND matches 14
+  // passages, 2 of them git's.
+  await using database = await server().database();
+  const pool = database.pool();
+  const numbered = (prefix: string, count: number, text: string) =>
+    Array.from({ length: count }, (_, n) => ({
+      id: `${prefix}${String(n + 1).padStart(2, '0')}`,
+      text,
+      product: prefix.startsWith('git') ? 'git' : 'gcc',
+    }));
+  await contract(pool, [
+    ...numbered('gcc', 12, 'rotate the key'),
+    ...numbered('git-both', 2, 'rotate the key'),
+    ...numbered('git-key', 2, 'signing key'),
+    ...numbered('git-rotate', 3, 'rotate logs'),
+  ]);
+
+  // Act
+  const results = (
+    await keywordsOf(pool).retrieve('rotate key', {
+      topK: 20,
+      filter: { field: 'metadata.product', operator: '==', value: 'git' },
+    })
+  ).passages;
+
+  // Assert: without 'rotate', git's passages that hold 'key', those that
+  // hold both first.
+  assert.deepEqual(ids(results), [
+    'git-both01',
+    'git-both02',
+    'git-key01',
+    'git-key02',
+  ]);
+});
+
+test('by default, a question whose AND matches exactly 10 passages keeps every word', async () => {
+  // Arrange: 'rotate' is in 13 passages and 'key' in 15; AND matches 10.
+  await using database = await server().database();
+  const pool = database.pool();
+  const numbered = (prefix: string, count: number, text: string) =>
+    Array.from({ length: count }, (_, n) => ({
+      id: `${prefix}${String(n + 1).padStart(2, '0')}`,
+      text,
+    }));
+  await contract(pool, [
+    ...numbered('both', 10, 'rotate the key'),
+    ...numbered('rotate', 3, 'rotate logs'),
+    ...numbered('key', 5, 'signing key'),
+  ]);
+
+  // Act
+  const results = (await keywordsOf(pool).retrieve('rotate key', { topK: 20 }))
+    .passages;
+
+  // Assert
+  assert.deepEqual(
+    ids(results),
+    Array.from(
+      { length: 10 },
+      (_, n) => `both${String(n + 1).padStart(2, '0')}`,
+    ),
   );
 });
