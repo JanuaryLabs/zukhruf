@@ -2,15 +2,17 @@
 // `node migrate-diff.js check` for `migrate:check`, and
 // `node migrate-diff.js create --name <name>` for `migrate:create`. Each runs
 // `prisma migrate diff` from the migrations folder to the schema folder.
-// Prisma replays the migrations on the shadow database, which it reads from
-// `datasource.shadowDatabaseUrl` of prisma.config.ts and never creates (ADR
-// 0018). The generated config reads it from SHADOW_CONNECTION_STRING, so this
-// script sets that variable to a new, empty database of
-// @zukhruf/testing/postgres, and drops the database after the diff.
+// Prisma replays the migrations on a shadow database, which it reads from
+// `datasource.shadowDatabaseUrl` of prisma.config.ts. The shadow database
+// follows the `provider` of the schema's datasource block (ADR 0018):
+// - postgresql: Prisma never creates the shadow database, so this script sets
+//   SHADOW_CONNECTION_STRING, which the generated config reads, to a new,
+//   empty database of @zukhruf/testing/postgres, and drops it after the diff.
+// - sqlite: with no shadow URL, Prisma replays the migrations on an in-memory
+//   SQLite database, so this script sets nothing and starts no database.
 import { spawn } from 'node:child_process';
+import { glob, readFile } from 'node:fs/promises';
 import { parseArgs } from 'node:util';
-
-import { Postgres } from '@zukhruf/testing/postgres';
 
 type Run = { command: 'check' } | { command: 'create'; output: string };
 
@@ -40,10 +42,79 @@ function parse(): Run {
   );
 }
 
+interface Shadow extends AsyncDisposable {
+  /** The variables that give Prisma the shadow database. */
+  readonly environment: Record<string, string>;
+}
+
+class PostgresShadow implements Shadow {
+  static async create(): Promise<PostgresShadow> {
+    // Imported here: @zukhruf/testing is an optional peer, and a repo whose
+    // db packages all use SQLite need not install it.
+    const { Postgres } = await import('@zukhruf/testing/postgres');
+    return new PostgresShadow(
+      await new Postgres({ environment: process.env }).database(),
+    );
+  }
+
+  readonly #database: AsyncDisposable & { connectionString: string };
+
+  private constructor(
+    database: AsyncDisposable & { connectionString: string },
+  ) {
+    this.#database = database;
+  }
+
+  get environment() {
+    return { SHADOW_CONNECTION_STRING: this.#database.connectionString };
+  }
+
+  [Symbol.asyncDispose]() {
+    return this.#database[Symbol.asyncDispose]();
+  }
+}
+
+class SqliteShadow implements Shadow {
+  readonly environment = {};
+
+  async [Symbol.asyncDispose]() {}
+}
+
+const shadows: Record<string, () => Promise<Shadow>> = {
+  postgresql: () => PostgresShadow.create(),
+  sqlite: async () => new SqliteShadow(),
+};
+
+const datasourceBlock = /^\s*datasource\s+\w+\s*\{([^}]*)\}/m;
+const providerLine = /^\s*provider\s*=\s*"([^"]+)"/m;
+
+// The `provider` of the datasource block, from the `*.prisma` files of the
+// schema folder, as `--to-schema .` reads them.
+async function provider(): Promise<string> {
+  for await (const file of glob('**/*.prisma', {
+    exclude: ['**/node_modules/**'],
+  })) {
+    const block = datasourceBlock.exec(await readFile(file, 'utf8'))?.[1];
+    const name =
+      block === undefined ? undefined : providerLine.exec(block)?.[1];
+    if (name !== undefined) {
+      return name;
+    }
+  }
+  throw new Error(
+    'No *.prisma file of this project has a datasource block with a provider.',
+  );
+}
+
 const run = parse();
-await using shadow = await new Postgres({
-  environment: process.env,
-}).database();
+const declared = await provider();
+const shadowOf = shadows[declared];
+if (shadowOf === undefined) {
+  throw new Error(
+    `migrate-diff has no shadow database for the datasource provider "${declared}" of this schema. It has one for ${Object.keys(shadows).join(' and ')}.`,
+  );
+}
+await using shadow = await shadowOf();
 const prisma = spawn(
   'prisma',
   [
@@ -61,7 +132,7 @@ const prisma = spawn(
   ],
   {
     stdio: 'inherit',
-    env: { ...process.env, SHADOW_CONNECTION_STRING: shadow.connectionString },
+    env: { ...process.env, ...shadow.environment },
   },
 );
 const {

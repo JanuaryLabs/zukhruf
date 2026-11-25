@@ -40,3 +40,21 @@ The prisma area gives each Prisma project two more targets, and both run a scrip
 - The typecheck of a db package needs Docker, as its test already does.
 - A config that reads the shadow URL from another variable, or not at all (factory reads only `DATABASE_URL`), makes `migrate:check` stop with Prisma's message about `datasource.shadowDatabaseUrl`.
 - The proof of 2026-11-20 on a workspace that the prisma generator wrote (Nx 24.0.6, Prisma 7.10.1): `migrate:check` passed on the empty package, `migrate:create --name init` wrote the table of a new model, `migrate:check` passed and then replayed from the cache, failed on a column with no migration and on a migration with no model, and the typecheck failed with it; a `SHADOW_CONNECTION_STRING` in `.env` that named another database kept its table.
+
+## Amendment 2026-11-25: the shadow database follows the provider of the schema (#5625)
+
+The script started a Postgres shadow database for each db package. A db package whose schema has `provider = "sqlite"` (text2sql `apps/desktop/db`) then failed `migrate:check`: Prisma opened the Postgres URL as a SQLite file, "SQLite database error, unable to open database file: postgresql://…".
+
+Facts read on 2026-11-25 with Prisma 7.10.1 (a scratch project, a SQLite schema and one migration):
+
+- With no `datasource.shadowDatabaseUrl`, `migrate diff --from-migrations migrations --to-schema . --exit-code` exits 0 when the migrations build the schema, and 2 with "[+] Added tables" when they do not. It writes no file: Prisma replays SQLite migrations on an in-memory database. The "You must set `datasource.shadowDatabaseUrl`" stop is for the Postgres provider only.
+- With `--script --output <file>`, it writes the SQL of the diff, as for Postgres.
+- With a `postgresql://` shadow URL, it stops with the error above (`sql_schema_connector::flavour::sqlite::sql_schema_from_migration_history`, `external_shadow_db=Yes`).
+
+Decision 3 now holds for the `postgresql` provider only. The script reads the `provider` of the `datasource` block from the `*.prisma` files of the project folder, and each provider has its own shadow type:
+
+- `postgresql`: a new database of `@zukhruf/testing/postgres` as `SHADOW_CONNECTION_STRING`, as before. The script imports `@zukhruf/testing/postgres` only for this provider, because `@zukhruf/testing` is an optional peer (decision 5).
+- `sqlite`: no variable and no database. Prisma uses its in-memory shadow database.
+- Any other provider: the script stops before Prisma with an error that names the provider. Before, Prisma got a Postgres URL and failed with its own error.
+
+A SQLite db package needs no Docker for `migrate:check` and `migrate:create`. A `SHADOW_CONNECTION_STRING` in `.env` or in the shell of a SQLite package reaches Prisma unchanged, so a person can still name a shadow file.

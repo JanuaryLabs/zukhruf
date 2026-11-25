@@ -750,7 +750,7 @@ You need Nx 24.0.6 or later, and `prisma` and `@prisma/client` in the lockfile. 
 }
 ```
 
-Keep the entries that are already in the lists. Nx skips a `dependsOn` on a target that the project does not have, so a project with no Prisma is not changed. `migrate:check` needs Docker and `@zukhruf/testing` (see [Check the migrations](#check-the-migrations)). The plugin does not change `typecheck` or `build`. Those targets belong to other plugins, as for `format:check` ([ADR 0001](./docs/adr/0001-inferred-targets-not-copied-defaults.md)). The `typecheck:generate` tag of text2sql is then not necessary. See [ADR 0008](./docs/adr/0008-prisma-targets-from-prisma-config-with-outputs-from-the-schema.md).
+Keep the entries that are already in the lists. Nx skips a `dependsOn` on a target that the project does not have, so a project with no Prisma is not changed. `migrate:check` of a Postgres schema needs Docker and `@zukhruf/testing` (see [Check the migrations](#check-the-migrations)). The plugin does not change `typecheck` or `build`. Those targets belong to other plugins, as for `format:check` ([ADR 0001](./docs/adr/0001-inferred-targets-not-copied-defaults.md)). The `typecheck:generate` tag of text2sql is then not necessary. See [ADR 0008](./docs/adr/0008-prisma-targets-from-prisma-config-with-outputs-from-the-schema.md).
 
 ### Signature of the prisma area
 
@@ -796,8 +796,10 @@ npx nx run @acme/db:migrate:create --name add_patient_age
 npx nx run @acme/db:migrate:check
 ```
 
-- Both run `src/prisma/migrate-diff.ts` of this package. It takes a new, empty database from `@zukhruf/testing/postgres`, gives it to Prisma as `SHADOW_CONNECTION_STRING`, and drops it after the diff. Prisma replays the migrations there. So the targets need Docker and `@zukhruf/testing`, as the tests of a db package do, and no `.env` entry, dev database or CI step. A `SHADOW_CONNECTION_STRING` in `.env` or in the shell is not used, so its database is never emptied.
-- `prisma.config.ts` must read `datasource.shadowDatabaseUrl` from `SHADOW_CONNECTION_STRING`, as the [prisma generator](#prisma-generator) writes it. Else Prisma stops with "You must set `datasource.shadowDatabaseUrl`".
+- Both run `src/prisma/migrate-diff.ts` of this package. The script reads the `provider` of the `datasource` block of the schema, and the shadow database follows it:
+  - `postgresql`: the script takes a new, empty database from `@zukhruf/testing/postgres`, gives it to Prisma as `SHADOW_CONNECTION_STRING`, and drops it after the diff. Prisma replays the migrations there. So the targets need Docker and `@zukhruf/testing`, as the tests of a db package do, and no `.env` entry, dev database or CI step. A `SHADOW_CONNECTION_STRING` in `.env` or in the shell is not used, so its database is never emptied. `prisma.config.ts` must read `datasource.shadowDatabaseUrl` from `SHADOW_CONNECTION_STRING`, as the [prisma generator](#prisma-generator) writes it. Else Prisma stops with "You must set `datasource.shadowDatabaseUrl`".
+  - `sqlite`: the script sets no `SHADOW_CONNECTION_STRING` and starts no database. With no shadow URL, Prisma replays the migrations on an in-memory SQLite database. The targets need no Docker and no `@zukhruf/testing` (#5625).
+  - Another provider: the script stops before Prisma with an error that names the provider.
 - The schema is the project folder (`--to-schema .`), with each `*.prisma` file under it, as `schema: '.'` of the generated config. A diff to `schema.prisma` alone removes every table that `models/*.prisma` holds.
 - The folder name of `migrate:create` is the UTC time to the second and the name, as `prisma migrate dev` names it. With no change, the file is `-- This is an empty migration.`, for SQL that you write. `migrate:create` needs no TTY and no dev database, where `migrate dev --create-only` refuses a data-loss warning with no TTY. Its SQL can still fail on a table with rows, for example a required column with no default: edit it before `deploy`.
 - `migrate:check` is cached on the `*.prisma` files, `prisma.config.ts`, the migrations and the package `prisma`. The [prisma generator](#prisma-generator) adds it to `targetDefaults.typecheck.dependsOn`. See [ADR 0018](./docs/adr/0018-migrate-check-diffs-the-migrations-on-a-shadow-database-that-it-makes.md).
@@ -805,7 +807,7 @@ npx nx run @acme/db:migrate:check
 ### Migrate a workspace to the prisma area
 
 1. Add `@zukhruf/nx/prisma` to `plugins` in `nx.json`.
-2. Add `generate` to `targetDefaults.typecheck.dependsOn` and `targetDefaults.build.dependsOn`. Add `migrate:check` to `targetDefaults.typecheck.dependsOn`, as the [prisma generator](#prisma-generator) does (commit 19a4bd37, `src/generators/prisma/generator.test.ts`). `migrate:check` needs Docker and `@zukhruf/testing` (see [Check the migrations](#check-the-migrations)).
+2. Add `generate` to `targetDefaults.typecheck.dependsOn` and `targetDefaults.build.dependsOn`. Add `migrate:check` to `targetDefaults.typecheck.dependsOn`, as the [prisma generator](#prisma-generator) does (commit 19a4bd37, `src/generators/prisma/generator.test.ts`). `migrate:check` of a Postgres schema needs Docker and `@zukhruf/testing` (see [Check the migrations](#check-the-migrations)).
 3. Delete `generate`, `migrate`, `deploy`, `reset` and `pull` from each Prisma project, and the `typecheck` entry that only adds `generate`.
 4. Delete the `typecheck:generate` tag and its `targetDefaults` filter.
 5. Compare `nx show project <project> --json` before and after.

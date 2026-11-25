@@ -173,5 +173,5 @@ What `applySchema` of `<db package>/testing` does: it runs each committed `migra
 _Avoid_: Migrate, seed, reset
 
 **Shadow database**:
-The empty Postgres database on which `prisma migrate diff --from-migrations` replays the migrations, to compare them with the schema. Prisma empties it on each use and never creates it. `migrate:check` and `migrate:create` take a new one from `@zukhruf/testing/postgres` for each run and drop it after (ADR 0018).
+The empty database on which `prisma migrate diff --from-migrations` replays the migrations, to compare them with the schema. For Postgres, Prisma empties it on each use and never creates it, so `migrate:check` and `migrate:create` take a new one from `@zukhruf/testing/postgres` for each run and drop it after. For SQLite, Prisma uses an in-memory database when no shadow URL is set, so the two targets give none (ADR 0018).
 _Avoid_: Dev database (that one keeps its data), test database

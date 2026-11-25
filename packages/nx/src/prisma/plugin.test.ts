@@ -19,10 +19,12 @@ interface Target {
 }
 
 // A `prisma` on the PATH of the tasks that logs each call to `prisma.log` in
-// the workspace root; `generate` writes a client into `src/prisma`, as the
-// generator block of `schema` below says.
+// the workspace root, and for `migrate diff` the shadow database URL that
+// prisma.config.ts reads; `generate` writes a client into `src/prisma`, as
+// the generator block of `schema` below says.
 const fakePrisma = (root: string) => `#!/bin/sh
 echo "prisma $*" >> "${root}/prisma.log"
+if [ "$1 $2" = "migrate diff" ]; then echo "SHADOW_CONNECTION_STRING=\${SHADOW_CONNECTION_STRING-unset}" >> "${root}/prisma.log"; fi
 if [ "$1" = generate ]; then mkdir -p src/prisma && echo client > src/prisma/client.ts; fi
 `;
 
@@ -196,4 +198,63 @@ test('migrate runs generate first, in the project root', async () => {
     await probe.read('packages/db/src/prisma/client.ts'),
     'client\n',
   );
+});
+
+test('migrate:check of a SQLite schema diffs with no shadow database URL, so Prisma replays the migrations in memory', async () => {
+  await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
+  const probe = await workspace(folder.path, {
+    'packages/db/project.json': projectJson('db'),
+    'packages/db/prisma.config.ts': prismaConfig,
+    'packages/db/schema.prisma': schema('src/prisma').replace(
+      'postgresql',
+      'sqlite',
+    ),
+    'packages/db/models/user.prisma': model,
+  });
+
+  const run = await probe.nx('run', 'db:migrate:check');
+
+  assert.equal(run.code, 0, run.output);
+  assert.equal(
+    await probe.read('prisma.log'),
+    'prisma migrate diff --from-migrations migrations --to-schema . --exit-code\nSHADOW_CONNECTION_STRING=unset\n',
+  );
+});
+
+test('migrate:create of a SQLite schema writes the migration with no shadow database URL', async () => {
+  await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
+  const probe = await workspace(folder.path, {
+    'packages/db/project.json': projectJson('db'),
+    'packages/db/prisma.config.ts': prismaConfig,
+    'packages/db/schema.prisma': schema('src/prisma').replace(
+      'postgresql',
+      'sqlite',
+    ),
+  });
+
+  const run = await probe.nx('run', 'db:migrate:create', '--name', 'init');
+
+  assert.equal(run.code, 0, run.output);
+  assert.match(
+    await probe.read('prisma.log'),
+    /^prisma migrate diff --from-migrations migrations --to-schema \. --script --output migrations\/\d{14}_init\/migration\.sql\nSHADOW_CONNECTION_STRING=unset\n$/,
+  );
+});
+
+test('migrate:check of a schema whose provider has no shadow database here stops before Prisma and names the provider', async () => {
+  await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
+  const probe = await workspace(folder.path, {
+    'packages/db/project.json': projectJson('db'),
+    'packages/db/prisma.config.ts': prismaConfig,
+    'packages/db/schema.prisma': schema('src/prisma').replace(
+      'postgresql',
+      'mysql',
+    ),
+  });
+
+  const run = await probe.nx('run', 'db:migrate:check');
+
+  assert.notEqual(run.code, 0, run.output);
+  assert.match(run.output, /provider "mysql"/);
+  await assert.rejects(probe.read('prisma.log'), { code: 'ENOENT' });
 });
