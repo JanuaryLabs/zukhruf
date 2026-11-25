@@ -5,10 +5,13 @@ import type {
 } from './deletion-policy.ts';
 import { fingerprintOf } from './fingerprint.ts';
 import {
+  type GroupedSnapshot,
   type GroupedSnapshotState,
+  type KeyedChanges,
   type SavedEntry,
   type SavedGroup,
   type SnapshotState,
+  type UnknownEntry,
   fingerprintIn,
   keyOf,
   keyValuesOf,
@@ -154,8 +157,26 @@ export class SnapshotDifferential<Data extends Record<string, unknown>> {
       };
       return;
     }
-    yield* this.#judge(previous, listedSoFar, current);
+    yield* this.#judge(previous, listedSoFar, (key, entry) =>
+      current.set(key, entry),
+    );
     yield { type: 'state', state: { snapshot: sorted(current) } };
+  }
+
+  // The grouped snapshot before the first scan: a new one at each read, so
+  // a caller that changes one changes no other caller's snapshot.
+  static get noGroups(): GroupedSnapshot {
+    return { groups: new Map(), unknown: new Map(), listed: new Set() };
+  }
+
+  // The grouped snapshot that a store saved, from the entries it saved of
+  // each collection: each change of diffGroups applied in order.
+  savedGroups(saved: {
+    readonly groups: ReadonlyMap<string, unknown>;
+    readonly unknown: ReadonlyMap<string, unknown>;
+    readonly listed: ReadonlyMap<string, unknown>;
+  }): GroupedSnapshot {
+    return readGroups(this.name, saved);
   }
 
   // diff for a scan whose records come from inputs the source fingerprints
@@ -163,27 +184,30 @@ export class SnapshotDifferential<Data extends Record<string, unknown>> {
   // kept group and a failed group keep their records without reading them;
   // every other group is read and diffed record by record. Vanished keys are
   // judged over the complete scan. continues makes this call one part of a
-  // scan in parts, as for diff.
+  // scan in parts, as for diff. The state change gives the new snapshot and
+  // what changed in it, so a store saves only the entries that changed.
   async *diffGroups(
     groups:
       | AsyncIterable<SnapshotGroup<Data> | KeptGroup | FailedGroup>
       | Iterable<SnapshotGroup<Data> | KeptGroup | FailedGroup>,
-    state: unknown,
+    snapshot: GroupedSnapshot,
     { continues = false }: { readonly continues?: boolean } = {},
   ): AsyncGenerator<SnapshotChange<Data, GroupedSnapshotState>> {
-    const previous = readGroups(this.name, state);
     // Every saved entry by key, so a record that moves between groups or
     // comes back from unknown is compared with its previous fingerprint.
     const saved = new Map<string, SavedEntry>();
     // The group that held each saved key, for the policy's judgment, also of
     // a key that vanished in an earlier part of an open scan.
-    const holders = new Map(previous.holders);
-    for (const [groupKey, { snapshot }] of previous.groups)
-      for (const [key, entry] of Object.entries(snapshot)) {
+    const holders = new Map<string, string>();
+    for (const [key, { saved: entry, holder }] of snapshot.unknown) {
+      saved.set(key, entry);
+      if (holder !== undefined) holders.set(key, holder);
+    }
+    for (const [groupKey, { snapshot: records }] of snapshot.groups)
+      for (const [key, entry] of Object.entries(records)) {
         saved.set(key, entry);
         holders.set(key, groupKey);
       }
-    for (const [key, entry] of previous.unknown) saved.set(key, entry);
     const seen = new Set<string>();
     const current = new Map<string, SavedGroup>();
     // The groups this call failed to read: listed, and kept as the groups an
@@ -198,7 +222,7 @@ export class SnapshotDifferential<Data extends Record<string, unknown>> {
         failed.add(group.key);
         continue;
       }
-      const before = previous.groups.get(group.key);
+      const before = snapshot.groups.get(group.key);
       if (
         'kept' in group ||
         (group.fingerprint !== null &&
@@ -213,11 +237,11 @@ export class SnapshotDifferential<Data extends Record<string, unknown>> {
         current.set(group.key, before);
         continue;
       }
-      const snapshot = new Map<string, SavedEntry>();
+      const records = new Map<string, SavedEntry>();
       for await (const record of group.records()) {
         const key = this.#claim(seen, record);
         const fingerprint = this.#fingerprint(record);
-        snapshot.set(key, this.#entry(record, fingerprint));
+        records.set(key, this.#entry(record, fingerprint));
         const before = saved.get(key);
         if (before === undefined) yield { type: 'insert', record };
         else if (fingerprintIn(before) !== fingerprint)
@@ -229,34 +253,47 @@ export class SnapshotDifferential<Data extends Record<string, unknown>> {
       }
       current.set(group.key, {
         fingerprint: group.fingerprint,
-        snapshot: sorted(snapshot),
+        snapshot: sorted(records),
       });
     }
-    const listedSoFar = new Set([
-      ...previous.listed,
-      ...current.keys(),
-      ...failed,
-    ]);
+    const listed = new Set([...current.keys(), ...failed]);
     // A group this call did not read keeps what the scan saw of it while the
     // scan goes on, when an earlier part listed it, or when this call failed
     // to read it; a record that moved into a group this call read leaves it.
-    for (const [key, before] of previous.groups) {
+    for (const [key, before] of snapshot.groups) {
       if (
         current.has(key) ||
-        !(continues || previous.listed.has(key) || failed.has(key))
+        !(continues || snapshot.listed.has(key) || failed.has(key))
       )
         continue;
-      const snapshot = Object.entries(before.snapshot).filter(
-        ([recordKey]) => !seen.has(recordKey),
+      const all = Object.entries(before.snapshot);
+      const records = all.filter(([recordKey]) => !seen.has(recordKey));
+      for (const [recordKey] of records) seen.add(recordKey);
+      // A group that no record left keeps its object, so the changes do not
+      // put it.
+      current.set(
+        key,
+        records.length === all.length
+          ? before
+          : {
+              fingerprint: before.fingerprint,
+              snapshot: Object.fromEntries(records),
+            },
       );
-      for (const [recordKey] of snapshot) seen.add(recordKey);
-      current.set(key, {
-        fingerprint: before.fingerprint,
-        snapshot: Object.fromEntries(snapshot),
-      });
     }
-    const unknown = new Map<string, SavedEntry>();
-    const waiting = new Map<string, string>();
+    const unknown = new Map<string, UnknownEntry>();
+    // An unchanged entry keeps its object, so the changes do not put it.
+    const keep = (key: string, entry: SavedEntry, holder?: string) => {
+      const before = snapshot.unknown.get(key);
+      unknown.set(
+        key,
+        before?.saved === entry && before.holder === holder
+          ? before
+          : holder === undefined
+            ? { saved: entry }
+            : { saved: entry, holder },
+      );
+    };
     if (continues) {
       // A key no group holds any more, such as one that vanished from a
       // group this part read again, waits for the last part's judgment.
@@ -264,36 +301,50 @@ export class SnapshotDifferential<Data extends Record<string, unknown>> {
         [...current.values()].flatMap(({ snapshot }) => Object.keys(snapshot)),
       );
       for (const [key, entry] of saved)
-        if (!seen.has(key) && !grouped.has(key)) {
-          unknown.set(key, entry);
-          const holder = holders.get(key);
-          if (holder !== undefined) waiting.set(key, holder);
-        }
+        if (!seen.has(key) && !grouped.has(key))
+          keep(key, entry, holders.get(key));
     } else {
-      yield* this.#judge(saved, seen, unknown, (key) => {
+      yield* this.#judge(saved, seen, keep, (key) => {
         const holder = holders.get(key);
         return holder === undefined
           ? undefined
-          : { key: holder, listed: listedSoFar.has(holder) };
+          : {
+              key: holder,
+              listed: snapshot.listed.has(holder) || listed.has(holder),
+            };
       });
     }
+    const listedSoFar = continues
+      ? snapshot.listed.union(listed)
+      : new Set<string>();
     yield {
       type: 'state',
       state: {
-        groups: sorted(current),
-        ...(unknown.size === 0 ? {} : { unknown: sorted(unknown) }),
-        ...(continues ? { listed: [...listedSoFar].sort() } : {}),
-        ...(waiting.size === 0 ? {} : { holders: sorted(waiting) }),
+        snapshot: { groups: current, unknown, listed: listedSoFar },
+        changes: {
+          groups: changesOf(snapshot.groups, current),
+          unknown: changesOf(snapshot.unknown, unknown),
+          listed: {
+            put: new Map(
+              [...listedSoFar.difference(snapshot.listed)].map((key) => [
+                key,
+                true,
+              ]),
+            ),
+            remove: snapshot.listed.difference(listedSoFar),
+          },
+        },
       },
     };
   }
 
   // Asks the policy about every saved key the scan did not list. A deleted
-  // one yields a delete, an unknown one stays in kept, an expired one leaves.
+  // one yields a delete, an unknown one is given to keep, an expired one
+  // leaves.
   *#judge(
     saved: ReadonlyMap<string, SavedEntry>,
     seen: ReadonlySet<string>,
-    kept: Map<string, SavedEntry>,
+    keep: (key: string, entry: SavedEntry) => void,
     groupOf: (key: string) => VanishedRecord['group'] = () => undefined,
   ): Generator<SnapshotChange<Data, never>> {
     for (const [key, entry] of saved) {
@@ -306,7 +357,7 @@ export class SnapshotDifferential<Data extends Record<string, unknown>> {
       };
       const verdict = this.policy.vanished(record);
       if (verdict === 'deleted') yield { type: 'delete', key: record.key };
-      else if (verdict === 'unknown') kept.set(key, entry);
+      else if (verdict === 'unknown') keep(key, entry);
     }
   }
 
@@ -356,6 +407,20 @@ export class SnapshotDifferential<Data extends Record<string, unknown>> {
       .map(([field, value]) => `${field} ${valueText(value)}`)
       .join(', ');
   }
+}
+
+// The entries of after that are not the same object in before, and the keys
+// of before that after does not have.
+function changesOf<Value>(
+  before: ReadonlyMap<string, Value>,
+  after: ReadonlyMap<string, Value>,
+): KeyedChanges<Value> {
+  return {
+    put: new Map(
+      [...after].filter(([key, value]) => before.get(key) !== value),
+    ),
+    remove: new Set([...before.keys()].filter((key) => !after.has(key))),
+  };
 }
 
 function valueText(value: KeyValue): string {

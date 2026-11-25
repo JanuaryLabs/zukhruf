@@ -1,5 +1,7 @@
 # A vanished key names the group that held it
 
+Superseded in part on 2026-11-25 (#4468) for where the group of a waiting key is saved. It is the `holder` of the key's entry in `unknown`, not a `holders` field ([ADR 0011](./0011-a-grouped-diff-gives-what-changed-in-each-keyed-collection.md)).
+
 A grouped scan diffs the records of each group, such as the records that one web page gave. The deletion policy judged each vanished key by its key and its `expiresBy` only. So it could not tell a key that vanished from a group the scan read again from a key of a group that the scan did not list.
 
 The web source of elt needs that difference (elt backlog item 3235). Its groups are pages. A page that the crawl reads again with fewer records, or a page that answers 404 or 410, no longer has the records it gave, so their rows must go: Apache Nutch's indexer deletes gone documents (`-deleteGone`), StormCrawler sends them to its deletion stream, and dlt's merge deletes the rows of a `merge_key` that a load gives again without them. A page that only left the listings that named it can still exist, so its records must not be deleted (source-web-pages ADR 0005). A predicate on the key, `Coverage`, cannot tell the two cases when the stream's key is not the page, such as a product's id that a page of a shop's product list gives.

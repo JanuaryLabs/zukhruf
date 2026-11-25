@@ -24,9 +24,33 @@ _Avoid_: Hash (a hash can be of anything), version
 The keys that the last committed scan saw, each with the fingerprint of its record. The keys that the policy judged unknown stay in it too. The caller saves the snapshot as the state of the diff.
 _Avoid_: Cache (a cache is one kind of upstream), checkpoint (an ELT pipeline's word for all saved state)
 
+**Grouped snapshot**:
+The snapshot of a grouped scan, as three keyed collections: `groups`, each group's key with its fingerprint and the snapshot of its records; `unknown`, each key that belongs to no group; and `listed`, the listed groups. `SnapshotDifferential.noGroups` is the grouped snapshot before the first scan.
+_Avoid_: Grouped state (the state change holds the grouped snapshot and its snapshot changes)
+
+**Saved entry**:
+One entry of a collection of a grouped snapshot under its key, as a store saves it: a group, an unknown key, or a listed group, which is saved as `true`. `savedGroups` reads the saved entries of each collection back into a grouped snapshot.
+_Avoid_: Row (a row is in a destination), record (a record is an item of a scan)
+
+**Holder**:
+The group that held a key that waits in `unknown` for the last part's judgment. The unknown key keeps it, and the policy is told it.
+_Avoid_: Owner, parent
+
 **Change**:
 What a diff yields: an insert, an update, a delete of a key, and the new snapshot last.
 _Avoid_: Event, message (an ELT pipeline's word for what a source yields)
+
+**Snapshot changes**:
+What one grouped diff changed in each collection of the grouped snapshot since the snapshot it got: for each collection, the saved entries to put under their keys, and the keys to remove. A store that applies the snapshot changes of each diff in order has the saved entries of the new grouped snapshot.
+_Avoid_: Delta, patch, diff (the diff is the comparison of a scan with the snapshot)
+
+**Put**:
+A saved entry of the snapshot changes that the store saves under its key, in place of the entry it has.
+_Avoid_: Upsert (the word of a record in a destination), write
+
+**Remove**:
+A key of the snapshot changes whose saved entry the store deletes. A remove is of a saved entry, not of a record.
+_Avoid_: Delete (a delete is the change of a record)
 
 **Insert**:
 The change for a record whose key the snapshot does not have.
@@ -42,7 +66,7 @@ _Avoid_: Old fingerprint, previous hash
 
 **Delete**:
 The change for a vanished key that the policy judged deleted. It gives the key as its primary key fields, and no record.
-_Avoid_: Remove, tombstone
+_Avoid_: Remove (a remove is of a saved entry), tombstone
 
 **Bytes**:
 A `Uint8Array` value, such as a `Buffer` or a `BLOB` of SQLite. A record and a key can hold bytes.
@@ -99,6 +123,10 @@ _Avoid_: Page (the upstream's unit), batch, pass (an ELT pipeline uses pass for 
 **Listed key**:
 A key that an earlier part of the open scan listed. At the last part, a listed key is not a vanished key.
 _Avoid_: Seen key, marked key
+
+**Listed group**:
+A group that an earlier part of the open grouped scan listed. Each part adds the groups that it lists, and the last part removes every listed group. At the last part, a listed group keeps its records, and the policy is told that the scan listed it.
+_Avoid_: Seen group, marked group
 
 **Group**:
 The records that one input produced, such as one file, with a fingerprint of the input. A group with the same fingerprint as before keeps its records, and the diff does not read them.

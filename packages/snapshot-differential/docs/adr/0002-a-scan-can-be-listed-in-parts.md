@@ -1,5 +1,7 @@
 # A scan can be listed in parts
 
+Superseded in part on 2026-11-25 (#4468) for the size of what a part of a grouped scan saves. A part of `diffGroups` gives only the saved entries that it changed, and adds only its own groups to `listed`, so a store writes about what the part read, not the whole snapshot ([ADR 0011](./0011-a-grouped-diff-gives-what-changed-in-each-keyed-collection.md)).
+
 The Instagram source reads the posts of a profile through Instagram's web API. One page holds at most 33 posts, and @propertyplus.jo has 3,479 posts, so one complete scan is 106 pages. Instagram answers 429, "Please wait a few minutes", to a client that reads too much, so a source reads 10 pages in each run. A complete scan therefore takes 11 runs.
 
 A diff judged the vanished keys of each call. A call that listed 10 pages made every other post a vanished key, and `ClosedWorld` deleted it. A source could not keep the rows of the posts that the scan had not reached yet.

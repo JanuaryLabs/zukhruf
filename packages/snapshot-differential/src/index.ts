@@ -15,4 +15,10 @@ export {
   type SnapshotDifferentialOptions,
   type SnapshotGroup,
 } from './snapshot-differential.ts';
-export type { GroupedSnapshotState, SnapshotState } from './snapshot-state.ts';
+export type {
+  GroupedSnapshot,
+  GroupedSnapshotChanges,
+  GroupedSnapshotState,
+  KeyedChanges,
+  SnapshotState,
+} from './snapshot-state.ts';

@@ -188,11 +188,13 @@ for await (const change of differential.diffGroups(
     fingerprint: `${file.size}:${file.mtimeMs}`,
     records: () => parse(file.path),
   })),
-  saved,
+  snapshot,
 )) {
   // …
 }
 ```
+
+- Give `SnapshotDifferential.noGroups` as the snapshot for the first scan. Each read of `noGroups` gives a new empty snapshot.
 
 - A group with the same fingerprint as in the snapshot keeps its records. The diff does not call its `records`.
 - A group with a `null` fingerprint is always read.
@@ -200,6 +202,32 @@ for await (const change of differential.diffGroups(
 - A failed group, `{ key, failed: true }`, keeps its saved fingerprint and records too. Give it when you could not read the input, such as a page that answered 503. Its keys do not vanish, so a scan that reads the group again deletes only what it no longer gives. A record that another group of the scan gives moved, and leaves the failed group with no change. A failed group that the snapshot does not have keeps nothing and is no error ([ADR 0010](./docs/adr/0010-a-scan-keeps-a-group-that-it-failed-to-read.md)).
 - A record that moves to a different group, with the same fingerprint, gets no change. With a different fingerprint, it gets an update.
 - The policy judges the vanished keys of the complete scan, also the keys of groups that are not in the scan.
+
+## Save only the entries of a grouped snapshot that changed
+
+A grouped snapshot is three keyed collections: `groups` (each group key and what the group saved), `unknown` (each key that belongs to no group) and `listed` (the groups that the open scan in parts listed). The state change of `diffGroups` gives the new snapshot and what changed in each collection since the snapshot that the diff got:
+
+```ts
+let snapshot = SnapshotDifferential.noGroups;
+for await (const change of differential.diffGroups(pages, snapshot)) {
+  if (change.type !== 'state') continue; // the inserts, updates and deletes come first
+  const { changes } = change.state;
+  for (const name of ['groups', 'unknown', 'listed'] as const) {
+    for (const key of changes[name].remove) await store.remove(name, key);
+    for (const [key, value] of changes[name].put)
+      await store.put(name, key, value);
+  }
+  snapshot = change.state.snapshot;
+}
+```
+
+- Each collection has a `put` map, the entries to save under their keys, and a `remove` set, the keys to delete.
+- A group that the diff did not change is not in `put`: a group with the same fingerprint, a kept group, a failed group, and a group that an open scan has not reached. A group that a record moved out of, also a failed group, is in `put` without that record. The records of each group are sorted by key.
+- A part of a scan in parts puts the groups that it read and lists only its own groups. The last part removes every listed group, and every group that the scan did not list and did not fail to read. Thus a part writes about what it read, not the whole snapshot ([ADR 0011](./docs/adr/0011-a-grouped-diff-gives-what-changed-in-each-keyed-collection.md)).
+- A listed group is saved as `true`.
+- To diff again in the same process, give `change.state.snapshot` to the next diff. To diff after a restart, read the saved entries of each collection into a `Map`, and give the three maps to `savedGroups`. The next diff is the same in both cases. `savedGroups` keeps the snapshot object of each group as you give it, and does not copy it.
+- Apply the changes of each state in order, and only after you applied the inserts, updates and deletes before them.
+- Do not change a snapshot or the entries of its changes. Two snapshots share each group that the diff did not change, and `diffGroups` never changes the snapshot that it gets ([ADR 0011](./docs/adr/0011-a-grouped-diff-gives-what-changed-in-each-keyed-collection.md)).
 
 ## A lookback window keeps only what the next scan reads again
 
@@ -228,7 +256,7 @@ for await (const page of profile.pages(after)) {
 - A part yields an insert or an update for each new or changed record that it lists. It does not wait for the last part.
 - A part that continues the scan judges no vanished key. Its snapshot keeps every key, and the keys that the open scan listed so far.
 - The last part judges each saved key that no part of the scan listed.
-- In `diffGroups`, a record that leaves a group that a part reads again waits in the snapshot for the last part's judgment.
+- In `diffGroups`, a record that leaves a group that a part reads again waits in `unknown` for the last part's judgment, with the group that held it.
 - Two parts can list the same key. One part cannot list a key twice.
 - The parts can be in different runs. Save the snapshot after each part, and give it to the next part.
 - The next scan starts with no listed keys.
@@ -288,22 +316,23 @@ Each failure is a `TypeError`. A diff that fails yields no snapshot. The tests i
 | `TypeError` | `diffGroups` gets a kept group that the snapshot does not have: `Snapshot <name> kept group <key>, which its snapshot does not have` ([ADR 0004](./docs/adr/0004-a-scan-can-keep-a-group-without-reading-it.md)).                                                                                                                                                                          |
 | `TypeError` | A record has a value that JSON cannot hold without a change and that is not bytes or a `bigint`, such as `undefined`, a `Date`, a `Map`, an instance of a class or a `Uint16Array`: `Snapshot <name> records must be losslessly JSON serializable, or bytes, to diff snapshots`. An object with a `null` prototype, such as a row from `node:sqlite`, is a plain object and does not fail. |
 | `TypeError` | A record has no timestamp in its `expiresBy` field, in the format of `Date#toISOString`: `Snapshot <name> records must carry <field> as a timestamp to expire`.                                                                                                                                                                                                                            |
-| `TypeError` | The saved state is not a snapshot that this package wrote: `Snapshot <name> state is not a saved snapshot`.                                                                                                                                                                                                                                                                                |
+| `TypeError` | The saved state that `diff` gets, or a saved entry that `savedGroups` gets, is not one that this package wrote: `Snapshot <name> state is not a saved snapshot`.                                                                                                                                                                                                                           |
 | `TypeError` | A vanished key of the saved snapshot has fewer values than `primaryKey` has fields, such as a key saved before a field was added to `primaryKey`: `Snapshot key <key> does not match <name>'s primary key`.                                                                                                                                                                                |
 | `TypeError` | `Retention` gets a horizon that is not a timestamp: `Retention horizon <horizon> is not a timestamp`.                                                                                                                                                                                                                                                                                      |
 
 ## The same concepts in other systems
 
-| This package             | Other systems                                                                                                                    |
-| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
-| Snapshot differential    | Labio and Garcia-Molina, VLDB 1996; change data capture by diff compare in Kimball and Caserta, _The Data Warehouse ETL Toolkit_ |
-| `DeletionPolicy`         | The Strategy pattern of Gamma et al., _Design Patterns_, which also names it Policy                                              |
-| `deleted`, `ClosedWorld` | The closed-world assumption of Reiter, "On Closed World Data Bases" (1978)                                                       |
-| `unknown`, `Coverage`    | The open-world assumption                                                                                                        |
-| `expired`, `Retention`   | Cassandra's TTL; Kafka's `retention.ms`                                                                                          |
-| `rereads`                | The lookback of dbt incremental models; the re-sync window of Fivetran                                                           |
-| `continues`              | The incremental marking of a mark-and-sweep garbage collector: each part marks, and the last part sweeps                         |
-| Groups and fingerprints  | The up-to-date checks of Make and Bazel                                                                                          |
+| This package              | Other systems                                                                                                                                                                                                                    |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Snapshot differential     | Labio and Garcia-Molina, VLDB 1996; change data capture by diff compare in Kimball and Caserta, _The Data Warehouse ETL Toolkit_                                                                                                 |
+| `DeletionPolicy`          | The Strategy pattern of Gamma et al., _Design Patterns_, which also names it Policy                                                                                                                                              |
+| `deleted`, `ClosedWorld`  | The closed-world assumption of Reiter, "On Closed World Data Bases" (1978)                                                                                                                                                       |
+| `unknown`, `Coverage`     | The open-world assumption                                                                                                                                                                                                        |
+| `expired`, `Retention`    | Cassandra's TTL; Kafka's `retention.ms`                                                                                                                                                                                          |
+| `rereads`                 | The lookback of dbt incremental models; the re-sync window of Fivetran                                                                                                                                                           |
+| `continues`               | The incremental marking of a mark-and-sweep garbage collector: each part marks, and the last part sweeps                                                                                                                         |
+| Groups and fingerprints   | The up-to-date checks of Make and Bazel                                                                                                                                                                                          |
+| `changes` of `diffGroups` | The offsets of Kafka Connect's `OffsetStorageWriter`, which flushes only the partitions written since the last flush; the incremental checkpoint of Flink's `RocksIncrementalSnapshotStrategy`, which uploads only new SST files |
 
 Airbyte has no equivalent. Outside change data capture, it deletes only when it replaces a complete stream, and its state decides what to read again, never what to delete.
 
@@ -379,13 +408,30 @@ type SnapshotState = {
   readonly listed?: readonly string[]; // while a scan in parts is open
 };
 
+type GroupedSnapshot = {
+  readonly groups: ReadonlyMap<string, SavedGroup>;
+  readonly unknown: ReadonlyMap<string, UnknownEntry>; // the holder: while a scan in parts is open
+  readonly listed: ReadonlySet<string>; // while a scan in parts is open
+};
+
+type KeyedChanges<Value> = {
+  readonly put: ReadonlyMap<string, Value>;
+  readonly remove: ReadonlySet<string>;
+};
+
+type GroupedSnapshotChanges = {
+  readonly groups: KeyedChanges<SavedGroup>;
+  readonly unknown: KeyedChanges<UnknownEntry>;
+  readonly listed: KeyedChanges<true>;
+};
+
 type GroupedSnapshotState = {
-  readonly groups: Readonly<Record<string, SavedGroup>>;
-  readonly unknown?: Readonly<Record<string, SavedEntry>>;
-  readonly listed?: readonly string[]; // while a scan in parts is open
+  readonly snapshot: GroupedSnapshot; // for the next diff
+  readonly changes: GroupedSnapshotChanges; // since the snapshot the diff got
 };
 
 class SnapshotDifferential<Data extends Record<string, unknown>> {
+  static get noGroups(): GroupedSnapshot; // a new empty snapshot, for the first grouped scan
   constructor(options: SnapshotDifferentialOptions<Data>);
   readonly name: string;
   readonly primaryKey: readonly string[];
@@ -403,13 +449,18 @@ class SnapshotDifferential<Data extends Record<string, unknown>> {
     groups:
       | AsyncIterable<SnapshotGroup<Data> | KeptGroup | FailedGroup>
       | Iterable<SnapshotGroup<Data> | KeptGroup | FailedGroup>,
-    state: unknown, // null for the first scan
+    snapshot: GroupedSnapshot, // SnapshotDifferential.noGroups for the first scan
     options?: { readonly continues?: boolean }, // default: false
   ): AsyncGenerator<SnapshotChange<Data, GroupedSnapshotState>>;
+  savedGroups(saved: {
+    readonly groups: ReadonlyMap<string, unknown>;
+    readonly unknown: ReadonlyMap<string, unknown>;
+    readonly listed: ReadonlyMap<string, unknown>;
+  }): GroupedSnapshot; // TypeError: an entry that diffGroups did not write
 }
 ```
 
-`SavedEntry` and `SavedGroup` are not exported. Save the state as the diff gives it, and give it back unchanged.
+`SavedEntry`, `SavedGroup` and `UnknownEntry` are not exported. Save the state of `diff` and each entry of the changes of `diffGroups` as the diff gives them, and give them back unchanged.
 
 ## Documentation
 
@@ -429,6 +480,7 @@ class SnapshotDifferential<Data extends Record<string, unknown>> {
 - [ADR 0008: The caller can give the fingerprint](./docs/adr/0008-the-caller-can-give-the-fingerprint.md)
 - [ADR 0009: A vanished key names the group that held it](./docs/adr/0009-a-vanished-key-names-the-group-that-held-it.md)
 - [ADR 0010: A scan keeps a group that it failed to read](./docs/adr/0010-a-scan-keeps-a-group-that-it-failed-to-read.md)
+- [ADR 0011: A grouped diff gives what changed in each keyed collection](./docs/adr/0011-a-grouped-diff-gives-what-changed-in-each-keyed-collection.md)
 
 ## Development
 
@@ -442,7 +494,7 @@ npx nx run snapshot-differential:typecheck   # formats, lints, then type checks
 ```
 src/
   snapshot-differential.ts   SnapshotDifferential: diff, diffGroups, and the judgment of vanished keys
-  snapshot-state.ts          the saved snapshot and its guards
+  snapshot-state.ts          the saved snapshots, the changes of a grouped snapshot, and their guards
   deletion-policy.ts         DeletionPolicy, VanishedRecord, Verdict
   closed-world.ts            ClosedWorld
   retention.ts               Retention

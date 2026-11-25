@@ -20,17 +20,45 @@ export type SavedGroup = {
   readonly snapshot: Readonly<Record<string, SavedEntry>>;
 };
 
-// Each group's input fingerprint and the snapshot of the records it produced,
-// and the keys that belong to no group any more: those judged unknown and,
-// while a scan in parts is open, those waiting for its last part's
-// judgment. listed holds the groups the open scan's earlier parts listed, and
-// holders the group that held each key waiting for that judgment, which the
-// deletion policy is told.
+// A key that belongs to no group: one the policy judged unknown, or, while a
+// scan in parts is open, one that waits for its last part's judgment. holder
+// is the group that held a waiting key, which the deletion policy is told.
+export type UnknownEntry = {
+  readonly saved: SavedEntry;
+  readonly holder?: string;
+};
+
+// What the last committed grouped scan saw, as three keyed collections: each
+// group's input fingerprint and the snapshot of the records it produced, the
+// keys that belong to no group, and, while a scan in parts is open, the
+// groups its earlier parts listed.
+export type GroupedSnapshot = {
+  readonly groups: ReadonlyMap<string, SavedGroup>;
+  readonly unknown: ReadonlyMap<string, UnknownEntry>;
+  readonly listed: ReadonlySet<string>;
+};
+
+// What one diff changed in one keyed collection: the entries to save under
+// their keys, and the keys to delete.
+export type KeyedChanges<Value> = {
+  readonly put: ReadonlyMap<string, Value>;
+  readonly remove: ReadonlySet<string>;
+};
+
+// What one diff changed in each collection of a grouped snapshot. A listed
+// group is saved as true under its key.
+export type GroupedSnapshotChanges = {
+  readonly groups: KeyedChanges<SavedGroup>;
+  readonly unknown: KeyedChanges<UnknownEntry>;
+  readonly listed: KeyedChanges<true>;
+};
+
+// What the state change of a grouped diff gives: the new snapshot, for the
+// next diff in memory, and what changed since the snapshot the diff got, for
+// a store that saves each entry under its key.
 export type GroupedSnapshotState = {
-  readonly groups: Readonly<Record<string, SavedGroup>>;
-  readonly unknown?: Readonly<Record<string, SavedEntry>>;
-  readonly listed?: readonly string[];
-  readonly holders?: Readonly<Record<string, string>>;
+  readonly snapshot: GroupedSnapshot;
+  readonly changes: GroupedSnapshotChanges;
 };
 
 // The previous snapshot and the keys the open scan's earlier parts listed,
@@ -47,40 +75,22 @@ export function readSnapshot(
   };
 }
 
-function holdersOf(name: string, holders: unknown): Map<string, string> {
-  if (holders === undefined) return new Map();
-  if (!isPlainObject(holders)) throw invalid(name);
-  const map = new Map<string, string>();
-  for (const [key, group] of Object.entries(holders)) {
-    if (typeof group !== 'string') throw invalid(name);
-    map.set(key, group);
-  }
-  return map;
-}
-
-// The previous groups, unknown keys and the groups the open scan's earlier
-// parts listed, as diffGroups wrote them. Each group keeps the snapshot
-// object the state holds, so a state as large as a mailbox is not copied.
+// A grouped snapshot from the entries a store saved of each collection, as
+// the changes of diffGroups gave them. Each group keeps the snapshot object
+// the store gives, so a snapshot as large as a mailbox is not copied. A
+// holder names a group of the snapshot, since an open scan keeps every group
+// until its last part. A listed group need not be in groups: a failed group
+// that the snapshot does not have is listed and keeps nothing.
 export function readGroups(
   name: string,
-  state: unknown,
-): {
-  groups: Map<string, SavedGroup>;
-  unknown: Map<string, SavedEntry>;
-  listed: Set<string>;
-  holders: Map<string, string>;
-} {
-  if (state === null)
-    return {
-      groups: new Map(),
-      unknown: new Map(),
-      listed: new Set(),
-      holders: new Map(),
-    };
-  if (!isPlainObject(state) || !isPlainObject(state.groups))
-    throw invalid(name);
+  saved: {
+    readonly groups: ReadonlyMap<string, unknown>;
+    readonly unknown: ReadonlyMap<string, unknown>;
+    readonly listed: ReadonlyMap<string, unknown>;
+  },
+): GroupedSnapshot {
   const groups = new Map<string, SavedGroup>();
-  for (const [key, group] of Object.entries(state.groups)) {
+  for (const [key, group] of saved.groups) {
     if (
       !isPlainObject(group) ||
       (group.fingerprint !== null && typeof group.fingerprint !== 'string') ||
@@ -92,13 +102,28 @@ export function readGroups(
       snapshot: group.snapshot,
     });
   }
-  return {
-    groups,
-    unknown:
-      state.unknown === undefined ? new Map() : entries(name, state.unknown),
-    listed: listedKeys(name, state.listed),
-    holders: holdersOf(name, state.holders),
-  };
+  const unknown = new Map<string, UnknownEntry>();
+  for (const [key, entry] of saved.unknown) {
+    if (
+      !isPlainObject(entry) ||
+      !isSavedEntry(entry.saved) ||
+      (entry.holder !== undefined &&
+        (typeof entry.holder !== 'string' || !groups.has(entry.holder)))
+    )
+      throw invalid(name);
+    unknown.set(
+      key,
+      entry.holder === undefined
+        ? { saved: entry.saved }
+        : { saved: entry.saved, holder: entry.holder },
+    );
+  }
+  const listed = new Set<string>();
+  for (const [key, value] of saved.listed) {
+    if (value !== true) throw invalid(name);
+    listed.add(key);
+  }
+  return { groups, unknown, listed };
 }
 
 // Sorted by key, so equal scans save byte-identical state.
