@@ -1,3 +1,4 @@
+import { JxaRequest } from '../native/jxa-request.ts';
 import { nodeFfi } from '../native/node-ffi.ts';
 import { PromptedService } from '../prompted-service.ts';
 
@@ -9,6 +10,13 @@ export class InputMonitoring extends PromptedService<InputMonitoringStatus> {
   readonly name = 'kTCCServiceListenEvent';
   readonly pane = 'Input Monitoring';
   protected readonly anchor = 'Privacy_ListenEvent';
+
+  protected readonly requestScript = JxaRequest.direct(
+    ['IOKit'],
+    "'IOHIDRequestAccess', ['bool', ['unsigned int']]",
+    // kIOHIDRequestTypeListenEvent (IOKit/hidsystem/IOHIDLib.h:213)
+    '$.IOHIDRequestAccess(1)',
+  ).source;
 
   status(): InputMonitoringStatus {
     using iokit = new (nodeFfi().DynamicLibrary)(

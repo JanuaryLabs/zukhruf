@@ -1,3 +1,4 @@
+import { JxaRequest } from '../native/jxa-request.ts';
 import { nodeFfi } from '../native/node-ffi.ts';
 import { PromptedService } from '../prompted-service.ts';
 
@@ -29,6 +30,16 @@ export class Automation extends PromptedService<AutomationStatus> {
   constructor(target: string) {
     super();
     this.target = target;
+  }
+
+  // AEDeterminePermissionToAutomateTarget with askUserIfNeeded, which waits
+  // for the answer (AE/AppleEvents.h:363).
+  protected get requestScript(): string {
+    return JxaRequest.direct(
+      ['CoreServices'],
+      "'AEDeterminePermissionToAutomateTarget', ['int', ['void *', 'unsigned int', 'unsigned int', 'bool']]",
+      `$.AEDeterminePermissionToAutomateTarget($.NSAppleEventDescriptor.descriptorWithBundleIdentifier(${JSON.stringify(this.target)}).aeDesc, ${coreSuite}, ${openDocuments}, true)`,
+    ).source;
   }
 
   status(): AutomationStatus {

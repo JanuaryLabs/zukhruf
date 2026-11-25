@@ -1,3 +1,4 @@
+import { JxaRequest } from '../native/jxa-request.ts';
 import { ObjectiveCClass } from '../native/objective-c-class.ts';
 import { PromptedService } from '../prompted-service.ts';
 
@@ -10,6 +11,12 @@ export class SpeechRecognition extends PromptedService<SpeechStatus> {
   readonly name = 'kTCCServiceSpeechRecognition';
   readonly pane = 'Speech Recognition';
   protected readonly anchor = 'Privacy_SpeechRecognition';
+
+  protected readonly requestScript = JxaRequest.decided(
+    ['Speech'],
+    "C('SFSpeechRecognizer').requestAuthorization(() => {});",
+    "Number(C('SFSpeechRecognizer').authorizationStatus) === 0",
+  ).source;
 
   status(): SpeechStatus {
     return this.named(

@@ -22,4 +22,4 @@ The package exports classes and no instance. It has no slot that a host fills. A
 
 ## Confirmation
 
-- `src/index.ts` exports classes only; a test imports the package twice in one process and finds no shared state.
+- `src/index.ts` exports classes only, and no module of `src` holds a value that a call changes: each native library is opened and closed in the call that needs it (`using`).

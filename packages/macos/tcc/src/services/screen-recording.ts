@@ -1,3 +1,4 @@
+import { JxaRequest } from '../native/jxa-request.ts';
 import { nodeFfi } from '../native/node-ffi.ts';
 import { PromptedService } from '../prompted-service.ts';
 
@@ -9,6 +10,12 @@ export class ScreenRecording extends PromptedService<ScreenRecordingStatus> {
   readonly name = 'kTCCServiceScreenCapture';
   readonly pane = 'Screen Recording';
   protected readonly anchor = 'Privacy_ScreenCapture';
+
+  protected readonly requestScript = JxaRequest.direct(
+    ['CoreGraphics'],
+    "'CGRequestScreenCaptureAccess', ['bool', []]",
+    '$.CGRequestScreenCaptureAccess()',
+  ).source;
 
   status(): ScreenRecordingStatus {
     using graphics = new (nodeFfi().DynamicLibrary)(
