@@ -5,7 +5,7 @@ import type { ScoredPassage } from './scored-passage.ts';
 /**
  * The port of the package: any source can implement it (ADR 0002). It gives
  * scored passages, best first. A retriever that needs a field of its own
- * declares it in its query type, `QueryBundle & { readonly entrez: string }`,
+ * declares it in its query type, `QueryBundle & { readonly jql: string }`,
  * and then takes no string (ADR 0013).
  */
 export interface Retriever<in Q extends QueryType = QueryType> {

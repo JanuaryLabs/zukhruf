@@ -33,7 +33,7 @@ What a caller searches with: a string, or a query bundle. A string is a query bu
 _Avoid_: Question, prompt, search term
 
 **Query bundle**:
-One search request with a text for each kind of search that needs other words: `{ query, keywords?, customEmbeddings? }`, after LlamaIndex's `QueryBundle`. A host adapter adds its own fields in its own bundle type, `QueryBundle & { readonly entrez: string }`, and then takes no string.
+One search request with a text for each kind of search that needs other words: `{ query, keywords?, customEmbeddings? }`, after LlamaIndex's `QueryBundle`. A host adapter adds its own fields in its own bundle type, `QueryBundle & { readonly jql: string }`, and then takes no string.
 _Avoid_: Query object, request, search input
 
 **Keywords**:

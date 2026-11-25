@@ -34,13 +34,20 @@ export const needOf = (query: QueryType): string =>
 
 /**
  * The words that a keyword retriever quotes: the words of `keywords`, or of
- * `query` when the bundle has none.
+ * `query` when the bundle has none. A `keywords` of no words is a caller bug,
+ * as an empty list is, so it throws a `RangeError` (ADR 0013).
  */
 export const keywordsOf = (query: QueryType): string[] => {
   const bundle = bundleOf(query);
-  return (bundle.keywords ?? [bundle.query])
+  const words = (bundle.keywords ?? [bundle.query])
     .flatMap((text) => text.split(/\s+/))
     .filter((word) => word !== '');
+  if (bundle.keywords !== undefined && words.length === 0) {
+    throw new RangeError(
+      `The keywords of a query bundle hold no word: got ${JSON.stringify(bundle.keywords)}`,
+    );
+  }
+  return words;
 };
 
 /** The texts that an embedding retriever embeds: `customEmbeddings`, or `[query]`. */

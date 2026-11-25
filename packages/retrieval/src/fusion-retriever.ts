@@ -15,7 +15,7 @@ import type { ScoredPassage } from './scored-passage.ts';
  * need two other fields take `new FusionRetriever<A & B>(…)` (ADR 0013).
  */
 export class FusionRetriever<
-  Q extends QueryType = QueryType,
+  in Q extends QueryType = QueryType,
 > implements Retriever<Q> {
   readonly #retrievers: readonly Retriever<Q>[];
   readonly #fusion: Fusion;

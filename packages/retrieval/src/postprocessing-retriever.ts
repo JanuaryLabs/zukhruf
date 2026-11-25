@@ -13,7 +13,7 @@ import type { ScoredPassage } from './scored-passage.ts';
  * of the call.
  */
 export class PostprocessingRetriever<
-  Q extends QueryType = QueryType,
+  in Q extends QueryType = QueryType,
 > implements Retriever<Q> {
   readonly #retriever: Retriever<Q>;
   readonly #postprocessors: readonly Postprocessor[];

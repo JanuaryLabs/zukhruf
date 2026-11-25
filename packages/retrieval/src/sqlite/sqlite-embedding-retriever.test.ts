@@ -422,6 +422,45 @@ test('the texts of customEmbeddings are embedded in place of query, and two text
   );
 });
 
+test('texts of one query whose vectors have different dimensions fail with DimensionMismatchError, whichever text comes first, in retrieve and in retrieveMany', async () => {
+  // Arrange: a broken model gives 4 dimensions for one text and 2 for another.
+  using database = contract([{ id: 'a', vector: [1, 0, 0, 0] }]);
+  const query = embeddingModel({
+    four: [1, 0, 0, 0],
+    two: [1, 0],
+    other: [0, 1, 0, 0],
+  });
+  const retriever = new SqliteEmbeddingRetriever({
+    store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
+    vectors: 'docs_passage_vectors',
+    model: query,
+  });
+  const mismatch = (expected: number, actual: number) => (error: unknown) => {
+    assert.ok(error instanceof DimensionMismatchError);
+    assert.deepEqual([error.expected, error.actual], [expected, actual]);
+    return true;
+  };
+
+  // Act
+  const longFirst = retriever.retrieve({
+    query: 'q',
+    customEmbeddings: ['four', 'two'],
+  });
+  const shortFirst = retriever.retrieve({
+    query: 'q',
+    customEmbeddings: ['two', 'four'],
+  });
+  const many = retriever.retrieveMany([
+    'other',
+    { query: 'q', customEmbeddings: ['four', 'two'] },
+  ]);
+
+  // Assert
+  await assert.rejects(longFirst, mismatch(4, 2));
+  await assert.rejects(shortFirst, mismatch(2, 4));
+  await assert.rejects(many, mismatch(4, 2));
+});
+
 test('retrieveMany of no queries gives no lists', async () => {
   // Arrange
   using database = contract([{ id: 'x', vector: [1, 0, 0, 0] }]);

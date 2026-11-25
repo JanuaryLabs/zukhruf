@@ -219,6 +219,27 @@ test('a query of no words gives no passages', async () => {
   assert.deepEqual(results, []);
 });
 
+test('keywords of no words reject with a RangeError that names keywords, since a blank keyword is a caller bug and not an empty search', async () => {
+  // Arrange
+  using database = contract([{ id: 'a', text: 'rotate the key' }]);
+  const retriever = new SqliteBM25Retriever({
+    store: new SqlitePassageStore({ database, passages: 'docs_passages' }),
+    index: 'docs_passages_fts',
+  });
+
+  // Act
+  const result = retriever.retrieve({
+    query: 'rotate the key',
+    keywords: ['  '],
+  });
+
+  // Assert
+  await assert.rejects(result, {
+    name: 'RangeError',
+    message: 'The keywords of a query bundle hold no word: got ["  "]',
+  });
+});
+
 test('a keyword search gives 10 passages when the call gives no topK, topK when it gives one, and only the passages its filter selects', async () => {
   // Arrange
   using database = contract(

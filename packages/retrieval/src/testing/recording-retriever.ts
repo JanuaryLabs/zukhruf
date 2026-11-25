@@ -15,10 +15,11 @@ export type EntrezQueryBundle = QueryBundle & { readonly entrez: string };
 /**
  * A host adapter for a live source cannot run in CI. This retriever records
  * each query it gets and gives its passages, in their order, with the scores
- * 1, 1/2, 1/3 and so on. The text of each passage is its id.
+ * 1, 1/2, 1/3 and so on. The text of each passage is its id. It takes its
+ * query type and gives it back in `queries`, so `Q` is `in out`.
  */
 export class RecordingRetriever<
-  Q extends QueryType = QueryType,
+  in out Q extends QueryType = QueryType,
 > implements Retriever<Q> {
   readonly queries: Q[] = [];
   readonly #ids: readonly string[];

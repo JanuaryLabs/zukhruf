@@ -29,7 +29,8 @@ type Engine = {
  * no model call; a query model of another provider or model id fails with
  * ModelMismatchError before the model call; a query vector whose dimensions
  * no stored identity of that model has fails with DimensionMismatchError
- * after it. The engine reads the stored identities and runs the search.
+ * after it, and so do texts of one query whose vectors have different
+ * dimensions. The engine reads the stored identities and runs the search.
  * Each query is embedded as its `customEmbeddings`, or as its `query` when
  * it has none, and several texts search with the mean of their vectors, as
  * LlamaIndex's vector retriever does (ADR 0013).
@@ -122,11 +123,18 @@ export class IdentityCheckedSearch {
 
 /**
  * The mean of vectors of one length, component by component, as LlamaIndex's
- * `mean_agg` takes `np.array(embeddings).mean(axis=0)`.
+ * `mean_agg` takes `np.array(embeddings).mean(axis=0)`, which also refuses
+ * vectors of different lengths. A model that gives them is broken, so the
+ * mean fails with DimensionMismatchError, the first vector's length as
+ * `expected` (ADR 0010).
  */
 function meanVector(vectors: readonly (readonly number[])[]): number[] {
-  const [first] = vectors;
-  return (first ?? []).map((_, index) =>
+  const [first = []] = vectors;
+  const other = vectors.find(({ length }) => length !== first.length);
+  if (other !== undefined) {
+    throw new DimensionMismatchError(first.length, other.length);
+  }
+  return first.map((_, index) =>
     mean(vectors.map((vector) => vector[index] ?? 0)),
   );
 }
