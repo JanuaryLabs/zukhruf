@@ -1,5 +1,9 @@
 import type { Metadata, StoredPassage } from '../passage.ts';
-import { type QueryType, keywordsOf } from '../query-bundle.ts';
+import {
+  type KeywordQuery,
+  type QueryType,
+  keywordQueryOf,
+} from '../query-bundle.ts';
 import type { RetrievalResult } from '../retrieval-result.ts';
 import type { RetrieveOptions } from '../retrieve-options.ts';
 import type { Retriever } from '../retriever.ts';
@@ -58,7 +62,7 @@ export class SqlServerKeywordRetriever<
     options: RetrieveOptions<StoredPassage<M>> = {},
   ): Promise<RetrievalResult<StoredPassage<M>>> {
     options.signal?.throwIfAborted();
-    const words = phrases(keywordsOf(query));
+    const words = phrases(wordsOf(keywordQueryOf(query)));
     if (words.length === 0) return { passages: [], failures: new Map() };
     const parameters: Record<string, unknown> = {};
     // A condition longer than 4,000 characters reaches the caller as SQL
@@ -101,3 +105,12 @@ function phrases(words: readonly string[]): string[] {
     .filter((word) => /[\p{L}\p{N}]/u.test(word))
     .map((word) => `"${word}"`);
 }
+
+/**
+ * The white-space words of each keyword, or of the text: today's split, the
+ * same on every engine until each one tokenizes its own way (#5669).
+ */
+const wordsOf = (query: KeywordQuery): string[] =>
+  (query.kind === 'keywords' ? query.keywords : [query.text])
+    .flatMap((text) => text.split(/\s+/))
+    .filter((word) => word !== '');

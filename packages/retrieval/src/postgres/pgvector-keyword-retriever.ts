@@ -1,5 +1,9 @@
 import type { Metadata, StoredPassage } from '../passage.ts';
-import { type QueryType, keywordsOf } from '../query-bundle.ts';
+import {
+  type KeywordQuery,
+  type QueryType,
+  keywordQueryOf,
+} from '../query-bundle.ts';
 import type { RetrievalResult } from '../retrieval-result.ts';
 import type { RetrieveOptions } from '../retrieve-options.ts';
 import type { Retriever } from '../retriever.ts';
@@ -61,7 +65,7 @@ export class PgvectorKeywordRetriever<
     options: RetrieveOptions<StoredPassage<M>> = {},
   ): Promise<RetrievalResult<StoredPassage<M>>> {
     options.signal?.throwIfAborted();
-    const words = keywordsOf(query);
+    const words = wordsOf(keywordQueryOf(query));
     if (words.length === 0) return { passages: [], failures: new Map() };
     const parameters: unknown[] = [];
     // The configuration is a parameter too, so its text is never SQL.
@@ -96,3 +100,12 @@ export class PgvectorKeywordRetriever<
     };
   }
 }
+
+/**
+ * The white-space words of each keyword, or of the text: today's split, the
+ * same on every engine until each one tokenizes its own way (#5669).
+ */
+const wordsOf = (query: KeywordQuery): string[] =>
+  (query.kind === 'keywords' ? query.keywords : [query.text])
+    .flatMap((text) => text.split(/\s+/))
+    .filter((word) => word !== '');

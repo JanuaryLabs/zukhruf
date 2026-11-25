@@ -1,7 +1,11 @@
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 
 import type { Metadata, StoredPassage } from '../passage.ts';
-import { type QueryType, keywordsOf } from '../query-bundle.ts';
+import {
+  type KeywordQuery,
+  type QueryType,
+  keywordQueryOf,
+} from '../query-bundle.ts';
 import type { RetrievalResult } from '../retrieval-result.ts';
 import type { RetrieveOptions } from '../retrieve-options.ts';
 import type { Retriever } from '../retriever.ts';
@@ -51,7 +55,7 @@ export class SqliteBM25Retriever<
     options: RetrieveOptions<StoredPassage<M>> = {},
   ): Promise<RetrievalResult<StoredPassage<M>>> {
     options.signal?.throwIfAborted();
-    const words = keywordsOf(query);
+    const words = wordsOf(keywordQueryOf(query));
     if (words.length === 0) return { passages: [], failures: new Map() };
     const parameters: SQLInputValue[] = [ftsQuery(words, this.#operator)];
     const filter = where(dialect, options.filter, parameters);
@@ -81,3 +85,12 @@ export class SqliteBM25Retriever<
  */
 const ftsQuery = (words: readonly string[], operator: 'AND' | 'OR'): string =>
   words.map((word) => `"${word.replaceAll('"', '""')}"`).join(` ${operator} `);
+
+/**
+ * The white-space words of each keyword, or of the text: today's split, the
+ * same on every engine until each one tokenizes its own way (#5669).
+ */
+const wordsOf = (query: KeywordQuery): string[] =>
+  (query.kind === 'keywords' ? query.keywords : [query.text])
+    .flatMap((text) => text.split(/\s+/))
+    .filter((word) => word !== '');

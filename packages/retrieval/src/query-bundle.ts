@@ -33,21 +33,37 @@ export const needOf = (query: QueryType): string =>
   typeof query === 'string' ? query : query.query;
 
 /**
- * The words that a keyword retriever quotes: the words of `keywords`, or of
- * `query` when the bundle has none. A `keywords` of no words is a caller bug,
- * as an empty list is, so it throws a `RangeError` (ADR 0013).
+ * What a keyword retriever matches: the whole keywords of the bundle, or the
+ * text of `query` when it has none (ADR 0013). How a keyword or a text
+ * becomes a match is each engine's.
  */
-export const keywordsOf = (query: QueryType): string[] => {
+export type KeywordQuery =
+  | {
+      readonly kind: 'keywords';
+      readonly keywords: readonly [string, ...string[]];
+    }
+  | { readonly kind: 'text'; readonly text: string };
+
+/**
+ * The first phase of a keyword search (Split Phase, Fowler): which text the
+ * retriever matches; each engine's retriever is the second phase, which
+ * tokenizes it. A blank keyword is dropped. A `keywords` of no word is a
+ * caller bug, as an empty list is, so it throws a `RangeError` (ADR 0013).
+ */
+export const keywordQueryOf = (query: QueryType): KeywordQuery => {
   const bundle = bundleOf(query);
-  const words = (bundle.keywords ?? [bundle.query])
-    .flatMap((text) => text.split(/\s+/))
-    .filter((word) => word !== '');
-  if (bundle.keywords !== undefined && words.length === 0) {
+  if (bundle.keywords === undefined) {
+    return { kind: 'text', text: bundle.query };
+  }
+  const [first, ...rest] = bundle.keywords.filter((keyword) =>
+    /\S/.test(keyword),
+  );
+  if (first === undefined) {
     throw new RangeError(
       `The keywords of a query bundle hold no word: got ${JSON.stringify(bundle.keywords)}`,
     );
   }
-  return words;
+  return { kind: 'keywords', keywords: [first, ...rest] };
 };
 
 /** The texts that an embedding retriever embeds: `customEmbeddings`, or `[query]`. */
