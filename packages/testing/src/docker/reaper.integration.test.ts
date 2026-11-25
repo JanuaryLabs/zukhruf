@@ -49,13 +49,17 @@ async function present(image: string): Promise<void> {
     await docker.images.pull(image);
 }
 
-/** Short inputs, as the tests of Ryuk give it (ADR 0020, item 4). */
+/**
+ * Short inputs, as the tests of Ryuk give it (ADR 0020, item 4), with the
+ * shipped request time limit: a tighter one races the engine calls on a loaded
+ * runner, and a call that hits it keeps the reaper (#5266, #5482, #5635). A
+ * test of the limit sets its own.
+ */
 const quick: ReaperSettings = {
   ...REAPER_DEFAULTS,
   grace: 300,
   interval: 200,
   passes: 2,
-  requestTimeout: 3_000,
   retries: 2,
 };
 
@@ -204,6 +208,22 @@ const exists = async (id: string): Promise<boolean> =>
 
 const volumeExists = async (name: string): Promise<boolean> =>
   (await docker.volumes.find(name)) !== undefined;
+
+/**
+ * True when the reaper `id` of `run` ended: it is gone, or it is a kept
+ * reaper (ADR 0031), which exited with 0 under the name
+ * `<reaperName(run)>-<self>` after a call hit its request time limit, as
+ * endedOnce reads it.
+ */
+const reaperEnded = async (id: string, run: string): Promise<boolean> => {
+  const reaper = await (await docker.containers.find(id))?.inspect();
+  return (
+    reaper === undefined ||
+    (reaper.State?.Status === 'exited' &&
+      reaper.State.ExitCode === 0 &&
+      reaper.Name?.startsWith(`/${reaperName(run)}-`) === true)
+  );
+};
 
 const reapers = async (run: string): Promise<string[]> =>
   (
@@ -1536,19 +1556,23 @@ exec sleep 3600`,
       await restarted.kill();
       await restarted.wait({ condition: 'not-running' });
       // The reaper reads the age of a reaper in whole seconds of the engine's
-      // clock: these are older than keptTtl from the next second on, and the
-      // young one stays younger while the reaper runs.
+      // clock: these are older than keptTtl from the next second on.
       await delay(keptTtl + 1_100);
-      const young = await staleReaper(randomUUID());
-      others.push(young);
       const proxy = stack.use(await EngineProxy.start(engine));
+      // The fifth list of containers is the reaper's list of stopped reapers,
+      // after the check of its socket, the two lists of its pass and the list
+      // of its expiry pass. The young reaper is made while that list waits, so
+      // it is younger than keptTtl however long the reaper took to get there
+      // (#5635: a loaded engine took longer than keptTtl).
+      const stopped = proxy.hold('GET', '/containers/json', 5);
+      stack.defer(() => stopped.release());
       // keptTtl expires each stopped reaper of the engine older than 10 s,
       // such as a kept reaper of another session. The proxy refuses the
       // removal of each reaper but those of the test and the reaper under
       // test. It starts `restarted` before the engine gets its removal, as the
       // engine does with a reaper that it starts again between the list of
       // stopped reapers and the removal.
-      const ours = new Set([old, young, created.id, live.id, restarted.id]);
+      const ours = new Set([old, created.id, live.id, restarted.id]);
       proxy.intercept('DELETE', /^\/containers\/[^/]+$/, async ({ path }) => {
         const target = await docker.containers.inspect(
           decodeURIComponent(path.slice('/containers/'.length)),
@@ -1566,6 +1590,11 @@ exec sleep 3600`,
         passes: 0,
         keptTtl,
       });
+      await within(stopped.reached, t.signal, 'the list of stopped reapers');
+      const young = await staleReaper(randomUUID());
+      others.push(young);
+      ours.add(young);
+      stopped.release();
 
       await within(finished, t.signal, 'the end of the reaper');
       assert.deepEqual(
@@ -1595,11 +1624,13 @@ exec sleep 3600`,
       // list of the run's containers, and the list of the shared servers.
       const servers = proxy.hold('GET', '/containers/json', 3);
       stack.defer(() => servers.release());
-      await proxiedReaper(stack, proxy, run, {
+      const settings = {
         ...quick,
         grace: 0,
         passes: 0,
-      });
+        requestTimeout: 1_000,
+      };
+      await proxiedReaper(stack, proxy, run, settings);
 
       const kept = await waitFor(
         async () => {
@@ -1619,7 +1650,7 @@ exec sleep 3600`,
           .split('\n')
           .filter((line) => line.includes('msg="request time limit"')),
         [
-          `level=WARN msg="request time limit" call="docker ps" limit=${quick.requestTimeout} run=${run}`,
+          `level=WARN msg="request time limit" call="docker ps" limit=${settings.requestTimeout} run=${run}`,
         ],
       );
     },
@@ -2131,6 +2162,8 @@ test('a container that the engine creates after the first pass of the reaper is 
 
   const child = await holder(run, settings);
   cleanup.defer(() => killed(child));
+  const [reaper] = await reapers(run);
+  assert.ok(reaper);
   ids.push(await object(run));
   const removed = (await docker.containers.find(ids[0]!))!
     .wait({ condition: 'removed', signal: t.signal })
@@ -2150,9 +2183,14 @@ test('a container that the engine creates after the first pass of the reaper is 
   ids.push(late.id);
   await late.start();
 
+  // The fact under test: a re-check pass removed the late container.
+  await gone(t, async () => assert.equal(await exists(ids[1]!), false));
+  // The reaper ended: removed, or kept after a call hit its request time
+  // limit. A failure names what the reaper wrote.
   await gone(t, async () => {
-    assert.equal(await exists(ids[1]!), false);
-    assert.deepEqual(await reapers(run), []);
+    if (await reaperEnded(reaper, run)) return;
+    const logs = await (await docker.containers.find(reaper))?.logs();
+    assert.fail(`the reaper has not ended:\n${logs?.stderr ?? ''}`);
   });
 });
 
