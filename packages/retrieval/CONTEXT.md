@@ -84,6 +84,10 @@ _Avoid_: Bulk search, multi-search, multi-query (a multi-query is one query rewr
 The most passages that a call gives. The default is 10 (Haystack `top_k`, Mastra `topK`).
 _Avoid_: Limit, k, size, top, n
 
+**Signal**:
+The optional `AbortSignal` of a call, named `signal` as in `fetch` and Node, on every async port: `retrieve`, `retrieveMany`, `postprocess`, the store's `get` and `neighbours`, and the session's `query`. Each implementation passes it to every async call it makes, and an aborted call rejects with its reason. A composite rejects at once, whatever its parts do. The AI SDK's `abortSignal` is the same signal at the model's boundary ([ADR 0017](./docs/adr/0017-every-async-port-takes-an-optional-abort-signal-and-a-composite-rejects-at-once-when-it-aborts.md)).
+_Avoid_: abortSignal (outside a model call), cancellation token, ctx
+
 **Filter**:
 A condition on passage fields and metadata columns, in Haystack's shape: AND, OR and NOT over `== != > >= < <= in "not in"` ([Haystack metadata filtering](https://docs.haystack.deepset.ai/docs/metadata-filtering)). `Filter<P>` names the stored fields of the passage type `P` and `metadata.<key>` of its metadata, each with its value type ([ADR 0015](./docs/adr/0015-a-passage-is-typed-by-its-metadata-and-only-a-stored-passage-has-source-seq-start-and-end.md)). An engine retriever runs it as SQL `WHERE`.
 _Avoid_: Where, predicate, query (for the condition)

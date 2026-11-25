@@ -162,3 +162,24 @@ test('a list of order only comes back with a score on every passage: the relevan
     ],
   );
 });
+
+test('an aborted signal rejects with its reason and makes no call to the reranking model, which ignores its signal', async () => {
+  // Arrange
+  const calls: Call[] = [];
+  const rerank = new Rerank({ model: reranker(relevance, calls) });
+  const reason = new Error('the caller left');
+
+  // Act
+  const outcome = await rerank
+    .postprocess(passages, 'rotate a key', {
+      signal: AbortSignal.abort(reason),
+    })
+    .then(
+      () => 'answered',
+      (rejection: unknown) => rejection,
+    );
+
+  // Assert
+  assert.equal(outcome, reason);
+  assert.deepEqual(calls, []);
+});

@@ -30,7 +30,8 @@ import type { Retriever } from './retriever.ts';
  * error of one search aborts the signal of the others, with the error as
  * the reason, and the call rejects with it; a caller that aborted before
  * the fan-out starts no search; when the caller aborts, the call rejects at
- * once with the signal's reason. It catches nothing, a
+ * once with the signal's reason, while the model writes the versions too
+ * (ADR 0017). It catches nothing, a
  * `RetrieverUnavailableError` too: every search reads one retriever, so an
  * unavailable retriever leaves nothing to answer (ADR 0014).
  */
@@ -70,27 +71,32 @@ export class MultiQueryRetriever<
     options: RetrieveOptions<P> = {},
   ): Promise<RetrievalResult<P>> {
     const need = needOf(query);
-    const { output } = await generateText({
-      model: this.#model,
-      prompt: expansionPrompt(need.trim(), this.#queryCount),
-      output: Output.object({ schema: expansions }),
-      ...(options.abortSignal === undefined
-        ? {}
-        : { abortSignal: options.abortSignal }),
-    });
+    const caller = options.signal;
+    caller?.throwIfAborted();
+    // The model may ignore its signal: the caller's abort rejects at once.
+    const { output } = await untilAborted(
+      generateText({
+        model: this.#model,
+        prompt: expansionPrompt(need.trim(), this.#queryCount),
+        output: Output.object({ schema: expansions }),
+        // The AI SDK names the signal `abortSignal`.
+        ...(caller === undefined ? {} : { abortSignal: caller }),
+      }),
+      caller,
+    );
     const queries: QueryType[] = [
       query,
       ...output.queries
         .slice(0, this.#queryCount)
         .filter((version) => version.toLowerCase() !== need.toLowerCase()),
     ];
-    const caller = options.abortSignal;
-    // The model may answer after the caller aborted: then no search starts.
+    // A caller that aborted before the fan-out starts no search, as a
+    // FusionRetriever starts no retriever.
     caller?.throwIfAborted();
     // The first error aborts the other searches with the error as the
     // reason, as Go's errgroup.WithContext cancels with its cause.
     const siblings = new AbortController();
-    const abortSignal =
+    const signal =
       caller === undefined
         ? siblings.signal
         : AbortSignal.any([caller, siblings.signal]);
@@ -100,7 +106,7 @@ export class MultiQueryRetriever<
           try {
             return await this.#retriever.retrieve(version, {
               ...options,
-              abortSignal,
+              signal,
             });
           } catch (error) {
             siblings.abort(error);

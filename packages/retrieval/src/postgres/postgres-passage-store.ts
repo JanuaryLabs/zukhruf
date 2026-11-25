@@ -88,6 +88,7 @@ export class PostgresPassageStore<
 
   async get(
     ids: readonly string[],
+    options: { readonly signal?: AbortSignal } = {},
   ): Promise<ReadonlyMap<string, StoredPassage<M>>> {
     const parameters: unknown[] = [];
     const row = passageJson(parameters, this.#passages);
@@ -95,6 +96,7 @@ export class PostgresPassageStore<
     const rows = await this.#session.query(
       `SELECT ${row} AS "passage" FROM ${this.#passages} p WHERE p."id"::text IN (SELECT jsonb_array_elements_text(${list}::jsonb))`,
       parameters,
+      options.signal === undefined ? {} : { signal: options.signal },
     );
     return new Map(
       rows.map((cells) => {
@@ -113,6 +115,7 @@ export class PostgresPassageStore<
     readonly source: string;
     readonly seq: number;
     readonly windowSize: number;
+    readonly signal?: AbortSignal;
   }): Promise<StoredPassage<M>[]> {
     const parameters: unknown[] = [];
     const row = passageJson(parameters, this.#passages);
@@ -122,6 +125,7 @@ export class PostgresPassageStore<
     const rows = await this.#session.query(
       `SELECT ${row} AS "passage" FROM ${this.#passages} p WHERE p."source" = ${source} AND p."seq" BETWEEN ${from} AND ${to} ORDER BY p."seq", p."id"::text COLLATE "C"`,
       parameters,
+      options.signal === undefined ? {} : { signal: options.signal },
     );
     return rows.map((cells) => passage(cells['passage'], this.#metadata));
   }

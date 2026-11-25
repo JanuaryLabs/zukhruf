@@ -421,3 +421,42 @@ export const bagPort: Postprocessor<StoredPassage> = new Collapse({
 export const livePort: Postprocessor<Passage<Label>> = new Collapse<
   Passage<Label>
 >({ field: 'metadata.year' });
+
+// Every async port takes `signal`, the name of the DOM, fetch, Node and
+// every other zukhruf package; the old `abortSignal` is gone, with no alias
+// (ADR 0017).
+declare const signal: AbortSignal;
+export const retrieved = plain.retrieve('q', { signal });
+export const oldRetrieve = plain.retrieve('q', { abortSignal: signal }); // TS2353
+declare const postprocessor: Postprocessor;
+export const signalled = postprocessor.postprocess([], 'q', { signal });
+export const oldPostprocess = postprocessor.postprocess([], 'q', {
+  abortSignal: signal, // TS2353
+});
+export const got = store.get(['a'], { signal });
+export const oldGet = store.get(['a'], { abortSignal: signal }); // TS2353
+export const window = store.neighbours({
+  source: 's',
+  seq: 0,
+  windowSize: 1,
+  signal,
+});
+export const oldWindow = store.neighbours({
+  source: 's',
+  seq: 0,
+  windowSize: 1,
+  abortSignal: signal, // TS2353
+});
+// A host session reads the signal of each query.
+export const cancelling: PostgresSession = {
+  query: async (_sql, _parameters, options) => {
+    options?.signal?.throwIfAborted();
+    return [];
+  },
+};
+export const oldSession: PostgresSession = {
+  query: async (_sql, _parameters, options) => {
+    options?.abortSignal?.throwIfAborted(); // TS2339
+    return [];
+  },
+};

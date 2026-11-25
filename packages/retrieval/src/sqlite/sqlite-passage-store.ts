@@ -74,7 +74,11 @@ export class SqlitePassageStore<
 
   async get(
     ids: readonly string[],
+    options: { readonly signal?: AbortSignal } = {},
   ): Promise<ReadonlyMap<string, StoredPassage<M>>> {
+    // node:sqlite runs the statement synchronously: no abort can land while
+    // it runs, so the signal is checked before it (ADR 0017).
+    options.signal?.throwIfAborted();
     const statement = this.#database.prepare(
       `SELECT p.* FROM ${this.#passages} p WHERE p."id" IN (SELECT "value" FROM json_each(?))`,
     );
@@ -94,7 +98,9 @@ export class SqlitePassageStore<
     readonly source: string;
     readonly seq: number;
     readonly windowSize: number;
+    readonly signal?: AbortSignal;
   }): Promise<StoredPassage<M>[]> {
+    options.signal?.throwIfAborted();
     const statement = this.#database.prepare(
       `SELECT p.* FROM ${this.#passages} p WHERE p."source" = ? AND p."seq" BETWEEN ? AND ? ORDER BY p."seq", p."id"`,
     );

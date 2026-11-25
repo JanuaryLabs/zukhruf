@@ -50,7 +50,7 @@ export class SqliteBM25Retriever<
     query: QueryType,
     options: RetrieveOptions<StoredPassage<M>> = {},
   ): Promise<RetrievalResult<StoredPassage<M>>> {
-    options.abortSignal?.throwIfAborted();
+    options.signal?.throwIfAborted();
     const words = keywordsOf(query);
     if (words.length === 0) return { passages: [], failures: new Map() };
     const parameters: SQLInputValue[] = [ftsQuery(words, this.#operator)];

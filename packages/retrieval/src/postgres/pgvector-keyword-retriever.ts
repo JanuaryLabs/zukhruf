@@ -60,7 +60,7 @@ export class PgvectorKeywordRetriever<
     query: QueryType,
     options: RetrieveOptions<StoredPassage<M>> = {},
   ): Promise<RetrievalResult<StoredPassage<M>>> {
-    options.abortSignal?.throwIfAborted();
+    options.signal?.throwIfAborted();
     const words = keywordsOf(query);
     if (words.length === 0) return { passages: [], failures: new Map() };
     const parameters: unknown[] = [];
@@ -85,6 +85,7 @@ export class PgvectorKeywordRetriever<
       ORDER BY 1 DESC, p."id"::text COLLATE "C"
       LIMIT ${topK}`,
       parameters,
+      options.signal === undefined ? {} : { signal: options.signal },
     );
     return {
       passages: rows.map((cells) => ({

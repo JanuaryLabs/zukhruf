@@ -153,12 +153,12 @@ export class FusionRetriever<
         `The rankWindowSize ${rankWindowSize} is smaller than the topK ${topK} of the call`,
       );
     }
-    const caller = options.abortSignal;
+    const caller = options.signal;
     caller?.throwIfAborted();
     // A bug aborts the siblings with the bug as the reason, as Go's
     // errgroup.WithContext cancels with its cause.
     const siblings = new AbortController();
-    const abortSignal =
+    const signal =
       caller === undefined
         ? siblings.signal
         : AbortSignal.any([caller, siblings.signal]);
@@ -170,7 +170,7 @@ export class FusionRetriever<
               const result = await retriever.retrieve(query, {
                 ...options,
                 topK: rankWindowSize,
-                abortSignal,
+                signal,
               });
               return { name, weight, result };
             } catch (error) {

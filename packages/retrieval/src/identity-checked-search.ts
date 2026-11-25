@@ -14,8 +14,9 @@ import type { ScoredPassage } from './scored-passage.ts';
 type Engine<P extends StoredPassage> = {
   readonly model: EmbeddingModel;
   /** The identities of the stored vectors, in the byte order of their text. */
-  readonly storedIdentities: () =>
-    readonly ModelIdentity[] | Promise<readonly ModelIdentity[]>;
+  readonly storedIdentities: (
+    signal: AbortSignal | undefined,
+  ) => readonly ModelIdentity[] | Promise<readonly ModelIdentity[]>;
   /** One search for every query vector, among the vectors of the identity. */
   readonly search: (
     vectors: readonly (readonly number[])[],
@@ -48,20 +49,19 @@ export class IdentityCheckedSearch<P extends StoredPassage> {
     options: RetrieveOptions<P>,
   ): Promise<ScoredPassage<P>[]> {
     const [text, ...more] = embeddingsOf(query);
-    const [passages] = await this.#retrieve(1, options, async (abortSignal) => {
-      const signal = abortSignal === undefined ? {} : { abortSignal };
+    const [passages] = await this.#retrieve(1, options, async (signal) => {
       if (more.length === 0) {
         const { embedding } = await embed({
           model: this.#engine.model,
           value: text,
-          ...signal,
+          ...aiSignal(signal),
         });
         return [embedding];
       }
       const { embeddings } = await embedMany({
         model: this.#engine.model,
         values: [text, ...more],
-        ...signal,
+        ...aiSignal(signal),
       });
       return [meanVector(embeddings)];
     });
@@ -74,11 +74,11 @@ export class IdentityCheckedSearch<P extends StoredPassage> {
   ): Promise<ScoredPassage<P>[][]> {
     if (queries.length === 0) return [];
     const texts = queries.map(embeddingsOf);
-    return this.#retrieve(queries.length, options, async (abortSignal) => {
+    return this.#retrieve(queries.length, options, async (signal) => {
       const { embeddings } = await embedMany({
         model: this.#engine.model,
         values: texts.flat(),
-        ...(abortSignal === undefined ? {} : { abortSignal }),
+        ...aiSignal(signal),
       });
       const vectors = embeddings.values();
       return texts.map(({ length }) =>
@@ -90,11 +90,14 @@ export class IdentityCheckedSearch<P extends StoredPassage> {
   async #retrieve(
     count: number,
     options: RetrieveOptions<P>,
-    embedQueries: (abortSignal?: AbortSignal) => Promise<readonly number[][]>,
+    embedQueries: (
+      signal: AbortSignal | undefined,
+    ) => Promise<readonly number[][]>,
   ): Promise<ScoredPassage<P>[][]> {
-    options.abortSignal?.throwIfAborted();
+    const { signal } = options;
+    signal?.throwIfAborted();
     const query = modelName(this.#engine.model);
-    const stored = await this.#engine.storedIdentities();
+    const stored = await this.#engine.storedIdentities(signal);
     const [first] = stored;
     if (first === undefined) return Array.from({ length: count }, () => []);
     const sameModel = stored.filter(
@@ -109,8 +112,8 @@ export class IdentityCheckedSearch<P extends StoredPassage> {
       );
     }
 
-    const vectors = await embedQueries(options.abortSignal);
-    options.abortSignal?.throwIfAborted();
+    const vectors = await embedQueries(signal);
+    signal?.throwIfAborted();
     const dimensions = vectors[0]?.length ?? 0;
     const identity = sameModel.find(
       (candidate) => candidate.dimensions === dimensions,
@@ -121,6 +124,12 @@ export class IdentityCheckedSearch<P extends StoredPassage> {
     return this.#engine.search(vectors, identity, options);
   }
 }
+
+/** The AI SDK names the signal `abortSignal`. */
+const aiSignal = (
+  signal: AbortSignal | undefined,
+): { readonly abortSignal?: AbortSignal } =>
+  signal === undefined ? {} : { abortSignal: signal };
 
 /**
  * The mean of vectors of one length, component by component, as LlamaIndex's

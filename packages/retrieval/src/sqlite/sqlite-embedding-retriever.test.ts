@@ -574,10 +574,10 @@ test('an aborted call rejects with the reason of its signal, before the model ca
 
   // Act
   const early = retriever(before).retrieve('q', {
-    abortSignal: AbortSignal.abort(reason),
+    signal: AbortSignal.abort(reason),
   });
   const late = retriever(during).retrieve('q', {
-    abortSignal: controller.signal,
+    signal: controller.signal,
   });
 
   // Assert

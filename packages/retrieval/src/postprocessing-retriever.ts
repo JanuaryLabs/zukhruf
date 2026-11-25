@@ -1,3 +1,5 @@
+import { untilAborted } from '@zukhruf/async';
+
 import type { Passage } from './passage.ts';
 import type { Postprocessor } from './postprocessor.ts';
 import { type QueryType, needOf } from './query-bundle.ts';
@@ -14,7 +16,9 @@ import type { ScoredPassage } from './scored-passage.ts';
  * the information need (`query` of the bundle, ADR 0013) and the abort signal
  * of the call. Each postprocessor takes the passage type of the retriever,
  * so `ContextWindow` goes only over a retriever of stored passages (ADR
- * 0015). The failures of the retriever pass up unchanged (ADR 0014).
+ * 0015). The failures of the retriever pass up unchanged (ADR 0014). When
+ * the caller aborts, the call rejects at once with the signal's reason,
+ * whatever the retriever and the postprocessors do (ADR 0017).
  */
 export class PostprocessingRetriever<
   in Q extends QueryType = QueryType,
@@ -40,14 +44,24 @@ export class PostprocessingRetriever<
     query: Q,
     options: RetrieveOptions<P> = {},
   ): Promise<RetrievalResult<P>> {
+    const { signal } = options;
+    signal?.throwIfAborted();
+    return untilAborted(this.#postprocess(query, options), signal);
+  }
+
+  async #postprocess(
+    query: Q,
+    options: RetrieveOptions<P>,
+  ): Promise<RetrievalResult<P>> {
     const signal =
-      options.abortSignal === undefined
-        ? {}
-        : { abortSignal: options.abortSignal };
+      options.signal === undefined ? {} : { signal: options.signal };
     const result = await this.#retriever.retrieve(query, options);
     let passages: readonly ScoredPassage<P>[] = result.passages;
     const need = needOf(query);
     for (const postprocessor of this.#postprocessors) {
+      // The call rejected already; a postprocessor that ignored the signal
+      // must not start the next one, model calls included.
+      options.signal?.throwIfAborted();
       passages = await postprocessor.postprocess(passages, need, signal);
     }
     return { passages, failures: result.failures };

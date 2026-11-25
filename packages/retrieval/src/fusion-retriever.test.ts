@@ -33,6 +33,7 @@ import {
   type EntrezQueryBundle,
   RecordingRetriever,
 } from './testing/recording-retriever.ts';
+import { settledThisTurn } from './testing/settled-this-turn.ts';
 
 type Row = {
   readonly id: string;
@@ -126,25 +127,10 @@ class SignalRecordingRetriever implements Retriever {
     _query: QueryType,
     options: RetrieveOptions = {},
   ): Promise<RetrievalResult> => {
-    this.signals.push(options.abortSignal);
+    this.signals.push(options.signal);
     return new Promise(() => {});
   };
 }
-
-const pending = Symbol('pending');
-
-// What the call settled with before the event loop's next turn: its
-// rejection reason, 'answered', or `pending`. A call that rejects at once
-// settles in microtasks; one that waits on a retriever that never settles
-// stays pending, so the assertion fails there, not at the time limit.
-const settledThisTurn = (call: Promise<unknown>): Promise<unknown> =>
-  Promise.race([
-    call.then(
-      () => 'answered',
-      (reason: unknown) => reason,
-    ),
-    nextTurn(pending),
-  ]);
 
 test('a FusionRetriever refuses a record of no retriever, a name that holds the path separator ":", and a weight for a name that is no retriever, by type for a literal record and at construction for a record typed by string', () => {
   // Arrange
@@ -248,7 +234,7 @@ test('a RetrieverUnavailableError leaves its siblings running: a sibling that an
   const live = new LiveRetriever(['doi-1', 'doi-2']);
   const late: Retriever = {
     retrieve: async (query, options = {}) => {
-      signals.push(options.abortSignal);
+      signals.push(options.signal);
       await nextTurn();
       return live.retrieve(query, options);
     },
@@ -410,7 +396,7 @@ test("the caller's abort rejects the call at once with the signal's reason, whil
 
   // Act
   const call = retriever.retrieve('rotate key', {
-    abortSignal: caller.signal,
+    signal: caller.signal,
   });
   caller.abort(reason);
   const outcome = await settledThisTurn(call);
@@ -548,7 +534,7 @@ test("each retriever gets a signal that aborts when the call's signal aborts, wi
   aborted.abort();
 
   // Act
-  await both.retrieve('rotate key', { abortSignal: given.signal });
+  await both.retrieve('rotate key', { signal: given.signal });
   given.abort(reason);
 
   // Assert: the embedding model of the second retriever got the signal of
@@ -558,7 +544,7 @@ test("each retriever gets a signal that aborts when the call's signal aborts, wi
   assert.equal(signals[0]?.aborted, true);
   assert.equal(signals[0]?.reason, reason);
   await assert.rejects(
-    keywordsOnly.retrieve('rotate key', { abortSignal: aborted.signal }),
+    keywordsOnly.retrieve('rotate key', { signal: aborted.signal }),
     { name: 'AbortError' },
   );
 });

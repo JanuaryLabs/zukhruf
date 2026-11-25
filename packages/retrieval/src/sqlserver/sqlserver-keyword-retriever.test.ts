@@ -618,7 +618,7 @@ test(
 
     // Act
     const result = retriever.retrieve('key', {
-      abortSignal: AbortSignal.abort(reason),
+      signal: AbortSignal.abort(reason),
     });
 
     // Assert
@@ -846,5 +846,40 @@ test(
       )[0],
       { product: 'kms' },
     );
+  },
+);
+
+test(
+  "the keyword search passes the call's signal to the session",
+  { skip: emulation },
+  async (t) => {
+    // Arrange: the session records the signal of each query.
+    await using database = await server().database();
+    const pool = await database.pool();
+    await contract(pool, [{ id: 'a', text: 'rotate the key' }], t.signal);
+    const signals: (AbortSignal | undefined)[] = [];
+    const host = session(pool);
+    const retriever = new SqlServerKeywordRetriever({
+      store: new SqlServerPassageStore({
+        session: {
+          query: (sql, parameters, options) => {
+            signals.push(options?.signal);
+            return host.query(sql, parameters);
+          },
+        },
+        passages: 'docs_passages',
+        metadata: (columns) => columns,
+      }),
+      index: { table: 'docs_passages' },
+    });
+    const controller = new AbortController();
+    const { signal } = controller;
+
+    // Act
+    const result = await retriever.retrieve('key', { signal });
+
+    // Assert
+    assert.deepEqual(ids(result.passages), ['a']);
+    assert.deepEqual(signals, [signal]);
   },
 );

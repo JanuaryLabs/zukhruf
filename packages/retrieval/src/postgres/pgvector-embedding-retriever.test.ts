@@ -665,10 +665,10 @@ test('an aborted call rejects with the reason of its signal, before the model ca
 
   // Act
   const early = retriever(before).retrieve('q', {
-    abortSignal: AbortSignal.abort(reason),
+    signal: AbortSignal.abort(reason),
   });
   const late = retriever(during).retrieve('q', {
-    abortSignal: controller.signal,
+    signal: controller.signal,
   });
 
   // Assert
@@ -1256,4 +1256,40 @@ test('an error that the metadata of a store throws for a row is the error of eac
     );
   }
   assert.deepEqual(read.get('a')?.metadata, { year: 2024, draft: false });
+});
+
+test("retrieve and retrieveMany pass the call's signal to the session, for the stored identities and for the search", async () => {
+  // Arrange: the session records the signal of each query.
+  await using database = await server().database();
+  const pool = database.pool();
+  await contract(pool, [{ id: 'x', vector: [1, 0, 0, 0] }]);
+  const signals: (AbortSignal | undefined)[] = [];
+  const retriever = new PgvectorEmbeddingRetriever({
+    store: new PostgresPassageStore({
+      session: {
+        query: async (sql, parameters, options) => {
+          signals.push(options?.signal);
+          return (await pool.query(sql, [...parameters])).rows;
+        },
+      },
+      passages: 'docs_passages',
+      metadata: (columns) => columns,
+    }),
+    vectors: 'docs_passage_vectors',
+    model: embeddingModel({ a: [1, 0, 0, 0], b: [0, 1, 0, 0] }),
+  });
+  const controller = new AbortController();
+  const { signal } = controller;
+
+  // Act
+  const one = await retriever.retrieve('a', { signal });
+  const many = await retriever.retrieveMany(['a', 'b'], { signal });
+
+  // Assert
+  assert.deepEqual(ids(one.passages), ['x']);
+  assert.deepEqual(
+    many.map(({ passages }) => ids(passages)),
+    [['x'], ['x']],
+  );
+  assert.deepEqual(signals, [signal, signal, signal, signal]);
 });

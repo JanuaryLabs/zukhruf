@@ -53,7 +53,7 @@ export class PgvectorEmbeddingRetriever<
     this.#vectors = contract.relation(options.vectors);
     this.#retrieval = new IdentityCheckedSearch({
       model: options.model,
-      storedIdentities: () => this.#storedIdentities(),
+      storedIdentities: (signal) => this.#storedIdentities(signal),
       search: (vectors, identity, retrieveOptions) =>
         this.#search(vectors, identity, retrieveOptions),
     });
@@ -78,10 +78,13 @@ export class PgvectorEmbeddingRetriever<
   }
 
   /** The identities of the stored vectors, in the byte order of their text, as SQLite orders text. */
-  async #storedIdentities(): Promise<ModelIdentity[]> {
+  async #storedIdentities(
+    signal: AbortSignal | undefined,
+  ): Promise<ModelIdentity[]> {
     const rows = await this.#session.query(
       `SELECT DISTINCT "model" COLLATE "C" AS "model" FROM ${this.#vectors} ORDER BY 1`,
       [],
+      signal === undefined ? {} : { signal },
     );
     return rows.map(({ model }) => parseModelIdentity(String(model)));
   }
@@ -132,6 +135,7 @@ export class PgvectorEmbeddingRetriever<
       ) r
       ORDER BY q."query", r."distance", r."id"`,
       parameters,
+      options.signal === undefined ? {} : { signal: options.signal },
     );
     const lists = vectors.map((): ScoredPassage<StoredPassage<M>>[] => []);
     for (const cells of rows) {

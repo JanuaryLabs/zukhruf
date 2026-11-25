@@ -335,7 +335,7 @@ test('an aborted keyword search rejects with the reason of its signal', async ()
 
   // Act
   const result = retriever.retrieve('key', {
-    abortSignal: AbortSignal.abort(reason),
+    signal: AbortSignal.abort(reason),
   });
 
   // Assert

@@ -92,12 +92,14 @@ export class SqlServerPassageStore<
 
   async get(
     ids: readonly string[],
+    options: { readonly signal?: AbortSignal } = {},
   ): Promise<ReadonlyMap<string, StoredPassage<M>>> {
     const parameters: Record<string, unknown> = {};
     const list = bind(parameters, JSON.stringify(ids));
     const rows = await this.#session.query(
       `SELECT ${passageJson} AS [passage] FROM ${this.#passages} p WHERE p.[id] ${binary} IN (SELECT j.[value] FROM OPENJSON(${list}) j)`,
       parameters,
+      options.signal === undefined ? {} : { signal: options.signal },
     );
     return new Map(
       rows.map((cells) => {
@@ -116,6 +118,7 @@ export class SqlServerPassageStore<
     readonly source: string;
     readonly seq: number;
     readonly windowSize: number;
+    readonly signal?: AbortSignal;
   }): Promise<StoredPassage<M>[]> {
     const parameters: Record<string, unknown> = {};
     const source = bind(parameters, options.source);
@@ -124,6 +127,7 @@ export class SqlServerPassageStore<
     const rows = await this.#session.query(
       `SELECT ${passageJson} AS [passage] FROM ${this.#passages} p WHERE p.[source] = ${source} ${binary} AND p.[seq] BETWEEN ${from} AND ${to} ORDER BY p.[seq], p.[id] ${binary}`,
       parameters,
+      options.signal === undefined ? {} : { signal: options.signal },
     );
     return rows.map((cells) => passage(cells['passage'], this.#metadata));
   }

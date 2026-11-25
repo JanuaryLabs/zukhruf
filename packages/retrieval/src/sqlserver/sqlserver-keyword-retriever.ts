@@ -57,7 +57,7 @@ export class SqlServerKeywordRetriever<
     query: QueryType,
     options: RetrieveOptions<StoredPassage<M>> = {},
   ): Promise<RetrievalResult<StoredPassage<M>>> {
-    options.abortSignal?.throwIfAborted();
+    options.signal?.throwIfAborted();
     const words = phrases(keywordsOf(query));
     if (words.length === 0) return { passages: [], failures: new Map() };
     const parameters: Record<string, unknown> = {};
@@ -75,6 +75,7 @@ export class SqlServerKeywordRetriever<
       WHERE ${filter}
       ORDER BY k.[RANK] DESC, p.[id] ${binary}`,
       parameters,
+      options.signal === undefined ? {} : { signal: options.signal },
     );
     return {
       passages: rows.map((cells) => ({

@@ -324,3 +324,35 @@ test(
     );
   },
 );
+
+test(
+  "get and neighbours pass the call's signal to the session",
+  { skip: emulation },
+  async () => {
+    // Arrange: the session records the signal of each query.
+    await using database = await server().database();
+    const pool = await database.pool();
+    await contract(pool, [{ id: 'g0', source: 'guide', seq: 0 }]);
+    const signals: (AbortSignal | undefined)[] = [];
+    const host = session(pool);
+    const store = new SqlServerPassageStore({
+      session: {
+        query: (sql, parameters, options) => {
+          signals.push(options?.signal);
+          return host.query(sql, parameters);
+        },
+      },
+      passages: 'docs_passages',
+      metadata: (columns) => columns,
+    });
+    const controller = new AbortController();
+    const { signal } = controller;
+
+    // Act
+    await store.get(['g0'], { signal });
+    await store.neighbours({ source: 'guide', seq: 0, windowSize: 1, signal });
+
+    // Assert
+    assert.deepEqual(signals, [signal, signal]);
+  },
+);

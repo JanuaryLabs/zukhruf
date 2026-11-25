@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import type { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
+import { setImmediate as nextTurn } from 'node:timers/promises';
 
 import { MockLanguageModelV4, MockRerankingModelV4 } from 'ai/test';
 
@@ -23,6 +24,7 @@ import {
   type EntrezQueryBundle,
   RecordingRetriever,
 } from './testing/recording-retriever.ts';
+import { settledThisTurn } from './testing/settled-this-turn.ts';
 
 // The passages and their vectors as elt's Vectorizer writes them.
 function contract(): DatabaseSync {
@@ -244,7 +246,7 @@ test('the abort signal of the call reaches the model and the search', async () =
   });
 
   // Act
-  await retriever.retrieve('rotate a key', { abortSignal: given.signal });
+  await retriever.retrieve('rotate a key', { signal: given.signal });
 
   // Assert
   assert.equal(calls[0]?.abortSignal, given.signal);
@@ -294,4 +296,90 @@ test('the failures of the retriever pass up unchanged, and its list of order onl
   );
   assert.deepEqual([...result.failures], [['news', unavailable]]);
   assert.equal(result.failures.get('news'), unavailable);
+});
+
+test("the caller's abort rejects the call at once with the signal's reason, while the model ignores its signal and never answers", async () => {
+  // Arrange
+  using database = contract();
+  const writing = Promise.withResolvers<void>();
+  const retriever = new HydeRetriever({
+    retriever: meaning(database),
+    model: new MockLanguageModelV4({
+      doGenerate: () => {
+        writing.resolve();
+        return new Promise(() => {});
+      },
+    }),
+  });
+  const controller = new AbortController();
+  const reason = new Error('the caller left');
+
+  // Act
+  const call = retriever.retrieve('rotate a key', {
+    signal: controller.signal,
+  });
+  await writing.promise;
+  controller.abort(reason);
+  const outcome = await settledThisTurn(call);
+
+  // Assert
+  assert.equal(outcome, reason);
+});
+
+test('an aborted signal rejects the call with its reason and calls neither the model nor the retriever', async () => {
+  // Arrange: the AI SDK's generateText calls a model with an aborted signal
+  // (ai 7.0.179), so only the check of HydeRetriever keeps the model idle.
+  const searched: QueryBundle[] = [];
+  const model = new MockLanguageModelV4({
+    doGenerate: () => new Promise(() => {}),
+  });
+  const retriever = new HydeRetriever({
+    retriever: {
+      retrieve: (query: QueryBundle) => {
+        searched.push(query);
+        return new Promise<never>(() => {});
+      },
+    },
+    model,
+  });
+  const reason = new Error('the caller left');
+
+  // Act
+  const outcome = await settledThisTurn(
+    retriever.retrieve('rotate a key', { signal: AbortSignal.abort(reason) }),
+  );
+  // A model call would start in the microtasks after the rejection.
+  await nextTurn();
+
+  // Assert
+  assert.equal(outcome, reason);
+  assert.equal(model.doGenerateCalls.length, 0);
+  assert.deepEqual(searched, []);
+});
+
+test("the caller's abort rejects the call at once with the signal's reason, while the retriever ignores its signal and never settles", async () => {
+  // Arrange
+  const searching = Promise.withResolvers<void>();
+  const retriever = new HydeRetriever({
+    retriever: {
+      retrieve: () => {
+        searching.resolve();
+        return new Promise<never>(() => {});
+      },
+    },
+    model: languageModel(),
+  });
+  const controller = new AbortController();
+  const reason = new Error('the caller left');
+
+  // Act
+  const call = retriever.retrieve('rotate a key', {
+    signal: controller.signal,
+  });
+  await searching.promise;
+  controller.abort(reason);
+  const outcome = await settledThisTurn(call);
+
+  // Assert
+  assert.equal(outcome, reason);
 });

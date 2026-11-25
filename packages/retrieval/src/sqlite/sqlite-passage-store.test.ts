@@ -185,3 +185,29 @@ test('a SQLite store takes no schema, so no schema can name relations that the s
   // Assert
   assert.deepEqual([...passages.keys()], ['g0']);
 });
+
+test('an aborted signal rejects get and neighbours with its reason, before the statement runs', async () => {
+  // Arrange: node:sqlite runs a statement synchronously, so an abort can only
+  // be seen before it.
+  using database = contract([{ id: 'g0', source: 'guide', seq: 0 }]);
+  const store = new SqlitePassageStore({
+    database,
+    passages: 'docs_passages',
+    metadata: (columns) => columns,
+  });
+  const reason = new Error('the caller left');
+  const signal = AbortSignal.abort(reason);
+
+  // Act
+  const got = store.get(['g0'], { signal });
+  const window = store.neighbours({
+    source: 'guide',
+    seq: 0,
+    windowSize: 1,
+    signal,
+  });
+
+  // Assert
+  await assert.rejects(got, (error) => error === reason);
+  await assert.rejects(window, (error) => error === reason);
+});

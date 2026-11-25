@@ -7,5 +7,6 @@ export type RetrieveOptions<P extends Passage = Passage> = {
   readonly filter?: Filter<P>;
   /** Gives the vector of each passage: false when absent. */
   readonly includeVectors?: boolean;
-  readonly abortSignal?: AbortSignal;
+  /** Stops the call: it rejects with the signal's reason (ADR 0017). */
+  readonly signal?: AbortSignal;
 };

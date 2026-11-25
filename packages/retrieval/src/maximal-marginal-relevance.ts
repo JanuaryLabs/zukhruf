@@ -48,8 +48,9 @@ export class MaximalMarginalRelevance implements Postprocessor<Passage> {
   async postprocess<P extends Passage>(
     passages: readonly ScoredPassage<P>[],
     query: string,
-    options: { readonly abortSignal?: AbortSignal } = {},
+    options: { readonly signal?: AbortSignal } = {},
   ): Promise<ScoredPassage<P>[]> {
+    options.signal?.throwIfAborted();
     const candidates = passages.map((scored) => {
       if (scored.vector === undefined) {
         throw new VectorMissingError(scored.passage.id);
@@ -60,9 +61,8 @@ export class MaximalMarginalRelevance implements Postprocessor<Passage> {
     const { embedding } = await embed({
       model: this.#model,
       value: query,
-      ...(options.abortSignal === undefined
-        ? {}
-        : { abortSignal: options.abortSignal }),
+      // The AI SDK names the signal `abortSignal`.
+      ...(options.signal === undefined ? {} : { abortSignal: options.signal }),
     });
     const queryVector = Vector.from(embedding);
     const remaining = candidates.map(({ scored, vector }) => ({

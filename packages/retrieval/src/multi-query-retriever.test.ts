@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import type { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
-import { setImmediate as nextTurn } from 'node:timers/promises';
 
 import { MockLanguageModelV4 } from 'ai/test';
 
@@ -26,6 +25,7 @@ import {
 import { embeddingModel } from './testing/embedding-model.ts';
 import { writeKeywordContract } from './testing/keyword-contract.ts';
 import { RecordingRetriever } from './testing/recording-retriever.ts';
+import { settledThisTurn } from './testing/settled-this-turn.ts';
 
 // Each passage matches one query of the tests, and its vector is the one
 // that the embedding model gives for that query.
@@ -118,21 +118,6 @@ function languageModel(
 
 const queries = (...versions: readonly string[]) =>
   JSON.stringify({ queries: versions });
-
-const pending = Symbol('pending');
-
-// What the call settled with before the event loop's next turn: its
-// rejection reason, 'answered', or `pending`. A call that rejects at once
-// settles in microtasks; one that waits on a search that never settles
-// stays pending, so the assertion fails there, not at the time limit.
-const settledThisTurn = (call: Promise<unknown>): Promise<unknown> =>
-  Promise.race([
-    call.then(
-      () => 'answered',
-      (reason: unknown) => reason,
-    ),
-    nextTurn(pending),
-  ]);
 
 const scores = (
   results: readonly {
@@ -372,7 +357,7 @@ test("the filter and includeVectors of the call reach each search, its abort sig
       topK: 2,
       filter: { field: 'metadata.product', operator: '==', value: 'a' },
       includeVectors: true,
-      abortSignal: given.signal,
+      signal: given.signal,
     })
   ).passages;
 
@@ -481,7 +466,7 @@ test('a search that throws aborts the signal of the other searches, with the err
         searching.resolve();
         return Promise.reject(down);
       }
-      signals.push(options.abortSignal);
+      signals.push(options.signal);
       return new Promise(() => {});
     },
   };
@@ -524,7 +509,7 @@ test("the caller's abort rejects the call at once with the signal's reason, whil
 
   // Act
   const call = retriever.retrieve('rotate key', {
-    abortSignal: caller.signal,
+    signal: caller.signal,
   });
   await searching.promise;
   caller.abort(reason);
@@ -552,11 +537,39 @@ test('a caller that aborted before the fan-out starts no search, as a FusionRetr
   // rejects at once whatever the model does, and no turn of the event loop
   // is raced.
   const outcome = await retriever
-    .retrieve('rotate key', { abortSignal: caller.signal })
+    .retrieve('rotate key', { signal: caller.signal })
     .then(
       () => 'answered',
       (rejection: unknown) => rejection,
     );
+
+  // Assert
+  assert.equal(outcome, reason);
+  assert.deepEqual(source.queries, []);
+});
+
+test("the caller's abort rejects the call at once with the signal's reason, while the model ignores its signal and never answers", async () => {
+  // Arrange
+  const caller = new AbortController();
+  const reason = new Error('the turn ended');
+  const writing = Promise.withResolvers<void>();
+  const source = new RecordingRetriever(['alpha']);
+  const retriever = new MultiQueryRetriever({
+    retriever: source,
+    model: new MockLanguageModelV4({
+      doGenerate: () => {
+        writing.resolve();
+        return new Promise(() => {});
+      },
+    }),
+    queryCount: 1,
+  });
+
+  // Act
+  const call = retriever.retrieve('rotate key', { signal: caller.signal });
+  await writing.promise;
+  caller.abort(reason);
+  const outcome = await settledThisTurn(call);
 
   // Assert
   assert.equal(outcome, reason);

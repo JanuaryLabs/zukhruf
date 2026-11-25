@@ -28,16 +28,16 @@ export class Rerank implements Postprocessor<Passage> {
   async postprocess<P extends Passage>(
     passages: readonly ScoredPassage<P>[],
     query: string,
-    options: { readonly abortSignal?: AbortSignal } = {},
+    options: { readonly signal?: AbortSignal } = {},
   ): Promise<ScoredPassage<P>[]> {
+    options.signal?.throwIfAborted();
     const { ranking } = await rerank({
       model: this.#model,
       documents: passages.map(({ passage }) => passage.text),
       query,
       ...(this.#topN === undefined ? {} : { topN: this.#topN }),
-      ...(options.abortSignal === undefined
-        ? {}
-        : { abortSignal: options.abortSignal }),
+      // The AI SDK names the signal `abortSignal`.
+      ...(options.signal === undefined ? {} : { abortSignal: options.signal }),
     });
     const relevance = new Map(
       ranking.map(({ originalIndex, score }) => [originalIndex, score]),

@@ -14,6 +14,6 @@ export interface Postprocessor<in out P extends Passage = Passage> {
   readonly postprocess: (
     passages: readonly ScoredPassage<P>[],
     query: string,
-    options?: { readonly abortSignal?: AbortSignal },
+    options?: { readonly signal?: AbortSignal },
   ) => Promise<ScoredPassage<P>[]>;
 }

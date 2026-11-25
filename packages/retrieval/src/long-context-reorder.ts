@@ -17,7 +17,10 @@ import type { ScoredPassage } from './scored-passage.ts';
 export class LongContextReorder implements Postprocessor<Passage> {
   async postprocess<P extends Passage>(
     passages: readonly ScoredPassage<P>[],
+    _query?: string,
+    options: { readonly signal?: AbortSignal } = {},
   ): Promise<ScoredPassage<P>[]> {
+    options.signal?.throwIfAborted();
     const reordered: ScoredPassage<P>[] = [];
     for (const [index, passage] of passages.toReversed().entries()) {
       if (index % 2 === 1) reordered.push(passage);

@@ -207,9 +207,28 @@ test('the abort signal of the call reaches the embedding model', async () => {
 
   // Act
   await mmr.postprocess(list, 'rotate a key', {
-    abortSignal: controller.signal,
+    signal: controller.signal,
   });
 
   // Assert
   assert.deepEqual(signals, [controller.signal]);
+});
+
+test('an aborted signal rejects with its reason and makes no call to the embedding model, which ignores its signal', async () => {
+  // Arrange
+  const signals: (AbortSignal | undefined)[] = [];
+  const mmr = new MaximalMarginalRelevance({ model: model(signals), topK: 1 });
+  const reason = new Error('the caller left');
+
+  // Act
+  const outcome = await mmr
+    .postprocess(list, 'rotate a key', { signal: AbortSignal.abort(reason) })
+    .then(
+      () => 'answered',
+      (rejection: unknown) => rejection,
+    );
+
+  // Assert
+  assert.equal(outcome, reason);
+  assert.deepEqual(signals, []);
 });

@@ -4,7 +4,7 @@ import { test } from 'node:test';
 
 import { open } from '@zukhruf/sqlite-open';
 
-import { ContextWindow, PassageGapError } from './index.ts';
+import { ContextWindow, PassageGapError, type PassageStore } from './index.ts';
 import { SqlitePassageStore } from './sqlite.ts';
 
 const guide = 'abcdefghijklmnopqrstuvwxyz0123456789';
@@ -296,8 +296,38 @@ test('an aborted call rejects with the reason of its signal', async () => {
   // Act and Assert
   await assert.rejects(
     window.postprocess(await found(store, ['guide-4']), 'rotate a key', {
-      abortSignal: controller.signal,
+      signal: controller.signal,
     }),
     (error) => error === reason,
   );
+});
+
+test("the store gets the call's signal for the window of each passage", async () => {
+  // Arrange: a store that records the signal of each neighbours call.
+  using database = passages();
+  const stored = new SqlitePassageStore({
+    database,
+    passages: 'docs_passages',
+    metadata: (columns) => columns,
+  });
+  const signals: (AbortSignal | undefined)[] = [];
+  const store: PassageStore = {
+    get: (ids, options) => stored.get(ids, options),
+    neighbours: (options) => {
+      signals.push(options.signal);
+      return stored.neighbours(options);
+    },
+  };
+  const window = new ContextWindow({ store, windowSize: 1 });
+  const controller = new AbortController();
+
+  // Act
+  await window.postprocess(
+    await found(stored, ['guide-4', 'notes-1']),
+    'rotate a key',
+    { signal: controller.signal },
+  );
+
+  // Assert
+  assert.deepEqual(signals, [controller.signal, controller.signal]);
 });

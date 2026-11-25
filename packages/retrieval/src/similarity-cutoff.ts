@@ -17,7 +17,10 @@ export class SimilarityCutoff implements Postprocessor<Passage> {
 
   async postprocess<P extends Passage>(
     passages: readonly ScoredPassage<P>[],
+    _query?: string,
+    options: { readonly signal?: AbortSignal } = {},
   ): Promise<ScoredPassage<P>[]> {
+    options.signal?.throwIfAborted();
     return passages.filter(
       ({ score }) => score !== undefined && score >= this.#threshold,
     );

@@ -20,7 +20,8 @@ import type { ScoredPassage } from './scored-passage.ts';
  * stored passages: a live source's passage has no source or seq to widen
  * (ADR 0015). `M` is the metadata of its store, so a store of another typed
  * `M` does not compile; a bag store goes over any passages, which is harmless,
- * since a window keeps the passage's own metadata.
+ * since a window keeps the passage's own metadata. It passes the signal of
+ * the call to the store (ADR 0017).
  */
 export class ContextWindow<
   M extends Metadata = Metadata,
@@ -45,15 +46,17 @@ export class ContextWindow<
   async postprocess<P extends StoredPassage<M>>(
     passages: readonly ScoredPassage<P>[],
     _query: string,
-    options: { readonly abortSignal?: AbortSignal } = {},
+    options: { readonly signal?: AbortSignal } = {},
   ): Promise<ScoredPassage<P>[]> {
-    options.abortSignal?.throwIfAborted();
+    const { signal } = options;
+    signal?.throwIfAborted();
     return Promise.all(
       passages.map(async (scored) => {
         const window = await this.#store.neighbours({
           source: scored.passage.source,
           seq: scored.passage.seq,
           windowSize: this.#windowSize,
+          ...(signal === undefined ? {} : { signal }),
         });
         return window.length === 0
           ? scored

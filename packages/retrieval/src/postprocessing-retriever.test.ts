@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import type { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
+import { setImmediate as nextTurn } from 'node:timers/promises';
 
 import type { RerankingModel } from 'ai';
 
@@ -11,9 +12,12 @@ import { install, toSql } from '@zukhruf/vectors/sqlite';
 import {
   MaximalMarginalRelevance,
   PostprocessingRetriever,
+  type Postprocessor,
+  type QueryType,
   Rerank,
   RetrieverUnavailableError,
   SimilarityCutoff,
+  type StoredPassage,
 } from './index.ts';
 import { SqliteEmbeddingRetriever, SqlitePassageStore } from './sqlite.ts';
 import { embeddingModel } from './testing/embedding-model.ts';
@@ -22,6 +26,7 @@ import {
   type EntrezQueryBundle,
   RecordingRetriever,
 } from './testing/recording-retriever.ts';
+import { settledThisTurn } from './testing/settled-this-turn.ts';
 
 // The passages and their vectors, as elt writes them. Each vector has length
 // 5; the cosine similarities to the query [4, 3, 0] are alpha 20/25 = 0.8,
@@ -160,7 +165,7 @@ test('the query and the abort signal of the call reach the retriever and each po
   const controller = new AbortController();
 
   // Act
-  await retriever.retrieve('rotate a key', { abortSignal: controller.signal });
+  await retriever.retrieve('rotate a key', { signal: controller.signal });
 
   // Assert
   assert.deepEqual(searched, [controller.signal]);
@@ -268,4 +273,96 @@ test('the failures of the retriever pass up unchanged, and a list of order only 
     assert.deepEqual([...result.failures], [['news', unavailable]]);
     assert.equal(result.failures.get('news'), unavailable);
   }
+});
+
+test("the caller's abort rejects the call at once with the signal's reason, while a postprocessor ignores its signal and never settles", async () => {
+  // Arrange
+  const started = Promise.withResolvers<void>();
+  const postprocessor: Postprocessor<StoredPassage> = {
+    postprocess: () => {
+      started.resolve();
+      return new Promise(() => {});
+    },
+  };
+  const retriever = new PostprocessingRetriever({
+    retriever: new RecordingRetriever(['a']),
+    postprocessors: [postprocessor],
+  });
+  const controller = new AbortController();
+  const reason = new Error('the caller left');
+
+  // Act
+  const call = retriever.retrieve('rotate a key', {
+    signal: controller.signal,
+  });
+  await started.promise;
+  controller.abort(reason);
+  const outcome = await settledThisTurn(call);
+
+  // Assert
+  assert.equal(outcome, reason);
+});
+
+test("the caller's abort rejects the call at once with the signal's reason, while the retriever ignores its signal and never settles, and an aborted signal starts no search", async () => {
+  // Arrange
+  const searched: QueryType[] = [];
+  const retriever = new PostprocessingRetriever({
+    retriever: {
+      retrieve: (query: QueryType) => {
+        searched.push(query);
+        return new Promise<never>(() => {});
+      },
+    },
+    postprocessors: [],
+  });
+  const controller = new AbortController();
+  const reason = new Error('the caller left');
+
+  // Act
+  const call = settledThisTurn(
+    retriever.retrieve('rotate a key', { signal: controller.signal }),
+  );
+  controller.abort(reason);
+  const early = settledThisTurn(
+    retriever.retrieve('expire a key', { signal: AbortSignal.abort(reason) }),
+  );
+  const outcomes = await Promise.all([call, early]);
+
+  // Assert
+  assert.deepEqual(outcomes, [reason, reason]);
+  assert.deepEqual(searched, ['rotate a key']);
+});
+
+test('an abort while a postprocessor runs stops the list there: the postprocessors after it never run, even when that one ignores its signal and answers', async () => {
+  // Arrange
+  const controller = new AbortController();
+  const reason = new Error('the caller left');
+  const later: string[] = [];
+  const retriever = new PostprocessingRetriever({
+    retriever: new RecordingRetriever(['a']),
+    postprocessors: [
+      {
+        postprocess: async (passages) => {
+          controller.abort(reason);
+          return [...passages];
+        },
+      },
+      {
+        postprocess: async (passages, query) => {
+          later.push(query);
+          return [...passages];
+        },
+      },
+    ],
+  });
+
+  // Act
+  const outcome = await settledThisTurn(
+    retriever.retrieve('rotate a key', { signal: controller.signal }),
+  );
+  await nextTurn();
+
+  // Assert
+  assert.equal(outcome, reason);
+  assert.deepEqual(later, []);
 });

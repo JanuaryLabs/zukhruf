@@ -61,7 +61,10 @@ export class Collapse<
   async postprocess<R extends P>(
     passages: readonly ScoredPassage<R>[] &
       (F extends FieldOf<R> ? unknown : never),
+    _query?: string,
+    options: { readonly signal?: AbortSignal } = {},
   ): Promise<ScoredPassage<R>[]> {
+    options.signal?.throwIfAborted();
     const kept = new Map<unknown, number>();
     return bestFirst(passages).filter(({ passage }) => {
       const key = this.#value(passage) ?? null;

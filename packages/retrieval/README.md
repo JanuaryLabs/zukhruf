@@ -171,7 +171,7 @@ Output:
 The query model openai/text-embedding-3-small is not the model of the stored vectors, toy/three-words
 ```
 
-On Postgres, the store takes a session: one `query(sql, parameters)` method over the driver of the host, with positional parameters, `$1` for the first. So the package imports no driver.
+On Postgres, the store takes a session: one `query(sql, parameters, { signal })` method over the driver of the host, with positional parameters, `$1` for the first. So the package imports no driver. "Cancel a search" shows a session that cancels its query when the signal aborts.
 
 ```ts
 import pg from 'pg';
@@ -199,7 +199,7 @@ const pgRetriever = new PgvectorEmbeddingRetriever({
 
 const pgResults = await pgRetriever.retrieve('How do I rotate a key?', {
   topK: 3,
-  abortSignal: AbortSignal.timeout(10_000),
+  signal: AbortSignal.timeout(10_000),
 });
 for (const { passage, score } of pgResults.passages) {
   console.log(score?.toFixed(3), passage.id, passage.text);
@@ -682,6 +682,53 @@ Output:
 
 On Postgres, pgvector filters after the approximate index scan, so a filtered call can give fewer than `topK` passages ([pgvector README](https://github.com/pgvector/pgvector/blob/master/README.md)).
 
+## Cancel a search
+
+Every async call of the package takes an optional `signal`, the name of `fetch` and Node ([ADR 0017](./docs/adr/0017-every-async-port-takes-an-optional-abort-signal-and-a-composite-rejects-at-once-when-it-aborts.md)): `retrieve`, `retrieveMany`, `postprocess`, the store's `get` and `neighbours`, and the session's `query`. Each built-in passes the signal to every async call it makes: an engine retriever and a store to the session, `ContextWindow` to the store, and each composite to its retrievers, postprocessors and model. The AI SDK names it `abortSignal`, and the package maps `signal` onto it at its own model calls. An aborted call rejects with the signal's reason. A composite (`FusionRetriever`, `MultiQueryRetriever`, `PostprocessingRetriever`, `HydeRetriever`) rejects at once when the signal aborts, even while a part of it ignores its signal. An abort is never a failure in `failures`.
+
+A session cancels its query on the server. node-postgres takes no signal, so this session cancels with `pg_cancel_backend`:
+
+```ts
+import { addAbortListener } from 'node:events';
+
+const cancelling: PostgresSession = {
+  async query(sql, parameters, { signal } = {}) {
+    const client = await pool.connect();
+    let cancelled: Promise<unknown> | undefined;
+    try {
+      const [backend] = (await client.query('SELECT pg_backend_pid() AS pid'))
+        .rows;
+      using _listening =
+        signal === undefined
+          ? undefined
+          : addAbortListener(signal, () => {
+              cancelled = pool.query('SELECT pg_cancel_backend($1)', [
+                backend?.pid,
+              ]);
+            });
+      try {
+        const { rows } = await client.query(sql, [...parameters]);
+        signal?.throwIfAborted(); // an abort the cancel came too late for
+        return rows;
+      } catch (error) {
+        signal?.throwIfAborted(); // the reason, not "canceling statement due to user request"
+        throw error;
+      }
+    } finally {
+      // The cancel ends before the client goes back to the pool, so it
+      // cannot cancel the query of the next borrower of this backend.
+      try {
+        await cancelled;
+      } finally {
+        client.release();
+      }
+    }
+  },
+};
+```
+
+On SQL Server, the session cancels with mssql's `request.cancel()` in the same way. SQLite runs a statement synchronously, so its store and retrievers check the signal before the statement, and the embedding retriever after the model call too.
+
 ## Errors
 
 | Error                                         | When                                                                                                                                                                                                                                                                                                             |
@@ -694,7 +741,7 @@ On Postgres, pgvector filters after the approximate index scan, so a filtered ca
 | `RangeError`                                  | An option out of its range: a `FusionRetriever` of no retriever, with a name that holds `:` or with a weight for a name that is no retriever, or a `rankWindowSize` smaller than the `topK` of the call; a `queryCount`, `topK` of MMR or `windowSize` that is not a positive integer; a `lambda` outside 0 to 1 |
 | `TypeError`                                   | A filter field that is not a passage field or `metadata.<column>`, an `in` or `not in` value that is not an array, a stored model identity that is not of the form `provider/model (n dimensions)`, or a passage without a score in `relativeScoreFusion` or `distributionBasedScoreFusion`                      |
 
-An error of the model, of the engine, of the store's `metadata` or of the reranking model reaches the caller as it is. An aborted call rejects with the reason of its `abortSignal`.
+An error of the model, of the engine, of the store's `metadata` or of the reranking model reaches the caller as it is. An aborted call rejects with the reason of its `signal` ("Cancel a search").
 
 ## What the package does not do
 
@@ -812,7 +859,7 @@ type RetrieveOptions<P extends Passage = Passage> = {
   readonly topK?: number; // 10
   readonly filter?: Filter<P>;
   readonly includeVectors?: boolean; // false
-  readonly abortSignal?: AbortSignal;
+  readonly signal?: AbortSignal; // rejects with its reason when it aborts
 };
 
 type QueryBundle = {
@@ -892,7 +939,7 @@ interface Postprocessor<in out P extends Passage = Passage> {
   readonly postprocess: (
     passages: readonly ScoredPassage<P>[],
     query: string, // the query of the query bundle
-    options?: { readonly abortSignal?: AbortSignal },
+    options?: { readonly signal?: AbortSignal },
   ) => Promise<ScoredPassage<P>[]>;
 }
 class PostprocessingRetriever<
@@ -951,11 +998,15 @@ class ContextWindow<M extends Metadata = Metadata> implements Postprocessor<
 }
 
 interface PassageStore<M extends Metadata = Metadata> {
-  get(ids: readonly string[]): Promise<ReadonlyMap<string, StoredPassage<M>>>;
+  get(
+    ids: readonly string[],
+    options?: { readonly signal?: AbortSignal },
+  ): Promise<ReadonlyMap<string, StoredPassage<M>>>;
   neighbours(options: {
     readonly source: string;
     readonly seq: number;
     readonly windowSize: number;
+    readonly signal?: AbortSignal;
   }): Promise<StoredPassage<M>[]>;
 }
 
@@ -1018,6 +1069,7 @@ type PostgresSession = {
   query(
     sql: string,
     parameters: readonly unknown[], // $1 for the first
+    options?: { readonly signal?: AbortSignal }, // cancel the query when it aborts
   ): Promise<readonly Record<string, unknown>[]>;
 };
 class PostgresPassageStore<
@@ -1057,6 +1109,7 @@ type SqlServerSession = {
   query(
     sql: string,
     parameters: Readonly<Record<string, unknown>>, // @p0 for the key p0
+    options?: { readonly signal?: AbortSignal }, // cancel the query when it aborts
   ): Promise<readonly Record<string, unknown>[]>;
 };
 class SqlServerPassageStore<

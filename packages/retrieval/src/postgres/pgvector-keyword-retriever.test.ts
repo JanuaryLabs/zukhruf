@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
+import { addAbortListener } from 'node:events';
 import { test } from 'node:test';
 
 import type pg from 'pg';
 
+import { waitFor } from '@zukhruf/testing/async';
 import { Postgres } from '@zukhruf/testing/postgres';
 
 import {
@@ -429,7 +431,7 @@ test('an aborted keyword search rejects with the reason of its signal', async ()
 
   // Act
   const result = retriever.retrieve('key', {
-    abortSignal: AbortSignal.abort(reason),
+    signal: AbortSignal.abort(reason),
   });
 
   // Assert
@@ -654,4 +656,94 @@ test('the metadata of each passage is what the metadata of its store reads from 
   );
   assert.ok(passages.every((passage) => metadata.gave(passage.metadata)));
   assert.deepEqual(metadata.columns[0], { product: 'kms' });
+});
+
+test("the keyword search passes the call's signal to the session, which cancels the running query on the server, and the call rejects with the signal's reason", async (t) => {
+  // Arrange: a host session that cancels its query with pg_cancel_backend,
+  // as the README shows; it records the cancel and the code of each error.
+  await using database = await server().database();
+  const pool = database.pool();
+  await contract(pool, [{ id: 'a', text: 'rotate the key' }]);
+  const cancels: Promise<unknown>[] = [];
+  const codes: unknown[] = [];
+  const cancelling: PostgresSession = {
+    query: async (sql, parameters, { signal } = {}) => {
+      const client = await pool.connect();
+      let cancelled: Promise<unknown> | undefined;
+      try {
+        const [backend] = (await client.query('SELECT pg_backend_pid() AS pid'))
+          .rows;
+        const cancel = () => {
+          cancelled = pool.query('SELECT pg_cancel_backend($1)', [
+            backend?.pid,
+          ]);
+          cancels.push(cancelled);
+        };
+        using _listening =
+          signal === undefined ? undefined : addAbortListener(signal, cancel);
+        try {
+          const { rows } = await client.query(sql, [...parameters]);
+          signal?.throwIfAborted();
+          return rows;
+        } catch (error) {
+          codes.push(
+            Error.isError(error) && 'code' in error ? error.code : error,
+          );
+          signal?.throwIfAborted();
+          throw error;
+        }
+      } finally {
+        try {
+          await cancelled;
+        } finally {
+          client.release();
+        }
+      }
+    },
+  };
+  const retriever = new PgvectorKeywordRetriever({
+    store: new PostgresPassageStore({
+      session: cancelling,
+      passages: 'docs_passages',
+      metadata: (columns) => columns,
+    }),
+    index: { column: 'keywords' },
+  });
+  // A transaction that holds the table, so the search waits on its lock
+  // until the session cancels it.
+  const locker = await pool.connect();
+  try {
+    await locker.query(
+      'BEGIN; LOCK TABLE docs_passages IN ACCESS EXCLUSIVE MODE',
+    );
+    const controller = new AbortController();
+    const reason = new Error('the caller left');
+
+    // Act
+    const result = retriever.retrieve('key', { signal: controller.signal });
+    const settled = result.then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    await waitFor(
+      async () => {
+        const { rows } = await pool.query(
+          `SELECT 1 FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'`,
+        );
+        assert.equal(rows.length, 1);
+      },
+      { signal: t.signal },
+    );
+    controller.abort(reason);
+    // A session that got no signal cancels nothing: the commit below then
+    // lets the search answer, and the assertion fails.
+    await Promise.all(cancels);
+    await locker.query('COMMIT');
+
+    // Assert
+    assert.equal(await settled, reason);
+    assert.deepEqual(codes, ['57014']);
+  } finally {
+    locker.release();
+  }
 });

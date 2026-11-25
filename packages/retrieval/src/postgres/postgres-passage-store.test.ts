@@ -240,3 +240,30 @@ test('a store with a schema reads the passages and the neighbours of that schema
     ['public-g0'],
   );
 });
+
+test("get and neighbours pass the call's signal to the session", async () => {
+  // Arrange: the session records the signal of each query.
+  await using database = await server().database();
+  const pool = database.pool();
+  await contract(pool, [{ id: 'g0', source: 'guide', seq: 0 }]);
+  const signals: (AbortSignal | undefined)[] = [];
+  const store = new PostgresPassageStore({
+    session: {
+      query: async (sql, parameters, options) => {
+        signals.push(options?.signal);
+        return (await pool.query(sql, [...parameters])).rows;
+      },
+    },
+    passages: 'docs_passages',
+    metadata: (columns) => columns,
+  });
+  const controller = new AbortController();
+  const { signal } = controller;
+
+  // Act
+  await store.get(['g0'], { signal });
+  await store.neighbours({ source: 'guide', seq: 0, windowSize: 1, signal });
+
+  // Assert
+  assert.deepEqual(signals, [signal, signal]);
+});
