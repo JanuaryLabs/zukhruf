@@ -2,6 +2,8 @@
 
 Superseded in part on 2026-11-25 (#5583) for a list without scores. Reciprocal rank fusion reads the order only, so such a list fuses like any other; `relativeScoreFusion` and `distributionBasedScoreFusion` refuse a passage without a score with a `TypeError` that names the passage and its list, and says to fuse a list of order only with `reciprocalRankFusion` ([ADR 0016](./0016-a-scored-passage-may-have-no-score-and-a-list-is-in-the-retrievers-order.md)).
 
+Superseded in part on 2026-11-25 (#5582) for the retrievers and the weights of `FusionRetriever`: a record by name, with weights by name and 1 for each name that is absent, so a count of weights that differs from the count of retrievers cannot be written. The `RangeError` for weights that are not one for each list stays for `Fusion.fuse` ([ADR 0014](./0014-a-retrieve-call-answers-with-the-retrievers-that-answered-and-names-those-that-were-unavailable.md)).
+
 Status: accepted by Ezz on 2026-11-23 ("Approve, write the paper").
 
 Reciprocal rank fusion (RRF; Cormack, Clarke and Büttcher, SIGIR 2009) gives each passage the sum of `weight / (k + rank)` over the lists that hold it. The leaders agree on k 60 with ranks from 1:

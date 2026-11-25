@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import type { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
+import { setImmediate as nextTurn } from 'node:timers/promises';
 
 import { MockLanguageModelV4 } from 'ai/test';
 
@@ -13,6 +14,7 @@ import {
   type Passage,
   type QueryType,
   type RetrievalResult,
+  type RetrieveOptions,
   RetrieverUnavailableError,
   relativeScoreFusion,
 } from './index.ts';
@@ -116,6 +118,21 @@ function languageModel(
 
 const queries = (...versions: readonly string[]) =>
   JSON.stringify({ queries: versions });
+
+const pending = Symbol('pending');
+
+// What the call settled with before the event loop's next turn: its
+// rejection reason, 'answered', or `pending`. A call that rejects at once
+// settles in microtasks; one that waits on a search that never settles
+// stays pending, so the assertion fails there, not at the time limit.
+const settledThisTurn = (call: Promise<unknown>): Promise<unknown> =>
+  Promise.race([
+    call.then(
+      () => 'answered',
+      (reason: unknown) => reason,
+    ),
+    nextTurn(pending),
+  ]);
 
 const scores = (
   results: readonly {
@@ -324,11 +341,12 @@ test('a query bundle is searched as the caller gives it, first, and each version
   ]);
 });
 
-test('the filter and includeVectors of the call reach each search, and its abort signal reaches the model and each search', async () => {
+test("the filter and includeVectors of the call reach each search, its abort signal reaches the model, and each search gets a signal that aborts when the call's aborts, with its reason", async () => {
   // Arrange
   using database = contract();
   const calls: Call[] = [];
   const given = new AbortController();
+  const reason = new Error('the turn ended');
   const signals: (AbortSignal | undefined)[] = [];
   const embeddings: Record<string, readonly number[]> = Object.fromEntries(
     rows.map(({ text, vector }) => [text, vector]),
@@ -365,8 +383,13 @@ test('the filter and includeVectors of the call reach each search, and its abort
   //   'revoke token'      [alpha 0, delta 0]
   //   'renew certificate' [gamma 1, alpha 0]
   //   alpha = 1 / 61 + 1 / 61 + 1 / 62, delta = 1 / 62 + 1 / 62, gamma = 1 / 61
+  given.abort(reason);
   assert.equal(calls[0]?.abortSignal, given.signal);
-  assert.deepEqual(signals, [given.signal, given.signal, given.signal]);
+  assert.equal(signals.length, 3);
+  for (const signal of signals) {
+    assert.equal(signal?.aborted, true);
+    assert.equal(signal?.reason, reason);
+  }
   assert.deepEqual(
     results.map(({ passage, score, vector }) => [passage.id, score, vector]),
     [
@@ -441,4 +464,101 @@ test('the failures of the searches merge by name, in the order of the searches, 
     ],
   );
   assert.equal(result.failures.get('news'), first);
+});
+
+test('a search that throws aborts the signal of the other searches, with the error as the reason, and the call rejects with it at once, a RetrieverUnavailableError too: every version reads one retriever', async () => {
+  // Arrange: the version 'revoke token' cannot reach the source, and the
+  // other searches record their signal and never settle.
+  const down = new RetrieverUnavailableError('HTTP 503');
+  const signals: (AbortSignal | undefined)[] = [];
+  const searching = Promise.withResolvers<void>();
+  const source = {
+    retrieve: (
+      query: QueryType,
+      options: RetrieveOptions<Passage> = {},
+    ): Promise<RetrievalResult<Passage>> => {
+      if (query === 'revoke token') {
+        searching.resolve();
+        return Promise.reject(down);
+      }
+      signals.push(options.abortSignal);
+      return new Promise(() => {});
+    },
+  };
+  const retriever = new MultiQueryRetriever({
+    retriever: source,
+    model: languageModel(queries('revoke token', 'renew certificate')),
+    queryCount: 2,
+  });
+
+  // Act
+  const call = retriever.retrieve('rotate key');
+  await searching.promise;
+  const outcome = await settledThisTurn(call);
+
+  // Assert: the query and 'renew certificate' were searching.
+  assert.equal(outcome, down);
+  assert.equal(signals.length, 2);
+  for (const signal of signals) {
+    assert.equal(signal?.aborted, true);
+    assert.equal(signal?.reason, down);
+  }
+});
+
+test("the caller's abort rejects the call at once with the signal's reason, while the searches ignore their signal", async () => {
+  // Arrange
+  const caller = new AbortController();
+  const reason = new Error('the turn ended');
+  const searching = Promise.withResolvers<void>();
+  const deaf = {
+    retrieve: (): Promise<RetrievalResult<Passage>> => {
+      searching.resolve();
+      return new Promise(() => {});
+    },
+  };
+  const retriever = new MultiQueryRetriever({
+    retriever: deaf,
+    model: languageModel(queries('revoke token')),
+    queryCount: 1,
+  });
+
+  // Act
+  const call = retriever.retrieve('rotate key', {
+    abortSignal: caller.signal,
+  });
+  await searching.promise;
+  caller.abort(reason);
+  const outcome = await settledThisTurn(call);
+
+  // Assert: the searches never settle, so the call settles only by the
+  // abort.
+  assert.equal(outcome, reason);
+});
+
+test('a caller that aborted before the fan-out starts no search, as a FusionRetriever starts no retriever, and the call rejects with its reason', async () => {
+  // Arrange: the model ignores the signal and answers.
+  const caller = new AbortController();
+  const reason = new Error('the turn ended');
+  caller.abort(reason);
+  const source = new RecordingRetriever(['alpha']);
+  const retriever = new MultiQueryRetriever({
+    retriever: source,
+    model: languageModel(queries('revoke token')),
+    queryCount: 1,
+  });
+
+  // Act
+  // A plain await: the caller is aborted before the call, so the call
+  // rejects at once whatever the model does, and no turn of the event loop
+  // is raced.
+  const outcome = await retriever
+    .retrieve('rotate key', { abortSignal: caller.signal })
+    .then(
+      () => 'answered',
+      (rejection: unknown) => rejection,
+    );
+
+  // Assert
+  assert.equal(outcome, reason);
+  assert.deepEqual(source.queries, []);
 });

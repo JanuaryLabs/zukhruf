@@ -144,7 +144,9 @@ test('the passage reaches the embedding search only, as customEmbeddings: the qu
   const source = new RecordingRetriever(['kw-1']);
   const reranked: string[] = [];
   const stack = new PostprocessingRetriever({
-    retriever: new FusionRetriever({ retrievers: [source, meaning(database)] }),
+    retriever: new FusionRetriever({
+      retrievers: { source, meaning: meaning(database) },
+    }),
     postprocessors: [
       new Rerank({
         model: new MockRerankingModelV4({
@@ -189,13 +191,13 @@ test('HyDE takes a retriever of any query bundle: not one of strings only, nor a
   using database = contract();
   const host = new RecordingRetriever<EntrezQueryBundle>(['pmid-1']);
   const federation = new FusionRetriever({
-    retrievers: [
+    retrievers: {
       host,
-      new HydeRetriever({
+      hyde: new HydeRetriever({
         retriever: meaning(database),
         model: languageModel(),
       }),
-    ],
+    },
   });
   const query: EntrezQueryBundle = {
     query: 'how do I change my signing key?',

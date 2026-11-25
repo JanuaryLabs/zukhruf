@@ -57,11 +57,11 @@ What a retrieve call gives: `{ passages, failures }`, the scored passages, best 
 _Avoid_: Response, search result, hits
 
 **Failures**:
-The `failures` of a retrieval result: each child of a composite that was unavailable, by its name, with its error. It is empty when nothing failed (Elasticsearch `_shards.failures`, bleve `Status.Errors`).
+The `failures` of a retrieval result: each child of a composite that was unavailable, by its name, with its error. A failure inside a nested fusion is named by its path, `outer:inner`, as Elasticsearch writes `cluster:index`, so a name holds no `:`. It is empty when nothing failed (Elasticsearch `_shards.failures`, bleve `Status.Errors`).
 _Avoid_: Errors, partial, skipped
 
 **Unavailable retriever**:
-A retriever that could not answer and that a search can go on without: its adapter throws `RetrieverUnavailableError`, as Elasticsearch's `skip_unavailable` skips a cluster. Every other error is a bug, and rejects the call. `NoRetrieverAnsweredError` is a fusion none of whose children answered ([ADR 0014](./docs/adr/0014-a-retrieve-call-answers-with-the-retrievers-that-answered-and-names-those-that-were-unavailable.md)).
+A retriever that could not answer and that a search can go on without: its adapter throws `RetrieverUnavailableError`, as Elasticsearch's `skip_unavailable` skips a cluster. Every other error is a bug: it aborts the signal of every sibling, with the error as the reason, and rejects the call. `NoRetrieverAnsweredError` is a fusion none of whose children answered ([ADR 0014](./docs/adr/0014-a-retrieve-call-answers-with-the-retrievers-that-answered-and-names-those-that-were-unavailable.md)).
 _Avoid_: Down source, failed source, source error
 
 **Engine retriever**:

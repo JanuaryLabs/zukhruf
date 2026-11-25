@@ -63,6 +63,7 @@
     "access": "public"
   },
   "dependencies": {
+    "@zukhruf/async": "^0.8.70",
     "@zukhruf/statistics": "^0.8.70",
     "@zukhruf/vectors": "^0.8.70",
     "ai": "^7.0.179",

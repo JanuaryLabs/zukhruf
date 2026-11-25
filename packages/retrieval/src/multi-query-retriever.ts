@@ -1,5 +1,7 @@
 import { type LanguageModel, Output, generateText, jsonSchema } from 'ai';
 
+import { untilAborted } from '@zukhruf/async';
+
 import type { Fusion } from './fusion.ts';
 import type { Passage } from './passage.ts';
 import { type QueryType, needOf } from './query-bundle.ts';
@@ -23,6 +25,14 @@ import type { Retriever } from './retriever.ts';
  * and Haystack. So the retriever takes a plain query (ADR 0013). The
  * failures of the searches merge by name, in the order of the searches, and
  * a name that two searches give keeps the failure of the first (ADR 0014).
+ *
+ * The searches fan out as the retrievers of a `FusionRetriever` do: an
+ * error of one search aborts the signal of the others, with the error as
+ * the reason, and the call rejects with it; a caller that aborted before
+ * the fan-out starts no search; when the caller aborts, the call rejects at
+ * once with the signal's reason. It catches nothing, a
+ * `RetrieverUnavailableError` too: every search reads one retriever, so an
+ * unavailable retriever leaves nothing to answer (ADR 0014).
  */
 export class MultiQueryRetriever<
   // `in out P`: a filter puts P in a parameter as well, so TypeScript cannot
@@ -74,8 +84,31 @@ export class MultiQueryRetriever<
         .slice(0, this.#queryCount)
         .filter((version) => version.toLowerCase() !== need.toLowerCase()),
     ];
-    const results = await Promise.all(
-      queries.map((version) => this.#retriever.retrieve(version, options)),
+    const caller = options.abortSignal;
+    // The model may answer after the caller aborted: then no search starts.
+    caller?.throwIfAborted();
+    // The first error aborts the other searches with the error as the
+    // reason, as Go's errgroup.WithContext cancels with its cause.
+    const siblings = new AbortController();
+    const abortSignal =
+      caller === undefined
+        ? siblings.signal
+        : AbortSignal.any([caller, siblings.signal]);
+    const results = await untilAborted(
+      Promise.all(
+        queries.map(async (version) => {
+          try {
+            return await this.#retriever.retrieve(version, {
+              ...options,
+              abortSignal,
+            });
+          } catch (error) {
+            siblings.abort(error);
+            throw error;
+          }
+        }),
+      ),
+      caller,
     );
     return {
       passages: this.#fusion

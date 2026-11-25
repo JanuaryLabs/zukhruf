@@ -39,7 +39,7 @@ type IssueQueryBundle = QueryBundle & { readonly jql: string };
 declare const plain: Retriever;
 declare const issues: Retriever<IssueQueryBundle>;
 
-const federation = new FusionRetriever({ retrievers: [plain, issues] });
+const federation = new FusionRetriever({ retrievers: { plain, issues } });
 const postprocessed = new PostprocessingRetriever({
   retriever: issues,
   postprocessors: [],
@@ -50,13 +50,41 @@ export const fused: FusionRetriever<IssueQueryBundle> = federation;
 export const kept: PostprocessingRetriever<IssueQueryBundle> = postprocessed;
 // A composite of plain retrievers serves a host query too (contravariance).
 export const served: FusionRetriever<IssueQueryBundle> = new FusionRetriever({
-  retrievers: [plain],
+  retrievers: { plain },
 });
 
 // A host composite does not widen to a plain one: a string has no jql.
 export const widened: FusionRetriever = federation; // TS2322
 export const widenedPostprocessing: PostprocessingRetriever = postprocessed; // TS2322
 export const widenedPort: Retriever = federation; // TS2322
+
+// The retrievers of a fusion are named, and its weights take those names: a
+// weight for a name that is no retriever, a record of no retriever and a
+// name that holds ':', the separator of a nested failure's path, do not
+// compile (ADR 0014).
+export const weighted = new FusionRetriever({
+  retrievers: { plain, issues },
+  weights: { issues: 2 },
+});
+export const unknownWeight = new FusionRetriever({
+  retrievers: { plain, issues },
+  weights: { isues: 2 }, // TS2561
+});
+export const noRetriever = new FusionRetriever({
+  retrievers: {}, // TS2322
+});
+export const pathName = new FusionRetriever({
+  retrievers: {
+    plain,
+    'labels:dailymed': plain, // TS2322
+  },
+});
+// A record typed by string compiles, and the constructor checks it.
+declare const dynamic: Readonly<Record<string, Retriever>>;
+export const fromConfig = new FusionRetriever({
+  retrievers: dynamic,
+  weights: { any: 2 },
+});
 
 // The passage type, the second parameter of the port (ADR 0015).
 type Label = { readonly setid: string; readonly year: number };
@@ -115,7 +143,9 @@ export const bag: Filter = { field: 'metadata.x', operator: '==', value: 1 };
 
 // ContextWindow needs stored passages: it goes over an engine and over a
 // fusion of engines, and not over a live source.
-const engines = new FusionRetriever({ retrievers: [engine, engine] });
+const engines = new FusionRetriever({
+  retrievers: { labels: engine, more: engine },
+});
 export const fusedEngines: Of<StoredPassage<Label>> = engines.retrieve('q');
 export const overEngines = new PostprocessingRetriever({
   retriever: engines,
@@ -135,7 +165,7 @@ export const cutLive = new PostprocessingRetriever({
 
 // A fusion of a live source and an engine gives their common type,
 // Passage<Label>, so it takes no ContextWindow.
-const mixed = new FusionRetriever({ retrievers: [live, engine] });
+const mixed = new FusionRetriever({ retrievers: { live, engine } });
 export const common: Of<Passage<Label>> = mixed.retrieve('q');
 export const stored: Of<StoredPassage<Label>> = mixed.retrieve('q'); // TS2322
 export const mixedWindow = new PostprocessingRetriever({
@@ -143,10 +173,12 @@ export const mixedWindow = new PostprocessingRetriever({
   postprocessors: [new ContextWindow({ store })], // TS2322
 });
 // Two metadata types fuse only with a type argument that names their union.
-export const two = new FusionRetriever({ retrievers: [engine, pubmed] }); // TS2322
+export const two = new FusionRetriever({
+  retrievers: { engine, pubmed }, // TS2322
+});
 type Both = StoredPassage<Label> | StoredPassage<{ readonly pmid: string }>;
 export const both = new FusionRetriever<string, Both>({
-  retrievers: [engine, pubmed],
+  retrievers: { engine, pubmed },
 });
 
 // The ports are generic in their parameter, not in their method (the island
@@ -158,7 +190,7 @@ export const reranked: Of<StoredPassage<Label>> = new PostprocessingRetriever({
   postprocessors: [new Rerank({ model }), new ContextWindow({ store })],
 }).retrieve('q');
 export const ranked: Of<StoredPassage<Label>> = new FusionRetriever({
-  retrievers: [engine, engine],
+  retrievers: { labels: engine, more: engine },
   fusion: reciprocalRankFusion(),
 }).retrieve('q');
 // A host writes a postprocessor or a fusion for its own passage type, and
@@ -180,7 +212,7 @@ const firstList: Fusion<StoredPassage<Label>> = {
 };
 export const hosted: Of<StoredPassage<Label>> = new PostprocessingRetriever({
   retriever: new FusionRetriever({
-    retrievers: [engine, engine],
+    retrievers: { labels: engine, more: engine },
     fusion: firstList,
   }),
   postprocessors: [pin, new SimilarityCutoff({ threshold: 0.2 })],
@@ -231,6 +263,14 @@ const articleKeyword = new PgvectorKeywordRetriever({
 export const typedStore: Promise<ReadonlyMap<string, StoredPassage<Label>>> =
   labels.get(['p1']);
 export const typedKeyword: Of<StoredPassage<Label>> = keyword.retrieve('q');
+// A live source beside an engine class of one metadata type fuses to their
+// common passage type, in either order, as an array of both did.
+export const liveFirst: Of<Passage<Label>> = new FusionRetriever({
+  retrievers: { live, keyword },
+}).retrieve('q');
+export const engineFirst: Of<Passage<Label>> = new FusionRetriever({
+  retrievers: { keyword, live },
+}).retrieve('q');
 export const typedMany: Promise<RetrievalResult<StoredPassage<Label>>[]> =
   embedding.retrieveMany(['q']);
 export const typedArticles: Of<StoredPassage<Article>> =
@@ -271,18 +311,20 @@ export const anyYear: SqliteBM25Retriever<Year<number>> = year2026; // TS2322
 // follows it. Two engines of different M fuse only when the type argument
 // names their union, as the paper wants: no inferred type covers both, and
 // the union is not the intersection.
-const sameM = new FusionRetriever({ retrievers: [keyword, embedding] });
+const sameM = new FusionRetriever({
+  retrievers: { keyword, embedding },
+});
 export const sameMetadata: Of<StoredPassage<Label>> = sameM.retrieve('q');
 export const sameWindow = new PostprocessingRetriever({
   retriever: sameM,
   postprocessors: [new ContextWindow({ store: labels })],
 });
 export const twoM = new FusionRetriever({
-  retrievers: [keyword, articleKeyword], // TS2322
+  retrievers: { keyword, articleKeyword }, // TS2322
 });
 type Either = StoredPassage<Label> | StoredPassage<Article>;
 const eitherM = new FusionRetriever<string, Either>({
-  retrievers: [keyword, articleKeyword],
+  retrievers: { keyword, articleKeyword },
 });
 export const either: Of<Either> = eitherM.retrieve('q');
 type LabelAndArticle = StoredPassage<Label & Article>;

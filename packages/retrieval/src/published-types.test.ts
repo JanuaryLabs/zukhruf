@@ -37,7 +37,7 @@ const compile = async (): Promise<string> => {
   }
 };
 
-test('a consumer of the built declarations gets exactly the errors marked in type-tests: a host-typed FusionRetriever or PostprocessingRetriever does not widen to a plain one, the passage type keeps live passages from stored ones and checks the metadata and the filter, and the built-in postprocessors and fusions take the passage type of the retriever while a host postprocessor or fusion of one passage type needs no assertion', async () => {
+test('a consumer of the built declarations gets exactly the errors marked in type-tests: a host-typed FusionRetriever or PostprocessingRetriever does not widen to a plain one, the weights of a fusion take only the names of its retrievers and its record holds at least one name and none with a colon, the passage type keeps live passages from stored ones and checks the metadata and the filter, and the built-in postprocessors and fusions take the passage type of the retriever while a host postprocessor or fusion of one passage type needs no assertion', async () => {
   // Arrange
   const source = await readFile(join(fixture, 'published-types.ts'), 'utf8');
   const expected = source
@@ -57,7 +57,7 @@ test('a consumer of the built declarations gets exactly the errors marked in typ
     ...stdout.matchAll(/^(?:(.+?)\((\d+),\d+\): )?error (TS\d+):/gm),
   ].map(([, file = '', line = '', error]) => `${file}:${line} ${error}`);
   const files = stdout.split('\n').filter((line) => line.startsWith(root));
-  assert.equal(expected.length, 28, 'the fixture marks its 28 errors');
+  assert.equal(expected.length, 31, 'the fixture marks its 31 errors');
   assert.deepEqual(errors, expected);
   assert.ok(files.includes(join(root, 'dist', 'index.d.ts')));
   assert.deepEqual(

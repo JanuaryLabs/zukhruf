@@ -7,7 +7,7 @@ Root ADR 0001 sorts the packages into layers by their imports: shipped code of a
 ## Decision
 
 - `@zukhruf/retrieval` has the tag `std:base`.
-- Its shipped code imports `@zukhruf/vectors` (the SQLite distance functions), `@zukhruf/statistics` and `ai` only. It imports `mean` and `std` from `@zukhruf/statistics`. `std` is NumPy's `np.std` (`ddof` 0 by default), which `distributionBasedScoreFusion` needs. It moved into `@zukhruf/statistics` at this third place (backlog #3992), and the two copies in `@zukhruf/mteb` (`src/dependencies/numpy.ts`) and relevance-filtering (`src/statistics.ts`, `populationSd`) use it.
+- Its shipped code imports `@zukhruf/vectors` (the SQLite distance functions), `@zukhruf/statistics`, `@zukhruf/async` and `ai` only. It imports `untilAborted` from `@zukhruf/async`, a base package, so a fan-out rejects at once when its caller aborts ([ADR 0014](./0014-a-retrieve-call-answers-with-the-retrievers-that-answered-and-names-those-that-were-unavailable.md)). It imports `mean` and `std` from `@zukhruf/statistics`. `std` is NumPy's `np.std` (`ddof` 0 by default), which `distributionBasedScoreFusion` needs. It moved into `@zukhruf/statistics` at this third place (backlog #3992), and the two copies in `@zukhruf/mteb` (`src/dependencies/numpy.ts`) and relevance-filtering (`src/statistics.ts`, `populationSd`) use it.
 - The engine subpaths take a `DatabaseSync` of `node:sqlite` or a session with one `query(sql, parameters)` method, so the package imports no database driver. `SqlServerSession` takes named parameters, a `Record`, as the SQL Server store of `@zukhruf/embedding-cache` does (`packages/embedding-cache/src/sqlserver.ts`). `PostgresSession` takes positional parameters, an array.
 
 ## Considered Options

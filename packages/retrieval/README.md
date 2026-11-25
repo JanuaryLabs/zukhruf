@@ -349,19 +349,19 @@ Output:
 
 ## Combine searches
 
-`FusionRetriever` asks each retriever for `rankWindowSize` passages, fuses the lists on `Passage.id` and gives the best `topK`. The default fusion is reciprocal rank fusion with k 60 and ranks from 1; each retriever has a weight of 1 ([ADR 0007](./docs/adr/0007-reciprocal-rank-fusion-is-the-default-fusion-with-k-60-and-ranks-from-1.md)). `rankWindowSize` is the `topK` of the call when absent, and a `rankWindowSize` smaller than that `topK` is a `RangeError`. This program uses `keywords` of "Search by keywords".
+`FusionRetriever` takes its retrievers by name. It asks each retriever for `rankWindowSize` passages, fuses the lists on `Passage.id`, in the order of the names, and gives the best `topK`. The default fusion is reciprocal rank fusion with k 60 and ranks from 1. `weights` gives a weight by name, and each name that it does not give has a weight of 1 ([ADR 0007](./docs/adr/0007-reciprocal-rank-fusion-is-the-default-fusion-with-k-60-and-ranks-from-1.md), [ADR 0014](./docs/adr/0014-a-retrieve-call-answers-with-the-retrievers-that-answered-and-names-those-that-were-unavailable.md)). A weight for a name that is no retriever, a record of no retriever, and a name that holds `:` do not compile; a record typed by `string` gets a `RangeError` for them at construction. `rankWindowSize` is the `topK` of the call when absent, and a `rankWindowSize` smaller than that `topK` is a `RangeError`. This program uses `keywords` of "Search by keywords".
 
 ```ts
 import { FusionRetriever, relativeScoreFusion } from '@zukhruf/retrieval';
 
 const hybrid = new FusionRetriever({
-  retrievers: [retriever, keywords],
+  retrievers: { meaning: retriever, keywords },
   rankWindowSize: 50,
 });
 const minMax = new FusionRetriever({
-  retrievers: [retriever, keywords],
+  retrievers: { meaning: retriever, keywords },
   fusion: relativeScoreFusion(),
-  weights: [0.75, 0.25],
+  weights: { meaning: 0.75, keywords: 0.25 },
 });
 
 for (const search of [hybrid, minMax]) {
@@ -391,9 +391,17 @@ Output:
 
 `vault-guide#0` is first in both lists, so reciprocal rank fusion gives it `1/61 + 1/61`. `minMax` has no `rankWindowSize`, so each retriever gives 3 passages. Min-max scaling gives the worst passage of a list 0, and a list whose scores are all equal gives 1.
 
+The retrievers run at once, and the call answers with the retrievers that answered ([ADR 0014](./docs/adr/0014-a-retrieve-call-answers-with-the-retrievers-that-answered-and-names-those-that-were-unavailable.md)):
+
+- **A retriever that throws `RetrieverUnavailableError` is left out**, and `failures` names it, as Elasticsearch's `skip_unavailable` skips a cluster. A host adapter throws it, or a subclass of it, when its source cannot answer: HTTP 503 or 429, a timeout of its own, a refusal.
+- **A fusion inside a fusion names its failures by path**: `literature:pubmed` is the retriever `pubmed` of the retriever `literature`, as Elasticsearch writes `cluster:index`. So a name holds no `:`.
+- **When no retriever answered, the call throws `NoRetrieverAnsweredError`.** It is a `RetrieverUnavailableError`, so a fusion that got no answer is an unavailable retriever of the fusion above it. An empty list would read as "nothing found".
+- **Any other error is a bug.** It aborts the signal of every other retriever, with the error as the reason, as Go's `errgroup.WithContext` cancels with its cause, and the call rejects with it.
+- **When the caller aborts, the call rejects at once with the signal's reason**, even while a retriever ignores its signal.
+
 A retriever that gives an order only, such as a host's web search, writes no score ([ADR 0016](./docs/adr/0016-a-scored-passage-may-have-no-score-and-a-list-is-in-the-retrievers-order.md)). Reciprocal rank fusion reads the order only, so its list fuses like any other. `relativeScoreFusion` and `distributionBasedScoreFusion` read scores, so a passage without one is a `TypeError` that names the passage and the index of its list, and says to fuse a list of order only with `reciprocalRankFusion`. A missing score taken as 0, as LlamaIndex, Haystack and Eino take it, would tie every passage of that list with the best scored passage. `SimilarityCutoff` drops a passage without a score, as LlamaIndex's `SimilarityPostprocessor` does, `Collapse` sorts by score only when every passage has one, and `Rerank` gives every passage a score.
 
-`MultiQueryRetriever` asks a language model for `queryCount` other versions of the query, 4 when absent. It searches the query and each version, and fuses the lists with `reciprocalRankFusion()` when it has no `fusion` ([ADR 0008](./docs/adr/0008-a-search-is-composed-of-retrievers-that-wrap-retrievers-and-a-list-of-postprocessors.md)). It searches a query bundle as the caller gives it, first, and each version as a plain string, so its retriever takes a plain query ([ADR 0013](./docs/adr/0013-a-query-is-a-string-or-a-query-bundle-with-a-text-for-each-kind-of-search.md)). This program continues the one above.
+`MultiQueryRetriever` asks a language model for `queryCount` other versions of the query, 4 when absent. It searches the query and each version, and fuses the lists with `reciprocalRankFusion()` when it has no `fusion` ([ADR 0008](./docs/adr/0008-a-search-is-composed-of-retrievers-that-wrap-retrievers-and-a-list-of-postprocessors.md)). It searches a query bundle as the caller gives it, first, and each version as a plain string, so its retriever takes a plain query ([ADR 0013](./docs/adr/0013-a-query-is-a-string-or-a-query-bundle-with-a-text-for-each-kind-of-search.md)). The searches run at once as the retrievers of a `FusionRetriever` do: an error of one search aborts the others with the error as the reason, and an abort of the caller rejects at once. It catches no error, a `RetrieverUnavailableError` too: every search reads the one retriever, so the call rejects with it. This program continues the one above.
 
 ```ts
 import { MockLanguageModelV4 } from 'ai/test';
@@ -450,7 +458,7 @@ Output:
 ]
 ```
 
-`HydeRetriever { retriever, model }` asks the language model for a passage that answers the `query`, and gives that passage to the embedding search only, as `customEmbeddings: [passage]`. The `query` and the `keywords` stay, so a reranker below it still ranks against the question. Its retriever takes any query bundle: a host source that needs its own field is fused beside it, `new FusionRetriever({ retrievers: [new IssueRetriever(), new HydeRetriever({ retriever: embeddings, model })] })`, since only an embedding search reads the passage ([ADR 0013](./docs/adr/0013-a-query-is-a-string-or-a-query-bundle-with-a-text-for-each-kind-of-search.md)). The passage replaces any `customEmbeddings` of the caller, so the embedding search reads the passage alone, as LangChain's [`HydeRetriever`](https://raw.githubusercontent.com/langchain-ai/langchainjs/main/libs/langchain-classic/src/retrievers/hyde.ts) and Haystack's [HyDE recipe](https://docs.haystack.deepset.ai/docs/hypothetical-document-embeddings-hyde) do; LlamaIndex's [`HyDEQueryTransform`](https://raw.githubusercontent.com/run-llama/llama_index/main/llama-index-core/llama_index/core/indices/query/query_transform/base.py) keeps them by default (`include_original=True`).
+`HydeRetriever { retriever, model }` asks the language model for a passage that answers the `query`, and gives that passage to the embedding search only, as `customEmbeddings: [passage]`. The `query` and the `keywords` stay, so a reranker below it still ranks against the question. Its retriever takes any query bundle: a host source that needs its own field is fused beside it, `new FusionRetriever({ retrievers: { issues: new IssueRetriever(), hyde: new HydeRetriever({ retriever: embeddings, model }) } })`, since only an embedding search reads the passage ([ADR 0013](./docs/adr/0013-a-query-is-a-string-or-a-query-bundle-with-a-text-for-each-kind-of-search.md)). The passage replaces any `customEmbeddings` of the caller, so the embedding search reads the passage alone, as LangChain's [`HydeRetriever`](https://raw.githubusercontent.com/langchain-ai/langchainjs/main/libs/langchain-classic/src/retrievers/hyde.ts) and Haystack's [HyDE recipe](https://docs.haystack.deepset.ai/docs/hypothetical-document-embeddings-hyde) do; LlamaIndex's [`HyDEQueryTransform`](https://raw.githubusercontent.com/run-llama/llama_index/main/llama-index-core/llama_index/core/indices/query/query_transform/base.py) keeps them by default (`include_original=True`).
 
 ## Rerank and post-process the results
 
@@ -592,7 +600,7 @@ const told = new MockRerankingModelV4({
 });
 const federation = new PostprocessingRetriever({
   retriever: new FusionRetriever({
-    retrievers: [new IssueRetriever(), keywords],
+    retrievers: { issues: new IssueRetriever(), keywords },
   }),
   postprocessors: [new Rerank({ model: told, topN: 2 })],
 });
@@ -618,7 +626,7 @@ reranker got: How do I rotate the old key?
 [ 'vault-guide#0 0.57', 'VAULT-12 0.43' ]
 ```
 
-`federation.retrieve(question)` does not compile: the issue search needs `jql`, and a string has none. `new MultiQueryRetriever({ retriever: federation, model })` does not compile either: a version of the query is a plain string. TypeScript infers the query type of a fusion from its retrievers. Two retrievers that each need a field of their own take the type argument: `new FusionRetriever<A & B>({ retrievers })`.
+`federation.retrieve(question)` does not compile: the issue search needs `jql`, and a string has none. `new MultiQueryRetriever({ retriever: federation, model })` does not compile either: a version of the query is a plain string. TypeScript infers the query type of a fusion from its retrievers. Two retrievers that each need a field of their own take the type argument: `new FusionRetriever<A & B>({ retrievers })`. A type argument makes the names `string`, as TypeScript infers all type arguments or none, so the constructor checks the names of the weights.
 
 ## Search many queries at once
 
@@ -676,14 +684,15 @@ On Postgres, pgvector filters after the approximate index scan, so a filtered ca
 
 ## Errors
 
-| Error                                         | When                                                                                                                                                                                                                                                                                        |
-| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ModelMismatchError`                          | The query model of an embedding retriever has another provider or model id than the stored vectors, before the model call. `stored` and `query` are each `{ provider, modelId }`                                                                                                            |
-| `DimensionMismatchError` (`@zukhruf/vectors`) | The query vector has other dimensions than the stored vectors, after the model call. `expected` and `actual`                                                                                                                                                                                |
-| `VectorMissingError`                          | `MaximalMarginalRelevance` gets a passage without a vector: the call did not ask for vectors. `passageId`                                                                                                                                                                                   |
-| `PassageGapError`                             | `ContextWindow` gets a window whose passages leave a gap in their source: the writer of the contract broke it. `source`, and `start` and `end` of the gap                                                                                                                                   |
-| `RangeError`                                  | An option out of its range: `FusionRetriever` weights that are not one for each retriever, or a `rankWindowSize` smaller than the `topK` of the call; a `queryCount`, `topK` of MMR or `windowSize` that is not a positive integer; a `lambda` outside 0 to 1                               |
-| `TypeError`                                   | A filter field that is not a passage field or `metadata.<column>`, an `in` or `not in` value that is not an array, a stored model identity that is not of the form `provider/model (n dimensions)`, or a passage without a score in `relativeScoreFusion` or `distributionBasedScoreFusion` |
+| Error                                         | When                                                                                                                                                                                                                                                                                                             |
+| --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ModelMismatchError`                          | The query model of an embedding retriever has another provider or model id than the stored vectors, before the model call. `stored` and `query` are each `{ provider, modelId }`                                                                                                                                 |
+| `DimensionMismatchError` (`@zukhruf/vectors`) | The query vector has other dimensions than the stored vectors, after the model call. `expected` and `actual`                                                                                                                                                                                                     |
+| `VectorMissingError`                          | `MaximalMarginalRelevance` gets a passage without a vector: the call did not ask for vectors. `passageId`                                                                                                                                                                                                        |
+| `PassageGapError`                             | `ContextWindow` gets a window whose passages leave a gap in their source: the writer of the contract broke it. `source`, and `start` and `end` of the gap                                                                                                                                                        |
+| `NoRetrieverAnsweredError`                    | No retriever of a `FusionRetriever` answered: each threw `RetrieverUnavailableError`. `failures` names each, by path when nested, and the cause is an `AggregateError` of them. It is a `RetrieverUnavailableError`, so the fusion above leaves it out                                                           |
+| `RangeError`                                  | An option out of its range: a `FusionRetriever` of no retriever, with a name that holds `:` or with a weight for a name that is no retriever, or a `rankWindowSize` smaller than the `topK` of the call; a `queryCount`, `topK` of MMR or `windowSize` that is not a positive integer; a `lambda` outside 0 to 1 |
+| `TypeError`                                   | A filter field that is not a passage field or `metadata.<column>`, an `in` or `not in` value that is not an array, a stored model identity that is not of the form `provider/model (n dimensions)`, or a passage without a score in `relativeScoreFusion` or `distributionBasedScoreFusion`                      |
 
 An error of the model, of the engine, of the store's `metadata` or of the reranking model reaches the caller as it is. An aborted call rejects with the reason of its `abortSignal`.
 
@@ -850,13 +859,14 @@ function distributionBasedScoreFusion(); // mean ± 3σ; a passage without a sco
 class FusionRetriever<
   in Q extends QueryType = QueryType,
   in out P extends Passage = Passage,
+  K extends string = string, // the names of the retrievers
 > implements Retriever<Q, P> {
   constructor(options: {
-    readonly retrievers: readonly Retriever<Q, P>[]; // each gets the query unchanged
+    readonly retrievers: Readonly<Record<K, Retriever<Q, P>>>; // at least one; no name holds ':'; each gets the query unchanged
     readonly fusion?: Fusion<NoInfer<P>>; // reciprocalRankFusion()
-    readonly weights?: readonly number[]; // 1 each
+    readonly weights?: Readonly<Partial<Record<NoInfer<K>, number>>>; // 1 for each name that is absent
     readonly rankWindowSize?: number; // the topK of the call
-  });
+  }); // an unavailable retriever is named in failures, 'outer:inner' when nested; none answered: NoRetrieverAnsweredError; a bug aborts the others and rejects; the caller's abort rejects at once
 }
 class MultiQueryRetriever<
   in out P extends Passage = Passage,
@@ -866,7 +876,7 @@ class MultiQueryRetriever<
     readonly model: LanguageModel;
     readonly queryCount?: number; // 4 versions, besides the query
     readonly fusion?: Fusion<NoInfer<P>>; // reciprocalRankFusion()
-  }); // the failures of the searches merge by name; the first search's failure of a name is kept
+  }); // the failures of the searches merge by name, the first kept; an error of a search aborts the others and rejects; the caller's abort rejects at once
 }
 class HydeRetriever<in out P extends Passage = Passage> implements Retriever<
   QueryType,

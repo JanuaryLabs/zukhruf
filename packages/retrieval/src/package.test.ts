@@ -19,7 +19,7 @@ const run = async (source: string): Promise<unknown> => {
   return JSON.parse(stdout);
 };
 
-test('a consumer imports each subpath by its package name, and the package depends at run time only on ai, pgvector, @zukhruf/statistics and @zukhruf/vectors', async () => {
+test('a consumer imports each subpath by its package name, and the package depends at run time only on ai, pgvector, @zukhruf/async, @zukhruf/statistics and @zukhruf/vectors', async () => {
   // Act
   const result = await run(`
     const core = await import('@zukhruf/retrieval');
@@ -80,7 +80,13 @@ test('a consumer imports each subpath by its package name, and the package depen
     ],
     postgresConditions: ['@zukhruf/source', 'types', 'import', 'default'],
     sqlserverConditions: ['@zukhruf/source', 'types', 'import', 'default'],
-    dependencies: ['@zukhruf/statistics', '@zukhruf/vectors', 'ai', 'pgvector'],
+    dependencies: [
+      '@zukhruf/async',
+      '@zukhruf/statistics',
+      '@zukhruf/vectors',
+      'ai',
+      'pgvector',
+    ],
   });
 });
 
@@ -114,6 +120,7 @@ test('the built package imports only node built-ins, its dependencies and its ow
       )
       .toSorted(),
     [
+      '@zukhruf/async',
       '@zukhruf/statistics',
       '@zukhruf/vectors',
       '@zukhruf/vectors/sqlite',

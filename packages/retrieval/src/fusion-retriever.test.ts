@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import type { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
+import { setImmediate as nextTurn } from 'node:timers/promises';
 
 import { MockLanguageModelV4 } from 'ai/test';
 
@@ -11,6 +12,12 @@ import { install, toSql } from '@zukhruf/vectors/sqlite';
 import {
   FusionRetriever,
   MultiQueryRetriever,
+  NoRetrieverAnsweredError,
+  type QueryType,
+  type RetrievalResult,
+  type RetrieveOptions,
+  type Retriever,
+  RetrieverUnavailableError,
   distributionBasedScoreFusion,
   relativeScoreFusion,
 } from './index.ts';
@@ -84,9 +91,9 @@ const keywords = (database: DatabaseSync) =>
 const retrievers = (
   database: DatabaseSync,
   signals: (AbortSignal | undefined)[] = [],
-) => [
-  keywords(database),
-  new SqliteEmbeddingRetriever({
+) => ({
+  keywords: keywords(database),
+  meaning: new SqliteEmbeddingRetriever({
     store: new SqlitePassageStore({
       database,
       passages: 'docs_passages',
@@ -95,7 +102,7 @@ const retrievers = (
     vectors: 'docs_passage_vectors',
     model: model(signals),
   }),
-];
+});
 
 const scores = (
   results: readonly {
@@ -104,20 +111,315 @@ const scores = (
   }[],
 ) => results.map(({ passage, score }) => [passage.id, score]);
 
-test('a FusionRetriever refuses weights that are not one for each retriever', () => {
+// A host adapter whose source cannot answer throws RetrieverUnavailableError
+// (ADR 0014).
+const unavailable = (error: RetrieverUnavailableError): Retriever => ({
+  retrieve: () => Promise.reject(error),
+});
+
+// A retriever that is still searching: it records the signal it gets and
+// never settles, so only the fusion can settle the call.
+class SignalRecordingRetriever implements Retriever {
+  readonly signals: (AbortSignal | undefined)[] = [];
+
+  retrieve = (
+    _query: QueryType,
+    options: RetrieveOptions = {},
+  ): Promise<RetrievalResult> => {
+    this.signals.push(options.abortSignal);
+    return new Promise(() => {});
+  };
+}
+
+const pending = Symbol('pending');
+
+// What the call settled with before the event loop's next turn: its
+// rejection reason, 'answered', or `pending`. A call that rejects at once
+// settles in microtasks; one that waits on a retriever that never settles
+// stays pending, so the assertion fails there, not at the time limit.
+const settledThisTurn = (call: Promise<unknown>): Promise<unknown> =>
+  Promise.race([
+    call.then(
+      () => 'answered',
+      (reason: unknown) => reason,
+    ),
+    nextTurn(pending),
+  ]);
+
+test('a FusionRetriever refuses a record of no retriever, a name that holds the path separator ":", and a weight for a name that is no retriever, by type for a literal record and at construction for a record typed by string', () => {
   // Arrange
   using database = contract(rows);
+  const none: Readonly<Record<string, Retriever>> = {};
+  const nested: Readonly<Record<string, Retriever>> = {
+    keywords: keywords(database),
+    'labels:dailymed': keywords(database),
+  };
+  const named: Readonly<Record<string, Retriever>> = retrievers(database);
+  const typo: Readonly<Record<string, number>> = { meanng: 2 };
 
   // Act and Assert
+  assert.throws(() => new FusionRetriever({ retrievers: none }), {
+    name: 'RangeError',
+    message: 'A FusionRetriever takes at least one retriever',
+  });
+  assert.throws(() => new FusionRetriever({ retrievers: nested }), {
+    name: 'RangeError',
+    message:
+      "A retriever's name holds no ':', the separator of a nested failure's path: labels:dailymed",
+  });
   assert.throws(
-    () =>
-      new FusionRetriever({ retrievers: retrievers(database), weights: [1] }),
+    () => new FusionRetriever({ retrievers: named, weights: typo }),
     {
       name: 'RangeError',
       message:
-        'A FusionRetriever takes one weight for each retriever: got 1 weights for 2 retrievers',
+        'A FusionRetriever has no retriever named meanng to weight: its retrievers are keywords, meaning',
     },
   );
+  // Each line after a directive is a compile error, which the typecheck
+  // target proves; the function never runs.
+  const refused = () => [
+    // @ts-expect-error: a fusion takes at least one retriever
+    new FusionRetriever({ retrievers: {} }),
+    new FusionRetriever({
+      retrievers: {
+        keywords: keywords(database),
+        // @ts-expect-error: ':' separates the names of a nested failure
+        'labels:dailymed': keywords(database),
+      },
+    }),
+    new FusionRetriever({
+      retrievers: retrievers(database),
+      // @ts-expect-error: no retriever is named meanng
+      weights: { meanng: 2 },
+    }),
+  ];
+  assert.equal(typeof refused, 'function');
+});
+
+test('the weights are by name, 1 for each name that is absent', async () => {
+  // Arrange
+  using database = contract(rows);
+  const retriever = new FusionRetriever({
+    retrievers: retrievers(database),
+    weights: { meaning: 3 },
+  });
+
+  // Act
+  const results = (await retriever.retrieve('rotate key')).passages;
+
+  // Assert: keywords [kw, both] at weight 1, meaning [vec, both, kw, far] at
+  // weight 3.
+  //   both = 1 / 62 + 3 / 62 = 0.064516
+  //   kw   = 1 / 61 + 3 / 63 = 0.064012
+  //   vec  =          3 / 61 = 0.049180
+  //   far  =          3 / 64 = 0.046875
+  assert.deepEqual(scores(results), [
+    ['both', 1 / 62 + 3 / 62],
+    ['kw', 1 / 61 + 3 / 63],
+    ['vec', 3 / 61],
+    ['far', 3 / 64],
+  ]);
+});
+
+test('a retriever that throws RetrieverUnavailableError is left out and named in failures, and the others still answer (#5582)', async () => {
+  // Arrange
+  using database = contract(rows);
+  const down = new RetrieverUnavailableError('web search answered HTTP 503');
+  const retriever = new FusionRetriever({
+    retrievers: { web: unavailable(down), keywords: keywords(database) },
+  });
+
+  // Act
+  const result = await retriever.retrieve('rotate key');
+
+  // Assert: the keyword list alone, [kw, both].
+  assert.deepEqual(scores(result.passages), [
+    ['kw', 1 / 61],
+    ['both', 1 / 62],
+  ]);
+  assert.deepEqual([...result.failures], [['web', down]]);
+});
+
+test('a RetrieverUnavailableError leaves its siblings running: a sibling that answers on a later turn keeps its signal unaborted, and its passages are in the result', async () => {
+  // Arrange: the sibling answers after setImmediate, when the unavailable
+  // retriever has long rejected.
+  const down = new RetrieverUnavailableError('web search answered HTTP 503');
+  const signals: (AbortSignal | undefined)[] = [];
+  const live = new LiveRetriever(['doi-1', 'doi-2']);
+  const late: Retriever = {
+    retrieve: async (query, options = {}) => {
+      signals.push(options.abortSignal);
+      await nextTurn();
+      return live.retrieve(query, options);
+    },
+  };
+  const retriever = new FusionRetriever({
+    retrievers: { web: unavailable(down), late },
+  });
+
+  // Act
+  const result = await retriever.retrieve('rotate key');
+
+  // Assert
+  assert.equal(signals.length, 1);
+  assert.equal(signals[0]?.aborted, false);
+  assert.deepEqual(scores(result.passages), [
+    ['doi-1', 1 / 61],
+    ['doi-2', 1 / 62],
+  ]);
+  assert.deepEqual([...result.failures], [['web', down]]);
+});
+
+test("a nested fusion's failure beside a failure of the outer fusion: each is named, the nested one by its path, outer:inner, the outer one by its name", async () => {
+  // Arrange
+  const pubmed = new RetrieverUnavailableError('HTTP 429');
+  const web = new RetrieverUnavailableError('HTTP 503');
+  const retriever = new FusionRetriever({
+    retrievers: {
+      literature: new FusionRetriever({
+        retrievers: {
+          pubmed: unavailable(pubmed),
+          crossref: new LiveRetriever(['doi-1']),
+        },
+      }),
+      web: unavailable(web),
+    },
+  });
+
+  // Act
+  const result = await retriever.retrieve('rotate key');
+
+  // Assert
+  assert.deepEqual(scores(result.passages), [['doi-1', 1 / 61]]);
+  assert.deepEqual(
+    [...result.failures],
+    [
+      ['literature:pubmed', pubmed],
+      ['web', web],
+    ],
+  );
+});
+
+test('a nested fusion names each failure by its path, outer:inner, for an inner fusion that answered in part and for one where no retriever answered', async () => {
+  // Arrange
+  using database = contract(rows);
+  const pubmed = new RetrieverUnavailableError('HTTP 429');
+  const trials = new RetrieverUnavailableError('timeout');
+  const preprints = new RetrieverUnavailableError('HTTP 503');
+  const retriever = new FusionRetriever({
+    retrievers: {
+      literature: new FusionRetriever({
+        retrievers: {
+          pubmed: unavailable(pubmed),
+          crossref: new LiveRetriever(['doi-1']),
+        },
+      }),
+      registries: new FusionRetriever({
+        retrievers: {
+          trials: unavailable(trials),
+          preprints: unavailable(preprints),
+        },
+      }),
+      keywords: keywords(database),
+    },
+  });
+
+  // Act
+  const result = await retriever.retrieve('rotate key');
+
+  // Assert: literature [doi-1] and keywords [kw, both]; a tie keeps the
+  // order of the lists.
+  assert.deepEqual(scores(result.passages), [
+    ['doi-1', 1 / 61],
+    ['kw', 1 / 61],
+    ['both', 1 / 62],
+  ]);
+  assert.deepEqual(
+    [...result.failures],
+    [
+      ['literature:pubmed', pubmed],
+      ['registries:trials', trials],
+      ['registries:preprints', preprints],
+    ],
+  );
+});
+
+test('when no retriever answered, the call throws NoRetrieverAnsweredError, a RetrieverUnavailableError that names each failure, not an empty list', async () => {
+  // Arrange
+  const pubmed = new RetrieverUnavailableError('HTTP 429');
+  const web = new RetrieverUnavailableError('HTTP 503');
+  const retriever = new FusionRetriever({
+    retrievers: { pubmed: unavailable(pubmed), web: unavailable(web) },
+  });
+
+  // Act
+  const error = await retriever.retrieve('rotate key').then(
+    () => assert.fail('the call answered'),
+    (reason: unknown) => reason,
+  );
+
+  // Assert
+  assert.ok(error instanceof NoRetrieverAnsweredError);
+  assert.ok(error instanceof RetrieverUnavailableError);
+  assert.equal(error.message, 'No retriever answered: pubmed, web');
+  assert.deepEqual(
+    [...error.failures],
+    [
+      ['pubmed', pubmed],
+      ['web', web],
+    ],
+  );
+  assert.ok(error.cause instanceof AggregateError);
+  assert.deepEqual(error.cause.errors, [pubmed, web]);
+});
+
+test('an error that is no RetrieverUnavailableError is a bug: it aborts the signal of every other retriever, with the bug as the reason, and the call rejects with it at once (#5588)', async () => {
+  // Arrange: the sibling never settles.
+  const bug = new TypeError(
+    "Cannot read properties of undefined (reading 'id')",
+  );
+  const sibling = new SignalRecordingRetriever();
+  const retriever = new FusionRetriever({
+    retrievers: {
+      slow: sibling,
+      buggy: { retrieve: () => Promise.reject(bug) },
+    },
+  });
+
+  // Act
+  const outcome = await settledThisTurn(retriever.retrieve('rotate key'));
+
+  // Assert
+  assert.equal(outcome, bug);
+  assert.equal(sibling.signals.length, 1);
+  assert.equal(sibling.signals[0]?.aborted, true);
+  assert.equal(sibling.signals[0]?.reason, bug);
+});
+
+test("the caller's abort rejects the call at once with the signal's reason, while the retrievers never settle, one ignoring its signal and one recording it; the recorded signal sees the abort (#5588)", async () => {
+  // Arrange
+  const caller = new AbortController();
+  const reason = new Error('the turn ended');
+  const recording = new SignalRecordingRetriever();
+  const retriever = new FusionRetriever({
+    retrievers: {
+      deaf: { retrieve: () => new Promise(() => {}) },
+      recording,
+    },
+  });
+
+  // Act
+  const call = retriever.retrieve('rotate key', {
+    abortSignal: caller.signal,
+  });
+  caller.abort(reason);
+  const outcome = await settledThisTurn(call);
+
+  // Assert: no retriever settles, so the call settles only by the abort.
+  assert.equal(outcome, reason);
+  assert.equal(recording.signals.length, 1);
+  assert.equal(recording.signals[0]?.aborted, true);
+  assert.equal(recording.signals[0]?.reason, reason);
 });
 
 test('a rankWindowSize smaller than the topK of the call is refused, as Elasticsearch refuses a rank_window_size smaller than size', async () => {
@@ -230,7 +532,7 @@ test('the filter and includeVectors of the call reach each retriever, and a pass
   );
 });
 
-test('the abort signal of the call reaches each retriever', async () => {
+test("each retriever gets a signal that aborts when the call's signal aborts, with its reason, and an aborted signal rejects the call", async () => {
   // Arrange
   using database = contract(rows);
   const signals: (AbortSignal | undefined)[] = [];
@@ -238,18 +540,23 @@ test('the abort signal of the call reaches each retriever', async () => {
     retrievers: retrievers(database, signals),
   });
   const keywordsOnly = new FusionRetriever({
-    retrievers: [keywords(database)],
+    retrievers: { keywords: keywords(database) },
   });
   const given = new AbortController();
+  const reason = new Error('the turn ended');
   const aborted = new AbortController();
   aborted.abort();
 
   // Act
   await both.retrieve('rotate key', { abortSignal: given.signal });
+  given.abort(reason);
 
-  // Assert: the embedding model of the second retriever got the signal, and
-  // the keyword retriever, which calls no model, stops on an aborted one.
-  assert.deepEqual(signals, [given.signal]);
+  // Assert: the embedding model of the second retriever got the signal of
+  // the fusion, linked to the call's, and the keyword retriever, which
+  // calls no model, stops on an aborted one.
+  assert.equal(signals.length, 1);
+  assert.equal(signals[0]?.aborted, true);
+  assert.equal(signals[0]?.reason, reason);
   await assert.rejects(
     keywordsOnly.retrieve('rotate key', { abortSignal: aborted.signal }),
     { name: 'AbortError' },
@@ -262,7 +569,7 @@ test('the fusion and the weights that the caller gives fuse the lists', async ()
   const retriever = new FusionRetriever({
     retrievers: retrievers(database),
     fusion: relativeScoreFusion(),
-    weights: [0.75, 0.25],
+    weights: { keywords: 0.75, meaning: 0.25 },
   });
 
   // Act
@@ -292,10 +599,10 @@ test('each retriever gets the query bundle unchanged and reads its own text: the
   });
   const source = new RecordingRetriever<EntrezQueryBundle>(['pmid-1']);
   const federation = new FusionRetriever({
-    retrievers: [
+    retrievers: {
       source,
-      keywords(database),
-      new SqliteEmbeddingRetriever({
+      keywords: keywords(database),
+      meaning: new SqliteEmbeddingRetriever({
         store: new SqlitePassageStore({
           database,
           passages: 'docs_passages',
@@ -304,7 +611,7 @@ test('each retriever gets the query bundle unchanged and reads its own text: the
         vectors: 'docs_passage_vectors',
         model: embeddings,
       }),
-    ],
+    },
   });
   const question = {
     query: 'how do I rotate the key?',
@@ -366,10 +673,10 @@ test('a fusion of plain retrievers takes a string as a query bundle with only qu
   using database = contract(rows);
   const plain = new FusionRetriever({ retrievers: retrievers(database) });
   const federation = new FusionRetriever({
-    retrievers: [
-      new RecordingRetriever<EntrezQueryBundle>([]),
-      keywords(database),
-    ],
+    retrievers: {
+      source: new RecordingRetriever<EntrezQueryBundle>([]),
+      keywords: keywords(database),
+    },
   });
 
   // Act
@@ -401,14 +708,14 @@ test('a live source of order only fuses beside an engine search by reciprocal ra
   using database = contract(rows);
   const web = () => new LiveRetriever(['web-1', 'web-2']);
   const byRank = new FusionRetriever({
-    retrievers: [web(), keywords(database)],
+    retrievers: { web: web(), keywords: keywords(database) },
   });
   const minMax = new FusionRetriever({
-    retrievers: [keywords(database), web()],
+    retrievers: { keywords: keywords(database), web: web() },
     fusion: relativeScoreFusion(),
   });
   const distribution = new FusionRetriever({
-    retrievers: [keywords(database), web()],
+    retrievers: { keywords: keywords(database), web: web() },
     fusion: distributionBasedScoreFusion(),
   });
 
