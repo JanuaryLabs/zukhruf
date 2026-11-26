@@ -74,6 +74,7 @@
     "@ai-sdk/provider": "^4.0.39",
     "@types/heap": "^0.2.35",
     "@zukhruf/fs": "*",
+    "@zukhruf/parameterized-test": "*",
     "@zukhruf/testing": "*"
   }
 }

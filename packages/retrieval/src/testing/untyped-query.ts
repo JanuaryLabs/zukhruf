@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 
-import { test } from '@zukhruf/testing/node';
+import { test } from '@zukhruf/parameterized-test';
 
 import type { QueryType } from '../index.ts';
 

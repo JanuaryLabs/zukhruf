@@ -8,8 +8,8 @@ import { Hono } from 'hono';
 
 import { Latch, untilAborted } from '@zukhruf/async';
 import type { FencingToken } from '@zukhruf/fencing';
+import { describe, test } from '@zukhruf/parameterized-test';
 import { waitFor } from '@zukhruf/testing/async';
-import { describe, test } from '@zukhruf/testing/node';
 import { startWorker } from '@zukhruf/testing/process';
 
 import { Modes } from '../../mutex/acquire-modes/modes.ts';

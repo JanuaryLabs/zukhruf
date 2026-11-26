@@ -68,7 +68,7 @@ function loopOutsideTestCases(node: Rule.Node): Rule.Node | undefined {
 
 /**
  * A loop that declares a test or a suite runs its cases as one block of code:
- * `test.each` or `suite.each` of `@zukhruf/testing/node` declares each case as
+ * `test.each` or `suite.each` of `@zukhruf/parameterized-test` declares each case as
  * its own test, so each one has its own name and result. The rule follows
  * `jest/prefer-each` and `vitest/prefer-each`: it reports a for, for-in or
  * for-of loop, and a `forEach` or `map` callback, that calls `test`, `it`,
@@ -81,12 +81,12 @@ const rule: Rule.RuleModule = {
     type: 'suggestion',
     docs: {
       description:
-        'Prefer test.each or suite.each of @zukhruf/testing/node over a loop that declares tests',
+        'Prefer test.each or suite.each of @zukhruf/parameterized-test over a loop that declares tests',
     },
     schema: [],
     messages: {
       preferEach:
-        'Declare these cases with test.each or suite.each of @zukhruf/testing/node, not a loop: each case is then its own test, with its own name and result.',
+        'Declare these cases with test.each or suite.each of @zukhruf/parameterized-test, not a loop: each case is then its own test, with its own name and result.',
     },
   },
   create(context) {

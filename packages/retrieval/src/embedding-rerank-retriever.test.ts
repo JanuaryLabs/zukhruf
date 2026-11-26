@@ -3,7 +3,7 @@ import { setImmediate as nextTurn } from 'node:timers/promises';
 
 import { MockEmbeddingModelV4 } from 'ai/test';
 
-import { test } from '@zukhruf/testing/node';
+import { test } from '@zukhruf/parameterized-test';
 
 import {
   EmbeddingRerankRetriever,

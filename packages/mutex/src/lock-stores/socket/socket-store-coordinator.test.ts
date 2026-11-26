@@ -11,8 +11,8 @@ import { createClock } from '@sinonjs/fake-timers';
 
 import { type Clock, untilAborted } from '@zukhruf/async';
 import { TemporaryFiles } from '@zukhruf/fs';
+import { test } from '@zukhruf/parameterized-test';
 import { waitFor } from '@zukhruf/testing/async';
-import { test } from '@zukhruf/testing/node';
 
 import { isRecord } from '../../shared/is-record.ts';
 import { grantedWithin } from '../../testing/granted-within.ts';

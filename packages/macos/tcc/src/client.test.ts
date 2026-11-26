@@ -15,8 +15,8 @@ import { promisify } from 'node:util';
 
 import { TemporaryFiles } from '@zukhruf/fs';
 import { Launchd } from '@zukhruf/launchd';
+import { test } from '@zukhruf/parameterized-test';
 import { waitFor } from '@zukhruf/testing/async';
-import { test } from '@zukhruf/testing/node';
 
 import { Client } from './index.ts';
 

@@ -3,8 +3,8 @@ import { once } from 'node:events';
 import { setTimeout as delay } from 'node:timers/promises';
 import { Worker } from 'node:worker_threads';
 
+import { describe, test } from '@zukhruf/parameterized-test';
 import { waitFor } from '@zukhruf/testing/async';
-import { describe, test } from '@zukhruf/testing/node';
 
 import { Modes } from '../../mutex/acquire-modes/modes.ts';
 import { Mutex } from '../../mutex/mutex.ts';

@@ -4,7 +4,7 @@ import { MockEmbeddingModelV4 } from 'ai/test';
 import type pg from 'pg';
 import { toSql } from 'pgvector';
 
-import { test } from '@zukhruf/testing/node';
+import { test } from '@zukhruf/parameterized-test';
 import { Postgres } from '@zukhruf/testing/postgres';
 import { DimensionMismatchError } from '@zukhruf/vectors';
 

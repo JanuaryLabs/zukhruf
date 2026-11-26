@@ -3,9 +3,9 @@ import { readFileSync } from 'node:fs';
 import { type TestContext, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
+import { describe } from '@zukhruf/parameterized-test';
 import { waitFor } from '@zukhruf/testing/async';
 import { DockerTestbed } from '@zukhruf/testing/docker';
-import { describe } from '@zukhruf/testing/node';
 
 import { isRecord } from '../../shared/is-record.ts';
 

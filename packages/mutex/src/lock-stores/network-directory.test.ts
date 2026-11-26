@@ -6,8 +6,8 @@ import { join } from 'node:path';
 import { describe } from 'node:test';
 
 import { TemporaryFiles } from '@zukhruf/fs';
+import { test } from '@zukhruf/parameterized-test';
 import { waitFor } from '@zukhruf/testing/async';
-import { test } from '@zukhruf/testing/node';
 
 import { mountAs, onLinux } from '../testing/network-mount.ts';
 import { outcome } from '../testing/outcome.ts';

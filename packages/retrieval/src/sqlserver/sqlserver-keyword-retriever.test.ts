@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 
 import type mssql from 'mssql';
 
+import { test } from '@zukhruf/parameterized-test';
 import { waitFor } from '@zukhruf/testing/async';
-import { test } from '@zukhruf/testing/node';
 import { SqlServer } from '@zukhruf/testing/sqlserver';
 
 import {

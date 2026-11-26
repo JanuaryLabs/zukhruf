@@ -157,6 +157,9 @@
     },
     {
       "path": "./packages/authentication"
+    },
+    {
+      "path": "./packages/parameterized-test"
     }
   ]
 }

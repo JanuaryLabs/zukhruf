@@ -4,7 +4,7 @@ import { describe } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
-import { test } from '@zukhruf/testing/node';
+import { test } from '@zukhruf/parameterized-test';
 
 import {
   Accessibility,

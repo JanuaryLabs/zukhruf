@@ -5,8 +5,8 @@ import { setTimeout as delay } from 'node:timers/promises';
 
 import { untilAborted } from '@zukhruf/async';
 import { TemporaryFiles } from '@zukhruf/fs';
+import { describe, test } from '@zukhruf/parameterized-test';
 import { waitFor } from '@zukhruf/testing/async';
-import { describe, test } from '@zukhruf/testing/node';
 import { startWorker } from '@zukhruf/testing/process';
 
 import { Mutex } from '../../mutex/mutex.ts';

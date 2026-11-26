@@ -11,9 +11,9 @@ import { describe } from 'node:test';
 
 import { Latch, untilAborted } from '@zukhruf/async';
 import { TemporaryFiles } from '@zukhruf/fs';
+import { test } from '@zukhruf/parameterized-test';
 import { UnavailableError } from '@zukhruf/sqlite-open';
 import { waitFor } from '@zukhruf/testing/async';
-import { test } from '@zukhruf/testing/node';
 import { startWorker } from '@zukhruf/testing/process';
 
 import { Modes } from '../../mutex/acquire-modes/modes.ts';

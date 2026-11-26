@@ -8,8 +8,8 @@ import { join } from 'node:path';
 import { describe } from 'node:test';
 
 import { TemporaryFiles } from '@zukhruf/fs';
+import { test } from '@zukhruf/parameterized-test';
 import { waitFor } from '@zukhruf/testing/async';
-import { test } from '@zukhruf/testing/node';
 import { startWorker } from '@zukhruf/testing/process';
 
 import { Mutex } from '../../mutex/mutex.ts';

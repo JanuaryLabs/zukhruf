@@ -10,8 +10,8 @@ import { aborted } from 'node:util';
 import { Latch, untilAborted } from '@zukhruf/async';
 import type { FencedLease } from '@zukhruf/fencing';
 import { TemporaryFiles } from '@zukhruf/fs';
+import { test } from '@zukhruf/parameterized-test';
 import { waitFor } from '@zukhruf/testing/async';
-import { test } from '@zukhruf/testing/node';
 import { startWorker } from '@zukhruf/testing/process';
 
 import { LeaseLostError, type LockHandle, Mutex } from '../../index.ts';

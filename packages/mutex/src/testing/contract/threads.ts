@@ -3,7 +3,7 @@ import { once } from 'node:events';
 import { setImmediate as nextTurn } from 'node:timers/promises';
 
 import { untilAborted } from '@zukhruf/async';
-import { describe, test } from '@zukhruf/testing/node';
+import { describe, test } from '@zukhruf/parameterized-test';
 
 import { Modes } from '../../mutex/acquire-modes/modes.ts';
 import { Mutex } from '../../mutex/mutex.ts';

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 
 import { createClock } from '@sinonjs/fake-timers';
 
-import { test } from '@zukhruf/testing/node';
+import { test } from '@zukhruf/parameterized-test';
 
 import { Gradient, HillClimbing, IdleTimeout, type Sizing } from './index.ts';
 

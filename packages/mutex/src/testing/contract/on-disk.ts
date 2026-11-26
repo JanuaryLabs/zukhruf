@@ -3,7 +3,7 @@ import fsPromises, { readdir, stat } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 
 import { TemporaryFiles } from '@zukhruf/fs';
-import { describe, test } from '@zukhruf/testing/node';
+import { describe, test } from '@zukhruf/parameterized-test';
 import { startWorker } from '@zukhruf/testing/process';
 
 import { NetworkDirectoryError } from '../../lock-stores/file-system/index.ts';

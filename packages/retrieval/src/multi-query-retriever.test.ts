@@ -3,8 +3,8 @@ import type { DatabaseSync } from 'node:sqlite';
 
 import { MockLanguageModelV4 } from 'ai/test';
 
+import { test } from '@zukhruf/parameterized-test';
 import { open } from '@zukhruf/sqlite-open';
-import { test } from '@zukhruf/testing/node';
 import { Vector } from '@zukhruf/vectors';
 import { install, toSql } from '@zukhruf/vectors/sqlite';
 

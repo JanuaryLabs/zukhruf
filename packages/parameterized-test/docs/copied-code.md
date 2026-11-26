@@ -1,0 +1,7 @@
+# Code copied in this package
+
+This package keeps code that another place also has. Each copy is listed here with its source and what changed, so that a fix in one copy goes into each copy, and the commit names all of them.
+
+| Copy                | Source                                   | What changed                                                                                                                                                                                                                                                                                                                                                                             |
+| ------------------- | ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/index.test.ts` | `packages/testing/src/node/node.test.ts` | The suite moved here with the code (#5729). It makes its temporary folders with `mkdtempDisposable` of node:fs, because the tests of @zukhruf/fs import this package; its first test asserts that node:test stays unchanged (ADR 0002); it adds the scenarios that report as node:test reports them. The source goes with the `./node` export of @zukhruf/testing, and this row with it. |

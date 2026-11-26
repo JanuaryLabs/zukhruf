@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 
 import type { FencingToken } from '@zukhruf/fencing';
-import { describe, test } from '@zukhruf/testing/node';
+import { describe, test } from '@zukhruf/parameterized-test';
 
 import { Mutex } from '../../mutex/mutex.ts';
 import { label, longKey } from './keys.ts';

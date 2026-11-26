@@ -3,8 +3,8 @@ import { addAbortListener } from 'node:events';
 
 import type pg from 'pg';
 
+import { test } from '@zukhruf/parameterized-test';
 import { waitFor } from '@zukhruf/testing/async';
-import { test } from '@zukhruf/testing/node';
 import { Postgres } from '@zukhruf/testing/postgres';
 
 import {

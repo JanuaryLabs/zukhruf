@@ -14,7 +14,7 @@
 6. Stop the jobs at the end of the test. Move the clock until each caller ends: the last job of each caller waits on the clock.
 7. Give the sizing a plain computer: `computer: { availableParallelism: () => 4, availableMemory: () => 2 ** 40 }`. The test then gets the same capacity on each computer that runs it. To show other processes that take the memory, let `availableMemory` return a variable, and change the variable.
 8. Run the tests at the same time: `describe(name, { concurrency: true }, ...)`. Each test moves only its own clock and reads only its own computer.
-9. Run each claim for each sizing with `test.each` of `@zukhruf/testing/node`.
+9. Run each claim for each sizing with `test.each` of `@zukhruf/parameterized-test`.
 
 ## The program
 

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 
-import { describe, test } from '@zukhruf/testing/node';
+import { describe, test } from '@zukhruf/parameterized-test';
 
 import { Mutex } from '../../mutex/mutex.ts';
 import { hold } from '../hold.ts';

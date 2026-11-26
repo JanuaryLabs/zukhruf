@@ -4,8 +4,8 @@ import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 
 import { TemporaryFiles, isErrno } from '@zukhruf/fs';
+import { describe, test } from '@zukhruf/parameterized-test';
 import { waitFor } from '@zukhruf/testing/async';
-import { describe, test } from '@zukhruf/testing/node';
 import { startWorker } from '@zukhruf/testing/process';
 
 import { Mutex } from '../../mutex/mutex.ts';

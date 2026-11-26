@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { MockEmbeddingModelV4 } from 'ai/test';
 import type mssql from 'mssql';
 
-import { test } from '@zukhruf/testing/node';
+import { test } from '@zukhruf/parameterized-test';
 import { SqlServer } from '@zukhruf/testing/sqlserver';
 import { DimensionMismatchError } from '@zukhruf/vectors';
 

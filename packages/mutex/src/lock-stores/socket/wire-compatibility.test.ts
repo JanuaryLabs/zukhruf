@@ -8,9 +8,9 @@ import { describe } from 'node:test';
 
 import { Latch, untilAborted } from '@zukhruf/async';
 import { FileLock, TemporaryFiles } from '@zukhruf/fs';
+import { test } from '@zukhruf/parameterized-test';
 import { UnchangedJournal, open } from '@zukhruf/sqlite-open';
 import { waitFor } from '@zukhruf/testing/async';
-import { test } from '@zukhruf/testing/node';
 import { startWorker } from '@zukhruf/testing/process';
 
 import { Mutex } from '../../index.ts';

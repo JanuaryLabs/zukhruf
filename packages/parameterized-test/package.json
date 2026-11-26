@@ -1,0 +1,41 @@
+{
+  "name": "@zukhruf/parameterized-test",
+  "version": "0.8.70",
+  "description": "test.each and suite.each for node:test: each row of a table is one test with its own name and result. It imports only node:test, so the tests of every package can use it.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JanuaryLabs/zukhruf",
+    "directory": "packages/parameterized-test"
+  },
+  "bugs": {
+    "url": "https://github.com/JanuaryLabs/zukhruf/issues"
+  },
+  "homepage": "https://github.com/JanuaryLabs/zukhruf/tree/main/packages/parameterized-test#readme",
+  "keywords": [
+    "node:test",
+    "parameterized-test",
+    "test.each",
+    "table-driven-tests",
+    "testing"
+  ],
+  "type": "module",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "@zukhruf/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "!dist/spec/**",
+    "!**/*.tsbuildinfo",
+    "!**/*.test.*"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}

@@ -8,7 +8,7 @@ import { type TestContext, describe } from 'node:test';
 
 import { untilAborted } from '@zukhruf/async';
 import { TemporaryFiles } from '@zukhruf/fs';
-import { test } from '@zukhruf/testing/node';
+import { test } from '@zukhruf/parameterized-test';
 import { startWorker } from '@zukhruf/testing/process';
 
 import { type Settlement, watch } from '../../testing/watch.ts';

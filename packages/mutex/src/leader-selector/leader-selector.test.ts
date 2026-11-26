@@ -14,8 +14,8 @@ import { SqliteElection, type Term } from '@zukhruf/election';
 import type { FencedLease } from '@zukhruf/fencing';
 import { TemporaryFiles } from '@zukhruf/fs';
 import { LeaseController, LeaseLostError } from '@zukhruf/lease';
+import { describe } from '@zukhruf/parameterized-test';
 import { waitFor } from '@zukhruf/testing/async';
-import { describe } from '@zukhruf/testing/node';
 
 import {
   LeaderSelector,

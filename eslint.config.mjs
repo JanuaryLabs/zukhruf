@@ -330,9 +330,15 @@ export default defineConfig(
   // @zukhruf/fs depends on async and sqlite-open, so the tests of these two
   // packages cannot import TemporaryFiles: that import would make a cycle in
   // the build (docs/adr/0001). sqlite-open keeps a copy of the temporary
-  // directory (packages/sqlite/open/docs/copied-code.md).
+  // directory (packages/sqlite/open/docs/copied-code.md). The tests of fs
+  // import @zukhruf/parameterized-test, so its own tests use node:fs's
+  // mkdtempDisposable (its ADR 0001).
   {
-    files: ['packages/async/**', 'packages/sqlite/open/**'],
+    files: [
+      'packages/async/**',
+      'packages/sqlite/open/**',
+      'packages/parameterized-test/**',
+    ],
     rules: { 'zukhruf/no-raw-temp-directory': 'off' },
   },
   // @zukhruf/sqlite-open is the one place that constructs DatabaseSync. The

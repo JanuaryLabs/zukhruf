@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 
-import { test } from '@zukhruf/testing/node';
+import { test } from '@zukhruf/parameterized-test';
 
 import { MaximalMarginalRelevance, VectorMissingError } from './index.ts';
 import { embeddingModel } from './testing/embedding-model.ts';

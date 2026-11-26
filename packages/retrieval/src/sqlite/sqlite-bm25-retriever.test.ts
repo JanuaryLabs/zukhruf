@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { type DatabaseSync, constants } from 'node:sqlite';
 
+import { test } from '@zukhruf/parameterized-test';
 import { open } from '@zukhruf/sqlite-open';
-import { test } from '@zukhruf/testing/node';
 
 import {
   SqliteBM25Retriever,

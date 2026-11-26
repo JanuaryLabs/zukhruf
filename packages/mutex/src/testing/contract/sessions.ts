@@ -6,8 +6,8 @@ import type { TestContext } from 'node:test';
 import { createClock } from '@sinonjs/fake-timers';
 
 import { type Clock, untilAborted } from '@zukhruf/async';
+import { describe, test } from '@zukhruf/parameterized-test';
 import { waitFor } from '@zukhruf/testing/async';
-import { describe, test } from '@zukhruf/testing/node';
 
 import { LeaseLostError } from '../../index.ts';
 import type { LockStore } from '../../mutex/lock-store.ts';

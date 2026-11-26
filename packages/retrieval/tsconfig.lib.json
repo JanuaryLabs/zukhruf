@@ -22,6 +22,9 @@
     },
     {
       "path": "../vectors/tsconfig.lib.json"
+    },
+    {
+      "path": "../parameterized-test/tsconfig.lib.json"
     }
   ]
 }

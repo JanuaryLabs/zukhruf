@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 
 import type { RerankingModel } from 'ai';
 
-import { test } from '@zukhruf/testing/node';
+import { test } from '@zukhruf/parameterized-test';
 
 import {
   EmbeddingRerankRetriever,

@@ -4,8 +4,8 @@ import { type DatabaseSync, constants } from 'node:sqlite';
 import { wrapEmbeddingModel } from 'ai';
 import { MockEmbeddingModelV4 } from 'ai/test';
 
+import { test } from '@zukhruf/parameterized-test';
 import { open } from '@zukhruf/sqlite-open';
-import { test } from '@zukhruf/testing/node';
 import { DimensionMismatchError, Vector } from '@zukhruf/vectors';
 import { install, toSql } from '@zukhruf/vectors/sqlite';
 

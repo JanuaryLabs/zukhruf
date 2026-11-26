@@ -8,7 +8,7 @@ import { describe } from 'node:test';
 
 import { CounterTokenSource, type TokenSource } from '@zukhruf/fencing';
 import { TemporaryFiles, isErrno } from '@zukhruf/fs';
-import { test } from '@zukhruf/testing/node';
+import { test } from '@zukhruf/parameterized-test';
 
 import type { LockStore } from '../../mutex/lock-store.ts';
 import { Mutex } from '../../mutex/mutex.ts';

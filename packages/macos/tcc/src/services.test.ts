@@ -3,7 +3,7 @@ import { execFile } from 'node:child_process';
 import { describe } from 'node:test';
 import { promisify } from 'node:util';
 
-import { test } from '@zukhruf/testing/node';
+import { test } from '@zukhruf/parameterized-test';
 
 import {
   Accessibility,

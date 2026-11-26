@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
 
-import { test } from '@zukhruf/testing/node';
+import { test } from '@zukhruf/parameterized-test';
 
 import { computerStore } from './index.ts';
 

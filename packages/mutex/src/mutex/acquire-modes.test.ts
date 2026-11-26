@@ -4,8 +4,8 @@ import { setTimeout as delay } from 'node:timers/promises';
 
 import { createClock } from '@sinonjs/fake-timers';
 
+import { describe } from '@zukhruf/parameterized-test';
 import { waitFor } from '@zukhruf/testing/async';
-import { describe } from '@zukhruf/testing/node';
 
 import { MutexWarning } from '../index.ts';
 import { MemoryStore } from '../lock-stores/memory/memory-store.ts';

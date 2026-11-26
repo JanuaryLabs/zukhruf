@@ -12,13 +12,13 @@ import PQueue from 'p-queue';
 
 import { Latch, type WallClock, delay, untilAborted } from '@zukhruf/async';
 import { TemporaryFiles } from '@zukhruf/fs';
+import { describe, test } from '@zukhruf/parameterized-test';
 import { open } from '@zukhruf/sqlite-open';
 import {
   SqliteJobQueue,
   type SqliteJobQueueOptions,
 } from '@zukhruf/sqlite-queue';
 import { waitFor } from '@zukhruf/testing/async';
-import { describe, test } from '@zukhruf/testing/node';
 
 import {
   DisposedError,

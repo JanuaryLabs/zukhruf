@@ -4,7 +4,7 @@ import { dirname, extname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { TemporaryFiles } from '@zukhruf/fs';
-import { test } from '@zukhruf/testing/node';
+import { test } from '@zukhruf/parameterized-test';
 
 import {
   workspace as temporaryWorkspace,
