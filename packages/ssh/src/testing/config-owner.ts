@@ -5,6 +5,7 @@
 //
 //   node config-owner.ts <ssh config file> <destination> <home>
 import { OpenSshConfig } from '../config.ts';
+import { PATH } from './path.ts';
 
 const [file, destination, home] = process.argv.slice(2);
 if (file === undefined || destination === undefined || home === undefined) {
@@ -15,7 +16,7 @@ if (file === undefined || destination === undefined || home === undefined) {
 
 const config = await OpenSshConfig.resolve(destination, {
   flags: ['-F', file],
-  environment: { PATH: '/usr/bin:/bin', HOME: home },
+  environment: { PATH, HOME: home },
 });
 const client = await config.dial({ clock: globalThis });
 await client.newSession().start('exec cat > /dev/null');

@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import { type ChildProcess, execFile, spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { access, chmod, readFile, rm, writeFile } from 'node:fs/promises';
-import { type Server, type Socket, createServer } from 'node:net';
 import { userInfo } from 'node:os';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
@@ -15,6 +14,8 @@ import { TemporaryFiles, isErrno } from '@zukhruf/fs';
 
 import { OpenSshConfig } from './config.ts';
 import { KeyError } from './knownhosts.ts';
+import { PATH } from './testing/path.ts';
+import { startReports } from './testing/reports.ts';
 import { startSilentServer } from './testing/silent-server.ts';
 import { hermeticLines } from './testing/ssh-config.ts';
 import { type Sshd, startSshd } from './testing/sshd.ts';
@@ -148,48 +149,6 @@ async function startOwner(
   return owner;
 }
 
-interface Reports extends AsyncDisposable {
-  readonly port: number;
-  /** The pid that the first command reported. */
-  pid(signal: AbortSignal): Promise<number>;
-  /** The lines of the first command, once its connection to the report port ended. */
-  ended(signal: AbortSignal): Promise<string[]>;
-}
-
-/** The report port of the proxy script. The dispose ends the reported command if it still runs. */
-async function startReports(): Promise<Reports> {
-  const connected = Promise.withResolvers<Socket>();
-  const sockets = new Set<Socket>();
-  let received = '';
-  const server = createServer((socket) => {
-    sockets.add(socket);
-    socket.setEncoding('utf8');
-    socket.on('data', (chunk: string) => (received += chunk));
-    connected.resolve(socket);
-  });
-  server.listen(0, '127.0.0.1');
-  await once(server, 'listening');
-  return {
-    port: portOf(server),
-    async pid(signal) {
-      const socket = await connected.promise;
-      while (!received.includes('\n')) await once(socket, 'data', { signal });
-      return Number(received.split('\n')[0]);
-    },
-    async ended(signal) {
-      const socket = await connected.promise;
-      if (!socket.readableEnded) await once(socket, 'end', { signal });
-      return received.split('\n').filter((line) => line !== '');
-    },
-    async [Symbol.asyncDispose]() {
-      if (received.includes('\n')) stop(Number(received.split('\n')[0]));
-      for (const socket of sockets) socket.destroy();
-      server.close();
-      await once(server, 'close');
-    },
-  };
-}
-
 /** Ends a process that the test started and that may have ended. */
 function stop(pid: number): void {
   try {
@@ -242,7 +201,7 @@ test(
           `  ProxyCommand touch ${marker}`,
         ]),
       ],
-      environment: { PATH: '/usr/bin:/bin', HOME: directory.path },
+      environment: { PATH, HOME: directory.path },
     });
 
     // Act
@@ -274,7 +233,7 @@ test(
           '  ProxyJump jump',
         ]),
       ],
-      environment: { PATH: '/usr/bin:/bin', HOME: directory.path },
+      environment: { PATH, HOME: directory.path },
     });
 
     // Act
@@ -297,12 +256,9 @@ test(
     const config = await OpenSshConfig.resolve('box', {
       flags: [
         '-F',
-        await writeConfig(directory.path, [
-          'Host box',
-          '  ProxyCommand /usr/bin/true',
-        ]),
+        await writeConfig(directory.path, ['Host box', '  ProxyCommand true']),
       ],
-      environment: { PATH: '/usr/bin:/bin', HOME: directory.path },
+      environment: { PATH, HOME: directory.path },
     });
 
     // Act
@@ -334,7 +290,7 @@ test(
           `  ProxyCommand ${process.execPath} ${script} %p ${reports.port}`,
         ]),
       ],
-      environment: { PATH: '/usr/bin:/bin', HOME: directory.path },
+      environment: { PATH, HOME: directory.path },
     });
     const controller = new AbortController();
     const reason = new Error('the caller gave up');
@@ -381,7 +337,7 @@ test(
           `  ProxyCommand ${process.execPath} ${script} %p ${reports.port}`,
         ]),
       ],
-      environment: { PATH: '/usr/bin:/bin', HOME: directory.path },
+      environment: { PATH, HOME: directory.path },
     });
 
     // Act
@@ -422,7 +378,7 @@ test(
           `  ProxyCommand ${process.execPath} ${script} %p ${reports.port}`,
         ]),
       ],
-      environment: { PATH: '/usr/bin:/bin', HOME: directory.path },
+      environment: { PATH, HOME: directory.path },
     });
     const client = await config.dial({
       clock: createClock(),
@@ -465,7 +421,7 @@ test(
           `  ProxyCommand ${process.execPath} ${script} %p ${reports.port}`,
         ]),
       ],
-      environment: { PATH: '/usr/bin:/bin', HOME: directory.path },
+      environment: { PATH, HOME: directory.path },
     });
     await using client = await config.dial({
       clock: createClock(),
@@ -503,7 +459,7 @@ test(
       '  ProxyCommand connect %h:%p as %r for %n under %k at 100%%',
     ]);
     const environment = {
-      PATH: '/usr/bin:/bin',
+      PATH,
       HOME: directory.path,
       SHELL: shell,
     };
@@ -553,7 +509,7 @@ test(
       'Host box',
       `  ProxyCommand mkdir -p ${ran}"$0"`,
     ]);
-    const environment = { PATH: '/usr/bin:/bin', HOME: directory.path };
+    const environment = { PATH, HOME: directory.path };
     await runOpenSsh(file, 'box', environment);
     const openSsh = await exists(join(ran, 'bin', 'sh'));
     await rm(ran, { recursive: true });
@@ -626,7 +582,7 @@ test(
         ]),
       ],
       environment: {
-        PATH: '/usr/bin:/bin',
+        PATH,
         HOME: directory.path,
         MARK: 'from the config',
       },
@@ -718,7 +674,7 @@ test(
     );
     const config = await OpenSshConfig.resolve('dest', {
       flags: ['-F', await jumpConfig(directory.path, jump, dest)],
-      environment: { PATH: '/usr/bin:/bin', HOME: directory.path },
+      environment: { PATH, HOME: directory.path },
     });
 
     // Act
@@ -778,7 +734,7 @@ test(
           `  IdentityFile ${dest.userKey}`,
         ]),
       ],
-      environment: { PATH: '/usr/bin:/bin', HOME: directory.path },
+      environment: { PATH, HOME: directory.path },
     });
     const client = await config.dial({
       clock: createClock(),
@@ -821,7 +777,7 @@ test(
           jumpLines: ['  StrictHostKeyChecking no'],
         }),
       ],
-      environment: { PATH: '/usr/bin:/bin', HOME: directory.path },
+      environment: { PATH, HOME: directory.path },
     });
 
     // Act
@@ -859,7 +815,7 @@ test(
     );
     const config = await OpenSshConfig.resolve('dest', {
       flags: ['-F', await jumpConfig(directory.path, jump, dest)],
-      environment: { PATH: '/usr/bin:/bin', HOME: directory.path },
+      environment: { PATH, HOME: directory.path },
     });
 
     // Act
@@ -891,7 +847,7 @@ test(
     );
     const config = await OpenSshConfig.resolve('dest', {
       flags: ['-F', await jumpConfig(directory.path, jump, dest)],
-      environment: { PATH: '/usr/bin:/bin', HOME: directory.path },
+      environment: { PATH, HOME: directory.path },
     });
     const client = await config.dial({
       clock: createClock(),
@@ -927,7 +883,7 @@ test(
           jumpLines: ['  StrictHostKeyChecking no'],
         }),
       ],
-      environment: { PATH: '/usr/bin:/bin', HOME: directory.path },
+      environment: { PATH, HOME: directory.path },
     });
 
     // Act
@@ -983,7 +939,7 @@ test(
           `  IdentityFile ${dest.userKey}`,
         ]),
       ],
-      environment: { PATH: '/usr/bin:/bin', HOME: directory.path },
+      environment: { PATH, HOME: directory.path },
     });
 
     // Act
@@ -1033,9 +989,3 @@ test(
     await dest.connectionsEnded({ signal: t.signal });
   },
 );
-
-function portOf(server: Server): number {
-  const address = server.address();
-  assert.ok(address !== null && typeof address === 'object');
-  return address.port;
-}

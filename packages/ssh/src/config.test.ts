@@ -1,21 +1,21 @@
 import assert from 'node:assert/strict';
-import { execFile } from 'node:child_process';
-import { readFile, writeFile } from 'node:fs/promises';
+import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { promisify } from 'node:util';
 
-import { TemporaryFiles, isErrno } from '@zukhruf/fs';
+import { TemporaryFiles } from '@zukhruf/fs';
 
 import { OpenSshConfig } from './config.ts';
+import { PATH } from './testing/path.ts';
+import { startReports } from './testing/reports.ts';
 
 const noSsh =
   process.platform === 'win32'
     ? 'the tests run the OpenSSH ssh binary on a config file with a Unix path'
     : false;
 
-/** The environment of ssh -G in each test: no variable of the test process. */
-const environment = { PATH: '/usr/bin:/bin', HOME: '/home/test' };
+/** The environment of ssh -G in each test: of the test process, only its PATH. */
+const environment = { PATH, HOME: '/home/test' };
 
 /** Writes `lines` to a config file of the test, for ssh -F. */
 async function configFile(
@@ -25,15 +25,6 @@ async function configFile(
   const file = join(directory, 'ssh_config');
   await writeFile(file, [...lines, ''].join('\n'));
   return file;
-}
-
-/** Ends a process that the test started and that may have ended. */
-function stop(pid: number): void {
-  try {
-    process.kill(pid);
-  } catch (error) {
-    if (!isErrno(error, 'ESRCH')) throw error;
-  }
 }
 
 test(
@@ -94,18 +85,31 @@ test(
   },
 );
 
+/**
+ * A command for Match exec, run by Node: it reports the pid of its shell to
+ * the report port.
+ *
+ *   node report.mjs <pid> <report port>
+ */
+const reportScript = `
+import { connect } from 'node:net';
+const [pid, port] = process.argv.slice(2);
+connect(Number(port), '127.0.0.1').end(pid + '\\n');
+`;
+
 test(
   'an abort of the signal while ssh -G runs rejects with its reason',
   { skip: noSsh },
-  async () => {
+  async (t) => {
     // Arrange
     await using directory = await new TemporaryFiles().directory('ssh-', {
       parent: '/tmp',
     });
-    const started = join(directory.path, 'started');
-    await promisify(execFile)('mkfifo', [started]);
+    await using reports = await startReports();
+    const script = join(directory.path, 'report.mjs');
+    await writeFile(script, reportScript);
     const file = await configFile(directory.path, [
-      `Match exec "echo $$ > ${started}; exec sleep 30"`,
+      `Match exec "${process.execPath} ${script} $$ ${reports.port}; exec sleep 30"`,
     ]);
     const controller = new AbortController();
     const reason = new Error('the caller gave up');
@@ -114,25 +118,18 @@ test(
       environment,
       signal: controller.signal,
     });
-    let sleeper: number | undefined;
-    try {
-      sleeper = Number(
-        await Promise.race([
-          readFile(started, 'utf8'),
-          resolving.then(() => {
-            throw new Error('resolve ended before Match exec ran');
-          }),
-        ]),
-      );
+    await Promise.race([
+      reports.pid(t.signal),
+      resolving.then(() => {
+        throw new Error('resolve ended before Match exec ran');
+      }),
+    ]);
 
-      // Act
-      controller.abort(reason);
+    // Act
+    controller.abort(reason);
 
-      // Assert
-      await assert.rejects(resolving, (error) => error === reason);
-    } finally {
-      if (sleeper !== undefined) stop(sleeper);
-    }
+    // Assert
+    await assert.rejects(resolving, (error) => error === reason);
   },
 );
 
@@ -435,8 +432,6 @@ test(
       '  IdentityAgent $OTHER_AGENT',
       'Host expanded',
       '  IdentityAgent ${HOME}/agent.sock',
-      'Host path-of-process',
-      '  IdentityAgent ${PATH}/agent.sock',
     ]);
     const withAgent = {
       ...environment,
@@ -464,9 +459,10 @@ test(
       resolve('expanded'),
       resolve('absent', environment),
     ]);
-    const withoutPath = OpenSshConfig.resolve('path-of-process', {
+    // HOME of the test process is set; ssh -G must not see it.
+    const withoutHome = OpenSshConfig.resolve('expanded', {
       flags: ['-F', file],
-      environment: { HOME: '/home/test' },
+      environment: { PATH },
     });
 
     // Assert
@@ -479,7 +475,7 @@ test(
       '/home/test/agent.sock',
       undefined,
     ]);
-    await assert.rejects(withoutPath, /env var \$\{PATH\} has no value/);
+    await assert.rejects(withoutHome, /env var \$\{HOME\} has no value/);
   },
 );
 
@@ -514,7 +510,7 @@ test(
     const resolved = await Promise.all([
       resolve('box'),
       resolve('plain'),
-      resolve('box', { PATH: environment.PATH }),
+      resolve('box', { PATH }),
     ]);
 
     // Assert

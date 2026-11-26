@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { writeFile } from 'node:fs/promises';
+import { symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { promisify } from 'node:util';
+
+import { TemporaryFiles } from '@zukhruf/fs';
 
 import { startSshd } from './testing/sshd.ts';
 
@@ -43,5 +45,43 @@ test(
 
     // Assert
     assert.equal(stdout, 'ok\n');
+  },
+);
+
+test(
+  'in a process whose PATH has no sshd, startSshd rejects with an error that names the PATH, and uses no sshd outside it',
+  { skip: noSshd },
+  async () => {
+    // Arrange
+    await using directory = await new TemporaryFiles().directory('sshd-', {
+      parent: '/tmp',
+    });
+    const { stdout } = await promisify(execFile)('sh', [
+      '-c',
+      'command -v ssh-keygen',
+    ]);
+    await symlink(stdout.trim(), join(directory.path, 'ssh-keygen'));
+    const helper = new URL('testing/sshd.ts', import.meta.url).href;
+
+    // Act
+    const started = promisify(execFile)(
+      process.execPath,
+      [
+        '--input-type=module',
+        '-e',
+        `import { startSshd } from '${helper}'; await using sshd = await startSshd();`,
+      ],
+      { env: { ...process.env, PATH: directory.path } },
+    );
+
+    // Assert
+    await assert.rejects(started, (error) => {
+      assert.ok(Error.isError(error) && 'stderr' in error);
+      assert.match(
+        String(error.stderr),
+        /The OpenSSH server sshd is missing from the PATH/,
+      );
+      return true;
+    });
   },
 );

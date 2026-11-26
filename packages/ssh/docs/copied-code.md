@@ -1,6 +1,6 @@
 # Code copied in this package
 
-This package keeps code that another place also has. Each copy is listed here with its source and what changed, so that a fix in one copy goes into each copy, and the commit names all of them. A test helper of this package moves into `src/testing/` at its third place (root ADR 0001, rule 2), as `src/testing/dial.ts` and `src/testing/silent-server.ts` did.
+This package keeps code that another place also has. Each copy is listed here with its source and what changed, so that a fix in one copy goes into each copy, and the commit names all of them. A test helper of this package moves into `src/testing/` at its third place (root ADR 0001, rule 2), as `src/testing/dial.ts`, `src/testing/silent-server.ts` and `src/testing/reports.ts` did.
 
 | Copy                                                  | Source                                            | What changed                                                                                                                                                                                                                                   |
 | ----------------------------------------------------- | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

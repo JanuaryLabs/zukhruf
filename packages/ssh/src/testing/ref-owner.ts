@@ -46,6 +46,7 @@ import { parseArgs } from 'node:util';
 import { OpenSshConfig, type SharedConnection } from '../config.ts';
 import { ControlMaster } from '../control.ts';
 import { Client, type ClientConfig, PrivateKey } from '../index.ts';
+import { PATH } from './path.ts';
 
 const { values, positionals } = parseArgs({
   allowPositionals: true,
@@ -143,7 +144,7 @@ async function resolveConfig(
 ): Promise<OpenSshConfig> {
   return OpenSshConfig.resolve(destination, {
     flags: ['-F', file],
-    environment: { PATH: '/usr/bin:/bin', HOME: home },
+    environment: { PATH, HOME: home },
   });
 }
 

@@ -2,13 +2,12 @@ import { type ChildProcess, execFile, spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { readFile, writeFile } from 'node:fs/promises';
 import { type Server, createServer } from 'node:net';
-import { join } from 'node:path';
+import { delimiter, join } from 'node:path';
 import { promisify } from 'node:util';
 
 import { untilAborted } from '@zukhruf/async';
 import { TemporaryFiles, isErrno } from '@zukhruf/fs';
 
-const sshdPath = '/usr/sbin/sshd';
 const run = promisify(execFile);
 
 export interface Sshd extends AsyncDisposable {
@@ -30,7 +29,7 @@ export interface Sshd extends AsyncDisposable {
 
 /**
  * A real OpenSSH server for one test, with no root and no fixed port: a
- * `node:net` server on 127.0.0.1 port 0 starts `/usr/sbin/sshd -i` in inetd
+ * `node:net` server on 127.0.0.1 port 0 starts `sshd -i` of the PATH in inetd
  * mode for each connection, as OpenSSH's regress/test-exec.sh does with its
  * sshd_proxy. The config uses only options that OpenSSH 9.6 knows; `config`
  * adds lines, such as `AcceptEnv LANG`.
@@ -64,7 +63,7 @@ export async function startSshd(
         '',
       ].join('\n'),
     );
-    await testConfig(config);
+    const sshd = await findSshd(config);
     const hostPublicKey = (await readFile(`${hostKey}.pub`, 'utf8')).trim();
 
     const children = new Set<ChildProcess>();
@@ -74,7 +73,7 @@ export async function startSshd(
       // (privsep_postauth in OpenSSH's sshd-session.c); it holds the socket
       // too, and outlives a signal to its parent. In its own process group,
       // the whole connection gets each signal.
-      const child = spawn(sshdPath, ['-i', '-f', config], {
+      const child = spawn(sshd, ['-i', '-f', config], {
         stdio: [socket, socket, 'ignore'],
         detached: true,
       });
@@ -137,18 +136,23 @@ function signalGroup(child: ChildProcess, signal: NodeJS.Signals): void {
   }
 }
 
-async function testConfig(config: string): Promise<void> {
-  try {
-    await run(sshdPath, ['-t', '-f', config]);
-  } catch (error) {
-    if (isErrno(error, 'ENOENT')) {
-      throw new Error(
-        `The OpenSSH server ${sshdPath} is missing; install OpenSSH's sshd (openssh-server) to run these tests.`,
-        { cause: error },
-      );
+/**
+ * The first sshd on the PATH that tests the config with `sshd -t`, as Go's
+ * x/crypto/ssh tests find theirs with `exec.LookPath("sshd")`.
+ */
+async function findSshd(config: string): Promise<string> {
+  for (const directory of (process.env['PATH'] ?? '').split(delimiter)) {
+    const sshd = join(directory, 'sshd');
+    try {
+      await run(sshd, ['-t', '-f', config]);
+      return sshd;
+    } catch (error) {
+      if (!isErrno(error, 'ENOENT')) throw error;
     }
-    throw error;
   }
+  throw new Error(
+    "The OpenSSH server sshd is missing from the PATH; install OpenSSH's sshd (openssh-server) to run these tests.",
+  );
 }
 
 function portOf(server: Server): number {

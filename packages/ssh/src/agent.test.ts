@@ -223,7 +223,7 @@ test(
     // Arrange
     await using agent = await startSshAgent({
       environment: {
-        SSH_ASKPASS: '/usr/bin/false',
+        SSH_ASKPASS: 'false',
         SSH_ASKPASS_REQUIRE: 'force',
         DISPLAY: ':0',
       },

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { chmod, unlink, writeFile } from 'node:fs/promises';
-import { type Server, type Socket, createServer } from 'node:net';
+import { type Server, createServer } from 'node:net';
 import { userInfo } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -11,6 +11,8 @@ import { untilAborted } from '@zukhruf/async';
 import { TemporaryFiles, isErrno } from '@zukhruf/fs';
 
 import { OpenSshConfig, SharedConnectionWarning } from './config.ts';
+import { PATH } from './testing/path.ts';
+import { startReports } from './testing/reports.ts';
 import { hermeticLines } from './testing/ssh-config.ts';
 import { type Sshd, startSshd } from './testing/sshd.ts';
 
@@ -127,50 +129,6 @@ process.stdin.pipe(socket);
 socket.pipe(process.stdout);
 process.stdout.on('error', () => socket.destroy());
 `;
-
-interface Reports extends AsyncDisposable {
-  readonly port: number;
-  /** Resolves when the connection of the command to the report port ends. */
-  ended(signal: AbortSignal): Promise<void>;
-}
-
-/** The report port of the relay. Disposal ends the command if it still runs, and destroys the connections. */
-async function startReports(): Promise<Reports> {
-  const connected = Promise.withResolvers<Socket>();
-  const sockets = new Set<Socket>();
-  let received = '';
-  const server = createServer((socket) => {
-    sockets.add(socket);
-    socket.setEncoding('utf8');
-    socket.on('data', (chunk: string) => (received += chunk));
-    socket.on('error', () => undefined);
-    connected.resolve(socket);
-  });
-  server.listen(0, '127.0.0.1');
-  await once(server, 'listening');
-  return {
-    port: portOf(server),
-    async ended(signal) {
-      const socket = await untilAborted(connected.promise, signal);
-      if (!socket.readableEnded) await once(socket, 'end', { signal });
-    },
-    async [Symbol.asyncDispose]() {
-      const pid = Number(received.split('\n')[0]);
-      if (pid > 0) {
-        try {
-          process.kill(pid, 'SIGKILL');
-        } catch (error) {
-          // It has exited.
-          if (!isErrno(error, 'ESRCH')) throw error;
-        }
-      }
-      for (const socket of sockets) socket.destroy();
-      const closed = once(server, 'close');
-      server.close();
-      await closed;
-    },
-  };
-}
 
 function portOf(server: Server): number {
   const address = server.address();
@@ -565,7 +523,7 @@ test(
     const file = await writeSharingConfig(directory.path, sshd);
     const config = await OpenSshConfig.resolve('box', {
       flags: ['-F', file],
-      environment: { PATH: '/usr/bin:/bin', HOME: directory.path },
+      environment: { PATH, HOME: directory.path },
     });
     await using master = await config.share({ clock: globalThis });
     await using owner = await startOwner(
@@ -599,7 +557,7 @@ test(
     );
     const config = await OpenSshConfig.resolve('box', {
       flags: ['-F', file],
-      environment: { PATH: '/usr/bin:/bin', HOME: directory.path },
+      environment: { PATH, HOME: directory.path },
     });
     const joined = await config.share({ clock: globalThis });
     owner.unref();
@@ -629,7 +587,7 @@ test(
     const file = await writeSharingConfig(directory.path, sshd);
     const config = await OpenSshConfig.resolve('box', {
       flags: ['-F', file],
-      environment: { PATH: '/usr/bin:/bin', HOME: directory.path },
+      environment: { PATH, HOME: directory.path },
     });
     await using master = await config.share({ clock: globalThis });
     const target = createServer();
@@ -705,7 +663,7 @@ test(
     await owner[Symbol.asyncDispose]();
     const config = await OpenSshConfig.resolve('box', {
       flags: ['-F', file],
-      environment: { PATH: '/usr/bin:/bin', HOME: directory.path },
+      environment: { PATH, HOME: directory.path },
     });
 
     // Act
@@ -740,7 +698,7 @@ test(
     );
     const config = await OpenSshConfig.resolve('box', {
       flags: ['-F', file],
-      environment: { PATH: '/usr/bin:/bin', HOME: directory.path },
+      environment: { PATH, HOME: directory.path },
     });
     await using joined = await config.share({ clock: globalThis });
     await owner[Symbol.asyncDispose]();
@@ -774,7 +732,7 @@ test(
     );
     const config = await OpenSshConfig.resolve('box', {
       flags: ['-F', file],
-      environment: { PATH: '/usr/bin:/bin', HOME: directory.path },
+      environment: { PATH, HOME: directory.path },
     });
     await using joined = await config.share({ clock: globalThis });
     joined.unref();
@@ -823,7 +781,7 @@ test(
       ['share', file, 'box', directory.path],
       t.signal,
     );
-    const environment = { PATH: '/usr/bin:/bin', HOME: directory.path };
+    const environment = { PATH, HOME: directory.path };
     const joining = await OpenSshConfig.resolve('box', {
       flags: ['-F', file, '-o', 'ControlMaster=no'],
       environment,
@@ -896,7 +854,7 @@ test(
     );
     const config = await OpenSshConfig.resolve('box', {
       flags: ['-F', file],
-      environment: { PATH: '/usr/bin:/bin', HOME: directory.path },
+      environment: { PATH, HOME: directory.path },
     });
     await using joined = await config.share({ clock: globalThis });
     joined.unref();
@@ -950,7 +908,7 @@ test(
     );
     const config = await OpenSshConfig.resolve('box', {
       flags: ['-F', file],
-      environment: { PATH: '/usr/bin:/bin', HOME: directory.path },
+      environment: { PATH, HOME: directory.path },
     });
     await using joined = await config.share({ clock: globalThis });
     joined.unref();
@@ -1003,7 +961,7 @@ test(
     );
     const config = await OpenSshConfig.resolve('box', {
       flags: ['-F', file],
-      environment: { PATH: '/usr/bin:/bin', HOME: directory.path },
+      environment: { PATH, HOME: directory.path },
     });
     await using joined = await config.share({ clock: globalThis });
     owner.unref();
@@ -1039,7 +997,7 @@ test(
     );
     const config = await OpenSshConfig.resolve('box', {
       flags: ['-F', file],
-      environment: { PATH: '/usr/bin:/bin', HOME: directory.path },
+      environment: { PATH, HOME: directory.path },
     });
     await using joined = await config.share({ clock: globalThis });
     owner.close();

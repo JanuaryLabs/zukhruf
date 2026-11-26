@@ -17,6 +17,7 @@ import { OpenSshConfig } from './config.ts';
 import { isErrno } from './errno.ts';
 import { AuthenticationError, ExitError } from './index.ts';
 import { KeyError, RevokedError } from './knownhosts.ts';
+import { PATH } from './testing/path.ts';
 import { startSilentServer } from './testing/silent-server.ts';
 import { type SshAgent, startSshAgent } from './testing/ssh-agent.ts';
 import { hermeticLines } from './testing/ssh-config.ts';
@@ -130,7 +131,7 @@ test(
     await writeFile(join(directory.path, 'known_hosts'), '');
     const config = await resolve(
       await writeConfig(directory.path, sshd, [`IdentityFile ${sshd.userKey}`]),
-      { PATH: '/usr/bin:/bin', HOME: directory.path },
+      { PATH, HOME: directory.path },
     );
 
     // Act
@@ -167,7 +168,7 @@ test(
     );
     const config = await resolve(
       await writeConfig(directory.path, sshd, [`IdentityFile ${sshd.userKey}`]),
-      { PATH: '/usr/bin:/bin', HOME: directory.path },
+      { PATH, HOME: directory.path },
     );
 
     // Act
@@ -192,7 +193,7 @@ test(
         'StrictHostKeyChecking ask',
         `IdentityFile ${sshd.userKey}`,
       ]),
-      { PATH: '/usr/bin:/bin', HOME: directory.path },
+      { PATH, HOME: directory.path },
     );
 
     // Act
@@ -224,7 +225,7 @@ test(
     );
     const config = await resolve(
       await writeConfig(directory.path, sshd, [`IdentityFile ${sshd.userKey}`]),
-      { PATH: '/usr/bin:/bin', HOME: directory.path },
+      { PATH, HOME: directory.path },
     );
 
     // Act
@@ -261,7 +262,7 @@ test(
         'StrictHostKeyChecking accept-new',
         `IdentityFile ${sshd.userKey}`,
       ]),
-      { PATH: '/usr/bin:/bin', HOME: directory.path },
+      { PATH, HOME: directory.path },
     );
 
     // Act
@@ -294,7 +295,7 @@ test(
         'StrictHostKeyChecking accept-new',
         `IdentityFile ${sshd.userKey}`,
       ]),
-      { PATH: '/usr/bin:/bin', HOME: directory.path },
+      { PATH, HOME: directory.path },
     );
 
     // Act
@@ -326,7 +327,7 @@ test(
         `GlobalKnownHostsFile ${global}`,
         `IdentityFile ${sshd.userKey}`,
       ]),
-      { PATH: '/usr/bin:/bin', HOME: directory.path },
+      { PATH, HOME: directory.path },
     );
 
     // Act
@@ -362,7 +363,7 @@ test(
         'HashKnownHosts yes',
         `IdentityFile ${sshd.userKey}`,
       ]),
-      { PATH: '/usr/bin:/bin', HOME: directory.path },
+      { PATH, HOME: directory.path },
     );
 
     // Act
@@ -392,7 +393,7 @@ test(
         'StrictHostKeyChecking no',
         `IdentityFile ${sshd.userKey}`,
       ]),
-      { PATH: '/usr/bin:/bin', HOME: directory.path },
+      { PATH, HOME: directory.path },
     );
 
     // Act
@@ -436,7 +437,7 @@ test(
         `IdentityFile ${sshd.userKey}`,
       ]),
       {
-        PATH: '/usr/bin:/bin',
+        PATH,
         HOME: directory.path,
         SSH_AUTH_SOCK: agent.socket,
       },
@@ -481,7 +482,7 @@ test(
         'StrictHostKeyChecking no',
         `IdentityFile ${sshd.userKey}`,
       ]),
-      { PATH: '/usr/bin:/bin', HOME: directory.path },
+      { PATH, HOME: directory.path },
     );
 
     // Act
@@ -517,7 +518,7 @@ test(
         'HostKeyAlias box-alias',
         `IdentityFile ${sshd.userKey}`,
       ]),
-      { PATH: '/usr/bin:/bin', HOME: directory.path },
+      { PATH, HOME: directory.path },
     );
 
     // Act
@@ -547,7 +548,7 @@ test(
         `GlobalKnownHostsFile ${global}`,
         `IdentityFile ${sshd.userKey}`,
       ]),
-      { PATH: '/usr/bin:/bin', HOME: directory.path },
+      { PATH, HOME: directory.path },
     );
 
     // Act
@@ -582,7 +583,7 @@ test(
         'HostKeyAlias box-alias',
         `IdentityFile ${sshd.userKey}`,
       ]),
-      { PATH: '/usr/bin:/bin', HOME: directory.path },
+      { PATH, HOME: directory.path },
     );
 
     // Act
@@ -612,7 +613,7 @@ test(
         `IdentityFile ${sshd.userKey}`,
       ]),
       {
-        PATH: '/usr/bin:/bin',
+        PATH,
         HOME: directory.path,
         SSH_AUTH_SOCK: join(directory.path, 'no-agent.sock'),
       },
@@ -648,7 +649,7 @@ test(
         `IdentityFile ${encrypted}`,
         `IdentityFile ${sshd.userKey}`,
       ]),
-      { PATH: '/usr/bin:/bin', HOME: directory.path },
+      { PATH, HOME: directory.path },
     );
 
     // Act
@@ -679,7 +680,7 @@ test(
         `IdentityFile ${garbage}`,
         `IdentityFile ${sshd.userKey}`,
       ]),
-      { PATH: '/usr/bin:/bin', HOME: directory.path },
+      { PATH, HOME: directory.path },
     );
 
     // Act
@@ -709,7 +710,7 @@ test(
     const config = await resolve(
       await writeConfig(directory.path, sshd, ['IdentityAgent SSH_AUTH_SOCK']),
       {
-        PATH: '/usr/bin:/bin',
+        PATH,
         HOME: directory.path,
         SSH_AUTH_SOCK: agent.socket,
       },
@@ -746,7 +747,7 @@ test(
         `IdentityFile ${refused}`,
       ]),
       {
-        PATH: '/usr/bin:/bin',
+        PATH,
         HOME: directory.path,
         SSH_AUTH_SOCK: agent.socket,
       },
@@ -784,7 +785,7 @@ test(
         `IdentityFile ${refused}`,
       ]),
       {
-        PATH: '/usr/bin:/bin',
+        PATH,
         HOME: directory.path,
         SSH_AUTH_SOCK: agent.socket,
       },
@@ -819,7 +820,7 @@ test(
         `IdentityFile ${keyFile}`,
       ]),
       {
-        PATH: '/usr/bin:/bin',
+        PATH,
         HOME: directory.path,
         SSH_AUTH_SOCK: agent.socket,
       },
@@ -853,7 +854,7 @@ test(
         `IdentityFile ${sshd.userKey}`,
       ]),
       {
-        PATH: '/usr/bin:/bin',
+        PATH,
         HOME: directory.path,
         LC_TEST: 'sent by pattern',
         NAMED: 'sent by name',
@@ -893,7 +894,7 @@ test(
         'SendEnv LC_*',
         `IdentityFile ${sshd.userKey}`,
       ]),
-      { PATH: '/usr/bin:/bin', HOME: directory.path, LC_TEST: 'from-env' },
+      { PATH, HOME: directory.path, LC_TEST: 'from-env' },
     );
     await using client = await config.dial({
       clock: createClock(),
@@ -926,7 +927,7 @@ test(
         `IdentityFile ${sshd.userKey}`,
       ]),
       {
-        PATH: '/usr/bin:/bin',
+        PATH,
         HOME: directory.path,
         SSH_AUTH_SOCK: agent.socket,
       },
@@ -968,7 +969,7 @@ test(
         `IdentityFile ${sshd.userKey}`,
       ]),
       {
-        PATH: '/usr/bin:/bin',
+        PATH,
         HOME: directory.path,
         SSH_AUTH_SOCK: other.socket,
       },
@@ -1010,7 +1011,7 @@ test(
         `IdentityFile ${sshd.userKey}`,
       ]),
       {
-        PATH: '/usr/bin:/bin',
+        PATH,
         HOME: directory.path,
         SSH_AUTH_SOCK: agent.socket,
       },
@@ -1047,7 +1048,7 @@ test(
         'ForwardAgent yes',
         `IdentityFile ${sshd.userKey}`,
       ]),
-      { PATH: '/usr/bin:/bin', HOME: directory.path },
+      { PATH, HOME: directory.path },
     );
     await using client = await config.dial({
       clock: createClock(),
@@ -1086,7 +1087,7 @@ test(
       ].join('\n'),
     );
     const config = await resolve(file, {
-      PATH: '/usr/bin:/bin',
+      PATH,
       HOME: directory.path,
     });
     const clock = createClock();
@@ -1137,7 +1138,7 @@ test(
         'ServerAliveCountMax 1',
         `IdentityFile ${sshd.userKey}`,
       ]),
-      { PATH: '/usr/bin:/bin', HOME: directory.path },
+      { PATH, HOME: directory.path },
     );
     const clock = createClock();
     await using client = await config.dial({ clock, signal: t.signal });
@@ -1175,7 +1176,7 @@ test(
         'AddressFamily inet6',
         `IdentityFile ${sshd.userKey}`,
       ]),
-      { PATH: '/usr/bin:/bin', HOME: directory.path },
+      { PATH, HOME: directory.path },
     );
 
     // Act
@@ -1216,7 +1217,7 @@ test(
         'ControlMaster auto',
         `ControlPath ${join(directory.path, 'cm')}`,
       ]),
-      { PATH: '/usr/bin:/bin', HOME: directory.path },
+      { PATH, HOME: directory.path },
     );
     await using first = await config.share({
       clock: createClock(),
@@ -1252,7 +1253,7 @@ async function sharing(
       `ControlPath ${join(directory, 'cm')}`,
       ...lines,
     ]),
-    { PATH: '/usr/bin:/bin', HOME: directory },
+    { PATH, HOME: directory },
   );
 }
 
@@ -1457,7 +1458,7 @@ test(
         'ControlMaster auto',
         'ControlPath none',
       ]),
-      { PATH: '/usr/bin:/bin', HOME: directory.path },
+      { PATH, HOME: directory.path },
     );
 
     // Act
