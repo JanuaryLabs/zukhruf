@@ -4,6 +4,7 @@ import { untilAborted } from '@zukhruf/async';
 import { Vector, cosineSimilarity } from '@zukhruf/vectors';
 
 import { positiveInteger } from './count.ts';
+import { fanOut } from './fan-out.ts';
 import type { Passage } from './passage.ts';
 import { type QueryType, needOf, wordedNeed } from './query-bundle.ts';
 import { RankWindow } from './rank-window.ts';
@@ -91,15 +92,12 @@ export class EmbeddingRerankRetriever<
     // It embeds the passages with its own model, so it never asks its
     // retriever for vectors; filter and signal pass down unchanged.
     const { includeVectors = false, ...asked } = options;
-    return untilAborted(
-      this.#rerank(
-        query,
-        need,
-        { ...asked, topK: call.window },
-        call.topK,
-        includeVectors,
-      ),
-      signal,
+    return await this.#rerank(
+      query,
+      need,
+      { ...asked, topK: call.window },
+      call.topK,
+      includeVectors,
     );
   }
 
@@ -110,25 +108,36 @@ export class EmbeddingRerankRetriever<
     topK: number,
     includeVectors: boolean,
   ): Promise<RetrievalResult<P, ScoredPassage<P>>> {
-    const { passages, failures } = await this.#retriever.retrieve(
-      query,
-      options,
+    // The retriever may ignore its signal: the caller's abort rejects at
+    // once, and fanOut covers the model calls.
+    const { passages, failures } = await untilAborted(
+      this.#retriever.retrieve(query, options),
+      options.signal,
     );
     if (passages.length === 0) return { passages: [], failures };
     // The call rejected already; a retriever that ignored the signal must
     // not start the model calls.
     options.signal?.throwIfAborted();
-    // The AI SDK names the signal `abortSignal`.
-    const abortSignal =
-      options.signal === undefined ? {} : { abortSignal: options.signal };
-    const [{ embedding }, { embeddings }] = await Promise.all([
-      embed({ model: this.#model, value: need, ...abortSignal }),
-      embedMany({
-        model: this.#model,
-        values: passages.map(({ passage }) => passage.text),
-        ...abortSignal,
-      }),
-    ]);
+    // A failing call aborts the other, so no model call goes on after the
+    // call failed (ADR 0014). One list: the vector of the query, then the
+    // vector of each passage; embed always gives one vector, and an empty
+    // one would fail the check of the query's vector below.
+    const [embedding = [], ...embeddings] = (
+      await fanOut(options.signal, [
+        async (abortSignal) => [
+          (await embed({ model: this.#model, value: need, abortSignal }))
+            .embedding,
+        ],
+        async (abortSignal) =>
+          (
+            await embedMany({
+              model: this.#model,
+              values: passages.map(({ passage }) => passage.text),
+              abortSignal,
+            })
+          ).embeddings,
+      ])
+    ).flat(1);
     const queryVector = Vector.from(embedding);
     // A zero vector has no cosine similarity, even with itself.
     const self = cosineSimilarity(queryVector, queryVector);

@@ -17,6 +17,7 @@ import { embeddingModel } from './testing/embedding-model.ts';
 import { LiveRetriever } from './testing/live-retriever.ts';
 import type { EntrezQueryBundle } from './testing/recording-retriever.ts';
 import { settledThisTurn } from './testing/settled-this-turn.ts';
+import { refusesUntypedQuery } from './testing/untyped-query.ts';
 
 // The query 'rotate a key' has the vector [4, 3, 0]. Every vector has length
 // 5, so a cosine is the dot product / 25:
@@ -312,6 +313,19 @@ void test.each(
     }),
 );
 
+refusesUntypedQuery(
+  'any call of its retriever or of the embedding model',
+  () => {
+    const model = embeddingModel(vectors);
+    const source = live();
+    const retriever = new EmbeddingRerankRetriever({
+      retriever: source,
+      model,
+    });
+    return { retriever, calls: [source.queries, model.doEmbedCalls] };
+  },
+);
+
 test('an empty list gives no passages and makes no call to the embedding model', async () => {
   // Arrange
   const model = embeddingModel(vectors);
@@ -430,16 +444,57 @@ test('the options of the call reach its retriever unchanged but for includeVecto
   // Act
   const result = await rerank.retrieve('rotate a key', options);
 
-  // Assert: the query and the two texts each saw the signal.
+  // Assert: the retriever got the caller's own signal; the query and the two
+  // texts each saw a signal that the caller's abort aborts with its reason.
   const { includeVectors: _asked, ...passedDown } = options;
   assert.deepEqual(seen, [passedDown]);
-  assert.deepEqual(signals, [
-    controller.signal,
-    controller.signal,
-    controller.signal,
-  ]);
+  assert.equal(seen[0]?.signal, controller.signal);
+  assert.equal(signals.length, 3);
+  const reason = new Error('the caller left');
+  controller.abort(reason);
+  assert.deepEqual(
+    signals.map((signal) => signal?.reason),
+    [reason, reason, reason],
+  );
   assert.deepEqual([...result.failures], [['news', unavailable]]);
   assert.equal(result.failures.get('news'), unavailable);
+});
+
+test('a failing embedding of the query aborts the embedding of the passages and rejects with its own error, so the model is not called in the background after the call failed', async () => {
+  // Arrange: the query fails once the passages started; they wait for their
+  // signal.
+  const down = new Error('the embedding model is down');
+  const passageSignals: (AbortSignal | undefined)[] = [];
+  const passagesStarted = Promise.withResolvers<void>();
+  const model = new MockEmbeddingModelV4({
+    maxEmbeddingsPerCall: 100,
+    doEmbed: async ({ values, abortSignal }) => {
+      if (values.includes('rotate a key')) {
+        await passagesStarted.promise;
+        throw down;
+      }
+      passageSignals.push(abortSignal);
+      passagesStarted.resolve();
+      // An aborted call rejects with an error of its own, as the AI SDK's
+      // fetch does, so only the first error can be the call's.
+      return await new Promise<never>((_resolve, reject) => {
+        abortSignal?.addEventListener('abort', () =>
+          reject(new DOMException('aborted', 'AbortError')),
+        );
+      });
+    },
+  });
+  const rerank = new EmbeddingRerankRetriever({ retriever: live(), model });
+
+  // Act
+  const call = rerank.retrieve('rotate a key');
+
+  // Assert
+  await assert.rejects(call, (error) => error === down);
+  assert.equal(passageSignals.length, 1);
+  assert.equal(passageSignals[0]?.aborted, true);
+  await nextTurn();
+  assert.equal(passageSignals.length, 1);
 });
 
 test('a retriever that needs its own field gets the query bundle unchanged, while the embedding model embeds the information need', async () => {

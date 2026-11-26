@@ -1254,6 +1254,32 @@ const blankQueries: readonly (readonly [QueryType, string])[] = [
     { query: 'rotate a key', customEmbeddings: ['rotate a key', '  '] },
     'The customEmbeddings of a query bundle hold a text of no word: got ["rotate a key","  "]',
   ],
+  [
+    // @ts-expect-error: a caller with no types passes a bundle with no query
+    { entrez: 'term' },
+    'The query of a query bundle is not a string: got undefined',
+  ],
+  [
+    // @ts-expect-error: a caller with no types passes a null query
+    { query: null },
+    'The query of a query bundle is not a string: got null',
+  ],
+  [
+    {
+      query: 'rotate a key',
+      // @ts-expect-error: a caller with no types passes a number to embed
+      customEmbeddings: ['rotate a key', 7],
+    },
+    'The customEmbeddings of a query bundle are not a list of strings: got ["rotate a key",7]',
+  ],
+  [
+    {
+      query: 'rotate a key',
+      // @ts-expect-error: a caller with no types passes one text, not a list
+      customEmbeddings: 'rotate a key',
+    },
+    'The customEmbeddings of a query bundle are not a list of strings: got "rotate a key"',
+  ],
 ];
 
 void test.each(

@@ -34,6 +34,7 @@ import { embeddingModel } from './testing/embedding-model.ts';
 import { writeKeywordContract } from './testing/keyword-contract.ts';
 import { RecordingRetriever } from './testing/recording-retriever.ts';
 import { settledThisTurn } from './testing/settled-this-turn.ts';
+import { refusesUntypedQuery } from './testing/untyped-query.ts';
 
 // Each passage matches one query of the tests, and its vector is the one
 // that the embedding model gives for that query.
@@ -747,3 +748,13 @@ void test.each(
       assert.deepEqual(source.queries, []);
     }),
 );
+
+refusesUntypedQuery('the language model or the retriever is called', () => {
+  const calls: Call[] = [];
+  const source = new RecordingRetriever(['kw-1']);
+  const retriever = new MultiQueryRetriever({
+    retriever: source,
+    model: languageModel(queries('change a key'), calls),
+  });
+  return { retriever, calls: [calls, source.queries] };
+});

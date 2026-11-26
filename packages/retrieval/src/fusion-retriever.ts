@@ -1,5 +1,4 @@
-import { untilAborted } from '@zukhruf/async';
-
+import { fanOut } from './fan-out.ts';
 import { fusePassages } from './fuse-passages.ts';
 import { checkWeights } from './fuse.ts';
 import type { Fusion, RankedDoc } from './fusion.ts';
@@ -161,17 +160,12 @@ export class FusionRetriever<
     caller?.throwIfAborted();
     if (call === undefined) return { passages: [], failures: new Map() };
     const { topK, window } = call;
-    // A bug aborts the siblings with the bug as the reason, as Go's
-    // errgroup.WithContext cancels with its cause.
-    const siblings = new AbortController();
-    const signal =
-      caller === undefined
-        ? siblings.signal
-        : AbortSignal.any([caller, siblings.signal]);
-    const answers = await untilAborted(
-      Promise.all(
-        this.#retrievers.map(
-          async ([name, retriever, weight]): Promise<Answer<P, F>> => {
+    // A bug aborts the siblings (fanOut); an unavailable retriever does not.
+    const answers = await fanOut(
+      caller,
+      this.#retrievers.map(
+        ([name, retriever, weight]) =>
+          async (signal: AbortSignal): Promise<Answer<P, F>> => {
             try {
               const result = await retriever.retrieve(query, {
                 ...options,
@@ -183,13 +177,10 @@ export class FusionRetriever<
               if (error instanceof RetrieverUnavailableError) {
                 return { name, weight, error };
               }
-              siblings.abort(error);
               throw error;
             }
           },
-        ),
       ),
-      caller,
     );
     const failures = new Map<string, RetrieverUnavailableError>();
     const answered: Answered<P, F>[] = [];

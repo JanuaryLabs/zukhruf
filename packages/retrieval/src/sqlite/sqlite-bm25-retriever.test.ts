@@ -375,6 +375,43 @@ test('keywords of no words reject with a RangeError that names keywords, since a
   });
 });
 
+void test.each(
+  [
+    [
+      { entrez: 'term' },
+      'The query of a query bundle is not a string: got undefined',
+    ],
+    [
+      { query: 'rotate the key', keywords: ['rotate', 7] },
+      'The keywords of a query bundle are not a list of strings: got ["rotate",7]',
+    ],
+    [
+      { query: 'rotate the key', keywords: 'rotate' },
+      'The keywords of a query bundle are not a list of strings: got "rotate"',
+    ],
+  ] as const,
+  ([bundle, message]) =>
+    test(`${JSON.stringify(bundle)}, from a caller with no types, rejects with a RangeError, since a keyword search matches text only`, async () => {
+      // Arrange
+      using database = contract([{ id: 'a', text: 'rotate the key' }]);
+      const retriever = new SqliteBM25Retriever({
+        store: new SqlitePassageStore({
+          database,
+          passages: 'docs_passages',
+          metadata: (columns) => columns,
+        }),
+        index: 'docs_passages_fts',
+      });
+
+      // Act
+      // @ts-expect-error: a caller with no types passes a bundle with no string query
+      const result = retriever.retrieve(bundle);
+
+      // Assert
+      await assert.rejects(result, { name: 'RangeError', message });
+    }),
+);
+
 test('a keyword search gives 10 passages when the call gives no topK, topK when it gives one, and only the passages its filter selects', async () => {
   // Arrange
   using database = contract(

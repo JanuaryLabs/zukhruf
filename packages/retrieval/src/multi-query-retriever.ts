@@ -3,6 +3,7 @@ import { type LanguageModel, Output, generateText, jsonSchema } from 'ai';
 import { untilAborted } from '@zukhruf/async';
 
 import { asksForNoPassages, callTopK, positiveInteger } from './count.ts';
+import { fanOut } from './fan-out.ts';
 import { fusePassages } from './fuse-passages.ts';
 import type { Fusion, RankedDoc } from './fusion.ts';
 import type { Passage } from './passage.ts';
@@ -105,28 +106,13 @@ export class MultiQueryRetriever<
     // A caller that aborted before the fan-out starts no search, as a
     // FusionRetriever starts no retriever.
     caller?.throwIfAborted();
-    // The first error aborts the other searches with the error as the
-    // reason, as Go's errgroup.WithContext cancels with its cause.
-    const siblings = new AbortController();
-    const signal =
-      caller === undefined
-        ? siblings.signal
-        : AbortSignal.any([caller, siblings.signal]);
-    const results = await untilAborted(
-      Promise.all(
-        queries.map(async (version) => {
-          try {
-            return await this.#retriever.retrieve(version, {
-              ...options,
-              signal,
-            });
-          } catch (error) {
-            siblings.abort(error);
-            throw error;
-          }
-        }),
-      ),
+    // The first error aborts the other searches (fanOut).
+    const results = await fanOut(
       caller,
+      queries.map(
+        (version) => async (signal: AbortSignal) =>
+          await this.#retriever.retrieve(version, { ...options, signal }),
+      ),
     );
     return {
       passages: fusePassages(

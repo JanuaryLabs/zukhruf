@@ -34,6 +34,27 @@ export const needOf = (query: QueryType): string =>
   typeof query === 'string' ? query : query.query;
 
 /**
+ * The `query` of a bundle from a caller with no types may be no string at
+ * all; `/\S/` would read `undefined` or `null` as the word 'undefined' or
+ * 'null', so a non-string is a `RangeError` before any word test.
+ */
+const queryText = (query: unknown): string => {
+  if (typeof query !== 'string') {
+    throw new RangeError(
+      `The query of a query bundle is not a string: got ${JSON.stringify(query)}`,
+    );
+  }
+  return query;
+};
+
+/**
+ * A caller with no types may pass a list field as no list at all, or with a
+ * non-string in it; `every` alone throws a `TypeError` on a non-list.
+ */
+const isListOfStrings = (value: unknown): boolean =>
+  Array.isArray(value) && value.every((item) => typeof item === 'string');
+
+/**
  * An information need that a model reads: one that is empty or white space
  * only has no meaning to rank, embed or expand, so it is a caller bug and a
  * `RangeError`, by the rule of a blank keyword (ADR 0013). Each object that
@@ -45,6 +66,7 @@ export const needOf = (query: QueryType): string =>
  * no need.
  */
 export const wordedNeed = (need: string): string => {
+  queryText(need);
   if (!/\S/.test(need)) {
     throw new RangeError(
       `The query of a query bundle holds no word: got ${JSON.stringify(need)}`,
@@ -74,7 +96,12 @@ export type KeywordQuery =
 export const keywordQueryOf = (query: QueryType): KeywordQuery => {
   const bundle = bundleOf(query);
   if (bundle.keywords === undefined) {
-    return { kind: 'text', text: bundle.query };
+    return { kind: 'text', text: queryText(bundle.query) };
+  }
+  if (!isListOfStrings(bundle.keywords)) {
+    throw new RangeError(
+      `The keywords of a query bundle are not a list of strings: got ${JSON.stringify(bundle.keywords)}`,
+    );
   }
   const [first, ...rest] = bundle.keywords.filter((keyword) =>
     /\S/.test(keyword),
@@ -99,6 +126,11 @@ export const embeddingsOf = (
   const bundle = bundleOf(query);
   const texts = bundle.customEmbeddings;
   if (texts === undefined) return [wordedNeed(bundle.query)];
+  if (!isListOfStrings(texts)) {
+    throw new RangeError(
+      `The customEmbeddings of a query bundle are not a list of strings: got ${JSON.stringify(texts)}`,
+    );
+  }
   if (!texts.every((text) => /\S/.test(text))) {
     throw new RangeError(
       `The customEmbeddings of a query bundle hold a text of no word: got ${JSON.stringify(texts)}`,

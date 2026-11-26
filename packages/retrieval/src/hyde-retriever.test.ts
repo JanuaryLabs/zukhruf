@@ -24,6 +24,7 @@ import {
   RecordingRetriever,
 } from './testing/recording-retriever.ts';
 import { settledThisTurn } from './testing/settled-this-turn.ts';
+import { refusesUntypedQuery } from './testing/untyped-query.ts';
 
 // The passages and their vectors as elt's Vectorizer writes them.
 function contract(): DatabaseSync {
@@ -438,6 +439,16 @@ void test.each(
       assert.deepEqual(source.queries, []);
     }),
 );
+
+refusesUntypedQuery('the language model or the retriever is called', () => {
+  const calls: Call[] = [];
+  const source = new RecordingRetriever<QueryBundle>(['kw-1']);
+  const retriever = new HydeRetriever({
+    retriever: source,
+    model: languageModel(calls),
+  });
+  return { retriever, calls: [calls, source.queries] };
+});
 
 test('a topK of 0 in the call gives no passages and no failures, and calls neither the language model nor the retriever, since no work can reach the call', async () => {
   // Arrange

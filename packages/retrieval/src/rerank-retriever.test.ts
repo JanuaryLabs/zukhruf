@@ -17,6 +17,7 @@ import {
   RecordingRetriever,
 } from './testing/recording-retriever.ts';
 import { settledThisTurn } from './testing/settled-this-turn.ts';
+import { refusesUntypedQuery } from './testing/untyped-query.ts';
 
 type Call = {
   readonly documents: readonly unknown[];
@@ -506,3 +507,13 @@ void test.each(
       assert.deepEqual(source.queries, []);
     }),
 );
+
+refusesUntypedQuery('the retriever or the reranking model is called', () => {
+  const calls: Call[] = [];
+  const source = new RecordingRetriever(['alpha']);
+  const retriever = new RerankRetriever({
+    retriever: source,
+    model: reranker({ alpha: 0.5 }, calls),
+  });
+  return { retriever, calls: [calls, source.queries] };
+});
