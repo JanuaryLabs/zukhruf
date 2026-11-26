@@ -162,13 +162,14 @@ Probed on 2026-11-26.
 
 ## Who uses it
 
-| Consumer              | How                                                                                                                       | Record |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------- | ------ |
-| zukhruf test files    | Every test file that repeats a test over a table: 136 loops became `test.each` (cbf95ce6), and the tests of `testing` too | #5729  |
-| `zukhruf/prefer-each` | An error on a loop that declares tests; its message names this package                                                    | #5729  |
-| sdk-it                | 69 files moved here (2ea8d2a7)                                                                                            | #5729  |
-| deepagents            | 6 files moved here (b136e29d)                                                                                             | #5729  |
-| context-compiler      | 2 files, as above                                                                                                         | #5729  |
+| Consumer                  | How                                                                                                                                                                                             | Record |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| zukhruf test files        | Every test file that repeats a test over a table: 136 loops that declared tests became `test.each` (cbf95ce6), the tests of `testing` too, and 82 loops over a table inside one test (26b9b614) | #5729  |
+| `zukhruf/prefer-each`     | An error on a loop that declares tests; its message names this package                                                                                                                          | #5729  |
+| `zukhruf/no-tabular-test` | An error on a loop inside one test over a table of independent cases; its message names this package                                                                                            | #5729  |
+| sdk-it                    | 69 files moved here (2ea8d2a7)                                                                                                                                                                  | #5729  |
+| deepagents                | 6 files moved here (b136e29d)                                                                                                                                                                   | #5729  |
+| context-compiler          | 2 files, as above                                                                                                                                                                               | #5729  |
 
 ## The same concepts in other systems
 
