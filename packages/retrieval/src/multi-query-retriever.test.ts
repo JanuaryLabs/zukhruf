@@ -677,6 +677,75 @@ test('under ScoreFusion(none, max), a passage that two searches find keeps its g
   ]);
 });
 
+// A host item with a field of its own: the other labels that its store's
+// collapse hid, as Elasticsearch's inner_hits sits on the hit.
+type Collapsed = ScoredPassage & {
+  readonly innerHits: { readonly total: number };
+};
+test("each fused item is the item of the first search that finds it, with every field of that item and the fused score in place of its own, as a FusionRetriever's is (ADR 0024)", async () => {
+  // Arrange: a host engine that gives each query its own collapsed hits.
+  const found = new Map<string, readonly Collapsed[]>([
+    [
+      'rotate key',
+      [
+        {
+          passage: { id: 'x', text: 'x as the query found it', metadata: {} },
+          score: 0.3,
+          innerHits: { total: 11 },
+        },
+      ],
+    ],
+    [
+      'revoke token',
+      [
+        {
+          passage: { id: 'y', text: 'y', metadata: {} },
+          score: 0.5,
+          innerHits: { total: 1 },
+        },
+        {
+          passage: { id: 'x', text: 'x as the version found it', metadata: {} },
+          score: 0.4,
+          innerHits: { total: 2 },
+        },
+      ],
+    ],
+  ]);
+  const engine = {
+    retrieve: async (
+      query: QueryType,
+    ): Promise<RetrievalResult<Passage, Collapsed>> => ({
+      passages:
+        found.get(typeof query === 'string' ? query : query.query) ?? [],
+      failures: new Map(),
+    }),
+  };
+  const retriever = new MultiQueryRetriever({
+    retriever: engine,
+    model: languageModel(queries('revoke token')),
+    queryCount: 1,
+  });
+
+  // Act
+  const { passages } = await retriever.retrieve('rotate key');
+
+  // Assert: reciprocal rank fusion, k 60: x = 1/61 + 1/62, y = 1/61.
+  // deepEqual of the whole items, so a lost field, a merged field or a kept
+  // score fails it.
+  assert.deepEqual(passages, [
+    {
+      passage: { id: 'x', text: 'x as the query found it', metadata: {} },
+      score: 1 / 61 + 1 / 62,
+      innerHits: { total: 11 },
+    },
+    {
+      passage: { id: 'y', text: 'y', metadata: {} },
+      score: 1 / 61,
+      innerHits: { total: 1 },
+    },
+  ]);
+});
+
 void test.each([-1, 2.5, Number.NaN, Number.POSITIVE_INFINITY], (topK) =>
   test(`a topK of ${topK} in the call is a RangeError before the model or the retriever is called, as Elasticsearch refuses a bad size`, async () => {
     // Arrange

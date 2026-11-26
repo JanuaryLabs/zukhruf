@@ -115,7 +115,7 @@ export class MultiQueryRetriever<
       ),
     );
     return {
-      passages: fusePassages(
+      passages: fusePassages<RankedPassage<P>, F>(
         this.#fusion,
         results.map(({ passages }, index) => ({
           name: index === 0 ? 'query' : `version ${index}`,

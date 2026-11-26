@@ -19,6 +19,7 @@ import {
   type QueryType,
   RankFusion,
   type RankedDoc,
+  type Rescored,
   type RetrievalResult,
   type RetrieveOptions,
   type Retriever,
@@ -37,6 +38,7 @@ import {
   SqliteEmbeddingRetriever,
   SqlitePassageStore,
 } from './sqlite.ts';
+import { aloneAndPostprocessed } from './testing/alone-and-postprocessed.ts';
 import { embeddingModel } from './testing/embedding-model.ts';
 import { writeKeywordContract } from './testing/keyword-contract.ts';
 import { LiveRetriever } from './testing/live-retriever.ts';
@@ -1006,3 +1008,98 @@ test('under ScoreFusion(none, max), a passage that two retrievers give keeps its
     { passage: passageOf('y'), score: 0.5, vector: [0, 1] },
   ]);
 });
+
+// A host item with fields of its own: the other labels that its store's
+// collapse hid, as Elasticsearch's inner_hits sits on the hit, and a note
+// that only some items have.
+type Collapsed = ScoredPassage & {
+  readonly innerHits: { readonly total: number };
+  readonly note?: string;
+};
+void test.each(
+  aloneAndPostprocessed<Rescored<Collapsed>>({
+    queryVectors: { 'rotate key': [1, 1] },
+  }),
+  ([name, around]) =>
+    test(`${name}, a fused item is the item of the first retriever, in the order of the record's keys, that gives its id, with every field of that item and the fused score in place of its own; no field of a later retriever's item for that id is merged in, but its vector when the first gives none, as Elasticsearch's rrf retriever keeps one document for an id (ADR 0024)`, async () => {
+      // Arrange: labels gives x first; more gives x too, with other members,
+      // a note and a vector.
+      const hosted = (
+        ...items: readonly Collapsed[]
+      ): Retriever<QueryType, Passage, Collapsed> => ({
+        retrieve: async () => ({ passages: items, failures: new Map() }),
+      });
+      const fusion = around(
+        new FusionRetriever({
+          retrievers: {
+            labels: {
+              retriever: hosted(
+                {
+                  passage: passageOf('x', 'x as the labels have it'),
+                  score: 0.3,
+                  innerHits: { total: 11 },
+                },
+                {
+                  passage: passageOf('z'),
+                  score: 0.2,
+                  vector: [1, 1],
+                  innerHits: { total: 0 },
+                },
+              ),
+            },
+            more: {
+              retriever: hosted(
+                {
+                  passage: passageOf('y'),
+                  score: 0.9,
+                  vector: [0, 1],
+                  innerHits: { total: 1 },
+                  note: 'y has a note',
+                },
+                {
+                  passage: passageOf('x', 'x as more has it'),
+                  score: 0.8,
+                  vector: [1, 0],
+                  innerHits: { total: 2 },
+                  note: 'x has a note in more',
+                },
+              ),
+            },
+          },
+        }),
+      );
+
+      // Act: the call asks for vectors; labels has none for x.
+      const { passages } = await fusion.retrieve('rotate key', {
+        includeVectors: true,
+      });
+
+      // Assert: reciprocal rank fusion, k 60: x = 1/61 + 1/62, y = 1/61,
+      // z = 1/62. deepEqual of the whole items, by id, so a lost field, a
+      // merged field or a kept score fails it.
+      assert.deepEqual(
+        passages.toSorted((a, b) => a.passage.id.localeCompare(b.passage.id)),
+        [
+          {
+            passage: passageOf('x', 'x as the labels have it'),
+            score: 1 / 61 + 1 / 62,
+            vector: [1, 0],
+            innerHits: { total: 11 },
+          },
+          {
+            passage: passageOf('y'),
+            score: 1 / 61,
+            vector: [0, 1],
+            innerHits: { total: 1 },
+            note: 'y has a note',
+          },
+          {
+            passage: passageOf('z'),
+            score: 1 / 62,
+            vector: [1, 1],
+            innerHits: { total: 0 },
+          },
+        ],
+      );
+    }),
+);

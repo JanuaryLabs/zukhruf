@@ -777,6 +777,81 @@ screened [ 'web-4 0.873' ]
 
 `narrow` gets web-1 and web-2 from the search and can only reorder them. `windowed` gets all four, and web-4, the best, is the fourth in the search's order. `screened` drops web-2 after the cut, so the call gives one passage: a screen in the same composite as the window would run on all four and could give web-3 in its place. A window smaller than the `topK` of the call is a `RangeError` before the retriever or the model is called, as Elasticsearch refuses a `rank_window_size` smaller than `size`, and a `rankWindowSize` that is not a positive integer is a `RangeError` when the composite is made. Over a `FusionRetriever`, a composite's window is the fusion's `topK`, so the fusion's own `rankWindowSize` must be at least that window. A `PostprocessingRetriever` with a `rankWindowSize` takes at least one postprocessor: `postprocessors: []` with a window does not compile. `MaximalMarginalRelevance` in a window picks from all of it. `topN` is not needed in a window, and a `topN` below `topK` gives fewer passages, as Cohere's `top_n` does.
 
+## Keep the fields of a host's item
+
+A host's retriever may give items with fields of their own, such as the copies that a source's collapse hid, as Elasticsearch's `inner_hits` sits on the hit. `RerankRetriever`, `EmbeddingRerankRetriever` and `FusionRetriever` keep every field of an item and replace only its score, as Elasticsearch rescores a hit and LlamaIndex's reranker sets the score on the same node: they give `Rescored<I>`, the item `I` of their retriever with the composite's `score` ([ADR 0024](./docs/adr/0024-a-composite-that-reranks-or-fuses-keeps-the-fields-of-each-item-and-replaces-only-its-score.md)). `Rescored<RankedPassage<P>>` is `ScoredPassage<P>`. `RerankRetriever` and `FusionRetriever` keep the `vector` their retriever gave, and a retriever gives one only when the call asks; `EmbeddingRerankRetriever` gives its model's vector, only when the call asks. An item is plain data: the composites spread it, so its own enumerable fields are kept, and the methods and the prototype of a class item are not. A fusion gives, for an id that several retrievers give, the item of the first retriever in the order of the record's keys, and merges no fields of the others. Beside a plain retriever, the fused item is the common item of the two; annotate one retriever as the union of the items, and the fusion infers that union and still checks the names of its retrievers. Type arguments would name the union too, but `K` then is `string`, and an empty record or a name with `:` compiles. This program continues the one of "Rerank by meaning with an embedding model".
+
+```ts
+import { FusionRetriever, type RankedPassage } from '@zukhruf/retrieval';
+
+// A host source that collapses copies in its own query and gives, on each
+// kept hit, the other copies it hid, as Elasticsearch's inner_hits sits on
+// the hit.
+type CollapsedHit = RankedPassage<Passage> & {
+  readonly innerHits: {
+    readonly ids: readonly string[];
+    readonly total: number;
+  };
+};
+const handbook: Retriever<string, Passage, CollapsedHit> = {
+  retrieve: async () => ({
+    passages: [
+      {
+        passage: {
+          id: 'handbook-1',
+          text: 'Rotate the old key every 90 days.',
+          metadata: {},
+        },
+        innerHits: { ids: ['handbook-7', 'handbook-9'], total: 2 },
+      },
+    ],
+    failures: new Map(),
+  }),
+};
+
+const reranked = new EmbeddingRerankRetriever({
+  retriever: handbook,
+  model: embeddingModel,
+});
+const [hit] = (await reranked.retrieve('rotate the old key')).passages;
+console.log(hit?.passage.id, hit?.score.toFixed(3), hit?.innerHits);
+
+// Beside the web search, the fused item is the common item of the two, so
+// the type has no innerHits; annotate one retriever as the union to read it.
+type Item = CollapsedHit | RankedPassage<Passage>;
+const widened: Retriever<string, Passage, Item> = reranked;
+const fused = new FusionRetriever({
+  retrievers: {
+    handbook: { retriever: widened },
+    web: {
+      retriever: new EmbeddingRerankRetriever({
+        retriever: web,
+        model: embeddingModel,
+      }),
+    },
+  },
+});
+for (const item of (await fused.retrieve('rotate the old key', { topK: 3 }))
+  .passages) {
+  console.log(
+    item.passage.id,
+    item.score.toFixed(4),
+    'innerHits' in item ? item.innerHits.total : '-',
+  );
+}
+```
+
+Output:
+
+```
+handbook-1 1.000 { ids: [ 'handbook-7', 'handbook-9' ], total: 2 }
+handbook-1 0.0164 2
+web-4 0.0164 -
+web-2 0.0161 -
+```
+
+The reranker gives handbook-1 the cosine similarity 1 and keeps `innerHits`. The fusion gives the reciprocal rank fusion score and keeps the field too. A fusion infers the common item of its retrievers, as it infers their common passage type: two items that differ in fields of their own, such as a scored passage and a collapsed hit, do not compile without the type argument that names their union, and a reader narrows with `'innerHits' in item`. The postprocessors keep the fields of the items they get, so a `PostprocessingRetriever` around a rerank or a fusion keeps them. The members in `innerHits` are not reranked, as Elasticsearch applies no rescorer to inner hits.
+
 ## Give each search its own text
 
 A query is a string or a query bundle, `{ query, keywords?, customEmbeddings? }`, after LlamaIndex's `QueryBundle` ([ADR 0013](./docs/adr/0013-a-query-is-a-string-or-a-query-bundle-with-a-text-for-each-kind-of-search.md)). `query` is the information need: the reranker reads it, and so does every search that has no text of its own. A keyword retriever matches each keyword of `keywords` as one phrase in place of the words of `query`. An embedding retriever embeds the texts of `customEmbeddings` in place of `query`, and searches with the mean of their vectors; a text of no word to embed, a blank `query` or a blank text of `customEmbeddings`, is a `RangeError` before it reads the store or calls its model. `FusionRetriever` gives each retriever the bundle unchanged, so each reads its own text. A string is a bundle with only `query`. This program continues the one of "Rerank and post-process the results".
@@ -1021,6 +1096,7 @@ Each consumer moves to the fusions and the ranked and scored passages of #5400 w
 | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `Passage`                                               | LlamaIndex `TextNode` ([schema.py](https://raw.githubusercontent.com/run-llama/llama_index/main/llama-index-core/llama_index/core/schema.py)); LangChain `Document` ([document.ts](https://raw.githubusercontent.com/langchain-ai/langchainjs/main/libs/langchain-core/src/documents/document.ts)); Haystack `Document` ([document.py](https://raw.githubusercontent.com/deepset-ai/haystack/main/haystack/dataclasses/document.py))                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | `RankedPassage`, `ScoredPassage`                        | MongoDB's "Ranked Pipeline" of `$rankFusion` and the `$score` that `$scoreFusion` requires ([$rankFusion](https://www.mongodb.com/docs/manual/reference/operator/aggregation/rankFusion/), [$scoreFusion](https://www.mongodb.com/docs/manual/reference/operator/aggregation/scoreFusion/)); Lucene `ScoreDoc`; LlamaIndex `NodeWithScore`; .NET `VectorSearchResult<TRecord>{Record, Score}` ([vector search](https://learn.microsoft.com/en-us/dotnet/ai/vector-stores/vector-search))                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `Rescored`                                              | Elasticsearch's rescore changes the score of a hit and keeps the hit; LlamaIndex's rerankers set `node.score` on the same node; LangChain's `CohereRerank` copies a document's metadata and adds `relevance_score`; Haystack's `DocumentJoiner` keeps the other fields of the first document with an id                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | `Retriever.retrieve`                                    | LlamaIndex `BaseRetriever.retrieve` ([base_retriever.py](https://raw.githubusercontent.com/run-llama/llama_index/main/llama-index-core/llama_index/core/base/base_retriever.py)); LangChain `BaseRetriever` ([retrievers/index.ts](https://raw.githubusercontent.com/langchain-ai/langchainjs/main/libs/langchain-core/src/retrievers/index.ts)); Semantic Kernel `ITextSearch` ([text search](https://learn.microsoft.com/en-us/semantic-kernel/concepts/text-search/text-search-abstractions))                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | `QueryBundle`, `QueryType`                              | LlamaIndex `QueryBundle` and `QueryType` (LlamaIndex.TS `@llamaindex/core` 0.6.22, `query-engine/dist/index.d.ts`; [schema.py](https://raw.githubusercontent.com/run-llama/llama_index/main/llama-index-core/llama_index/core/schema.py))                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | `keywords`                                              | .NET `HybridSearchAsync(searchValue, keywords)` ([IKeywordHybridSearchable.cs](https://raw.githubusercontent.com/dotnet/extensions/main/src/Libraries/Microsoft.Extensions.VectorData.Abstractions/IKeywordHybridSearchable.cs))                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
@@ -1085,6 +1161,14 @@ type RankedPassage<P extends Passage = Passage> = {
 type ScoredPassage<P extends Passage = Passage> = RankedPassage<P> & {
   readonly score: number; // finite, higher is better (ADR 0005)
 }; // a scored passage is a ranked passage
+// A rerank or a fusion replaces the score of an item and keeps its other
+// fields (ADR 0024). Rescored<RankedPassage<P>> is ScoredPassage<P>.
+type Rescored<I extends RankedPassage> = {
+  [K in keyof I as Exclude<K, 'score' | 'vector'>]: I[K]; // each member of a union on its own
+} & {
+  readonly score: number; // the composite's
+  readonly vector?: readonly number[]; // the composite's, when the call asks
+};
 type RetrievalResult<
   P extends Passage = Passage,
   I extends RankedPassage<P> = RankedPassage<P>, // the item of the list
@@ -1214,20 +1298,21 @@ class FusionRetriever<
   in out P extends Passage = Passage,
   F = unknown, // the fields of a doc besides its id: unknown under a RankFusion, { score: number } under a ScoreFusion
   K extends string = string, // the names of the retrievers
-> implements Retriever<Q, P, ScoredPassage<P>> {
+  out I extends RankedPassage<P> = RankedPassage<P>, // the common item of the retrievers; items that differ in fields of their own take a type argument that names their union
+> implements Retriever<Q, P, Rescored<I>> {
   constructor(options: {
     readonly retrievers: Readonly<
       Record<
         K,
         {
-          readonly retriever: Retriever<Q, P, RankedPassage<P> & F>; // each gets the query unchanged
+          readonly retriever: Retriever<Q, P, I & F>; // each gets the query unchanged
           readonly weight?: number; // 1; finite and 0 or more, at least one above 0
         }
       >
     >; // at least one; no name holds ':'; the lists fuse in the order of the names
     readonly fusion?: Fusion<RankedDoc & F>; // new RankFusion()
     readonly rankWindowSize?: number; // the topK of the call; a positive integer, at least that topK
-  }); // an unavailable retriever is named in failures, 'outer:inner' when nested; none answered: NoRetrieverAnsweredError; a bug aborts the others and rejects; the caller's abort rejects at once
+  }); // each fused item is the item of the first retriever that gives its id, with every field but its score and the first vector a retriever gives; an unavailable retriever is named in failures, 'outer:inner' when nested; none answered: NoRetrieverAnsweredError; a bug aborts the others and rejects; the caller's abort rejects at once
 }
 class MultiQueryRetriever<
   in out P extends Passage = Passage,
@@ -1252,26 +1337,28 @@ class HydeRetriever<
 class RerankRetriever<
   in Q extends QueryType = QueryType,
   in out P extends Passage = Passage,
-> implements Retriever<Q, P, ScoredPassage<P>> {
+  out I extends RankedPassage<P> = RankedPassage<P>, // the item of its retriever
+> implements Retriever<Q, P, Rescored<I>> {
   constructor(options: {
-    readonly retriever: Retriever<Q, P>; // any kind; gets the window as its topK; its failures pass up
+    readonly retriever: Retriever<Q, P, I>; // any kind; gets the window as its topK; its failures pass up
     readonly model: RerankingModel;
     readonly rankWindowSize?: number; // the topK of the call; a positive integer, at least that topK
     readonly topN?: number; // a positive integer, or a RangeError; every passage when absent
     readonly scoreThreshold?: number; // keeps a relevance >= it; not finite is a RangeError
-  }); // the relevance of the model is the score, best first, cut to the topK of the call; a relevance that is not finite is a TypeError
+  }); // the relevance of the model is the score, best first, cut to the topK of the call; each item keeps every other field, its vector included; a relevance that is not finite is a TypeError
 }
 class EmbeddingRerankRetriever<
   in Q extends QueryType = QueryType,
   in out P extends Passage = Passage,
-> implements Retriever<Q, P, ScoredPassage<P>> {
+  out I extends RankedPassage<P> = RankedPassage<P>, // the item of its retriever
+> implements Retriever<Q, P, Rescored<I>> {
   constructor(options: {
-    readonly retriever: Retriever<Q, P>; // any kind; gets the window as its topK; its failures pass up
+    readonly retriever: Retriever<Q, P, I>; // any kind; gets the window as its topK; its failures pass up
     readonly model: EmbeddingModel; // embeds the query of the bundle and the text of each passage
     readonly rankWindowSize?: number; // the topK of the call; a positive integer, at least that topK
     readonly topN?: number; // a positive integer, or a RangeError; every passage when absent
     readonly scoreThreshold?: number; // keeps a cosine similarity >= it; not finite is a RangeError
-  }); // the cosine similarity is the score, best first, with the vector the model made when the call asks with includeVectors, cut to the topK of the call; a blank information need is a RangeError; a cosine that is not finite is a TypeError
+  }); // the cosine similarity is the score, best first, with the vector the model made when the call asks with includeVectors and no other, cut to the topK of the call; each item keeps every other field; a blank information need is a RangeError; a cosine that is not finite is a TypeError
 }
 
 interface Postprocessor<
@@ -1530,7 +1617,7 @@ class SqlServerKeywordRetriever<
 - [ADR 0004](./docs/adr/0004-a-keyword-retriever-queries-the-keyword-index-that-elt-writes.md): a keyword retriever queries the keyword index that elt writes (superseded in part by ADR 0013 and ADR 0018).
 - [ADR 0005](./docs/adr/0005-a-score-is-higher-for-a-better-passage.md): a score is higher for a better passage (superseded in part by ADR 0016, ADR 0019 and ADR 0021).
 - [ADR 0006](./docs/adr/0006-a-retriever-gives-10-passages-when-the-caller-gives-no-topk.md): a retriever gives 10 passages when the caller gives no topK.
-- [ADR 0007](./docs/adr/0007-reciprocal-rank-fusion-is-the-default-fusion-with-k-60-and-ranks-from-1.md): reciprocal rank fusion is the default fusion, with k 60 and ranks from 1 (superseded in part by ADR 0014, ADR 0016, ADR 0020 and ADR 0023).
+- [ADR 0007](./docs/adr/0007-reciprocal-rank-fusion-is-the-default-fusion-with-k-60-and-ranks-from-1.md): reciprocal rank fusion is the default fusion, with k 60 and ranks from 1 (superseded in part by ADR 0014, ADR 0016, ADR 0020 and ADR 0023, amended by ADR 0024).
 - [ADR 0008](./docs/adr/0008-a-search-is-composed-of-retrievers-that-wrap-retrievers-and-a-list-of-postprocessors.md): a search is composed of retrievers that wrap retrievers and a list of postprocessors (superseded in part by ADR 0013, ADR 0014, ADR 0016, ADR 0017, ADR 0019, ADR 0020, ADR 0021 and ADR 0023).
 - [ADR 0009](./docs/adr/0009-a-filter-has-the-shape-of-haystacks-filters.md): a filter has the shape of Haystack's filters (superseded in part by ADR 0015).
 - [ADR 0010](./docs/adr/0010-an-embedding-retriever-refuses-a-query-model-whose-identity-differs-from-the-stored-vectors.md): an embedding retriever refuses a query model whose identity differs from the stored vectors.
@@ -1544,6 +1631,7 @@ class SqlServerKeywordRetriever<
 - [ADR 0018](./docs/adr/0018-each-keyword-retriever-matches-in-the-strongest-form-of-its-engine.md): each keyword retriever matches in the strongest form of its engine.
 - [ADR 0019](./docs/adr/0019-a-score-threshold-belongs-to-the-embedding-retriever-or-to-rerank-where-the-scale-of-the-score-is-known.md): a score threshold belongs to the embedding retriever or to Rerank, where the scale of the score is known (superseded in part by ADR 0021 and ADR 0022).
 - [ADR 0020](./docs/adr/0020-a-fusion-is-a-rank-fusion-or-a-score-fusion-over-ids-with-a-normalizer-for-each-list-and-a-combination.md): a fusion is a rank fusion or a score fusion over ids, with a normalizer for each list and a combination.
-- [ADR 0021](./docs/adr/0021-a-retriever-says-whether-it-gives-scores-a-ranked-passage-has-none-and-a-scored-passage-always-has-one.md): a retriever says whether it gives scores: a ranked passage has none, and a scored passage always has one (superseded in part by ADR 0023).
-- [ADR 0022](./docs/adr/0022-a-reranker-may-embed-the-text-of-the-candidates-when-the-query-runs.md): a reranker may embed the text of the candidates when the query runs (superseded in part by ADR 0023).
+- [ADR 0021](./docs/adr/0021-a-retriever-says-whether-it-gives-scores-a-ranked-passage-has-none-and-a-scored-passage-always-has-one.md): a retriever says whether it gives scores: a ranked passage has none, and a scored passage always has one (superseded in part by ADR 0023, amended by ADR 0024).
+- [ADR 0022](./docs/adr/0022-a-reranker-may-embed-the-text-of-the-candidates-when-the-query-runs.md): a reranker may embed the text of the candidates when the query runs (superseded in part by ADR 0023, amended by ADR 0024).
 - [ADR 0023](./docs/adr/0023-a-composite-that-fuses-reranks-or-diversifies-asks-its-retriever-for-a-rank-window-and-gives-the-topk-of-the-call.md): a composite that fuses, reranks or diversifies asks its retriever for a rank window and gives the topK of the call.
+- [ADR 0024](./docs/adr/0024-a-composite-that-reranks-or-fuses-keeps-the-fields-of-each-item-and-replaces-only-its-score.md): a composite that reranks or fuses keeps the fields of each item and replaces only its score.

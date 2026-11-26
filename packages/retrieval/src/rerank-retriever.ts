@@ -6,11 +6,12 @@ import { positiveInteger } from './count.ts';
 import type { Passage } from './passage.ts';
 import { type QueryType, needOf, wordedNeed } from './query-bundle.ts';
 import { RankWindow } from './rank-window.ts';
+import type { RankedPassage } from './ranked-passage.ts';
 import type { RetrievalResult } from './retrieval-result.ts';
 import type { RetrieveOptions } from './retrieve-options.ts';
 import type { Retriever } from './retriever.ts';
 import { ScoreThreshold } from './score-threshold.ts';
-import type { ScoredPassage } from './scored-passage.ts';
+import type { Rescored } from './scored-passage.ts';
 
 /**
  * Reranks the passages of its retriever with a reranking model through the
@@ -24,7 +25,10 @@ import type { ScoredPassage } from './scored-passage.ts';
  * bundle, ADR 0013) and `topN`, and without `topN` it ranks every passage.
  * Each passage that the model ranks gets the relevance that the model gives
  * it as its score, higher is better, best first, so it gives scored passages
- * over any retriever. A passage that the model leaves out is dropped, and so
+ * over any retriever. Each item keeps every field its retriever gave, its
+ * vector included, and only its score is replaced, as Elasticsearch rescores
+ * a hit and LlamaIndex's reranker sets the score on the same node (ADR
+ * 0024). A passage that the model leaves out is dropped, and so
  * is one whose relevance is under the `scoreThreshold` (ADR 0019); the call
  * gives the best `topK` of the rest (ADR 0006). A window smaller than the
  * `topK` of the call is a `RangeError` before the retriever or the model is
@@ -43,15 +47,21 @@ export class RerankRetriever<
   // measure its variance and compares two composites by structure, where a
   // method checks its parameters both ways (ADR 0015).
   in out P extends Passage = Passage,
-> implements Retriever<Q, P, ScoredPassage<P>> {
-  readonly #retriever: Retriever<Q, P>;
+  /** The item its retriever gives: each reranked item keeps its fields but its score (ADR 0024). */
+  // `out I`: I is only in what the composite gives. Unannotated, the
+  // variance of `Rescored<I>` is not measured, so TypeScript compares two
+  // composites by structure, where the method `retrieve` checks its
+  // parameters both ways, and a host composite widened to a plain one.
+  out I extends RankedPassage<P> = RankedPassage<P>,
+> implements Retriever<Q, P, Rescored<I>> {
+  readonly #retriever: Retriever<Q, P, I>;
   readonly #model: RerankingModel;
   readonly #topN: number | undefined;
   readonly #threshold: ScoreThreshold;
   readonly #window: RankWindow;
 
   constructor(options: {
-    readonly retriever: Retriever<Q, P>;
+    readonly retriever: Retriever<Q, P, I>;
     readonly model: RerankingModel;
     /**
      * How many passages the retriever gives to the model: the `topK` of the
@@ -77,7 +87,7 @@ export class RerankRetriever<
   async retrieve(
     query: Q,
     options: RetrieveOptions<P> = {},
-  ): Promise<RetrievalResult<P, ScoredPassage<P>>> {
+  ): Promise<RetrievalResult<P, Rescored<I>>> {
     const call = this.#window.forCall(options.topK);
     const need = wordedNeed(needOf(query));
     const { signal } = options;
@@ -94,7 +104,7 @@ export class RerankRetriever<
     need: string,
     options: RetrieveOptions<P>,
     topK: number,
-  ): Promise<RetrievalResult<P, ScoredPassage<P>>> {
+  ): Promise<RetrievalResult<P, Rescored<I>>> {
     const { passages, failures } = await this.#retriever.retrieve(
       query,
       options,
@@ -113,17 +123,15 @@ export class RerankRetriever<
     const relevance = new Map(
       ranking.map(({ originalIndex, score }) => [originalIndex, score]),
     );
-    const scored = passages.flatMap(({ passage, vector }, index) => {
+    const scored = passages.flatMap((item, index): Rescored<I>[] => {
       const score = relevance.get(index);
       if (score === undefined) return [];
       if (!Number.isFinite(score)) {
         throw new TypeError(
-          `RerankRetriever reads scores, and the passage ${passage.id} has the score ${score}: a score is a finite number`,
+          `RerankRetriever reads scores, and the passage ${item.passage.id} has the score ${score}: a score is a finite number`,
         );
       }
-      return [
-        vector === undefined ? { passage, score } : { passage, score, vector },
-      ];
+      return [{ ...item, score }];
     });
     const reranked = this.#threshold
       .keep(scored)

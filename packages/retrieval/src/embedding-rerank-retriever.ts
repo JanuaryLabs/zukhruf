@@ -8,11 +8,12 @@ import { fanOut } from './fan-out.ts';
 import type { Passage } from './passage.ts';
 import { type QueryType, needOf, wordedNeed } from './query-bundle.ts';
 import { RankWindow } from './rank-window.ts';
+import type { RankedPassage } from './ranked-passage.ts';
 import type { RetrievalResult } from './retrieval-result.ts';
 import type { RetrieveOptions } from './retrieve-options.ts';
 import type { Retriever } from './retriever.ts';
 import { ScoreThreshold } from './score-threshold.ts';
-import type { ScoredPassage } from './scored-passage.ts';
+import type { Rescored } from './scored-passage.ts';
 
 /**
  * Reranks the passages of its retriever by meaning with an embedding model
@@ -26,7 +27,10 @@ import type { ScoredPassage } from './scored-passage.ts';
  * the bundle, ADR 0013) and the text of each passage, in two calls that run
  * at once. Each passage gets the cosine similarity of its vector to the
  * query's as its score, from -1 to 1, best first, a tie in the order of the
- * retriever. A call with `includeVectors: true` also gets the vector the
+ * retriever. Each item keeps every field its retriever gave but its score
+ * and its vector, as LangChain's reranker copies a document's metadata and
+ * LlamaIndex's sets the score on the same node (ADR 0024). A call with
+ * `includeVectors: true` also gets the vector the
  * model made with each passage, never one its retriever gave (ADR 0010), and
  * a call without it gets no vector, as every retriever gives one only when
  * asked. So `MaximalMarginalRelevance` with the same model follows it in a
@@ -49,15 +53,21 @@ export class EmbeddingRerankRetriever<
   // measure its variance and compares two composites by structure, where a
   // method checks its parameters both ways (ADR 0015).
   in out P extends Passage = Passage,
-> implements Retriever<Q, P, ScoredPassage<P>> {
-  readonly #retriever: Retriever<Q, P>;
+  /** The item its retriever gives: each reranked item keeps its fields but its score and vector (ADR 0024). */
+  // `out I`: I is only in what the composite gives. Unannotated, the
+  // variance of `Rescored<I>` is not measured, so TypeScript compares two
+  // composites by structure, where the method `retrieve` checks its
+  // parameters both ways, and a host composite widened to a plain one.
+  out I extends RankedPassage<P> = RankedPassage<P>,
+> implements Retriever<Q, P, Rescored<I>> {
+  readonly #retriever: Retriever<Q, P, I>;
   readonly #model: EmbeddingModel;
   readonly #topN: number | undefined;
   readonly #threshold: ScoreThreshold;
   readonly #window: RankWindow;
 
   constructor(options: {
-    readonly retriever: Retriever<Q, P>;
+    readonly retriever: Retriever<Q, P, I>;
     /** The model that embeds the query and the text of each passage. */
     readonly model: EmbeddingModel;
     /**
@@ -83,7 +93,7 @@ export class EmbeddingRerankRetriever<
   async retrieve(
     query: Q,
     options: RetrieveOptions<P> = {},
-  ): Promise<RetrievalResult<P, ScoredPassage<P>>> {
+  ): Promise<RetrievalResult<P, Rescored<I>>> {
     const call = this.#window.forCall(options.topK);
     const need = wordedNeed(needOf(query));
     const { signal } = options;
@@ -107,7 +117,7 @@ export class EmbeddingRerankRetriever<
     options: RetrieveOptions<P>,
     topK: number,
     includeVectors: boolean,
-  ): Promise<RetrievalResult<P, ScoredPassage<P>>> {
+  ): Promise<RetrievalResult<P, Rescored<I>>> {
     // The retriever may ignore its signal: the caller's abort rejects at
     // once, and fanOut covers the model calls.
     const { passages, failures } = await untilAborted(
@@ -146,19 +156,25 @@ export class EmbeddingRerankRetriever<
         `EmbeddingRerankRetriever scores by cosine similarity, and the vector of the query has the cosine similarity ${self} with itself: a score is a finite number`,
       );
     }
-    const scored = passages.map(({ passage }, index) => {
+    const scored = passages.map((item, index): Rescored<I> => {
       // embedMany refuses a model that gives another count of embeddings
       // than texts (AI_InvalidResponseDataError), so no index lacks one.
       const vector = embeddings[index] ?? [];
       const score = cosineSimilarity(Vector.from(vector), queryVector);
       if (!Number.isFinite(score)) {
         throw new TypeError(
-          `EmbeddingRerankRetriever scores by cosine similarity, and the passage ${passage.id} has the score ${score}: a score is a finite number`,
+          `EmbeddingRerankRetriever scores by cosine similarity, and the passage ${item.passage.id} has the score ${score}: a score is a finite number`,
         );
       }
       // A vector only for a call that asks for one (RetrieveOptions), as
-      // MaximalMarginalRelevance after it does.
-      return includeVectors ? { passage, score, vector } : { passage, score };
+      // MaximalMarginalRelevance after it does, and only the one its model
+      // made (ADR 0010).
+      if (includeVectors) return { ...item, score, vector };
+      const rescored: Rescored<I> = { ...item, score };
+      // A spread cannot leave out a key of a generic item, so the vector that
+      // a retriever gave unasked is deleted from the copy.
+      Reflect.deleteProperty(rescored, 'vector');
+      return rescored;
     });
     const reranked = this.#threshold
       .keep(scored)

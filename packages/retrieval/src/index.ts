@@ -35,5 +35,5 @@ export type { RetrieveOptions } from './retrieve-options.ts';
 export type { Retriever } from './retriever.ts';
 export { RetrieverUnavailableError } from './retriever-unavailable-error.ts';
 export { ScoreFusion } from './score-fusion.ts';
-export type { ScoredPassage } from './scored-passage.ts';
+export type { Rescored, ScoredPassage } from './scored-passage.ts';
 export { VectorMissingError } from './vector-missing-error.ts';

@@ -7,10 +7,13 @@ import { test } from '@zukhruf/parameterized-test';
 
 import {
   RerankRetriever,
+  type Rescored,
   type RetrieveOptions,
   RetrieverUnavailableError,
+  type ScoredPassage,
   type StoredPassage,
 } from './index.ts';
+import { aloneAndPostprocessed } from './testing/alone-and-postprocessed.ts';
 import { LiveRetriever } from './testing/live-retriever.ts';
 import {
   type EntrezQueryBundle,
@@ -517,3 +520,66 @@ refusesUntypedQuery('the retriever or the reranking model is called', () => {
   });
   return { retriever, calls: [calls, source.queries] };
 });
+
+// A host item with a field of its own: the other labels that its store's
+// collapse hid, as Elasticsearch's inner_hits sits on the hit.
+type Collapsed = ScoredPassage & {
+  readonly innerHits: { readonly total: number };
+};
+void test.each(
+  aloneAndPostprocessed<Rescored<Collapsed>>({
+    queryVectors: { 'rotate a key': [1, 1] },
+  }),
+  ([name, around]) =>
+    test(`${name}, each reranked item keeps every field its retriever gave, its vector included, and only its score is replaced with the relevance of the model, as Elasticsearch rescores a hit (ADR 0024)`, async () => {
+      // Arrange
+      const items: readonly Collapsed[] = [
+        {
+          passage: { id: 'alpha', text: 'alpha', metadata: {} },
+          score: 0.9,
+          vector: [1, 0],
+          innerHits: { total: 11 },
+        },
+        {
+          passage: { id: 'beta', text: 'beta', metadata: {} },
+          score: 0.5,
+          vector: [0, 1],
+          innerHits: { total: 0 },
+        },
+      ];
+      const rerank = around(
+        new RerankRetriever({
+          retriever: {
+            retrieve: async () => ({ passages: items, failures: new Map() }),
+          },
+          model: reranker(relevance),
+        }),
+      );
+
+      // Act: the call asks for vectors, so the retriever gives them.
+      const { passages } = await rerank.retrieve('rotate a key', {
+        includeVectors: true,
+      });
+
+      // Assert: deepEqual of the whole items, by id, so a lost field, a
+      // lost vector or a kept score fails it. The order has its own tests
+      // above.
+      assert.deepEqual(
+        passages.toSorted((a, b) => a.passage.id.localeCompare(b.passage.id)),
+        [
+          {
+            passage: { id: 'alpha', text: 'alpha', metadata: {} },
+            score: 0.2,
+            vector: [1, 0],
+            innerHits: { total: 11 },
+          },
+          {
+            passage: { id: 'beta', text: 'beta', metadata: {} },
+            score: 0.8,
+            vector: [0, 1],
+            innerHits: { total: 0 },
+          },
+        ],
+      );
+    }),
+);

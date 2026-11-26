@@ -10,9 +10,12 @@ import {
   MaximalMarginalRelevance,
   type Passage,
   PostprocessingRetriever,
+  type RankedPassage,
+  type Rescored,
   type RetrieveOptions,
   RetrieverUnavailableError,
 } from './index.ts';
+import { aloneAndPostprocessed } from './testing/alone-and-postprocessed.ts';
 import { embeddingModel } from './testing/embedding-model.ts';
 import { LiveRetriever } from './testing/live-retriever.ts';
 import type { EntrezQueryBundle } from './testing/recording-retriever.ts';
@@ -601,3 +604,73 @@ test('an error of the embedding model reaches the caller as it is', async () => 
     message: 'The test names no vector for zeta',
   });
 });
+
+// A host item of order only with a field of its own: the other labels that
+// its store's collapse hid, as Elasticsearch's inner_hits sits on the hit.
+type Collapsed = RankedPassage & {
+  readonly innerHits: { readonly total: number };
+};
+void test.each(aloneAndPostprocessed<Rescored<Collapsed>>(), ([name, around]) =>
+  test(`${name}, each reranked item keeps every field its retriever gave but its vector, gets the cosine similarity as its score, and the vector its model made only when the call asks (ADR 0024)`, async () => {
+    // Arrange: the source stored a vector of another model for alpha.
+    const items: readonly Collapsed[] = [
+      {
+        passage: { id: 'alpha', text: 'alpha', metadata: {} },
+        vector: [0, 0, 5],
+        innerHits: { total: 11 },
+      },
+      {
+        passage: { id: 'beta', text: 'beta', metadata: {} },
+        innerHits: { total: 0 },
+      },
+    ];
+    const rerank = around(
+      new EmbeddingRerankRetriever({
+        retriever: {
+          retrieve: async () => ({ passages: items, failures: new Map() }),
+        },
+        model: embeddingModel(vectors),
+      }),
+    );
+    const byId = (
+      a: { readonly passage: Passage },
+      b: { readonly passage: Passage },
+    ) => a.passage.id.localeCompare(b.passage.id);
+
+    // Act
+    const unasked = (await rerank.retrieve('rotate a key')).passages;
+    const asked = (
+      await rerank.retrieve('rotate a key', { includeVectors: true })
+    ).passages;
+
+    // Assert: deepEqual of the whole items, by id, so a lost field, a
+    // kept score or a vector key fails it. The order has its own tests
+    // above.
+    assert.deepEqual(unasked.toSorted(byId), [
+      {
+        passage: { id: 'alpha', text: 'alpha', metadata: {} },
+        score: 0.8,
+        innerHits: { total: 11 },
+      },
+      {
+        passage: { id: 'beta', text: 'beta', metadata: {} },
+        score: 0.6,
+        innerHits: { total: 0 },
+      },
+    ]);
+    assert.deepEqual(asked.toSorted(byId), [
+      {
+        passage: { id: 'alpha', text: 'alpha', metadata: {} },
+        score: 0.8,
+        vector: [5, 0, 0],
+        innerHits: { total: 11 },
+      },
+      {
+        passage: { id: 'beta', text: 'beta', metadata: {} },
+        score: 0.6,
+        vector: [0, 5, 0],
+        innerHits: { total: 0 },
+      },
+    ]);
+  }),
+);

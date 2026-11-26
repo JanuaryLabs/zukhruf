@@ -12,7 +12,7 @@ import type { RetrievalResult } from './retrieval-result.ts';
 import type { RetrieveOptions } from './retrieve-options.ts';
 import { RetrieverUnavailableError } from './retriever-unavailable-error.ts';
 import type { Retriever } from './retriever.ts';
-import type { ScoredPassage } from './scored-passage.ts';
+import type { Rescored } from './scored-passage.ts';
 
 /**
  * The names of a fusion's retrievers, as the compiler checks them: at least
@@ -25,44 +25,56 @@ type Names<K extends string> = ([K] extends [never]
   Readonly<Record<Extract<K, `${string}:${string}`>, never>>;
 
 /**
- * Where P is inferred: only from the passages each retriever gives, so a
- * live source beside an engine infers their common passage type, as an
- * array of both does. A filter puts P in a parameter too, and inferred from
- * there per name, P took the engine's `StoredPassage`, and the live source
- * did not compile.
+ * Where P and I are inferred: only from the items each retriever gives, so a
+ * live source beside an engine infers their common passage type and item,
+ * as an array of both does. A filter puts P in a parameter too, and inferred
+ * from there per name, P took the engine's `StoredPassage`, and the live
+ * source did not compile. P comes from the passage of each item and I from
+ * the whole item, so a host item keeps its own fields.
  */
-type Gives<P extends Passage> = {
+type Gives<P extends Passage, I> = {
   readonly retrieve: (
     query: never,
     options?: never,
-  ) => Promise<RetrievalResult<P>>;
+  ) => Promise<RetrievalResult<P, RankedPassage<P> & I>>;
 };
 
 /** A retriever of the fusion by its name, with its weight. */
-type Weighted<Q extends QueryType, P extends Passage, F> = {
-  readonly retriever: Retriever<Q, P, RankedPassage<P> & F>;
+type Weighted<
+  Q extends QueryType,
+  P extends Passage,
+  I extends RankedPassage<P>,
+  F,
+> = {
+  readonly retriever: Retriever<Q, P, I & F>;
   /** 1 when absent, as Elasticsearch's rrf `weight` and MongoDB's `weights`. A finite number of 0 or more, and at least one retriever's is above 0 (ADR 0007, amendment 2026-11-25). */
   readonly weight?: number;
 };
 
 /** What a retriever gave: its result, or the error that left it out. */
-type Answer<P extends Passage, F> =
-  | Answered<P, F>
+type Answer<P extends Passage, I extends RankedPassage<P>, F> =
+  | Answered<P, I, F>
   | {
       readonly name: string;
       readonly weight: number;
       readonly error: RetrieverUnavailableError;
     };
 
-type Answered<P extends Passage, F> = {
+type Answered<P extends Passage, I extends RankedPassage<P>, F> = {
   readonly name: string;
   readonly weight: number;
-  readonly result: RetrievalResult<P, RankedPassage<P> & F>;
+  readonly result: RetrievalResult<P, I & F>;
 };
 
 /**
  * Asks each named retriever for `rankWindowSize` passages, fuses the lists on
- * `Passage.id` and gives the best `topK` with their fused scores (ADR 0007). Each retriever gets the
+ * `Passage.id` and gives the best `topK` with their fused scores (ADR 0007).
+ * Each fused item is the item of the first retriever, in the order of the
+ * record's keys, that gives its id, with every field of that item but its
+ * score, as Elasticsearch's rrf retriever keeps the one document of an id and
+ * Haystack's `DocumentJoiner` keeps the other fields of the first document
+ * with that id; its vector is the first that a retriever gives (ADR 0024).
+ * No fields of two retrievers' items are merged. Each retriever gets the
  * query unchanged and reads its own text, as LlamaIndex's
  * `QueryFusionRetriever` gives each retriever the same `QueryBundle`. So the
  * query type of the fusion is one that each retriever takes: TypeScript
@@ -96,10 +108,22 @@ export class FusionRetriever<
   // The names of the retrievers. A type argument for Q or P makes it
   // `string`: TypeScript infers all or none.
   K extends string = string,
-> implements Retriever<Q, P, ScoredPassage<P>> {
+  /**
+   * The item that each retriever gives, whose fields the fused item keeps
+   * but its score (ADR 0024): the common item of the retrievers when
+   * inferred, as P is their common passage type. Retrievers whose items
+   * differ in a field of their own fuse with a type argument that names
+   * their union, as two metadata types do (ADR 0015).
+   */
+  // `out I`: I is only in what the composite gives. Unannotated, the
+  // variance of `Rescored<I>` is not measured, so TypeScript compares two
+  // composites by structure, where the method `retrieve` checks its
+  // parameters both ways, and a host composite widened to a plain one.
+  out I extends RankedPassage<P> = RankedPassage<P>,
+> implements Retriever<Q, P, Rescored<I>> {
   readonly #retrievers: readonly (readonly [
     name: string,
-    retriever: Retriever<Q, P, RankedPassage<P> & F>,
+    retriever: Retriever<Q, P, I & F>,
     weight: number,
   ])[];
   readonly #fusion: Fusion<RankedDoc & F>;
@@ -111,13 +135,15 @@ export class FusionRetriever<
      * the fusion give, with its weight. The lists fuse in the order of the
      * record's keys.
      */
-    // `NoInfer`: P comes from the passages that each retriever gives (Gives),
-    // and F from the fusion only. Gives comes first: after Weighted, a
+    // `NoInfer`: P and I come from the items that each retriever gives
+    // (Gives), and F from the fusion only. Gives comes first: after Weighted, a
     // retriever made in place with a query type of its own, such as
     // `new LiveRetriever(ids)`, took `never` from the `query: never` of Gives,
     // and so did Q.
-    readonly retrievers: Readonly<Record<K, { readonly retriever: Gives<P> }>> &
-      Readonly<Record<K, Weighted<Q, NoInfer<P>, NoInfer<F>>>> &
+    readonly retrievers: Readonly<
+      Record<K, { readonly retriever: Gives<P, I> }>
+    > &
+      Readonly<Record<K, Weighted<Q, NoInfer<P>, NoInfer<I>, NoInfer<F>>>> &
       Names<K>;
     /** `new RankFusion()` when absent: reciprocal rank fusion, k 60, ranks from 1. */
     readonly fusion?: Fusion<RankedDoc & F>;
@@ -128,7 +154,7 @@ export class FusionRetriever<
      */
     readonly rankWindowSize?: number;
   }) {
-    const retrievers: Readonly<Record<string, Weighted<Q, P, F>>> =
+    const retrievers: Readonly<Record<string, Weighted<Q, P, I, F>>> =
       options.retrievers;
     const names = Object.keys(retrievers);
     if (names.length === 0) {
@@ -154,7 +180,7 @@ export class FusionRetriever<
   async retrieve(
     query: Q,
     options: RetrieveOptions<P> = {},
-  ): Promise<RetrievalResult<P, ScoredPassage<P>>> {
+  ): Promise<RetrievalResult<P, Rescored<I>>> {
     const call = this.#window.forCall(options.topK);
     const caller = options.signal;
     caller?.throwIfAborted();
@@ -165,7 +191,7 @@ export class FusionRetriever<
       caller,
       this.#retrievers.map(
         ([name, retriever, weight]) =>
-          async (signal: AbortSignal): Promise<Answer<P, F>> => {
+          async (signal: AbortSignal): Promise<Answer<P, I, F>> => {
             try {
               const result = await retriever.retrieve(query, {
                 ...options,
@@ -183,7 +209,7 @@ export class FusionRetriever<
       ),
     );
     const failures = new Map<string, RetrieverUnavailableError>();
-    const answered: Answered<P, F>[] = [];
+    const answered: Answered<P, I, F>[] = [];
     for (const answer of answers) {
       if ('result' in answer) {
         answered.push(answer);
@@ -205,7 +231,7 @@ export class FusionRetriever<
     // One list for each retriever, empty for one that did not answer, so the
     // fusion gets the weights that the constructor checked (#5720).
     return {
-      passages: fusePassages(
+      passages: fusePassages<I, F>(
         this.#fusion,
         answers.map((answer) => ({
           name: answer.name,

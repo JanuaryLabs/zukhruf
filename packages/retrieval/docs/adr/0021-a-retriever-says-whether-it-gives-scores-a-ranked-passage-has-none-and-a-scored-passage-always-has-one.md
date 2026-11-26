@@ -1,5 +1,7 @@
 # A retriever says whether it gives scores: a ranked passage has none, and a scored passage always has one
 
+Amended on 2026-11-26 (#5759) for what `RerankRetriever` gives: `Rescored<I>`, the item of its retriever with the model's relevance as its score and every other field kept, which is `ScoredPassage<P>` over a retriever of plain items ([ADR 0024](./0024-a-composite-that-reranks-or-fuses-keeps-the-fields-of-each-item-and-replaces-only-its-score.md)).
+
 Superseded in part on 2026-11-26 (#5728) for what `RerankRetriever` passes to its retriever and gives back. It takes `rankWindowSize`: its retriever gets the options of the call with the window as their `topK`, the `topK` of the call when absent, and the call gives the best `topK` of the reranked list. A `topN` that is not a positive integer is a `RangeError` ([ADR 0023](./0023-a-composite-that-fuses-reranks-or-diversifies-asks-its-retriever-for-a-rank-window-and-gives-the-topk-of-the-call.md)).
 
 Status: Accepted 2026-11-26 (backlog #5400).

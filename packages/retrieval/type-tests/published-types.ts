@@ -21,7 +21,9 @@ import {
   type QueryType,
   RankFusion,
   type RankedDoc,
+  type RankedPassage,
   RerankRetriever,
+  type Rescored,
   type RetrievalResult,
   type Retriever,
   ScoreFusion,
@@ -757,3 +759,114 @@ export const thresholds = [
 export const perCall = embedding.retrieve('q', {
   scoreThreshold: 0.5, // TS2353
 });
+
+// A composite that reranks or fuses keeps every field of a host's item and
+// replaces only its score (ADR 0024). Rescored<RankedPassage<P>> is
+// ScoredPassage<P> both ways, so a caller of a plain retriever does not
+// change.
+declare const rescoredLabel: Rescored<RankedPassage<StoredPassage<Label>>>;
+declare const scoredLabel: ScoredPassage<StoredPassage<Label>>;
+export const rescoredIsScored: ScoredPassage<StoredPassage<Label>> =
+  rescoredLabel;
+export const scoredIsRescored: Rescored<RankedPassage<StoredPassage<Label>>> =
+  scoredLabel;
+// A host's collapsed hit, as Elasticsearch's inner_hits sits on the hit.
+type Collapsed = RankedPassage<StoredPassage<Label>> & {
+  readonly innerHits: { readonly total: number };
+};
+declare const collapsing: Retriever<string, StoredPassage<Label>, Collapsed>;
+const totalOf = async (
+  retriever: Retriever<string, StoredPassage<Label>, Rescored<Collapsed>>,
+): Promise<[total: number | undefined, score: number | undefined]> => {
+  const [hit] = (await retriever.retrieve('q')).passages;
+  return [hit?.innerHits.total, hit?.score];
+};
+const rerankedHits = new RerankRetriever({ retriever: collapsing, model });
+export const keptByRerank = totalOf(rerankedHits);
+export const keptByEmbeddingRerank = totalOf(
+  new EmbeddingRerankRetriever({
+    retriever: collapsing,
+    model: embeddingModel,
+  }),
+);
+export const keptByFusion = totalOf(
+  new FusionRetriever({
+    retrievers: {
+      labels: { retriever: collapsing },
+      more: { retriever: collapsing },
+    },
+  }),
+);
+export const keptByScoreFusion = totalOf(
+  new FusionRetriever({
+    retrievers: {
+      labels: { retriever: rerankedHits },
+      more: { retriever: rerankedHits },
+    },
+    fusion: byScore(),
+  }),
+);
+export const keptByPostprocessing = totalOf(
+  new PostprocessingRetriever({
+    retriever: rerankedHits,
+    postprocessors: [new Collapse(), new LongContextReorder()],
+  }),
+);
+// The item of a fusion is the common item of its retrievers, as its passage
+// type is their common passage type: beside a plain engine, the hit's field
+// is not in the type. Items that differ in fields of their own fuse only once
+// the caller names their union, as two metadata types do, and a reader
+// narrows by the field. One retriever annotated as the union names it and
+// keeps the literal names, so a name with ':' still does not compile; type
+// arguments would make K string and turn the name checks off.
+export const plainAndHit = async () =>
+  (
+    await new FusionRetriever({
+      retrievers: {
+        engine: { retriever: engine },
+        collapsing: { retriever: collapsing },
+      },
+    }).retrieve('q')
+  ).passages[0]?.innerHits; // TS2339
+export const scoredAndHit = new FusionRetriever({
+  retrievers: {
+    engine: { retriever: scoredEngine },
+    collapsing: { retriever: collapsing }, // TS2322
+  },
+});
+type ScoredOrCollapsed = ScoredPassage<StoredPassage<Label>> | Collapsed;
+const widenedCollapsing: Retriever<
+  string,
+  StoredPassage<Label>,
+  ScoredOrCollapsed
+> = collapsing;
+export const namedUnion = async (): Promise<number | undefined> => {
+  const [item] = (
+    await new FusionRetriever({
+      retrievers: {
+        engine: { retriever: scoredEngine },
+        collapsing: { retriever: widenedCollapsing },
+      },
+    }).retrieve('q')
+  ).passages;
+  return item !== undefined && 'innerHits' in item
+    ? item.innerHits.total
+    : item?.score;
+};
+export const namedUnionPathName = new FusionRetriever({
+  retrievers: {
+    engine: { retriever: scoredEngine },
+    'labels:collapsing': { retriever: widenedCollapsing }, // TS2322
+  },
+});
+// A host rerank does not widen to a plain one either: the item parameter
+// keeps the comparison by type arguments, where the method `retrieve` would
+// take a string by structure.
+const issueRerank = new RerankRetriever({ retriever: issues, model });
+const issueEmbeddingRerank = new EmbeddingRerankRetriever({
+  retriever: issues,
+  model: embeddingModel,
+});
+export const widenedRerank: RerankRetriever = issueRerank; // TS2322
+// prettier-ignore
+export const widenedEmbeddingRerank: EmbeddingRerankRetriever = issueEmbeddingRerank; // TS2322
