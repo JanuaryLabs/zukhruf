@@ -26,6 +26,23 @@ void test.each(
       ],
     },
     {
+      // packages/sqlite/federation federation.test.ts:587.
+      name: 'each row that resets a value declared outside the loop with = before its act',
+      line: 5,
+      code: [
+        `import { Federation } from './federation.ts';`,
+        `test('PRAGMAs locate each database name', () => {`,
+        `  const located: string[] = [];`,
+        `  using federation = new Federation({ locate: (name) => located.push(name) });`,
+        `  for (const name of ['a', 'b']) {`,
+        `    located.length = 0;`,
+        `    assert.deepEqual(federation.query(\`PRAGMA \${name}.table_info(t)\`).rows, []);`,
+        `    assert.deepEqual(located, [name]);`,
+        `  }`,
+        `});`,
+      ],
+    },
+    {
       // packages/information-filtering/relevance-filtering utility-threshold.test.ts:47.
       name: 'each cost written out in the loop head into a new subject',
       line: 2,
@@ -150,6 +167,23 @@ void test.each(
         `  const tree = createTreeWithEmptyWorkspace();`,
         `  await prismaGenerator(tree, { name: 'db' });`,
         `  for (const path of ['db/schema.prisma', 'db/client.ts']) assert.ok(tree.exists(path));`,
+        `});`,
+      ],
+    },
+    {
+      // elt destinations/sqlite derived-during-pass.test.ts:641 and
+      // destinations/sqlserver computed-dataset.test.ts:789.
+      name: 'rows that add to a value declared outside the loop, a sequence of passes',
+      code: [
+        `import { waitFor } from '@zukhruf/testing/async';`,
+        `import { counts } from './counts.ts';`,
+        `test('each pass loads the rows that the source gives now', async () => {`,
+        `  const source = new FakeSource();`,
+        `  for (const ids of [['r1', 'r2'], ['r1', 'r2', 'r3']]) {`,
+        `    source.ids = ids;`,
+        `    source.dial.turns += 1;`,
+        `    await waitFor(async () => assert.equal(await counts(), ids.length));`,
+        `  }`,
         `});`,
       ],
     },

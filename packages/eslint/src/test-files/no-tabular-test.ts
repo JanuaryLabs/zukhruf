@@ -555,7 +555,7 @@ class CaseLoop {
             (call.callee.type === 'Identifier' &&
               this.#rows.has(call.callee.name))),
       );
-    if (rowCalls.length === 0) return false;
+    if (rowCalls.length === 0 || this.#accumulates()) return false;
     if (!this.#table.elements.every((row) => this.#writtenOut(row, true))) {
       return false;
     }
@@ -563,6 +563,29 @@ class CaseLoop {
       return false;
     }
     return rowCalls.some((call) => this.#reachesSubject(call));
+  }
+
+  /**
+   * The body adds to a value declared outside the loop (`+=`, `++`, `??=`):
+   * each row's result depends on the rows before it, so the rows are a
+   * sequence, not independent cases. A plain `=`, such as a reset at the
+   * start of each row, keeps the rows independent.
+   */
+  #accumulates(): boolean {
+    return this.#tree.nodes(this.#loop.body).some((node) => {
+      let target: TSESTree.Node | undefined;
+      if (node.type === 'AssignmentExpression' && node.operator !== '=') {
+        target = node.left;
+      } else if (node.type === 'UpdateExpression') {
+        target = node.argument;
+      }
+      const root = rootOf(target);
+      return (
+        root !== undefined &&
+        !this.#bodyLocals.has(root) &&
+        !this.#rows.has(root)
+      );
+    });
   }
 
   /** A row written out: no `await`, no `this`, no call of a value of the test, no result of the act. */
