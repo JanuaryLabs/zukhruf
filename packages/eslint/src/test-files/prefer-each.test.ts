@@ -55,7 +55,7 @@ test('prefer-each passes test.each, a loop inside a test case, and a loop that d
   });
 });
 
-test('the tests config turns prefer-each on as a warning for a test file', async () => {
+test('the tests config turns prefer-each on as an error for a test file', async () => {
   // Arrange
   await using workspace = await fixtureWorkspace({
     'nx.json': '{}',
@@ -75,5 +75,5 @@ test('the tests config turns prefer-each on as a warning for a test file', async
   // Assert
   const rules = isRecord(config) ? config['rules'] : undefined;
   const entry = isRecord(rules) ? rules['zukhruf/prefer-each'] : undefined;
-  assert.deepEqual(entry, [1]);
+  assert.deepEqual(entry, [2]);
 });

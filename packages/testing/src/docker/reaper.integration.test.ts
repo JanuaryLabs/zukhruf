@@ -20,12 +20,12 @@ import {
   Docker,
 } from '@zukhruf/docker';
 import { TemporaryFiles } from '@zukhruf/fs';
+import { test } from '@zukhruf/parameterized-test';
 
 import { retryUntilReady } from '../async/retry-until-ready.ts';
 import { waitFor } from '../async/wait-for.ts';
 import type { Database } from '../databases/database.ts';
 import { Postgres } from '../databases/postgres.ts';
-import { test } from '../node/index.ts';
 import { engine, proxyless } from '../testing/current-engine.ts';
 import { docker } from '../testing/engine-client.ts';
 import { EngineProxy } from '../testing/engine-proxy.ts';

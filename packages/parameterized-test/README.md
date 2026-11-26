@@ -4,7 +4,7 @@
 
 `test.each` and `suite.each` for `node:test`. Each row of a table becomes one test with its own name and its own result. One failed row does not hide the other rows.
 
-The package imports nothing of zukhruf. It imports only `node:test` and `node:util/types`. Thus the tests of each package can use it, also the tests of the packages that `@zukhruf/testing` depends on ([ADR 0001](./docs/adr/0001-the-package-is-its-own-tool-package-and-imports-nothing-of-zukhruf.md)). The code moves here from `@zukhruf/testing/node`, which goes away with no alias.
+The package imports nothing of zukhruf. It imports only `node:test` and `node:util/types`. Thus the tests of each package can use it, also the tests of the packages that `@zukhruf/testing` depends on ([ADR 0001](./docs/adr/0001-the-package-is-its-own-tool-package-and-imports-nothing-of-zukhruf.md)). The code moved here from `@zukhruf/testing/node`, which is gone, with no alias.
 
 The words in these documents have one meaning each. See the glossary in [CONTEXT.md](./CONTEXT.md).
 
@@ -162,13 +162,13 @@ Probed on 2026-11-26.
 
 ## Who uses it
 
-| Consumer              | How                                                                                                                            | Record |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ------ |
-| zukhruf test files    | 53 files that import `@zukhruf/testing/node` today move to this package; 134 loops in 73 files become `test.each` (2026-11-26) | #5729  |
-| `zukhruf/prefer-each` | Its message names this package in place of `@zukhruf/testing/node`                                                             | #5729  |
-| sdk-it                | 69 files that import `@zukhruf/testing/node` move here after the release                                                       | #5729  |
-| deepagents            | 6 files, as above                                                                                                              | #5729  |
-| context-compiler      | 2 files, as above                                                                                                              | #5729  |
+| Consumer              | How                                                                                                                       | Record |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------- | ------ |
+| zukhruf test files    | Every test file that repeats a test over a table: 136 loops became `test.each` (cbf95ce6), and the tests of `testing` too | #5729  |
+| `zukhruf/prefer-each` | An error on a loop that declares tests; its message names this package                                                    | #5729  |
+| sdk-it                | 69 files moved here (2ea8d2a7)                                                                                            | #5729  |
+| deepagents            | 6 files moved here (b136e29d)                                                                                             | #5729  |
+| context-compiler      | 2 files, as above                                                                                                         | #5729  |
 
 ## The same concepts in other systems
 

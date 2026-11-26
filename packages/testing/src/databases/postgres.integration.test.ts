@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
-import { test } from 'node:test';
+
+import { test } from '@zukhruf/parameterized-test';
 
 import { slowProxy } from '../testing/slow-proxy.ts';
 import { Postgres, type PostgresDatabase, postgresPool } from './postgres.ts';
@@ -268,7 +269,7 @@ test('a database() with tmpFs is on another shared server than a database() with
   assert.equal(await diskKib(other, '/scratch'), 64 * 1024);
 });
 
-for (const size of ['10%', '1gb']) {
+void test.each(['10%', '1gb'], (size) =>
   test(`a data directory size=${size} is refused, since Postgres gets no max_wal_size from it`, () => {
     // Act & Assert
     assert.throws(
@@ -282,8 +283,8 @@ for (const size of ['10%', '1gb']) {
         message: `The size=${size} of /var/lib/postgresql is not a number of bytes with an optional k, m, g, t, p or e, so it gives no max_wal_size.`,
       },
     );
-  });
-}
+  }),
+);
 
 test("postgresPool's disposal resolves once every client of its pool has closed", async () => {
   // Arrange: three idle clients.

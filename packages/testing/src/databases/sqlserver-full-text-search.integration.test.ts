@@ -6,10 +6,10 @@ import { readFile } from 'node:fs/promises';
 import type sql from 'mssql';
 
 import { BuildFailedError, Docker } from '@zukhruf/docker';
+import { test } from '@zukhruf/parameterized-test';
 
 import { waitFor } from '../async/wait-for.ts';
 import { DockerTestbed } from '../docker/testbed.ts';
-import { test } from '../node/index.ts';
 import { SqlServer, type SqlServerDatabase } from './sqlserver.ts';
 
 // SQL Server 2025 crashes at start about once in 41 starts when an arm64

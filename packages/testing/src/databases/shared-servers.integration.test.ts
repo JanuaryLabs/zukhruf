@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { test } from 'node:test';
 import { inspect, promisify } from 'node:util';
+
+import { test } from '@zukhruf/parameterized-test';
 
 import { waitFor } from '../async/wait-for.ts';
 import { DockerTestbed } from '../docker/index.ts';
@@ -108,56 +109,58 @@ test('explicit SQL Server startup creates the requested database and owns cleanu
 // never passes, so only the exit of the container can end the acquisition.
 // A container that exits at once can stop before or after its port is read,
 // so its probe may not run.
-for (const [acquisition, exit] of [
-  ['shared', 'at once'],
-  ['shared', 'after its port is published'],
-  ['dedicated', 'at once'],
-  ['dedicated', 'after its port is published'],
-] as const) {
-  test(`a ${acquisition} server whose container exits ${exit} rejects with the exit code and output of its container`, async (t) => {
-    const scope = randomUUID();
-    const startup = exit === 'at once' ? '' : 'sleep 2; ';
-    const body = {
-      Image: 'alpine:latest',
-      Entrypoint: [
-        'sh',
-        '-c',
-        `${startup}echo "launch_sqlservr.sh: 9 Aborted ${scope}" >&2; exit 134`,
-      ],
-      Labels: { 'dev.zukhruf.testing.verification': scope },
-    };
-    const probes: AbortSignal[] = [];
-    const options = {
-      internalPort: 1433,
-      healthy: (_service: unknown, signal: AbortSignal) => {
-        probes.push(signal);
-        return waitFor(
-          () => {
-            throw new Error('the server does not answer');
-          },
-          { signal: AbortSignal.any([t.signal, signal]) },
-        );
-      },
-    };
-    try {
-      await assert.rejects(
-        acquisition === 'shared'
-          ? docker.reuse(body, options)
-          : docker.serve(body, options),
-        (error: unknown) => {
-          const said = inspect(error);
-          assert.match(said, /exited with code 134/);
-          assert.match(said, new RegExp(`9 Aborted ${scope}`));
-          return true;
+void test.each(
+  [
+    ['shared', 'at once'],
+    ['shared', 'after its port is published'],
+    ['dedicated', 'at once'],
+    ['dedicated', 'after its port is published'],
+  ] as const,
+  ([acquisition, exit]) =>
+    test(`a ${acquisition} server whose container exits ${exit} rejects with the exit code and output of its container`, async (t) => {
+      const scope = randomUUID();
+      const startup = exit === 'at once' ? '' : 'sleep 2; ';
+      const body = {
+        Image: 'alpine:latest',
+        Entrypoint: [
+          'sh',
+          '-c',
+          `${startup}echo "launch_sqlservr.sh: 9 Aborted ${scope}" >&2; exit 134`,
+        ],
+        Labels: { 'dev.zukhruf.testing.verification': scope },
+      };
+      const probes: AbortSignal[] = [];
+      const options = {
+        internalPort: 1433,
+        healthy: (_service: unknown, signal: AbortSignal) => {
+          probes.push(signal);
+          return waitFor(
+            () => {
+              throw new Error('the server does not answer');
+            },
+            { signal: AbortSignal.any([t.signal, signal]) },
+          );
         },
-      );
-      assert.ok(probes.every((signal) => signal.aborted));
-      if (exit !== 'at once') assert.equal(probes.length, 1);
-    } finally {
-      await removeScope(scope);
-    }
-  });
-}
+      };
+      try {
+        await assert.rejects(
+          acquisition === 'shared'
+            ? docker.reuse(body, options)
+            : docker.serve(body, options),
+          (error: unknown) => {
+            const said = inspect(error);
+            assert.match(said, /exited with code 134/);
+            assert.match(said, new RegExp(`9 Aborted ${scope}`));
+            return true;
+          },
+        );
+        assert.ok(probes.every((signal) => signal.aborted));
+        if (exit !== 'at once') assert.equal(probes.length, 1);
+      } finally {
+        await removeScope(scope);
+      }
+    }),
+);
 
 interface DatabaseHandle {
   containerId: string;
@@ -213,141 +216,145 @@ const worker = `
   console.log(JSON.stringify(handle));
 `;
 
-for (const [engine, helper, config] of [
-  ['postgres', 'Postgres', { user: 'shared_tester' }],
-  ['mysql', 'Mysql', {}],
-  ['mariadb', 'Mariadb', {}],
-  ['sqlserver', 'SqlServer', {}],
-] as const) {
-  test(
-    `${engine} shares across processes and restarts until explicit cleanup`,
-    { timeout: 300_000 },
-    async (t) => {
-      const scope = randomUUID();
-      const labels = { 'dev.zukhruf.testing.verification': scope };
-      try {
-        const run = async (fail: boolean): Promise<DatabaseHandle> => {
-          const env = { ...process.env };
-          delete env.NODE_TEST_CONTEXT;
-          const { stdout } = await execute(
-            process.execPath,
-            [
-              '--input-type=module',
-              '--eval',
-              worker,
-              JSON.stringify({
-                helper,
-                config: {
-                  ...config,
-                  labels,
-                  database: `requested_${randomUUID()}`,
-                },
-                fail,
-              }),
-            ],
-            { env, signal: t.signal },
-          );
-          return JSON.parse(stdout);
-        };
+void test.each(
+  [
+    ['postgres', 'Postgres', { user: 'shared_tester' }],
+    ['mysql', 'Mysql', {}],
+    ['mariadb', 'Mariadb', {}],
+    ['sqlserver', 'SqlServer', {}],
+  ] as const,
+  ([engine, helper, config]) =>
+    test(
+      `${engine} shares across processes and restarts until explicit cleanup`,
+      { timeout: 300_000 },
+      async (t) => {
+        const scope = randomUUID();
+        const labels = { 'dev.zukhruf.testing.verification': scope };
+        try {
+          const run = async (fail: boolean): Promise<DatabaseHandle> => {
+            const env = { ...process.env };
+            delete env.NODE_TEST_CONTEXT;
+            const { stdout } = await execute(
+              process.execPath,
+              [
+                '--input-type=module',
+                '--eval',
+                worker,
+                JSON.stringify({
+                  helper,
+                  config: {
+                    ...config,
+                    labels,
+                    database: `requested_${randomUUID()}`,
+                  },
+                  fail,
+                }),
+              ],
+              { env, signal: t.signal },
+            );
+            return JSON.parse(stdout);
+          };
 
-        const concurrent = await Promise.allSettled([
-          run(false),
-          run(false),
-          run(false),
-        ]);
-        const first = concurrent.map((result) => {
-          assert.equal(
-            result.status,
-            'fulfilled',
-            result.status === 'rejected' ? String(result.reason) : '',
-          );
-          return result.value;
-        });
-        const restarted = await run(false);
-        const failed = await run(true);
-        const handles = [...first, restarted, failed];
-        const [server] = handles;
-        assert.ok(server);
-        assert.equal(
-          new Set(handles.map((handle) => handle.containerId)).size,
-          1,
-        );
-        assert.equal(
-          new Set(handles.map((handle) => handle.database)).size,
-          handles.length,
-        );
-
-        const names = handles.map(({ database }) => `'${database}'`).join(',');
-        if (engine === 'postgres') {
-          const stdout = await execIn(server.containerId, [
-            'psql',
-            '-U',
-            server.user,
-            '-d',
-            'postgres',
-            '-Atc',
-            `SELECT COUNT(*) FROM pg_database WHERE datname IN (${names})`,
+          const concurrent = await Promise.allSettled([
+            run(false),
+            run(false),
+            run(false),
           ]);
-          assert.equal(stdout.trim(), '0');
-        } else if (engine === 'mysql' || engine === 'mariadb') {
-          const stdout = await execIn(server.containerId, [
-            engine,
-            `-u${server.user}`,
-            `-p${server.password}`,
-            '--batch',
-            '--skip-column-names',
-            '--execute',
-            `SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name IN (${names})`,
-          ]);
-          assert.equal(stdout.trim(), '0');
-        } else {
-          const { default: sql } = await import('mssql');
-          // Worker-local forwarded ports expire with their scope. Acquire a
-          // connection in this process to inspect the same persistent server.
-          await using inspector = await new SqlServer({
-            ...config,
-            environment: process.env,
-            labels,
-          }).database();
-          assert.equal(inspector.containerId, server.containerId);
-          const pool = new sql.ConnectionPool({
-            server: inspector.host,
-            port: inspector.port,
-            user: server.user,
-            password: server.password,
-            database: 'master',
-            options: { trustServerCertificate: true, encrypt: false },
-          });
-          try {
-            await pool.connect();
-            const result = await pool
-              .request()
-              .query(
-                `SELECT COUNT(*) AS count FROM sys.databases WHERE name IN (${names})`,
-              );
-            assert.equal(result.recordset[0].count, 0);
-          } finally {
-            await pool.close();
-          }
-        }
-
-        const client = await docker.client();
-        const shared = await client.containers.find(server.containerId);
-        assert.equal((await shared?.inspect())?.State?.Running, true);
-        await shared?.stop();
-        await waitFor(
-          async () =>
+          const first = concurrent.map((result) => {
             assert.equal(
-              await client.containers.find(server.containerId),
-              undefined,
-            ),
-          { signal: t.signal },
-        );
-        const replacement = await run(false);
-        assert.notEqual(replacement.containerId, server.containerId);
-      } finally {
-        await removeScope(scope);
-      }
-    },
-  );
-}
+              result.status,
+              'fulfilled',
+              result.status === 'rejected' ? String(result.reason) : '',
+            );
+            return result.value;
+          });
+          const restarted = await run(false);
+          const failed = await run(true);
+          const handles = [...first, restarted, failed];
+          const [server] = handles;
+          assert.ok(server);
+          assert.equal(
+            new Set(handles.map((handle) => handle.containerId)).size,
+            1,
+          );
+          assert.equal(
+            new Set(handles.map((handle) => handle.database)).size,
+            handles.length,
+          );
+
+          const names = handles
+            .map(({ database }) => `'${database}'`)
+            .join(',');
+          if (engine === 'postgres') {
+            const stdout = await execIn(server.containerId, [
+              'psql',
+              '-U',
+              server.user,
+              '-d',
+              'postgres',
+              '-Atc',
+              `SELECT COUNT(*) FROM pg_database WHERE datname IN (${names})`,
+            ]);
+            assert.equal(stdout.trim(), '0');
+          } else if (engine === 'mysql' || engine === 'mariadb') {
+            const stdout = await execIn(server.containerId, [
+              engine,
+              `-u${server.user}`,
+              `-p${server.password}`,
+              '--batch',
+              '--skip-column-names',
+              '--execute',
+              `SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name IN (${names})`,
+            ]);
+            assert.equal(stdout.trim(), '0');
+          } else {
+            const { default: sql } = await import('mssql');
+            // Worker-local forwarded ports expire with their scope. Acquire a
+            // connection in this process to inspect the same persistent server.
+            await using inspector = await new SqlServer({
+              ...config,
+              environment: process.env,
+              labels,
+            }).database();
+            assert.equal(inspector.containerId, server.containerId);
+            const pool = new sql.ConnectionPool({
+              server: inspector.host,
+              port: inspector.port,
+              user: server.user,
+              password: server.password,
+              database: 'master',
+              options: { trustServerCertificate: true, encrypt: false },
+            });
+            try {
+              await pool.connect();
+              const result = await pool
+                .request()
+                .query(
+                  `SELECT COUNT(*) AS count FROM sys.databases WHERE name IN (${names})`,
+                );
+              assert.equal(result.recordset[0].count, 0);
+            } finally {
+              await pool.close();
+            }
+          }
+
+          const client = await docker.client();
+          const shared = await client.containers.find(server.containerId);
+          assert.equal((await shared?.inspect())?.State?.Running, true);
+          await shared?.stop();
+          await waitFor(
+            async () =>
+              assert.equal(
+                await client.containers.find(server.containerId),
+                undefined,
+              ),
+            { signal: t.signal },
+          );
+          const replacement = await run(false);
+          assert.notEqual(replacement.containerId, server.containerId);
+        } finally {
+          await removeScope(scope);
+        }
+      },
+    ),
+);

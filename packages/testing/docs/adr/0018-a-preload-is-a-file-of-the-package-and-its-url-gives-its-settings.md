@@ -1,5 +1,7 @@
 # A preload is a file of the package, and its URL gives its settings
 
+On 2026-11-26 (#5729), `src/node/node.test.ts` moved to `packages/parameterized-test/src/index.test.ts`, with its own hook. The lines below name its old path.
+
 A test can check that a module loads in a project that did not install an optional peer dependency. Four tests in two repositories do this in a child process. They make installed packages unresolvable with a `registerHooks` hook, written as a string and given to `--import` as a `data:` URL:
 
 - `src/areas.test.ts` and `src/node/node.test.ts` of this package.

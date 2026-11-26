@@ -1,5 +1,7 @@
 # A test helper goes into an area when three repositories have its knowledge and it does not use `mock`
 
+Superseded in part on 2026-11-26 (user, #5729) for the `node` area. `test.each` and `suite.each` moved to [@zukhruf/parameterized-test](../../../parameterized-test) (its ADR 0001): the packages that this package depends on (async, docker, fs, ssh and sqlite-open) cannot import an area of this package without a cycle in the build, and their tests need `each` too. The `./node` area is gone, with no alias.
+
 Superseded in part on 2026-11-17 (#4205) by [ADR 0021](./0021-a-test-helper-in-the-test-support-of-three-packages-goes-into-an-area-when-no-public-package-does-its-work.md). A test helper in the test support (`src/testing/`) of three packages goes into an area also when only this repository has its knowledge, if no public package does its work. Thus the worker process of the mutex tests is `WorkerProcess` of the `process` area, and a wait is `waitFor` of the `async` area on the test's signal. The example `t.waitFor` below no longer holds: it takes no signal, so it ends at a limit of its own, and `zukhruf/no-own-wait-limit` reports it. Condition 2 (no `mock`) stays.
 
 Root ADR 0001 (rule 2) keeps the test helpers of different packages as copies, also after the third copy. On 2026-10-09 the maintainer chose a third copy of `recordDiskWrites` in the tests of `@zukhruf/fs`, in place of a new `fs` area. Thus each test file reads from top to bottom, and no area ships code that imports the `mock` of `node:test`.

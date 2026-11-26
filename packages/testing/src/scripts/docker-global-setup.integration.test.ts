@@ -16,7 +16,7 @@ import {
 import { findPackageJSON } from 'node:module';
 import { connect, createServer } from 'node:net';
 import { dirname, join } from 'node:path';
-import { type TestContext, describe, test } from 'node:test';
+import { type TestContext, describe } from 'node:test';
 import { setTimeout } from 'node:timers/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
@@ -28,6 +28,7 @@ import {
   Docker,
 } from '@zukhruf/docker';
 import { type TemporaryDirectory, TemporaryFiles, isErrno } from '@zukhruf/fs';
+import { test } from '@zukhruf/parameterized-test';
 
 import { waitFor } from '../async/wait-for.ts';
 import { EngineLease } from '../docker/engine-lease.ts';
@@ -818,147 +819,145 @@ function leaseRemoval(proxy: EngineProxy, id: string) {
 
 // Each test below keeps its runs under a state root of its own (runEnvironment), and its reaper removes only its own run, so they run four at a time.
 describe('a run and its recovery', { concurrency: 4 }, () => {
-  for (const mode of [
-    'failure',
-    'timeout',
-    'SIGINT',
-    'SIGTERM',
-    'recovery',
-  ] as const) {
-    test(
-      mode === 'recovery'
-        ? "a run whose engine stops answering before its global teardown ends cleanly: the teardown makes no engine call, and the reaper removes the run's containers and volumes"
-        : `the reaper cleans an interrupted run (${mode}) and preserves another run's containers and volumes`,
-      {
-        skip:
-          mode === 'recovery'
-            ? proxyless
-            : mode === 'SIGINT' || mode === 'SIGTERM'
-              ? signals
-              : false,
-      },
-      async (t) => {
-        await using directory = await runsDirectory('zukhruf-testing-cleanup-');
-        // Another run's container and volume: the sweep must match the run id,
-        // not only the label.
-        const unrelated = new DockerTestbed({
-          environment: {
-            ...process.env,
-            ZUKHRUF_TESTING_RUN_ID: `unrelated-${randomUUID()}`,
-            ZUKHRUF_TESTING_RUN_DIR: directory.path,
-          },
-        });
-        await using sentinel = await unrelated.start({
-          Image: 'alpine:latest',
-          Cmd: ['sleep', '600'],
-        });
-        await using sentinelVolume = await unrelated.volume();
-        const statePath = join(directory.path, 'state.json');
-        const file = join(directory.path, 'worker.test.ts');
-        // In recovery mode the run's engine is a proxy, which stops before the
-        // global teardown: the hold of the test process ends with it.
-        await using proxy =
-          mode === 'recovery' ? await EngineProxy.start(engine) : undefined;
-        const stopped = join(directory.path, 'stopped');
-        await writeFile(
-          file,
-          workerSource(
-            statePath,
-            [
-              mode === 'recovery'
-                ? `await t.waitFor(() => { if (!existsSync(${JSON.stringify(stopped)})) throw new Error('the proxy has not stopped'); }, { timeout: 80_000 });`
-                : '',
-              mode === 'failure'
-                ? "throw new Error('intentional assertion failure');"
-                : mode === 'recovery'
-                  ? ''
-                  : 'await setTimeout(120_000);',
-            ].join('\n'),
-            mode === 'timeout' ? 30_000 : 90_000,
-          ),
-        );
-        const env = proxy
-          ? proxiedEnvironment(join(directory.path, 'state'), proxy)
-          : runEnvironment(join(directory.path, 'state'));
-        const run = started(
-          runnerArgs('--test-timeout=90000', '--test-force-exit', file),
-          env,
-        );
-        // Disposed after the end of the run, which then creates nothing more.
-        await using leftovers = new AsyncDisposableStack();
-        await using cleanup = new AsyncDisposableStack();
-        cleanup.defer(async () => {
-          if (run.child.exitCode === null && run.child.signalCode === null)
-            run.child.kill('SIGKILL');
-          await run.exited.catch(() => null);
-        });
-
-        const state = await readState<State>(t, statePath);
-        leftovers.defer(() => removeLeftovers(state));
-        assert.ok(state.anonymousVolumes.length > 0);
-        assert.ok(state.generalVolumes.length > 0);
-        if (mode === 'SIGINT' || mode === 'SIGTERM') run.child.kill(mode);
-        if (proxy) {
-          await proxy.close();
-          await writeFile(stopped, '');
-        }
-        const code = await run.exited;
-        if (proxy) {
-          // The test passed, and the teardown needs no engine.
-          assert.equal(code, 0, run.output());
-          assert.doesNotMatch(run.output(), /retained ownership record/);
-        } else assert.notEqual(code, 0, run.output());
-        const ended = state;
-        await reaped(t, async () => {
-          for (const id of [ended.id, ended.general])
-            assert.equal(await exists(id), false, run.output());
-          for (const name of [
-            ended.volume,
-            ...ended.anonymousVolumes,
-            ...ended.generalVolumes,
-          ])
-            assert.equal(
-              await volumeExists(name),
-              false,
-              `the run left volume ${name}: ${run.output()}`,
-            );
-          // The reaper removes the directory after its first pass. Docker
-          // validates the remote path. This probe never creates the source.
-          await assert.rejects(
-            docker.containers.run({
-              Image: 'alpine:latest',
-              Cmd: ['true'],
-              HostConfig: {
-                Mounts: [
-                  { Type: 'bind', Source: ended.path, Target: '/fixture' },
-                ],
-              },
-            }),
-            BindSourceNotFoundError,
+  void test.each(
+    ['failure', 'timeout', 'SIGINT', 'SIGTERM', 'recovery'] as const,
+    (mode) =>
+      test(
+        mode === 'recovery'
+          ? "a run whose engine stops answering before its global teardown ends cleanly: the teardown makes no engine call, and the reaper removes the run's containers and volumes"
+          : `the reaper cleans an interrupted run (${mode}) and preserves another run's containers and volumes`,
+        {
+          skip:
+            mode === 'recovery'
+              ? proxyless
+              : mode === 'SIGINT' || mode === 'SIGTERM'
+                ? signals
+                : false,
+        },
+        async (t) => {
+          await using directory = await runsDirectory(
+            'zukhruf-testing-cleanup-',
           );
-        });
-        if (mode === 'SIGINT' || mode === 'SIGTERM') {
-          // The runner does not wait for a signalled test process, so the
-          // teardown may keep the run's records; the next run removes them.
-          const { pid } = state;
-          await waitFor(() => assert.equal(alive(pid), false), {
-            signal: t.signal,
+          // Another run's container and volume: the sweep must match the run id,
+          // not only the label.
+          const unrelated = new DockerTestbed({
+            environment: {
+              ...process.env,
+              ZUKHRUF_TESTING_RUN_ID: `unrelated-${randomUUID()}`,
+              ZUKHRUF_TESTING_RUN_DIR: directory.path,
+            },
           });
-          await emptyRun(file, env);
-        }
-        // The teardown deletes the run's records with no engine call, also
-        // when the proxy is gone. After a signal, the next run deletes them.
-        assert.deepEqual(
-          await readdir(
-            join(directory.path, 'state', 'zukhruf-testing', 'docker-runs'),
-          ),
-          [],
-        );
-        assert.equal(await running(sentinel.id), true);
-        assert.equal(await volumeExists(sentinelVolume.name), true);
-      },
-    );
-  }
+          await using sentinel = await unrelated.start({
+            Image: 'alpine:latest',
+            Cmd: ['sleep', '600'],
+          });
+          await using sentinelVolume = await unrelated.volume();
+          const statePath = join(directory.path, 'state.json');
+          const file = join(directory.path, 'worker.test.ts');
+          // In recovery mode the run's engine is a proxy, which stops before the
+          // global teardown: the hold of the test process ends with it.
+          await using proxy =
+            mode === 'recovery' ? await EngineProxy.start(engine) : undefined;
+          const stopped = join(directory.path, 'stopped');
+          await writeFile(
+            file,
+            workerSource(
+              statePath,
+              [
+                mode === 'recovery'
+                  ? `await t.waitFor(() => { if (!existsSync(${JSON.stringify(stopped)})) throw new Error('the proxy has not stopped'); }, { timeout: 80_000 });`
+                  : '',
+                mode === 'failure'
+                  ? "throw new Error('intentional assertion failure');"
+                  : mode === 'recovery'
+                    ? ''
+                    : 'await setTimeout(120_000);',
+              ].join('\n'),
+              mode === 'timeout' ? 30_000 : 90_000,
+            ),
+          );
+          const env = proxy
+            ? proxiedEnvironment(join(directory.path, 'state'), proxy)
+            : runEnvironment(join(directory.path, 'state'));
+          const run = started(
+            runnerArgs('--test-timeout=90000', '--test-force-exit', file),
+            env,
+          );
+          // Disposed after the end of the run, which then creates nothing more.
+          await using leftovers = new AsyncDisposableStack();
+          await using cleanup = new AsyncDisposableStack();
+          cleanup.defer(async () => {
+            if (run.child.exitCode === null && run.child.signalCode === null)
+              run.child.kill('SIGKILL');
+            await run.exited.catch(() => null);
+          });
+
+          const state = await readState<State>(t, statePath);
+          leftovers.defer(() => removeLeftovers(state));
+          assert.ok(state.anonymousVolumes.length > 0);
+          assert.ok(state.generalVolumes.length > 0);
+          if (mode === 'SIGINT' || mode === 'SIGTERM') run.child.kill(mode);
+          if (proxy) {
+            await proxy.close();
+            await writeFile(stopped, '');
+          }
+          const code = await run.exited;
+          if (proxy) {
+            // The test passed, and the teardown needs no engine.
+            assert.equal(code, 0, run.output());
+            assert.doesNotMatch(run.output(), /retained ownership record/);
+          } else assert.notEqual(code, 0, run.output());
+          const ended = state;
+          await reaped(t, async () => {
+            for (const id of [ended.id, ended.general])
+              assert.equal(await exists(id), false, run.output());
+            for (const name of [
+              ended.volume,
+              ...ended.anonymousVolumes,
+              ...ended.generalVolumes,
+            ])
+              assert.equal(
+                await volumeExists(name),
+                false,
+                `the run left volume ${name}: ${run.output()}`,
+              );
+            // The reaper removes the directory after its first pass. Docker
+            // validates the remote path. This probe never creates the source.
+            await assert.rejects(
+              docker.containers.run({
+                Image: 'alpine:latest',
+                Cmd: ['true'],
+                HostConfig: {
+                  Mounts: [
+                    { Type: 'bind', Source: ended.path, Target: '/fixture' },
+                  ],
+                },
+              }),
+              BindSourceNotFoundError,
+            );
+          });
+          if (mode === 'SIGINT' || mode === 'SIGTERM') {
+            // The runner does not wait for a signalled test process, so the
+            // teardown may keep the run's records; the next run removes them.
+            const { pid } = state;
+            await waitFor(() => assert.equal(alive(pid), false), {
+              signal: t.signal,
+            });
+            await emptyRun(file, env);
+          }
+          // The teardown deletes the run's records with no engine call, also
+          // when the proxy is gone. After a signal, the next run deletes them.
+          assert.deepEqual(
+            await readdir(
+              join(directory.path, 'state', 'zukhruf-testing', 'docker-runs'),
+            ),
+            [],
+          );
+          assert.equal(await running(sentinel.id), true);
+          assert.equal(await volumeExists(sentinelVolume.name), true);
+        },
+      ),
+  );
 
   test(
     'a create that the engine finishes after its test process was killed and after the first pass of the reaper is removed by a re-check pass, with no later run',

@@ -26,12 +26,6 @@
   "type": "module",
   "exports": {
     "./package.json": "./package.json",
-    "./node": {
-      "@zukhruf/source": "./src/node/index.ts",
-      "types": "./dist/node/index.d.ts",
-      "import": "./dist/node/index.js",
-      "default": "./dist/node/index.js"
-    },
     "./async": {
       "@zukhruf/source": "./src/async/index.ts",
       "types": "./dist/async/index.d.ts",
@@ -145,6 +139,7 @@
     "@sinonjs/fake-timers": "15.5.0",
     "@types/mssql": "^12.3.0",
     "@types/pg": "^8.23.1",
+    "@zukhruf/parameterized-test": "^0.8.70",
     "mariadb": "^3.5.5",
     "mssql": "^12.8.0",
     "msw": "^3.0.7",

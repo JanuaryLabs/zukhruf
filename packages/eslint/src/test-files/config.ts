@@ -30,11 +30,11 @@ const testFileRules = {
   'no-assert-in-retry-until-ready': noAssertInRetryUntilReady,
   'no-own-module-mock': noOwnModuleMock,
   'one-test-runner': oneTestRunner,
+  'prefer-each': preferEach,
 };
 
 const rules = {
   ...testFileRules,
-  'prefer-each': preferEach,
   'no-vitest-globals': noVitestGlobals,
 };
 
@@ -46,9 +46,7 @@ export const tests: Concept = {
     {
       name: 'zukhruf/tests',
       files: [...TESTS, ...TEST_SUPPORT],
-      // prefer-each warns: repositories hold loops of tests that move to
-      // test.each one by one (Ezz, 2026-11-25).
-      rules: { ...enable(testFileRules), 'zukhruf/prefer-each': 'warn' },
+      rules: enable(testFileRules),
     },
     {
       // A global setup runs before any test process, and process.env is its only channel to them.

@@ -9,6 +9,7 @@ import { type TestContext, describe } from 'node:test';
 
 import { ContainerNotRunningError } from '@zukhruf/docker';
 import { TemporaryFiles } from '@zukhruf/fs';
+import { test } from '@zukhruf/parameterized-test';
 
 import { waitFor } from '../async/wait-for.ts';
 import type { Database } from '../databases/database.ts';
@@ -16,7 +17,6 @@ import { Mariadb } from '../databases/mariadb.ts';
 import { Mysql } from '../databases/mysql.ts';
 import { Postgres } from '../databases/postgres.ts';
 import { SqlServer } from '../databases/sqlserver.ts';
-import { test } from '../node/index.ts';
 import { engine, proxyless } from '../testing/current-engine.ts';
 import { docker } from '../testing/engine-client.ts';
 import { EngineProxy } from '../testing/engine-proxy.ts';
@@ -185,7 +185,7 @@ async function removeScope(scope: string): Promise<void> {
 
 // Each test below scopes its servers with a label of its own (VERIFICATION), so each gets servers of its own, and they run four at a time.
 describe('the databases of a run', { concurrency: 4 }, () => {
-  for (const kind of kinds) {
+  void test.each(kinds, (kind) =>
     test(
       `a database whose test process was killed is dropped by the reaper after the run ends (${kind.name})`,
       { skip: signals, timeout: 600_000 },
@@ -229,8 +229,8 @@ describe('the databases of a run', { concurrency: 4 }, () => {
           await removeScope(scope);
         }
       },
-    );
-  }
+    ),
+  );
 
   test(
     "the run's cleanup leaves the databases of another run on the same server",

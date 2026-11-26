@@ -31,7 +31,6 @@ const drivers: [string, ...string[]] = [
 
 test('every area without a driver imports when no driver is installed', async () => {
   for (const area of [
-    'node',
     'async',
     'process',
     'docker',

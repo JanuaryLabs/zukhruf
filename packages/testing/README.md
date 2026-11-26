@@ -10,7 +10,6 @@ Each area has its own import path, so a test loads only the drivers it uses. The
 
 | Import                                 | Gives                                                               | Needs                      |
 | -------------------------------------- | ------------------------------------------------------------------- | -------------------------- |
-| `@zukhruf/testing/node`                | Native `test`, `it`, `suite`, `describe` with `.each`               |                            |
 | `@zukhruf/testing/async`               | `waitFor`, `retryUntilReady`                                        |                            |
 | `@zukhruf/testing/process`             | `startWorker`                                                       |                            |
 | `@zukhruf/testing/docker`              | `DockerTestbed`, `ServiceContainer`, `DockerDirectory`              | a Docker engine            |
@@ -27,46 +26,6 @@ Each area has its own import path, so a test loads only the drivers it uses. The
 | `@zukhruf/testing/msw`                 | `Msw`                                                               | `msw`                      |
 | `@zukhruf/testing/preload`             | `notInstalled`                                                      |                            |
 | `@zukhruf/testing/docker-global-setup` | `globalSetup`, `globalTeardown` (see [A killed run](#a-killed-run)) |                            |
-
-## Parameterized tests
-
-Import `test` or `it` from `@zukhruf/testing/node` to repeat native test declarations over a table. Use `suite` or `describe` for suites across implementations or configurations.
-
-```ts
-import { describe, test } from '@zukhruf/testing/node';
-
-void test.each(
-  [
-    { name: 'integer', input: '42', expected: 42 },
-    { name: 'decimal', input: '1.5', expected: 1.5 },
-  ],
-  (row) =>
-    test(row.name, { timeout: 1_000 }, (t) => {
-      t.assert.equal(Number(row.input), row.expected);
-    }),
-);
-
-void describe.each(['utf8', 'utf16le'] as const, (encoding) =>
-  describe(encoding, () => {
-    test('round-trips text', (t) => {
-      t.assert.equal(
-        Buffer.from('hello', encoding).toString(encoding),
-        'hello',
-      );
-    });
-  }),
-);
-```
-
-Both methods accept `(rows, register)`. The rows are a readonly array; scalars, objects, tuples, and factories keep their inferred types. `register(row, index)` must return the native `test()` or `suite()` promise. Names, options, modifiers, and contexts belong to that native call. An empty table or a callback that returns no promise throws during registration.
-
-Call native `test()` or `suite()` directly in the callback in your test file. This preserves Node's declaration location for reports, navigation, and saved-failure reruns. The earlier `(rows, name, [options], body)` prototype registered inside the shared helper and has been removed because those locations collided across files.
-
-Inside an asynchronous parent test, `await test.each(...)` to keep that parent alive until its subtests finish. Call `t.test()` in the registration callback when using the parent's assertion plan. Node controls subtest concurrency through the parent. Inside a suite, native declaration promises fulfill immediately. Acquire and dispose fixtures inside each test body.
-
-These are the original native function objects with an added property: `test === it` and `suite === describe`. Their extended types are available through this import, without globally augmenting `node:test`. This area imports only Node built-ins.
-
-TAP, spec, simultaneous JUnit output, name filtering, skip/TODO reasons, failure exit status, default snapshots, and saved-failure reruns across multiple files are covered by this area's tests. Snapshots belong to the test entry file. Rerun regression tests check actual body execution through persistent failures, a subsequent fix, and replay of the passing results.
 
 ## Docker
 
@@ -575,17 +534,6 @@ The driver is msw 3 (`msw ^3.0.7`, with its experimental `msw/experimental` API)
 ## API
 
 ```ts
-// @zukhruf/testing/node: the native functions of node:test, with `each`.
-// test === it and suite === describe.
-// Each is a name of this block, not an export.
-type Each = <Row>(
-  rows: readonly Row[],
-  register: (row: Row, index: number) => Promise<void>,
-) => Promise<void>;
-export const test: typeof import('node:test').test & { each: Each };
-export const suite: typeof import('node:test').suite & { each: Each };
-export { suite as describe, test as it };
-
 // @zukhruf/testing/async
 interface WaitForOptions {
   signal: AbortSignal;
