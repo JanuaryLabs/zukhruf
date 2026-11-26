@@ -5,8 +5,9 @@ import { once } from 'node:events';
 import { existsSync } from 'node:fs';
 import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { type TestContext, describe, test } from 'node:test';
+import { type TestContext, describe } from 'node:test';
 
+import { ContainerNotRunningError } from '@zukhruf/docker';
 import { TemporaryFiles } from '@zukhruf/fs';
 
 import { waitFor } from '../async/wait-for.ts';
@@ -15,6 +16,7 @@ import { Mariadb } from '../databases/mariadb.ts';
 import { Mysql } from '../databases/mysql.ts';
 import { Postgres } from '../databases/postgres.ts';
 import { SqlServer } from '../databases/sqlserver.ts';
+import { test } from '../node/index.ts';
 import { engine, proxyless } from '../testing/current-engine.ts';
 import { docker } from '../testing/engine-client.ts';
 import { EngineProxy } from '../testing/engine-proxy.ts';
@@ -25,6 +27,15 @@ const signals =
     ? 'Windows ends a process on a signal, so it runs no global teardown'
     : false;
 const VERIFICATION = 'dev.zukhruf.testing.verification';
+const DATABASE_LABEL = 'dev.zukhruf.testing.database';
+
+/** The records of the database `database` on the engine. */
+const recordsOf = async (database: string): Promise<string[]> =>
+  (
+    await docker.volumes.list({
+      filters: { label: [`${DATABASE_LABEL}=${database}`] },
+    })
+  ).map(({ Name }) => Name);
 
 /** A database fixture, and how the test sees a database on its server. */
 interface Kind {
@@ -276,6 +287,58 @@ describe('the databases of a run', { concurrency: 4 }, () => {
     },
   );
 
+  void test.each(kinds, (kind) =>
+    test(
+      `a disposal drops its database and removes its record (${kind.name})`,
+      { timeout: 300_000 },
+      async () => {
+        const scope = randomUUID();
+        try {
+          await using own = await kind.create(process.env, scope);
+          const handle = await kind.create(process.env, scope);
+          assert.equal((await recordsOf(handle.database)).length, 1);
+
+          await handle[Symbol.asyncDispose]();
+
+          assert.deepEqual(await recordsOf(handle.database), []);
+          assert.equal(await kind.exists(own, handle.database), false);
+        } finally {
+          await removeScope(scope);
+        }
+      },
+    ),
+  );
+
+  test(
+    'a disposal whose drop fails rejects, and keeps the database and its record',
+    { timeout: 300_000 },
+    async () => {
+      const scope = randomUUID();
+      try {
+        await using own = await postgres.create(process.env, scope);
+        const handle = await postgres.create(process.env, scope);
+        const server = await docker.containers.find(handle.containerId);
+        assert.ok(server);
+
+        // A paused server refuses each exec, and still holds its databases.
+        await server.pause();
+        try {
+          await assert.rejects(
+            async () => await handle[Symbol.asyncDispose](),
+            ContainerNotRunningError,
+          );
+        } finally {
+          await server.unpause();
+        }
+
+        assert.equal((await recordsOf(handle.database)).length, 1);
+        assert.equal(await postgres.exists(own, handle.database), true);
+      } finally {
+        await removeScope(scope);
+      }
+    },
+  );
+
   test(
     'a run whose test process only took a database is cleaned when it ends',
     { timeout: 300_000 },
@@ -314,60 +377,3 @@ describe('the databases of a run', { concurrency: 4 }, () => {
     },
   );
 });
-
-// This test keeps a server that never answers, which slows the pass of every other reaper: it runs alone, after them.
-
-test(
-  'a run ends cleanly while another process still starts a shared server',
-  { skip: signals, timeout: 300_000 },
-  async (t) => {
-    await using directory = await new TemporaryFiles().directory(
-      'zukhruf-testing-database-cleanup-',
-    );
-    const scope = randomUUID();
-    try {
-      await using own = await postgres.create(process.env, scope);
-      // A MySQL server that does not answer yet: its client is not there.
-      if ((await docker.images.inspect('alpine:latest')) === undefined)
-        await docker.images.pull('alpine:latest');
-      const starting = await docker.containers.create({
-        Image: 'alpine:latest',
-        Cmd: ['sleep', '600'],
-        Labels: {
-          'dev.zukhruf.testing.server': randomUUID(),
-          'dev.zukhruf.testing.kind': 'mysql',
-          [VERIFICATION]: scope,
-        },
-        Env: ['MYSQL_ROOT_PASSWORD=testpassword'],
-      });
-      await starting.start();
-      const statePath = join(directory.path, 'state.json');
-      const file = join(directory.path, 'worker.test.ts');
-      await writeFile(
-        file,
-        workerSource(
-          postgres,
-          scope,
-          statePath,
-          "process.kill(process.pid, 'SIGKILL');",
-        ),
-      );
-
-      const run = await runFile(
-        file,
-        runEnvironment(join(directory.path, 'state')),
-      );
-
-      assert.doesNotMatch(run.output, /retained ownership record/);
-      const { database } = await readState(t, statePath);
-      // The reaper drops it about 2 s after the run's last test process.
-      await waitFor(
-        async () =>
-          assert.equal(await postgres.exists(own, database), false, run.output),
-        { signal: t.signal, interval: 200 },
-      );
-    } finally {
-      await removeScope(scope);
-    }
-  },
-);

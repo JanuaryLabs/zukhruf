@@ -25,14 +25,6 @@ export const databaseName = (id: string | undefined): string =>
     : `test_${hex(randomUUID())}`;
 
 /**
- * The extended regular expression of the names of the databases of the run
- * whose id without hyphens is `runHex`. `_` is a wildcard of SQL's LIKE, so
- * only this exact pattern proves a run's database.
- */
-export const ownedNames = (runHex: string): string =>
-  `^test_${runHex}_[0-9a-f]{16}$`;
-
-/**
  * The databases of one server kind, through the client in the server's
  * image. Disposal and the reaper (ADR 0020) both run its command and SQL.
  */
@@ -42,16 +34,21 @@ export interface Collector {
   readonly credential: { variable: string; fallback?: string };
   /** The command in the server's container that runs `sql` with `credential`, and prints one value of each row a line. */
   command(credential: string, sql: string): string[];
-  /** The SQL that lists each database whose name starts with `test`, a superset of a run's. */
-  readonly list: string;
   /** The SQL that drops the database `name` if it exists. */
   drop(name: string): string;
 }
 
+/** The states of a server that took its databases with it: a shared server runs with AutoRemove. */
+export const ENDED: ReadonlySet<string> = new Set([
+  'exited',
+  'dead',
+  'removing',
+]);
+
 /**
  * Drops the database `name` in the server `container` with the client of
- * `collector`. A shared server runs with AutoRemove, so a server that stopped
- * or is gone took its databases with it: that drop resolves.
+ * `collector`. A server that is gone or stopped took its databases with it:
+ * that drop resolves. A paused server still holds them: that drop rejects.
  */
 export async function dropDatabase(
   collector: Collector,
@@ -65,10 +62,9 @@ export async function dropDatabase(
       collector.command(credential, collector.drop(name)),
     );
   } catch (error) {
-    if (
-      !(error instanceof ContainerNotFoundError) &&
-      !(error instanceof ContainerNotRunningError)
-    )
-      throw error;
+    if (error instanceof ContainerNotFoundError) return;
+    if (error instanceof ContainerNotRunningError && ENDED.has(error.state))
+      return;
+    throw error;
   }
 }

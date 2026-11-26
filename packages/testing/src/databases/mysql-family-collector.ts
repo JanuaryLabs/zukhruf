@@ -27,7 +27,6 @@ function mysqlFamily(
       '--execute',
       sql,
     ],
-    list: "SHOW DATABASES LIKE 'test%'",
     drop: (name) => `DROP DATABASE IF EXISTS \`${name}\``,
   };
 }

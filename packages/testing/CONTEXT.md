@@ -46,6 +46,10 @@ _Avoid_: Global container, singleton
 The SHA-256 hash of a request to `reuse()`: the container body after the testbed adds its defaults and the published port, and the `internalPort`. The order of the keys does not change it. It names the shared server of the request, `zukhruf-testing-<fingerprint>` when the request gives no `name`, and the label `dev.zukhruf.testing.server` of that server holds it (ADR 0019).
 _Avoid_: Key, ID (for the hash)
 
+**Database record**:
+A volume of a run, `zukhruf-testing-database-<name>`, that names one database of a shared server: its name, the id of its server and its kind, in labels. In a run, `database()` writes it before it creates the database, and the disposal removes it after the drop. The reaper of the run drops each recorded database that a test process left, and visits no other shared server (ADR 0032).
+_Avoid_: Database lease, marker
+
 **Lease**:
 A container that runs `cat` on the standard input of the attach of its holder process. When the holder exits for any reason, the attach closes and the engine removes the lease. A process lease tells a reaper that a test process uses one shared server now. `reuse()` takes one for each process and shared server.
 _Avoid_: Heartbeat, lock, Ryuk session
@@ -79,7 +83,7 @@ Node's hook that runs after the test processes of a run end. It is synchronous a
 _Avoid_: Cleanup hook
 
 **Reaper**:
-A container of one run on one engine (ADR 0020). It mounts a socket of the engine's host, and lets a holder in only after it finds itself through that socket. Each test process of the run holds it with one `cat` exec, and takes the hold again at once when it ends while the process lives. About 2 s after the last holder ended, it closes, so a later holder holds the next reaper of the run, and it removes the run's containers and volumes and its host directories, drops the run's databases in the shared servers, checks again a few times, removes the expired shared servers and the expired stopped reapers, and exits.
+A container of one run on one engine (ADR 0020). It mounts a socket of the engine's host, and lets a holder in only after it finds itself through that socket. Each test process of the run holds it with one `cat` exec, and takes the hold again at once when it ends while the process lives. About 2 s after the last holder ended, it closes, so a later holder holds the next reaper of the run, and it removes the run's containers, drops the databases that the run recorded (database records), removes the run's other volumes and its host directories, checks again a few times, removes the expired shared servers and the expired stopped reapers, and exits.
 _Avoid_: Ryuk, janitor
 
 **Kept reaper**:

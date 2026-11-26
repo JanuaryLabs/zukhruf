@@ -2,7 +2,11 @@ import { retryUntilReady } from '../async/retry-until-ready.ts';
 import { readRun } from '../docker/run-records.ts';
 import type { ServiceContainer } from '../docker/service-container.ts';
 import { DockerTestbed } from '../docker/testbed.ts';
-import { KIND_LABEL, databaseName, dropDatabase } from './collector.ts';
+import { KIND_LABEL } from './collector.ts';
+import {
+  type SharedDatabase,
+  createSharedDatabase,
+} from './database-record.ts';
 import type { Database, DatabaseOptions } from './database.ts';
 import { type MysqlFamilyCollector, user } from './mysql-family-collector.ts';
 import { type OwnedPool, OwnedPools } from './owned-pools.ts';
@@ -71,20 +75,22 @@ export abstract class MysqlFamilyServer<Pool, PoolOptions> {
   /** Create an isolated database on the persistent shared server. */
   async database(): Promise<MysqlFamilyDatabase<Pool, PoolOptions>> {
     const container = await this.#acquire('app', 'reuse');
-    const database = databaseName(this.#runId);
+    let database: SharedDatabase;
     try {
-      await this.#sql(container, `CREATE DATABASE \`${database}\``);
+      database = await createSharedDatabase(
+        this.#docker,
+        this.#runId,
+        this.collector,
+        container.container,
+        this.#options.password,
+        (name) => this.#sql(container, `CREATE DATABASE \`${name}\``),
+      );
     } catch (error) {
       await container.disconnect();
       throw error;
     }
-    return this.#handle(container, database, async () => {
-      await dropDatabase(
-        this.collector,
-        container.container,
-        this.#options.password,
-        database,
-      );
+    return this.#handle(container, database.name, async () => {
+      await database.drop();
       await container.disconnect();
     });
   }

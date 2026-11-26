@@ -16,11 +16,11 @@ import {
   type OutputChunk,
 } from '@zukhruf/docker';
 
+import { type Collector, ENDED, KIND_LABEL } from '../databases/collector.ts';
 import {
-  type Collector,
-  KIND_LABEL,
-  ownedNames,
-} from '../databases/collector.ts';
+  DATABASE_LABEL,
+  DATABASE_SERVER_LABEL,
+} from '../databases/database-record.ts';
 import { mariadb, mysql } from '../databases/mysql-family-collector.ts';
 import { postgres } from '../databases/postgres-collector.ts';
 import { sqlserver } from '../databases/sqlserver-collector.ts';
@@ -179,35 +179,30 @@ function word(text: string): string {
 
 const variable = (name: string): string => `\0${name}\0`;
 
-/** The `case` branch of a collector: lists the run's databases on the server `$1` and drops each one. */
+/** The `case` branch of a collector: drops the database `$database` in the server `$1` with the server's own client. */
 function dropBranch(collector: Collector): string {
   const { variable: name, fallback } = collector.credential;
-  const run = (sql: string) =>
-    collector
-      .command(variable('credential'), variable(sql))
-      .map((part) => word(part))
-      .join(' ');
+  const drop = collector
+    .command(variable('credential'), variable('drop'))
+    .map((part) => word(part))
+    .join(' ');
   return `
     ${collector.kind})
       credential=$(value ${name})
       ${fallback === undefined ? '' : `[ -n "$credential" ] || credential=${word(fallback)}`}
-      list=${word(collector.list)}
-      names=$(bounded "docker exec $1 list" "$1" docker exec "$1" ${run('list')}) || return 0
-      for name in $(echo "$names" | tr -d '\\r' | grep -E ${word(ownedNames(variable('hex')))}); do
-        drop=${word(collector.drop(variable('name')))}
-        bounded "docker exec $1 drop $name" "$1" docker exec "$1" ${run('drop')} >/dev/null || return 0
-      done ;;`;
+      drop=${word(collector.drop(variable('database')))}
+      bounded "docker exec $1 drop $database" "$1" docker exec "$1" ${drop} >/dev/null ;;`;
 }
 
 /**
  * The command of the reaper. Each holder is one `cat` exec that holds the
  * door shared. After the last holder ended, it waits the grace, and a holder
  * that comes back stops the countdown. Then it closes the door, removes the
- * run's containers and volumes, removes the run's host directories, drops
- * the run's databases, does the re-check passes and removes the expired shared
- * servers and the expired stopped reapers, with the door closed. It removes
- * itself, or keeps its container when a call hit its request time limit
- * (ADR 0031).
+ * run's containers, drops the databases that the run recorded (ADR 0032),
+ * removes the run's other volumes and its host directories, does the
+ * re-check passes and removes the expired shared servers and the expired
+ * stopped reapers, with the door closed. It removes itself, or keeps its
+ * container when a call hit its request time limit (ADR 0031).
  */
 function script(): string {
   return `
@@ -220,7 +215,6 @@ exec 3>&2
 # would answer a holder before this start checked it (#4508).
 rm -f ${CAME} ${BIND}
 filter="label=${TEST_RUN_LABEL}=$REAPER_RUN"
-hex=$(echo "$REAPER_RUN" | tr -d -)
 tick=0.05
 # Milliseconds since boot. Not %d: BusyBox awk caps it at 2^31 - 1 ms, which
 # an engine host passes after 24.8 days of uptime; the shell's arithmetic is
@@ -294,22 +288,46 @@ quiet() {
 }
 value() { echo "$env" | sed -n "s/^$1=//p" | head -n 1; }
 
+# Drops the database $3 in the server $1 of the kind $2, with the server's own
+# client and the credential of its environment.
 drop_in() {
-  env=$(bounded "docker inspect $1" "$1" docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$1") || return 0
+  database=$3
+  env=$(bounded "docker inspect $1" "$1" docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$1") || return 1
   case $2 in${COLLECTORS.map((collector) => dropBranch(collector)).join('')}
   esac
+}
+
+# Succeeds when the server $1 is gone or stopped. A shared server runs with
+# AutoRemove, so a server that stopped took its databases with it; a paused
+# server still holds them.
+ended() {
+  state=$(once docker ps -a --no-trunc --filter "id=$1" --format '{{.State}}') || return 1
+  case $state in ''|${[...ENDED].join('|')}) return 0 ;; esac
+  return 1
+}
+
+# Drops each database that the run recorded, in its server, and removes the
+# record once the drop succeeded or the server ended. A record whose drop
+# failed stays, for the next reaper of the run (ADR 0032). No pass visits a
+# server that its run did not record.
+records() {
+  listed=$(call docker volume ls --filter "$filter" --filter "label=${DATABASE_LABEL}" --format '{{.Name}} {{.Label "${DATABASE_LABEL}"}} {{.Label "${DATABASE_SERVER_LABEL}"}} {{.Label "${KIND_LABEL}"}}') || return 1
+  echo "$listed" | while read -r record database server kind; do
+    [ -n "$record" ] || continue
+    drop_in "$server" "$kind" "$database" || ended "$server" || continue
+    call docker volume rm "$record" >/dev/null
+  done
 }
 
 pass() {
   listed=$(call docker ps -a --no-trunc --filter "$filter" --format '{{.ID}} {{.Label "${SERVER_LABEL}"}}') || return 1
   ids=$(echo "$listed" | awk 'NF == 1 { print $1 }')
   [ -z "$ids" ] || call docker rm -f -v $ids >/dev/null || return 1
-  volumes=$(call docker volume ls -q --filter "$filter") || return 1
+  records || return 1
+  # The run's other volumes: a record has the name of its database as a label.
+  listed=$(call docker volume ls --filter "$filter" --format '{{.Name}} {{.Label "${DATABASE_LABEL}"}}') || return 1
+  volumes=$(echo "$listed" | awk 'NF == 1 { print $1 }')
   [ -z "$volumes" ] || call docker volume rm -f $volumes >/dev/null || return 1
-  servers=$(once docker ps --no-trunc --filter "label=${SERVER_LABEL}" --filter "label=${KIND_LABEL}" --format '{{.ID}} {{.Label "${KIND_LABEL}"}}') || return 0
-  echo "$servers" | while read -r id kind; do
-    [ -n "$id" ] && drop_in "$id" "$kind"
-  done
   return 0
 }
 

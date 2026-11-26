@@ -11,7 +11,8 @@ import { retryUntilReady } from '../async/retry-until-ready.ts';
 import { readRun } from '../docker/run-records.ts';
 import type { ServiceContainer } from '../docker/service-container.ts';
 import { DockerTestbed, type DockerTestbedOptions } from '../docker/testbed.ts';
-import { KIND_LABEL, databaseName, dropDatabase } from './collector.ts';
+import { KIND_LABEL } from './collector.ts';
+import { createSharedDatabase } from './database-record.ts';
 import type { Database, DatabaseOptions } from './database.ts';
 import { type OwnedPool, OwnedPools } from './owned-pools.ts';
 import {
@@ -248,17 +249,18 @@ export class SqlServer {
   async database(): Promise<SqlServerDatabase> {
     const image = await this.#image();
     const container = await this.#acquire(image, 'reuse');
-    const database = databaseName(this.#runId);
     try {
-      await this.#createDatabase(container, database);
-      return this.#handle(container, image, database, async () => {
+      const database = await createSharedDatabase(
+        this.#docker,
+        this.#runId,
+        sqlserver,
+        container.container,
+        this.#options.password,
+        (name) => this.#createDatabase(container, name),
+      );
+      return this.#handle(container, image, database.name, async () => {
         try {
-          await dropDatabase(
-            sqlserver,
-            container.container,
-            this.#options.password,
-            database,
-          );
+          await database.drop();
         } finally {
           await container.disconnect();
         }

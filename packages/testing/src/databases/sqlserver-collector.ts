@@ -32,7 +32,6 @@ export const sqlserver: Collector = {
     '-Q',
     `SET NOCOUNT ON; ${sql}`,
   ],
-  list: "SELECT name FROM sys.databases WHERE name LIKE 'test%'",
   drop: (name) =>
     `IF DB_ID('${name}') IS NOT NULL BEGIN ALTER DATABASE [${name}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [${name}]; END`,
 };

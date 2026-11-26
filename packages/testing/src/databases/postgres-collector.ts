@@ -14,6 +14,5 @@ export const postgres: Collector = {
     '-c',
     sql,
   ],
-  list: "SELECT datname FROM pg_database WHERE datname LIKE 'test%'",
   drop: (name) => `DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`,
 };

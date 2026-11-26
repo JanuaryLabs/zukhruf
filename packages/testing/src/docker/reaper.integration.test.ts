@@ -6,7 +6,7 @@ import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { type Socket, connect, createServer } from 'node:net';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
-import { type TestContext, describe, test } from 'node:test';
+import { type TestContext, describe } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 import { promisify } from 'node:util';
 
@@ -23,6 +23,9 @@ import { TemporaryFiles } from '@zukhruf/fs';
 
 import { retryUntilReady } from '../async/retry-until-ready.ts';
 import { waitFor } from '../async/wait-for.ts';
+import type { Database } from '../databases/database.ts';
+import { Postgres } from '../databases/postgres.ts';
+import { test } from '../node/index.ts';
 import { engine, proxyless } from '../testing/current-engine.ts';
 import { docker } from '../testing/engine-client.ts';
 import { EngineProxy } from '../testing/engine-proxy.ts';
@@ -42,6 +45,10 @@ import { directoryParent } from './run-records.ts';
 
 const RUN_LABEL = 'dev.zukhruf.testing.run';
 const KIND_LABEL = 'dev.zukhruf.testing.kind';
+/** The label that gives a test shared servers of its own, as database-cleanup.integration.test.ts does. */
+const SCOPE_LABEL = 'dev.zukhruf.testing.verification';
+const DATABASE_LABEL = 'dev.zukhruf.testing.database';
+const DATABASE_SERVER_LABEL = 'dev.zukhruf.testing.database.server';
 
 /** Pulls `image` when the engine of this process does not have it. */
 async function present(image: string): Promise<void> {
@@ -702,6 +709,78 @@ async function heldOn(client: Docker, run: string): Promise<number> {
   return reaper === undefined ? 0 : (await holdersOf(reaper.Id, client)).length;
 }
 
+/** The environment of a process of the run `run` whose records are in `records`, with `environment` over this process's. */
+const runOf = (
+  run: string,
+  records: string,
+  environment: NodeJS.ProcessEnv = {},
+): NodeJS.ProcessEnv => ({
+  ...process.env,
+  ...environment,
+  ZUKHRUF_TESTING_RUN_ID: run,
+  ZUKHRUF_TESTING_RUN_DIR: records,
+});
+
+/** The environment of a process whose engine is `proxy`: a selected context would win over DOCKER_HOST. */
+const proxied = (proxy: EngineProxy): NodeJS.ProcessEnv => ({
+  DOCKER_CONTEXT: undefined,
+  DOCKER_HOST: proxy.host,
+});
+
+/**
+ * A process with `env` that takes a database of `fixture`, exported from
+ * `module`, on the server of `labels`, prints its name and its server as
+ * JSON, then awaits `then` with the database as `handle` and prints `then`,
+ * and lives until it is killed.
+ */
+function taker(
+  env: NodeJS.ProcessEnv,
+  labels: Record<string, string>,
+  then = '',
+  { fixture, module } = {
+    fixture: 'Postgres',
+    module: '../databases/postgres.ts',
+  },
+): Program {
+  return program(
+    `
+      const { ${fixture} } = await import(${JSON.stringify(new URL(module, import.meta.url).href)});
+      const handle = await new ${fixture}({ environment: process.env, labels: ${JSON.stringify(labels)} }).database();
+      console.log(JSON.stringify({ database: handle.database, server: handle.containerId }));
+      ${then === '' ? '' : `await ${then}; console.log('then');`}
+      setInterval(() => {}, 60_000);
+    `,
+    env,
+  );
+}
+
+/** The records of the database `database` on the engine. */
+const recordsOfDatabase = async (database: string): Promise<string[]> =>
+  (
+    await docker.volumes.list({
+      filters: { label: [`${DATABASE_LABEL}=${database}`] },
+    })
+  ).map(({ Name }) => Name);
+
+/** The databases of the run `run` on the Postgres server of `handle`. */
+async function databasesOf(handle: Database, run: string): Promise<string[]> {
+  const server = await docker.containers.find(handle.containerId);
+  assert.ok(server);
+  const { exitCode, stdout, output } = await server.exec({
+    Cmd: [
+      'psql',
+      '-U',
+      handle.user,
+      '-d',
+      'postgres',
+      '-Atc',
+      `SELECT datname FROM pg_database WHERE starts_with(datname, 'test_${run.replaceAll('-', '')}_')`,
+    ],
+  });
+  assert.equal(exitCode, 0, output);
+  return stdout.split('\n').filter((name) => name !== '');
+}
+
 // Each test scopes its objects by its own run id, so these run four at a time.
 describe('the reaper of a run', { concurrency: 4 }, () => {
   test('one reaper of a run keeps the run’s objects while one of its holders lives, and removes them, with their anonymous volumes, after the last one ended', async (t) => {
@@ -849,9 +928,8 @@ describe('the reaper of a run', { concurrency: 4 }, () => {
     const run = randomUUID();
     await present('alpine:latest');
     const database = `test_${run.replaceAll('-', '')}_0123456789abcdef`;
-    // A list that does not answer within one request time limit counts as
-    // done (ADR 0020, item 8), so a tighter limit than the shipped one races
-    // the list under load, not the drop.
+    // The shipped request time limit: a tighter one races the other calls of
+    // the pass under load, not the drop.
     const settings = {
       ...quick,
       grace: 100,
@@ -862,9 +940,9 @@ describe('the reaper of a run', { concurrency: 4 }, () => {
     await using cleanup = new AsyncDisposableStack();
     cleanup.defer(() => removeRun(run, others));
 
-    // A shared Postgres server whose psql lists the run's database and never
-    // ends a drop. The database is a file that the drop would remove. A drop
-    // writes its command to /dropped first.
+    // A shared Postgres server whose psql never ends a drop. The database is
+    // a file that the drop would remove. A drop writes its command to
+    // /dropped first.
     const fake = await docker.containers.create({
       Image: 'alpine:latest',
       Entrypoint: [
@@ -880,14 +958,25 @@ exec sleep 3600`,
     });
     others.push(fake.id);
     await fake.start();
+    // The database record of the fake server, as database() writes it for a
+    // real one: no fixture makes a server whose drop never answers (ADR 0032).
+    await docker.volumes.create({
+      Name: `zukhruf-testing-database-${database}`,
+      Labels: {
+        [RUN_LABEL]: run,
+        [DATABASE_LABEL]: database,
+        [DATABASE_SERVER_LABEL]: fake.id,
+        [KIND_LABEL]: 'postgres',
+      },
+    });
     const child = await holder(run, settings);
     cleanup.defer(() => killed(child));
     const owned = await object(run);
 
     await killed(child);
 
-    // Within the grace, one list, one drop that times out, and the expiry
-    // pass. The drop hit its limit, so the reaper keeps its container (ADR 0031).
+    // Within the grace, one drop that times out, and the expiry pass. The
+    // drop hit its limit, so the reaper keeps its container (ADR 0031).
     const kept = await waitFor(
       async () => {
         const [stopped] = await docker.containers.list({
@@ -911,77 +1000,7 @@ exec sleep 3600`,
         `level=WARN msg="request time limit" call="docker exec ${fake.id} drop ${database}" server=${fake.id} limit=${settings.requestTimeout} run=${run}`,
       ],
     );
-  });
-
-  test('a reaper whose list of the databases of a shared server hits its request time limit keeps those databases, keeps its stopped container with one line for each list, and a hold that comes while it closes holds the next reaper of the run', async (t) => {
-    const run = randomUUID();
-    await present('alpine:latest');
-    const database = `test_${run.replaceAll('-', '')}_0123456789abcdef`;
-    // The list answers after 2 s, so the limit of 1 s ends it in each pass.
-    // The re-check passes keep the reaper closing for about 9 s.
-    const settings = {
-      ...quick,
-      grace: 100,
-      interval: 2_000,
-      passes: 3,
-      requestTimeout: 1_000,
-    };
-    const holders: ChildProcess[] = [];
-    const others: string[] = [];
-    await using cleanup = new AsyncDisposableStack();
-    cleanup.defer(async () => {
-      for (const child of holders) await killed(child);
-      await removeRun(run, others);
-    });
-
-    // A shared Postgres server whose psql answers a list of the run's
-    // database after 2 s. A drop writes its command to /dropped and removes
-    // the database, a file.
-    const fake = await docker.containers.create({
-      Image: 'alpine:latest',
-      Entrypoint: [
-        'sh',
-        '-c',
-        `mkdir -p /databases && touch /databases/${database}
-printf '%s\\n' '#!/bin/sh' 'case "$*" in *DROP*) echo "$*" > /dropped; rm -f /databases/*;; *) sleep 2; ls /databases;; esac' > /usr/local/bin/psql
-chmod +x /usr/local/bin/psql
-exec sleep 3600`,
-      ],
-      Cmd: [],
-      Labels: { [SERVER_LABEL]: randomUUID(), [KIND_LABEL]: 'postgres' },
-    });
-    others.push(fake.id);
-    await fake.start();
-    holders.push(await holder(run, settings));
-    const owned = await object(run);
-    const [closing] = await reapers(run);
-    assert.ok(closing);
-    await killed(holders[0]!);
-    // The first pass removed the run's container: the reaper is closing.
-    await gone(t, async () => assert.equal(await exists(owned), false));
-
-    // A limit of 3 s: the reaper of this hold lists the server in time.
-    holders.push(await holder(run, quick));
-    // A fixed window, longer than the first wait of a restart policy of
-    // Docker (100 ms): a reaper that the engine starts again runs after it.
-    await delay(3_000);
-    const kept = await docker.containers.inspect(closing);
-    const { stderr } = await (await docker.containers.find(closing))!.logs();
-    const [next] = (await reapers(run)).filter((id) => id !== closing);
-    const { stdout } = await fake.exec({ Cmd: ['ls', '/databases'] });
-
-    assert.equal(kept?.State?.Status, 'exited');
-    assert.deepEqual(
-      stderr.split('\n').filter((line) => line.includes(`server=${fake.id}`)),
-      Array.from(
-        { length: settings.passes + 1 },
-        () =>
-          `level=WARN msg="request time limit" call="docker exec ${fake.id} list" server=${fake.id} limit=${settings.requestTimeout} run=${run}`,
-      ),
-    );
-    assert.ok(next, 'the hold is on the next reaper of the run');
-    assert.equal((await holdersOf(next)).length, 1);
-    assert.equal(stdout.trim(), database);
+    assert.equal((await recordsOfDatabase(database)).length, 1);
   });
 
   test('a reaper that no holder holds removes the run’s objects after its wait for a first holder, and exits', async (t) => {
@@ -1698,8 +1717,8 @@ exec sleep 3600`,
     cleanup.defer(() => removeRun(run, others));
 
     await present('alpine:latest');
-    // A shared Postgres server whose psql lists the run's database, and
-    // writes the command of a drop to /dropped and never ends it.
+    // A shared Postgres server whose psql writes the command of a drop to
+    // /dropped and never ends it.
     const fake = await docker.containers.create({
       Image: 'alpine:latest',
       Entrypoint: [
@@ -1715,6 +1734,17 @@ exec sleep 3600`,
     });
     others.push(fake.id);
     await fake.start();
+    // The database record of the fake server, as database() writes it for a
+    // real one: no fixture makes a server whose drop never ends (ADR 0032).
+    await docker.volumes.create({
+      Name: `zukhruf-testing-database-${database}`,
+      Labels: {
+        [RUN_LABEL]: run,
+        [DATABASE_LABEL]: database,
+        [DATABASE_SERVER_LABEL]: fake.id,
+        [KIND_LABEL]: 'postgres',
+      },
+    });
     const since = Math.floor(Date.now() / 1000) - 1;
     const child = await holder(run, settings);
     cleanup.defer(() => killed(child));
@@ -1926,6 +1956,310 @@ exec sleep 3600`,
         assert.equal(await onEngineHost(path), false, path);
     });
   });
+
+  test(
+    'a process killed while database() writes the record of its database leaves no database of its run on the server',
+    { skip: proxyless },
+    async (t) => {
+      const run = randomUUID();
+      const scope = { [SCOPE_LABEL]: randomUUID() };
+      await using directory = await new TemporaryFiles().directory(
+        'zukhruf-testing-reaper-',
+      );
+      const records = await recordsOf(directory.path);
+      await using stack = new AsyncDisposableStack();
+      const others: string[] = [];
+      await using cleanup = new AsyncDisposableStack();
+      cleanup.defer(() => removeRun(run, others));
+      // The server of the test, through a database of this process's run.
+      await using own = await new Postgres({
+        environment: process.env,
+        labels: scope,
+      }).database();
+      others.push(own.containerId);
+      const proxy = stack.use(await EngineProxy.start(engine));
+      // The create of the record waits until the process that asked for it
+      // is gone, and then never reaches the engine.
+      const recording = Promise.withResolvers<'recording'>();
+      proxy.intercept('POST', '/volumes/create', async ({ body }, left) => {
+        const { Labels = {} }: { Labels?: Record<string, string> } =
+          JSON.parse(body);
+        if (!(DATABASE_LABEL in Labels)) return;
+        recording.resolve('recording');
+        if (!left.aborted) await once(left, 'abort');
+        throw new Error('The process that asked for the record is gone.');
+      });
+      const first = await holder(run, quick);
+      cleanup.defer(() => killed(first));
+
+      const worker = taker(runOf(run, records, proxied(proxy)), scope);
+      cleanup.defer(() => killed(worker.child));
+      const created = worker.line();
+      created.catch(() => {});
+      assert.equal(
+        await within(
+          Promise.race([recording.promise, created]),
+          t.signal,
+          'the record or the database',
+        ),
+        'recording',
+        'the database exists only after its record',
+      );
+      await killed(worker.child);
+
+      assert.deepEqual(await databasesOf(own, run), []);
+    },
+  );
+
+  test(
+    'a reaper drops the database that its run recorded and makes no exec in any other shared server',
+    { skip: proxyless },
+    async (t) => {
+      const run = randomUUID();
+      const scope = { [SCOPE_LABEL]: randomUUID() };
+      await present('alpine:latest');
+      await using directory = await new TemporaryFiles().directory(
+        'zukhruf-testing-reaper-',
+      );
+      const records = await recordsOf(directory.path);
+      await using stack = new AsyncDisposableStack();
+      const others: string[] = [];
+      await using cleanup = new AsyncDisposableStack();
+      cleanup.defer(() => removeRun(run, others));
+      await using own = await new Postgres({
+        environment: process.env,
+        labels: scope,
+      }).database();
+      others.push(own.containerId);
+      // A shared MySQL server of another process, which the run never used.
+      const starting = await docker.containers.create({
+        Image: 'alpine:latest',
+        Cmd: ['sleep', '3600'],
+        Labels: {
+          [SERVER_LABEL]: randomUUID(),
+          [KIND_LABEL]: 'mysql',
+          ...scope,
+        },
+        Env: ['MYSQL_ROOT_PASSWORD=testpassword'],
+      });
+      others.push(starting.id);
+      await starting.start();
+      const proxy = stack.use(await EngineProxy.start(engine));
+      // The reaper's first list is the check of its socket (ADR 0020, item
+      // 14). It waits for no first holder, so the worker's hold comes first.
+      const check = proxy.hold('GET', '/containers/json', 1);
+      stack.defer(() => check.release());
+      const since = Math.floor(Date.now() / 1000) - 1;
+      const { id: reaper, finished } = await proxiedReaper(
+        stack,
+        proxy,
+        run,
+        quick,
+      );
+      await within(check.reached, t.signal, 'the check of the socket');
+      const watch = new AbortController();
+      const holding = execEvent(reaper, since, 'exec_start', watch.signal);
+      holding.catch(() => {});
+      const worker = taker(runOf(run, records), scope);
+      cleanup.defer(() => killed(worker.child));
+      await within(holding, t.signal, 'the hold of the worker');
+      watch.abort();
+      check.release();
+      const { database } = JSON.parse(
+        await within(worker.line(), t.signal, 'the database of the worker'),
+      );
+
+      await killed(worker.child);
+
+      assert.equal(
+        await within(finished, t.signal, 'the end of the reaper'),
+        'removed',
+      );
+      assert.deepEqual(await databasesOf(own, run), []);
+      const servers = proxy.requests.flatMap(({ method, path }) => {
+        const exec = /^\/containers\/([^/]+)\/exec$/.exec(path);
+        return method === 'POST' && exec !== null ? [exec[1]] : [];
+      });
+      assert.ok(
+        servers.length > 0,
+        `the reaper dropped ${database} through the proxy`,
+      );
+      assert.deepEqual(new Set(servers), new Set([own.containerId]));
+    },
+  );
+
+  test('a reaper keeps the record of a database whose drop fails, and the next reaper of its run drops that database', async (t) => {
+    const run = randomUUID();
+    const scope = { [SCOPE_LABEL]: randomUUID() };
+    await using directory = await new TemporaryFiles().directory(
+      'zukhruf-testing-reaper-',
+    );
+    const records = await recordsOf(directory.path);
+    const others: string[] = [];
+    await using cleanup = new AsyncDisposableStack();
+    cleanup.defer(() => removeRun(run, others));
+    await using own = await new Postgres({
+      environment: process.env,
+      labels: scope,
+    }).database();
+    others.push(own.containerId);
+    const first = await holder(run, quick);
+    cleanup.defer(() => killed(first));
+    const worker = taker(runOf(run, records), scope);
+    cleanup.defer(() => killed(worker.child));
+    const { database } = JSON.parse(
+      await within(worker.line(), t.signal, 'the database of the worker'),
+    );
+    await killed(worker.child);
+    const server = await docker.containers.find(own.containerId);
+    assert.ok(server);
+
+    // A paused server refuses each exec, so the drop fails.
+    await server.pause();
+    try {
+      await killed(first);
+      await reaperRemoved(t, run, async () => {});
+    } finally {
+      await server.unpause();
+    }
+
+    assert.equal((await recordsOfDatabase(database)).length, 1);
+    assert.deepEqual(await databasesOf(own, run), [database]);
+    const next = await holder(run, quick);
+    cleanup.defer(() => killed(next));
+    await killed(next);
+    await reaperRemoved(t, run, async () =>
+      assert.deepEqual(await databasesOf(own, run), []),
+    );
+    assert.deepEqual(await recordsOfDatabase(database), []);
+  });
+
+  test('a reaper removes the record of a database whose server is gone', async (t) => {
+    const run = randomUUID();
+    const scope = { [SCOPE_LABEL]: randomUUID() };
+    await using directory = await new TemporaryFiles().directory(
+      'zukhruf-testing-reaper-',
+    );
+    const records = await recordsOf(directory.path);
+    const others: string[] = [];
+    await using cleanup = new AsyncDisposableStack();
+    cleanup.defer(() => removeRun(run, others));
+    const first = await holder(run, quick);
+    cleanup.defer(() => killed(first));
+    const worker = taker(runOf(run, records), scope);
+    cleanup.defer(() => killed(worker.child));
+    const { database, server } = JSON.parse(
+      await within(worker.line(), t.signal, 'the database of the worker'),
+    );
+    others.push(server);
+    assert.equal((await recordsOfDatabase(database)).length, 1);
+    await killed(worker.child);
+
+    await (
+      await docker.containers.find(server)
+    )?.remove({
+      force: true,
+      v: true,
+    });
+    await killed(first);
+
+    await reaperRemoved(t, run, async () => {});
+    assert.deepEqual(await recordsOfDatabase(database), []);
+  });
+
+  // Each kind drops with its own client and SQL.
+  void test.each(
+    [
+      {
+        name: 'postgres',
+        fixture: 'Postgres',
+        module: '../databases/postgres.ts',
+      },
+      { name: 'mysql', fixture: 'Mysql', module: '../databases/mysql.ts' },
+      {
+        name: 'mariadb',
+        fixture: 'Mariadb',
+        module: '../databases/mariadb.ts',
+      },
+      {
+        name: 'sqlserver',
+        fixture: 'SqlServer',
+        module: '../databases/sqlserver.ts',
+      },
+    ],
+    (fixture) =>
+      test(
+        `a reaper removes the record of a database that its process dropped and was killed before it removed the record (${fixture.name})`,
+        { skip: proxyless },
+        async (t) => {
+          const run = randomUUID();
+          const scope = { [SCOPE_LABEL]: randomUUID() };
+          await using directory = await new TemporaryFiles().directory(
+            'zukhruf-testing-reaper-',
+          );
+          const records = await recordsOf(directory.path);
+          await using stack = new AsyncDisposableStack();
+          const others: string[] = [];
+          await using cleanup = new AsyncDisposableStack();
+          cleanup.defer(() => removeRun(run, others));
+          const proxy = stack.use(await EngineProxy.start(engine));
+          // The removal of the record waits until its process is gone, and
+          // then never reaches the engine.
+          const removing = Promise.withResolvers<'removing'>();
+          proxy.intercept('DELETE', /^\/volumes\//, async (_request, left) => {
+            removing.resolve('removing');
+            if (!left.aborted) await once(left, 'abort');
+            throw new Error('The process that removes the record is gone.');
+          });
+          const first = await holder(run, quick);
+          cleanup.defer(() => killed(first));
+          const worker = taker(
+            runOf(run, records, proxied(proxy)),
+            scope,
+            'handle[Symbol.asyncDispose]()',
+            fixture,
+          );
+          cleanup.defer(() => killed(worker.child));
+          const { database, server } = JSON.parse(
+            await within(worker.line(), t.signal, 'the database of the worker'),
+          );
+          others.push(server);
+          const disposed = worker.line();
+          disposed.catch(() => {});
+          assert.equal(
+            await within(
+              Promise.race([removing.promise, disposed]),
+              t.signal,
+              'the removal of the record',
+            ),
+            'removing',
+            'the disposal removes the record',
+          );
+          await killed(worker.child);
+          assert.equal((await recordsOfDatabase(database)).length, 1);
+          const removal = proxy.requests.findIndex(
+            ({ method, path }) =>
+              method === 'DELETE' && path.startsWith('/volumes/'),
+          );
+          assert.ok(
+            proxy.requests
+              .slice(0, removal)
+              .some(
+                ({ method, path, body }) =>
+                  method === 'POST' &&
+                  path === `/containers/${server}/exec` &&
+                  body.includes('DROP DATABASE'),
+              ),
+            `the disposal dropped ${database} before it removed the record`,
+          );
+
+          await killed(first);
+
+          await reaperRemoved(t, run, async () => {});
+          assert.deepEqual(await recordsOfDatabase(database), []);
+        },
+      ),
+  );
 });
 
 // Each test starts a privileged docker:dind engine of its own; two at a time bound the load on the engine host.
