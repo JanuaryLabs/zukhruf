@@ -431,8 +431,8 @@ describe('ModelMeta.loadModel', () => {
 });
 
 describe('serializeExperimentKwargsToName', () => {
-  test('gives the names that MTEB gives', () => {
-    const cases: [Record<string, unknown>, string, string][] = [
+  void test.each(
+    [
       [{ param1: 'value1' }, 'param1_value1', 'param1=value1'],
       [{ b: 1, a: 'x' }, 'a_x__b_1', 'a=x, b=1'],
       [
@@ -453,13 +453,13 @@ describe('serializeExperimentKwargsToName', () => {
         'exp_a759c9007353bdc8',
       ],
       [{ unicode: 'café' }, 'unicode_café', 'unicode=café'],
-    ];
-
-    for (const [kwargs, name, label] of cases) {
-      assert.equal(serializeExperimentKwargsToName(kwargs), name);
-      assert.equal(serializeExperimentKwargsToName(kwargs, '=', ', '), label);
-    }
-  });
+    ] satisfies [Record<string, unknown>, string, string][],
+    ([kwargs, name, label]) =>
+      test(`gives the names that MTEB gives: ${name} and ${label}`, () => {
+        assert.equal(serializeExperimentKwargsToName(kwargs), name);
+        assert.equal(serializeExperimentKwargsToName(kwargs, '=', ', '), label);
+      }),
+  );
 
   test('writes floats as Python writes them and sorts keys by code point', () => {
     assert.equal(

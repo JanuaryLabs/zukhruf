@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { test } from 'node:test';
 import { promisify } from 'node:util';
+
+import { test } from '@zukhruf/parameterized-test';
 
 import { notInstalled } from './preload/index.ts';
 
@@ -29,8 +30,8 @@ const drivers: [string, ...string[]] = [
   'msw',
 ];
 
-test('every area without a driver imports when no driver is installed', async () => {
-  for (const area of [
+void test.each(
+  [
     'async',
     'process',
     'docker',
@@ -39,13 +40,15 @@ test('every area without a driver imports when no driver is installed', async ()
     'http',
     'streams',
     'preload',
-  ]) {
-    await importArea(area, drivers);
-  }
-});
+  ],
+  (area) =>
+    test(`the ${area} area, which has no driver, imports when no driver is installed`, async () => {
+      await importArea(area, drivers);
+    }),
+);
 
-test('an area with a driver needs only its own driver', async () => {
-  for (const [area, driver] of [
+void test.each(
+  [
     ['sqlserver', 'mssql'],
     ['postgres', 'pg'],
     ['mysql', 'mysql2'],
@@ -53,16 +56,21 @@ test('an area with a driver needs only its own driver', async () => {
     ['duckdb', '@duckdb/node-api'],
     ['bigquery', '@google-cloud/bigquery'],
     ['msw', 'msw'],
-  ] as const) {
-    const [other, ...others] = drivers.filter((name) => name !== driver);
-    assert.ok(other !== undefined);
-    await importArea(area, [other, ...others]);
-    await assert.rejects(
-      importArea(area, [driver]),
-      (error: unknown) =>
-        Error.isError(error) &&
-        'stderr' in error &&
-        String(error.stderr).includes(`Cannot find package '${driver}'`),
-    );
-  }
-});
+  ] as const,
+  ([area, driver]) =>
+    test(`the ${area} area needs only its own driver, ${driver}`, async () => {
+      // Arrange
+      const [other, ...others] = drivers.filter((name) => name !== driver);
+      assert.ok(other !== undefined);
+
+      // Act and Assert
+      await importArea(area, [other, ...others]);
+      await assert.rejects(
+        importArea(area, [driver]),
+        (error: unknown) =>
+          Error.isError(error) &&
+          'stderr' in error &&
+          String(error.stderr).includes(`Cannot find package '${driver}'`),
+      );
+    }),
+);

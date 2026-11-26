@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { test } from 'node:test';
 import { promisify } from 'node:util';
+
+import { test } from '@zukhruf/parameterized-test';
 
 /**
  * A consumer imports the package by its name, so these tests do too: a child
@@ -22,8 +23,8 @@ const exportsOf = (path: string) =>
     `console.log(JSON.stringify(Object.keys(await import(${JSON.stringify(path)})).sort()));`,
   );
 
-test('each lock-store family has its own import path with its stores and the errors they throw', async () => {
-  for (const [family, names] of [
+void test.each(
+  [
     ['memory', ['MemoryStore']],
     [
       'thread',
@@ -69,14 +70,16 @@ test('each lock-store family has its own import path with its stores and the err
         'SocketStore',
       ],
     ],
-  ] as const) {
-    assert.deepEqual(
-      await exportsOf(`@zukhruf/mutex/${family}`),
-      names,
-      `@zukhruf/mutex/${family}`,
-    );
-  }
-});
+  ] as const,
+  ([family, names]) =>
+    test(`the ${family} lock-store family has its own import path with its stores and the errors they throw`, async () => {
+      assert.deepEqual(
+        await exportsOf(`@zukhruf/mutex/${family}`),
+        names,
+        `@zukhruf/mutex/${family}`,
+      );
+    }),
+);
 
 test('the root import path has only the core and no lock store', async () => {
   assert.deepEqual(await exportsOf('@zukhruf/mutex'), [
@@ -112,8 +115,8 @@ test('an error that several families throw is one class on every path, so instan
   );
 });
 
-test('the remote and session internals have no import path', async () => {
-  for (const internal of ['remote', 'session']) {
+void test.each(['remote', 'session'], (internal) =>
+  test(`the ${internal} internals have no import path`, async () => {
     await assert.rejects(
       exportsOf(`@zukhruf/mutex/${internal}`),
       (error: unknown) => {
@@ -123,5 +126,5 @@ test('the remote and session internals have no import path', async () => {
       },
       `@zukhruf/mutex/${internal}`,
     );
-  }
-});
+  }),
+);

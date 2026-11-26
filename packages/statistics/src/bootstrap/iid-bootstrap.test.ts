@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+
+import { test } from '@zukhruf/parameterized-test';
 
 import { ConfidenceInterval, IidBootstrap } from '../index.ts';
 
@@ -39,8 +40,8 @@ test('IidBootstrap draws one random index from 0 to n - 1 for each item, resampl
   assert.deepEqual(distribution, [10, 20]);
 });
 
-test('IidBootstrap refuses a random index out of 0 to n - 1, and data with no items', () => {
-  for (const index of [3, -1, 1.5, 0.5, Number.NaN]) {
+void test.each([3, -1, 1.5, 0.5, Number.NaN], (index) =>
+  test(`IidBootstrap refuses the random index ${index}, which is out of 0 to n - 1`, () => {
     const bootstrap = new IidBootstrap({
       nResamples: 1,
       randomIndex: () => index,
@@ -49,15 +50,18 @@ test('IidBootstrap refuses a random index out of 0 to n - 1, and data with no it
       name: 'RangeError',
       message: /^A random index is from 0 to 2/,
     });
-  }
-  for (const nResamples of [0, 1]) {
+  }),
+);
+
+void test.each([0, 1], (nResamples) =>
+  test(`IidBootstrap with ${nResamples} resamples refuses data with no items`, () => {
     const bootstrap = new IidBootstrap({ nResamples, randomIndex: () => 0 });
     assert.throws(() => bootstrap.distribution([], () => 0), {
       name: 'RangeError',
       message: /^A bootstrap needs at least one item/,
     });
-  }
-});
+  }),
+);
 
 test('IidBootstrap.interval gives its method the statistic of every resample, in order, and returns the interval of that method', () => {
   const generator = scripted([0, 0, 1, 1, 0, 1, 1, 0]);

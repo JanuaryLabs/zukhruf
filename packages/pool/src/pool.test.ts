@@ -115,12 +115,17 @@ test('gradient keeps one more worker while a job takes at most half again the ti
   assert.deepEqual([sizing.current, sizing.kept], [3, 3]);
 });
 
-test('an idle timeout throws a RangeError for a time that a timer cannot keep', () => {
-  for (const after of [0, Infinity, 2 ** 31])
+void test.each([0, Infinity, 2 ** 31], (after) =>
+  test(`an idle timeout throws a RangeError for ${after} ms, a time that a timer cannot keep`, () => {
     assert.throws(() => new IdleTimeout({ after }), RangeError, String(after));
-  for (const after of [1, 2_147_483_647])
+  }),
+);
+
+void test.each([1, 2_147_483_647], (after) =>
+  test(`an idle timeout takes ${after} ms, a time that a timer can keep`, () => {
     assert.doesNotThrow(() => new IdleTimeout({ after }), String(after));
-});
+  }),
+);
 
 test('an idle timeout evicts no worker and keeps no timer when its signal aborted before the call', async () => {
   // Arrange

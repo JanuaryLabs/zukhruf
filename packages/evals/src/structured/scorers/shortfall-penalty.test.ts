@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+
+import { test } from '@zukhruf/parameterized-test';
 
 import {
   F1,
@@ -10,21 +11,24 @@ import {
 } from '../../index.ts';
 import { ConfigCase, ParseSuccess, PathMatches, TreeWalk } from '../index.ts';
 
-test('ShortfallPenalty throws a RangeError for a target or a power that is 0, below 0 or NaN', () => {
-  const keys = new SampleAveraged(new F1(new PathMatches()), { whenEmpty: 0 });
-
-  const settings = [
+void test.each(
+  [
     { target: 0, power: 2 },
     { target: -0.9, power: 2 },
     { target: Number.NaN, power: 2 },
     { target: 0.9, power: 0 },
     { target: 0.9, power: -2 },
     { target: 0.9, power: Number.NaN },
-  ];
+  ],
+  (setting) =>
+    test(`ShortfallPenalty throws a RangeError for a target or a power that is 0, below 0 or NaN: target ${setting.target}, power ${setting.power}`, () => {
+      const keys = new SampleAveraged(new F1(new PathMatches()), {
+        whenEmpty: 0,
+      });
 
-  for (const setting of settings)
-    assert.throws(() => new ShortfallPenalty(keys, setting), RangeError);
-});
+      assert.throws(() => new ShortfallPenalty(keys, setting), RangeError);
+    }),
+);
 
 test('ShortfallPenalty gives min(1, (value / target) ** power) with the bits of compute_coverage_gate of evaluate.py for image: 1 at the target and above it, 0 at 0, and the fraction to the power below it', () => {
   const keys = new SampleAveraged(

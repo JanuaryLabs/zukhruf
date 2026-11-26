@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
-import { describe, test } from 'node:test';
+import { describe } from 'node:test';
+
+import { test } from '@zukhruf/parameterized-test';
 
 import { Scores, UtilityThreshold } from './index.ts';
 
@@ -43,18 +45,21 @@ describe('UtilityThreshold', () => {
     );
   });
 
-  test('costs that give no threshold are a RangeError: a negative cost, two costs of 0, or a cost that is not a finite number', () => {
-    for (const costs of [
+  void test.each(
+    [
       { falseAlarm: -1, miss: 2 },
       { falseAlarm: 1, miss: -0.5 },
       { falseAlarm: 0, miss: 0 },
       { falseAlarm: Number.NaN, miss: 1 },
       { falseAlarm: 1, miss: Infinity },
-    ])
-      assert.throws(
-        () => new UtilityThreshold(costs),
-        RangeError,
-        JSON.stringify(costs),
-      );
-  });
+    ],
+    (costs) =>
+      test(`costs that give no threshold are a RangeError: a negative cost, two costs of 0, or a cost that is not a finite number (falseAlarm ${costs.falseAlarm}, miss ${costs.miss})`, () => {
+        assert.throws(
+          () => new UtilityThreshold(costs),
+          RangeError,
+          JSON.stringify(costs),
+        );
+      }),
+  );
 });

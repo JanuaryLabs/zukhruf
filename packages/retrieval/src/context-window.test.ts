@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import type { DatabaseSync } from 'node:sqlite';
-import { test } from 'node:test';
 
+import { test } from '@zukhruf/parameterized-test';
 import { open } from '@zukhruf/sqlite-open';
 
 import { ContextWindow, PassageGapError, type PassageStore } from './index.ts';
@@ -262,23 +262,23 @@ test('a passage that the store has no window for stays as it is', async () => {
   assert.deepEqual(results, [web]);
 });
 
-test('a windowSize that is not a positive integer is refused, as Haystack refuses a window_size below 1', () => {
-  // Arrange
-  using database = passages();
-  const store = new SqlitePassageStore({
-    database,
-    passages: 'docs_passages',
-    metadata: (columns) => columns,
-  });
+void test.each([0, 1.5], (windowSize) =>
+  test(`a windowSize of ${windowSize}, which is not a positive integer, is refused, as Haystack refuses a window_size below 1`, () => {
+    // Arrange
+    using database = passages();
+    const store = new SqlitePassageStore({
+      database,
+      passages: 'docs_passages',
+      metadata: (columns) => columns,
+    });
 
-  // Act and Assert
-  for (const windowSize of [0, 1.5]) {
+    // Act and Assert
     assert.throws(() => new ContextWindow({ store, windowSize }), {
       name: 'RangeError',
       message: `The windowSize is a positive integer, not ${windowSize}`,
     });
-  }
-});
+  }),
+);
 
 test('an aborted call rejects with the reason of its signal', async () => {
   // Arrange

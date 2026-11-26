@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import type { DatabaseSync } from 'node:sqlite';
-import { test } from 'node:test';
 
 import * as sqliteVec from 'sqlite-vec';
 
+import { test } from '@zukhruf/parameterized-test';
 import { open } from '@zukhruf/sqlite-open';
 
 import {
@@ -233,75 +233,143 @@ test('install refuses a database that loaded sqlite-vec', () => {
   assert.throws(() => install(database), SqliteVecLoadedError);
 });
 
-test('after install, plain SQLite gives the results of sqlite-vec, to float32 precision', () => {
-  // Arrange
-  using plain = withInstall();
-  using extension = withSqliteVec();
-  const f32 = (values: number[]) => toSql(Vector.from(values));
-  const cases: [string, (Uint8Array | string)[]][] = [
-    ['vec_distance_cosine(?, ?)', [f32([1, 2, 3]), f32([1, 2, 4])]],
-    ['vec_distance_cosine(?, ?)', [f32([1, 0]), f32([0, 1])]],
-    ['vec_distance_cosine(?, ?)', [f32([0, 0]), f32([1, 2])]],
-    ['vec_distance_cosine(?, ?)', [f32([0, 0]), f32([0, 0])]],
+// A parameter of a case: numbers are the bytes of a float32 vector, a string
+// is the JSON text of a vector, and { bytes } is that many zero bytes.
+type Parameter = number[] | string | { bytes: number };
+
+function bind(parameters: Parameter[]): (Uint8Array | string)[] {
+  return parameters.map((parameter) =>
+    typeof parameter === 'string'
+      ? parameter
+      : Array.isArray(parameter)
+        ? toSql(Vector.from(parameter))
+        : new Uint8Array(parameter.bytes),
+  );
+}
+
+void test.each(
+  [
+    [
+      'vec_distance_cosine(?, ?)',
+      [
+        [1, 2, 3],
+        [1, 2, 4],
+      ],
+    ],
+    [
+      'vec_distance_cosine(?, ?)',
+      [
+        [1, 0],
+        [0, 1],
+      ],
+    ],
+    [
+      'vec_distance_cosine(?, ?)',
+      [
+        [0, 0],
+        [1, 2],
+      ],
+    ],
+    [
+      'vec_distance_cosine(?, ?)',
+      [
+        [0, 0],
+        [0, 0],
+      ],
+    ],
     ['vec_distance_cosine(?, ?)', ['[1,2,3]', '[1,2,4]']],
-    ['vec_distance_cosine(?, ?)', ['[0.5,-1]', f32([2, 3])]],
-    ['vec_distance_L2(?, ?)', [f32([0, 0]), f32([3, 4])]],
-    ['vec_distance_L2(?, ?)', [f32([0, 0]), f32([0, 0])]],
-    ['vec_distance_L2(?, ?)', [f32([1.5, -2, 9]), f32([0.25, 7, -3])]],
+    ['vec_distance_cosine(?, ?)', ['[0.5,-1]', [2, 3]]],
+    [
+      'vec_distance_L2(?, ?)',
+      [
+        [0, 0],
+        [3, 4],
+      ],
+    ],
+    [
+      'vec_distance_L2(?, ?)',
+      [
+        [0, 0],
+        [0, 0],
+      ],
+    ],
+    [
+      'vec_distance_L2(?, ?)',
+      [
+        [1.5, -2, 9],
+        [0.25, 7, -3],
+      ],
+    ],
     ['vec_distance_L2(?, ?)', ['[1,2]', '[4,6]']],
-  ];
+  ] satisfies [string, Parameter[]][],
+  ([sql, parameters]) =>
+    test(`after install, plain SQLite gives the result of sqlite-vec, to float32 precision, for ${sql} with ${JSON.stringify(parameters)}`, () => {
+      // Arrange
+      using plain = withInstall();
+      using extension = withSqliteVec();
 
-  for (const [sql, parameters] of cases) {
-    // Act
-    const ours = outcome(plain, sql, parameters);
-    const theirs = outcome(extension, sql, parameters);
+      // Act
+      const ours = outcome(plain, sql, bind(parameters));
+      const theirs = outcome(extension, sql, bind(parameters));
 
-    // Assert
-    if (
-      'value' in theirs &&
-      typeof theirs.value === 'number' &&
-      'value' in ours &&
-      typeof ours.value === 'number'
-    ) {
-      assert.ok(
-        Math.abs(ours.value - theirs.value) <=
-          1e-6 * Math.max(1, Math.abs(theirs.value)),
-        `${sql} ${ours.value} ${theirs.value}`,
-      );
-    } else {
+      // Assert
+      if (
+        'value' in theirs &&
+        typeof theirs.value === 'number' &&
+        'value' in ours &&
+        typeof ours.value === 'number'
+      ) {
+        assert.ok(
+          Math.abs(ours.value - theirs.value) <=
+            1e-6 * Math.max(1, Math.abs(theirs.value)),
+          `${sql} ${ours.value} ${theirs.value}`,
+        );
+      } else {
+        assert.deepEqual(ours, theirs, sql);
+      }
+    }),
+);
+
+void test.each(
+  [
+    [
+      'vec_distance_cosine(?, ?)',
+      [
+        [1, 2],
+        [1, 2, 3],
+      ],
+    ],
+    [
+      'vec_distance_L2(?, ?)',
+      [
+        [1, 2],
+        [1, 2, 3],
+      ],
+    ],
+    ['vec_distance_cosine(?, ?)', [{ bytes: 3 }, [1]]],
+    ['vec_distance_cosine(?, ?)', [[1], { bytes: 3 }]],
+    ['vec_distance_L2(?, ?)', [{ bytes: 0 }, [1]]],
+    ['vec_distance_cosine(?, ?)', ['[]', [1]]],
+    ['vec_distance_cosine(NULL, ?)', [[1]]],
+    ['vec_distance_cosine(?, NULL)', [[1]]],
+    ['vec_distance_L2(7, ?)', [[1]]],
+    ['vec_distance_L2(?, 1.5)', [[1]]],
+  ] satisfies [string, Parameter[]][],
+  ([sql, parameters]) =>
+    test(`after install, plain SQLite raises the error text of sqlite-vec for ${sql} with ${JSON.stringify(parameters)}`, () => {
+      // Arrange
+      using plain = withInstall();
+      using extension = withSqliteVec();
+
+      // Act
+      const ours = outcome(plain, sql, bind(parameters));
+      const theirs = outcome(extension, sql, bind(parameters));
+
+      // Assert
+      assert.ok('error' in theirs, `sqlite-vec accepted ${sql}`);
       assert.deepEqual(ours, theirs, sql);
-    }
-  }
-});
-
-test('after install, plain SQLite raises the error texts of sqlite-vec', () => {
-  // Arrange
-  using plain = withInstall();
-  using extension = withSqliteVec();
-  const f32 = (values: number[]) => toSql(Vector.from(values));
-  const cases: [string, (Uint8Array | string)[]][] = [
-    ['vec_distance_cosine(?, ?)', [f32([1, 2]), f32([1, 2, 3])]],
-    ['vec_distance_L2(?, ?)', [f32([1, 2]), f32([1, 2, 3])]],
-    ['vec_distance_cosine(?, ?)', [new Uint8Array(3), f32([1])]],
-    ['vec_distance_cosine(?, ?)', [f32([1]), new Uint8Array(3)]],
-    ['vec_distance_L2(?, ?)', [new Uint8Array(0), f32([1])]],
-    ['vec_distance_cosine(?, ?)', ['[]', f32([1])]],
-    ['vec_distance_cosine(NULL, ?)', [f32([1])]],
-    ['vec_distance_cosine(?, NULL)', [f32([1])]],
-    ['vec_distance_L2(7, ?)', [f32([1])]],
-    ['vec_distance_L2(?, 1.5)', [f32([1])]],
-  ];
-
-  for (const [sql, parameters] of cases) {
-    // Act
-    const ours = outcome(plain, sql, parameters);
-    const theirs = outcome(extension, sql, parameters);
-
-    // Assert
-    assert.ok('error' in theirs, `sqlite-vec accepted ${sql}`);
-    assert.deepEqual(ours, theirs, sql);
-  }
-});
+    }),
+);
 
 test('the functions of install are deterministic, so an index can use them', () => {
   // Arrange

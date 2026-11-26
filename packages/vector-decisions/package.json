@@ -38,6 +38,7 @@
     "!**/*.test.*"
   ],
   "devDependencies": {
+    "@zukhruf/parameterized-test": "*",
     "@zukhruf/sqlite-open": "*",
     "@zukhruf/testing": "*"
   },

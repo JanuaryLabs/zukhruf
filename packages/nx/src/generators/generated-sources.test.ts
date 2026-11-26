@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { basename, dirname, join, matchesGlob } from 'node:path';
-import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual, stripVTControlCharacters } from 'node:util';
 
 import type { NxJsonConfiguration, PluginConfiguration } from '@nx/devkit';
 
 import { TemporaryFiles } from '@zukhruf/fs';
+import { test } from '@zukhruf/parameterized-test';
 
 import { changes, generatorTree } from '../testing/generator-tree.ts';
 import { workspace, zukhrufModules } from '../testing/workspace.ts';
@@ -322,47 +322,49 @@ test('the sdk-it client runs after the db generator and hashes its output', asyn
   );
 });
 
-test('a change of the backend or the db schema affects the client and the web', async () => {
-  await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
-  const { probe } = await generatedWorkspace(folder.path);
-  // Nx reads the affected files against git, so the folder is a repository
-  // with one commit, out of reach of the user's git config and hooks.
-  const git = (...args: string[]) =>
-    execFileSync('git', args, {
-      cwd: folder.path,
-      env: {
-        PATH: process.env['PATH'],
-        GIT_CONFIG_GLOBAL: '/dev/null',
-        GIT_CONFIG_NOSYSTEM: '1',
-        GIT_AUTHOR_NAME: 'probe',
-        GIT_AUTHOR_EMAIL: 'probe@example.invalid',
-        GIT_COMMITTER_NAME: 'probe',
-        GIT_COMMITTER_EMAIL: 'probe@example.invalid',
-      },
-    });
-  git('init', '--quiet');
-  git('add', '--all');
-  git('commit', '--quiet', '--no-verify', '--message', 'generated');
+void test.each(
+  ['apps/backend/src/server.ts', 'packages/db/schema.prisma'],
+  (file) =>
+    test(`a change of ${file} affects the client and the web`, async () => {
+      await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
+      const { probe } = await generatedWorkspace(folder.path);
+      // Nx reads the affected files against git, so the folder is a repository
+      // with one commit, out of reach of the user's git config and hooks.
+      const git = (...args: string[]) =>
+        execFileSync('git', args, {
+          cwd: folder.path,
+          env: {
+            PATH: process.env['PATH'],
+            GIT_CONFIG_GLOBAL: '/dev/null',
+            GIT_CONFIG_NOSYSTEM: '1',
+            GIT_AUTHOR_NAME: 'probe',
+            GIT_AUTHOR_EMAIL: 'probe@example.invalid',
+            GIT_COMMITTER_NAME: 'probe',
+            GIT_COMMITTER_EMAIL: 'probe@example.invalid',
+          },
+        });
+      git('init', '--quiet');
+      git('add', '--all');
+      git('commit', '--quiet', '--no-verify', '--message', 'generated');
 
-  for (const file of [
-    'apps/backend/src/server.ts',
-    'packages/db/schema.prisma',
-  ]) {
-    const shown = await probe.nx(
-      'show',
-      'projects',
-      '--affected',
-      `--files=${file}`,
-      '--json',
-    );
+      const shown = await probe.nx(
+        'show',
+        'projects',
+        '--affected',
+        `--files=${file}`,
+        '--json',
+      );
 
-    assert.equal(shown.code, 0, shown.output);
-    const affected: string[] = JSON.parse(shown.stdout);
-    for (const project of ['@acme/backend-client', '@acme/web']) {
-      assert.ok(affected.includes(project), `${file}: ${affected.join(', ')}`);
-    }
-  }
-});
+      assert.equal(shown.code, 0, shown.output);
+      const affected: string[] = JSON.parse(shown.stdout);
+      for (const project of ['@acme/backend-client', '@acme/web']) {
+        assert.ok(
+          affected.includes(project),
+          `${file}: ${affected.join(', ')}`,
+        );
+      }
+    }),
+);
 
 /** Each file that no tsconfig of src includes, by the project that type-checks it. */
 const configFiles = [
@@ -371,17 +373,15 @@ const configFiles = [
   { project: 'hooks', file: '.husky/pre-push.ts' },
 ];
 
-test('the typecheck of each project hashes its config files and fails on a type error in one', async () => {
-  await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
-  const { probe } = await generatedWorkspace(folder.path);
-  for (const { file } of configFiles) {
+void test.each(configFiles, ({ project, file }) =>
+  test(`the typecheck of ${project} hashes its config file ${file} and fails on a type error in it`, async () => {
+    await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
+    const { probe } = await generatedWorkspace(folder.path);
     await probe.write(
       file,
       `${await probe.read(file)}export const probe: number = 'text';\n`,
     );
-  }
 
-  for (const { project, file } of configFiles) {
     const planned = await probe.nx(
       'run',
       `${project}:typecheck`,
@@ -418,15 +418,13 @@ test('the typecheck of each project hashes its config files and fails on a type 
         `${basename(file).replaceAll('.', '\\.')}:\\d+:\\d+ - error TS2322`,
       ),
     );
-  }
-});
+  }),
+);
 
-test('typed lint finds each config file in a tsconfig of its project, with no default project', async () => {
-  await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
-  await generatedWorkspace(folder.path);
-
-  for (const { file } of configFiles) {
-    const cwd = join(folder.path, dirname(file));
+void test.each(configFiles, ({ file }) =>
+  test(`typed lint finds the config file ${file} in a tsconfig of its project, with no default project`, async () => {
+    await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
+    await generatedWorkspace(folder.path);
     const run = spawnSync(
       process.execPath,
       [
@@ -436,7 +434,7 @@ test('typed lint finds each config file in a tsconfig of its project, with no de
         basename(file),
       ],
       {
-        cwd,
+        cwd: join(folder.path, dirname(file)),
         encoding: 'utf8',
         env: { PATH: process.env['PATH'] },
         timeout: 60_000,
@@ -452,5 +450,5 @@ test('typed lint finds each config file in a tsconfig of its project, with no de
       [],
       file,
     );
-  }
-});
+  }),
+);

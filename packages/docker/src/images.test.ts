@@ -602,35 +602,38 @@ describe('docker.images', () => {
     }
   });
 
-  test('inspect(), save() and load() with a platform reject with UnsupportedEngineError before the request when the API version is lower than the call needs', async () => {
-    // Arrange
-    await using scratch = await new TemporaryFiles().directory('docker-test-');
-    const calls = [
+  void test.each(
+    [
       {
+        name: 'inspect() with one platform at API 1.48',
         apiVersion: '1.48',
         minimumVersion: '1.49',
         call: (docker: Docker) =>
           docker.images.inspect('alpine:3', { platform: AMD64 }),
       },
       {
+        name: 'save() with one platform at API 1.47',
         apiVersion: '1.47',
         minimumVersion: '1.48',
         call: (docker: Docker) =>
           docker.images.save(['alpine:3'], { platform: AMD64 }),
       },
       {
+        name: 'load() with one platform at API 1.47',
         apiVersion: '1.47',
         minimumVersion: '1.48',
         call: (docker: Docker) =>
           docker.images.load(new Uint8Array(1024), { platform: AMD64 }),
       },
       {
+        name: 'save() with two platforms at API 1.51',
         apiVersion: '1.51',
         minimumVersion: '1.52',
         call: (docker: Docker) =>
           docker.images.save(['alpine:3'], { platform: [AMD64, ARM64] }),
       },
       {
+        name: 'load() with two platforms at API 1.51',
         apiVersion: '1.51',
         minimumVersion: '1.52',
         call: (docker: Docker) =>
@@ -638,42 +641,41 @@ describe('docker.images', () => {
             platform: [AMD64, ARM64],
           }),
       },
-    ];
+    ],
+    ({ name, apiVersion, minimumVersion, call }) =>
+      test(`${name} rejects with UnsupportedEngineError before the request, because the call needs API ${minimumVersion}`, async () => {
+        // Arrange
+        await using scratch = await new TemporaryFiles().directory(
+          'docker-test-',
+        );
+        await using engine = await fakeEngine({
+          directory: scratch.path,
+          apiVersion,
+        });
+        await using docker = await Docker.connect({
+          clock: globalThis,
+          host: engine.host,
+        });
 
-    for (const { apiVersion, minimumVersion, call } of calls) {
-      await using engine = await fakeEngine({
-        directory: scratch.path,
-        apiVersion,
-      });
-      await using docker = await Docker.connect({
-        clock: globalThis,
-        host: engine.host,
-      });
+        // Act
+        const calling = call(docker);
 
-      // Act
-      const calling = call(docker);
+        // Assert
+        await assert.rejects(calling, (error: unknown) => {
+          assert.ok(error instanceof UnsupportedEngineError);
+          assert.equal(error.host, engine.host);
+          assert.equal(error.engineVersion, apiVersion);
+          assert.equal(error.minimumVersion, minimumVersion);
+          return true;
+        });
+        assert.deepEqual(engine.paths, ['/_ping']);
+      }),
+  );
 
-      // Assert
-      await assert.rejects(calling, (error: unknown) => {
-        assert.ok(error instanceof UnsupportedEngineError);
-        assert.equal(error.host, engine.host);
-        assert.equal(error.engineVersion, apiVersion);
-        assert.equal(error.minimumVersion, minimumVersion);
-        return true;
-      });
-      assert.deepEqual(engine.paths, ['/_ping']);
-    }
-  });
-
-  test('at the lowest API version of each call, inspect(), save() and load() send each platform as one platform parameter of OCI platform JSON', async () => {
-    // Arrange: an engine at the version of the call that answers with an empty success.
-    await using scratch = await new TemporaryFiles().directory('docker-test-');
-    const platformsOf = (path: string | undefined) =>
-      new URL(path ?? '', 'http://engine').searchParams
-        .getAll('platform')
-        .map((each) => JSON.parse(each));
-    const calls = [
+  void test.each(
+    [
       {
+        name: 'inspect() with one platform',
         apiVersion: '1.49',
         platforms: [{ ...ARM64, variant: 'v8' }],
         call: (docker: Docker) =>
@@ -682,6 +684,7 @@ describe('docker.images', () => {
           }),
       },
       {
+        name: 'save() with one platform',
         apiVersion: '1.48',
         platforms: [AMD64],
         call: async (docker: Docker) =>
@@ -690,6 +693,7 @@ describe('docker.images', () => {
           ).cancel(),
       },
       {
+        name: 'save() with two platforms',
         apiVersion: '1.52',
         platforms: [AMD64, ARM64],
         call: async (docker: Docker) =>
@@ -700,48 +704,58 @@ describe('docker.images', () => {
           ).cancel(),
       },
       {
+        name: 'load() with one platform',
         apiVersion: '1.48',
         platforms: [AMD64],
         call: (docker: Docker) =>
           docker.images.load(new Uint8Array(0), { platform: AMD64 }),
       },
       {
+        name: 'load() with two platforms',
         apiVersion: '1.52',
         platforms: [AMD64, ARM64],
         call: (docker: Docker) =>
           docker.images.load(new Uint8Array(0), { platform: [AMD64, ARM64] }),
       },
-    ];
+    ],
+    ({ name, apiVersion, platforms, call }) =>
+      test(`at its lowest API version ${apiVersion}, ${name} sends each platform as one platform parameter of OCI platform JSON`, async () => {
+        // Arrange: an engine at the version of the call that answers with an empty success.
+        await using scratch = await new TemporaryFiles().directory(
+          'docker-test-',
+        );
+        const platformsOf = (path: string | undefined) =>
+          new URL(path ?? '', 'http://engine').searchParams
+            .getAll('platform')
+            .map((each) => JSON.parse(each));
+        await using engine = await fakeEngine({
+          directory: scratch.path,
+          apiVersion,
+          answer: (request, response) => {
+            request.resume();
+            if (request.url?.includes('/json')) {
+              response.writeHead(200, { 'Content-Type': 'application/json' });
+              response.end(JSON.stringify({ Id: 'sha256:0' }));
+              return;
+            }
+            response.writeHead(200);
+            response.end();
+          },
+        });
+        await using docker = await Docker.connect({
+          clock: globalThis,
+          host: engine.host,
+        });
 
-    for (const { apiVersion, platforms, call } of calls) {
-      await using engine = await fakeEngine({
-        directory: scratch.path,
-        apiVersion,
-        answer: (request, response) => {
-          request.resume();
-          if (request.url?.includes('/json')) {
-            response.writeHead(200, { 'Content-Type': 'application/json' });
-            response.end(JSON.stringify({ Id: 'sha256:0' }));
-            return;
-          }
-          response.writeHead(200);
-          response.end();
-        },
-      });
-      await using docker = await Docker.connect({
-        clock: globalThis,
-        host: engine.host,
-      });
+        // Act
+        await call(docker);
 
-      // Act
-      await call(docker);
-
-      // Assert
-      const [, request] = engine.paths;
-      assert.match(request ?? '', new RegExp(`^/v${apiVersion}/images/`));
-      assert.deepEqual(platformsOf(request), platforms);
-    }
-  });
+        // Assert
+        const [, request] = engine.paths;
+        assert.match(request ?? '', new RegExp(`^/v${apiVersion}/images/`));
+        assert.deepEqual(platformsOf(request), platforms);
+      }),
+  );
 
   test('save() with a platform gives only the content of that platform of a multi-platform image', async () => {
     // Arrange: a tag for each platform. The containerd image store keeps both

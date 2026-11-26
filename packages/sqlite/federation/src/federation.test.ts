@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { test } from 'node:test';
 import { Worker } from 'node:worker_threads';
 
 import { TemporaryFiles } from '@zukhruf/fs';
+import { test } from '@zukhruf/parameterized-test';
 import { RollbackJournal, open } from '@zukhruf/sqlite-open';
 
 import {
@@ -559,11 +559,8 @@ test('raw SQL preserves column positions, empty headers and qualified table reso
   assert.deepEqual(attachedNames(federation), ['main']);
 });
 
-test('PRAGMAs discover bare and quoted database names through raw SQL and bound parameters', async () => {
-  await using scratch = await new TemporaryFiles().directory('federation-');
-  const path = join(scratch.path, 'd.sqlite');
-  writeDatabase(path, [1]);
-  const schemas = [
+void test.each(
+  [
     ['contacts', 'contacts'],
     ['"call-history"', 'call-history'],
     ['[call-history]', 'call-history'],
@@ -571,55 +568,119 @@ test('PRAGMAs discover bare and quoted database names through raw SQL and bound 
     ["'o''brien'", "o'brien"],
     ['`a``b`', 'a`b'],
     ['"a.b"', 'a.b'],
-  ] as const;
-  const paths = new Map<string, string>(
-    schemas.map(([, name]) => [name, path]),
-  );
-  const located: string[] = [];
-  using federation = new Federation({
-    main: ':memory:',
-    locate: (name) => {
-      located.push(name);
-      return paths.get(name);
-    },
-  });
+  ] as const,
+  ([token, name]) =>
+    test(`PRAGMAs discover bare and quoted database names through raw SQL and bound parameters: ${token}`, async () => {
+      await using scratch = await new TemporaryFiles().directory('federation-');
+      const path = join(scratch.path, 'd.sqlite');
+      writeDatabase(path, [1]);
+      const located: string[] = [];
+      using federation = new Federation({
+        main: ':memory:',
+        locate: (found) => {
+          located.push(found);
+          return found === name ? path : undefined;
+        },
+      });
 
-  for (const [token, name] of schemas) {
-    located.length = 0;
-    assert.deepEqual(federation.query(`PRAGMA ${token}.table_info(t)`).rows, [
-      [0, 'x', 'INTEGER', 0, null, 0],
-    ]);
-    assert.deepEqual(located, [name]);
-    assert.deepEqual(attachedNames(federation), ['main']);
-    assert.deepEqual(
-      federation.query(
-        `SELECT name FROM pragma_table_info('t', '${name.replaceAll("'", "''")}')`,
-      ).rows,
-      [['x']],
-    );
-    assert.deepEqual(
-      federation.sql.all`SELECT name FROM pragma_table_info('t', ${name})`.map(
-        ({ name }) => name,
-      ),
-      ['x'],
-    );
-    assert.deepEqual(
-      federation.query(`PRAGMA ${token}.table_info(missing)`).rows,
-      [],
-    );
-    assert.deepEqual(attachedNames(federation), ['main']);
-  }
-  for (const sql of [
+      assert.deepEqual(federation.query(`PRAGMA ${token}.table_info(t)`).rows, [
+        [0, 'x', 'INTEGER', 0, null, 0],
+      ]);
+      assert.deepEqual(located, [name]);
+      assert.deepEqual(attachedNames(federation), ['main']);
+      assert.deepEqual(
+        federation.query(
+          `SELECT name FROM pragma_table_info('t', '${name.replaceAll("'", "''")}')`,
+        ).rows,
+        [['x']],
+      );
+      assert.deepEqual(
+        federation.sql
+          .all`SELECT name FROM pragma_table_info('t', ${name})`.map(
+          ({ name }) => name,
+        ),
+        ['x'],
+      );
+      assert.deepEqual(
+        federation.query(`PRAGMA ${token}.table_info(missing)`).rows,
+        [],
+      );
+      assert.deepEqual(attachedNames(federation), ['main']);
+    }),
+);
+
+void test.each(
+  [
     'PRAGMA missing.table_info(t)',
     "SELECT * FROM contacts.t, pragma_table_info('t', 'missing')",
-  ]) {
-    assert.throws(() => federation.query(sql), /unknown database '?missing'?/);
-    assert.deepEqual(attachedNames(federation), ['main']);
-  }
+  ],
+  (sql) =>
+    test(`PRAGMAs reject an unknown database name and leave no database attached: ${sql}`, async () => {
+      await using scratch = await new TemporaryFiles().directory('federation-');
+      const path = join(scratch.path, 'd.sqlite');
+      writeDatabase(path, [1]);
+      using federation = new Federation({
+        main: ':memory:',
+        locate: (name) => (name === 'contacts' ? path : undefined),
+      });
+
+      assert.throws(
+        () => federation.query(sql),
+        /unknown database '?missing'?/,
+      );
+      assert.deepEqual(attachedNames(federation), ['main']);
+    }),
+);
+
+test('PRAGMA main.table_info reads the main database, not a located one', async () => {
+  await using scratch = await new TemporaryFiles().directory('federation-');
+  const path = join(scratch.path, 'd.sqlite');
+  writeDatabase(path, [1]);
+  using federation = new Federation({
+    main: ':memory:',
+    locate: () => path,
+  });
+
   assert.deepEqual(federation.query('PRAGMA main.table_info(t)').rows, []);
 });
 
-test('raw SQL rejects second statements before executing and detaches on failure', async () => {
+void test.each(
+  ['SELECT 2', 'malformed sql', 'SELECT * FROM absent.t'],
+  (tail) =>
+    test(`raw SQL rejects a second statement before executing and detaches: ${tail}`, async () => {
+      await using scratch = await new TemporaryFiles().directory('federation-');
+      const path = join(scratch.path, 'd.sqlite');
+      writeDatabase(path, [1]);
+      const paths = new Map([['d', path]]);
+      using federation = new Federation({
+        main: ':memory:',
+        locate: (name) => paths.get(name),
+      });
+
+      assert.throws(
+        () =>
+          federation.query(
+            `CREATE TEMP TABLE rejected AS SELECT x FROM d.t; ${tail}`,
+          ),
+        {
+          message: 'Run one SQL statement at a time',
+        },
+      );
+      assert.equal(attachedNames(federation).includes('d'), false);
+      assert.equal(
+        federation.sql
+          .get`SELECT count(*) AS n FROM temp.sqlite_schema WHERE name = 'rejected'`
+          ?.n,
+        0,
+      );
+      assert.deepEqual(federation.query('SELECT x FROM d.t'), {
+        columns: ['x'],
+        rows: [[1]],
+      });
+    }),
+);
+
+test('raw SQL runs one statement that ends in comments and semicolons, and detaches on failure', async () => {
   await using scratch = await new TemporaryFiles().directory('federation-');
   const path = join(scratch.path, 'd.sqlite');
   writeDatabase(path, [1]);
@@ -636,24 +697,6 @@ test('raw SQL rejects second statements before executing and detaches on failure
       rows: [[';']],
     },
   );
-  for (const tail of ['SELECT 2', 'malformed sql', 'SELECT * FROM absent.t']) {
-    assert.throws(
-      () =>
-        federation.query(
-          `CREATE TEMP TABLE rejected AS SELECT x FROM d.t; ${tail}`,
-        ),
-      {
-        message: 'Run one SQL statement at a time',
-      },
-    );
-    assert.equal(attachedNames(federation).includes('d'), false);
-    assert.equal(
-      federation.sql
-        .get`SELECT count(*) AS n FROM temp.sqlite_schema WHERE name = 'rejected'`
-        ?.n,
-      0,
-    );
-  }
   assert.throws(
     () => federation.query('SELECT * FROM d.missing'),
     /no such table: d.missing/,
@@ -667,7 +710,7 @@ test('raw SQL rejects second statements before executing and detaches on failure
     columns: ['x'],
     rows: [[1]],
   });
-  assert.deepEqual(attachedNames(federation), ['main', 'temp']);
+  assert.deepEqual(attachedNames(federation), ['main']);
 });
 
 test('a configured busy timeout waits for a writer before reading an attached database', async () => {

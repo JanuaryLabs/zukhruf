@@ -577,8 +577,8 @@ test('with timeout 0, an owner fails at once on the write lock of another progra
   }
 });
 
-test('a database in memory has no file, so it gets no journal, and works', () => {
-  for (const path of [':memory:', '', 'file::memory:?cache=shared']) {
+void test.each([':memory:', '', 'file::memory:?cache=shared'], (path) =>
+  test(`a database in memory has no file, so it gets no journal, and works: ${JSON.stringify(path)}`, () => {
     using database = open(path);
 
     database.exec(
@@ -593,8 +593,8 @@ test('a database in memory has no file, so it gets no journal, and works', () =>
       ['first'],
       JSON.stringify(path),
     );
-  }
-});
+  }),
+);
 
 test('open applies a journal that the caller writes', async () => {
   await using dir = await scratchDirectory();

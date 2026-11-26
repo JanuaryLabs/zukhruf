@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { relative } from 'node:path';
-import { test } from 'node:test';
+
+import { test } from '@zukhruf/parameterized-test';
 
 import zukhruf from '../plugin.ts';
 import { fixtureWorkspace } from '../testing/fixture-workspace.ts';
@@ -63,56 +64,72 @@ test('a file that imports @zukhruf/shadcn under a config with the React communit
   );
 });
 
-test('the shadcn config, by extends and by spread, runs the kit rules and satisfies the guard', async () => {
-  for (const shadcn of [
-    `{ plugins: { zukhruf }, extends: ['zukhruf/base', 'zukhruf/shadcn'] }`,
-    `...zukhruf.configs['base'], ...zukhruf.configs['shadcn']`,
-  ]) {
-    // Arrange
-    await using workspace = await fixtureWorkspace({
-      'nx.json': '{}',
-      'tsconfig.json': tsconfig,
-      'eslint.config.mjs': fixtureConfig(shadcn),
-      'src/open.tsx': dialog,
-      'src/kit.ts': `export { cn } from '@zukhruf/shadcn';\nimport type { ButtonProps } from '@zukhruf/shadcn';\nexport type Props = ButtonProps;\n`,
-    });
+void test.each(
+  [
+    {
+      name: 'by extends',
+      shadcn: `{ plugins: { zukhruf }, extends: ['zukhruf/base', 'zukhruf/shadcn'] }`,
+    },
+    {
+      name: 'by spread',
+      shadcn: `...zukhruf.configs['base'], ...zukhruf.configs['shadcn']`,
+    },
+  ],
+  ({ name, shadcn }) =>
+    test(`the shadcn config, ${name}, runs the kit rules and satisfies the guard`, async () => {
+      // Arrange
+      await using workspace = await fixtureWorkspace({
+        'nx.json': '{}',
+        'tsconfig.json': tsconfig,
+        'eslint.config.mjs': fixtureConfig(shadcn),
+        'src/open.tsx': dialog,
+        'src/kit.ts': `export { cn } from '@zukhruf/shadcn';\nimport type { ButtonProps } from '@zukhruf/shadcn';\nexport type Props = ButtonProps;\n`,
+      });
 
-    // Act
-    const findings = lint(workspace.root, ['src']);
+      // Act
+      const findings = lint(workspace.root, ['src']);
 
-    // Assert
-    assert.deepEqual(
-      kitFindings(workspace.root, findings),
-      ['src/open.tsx: zukhruf/no-as-child'],
-      shadcn,
-    );
-  }
-});
+      // Assert
+      assert.deepEqual(
+        kitFindings(workspace.root, findings),
+        ['src/open.tsx: zukhruf/no-as-child'],
+        shadcn,
+      );
+    }),
+);
 
-test('the deprecated react name, by extends and by spread, still runs the kit rules and satisfies the guard', async () => {
-  for (const react of [
-    `{ plugins: { zukhruf }, extends: ['zukhruf/base', 'zukhruf/react'] }`,
-    `...zukhruf.configs['base'], ...zukhruf.configs['react']`,
-  ]) {
-    // Arrange
-    await using workspace = await fixtureWorkspace({
-      'nx.json': '{}',
-      'tsconfig.json': tsconfig,
-      'eslint.config.mjs': fixtureConfig(react),
-      'src/open.tsx': dialog,
-    });
+void test.each(
+  [
+    {
+      name: 'by extends',
+      react: `{ plugins: { zukhruf }, extends: ['zukhruf/base', 'zukhruf/react'] }`,
+    },
+    {
+      name: 'by spread',
+      react: `...zukhruf.configs['base'], ...zukhruf.configs['react']`,
+    },
+  ],
+  ({ name, react }) =>
+    test(`the deprecated react name, ${name}, still runs the kit rules and satisfies the guard`, async () => {
+      // Arrange
+      await using workspace = await fixtureWorkspace({
+        'nx.json': '{}',
+        'tsconfig.json': tsconfig,
+        'eslint.config.mjs': fixtureConfig(react),
+        'src/open.tsx': dialog,
+      });
 
-    // Act
-    const findings = lint(workspace.root, ['src']);
+      // Act
+      const findings = lint(workspace.root, ['src']);
 
-    // Assert
-    assert.deepEqual(
-      kitFindings(workspace.root, findings),
-      ['src/open.tsx: zukhruf/no-as-child'],
-      react,
-    );
-  }
-});
+      // Assert
+      assert.deepEqual(
+        kitFindings(workspace.root, findings),
+        ['src/open.tsx: zukhruf/no-as-child'],
+        react,
+      );
+    }),
+);
 
 test('reading the react config warns that it is deprecated and names shadcn', async () => {
   // Arrange

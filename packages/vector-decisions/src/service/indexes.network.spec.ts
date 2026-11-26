@@ -2,9 +2,9 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
-import { test } from 'node:test';
 
 import { TemporaryFiles } from '@zukhruf/fs';
+import { test } from '@zukhruf/parameterized-test';
 import { open } from '@zukhruf/sqlite-open';
 
 import type {
@@ -399,15 +399,8 @@ test('registerIndex refuses ids of another count than the rows, two ids with one
   assertIndexesRefused(decisions, 'invalid_index');
 });
 
-test('registerIndex refuses an id or an outcome that is a number but not a safe whole number, which Venn takes, with invalid_index', async () => {
-  await using directory = await new TemporaryFiles().directory(
-    'vector-decisions-',
-  );
-  using database = open(join(directory.path, 'cache.sqlite'));
-  const decisions = await service(directory.path, database);
-  const two = rows([0, 1]);
-
-  for (const [ids, outcomes] of [
+void test.each(
+  [
     [[1.5, 2], undefined],
     [[2 ** 53, 2], undefined],
     [
@@ -418,13 +411,23 @@ test('registerIndex refuses an id or an outcome that is a number but not a safe 
       ['a', 'b'],
       ['p', 2 ** 53],
     ],
-  ] as const)
-    assert.throws(() => decisions.registerIndex(two, ids, outcomes), {
-      name: 'ContractError',
-      code: 'invalid_index',
-      status: 422,
-    });
-});
+  ] as const,
+  ([ids, outcomes]) =>
+    test(`registerIndex refuses an id or an outcome that is a number but not a safe whole number, which Venn takes, with invalid_index (ids ${JSON.stringify(ids)}, outcomes ${JSON.stringify(outcomes)})`, async () => {
+      await using directory = await new TemporaryFiles().directory(
+        'vector-decisions-',
+      );
+      using database = open(join(directory.path, 'cache.sqlite'));
+      const decisions = await service(directory.path, database);
+      const two = rows([0, 1]);
+
+      assert.throws(() => decisions.registerIndex(two, ids, outcomes), {
+        name: 'ContractError',
+        code: 'invalid_index',
+        status: 422,
+      });
+    }),
+);
 
 test("the handle of registerIndex is Venn's: the SHA-256 of the unit float32 rows and of Python's JSON of the ids and the outcomes, also with ids outside ASCII and whole numbers", async () => {
   await using directory = await new TemporaryFiles().directory(
@@ -498,26 +501,29 @@ test('decide refuses a state { indexRef } that registerIndex did not give with i
   ]);
 });
 
-test('an IndexApply question about an index answers each row with the id of the row, honours rowCap, batchSize, a threshold that turns some rows into "none", also over a questionRef, and the decision has no vector', async () => {
-  await using directory = await new TemporaryFiles().directory(
-    'vector-decisions-',
-  );
-  using database = open(join(directory.path, 'cache.sqlite'));
-  const decisions = await service(directory.path, database);
-  const handles = await register(decisions);
-
-  for (const name of [
+void test.each(
+  [
     'index rows',
     'index row cap',
     'index reference',
     'index low threshold',
-  ] as const) {
-    const { request, answers, vector } = golden.answered[name];
-    const decision = await decisions.decide(referenced(request, handles));
-    assertClose(decision.answers, answers, name, TOLERANCE);
-    assert.equal(decision.vector, vector);
-  }
-});
+  ] as const,
+  (name) =>
+    test(`an IndexApply question about an index answers each row with the id of the row, honours rowCap, batchSize, a threshold that turns some rows into "none", also over a questionRef, and the decision has no vector (${name})`, async () => {
+      await using directory = await new TemporaryFiles().directory(
+        'vector-decisions-',
+      );
+      using database = open(join(directory.path, 'cache.sqlite'));
+      const decisions = await service(directory.path, database);
+      const handles = await register(decisions);
+      const { request, answers, vector } = golden.answered[name];
+
+      const decision = await decisions.decide(referenced(request, handles));
+
+      assertClose(decision.answers, answers, name, TOLERANCE);
+      assert.equal(decision.vector, vector);
+    }),
+);
 
 test('decide refuses a threshold out of 0..1 that a questionRef gives over its registered question, with threshold', async () => {
   await using directory = await new TemporaryFiles().directory(
@@ -665,17 +671,18 @@ test('streamIndex streams the question of a questionRef, with each field of the 
   ]);
 });
 
-test('a NearestReference question answers the outcome of the nearest rows, with the margin to the next outcome, its float32 sigmoid over choice_temperature, the ids of the 5 nearest rows, about a text or a given vector, with ids and outcomes outside ASCII or whole numbers', async () => {
-  await using directory = await new TemporaryFiles().directory(
-    'vector-decisions-',
-  );
-  using database = open(join(directory.path, 'cache.sqlite'));
-  const decisions = await service(directory.path, database);
-  const handles = await register(decisions);
-
-  for (const name of ['nearest', 'nearest vector'] as const) {
+void test.each(['nearest', 'nearest vector'] as const, (name) =>
+  test(`a NearestReference question answers the outcome of the nearest rows, with the margin to the next outcome, its float32 sigmoid over choice_temperature, the ids of the 5 nearest rows, about a text or a given vector, with ids and outcomes outside ASCII or whole numbers (${name})`, async () => {
+    await using directory = await new TemporaryFiles().directory(
+      'vector-decisions-',
+    );
+    using database = open(join(directory.path, 'cache.sqlite'));
+    const decisions = await service(directory.path, database);
+    const handles = await register(decisions);
     const { request, answers, vector } = golden.answered[name];
+
     const decision = await decisions.decide(referenced(request, handles));
+
     assertClose(decision.answers, answers, name, NEAREST_TOLERANCE);
     assertClose(decision.vector, vector, `${name}.vector`, FLOAT32_TOLERANCE);
     // Venn's probability is a float32 tensor and its margin a float32 score
@@ -685,8 +692,8 @@ test('a NearestReference question answers the outcome of the nearest rows, with 
       assert.equal(Math.fround(answer.confidence), answer.confidence, name);
       assert.equal(Math.fround(answer.margin), answer.margin, name);
     }
-  }
-});
+  }),
+);
 
 test('of outcomes or rows with the same score, NearestReference answers the later one first, as numpy sorts 16 values or fewer: outcomes by value for whole numbers, else by code point', async () => {
   await using directory = await new TemporaryFiles().directory(
@@ -749,25 +756,25 @@ test('a NearestReference question keeps its outcome at a threshold equal to its 
   assert.equal(atThreshold.answer, first.answer);
 });
 
-test('a NearestReference question of a family, its own or the request\'s, divides its margin by the temperature that registerCalibration fitted for "<family>/NearestReference", which no Choice question reads', async () => {
-  await using directory = await new TemporaryFiles().directory(
-    'vector-decisions-',
-  );
-  using database = open(join(directory.path, 'cache.sqlite'));
-  const decisions = await service(directory.path, database);
-  const handles = await register(decisions);
-  calibrate(decisions);
-
-  for (const name of ['nearest family', 'nearest own family'] as const) {
+void test.each(['nearest family', 'nearest own family'] as const, (name) =>
+  test(`a NearestReference question of a family, its own or the request's, divides its margin by the temperature that registerCalibration fitted for "<family>/NearestReference", which no Choice question reads (${name})`, async () => {
+    await using directory = await new TemporaryFiles().directory(
+      'vector-decisions-',
+    );
+    using database = open(join(directory.path, 'cache.sqlite'));
+    const decisions = await service(directory.path, database);
+    const handles = await register(decisions);
+    calibrate(decisions);
     const { request, answers } = golden.answered[name];
+
     assertClose(
       (await decisions.decide(referenced(request, handles))).answers,
       answers,
       name,
       NEAREST_TOLERANCE,
     );
-  }
-});
+  }),
+);
 
 test('a NearestReference question is refused in the order of Venn: the threshold, the index (index_handle, 404), an index without outcomes or a state that is not one vector (nearest_input), one outcome (nearest_labels), then k (nearest_k)', async () => {
   await using directory = await new TemporaryFiles().directory(

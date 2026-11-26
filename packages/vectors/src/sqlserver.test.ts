@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
 
 import mssql from 'mssql';
 
+import { test } from '@zukhruf/parameterized-test';
 import { SqlServer } from '@zukhruf/testing/sqlserver';
 
 import {
@@ -154,94 +154,103 @@ test(
   },
 );
 
-test(
-  'a host query sorts by VECTOR_DISTANCE in the order and with the distances of the math in memory',
-  { skip: emulation },
-  async () => {
-    // Arrange
-    await using database = await new SqlServer({
-      environment: process.env,
-      image,
-    }).database();
-    const pool = await new mssql.ConnectionPool(
-      database.connectionString,
-    ).connect();
-    try {
-      const rows: [string, Vector][] = [
-        ['a', Vector.from([1, 0, 0])],
-        ['b', Vector.from([0, 1, 0])],
-        ['c', Vector.from([1, 0.2, 0])],
-        ['d', Vector.from([-1, 0, 0])],
-        ['e', Vector.from([1, 0.5, 0.1])],
-        ['f', Vector.from([0.987654321, 0.123456789, 0.0234567891])],
-        ['g', Vector.from([0.876543219, 0.234567891, -0.0345678912])],
-      ];
-      await pool
-        .request()
-        .query(
-          'CREATE TABLE chunks (id NVARCHAR(10) PRIMARY KEY, embedding VECTOR(3) NOT NULL)',
-        );
-      for (const [id, vector] of rows) {
-        await pool
-          .request()
-          .input('id', mssql.NVarChar(10), id)
-          .input('v', mssql.NVarChar(mssql.MAX), toSql(vector))
-          .query(
-            `INSERT INTO chunks VALUES (@id, CAST(@v AS ${sqlType(vector)}))`,
-          );
-      }
-      const query = Vector.from([0.991234567, 0.112345678, 0.00456789123]);
-      const metrics: [string, (vector: Vector) => number][] = [
-        ['cosine', (vector) => cosineDistance(vector, query)],
-        ['euclidean', (vector) => euclideanDistance(vector, query)],
-        ['dot', (vector) => -dot(vector, query)],
-      ];
+void test.each(
+  [
+    {
+      metric: 'cosine',
+      inMemory: (vector: Vector, query: Vector) =>
+        cosineDistance(vector, query),
+    },
+    {
+      metric: 'euclidean',
+      inMemory: (vector: Vector, query: Vector) =>
+        euclideanDistance(vector, query),
+    },
+    {
+      metric: 'dot',
+      inMemory: (vector: Vector, query: Vector) => -dot(vector, query),
+    },
+  ],
+  ({ metric, inMemory }) =>
+    test(
+      `a host query sorts by VECTOR_DISTANCE('${metric}') in the order and with the distances of the math in memory`,
+      { skip: emulation },
+      async () => {
+        // Arrange
+        await using database = await new SqlServer({
+          environment: process.env,
+          image,
+        }).database();
+        const pool = await new mssql.ConnectionPool(
+          database.connectionString,
+        ).connect();
+        try {
+          const rows: [string, Vector][] = [
+            ['a', Vector.from([1, 0, 0])],
+            ['b', Vector.from([0, 1, 0])],
+            ['c', Vector.from([1, 0.2, 0])],
+            ['d', Vector.from([-1, 0, 0])],
+            ['e', Vector.from([1, 0.5, 0.1])],
+            ['f', Vector.from([0.987654321, 0.123456789, 0.0234567891])],
+            ['g', Vector.from([0.876543219, 0.234567891, -0.0345678912])],
+          ];
+          await pool
+            .request()
+            .query(
+              'CREATE TABLE chunks (id NVARCHAR(10) PRIMARY KEY, embedding VECTOR(3) NOT NULL)',
+            );
+          for (const [id, vector] of rows) {
+            await pool
+              .request()
+              .input('id', mssql.NVarChar(10), id)
+              .input('v', mssql.NVarChar(mssql.MAX), toSql(vector))
+              .query(
+                `INSERT INTO chunks VALUES (@id, CAST(@v AS ${sqlType(vector)}))`,
+              );
+          }
+          const query = Vector.from([0.991234567, 0.112345678, 0.00456789123]);
 
-      for (const [metric, inMemory] of metrics) {
-        // Act
-        const result = await pool
-          .request()
-          .input('q', mssql.NVarChar(mssql.MAX), toSql(query))
-          .query(
-            `SELECT TOP (3) id, VECTOR_DISTANCE('${metric}', embedding, CAST(@q AS ${sqlType(query)})) AS distance
+          // Act
+          const result = await pool
+            .request()
+            .input('q', mssql.NVarChar(mssql.MAX), toSql(query))
+            .query(
+              `SELECT TOP (3) id, VECTOR_DISTANCE('${metric}', embedding, CAST(@q AS ${sqlType(query)})) AS distance
            FROM chunks ORDER BY distance`,
-          );
+            );
 
-        // Assert
-        const expected = rows
-          .map(([id, vector]) => ({ id, distance: inMemory(vector) }))
-          .sort((left, right) => left.distance - right.distance)
-          .slice(0, 3);
-        assert.deepEqual(
-          result.recordset.map((row) => row['id']),
-          expected.map((row) => row.id),
-          metric,
-        );
-        result.recordset.forEach((row, index) => {
-          assert.ok(
-            Math.abs(
-              Number(row['distance']) -
-                (expected[index]?.distance ?? Number.NaN),
-            ) < 1e-6,
-            `${metric} ${row['id']}`,
+          // Assert
+          const expected = rows
+            .map(([id, vector]) => ({ id, distance: inMemory(vector, query) }))
+            .sort((left, right) => left.distance - right.distance)
+            .slice(0, 3);
+          assert.deepEqual(
+            result.recordset.map((row) => row['id']),
+            expected.map((row) => row.id),
+            metric,
           );
-        });
-      }
-    } finally {
-      await pool.close();
-    }
-  },
+          result.recordset.forEach((row, index) => {
+            assert.ok(
+              Math.abs(
+                Number(row['distance']) -
+                  (expected[index]?.distance ?? Number.NaN),
+              ) < 1e-6,
+              `${metric} ${row['id']}`,
+            );
+          });
+        } finally {
+          await pool.close();
+        }
+      },
+    ),
 );
 
-test('fromSql refuses text that is not a JSON array of numbers', () => {
-  // Arrange
-  const texts = ['[]', '{"0": 1}', '[1, "2"]', '"[1, 2]"'];
-
-  for (const text of texts) {
+void test.each(['[]', '{"0": 1}', '[1, "2"]', '"[1, 2]"'], (text) =>
+  test(`fromSql refuses text that is not a JSON array of numbers: ${text}`, () => {
     // Act and Assert
     assert.throws(() => fromSql(Vector, text), RangeError, text);
-  }
-});
+  }),
+);
 
 test(
   'a table declared from sqlType of a type and dimensions, before its first row, has a column of that element type and those dimensions',
@@ -304,19 +313,20 @@ test(
   },
 );
 
-test('sqlType refuses a number of dimensions that is not a positive integer', () => {
-  // Arrange
-  const counts = [0, -3, 1.5, Number.NaN, Number.POSITIVE_INFINITY];
-
-  for (const type of [Vector, HalfVector]) {
-    for (const dimensions of counts) {
+void test.each([Vector, HalfVector], (type) =>
+  test.each([0, -3, 1.5, Number.NaN, Number.POSITIVE_INFINITY], (dimensions) =>
+    test(`sqlType refuses ${dimensions} dimensions of a ${type.name}, which is not a positive integer`, () => {
       // Act and Assert
       assert.throws(
         () => sqlType(type, dimensions),
         RangeError,
         `${type.name} ${dimensions}`,
       );
-    }
-  }
+    }),
+  ),
+);
+
+test('sqlType refuses an empty vector', () => {
+  // Act and Assert
   assert.throws(() => sqlType(Vector.from([])), RangeError, 'an empty vector');
 });

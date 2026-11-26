@@ -1055,16 +1055,15 @@ test("by default, the score is the number of the question's words that a passage
   );
 });
 
-test('a dropTokensThreshold that is not a positive finite number is refused with a RangeError when the retriever is made', () => {
-  // Arrange
-  const store = new PostgresPassageStore({
-    session: { query: () => Promise.reject(new Error('no query runs')) },
-    passages: 'docs_passages',
-    metadata: (columns) => columns,
-  });
-  const values = [0, -1, Number.NaN, Number.POSITIVE_INFINITY];
+void test.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY], (value) =>
+  test(`a dropTokensThreshold of ${value}, which is not a positive finite number, is refused with a RangeError when the retriever is made`, () => {
+    // Arrange
+    const store = new PostgresPassageStore({
+      session: { query: () => Promise.reject(new Error('no query runs')) },
+      passages: 'docs_passages',
+      metadata: (columns) => columns,
+    });
 
-  for (const value of values) {
     // Act
     const make = () =>
       new PgvectorKeywordRetriever({
@@ -1080,8 +1079,8 @@ test('a dropTokensThreshold that is not a positive finite number is refused with
         `The dropTokensThreshold of matching is a positive finite number, not ${String(value)}`,
       ),
     );
-  }
-});
+  }),
+);
 
 test('by default, on a column whose statistics track 1,000 lexemes, every statement reads the passages through the GIN index, for a word that the statistics do not track and for words they do, only a word they do not track is counted, and each drop is one statement', async () => {
   // Arrange: 20,000 passages of 30 words of a skewed vocabulary, on a

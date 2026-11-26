@@ -210,12 +210,12 @@ test('a failed model call rejects', async () => {
   });
 });
 
-test('a queryCount that is not a positive integer is refused', () => {
-  // Arrange
-  using database = contract();
+void test.each([0, 1.5], (queryCount) =>
+  test(`a queryCount of ${queryCount}, which is not a positive integer, is refused`, () => {
+    // Arrange
+    using database = contract();
 
-  // Act and Assert
-  for (const queryCount of [0, 1.5]) {
+    // Act and Assert
     assert.throws(
       () =>
         new MultiQueryRetriever({
@@ -228,8 +228,8 @@ test('a queryCount that is not a positive integer is refused', () => {
         message: `The queryCount is a positive integer, not ${queryCount}`,
       },
     );
-  }
-});
+  }),
+);
 
 test("the model writes 4 versions of the query with Haystack's prompt, each version and the query are searched, and reciprocal rank fusion gives the best topK", async () => {
   // Arrange

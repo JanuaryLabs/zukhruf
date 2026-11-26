@@ -751,25 +751,24 @@ test('by default a word in 20,000 passages is rare and a word in 20,001 is commo
   assert.equal(edge.length, 10);
 });
 
-test('a cutoffFrequency that is not a positive finite number is refused with a RangeError when the retriever is made', () => {
-  // Arrange
-  using database = contract([]);
-  const values = [0, -1, Number.NaN, Number.POSITIVE_INFINITY];
+void test.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY], (value) =>
+  test(`a cutoffFrequency of ${value}, which is not a positive finite number, is refused with a RangeError when the retriever is made`, () => {
+    // Arrange
+    using database = contract([]);
 
-  // Act
-  const make = (cutoffFrequency: number) => () =>
-    keywordsOf(database, { operator: 'OR', cutoffFrequency });
+    // Act
+    const make = () =>
+      keywordsOf(database, { operator: 'OR', cutoffFrequency: value });
 
-  // Assert
-  for (const value of values) {
+    // Assert
     assert.throws(
-      make(value),
+      make,
       new RangeError(
         `The cutoffFrequency of matching is a positive finite number, not ${String(value)}`,
       ),
     );
-  }
-});
+  }),
+);
 
 void test.each([-1, 2.5, Number.NaN, Number.POSITIVE_INFINITY], (topK) =>
   test(`a topK of ${topK} in the call is a RangeError before any statement runs, as Elasticsearch refuses a bad size`, async () => {

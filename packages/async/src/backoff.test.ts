@@ -1,43 +1,64 @@
 import assert from 'node:assert/strict';
-import { describe, test } from 'node:test';
+
+import { describe, test } from '@zukhruf/parameterized-test';
 
 import { Backoff, type BackoffOptions } from './index.ts';
 
 describe('Backoff', () => {
-  test('options that describe no back-off throw a RangeError when the back-off is made', () => {
-    // Arrange
-    const valid: BackoffOptions = {
-      initial: 100,
-      multiplier: 2,
-      max: 1_000,
-      jitter: { kind: 'none' },
-    };
-    const invalid: BackoffOptions[] = [
-      { ...valid, initial: 0 },
-      { ...valid, initial: -1 },
-      { ...valid, initial: Number.NaN },
-      { ...valid, initial: Infinity },
-      { ...valid, multiplier: 0.5 },
-      { ...valid, multiplier: Number.NaN },
-      { ...valid, multiplier: Infinity },
-      { ...valid, max: 99 },
-      { ...valid, max: Infinity },
-      { ...valid, max: Number.NaN },
-      { ...valid, jitter: { kind: 'ratio', ratio: 0 } },
-      { ...valid, jitter: { kind: 'ratio', ratio: -0.1 } },
-      { ...valid, jitter: { kind: 'ratio', ratio: 1.5 } },
-      { ...valid, jitter: { kind: 'ratio', ratio: Number.NaN } },
-    ];
-
-    // Act and Assert
-    for (const options of invalid) {
-      assert.throws(
-        () => new Backoff(options),
-        RangeError,
-        `Must refuse ${JSON.stringify(options)}`,
-      );
-    }
-  });
+  const valid: BackoffOptions = {
+    initial: 100,
+    multiplier: 2,
+    max: 1_000,
+    jitter: { kind: 'none' },
+  };
+  void test.each(
+    [
+      { name: 'an initial of 0', options: { ...valid, initial: 0 } },
+      { name: 'an initial of -1', options: { ...valid, initial: -1 } },
+      { name: 'an initial of NaN', options: { ...valid, initial: Number.NaN } },
+      {
+        name: 'an initial of Infinity',
+        options: { ...valid, initial: Infinity },
+      },
+      { name: 'a multiplier of 0.5', options: { ...valid, multiplier: 0.5 } },
+      {
+        name: 'a multiplier of NaN',
+        options: { ...valid, multiplier: Number.NaN },
+      },
+      {
+        name: 'a multiplier of Infinity',
+        options: { ...valid, multiplier: Infinity },
+      },
+      { name: 'a max of 99', options: { ...valid, max: 99 } },
+      { name: 'a max of Infinity', options: { ...valid, max: Infinity } },
+      { name: 'a max of NaN', options: { ...valid, max: Number.NaN } },
+      {
+        name: 'a ratio of 0',
+        options: { ...valid, jitter: { kind: 'ratio', ratio: 0 } },
+      },
+      {
+        name: 'a ratio of -0.1',
+        options: { ...valid, jitter: { kind: 'ratio', ratio: -0.1 } },
+      },
+      {
+        name: 'a ratio of 1.5',
+        options: { ...valid, jitter: { kind: 'ratio', ratio: 1.5 } },
+      },
+      {
+        name: 'a ratio of NaN',
+        options: { ...valid, jitter: { kind: 'ratio', ratio: Number.NaN } },
+      },
+    ] satisfies { name: string; options: BackoffOptions }[],
+    ({ name, options }) =>
+      test(`options with ${name}, which describe no back-off, throw a RangeError when the back-off is made`, () => {
+        // Act and Assert
+        assert.throws(
+          () => new Backoff(options),
+          RangeError,
+          `Must refuse ${JSON.stringify(options)}`,
+        );
+      }),
+  );
 
   test('the edge of each option makes a back-off: a multiplier of 1 gives the same wait each time, a max equal to initial, and a ratio of 1', () => {
     // Arrange
@@ -56,24 +77,24 @@ describe('Backoff', () => {
     assert.deepEqual(waits, [100, 100, 100, 100]);
   });
 
-  test('a count of retries that is not an integer of 0 or more throws a RangeError', () => {
-    // Arrange
-    const backoff = new Backoff({
-      initial: 100,
-      multiplier: 2,
-      max: 1_000,
-      jitter: { kind: 'none' },
-    });
+  void test.each([-1, 1.5, Number.NaN, Infinity], (retries) =>
+    test(`a count of ${retries} retries, which is not an integer of 0 or more, throws a RangeError`, () => {
+      // Arrange
+      const backoff = new Backoff({
+        initial: 100,
+        multiplier: 2,
+        max: 1_000,
+        jitter: { kind: 'none' },
+      });
 
-    // Act and Assert
-    for (const retries of [-1, 1.5, Number.NaN, Infinity]) {
+      // Act and Assert
       assert.throws(
         () => backoff.duration(retries),
         RangeError,
         `Must refuse ${retries} retries`,
       );
-    }
-  });
+    }),
+  );
 
   test('without jitter, the wait grows by the multiplier from initial before the first retry, and stops at max', () => {
     // Arrange: the first back-off has the numbers that patiently of @zukhruf/fs uses.

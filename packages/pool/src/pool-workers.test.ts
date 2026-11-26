@@ -675,35 +675,37 @@ describe('PoolWorkers lends its workers', { concurrency: true }, () => {
     assert.equal(created.length, 2);
   });
 
-  test('a resources sizing runs one worker per CPU while each finds its memory free, and at least one', async () => {
-    for (const [cpus, gibFree, expected] of [
+  void test.each(
+    [
       [3, 64, 3],
       [8, 2.5, 2],
       [4, 0.5, 1],
-    ] as const) {
-      await using folder = await new TemporaryFiles().directory('pool-');
-      const created: EchoWorker[] = [];
-      await using workers = lending(join(folder.path, 'store.sqlite'), {
-        size: new Resources({
-          memoryPerWorker: 2 ** 30,
-          computer: {
-            availableParallelism: () => cpus,
-            availableMemory: () => gibFree * 2 ** 30,
+    ] as const,
+    ([cpus, gibFree, expected]) =>
+      test(`a resources sizing runs ${expected} workers on ${cpus} CPUs with ${gibFree} GiB free: one worker per CPU while each finds its memory free, and at least one`, async () => {
+        await using folder = await new TemporaryFiles().directory('pool-');
+        const created: EchoWorker[] = [];
+        await using workers = lending(join(folder.path, 'store.sqlite'), {
+          size: new Resources({
+            memoryPerWorker: 2 ** 30,
+            computer: {
+              availableParallelism: () => cpus,
+              availableMemory: () => gibFree * 2 ** 30,
+            },
+          }),
+          startup: new Parallel(),
+          eviction: new NoEviction(),
+          create: () => {
+            const worker = new EchoWorker();
+            worker.release();
+            created.push(worker);
+            return worker;
           },
-        }),
-        startup: new Parallel(),
-        eviction: new NoEviction(),
-        create: () => {
-          const worker = new EchoWorker();
-          worker.release();
-          created.push(worker);
-          return worker;
-        },
-      });
-      await workers.ready();
-      assert.equal(created.length, expected);
-    }
-  });
+        });
+        await workers.ready();
+        assert.equal(created.length, expected);
+      }),
+  );
 
   test('an owner keeps alive a worker it stops running while the sizing keeps it, and closes it once the sizing does not', async (t) => {
     await using folder = await new TemporaryFiles().directory('pool-');
@@ -2602,43 +2604,49 @@ describe('PoolWorkers evicts on a fake clock', { concurrency: true }, () => {
     await created[0]!.exited();
   });
 
-  test('an evicted worker starts no replacement and no back-off, and a job then starts a worker at once, also after a leader-first start', async (t) => {
-    for (const startup of [new Parallel(), new LeaderFirst()]) {
-      await using folder = await new TemporaryFiles().directory('pool-');
-      const store = join(folder.path, 'store.sqlite');
-      const clock = createClock(Date.now());
-      const created: EchoWorker[] = [];
-      await using owner = lendingOn(clock, store, {
-        size: new Fixed(2),
-        startup,
-        eviction: new IdleTimeout({ after: 1_000 }),
-        create: () => {
-          const worker = new EchoWorker();
-          worker.release();
-          created.push(worker);
-          return worker;
-        },
-      });
-      await using pool = new Pool({ kind: echo(), store, clock });
-      await owner.ready();
+  void test.each(
+    [
+      { name: 'a parallel start', build: () => new Parallel() },
+      { name: 'a leader-first start', build: () => new LeaderFirst() },
+    ],
+    ({ name, build }) =>
+      test(`an evicted worker starts no replacement and no back-off, and a job then starts a worker at once, after ${name}`, async (t) => {
+        const startup = build();
+        await using folder = await new TemporaryFiles().directory('pool-');
+        const store = join(folder.path, 'store.sqlite');
+        const clock = createClock(Date.now());
+        const created: EchoWorker[] = [];
+        await using owner = lendingOn(clock, store, {
+          size: new Fixed(2),
+          startup,
+          eviction: new IdleTimeout({ after: 1_000 }),
+          create: () => {
+            const worker = new EchoWorker();
+            worker.release();
+            created.push(worker);
+            return worker;
+          },
+        });
+        await using pool = new Pool({ kind: echo(), store, clock });
+        await owner.ready();
 
-      await clock.tickAsync(1_000);
-      await Promise.all(created.map((worker) => worker.exited()));
-      await clock.tickAsync(60_000);
-      assert.equal(created.length, 2, `${startup.constructor.name} replaced`);
-      assert.deepEqual(owner.stats, {
-        starting: 0,
-        idle: 0,
-        lent: 0,
-        waiting: 0,
-      });
+        await clock.tickAsync(1_000);
+        await Promise.all(created.map((worker) => worker.exited()));
+        await clock.tickAsync(60_000);
+        assert.equal(created.length, 2, `${startup.constructor.name} replaced`);
+        assert.deepEqual(owner.stats, {
+          starting: 0,
+          idle: 0,
+          lent: 0,
+          waiting: 0,
+        });
 
-      // The timers do not move, so a job that waits for a back-off fails at
-      // the limit of the test, t.signal.
-      assert.equal(await pool.run('now'), 'now');
-      assert.equal(created.length, 3);
-    }
-  });
+        // The timers do not move, so a job that waits for a back-off fails at
+        // the limit of the test, t.signal.
+        assert.equal(await pool.run('now'), 'now');
+        assert.equal(created.length, 3);
+      }),
+  );
 
   test('disposing an owner leaves no idle timeout on its clock', async () => {
     await using folder = await new TemporaryFiles().directory('pool-');

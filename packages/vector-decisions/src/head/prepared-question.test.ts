@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { test } from 'node:test';
+
+import { test } from '@zukhruf/parameterized-test';
 
 import {
   CosineAbstention,
@@ -145,19 +146,21 @@ test('weights that lack a tensor of the head, or do not fit together, are refuse
   );
 });
 
-test('the logits equal the logits of Venn for questions with 2, 3 and 5 options', async () => {
-  const head = CosineAbstention.fromWeights(await loadWeights(TINY_HEAD));
+void test.each(['2 options', '3 options', '5 options'], (name) =>
+  test(`the logits equal the logits of Venn for a question with ${name}`, async () => {
+    const head = CosineAbstention.fromWeights(await loadWeights(TINY_HEAD));
 
-  for (const name of ['2 options', '3 options', '5 options'])
     assertVennLogits(head, goldenCase(name));
-});
+  }),
+);
 
-test('an option or a question that centering makes zero or tiny gives the logits of Venn, not NaN', async () => {
-  const head = CosineAbstention.fromWeights(await loadWeights(TINY_HEAD));
+void test.each(['1 option', 'equal options', 'tiny options'], (name) =>
+  test(`an option or a question that centering makes zero or tiny gives the logits of Venn, not NaN, ${name}`, async () => {
+    const head = CosineAbstention.fromWeights(await loadWeights(TINY_HEAD));
 
-  for (const name of ['1 option', 'equal options', 'tiny options'])
     assertVennLogits(head, goldenCase(name));
-});
+  }),
+);
 
 test('a question with no option gives only the logit of none, as Venn gives it', async () => {
   const head = CosineAbstention.fromWeights(await loadWeights(TINY_HEAD));

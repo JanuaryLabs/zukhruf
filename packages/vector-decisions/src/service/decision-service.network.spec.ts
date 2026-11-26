@@ -4,11 +4,11 @@ import { readFileSync } from 'node:fs';
 import { copyFile, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
-import { test } from 'node:test';
 
 import type { MockEmbeddingModelV4 } from 'ai/test';
 
 import { TemporaryFiles } from '@zukhruf/fs';
+import { test } from '@zukhruf/parameterized-test';
 import { open } from '@zukhruf/sqlite-open';
 
 import {
@@ -571,32 +571,39 @@ test('a Choice question gives the probability of each option and of "none", and 
   assertAnswer(decision, kinds, 'team');
 });
 
-test('a Score question also gives the expected score of the options, with the levels 0, 1, 2 and so on, or the scores that it gives', async () => {
-  await using directory = await new TemporaryFiles().directory(
-    'vector-decisions-',
-  );
-  using database = open(join(directory.path, 'cache.sqlite'));
-  const decisions = await service(directory.path, database);
-  const { kinds, scores } = golden.answered;
+void test.each(['kinds', 'scores'] as const, (name) =>
+  test(`a Score question also gives the expected score of the options, with the levels 0, 1, 2 and so on, or the scores that it gives (${name})`, async () => {
+    await using directory = await new TemporaryFiles().directory(
+      'vector-decisions-',
+    );
+    using database = open(join(directory.path, 'cache.sqlite'));
+    const decisions = await service(directory.path, database);
+    const answered = golden.answered[name];
 
-  for (const answered of [kinds, scores])
     assertAnswer(await decisions.decide(answered.request), answered, 'urgency');
-});
+  }),
+);
 
-test('a Noul question gives the probability of "none" first, shares the rest among the options, and answers "none" from the threshold, or 0.5, up, else "in_scope"', async () => {
-  await using directory = await new TemporaryFiles().directory(
-    'vector-decisions-',
-  );
-  using database = open(join(directory.path, 'cache.sqlite'));
-  const decisions = await service(directory.path, database);
-  const { kinds, thresholds } = golden.answered;
-  // Without a threshold, a probability of "none" of 0.221 and of 0.509.
-  const inScope = golden.answered['noul in scope'];
-  const none = golden.answered['noul none'];
+// 'noul in scope' and 'noul none' have no threshold, and a probability of
+// "none" of 0.221 and of 0.509.
+void test.each(
+  ['kinds', 'thresholds', 'noul in scope', 'noul none'] as const,
+  (name) =>
+    test(`a Noul question gives the probability of "none" first, shares the rest among the options, and answers "none" from the threshold, or 0.5, up, else "in_scope" (${name})`, async () => {
+      await using directory = await new TemporaryFiles().directory(
+        'vector-decisions-',
+      );
+      using database = open(join(directory.path, 'cache.sqlite'));
+      const decisions = await service(directory.path, database);
+      const answered = golden.answered[name];
 
-  for (const answered of [kinds, thresholds, inScope, none])
-    assertAnswer(await decisions.decide(answered.request), answered, 'defect');
-});
+      assertAnswer(
+        await decisions.decide(answered.request),
+        answered,
+        'defect',
+      );
+    }),
+);
 
 test('a Choice or Score question answers "none" when its confidence is below its threshold', async () => {
   await using directory = await new TemporaryFiles().directory(
@@ -637,18 +644,17 @@ test('a request can give the vectors: a state vector that is not a unit vector, 
   assertAnswer(await decisions.decide(given.request), given, 'team');
 });
 
-test('the decision gives the vector of a state that the reader embedded, the vectors of a state of texts, and null for given vectors', async () => {
-  await using directory = await new TemporaryFiles().directory(
-    'vector-decisions-',
-  );
-  using database = open(join(directory.path, 'cache.sqlite'));
-  const decisions = await service(directory.path, database);
-  const { kinds, thresholds, given } = golden.answered;
-  const texts = golden.answered['index texts'];
-  const vectors = golden.answered['index threshold'];
+void test.each(['kinds', 'thresholds', 'index texts'] as const, (name) =>
+  test(`the decision gives the vector of a state that the reader embedded, or the vectors of a state of texts (${name})`, async () => {
+    await using directory = await new TemporaryFiles().directory(
+      'vector-decisions-',
+    );
+    using database = open(join(directory.path, 'cache.sqlite'));
+    const decisions = await service(directory.path, database);
+    const answered = golden.answered[name];
 
-  for (const answered of [kinds, thresholds, texts]) {
     const { vector } = await decisions.decide(answered.request);
+
     assert.ok(vector !== null && answered.vector !== null);
     const values = answered.vector.flat();
     const got = vector.flat();
@@ -660,13 +666,30 @@ test('the decision gives the vector of a state that the reader embedded, the vec
         `value ${index}: ${number} against Venn's ${value}`,
       );
     }
-  }
+  }),
+);
+
+test('the vector of a state of texts is one vector for each text', () => {
+  const texts = golden.answered['index texts'];
+
   assert.ok(Array.isArray(texts.vector?.[0]));
-  for (const answered of [given, vectors]) {
-    assert.equal((await decisions.decide(answered.request)).vector, null);
-    assert.equal(answered.vector, null);
-  }
 });
+
+void test.each(['given', 'index threshold'] as const, (name) =>
+  test(`the decision gives null for given vectors (${name})`, async () => {
+    await using directory = await new TemporaryFiles().directory(
+      'vector-decisions-',
+    );
+    using database = open(join(directory.path, 'cache.sqlite'));
+    const decisions = await service(directory.path, database);
+    const answered = golden.answered[name];
+
+    const { vector } = await decisions.decide(answered.request);
+
+    assert.equal(vector, null);
+    assert.equal(answered.vector, null);
+  }),
+);
 
 test('a request of several named questions of each type answers each by its name about the one state', async () => {
   await using directory = await new TemporaryFiles().directory(

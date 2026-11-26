@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+
+import { test } from '@zukhruf/parameterized-test';
 
 import {
   BitVector,
@@ -10,35 +11,29 @@ import {
   ZeroVectorError,
 } from './index.ts';
 
-test('Vector.from refuses a value that is not finite in float32', () => {
-  // Arrange
-  const sources = [[1, Number.NaN], [Number.POSITIVE_INFINITY], [1e39]];
+void test.each(
+  [[1, Number.NaN], [Number.POSITIVE_INFINITY], [1e39]],
+  (source) =>
+    test(`Vector.from refuses a value that is not finite in float32: [${String(source)}]`, () => {
+      // Act and Assert
+      assert.throws(() => Vector.from(source), RangeError, String(source));
+    }),
+);
 
-  for (const source of sources) {
-    // Act and Assert
-    assert.throws(() => Vector.from(source), RangeError, String(source));
-  }
-});
-
-test('HalfVector.from refuses a value that is not finite in float16', () => {
-  // Arrange: 70000 is past the largest float16, 65504.
-  const sources = [[Number.NaN], [Number.NEGATIVE_INFINITY], [70000]];
-
-  for (const source of sources) {
+// 70000 is past the largest float16, 65504.
+void test.each([[Number.NaN], [Number.NEGATIVE_INFINITY], [70000]], (source) =>
+  test(`HalfVector.from refuses a value that is not finite in float16: [${String(source)}]`, () => {
     // Act and Assert
     assert.throws(() => HalfVector.from(source), RangeError, String(source));
-  }
-});
+  }),
+);
 
-test('Int8Vector.from refuses a value that is not an integer from -128 to 127', () => {
-  // Arrange
-  const sources = [[128], [-129], [1.5], [Number.NaN]];
-
-  for (const source of sources) {
+void test.each([[128], [-129], [1.5], [Number.NaN]], (source) =>
+  test(`Int8Vector.from refuses a value that is not an integer from -128 to 127: [${String(source)}]`, () => {
     // Act and Assert
     assert.throws(() => Int8Vector.from(source), RangeError, String(source));
-  }
-});
+  }),
+);
 
 test('Int8Vector.from keeps the edges of the range', () => {
   // Act
@@ -94,19 +89,27 @@ test('UnitVector.normalize refuses a vector of length 0 with a ZeroVectorError, 
   assert.throws(() => UnitVector.normalize(zero), RangeError);
 });
 
-test('UnitVector.normalize gives a vector of length 1 in the same direction', () => {
-  // Arrange
-  const vectors = [Vector.from([3, 4]), HalfVector.from([3, 4])];
+void test.each(
+  [
+    { name: 'Vector', create: () => Vector.from([3, 4]) },
+    { name: 'HalfVector', create: () => HalfVector.from([3, 4]) },
+  ],
+  ({ name, create }) =>
+    test(`UnitVector.normalize gives a vector of length 1 in the same direction for a ${name}`, () => {
+      // Arrange
+      const vector = create();
 
-  for (const vector of vectors) {
-    // Act
-    const unit = UnitVector.normalize(vector);
+      // Act
+      const unit = UnitVector.normalize(vector);
 
-    // Assert
-    assert.ok(unit instanceof Vector);
-    assert.deepEqual([...unit.values], [0.6000000238418579, 0.800000011920929]);
-  }
-});
+      // Assert
+      assert.ok(unit instanceof Vector);
+      assert.deepEqual(
+        [...unit.values],
+        [0.6000000238418579, 0.800000011920929],
+      );
+    }),
+);
 
 test('each from copies its source, and values gives a copy', () => {
   // Arrange

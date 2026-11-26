@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import type { SQLOutputValue } from 'node:sqlite';
-import { test } from 'node:test';
 import { promisify } from 'node:util';
 
+import { test } from '@zukhruf/parameterized-test';
 import { open } from '@zukhruf/sqlite-open';
 
 import {
@@ -1305,15 +1305,21 @@ test('a store that folds the changes of each diff into its saved entries and rea
   );
 });
 
-test('savedGroups rejects a saved entry that diffGroups did not write, and names the snapshot', () => {
-  const differential = items(new ClosedWorld());
+// A saved entry that diffGroups writes: one group, a key that waits for it,
+// and the group listed as failed.
+function savedEntry() {
   const group = { fingerprint: 'v1', snapshot: { '["a"]': 'f' } };
-  const none = new Map<string, unknown>();
   const valid = {
     groups: new Map([['one', group]]),
     unknown: new Map([['["b"]', { saved: 'f', holder: 'one' }]]),
     listed: new Map([['one', true]]),
   };
+  return { group, valid };
+}
+
+test('savedGroups reads a saved entry that diffGroups wrote, and lists a failed group that the snapshot does not have', () => {
+  const differential = items(new ClosedWorld());
+  const { group, valid } = savedEntry();
 
   const read = differential.savedGroups(valid);
 
@@ -1329,25 +1335,92 @@ test('savedGroups rejects a saved entry that diffGroups did not write, and names
       .listed,
     new Set(['new']),
   );
-  for (const saved of [
-    { ...valid, groups: new Map([['one', 'v1']]) },
-    { ...valid, groups: new Map([['one', { ...group, fingerprint: 1 }]]) },
-    { ...valid, groups: new Map([['one', { ...group, snapshot: { a: 1 } }]]) },
-    { ...valid, unknown: new Map([['["b"]', 'f']]) },
-    { ...valid, unknown: new Map([['["b"]', { saved: ['f'] }]]) },
-    { ...valid, unknown: new Map([['["b"]', { saved: 'f', holder: 1 }]]) },
-    { ...valid, listed: new Map([['one', 'yes']]) },
-    // A waiting key's holder is a group of the snapshot.
-    { ...valid, unknown: new Map([['["b"]', { saved: 'f', holder: 'two' }]]) },
-    { groups: none, unknown: none, listed: new Map([['one', false]]) },
-  ])
-    assert.throws(
-      () => differential.savedGroups(saved),
-      (error) =>
-        error instanceof TypeError &&
-        error.message === 'Snapshot items state is not a saved snapshot',
-    );
 });
+
+void test.each(
+  [
+    {
+      name: 'a group that is not an object',
+      saved: ({ valid }: ReturnType<typeof savedEntry>) => ({
+        ...valid,
+        groups: new Map([['one', 'v1']]),
+      }),
+    },
+    {
+      name: 'a fingerprint that is a number',
+      saved: ({ valid, group }: ReturnType<typeof savedEntry>) => ({
+        ...valid,
+        groups: new Map([['one', { ...group, fingerprint: 1 }]]),
+      }),
+    },
+    {
+      name: 'a snapshot entry that is a number',
+      saved: ({ valid, group }: ReturnType<typeof savedEntry>) => ({
+        ...valid,
+        groups: new Map([['one', { ...group, snapshot: { a: 1 } }]]),
+      }),
+    },
+    {
+      name: 'a waiting key that is not an object',
+      saved: ({ valid }: ReturnType<typeof savedEntry>) => ({
+        ...valid,
+        unknown: new Map([['["b"]', 'f']]),
+      }),
+    },
+    {
+      name: 'a waiting key whose saved fingerprint is a list',
+      saved: ({ valid }: ReturnType<typeof savedEntry>) => ({
+        ...valid,
+        unknown: new Map([['["b"]', { saved: ['f'] }]]),
+      }),
+    },
+    {
+      name: 'a waiting key whose holder is a number',
+      saved: ({ valid }: ReturnType<typeof savedEntry>) => ({
+        ...valid,
+        unknown: new Map([['["b"]', { saved: 'f', holder: 1 }]]),
+      }),
+    },
+    {
+      name: 'a listed group whose value is text',
+      saved: ({ valid }: ReturnType<typeof savedEntry>) => ({
+        ...valid,
+        listed: new Map([['one', 'yes']]),
+      }),
+    },
+    {
+      // A waiting key's holder is a group of the snapshot.
+      name: 'a waiting key whose holder is not a group of the snapshot',
+      saved: ({ valid }: ReturnType<typeof savedEntry>) => ({
+        ...valid,
+        unknown: new Map([['["b"]', { saved: 'f', holder: 'two' }]]),
+      }),
+    },
+    {
+      name: 'a listed group whose value is false',
+      saved: () => {
+        const none = new Map<string, unknown>();
+        return {
+          groups: none,
+          unknown: none,
+          listed: new Map([['one', false]]),
+        };
+      },
+    },
+  ],
+  (row) =>
+    test(`savedGroups rejects a saved entry that diffGroups did not write, and names the snapshot: ${row.name}`, () => {
+      const differential = items(new ClosedWorld());
+      const saved = row.saved(savedEntry());
+
+      assert.throws(
+        () => differential.savedGroups(saved),
+        (error) =>
+          error instanceof TypeError &&
+          error.message === 'Snapshot items state is not a saved snapshot',
+      );
+    }),
+);
 
 // The entries of a grouped snapshot, as text to compare before and after.
 function serialized(snapshot: GroupedSnapshot): string {
@@ -1748,31 +1821,37 @@ test('a record that holds bytes diffs by its bytes: equal bytes in a Buffer or a
   ]);
 });
 
-test('a record that holds a value JSON cannot hold with no change, other than bytes, fails', async () => {
-  const loose = new SnapshotDifferential<Record<string, unknown>>({
-    name: 'loose',
-    primaryKey: ['id'],
-    key: () => ['a'],
-    policy: new ClosedWorld(),
-  });
+void test.each(
+  [
+    { name: 'a Uint16Array', value: new Uint16Array([1]) },
+    { name: 'a Uint8ClampedArray', value: new Uint8ClampedArray([1]) },
+    { name: 'a Date', value: new Date(0) },
+    { name: 'a Map', value: new Map([['inner', 1]]) },
+    {
+      name: 'an instance of a class',
+      value: new (class Inner {
+        inner = 1;
+      })(),
+    },
+    { name: '-0', value: -0 },
+    { name: 'NaN', value: Number.NaN },
+    { name: 'an undefined property', value: { inner: undefined } },
+  ],
+  (row) =>
+    test(`a record that holds a value JSON cannot hold with no change, other than bytes, fails: ${row.name}`, async () => {
+      const loose = new SnapshotDifferential<Record<string, unknown>>({
+        name: 'loose',
+        primaryKey: ['id'],
+        key: () => ['a'],
+        policy: new ClosedWorld(),
+      });
 
-  for (const value of [
-    new Uint16Array([1]),
-    new Uint8ClampedArray([1]),
-    new Date(0),
-    new Map([['inner', 1]]),
-    new (class Inner {
-      inner = 1;
-    })(),
-    -0,
-    Number.NaN,
-    { inner: undefined },
-  ])
-    await assert.rejects(
-      Array.fromAsync(loose.diff([{ id: 'a', value }], null)),
-      /Snapshot loose records must be losslessly JSON serializable, or bytes/,
-    );
-});
+      await assert.rejects(
+        Array.fromAsync(loose.diff([{ id: 'a', value: row.value }], null)),
+        /Snapshot loose records must be losslessly JSON serializable, or bytes/,
+      );
+    }),
+);
 
 test('rows that node:sqlite reads, whose prototype is null, diff as the same rows in plain objects do', async () => {
   const rows = new SnapshotDifferential<Record<string, SQLOutputValue>>({

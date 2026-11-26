@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
 
 import { Fragment, type ReactNode, createElement } from 'react';
 import { renderToStaticMarkup as render } from 'react-dom/server';
@@ -18,6 +17,7 @@ import {
   SvgTimelineDiagram,
   layoutGraph,
 } from '@zukhruf/diagram';
+import { test } from '@zukhruf/parameterized-test';
 
 import { assertSoundLayout } from '../../../testing/sound-layout.ts';
 import { compileGraph } from '../../compiler/diagram-compile.ts';
@@ -1624,53 +1624,55 @@ test('rejects a note whose target is not a node or group', () => {
   );
 });
 
-test('stacked frames fan out behind a node in their direction and stay inside the viewBox', () => {
-  for (const [direction, dx, dy] of [
+void test.each(
+  [
     ['up-right', 1, -1],
     ['up-left', -1, -1],
     ['down-right', 1, 1],
     ['down-left', -1, 1],
-  ] as const) {
-    // Arrange
-    const children = createElement(
-      Diagram.Card,
-      {
-        id: 'vm',
-        row: 0,
-        col: 0,
-        stack: 3,
-        stackDirection: direction,
-        caption: 'Hosted VM',
-        captionSide: 'top',
-      },
-      createElement(Diagram.Line, null, 'VM'),
-      createElement(Diagram.Line, { textColor: 'dim' }, 'K3s worker'),
-    );
+  ] as const,
+  ([direction, dx, dy]) =>
+    test(`stacked frames fan out behind a node in the ${direction} direction and stay inside the viewBox`, () => {
+      // Arrange
+      const children = createElement(
+        Diagram.Card,
+        {
+          id: 'vm',
+          row: 0,
+          col: 0,
+          stack: 3,
+          stackDirection: direction,
+          caption: 'Hosted VM',
+          captionSide: 'top',
+        },
+        createElement(Diagram.Line, null, 'VM'),
+        createElement(Diagram.Line, { textColor: 'dim' }, 'K3s worker'),
+      );
 
-    // Act
-    const layout = soundLayout(children);
-    const markup = render(
-      createElement(SvgGraphDiagram, {
-        title: 'stacked-vm-test',
-        defaultMode: 'static',
-        children,
-      }),
-    );
+      // Act
+      const layout = soundLayout(children);
+      const markup = render(
+        createElement(SvgGraphDiagram, {
+          title: 'stacked-vm-test',
+          defaultMode: 'static',
+          children,
+        }),
+      );
 
-    // Assert
-    const vm = nodeOf(layout, 'vm');
-    assert.equal(vm.frames.length, 2, direction);
-    for (const frame of vm.frames) {
-      assert.equal(Math.sign(frame.x - vm.box.x), dx, `${direction} x`);
-      assert.equal(Math.sign(frame.y - vm.box.y), dy, `${direction} y`);
-      assert.ok(contains(layout.viewBox, frame), `${direction} in viewBox`);
-    }
-    assert.notDeepEqual(vm.frames[0], vm.frames[1], `${direction} fans out`);
-    assert.match(markup, /data-diagram-node-stack="vm:1"/);
-    assert.match(markup, /data-diagram-node-stack="vm:2"/);
-    assert.doesNotMatch(markup, /data-diagram-node-stack="vm:3"/);
-  }
-});
+      // Assert
+      const vm = nodeOf(layout, 'vm');
+      assert.equal(vm.frames.length, 2, direction);
+      for (const frame of vm.frames) {
+        assert.equal(Math.sign(frame.x - vm.box.x), dx, `${direction} x`);
+        assert.equal(Math.sign(frame.y - vm.box.y), dy, `${direction} y`);
+        assert.ok(contains(layout.viewBox, frame), `${direction} in viewBox`);
+      }
+      assert.notDeepEqual(vm.frames[0], vm.frames[1], `${direction} fans out`);
+      assert.match(markup, /data-diagram-node-stack="vm:1"/);
+      assert.match(markup, /data-diagram-node-stack="vm:2"/);
+      assert.doesNotMatch(markup, /data-diagram-node-stack="vm:3"/);
+    }),
+);
 
 test('renders node body item lists and descriptions as rows inside the card', () => {
   // Arrange
@@ -3488,55 +3490,77 @@ test('rejects edges that reference a missing named group port', () => {
   );
 });
 
-test('svg outputs draw text in Geist with kerning on and ligatures off, the shaping their text is measured with', () => {
-  // Arrange
-  const outputs = [
-    createElement(SvgGraphDiagram, {
-      title: 'font-graph-test',
-      defaultMode: 'static',
-      children: [
-        createElement(
-          Diagram.Group,
-          { id: 'backend', label: 'Backend' },
-          createElement(
-            Diagram.Box,
-            { id: 'service', row: 0, col: 1 },
-            'Service',
-          ),
-        ),
-        createElement(Diagram.Junction, { id: 'bus', row: 1, col: 1 }, 'Bus'),
-        createElement(Diagram.Box, { id: 'router', row: 0, col: 0 }, 'Router'),
-        createElement(
-          Diagram.Arrow,
-          { from: 'router', to: 'service' },
-          'calls',
-        ),
-      ],
-    }),
-    createElement(SvgTimelineDiagram, {
-      title: 'font-timeline-test',
-      defaultMode: 'static',
-      children: [
-        createElement(Diagram.Lane, { id: 'user' }, 'User'),
-        createElement(Diagram.Lane, { id: 'api' }, 'API'),
-        createElement(Diagram.Signal, { from: 'user', to: 'api' }, 'Request'),
-      ],
-    }),
-  ];
+void test.each(
+  [
+    {
+      name: 'graph',
+      build: () =>
+        createElement(SvgGraphDiagram, {
+          title: 'font-graph-test',
+          defaultMode: 'static',
+          children: [
+            createElement(
+              Diagram.Group,
+              { id: 'backend', label: 'Backend' },
+              createElement(
+                Diagram.Box,
+                { id: 'service', row: 0, col: 1 },
+                'Service',
+              ),
+            ),
+            createElement(
+              Diagram.Junction,
+              { id: 'bus', row: 1, col: 1 },
+              'Bus',
+            ),
+            createElement(
+              Diagram.Box,
+              { id: 'router', row: 0, col: 0 },
+              'Router',
+            ),
+            createElement(
+              Diagram.Arrow,
+              { from: 'router', to: 'service' },
+              'calls',
+            ),
+          ],
+        }),
+    },
+    {
+      name: 'timeline',
+      build: () =>
+        createElement(SvgTimelineDiagram, {
+          title: 'font-timeline-test',
+          defaultMode: 'static',
+          children: [
+            createElement(Diagram.Lane, { id: 'user' }, 'User'),
+            createElement(Diagram.Lane, { id: 'api' }, 'API'),
+            createElement(
+              Diagram.Signal,
+              { from: 'user', to: 'api' },
+              'Request',
+            ),
+          ],
+        }),
+    },
+  ],
+  ({ name, build }) =>
+    test(`the svg ${name} output draws text in Geist with kerning on and ligatures off, the shaping its text is measured with`, () => {
+      // Arrange
+      const output = build();
 
-  for (const output of outputs) {
-    // Act
-    const markup = render(output).replaceAll('&#x27;', "'");
+      // Act
+      const markup = render(output).replaceAll('&#x27;', "'");
 
-    // Assert
-    // styles.test.ts proves what an app's stylesheet makes of dgm-text-shaping.
-    assert.match(markup, /<svg[^>]*class="dgm-text-shaping[ "]/);
-    const families = [...markup.matchAll(/font-family="([^"]*)"/g)].map(
-      ([, family]) => family,
-    );
-    assert.ok(families.length > 0, 'the diagram draws text');
-    for (const family of families) {
-      assert.match(family ?? '', /^'Geist (Sans|Mono)',/);
-    }
-  }
-});
+      // Assert
+      // styles.test.ts proves what an app's stylesheet makes of dgm-text-shaping.
+      assert.match(markup, /<svg[^>]*class="dgm-text-shaping[ "]/);
+      const families = [...markup.matchAll(/font-family="([^"]*)"/g)].map(
+        ([, family]) => family,
+      );
+      assert.ok(families.length > 0, 'the diagram draws text');
+      for (const family of families) {
+        assert.match(family ?? '', /^'Geist (Sans|Mono)',/);
+      }
+    }),
+);

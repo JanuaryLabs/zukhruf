@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
-import { test } from 'node:test';
 
 import * as sqliteVec from 'sqlite-vec';
 
 import { TemporaryFiles } from '@zukhruf/fs';
+import { test } from '@zukhruf/parameterized-test';
 import { open } from '@zukhruf/sqlite-open';
 
 import { Declaration } from './index.ts';
@@ -71,33 +71,42 @@ test('a database that stores every object as declared fits, and apply keeps its 
   assert.equal(count(database, 'events'), 1);
 });
 
-test('a table whose columns or CHECK differ from its declaration is stale, and apply replaces the whole declaration without its rows', async () => {
-  for (const older of [
-    'CREATE TABLE parents (id INTEGER PRIMARY KEY) STRICT',
-    "CREATE TABLE parents (id INTEGER PRIMARY KEY, status TEXT CHECK (status IN ('a'))) STRICT",
-  ]) {
-    await using scratch = await new TemporaryFiles().directory('drift-');
-    using database = open(join(scratch.path, 'data.sqlite'));
-    database.exec(`${older};
+void test.each(
+  [
+    {
+      name: 'its columns differ',
+      older: 'CREATE TABLE parents (id INTEGER PRIMARY KEY) STRICT',
+    },
+    {
+      name: 'its CHECK differs',
+      older:
+        "CREATE TABLE parents (id INTEGER PRIMARY KEY, status TEXT CHECK (status IN ('a'))) STRICT",
+    },
+  ],
+  ({ name, older }) =>
+    test(`a table whose columns or CHECK differ from its declaration is stale, and apply replaces the whole declaration without its rows: ${name}`, async () => {
+      await using scratch = await new TemporaryFiles().directory('drift-');
+      using database = open(join(scratch.path, 'data.sqlite'));
+      database.exec(`${older};
       CREATE TABLE children (parent INTEGER NOT NULL REFERENCES parents (id)) STRICT;
       INSERT INTO parents (id) VALUES (1);
       INSERT INTO children VALUES (1)`);
-    const declaration = new Declaration(
-      [
-        "CREATE TABLE parents (id INTEGER PRIMARY KEY, status TEXT CHECK (status IN ('a', 'b'))) STRICT",
-        'CREATE TABLE children (parent INTEGER NOT NULL REFERENCES parents (id)) STRICT',
-      ],
-      { rows: 'replace' },
-    );
+      const declaration = new Declaration(
+        [
+          "CREATE TABLE parents (id INTEGER PRIMARY KEY, status TEXT CHECK (status IN ('a', 'b'))) STRICT",
+          'CREATE TABLE children (parent INTEGER NOT NULL REFERENCES parents (id)) STRICT',
+        ],
+        { rows: 'replace' },
+      );
 
-    assert.equal(declaration.drift(database), 'stale');
-    declaration.apply(database);
+      assert.equal(declaration.drift(database), 'stale');
+      declaration.apply(database);
 
-    assert.equal(declaration.drift(database), 'fits');
-    assert.equal(count(database, 'parents'), 0);
-    assert.equal(count(database, 'children'), 0);
-  }
-});
+      assert.equal(declaration.drift(database), 'fits');
+      assert.equal(count(database, 'parents'), 0);
+      assert.equal(count(database, 'children'), 0);
+    }),
+);
 
 test('a database that stores some objects of a declaration but not others has drifted, and apply creates only the missing ones', async () => {
   await using scratch = await new TemporaryFiles().directory('drift-');
@@ -143,9 +152,10 @@ test('a view whose query differs from its declaration is stale', async () => {
   assert.equal(declaration.drift(database), 'stale');
 });
 
-test('a table whose stored text differs from its declaration only in comments fits, and apply keeps the stored text and the rows', async () => {
-  for (const { older, newer } of [
+void test.each(
+  [
     {
+      name: 'a line comment that changed',
       older: `CREATE TABLE jobs (
         -- plans.js:871-880
         id TEXT PRIMARY KEY
@@ -156,34 +166,39 @@ test('a table whose stored text differs from its declaration only in comments fi
       ) STRICT`,
     },
     {
+      name: 'a block comment that spans more lines',
       older: 'CREATE TABLE jobs (/* the key */ id TEXT PRIMARY KEY) STRICT',
       newer: `CREATE TABLE jobs (/* the key
         of a job */ id TEXT PRIMARY KEY) STRICT`,
     },
     {
+      name: 'an empty block comment that becomes a line comment',
       older: 'CREATE TABLE jobs (id TEXT/**/PRIMARY KEY) STRICT',
       newer: `CREATE TABLE jobs (id TEXT -- the key
         PRIMARY KEY) STRICT`,
     },
-  ]) {
-    await using scratch = await new TemporaryFiles().directory('drift-');
-    using database = open(join(scratch.path, 'data.sqlite'));
-    new Declaration([older], { rows: 'replace' }).apply(database);
-    database.exec("INSERT INTO jobs VALUES ('a')");
-    const before = stored(database);
-    const declaration = new Declaration([newer], { rows: 'replace' });
+  ],
+  ({ name, older, newer }) =>
+    test(`a table whose stored text differs from its declaration only in comments fits, and apply keeps the stored text and the rows: ${name}`, async () => {
+      await using scratch = await new TemporaryFiles().directory('drift-');
+      using database = open(join(scratch.path, 'data.sqlite'));
+      new Declaration([older], { rows: 'replace' }).apply(database);
+      database.exec("INSERT INTO jobs VALUES ('a')");
+      const before = stored(database);
+      const declaration = new Declaration([newer], { rows: 'replace' });
 
-    assert.equal(declaration.drift(database), 'fits', newer);
-    declaration.apply(database);
+      assert.equal(declaration.drift(database), 'fits', newer);
+      declaration.apply(database);
 
-    assert.deepEqual(stored(database), before);
-    assert.equal(count(database, 'jobs'), 1);
-  }
-});
+      assert.deepEqual(stored(database), before);
+      assert.equal(count(database, 'jobs'), 1);
+    }),
+);
 
-test('a table whose stored text differs from its declaration only in the spaces and line breaks between tokens fits', async () => {
-  for (const { older, newer } of [
+void test.each(
+  [
     {
+      name: 'line breaks, a tab and more spaces',
       older:
         "CREATE TABLE jobs (id TEXT PRIMARY KEY, state TEXT NOT NULL DEFAULT 'created') STRICT",
       newer: `CREATE TABLE jobs (
@@ -193,18 +208,21 @@ test('a table whose stored text differs from its declaration only in the spaces 
       )   STRICT`,
     },
     {
+      name: 'no spaces around parentheses and commas',
       older: 'CREATE TABLE jobs ( id TEXT , n INT CHECK ( n > 0 ) ) STRICT',
       newer: 'CREATE TABLE jobs(id TEXT,n INT CHECK(n > 0))STRICT',
     },
-  ]) {
-    await using scratch = await new TemporaryFiles().directory('drift-');
-    using database = open(join(scratch.path, 'data.sqlite'));
-    new Declaration([older], { rows: 'replace' }).apply(database);
-    const declaration = new Declaration([newer], { rows: 'replace' });
+  ],
+  ({ name, older, newer }) =>
+    test(`a table whose stored text differs from its declaration only in the spaces and line breaks between tokens fits: ${name}`, async () => {
+      await using scratch = await new TemporaryFiles().directory('drift-');
+      using database = open(join(scratch.path, 'data.sqlite'));
+      new Declaration([older], { rows: 'replace' }).apply(database);
+      const declaration = new Declaration([newer], { rows: 'replace' });
 
-    assert.equal(declaration.drift(database), 'fits', newer);
-  }
-});
+      assert.equal(declaration.drift(database), 'fits', newer);
+    }),
+);
 
 test('with rows keep, apply rebuilds the table whose column changed, and a table whose comment changed keeps its stored text and its rows', async () => {
   await using scratch = await new TemporaryFiles().directory('drift-');
@@ -251,69 +269,85 @@ test('with rows keep, apply rebuilds the table whose column changed, and a table
   ]);
 });
 
-test('a change inside a string, a quoted name or a token, or a change of a column or a constraint beside a comment, is stale', async () => {
-  for (const { older, newer } of [
+void test.each(
+  [
     {
+      name: 'a -- inside a string',
       older: "CREATE TABLE jobs (state TEXT DEFAULT 'a -- b') STRICT",
       newer: "CREATE TABLE jobs (state TEXT DEFAULT 'a -- c') STRICT",
     },
     {
+      name: 'a -- inside a string with an escaped quote',
       older: "CREATE TABLE jobs (state TEXT DEFAULT 'it''s -- b') STRICT",
       newer: "CREATE TABLE jobs (state TEXT DEFAULT 'it''s -- c') STRICT",
     },
     {
+      name: 'a /* */ inside a string',
       older: "CREATE TABLE jobs (state TEXT DEFAULT 'a /* b */ c') STRICT",
       newer: "CREATE TABLE jobs (state TEXT DEFAULT 'a /* b */ d') STRICT",
     },
     {
+      name: 'two spaces inside a string',
       older: "CREATE TABLE jobs (state TEXT DEFAULT 'a b') STRICT",
       newer: "CREATE TABLE jobs (state TEXT DEFAULT 'a  b') STRICT",
     },
     {
+      name: 'two spaces inside a double-quoted name',
       older: 'CREATE TABLE jobs ("the state" TEXT) STRICT',
       newer: 'CREATE TABLE jobs ("the  state" TEXT) STRICT',
     },
     {
+      name: 'a -- inside a double-quoted name with an escaped quote',
       older: 'CREATE TABLE jobs ("a"" -- b" TEXT) STRICT',
       newer: 'CREATE TABLE jobs ("a"" -- c" TEXT) STRICT',
     },
     {
+      name: 'two spaces inside a backquoted name',
       older: 'CREATE TABLE jobs (`the state` TEXT) STRICT',
       newer: 'CREATE TABLE jobs (`the  state` TEXT) STRICT',
     },
     {
+      name: 'a /* */ inside a backquoted name with an escaped backquote',
       older: 'CREATE TABLE jobs (`a`` /* b */` TEXT) STRICT',
       newer: 'CREATE TABLE jobs (`a`` /* c */` TEXT) STRICT',
     },
     {
+      name: 'two spaces inside a bracketed name',
       older: 'CREATE TABLE jobs ([the state] TEXT) STRICT',
       newer: 'CREATE TABLE jobs ([the  state] TEXT) STRICT',
     },
     {
+      name: 'a bare name that becomes double-quoted',
       older: 'CREATE TABLE jobs (state TEXT) STRICT',
       newer: 'CREATE TABLE jobs ("state" TEXT) STRICT',
     },
     {
+      name: 'a double-quoted name that becomes bracketed',
       older: 'CREATE TABLE jobs ("state" TEXT) STRICT',
       newer: 'CREATE TABLE jobs ([state] TEXT) STRICT',
     },
     {
+      name: 'a bare name that becomes backquoted',
       older: 'CREATE TABLE jobs (state TEXT) STRICT',
       newer: 'CREATE TABLE jobs (`state` TEXT) STRICT',
     },
     {
+      name: 'a bare name that becomes bracketed',
       older: 'CREATE TABLE jobs (state TEXT) STRICT',
       newer: 'CREATE TABLE jobs ([state] TEXT) STRICT',
     },
     {
+      name: 'a type whose case changed',
       older: 'CREATE TABLE jobs (state TEXT) STRICT',
       newer: 'CREATE TABLE jobs (state text) STRICT',
     },
     {
+      name: 'two tokens joined into one',
       older: 'CREATE TABLE jobs (id INT, state TEXT)',
       newer: 'CREATE TABLE jobs (id INT, stateTEXT)',
     },
     {
+      name: 'a column added beside a line comment',
       older: `CREATE TABLE jobs (
         -- the key
         id TEXT
@@ -325,6 +359,7 @@ test('a change inside a string, a quoted name or a token, or a change of a colum
       ) STRICT`,
     },
     {
+      name: 'a CHECK changed beside a block comment',
       older: `CREATE TABLE jobs (
         n INT /* above 0 */ CHECK (n > 0)
       ) STRICT`,
@@ -332,15 +367,17 @@ test('a change inside a string, a quoted name or a token, or a change of a colum
         n INT /* above 1 */ CHECK (n > 1)
       ) STRICT`,
     },
-  ]) {
-    await using scratch = await new TemporaryFiles().directory('drift-');
-    using database = open(join(scratch.path, 'data.sqlite'));
-    new Declaration([older], { rows: 'replace' }).apply(database);
-    const declaration = new Declaration([newer], { rows: 'replace' });
+  ],
+  ({ name, older, newer }) =>
+    test(`a change inside a string, a quoted name or a token, or a change of a column or a constraint beside a comment, is stale: ${name}`, async () => {
+      await using scratch = await new TemporaryFiles().directory('drift-');
+      using database = open(join(scratch.path, 'data.sqlite'));
+      new Declaration([older], { rows: 'replace' }).apply(database);
+      const declaration = new Declaration([newer], { rows: 'replace' });
 
-    assert.equal(declaration.drift(database), 'stale', newer);
-  }
-});
+      assert.equal(declaration.drift(database), 'stale', newer);
+    }),
+);
 
 test('drift reads a database opened read-only and changes nothing', async () => {
   await using scratch = await new TemporaryFiles().directory('drift-');
@@ -788,8 +825,8 @@ test('with rows keep, a view that was broken before apply does not fail it', asy
   ]);
 });
 
-test('a trigger on another table that was broken before apply does not fail it, with rows keep and with rows replace', async () => {
-  for (const kept of ['keep', 'replace'] as const) {
+void test.each(['keep', 'replace'] as const, (kept) =>
+  test(`a trigger on another table that was broken before apply does not fail it, with rows ${kept}`, async () => {
     await using scratch = await new TemporaryFiles().directory('drift-');
     using database = open(join(scratch.path, 'data.sqlite'));
     database.exec(`CREATE TABLE runs (id INTEGER PRIMARY KEY) STRICT;
@@ -806,8 +843,8 @@ test('a trigger on another table that was broken before apply does not fail it, 
     declaration.apply(database);
 
     assert.equal(declaration.drift(database), 'fits');
-  }
-});
+  }),
+);
 
 test('with rows keep, a rebuild that drops a column that a trigger on another table reads fails apply with the error of SQLite, and the tables and their rows stay as they were', async () => {
   await using scratch = await new TemporaryFiles().directory('drift-');
@@ -865,8 +902,8 @@ test('with rows replace, a replace that drops a column that a trigger on another
   assert.deepEqual(rows(database, 'SELECT * FROM documents'), [{ id: 1 }]);
 });
 
-test('a change that keeps the columns that a trigger on another table reads applies, with rows keep and with rows replace, and the trigger works after it', async () => {
-  for (const kept of ['keep', 'replace'] as const) {
+void test.each(['keep', 'replace'] as const, (kept) =>
+  test(`a change that keeps the columns that a trigger on another table reads applies, with rows ${kept}, and the trigger works after it`, async () => {
     await using scratch = await new TemporaryFiles().directory('drift-');
     using database = open(join(scratch.path, 'data.sqlite'));
     database.exec(`CREATE TABLE chunks (id INTEGER PRIMARY KEY, document INTEGER) STRICT;
@@ -890,8 +927,8 @@ test('a change that keeps the columns that a trigger on another table reads appl
       INSERT INTO chunks VALUES (3, 2, 'third');
       DELETE FROM documents WHERE id = 1`);
     assert.deepEqual(rows(database, 'SELECT id FROM chunks'), [{ id: 3 }]);
-  }
-});
+  }),
+);
 
 test('with rows replace, a stale AUTOINCREMENT table is replaced and the declaration fits', async () => {
   await using scratch = await new TemporaryFiles().directory('drift-');
@@ -952,8 +989,8 @@ test('an AUTOINCREMENT declaration that the database does not store is missing, 
   assert.equal(declaration.drift(database), 'missing');
 });
 
-test('with rows keep, a table without INTEGER PRIMARY KEY keeps the rowid of each row, also when a column is named rowid', async () => {
-  for (const [older, newer, id] of [
+void test.each(
+  [
     [
       'CREATE TABLE notes (body TEXT) STRICT',
       'CREATE TABLE notes (body TEXT, at TEXT) STRICT',
@@ -969,29 +1006,31 @@ test('with rows keep, a table without INTEGER PRIMARY KEY keeps the rowid of eac
       'CREATE TABLE notes (rowid TEXT, _rowid_ TEXT, body TEXT, at TEXT) STRICT',
       'oid',
     ],
-  ] as const) {
-    await using scratch = await new TemporaryFiles().directory('drift-');
-    using database = open(join(scratch.path, 'data.sqlite'));
-    database.exec(`${older};
+  ] as const,
+  ([older, newer, id]) =>
+    test(`with rows keep, a table without INTEGER PRIMARY KEY keeps the rowid of each row, also when a column is named rowid: read by ${id}`, async () => {
+      await using scratch = await new TemporaryFiles().directory('drift-');
+      using database = open(join(scratch.path, 'data.sqlite'));
+      database.exec(`${older};
       INSERT INTO notes (body) VALUES ('a'), ('b'), ('c');
       DELETE FROM notes WHERE body = 'a'`);
-    const declaration = new Declaration([newer], { rows: 'keep' });
+      const declaration = new Declaration([newer], { rows: 'keep' });
 
-    declaration.apply(database);
+      declaration.apply(database);
 
-    assert.equal(declaration.drift(database), 'fits');
-    assert.deepEqual(
-      rows(database, `SELECT ${id} AS id, body FROM notes ORDER BY body`),
-      [
-        { id: 2, body: 'b' },
-        { id: 3, body: 'c' },
-      ],
-    );
-  }
-});
+      assert.equal(declaration.drift(database), 'fits');
+      assert.deepEqual(
+        rows(database, `SELECT ${id} AS id, body FROM notes ORDER BY body`),
+        [
+          { id: 2, body: 'b' },
+          { id: 3, body: 'c' },
+        ],
+      );
+    }),
+);
 
-test('with rows keep, an AUTOINCREMENT table keeps its counter, so the id of a deleted row is not used again, also when no row is left', async () => {
-  for (const [deleted, kept] of [
+void test.each(
+  [
     [
       'DELETE FROM jobs WHERE id = 3',
       [
@@ -1000,29 +1039,31 @@ test('with rows keep, an AUTOINCREMENT table keeps its counter, so the id of a d
       ],
     ],
     ['DELETE FROM jobs', []],
-  ] as const) {
-    await using scratch = await new TemporaryFiles().directory('drift-');
-    using database = open(join(scratch.path, 'data.sqlite'));
-    database.exec(`CREATE TABLE jobs (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT) STRICT;
+  ] as const,
+  ([deleted, kept]) =>
+    test(`with rows keep, an AUTOINCREMENT table keeps its counter, so the id of a deleted row is not used again, also when no row is left: ${deleted}`, async () => {
+      await using scratch = await new TemporaryFiles().directory('drift-');
+      using database = open(join(scratch.path, 'data.sqlite'));
+      database.exec(`CREATE TABLE jobs (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT) STRICT;
       INSERT INTO jobs (name) VALUES ('a'), ('b'), ('c');
       ${deleted}`);
-    const declaration = new Declaration(
-      [
-        'CREATE TABLE jobs (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, at TEXT) STRICT',
-      ],
-      { rows: 'keep' },
-    );
+      const declaration = new Declaration(
+        [
+          'CREATE TABLE jobs (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, at TEXT) STRICT',
+        ],
+        { rows: 'keep' },
+      );
 
-    declaration.apply(database);
-    database.exec("INSERT INTO jobs (name) VALUES ('d')");
+      declaration.apply(database);
+      database.exec("INSERT INTO jobs (name) VALUES ('d')");
 
-    assert.equal(declaration.drift(database), 'fits');
-    assert.deepEqual(rows(database, 'SELECT id, name FROM jobs ORDER BY id'), [
-      ...kept,
-      { id: 4, name: 'd' },
-    ]);
-  }
-});
+      assert.equal(declaration.drift(database), 'fits');
+      assert.deepEqual(
+        rows(database, 'SELECT id, name FROM jobs ORDER BY id'),
+        [...kept, { id: 4, name: 'd' }],
+      );
+    }),
+);
 
 test('with rows keep, a table that loses AUTOINCREMENT keeps its rows and rowids, and sqlite_sequence has no row for it', async () => {
   await using scratch = await new TemporaryFiles().directory('drift-');
@@ -1076,15 +1117,20 @@ test('with rows keep, a stale virtual table fails apply before any change, and i
   );
 });
 
-test('an element with two statements fails when the declaration is made, and one statement with a closing semicolon and a comment does not', async () => {
-  for (const element of [
+void test.each(
+  [
     'CREATE TABLE events (at TEXT) STRICT; CREATE TABLE notes (body TEXT) STRICT',
     'CREATE TABLE events (at TEXT) STRICT; notes',
-  ])
-    assert.throws(() => new Declaration([element], { rows: 'replace' }), {
-      message: `An element of a declaration holds one statement. This element holds more: ${element}`,
-    });
+  ],
+  (element) =>
+    test(`an element with two statements fails when the declaration is made: ${element}`, () => {
+      assert.throws(() => new Declaration([element], { rows: 'replace' }), {
+        message: `An element of a declaration holds one statement. This element holds more: ${element}`,
+      });
+    }),
+);
 
+test('an element of one statement with a closing semicolon and a comment does not fail when the declaration is made', async () => {
   await using scratch = await new TemporaryFiles().directory('drift-');
   using database = open(join(scratch.path, 'data.sqlite'));
   const declaration = new Declaration(
@@ -1103,22 +1149,25 @@ test('an element with two statements fails when the declaration is made, and one
   ]);
 });
 
-test('an element that makes no object fails when the declaration is made', () => {
-  for (const element of [
+void test.each(
+  [
     'CREATE TABLE IF NOT EXISTS events (at TEXT) STRICT',
     'CREATE TEMP TABLE scratch (at TEXT) STRICT',
     "INSERT INTO events VALUES ('2026-10-23')",
-  ])
-    assert.throws(
-      () =>
-        new Declaration(['CREATE TABLE events (at TEXT) STRICT', element], {
-          rows: 'replace',
-        }),
-      {
-        message: `An element of a declaration makes one object. This element makes none: ${element}`,
-      },
-    );
-});
+  ],
+  (element) =>
+    test(`an element that makes no object fails when the declaration is made: ${element}`, () => {
+      assert.throws(
+        () =>
+          new Declaration(['CREATE TABLE events (at TEXT) STRICT', element], {
+            rows: 'replace',
+          }),
+        {
+          message: `An element of a declaration makes one object. This element makes none: ${element}`,
+        },
+      );
+    }),
+);
 
 test('with rows keep, a WITHOUT ROWID table keeps its rows', async () => {
   await using scratch = await new TemporaryFiles().directory('drift-');
@@ -1141,62 +1190,79 @@ test('with rows keep, a WITHOUT ROWID table keeps its rows', async () => {
   ]);
 });
 
-test('with rows keep, a table that becomes a virtual table, or a virtual table that becomes a table, fails apply before any change', async () => {
-  for (const [older, newer] of [
-    [
-      'CREATE TABLE notes (body TEXT)',
-      'CREATE VIRTUAL TABLE notes USING fts5(body)',
-    ],
-    [
-      'CREATE VIRTUAL TABLE notes USING fts5(body)',
-      'CREATE TABLE notes (body TEXT)',
-    ],
-  ] as const) {
-    await using scratch = await new TemporaryFiles().directory('drift-');
-    using database = open(join(scratch.path, 'data.sqlite'));
-    database.exec(`${older};
+void test.each(
+  [
+    {
+      name: 'a table that becomes a virtual table',
+      older: 'CREATE TABLE notes (body TEXT)',
+      newer: 'CREATE VIRTUAL TABLE notes USING fts5(body)',
+    },
+    {
+      name: 'a virtual table that becomes a table',
+      older: 'CREATE VIRTUAL TABLE notes USING fts5(body)',
+      newer: 'CREATE TABLE notes (body TEXT)',
+    },
+  ],
+  ({ name, older, newer }) =>
+    test(`with rows keep, ${name} fails apply before any change`, async () => {
+      await using scratch = await new TemporaryFiles().directory('drift-');
+      using database = open(join(scratch.path, 'data.sqlite'));
+      database.exec(`${older};
       INSERT INTO notes VALUES ('kept')`);
-    const before = stored(database);
-    const declaration = new Declaration([newer], { rows: 'keep' });
+      const before = stored(database);
+      const declaration = new Declaration([newer], { rows: 'keep' });
 
-    assert.throws(() => declaration.apply(database), {
-      message:
-        "The virtual table notes cannot keep its rows: declare it in its own declaration with rows: 'replace'.",
-    });
+      assert.throws(() => declaration.apply(database), {
+        message:
+          "The virtual table notes cannot keep its rows: declare it in its own declaration with rows: 'replace'.",
+      });
 
-    assert.deepEqual(stored(database), before);
-    assert.deepEqual(rows(database, 'SELECT body FROM notes'), [
-      { body: 'kept' },
-    ]);
-  }
-});
+      assert.deepEqual(stored(database), before);
+      assert.deepEqual(rows(database, 'SELECT body FROM notes'), [
+        { body: 'kept' },
+      ]);
+    }),
+);
 
-test('with rows keep, a column that becomes the INTEGER PRIMARY KEY keeps its values, and a new INTEGER PRIMARY KEY takes the old rowids', async () => {
-  for (const [older, ids] of [
-    ['CREATE TABLE notes (id INTEGER, body TEXT) STRICT', [100, 200]],
-    ['CREATE TABLE notes (body TEXT) STRICT', [2, 3]],
-  ] as const) {
-    await using scratch = await new TemporaryFiles().directory('drift-');
-    using database = open(join(scratch.path, 'data.sqlite'));
-    database.exec(`${older};
+void test.each(
+  [
+    {
+      name: 'a column that becomes the INTEGER PRIMARY KEY keeps its values',
+      older: 'CREATE TABLE notes (id INTEGER, body TEXT) STRICT',
+      ids: [100, 200],
+    },
+    {
+      name: 'a new INTEGER PRIMARY KEY takes the old rowids',
+      older: 'CREATE TABLE notes (body TEXT) STRICT',
+      ids: [2, 3],
+    },
+  ],
+  ({ name, older, ids }) =>
+    test(`with rows keep, ${name}`, async () => {
+      await using scratch = await new TemporaryFiles().directory('drift-');
+      using database = open(join(scratch.path, 'data.sqlite'));
+      database.exec(`${older};
       INSERT INTO notes (body) VALUES ('a'), ('b'), ('c');
       DELETE FROM notes WHERE body = 'a'`);
-    if (older.includes('id INTEGER'))
-      database.exec(`UPDATE notes SET id = rowid * 100 - 100`);
-    const declaration = new Declaration(
-      ['CREATE TABLE notes (id INTEGER PRIMARY KEY, body TEXT) STRICT'],
-      { rows: 'keep' },
-    );
+      if (older.includes('id INTEGER'))
+        database.exec(`UPDATE notes SET id = rowid * 100 - 100`);
+      const declaration = new Declaration(
+        ['CREATE TABLE notes (id INTEGER PRIMARY KEY, body TEXT) STRICT'],
+        { rows: 'keep' },
+      );
 
-    declaration.apply(database);
+      declaration.apply(database);
 
-    assert.equal(declaration.drift(database), 'fits');
-    assert.deepEqual(rows(database, 'SELECT id, body FROM notes ORDER BY id'), [
-      { id: ids[0], body: 'b' },
-      { id: ids[1], body: 'c' },
-    ]);
-  }
-});
+      assert.equal(declaration.drift(database), 'fits');
+      assert.deepEqual(
+        rows(database, 'SELECT id, body FROM notes ORDER BY id'),
+        [
+          { id: ids[0], body: 'b' },
+          { id: ids[1], body: 'c' },
+        ],
+      );
+    }),
+);
 
 test('with a dev database that loads sqlite-vec, a vec0 declaration goes from missing to fits, and with rows replace a new dimension fits after apply', async () => {
   await using scratch = await new TemporaryFiles().directory('drift-');

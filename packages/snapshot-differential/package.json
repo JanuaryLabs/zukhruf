@@ -42,6 +42,7 @@
     "access": "public"
   },
   "devDependencies": {
+    "@zukhruf/parameterized-test": "^0.8.70",
     "@zukhruf/sqlite-open": "^0.8.70"
   }
 }

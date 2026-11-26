@@ -178,9 +178,9 @@ test('a passage without a vector is a VectorMissingError that names it, before t
   assert.deepEqual(signals, []);
 });
 
-test('a lambda outside 0 to 1 and a topK that is not a positive integer are refused', () => {
-  // Act and Assert
-  for (const lambda of [-0.1, 1.1, Number.NaN]) {
+void test.each([-0.1, 1.1, Number.NaN], (lambda) =>
+  test(`a lambda of ${lambda}, which is outside 0 to 1, is refused`, () => {
+    // Act and Assert
     assert.throws(
       () => new MaximalMarginalRelevance({ model: model(), lambda, topK: 2 }),
       {
@@ -188,8 +188,12 @@ test('a lambda outside 0 to 1 and a topK that is not a positive integer are refu
         message: `The lambda is from 0 to 1, not ${lambda}`,
       },
     );
-  }
-  for (const topK of [0, 1.5]) {
+  }),
+);
+
+void test.each([0, 1.5], (topK) =>
+  test(`a topK of ${topK}, which is not a positive integer, is refused`, () => {
+    // Act and Assert
     assert.throws(
       () => new MaximalMarginalRelevance({ model: model(), topK }),
       {
@@ -197,8 +201,8 @@ test('a lambda outside 0 to 1 and a topK that is not a positive integer are refu
         message: `The topK is a positive integer, not ${topK}`,
       },
     );
-  }
-});
+  }),
+);
 
 test('the abort signal of the call reaches the embedding model', async () => {
   // Arrange

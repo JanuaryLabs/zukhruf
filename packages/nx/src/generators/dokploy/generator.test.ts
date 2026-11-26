@@ -626,13 +626,13 @@ test('a database that is not a Prisma package stops the generator', async () => 
 const tofuOnPath =
   spawnSync('tofu', ['version'], { stdio: 'ignore' }).status === 0;
 
-test(
-  'tofu fmt would change no .tf file the generator writes',
-  { skip: tofuOnPath ? false : 'tofu is not on PATH' },
-  async () => {
-    for (const [hostMode, hostOptions] of Object.entries(hosts)) {
-      for (const postgres of [true, false]) {
-        for (const registry of [true, false]) {
+void test.each(Object.entries(hosts), ([hostMode, hostOptions]) =>
+  test.each([true, false], (postgres) =>
+    test.each([true, false], (registry) =>
+      test(
+        `tofu fmt would change no .tf file the generator writes for host ${hostMode}, postgres ${postgres ? 'on' : 'off'}, private registry ${registry ? 'on' : 'off'}`,
+        { skip: tofuOnPath ? false : 'tofu is not on PATH' },
+        async () => {
           const tree = await workspace(postgres ? 'packages/db' : undefined);
           await dokployGenerator(tree, {
             api: 'apps/backend',
@@ -664,10 +664,10 @@ test(
             0,
             `host ${hostMode}, postgres ${postgres}, registry ${registry}: tofu fmt would rewrite\n${fmt.stdout}${fmt.stderr}`,
           );
-        }
-      }
-    }
-  },
+        },
+      ),
+    ),
+  ),
 );
 
 // The generated main.tf calls the module at ref=main; this points the call at
@@ -675,16 +675,18 @@ test(
 // module does not have fails here, before a host's tofu init fetches main.
 // -lockfile=readonly, as the typecheck target runs it, also proves that the
 // written lock file has each provider that the module requires.
-test(
-  'the generated infra validates against the dokploy-stack module of the checkout',
-  { skip: tofuOnPath ? false : 'tofu is not on PATH' },
-  async () => {
-    await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
-    const pluginCache = join(folder.path, 'plugin-cache');
-    await mkdir(pluginCache);
-    for (const [hostMode, hostOptions] of Object.entries(hosts)) {
-      for (const postgres of [true, false]) {
-        for (const registry of [true, false]) {
+void test.each(Object.entries(hosts), ([hostMode, hostOptions]) =>
+  test.each([true, false], (postgres) =>
+    test.each([true, false], (registry) =>
+      test(
+        `the generated infra validates against the dokploy-stack module of the checkout for host ${hostMode}, postgres ${postgres ? 'on' : 'off'}, private registry ${registry ? 'on' : 'off'}`,
+        { skip: tofuOnPath ? false : 'tofu is not on PATH' },
+        async () => {
+          await using folder = await new TemporaryFiles().directory(
+            'zukhruf-nx-',
+          );
+          const pluginCache = join(folder.path, 'plugin-cache');
+          await mkdir(pluginCache);
           const tree = await workspace(postgres ? 'packages/db' : undefined);
           await dokployGenerator(tree, {
             api: 'apps/backend',
@@ -693,7 +695,7 @@ test(
             ...(postgres ? { database: 'packages/db' } : {}),
             ...(registry ? { registryUser: 'octocat' } : {}),
           });
-          const root = join(folder.path, `${hostMode}-${postgres}-${registry}`);
+          const root = join(folder.path, 'checkout');
           await cp(stackModule, join(root, 'dokploy-stack'), {
             recursive: true,
             filter: (source) => !source.includes('.terraform'),
@@ -730,10 +732,10 @@ test(
               `host ${hostMode}, postgres ${postgres}, registry ${registry}: tofu ${args.join(' ')}\n${run.stdout}${run.stderr}`,
             );
           }
-        }
-      }
-    }
-  },
+        },
+      ),
+    ),
+  ),
 );
 
 test('a zone without a host, or a host outside its zone, stops the generator', async () => {

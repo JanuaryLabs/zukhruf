@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { test } from 'node:test';
+
+import { test } from '@zukhruf/parameterized-test';
 
 import { AdamW } from './adamw.ts';
 import { AttentionPooling } from './attention-pooling.ts';
@@ -173,55 +174,64 @@ test('the output of Linear equals the output of nn.Linear of PyTorch', () => {
   assertClose(actual.values, output.flat(), GOLDEN_TOLERANCE, 'output');
 });
 
-test('a bias that is not one row of the outputs of the weight is refused', () => {
-  const weight = new Matrix(3, 2);
+void test.each(
+  [
+    [1, 2],
+    [3, 1],
+  ] as const,
+  ([rows, columns]) =>
+    test(`a ${rows} × ${columns} bias, not one row of the outputs of the weight, is refused`, () => {
+      const weight = new Matrix(3, 2);
+      const bias = new Matrix(rows, columns);
 
-  for (const bias of [new Matrix(1, 2), new Matrix(3, 1)])
-    assert.throws(() => new Linear(weight, bias), {
-      name: 'RangeError',
-      message: new RegExp(
-        `The bias of 3 outputs is 1 × 3, not ${bias.rows} × ${bias.columns}`,
-      ),
-    });
-});
+      assert.throws(() => new Linear(weight, bias), {
+        name: 'RangeError',
+        message: new RegExp(
+          `The bias of 3 outputs is 1 × 3, not ${bias.rows} × ${bias.columns}`,
+        ),
+      });
+    }),
+);
 
-test('the gradients of the weight, the bias and the input of Linear equal central finite differences', () => {
-  const random = generator(1);
-  for (const [inputs, outputs, batch] of [
-    [3, 2, 4],
-    [1, 4, 1],
-    [5, 3, 2],
-  ] as const) {
-    const linear = new Linear(
-      randomMatrix(random, outputs, inputs),
-      randomMatrix(random, 1, outputs),
-    );
-    const input = randomMatrix(random, batch, inputs);
-    const upstream = randomMatrix(random, batch, outputs);
-    const loss = () => dot(linear.forward(input).output, upstream);
-
-    const pass = linear.forward(input);
-    pass.accumulate(upstream);
-    const inputGradient = pass.pullback(upstream);
-
-    for (const [name, parameter] of [
-      ['weight', linear.weight],
-      ['bias', linear.bias],
-    ] as const)
-      assertClose(
-        parameter.gradient.values,
-        finiteDifferences(parameter.value.values, loss),
-        GRADIENT_TOLERANCE,
-        `${inputs} → ${outputs}, ${name}`,
+void test.each(
+  [
+    { seed: 11, inputs: 3, outputs: 2, batch: 4 },
+    { seed: 12, inputs: 1, outputs: 4, batch: 1 },
+    { seed: 13, inputs: 5, outputs: 3, batch: 2 },
+  ],
+  ({ seed, inputs, outputs, batch }) =>
+    test(`the gradients of the weight, the bias and the input of Linear equal central finite differences, ${inputs} → ${outputs}, batch ${batch}`, () => {
+      const random = generator(seed);
+      const linear = new Linear(
+        randomMatrix(random, outputs, inputs),
+        randomMatrix(random, 1, outputs),
       );
-    assertClose(
-      inputGradient.values,
-      finiteDifferences(input.values, loss),
-      GRADIENT_TOLERANCE,
-      `${inputs} → ${outputs}, input`,
-    );
-  }
-});
+      const input = randomMatrix(random, batch, inputs);
+      const upstream = randomMatrix(random, batch, outputs);
+      const loss = () => dot(linear.forward(input).output, upstream);
+
+      const pass = linear.forward(input);
+      pass.accumulate(upstream);
+      const inputGradient = pass.pullback(upstream);
+
+      for (const [name, parameter] of [
+        ['weight', linear.weight],
+        ['bias', linear.bias],
+      ] as const)
+        assertClose(
+          parameter.gradient.values,
+          finiteDifferences(parameter.value.values, loss),
+          GRADIENT_TOLERANCE,
+          `${inputs} → ${outputs}, ${name}`,
+        );
+      assertClose(
+        inputGradient.values,
+        finiteDifferences(input.values, loss),
+        GRADIENT_TOLERANCE,
+        `${inputs} → ${outputs}, input`,
+      );
+    }),
+);
 
 test('the output of GELU equals nn.GELU of PyTorch, the exact form, from -8 to 8', () => {
   const { input, output } = golden.gelu;
@@ -232,32 +242,34 @@ test('the output of GELU equals nn.GELU of PyTorch, the exact form, from -8 to 8
   assertClose(actual.values, output.flat(), GOLDEN_TOLERANCE, 'output');
 });
 
-test('the gradient of the input of GELU equals central finite differences', () => {
-  const random = generator(2);
-  for (const [rows, columns] of [
-    [2, 3],
-    [1, 5],
-    [4, 1],
-  ] as const) {
-    const input = new Matrix(
-      rows,
-      columns,
-      randomMatrix(random, rows, columns).values.map((value) => value * 4),
-    );
-    const upstream = randomMatrix(random, rows, columns);
-    const gelu = new GELU();
-    const loss = () => dot(gelu.forward(input).output, upstream);
+void test.each(
+  [
+    { seed: 21, rows: 2, columns: 3 },
+    { seed: 22, rows: 1, columns: 5 },
+    { seed: 23, rows: 4, columns: 1 },
+  ],
+  ({ seed, rows, columns }) =>
+    test(`the gradient of the input of GELU equals central finite differences, ${rows} × ${columns}`, () => {
+      const random = generator(seed);
+      const input = new Matrix(
+        rows,
+        columns,
+        randomMatrix(random, rows, columns).values.map((value) => value * 4),
+      );
+      const upstream = randomMatrix(random, rows, columns);
+      const gelu = new GELU();
+      const loss = () => dot(gelu.forward(input).output, upstream);
 
-    const inputGradient = gelu.forward(input).pullback(upstream);
+      const inputGradient = gelu.forward(input).pullback(upstream);
 
-    assertClose(
-      inputGradient.values,
-      finiteDifferences(input.values, loss),
-      GRADIENT_TOLERANCE,
-      `${rows} × ${columns}`,
-    );
-  }
-});
+      assertClose(
+        inputGradient.values,
+        finiteDifferences(input.values, loss),
+        GRADIENT_TOLERANCE,
+        `${rows} × ${columns}`,
+      );
+    }),
+);
 
 test('the scores of LowRankBilinear equal left(states) @ right(options).T of PyTorch for every pair', () => {
   const { states, options, left, right, output } = golden.lowRankBilinear;
@@ -282,44 +294,47 @@ test('a left and a right factor of different ranks are refused', () => {
   });
 });
 
-test('the gradients of the left and right factors and of the states of LowRankBilinear equal central finite differences', () => {
-  const random = generator(3);
-  for (const [stateWidth, optionWidth, rank, batch, count] of [
-    [4, 3, 2, 3, 2],
-    [1, 5, 1, 2, 4],
-    [5, 2, 3, 1, 3],
-  ] as const) {
-    const bilinear = new LowRankBilinear(
-      randomMatrix(random, rank, stateWidth),
-      randomMatrix(random, rank, optionWidth),
-    );
-    const states = randomMatrix(random, batch, stateWidth);
-    const options = randomMatrix(random, count, optionWidth);
-    const upstream = randomMatrix(random, batch, count);
-    const loss = () => dot(bilinear.forward(states, options).output, upstream);
-
-    const pass = bilinear.forward(states, options);
-    pass.accumulate(upstream);
-    const statesGradient = pass.pullback(upstream);
-
-    for (const [name, parameter] of [
-      ['left', bilinear.left],
-      ['right', bilinear.right],
-    ] as const)
-      assertClose(
-        parameter.gradient.values,
-        finiteDifferences(parameter.value.values, loss),
-        GRADIENT_TOLERANCE,
-        `rank ${rank}, ${name}`,
+void test.each(
+  [
+    { seed: 31, stateWidth: 4, optionWidth: 3, rank: 2, batch: 3, count: 2 },
+    { seed: 32, stateWidth: 1, optionWidth: 5, rank: 1, batch: 2, count: 4 },
+    { seed: 33, stateWidth: 5, optionWidth: 2, rank: 3, batch: 1, count: 3 },
+  ],
+  ({ seed, stateWidth, optionWidth, rank, batch, count }) =>
+    test(`the gradients of the left and right factors and of the states of LowRankBilinear equal central finite differences, rank ${rank}`, () => {
+      const random = generator(seed);
+      const bilinear = new LowRankBilinear(
+        randomMatrix(random, rank, stateWidth),
+        randomMatrix(random, rank, optionWidth),
       );
-    assertClose(
-      statesGradient.values,
-      finiteDifferences(states.values, loss),
-      GRADIENT_TOLERANCE,
-      `rank ${rank}, states`,
-    );
-  }
-});
+      const states = randomMatrix(random, batch, stateWidth);
+      const options = randomMatrix(random, count, optionWidth);
+      const upstream = randomMatrix(random, batch, count);
+      const loss = () =>
+        dot(bilinear.forward(states, options).output, upstream);
+
+      const pass = bilinear.forward(states, options);
+      pass.accumulate(upstream);
+      const statesGradient = pass.pullback(upstream);
+
+      for (const [name, parameter] of [
+        ['left', bilinear.left],
+        ['right', bilinear.right],
+      ] as const)
+        assertClose(
+          parameter.gradient.values,
+          finiteDifferences(parameter.value.values, loss),
+          GRADIENT_TOLERANCE,
+          `rank ${rank}, ${name}`,
+        );
+      assertClose(
+        statesGradient.values,
+        finiteDifferences(states.values, loss),
+        GRADIENT_TOLERANCE,
+        `rank ${rank}, states`,
+      );
+    }),
+);
 
 test('the loss of CrossEntropyLoss equals the weighted cross-entropy of PyTorch over logits that Venn masks with -1e4, and over logits near 1000', () => {
   for (const { name, logits, targets, weights, loss } of golden.crossEntropy) {
@@ -354,46 +369,48 @@ test('targets or weights that do not fit the rows of logits are refused', () => 
     });
 });
 
-test('the gradient of the logits of CrossEntropyLoss equals central finite differences, and a masked logit gets 0', () => {
-  const random = generator(4);
-  for (const [rows, columns] of [
-    [3, 4],
-    [1, 2],
-    [4, 5],
-  ] as const) {
-    const logits = randomMatrix(random, rows, columns);
-    const targets = Array.from({ length: rows }, () =>
-      size(random, 0, columns - 1),
-    );
-    const masked = Array.from(
-      { length: rows },
-      (_, row) => ((targets[row] ?? 0) + 1) % columns,
-    );
-    for (const [row, column] of masked.entries())
-      logits.values[row * columns + column] = -1e4;
-    const weights = Array.from({ length: rows }, () => (random() + 1) * 2);
-    const upstream = random();
-    const crossEntropy = new CrossEntropyLoss();
-    const loss = () =>
-      crossEntropy.forward(logits, targets, weights).output * upstream;
-
-    const logitsGradient = crossEntropy
-      .forward(logits, targets, weights)
-      .pullback(upstream);
-
-    assertClose(
-      logitsGradient.values,
-      finiteDifferences(logits.values, loss),
-      GRADIENT_TOLERANCE,
-      `${rows} × ${columns}`,
-    );
-    for (const [row, column] of masked.entries())
-      assert.ok(
-        logitsGradient.values[row * columns + column] === 0,
-        `${rows} × ${columns}: masked logit of row ${row}`,
+void test.each(
+  [
+    { seed: 41, rows: 3, columns: 4 },
+    { seed: 42, rows: 1, columns: 2 },
+    { seed: 43, rows: 4, columns: 5 },
+  ],
+  ({ seed, rows, columns }) =>
+    test(`the gradient of the logits of CrossEntropyLoss equals central finite differences, and a masked logit gets 0, ${rows} × ${columns}`, () => {
+      const random = generator(seed);
+      const logits = randomMatrix(random, rows, columns);
+      const targets = Array.from({ length: rows }, () =>
+        size(random, 0, columns - 1),
       );
-  }
-});
+      const masked = Array.from(
+        { length: rows },
+        (_, row) => ((targets[row] ?? 0) + 1) % columns,
+      );
+      for (const [row, column] of masked.entries())
+        logits.values[row * columns + column] = -1e4;
+      const weights = Array.from({ length: rows }, () => (random() + 1) * 2);
+      const upstream = random();
+      const crossEntropy = new CrossEntropyLoss();
+      const loss = () =>
+        crossEntropy.forward(logits, targets, weights).output * upstream;
+
+      const logitsGradient = crossEntropy
+        .forward(logits, targets, weights)
+        .pullback(upstream);
+
+      assertClose(
+        logitsGradient.values,
+        finiteDifferences(logits.values, loss),
+        GRADIENT_TOLERANCE,
+        `${rows} × ${columns}`,
+      );
+      for (const [row, column] of masked.entries())
+        assert.ok(
+          logitsGradient.values[row * columns + column] === 0,
+          `${rows} × ${columns}: masked logit of row ${row}`,
+        );
+    }),
+);
 
 test('the pooled states of AttentionPooling equal the pool of Venn before its normalization', () => {
   const { fields, questions, query, output } = golden.attentionPooling;
@@ -417,33 +434,36 @@ test('a count of states that is not the count of questions is refused', () => {
   });
 });
 
-test('the gradient of the query of AttentionPooling equals central finite differences', () => {
-  const random = generator(5);
-  for (const [width, questionWidth, count, batch] of [
-    [3, 2, 4, 2],
-    [4, 4, 2, 3],
-    [1, 3, 3, 1],
-  ] as const) {
-    const pooling = new AttentionPooling(
-      randomMatrix(random, width, questionWidth),
-    );
-    const fields = Array.from({ length: batch }, () =>
-      randomMatrix(random, count, width),
-    );
-    const questions = randomMatrix(random, batch, questionWidth);
-    const upstream = randomMatrix(random, batch, width);
-    const loss = () => dot(pooling.forward(fields, questions).output, upstream);
+void test.each(
+  [
+    { seed: 51, width: 3, questionWidth: 2, count: 4, batch: 2 },
+    { seed: 52, width: 4, questionWidth: 4, count: 2, batch: 3 },
+    { seed: 53, width: 1, questionWidth: 3, count: 3, batch: 1 },
+  ],
+  ({ seed, width, questionWidth, count, batch }) =>
+    test(`the gradient of the query of AttentionPooling equals central finite differences, ${count} fields of ${width}`, () => {
+      const random = generator(seed);
+      const pooling = new AttentionPooling(
+        randomMatrix(random, width, questionWidth),
+      );
+      const fields = Array.from({ length: batch }, () =>
+        randomMatrix(random, count, width),
+      );
+      const questions = randomMatrix(random, batch, questionWidth);
+      const upstream = randomMatrix(random, batch, width);
+      const loss = () =>
+        dot(pooling.forward(fields, questions).output, upstream);
 
-    pooling.forward(fields, questions).accumulate(upstream);
+      pooling.forward(fields, questions).accumulate(upstream);
 
-    assertClose(
-      pooling.query.gradient.values,
-      finiteDifferences(pooling.query.value.values, loss),
-      GRADIENT_TOLERANCE,
-      `${count} fields of ${width}`,
-    );
-  }
-});
+      assertClose(
+        pooling.query.gradient.values,
+        finiteDifferences(pooling.query.value.values, loss),
+        GRADIENT_TOLERANCE,
+        `${count} fields of ${width}`,
+      );
+    }),
+);
 
 test('the rows of Normalize equal F.normalize of PyTorch, and a zero row or a row whose norm is below 1e-12 does not become NaN', () => {
   const { input, output } = golden.normalize;
@@ -454,27 +474,33 @@ test('the rows of Normalize equal F.normalize of PyTorch, and a zero row or a ro
   assertClose(actual.values, output.flat(), GOLDEN_TOLERANCE, 'output');
 });
 
-test('the gradient of the input of Normalize equals central finite differences, for a zero row and a row below 1e-12 too', () => {
+void test.each(
+  [
+    { seed: 61, rows: 3, columns: 4 },
+    { seed: 62, rows: 1, columns: 5 },
+    { seed: 63, rows: 2, columns: 1 },
+  ],
+  ({ seed, rows, columns }) =>
+    test(`the gradient of the input of Normalize equals central finite differences, ${rows} × ${columns}`, () => {
+      const random = generator(seed);
+      const input = randomMatrix(random, rows, columns);
+      const upstream = randomMatrix(random, rows, columns);
+      const normalize = new Normalize();
+      const loss = () => dot(normalize.forward(input).output, upstream);
+
+      const inputGradient = normalize.forward(input).pullback(upstream);
+
+      assertClose(
+        inputGradient.values,
+        finiteDifferences(input.values, loss),
+        GRADIENT_TOLERANCE,
+        `${rows} × ${columns}`,
+      );
+    }),
+);
+
+test('the gradient of the input of Normalize equals central finite differences for a zero row and a row below 1e-12', () => {
   const random = generator(6);
-  for (const [rows, columns] of [
-    [3, 4],
-    [1, 5],
-    [2, 1],
-  ] as const) {
-    const input = randomMatrix(random, rows, columns);
-    const upstream = randomMatrix(random, rows, columns);
-    const normalize = new Normalize();
-    const loss = () => dot(normalize.forward(input).output, upstream);
-
-    const inputGradient = normalize.forward(input).pullback(upstream);
-
-    assertClose(
-      inputGradient.values,
-      finiteDifferences(input.values, loss),
-      GRADIENT_TOLERANCE,
-      `${rows} × ${columns}`,
-    );
-  }
   const small = new Matrix(
     2,
     3,

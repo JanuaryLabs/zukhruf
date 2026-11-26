@@ -453,34 +453,33 @@ describe('Shutdown', () => {
       }),
   );
 
-  test('a program with no stop request ends when its work ends, with its own exit code, also when the scope never ends', async (t) => {
-    for (const declaration of [
-      'using shutdown = new Shutdown();',
-      'const shutdown = new Shutdown();',
-    ]) {
-      for (const exitCode of [0, 3]) {
-        // Arrange
-        await using program = run(
-          t.signal,
-          `
-            import { Shutdown } from '@zukhruf/shutdown';
+  void test.each(
+    ['using shutdown = new Shutdown();', 'const shutdown = new Shutdown();'],
+    (declaration) =>
+      test.each([0, 3], (exitCode) =>
+        test(`a program with \`${declaration}\` and no stop request ends when its work ends, with its own exit code ${exitCode}`, async (t) => {
+          // Arrange
+          await using program = run(
+            t.signal,
+            `
+              import { Shutdown } from '@zukhruf/shutdown';
 
-            ${declaration}
-            process.exitCode = ${exitCode};
-          `,
-        );
+              ${declaration}
+              process.exitCode = ${exitCode};
+            `,
+          );
 
-        // Act
-        const { code, signal } = await program.ended();
+          // Act
+          const { code, signal } = await program.ended();
 
-        // Assert
-        assert.deepEqual(
-          { declaration, code, signal },
-          { declaration, code: exitCode, signal: null },
-        );
-      }
-    }
-  });
+          // Assert
+          assert.deepEqual(
+            { declaration, code, signal },
+            { declaration, code: exitCode, signal: null },
+          );
+        }),
+      ),
+  );
 
   test('the end of the scope with no stop request aborts the signal, stops listening, and leaves the exit of the process alone', async (t) => {
     // Arrange

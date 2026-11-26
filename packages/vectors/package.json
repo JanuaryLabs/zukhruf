@@ -55,6 +55,7 @@
   },
   "devDependencies": {
     "@types/mssql": "^12.3.0",
+    "@zukhruf/parameterized-test": "^0.8.70",
     "@zukhruf/sqlite-open": "^0.8.70",
     "@zukhruf/testing": "^0.8.70",
     "mssql": "^12.8.0",

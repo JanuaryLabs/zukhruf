@@ -47,6 +47,7 @@
   },
   "devDependencies": {
     "@zukhruf/fs": "^0.8.70",
+    "@zukhruf/parameterized-test": "^0.8.70",
     "@zukhruf/testing": "^0.8.70"
   }
 }

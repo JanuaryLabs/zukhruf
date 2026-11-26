@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { describe, test } from 'node:test';
 import { promisify } from 'node:util';
 
 import { createClock } from '@sinonjs/fake-timers';
+
+import { describe, test } from '@zukhruf/parameterized-test';
 
 import {
   ChangeWatcher,
@@ -745,12 +746,12 @@ describe('ChangeWatcher', () => {
     assert.equal(clock.now, thirtyDays);
   });
 
-  test('an interval, a timeout or a period that is not a positive number of milliseconds is refused', () => {
-    // Arrange
-    const clock = createClock();
+  void test.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY], (ms) =>
+    test(`an interval, a timeout or a period of ${ms}, which is not a positive number of milliseconds, is refused`, () => {
+      // Arrange
+      const clock = createClock();
 
-    // Act and Assert
-    for (const ms of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+      // Act and Assert
       assert.throws(
         () => new ChangeWatcher([], { interval: ms, timeout: 5, clock }),
         RangeError,
@@ -760,6 +761,6 @@ describe('ChangeWatcher', () => {
         RangeError,
       );
       assert.throws(() => new Period(ms), RangeError);
-    }
-  });
+    }),
+  );
 });

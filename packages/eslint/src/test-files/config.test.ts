@@ -9,7 +9,7 @@ import { isRecord } from '../unknown-values.ts';
 void test.each(
   [
     { rule: 'prefer-each', as: 'an error', severity: 2 },
-    { rule: 'no-tabular-test', as: 'a warning', severity: 1 },
+    { rule: 'no-tabular-test', as: 'an error', severity: 2 },
   ],
   ({ rule, as, severity }) =>
     test(`the tests config turns ${rule} on as ${as} for a test file`, async () => {

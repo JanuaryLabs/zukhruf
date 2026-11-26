@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
-import { describe, it } from 'node:test';
+import { describe } from 'node:test';
+
+import { it } from '@zukhruf/parameterized-test';
 
 import { SqliteJobQueue, UnsupportedStartAfterError } from '../index.ts';
 import { PgBossBackend } from './backends.ts';
@@ -86,55 +88,54 @@ describe('startAfter', () => {
   // grammar in pg-boss, which SQLite does not reimplement, so it refuses them
   // by name instead of guessing (plan ruling, 2026-10-02). Each is first shown
   // to be one pg-boss accepts, so the refusal is SQLite's alone.
-  it('refuses forms outside the supported subset by name', async () => {
-    const refused = [
-      '1 day ago',
-      '@ 1 hour',
-      '1.5 hours',
-      '1-2',
-      '01:02:03',
-      '2027-01-01 08:00:00 America/New_York',
-    ];
-    // Postgres rejects these timestamps (a comma decimal, an hour with no
-    // minutes), so pg-boss throws on them as well; SQLite must refuse them
-    // rather than be more lenient.
-    const rejectedByBoth = ['2027-01-01T08:00:00,123Z', '2027-01-01T08'];
+  void it.each(
+    [
+      { form: '1 day ago', pgBoss: 'accepts' },
+      { form: '@ 1 hour', pgBoss: 'accepts' },
+      { form: '1.5 hours', pgBoss: 'accepts' },
+      { form: '1-2', pgBoss: 'accepts' },
+      { form: '01:02:03', pgBoss: 'accepts' },
+      { form: '2027-01-01 08:00:00 America/New_York', pgBoss: 'accepts' },
+      // Postgres rejects these timestamps (a comma decimal, an hour with no
+      // minutes), so pg-boss throws on them as well; SQLite must refuse them
+      // rather than be more lenient.
+      { form: '2027-01-01T08:00:00,123Z', pgBoss: 'rejects' },
+      { form: '2027-01-01T08', pgBoss: 'rejects' },
+    ] as const,
+    ({ form, pgBoss: pgBossAnswer }) =>
+      it(`refuses ${form}, a form outside the supported subset that pg-boss ${pgBossAnswer}, by name`, async () => {
+        const pgBoss = await new PgBossBackend().open();
+        try {
+          await pgBoss.queue.start();
+          await pgBoss.queue.createQueue('jobs');
+          if (pgBossAnswer === 'rejects')
+            await assert.rejects(
+              pgBoss.queue.send('jobs', { n: 1 }, { startAfter: form }),
+              form,
+            );
+          else
+            assert.ok(
+              await pgBoss.queue.send('jobs', { n: 1 }, { startAfter: form }),
+              `pg-boss accepts ${form}`,
+            );
+        } finally {
+          await pgBoss.close();
+        }
 
-    const pgBoss = await new PgBossBackend().open();
-    try {
-      await pgBoss.queue.start();
-      await pgBoss.queue.createQueue('jobs');
-      for (const form of rejectedByBoth) {
-        await assert.rejects(
-          pgBoss.queue.send('jobs', { n: 1 }, { startAfter: form }),
-          form,
-        );
-      }
-      for (const form of refused) {
-        assert.ok(
-          await pgBoss.queue.send('jobs', { n: 1 }, { startAfter: form }),
-          `pg-boss accepts ${form}`,
-        );
-      }
-    } finally {
-      await pgBoss.close();
-    }
-
-    const queue = new SqliteJobQueue({ path: ':memory:', schedule: false });
-    try {
-      await queue.start();
-      await queue.createQueue('jobs');
-      for (const form of [...refused, ...rejectedByBoth]) {
-        await assert.rejects(
-          queue.send('jobs', { n: 1 }, { startAfter: form }),
-          (error) =>
-            error instanceof UnsupportedStartAfterError &&
-            error.startAfter === form,
-          form,
-        );
-      }
-    } finally {
-      await queue.stop({ graceful: false, close: true });
-    }
-  });
+        const queue = new SqliteJobQueue({ path: ':memory:', schedule: false });
+        try {
+          await queue.start();
+          await queue.createQueue('jobs');
+          await assert.rejects(
+            queue.send('jobs', { n: 1 }, { startAfter: form }),
+            (error) =>
+              error instanceof UnsupportedStartAfterError &&
+              error.startAfter === form,
+            form,
+          );
+        } finally {
+          await queue.stop({ graceful: false, close: true });
+        }
+      }),
+  );
 });

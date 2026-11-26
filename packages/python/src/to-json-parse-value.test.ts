@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+
+import { test } from '@zukhruf/parameterized-test';
 
 import { loadsJson, toJsonParseValue } from './index.ts';
 
@@ -12,8 +13,8 @@ const ordered = (value: unknown): unknown => {
   return value;
 };
 
-test('toJsonParseValue gives what JSON.parse gives for the same text: integer-like keys first, an own __proto__ key, nested values, and the nearest number for an int beyond 2^53', () => {
-  const texts = [
+void test.each(
+  [
     '{"b": 1, "10": 2.0, "2": 1.0, "a": 3}',
     '{"__proto__": {"x": 1}}',
     '[{"a": [1, {"b": 2.5}]}, 3]',
@@ -23,15 +24,15 @@ test('toJsonParseValue gives what JSON.parse gives for the same text: integer-li
     '"text"',
     'true',
     'null',
-  ];
+  ],
+  (text) =>
+    test(`toJsonParseValue gives what JSON.parse gives for the same text (integer-like keys first, an own __proto__ key, nested values, and the nearest number for an int beyond 2^53): ${text}`, () => {
+      const value = toJsonParseValue(loadsJson(text));
 
-  for (const text of texts) {
-    const value = toJsonParseValue(loadsJson(text));
-
-    assert.deepEqual(value, JSON.parse(text), text);
-    assert.deepEqual(ordered(value), ordered(JSON.parse(text)), text);
-  }
-});
+      assert.deepEqual(value, JSON.parse(text), text);
+      assert.deepEqual(ordered(value), ordered(JSON.parse(text)), text);
+    }),
+);
 
 test('toJsonParseValue gives 0 for the int -0, where JSON.parse gives -0: an int of Python has no negative zero', () => {
   const value = toJsonParseValue(loadsJson('-0'));

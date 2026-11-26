@@ -48,9 +48,7 @@ export const tests: Concept = {
     {
       name: 'zukhruf/tests',
       files: [...TESTS, ...TEST_SUPPORT],
-      // no-tabular-test warns: repositories hold case tables looped inside one
-      // test that move to test.each one by one (#5729).
-      rules: { ...enable(testFileRules), 'zukhruf/no-tabular-test': 'warn' },
+      rules: enable(testFileRules),
     },
     {
       // A global setup runs before any test process, and process.env is its only channel to them.
