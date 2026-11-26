@@ -7,6 +7,7 @@ import { type QueryType, needOf } from './query-bundle.ts';
 import type { RetrievalResult } from './retrieval-result.ts';
 import type { RetrieveOptions } from './retrieve-options.ts';
 import type { Retriever } from './retriever.ts';
+import { ScoreThreshold } from './score-threshold.ts';
 import type { ScoredPassage } from './scored-passage.ts';
 
 /**
@@ -38,7 +39,7 @@ export class RerankRetriever<
   readonly #retriever: Retriever<Q, P>;
   readonly #model: RerankingModel;
   readonly #topN: number | undefined;
-  readonly #scoreThreshold: number | undefined;
+  readonly #threshold: ScoreThreshold;
 
   constructor(options: {
     readonly retriever: Retriever<Q, P>;
@@ -48,16 +49,10 @@ export class RerankRetriever<
     /** The least score from the reranking model that a passage keeps: every passage when absent (ADR 0019). */
     readonly scoreThreshold?: number;
   }) {
-    const { scoreThreshold } = options;
-    if (scoreThreshold !== undefined && !Number.isFinite(scoreThreshold)) {
-      throw new RangeError(
-        `The scoreThreshold is a finite number, not ${scoreThreshold}`,
-      );
-    }
+    this.#threshold = ScoreThreshold.of(options.scoreThreshold);
     this.#retriever = options.retriever;
     this.#model = options.model;
     this.#topN = options.topN;
-    this.#scoreThreshold = scoreThreshold;
   }
 
   async retrieve(
@@ -91,25 +86,20 @@ export class RerankRetriever<
     const relevance = new Map(
       ranking.map(({ originalIndex, score }) => [originalIndex, score]),
     );
-    const reranked = passages
-      .flatMap(({ passage, vector }, index) => {
-        const score = relevance.get(index);
-        if (score === undefined) return [];
-        if (!Number.isFinite(score)) {
-          throw new TypeError(
-            `RerankRetriever reads scores, and the passage ${passage.id} has the score ${score}: a score is a finite number`,
-          );
-        }
-        return [
-          vector === undefined
-            ? { passage, score }
-            : { passage, score, vector },
-        ];
-      })
-      .filter(
-        ({ score }) =>
-          this.#scoreThreshold === undefined || score >= this.#scoreThreshold,
-      )
+    const scored = passages.flatMap(({ passage, vector }, index) => {
+      const score = relevance.get(index);
+      if (score === undefined) return [];
+      if (!Number.isFinite(score)) {
+        throw new TypeError(
+          `RerankRetriever reads scores, and the passage ${passage.id} has the score ${score}: a score is a finite number`,
+        );
+      }
+      return [
+        vector === undefined ? { passage, score } : { passage, score, vector },
+      ];
+    });
+    const reranked = this.#threshold
+      .keep(scored)
       .toSorted((a, b) => b.score - a.score);
     return { passages: reranked, failures };
   }

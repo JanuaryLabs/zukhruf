@@ -3,6 +3,7 @@ export { Collapse } from './collapse.ts';
 export { arithmeticMean, max, sum } from './combinations.ts';
 export type { Combination } from './combinations.ts';
 export { ContextWindow } from './context-window.ts';
+export { EmbeddingRerankRetriever } from './embedding-rerank-retriever.ts';
 export type { Filter, FilterFields } from './filter.ts';
 export { FusionRetriever } from './fusion-retriever.ts';
 export type { FusionInput, Fusion, RankedDoc, ScoreDoc } from './fusion.ts';

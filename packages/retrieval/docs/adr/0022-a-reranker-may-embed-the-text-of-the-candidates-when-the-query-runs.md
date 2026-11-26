@@ -1,0 +1,50 @@
+# A reranker may embed the text of the candidates when the query runs
+
+Status: Accepted 2026-11-26 (backlog #5586).
+
+Decision-makers: Ezz, who overruled the README recipe on 2026-11-25 ("build it in", the paper's `EmbeddingRerank`, widening ADR 0001 in a new ADR), and the zukhruf session that built it on the port of #5400. The paper and its delta for the new port are in `~/.agent-backlog/handoff/zukhruf-retrieval-5585-5586/paper.md`, with the leaders' sources in `sources/` and the probe in `probes/p5586-rerank.mjs`.
+
+[ADR 0001](./0001-the-package-is-the-query-side-of-rag-and-reads-a-passage-contract-that-elt-writes.md) said: "It never cuts and never embeds documents. It embeds only the query." That keeps the ingestion side in elt. But a live source, such as a web search, PubMed or a product API, has no stored vectors, so no step of the package could rank its passages by meaning: `MaximalMarginalRelevance` fails with `VectorMissingError`, and `RerankRetriever` needs an AI SDK `RerankingModel`, which many hosts do not have (OpenAI has no rerank API). A host Postprocessor over the public port did the job in one `embedMany` call (probe p5586-rerank: a live order p0 p1 p2 p3 became p2 .548, p3 .500, p1 .408, p0 .204). Meddit's copy of it raised P@10 on TREC from .250 to .467.
+
+All three leaders embed the text of the candidates when the query runs:
+
+- LangChain's `EmbeddingsFilter` embeds the query and each document, ranks by cosine and keeps `k` and/or the documents above `similarity_threshold` (`langchain/retrievers/document_compressors/embeddings_filter.py`; LangChain.js `embeddings_filter.ts`). It runs inside `ContextualCompressionRetriever`, which asks its `baseRetriever` and then runs `baseCompressor.compressDocuments(docs, query)` (LangChain.js `retrievers/contextual_compression.ts`).
+- LlamaIndex's `SentenceEmbeddingOptimizer` embeds the query and the sentences of each node, to cut the text of a node (`llama_index/core/postprocessor/optimizer.py`).
+- Haystack's `SentenceTransformersDiversityRanker` embeds the query and the documents itself, for a diversity order (haystack-core-integrations `integrations/sentence_transformers/.../rankers/sentence_transformers/sentence_transformers_diversity.py`). Haystack's `SentenceTransformersRanker` (1.x) and `SentenceTransformersSimilarityRanker` (2.x) are cross-encoders, the mechanism of `RerankRetriever`.
+
+Only LangChain ranks by those vectors, so the shape follows LangChain, in the retriever-around-a-retriever form of [ADR 0021](./0021-a-retriever-says-whether-it-gives-scores-a-ranked-passage-has-none-and-a-scored-passage-always-has-one.md).
+
+Supersedes:
+
+- [ADR 0001](./0001-the-package-is-the-query-side-of-rag-and-reads-a-passage-contract-that-elt-writes.md), in part, for "It never cuts and never embeds documents. It embeds only the query."
+- [ADR 0019](./0019-a-score-threshold-belongs-to-the-embedding-retriever-or-to-rerank-where-the-scale-of-the-score-is-known.md), in part, for its consequence that the finite check and the cut are two copies (strike 2, #5735): `EmbeddingRerankRetriever` is the third place, and the three share `ScoreThreshold`.
+
+## Decision
+
+- **The boundary.** elt cuts and embeds the documents for the index. The package never writes a vector and never cuts a document. A reranker of the package may embed the text of the candidates of one query when that query runs, to score them, as `MaximalMarginalRelevance` and the embedding retrievers embed the query.
+- **`EmbeddingRerankRetriever<Q, P> { retriever, model, topN?, scoreThreshold? }`** implements `Retriever<Q, P, ScoredPassage<P>>`. Its retriever gets the query and the options of the call unchanged and may give an order only; its failures pass up unchanged ([ADR 0014](./0014-a-retrieve-call-answers-with-the-retrievers-that-answered-and-names-those-that-were-unavailable.md)).
+- **What it embeds.** `embed` of the information need, the `query` of the bundle ([ADR 0013](./0013-a-query-is-a-string-or-a-query-bundle-with-a-text-for-each-kind-of-search.md)), and `embedMany` of the text of each passage, in two calls that run at once, as LangChain's `embedQuery` and `embedDocuments`. An empty list makes no call.
+- **The score.** The cosine similarity of the two vectors, from -1 to 1, best first, a tie in the order of the retriever. A cosine that is not finite, as from a zero vector, is a `TypeError` that names the passage (#5700).
+- **The vector.** Each passage gets the vector the model made, never one its retriever gave: a stored vector of another model would mix two vector spaces, which [ADR 0010](./0010-an-embedding-retriever-refuses-a-query-model-whose-identity-differs-from-the-stored-vectors.md) forbids. So `MaximalMarginalRelevance` with the same model can follow it in a `PostprocessingRetriever` over a live source.
+- **`scoreThreshold`.** The scale is known, so it takes the threshold of [ADR 0019](./0019-a-score-threshold-belongs-to-the-embedding-retriever-or-to-rerank-where-the-scale-of-the-score-is-known.md): it keeps a score equal to or more than it, and a threshold that is not finite is a `RangeError`. LangChain's `similarity_threshold` is strict (`>`); the package keeps its inclusive rule.
+- **`topN`.** A positive integer, or a `RangeError`, as Haystack's `top_k` must be above 0. The class cuts the sorted list itself: an embedding model, unlike a reranking model, has no `topN`. Every passage when absent.
+- **The signal.** An aborted signal rejects before any work, an abort while the retriever runs starts no model call, and both calls get the signal as `abortSignal` ([ADR 0017](./0017-every-async-port-takes-an-optional-abort-signal-and-a-composite-rejects-at-once-when-it-aborts.md)).
+
+## Considered Options
+
+- **A README recipe: a host writes the postprocessor over the public port.** The decision of 2026-11-25, on the Rule of Three (strike 1) and 1 of 3 leaders for the exact use. Ezz overruled it the same day: every live source needs it, and the port allows only a host copy of the same knowledge in each host.
+- **A postprocessor, `EmbeddingRerank implements Postprocessor<Passage>`**, the shape of the paper. It lost to [ADR 0021](./0021-a-retriever-says-whether-it-gives-scores-a-ranked-passage-has-none-and-a-scored-passage-always-has-one.md), which made the reranker a retriever around a retriever, so that a reranker over a list of order only gives scored passages. The name ends in `Retriever`, as every composite's does and as `Rerank` became `RerankRetriever`.
+- **Keep a stored vector when the retriever gives one.** LangChain Python reuses a vector that its own earlier step made (`embeddings_redundant_filter.py`). It lost: the package cannot tell which model made a vector that its retriever gives.
+- **Embed the `customEmbeddings` of the bundle, as LlamaIndex's optimizer embeds `embedding_strs`.** It lost: `customEmbeddings` is the text of an embedding search (ADR 0013), and a reranker reads the information need, as `RerankRetriever` does.
+- **`SimilarityCutoff` for the threshold, as the paper said.** Gone since [ADR 0019](./0019-a-score-threshold-belongs-to-the-embedding-retriever-or-to-rerank-where-the-scale-of-the-score-is-known.md).
+
+## Consequences
+
+- A live source ranks by meaning with any AI SDK embedding model: `new EmbeddingRerankRetriever({ retriever: live, model })`, and it goes under a `ScoreFusion`, since it gives scores.
+- Each query costs one `embed` and one `embedMany` of the candidates. `@zukhruf/embedding-cache` can wrap the model, so a second query over the same texts embeds only the new ones.
+- The score threshold is now in three places: the embedding retrievers, `RerankRetriever` and `EmbeddingRerankRetriever`. That is strike 3 of #5735: the finite check and the inclusive cut are one Value Object, `ScoreThreshold` in `src/score-threshold.ts`, which each of them uses where it applies (after the engine search, after the model's scores), and the copy is gone from the [ledger](../copied-code.md).
+
+## Confirmation
+
+- `src/embedding-rerank-retriever.test.ts`: a list of order only comes back in cosine order with cosine scores and the model's vectors; a stored vector is replaced; a tie keeps the order of the retriever; `topN` keeps the best N and 0, -1, 1.5, NaN and Infinity are a `RangeError`; three `scoreThreshold` cases and NaN, Infinity and -Infinity as a `RangeError`; `MaximalMarginalRelevance` after it diversifies over a live source where alone it fails with `VectorMissingError`; an empty list makes no call; an aborted signal, an abort while the retriever runs, and the caller's abort over a retriever that never settles; the options reach the retriever, the signal reaches both calls and the failures pass up; a query bundle reaches the retriever unchanged while the model embeds the information need; a zero vector is a `TypeError`; an error of the model reaches the caller as it is. Each test failed first as an assertion, and each rule is caught by a mutation in memory.
+- `type-tests/published-types.ts`: `StoredPassage<M>` goes in and comes out through a `PostprocessingRetriever` with `ContextWindow` with no assertion; an `EmbeddingRerankRetriever` around a live source goes under a `ScoreFusion`; `scoreThreshold` is an option of the object, never of a call.

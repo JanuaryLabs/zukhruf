@@ -107,11 +107,11 @@ A passage in a list of order only, and its vector when the call asks for it: `Ra
 _Avoid_: Unscored passage, hit, rank (a position)
 
 **Scored passage**:
-A ranked passage with its score: `ScoredPassage<P> = RankedPassage<P> & { score }`, and the score is required. Every engine retriever, fusion and rerank retriever gives it. A scored passage is a ranked passage, so a scored list goes where an order is accepted. LlamaIndex calls it `NodeWithScore`, .NET `VectorSearchResult` ([ADR 0021](./docs/adr/0021-a-retriever-says-whether-it-gives-scores-a-ranked-passage-has-none-and-a-scored-passage-always-has-one.md)).
+A ranked passage with its score: `ScoredPassage<P> = RankedPassage<P> & { score }`, and the score is required. Every engine retriever, fusion, rerank retriever and embedding rerank retriever gives it. A scored passage is a ranked passage, so a scored list goes where an order is accepted. LlamaIndex calls it `NodeWithScore`, .NET `VectorSearchResult` ([ADR 0021](./docs/adr/0021-a-retriever-says-whether-it-gives-scores-a-ranked-passage-has-none-and-a-scored-passage-always-has-one.md)).
 _Avoid_: Result, hit, match, search result
 
 **Score threshold**:
-The least score that a passage keeps. Only an object that knows the scale of its scores takes one: an embedding retriever, for the cosine similarity from -1 to 1, and `RerankRetriever`, for the score of its model. The scores of a keyword retriever and of a fusion change their scale with the engine and the query, so they take none ([ADR 0019](./docs/adr/0019-a-score-threshold-belongs-to-the-embedding-retriever-or-to-rerank-where-the-scale-of-the-score-is-known.md)). Qdrant and Haystack call it `score_threshold`, Elasticsearch's knn retriever `similarity`.
+The least score that a passage keeps. Only an object that knows the scale of its scores takes one: an embedding retriever and `EmbeddingRerankRetriever`, for the cosine similarity from -1 to 1, and `RerankRetriever`, for the score of its model. The scores of a keyword retriever and of a fusion change their scale with the engine and the query, so they take none ([ADR 0019](./docs/adr/0019-a-score-threshold-belongs-to-the-embedding-retriever-or-to-rerank-where-the-scale-of-the-score-is-known.md)). Qdrant and Haystack call it `score_threshold`, Elasticsearch's knn retriever `similarity`.
 _Avoid_: Cutoff, similarity cutoff, minimum score
 
 ### Composition
@@ -155,3 +155,7 @@ _Avoid_: Compressor (LangChain), ranker (Haystack), filter (for a postprocessor)
 **Rerank retriever**:
 The retriever that scores the passages of its retriever again with an AI SDK reranking model and keeps the best `topN`: `RerankRetriever`, as Elasticsearch's `text_similarity_reranker` wraps a child retriever. Its retriever may give an order only; it gives scored passages ([ADR 0021](./docs/adr/0021-a-retriever-says-whether-it-gives-scores-a-ranked-passage-has-none-and-a-scored-passage-always-has-one.md)).
 _Avoid_: Rerank postprocessor, cross-encoder (one kind of model), re-score
+
+**Embedding rerank retriever**:
+The retriever that scores the passages of its retriever again by meaning with an AI SDK embedding model when the query runs: `EmbeddingRerankRetriever`. It embeds the information need and the text of each passage, gives each passage the cosine similarity of the two vectors as its score and the vector the model made, and keeps the best `topN`. It is the reranker of a host with an embedding model and no reranking model, and of a live source, which has no stored vectors. LangChain's `EmbeddingsFilter` inside a `ContextualCompressionRetriever` does the same ([ADR 0022](./docs/adr/0022-a-reranker-may-embed-the-text-of-the-candidates-when-the-query-runs.md)).
+_Avoid_: Embeddings filter (it does not only filter), bi-encoder reranker, semantic reranker

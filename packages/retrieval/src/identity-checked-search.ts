@@ -8,6 +8,7 @@ import { ModelMismatchError } from './model-mismatch-error.ts';
 import type { StoredPassage } from './passage.ts';
 import { type QueryType, embeddingsOf } from './query-bundle.ts';
 import type { RetrieveOptions } from './retrieve-options.ts';
+import { ScoreThreshold } from './score-threshold.ts';
 import type { ScoredPassage } from './scored-passage.ts';
 
 /** What the engine gives: the query model, its read of the stored identities, and its search. */
@@ -43,14 +44,10 @@ type Engine<P extends StoredPassage> = {
  */
 export class IdentityCheckedSearch<P extends StoredPassage> {
   readonly #engine: Engine<P>;
+  readonly #threshold: ScoreThreshold;
 
   constructor(engine: Engine<P>) {
-    const { scoreThreshold } = engine;
-    if (scoreThreshold !== undefined && !Number.isFinite(scoreThreshold)) {
-      throw new RangeError(
-        `The scoreThreshold is a finite number, not ${scoreThreshold}`,
-      );
-    }
+    this.#threshold = ScoreThreshold.of(engine.scoreThreshold);
     this.#engine = engine;
   }
 
@@ -132,11 +129,7 @@ export class IdentityCheckedSearch<P extends StoredPassage> {
       throw new DimensionMismatchError(nearest.dimensions, dimensions);
     }
     const lists = await this.#engine.search(vectors, identity, options);
-    const { scoreThreshold } = this.#engine;
-    if (scoreThreshold === undefined) return lists;
-    return lists.map((passages) =>
-      passages.filter(({ score }) => score >= scoreThreshold),
-    );
+    return lists.map((passages) => this.#threshold.keep(passages));
   }
 }
 

@@ -6,6 +6,7 @@
 import {
   Collapse,
   ContextWindow,
+  EmbeddingRerankRetriever,
   type Filter,
   type Fusion,
   FusionRetriever,
@@ -202,6 +203,17 @@ export const reranked: Of<StoredPassage<Label>> = new PostprocessingRetriever({
   retriever: new RerankRetriever({ retriever: engine, model }),
   postprocessors: [new ContextWindow({ store })],
 }).retrieve('q');
+declare const embeddingModel: ConstructorParameters<
+  typeof EmbeddingRerankRetriever
+>[0]['model'];
+export const embeddingReranked: Of<StoredPassage<Label>> =
+  new PostprocessingRetriever({
+    retriever: new EmbeddingRerankRetriever({
+      retriever: engine,
+      model: embeddingModel,
+    }),
+    postprocessors: [new ContextWindow({ store })],
+  }).retrieve('q');
 export const ranked: Of<StoredPassage<Label>> = new FusionRetriever({
   retrievers: { labels: { retriever: engine }, more: { retriever: engine } },
   fusion: new RankFusion(),
@@ -332,6 +344,18 @@ export const cutOrder = new PostprocessingRetriever({
 export const rerankedLive = new FusionRetriever({
   retrievers: {
     live: { retriever: new RerankRetriever({ retriever: live, model }) },
+    engine: { retriever: scoredEngine },
+  },
+  fusion: byScore(),
+});
+export const embeddingRerankedLive = new FusionRetriever({
+  retrievers: {
+    live: {
+      retriever: new EmbeddingRerankRetriever({
+        retriever: live,
+        model: embeddingModel,
+      }),
+    },
     engine: { retriever: scoredEngine },
   },
   fusion: byScore(),
@@ -713,6 +737,11 @@ export const thresholds = [
     scoreThreshold: 0.5,
   }),
   new RerankRetriever({ retriever: plain, model, scoreThreshold: 0.5 }),
+  new EmbeddingRerankRetriever({
+    retriever: plain,
+    model: embeddingModel,
+    scoreThreshold: 0.5,
+  }),
 ];
 export const perCall = embedding.retrieve('q', {
   scoreThreshold: 0.5, // TS2353

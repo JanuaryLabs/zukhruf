@@ -35,7 +35,7 @@ test('a consumer imports each subpath by its package name, and the package depen
       ).name,
       vectorMissing: new VectorMissingError('p').name,
       passageGap: new PassageGapError('s', 1, 2).name,
-      retrievers: [core.FusionRetriever, core.HydeRetriever, core.MultiQueryRetriever, core.RerankRetriever].map((type) => type.name),
+      retrievers: [core.EmbeddingRerankRetriever, core.FusionRetriever, core.HydeRetriever, core.MultiQueryRetriever, core.RerankRetriever].map((type) => type.name),
       fusions: [core.RankFusion, core.ScoreFusion].map((type) => type.name),
       strategies: [core.arithmeticMean, core.distributionBased, core.max, core.minMax, core.none, core.reciprocalRank, core.sum].map((strategy) => strategy.name),
       postprocessors: [core.Collapse, core.ContextWindow, core.LongContextReorder, core.MaximalMarginalRelevance, core.PostprocessingRetriever].map((type) => type.name),
@@ -54,6 +54,7 @@ test('a consumer imports each subpath by its package name, and the package depen
     vectorMissing: 'VectorMissingError',
     passageGap: 'PassageGapError',
     retrievers: [
+      'EmbeddingRerankRetriever',
       'FusionRetriever',
       'HydeRetriever',
       'MultiQueryRetriever',

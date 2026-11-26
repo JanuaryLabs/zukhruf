@@ -1,5 +1,7 @@
 # The package is the query side of RAG and reads a passage contract that elt writes
 
+Superseded in part on 2026-11-26 (#5586) for "It never cuts and never embeds documents. It embeds only the query." elt cuts and embeds the documents for the index, and the package never writes a vector; a reranker may embed the text of the candidates of a query when that query runs, as `EmbeddingRerankRetriever` does ([ADR 0022](./0022-a-reranker-may-embed-the-text-of-the-candidates-when-the-query-runs.md)).
+
 Superseded in part on 2026-11-25 (#5584) for the type of a passage of the contract. It is `StoredPassage<M>`, a `Passage<M>` with `source`, `seq`, `start` and `end`; a passage of any other source has only `id`, `text` and `metadata` ([ADR 0015](./0015-a-passage-is-typed-by-its-metadata-and-only-a-stored-passage-has-source-seq-start-and-end.md)). The rest of the decision below stays true.
 
 Status: accepted by Ezz on 2026-11-23 ("Approve, write the paper"). Before that, Ezz set the scope: "focusing on the search aspect only not ingestion. this elt job?", and for the keyword index: "Index in elt, query in retrieval".

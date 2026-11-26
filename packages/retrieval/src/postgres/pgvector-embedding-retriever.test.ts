@@ -1342,3 +1342,34 @@ void test.each(
       );
     }),
 );
+
+test('without a scoreThreshold, a passage whose stored vector is zero reaches the caller with the score NaN that pgvector gives, never dropped by a threshold the caller did not set', async () => {
+  // Arrange: <=> of a zero vector is NaN, and Postgres sorts NaN last.
+  await using database = await server().database();
+  const pool = database.pool();
+  await contract(pool, [
+    { id: 'a', vector: [3, 0, 0, 0] },
+    { id: 'z', vector: [0, 0, 0, 0] },
+  ]);
+  const retriever = new PgvectorEmbeddingRetriever({
+    store: new PostgresPassageStore({
+      session: session(pool),
+      passages: 'docs_passages',
+      metadata: (columns) => columns,
+    }),
+    vectors: 'docs_passage_vectors',
+    model: embeddingModel({ 'rotate a key': [1, 0, 0, 0] }),
+  });
+
+  // Act
+  const { passages } = await retriever.retrieve('rotate a key');
+
+  // Assert
+  assert.deepEqual(
+    passages.map(({ passage, score }) => [passage.id, score]),
+    [
+      ['a', 1],
+      ['z', Number.NaN],
+    ],
+  );
+});
