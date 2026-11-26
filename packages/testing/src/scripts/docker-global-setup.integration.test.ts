@@ -511,6 +511,13 @@ async function unleased(t: TestContext, fingerprint: string): Promise<void> {
 const DAY = 24 * 60 * 60 * 1000;
 
 /**
+ * The creator lease of a reaper that the test creates itself: no container
+ * has this name, so the reaper's first look finds its creator gone, as for a
+ * process killed before its hold (ADR 0033).
+ */
+const GONE_CREATOR = 'zukhruf-testing-creator-gone';
+
+/**
  * The expiry pass of a reaper of a new run with a TTL of 1 ms, as the reaper
  * of a run that used Docker does at its end eight days later, one day after
  * the TTL of each shared server (ADR 0020, item 4). `settings` changes the
@@ -677,6 +684,7 @@ async function proxiedReaper(
     },
     '/var/run/docker.sock',
     directoryParent(docker.host),
+    GONE_CREATOR,
   );
   const since = Math.floor(Date.now() / 1000) - 1;
   const reaper = await docker.containers.create(
@@ -1051,6 +1059,10 @@ describe('a run and its recovery', { concurrency: 4 }, () => {
           }
           if (Actor?.Attributes?.['dev.zukhruf.testing.run'] !== state.run)
             continue;
+          // A lease of the run, such as the creator lease of its reaper
+          // (ADR 0033), is not an object of a test.
+          if (Actor.Attributes['dev.zukhruf.testing.lease'] !== undefined)
+            continue;
           if (Actor?.ID === state.early) {
             if (Action === 'destroy') gate.release();
             continue;
@@ -1337,6 +1349,7 @@ describe('a run and its recovery', { concurrency: 4 }, () => {
         },
         '/var/run/docker.sock',
         directoryParent(docker.host),
+        GONE_CREATOR,
       ),
       { name: reaperName(stale) },
     );
@@ -1349,6 +1362,7 @@ describe('a run and its recovery', { concurrency: 4 }, () => {
         { ...REAPER_DEFAULTS, requestTimeout: 3_600_000 },
         '/var/run/docker.sock',
         directoryParent(docker.host),
+        GONE_CREATOR,
       ),
       { name: reaperName(young) },
     );

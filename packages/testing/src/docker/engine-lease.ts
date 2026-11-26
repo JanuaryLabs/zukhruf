@@ -10,7 +10,11 @@ import {
   type OwnedContainer,
 } from '@zukhruf/docker';
 
-/** The kind of a lease: `process` for a test process that reuses shared servers, `sweep` for a teardown that removes them. */
+/**
+ * The kind of a lease: `process` for a test process that reuses shared
+ * servers, `sweep` for a teardown that removes them, `creator` for the
+ * process that creates the reaper of its run, until its first hold.
+ */
 export const LEASE_LABEL = 'dev.zukhruf.testing.lease';
 
 /** The fingerprint of the shared server that a lease is for (ADR 0019). */
@@ -92,6 +96,11 @@ export class EngineLease implements AsyncDisposable {
     void Promise.allSettled([attach.exitCode, drained(attach)]).then(() =>
       this.#ended.open(),
     );
+  }
+
+  /** The id of the lease's container, which a reaper watches for its end. */
+  get id(): string {
+    return this.#container.id;
   }
 
   /** Resolves when the attach ends: the lease is gone. */

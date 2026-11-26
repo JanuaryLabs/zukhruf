@@ -25,6 +25,7 @@ import { mariadb, mysql } from '../databases/mysql-family-collector.ts';
 import { postgres } from '../databases/postgres-collector.ts';
 import { sqlserver } from '../databases/sqlserver-collector.ts';
 import {
+  EngineLease,
   LEASED_SERVER_LABEL,
   LEASE_IMAGE,
   LEASE_LABEL,
@@ -127,6 +128,15 @@ const BIND = '/tmp/bind';
  * holder (ADR 0020, item 9).
  */
 const CAME = '/tmp/came';
+
+/**
+ * The mark of a start: a restart of the engine or a kill of the reaper keeps
+ * it, so a later start knows that it is not the first (ADR 0033).
+ */
+const STARTED = '/tmp/started';
+
+/** A line here says that the creator lease of the reaper is gone (ADR 0033). */
+const CREATOR_GONE = '/tmp/creator-gone';
 
 /**
  * The mark of a call that the request time limit ended: the reaper keeps its
@@ -474,8 +484,25 @@ fi
 # engine ends with exit 1 and must not start again.
 once docker update --restart unless-stopped "$found" >/dev/null
 
-first=$(($(now) + REAPER_FIRST_HOLDER))
-until [ "$(holders)" -gt 0 ] || [ -e ${CAME} ] || [ "$(now)" -ge "$first" ]; do sleep $tick; done
+# The first start waits for its first hold until a hold comes or the creator
+# lease of the process that created it is gone (ADR 0033): the engine removes
+# that lease when the process ends. The watch starts at $since, before the
+# look, so a removal between the two is not lost, as a Kubernetes informer
+# lists and then watches. A start after a restart of the engine or a kill of
+# the reaper finds the mark of an earlier start, and keeps its wait for a
+# first holder (#4508).
+if [ -e ${STARTED} ]; then
+  first=$(($(now) + REAPER_FIRST_HOLDER))
+  until [ "$(holders)" -gt 0 ] || [ -e ${CAME} ] || [ "$(now)" -ge "$first" ]; do sleep $tick; done
+else
+  : > ${STARTED}
+  since=$(date +%s)
+  docker events --since "$since" --filter "container=$REAPER_CREATOR" --filter event=destroy --format x > ${CREATOR_GONE} 2>/dev/null &
+  watcher=$!
+  [ "$(once docker inspect -f '{{.State.Status}}' "$REAPER_CREATOR" 2>/dev/null)" = running ] || echo x >> ${CREATOR_GONE}
+  until [ "$(holders)" -gt 0 ] || [ -e ${CAME} ] || [ -s ${CREATOR_GONE} ]; do sleep $tick; done
+  kill "$watcher" 2>/dev/null
+fi
 while :; do
   while [ "$(holders)" -gt 0 ]; do sleep $tick; done
   quiet "$REAPER_GRACE" || continue
@@ -528,6 +555,7 @@ export function reaperRequest(
   settings: ReaperSettings,
   socket: string,
   directories: string,
+  creator: string,
 ): EngineApi.ContainerCreateRequest {
   const self = randomUUID();
   return {
@@ -537,6 +565,7 @@ export function reaperRequest(
     Env: [
       `REAPER_RUN=${runId}`,
       `REAPER_SELF=${self}`,
+      `REAPER_CREATOR=${creator}`,
       `REAPER_GRACE=${settings.grace}`,
       `REAPER_INTERVAL=${settings.interval}`,
       `REAPER_PASSES=${settings.passes}`,
@@ -655,6 +684,33 @@ async function closed(
 interface RunningReaper {
   container: Container;
   socket: string;
+  /**
+   * Ends the creator lease that this process took to create the reaper,
+   * once its hold has its answer; nothing when it found the reaper.
+   */
+  release(): Promise<void>;
+}
+
+/**
+ * A creator lease of the run `runId` (ADR 0033): the engine removes it when
+ * this process ends, and a new reaper waits for its first hold until a hold
+ * comes or this lease is gone. A missing image is pulled.
+ */
+async function creatorLease(
+  docker: Docker,
+  runId: string,
+  signal: AbortSignal,
+): Promise<EngineLease> {
+  const labels = { [TEST_RUN_LABEL]: runId, [LEASE_LABEL]: 'creator' };
+  for (;;) {
+    try {
+      const lease = await EngineLease.take(docker, labels, { signal });
+      if (lease !== undefined) return lease;
+    } catch (error) {
+      if (!(error instanceof ImageNotFoundError)) throw error;
+      await docker.images.pull(error.image, { signal });
+    }
+  }
 }
 
 /**
@@ -666,6 +722,11 @@ interface RunningReaper {
  * one that was stopped, is removed here: nobody else removes it. A `socket` that the
  * engine's host does not have rejects with BindSourceNotFoundError. Each
  * call to the engine stops when `signal` aborts.
+ *
+ * A process that creates the reaper takes a creator lease first, and the
+ * reaper names it, as Kubernetes writes the owner of an object when it
+ * creates it. A process that finds the reaper takes none: most holds find
+ * it, and a lease costs a create, an attach and a start (about 250 ms).
  */
 async function running(
   docker: Docker,
@@ -676,26 +737,31 @@ async function running(
   socket: string,
   signal: AbortSignal,
 ): Promise<RunningReaper | undefined> {
-  const request = reaperRequest(
-    runId,
-    settings,
-    socket,
-    directoryParent(endpoint),
-  );
   const name = reaperName(runId);
-  let reaper: Container;
-  try {
-    ({ container: reaper } = await docker.containers.createOrGet(request, {
-      name,
-      signal,
-    }));
-  } catch (error) {
-    if (!(error instanceof ImageNotFoundError)) throw error;
-    await docker.images.pull(error.image, { signal });
-    ({ container: reaper } = await docker.containers.createOrGet(request, {
-      name,
-      signal,
-    }));
+  await using creation = new AsyncDisposableStack();
+  let reaper = await docker.containers.find(name, { signal });
+  if (reaper === undefined) {
+    const lease = creation.use(await creatorLease(docker, runId, signal));
+    const request = reaperRequest(
+      runId,
+      settings,
+      socket,
+      directoryParent(endpoint),
+      lease.id,
+    );
+    try {
+      ({ container: reaper } = await docker.containers.createOrGet(request, {
+        name,
+        signal,
+      }));
+    } catch (error) {
+      if (!(error instanceof ImageNotFoundError)) throw error;
+      await docker.images.pull(error.image, { signal });
+      ({ container: reaper } = await docker.containers.createOrGet(request, {
+        name,
+        signal,
+      }));
+    }
   }
   let state: string | undefined;
   let source: string | undefined;
@@ -721,8 +787,14 @@ async function running(
     if (error instanceof ContainerNotFoundError) return undefined;
     throw error;
   }
-  if (state === 'running')
-    return { container: reaper, socket: source ?? socket };
+  if (state === 'running') {
+    const lease = creation.move();
+    return {
+      container: reaper,
+      socket: source ?? socket,
+      release: () => lease.disposeAsync(),
+    };
+  }
   if (state === 'exited' || state === 'dead')
     await reaper.remove({ force: true, signal });
   else await closed(docker, reaper, settings, clock, signal);
@@ -832,7 +904,12 @@ async function answer(
       continue;
     }
     if (reaper === undefined) return { kind: 'ended' };
-    const reply = await ask(reaper.container, signal);
+    let reply;
+    try {
+      reply = await ask(reaper.container, signal);
+    } finally {
+      await reaper.release();
+    }
     if (reply === undefined) return { kind: 'ended' };
     const { line, holder, output } = reply;
     if (line === 'held')

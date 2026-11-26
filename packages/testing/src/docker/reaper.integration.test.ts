@@ -29,7 +29,7 @@ import { Postgres } from '../databases/postgres.ts';
 import { engine, proxyless } from '../testing/current-engine.ts';
 import { docker } from '../testing/engine-client.ts';
 import { EngineProxy } from '../testing/engine-proxy.ts';
-import { LEASE_IMAGE } from './engine-lease.ts';
+import { EngineLease, LEASE_IMAGE } from './engine-lease.ts';
 import { DockerTestbed } from './index.ts';
 import {
   REAPER_DEFAULTS,
@@ -44,11 +44,19 @@ import {
 import { directoryParent } from './run-records.ts';
 
 const RUN_LABEL = 'dev.zukhruf.testing.run';
+/**
+ * The creator lease of a reaper that the test creates itself: no container
+ * has this name, so the reaper's first look finds its creator gone, as for a
+ * process killed before its hold (ADR 0033).
+ */
+const GONE_CREATOR = 'zukhruf-testing-creator-gone';
 const KIND_LABEL = 'dev.zukhruf.testing.kind';
 /** The label that gives a test shared servers of its own, as database-cleanup.integration.test.ts does. */
 const SCOPE_LABEL = 'dev.zukhruf.testing.verification';
 const DATABASE_LABEL = 'dev.zukhruf.testing.database';
 const DATABASE_SERVER_LABEL = 'dev.zukhruf.testing.database.server';
+/** The kind of a lease; a creator lease has the value `creator`. */
+const LEASE_KIND_LABEL = 'dev.zukhruf.testing.lease';
 
 /** Pulls `image` when the engine of this process does not have it. */
 async function present(image: string): Promise<void> {
@@ -348,6 +356,7 @@ async function proxiedReaper(
   proxy: EngineProxy,
   run: string,
   settings: ReaperSettings,
+  creator = GONE_CREATOR,
 ): Promise<{ id: string; finished: Promise<'removed' | 'kept'> }> {
   await present('alpine:latest');
   // Docker Desktop resolves host.docker.internal to this machine. On a native
@@ -384,6 +393,7 @@ async function proxiedReaper(
     { ...settings, firstHolder: 0 },
     '/var/run/docker.sock',
     directoryParent(docker.host),
+    creator,
   );
   const since = Math.floor(Date.now() / 1000) - 1;
   const reaper = await docker.containers.create(
@@ -1003,7 +1013,7 @@ exec sleep 3600`,
     assert.equal((await recordsOfDatabase(database)).length, 1);
   });
 
-  test('a reaper that no holder holds removes the run’s objects after its wait for a first holder, and exits', async (t) => {
+  test('a reaper whose creator is gone before any hold removes the run’s objects with no wait for a first holder, and exits', async (t) => {
     const run = randomUUID();
     await present('alpine:latest');
     await present(REAPER_IMAGE);
@@ -1015,13 +1025,16 @@ exec sleep 3600`,
 
     ids.push(await object(run));
     // The reaper of a process that was killed between the start of its
-    // reaper and its hold: no holder ever comes.
+    // reaper and its hold: no holder ever comes, and its creator lease is
+    // gone. A first-holder time of an hour fails the test target's limit
+    // when the reaper waits it.
     const reaper = await docker.containers.create(
       reaperRequest(
         run,
-        { ...quick, firstHolder: 1_000 },
+        { ...quick, firstHolder: 3_600_000 },
         '/var/run/docker.sock',
         directoryParent(docker.host),
+        GONE_CREATOR,
       ),
       { name: reaperName(run) },
     );
@@ -1049,6 +1062,7 @@ exec sleep 3600`,
         { ...quick, firstHolder: 0, requestTimeout: 1_000 },
         '/etc/hosts',
         directoryParent(docker.host),
+        GONE_CREATOR,
       ),
       { name: reaperName(run) },
     );
@@ -2259,6 +2273,192 @@ exec sleep 3600`,
           assert.deepEqual(await recordsOfDatabase(database), []);
         },
       ),
+  );
+
+  // A first-holder time of an hour: a reaper that waits it fails the limit of
+  // the test target, and one that waits for its creator ends in seconds.
+  const creatorTimeout = { ...quick, firstHolder: 3_600_000 };
+
+  test(
+    'a test process killed after it created its run’s reaper and before its hold leaves a reaper that removes itself with no wait for a first holder',
+    { skip: proxyless },
+    async (t) => {
+      const run = randomUUID();
+      await present('alpine:latest');
+      await using directory = await new TemporaryFiles().directory(
+        'zukhruf-testing-reaper-',
+      );
+      const records = await recordsOf(directory.path);
+      await using stack = new AsyncDisposableStack();
+      await using cleanup = new AsyncDisposableStack();
+      cleanup.defer(() => removeRun(run));
+      const owned = await object(run);
+      const proxy = stack.use(await EngineProxy.start(engine));
+      // The hold of the process waits until the process is gone, and then
+      // never reaches the engine.
+      const holding = Promise.withResolvers<void>();
+      proxy.intercept(
+        'POST',
+        /^\/containers\/[^/]+\/exec$/,
+        async (_request, left) => {
+          holding.resolve();
+          if (!left.aborted) await once(left, 'abort');
+          throw new Error('The process that holds is gone.');
+        },
+      );
+      const worker = program(
+        `
+        const docker = await Docker.connect({ clock: globalThis, environment: process.env });
+        await ReaperHold.take(docker, docker.host, ${JSON.stringify(run)}, ${JSON.stringify(creatorTimeout)}, globalThis);
+      `,
+        runOf(run, records, proxied(proxy)),
+      );
+      cleanup.defer(() => killed(worker.child));
+      await within(holding.promise, t.signal, 'the hold of the process');
+
+      await killed(worker.child);
+
+      await reaperRemoved(t, run, async () =>
+        assert.equal(await exists(owned), false),
+      );
+    },
+  );
+
+  test(
+    'a reaper that its creator left created, and that another process starts after the creator died, removes itself with no wait for a first holder',
+    { skip: proxyless },
+    async (t) => {
+      const run = randomUUID();
+      await present('alpine:latest');
+      await using directory = await new TemporaryFiles().directory(
+        'zukhruf-testing-reaper-',
+      );
+      const records = await recordsOf(directory.path);
+      await using stack = new AsyncDisposableStack();
+      await using cleanup = new AsyncDisposableStack();
+      cleanup.defer(() => removeRun(run));
+      const owned = await object(run);
+      const proxy = stack.use(await EngineProxy.start(engine));
+      // The first start of the process is the start of its creator lease, and
+      // the second the start of its reaper. That one waits until the process
+      // is gone, and then never reaches the engine.
+      const starting = Promise.withResolvers<void>();
+      let starts = 0;
+      proxy.intercept(
+        'POST',
+        /^\/containers\/[^/]+\/start$/,
+        async (_request, left) => {
+          starts += 1;
+          if (starts !== 2) return;
+          starting.resolve();
+          if (!left.aborted) await once(left, 'abort');
+          throw new Error('The process that starts its reaper is gone.');
+        },
+      );
+      const worker = program(
+        `
+        const docker = await Docker.connect({ clock: globalThis, environment: process.env });
+        await ReaperHold.take(docker, docker.host, ${JSON.stringify(run)}, ${JSON.stringify(creatorTimeout)}, globalThis);
+      `,
+        runOf(run, records, proxied(proxy)),
+      );
+      cleanup.defer(() => killed(worker.child));
+      await within(starting.promise, t.signal, 'the start of the reaper');
+      await killed(worker.child);
+      const reaper = await docker.containers.find(reaperName(run));
+      assert.ok(reaper, 'the creator left its reaper created');
+
+      await reaper.start();
+
+      await reaperRemoved(t, run, async () =>
+        assert.equal(await exists(owned), false),
+      );
+    },
+  );
+
+  test(
+    'the process that creates its run’s reaper takes one creator lease and leaves none once it holds, and a process that finds the reaper takes none',
+    { skip: proxyless },
+    async () => {
+      const run = randomUUID();
+      const holders: ChildProcess[] = [];
+      await using stack = new AsyncDisposableStack();
+      await using cleanup = new AsyncDisposableStack();
+      cleanup.defer(async () => {
+        for (const child of holders) await killed(child);
+        await removeRun(run);
+      });
+      const proxy = stack.use(await EngineProxy.start(engine));
+      const env = { ...process.env, ...proxied(proxy) };
+
+      holders.push(await holder(run, quick, env));
+      holders.push(await holder(run, quick, env));
+
+      const leases = proxy.requests.filter(({ method, path, body }) => {
+        if (method !== 'POST' || path !== '/containers/create') return false;
+        const { Labels = {} }: { Labels?: Record<string, string> } =
+          JSON.parse(body);
+        return Labels[LEASE_KIND_LABEL] === 'creator';
+      });
+      assert.equal(leases.length, 1);
+      assert.deepEqual(
+        await docker.containers.list({
+          all: true,
+          filters: {
+            label: [`${LEASE_KIND_LABEL}=creator`, `${RUN_LABEL}=${run}`],
+          },
+        }),
+        [],
+      );
+    },
+  );
+
+  test(
+    'a reaper whose creator lease ends after the reaper looked at it ends its wait for a first hold at that end',
+    { skip: proxyless },
+    async (t) => {
+      const run = randomUUID();
+      await present('alpine:latest');
+      await using stack = new AsyncDisposableStack();
+      await using cleanup = new AsyncDisposableStack();
+      cleanup.defer(() => removeRun(run));
+      const owned = await object(run);
+      // The test is the creator: its lease has the run's label, so removeRun
+      // removes it when the test fails before it ends it.
+      const lease = await EngineLease.take(docker, {
+        [RUN_LABEL]: run,
+        [LEASE_KIND_LABEL]: 'creator',
+      });
+      assert.ok(lease);
+      const proxy = stack.use(await EngineProxy.start(engine));
+      const { id } = await proxiedReaper(stack, proxy, run, quick, lease.id);
+      // The reaper's one look at its creator lease reached the engine, and its
+      // `docker inspect` exited: the look has its answer, that the lease runs.
+      await waitFor(
+        async () => {
+          assert.ok(
+            proxy.requests.some(
+              ({ method, path }) =>
+                method === 'GET' && path === `/containers/${lease.id}/json`,
+            ),
+            'the reaper looked at its creator lease',
+          );
+          const reaper = await docker.containers.find(id);
+          assert.ok(reaper);
+          const { stdout } = await reaper.exec({
+            Cmd: ['pgrep', '-f', 'docker inspect'],
+          });
+          assert.equal(stdout.trim(), '', 'the look has its answer');
+        },
+        { signal: t.signal, interval: 100 },
+      );
+
+      await lease[Symbol.asyncDispose]();
+
+      await reaperRemoved(t, run, async () =>
+        assert.equal(await exists(owned), false),
+      );
+    },
   );
 });
 

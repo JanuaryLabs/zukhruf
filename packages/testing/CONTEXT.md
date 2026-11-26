@@ -51,7 +51,7 @@ A volume of a run, `zukhruf-testing-database-<name>`, that names one database of
 _Avoid_: Database lease, marker
 
 **Lease**:
-A container that runs `cat` on the standard input of the attach of its holder process. When the holder exits for any reason, the attach closes and the engine removes the lease. A process lease tells a reaper that a test process uses one shared server now. `reuse()` takes one for each process and shared server.
+A container that runs `cat` on the standard input of the attach of its holder process. When the holder exits for any reason, the attach closes and the engine removes the lease. A process lease tells a reaper that a test process uses one shared server now. `reuse()` takes one for each process and shared server. A creator lease tells a new reaper that the process that created it lives, until that process holds it (ADR 0033).
 _Avoid_: Heartbeat, lock, Ryuk session
 
 **Sweep lease**:
