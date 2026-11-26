@@ -1,10 +1,18 @@
-import { mean, std } from '@zukhruf/statistics';
+import {
+  type FusionInput,
+  RankFusion,
+  type RankedDoc,
+  type ScoreDoc,
+  ScoreFusion,
+  sum,
+} from '@zukhruf/retrieval';
 
 // mteb/models/hybrid_wrappers.py: HybridSearch and its three fusions.
 import type { MTEBModels } from '../abstasks/abstask.ts';
 import {
   type ScoredId,
   compareScoredIds,
+  rankByScore,
   zipStrictMismatch,
 } from '../dependencies/python.ts';
 import type {
@@ -97,13 +105,14 @@ export class HybridSearch implements SearchProtocol {
     const strategy = options.fusionStrategy ?? 'rrf';
     if (typeof strategy === 'string') {
       this.fusionName = strategy;
-      this.#fuseFn =
-        strategy === 'rrf'
-          ? (queryScoresList, weights) =>
-              fuseRrf(queryScoresList, weights, this.rrfK)
-          : strategy === 'dbsf'
-            ? fuseDbsf
-            : fuseRelativeScoreFusion;
+      if (strategy === 'rrf') {
+        this.#fuseFn = (queryScoresList, weights) =>
+          fuseRrf(queryScoresList, weights, this.rrfK);
+      } else if (strategy === 'dbsf') {
+        this.#fuseFn = fuseDbsf;
+      } else {
+        this.#fuseFn = fuseRelativeScoreFusion;
+      }
     } else {
       // Python's __name__: an anonymous function is "custom".
       this.fusionName = strategy.name || 'custom';
@@ -200,19 +209,61 @@ function zipStrict(
   return queryScoresList.map((scores, index) => [scores, weights[index] ?? 0]);
 }
 
-// Adds the weighted normalized score of each document to its fused score.
-function addWeighted(
-  fused: Map<string, number>,
-  docIds: readonly string[],
-  normalized: readonly number[],
-  weight: number,
-): void {
-  for (const [index, docId] of docIds.entries())
-    fused.set(
-      docId,
-      (fused.get(docId) ?? 0.0) + weight * (normalized[index] ?? 0),
-    );
+// One input for each model, in the order of the models.
+function inputsOf<D extends RankedDoc>(
+  queryScoresList: readonly ReadonlyMap<string, number>[],
+  weights: readonly number[],
+  docsOf: (scores: ReadonlyMap<string, number>) => D[],
+): FusionInput<D>[] {
+  return zipStrict(queryScoresList, weights).map(([scores, weight], index) => ({
+    name: `model ${index}`,
+    docs: docsOf(scores),
+    weight,
+  }));
 }
+
+// The fused scores in the order in which the ids first appear in the inputs,
+// as MTEB's dict keeps them.
+function inMtebOrder(
+  fused: readonly ScoreDoc[],
+  inputs: readonly FusionInput<RankedDoc>[],
+): Map<string, number> {
+  const scores = new Map(fused.map(({ id, score }) => [id, score]));
+  return new Map(
+    inputs.flatMap(({ docs }) =>
+      docs.map(({ id }): [string, number] => [id, scores.get(id) ?? 0]),
+    ),
+  );
+}
+
+// The docs in the order of the map: the mean and the std of a list add its
+// scores in this order, as MTEB's do.
+function scoreDocsOf(scores: ReadonlyMap<string, number>): ScoreDoc[] {
+  return [...scores].map(([id, score]) => ({ id, score }));
+}
+
+const distributionBasedFusion = new ScoreFusion({
+  normalizer: {
+    normalize: (score, { mean, std }) => {
+      if (std < 1e-9) return 0.5;
+      const lowerLimit = mean - 3 * std;
+      const upperLimit = mean + 3 * std;
+      return Math.min(
+        Math.max((score - lowerLimit) / (upperLimit - lowerLimit), 0.0),
+        1.0,
+      );
+    },
+  },
+  combination: sum(),
+});
+
+const relativeScoreFusion = new ScoreFusion({
+  normalizer: {
+    normalize: (score, { min, max }) =>
+      max === min ? 0.5 : (score - min) / (max - min),
+  },
+  combination: sum(),
+});
 
 // Distribution-Based Score Fusion (https://arxiv.org/html/2410.20878v1):
 // each score is placed between mean - 3 std and mean + 3 std, and clipped to
@@ -221,49 +272,26 @@ export function fuseDbsf(
   queryScoresList: readonly ReadonlyMap<string, number>[],
   weights: readonly number[],
 ): Map<string, number> {
-  const fused = new Map<string, number>();
-  for (const [scores, weight] of zipStrict(queryScoresList, weights)) {
-    if (scores.size === 0) continue;
-    const docIds = [...scores.keys()];
-    const rawScores = [...scores.values()];
-    const mu = mean(rawScores);
-    const sigma = std(rawScores);
-    let normalized: number[];
-    if (sigma < 1e-9) normalized = rawScores.map(() => 0.5);
-    else {
-      const lowerLimit = mu - 3 * sigma;
-      const upperLimit = mu + 3 * sigma;
-      const denom = upperLimit - lowerLimit;
-      normalized = rawScores.map((score) =>
-        Math.min(Math.max((score - lowerLimit) / denom, 0.0), 1.0),
-      );
-    }
-    addWeighted(fused, docIds, normalized, weight);
-  }
-  return fused;
+  const inputs = inputsOf(queryScoresList, weights, scoreDocsOf);
+  return inMtebOrder(distributionBasedFusion.fuse(inputs), inputs);
 }
 
 // Reciprocal Rank Fusion: each document adds weight / (rrfK + rank). Equal
 // scores rank by descending document id, as the retrieval evaluation does.
+// MTEB allows an rrfK of 0.
 export function fuseRrf(
   queryScoresList: readonly ReadonlyMap<string, number>[],
   weights: readonly number[],
   rrfK = 60,
 ): Map<string, number> {
-  const fused = new Map<string, number>();
-  for (const [scores, weight] of zipStrict(queryScoresList, weights)) {
-    const sortedDocs = [...scores]
-      .map(([docId, score]): ScoredId => [score, docId])
-      .sort((left, right) => compareScoredIds(right, left));
-    for (const [rankIdx, [, docId]] of sortedDocs.entries()) {
-      const rank = rankIdx + 1;
-      fused.set(
-        docId,
-        (fused.get(docId) ?? 0.0) + weight * (1.0 / (rrfK + rank)),
-      );
-    }
-  }
-  return fused;
+  const inputs = inputsOf(queryScoresList, weights, (scores) =>
+    rankByScore(scores).map(([id]) => ({ id })),
+  );
+  const fusion = new RankFusion({
+    normalizer: { normalize: (rank) => 1.0 / (rrfK + rank) },
+    combination: sum(),
+  });
+  return inMtebOrder(fusion.fuse(inputs), inputs);
 }
 
 // Relative Score Fusion: min-max normalization. Scores that are all equal
@@ -272,18 +300,6 @@ export function fuseRelativeScoreFusion(
   queryScoresList: readonly ReadonlyMap<string, number>[],
   weights: readonly number[],
 ): Map<string, number> {
-  const fused = new Map<string, number>();
-  for (const [scores, weight] of zipStrict(queryScoresList, weights)) {
-    if (scores.size === 0) continue;
-    const docIds = [...scores.keys()];
-    const rawScores = [...scores.values()];
-    const minS = rawScores.reduce((left, right) => Math.min(left, right));
-    const maxS = rawScores.reduce((left, right) => Math.max(left, right));
-    const normalized =
-      maxS === minS
-        ? rawScores.map(() => 0.5)
-        : rawScores.map((score) => (score - minS) / (maxS - minS));
-    addWeighted(fused, docIds, normalized, weight);
-  }
-  return fused;
+  const inputs = inputsOf(queryScoresList, weights, scoreDocsOf);
+  return inMtebOrder(relativeScoreFusion.fuse(inputs), inputs);
 }

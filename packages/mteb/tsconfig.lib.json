@@ -29,6 +29,9 @@
     },
     {
       "path": "../fs/tsconfig.lib.json"
+    },
+    {
+      "path": "../retrieval/tsconfig.lib.json"
     }
   ]
 }

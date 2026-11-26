@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { test } from 'node:test';
 
 import { TemporaryFiles } from '@zukhruf/fs';
+import { test } from '@zukhruf/testing/node';
 
 import { AbsTaskRetrieval } from '../abstasks/retrieval.ts';
 import { TaskMetadata } from '../abstasks/task-metadata.ts';
@@ -186,6 +186,40 @@ test('a fusion with another number of weights than score maps stops, as zip(stri
     new RangeError('zip() argument 2 is shorter than argument 1'),
   );
 });
+
+test('a dbsf score more than 3 std below the mean becomes 0, as MTEB clips it', () => {
+  const scores = new Map([
+    ...Array.from({ length: 10 }, (_, index): [string, number] => [
+      `doc${index}`,
+      1,
+    ]),
+    ['low', 0],
+  ]);
+
+  const fused = fuseDbsf([scores], [1]);
+
+  assert.equal(fused.get('low'), 0);
+});
+
+void test.each(
+  [
+    { spread: 1e-9, std: '5e-10', expected: [0.5, 0.5] },
+    { spread: 4e-9, std: '2e-9', expected: [1 / 3, 2 / 3] },
+  ],
+  ({ spread, std, expected }) =>
+    test(`dbsf scores with a std of ${std} become ${expected.map((value) => value.toFixed(2)).join(' and ')}, as MTEB's cutoff is a std of 1e-9`, () => {
+      const scores = new Map([
+        ['a', 1],
+        ['b', 1 + spread],
+      ]);
+
+      const fused = fuseDbsf([scores], [1]);
+
+      // To 6 digits: the scores lose bits next to 1.
+      const rounded = (value: number) => Math.round(value * 1e6) / 1e6;
+      assert.deepEqual([...fused.values()].map(rounded), expected.map(rounded));
+    }),
+);
 
 test('a hybrid with the default settings has no experiment arguments, and its name is that of MTEB', () => {
   const models = () => [bm25S.loadModel(), bm25S.loadModel()];
