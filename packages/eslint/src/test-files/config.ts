@@ -9,6 +9,7 @@ import noOwnWaitLimit from './no-own-wait-limit.ts';
 import noProcessEnvWrite from './no-process-env-write.ts';
 import noShortTestTimeout from './no-short-test-timeout.ts';
 import noSleepPollLoop from './no-sleep-poll-loop.ts';
+import noTabularTest from './no-tabular-test.ts';
 import noTestLifecycleHooks from './no-test-lifecycle-hooks.ts';
 import noTimerRace from './no-timer-race.ts';
 import noVitestGlobals from './no-vitest-globals.ts';
@@ -31,6 +32,7 @@ const testFileRules = {
   'no-own-module-mock': noOwnModuleMock,
   'one-test-runner': oneTestRunner,
   'prefer-each': preferEach,
+  'no-tabular-test': noTabularTest,
 };
 
 const rules = {
@@ -46,7 +48,9 @@ export const tests: Concept = {
     {
       name: 'zukhruf/tests',
       files: [...TESTS, ...TEST_SUPPORT],
-      rules: enable(testFileRules),
+      // no-tabular-test warns: repositories hold case tables looped inside one
+      // test that move to test.each one by one (#5729).
+      rules: { ...enable(testFileRules), 'zukhruf/no-tabular-test': 'warn' },
     },
     {
       // A global setup runs before any test process, and process.env is its only channel to them.

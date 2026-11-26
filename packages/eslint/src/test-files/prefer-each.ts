@@ -1,9 +1,8 @@
 import type { Rule } from 'eslint';
 
 import { identifierName, isAstNode, isType } from '../authoring/ast.ts';
-import { DECLARATIONS, rootName } from './declarations.ts';
+import { DECLARATIONS, isTestCase } from './declarations.ts';
 
-const CASES = new Set(['test', 'it']);
 const MODIFIERS = new Set(['skip', 'only', 'todo', 'each']);
 const LOOPS = new Set(['ForStatement', 'ForInStatement', 'ForOfStatement']);
 const ITERATIONS = new Set(['forEach', 'map']);
@@ -26,19 +25,6 @@ function isFunction(node: unknown): boolean {
   return (
     isType(node, 'ArrowFunctionExpression') ||
     isType(node, 'FunctionExpression')
-  );
-}
-
-/**
- * The callback of `test(…)`, `it(…)`, `test.skip(…)` or `test.each(…)`: the
- * body of a test case. A `t.test(…)` subtest is always inside one.
- */
-function isTestCase(node: Rule.Node): boolean {
-  const call = node.parent;
-  return (
-    isFunction(node) &&
-    isType(call, 'CallExpression') &&
-    CASES.has(rootName(call['callee']) ?? '')
   );
 }
 

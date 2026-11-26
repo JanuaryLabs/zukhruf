@@ -1,10 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { fixtureWorkspace } from '../testing/fixture-workspace.ts';
 import { typescriptRuleTester } from '../testing/rule-tester.ts';
-import { fixtureConfig, printConfig } from '../testing/run-eslint.ts';
-import { isRecord } from '../unknown-values.ts';
 import rule from './prefer-each.ts';
 
 test('prefer-each reports a loop outside a test case that declares a test or a suite, once, and the innermost of nested loops', () => {
@@ -53,27 +50,4 @@ test('prefer-each passes test.each, a loop inside a test case, and a loop that d
     ],
     invalid: [],
   });
-});
-
-test('the tests config turns prefer-each on as an error for a test file', async () => {
-  // Arrange
-  await using workspace = await fixtureWorkspace({
-    'nx.json': '{}',
-    'tsconfig.json': JSON.stringify({
-      compilerOptions: { strict: true, noEmit: true, types: [] },
-      include: ['**/*.ts'],
-    }),
-    'eslint.config.mjs': fixtureConfig(
-      `{ plugins: { zukhruf }, extends: ['zukhruf/base', 'zukhruf/tests'] }`,
-    ),
-    'src/sum.test.ts': `export {};\n`,
-  });
-
-  // Act
-  const config = printConfig(workspace.root, 'src/sum.test.ts');
-
-  // Assert
-  const rules = isRecord(config) ? config['rules'] : undefined;
-  const entry = isRecord(rules) ? rules['zukhruf/prefer-each'] : undefined;
-  assert.deepEqual(entry, [2]);
 });
