@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { test } from 'node:test';
+
+import { test } from '@zukhruf/parameterized-test';
 
 import { type Bound, minimizeLbfgsb } from './scipy-lbfgsb.ts';
 
@@ -99,7 +100,7 @@ function assertClose(
   );
 }
 
-for (const lbfgsbCase of expected.cases)
+void test.each(expected.cases, (lbfgsbCase) =>
   test(`L-BFGS-B gives SciPy's iterations, evaluations and stop, x and f within 1e-6 and the gradient within 1e-5: ${lbfgsbCase.case}`, () => {
     const { result } = lbfgsbCase;
 
@@ -136,7 +137,8 @@ for (const lbfgsbCase of expected.cases)
         `jac[${i}]`,
         JAC_TOLERANCE,
       );
-  });
+  }),
+);
 
 test('bounds of another length than x0 throw, as SciPy raises a ValueError', () => {
   assert.throws(() => minimizeLbfgsb(quadratic, [0, 0], { bounds: [[0, 1]] }), {

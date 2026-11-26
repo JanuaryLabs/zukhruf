@@ -3,12 +3,13 @@ import { randomUUID } from 'node:crypto';
 import { access, readFile, rm, writeFile } from 'node:fs/promises';
 import { type Socket, connect } from 'node:net';
 import { join } from 'node:path';
-import { type TestContext, describe, test } from 'node:test';
+import { type TestContext, describe } from 'node:test';
 
 import { createClock } from '@sinonjs/fake-timers';
 
 import { type Clock, untilAborted } from '@zukhruf/async';
 import { TemporaryFiles } from '@zukhruf/fs';
+import { test } from '@zukhruf/parameterized-test';
 import { waitFor } from '@zukhruf/testing/async';
 import { type WorkerProcess, startWorker } from '@zukhruf/testing/process';
 
@@ -718,26 +719,28 @@ describe('The leader of a SQLite election', () => {
     assert.equal(clock.countTimers(), 0);
   });
 
-  for (const options of [
-    { leaseDuration: 300, heartbeatInterval: 300 },
-    { leaseDuration: 300, heartbeatInterval: 0 },
-    { leaseDuration: 300, heartbeatInterval: -1 },
-  ]) {
-    test(`an election refuses heartbeatInterval ${options.heartbeatInterval} with leaseDuration ${options.leaseDuration}: a heartbeat must come more often than the lease ends`, () => {
-      // Act and Assert
-      assert.throws(
-        () =>
-          new SqliteElection({
-            clock: globalThis,
-            directory: '/unused',
-            claimFile: 'term.lock',
-            epochFile: 'term.epoch',
-            ...options,
-          }),
-        RangeError,
-      );
-    });
-  }
+  void test.each(
+    [
+      { leaseDuration: 300, heartbeatInterval: 300 },
+      { leaseDuration: 300, heartbeatInterval: 0 },
+      { leaseDuration: 300, heartbeatInterval: -1 },
+    ],
+    (options) =>
+      test(`an election refuses heartbeatInterval ${options.heartbeatInterval} with leaseDuration ${options.leaseDuration}: a heartbeat must come more often than the lease ends`, () => {
+        // Act and Assert
+        assert.throws(
+          () =>
+            new SqliteElection({
+              clock: globalThis,
+              directory: '/unused',
+              claimFile: 'term.lock',
+              epochFile: 'term.epoch',
+              ...options,
+            }),
+          RangeError,
+        );
+      }),
+  );
 });
 
 describe('An observer of a SQLite election', () => {

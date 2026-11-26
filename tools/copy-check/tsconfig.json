@@ -9,6 +9,9 @@
   "references": [
     {
       "path": "../../packages/fs/tsconfig.json"
+    },
+    {
+      "path": "../../packages/parameterized-test/tsconfig.json"
     }
   ]
 }

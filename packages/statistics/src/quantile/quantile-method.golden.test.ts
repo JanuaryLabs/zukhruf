@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+
+import { test } from '@zukhruf/parameterized-test';
 
 import fixture from '../fixtures/expected.json' with { type: 'json' };
 import {
@@ -25,16 +26,17 @@ const methods: readonly (readonly [
   ['inverted_cdf', new InvertedCdf()],
 ];
 
-for (const [name, method] of methods)
+void test.each(methods, ([name, method]) =>
   test(`${name} gives the value of numpy.quantile(method='${name}') for each array and q, to the last bit`, () => {
     const values = fixture.arrays.map((sorted) =>
       fixture.qs.map((q) => method.of(sorted, q)),
     );
 
     assert.deepEqual(values, fixture.expected[name]);
-  });
+  }),
+);
 
-for (const [name, method] of methods)
+void test.each(methods, ([name, method]) =>
   test(`${name} refuses a q out of 0 to 1 and refuses no values, as NumPy does`, () => {
     for (const q of [-0.01, 1.01, Number.NaN])
       assert.throws(() => method.of([1, 2, 3], q), {
@@ -45,4 +47,5 @@ for (const [name, method] of methods)
       name: 'RangeError',
       message: /^A quantile needs at least one value/,
     });
-  });
+  }),
+);

@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { test } from 'node:test';
 
 import type { RerankingModelV4 } from '@ai-sdk/provider';
 import { z } from 'zod';
+
+import { test } from '@zukhruf/parameterized-test';
 
 import { AbsTaskRetrieval } from '../../abstasks/retrieval.ts';
 import { TaskMetadata } from '../../abstasks/task-metadata.ts';
@@ -168,7 +169,7 @@ const LOADERS: readonly [LoaderName, ModelMeta<CrossEncoderKwargs>][] = [
   ['Qwen3RerankerWrapper', qwen3Reranker0B6],
 ];
 
-for (const [name, meta] of LOADERS)
+void test.each(LOADERS, ([name, meta]) =>
   test(`the ${name} loader sends each pair as the query and the document that the model of MTEB scores`, async () => {
     const { model, pairs } = recordingModel();
     // Qwen3 also gives its model the instruction, which a reranking server
@@ -182,7 +183,8 @@ for (const [name, meta] of LOADERS)
     });
 
     assert.deepEqual(pairs, want);
-  });
+  }),
+);
 
 test('zipStrictMismatch gives the error of zip(strict=True) of CPython', () => {
   const errors = expected.zip_errors.map(([lengths]) => [
@@ -193,7 +195,7 @@ test('zipStrictMismatch gives the error of zip(strict=True) of CPython', () => {
   assert.deepEqual(errors, expected.zip_errors);
 });
 
-for (const [[queries, passages], outcome] of expected.qwen3_batches)
+void test.each(expected.qwen3_batches, ([[queries, passages], outcome]) =>
   test(`Qwen3-Reranker with ${queries} queries and ${passages} documents in batches of 2 ${'error' in outcome ? 'throws' : 'scores'} as MTEB does`, async () => {
     const { model, pairs } = recordingModel();
     const reranker = qwen3Reranker0B6.loadModel({ model });
@@ -217,7 +219,8 @@ for (const [[queries, passages], outcome] of expected.qwen3_batches)
       await scored;
       assert.equal(pairs.length, outcome.pairs);
     }
-  });
+  }),
+);
 
 test('each cross-encoder throws the error of its MTEB wrapper for 2 queries and 1 document', async () => {
   const { model } = recordingModel();

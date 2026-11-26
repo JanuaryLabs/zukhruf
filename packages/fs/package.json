@@ -54,6 +54,7 @@
     "@zukhruf/sqlite-open": "^0.8.70"
   },
   "devDependencies": {
-    "@sinonjs/fake-timers": "15.5.0"
+    "@sinonjs/fake-timers": "15.5.0",
+    "@zukhruf/parameterized-test": "^0.8.70"
   }
 }

@@ -17,5 +17,10 @@
     }
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"],
-  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx", "src/testing/**"]
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx", "src/testing/**"],
+  "references": [
+    {
+      "path": "../parameterized-test/tsconfig.lib.json"
+    }
+  ]
 }

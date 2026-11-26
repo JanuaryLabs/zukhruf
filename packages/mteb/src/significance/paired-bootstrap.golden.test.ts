@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { test } from 'node:test';
 
 import { TemporaryFiles } from '@zukhruf/fs';
+import { test } from '@zukhruf/parameterized-test';
 import { NeumaierSum } from '@zukhruf/python';
 import { Linear } from '@zukhruf/statistics';
 
@@ -163,7 +163,7 @@ test('the paired bootstrap test of BM25 and BM25 with k1 1.2 and b 0.5 gives the
   assert.deepEqual(actual, plain(verdict));
 });
 
-for (const synthetic of expected.synthetic)
+void test.each(expected.synthetic, (synthetic) =>
   test(`the paired bootstrap test of "${synthetic.case}" gives the interval, the p and the result of NumPy, to the last bit`, () => {
     const { seed, replicates } = synthetic.verdict;
 
@@ -174,7 +174,8 @@ for (const synthetic of expected.synthetic)
     );
 
     assert.deepEqual(actual, plain(synthetic.verdict));
-  });
+  }),
+);
 
 // np.percentile(a, q) divides q by 100 and reads that quantile with the
 // linear method, which is what pairedBootstrapTest gives 0.025 and 0.975.
@@ -190,12 +191,13 @@ test('np.percentile is the linear quantile of q / 100 of @zukhruf/statistics, to
   );
 });
 
-for (const { case: name, p, adjusted } of expected.holm)
+void test.each(expected.holm, ({ case: name, p, adjusted }) =>
   test(`holm adjusts the p-values of "${name}" as multipletests of statsmodels with method holm, to the last bit`, () => {
     const actual = holm(p);
 
     assert.deepEqual(actual, adjusted);
-  });
+  }),
+);
 
 test('a paired bootstrap test refuses a baseline and a change with different queries', () => {
   const baseline = new Map([

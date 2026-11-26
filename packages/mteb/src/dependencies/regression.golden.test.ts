@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { test } from 'node:test';
 
+import { test } from '@zukhruf/parameterized-test';
 import { defaultRng } from '@zukhruf/random';
 
 import { trainTestSplit } from './datasets-train-test-split.ts';
@@ -247,7 +247,7 @@ function predictionScales(
 const relative = (values: readonly number[]) =>
   values.map((value) => Math.max(1, Math.abs(value)));
 
-for (const kase of expected.linear_regression)
+void test.each(expected.linear_regression, (kase) =>
   test(`LinearRegression of ${kase.case} has the rank of scikit-learn, and its coefficients, singular values and predictions are within the tolerance of the float32 lstsq of Accelerate`, () => {
     const { x, xTest } = dataOf(kase);
 
@@ -280,7 +280,8 @@ for (const kase of expected.linear_regression)
         differences.predictions <= 1e-4,
       JSON.stringify(differences),
     );
-  });
+  }),
+);
 
 test('predict with the coefficients of scikit-learn gives its predictions within 2^-21 of the size of the terms, as BLAS adds the products in another order', () => {
   const actual = expected.linear_regression.map((kase) => {

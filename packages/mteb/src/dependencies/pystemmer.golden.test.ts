@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { hash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { test } from 'node:test';
+
+import { test } from '@zukhruf/parameterized-test';
 
 import { Stemmer } from './pystemmer.ts';
 
@@ -28,7 +29,7 @@ const expected: Expected = JSON.parse(
   ),
 );
 
-for (const [algorithm, pairs] of Object.entries(expected.stems)) {
+void test.each(Object.entries(expected.stems), ([algorithm, pairs]) =>
   test(`each word has the stem that PyStemmer 3.1.0 gives with ${algorithm}`, () => {
     const stemmer = new Stemmer(algorithm);
 
@@ -38,8 +39,8 @@ for (const [algorithm, pairs] of Object.entries(expected.stems)) {
       pairs.map(([word], index) => [word, stems[index]]),
       pairs,
     );
-  });
-}
+  }),
+);
 
 test('each name and alias of libstemmer stems the probe words as in PyStemmer', () => {
   const hashes = Object.fromEntries(

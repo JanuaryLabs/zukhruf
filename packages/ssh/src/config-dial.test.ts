@@ -5,13 +5,13 @@ import { appendFile, readFile, stat, writeFile } from 'node:fs/promises';
 import { type Server, type Socket, createServer } from 'node:net';
 import { userInfo } from 'node:os';
 import { join } from 'node:path';
-import { test } from 'node:test';
 import { setImmediate as nextMacrotask } from 'node:timers/promises';
 import { promisify } from 'node:util';
 
 import { createClock } from '@sinonjs/fake-timers';
 
 import { TemporaryFiles } from '@zukhruf/fs';
+import { test } from '@zukhruf/parameterized-test';
 
 import { OpenSshConfig } from './config.ts';
 import { isErrno } from './errno.ts';
@@ -1414,7 +1414,7 @@ test(
   },
 );
 
-for (const setting of ['ask', 'autoask']) {
+void test.each(['ask', 'autoask'], (setting) =>
   test(
     `under ControlMaster ${setting}, share() rejects with an error that names the setting, before any connection`,
     { skip: noSsh },
@@ -1438,8 +1438,8 @@ for (const setting of ['ask', 'autoask']) {
       });
       assert.equal(sshd.connections(), 0);
     },
-  );
-}
+  ),
+);
 
 test(
   'with ControlPath none, share() is a connection of this process alone: a second share() makes a second connection',

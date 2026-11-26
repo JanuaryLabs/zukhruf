@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import { describe, test } from 'node:test';
 
 import type { Clock } from '@zukhruf/async';
+import { describe, test } from '@zukhruf/parameterized-test';
 
 import { atomicWrite } from './atomic-write.ts';
 import { createExclusive } from './create-exclusive.ts';
@@ -24,7 +24,7 @@ const writes = {
 >;
 
 describe('The room for the name of a draft', () => {
-  for (const [name, write] of Object.entries(writes)) {
+  void test.each(Object.entries(writes), ([name, write]) =>
     test(`${name} writes a file whose name leaves exactly draftSuffixLength characters of room`, async () => {
       // Arrange
       await using directory = await new TemporaryFiles().directory(
@@ -39,8 +39,10 @@ describe('The room for the name of a draft', () => {
 
       // Assert
       assert.deepEqual(await readdir(directory.path), [longest]);
-    });
+    }),
+  );
 
+  void test.each(Object.entries(writes), ([name, write]) =>
     test(`${name} fails with ENAMETOOLONG for a name one character longer`, async () => {
       // Arrange
       await using directory = await new TemporaryFiles().directory(
@@ -56,6 +58,6 @@ describe('The room for the name of a draft', () => {
       // Assert
       await assert.rejects(writing, { code: 'ENAMETOOLONG' });
       assert.deepEqual(await readdir(directory.path), []);
-    });
-  }
+    }),
+  );
 });

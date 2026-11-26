@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { test } from 'node:test';
 
+import { test } from '@zukhruf/parameterized-test';
 import { defaultRng } from '@zukhruf/random';
 import { Linear, PercentileInterval } from '@zukhruf/statistics';
 
@@ -68,7 +68,7 @@ const runOf = (adds: readonly Add[]) => {
   return run;
 };
 
-for (const fixture of cases)
+void test.each(cases, (fixture) =>
   test(`PairedBootstrap gives the verdict of NumPy to the last bit: ${fixture.case}`, () => {
     const generator = defaultRng(fixture.seed);
     const paired = new PairedBootstrap({
@@ -99,4 +99,5 @@ for (const fixture of cases)
       },
       fixture.verdict,
     );
-  });
+  }),
+);

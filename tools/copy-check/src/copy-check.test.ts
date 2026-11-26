@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import { TemporaryFiles } from '@zukhruf/fs';
+import { test } from '@zukhruf/parameterized-test';
 
 const main = fileURLToPath(new URL('main.ts', import.meta.url));
 
@@ -76,7 +76,7 @@ test('a helper copied from a test file into src/testing with no ledger line fail
   assert.match(stderr, /packages\/b\/src\/testing\/totals\.ts/);
 });
 
-for (const ledger of ['docs/copied-code.md', 'docs/copied-from-a.md']) {
+void test.each(['docs/copied-code.md', 'docs/copied-from-a.md'], (ledger) =>
   test(`one line of ${ledger} that names both files records the copy`, async () => {
     // Arrange
     await using workspace = await new TemporaryFiles().directory('copy-check-');
@@ -93,8 +93,8 @@ for (const ledger of ['docs/copied-code.md', 'docs/copied-from-a.md']) {
     // Assert
     assert.equal(stderr, '');
     assert.equal(status, 0);
-  });
-}
+  }),
+);
 
 test('a ledger that names the two files on two lines records nothing', async () => {
   // Arrange

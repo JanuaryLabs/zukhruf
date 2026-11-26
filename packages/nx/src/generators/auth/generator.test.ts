@@ -2,12 +2,12 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { cp, mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import { type Tree, readJson } from '@nx/devkit';
 
 import { TemporaryFiles } from '@zukhruf/fs';
+import { test } from '@zukhruf/parameterized-test';
 
 import { changes, generatorTree } from '../../testing/generator-tree.ts';
 import { lintManifests } from '../../testing/lint-manifests.ts';
@@ -135,36 +135,38 @@ test('the factory and the CLI config load no env.ts and no startup.ts', async ()
   assert.doesNotMatch(cli, /env\.ts'|startup\.ts'/);
 });
 
-for (const [mount, version] of [
-  [uiMount, 'the UI_ROOT mount'],
-  [legacyUiMount, 'the mount before UI_ROOT'],
-] as const) {
-  test(`app.ts serves the auth routes before ${version} of pair`, async () => {
-    const tree = generatorTree();
-    await nodeAppGenerator(tree, { directory: 'apps/backend' });
-    await prismaGenerator(tree, {
-      directory: 'packages/db',
-      backend: 'apps/backend',
-    });
-    tree.write(
-      'apps/backend/src/app.ts',
-      (tree.read('apps/backend/src/app.ts', 'utf-8') ?? '').replace(
-        '\napp.notFound((c) =>',
-        `\n${mount}\n\napp.notFound((c) =>`,
-      ),
-    );
+void test.each(
+  [
+    [uiMount, 'the UI_ROOT mount'],
+    [legacyUiMount, 'the mount before UI_ROOT'],
+  ] as const,
+  ([mount, version]) =>
+    test(`app.ts serves the auth routes before ${version} of pair`, async () => {
+      const tree = generatorTree();
+      await nodeAppGenerator(tree, { directory: 'apps/backend' });
+      await prismaGenerator(tree, {
+        directory: 'packages/db',
+        backend: 'apps/backend',
+      });
+      tree.write(
+        'apps/backend/src/app.ts',
+        (tree.read('apps/backend/src/app.ts', 'utf-8') ?? '').replace(
+          '\napp.notFound((c) =>',
+          `\n${mount}\n\napp.notFound((c) =>`,
+        ),
+      );
 
-    await authGenerator(tree, options);
+      await authGenerator(tree, options);
 
-    const app = tree.read('apps/backend/src/app.ts', 'utf-8') ?? '';
-    assert.ok(
-      app.includes(
-        `// better-auth answers under /api/auth.\n(await import('./routes/auth.route.ts')).default(app);\n\n${mount}\n`,
-      ),
-      app,
-    );
-  });
-}
+      const app = tree.read('apps/backend/src/app.ts', 'utf-8') ?? '';
+      assert.ok(
+        app.includes(
+          `// better-auth answers under /api/auth.\n(await import('./routes/auth.route.ts')).default(app);\n\n${mount}\n`,
+        ),
+        app,
+      );
+    }),
+);
 
 test('startup.ts builds the auth on the app client, and app.ts serves it before the UI and notFound', async () => {
   const tree = generatorTree();

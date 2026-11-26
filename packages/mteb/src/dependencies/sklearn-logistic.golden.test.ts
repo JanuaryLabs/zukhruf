@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { test } from 'node:test';
+
+import { test } from '@zukhruf/parameterized-test';
 
 import { LogisticRegression } from './sklearn-logistic.ts';
 import type { ClassLabel } from './sklearn.ts';
@@ -59,7 +60,7 @@ function float32Rows(rows: readonly number[][]): Float32Array[] {
   return rows.map((row) => Float32Array.from(row));
 }
 
-for (const logisticCase of expected.cases)
+void test.each(expected.cases, (logisticCase) =>
   test(`LogisticRegression gives scikit-learn's classes, n_iter_ and predictions, and coefficients within 2e-4, exact after one iteration: ${logisticCase.case}`, () => {
     const model = new LogisticRegression({ maxIter: logisticCase.max_iter });
 
@@ -94,7 +95,8 @@ for (const logisticCase of expected.cases)
         logisticCase.decision_function[i] ?? [],
         `decision_function[${i}]`,
       );
-  });
+  }),
+);
 
 test('labels of one class throw, as scikit-learn raises a ValueError', () => {
   const model = new LogisticRegression();

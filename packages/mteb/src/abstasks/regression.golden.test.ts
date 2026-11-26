@@ -2,9 +2,9 @@ import assert from 'node:assert/strict';
 import { hash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { test } from 'node:test';
 
 import { TemporaryFiles } from '@zukhruf/fs';
+import { test } from '@zukhruf/parameterized-test';
 
 import type { Dataset } from '../dependencies/datasets.ts';
 import {
@@ -290,7 +290,7 @@ async function evaluated(name: Name, task: AbsTaskRegression) {
   };
 }
 
-for (const [name, makeTask] of TASKS)
+void test.each(TASKS, ([name, makeTask]) =>
   test(`the undersampling of each experiment of ${name} equals MTEB's: all the rows, or the stratified subsampling with the seed of the experiment`, async () => {
     const task = makeTask();
     await task.loadData();
@@ -304,9 +304,10 @@ for (const [name, makeTask] of TASKS)
     );
 
     assert.deepEqual(experiments, expected[name].undersampling);
-  });
+  }),
+);
 
-for (const [name, makeTask] of TASKS)
+void test.each(TASKS, ([name, makeTask]) =>
   test(`evaluate gives ${name} the encoder inputs of MTEB, its predictions in the same order, and its kendalltau and main score to the last bit`, async () => {
     const task = makeTask();
 
@@ -330,9 +331,10 @@ for (const [name, makeTask] of TASKS)
         scores: expected[name].scores.test.map(exactScores),
       },
     );
-  });
+  }),
+);
 
-for (const [name, makeTask] of TASKS)
+void test.each(TASKS, ([name, makeTask]) =>
   test(`evaluate gives ${name} the coefficients, predictions, mse, mae, r2 and rmse of MTEB within 1e-4 of their size`, async () => {
     const task = makeTask();
 
@@ -389,9 +391,10 @@ for (const [name, makeTask] of TASKS)
       Object.values(differences).every((value) => value <= TOLERANCE),
       JSON.stringify(differences),
     );
-  });
+  }),
+);
 
-for (const [name, makeTask] of TASKS)
+void test.each(TASKS, ([name, makeTask]) =>
   test(`the scores of the predictions of MTEB for ${name} equal MTEB's scores to the last bit`, async () => {
     const task = makeTask();
     await task.loadData();
@@ -406,9 +409,10 @@ for (const [name, makeTask] of TASKS)
       actual,
       expected[name].scores.test.map((score) => score.scores_per_experiment),
     );
-  });
+  }),
+);
 
-for (const [name, makeTask] of TASKS)
+void test.each(TASKS, ([name, makeTask]) =>
   test(`a second evaluate of the same ${name} task gives the scores of the first one, as MTEB does: the subsampling draws from new generators`, async () => {
     const task = makeTask();
     const first = await evaluated(name, task);
@@ -416,7 +420,8 @@ for (const [name, makeTask] of TASKS)
     const second = await evaluated(name, task);
 
     assert.deepEqual(second.scores, first.scores);
-  });
+  }),
+);
 
 test('a training split of fewer rows than nSamples plus the bins throws the error of MTEB', async () => {
   const task = new FolderTask('FewTrainRegressionFixture', 'few-train', 100);

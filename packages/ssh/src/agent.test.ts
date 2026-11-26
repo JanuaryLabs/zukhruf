@@ -4,12 +4,12 @@ import { type KeyObject, createPublicKey, verify } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { connect } from 'node:net';
 import { userInfo } from 'node:os';
-import { test } from 'node:test';
 import { promisify } from 'node:util';
 
 import { createClock } from '@sinonjs/fake-timers';
 
 import { poll } from '@zukhruf/async';
+import { test } from '@zukhruf/parameterized-test';
 
 import { AgentClient } from './agent.ts';
 import { Client, PrivateKey, PublicKey } from './index.ts';
@@ -160,7 +160,7 @@ test(
   },
 );
 
-for (const type of ['ed25519', 'rsa', 'ecdsa'] as const) {
+void test.each(['ed25519', 'rsa', 'ecdsa'] as const, (type) =>
   test(
     `add of an ${type} key: ssh-add lists it with its comment, and the agent signs with it`,
     { skip: noAgent },
@@ -185,8 +185,8 @@ for (const type of ['ed25519', 'rsa', 'ecdsa'] as const) {
       const signature = await client.sign(await publicKeyOf(keyFile), data);
       assert.ok(verifies(type, data, await pkcs8Of(keyFile), signature));
     },
-  );
-}
+  ),
+);
 
 test(
   'add with a lifetime in ms: the agent drops the key once the lifetime ends',

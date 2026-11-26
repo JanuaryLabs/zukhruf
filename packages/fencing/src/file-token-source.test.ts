@@ -4,9 +4,10 @@ import assert from 'node:assert/strict';
 import fsPromises from 'node:fs/promises';
 import { syncBuiltinESMExports } from 'node:module';
 import { dirname } from 'node:path';
-import { type TestContext, describe, test } from 'node:test';
+import { type TestContext, describe } from 'node:test';
 
 import { TemporaryFiles } from '@zukhruf/fs';
+import { test } from '@zukhruf/parameterized-test';
 
 import { FileTokenSource } from './index.ts';
 
@@ -198,44 +199,50 @@ describe('FileTokenSource durability', () => {
     );
   });
 
-  for (const [code, outcome] of [
-    ['EINVAL', 'mints'],
-    ['ENOTSUP', 'mints'],
-    ['EIO', 'fails'],
-  ] as const) {
-    test(
-      `a directory sync that fails with ${code} ${outcome === 'mints' ? 'still mints the token' : 'fails the mint'}`,
-      {
-        skip:
-          process.platform === 'win32'
-            ? 'Windows never syncs a directory'
-            : false,
-      },
-      async (t) => {
-        // Arrange: a file system whose directories answer fsync with `code`.
-        await using directory = await new TemporaryFiles().directory(
-          'zukhruf-fencing-',
-        );
-        const tokens = new FileTokenSource(directory.path, {
-          clock: globalThis,
-        });
-        using _refused = refuseSync(t, (path) => path === directory.path, code);
-
-        // Act
-        const minting = tokens.next('product:42');
-
-        // Assert: a file system that cannot sync directories at all still works; a disk error does not pass silently.
-        if (outcome === 'mints') {
-          const first = await minting;
-          const second = await tokens.next('product:42');
-          assert.ok(
-            second.isNewerThan(first),
-            'Tokens must still be minted, each newer than the last',
+  void test.each(
+    [
+      ['EINVAL', 'mints'],
+      ['ENOTSUP', 'mints'],
+      ['EIO', 'fails'],
+    ] as const,
+    ([code, outcome]) =>
+      test(
+        `a directory sync that fails with ${code} ${outcome === 'mints' ? 'still mints the token' : 'fails the mint'}`,
+        {
+          skip:
+            process.platform === 'win32'
+              ? 'Windows never syncs a directory'
+              : false,
+        },
+        async (t) => {
+          // Arrange: a file system whose directories answer fsync with `code`.
+          await using directory = await new TemporaryFiles().directory(
+            'zukhruf-fencing-',
           );
-        } else {
-          await assert.rejects(minting, { code });
-        }
-      },
-    );
-  }
+          const tokens = new FileTokenSource(directory.path, {
+            clock: globalThis,
+          });
+          using _refused = refuseSync(
+            t,
+            (path) => path === directory.path,
+            code,
+          );
+
+          // Act
+          const minting = tokens.next('product:42');
+
+          // Assert: a file system that cannot sync directories at all still works; a disk error does not pass silently.
+          if (outcome === 'mints') {
+            const first = await minting;
+            const second = await tokens.next('product:42');
+            assert.ok(
+              second.isNewerThan(first),
+              'Tokens must still be minted, each newer than the last',
+            );
+          } else {
+            await assert.rejects(minting, { code });
+          }
+        },
+      ),
+  );
 });

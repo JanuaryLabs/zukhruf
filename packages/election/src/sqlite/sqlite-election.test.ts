@@ -5,7 +5,7 @@ import { addAbortListener } from 'node:events';
 import fsPromises from 'node:fs/promises';
 import { syncBuiltinESMExports } from 'node:module';
 import { join, sep } from 'node:path';
-import { type TestContext, describe, test } from 'node:test';
+import { type TestContext, describe } from 'node:test';
 
 import { createClock } from '@sinonjs/fake-timers';
 
@@ -14,6 +14,7 @@ import {
   NetworkDirectoryError as FsNetworkDirectoryError,
   TemporaryFiles,
 } from '@zukhruf/fs';
+import { test } from '@zukhruf/parameterized-test';
 import { waitFor } from '@zukhruf/testing/async';
 import { startWorker } from '@zukhruf/testing/process';
 
@@ -390,95 +391,101 @@ describe('The files of a SQLite election', () => {
   // The empty file is what an unsynced write of @zukhruf/mutex 0.2.0 can leave
   // after a power loss. BigInt reads both texts as a number. No operation of
   // this version writes either one.
-  for (const { kind, text } of [
-    { kind: 'an empty', text: '' },
-    { kind: 'a padded', text: '   41 ' },
-  ]) {
-    test(`${kind} epoch file fails the campaign with a SyntaxError that names the file, stays as it was, and lets the claim go`, async () => {
-      // Arrange
-      await using directory = await new TemporaryFiles().directory(
-        'election-test-',
-      );
-      const epochFile = join(directory.path, 'term.epoch');
-      await fsPromises.writeFile(epochFile, text);
-      const failsOnTheEpochFile = (error: unknown) =>
-        error instanceof SyntaxError && error.message.includes(epochFile);
+  void test.each(
+    [
+      { kind: 'an empty', text: '' },
+      { kind: 'a padded', text: '   41 ' },
+    ],
+    ({ kind, text }) =>
+      test(`${kind} epoch file fails the campaign with a SyntaxError that names the file, stays as it was, and lets the claim go`, async () => {
+        // Arrange
+        await using directory = await new TemporaryFiles().directory(
+          'election-test-',
+        );
+        const epochFile = join(directory.path, 'term.epoch');
+        await fsPromises.writeFile(epochFile, text);
+        const failsOnTheEpochFile = (error: unknown) =>
+          error instanceof SyntaxError && error.message.includes(epochFile);
 
-      // Act
-      const campaigning = electionIn(directory.path).campaign();
-      await assert.rejects(
-        campaigning,
-        failsOnTheEpochFile,
-        'The campaign must fail with a SyntaxError that names the epoch file',
-      );
-      // A claim that is still held makes this campaign wait out its timeout and resolve undefined.
-      const next = electionIn(directory.path).campaign({ timeout: 1_000 });
+        // Act
+        const campaigning = electionIn(directory.path).campaign();
+        await assert.rejects(
+          campaigning,
+          failsOnTheEpochFile,
+          'The campaign must fail with a SyntaxError that names the epoch file',
+        );
+        // A claim that is still held makes this campaign wait out its timeout and resolve undefined.
+        const next = electionIn(directory.path).campaign({ timeout: 1_000 });
 
-      // Assert
-      await assert.rejects(
-        next,
-        failsOnTheEpochFile,
-        'The next campaign must take the claim that the failed campaign let go, and fail on the same epoch file',
-      );
-      assert.equal(
-        await fsPromises.readFile(epochFile, 'utf8'),
-        text,
-        'The epoch file must stay as it was',
-      );
-    });
-  }
+        // Assert
+        await assert.rejects(
+          next,
+          failsOnTheEpochFile,
+          'The next campaign must take the claim that the failed campaign let go, and fail on the same epoch file',
+        );
+        assert.equal(
+          await fsPromises.readFile(epochFile, 'utf8'),
+          text,
+          'The epoch file must stay as it was',
+        );
+      }),
+  );
 });
 
 describe('The last epoch of a SQLite election', () => {
   // No operation of this version writes either text: see the campaign tests above.
-  for (const { kind, text } of [
-    { kind: 'an empty', text: '' },
-    { kind: 'a padded', text: '   41 ' },
-  ]) {
-    test(`${kind} epoch file fails the read with a SyntaxError that names the file, and stays as it was`, async () => {
-      // Arrange
-      await using directory = await new TemporaryFiles().directory(
-        'election-test-',
-      );
-      const epochFile = join(directory.path, 'term.epoch');
-      await fsPromises.writeFile(epochFile, text);
+  void test.each(
+    [
+      { kind: 'an empty', text: '' },
+      { kind: 'a padded', text: '   41 ' },
+    ],
+    ({ kind, text }) =>
+      test(`${kind} epoch file fails the read with a SyntaxError that names the file, and stays as it was`, async () => {
+        // Arrange
+        await using directory = await new TemporaryFiles().directory(
+          'election-test-',
+        );
+        const epochFile = join(directory.path, 'term.epoch');
+        await fsPromises.writeFile(epochFile, text);
 
-      // Act
-      const reading = electionIn(directory.path).lastEpoch();
+        // Act
+        const reading = electionIn(directory.path).lastEpoch();
 
-      // Assert
-      await assert.rejects(
-        reading,
-        (error) =>
-          error instanceof SyntaxError && error.message.includes(epochFile),
-        'The read must fail with a SyntaxError that names the epoch file',
-      );
-      assert.equal(
-        await fsPromises.readFile(epochFile, 'utf8'),
-        text,
-        'The epoch file must stay as it was',
-      );
-    });
-  }
+        // Assert
+        await assert.rejects(
+          reading,
+          (error) =>
+            error instanceof SyntaxError && error.message.includes(epochFile),
+          'The read must fail with a SyntaxError that names the epoch file',
+        );
+        assert.equal(
+          await fsPromises.readFile(epochFile, 'utf8'),
+          text,
+          'The epoch file must stay as it was',
+        );
+      }),
+  );
 
-  for (const { kind, at } of [
-    { kind: 'an empty directory', at: [] },
-    { kind: 'a directory not yet created', at: ['not', 'yet'] },
-  ]) {
-    test(`in ${kind}, where no term was won, the read answers 0 and creates nothing`, async () => {
-      // Arrange
-      await using directory = await new TemporaryFiles().directory(
-        'election-test-',
-      );
+  void test.each(
+    [
+      { kind: 'an empty directory', at: [] },
+      { kind: 'a directory not yet created', at: ['not', 'yet'] },
+    ],
+    ({ kind, at }) =>
+      test(`in ${kind}, where no term was won, the read answers 0 and creates nothing`, async () => {
+        // Arrange
+        await using directory = await new TemporaryFiles().directory(
+          'election-test-',
+        );
 
-      // Act
-      const epoch = await electionIn(join(directory.path, ...at)).lastEpoch();
+        // Act
+        const epoch = await electionIn(join(directory.path, ...at)).lastEpoch();
 
-      // Assert
-      assert.equal(epoch, 0n);
-      assert.deepEqual(await fsPromises.readdir(directory.path), []);
-    });
-  }
+        // Assert
+        assert.equal(epoch, 0n);
+        assert.deepEqual(await fsPromises.readdir(directory.path), []);
+      }),
+  );
 
   test('a read that fails for another reason than a missing file fails the read: it never answers 0', async () => {
     // Arrange: a directory at the path of the epoch file. This is platform

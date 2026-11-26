@@ -11,9 +11,10 @@ import {
 } from 'node:fs/promises';
 import { connect } from 'node:net';
 import { join } from 'node:path';
-import { describe, test } from 'node:test';
+import { describe } from 'node:test';
 
 import { TemporaryFiles } from '@zukhruf/fs';
+import { test } from '@zukhruf/parameterized-test';
 
 import {
   NoServerError,
@@ -185,7 +186,7 @@ describe('the default folder of a plain name', { skip: posixOnly }, () => {
     assert.ok((await lstat(endpoint.address.path)).isSocket());
   });
 
-  for (const mode of [0o740, 0o720, 0o710, 0o704, 0o702, 0o701]) {
+  void test.each([0o740, 0o720, 0o710, 0o704, 0o702, 0o701], (mode) =>
     test(`is refused with mode 0${mode.toString(8)}: it gives access to its group or others`, async () => {
       // Arrange
       await using folder = defaultFolder();
@@ -205,8 +206,8 @@ describe('the default folder of a plain name', { skip: posixOnly }, () => {
         return true;
       });
       assert.equal(await codeOf(lstat(endpoint.address.path)), 'ENOENT');
-    });
-  }
+    }),
+  );
 
   test('is refused when it is a link to a safe folder of this user', async () => {
     // Arrange

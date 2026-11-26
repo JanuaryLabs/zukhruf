@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { test } from 'node:test';
 
 import { Random } from 'python-random';
 
+import { test } from '@zukhruf/parameterized-test';
 import type { JsonData } from '@zukhruf/python';
 import {
   ConfidenceInterval,
@@ -241,7 +241,7 @@ function sobLines(): { stated: JsonValue; testCase: Case }[] {
   return read;
 }
 
-for (const { modality, oracle, scorers, categories } of modalities) {
+void test.each(modalities, ({ modality, oracle, scorers, categories }) =>
   test(`${modality}: each line gives the 11 values and the weight of its eval_records row`, () => {
     const scorer = new ScorerSet(scorers, { comparer: new TreeWalk(spec) });
     const lines = sobLines();
@@ -280,8 +280,9 @@ for (const { modality, oracle, scorers, categories } of modalities) {
             : 0,
       })),
     );
-  });
-
+  }),
+);
+void test.each(modalities, ({ modality, oracle, scorers, categories }) =>
   test(`${modality}: the means, the category means and the bootstrap intervals equal build_summary, without and with weights`, () => {
     const scorer = new ScorerSet(
       { ...scorers, ...categories },
@@ -349,5 +350,5 @@ for (const { modality, oracle, scorers, categories } of modalities) {
       withoutTypePrecision(numbers(oracle.summary.overall_weighted)),
     );
     assert.equal(scored.length, oracle.summary.overall.n);
-  });
-}
+  }),
+);

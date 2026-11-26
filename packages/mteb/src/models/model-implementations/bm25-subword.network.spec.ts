@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { test } from 'node:test';
+
+import { test } from '@zukhruf/parameterized-test';
 
 import { AbsTaskRetrieval } from '../../abstasks/retrieval.ts';
 import { TaskMetadata } from '../../abstasks/task-metadata.ts';
@@ -71,9 +72,12 @@ test('the tokenizer of Qwen3 gives the tokens and ids of Python tokenizers for e
   );
 });
 
-for (const run of expected.runs) {
-  const name = `${run.folder} ${JSON.stringify(run.kwargs)}`;
+const runs = expected.runs.map((run) => ({
+  run,
+  name: `${run.folder} ${JSON.stringify(run.kwargs)}`,
+}));
 
+void test.each(runs, ({ run, name }) =>
   test(`mteb/baseline-bm25s-subword gives the float32 scores of MTEB in ${name}, to the last bit`, async () => {
     const task = new FolderTask(run.folder, run.eval_langs);
     await task.loadData();
@@ -98,8 +102,10 @@ for (const run of expected.runs) {
       results,
       new Map(run.full.map(([query, docs]) => [query, new Map(docs)])),
     );
-  });
+  }),
+);
 
+void test.each(runs, ({ run, name }) =>
   test(`evaluate gives the main score of MTEB for mteb/baseline-bm25s-subword in ${name}`, async () => {
     const result = await evaluate(
       bm25SSubword.loadModel(run.kwargs),
@@ -111,5 +117,5 @@ for (const run of expected.runs) {
       result.taskResults[0]?.scores['test']?.[0]?.['main_score'],
       run.main_score,
     );
-  });
-}
+  }),
+);

@@ -3,10 +3,11 @@ import { execFile } from 'node:child_process';
 import { readFile, readdir, rm, stat } from 'node:fs/promises';
 import { constants } from 'node:os';
 import { join } from 'node:path';
-import { describe, test } from 'node:test';
+import { describe } from 'node:test';
 import { promisify } from 'node:util';
 
 import { TemporaryFiles } from '@zukhruf/fs';
+import { test } from '@zukhruf/parameterized-test';
 import { waitFor } from '@zukhruf/testing/async';
 
 import {
@@ -68,42 +69,44 @@ describe('Service', { concurrency: true }, () => {
     await assert.rejects(stat(service.file), { code: 'ENOENT' });
   });
 
-  for (const { name, program, status } of [
-    { name: 'true', program: ['/usr/bin/true'], status: 0 },
-    { name: 'false', program: ['/usr/bin/false'], status: 1 },
-    { name: 'exit-3', program: ['/bin/sh', '-c', 'exit 3'], status: 3 },
-  ] satisfies {
-    name: string;
-    program: readonly [string, ...string[]];
-    status: number;
-  }[]) {
-    test(`state gives the exit status ${status} of a process that ended`, async (t) => {
-      // Arrange
-      const launchd = Launchd.agents({ clock: globalThis });
-      const service = launchd.service(`${PREFIX}${name}`);
-      try {
-        // Act
-        await launchd.install({
-          Label: service.label,
-          ProgramArguments: program,
-          RunAtLoad: true,
-        });
+  void test.each(
+    [
+      { name: 'true', program: ['/usr/bin/true'], status: 0 },
+      { name: 'false', program: ['/usr/bin/false'], status: 1 },
+      { name: 'exit-3', program: ['/bin/sh', '-c', 'exit 3'], status: 3 },
+    ] satisfies {
+      name: string;
+      program: readonly [string, ...string[]];
+      status: number;
+    }[],
+    ({ name, program, status }) =>
+      test(`state gives the exit status ${status} of a process that ended`, async (t) => {
+        // Arrange
+        const launchd = Launchd.agents({ clock: globalThis });
+        const service = launchd.service(`${PREFIX}${name}`);
+        try {
+          // Act
+          await launchd.install({
+            Label: service.label,
+            ProgramArguments: program,
+            RunAtLoad: true,
+          });
 
-        // Assert
-        await waitFor(
-          async () => {
-            assert.deepEqual(await service.state(), {
-              state: 'not running',
-              lastExitStatus: status,
-            });
-          },
-          { signal: t.signal, interval: 100 },
-        );
-      } finally {
-        await service.uninstall();
-      }
-    });
-  }
+          // Assert
+          await waitFor(
+            async () => {
+              assert.deepEqual(await service.state(), {
+                state: 'not running',
+                lastExitStatus: status,
+              });
+            },
+            { signal: t.signal, interval: 100 },
+          );
+        } finally {
+          await service.uninstall();
+        }
+      }),
+  );
 
   test('kickstart runs a service that does not run, gives the PID of a service that runs, and with kill gives a new one; a signal ends the process with no exit status', async (t) => {
     // Arrange

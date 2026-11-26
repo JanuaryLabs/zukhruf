@@ -1,30 +1,33 @@
 import assert from 'node:assert/strict';
 import { readdir } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import { describe, test } from 'node:test';
+import { describe } from 'node:test';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
+import { test } from '@zukhruf/parameterized-test';
 import * as shadcn from '@zukhruf/shadcn';
 
 describe('the entry of @zukhruf/shadcn', () => {
-  for (const subpath of [
-    'components/button',
-    'lib/utils',
-    'hooks/use-mobile',
-    'theme.css',
-    'dist/index.js',
-  ]) {
-    test(`refuses the subpath ${subpath}, so an app imports only from the entry`, () => {
-      // Act
-      const resolve = () => import.meta.resolve(`@zukhruf/shadcn/${subpath}`);
+  void test.each(
+    [
+      'components/button',
+      'lib/utils',
+      'hooks/use-mobile',
+      'theme.css',
+      'dist/index.js',
+    ],
+    (subpath) =>
+      test(`refuses the subpath ${subpath}, so an app imports only from the entry`, () => {
+        // Act
+        const resolve = () => import.meta.resolve(`@zukhruf/shadcn/${subpath}`);
 
-      // Assert
-      assert.throws(resolve, { code: 'ERR_PACKAGE_PATH_NOT_EXPORTED' });
-    });
-  }
+        // Assert
+        assert.throws(resolve, { code: 'ERR_PACKAGE_PATH_NOT_EXPORTED' });
+      }),
+  );
 
   test('resolves the entry and the stylesheet', () => {
     // Act

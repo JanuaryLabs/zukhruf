@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { type IncomingMessage, createServer } from 'node:http';
-import { test } from 'node:test';
 
 import { betterAuth } from 'better-auth';
 import { memoryAdapter } from 'better-auth/adapters/memory';
@@ -9,6 +8,8 @@ import { createAuthClient } from 'better-auth/client';
 import { twoFactorClient } from 'better-auth/client/plugins';
 import { toNodeHandler } from 'better-auth/node';
 import { testUtils, twoFactor } from 'better-auth/plugins';
+
+import { test } from '@zukhruf/parameterized-test';
 
 import {
   AuthenticationUnavailableError,
@@ -231,7 +232,7 @@ test('an unreachable session endpoint throws AuthenticationUnavailableError with
   assert.ok(thrown.cause instanceof TypeError);
 });
 
-for (const status of [500, 403]) {
+void test.each([500, 403], (status) =>
   test(`a session endpoint that answers ${status} throws AuthenticationUnavailableError with the error as its cause`, async () => {
     // Arrange: the server is up and answers with an error.
     const client = createAuthClient({
@@ -252,8 +253,8 @@ for (const status of [500, 403]) {
     // Assert
     assert.ok(thrown instanceof AuthenticationUnavailableError);
     assert.deepEqual(thrown.cause, { status, statusText: '' });
-  });
-}
+  }),
+);
 
 // A real better-auth instance behind a real HTTP server, read with the real
 // fetch, so an aborted signal cancels the read the way it does in a browser.
@@ -423,39 +424,45 @@ const origin = APP;
 const fallback = '/home';
 const exclude = ['/sign-in', '/two-factor/setup'];
 
-for (const [to, expected, why] of [
+void test.each(
   [
-    '/cases/42?tab=notes#n1',
-    '/cases/42?tab=notes#n1',
-    'a path with a query and a hash',
-  ],
-  ['/cases/../settings', '/settings', 'the parsed path, not the raw string'],
-  [null, fallback, 'no redirectTo'],
-  [undefined, fallback, 'no redirectTo'],
-  ['', fallback, 'an empty value'],
-  ['cases/42', fallback, 'a relative path'],
-  ['https://evil.example/', fallback, 'an absolute URL'],
-  [`${APP}/cases`, fallback, 'an absolute URL on the same origin'],
-  ['//evil.example', fallback, 'a protocol-relative URL'],
-  ['/\\evil.example', fallback, 'a backslash the browser reads as a slash'],
-  ['/\t/evil.example', fallback, 'a tab the parser drops'],
-  ['/\n/evil.example', fallback, 'a newline the parser drops'],
-  ['/.//evil.example', fallback, 'a dot segment the parser folds into //'],
-  ['javascript:alert(1)', fallback, 'a script URL'],
-  ['/sign-in', fallback, 'an excluded page'],
-  ['/sign-in?redirectTo=%2Fcases', fallback, 'an excluded page with a query'],
-  ['/two-factor/setup', fallback, 'the other excluded page'],
-  [`/${'a'.repeat(2047)}`, `/${'a'.repeat(2047)}`, 'exactly 2,048 characters'],
-  [`/${'a'.repeat(2048)}`, fallback, 'over 2,048 characters'],
-] as const) {
-  test(`safeRedirect(${JSON.stringify(to)?.slice(0, 40)}) gives ${expected.slice(0, 40)}: ${why}`, () => {
-    // Act
-    const target = safeRedirect(to, { origin, fallback, exclude });
+    [
+      '/cases/42?tab=notes#n1',
+      '/cases/42?tab=notes#n1',
+      'a path with a query and a hash',
+    ],
+    ['/cases/../settings', '/settings', 'the parsed path, not the raw string'],
+    [null, fallback, 'no redirectTo'],
+    [undefined, fallback, 'no redirectTo'],
+    ['', fallback, 'an empty value'],
+    ['cases/42', fallback, 'a relative path'],
+    ['https://evil.example/', fallback, 'an absolute URL'],
+    [`${APP}/cases`, fallback, 'an absolute URL on the same origin'],
+    ['//evil.example', fallback, 'a protocol-relative URL'],
+    ['/\\evil.example', fallback, 'a backslash the browser reads as a slash'],
+    ['/\t/evil.example', fallback, 'a tab the parser drops'],
+    ['/\n/evil.example', fallback, 'a newline the parser drops'],
+    ['/.//evil.example', fallback, 'a dot segment the parser folds into //'],
+    ['javascript:alert(1)', fallback, 'a script URL'],
+    ['/sign-in', fallback, 'an excluded page'],
+    ['/sign-in?redirectTo=%2Fcases', fallback, 'an excluded page with a query'],
+    ['/two-factor/setup', fallback, 'the other excluded page'],
+    [
+      `/${'a'.repeat(2047)}`,
+      `/${'a'.repeat(2047)}`,
+      'exactly 2,048 characters',
+    ],
+    [`/${'a'.repeat(2048)}`, fallback, 'over 2,048 characters'],
+  ] as const,
+  ([to, expected, why]) =>
+    test(`safeRedirect(${JSON.stringify(to)?.slice(0, 40)}) gives ${expected.slice(0, 40)}: ${why}`, () => {
+      // Act
+      const target = safeRedirect(to, { origin, fallback, exclude });
 
-    // Assert
-    assert.equal(target, expected);
-  });
-}
+      // Assert
+      assert.equal(target, expected);
+    }),
+);
 
 test('safeRedirect takes only the origin of a full URL given as origin', () => {
   // Act

@@ -3,10 +3,11 @@ import { execFile } from 'node:child_process';
 import { readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { homedir, userInfo } from 'node:os';
 import { join } from 'node:path';
-import { describe, test } from 'node:test';
+import { describe } from 'node:test';
 import { promisify } from 'node:util';
 
 import { TemporaryFiles } from '@zukhruf/fs';
+import { test } from '@zukhruf/parameterized-test';
 import { waitFor } from '@zukhruf/testing/async';
 
 import {
@@ -21,7 +22,7 @@ import {
 const PREFIX = 'dev.zukhruf.launchd.test.launchd.';
 
 describe('Launchd', { concurrency: true }, () => {
-  for (const label of ['', '.', '..', 'a/b']) {
+  void test.each(['', '.', '..', 'a/b'], (label) =>
     test(`install refuses the label ${JSON.stringify(label)}, which is not one file name, before it writes a file`, async () => {
       // Arrange
       const launchd = Launchd.agents({ clock: globalThis });
@@ -42,8 +43,8 @@ describe('Launchd', { concurrency: true }, () => {
         // Absent before the test, so only a broken install made it.
         await rm(file, { force: true });
       }
-    });
-  }
+    }),
+  );
 
   test('install refuses a label with a NUL character', async () => {
     const launchd = Launchd.agents({ clock: globalThis });

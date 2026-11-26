@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
-import { describe, it } from 'node:test';
+import { describe } from 'node:test';
 
 import { PGlite } from '@electric-sql/pglite';
 import { type Clock, PgBoss, fromPglite, systemClock } from 'pg-boss';
 
 import { untilAborted } from '@zukhruf/async';
+import { it } from '@zukhruf/parameterized-test';
 
 import { type JobQueue, SqliteJobQueue } from '../index.ts';
 import { flush } from '../testing/flush.ts';
@@ -581,61 +582,63 @@ describe('workers', () => {
 
   // Each case: the work() options, how many sends follow it back to back, and
   // whether a tick settles the first fetch before them.
-  for (const { label, options, sends, settleFirst } of [
-    { label: 'one job a batch, two sends', options: {}, sends: 2 },
-    { label: 'one job a batch, three sends', options: {}, sends: 3 },
-    {
-      label: 'two loops of one job, four sends',
-      options: { localConcurrency: 2 },
-      sends: 4,
-    },
-    {
-      label: 'two loops of five jobs, three sends',
-      options: { batchSize: 5, localConcurrency: 2 },
-      sends: 3,
-    },
-    {
-      label: 'two loops of five jobs, three sends after a settled fetch',
-      options: { batchSize: 5, localConcurrency: 2 },
-      sends: 3,
-      settleFirst: true,
-    },
-    {
-      label: 'one loop of five jobs, three sends after a settled fetch',
-      options: { batchSize: 5 },
-      sends: 3,
-      settleFirst: true,
-    },
-  ]) {
-    it(`run every job sent to a notify queue right after work() within the tick (${label})`, async () => {
-      const ids = Array.from({ length: sends }, (_, index) => id(index + 1));
-      const observed = await Parity.assertSame(async ({ queue, clock }) => {
-        await queue.start();
-        await queue.createQueue('jobs', { notify: true });
-        const ran: string[] = [];
-        await queue.work('jobs', options, async (jobs) => {
-          ran.push(...jobs.map((job) => job.id));
-        });
-        if (settleFirst) {
+  void it.each(
+    [
+      { label: 'one job a batch, two sends', options: {}, sends: 2 },
+      { label: 'one job a batch, three sends', options: {}, sends: 3 },
+      {
+        label: 'two loops of one job, four sends',
+        options: { localConcurrency: 2 },
+        sends: 4,
+      },
+      {
+        label: 'two loops of five jobs, three sends',
+        options: { batchSize: 5, localConcurrency: 2 },
+        sends: 3,
+      },
+      {
+        label: 'two loops of five jobs, three sends after a settled fetch',
+        options: { batchSize: 5, localConcurrency: 2 },
+        sends: 3,
+        settleFirst: true,
+      },
+      {
+        label: 'one loop of five jobs, three sends after a settled fetch',
+        options: { batchSize: 5 },
+        sends: 3,
+        settleFirst: true,
+      },
+    ],
+    ({ label, options, sends, settleFirst }) =>
+      it(`run every job sent to a notify queue right after work() within the tick (${label})`, async () => {
+        const ids = Array.from({ length: sends }, (_, index) => id(index + 1));
+        const observed = await Parity.assertSame(async ({ queue, clock }) => {
+          await queue.start();
+          await queue.createQueue('jobs', { notify: true });
+          const ran: string[] = [];
+          await queue.work('jobs', options, async (jobs) => {
+            ran.push(...jobs.map((job) => job.id));
+          });
+          if (settleFirst) {
+            await clock.tick(0);
+          }
+          for (const job of ids) {
+            await queue.send('jobs', null, { id: job });
+          }
           await clock.tick(0);
-        }
-        for (const job of ids) {
-          await queue.send('jobs', null, { id: job });
-        }
-        await clock.tick(0);
-        const inTick = ran.toSorted();
-        await clock.tick(30000);
-        return { inTick, afterBackstop: ran.toSorted() };
-      });
+          const inTick = ran.toSorted();
+          await clock.tick(30000);
+          return { inTick, afterBackstop: ran.toSorted() };
+        });
 
-      // Each insert raises its NOTIFY as it runs (PGlite's src/pglite.ts:
-      // 980-992), and a wake during a fetch makes the loop fetch again
-      // (worker.js:97, 107-111), so none waits for the 30s backstop. Which
-      // batch takes which job follows PGlite's microtask depth, so only the
-      // jobs that ran are compared.
-      assert.deepStrictEqual(observed, { inTick: ids, afterBackstop: ids });
-    });
-  }
+        // Each insert raises its NOTIFY as it runs (PGlite's src/pglite.ts:
+        // 980-992), and a wake during a fetch makes the loop fetch again
+        // (worker.js:97, 107-111), so none waits for the 30s backstop. Which
+        // batch takes which job follows PGlite's microtask depth, so only the
+        // jobs that ran are compared.
+        assert.deepStrictEqual(observed, { inTick: ids, afterBackstop: ids });
+      }),
+  );
 
   it('leave a worker waiting out its notify poll when the sent job is not due yet', async () => {
     const observed = await Parity.assertSame(async ({ queue, clock }) => {

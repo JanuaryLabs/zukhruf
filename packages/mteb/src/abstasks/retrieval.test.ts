@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { test } from 'node:test';
 
 import type { EmbeddingModelV4 } from '@ai-sdk/provider';
+
+import { test } from '@zukhruf/parameterized-test';
 
 import { AiSdkEncoder } from '../models/ai-sdk-encoder.ts';
 import { ModelMeta } from '../models/model-meta.ts';
@@ -115,27 +116,30 @@ function expected(pairs: [string, number | string][]): Record<string, number> {
   );
 }
 
-for (const [mode, rerank] of [
-  ['a full corpus search', false],
-  ['a reranking of candidates', true],
-] as const)
-  test(`the scores of ${mode} equal those of MTEB`, async () => {
-    const encoder = new AiSdkEncoder({
-      model: tableModel(),
-      modelMeta: ModelMeta.createEmpty({ name: 'test/table', revision: '1' }),
-    });
-    const task = new TableTask(rerank);
+void test.each(
+  [
+    ['a full corpus search', false],
+    ['a reranking of candidates', true],
+  ] as const,
+  ([mode, rerank]) =>
+    test(`the scores of ${mode} equal those of MTEB`, async () => {
+      const encoder = new AiSdkEncoder({
+        model: tableModel(),
+        modelMeta: ModelMeta.createEmpty({ name: 'test/table', revision: '1' }),
+      });
+      const task = new TableTask(rerank);
 
-    const scores = await task.evaluate(encoder, 'test', null, {
-      encodeKwargs: { batchSize: 3 },
-      timer: new TimingStack(globalThis),
-    });
+      const scores = await task.evaluate(encoder, 'test', null, {
+        encodeKwargs: { batchSize: 3 },
+        timer: new TimingStack(globalThis),
+      });
 
-    assert.deepEqual(
-      scores.get('default'),
-      expected(rerank ? fixture.rerank : fixture.full),
-    );
-  });
+      assert.deepEqual(
+        scores.get('default'),
+        expected(rerank ? fixture.rerank : fixture.full),
+      );
+    }),
+);
 
 test('the encoder adds up the tokens that the model reports', async () => {
   const encoder = new AiSdkEncoder({ model: tableModel() });

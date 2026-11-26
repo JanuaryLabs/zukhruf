@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { test } from 'node:test';
 
 import { TemporaryFiles } from '@zukhruf/fs';
+import { test } from '@zukhruf/parameterized-test';
 
 import { log } from '../dependencies/libm.ts';
 import { PythonRandom } from '../dependencies/python-random.ts';
@@ -299,7 +299,7 @@ const TASKS: readonly {
   },
 ];
 
-for (const { key, title, task, encoder, v2 } of TASKS)
+void test.each(TASKS, ({ key, title, task, encoder, v2 }) =>
   test(`evaluate gives ${title} the cluster labels and the V-measures of MTEB to the last bit, and the AMI within ${AMI_TOLERANCE}`, async () => {
     await using folder = await new TemporaryFiles().directory(
       'clustering-predictions-',
@@ -324,9 +324,10 @@ for (const { key, title, task, encoder, v2 } of TASKS)
       result.taskResults[0]?.scores['test']?.[0],
       python.scores.test[0],
     );
-  });
+  }),
+);
 
-for (const metricCase of expected.metric_cases)
+void test.each(expected.metric_cases, (metricCase) =>
   test(`the V-measure of "${metricCase.case}" equals scikit-learn's to the last bit, and the AMI is within ${AMI_TOLERANCE}`, () => {
     const labelsTrue = metricCase.labels_true;
     const labelsPred = metricCase.labels_pred;
@@ -345,7 +346,8 @@ for (const metricCase of expected.metric_cases)
       ],
     );
     assertClose(ami, metricCase.ami, AMI_TOLERANCE, 'ami');
-  });
+  }),
+);
 
 // CENTER_TOLERANCE * max(1, |value|) bounds the difference of a cluster
 // center. With the same labels at each step, the centers are equal to the
@@ -353,7 +355,7 @@ for (const metricCase of expected.metric_cases)
 // distance of BLAS and of this port round to other float32 values.
 const CENTER_TOLERANCE = 2 ** -20;
 
-for (const kmeansCase of expected.kmeans_cases)
+void test.each(expected.kmeans_cases, (kmeansCase) =>
   test(`MiniBatchKMeans of "${kmeansCase.case}" gives the labels and steps of scikit-learn, and centers within ${CENTER_TOLERANCE}`, () => {
     const x = kmeansCase.x.map((row) => Float32Array.from(row));
     const model = new MiniBatchKMeans({
@@ -378,7 +380,8 @@ for (const kmeansCase of expected.kmeans_cases)
         ),
       ),
     );
-  });
+  }),
+);
 
 test('MiniBatchKMeans throws for fewer samples than clusters, as scikit-learn raises', () => {
   const model = new MiniBatchKMeans({ nClusters: 3, randomState: 42 });

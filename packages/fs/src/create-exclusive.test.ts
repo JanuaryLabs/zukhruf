@@ -4,7 +4,9 @@ import assert from 'node:assert/strict';
 import fsPromises, { readFile, readdir, writeFile } from 'node:fs/promises';
 import { syncBuiltinESMExports } from 'node:module';
 import { join } from 'node:path';
-import { type TestContext, describe, test } from 'node:test';
+import { type TestContext, describe } from 'node:test';
+
+import { test } from '@zukhruf/parameterized-test';
 
 import { createExclusive } from './create-exclusive.ts';
 import { CreateExclusiveWarning } from './index.ts';
@@ -71,7 +73,7 @@ function failWriteHalfway(t: TestContext, code: string) {
 }
 
 describe('createExclusive', () => {
-  for (const before of [undefined, 'pid 1']) {
+  void test.each([undefined, 'pid 1'], (before) =>
     test(`a write of the draft that fails halfway rejects with that error, leaves no draft and ${before === undefined ? 'creates no file' : 'keeps the file that is there'}`, async (t) => {
       // Arrange
       await using directory = await new TemporaryFiles().directory(
@@ -96,8 +98,8 @@ describe('createExclusive', () => {
       if (before !== undefined) {
         assert.equal(await readFile(path, 'utf8'), before);
       }
-    });
-  }
+    }),
+  );
 
   test('a write of the draft that fails halfway, when the draft cannot be removed either, rejects with a SuppressedError of the failed removal over the failed write', async (t) => {
     // Arrange: a broken disk refuses the removal of the draft too.

@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
-import { describe, it } from 'node:test';
+import { describe } from 'node:test';
 
 import { PGlite } from '@electric-sql/pglite';
 import { type Job, PgBoss, TestClock, fromPglite } from 'pg-boss';
 
+import { it } from '@zukhruf/parameterized-test';
 import { open } from '@zukhruf/sqlite-open';
 
 import { SqliteJobQueue } from '../index.ts';
@@ -129,36 +130,38 @@ describe('wip events', () => {
     });
   });
 
-  for (const { seconds, at } of [
-    { seconds: 2, at: [4000, 6000] },
-    { seconds: 2.5, at: [2500, 6000] },
-  ]) {
-    it(`emit before a batch only more than 2000 ms after the last wip (polling every ${seconds}s)`, async () => {
-      const observed = await Parity.assertSame(
-        async ({ queue, clock, wip }) => {
-          await queue.start();
-          await queue.createQueue('jobs');
-          const held = holding();
-          await queue.work(
-            'jobs',
-            { pollingIntervalSeconds: seconds },
-            held.handler,
-          );
-          await queue.send('jobs', null, { id: id(1) });
-          try {
-            await clock.tick(6000);
-            return wip.map((event) => event.at);
-          } finally {
-            held.release();
-          }
-        },
-      );
+  void it.each(
+    [
+      { seconds: 2, at: [4000, 6000] },
+      { seconds: 2.5, at: [2500, 6000] },
+    ],
+    ({ seconds, at }) =>
+      it(`emit before a batch only more than 2000 ms after the last wip (polling every ${seconds}s)`, async () => {
+        const observed = await Parity.assertSame(
+          async ({ queue, clock, wip }) => {
+            await queue.start();
+            await queue.createQueue('jobs');
+            const held = holding();
+            await queue.work(
+              'jobs',
+              { pollingIntervalSeconds: seconds },
+              held.handler,
+            );
+            await queue.send('jobs', null, { id: id(1) });
+            try {
+              await clock.tick(6000);
+              return wip.map((event) => event.at);
+            } finally {
+              held.release();
+            }
+          },
+        );
 
-      // Before a batch, strictly more than 2000 ms (manager.js:1399-1406);
-      // the interval, 2000 ms or more (1035-1040).
-      assert.deepStrictEqual(observed, at);
-    });
-  }
+        // Before a batch, strictly more than 2000 ms (manager.js:1399-1406);
+        // the interval, 2000 ms or more (1035-1040).
+        assert.deepStrictEqual(observed, at);
+      }),
+  );
 
   it('emit after a batch with its jobs still counted and the previous end time', async () => {
     const observed = await Parity.assertSame(async ({ queue, clock, wip }) => {

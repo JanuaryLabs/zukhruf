@@ -81,6 +81,7 @@
   "devDependencies": {
     "@cfworker/json-schema": "4.1.6",
     "@zukhruf/fs": "^0.8.70",
+    "@zukhruf/parameterized-test": "^0.8.70",
     "@zukhruf/random": "*",
     "@zukhruf/testing": "^0.8.70",
     "munkres": "^2.1.1",

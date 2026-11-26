@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { test } from 'node:test';
 
 import { TemporaryFiles } from '@zukhruf/fs';
+import { test } from '@zukhruf/parameterized-test';
 
 import { evaluate } from '../evaluate.ts';
 import type { PairClassificationDistances } from '../evaluators/pair-classification-evaluator.ts';
@@ -250,7 +250,7 @@ test("the metrics of MTEB's own score arrays equal MTEB's scores to the last bit
   assert.deepEqual(Object.entries(metrics), Object.entries(scores));
 });
 
-for (const name of SCORE_NAMES)
+void test.each(SCORE_NAMES, (name) =>
   test(`the best accuracy and F1 of MTEB's ${name} and their thresholds equal MTEB's to the last bit`, () => {
     const task = new FolderTask();
     const high = !name.endsWith('_distances');
@@ -262,9 +262,10 @@ for (const name of SCORE_NAMES)
     );
 
     assert.deepEqual({ accuracy, f1 }, expected.folder.thresholds[name]);
-  });
+  }),
+);
 
-for (const metricCase of expected.metric_cases)
+void test.each(expected.metric_cases, (metricCase) =>
   test(`the metrics and thresholds of "${metricCase.case}" equal MTEB's to the last bit`, () => {
     const task = new FolderTask();
 
@@ -274,7 +275,8 @@ for (const metricCase of expected.metric_cases)
     };
 
     assert.deepEqual(actual, { high: metricCase.high, low: metricCase.low });
-  });
+  }),
+);
 
 function codePointEncoder() {
   return embeddingEncoder(

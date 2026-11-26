@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { mkdir, symlink, writeFile } from 'node:fs/promises';
 import { dirname, join, posix } from 'node:path';
-import { describe, test } from 'node:test';
+import { describe } from 'node:test';
 
 import { TemporaryFiles } from '@zukhruf/fs';
+import { test } from '@zukhruf/parameterized-test';
 
 import {
   compile,
@@ -962,9 +963,9 @@ async function writeTree(root: string, dockerignore: string): Promise<void> {
 }
 
 describe('the .dockerignore rules of the Docker CLI', () => {
-  for (const patternCase of PATTERN_CASES) {
+  void test.each(PATTERN_CASES, (patternCase) => {
     const { name, patterns, path, excluded } = patternCase;
-    test(
+    return test(
       `${name}: ${JSON.stringify(patterns)} and ${JSON.stringify(path)}`,
       { skip: goSkipsOnWindows(patternCase) },
       () => {
@@ -979,10 +980,10 @@ describe('the .dockerignore rules of the Docker CLI', () => {
         }
       },
     );
-  }
+  });
 
-  for (const separator of ['/', '\\'] as const) {
-    for (const { pattern, kind, slash, backslash } of COMPILE_CASES) {
+  void test.each(['/', '\\'] as const, (separator) =>
+    test.each(COMPILE_CASES, ({ pattern, kind, slash, backslash }) =>
       test(`TestCompile with ${separator}: ${pattern}`, () => {
         // Arrange: as testCompile, a cleaned pattern with the separator.
         const cleaned = posix.normalize(pattern).replaceAll('/', separator);
@@ -995,9 +996,9 @@ describe('the .dockerignore rules of the Docker CLI', () => {
         if (compiled.kind === 'regexp') {
           assert.equal(compiled.source, separator === '/' ? slash : backslash);
         }
-      });
-    }
-  }
+      }),
+    ),
+  );
 
   test('TestCleanPatterns and TestCleanPatternsStripEmptyPatterns: the patterns are read and a blank one is dropped', () => {
     // Act and Assert
@@ -1005,17 +1006,15 @@ describe('the .dockerignore rules of the Docker CLI', () => {
     assert.equal(matches('other', ['docs', 'config', '']), false);
   });
 
-  for (const exception of [
-    '!docs/README.md',
-    '  !docs/README.md',
-    '!docs/README.md  ',
-  ]) {
-    test(`TestCleanPatterns: ${JSON.stringify(exception)} is an exception`, () => {
-      // Act and Assert
-      assert.equal(matches('docs/README.md', ['docs', exception]), false);
-      assert.equal(matches('docs/guide.md', ['docs', exception]), true);
-    });
-  }
+  void test.each(
+    ['!docs/README.md', '  !docs/README.md', '!docs/README.md  '],
+    (exception) =>
+      test(`TestCleanPatterns: ${JSON.stringify(exception)} is an exception`, () => {
+        // Act and Assert
+        assert.equal(matches('docs/README.md', ['docs', exception]), false);
+        assert.equal(matches('docs/guide.md', ['docs', exception]), true);
+      }),
+  );
 
   test('TestMatchesOrParentMatchesMalformedPatternDoesNotPanicOnRepeatedCall: a pattern that passes the check and does not compile fails at each match', () => {
     // Act and Assert
@@ -1057,7 +1056,7 @@ describe('the .dockerignore rules of the Docker CLI', () => {
     assert.deepEqual(patterns, []);
   });
 
-  for (const { name, dockerignore, sent } of TREE_CASES) {
+  void test.each(TREE_CASES, ({ name, dockerignore, sent }) =>
     test(`the context sends what the Docker CLI sends, ${name}`, async () => {
       // Arrange
       await using scratch = await new TemporaryFiles().directory(
@@ -1072,35 +1071,39 @@ describe('the .dockerignore rules of the Docker CLI', () => {
 
       // Assert
       assert.deepEqual(paths.toSorted(), sent);
-    });
-  }
+    }),
+  );
 
-  for (const [pattern, path] of [
-    [String.raw`\d`, '1'],
-    [String.raw`\pL`, 'x'],
-    ['[[:alpha:]]', 'x'],
-  ] as const) {
-    test(
-      `a pattern with the regexp syntax ${pattern} of Go, which Go excludes ${path} with, is malformed`,
-      { skip: pattern.includes('\\') && process.platform === 'win32' },
-      () => {
-        // Act and Assert
-        assert.throws(() => matches(path, [pattern]), SyntaxError);
-      },
-    );
-  }
+  void test.each(
+    [
+      [String.raw`\d`, '1'],
+      [String.raw`\pL`, 'x'],
+      ['[[:alpha:]]', 'x'],
+    ] as const,
+    ([pattern, path]) =>
+      test(
+        `a pattern with the regexp syntax ${pattern} of Go, which Go excludes ${path} with, is malformed`,
+        { skip: pattern.includes('\\') && process.platform === 'win32' },
+        () => {
+          // Act and Assert
+          assert.throws(() => matches(path, [pattern]), SyntaxError);
+        },
+      ),
+  );
 
   // Go's MatchesOrParentMatches: "." of Go's regexp skips only "\n".
-  for (const [path, excluded] of [
-    ['a/x\ny/b', false],
-    ['a/x\ry/b', true],
-    ['a/x\u{2028}y/b', true],
-  ] as const) {
-    test(`a/**/b and ${JSON.stringify(path)}`, () => {
-      // Act and Assert
-      assert.equal(matches(path, ['a/**/b']), excluded);
-    });
-  }
+  void test.each(
+    [
+      ['a/x\ny/b', false],
+      ['a/x\ry/b', true],
+      ['a/x\u{2028}y/b', true],
+    ] as const,
+    ([path, excluded]) =>
+      test(`a/**/b and ${JSON.stringify(path)}`, () => {
+        // Act and Assert
+        assert.equal(matches(path, ['a/**/b']), excluded);
+      }),
+  );
 
   test('a pattern that fails to compile stops the context, where Go sends the part it has', async () => {
     // Arrange
@@ -1116,47 +1119,49 @@ describe('the .dockerignore rules of the Docker CLI', () => {
   });
 
   // Each value is what Go's ignorefile.ReadAll gives for the same bytes.
-  for (const { name, text, patterns } of [
-    {
-      name: 'a line ends at \\n and a \\r before it goes',
-      text: 'foo\r\nbar \r\n#c\r\n!baz\r\n\r\n',
-      patterns: ['foo', 'bar', '!baz'],
-    },
-    {
-      name: 'a byte order mark at the start goes',
-      text: '\u{FEFF}foo\nbar\n',
-      patterns: ['foo', 'bar'],
-    },
-    {
-      name: 'a comment can follow the byte order mark',
-      text: '\u{FEFF}#comment\nbar\n',
-      patterns: ['bar'],
-    },
-    {
-      name: 'a line is a comment only when "#" is its first character',
-      text: ' #x\n# y\n\t#z\n',
-      patterns: ['#x', '#z'],
-    },
-    {
-      name: 'U+FEFF is not a space to trim',
-      text: 'a\n\u{FEFF}foo\nbar\u{FEFF}\n! \u{FEFF}baz\n',
-      patterns: ['a', '\u{FEFF}foo', 'bar\u{FEFF}', '!\u{FEFF}baz'],
-    },
-  ]) {
-    test(`readDockerignore: ${name}`, async () => {
-      // Arrange
-      await using scratch = await new TemporaryFiles().directory(
-        'docker-test-',
-      );
-      await writeFile(join(scratch.path, '.dockerignore'), text);
+  void test.each(
+    [
+      {
+        name: 'a line ends at \\n and a \\r before it goes',
+        text: 'foo\r\nbar \r\n#c\r\n!baz\r\n\r\n',
+        patterns: ['foo', 'bar', '!baz'],
+      },
+      {
+        name: 'a byte order mark at the start goes',
+        text: '\u{FEFF}foo\nbar\n',
+        patterns: ['foo', 'bar'],
+      },
+      {
+        name: 'a comment can follow the byte order mark',
+        text: '\u{FEFF}#comment\nbar\n',
+        patterns: ['bar'],
+      },
+      {
+        name: 'a line is a comment only when "#" is its first character',
+        text: ' #x\n# y\n\t#z\n',
+        patterns: ['#x', '#z'],
+      },
+      {
+        name: 'U+FEFF is not a space to trim',
+        text: 'a\n\u{FEFF}foo\nbar\u{FEFF}\n! \u{FEFF}baz\n',
+        patterns: ['a', '\u{FEFF}foo', 'bar\u{FEFF}', '!\u{FEFF}baz'],
+      },
+    ],
+    ({ name, text, patterns }) =>
+      test(`readDockerignore: ${name}`, async () => {
+        // Arrange
+        await using scratch = await new TemporaryFiles().directory(
+          'docker-test-',
+        );
+        await writeFile(join(scratch.path, '.dockerignore'), text);
 
-      // Act
-      const read = await readDockerignore(scratch.path);
+        // Act
+        const read = await readDockerignore(scratch.path);
 
-      // Assert
-      assert.deepEqual(read, patterns);
-    });
-  }
+        // Assert
+        assert.deepEqual(read, patterns);
+      }),
+  );
 
   // Each `sent` is the tar entries of the Docker CLI's path for the same folder.
   test('a Dockerfile in an excluded folder is sent, and no other file of the folder', async () => {

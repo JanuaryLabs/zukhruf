@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
-import { describe, test } from 'node:test';
+import { describe } from 'node:test';
+
+import { test } from '@zukhruf/parameterized-test';
 
 import {
   type InvariantCode,
@@ -219,7 +221,7 @@ const variants: { name: string; inset: number; node: DiagramNode }[] = [
 ];
 
 describe('measureNode', () => {
-  for (const { name, inset, node } of variants) {
+  void test.each(variants, ({ name, inset, node }) =>
     test(`${name} keeps its text inside its padding, at its measured size`, () => {
       // Arrange
       const measured = measureNode(node);
@@ -229,8 +231,9 @@ describe('measureNode', () => {
 
       // Assert
       assert.deepEqual(contentViolations(layout, ['N2'], inset), []);
-    });
-
+    }),
+  );
+  void test.each(variants, ({ name, inset, node }) =>
     test(`${name} keeps its text inside its padding and its drawing inside the overhang it measured, in a larger area`, () => {
       // Arrange
       const measured = measureNode(node);
@@ -240,10 +243,10 @@ describe('measureNode', () => {
 
       // Assert
       assert.deepEqual(contentViolations(layout, ['N2', 'V1'], inset), []);
-    });
-  }
+    }),
+  );
 
-  for (const side of ['top', 'right', 'bottom', 'left'] as const) {
+  void test.each(['top', 'right', 'bottom', 'left'] as const, (side) =>
     test(`a caption on the ${side} sits CAPTION_GAP outside the frame, and the overhang on that side reaches its far edge`, () => {
       // Arrange
       const measured = measureNode({
@@ -276,8 +279,8 @@ describe('measureNode', () => {
         ) < 0.01,
         `overhang ${measured.overhang[side]}`,
       );
-    });
-  }
+    }),
+  );
 
   test('a Box grows wider with its longest line', () => {
     // Arrange
@@ -542,8 +545,8 @@ describe('measureGroupTitle', () => {
     ...overrides,
   });
 
-  for (const labelSide of ['top', 'bottom'] as const) {
-    for (const labelAlign of ['start', 'center', 'end'] as const) {
+  void test.each(['top', 'bottom'] as const, (labelSide) =>
+    test.each(['start', 'center', 'end'] as const, (labelAlign) =>
       test(`a ${labelAlign}-aligned title band on the ${labelSide} holds its label`, () => {
         // Arrange
         const titled = group({ titleBand: true, labelSide, labelAlign });
@@ -585,9 +588,9 @@ describe('measureGroupTitle', () => {
         for (const run of label) {
           assert.deepEqual({ x: run.x, anchor: run.anchor }, expected);
         }
-      });
-    }
-  }
+      }),
+    ),
+  );
 
   test('a title without a band reserves the same height and draws no band', () => {
     // Arrange

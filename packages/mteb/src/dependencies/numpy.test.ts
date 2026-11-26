@@ -1,20 +1,24 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+
+import { test } from '@zukhruf/parameterized-test';
 
 import { addReduceat, meanFloat32, sumFloat32 } from './numpy.ts';
 
 // NumPy 2.5.4 np.add.reduceat raised these IndexErrors.
-for (const [values, starts, message] of [
-  [[1, 2, 3, 4, 5], [0, 5], 'index 5 out-of-bounds in add.reduceat [0, 5)'],
-  [[1, 2, 3, 4, 5], [0, -1], 'index -1 out-of-bounds in add.reduceat [0, 5)'],
-  [[], [0], 'index 0 out-of-bounds in add.reduceat [0, 0)'],
-] as const)
-  test(`addReduceat refuses the starts ${JSON.stringify(starts)} of ${values.length} values, as numpy raises`, () => {
-    assert.throws(() => addReduceat(values, starts), {
-      name: 'RangeError',
-      message,
-    });
-  });
+void test.each(
+  [
+    [[1, 2, 3, 4, 5], [0, 5], 'index 5 out-of-bounds in add.reduceat [0, 5)'],
+    [[1, 2, 3, 4, 5], [0, -1], 'index -1 out-of-bounds in add.reduceat [0, 5)'],
+    [[], [0], 'index 0 out-of-bounds in add.reduceat [0, 0)'],
+  ] as const,
+  ([values, starts, message]) =>
+    test(`addReduceat refuses the starts ${JSON.stringify(starts)} of ${values.length} values, as numpy raises`, () => {
+      assert.throws(() => addReduceat(values, starts), {
+        name: 'RangeError',
+        message,
+      });
+    }),
+);
 
 // No caller of this package sums float32 negative zeros, so this test calls
 // the numpy port itself. NumPy 2.5.4 gave 0.0, not -0.0, for np.sum and

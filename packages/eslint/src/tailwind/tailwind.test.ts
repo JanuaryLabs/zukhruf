@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+import { test } from '@zukhruf/parameterized-test';
 
 import { typescriptRuleTester } from '../testing/rule-tester.ts';
 import noArbitraryZIndex from './no-arbitrary-z-index.ts';
@@ -64,7 +64,7 @@ test('no-h-screen and no-will-change ignore their own rule names', () => {
   });
 });
 
-for (const { name, rule, banned, forms } of cases) {
+void test.each(cases, ({ name, rule, banned, forms }) =>
   test(`${name} reports its class behind a variant, a modifier or as an object key`, () => {
     typescriptRuleTester().run(name, rule, {
       valid: [],
@@ -89,10 +89,10 @@ for (const { name, rule, banned, forms } of cases) {
         },
       ],
     });
-  });
-}
+  }),
+);
 
-for (const { name, rule, banned, allowed } of cases) {
+void test.each(cases, ({ name, rule, banned, allowed }) =>
   test(name, () => {
     typescriptRuleTester().run(name, rule, {
       valid: [
@@ -114,5 +114,5 @@ for (const { name, rule, banned, allowed } of cases) {
         },
       ],
     });
-  });
-}
+  }),
+);

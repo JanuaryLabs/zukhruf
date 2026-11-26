@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { test } from 'node:test';
+
+import { test } from '@zukhruf/parameterized-test';
 
 import { PythonRandom } from './python-random.ts';
 
@@ -23,7 +24,7 @@ const expected: { readonly python: Case[] } = JSON.parse(
   ),
 );
 
-for (const pythonCase of expected.python)
+void test.each(expected.python, (pythonCase) =>
   test(`random.Random(${pythonCase.seed}) gives the draws of CPython: ${pythonCase.case}`, () => {
     const generator = new PythonRandom(pythonCase.seed);
 
@@ -34,7 +35,8 @@ for (const pythonCase of expected.python)
     });
 
     assert.deepEqual(results, pythonCase.results);
-  });
+  }),
+);
 
 test('a sample larger than the population throws, as CPython raises a ValueError', () => {
   const generator = new PythonRandom(1);

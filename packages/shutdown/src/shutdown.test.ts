@@ -2,10 +2,11 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { createInterface } from 'node:readline';
-import { describe, test } from 'node:test';
+import { describe } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import { ConnectionFailedError, Docker } from '@zukhruf/docker';
+import { test } from '@zukhruf/parameterized-test';
 
 // Only a container makes a process PID 1. The kernel does not apply the
 // default action of a signal to PID 1, so there the process cannot die by
@@ -407,12 +408,14 @@ describe('Shutdown', () => {
     assert.deepEqual({ code, signal }, { code: 3, signal: null });
   });
 
-  for (const terminationSignal of ['SIGINT', 'SIGTERM', 'SIGHUP'] as const) {
-    test(`${terminationSignal} aborts the signal with an AbortError that names it, the cleanup runs, and then the process dies by ${terminationSignal}`, async (t) => {
-      // Arrange
-      await using program = run(
-        t.signal,
-        `
+  void test.each(
+    ['SIGINT', 'SIGTERM', 'SIGHUP'] as const,
+    (terminationSignal) =>
+      test(`${terminationSignal} aborts the signal with an AbortError that names it, the cleanup runs, and then the process dies by ${terminationSignal}`, async (t) => {
+        // Arrange
+        await using program = run(
+          t.signal,
+          `
           import { aborted } from 'node:util';
           import { Shutdown } from '@zukhruf/shutdown';
 
@@ -430,25 +433,25 @@ describe('Shutdown', () => {
           const { reason } = shutdown.signal;
           console.log(\`\${reason instanceof DOMException} \${reason.name}: \${reason.message}\`);
         `,
-      );
-      await program.wrote('ready');
+        );
+        await program.wrote('ready');
 
-      // Act
-      program.send(terminationSignal);
-      const { code, signal, stdout } = await program.ended();
+        // Act
+        program.send(terminationSignal);
+        const { code, signal, stdout } = await program.ended();
 
-      // Assert
-      assert.deepEqual(
-        { code, signal },
-        { code: null, signal: terminationSignal },
-      );
-      assert.deepEqual(stdout, [
-        'ready',
-        `true AbortError: The process received ${terminationSignal}`,
-        'cleanup ran',
-      ]);
-    });
-  }
+        // Assert
+        assert.deepEqual(
+          { code, signal },
+          { code: null, signal: terminationSignal },
+        );
+        assert.deepEqual(stdout, [
+          'ready',
+          `true AbortError: The process received ${terminationSignal}`,
+          'cleanup ran',
+        ]);
+      }),
+  );
 
   test('a program with no stop request ends when its work ends, with its own exit code, also when the scope never ends', async (t) => {
     for (const declaration of [
@@ -571,7 +574,7 @@ describe('Shutdown', () => {
     { stopRequest: 'SIGHUP', exitCode: 129, cleanup: 'ends' },
     { stopRequest: 'SIGTERM', exitCode: 143, cleanup: 'crashes' },
   ] as const;
-  for (const { stopRequest, exitCode, cleanup } of asPidOne) {
+  void test.each(asPidOne, ({ stopRequest, exitCode, cleanup }) =>
     test(
       `as PID 1 in a container, ${stopRequest} ends the process with exit code ${exitCode} when the cleanup ${cleanup}`,
       { skip: noEngine },
@@ -656,8 +659,8 @@ describe('Shutdown', () => {
             : 'pid 1\nready\ncleanup started\n',
         );
       },
-    );
-  }
+    ),
+  );
 
   test('SIGQUIT keeps its default action: the process ends at once, with no abort and no cleanup', async (t) => {
     // Arrange

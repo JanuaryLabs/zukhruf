@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import { hash, randomUUID } from 'node:crypto';
-import { describe, test } from 'node:test';
+import { describe } from 'node:test';
 import { setTimeout } from 'node:timers/promises';
 
 import { packTar, unpackTar } from 'modern-tar';
 
 import { TemporaryFiles } from '@zukhruf/fs';
+import { test } from '@zukhruf/parameterized-test';
 
 import {
   Docker,
@@ -266,7 +267,7 @@ describe('docker.images', () => {
     );
   });
 
-  for (const operation of ['pull', 'push'] as const) {
+  void test.each(['pull', 'push'] as const, (operation) =>
     test(`${operation}() sends auth as padded base64url, which the URLEncoding of Go decodes: its length is a multiple of 4`, async () => {
       // Arrange: a JSON of 37 bytes, so base64 of it ends with padding.
       await using scratch = await new TemporaryFiles().directory(
@@ -303,8 +304,8 @@ describe('docker.images', () => {
         JSON.parse(Buffer.from(standard, 'base64').toString('utf8')),
         auth,
       );
-    });
-  }
+    }),
+  );
 
   test('tag() gives the image a second name that inspect() and list() find, tag() of a missing image is an ImageNotFoundError, and remove() of the name resolves twice', async (t) => {
     // Arrange

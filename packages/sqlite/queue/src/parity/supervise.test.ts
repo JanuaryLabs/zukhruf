@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { describe, it } from 'node:test';
+import { describe } from 'node:test';
 
 import { PGlite } from '@electric-sql/pglite';
 import {
@@ -10,6 +10,7 @@ import {
   fromPglite,
 } from 'pg-boss';
 
+import { it } from '@zukhruf/parameterized-test';
 import { open } from '@zukhruf/sqlite-open';
 
 import type { JobQueue } from '../index.ts';
@@ -224,26 +225,31 @@ describe('supervisor', () => {
   // undefined is outside its types under exactOptionalPropertyTypes.
   const supervisedUndefined: RunOptions = { ...supervised };
   Reflect.set(supervisedUndefined, 'supervise', undefined);
-  for (const { label, options } of [
-    { label: 'supervise: false', options: { ...supervised, supervise: false } },
-    { label: 'supervise: undefined', options: supervisedUndefined },
-  ]) {
-    it(`leaves an expired job active with ${label}`, async () => {
-      const observed = await Parity.assertSame(
-        (run) => expiry(run, { retryLimit: 1, retryDelay: 60 }),
-        options,
-      );
+  void it.each(
+    [
+      {
+        label: 'supervise: false',
+        options: { ...supervised, supervise: false },
+      },
+      { label: 'supervise: undefined', options: supervisedUndefined },
+    ],
+    ({ label, options }) =>
+      it(`leaves an expired job active with ${label}`, async () => {
+        const observed = await Parity.assertSame(
+          (run) => expiry(run, { retryLimit: 1, retryDelay: 60 }),
+          options,
+        );
 
-      assert.deepStrictEqual(observed.timeline.at(-1), {
-        at: 2000,
-        job: active,
-      });
-      assert.deepStrictEqual(observed.settled, [
-        { ...active, state: 'completed', completedOn: 3000 },
-        { ...active, state: 'completed', completedOn: 3000 },
-      ]);
-    });
-  }
+        assert.deepStrictEqual(observed.timeline.at(-1), {
+          at: 2000,
+          job: active,
+        });
+        assert.deepStrictEqual(observed.settled, [
+          { ...active, state: 'completed', completedOn: 3000 },
+          { ...active, state: 'completed', completedOn: 3000 },
+        ]);
+      }),
+  );
 
   it('fails a job whose heartbeat is strictly overdue, and its next touch aborts it', async () => {
     const observed = await Parity.assertSame(
@@ -505,74 +511,76 @@ describe('supervisor', () => {
 
   // queuedCount > (the queue's warningQueueSize || the instance's || 10000)
   // (boss.js:140, 388-394); data is the stats row (plans.js:4621-4625).
-  for (const { label, options, warned } of [
-    {
-      label: "the queue's or the instance's",
-      options: { ...supervised, warningQueueSize: 2 },
-      warned: [
-        { name: 'alpha', queuedCount: 3, size: 0, threshold: 2 },
-        { name: 'zeta', queuedCount: 2, size: 1, threshold: 1 },
-      ],
-    },
-    {
-      label: "the queue's or 10000",
-      options: supervised,
-      warned: [{ name: 'zeta', queuedCount: 2, size: 1, threshold: 1 }],
-    },
-  ]) {
-    it(`warns on every pass about each queue whose backlog exceeds ${label}`, async () => {
-      const observed = await Parity.assertSame(
-        async ({ queue, clock, warnings, errors }) => {
-          await queue.start();
-          await queue.createQueue('zeta', { warningQueueSize: 1 });
-          await queue.createQueue('alpha');
-          await queue.createQueue('quiet');
-          // A null keeps the stored size (plans.js:1597); the contract types
-          // no null.
-          await queue.updateQueue(
-            'zeta',
-            JSON.parse('{"warningQueueSize":null}'),
-          );
-          for (const n of [1, 2]) {
-            await queue.send('zeta', null, { id: id(n) });
-          }
-          for (const n of [3, 4, 5]) {
-            await queue.send('alpha', null, { id: id(n) });
-          }
-          for (const n of [6, 7]) {
-            await queue.send('quiet', null, { id: id(n) });
-          }
-          await clock.tick(2000);
-          // A pass emits in its stats statement's RETURNING order, which
-          // has no ORDER BY, so pg-boss leaves it to the planner
-          // (plans.js:4611-4630).
-          return {
-            warnings: warnings.toSorted(
-              (a, b) => a.at - b.at || a.message.localeCompare(b.message),
-            ),
-            errors: errors.map((error) => error.message),
-          };
-        },
-        options,
-      );
-
-      const pass = (at: number) =>
-        warned.map(({ name, queuedCount, size, threshold }) => ({
-          at,
-          message: `Warning: large queue backlog: queue "${name}" has ${queuedCount} jobs in the created or retry state, over its warning threshold of ${threshold}. Your queue should be reviewed`,
-          data: {
-            name,
-            queuedCount,
-            warningQueueSize: size,
-            pinSeconds: true,
+  void it.each(
+    [
+      {
+        label: "the queue's or the instance's",
+        options: { ...supervised, warningQueueSize: 2 },
+        warned: [
+          { name: 'alpha', queuedCount: 3, size: 0, threshold: 2 },
+          { name: 'zeta', queuedCount: 2, size: 1, threshold: 1 },
+        ],
+      },
+      {
+        label: "the queue's or 10000",
+        options: supervised,
+        warned: [{ name: 'zeta', queuedCount: 2, size: 1, threshold: 1 }],
+      },
+    ],
+    ({ label, options, warned }) =>
+      it(`warns on every pass about each queue whose backlog exceeds ${label}`, async () => {
+        const observed = await Parity.assertSame(
+          async ({ queue, clock, warnings, errors }) => {
+            await queue.start();
+            await queue.createQueue('zeta', { warningQueueSize: 1 });
+            await queue.createQueue('alpha');
+            await queue.createQueue('quiet');
+            // A null keeps the stored size (plans.js:1597); the contract types
+            // no null.
+            await queue.updateQueue(
+              'zeta',
+              JSON.parse('{"warningQueueSize":null}'),
+            );
+            for (const n of [1, 2]) {
+              await queue.send('zeta', null, { id: id(n) });
+            }
+            for (const n of [3, 4, 5]) {
+              await queue.send('alpha', null, { id: id(n) });
+            }
+            for (const n of [6, 7]) {
+              await queue.send('quiet', null, { id: id(n) });
+            }
+            await clock.tick(2000);
+            // A pass emits in its stats statement's RETURNING order, which
+            // has no ORDER BY, so pg-boss leaves it to the planner
+            // (plans.js:4611-4630).
+            return {
+              warnings: warnings.toSorted(
+                (a, b) => a.at - b.at || a.message.localeCompare(b.message),
+              ),
+              errors: errors.map((error) => error.message),
+            };
           },
-        }));
-      assert.deepStrictEqual(observed, {
-        warnings: [...pass(1000), ...pass(2000)],
-        errors: [],
-      });
-    });
-  }
+          options,
+        );
+
+        const pass = (at: number) =>
+          warned.map(({ name, queuedCount, size, threshold }) => ({
+            at,
+            message: `Warning: large queue backlog: queue "${name}" has ${queuedCount} jobs in the created or retry state, over its warning threshold of ${threshold}. Your queue should be reviewed`,
+            data: {
+              name,
+              queuedCount,
+              warningQueueSize: size,
+              pinSeconds: true,
+            },
+          }));
+        assert.deepStrictEqual(observed, {
+          warnings: [...pass(1000), ...pass(2000)],
+          errors: [],
+        });
+      }),
+  );
 
   // Worker A holds job 1; worker B, polling every 500 ms, faces jobs 2 and 3.
   // A singleton or stately fetch skips a key whose job is active, read live,
@@ -663,76 +671,78 @@ describe('supervisor', () => {
     [2, 'k1'],
     [3, 'k2'],
   ];
-  for (const {
-    label,
-    options,
-    claims,
-    policy = 'singleton',
-    held: heldKey = 'k1',
-    queued = twoKeys,
-    batchSize = 2,
-    sendAt = 0,
-  } of heldKeyCases) {
-    it(`skips a held singleton key at once ${label}`, async () => {
-      const observed = await Parity.assertSame(
-        async ({ queue, clock, wip, errors }) => {
-          await queue.start();
-          await queue.createQueue('jobs', { policy });
-          // null sends without a key.
-          await queue.send(
-            'jobs',
-            null,
-            keyed({ id: id(1) }, heldKey ?? undefined),
-          );
-          const held = holding(clock);
-          await queue.work('jobs', held.handler);
-          const sendQueued = async () => {
-            for (const [n, singletonKey] of queued) {
-              await queue.send(
-                'jobs',
-                null,
-                keyed({ id: id(n) }, singletonKey),
-              );
-            }
-            await queue.work(
+  void it.each(
+    heldKeyCases,
+    ({
+      label,
+      options,
+      claims,
+      policy = 'singleton',
+      held: heldKey = 'k1',
+      queued = twoKeys,
+      batchSize = 2,
+      sendAt = 0,
+    }) =>
+      it(`skips a held singleton key at once ${label}`, async () => {
+        const observed = await Parity.assertSame(
+          async ({ queue, clock, wip, errors }) => {
+            await queue.start();
+            await queue.createQueue('jobs', { policy });
+            // null sends without a key.
+            await queue.send(
               'jobs',
-              { batchSize, pollingIntervalSeconds: 0.5 },
-              held.handler,
+              null,
+              keyed({ id: id(1) }, heldKey ?? undefined),
             );
-          };
-          try {
-            await flush(clock);
-            if (sendAt === 0) {
-              await sendQueued();
-            }
-            for (let step = 1; step <= 12; step++) {
-              await clock.tick(500);
-              if (step * 500 === sendAt) {
+            const held = holding(clock);
+            await queue.work('jobs', held.handler);
+            const sendQueued = async () => {
+              for (const [n, singletonKey] of queued) {
+                await queue.send(
+                  'jobs',
+                  null,
+                  keyed({ id: id(n) }, singletonKey),
+                );
+              }
+              await queue.work(
+                'jobs',
+                { batchSize, pollingIntervalSeconds: 0.5 },
+                held.handler,
+              );
+            };
+            try {
+              await flush(clock);
+              if (sendAt === 0) {
                 await sendQueued();
               }
+              for (let step = 1; step <= 12; step++) {
+                await clock.tick(500);
+                if (step * 500 === sendAt) {
+                  await sendQueued();
+                }
+              }
+              return {
+                batches: [...held.batches],
+                // When each worker last fetched, as the wip event at 6000
+                // lists them.
+                fetched: wip.at(-1)?.workers.map((w) => w.lastFetchedOn),
+                errors: errors.map((error) => error.message),
+              };
+            } finally {
+              held.release();
             }
-            return {
-              batches: [...held.batches],
-              // When each worker last fetched, as the wip event at 6000
-              // lists them.
-              fetched: wip.at(-1)?.workers.map((w) => w.lastFetchedOn),
-              errors: errors.map((error) => error.message),
-            };
-          } finally {
-            held.release();
-          }
-        },
-        options,
-      );
+          },
+          options,
+        );
 
-      assert.deepStrictEqual(observed, {
-        batches: [{ at: 0, ids: [id(1)] }, ...claims],
-        // B holds the batch it claimed, so its last fetch is that claim.
-        fetched: [0, claims.at(-1)?.at],
-        errors: [],
-      });
-    });
-  }
+        assert.deepStrictEqual(observed, {
+          batches: [{ at: 0, ids: [id(1)] }, ...claims],
+          // B holds the batch it claimed, so its last fetch is that claim.
+          fetched: [0, claims.at(-1)?.at],
+          errors: [],
+        });
+      }),
+  );
 
   // Each start loads every queue into the cache (manager.js:1057), and a
   // full fetch bursts while the cached readyCount exceeds the threshold
@@ -862,54 +872,56 @@ describe('supervisor', () => {
   // A full fetch bursts while the cached readyCount exceeds the threshold
   // (manager.js:1207-1223). The pass at 1000 counts 3 ready; the cache reads
   // that at 2000, after the poll that claims job 2, and before the next.
-  for (const { label, options, at } of [
-    {
-      label: 'polls every 2 s without supervision',
-      options: {},
-      at: [0, 2000, 4000, 6000, 8000],
-    },
-    {
-      label: 'bursts once the cached ready count exceeds the threshold',
-      options: supervised,
-      at: [0, 2000, 4000, 4000, 4000],
-    },
-  ]) {
-    it(`burstWhenReadyExceeds ${label}`, async () => {
-      const observed = await Parity.assertSame(
-        async ({ queue, clock, errors }) => {
-          await queue.start();
-          await queue.createQueue('jobs');
-          for (const n of [1, 2, 3, 4, 5]) {
-            await queue.send('jobs', null, { id: id(n) });
-          }
-          const claims: { at: number; ids: string[] }[] = [];
-          await queue.work(
-            'jobs',
-            { burstWhenReadyExceeds: 1 },
-            async (jobs) => {
-              claims.push({
-                at: clock.now() - origin,
-                ids: jobs.map((job) => job.id),
-              });
-            },
-          );
-          for (let step = 0; step < 10; step++) {
-            await clock.tick(1000);
-          }
-          return {
-            claims: [...claims],
-            errors: errors.map((error) => error.message),
-          };
-        },
-        options,
-      );
+  void it.each(
+    [
+      {
+        label: 'polls every 2 s without supervision',
+        options: {},
+        at: [0, 2000, 4000, 6000, 8000],
+      },
+      {
+        label: 'bursts once the cached ready count exceeds the threshold',
+        options: supervised,
+        at: [0, 2000, 4000, 4000, 4000],
+      },
+    ],
+    ({ label, options, at }) =>
+      it(`burstWhenReadyExceeds ${label}`, async () => {
+        const observed = await Parity.assertSame(
+          async ({ queue, clock, errors }) => {
+            await queue.start();
+            await queue.createQueue('jobs');
+            for (const n of [1, 2, 3, 4, 5]) {
+              await queue.send('jobs', null, { id: id(n) });
+            }
+            const claims: { at: number; ids: string[] }[] = [];
+            await queue.work(
+              'jobs',
+              { burstWhenReadyExceeds: 1 },
+              async (jobs) => {
+                claims.push({
+                  at: clock.now() - origin,
+                  ids: jobs.map((job) => job.id),
+                });
+              },
+            );
+            for (let step = 0; step < 10; step++) {
+              await clock.tick(1000);
+            }
+            return {
+              claims: [...claims],
+              errors: errors.map((error) => error.message),
+            };
+          },
+          options,
+        );
 
-      assert.deepStrictEqual(observed, {
-        claims: at.map((time, index) => ({ at: time, ids: [id(index + 1)] })),
-        errors: [],
-      });
-    });
-  }
+        assert.deepStrictEqual(observed, {
+          claims: at.map((time, index) => ({ at: time, ids: [id(index + 1)] })),
+          errors: [],
+        });
+      }),
+  );
 
   it('burstWhenReadyExceeds counts ready jobs without the deferred ones', async () => {
     const observed = await Parity.assertSame(

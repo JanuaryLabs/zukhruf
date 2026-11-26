@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+
+import { test } from '@zukhruf/parameterized-test';
 
 import { metrics } from './metrics.ts';
 
@@ -537,7 +538,7 @@ function partition(
   );
 }
 
-for (const { id, files, key, response, expected } of CASES)
+void test.each(CASES, ({ id, files, key, response, expected }) =>
   test(`reference scorer case ${id} (${files.join(' against ')}) gives the published recall, precision and F1`, () => {
     const scores = metrics(partition(key), partition(response));
 
@@ -555,4 +556,5 @@ for (const { id, files, key, response, expected } of CASES)
         `${metric}: expected R ${recall} P ${precision} F1 ${f1}, got R ${actual.recall} P ${actual.precision} F1 ${actual.f1}`,
       );
     }
-  });
+  }),
+);

@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { test } from 'node:test';
+
+import { test } from '@zukhruf/parameterized-test';
 
 import { type Scores, scores } from './metrics.ts';
 
@@ -44,7 +45,7 @@ test('a stream with no relevant article has no Brier skill', () => {
   assert.ok(Number.isNaN(scores([false], [0.1], [false]).brierSkill));
 });
 
-for (const stream of streams)
+void test.each(streams, (stream) =>
   test(`the scores of ${stream.stream} are the bits of the research metric_row`, () => {
     const result = scores(
       stream.accepted,
@@ -61,4 +62,5 @@ for (const stream of streams)
         ]),
       ),
     );
-  });
+  }),
+);

@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { test } from 'node:test';
 import {
   setImmediate as afterPendingReactions,
   setTimeout as delay,
@@ -14,7 +13,7 @@ import { SqliteElection, type Term } from '@zukhruf/election';
 import type { FencedLease } from '@zukhruf/fencing';
 import { TemporaryFiles } from '@zukhruf/fs';
 import { LeaseController, LeaseLostError } from '@zukhruf/lease';
-import { describe } from '@zukhruf/parameterized-test';
+import { describe, test } from '@zukhruf/parameterized-test';
 import { waitFor } from '@zukhruf/testing/async';
 
 import {
@@ -144,7 +143,7 @@ describe('The start', () => {
 });
 
 describe('A task that fails', () => {
-  for (const [name, options] of both) {
+  void test.each(both, ([name, options]) =>
     test(`${name}, it ends the selector after it gave the key up, and ended and the dispose reject with the failure`, async () => {
       // Arrange
       const mutex = new Mutex(new MemoryStore());
@@ -171,8 +170,8 @@ describe('A task that fails', () => {
         (error) => error === failure,
       );
       assert.equal(rounds, 1, 'A failed task must not run again');
-    });
-  }
+    }),
+  );
 
   test('a task that rejects with another error than the stop after the dispose is a failure', async (t) => {
     // Arrange
@@ -343,7 +342,7 @@ describe('An acquire that fails', () => {
 });
 
 describe('The dispose', () => {
-  for (const [name, options] of both) {
+  void test.each(both, ([name, options]) =>
     test(`${name}, a dispose during the task aborts its signal, and waits until the task ended and the key was given up`, async (t) => {
       // Arrange
       const mutex = new Mutex(new MemoryStore());
@@ -374,8 +373,9 @@ describe('The dispose', () => {
       assert.equal(await mutex.isHeld('warehouse-writer'), false);
       assert.equal(selector.hasLeadership, false);
       await selector.ended;
-    });
-
+    }),
+  );
+  void test.each(both, ([name, options]) =>
     test(`${name}, a dispose during the wait for a busy key stops the wait, and the selector never takes the key`, async () => {
       // Arrange
       const mutex = new Mutex(new MemoryStore());
@@ -401,8 +401,8 @@ describe('The dispose', () => {
       await holding;
       assert.equal(ran, false);
       assert.equal(await mutex.isHeld('warehouse-writer'), false);
-    });
-  }
+    }),
+  );
 
   test('a dispose while the selector waits for requeue ends it clean', async (t) => {
     // Arrange: without autoRequeue, the first task resolves.
@@ -525,33 +525,35 @@ describe('A lost lease', () => {
     await waitFor(() => assert.equal(rounds, 2), { signal: t.signal });
   });
 
-  for (const ending of ['rejects with another error', 'resolves'] as const) {
-    test(`a task that ${ending} after a loss has a loss, not a failure, so the selector leads again`, async (t) => {
-      // Arrange
-      const store = testStore();
-      let rounds = 0;
-      await using selector = LeaderSelector.start(
-        store.mutex.key('warehouse-writer'),
-        {
-          takeLeadership: async (_lease, signal) => {
-            rounds++;
-            if (rounds > 1) return untilStopped(signal);
-            await aborted(signal);
-            if (ending === 'rejects with another error')
-              throw new Error('The write after the loss failed');
+  void test.each(
+    ['rejects with another error', 'resolves'] as const,
+    (ending) =>
+      test(`a task that ${ending} after a loss has a loss, not a failure, so the selector leads again`, async (t) => {
+        // Arrange
+        const store = testStore();
+        let rounds = 0;
+        await using selector = LeaderSelector.start(
+          store.mutex.key('warehouse-writer'),
+          {
+            takeLeadership: async (_lease, signal) => {
+              rounds++;
+              if (rounds > 1) return untilStopped(signal);
+              await aborted(signal);
+              if (ending === 'rejects with another error')
+                throw new Error('The write after the loss failed');
+            },
           },
-        },
-        { autoRequeue: { backoff, clock: createClock() } },
-      );
-      await waitFor(() => assert.equal(rounds, 1), { signal: t.signal });
+          { autoRequeue: { backoff, clock: createClock() } },
+        );
+        await waitFor(() => assert.equal(rounds, 1), { signal: t.signal });
 
-      // Act
-      store.loseLease();
+        // Act
+        store.loseLease();
 
-      // Assert
-      await waitFor(() => assert.equal(rounds, 2), { signal: t.signal });
-    });
-  }
+        // Assert
+        await waitFor(() => assert.equal(rounds, 2), { signal: t.signal });
+      }),
+  );
 });
 
 describe('An interrupt', () => {

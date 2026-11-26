@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { lstat } from 'node:fs/promises';
 import { join } from 'node:path';
-import { describe, test } from 'node:test';
+import { describe } from 'node:test';
 
 import { TemporaryFiles } from '@zukhruf/fs';
+import { test } from '@zukhruf/parameterized-test';
 
 import { PipeEndpoint } from './index.ts';
 import { defaultFolder } from './testing/default-folder.ts';
@@ -117,7 +118,7 @@ describe('the length of a socket path', { skip: posixOnly }, () => {
 
 describe('a name or a prefix that is not one file name', () => {
   const broken = ['', '.', '..', 'a/b', '../x', 'a\\b', 'a\0b'];
-  for (const value of broken) {
+  void test.each(broken, (value) =>
     test(`the name ${JSON.stringify(value)} is a TypeError that names it`, () => {
       // Act
       const making = () => new PipeEndpoint(value, { prefix: 'example' });
@@ -136,8 +137,9 @@ describe('a name or a prefix that is not one file name', () => {
         );
         return true;
       });
-    });
-
+    }),
+  );
+  void test.each(broken, (value) =>
     test(`the prefix ${JSON.stringify(value)} is a TypeError that names it`, () => {
       // Act
       const making = () => new PipeEndpoint('greeter', { prefix: value });
@@ -152,8 +154,8 @@ describe('a name or a prefix that is not one file name', () => {
         );
         return true;
       });
-    });
-  }
+    }),
+  );
 
   test(
     'a name with dots inside it is one file name',

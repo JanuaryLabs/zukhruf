@@ -39,5 +39,8 @@
   ],
   "publishConfig": {
     "access": "public"
+  },
+  "devDependencies": {
+    "@zukhruf/parameterized-test": "^0.8.70"
   }
 }

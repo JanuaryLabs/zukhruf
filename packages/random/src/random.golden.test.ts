@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+
+import { test } from '@zukhruf/parameterized-test';
 
 import fixture from './fixtures/expected.json' with { type: 'json' };
 import {
@@ -37,76 +38,89 @@ const array = (n: number) => range(n).map((index) => 3 * index + 1);
 const float32Weights = (n: number) =>
   new Float32Array(n).fill(Math.fround(1 / n));
 
-for (const sequenceCase of fixture.seed_sequence)
+void test.each(fixture.seed_sequence, (sequenceCase) =>
   test(`SeedSequence(${sequenceCase.seed}).generateState gives the words of NumPy: ${sequenceCase.case}`, () => {
     const sequence = new SeedSequence(seedOf(sequenceCase.seed));
 
     const words = sequence.generateState(sequenceCase.n_words);
 
     assert.deepEqual([...words], sequenceCase.words);
-  });
+  }),
+);
 
-for (const pcgCase of fixture.pcg64)
-  for (const [form, make] of [
-    ['a seed', () => new PCG64(seedOf(pcgCase.seed))],
-    ['a SeedSequence', () => new PCG64(new SeedSequence(seedOf(pcgCase.seed)))],
-  ] as const)
-    test(`PCG64 of ${form} gives the low, then the high half of each 64-bit output of NumPy: ${pcgCase.case}`, () => {
-      const bits = make();
+void test.each(fixture.pcg64, (pcgCase) =>
+  test.each(
+    [
+      ['a seed', () => new PCG64(seedOf(pcgCase.seed))],
+      [
+        'a SeedSequence',
+        () => new PCG64(new SeedSequence(seedOf(pcgCase.seed))),
+      ],
+    ] as const,
+    ([form, make]) =>
+      test(`PCG64 of ${form} gives the low, then the high half of each 64-bit output of NumPy: ${pcgCase.case}`, () => {
+        const bits = make();
 
-      const words = pcgCase.words.map(() => bits.nextUint32());
+        const words = pcgCase.words.map(() => bits.nextUint32());
 
-      assert.deepEqual(words, pcgCase.words);
-    });
+        assert.deepEqual(words, pcgCase.words);
+      }),
+  ),
+);
 
-for (const mtCase of fixture.mt19937)
+void test.each(fixture.mt19937, (mtCase) =>
   test(`MT19937.legacy(${mtCase.seed}) gives the words of NumPy: ${mtCase.case}`, () => {
     const bits = MT19937.legacy(mtCase.seed);
 
     const words = mtCase.words.map(() => bits.nextUint32());
 
     assert.deepEqual(words, mtCase.words);
-  });
+  }),
+);
 
-for (const stateCase of fixture.random_state)
-  for (const [form, make] of [
-    ['a seed', () => new RandomState(stateCase.seed)],
-    ['an MT19937', () => new RandomState(MT19937.legacy(stateCase.seed))],
-  ] as const)
-    test(`RandomState of ${form} gives the draws of NumPy: ${stateCase.case}`, () => {
-      const generator = make();
+void test.each(fixture.random_state, (stateCase) =>
+  test.each(
+    [
+      ['a seed', () => new RandomState(stateCase.seed)],
+      ['an MT19937', () => new RandomState(MT19937.legacy(stateCase.seed))],
+    ] as const,
+    ([form, make]) =>
+      test(`RandomState of ${form} gives the draws of NumPy: ${stateCase.case}`, () => {
+        const generator = make();
 
-      const results = stateCase.calls.map((call) => {
-        const [name, [a = 0, b = 0, c = 0, ...weights]] = parse(call);
-        if (name === 'randint') return generator.randint(a, b, c);
-        if (name === 'choice_weights32')
-          return generator.choice(a, b, {
-            p: new Float32Array([c, ...weights]),
-          });
-        if (name === 'random_sample') return generator.randomSample(a);
-        if (name === 'uniform') return generator.uniform(a);
-        if (name === 'choice_p')
-          return generator.choice(a, b, { p: float32Weights(a) });
-        if (name === 'choice_no_replace')
-          return generator.choice(a, b, { replace: false });
-        if (name === 'choice') return generator.choice(array(a), b);
-        if (name === 'choice_array_p')
-          return generator.choice(array(a), b, { p: float32Weights(a) });
-        if (name === 'choice_array_no_replace')
-          return generator.choice(array(a), b, { replace: false });
-        if (name === 'permutation') return generator.permutation(a);
-        if (name === 'shuffle') {
-          const values = range(a);
-          generator.shuffle(values);
-          return values;
-        }
-        throw new Error(`No call ${name}`);
-      });
+        const results = stateCase.calls.map((call) => {
+          const [name, [a = 0, b = 0, c = 0, ...weights]] = parse(call);
+          if (name === 'randint') return generator.randint(a, b, c);
+          if (name === 'choice_weights32')
+            return generator.choice(a, b, {
+              p: new Float32Array([c, ...weights]),
+            });
+          if (name === 'random_sample') return generator.randomSample(a);
+          if (name === 'uniform') return generator.uniform(a);
+          if (name === 'choice_p')
+            return generator.choice(a, b, { p: float32Weights(a) });
+          if (name === 'choice_no_replace')
+            return generator.choice(a, b, { replace: false });
+          if (name === 'choice') return generator.choice(array(a), b);
+          if (name === 'choice_array_p')
+            return generator.choice(array(a), b, { p: float32Weights(a) });
+          if (name === 'choice_array_no_replace')
+            return generator.choice(array(a), b, { replace: false });
+          if (name === 'permutation') return generator.permutation(a);
+          if (name === 'shuffle') {
+            const values = range(a);
+            generator.shuffle(values);
+            return values;
+          }
+          throw new Error(`No call ${name}`);
+        });
 
-      assert.deepEqual(results, stateCase.results);
-    });
+        assert.deepEqual(results, stateCase.results);
+      }),
+  ),
+);
 
-for (const generatorCase of fixture.generator_cases)
+void test.each(fixture.generator_cases, (generatorCase) =>
   test(`Generator over ${generatorCase.bits} of the seed ${generatorCase.seed} gives the draws of NumPy: ${generatorCase.case}`, () => {
     const seed = seedOf(generatorCase.seed);
     const generator =
@@ -135,7 +149,8 @@ for (const generatorCase of fixture.generator_cases)
     });
 
     assert.deepEqual(results, generatorCase.results);
-  });
+  }),
+);
 
 // NumPy's ValueError is a RangeError here, with NumPy's message; its
 // TypeError is a TypeError, whose message names NumPy's dtypes and is not
@@ -160,8 +175,8 @@ const makers: Record<string, (seed: number | bigint) => unknown> = {
   RandomState: (seed) => new RandomState(seed),
 };
 
-for (const refusal of fixture.refusals)
-  for (const seed of seedForms(refusal.seed))
+void test.each(fixture.refusals, (refusal) =>
+  test.each(seedForms(refusal.seed), (seed) =>
     test(`${refusal.case} throws a ${errorNames[refusal.raises]}, as NumPy raises a ${refusal.raises} (seed ${typeof seed} ${seed})`, () => {
       const make = makers[refusal.make];
       if (make === undefined) throw new Error(`No maker ${refusal.make}`);
@@ -199,4 +214,6 @@ for (const refusal of fixture.refusals)
           ? { name: 'RangeError', message: refusal.message }
           : { name: 'TypeError' },
       );
-    });
+    }),
+  ),
+);

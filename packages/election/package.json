@@ -47,6 +47,7 @@
   },
   "devDependencies": {
     "@sinonjs/fake-timers": "15.5.0",
+    "@zukhruf/parameterized-test": "^0.8.70",
     "@zukhruf/testing": "^0.8.70"
   }
 }

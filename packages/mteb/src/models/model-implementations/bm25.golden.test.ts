@@ -2,9 +2,9 @@ import assert from 'node:assert/strict';
 import { hash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { test } from 'node:test';
 
 import { TemporaryFiles } from '@zukhruf/fs';
+import { test } from '@zukhruf/parameterized-test';
 import { HttpServer } from '@zukhruf/testing/http';
 
 import { AbsTaskRetrieval } from '../../abstasks/retrieval.ts';
@@ -239,9 +239,12 @@ test('each word has the stem that PyStemmer 3.1.0 gives', () => {
   );
 });
 
-for (const run of methodRuns) {
-  const name = `${run.folder} ${JSON.stringify(run.kwargs)}`;
+const methods = methodRuns.map((run) => ({
+  run,
+  name: `${run.folder} ${JSON.stringify(run.kwargs)}`,
+}));
 
+void test.each(methods, ({ run, name }) =>
   test(`each document of each query has the float32 score that MTEB gives with ${name}, to the last bit`, async () => {
     const results = await searchFolder(
       new FolderTask(['eng-Latn'], FOLDERS[run.folder]),
@@ -250,8 +253,10 @@ for (const run of methodRuns) {
     );
 
     assert.deepEqual(results, asMaps(run.full));
-  });
+  }),
+);
 
+void test.each(methods, ({ run, name }) =>
   test(`evaluate gives the main score of MTEB with ${name}`, async () => {
     const result = await evaluate(
       bm25S.loadModel(run.kwargs),
@@ -263,13 +268,16 @@ for (const run of methodRuns) {
       result.taskResults[0]?.scores['test']?.[0]?.['main_score'],
       run.main_score,
     );
-  });
-}
+  }),
+);
 
-for (const run of languagesExpected.runs) {
-  const name = `${run.folder} ${JSON.stringify(run.kwargs)}`;
-  const folder = LANGUAGE_FOLDERS[run.folder];
+const languages = languagesExpected.runs.map((run) => ({
+  run,
+  name: `${run.folder} ${JSON.stringify(run.kwargs)}`,
+  folder: LANGUAGE_FOLDERS[run.folder],
+}));
 
+void test.each(languages, ({ run, name, folder }) =>
   test(`each document of each query has the float32 score that MTEB gives in ${name}, to the last bit`, async () => {
     const results = await searchFolder(
       new FolderTask(folder.evalLangs, folder),
@@ -278,8 +286,10 @@ for (const run of languagesExpected.runs) {
     );
 
     assert.deepEqual(results, asMaps(run.full));
-  });
+  }),
+);
 
+void test.each(languages, ({ run, name, folder }) =>
   test(`evaluate gives the main score of MTEB in ${name}`, async () => {
     const result = await evaluate(
       bm25S.loadModel(run.kwargs),
@@ -291,8 +301,10 @@ for (const run of languagesExpected.runs) {
       result.taskResults[0]?.scores['test']?.[0]?.['main_score'],
       run.main_score,
     );
-  });
+  }),
+);
 
+void test.each(languages, ({ run, name }) =>
   test(`the experiment of ${name} has the names that MTEB gives it`, () => {
     const meta = bm25S.loadModel(run.kwargs).mtebModelMeta;
 
@@ -300,8 +312,8 @@ for (const run of languagesExpected.runs) {
       [meta.experimentName, meta.modelNameWithExperiment],
       [run.experiment_name, run.model_name_with_experiment],
     );
-  });
-}
+  }),
+);
 
 function decode({ ids, vocab }: Tokenized): (string | undefined)[][] {
   const tokens = new Map(Array.from(vocab, ([token, id]) => [id, token]));
@@ -328,7 +340,7 @@ test('each language of MTEB has the stopwords key, the stemmer and the tokens of
   assert.deepEqual(settings, languagesExpected.languages);
 });
 
-for (const run of languagesExpected.function_runs) {
+void test.each(languagesExpected.function_runs, (run) =>
   test(`a function as the tokenizer gives the float32 scores of MTEB in ${run.folder} ${JSON.stringify(run.kwargs)}, to the last bit`, async () => {
     const folder = LANGUAGE_FOLDERS[run.folder];
     const task = new FolderTask(folder.evalLangs, folder);
@@ -356,8 +368,8 @@ for (const run of languagesExpected.function_runs) {
     });
 
     assert.deepEqual(results, asMaps(run.full));
-  });
-}
+  }),
+);
 
 test('a function as the tokenizer of loadModel makes the experiment name throw the error of MTEB', () => {
   const meta = bm25S.loadModel({
@@ -438,14 +450,14 @@ test('the metadata of mteb/baseline-bm25s-subword is the metadata of MTEB, field
   );
 });
 
-for (const run of subwordExpected.runs) {
+void test.each(subwordExpected.runs, (run) =>
   test(`the experiment of mteb/baseline-bm25s-subword with ${JSON.stringify(run.kwargs)} has the name that MTEB gives it`, () => {
     assert.equal(
       bm25SSubword.loadModel(run.kwargs).mtebModelMeta.experimentName,
       run.experiment_name,
     );
-  });
-}
+  }),
+);
 
 test('a tokenizer of the Hub gives the tokens of Python tokenizers for each text of the tiny tokenizer', async () => {
   await using server = await tinyHub();

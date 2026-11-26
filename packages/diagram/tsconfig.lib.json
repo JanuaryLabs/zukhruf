@@ -12,5 +12,10 @@
     "types": []
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"],
-  "exclude": ["src/**/*.test.ts", "src/testing/**"]
+  "exclude": ["src/**/*.test.ts", "src/testing/**"],
+  "references": [
+    {
+      "path": "../parameterized-test/tsconfig.lib.json"
+    }
+  ]
 }

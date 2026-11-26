@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { test } from 'node:test';
+
+import { test } from '@zukhruf/parameterized-test';
 
 import { TaskResult } from '../results/task-result.ts';
 import { Version } from './packaging.ts';
@@ -65,7 +66,7 @@ test('versions sort in the order of packaging, with every digit', () => {
   assert.deepEqual(sorted, expected.sorted);
 });
 
-for (const range of expected.ranges)
+void test.each(expected.ranges, (range) =>
   test(`a merge of subsets with the versions ${range.versions.join(' and ')} gives the version range of MTEB`, () => {
     const [low, high] = range.versions;
     const subset = (name: string, version: string) =>
@@ -89,4 +90,5 @@ for (const range of expected.ranges)
     const merged = subset('s0', low).merge(subset('s1', high));
 
     assert.equal(merged.mtebVersion, range.mteb_version);
-  });
+  }),
+);

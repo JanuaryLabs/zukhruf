@@ -2,9 +2,9 @@ import assert from 'node:assert/strict';
 import { hash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { test } from 'node:test';
 
 import { ClassCounts, MacroAverage } from '@zukhruf/evals/classification';
+import { test } from '@zukhruf/parameterized-test';
 
 import { multilabelSubsampling } from '../abstasks/abstask.ts';
 import { iterativeTrainTestSplit } from '../abstasks/stratification.ts';
@@ -86,10 +86,11 @@ const expected: Expected = JSON.parse(
   ),
 );
 
-for (const { case: name, values, order } of expected.set_order)
+void test.each(expected.set_order, ({ case: name, values, order }) =>
   test(`a set of ints iterates in CPython's order: ${name}`, () => {
     assert.deepEqual(pythonIntSetOrder(values), order);
-  });
+  }),
+);
 
 // generate.py hashes the JSON text of the order without spaces, which is
 // JSON.stringify of the order.
@@ -103,7 +104,7 @@ test(`a set of ints that fills the table to 3/5 grows, in CPython's order: ${exp
   assert.equal(hash('sha256', JSON.stringify(order)), sha256);
 });
 
-for (const testCase of expected.binarizer)
+void test.each(expected.binarizer, (testCase) =>
   test(`MultiLabelBinarizer gives scikit-learn's classes and matrices: ${testCase.case}`, () => {
     const binarizer = new MultiLabelBinarizer();
 
@@ -118,9 +119,10 @@ for (const testCase of expected.binarizer)
         transformed: testCase.transform,
       },
     );
-  });
+  }),
+);
 
-for (const testCase of expected.metrics)
+void test.each(expected.metrics, (testCase) =>
   test(`accuracy, macro F1, LRAP and MTEB's hamming score of label indicator matrices equal Python's to the last bit: ${testCase.case}`, () => {
     const { y_true: yTrue, y_pred: yPred } = testCase;
 
@@ -139,17 +141,19 @@ for (const testCase of expected.metrics)
       lrap: testCase.lrap,
       hamming: testCase.hamming,
     });
-  });
+  }),
+);
 
-for (const testCase of expected.lrap)
+void test.each(expected.lrap, (testCase) =>
   test(`label_ranking_average_precision_score of scores equals scikit-learn's to the last bit: ${testCase.case}`, () => {
     assert.equal(
       labelRankingAveragePrecisionScore(testCase.y_true, testCase.y_score),
       testCase.lrap,
     );
-  });
+  }),
+);
 
-for (const testCase of expected.stratification)
+void test.each(expected.stratification, (testCase) =>
   test(`the iterative stratification and the multilabel subsampling keep MTEB's rows: ${testCase.case}`, () => {
     const labels = new MultiLabelBinarizer().fitTransform(testCase.label_sets);
     const dataset = {
@@ -184,12 +188,13 @@ for (const testCase of expected.stratification)
         texts: testCase.subsampled_texts,
       },
     );
-  });
+  }),
+);
 
 // BLAS (dgemm and ddot) adds the dot products of the distances in its own
 // order and the port in index order, but scikit-learn rounds each distance
 // to a float32: on these cases all 410 distances are equal to the last bit.
-for (const testCase of expected.knn)
+void test.each(expected.knn, (testCase) =>
   test(`KNeighborsClassifier finds scikit-learn's neighbours and predictions, to the last bit: ${testCase.case}`, () => {
     const xTrain = testCase.x_train.map((row) => Float32Array.from(row));
     const xTest = testCase.x_test.map((row) => Float32Array.from(row));
@@ -213,4 +218,5 @@ for (const testCase of expected.knn)
         score: testCase.score,
       },
     );
-  });
+  }),
+);

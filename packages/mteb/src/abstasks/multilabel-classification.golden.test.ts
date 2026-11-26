@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { test } from 'node:test';
 
 import { TemporaryFiles } from '@zukhruf/fs';
+import { test } from '@zukhruf/parameterized-test';
 
 import type { Dataset } from '../dependencies/datasets.ts';
 import { KNeighborsClassifier } from '../dependencies/sklearn-neighbors.ts';
@@ -142,7 +142,7 @@ function encoderOf(name: (typeof TASKS)[number][0]) {
   return name === 'kor' ? codePointEncoder() : vectorEncoder();
 }
 
-for (const [name, makeTask] of TASKS)
+void test.each(TASKS, ([name, makeTask]) =>
   test(`the undersampling of each experiment of ${name} equals MTEB's: the task's generator shuffles all the indices again for each one`, async () => {
     const task = makeTask();
     await task.loadData();
@@ -152,9 +152,10 @@ for (const [name, makeTask] of TASKS)
     const experiments = task.experiments(train);
 
     assert.deepEqual(experiments, expected[name].undersampling);
-  });
+  }),
+);
 
-for (const [name, makeTask] of TASKS)
+void test.each(TASKS, ([name, makeTask]) =>
   test(`evaluate gives ${name} the encoder inputs, the scores and the predictions file of MTEB, to the last bit`, async () => {
     await using folder = await new TemporaryFiles().directory(
       'multilabel-predictions-',
@@ -191,9 +192,10 @@ for (const [name, makeTask] of TASKS)
         predictions: expected[name].predictions,
       },
     );
-  });
+  }),
+);
 
-for (const [name, makeTask] of TASKS)
+void test.each(TASKS, ([name, makeTask]) =>
   test(`a second evaluate of the same ${name} task goes on with the shuffles of the first one and gives MTEB's second scores`, async () => {
     const task = makeTask();
     await evaluate(encoderOf(name).encoder, task, {
@@ -210,7 +212,8 @@ for (const [name, makeTask] of TASKS)
       second.taskResults[0]?.scores['test'],
       expected[name].second_scores.test,
     );
-  });
+  }),
+);
 
 test('a task with one label throws the error of MTEB, as scikit-learn then predicts a 1-D array', async () => {
   const task = new FolderTask('SingleLabelFixture', 'single');

@@ -14,8 +14,9 @@ import {
 import { chmod } from 'node:fs/promises';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { test } from 'node:test';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+
+import { test } from '@zukhruf/parameterized-test';
 
 import {
   DeniedError,
@@ -83,7 +84,7 @@ test(
   },
 );
 
-for (const [name, journal] of journals) {
+void test.each(journals, ([name, journal]) =>
   test(`${name}: a reader does not wait for an owner that writes a large transaction`, async () => {
     await using dir = await scratchDirectory();
     const path = join(dir.path, 'notes.sqlite');
@@ -108,8 +109,9 @@ for (const [name, journal] of journals) {
     } finally {
       owner.exec('ROLLBACK');
     }
-  });
-
+  }),
+);
+void test.each(journals, ([name, journal]) =>
   test(`${name}: an owner killed inside a write transaction leaves a file that a reader reads at once, with only the commits`, async () => {
     await using dir = await scratchDirectory();
     const path = join(dir.path, 'notes.sqlite');
@@ -131,8 +133,8 @@ for (const [name, journal] of journals) {
         .map((row) => row.title),
       ['first'],
     );
-  });
-}
+  }),
+);
 
 test('a reader never changes a database in a rollback journal', async () => {
   await using dir = await scratchDirectory();
@@ -776,29 +778,31 @@ test('the types refuse a journal for a reader and the option open, and take the 
   for (const make of legal) make().close();
 });
 
-for (const [name, journal] of [
-  ['WriteAheadLog', () => new WriteAheadLog({ pageSize: 32768 })],
+void test.each(
   [
-    'PersistentWriteAheadLog',
-    () => new PersistentWriteAheadLog({ pageSize: 32768 }),
-  ],
-] as const) {
-  test(`${name} with a page size gives a new file that page size, in a write-ahead log`, async () => {
-    await using dir = await scratchDirectory();
+    ['WriteAheadLog', () => new WriteAheadLog({ pageSize: 32768 })],
+    [
+      'PersistentWriteAheadLog',
+      () => new PersistentWriteAheadLog({ pageSize: 32768 }),
+    ],
+  ] as const,
+  ([name, journal]) =>
+    test(`${name} with a page size gives a new file that page size, in a write-ahead log`, async () => {
+      await using dir = await scratchDirectory();
 
-    using owner = open(join(dir.path, 'vectors.sqlite'), {
-      journal: journal(),
-    });
+      using owner = open(join(dir.path, 'vectors.sqlite'), {
+        journal: journal(),
+      });
 
-    assert.equal(owner.prepare('PRAGMA page_size').get()?.page_size, 32768);
-    assert.equal(
-      owner.prepare('PRAGMA journal_mode').get()?.journal_mode,
-      'wal',
-    );
-  });
-}
+      assert.equal(owner.prepare('PRAGMA page_size').get()?.page_size, 32768);
+      assert.equal(
+        owner.prepare('PRAGMA journal_mode').get()?.journal_mode,
+        'wal',
+      );
+    }),
+);
 
-for (const [name, journal] of [
+const synchronousJournals = [
   [
     'WriteAheadLog',
     (options?: { readonly synchronous: 'full' }) => new WriteAheadLog(options),
@@ -808,15 +812,19 @@ for (const [name, journal] of [
     (options?: { readonly synchronous: 'full' }) =>
       new PersistentWriteAheadLog(options),
   ],
-] as const) {
+] as const;
+
+void test.each(synchronousJournals, ([name, journal]) =>
   test(`${name} syncs at checkpoints by default, so a commit does not wait for the disk`, async () => {
     await using dir = await scratchDirectory();
 
     using owner = open(join(dir.path, 'notes.sqlite'), { journal: journal() });
 
     assert.equal(owner.prepare('PRAGMA synchronous').get()?.synchronous, 1);
-  });
+  }),
+);
 
+void test.each(synchronousJournals, ([name, journal]) =>
   test(`${name} with synchronous 'full' syncs at each commit, so a commit survives a power loss`, async () => {
     await using dir = await scratchDirectory();
 
@@ -825,8 +833,8 @@ for (const [name, journal] of [
     });
 
     assert.equal(owner.prepare('PRAGMA synchronous').get()?.synchronous, 2);
-  });
-}
+  }),
+);
 
 test('a page size does not change an existing write-ahead log, which keeps its own page size', async () => {
   await using dir = await scratchDirectory();

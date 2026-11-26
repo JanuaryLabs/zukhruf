@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { test } from 'node:test';
 
 import type { EmbeddingModelV4 } from '@ai-sdk/provider';
+
+import { test } from '@zukhruf/parameterized-test';
 
 import { TaskMetadata } from '../abstasks/task-metadata.ts';
 import { AiSdkEncoder } from './ai-sdk-encoder.ts';
@@ -51,7 +52,7 @@ function coordinatesModel(): EmbeddingModelV4 {
   };
 }
 
-for (const search of expected.searches)
+void test.each(expected.searches, (search) =>
   test(`SearchEncoderWrapper searches ${expected.corpus.length} documents in chunks of ${expected.corpus_chunk_size} with topK ${search.top_k} and gives the documents of MTEB in the order of MTEB`, async () => {
     const location = {
       taskMetadata: new TaskMetadata({
@@ -92,4 +93,5 @@ for (const search of expected.searches)
       [...results].map(([query, docs]) => [query, [...docs]]),
       search.results,
     );
-  });
+  }),
+);

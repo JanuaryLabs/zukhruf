@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
-import { describe, it } from 'node:test';
+import { describe } from 'node:test';
 
 import type { QueueStatsOptions } from 'pg-boss';
+
+import { it } from '@zukhruf/parameterized-test';
 
 import type { JobQueue } from '../index.ts';
 import { id } from '../testing/job-id.ts';
@@ -179,35 +181,34 @@ describe('getQueueStats()', () => {
     assert.deepStrictEqual(observed.afterRecount, counted(2, hour + 1));
   });
 
-  for (const option of [
-    'monitorIntervalSeconds',
-    'superviseIntervalSeconds',
-  ] as const) {
-    it(`serves the counts of a read for ${option} when it is longer than an hour`, async () => {
-      const observed = await Parity.assertSame(
-        async ({ queue, clock }) => {
-          await queue.start();
-          await queue.createQueue('jobs');
-          await stats(queue, 'jobs');
-          await sendTwo(queue, 'jobs', 1);
-          await clock.tick(hour + 1);
-          const pastAnHour = await stats(queue, 'jobs');
-          await clock.tick(hour - 1);
-          const atTheInterval = await stats(queue, 'jobs');
-          await clock.tick(1);
-          const pastTheInterval = await stats(queue, 'jobs');
-          return readings([pastAnHour, atTheInterval, pastTheInterval]);
-        },
-        { [option]: 7200 },
-      );
+  void it.each(
+    ['monitorIntervalSeconds', 'superviseIntervalSeconds'] as const,
+    (option) =>
+      it(`serves the counts of a read for ${option} when it is longer than an hour`, async () => {
+        const observed = await Parity.assertSame(
+          async ({ queue, clock }) => {
+            await queue.start();
+            await queue.createQueue('jobs');
+            await stats(queue, 'jobs');
+            await sendTwo(queue, 'jobs', 1);
+            await clock.tick(hour + 1);
+            const pastAnHour = await stats(queue, 'jobs');
+            await clock.tick(hour - 1);
+            const atTheInterval = await stats(queue, 'jobs');
+            await clock.tick(1);
+            const pastTheInterval = await stats(queue, 'jobs');
+            return readings([pastAnHour, atTheInterval, pastTheInterval]);
+          },
+          { [option]: 7200 },
+        );
 
-      assert.deepStrictEqual(observed, [
-        [[0, 0]],
-        [[0, 0]],
-        [[2, 2 * hour + 1]],
-      ]);
-    });
-  }
+        assert.deepStrictEqual(observed, [
+          [[0, 0]],
+          [[0, 0]],
+          [[2, 2 * hour + 1]],
+        ]);
+      }),
+  );
 
   it('with force, serves counts at most a minute old, then counts again, also when the intervals are longer than a minute', async () => {
     const observed = await Parity.assertSame(

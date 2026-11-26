@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { test } from 'node:test';
 
 import { TemporaryFiles } from '@zukhruf/fs';
+import { test } from '@zukhruf/parameterized-test';
 
 import type { Dataset } from '../dependencies/datasets.ts';
 import {
@@ -180,7 +180,7 @@ function encoderOf(name: (typeof TASKS)[number][0]) {
   return name.startsWith('banking77') ? codePointEncoder() : vectorEncoder();
 }
 
-for (const [name, makeTask] of TASKS)
+void test.each(TASKS, ([name, makeTask]) =>
   test(`the undersampling of each experiment of ${name} equals MTEB's: each one shuffles the shuffled indices again from the same seed`, async () => {
     const task = makeTask();
     await task.loadData();
@@ -190,9 +190,10 @@ for (const [name, makeTask] of TASKS)
     const experiments = task.experiments(train);
 
     assert.deepEqual(experiments, expected[name].undersampling);
-  });
+  }),
+);
 
-for (const [name, makeTask] of TASKS)
+void test.each(TASKS, ([name, makeTask]) =>
   test(`evaluate gives ${name} the encoder inputs, the scores and the predictions file of MTEB, to the last bit`, async () => {
     await using folder = await new TemporaryFiles().directory(
       'classification-predictions-',
@@ -224,7 +225,8 @@ for (const [name, makeTask] of TASKS)
         predictions: expected[name].predictions,
       },
     );
-  });
+  }),
+);
 
 // A fit adds float32 values and float64 dot products in another order than
 // Accelerate's BLAS (sklearn-logistic.ts): its coefficients are within
@@ -232,7 +234,7 @@ for (const [name, makeTask] of TASKS)
 // is 3.6e-7, in the folder task.
 const TOLERANCE = 1e-5;
 
-for (const [name, makeTask] of TASKS)
+void test.each(TASKS, ([name, makeTask]) =>
   test(`the LogisticRegression of each experiment of ${name} has scikit-learn's n_iter_, and coefficients within 1e-5`, async () => {
     const task = makeTask();
     const model = new RecordingLogisticRegression({ maxIter: 100 });
@@ -263,9 +265,10 @@ for (const [name, makeTask] of TASKS)
           `experiment ${i}, value ${j}: ${values[j]} and ${value}`,
         );
     }
-  });
+  }),
+);
 
-for (const [name, taskName] of FOLDER_TASKS)
+void test.each(FOLDER_TASKS, ([name, taskName]) =>
   test(`the metrics of MTEB's own predictions of ${name} equal MTEB's scores of each experiment and their means, in MTEB's order, to the last bit`, () => {
     const task = new FolderTask(taskName, name);
     const yTest = readFileSync(join(FOLDER, name, 'test.jsonl'), 'utf8')
@@ -291,7 +294,8 @@ for (const [name, taskName] of FOLDER_TASKS)
       Object.entries(task.averages(scores)),
       Object.entries(python),
     );
-  });
+  }),
+);
 
 test("the default evaluator model is MTEB's LogisticRegression: max_iter 100, C 1 and tol 1e-4", () => {
   const task = new FolderTask('ClassificationFixture', 'folder');

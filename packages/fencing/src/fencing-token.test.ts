@@ -1,49 +1,37 @@
 import assert from 'node:assert/strict';
-import { describe, test } from 'node:test';
+import { describe } from 'node:test';
+
+import { test } from '@zukhruf/parameterized-test';
 
 import { FencingToken } from './index.ts';
 
 describe('FencingToken.parse', () => {
-  for (const text of [
-    '',
-    '-1',
-    '+1',
-    ' 1',
-    '1 ',
-    '1\n',
-    '1.0',
-    '1e3',
-    '0x10',
-    '١',
-    'abc',
-  ]) {
-    test(`refuses ${JSON.stringify(text)}, which is not a token's text`, () => {
-      // Act
-      const token = FencingToken.parse(text);
+  void test.each(
+    ['', '-1', '+1', ' 1', '1 ', '1\n', '1.0', '1e3', '0x10', '١', 'abc'],
+    (text) =>
+      test(`refuses ${JSON.stringify(text)}, which is not a token's text`, () => {
+        // Act
+        const token = FencingToken.parse(text);
 
-      // Assert
-      assert.equal(token, null);
-    });
-  }
+        // Assert
+        assert.equal(token, null);
+      }),
+  );
 
-  for (const value of [
-    0n,
-    1n,
-    (5n << 32n) | 1n,
-    (1n << 63n) - 1n,
-    (1n << 64n) + 1n,
-  ]) {
-    test(`reads back the text of token ${value}`, () => {
-      // Arrange
-      const text = new FencingToken(value).toString();
+  void test.each(
+    [0n, 1n, (5n << 32n) | 1n, (1n << 63n) - 1n, (1n << 64n) + 1n],
+    (value) =>
+      test(`reads back the text of token ${value}`, () => {
+        // Arrange
+        const text = new FencingToken(value).toString();
 
-      // Act
-      const token = FencingToken.parse(text);
+        // Act
+        const token = FencingToken.parse(text);
 
-      // Assert
-      assert.equal(token?.value, value);
-    });
-  }
+        // Assert
+        assert.equal(token?.value, value);
+      }),
+  );
 });
 
 describe('FencingToken order', () => {

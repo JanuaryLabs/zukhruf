@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { test } from 'node:test';
 
 import { TemporaryFiles } from '@zukhruf/fs';
+import { test } from '@zukhruf/parameterized-test';
 
 import { pearsonr, rankdata, spearmanr } from '../dependencies/scipy.ts';
 import { evaluate } from '../evaluate.ts';
@@ -272,7 +272,7 @@ test("the Spearman correlations of MTEB's own score arrays equal MTEB's to the l
   assertMetricsOfPythonArrays(metrics, expected.folder.scores.test[0]);
 });
 
-for (const correlationCase of expected.correlation_cases)
+void test.each(expected.correlation_cases, (correlationCase) =>
   test(`rankdata and spearmanr of "${correlationCase.case}" equal SciPy's to the last bit, and pearsonr too below 4 values, else within 8 float64 units at 1`, () => {
     const x = correlationCase.x.map(fromJson);
     const y = correlationCase.y.map(fromJson);
@@ -291,7 +291,8 @@ for (const correlationCase of expected.correlation_cases)
     else if (python === 'NaN' || x.length < 4)
       assert.equal(pearsonr(x, y), fromJson(python));
     else assertClose(pearsonr(x, y), python, PEARSON_TOLERANCE, 'pearson');
-  });
+  }),
+);
 
 function codePointEncoder() {
   return embeddingEncoder(

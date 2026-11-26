@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
 
 import { createClock } from '@sinonjs/fake-timers';
 
 import type { Clock } from '@zukhruf/async';
+import { test } from '@zukhruf/parameterized-test';
 import { waitFor } from '@zukhruf/testing/async';
 
 import { LeaseLostError } from '../../index.ts';
@@ -231,11 +231,12 @@ async function readCommittedSnapshot(server: Server) {
   );
 }
 
-for (const snapshot of [false, true]) {
-  const isolation = snapshot
-    ? 'read committed snapshot'
-    : 'locking read committed';
+const isolations = [false, true].map((snapshot) => ({
+  snapshot,
+  isolation: snapshot ? 'read committed snapshot' : 'locking read committed',
+}));
 
+void test.each(isolations, ({ snapshot, isolation }) =>
   test(`under ${isolation}, of stores that race for a key with no row, one gets the key and the others get no error`, async () => {
     // Arrange
     await using fixture = await sqlServerFixture(process.env);
@@ -260,8 +261,10 @@ for (const snapshot of [false, true]) {
       winners.map(() => 1),
       'Exactly one store must add the row of a new key',
     );
-  });
+  }),
+);
 
+void test.each(isolations, ({ snapshot, isolation }) =>
   test(`under ${isolation}, of stores that race for a free key, one gets the key`, async () => {
     // Arrange: each key has a row that a holder released.
     await using fixture = await sqlServerFixture(process.env);
@@ -288,5 +291,5 @@ for (const snapshot of [false, true]) {
       winners.map(() => 1),
       'Exactly one store must take a free key',
     );
-  });
-}
+  }),
+);

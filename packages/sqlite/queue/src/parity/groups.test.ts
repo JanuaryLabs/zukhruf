@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
-import { describe, it } from 'node:test';
+import { describe } from 'node:test';
 
 import { type Job, type TestClock, policies } from 'pg-boss';
+
+import { it } from '@zukhruf/parameterized-test';
 
 import type { JobQueue } from '../index.ts';
 import { flush } from '../testing/flush.ts';
@@ -271,87 +273,89 @@ describe('group concurrency', () => {
   // Each send is [ms after the previous send, id, key]. Every key's head is
   // a job other than the group's lowest id, so a claim that ranked the group
   // without taking heads first would pick another job.
-  for (const { limit, sends, expected } of [
-    {
-      limit: 1,
-      sends: [
-        [0, 2, 'a'],
-        [1, 1, 'a'],
-        [0, 3, 'b'],
-      ],
-      expected: {
-        whileHeld: [[id(2)]],
-        heldStates: [
-          { id: id(1), state: 'created' },
-          { id: id(2), state: 'active' },
-          { id: id(3), state: 'created' },
+  void it.each(
+    [
+      {
+        limit: 1,
+        sends: [
+          [0, 2, 'a'],
+          [1, 1, 'a'],
+          [0, 3, 'b'],
         ],
-        batches: [[id(2)], [id(1)], [id(3)]],
+        expected: {
+          whileHeld: [[id(2)]],
+          heldStates: [
+            { id: id(1), state: 'created' },
+            { id: id(2), state: 'active' },
+            { id: id(3), state: 'created' },
+          ],
+          batches: [[id(2)], [id(1)], [id(3)]],
+        },
       },
-    },
-    {
-      limit: 2,
-      sends: [
-        [0, 1, 'a'],
-        [0, 2, 'a'],
-        [0, 3, 'b'],
-        [0, 4, 'c'],
-      ],
-      expected: {
-        whileHeld: [[id(1), id(3)]],
-        heldStates: [
-          { id: id(1), state: 'active' },
-          { id: id(2), state: 'created' },
-          { id: id(3), state: 'active' },
-          { id: id(4), state: 'created' },
+      {
+        limit: 2,
+        sends: [
+          [0, 1, 'a'],
+          [0, 2, 'a'],
+          [0, 3, 'b'],
+          [0, 4, 'c'],
         ],
-        batches: [
-          [id(1), id(3)],
-          [id(2), id(4)],
-        ],
+        expected: {
+          whileHeld: [[id(1), id(3)]],
+          heldStates: [
+            { id: id(1), state: 'active' },
+            { id: id(2), state: 'created' },
+            { id: id(3), state: 'active' },
+            { id: id(4), state: 'created' },
+          ],
+          batches: [
+            [id(1), id(3)],
+            [id(2), id(4)],
+          ],
+        },
       },
-    },
-  ] as const) {
-    it(`holds back a key_strict_fifo head while its group is full (groupConcurrency ${limit})`, async () => {
-      const observed = await Parity.assertSame(async ({ queue, clock }) => {
-        await queue.start();
-        await queue.createQueue('jobs', { policy: policies.key_strict_fifo });
-        for (const [after, n, singletonKey] of sends) {
-          await clock.tick(after);
-          await queue.send('jobs', null, {
-            id: id(n),
-            singletonKey,
-            group: { id: 'g1' },
-          });
-        }
-        const held = holding();
-        await queue.work(
-          'jobs',
-          { batchSize: sends.length, groupConcurrency: limit },
-          held.handler,
-        );
-        try {
-          await flush(clock);
-          await poll(clock);
-          const whileHeld = [...held.batches];
-          const heldStates = await jobStates(queue);
-          held.release();
-          await flush(clock);
-          await poll(clock);
-          await poll(clock);
-          return { whileHeld, heldStates, batches: [...held.batches] };
-        } finally {
-          held.release();
-        }
-      });
+    ] as const,
+    ({ limit, sends, expected }) =>
+      it(`holds back a key_strict_fifo head while its group is full (groupConcurrency ${limit})`, async () => {
+        const observed = await Parity.assertSame(async ({ queue, clock }) => {
+          await queue.start();
+          await queue.createQueue('jobs', { policy: policies.key_strict_fifo });
+          for (const [after, n, singletonKey] of sends) {
+            await clock.tick(after);
+            await queue.send('jobs', null, {
+              id: id(n),
+              singletonKey,
+              group: { id: 'g1' },
+            });
+          }
+          const held = holding();
+          await queue.work(
+            'jobs',
+            { batchSize: sends.length, groupConcurrency: limit },
+            held.handler,
+          );
+          try {
+            await flush(clock);
+            await poll(clock);
+            const whileHeld = [...held.batches];
+            const heldStates = await jobStates(queue);
+            held.release();
+            await flush(clock);
+            await poll(clock);
+            await poll(clock);
+            return { whileHeld, heldStates, batches: [...held.batches] };
+          } finally {
+            held.release();
+          }
+        });
 
-      // Each key offers only its head (plans.js:2479-2496), and the group
-      // limit ranks the heads after the LIMIT (2576-2585): a head past the
-      // limit waits, and a full group keeps every key's head out of the
-      // claim until a job of the group ends.
-      assert.deepStrictEqual(observed, expected);
-    });
-  }
+        // Each key offers only its head (plans.js:2479-2496), and the group
+        // limit ranks the heads after the LIMIT (2576-2585): a head past the
+        // limit waits, and a full group keeps every key's head out of the
+        // claim until a job of the group ends.
+        assert.deepStrictEqual(observed, expected);
+      }),
+  );
 
   it('looks a tier up by its exact name, quotes and placeholders included', async () => {
     const tiers = ["a'b", '$1', 'x"y', '{"a":1}', 'untiered'];
@@ -795,7 +799,7 @@ describe('local group concurrency', () => {
     });
   });
 
-  for (const wait of [true, false]) {
+  void it.each([true, false], (wait) =>
     it(`keeps a queue's group counts after its last live worker goes, while a stopping one still runs (offWork wait: ${wait})`, async () => {
       const observed = await Parity.assertSame(async ({ queue, clock }) => {
         await queue.start();
@@ -843,8 +847,8 @@ describe('local group concurrency', () => {
           { id: id(2), state: 'created' },
         ],
       });
-    });
-  }
+    }),
+  );
 
   it('limits a fetch that lands while stop() closes the listener, and refuses its batch once failWip ran', async () => {
     const observed = await Parity.assertSame(async ({ queue, clock }) => {

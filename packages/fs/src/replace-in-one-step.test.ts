@@ -11,7 +11,9 @@ import fsPromises, {
 } from 'node:fs/promises';
 import { syncBuiltinESMExports } from 'node:module';
 import { dirname, join } from 'node:path';
-import { type TestContext, describe, test } from 'node:test';
+import { type TestContext, describe } from 'node:test';
+
+import { test } from '@zukhruf/parameterized-test';
 
 import { atomicWrite } from './atomic-write.ts';
 import { durableWrite } from './durable-write.ts';
@@ -263,41 +265,43 @@ describe('A replacement in one step', () => {
     },
   );
 
-  for (const [code, outcome] of [
-    ['EINVAL', 'writes'],
-    ['ENOTSUP', 'writes'],
-    ['EIO', 'fails'],
-  ] as const) {
-    test(
-      `a directory sync that fails with ${code} ${outcome === 'writes' ? 'still completes the durable write' : 'fails the durable write'}`,
-      { ...neverOnWindows },
-      async (t) => {
-        // Arrange: a file system whose directories answer fsync with `code`.
-        await using directory = await new TemporaryFiles().directory(
-          'zukhruf-fs-',
-        );
-        const path = join(directory.path, 'counter');
-        using _refused = refuseSync(
-          t,
-          (opened) => opened === directory.path,
-          code,
-        );
+  void test.each(
+    [
+      ['EINVAL', 'writes'],
+      ['ENOTSUP', 'writes'],
+      ['EIO', 'fails'],
+    ] as const,
+    ([code, outcome]) =>
+      test(
+        `a directory sync that fails with ${code} ${outcome === 'writes' ? 'still completes the durable write' : 'fails the durable write'}`,
+        { ...neverOnWindows },
+        async (t) => {
+          // Arrange: a file system whose directories answer fsync with `code`.
+          await using directory = await new TemporaryFiles().directory(
+            'zukhruf-fs-',
+          );
+          const path = join(directory.path, 'counter');
+          using _refused = refuseSync(
+            t,
+            (opened) => opened === directory.path,
+            code,
+          );
 
-        // Act
-        const writing = durableWrite(path, '42', { clock: globalThis });
+          // Act
+          const writing = durableWrite(path, '42', { clock: globalThis });
 
-        // Assert: a file system that cannot sync directories still works; a disk error does not pass silently.
-        if (outcome === 'writes') {
-          await writing;
-          assert.equal(await readFile(path, 'utf8'), '42');
-        } else {
-          await assert.rejects(writing, { code });
-        }
-      },
-    );
-  }
+          // Assert: a file system that cannot sync directories still works; a disk error does not pass silently.
+          if (outcome === 'writes') {
+            await writing;
+            assert.equal(await readFile(path, 'utf8'), '42');
+          } else {
+            await assert.rejects(writing, { code });
+          }
+        },
+      ),
+  );
 
-  for (const [writer, write] of writers) {
+  void test.each(writers, ([writer, write]) =>
     test(`${writer} puts bytes at the path byte for byte`, async () => {
       // Arrange: bytes that are not valid UTF-8, so a text round trip would change them.
       await using directory = await new TemporaryFiles().directory(
@@ -314,8 +318,9 @@ describe('A replacement in one step', () => {
       // Assert
       assert.deepEqual(new Uint8Array(await readFile(fromArray)), bytes);
       assert.deepEqual(new Uint8Array(await readFile(fromBuffer)), bytes);
-    });
-
+    }),
+  );
+  void test.each(writers, ([writer, write]) =>
     test(
       `${writer} with a mode gives the draft that mode before the rename, also over a file with another mode`,
       { ...posixModesOnly },
@@ -352,8 +357,9 @@ describe('A replacement in one step', () => {
         assert.equal(await modeOf(path), 0o600);
         assert.equal(await readFile(path, 'utf8'), 'new');
       },
-    );
-
+    ),
+  );
+  void test.each(writers, ([writer, write]) =>
     test(
       `${writer} with a mode gives the file that mode whatever the process umask takes away`,
       { ...posixModesOnly },
@@ -370,8 +376,9 @@ describe('A replacement in one step', () => {
         // Assert
         assert.equal(await modeOf(path), 0o666);
       },
-    );
-
+    ),
+  );
+  void test.each(writers, ([writer, write]) =>
     test(
       `${writer} without a mode gives the file the mode that writeFile gives a new file`,
       { ...posixModesOnly },
@@ -390,6 +397,6 @@ describe('A replacement in one step', () => {
         // Assert
         assert.equal(await modeOf(path), await modeOf(reference));
       },
-    );
-  }
+    ),
+  );
 });

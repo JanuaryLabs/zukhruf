@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+
+import { test } from '@zukhruf/parameterized-test';
 
 import { fixtureWorkspace } from '../testing/fixture-workspace.ts';
 import { NX_JSON, buildProjectGraph } from '../testing/project-graph.ts';
@@ -785,35 +786,37 @@ test('a range that misses the version an npm: alias installs is reported with th
   assert.equal(JSON.parse(manifest).dependencies.pad, '1.3.0');
 });
 
-for (const testFile of [
-  'index.test.ts',
-  'index.test.mjs',
-  'index.test.js',
-  'index.test.cjs',
-  'index.spec.jsx',
-]) {
-  test(`the imports of a test file named ${testFile} are not dependencies of the package`, async () => {
-    // Arrange: greet ships nothing that imports left-pad; only its test does.
-    await using workspace = await fixtureWorkspace(
-      workspaceFiles({
-        apps: { web: { build: VITE_BUILD } },
-        greetTags: ['layer:island'],
-        greetDependencies: {},
-        greetSource: {
-          'index.ts': `export const greet = () => 'hi';\n`,
-          [testFile]: `import leftPad from 'left-pad';\nconsole.log(leftPad('hi', 5));\n`,
-        },
-      }),
-    );
-    buildProjectGraph(workspace.root);
+void test.each(
+  [
+    'index.test.ts',
+    'index.test.mjs',
+    'index.test.js',
+    'index.test.cjs',
+    'index.spec.jsx',
+  ],
+  (testFile) =>
+    test(`the imports of a test file named ${testFile} are not dependencies of the package`, async () => {
+      // Arrange: greet ships nothing that imports left-pad; only its test does.
+      await using workspace = await fixtureWorkspace(
+        workspaceFiles({
+          apps: { web: { build: VITE_BUILD } },
+          greetTags: ['layer:island'],
+          greetDependencies: {},
+          greetSource: {
+            'index.ts': `export const greet = () => 'hi';\n`,
+            [testFile]: `import leftPad from 'left-pad';\nconsole.log(leftPad('hi', 5));\n`,
+          },
+        }),
+      );
+      buildProjectGraph(workspace.root);
 
-    // Act
-    const findings = lint(workspace.root, ['libs/greet/package.json']);
+      // Act
+      const findings = lint(workspace.root, ['libs/greet/package.json']);
 
-    // Assert
-    assert.deepEqual(findings, []);
-  });
-}
+      // Assert
+      assert.deepEqual(findings, []);
+    }),
+);
 
 test('the imports of a JavaScript test file are not dependencies of a package that is not an island', async () => {
   // Arrange
@@ -846,66 +849,73 @@ const greetWithTestSupport = {
   },
 };
 
-for (const [unpublished, manifest] of [
-  ['that the manifest does not export', {}],
-  ['outside the folder of every files entry', { files: ['dist'] }],
-] as const) {
-  test(`the imports of a testing folder ${unpublished} are not dependencies of the package`, async () => {
-    // Arrange
-    await using workspace = await fixtureWorkspace(
-      workspaceFiles({
-        apps: { web: { build: VITE_BUILD } },
-        ...greetWithTestSupport,
-        greetManifest: {
-          ...manifest,
-          devDependencies: { 'left-pad': '1.3.0' },
-        },
-      }),
-    );
-    buildProjectGraph(workspace.root);
-
-    // Act
-    const findings = lint(workspace.root, ['libs/greet/package.json']);
-
-    // Assert
-    assert.deepEqual(findings, []);
-  });
-}
-
-for (const [publishes, published] of [
+void test.each(
   [
-    'an exports target in it',
-    {
-      exports: { '.': './src/index.ts', './testing': './src/testing/index.ts' },
-    },
-  ],
-  ['an exports pattern', { exports: { './*': './src/*.ts' } }],
-  ['a files entry', { files: ['src/index.ts', 'src/testing'] }],
-  ['a files entry that names a folder holding it', { files: ['src'] }],
-] as const) {
-  test(`a package whose manifest publishes its testing folder through ${publishes} declares what that folder imports`, async () => {
-    // Arrange
-    await using workspace = await fixtureWorkspace(
-      workspaceFiles({
-        apps: { web: { build: VITE_BUILD } },
-        ...greetWithTestSupport,
-        greetManifest: {
-          ...published,
-          devDependencies: { 'left-pad': '1.3.0' },
+    ['that the manifest does not export', {}],
+    ['outside the folder of every files entry', { files: ['dist'] }],
+  ] as const,
+  ([unpublished, manifest]) =>
+    test(`the imports of a testing folder ${unpublished} are not dependencies of the package`, async () => {
+      // Arrange
+      await using workspace = await fixtureWorkspace(
+        workspaceFiles({
+          apps: { web: { build: VITE_BUILD } },
+          ...greetWithTestSupport,
+          greetManifest: {
+            ...manifest,
+            devDependencies: { 'left-pad': '1.3.0' },
+          },
+        }),
+      );
+      buildProjectGraph(workspace.root);
+
+      // Act
+      const findings = lint(workspace.root, ['libs/greet/package.json']);
+
+      // Assert
+      assert.deepEqual(findings, []);
+    }),
+);
+
+void test.each(
+  [
+    [
+      'an exports target in it',
+      {
+        exports: {
+          '.': './src/index.ts',
+          './testing': './src/testing/index.ts',
         },
-      }),
-    );
-    buildProjectGraph(workspace.root);
+      },
+    ],
+    ['an exports pattern', { exports: { './*': './src/*.ts' } }],
+    ['a files entry', { files: ['src/index.ts', 'src/testing'] }],
+    ['a files entry that names a folder holding it', { files: ['src'] }],
+  ] as const,
+  ([publishes, published]) =>
+    test(`a package whose manifest publishes its testing folder through ${publishes} declares what that folder imports`, async () => {
+      // Arrange
+      await using workspace = await fixtureWorkspace(
+        workspaceFiles({
+          apps: { web: { build: VITE_BUILD } },
+          ...greetWithTestSupport,
+          greetManifest: {
+            ...published,
+            devDependencies: { 'left-pad': '1.3.0' },
+          },
+        }),
+      );
+      buildProjectGraph(workspace.root);
 
-    // Act
-    const findings = lint(workspace.root, ['libs/greet/package.json']);
+      // Act
+      const findings = lint(workspace.root, ['libs/greet/package.json']);
 
-    // Assert
-    assert.equal(findings.length, 1);
-    assert.equal(findings[0]?.ruleId, 'manifest/dependency-checks');
-    assert.match(findings[0]?.message ?? '', /left-pad/);
-  });
-}
+      // Assert
+      assert.equal(findings.length, 1);
+      assert.equal(findings[0]?.ruleId, 'manifest/dependency-checks');
+      assert.match(findings[0]?.message ?? '', /left-pad/);
+    }),
+);
 
 test('a bundled app does not declare what the unexported testing folder of a package it inlines imports', async () => {
   // Arrange

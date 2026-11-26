@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { test } from 'node:test';
 import { setImmediate } from 'node:timers/promises';
 
 import type { RerankingModelV4 } from '@ai-sdk/provider';
 
 import { TemporaryFiles } from '@zukhruf/fs';
+import { test } from '@zukhruf/parameterized-test';
 
 import { AbsTaskRetrieval } from '../abstasks/retrieval.ts';
 import { TaskMetadata } from '../abstasks/task-metadata.ts';
@@ -142,7 +142,7 @@ function nested(value: unknown): unknown {
   return value;
 }
 
-for (const search of expected.searches)
+void test.each(expected.searches, (search) =>
   test(`SearchCrossEncoderWrapper over the ${search.model} scores each candidate in the order of MTEB, sends the requests of MTEB and gives its scores, to the last bit`, async () => {
     const task = new CrossEncoderFixture();
     await task.loadData();
@@ -175,9 +175,10 @@ for (const search of expected.searches)
       },
       { requests: search.requests, results: search.results },
     );
-  });
+  }),
+);
 
-for (const evaluation of expected.evaluations)
+void test.each(expected.evaluations, (evaluation) =>
   test(`evaluate gives the ${evaluation.model} the predictions, main score and phases of MTEB`, async () => {
     await using folder = await new TemporaryFiles().directory(
       'mteb-cross-encoder-',
@@ -222,7 +223,8 @@ for (const evaluation of expected.evaluations)
         phases: evaluation.phases,
       },
     );
-  });
+  }),
+);
 
 test('a model without a score for its document throws, where MTEB scores the pair 0', async () => {
   const model: RerankingModelV4 = {

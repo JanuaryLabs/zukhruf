@@ -3,10 +3,11 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { findPackageJSON } from 'node:module';
 import { basename, dirname, join, posix } from 'node:path';
-import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import { workspaceRoot } from '@nx/devkit';
+
+import { test } from '@zukhruf/parameterized-test';
 
 import { isRecord } from './unknown-values.ts';
 
@@ -149,7 +150,7 @@ const workspaceRules = existsSync(workspaceRulesPath)
   ? realpathSync(workspaceRulesPath)
   : null;
 
-for (const specifier of specifiers) {
+void test.each(specifiers, (specifier) =>
   test(`${specifier} loads only packages that @zukhruf/eslint reaches over declared edges`, () => {
     // Arrange
     const closure = declaredClosure(packageRoot);
@@ -173,8 +174,8 @@ for (const specifier of specifiers) {
     }
     assert.ok(loads.length > 0, `${specifier} loaded no modules`);
     assert.deepEqual([...undeclared.values()], []);
-  });
-}
+  }),
+);
 
 test('@zukhruf/eslint loads neither plugin of modern-node, so a repo that does not use it does not need them', () => {
   // Act

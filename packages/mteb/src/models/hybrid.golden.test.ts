@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { test } from 'node:test';
 
 import type { EmbeddingModelV4 } from '@ai-sdk/provider';
+
+import { test } from '@zukhruf/parameterized-test';
 
 import { AbsTaskRetrieval } from '../abstasks/retrieval.ts';
 import { TaskMetadata } from '../abstasks/task-metadata.ts';
@@ -170,7 +171,7 @@ const MODELS: Record<ModelName, () => HybridSearch> = {
     }),
 };
 
-for (const fusion of expected.fusions)
+void test.each(expected.fusions, (fusion) =>
   test(`the fusions of "${fusion.case}" give the scores of MTEB in the order of MTEB, to the last bit`, () => {
     const queryScoresList = fusion.query_scores_list.map(
       (pairs) => new Map(pairs),
@@ -194,9 +195,10 @@ for (const fusion of expected.fusions)
         rsf: fusion.rsf,
       },
     );
-  });
+  }),
+);
 
-for (const search of expected.searches)
+void test.each(expected.searches, (search) =>
   test(`the ${search.model} hybrid ${search.rerank ? 'reranks' : 'searches'} with topK ${search.top_k} and gives the results of MTEB, to the last bit`, async () => {
     const task = new FolderTask();
     await task.loadData();
@@ -223,9 +225,10 @@ for (const search of expected.searches)
       [...results].map(([query, docs]) => [query, [...docs]]),
       search.results,
     );
-  });
+  }),
+);
 
-for (const evaluation of expected.evaluations)
+void test.each(expected.evaluations, (evaluation) =>
   test(`evaluate gives the ${evaluation.model} hybrid the main score of MTEB`, async () => {
     const model = MODELS[evaluation.model]();
 
@@ -241,7 +244,8 @@ for (const evaluation of expected.evaluations)
       ],
       [evaluation.name, evaluation.main_score],
     );
-  });
+  }),
+);
 
 // The hybrid of each case of the experiment names of generate.py.
 const EXPERIMENT_HYBRIDS: Record<string, () => HybridSearch> = {

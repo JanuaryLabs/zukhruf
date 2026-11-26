@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { cp, mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import {
@@ -13,6 +12,7 @@ import {
 } from '@nx/devkit';
 
 import { TemporaryFiles } from '@zukhruf/fs';
+import { test } from '@zukhruf/parameterized-test';
 
 import { changes, generatorTree } from '../../testing/generator-tree.ts';
 import { lintManifests } from '../../testing/lint-manifests.ts';
@@ -46,9 +46,9 @@ const hosts = {
   sslip: {},
 } as const;
 
-for (const [hostMode, hostOptions] of Object.entries(hosts)) {
-  for (const postgres of [true, false]) {
-    for (const registry of [true, false]) {
+void test.each(Object.entries(hosts), ([hostMode, hostOptions]) =>
+  test.each([true, false], (postgres) =>
+    test.each([true, false], (registry) =>
       test(`host ${hostMode}, postgres ${postgres ? 'on' : 'off'}, private registry ${registry ? 'on' : 'off'}`, async () => {
         const tree = await workspace(postgres ? 'packages/db' : undefined);
         const options: DokployOptions = {
@@ -164,10 +164,10 @@ for (const [hostMode, hostOptions] of Object.entries(hosts)) {
           ),
           registry,
         );
-      });
-    }
-  }
-}
+      }),
+    ),
+  ),
+);
 
 test('the deploy workflow is built from the actions of zukhruf and checks the sha only after a new image', async () => {
   const tree = await workspace();

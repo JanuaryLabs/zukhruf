@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { test } from 'node:test';
 
 import { TemporaryFiles } from '@zukhruf/fs';
+import { test } from '@zukhruf/parameterized-test';
 import { HttpServer } from '@zukhruf/testing/http';
 
 import { ArguAna } from './argu-ana-retrieval.ts';
@@ -83,15 +83,18 @@ async function hub(): Promise<{
   };
 }
 
-for (const [name, task] of [
-  ['ArguAna', () => new ArguAna()],
-  ['SCIDOCS', () => new SCIDOCS()],
-] as const)
-  test(`the metadata of ${name} is the metadata of MTEB`, () => {
-    const metadata = task().metadata;
+void test.each(
+  [
+    ['ArguAna', () => new ArguAna()],
+    ['SCIDOCS', () => new SCIDOCS()],
+  ] as const,
+  ([name, task]) =>
+    test(`the metadata of ${name} is the metadata of MTEB`, () => {
+      const metadata = task().metadata;
 
-    assert.deepEqual(metadata.toDict(), MTEB_METADATA[name]);
-  });
+      assert.deepEqual(metadata.toDict(), MTEB_METADATA[name]);
+    }),
+);
 
 test('a task loads its split from the files that the dataset card names, and keeps only the queries with qrels', async () => {
   await using server = await hub();

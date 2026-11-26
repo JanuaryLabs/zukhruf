@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { test } from 'node:test';
 import { promisify } from 'node:util';
 
+import { test } from '@zukhruf/parameterized-test';
 import { notInstalled } from '@zukhruf/testing/preload';
 
 const execFileAsync = promisify(execFile);
@@ -33,7 +33,7 @@ test('./promptfoo imports when no peer of a family is installed', async () => {
   await importPath('@zukhruf/evals/promptfoo', allPeers);
 });
 
-for (const [path, own] of Object.entries(peers)) {
+void test.each(Object.entries(peers), ([path, own]) =>
   test(`${path} imports with its peers and without the peers of the other family, and needs each one of its own`, async () => {
     await importPath(
       path,
@@ -48,5 +48,5 @@ for (const [path, own] of Object.entries(peers)) {
           String(error.stderr).includes(`Cannot find package '${peer}'`),
       );
     }
-  });
-}
+  }),
+);

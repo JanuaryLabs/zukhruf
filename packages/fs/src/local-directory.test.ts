@@ -4,7 +4,9 @@ import assert from 'node:assert/strict';
 import fsPromises, { readdir } from 'node:fs/promises';
 import { syncBuiltinESMExports } from 'node:module';
 import { join, sep } from 'node:path';
-import { type TestContext, describe, test } from 'node:test';
+import { type TestContext, describe } from 'node:test';
+
+import { test } from '@zukhruf/parameterized-test';
 
 import { assertLocalDirectory } from './local-directory.ts';
 import { NetworkDirectoryError } from './network-directory-error.ts';
@@ -91,7 +93,7 @@ const onLinux = {
 };
 
 describe('A network directory', () => {
-  for (const [fileSystem, type] of networkFileSystems) {
+  void test.each(networkFileSystems, ([fileSystem, type]) =>
     test(
       `a directory on ${fileSystem} is refused with the directory and its file system`,
       { ...onLinux },
@@ -113,35 +115,37 @@ describe('A network directory', () => {
           return true;
         });
       },
-    );
-  }
+    ),
+  );
 
-  for (const [fileSystem, type] of [
-    ['CIFS', 0xff534d42n],
-    ['SMB2', 0xfe534d42n],
-  ] as const) {
-    test(
-      `a ${fileSystem} type that statfs reports sign-extended is still refused`,
-      { ...onLinux },
-      async (t) => {
-        // Arrange: f_type is a signed long, so libuv hands over a magic with its high bit set as 64 sign-extended bits.
-        await using directory = await new TemporaryFiles().directory(
-          'zukhruf-fs-',
-        );
-        using _mount = mountAs(
-          t,
-          directory.path,
-          0xffff_ffff_0000_0000n | type,
-        );
+  void test.each(
+    [
+      ['CIFS', 0xff534d42n],
+      ['SMB2', 0xfe534d42n],
+    ] as const,
+    ([fileSystem, type]) =>
+      test(
+        `a ${fileSystem} type that statfs reports sign-extended is still refused`,
+        { ...onLinux },
+        async (t) => {
+          // Arrange: f_type is a signed long, so libuv hands over a magic with its high bit set as 64 sign-extended bits.
+          await using directory = await new TemporaryFiles().directory(
+            'zukhruf-fs-',
+          );
+          using _mount = mountAs(
+            t,
+            directory.path,
+            0xffff_ffff_0000_0000n | type,
+          );
 
-        // Act
-        const checking = assertLocalDirectory(directory.path);
+          // Act
+          const checking = assertLocalDirectory(directory.path);
 
-        // Assert
-        await assert.rejects(checking, { fileSystem });
-      },
-    );
-  }
+          // Assert
+          await assert.rejects(checking, { fileSystem });
+        },
+      ),
+  );
 
   test(
     'a CIFS type read as a negative number is still refused',
@@ -168,28 +172,30 @@ describe('A network directory', () => {
     },
   );
 
-  for (const [name, type] of [
-    ['ext4', 0xef53n],
-    ['a FUSE mount', 0x65735546n],
-  ] as const) {
-    test(
-      `a directory on ${name} counts as local`,
-      { ...onLinux },
-      async (t) => {
-        // Arrange
-        await using directory = await new TemporaryFiles().directory(
-          'zukhruf-fs-',
-        );
-        using _mount = mountAs(t, directory.path, type);
+  void test.each(
+    [
+      ['ext4', 0xef53n],
+      ['a FUSE mount', 0x65735546n],
+    ] as const,
+    ([name, type]) =>
+      test(
+        `a directory on ${name} counts as local`,
+        { ...onLinux },
+        async (t) => {
+          // Arrange
+          await using directory = await new TemporaryFiles().directory(
+            'zukhruf-fs-',
+          );
+          using _mount = mountAs(t, directory.path, type);
 
-        // Act
-        const checking = assertLocalDirectory(directory.path);
+          // Act
+          const checking = assertLocalDirectory(directory.path);
 
-        // Assert
-        await assert.doesNotReject(checking);
-      },
-    );
-  }
+          // Assert
+          await assert.doesNotReject(checking);
+        },
+      ),
+  );
 
   test(
     'a directory that does not exist yet is judged by its nearest parent, and is not created',
@@ -297,29 +303,31 @@ describe('A network directory', () => {
     },
   );
 
-  for (const share of [
-    String.raw`\\server\share\locks`,
-    String.raw`\\?\UNC\server\share\locks`,
-    String.raw`\\.\UNC\server\share\locks`,
-    '//server/share/locks',
-  ]) {
-    test(
-      `Windows refuses the network share ${share}`,
-      {
-        skip:
-          process.platform === 'win32'
-            ? false
-            : 'UNC paths exist only on Windows',
-      },
-      async () => {
-        // Act: the check judges the path itself, so the share need not exist.
-        const checking = assertLocalDirectory(share);
+  void test.each(
+    [
+      String.raw`\\server\share\locks`,
+      String.raw`\\?\UNC\server\share\locks`,
+      String.raw`\\.\UNC\server\share\locks`,
+      '//server/share/locks',
+    ],
+    (share) =>
+      test(
+        `Windows refuses the network share ${share}`,
+        {
+          skip:
+            process.platform === 'win32'
+              ? false
+              : 'UNC paths exist only on Windows',
+        },
+        async () => {
+          // Act: the check judges the path itself, so the share need not exist.
+          const checking = assertLocalDirectory(share);
 
-        // Assert
-        await assert.rejects(checking, NetworkDirectoryError);
-      },
-    );
-  }
+          // Assert
+          await assert.rejects(checking, NetworkDirectoryError);
+        },
+      ),
+  );
 
   test(
     'Windows keeps working in a local directory named with the \\\\?\\ prefix',

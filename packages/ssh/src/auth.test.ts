@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
 
 import { createClock } from '@sinonjs/fake-timers';
+
+import { test } from '@zukhruf/parameterized-test';
 
 import {
   type AuthMethod,
@@ -91,7 +92,7 @@ test(
   },
 );
 
-for (const answers of [['424242'], ['ezz', '424242', 'extra']]) {
+void test.each([['424242'], ['ezz', '424242', 'extra']], (answers) =>
   test(
     `keyboard-interactive: ${answers.length} answers to 2 prompts fail the dial, and the server gets none of them`,
     { skip: noSsh },
@@ -125,8 +126,8 @@ for (const answers of [['424242'], ['ezz', '424242', 'extra']]) {
       );
       assert.deepEqual(received, []);
     },
-  );
-}
+  ),
+);
 
 test(
   'a method that the server does not list is skipped, and a refused password rejects the dial with AuthenticationError, which lists the methods tried and the methods of the server',

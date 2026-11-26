@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
-import { describe, test } from 'node:test';
+import { describe } from 'node:test';
 
 import type { EmbeddingModelV4 } from '@ai-sdk/provider';
+
+import { test } from '@zukhruf/parameterized-test';
 
 import { ValidationError } from '../abstasks/task-metadata.ts';
 import { qwen3Embedding0B6 } from './model-implementations/qwen3-models.ts';
@@ -70,7 +72,7 @@ describe('ModelMeta', () => {
     assert.equal(model1.equals(model2), false);
   });
 
-  for (const license of ['apache-2.0', 'openmdw-1.1'])
+  void test.each(['apache-2.0', 'openmdw-1.1'], (license) =>
     test(`a model with the ${license} license and every artifact open scores 6 on openness`, () => {
       const meta = ModelMeta.createEmpty({
         name: 'test/openness',
@@ -85,7 +87,8 @@ describe('ModelMeta', () => {
       assert.equal(meta.openLicense, true);
       assert.equal(meta.opennessScore, 6);
       assert.ok(Object.values(meta.openness).every(Boolean));
-    });
+    }),
+  );
 
   test('a closed model scores 1 on openness, for its model card', () => {
     const meta = ModelMeta.createEmpty({
