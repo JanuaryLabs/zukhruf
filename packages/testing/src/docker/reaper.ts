@@ -488,7 +488,10 @@ once docker update --restart unless-stopped "$found" >/dev/null
 # lease of the process that created it is gone (ADR 0033): the engine removes
 # that lease when the process ends. The watch starts at $since, before the
 # look, so a removal between the two is not lost, as a Kubernetes informer
-# lists and then watches. A start after a restart of the engine or a kill of
+# lists and then watches. The watch and the look both append to the mark: a
+# watch that opened it with > after the look wrote would erase the look's
+# line, and a reaper whose creator was already gone then waited for ever
+# (#5739, 0.8.143). A start after a restart of the engine or a kill of
 # the reaper finds the mark of an earlier start, and keeps its wait for a
 # first holder (#4508).
 if [ -e ${STARTED} ]; then
@@ -497,7 +500,7 @@ if [ -e ${STARTED} ]; then
 else
   : > ${STARTED}
   since=$(date +%s)
-  docker events --since "$since" --filter "container=$REAPER_CREATOR" --filter event=destroy --format x > ${CREATOR_GONE} 2>/dev/null &
+  docker events --since "$since" --filter "container=$REAPER_CREATOR" --filter event=destroy --format x >> ${CREATOR_GONE} 2>/dev/null &
   watcher=$!
   [ "$(once docker inspect -f '{{.State.Status}}' "$REAPER_CREATOR" 2>/dev/null)" = running ] || echo x >> ${CREATOR_GONE}
   until [ "$(holders)" -gt 0 ] || [ -e ${CAME} ] || [ -s ${CREATOR_GONE} ]; do sleep $tick; done
