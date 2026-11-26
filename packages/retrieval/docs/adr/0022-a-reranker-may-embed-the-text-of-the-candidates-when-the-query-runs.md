@@ -1,5 +1,7 @@
 # A reranker may embed the text of the candidates when the query runs
 
+Superseded in part on 2026-11-26 (#5728) for what `EmbeddingRerankRetriever` passes to its retriever and gives back. It takes `rankWindowSize`: its retriever gets the options of the call with the window as their `topK`, the `topK` of the call when absent, and the call gives the best `topK` of the reranked list ([ADR 0023](./0023-a-composite-that-fuses-reranks-or-diversifies-asks-its-retriever-for-a-rank-window-and-gives-the-topk-of-the-call.md)).
+
 Status: Accepted 2026-11-26 (backlog #5586).
 
 Decision-makers: Ezz, who overruled the README recipe on 2026-11-25 ("build it in", the paper's `EmbeddingRerank`, widening ADR 0001 in a new ADR), and the zukhruf session that built it on the port of #5400. The paper and its delta for the new port are in `~/.agent-backlog/handoff/zukhruf-retrieval-5585-5586/paper.md`, with the leaders' sources in `sources/` and the probe in `probes/p5586-rerank.mjs`.

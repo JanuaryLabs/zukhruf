@@ -7,6 +7,7 @@ import { NoRetrieverAnsweredError } from './no-retriever-answered-error.ts';
 import type { Passage } from './passage.ts';
 import type { QueryType } from './query-bundle.ts';
 import { RankFusion } from './rank-fusion.ts';
+import { RankWindow } from './rank-window.ts';
 import type { RankedPassage } from './ranked-passage.ts';
 import type { RetrievalResult } from './retrieval-result.ts';
 import type { RetrieveOptions } from './retrieve-options.ts';
@@ -102,7 +103,7 @@ export class FusionRetriever<
     weight: number,
   ])[];
   readonly #fusion: Fusion<RankedDoc & F>;
-  readonly #rankWindowSize: number | undefined;
+  readonly #window: RankWindow;
 
   constructor(options: {
     /**
@@ -122,8 +123,8 @@ export class FusionRetriever<
     readonly fusion?: Fusion<RankedDoc & F>;
     /**
      * How many passages each retriever gives to the fusion: the `topK` of
-     * the call when absent. It is at least that `topK`, as Elasticsearch's
-     * `rank_window_size` is at least `size`.
+     * the call when absent. A positive integer, at least that `topK`, as
+     * Elasticsearch's `rank_window_size` is at least `size`.
      */
     readonly rankWindowSize?: number;
   }) {
@@ -147,20 +148,14 @@ export class FusionRetriever<
       this.#retrievers.map(([name, , weight]) => ({ name, weight })),
     );
     this.#fusion = options.fusion ?? new RankFusion();
-    this.#rankWindowSize = options.rankWindowSize;
+    this.#window = RankWindow.of(options.rankWindowSize);
   }
 
   async retrieve(
     query: Q,
     options: RetrieveOptions<P> = {},
   ): Promise<RetrievalResult<P, ScoredPassage<P>>> {
-    const topK = options.topK ?? 10;
-    const rankWindowSize = this.#rankWindowSize ?? topK;
-    if (rankWindowSize < topK) {
-      throw new RangeError(
-        `The rankWindowSize ${rankWindowSize} is smaller than the topK ${topK} of the call`,
-      );
-    }
+    const { topK, window } = this.#window.forCall(options.topK);
     const caller = options.signal;
     caller?.throwIfAborted();
     // A bug aborts the siblings with the bug as the reason, as Go's
@@ -177,7 +172,7 @@ export class FusionRetriever<
             try {
               const result = await retriever.retrieve(query, {
                 ...options,
-                topK: rankWindowSize,
+                topK: window,
                 signal,
               });
               return { name, weight, result };

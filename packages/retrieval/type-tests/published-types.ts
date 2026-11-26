@@ -72,6 +72,17 @@ export const served: FusionRetriever<IssueQueryBundle> = new FusionRetriever({
   retrievers: { plain: { retriever: plain } },
 });
 
+// A rank window needs a postprocessor to run on it: a window with none
+// would fetch passages only to cut them. With no window, an empty list
+// compiles, as `postprocessed` above. TypeScript names the argument, so the
+// mark stays on its line.
+// prettier-ignore
+export const windowWithoutPostprocessor = new PostprocessingRetriever({ // TS2345
+  retriever: plain,
+  postprocessors: [],
+  rankWindowSize: 50,
+});
+
 // A host composite does not widen to a plain one: a string has no jql.
 export const widened: FusionRetriever = federation; // TS2322
 export const widenedPostprocessing: PostprocessingRetriever = postprocessed; // TS2322

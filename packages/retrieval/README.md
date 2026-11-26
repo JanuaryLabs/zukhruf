@@ -565,9 +565,9 @@ Output:
 
 ## Rerank and post-process the results
 
-`RerankRetriever { retriever, model, topN?, scoreThreshold? }` reranks the passages of its retriever with an AI SDK reranking model, as Elasticsearch's `text_similarity_reranker` retriever reranks a child retriever and LangChain's `ContextualCompressionRetriever` runs a reranker over its base retriever ([ADR 0021](./docs/adr/0021-a-retriever-says-whether-it-gives-scores-a-ranked-passage-has-none-and-a-scored-passage-always-has-one.md)). Its retriever may give an order only. Each passage that the model ranks gets the relevance of the model as its score, best first, so a `RerankRetriever` gives scored passages over any retriever. A passage that the model leaves out, past `topN`, is dropped.
+`RerankRetriever { retriever, model, rankWindowSize?, topN?, scoreThreshold? }` reranks the passages of its retriever with an AI SDK reranking model, as Elasticsearch's `text_similarity_reranker` retriever reranks a child retriever and LangChain's `ContextualCompressionRetriever` runs a reranker over its base retriever ([ADR 0021](./docs/adr/0021-a-retriever-says-whether-it-gives-scores-a-ranked-passage-has-none-and-a-scored-passage-always-has-one.md)). Its retriever may give an order only. Each passage that the model ranks gets the relevance of the model as its score, best first, so a `RerankRetriever` gives scored passages over any retriever. A passage that the model leaves out, past `topN`, is dropped. The call gives the best `topK` of the rest; "Rerank a window of candidates" asks the retriever for more than that.
 
-`PostprocessingRetriever` runs a list of postprocessors, in order, on the result of its retriever ([ADR 0008](./docs/adr/0008-a-search-is-composed-of-retrievers-that-wrap-retrievers-and-a-list-of-postprocessors.md)). Each postprocessor gets the list of the one before it, the `query` of the query bundle (the information need, a string) and the abort signal of the call. It gives the kind of passage that its retriever gives, and each postprocessor takes that kind: over a `RerankRetriever` the list stays scored. This program continues the one of "Combine searches".
+`PostprocessingRetriever` runs a list of postprocessors, in order, on the result of its retriever ([ADR 0008](./docs/adr/0008-a-search-is-composed-of-retrievers-that-wrap-retrievers-and-a-list-of-postprocessors.md)). Each postprocessor gets the list of the one before it, the `query` of the query bundle (the information need, a string) and the abort signal of the call. It gives the kind of passage that its retriever gives, and each postprocessor takes that kind: over a `RerankRetriever` the list stays scored. The call gives the first `topK` passages of the last postprocessor. This program continues the one of "Combine searches".
 
 ```ts
 import { MockRerankingModelV4 } from 'ai/test';
@@ -645,7 +645,7 @@ A host writes its own postprocessor for its passage type and kind: `Postprocesso
 
 ## Rerank by meaning with an embedding model
 
-`EmbeddingRerankRetriever { retriever, model, topN?, scoreThreshold? }` reranks the passages of its retriever with an AI SDK embedding model, as LangChain's `EmbeddingsFilter` does inside a `ContextualCompressionRetriever` ([ADR 0022](./docs/adr/0022-a-reranker-may-embed-the-text-of-the-candidates-when-the-query-runs.md)). It is the reranker for a host that has an embedding model and no reranking model, and for a live source, which has no stored vectors. When the query runs, the model embeds the `query` of the query bundle and the text of each passage, in two calls at once. Each passage gets the cosine similarity of the two vectors as its score, from -1 to 1, best first, and the vector that the model made. It keeps the passages whose score is equal to or more than `scoreThreshold`, then the best `topN`, a positive integer. Its retriever may give an order only, so a live source in an `EmbeddingRerankRetriever` gives scored passages and goes under a `ScoreFusion`.
+`EmbeddingRerankRetriever { retriever, model, rankWindowSize?, topN?, scoreThreshold? }` reranks the passages of its retriever with an AI SDK embedding model, as LangChain's `EmbeddingsFilter` does inside a `ContextualCompressionRetriever` ([ADR 0022](./docs/adr/0022-a-reranker-may-embed-the-text-of-the-candidates-when-the-query-runs.md)). It is the reranker for a host that has an embedding model and no reranking model, and for a live source, which has no stored vectors. When the query runs, the model embeds the `query` of the query bundle and the text of each passage, in two calls at once. Each passage gets the cosine similarity of the two vectors as its score, from -1 to 1, best first, and the vector that the model made. It keeps the passages whose score is equal to or more than `scoreThreshold`, then the best `topN`, a positive integer. Its retriever may give an order only, so a live source in an `EmbeddingRerankRetriever` gives scored passages and goes under a `ScoreFusion`.
 
 ```ts
 import { MockEmbeddingModelV4 } from 'ai/test';
@@ -718,6 +718,62 @@ Output:
 ```
 
 The web search gave web-1 to web-4 in its own order. The reranker scores web-4 0.873, web-2 0.816, web-3 0.667 and web-1 0, and the threshold drops web-1. `MaximalMarginalRelevance` alone fails over this source with `VectorMissingError`, since a web search gives no vector; after the reranker it compares the vectors that the reranker made. It picks web-4 first, then weighs each other passage as `lambda * relevance - (1 - lambda) * redundancy`, where the redundancy is the cosine similarity to web-4: web-2 is more relevant (0.816 against 0.667) but repeats more of web-4 (0.802 against 0.655), so at `lambda: 0.3` web-3 wins (-0.258 against -0.316), and at the default of 0.5 web-2 would win. Give it the model of the reranker: a vector of another model is in another vector space ([ADR 0010](./docs/adr/0010-an-embedding-retriever-refuses-a-query-model-whose-identity-differs-from-the-stored-vectors.md)). For the same reason the reranker replaces a vector that its retriever gives. `RerankRetriever` sends `topN` to its reranking model; an embedding model has none, so `EmbeddingRerankRetriever` cuts its sorted list itself. Each query costs one `embed` of the query and one `embedMany` of the candidates; `@zukhruf/embedding-cache` can wrap the model so that a text is embedded once.
+
+## Rerank a window of candidates
+
+`rankWindowSize` is how many passages a composite asks of its retriever before it reranks or diversifies them: its retriever gets the options of the call with the window as their `topK`, and the call gives the best `topK` of the result, as Elasticsearch's `text_similarity_reranker` and `diversify` retrievers take `rank_window_size` ([ADR 0023](./docs/adr/0023-a-composite-that-fuses-reranks-or-diversifies-asks-its-retriever-for-a-rank-window-and-gives-the-topk-of-the-call.md)). `RerankRetriever`, `EmbeddingRerankRetriever`, `PostprocessingRetriever` and `FusionRetriever` take it. Without it, the window is the `topK` of the call, so the reranker can only reorder the passages that the call gives. This program continues the one of "Rerank by meaning with an embedding model".
+
+```ts
+import { PostprocessingRetriever } from '@zukhruf/retrieval';
+
+// The web search above, now giving the first topK pages, as the page size of
+// a search API does.
+const paged: Retriever<string, Passage> = {
+  retrieve: async (query, options = {}) => {
+    const { passages, failures } = await web.retrieve(query);
+    return { passages: passages.slice(0, options.topK ?? 10), failures };
+  },
+};
+
+const narrow = new EmbeddingRerankRetriever({
+  retriever: paged,
+  model: embeddingModel,
+});
+const windowed = new EmbeddingRerankRetriever({
+  retriever: paged,
+  model: embeddingModel,
+  rankWindowSize: 4, // the reranker asks for 4 and gives the topK of the call
+});
+// A host screen, such as one that drops a retracted article, goes in an outer
+// PostprocessingRetriever with no window: it runs on the topK passages only.
+const screened = new PostprocessingRetriever({
+  retriever: windowed,
+  postprocessors: [
+    {
+      postprocess: async (passages) =>
+        passages.filter(({ passage }) => passage.id !== 'web-2'),
+    },
+  ],
+});
+
+for (const [name, search] of Object.entries({ narrow, windowed, screened })) {
+  const { passages } = await search.retrieve('rotate the old key', { topK: 2 });
+  console.log(
+    name,
+    passages.map(({ passage, score }) => `${passage.id} ${score.toFixed(3)}`),
+  );
+}
+```
+
+Output:
+
+```
+narrow [ 'web-2 0.816', 'web-1 0.000' ]
+windowed [ 'web-4 0.873', 'web-2 0.816' ]
+screened [ 'web-4 0.873' ]
+```
+
+`narrow` gets web-1 and web-2 from the search and can only reorder them. `windowed` gets all four, and web-4, the best, is the fourth in the search's order. `screened` drops web-2 after the cut, so the call gives one passage: a screen in the same composite as the window would run on all four and could give web-3 in its place. A window smaller than the `topK` of the call is a `RangeError` before the retriever or the model is called, as Elasticsearch refuses a `rank_window_size` smaller than `size`, and a `rankWindowSize` that is not a positive integer is a `RangeError` when the composite is made. Over a `FusionRetriever`, a composite's window is the fusion's `topK`, so the fusion's own `rankWindowSize` must be at least that window. A `PostprocessingRetriever` with a `rankWindowSize` takes at least one postprocessor: `postprocessors: []` with a window does not compile. `MaximalMarginalRelevance` in a window picks from all of it. `topN` is not needed in a window, and a `topN` below `topK` gives fewer passages, as Cohere's `top_n` does.
 
 ## Give each search its own text
 
@@ -923,15 +979,15 @@ On SQL Server, the session cancels with mssql's `request.cancel()` in the same w
 
 ## Errors
 
-| Error                                         | When                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ModelMismatchError`                          | The query model of an embedding retriever has another provider or model id than the stored vectors, before the model call. `stored` and `query` are each `{ provider, modelId }`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| `DimensionMismatchError` (`@zukhruf/vectors`) | The query vector has other dimensions than the stored vectors, after the model call. `expected` and `actual`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| `VectorMissingError`                          | `MaximalMarginalRelevance` gets a passage without a vector: the call did not ask for vectors. `passageId`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| `PassageGapError`                             | `ContextWindow` gets a window whose passages leave a gap in their source: the writer of the contract broke it. `source`, and `start` and `end` of the gap                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| `NoRetrieverAnsweredError`                    | No retriever of a `FusionRetriever` answered: each threw `RetrieverUnavailableError`. `failures` names each, by path when nested, and the cause is an `AggregateError` of them. It is a `RetrieverUnavailableError`, so the fusion above leaves it out                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| `RangeError`                                  | An option out of its range: a `FusionRetriever` of no retriever or with a name that holds `:`, or a `rankWindowSize` smaller than the `topK` of the call; a `queryCount`, `topK` of MMR or `windowSize` that is not a positive integer; a `lambda` outside 0 to 1; a `topN` of `EmbeddingRerankRetriever` that is not a positive integer; a `scoreThreshold` of an embedding retriever, of `RerankRetriever` or of `EmbeddingRerankRetriever` that is not a finite number; a weight of a fusion input or of a `FusionRetriever` entry that is not a finite number of 0 or more (the message names the input or the retriever), or weights of which none is above 0; a `k` of `reciprocalRank` that is not an integer of 1 or more |
-| `TypeError`                                   | A filter field that is not a passage field or `metadata.<column>`, an `in` or `not in` value that is not an array, or a stored model identity that is not of the form `provider/model (n dimensions)`. A score that is not finite (NaN or an infinity): in an input of `ScoreFusion` (the message names the id and its input), from a normalizer (the id and its input) or a combination (the id and the inputs that hold it) of either fusion, or from the model of `RerankRetriever`; a cosine similarity that is not finite in `EmbeddingRerankRetriever`, as from a zero vector (the message names the passage). A host fusion in a `FusionRetriever` or a `MultiQueryRetriever` that gives an id of no input                 |
+| Error                                         | When                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ModelMismatchError`                          | The query model of an embedding retriever has another provider or model id than the stored vectors, before the model call. `stored` and `query` are each `{ provider, modelId }`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `DimensionMismatchError` (`@zukhruf/vectors`) | The query vector has other dimensions than the stored vectors, after the model call. `expected` and `actual`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `VectorMissingError`                          | `MaximalMarginalRelevance` gets a passage without a vector: the call did not ask for vectors. `passageId`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `PassageGapError`                             | `ContextWindow` gets a window whose passages leave a gap in their source: the writer of the contract broke it. `source`, and `start` and `end` of the gap                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `NoRetrieverAnsweredError`                    | No retriever of a `FusionRetriever` answered: each threw `RetrieverUnavailableError`. `failures` names each, by path when nested, and the cause is an `AggregateError` of them. It is a `RetrieverUnavailableError`, so the fusion above leaves it out                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `RangeError`                                  | An option out of its range: a `FusionRetriever` of no retriever or with a name that holds `:`; a `rankWindowSize` of `FusionRetriever`, `RerankRetriever`, `EmbeddingRerankRetriever` or `PostprocessingRetriever` that is not a positive integer, when it is made, or that is smaller than the `topK` of the call, before any retriever or model is called; a `queryCount`, `topK` of MMR or `windowSize` that is not a positive integer; a `lambda` outside 0 to 1; a `topN` of `RerankRetriever` or `EmbeddingRerankRetriever` that is not a positive integer; a `scoreThreshold` of an embedding retriever, of `RerankRetriever` or of `EmbeddingRerankRetriever` that is not a finite number; a weight of a fusion input or of a `FusionRetriever` entry that is not a finite number of 0 or more (the message names the input or the retriever), or weights of which none is above 0; a `k` of `reciprocalRank` that is not an integer of 1 or more |
+| `TypeError`                                   | A filter field that is not a passage field or `metadata.<column>`, an `in` or `not in` value that is not an array, or a stored model identity that is not of the form `provider/model (n dimensions)`. A score that is not finite (NaN or an infinity): in an input of `ScoreFusion` (the message names the id and its input), from a normalizer (the id and its input) or a combination (the id and the inputs that hold it) of either fusion, or from the model of `RerankRetriever`; a cosine similarity that is not finite in `EmbeddingRerankRetriever`, as from a zero vector (the message names the passage). A host fusion in a `FusionRetriever` or a `MultiQueryRetriever` that gives an id of no input                                                                                                                                                                                                                                         |
 
 An error of the model, of the engine, of the store's `metadata`, of the reranking model or of the embedding model of `EmbeddingRerankRetriever` reaches the caller as it is. An aborted call rejects with the reason of its `signal` ("Cancel a search").
 
@@ -981,6 +1037,7 @@ Each consumer moves to the fusions and the ranked and scored passages of #5400 w
 | `EmbeddingRerankRetriever`                              | LangChain `EmbeddingsFilter` as the `baseCompressor` of a `ContextualCompressionRetriever` ([embeddings_filter.ts](https://raw.githubusercontent.com/langchain-ai/langchainjs/main/libs/langchain-classic/src/retrievers/document_compressors/embeddings_filter.ts)); LlamaIndex `SentenceEmbeddingOptimizer`, which embeds the sentences of each node ([optimizer.py](https://raw.githubusercontent.com/run-llama/llama_index/main/llama-index-core/llama_index/core/postprocessor/optimizer.py)); Haystack `SentenceTransformersDiversityRanker`, which embeds the documents itself ([sentence_transformers_diversity.py](https://github.com/deepset-ai/haystack-core-integrations/blob/main/integrations/sentence_transformers/src/haystack_integrations/components/rankers/sentence_transformers/sentence_transformers_diversity.py))                                                                                                              |
 | `PostprocessingRetriever`                               | LangChain `ContextualCompressionRetriever` ([contextual_compression.ts](https://raw.githubusercontent.com/langchain-ai/langchainjs/main/libs/langchain-classic/src/retrievers/contextual_compression.ts)); LlamaIndex `node_postprocessors` ([types.py](https://raw.githubusercontent.com/run-llama/llama_index/main/llama-index-core/llama_index/core/postprocessor/types.py))                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | `MaximalMarginalRelevance`                              | Elasticsearch `diversify` `lambda` ([diversify retriever](https://www.elastic.co/docs/reference/elasticsearch/rest-apis/retrievers/diversify-retriever)); Weaviate `balance` ([1.39](https://weaviate.io/blog/weaviate-1-39-release)); Qdrant `mmr` `diversity`, 1 = diverse ([search relevance](https://qdrant.tech/documentation/search/search-relevance/))                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `rankWindowSize`                                        | Elasticsearch `rank_window_size` of the `text_similarity_reranker`, `diversify`, `rrf` and `linear` retrievers, at least `size` ([text similarity reranker](https://www.elastic.co/docs/reference/elasticsearch/rest-apis/retrievers/text-similarity-reranker-retriever), [diversify retriever](https://www.elastic.co/docs/reference/elasticsearch/rest-apis/retrievers/diversify-retriever)); Elasticsearch and OpenSearch rescore `window_size`; Vespa `rerank-count` ([phased ranking](https://docs.vespa.ai/en/ranking/phased-ranking.html))                                                                                                                                                                                                                                                                                                                                                                                                      |
 | `Collapse`                                              | Elasticsearch `collapse` ([standard retriever](https://www.elastic.co/docs/reference/elasticsearch/rest-apis/retrievers/standard-retriever)); Vespa `collapsesize` ([query API](https://docs.vespa.ai/en/reference/api/query.html)); Qdrant `query_points_groups` ([search](https://qdrant.tech/documentation/search/search/))                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | `ContextWindow`                                         | Haystack `SentenceWindowRetriever` ([sentence_window_retriever.py](https://raw.githubusercontent.com/deepset-ai/haystack/main/haystack/components/retrievers/sentence_window_retriever.py)); LlamaIndex `PrevNextNodePostprocessor`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | `LongContextReorder`                                    | LangChain `LongContextReorder` ([reference](https://reference.langchain.com/python/langchain-community/document_transformers/long_context_reorder/LongContextReorder)); Haystack `LostInTheMiddleRanker` ([rankers](https://docs.haystack.deepset.ai/docs/rankers))                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
@@ -1167,7 +1224,7 @@ class FusionRetriever<
       >
     >; // at least one; no name holds ':'; the lists fuse in the order of the names
     readonly fusion?: Fusion<RankedDoc & F>; // new RankFusion()
-    readonly rankWindowSize?: number; // the topK of the call
+    readonly rankWindowSize?: number; // the topK of the call; a positive integer, at least that topK
   }); // an unavailable retriever is named in failures, 'outer:inner' when nested; none answered: NoRetrieverAnsweredError; a bug aborts the others and rejects; the caller's abort rejects at once
 }
 class MultiQueryRetriever<
@@ -1195,22 +1252,24 @@ class RerankRetriever<
   in out P extends Passage = Passage,
 > implements Retriever<Q, P, ScoredPassage<P>> {
   constructor(options: {
-    readonly retriever: Retriever<Q, P>; // any kind; its failures pass up
+    readonly retriever: Retriever<Q, P>; // any kind; gets the window as its topK; its failures pass up
     readonly model: RerankingModel;
-    readonly topN?: number; // every passage when absent
+    readonly rankWindowSize?: number; // the topK of the call; a positive integer, at least that topK
+    readonly topN?: number; // a positive integer, or a RangeError; every passage when absent
     readonly scoreThreshold?: number; // keeps a relevance >= it; not finite is a RangeError
-  }); // the relevance of the model is the score, best first; a relevance that is not finite is a TypeError
+  }); // the relevance of the model is the score, best first, cut to the topK of the call; a relevance that is not finite is a TypeError
 }
 class EmbeddingRerankRetriever<
   in Q extends QueryType = QueryType,
   in out P extends Passage = Passage,
 > implements Retriever<Q, P, ScoredPassage<P>> {
   constructor(options: {
-    readonly retriever: Retriever<Q, P>; // any kind; its failures pass up
+    readonly retriever: Retriever<Q, P>; // any kind; gets the window as its topK; its failures pass up
     readonly model: EmbeddingModel; // embeds the query of the bundle and the text of each passage
+    readonly rankWindowSize?: number; // the topK of the call; a positive integer, at least that topK
     readonly topN?: number; // a positive integer, or a RangeError; every passage when absent
     readonly scoreThreshold?: number; // keeps a cosine similarity >= it; not finite is a RangeError
-  }); // the cosine similarity is the score, best first, with the vector the model made; a cosine that is not finite is a TypeError
+  }); // the cosine similarity is the score, best first, with the vector the model made, cut to the topK of the call; a cosine that is not finite is a TypeError
 }
 
 interface Postprocessor<
@@ -1228,10 +1287,24 @@ class PostprocessingRetriever<
   in out P extends Passage = Passage,
   in out I extends RankedPassage<P> = RankedPassage<P>,
 > implements Retriever<Q, P, I> {
-  constructor(options: {
-    readonly retriever: Retriever<Q, P, I>; // its failures pass up
-    readonly postprocessors: readonly Postprocessor<NoInfer<P>, NoInfer<I>>[]; // P and I come from the retriever
-  });
+  constructor(
+    options:
+      | {
+          readonly retriever: Retriever<Q, P, I>; // gets the topK of the call; its failures pass up
+          readonly postprocessors: readonly Postprocessor<
+            NoInfer<P>,
+            NoInfer<I>
+          >[]; // P and I come from the retriever
+        }
+      | {
+          readonly retriever: Retriever<Q, P, I>; // gets the window as its topK
+          readonly postprocessors: readonly [
+            Postprocessor<NoInfer<P>, NoInfer<I>>,
+            ...Postprocessor<NoInfer<P>, NoInfer<I>>[],
+          ]; // at least one: they run on the window
+          readonly rankWindowSize: number; // a positive integer, at least the topK of the call
+        },
+  ); // gives the first topK of the last postprocessor
 }
 // Each built-in keeps the kind it gets: postprocess<I extends RankedPassage>(…):
 // Promise<I[]>, ContextWindow<M> postprocess<I extends RankedPassage<StoredPassage<M>>>(…),
@@ -1455,8 +1528,8 @@ class SqlServerKeywordRetriever<
 - [ADR 0004](./docs/adr/0004-a-keyword-retriever-queries-the-keyword-index-that-elt-writes.md): a keyword retriever queries the keyword index that elt writes (superseded in part by ADR 0013 and ADR 0018).
 - [ADR 0005](./docs/adr/0005-a-score-is-higher-for-a-better-passage.md): a score is higher for a better passage (superseded in part by ADR 0016, ADR 0019 and ADR 0021).
 - [ADR 0006](./docs/adr/0006-a-retriever-gives-10-passages-when-the-caller-gives-no-topk.md): a retriever gives 10 passages when the caller gives no topK.
-- [ADR 0007](./docs/adr/0007-reciprocal-rank-fusion-is-the-default-fusion-with-k-60-and-ranks-from-1.md): reciprocal rank fusion is the default fusion, with k 60 and ranks from 1 (superseded in part by ADR 0014, ADR 0016 and ADR 0020).
-- [ADR 0008](./docs/adr/0008-a-search-is-composed-of-retrievers-that-wrap-retrievers-and-a-list-of-postprocessors.md): a search is composed of retrievers that wrap retrievers and a list of postprocessors (superseded in part by ADR 0013, ADR 0014, ADR 0016, ADR 0017, ADR 0019, ADR 0020 and ADR 0021).
+- [ADR 0007](./docs/adr/0007-reciprocal-rank-fusion-is-the-default-fusion-with-k-60-and-ranks-from-1.md): reciprocal rank fusion is the default fusion, with k 60 and ranks from 1 (superseded in part by ADR 0014, ADR 0016, ADR 0020 and ADR 0023).
+- [ADR 0008](./docs/adr/0008-a-search-is-composed-of-retrievers-that-wrap-retrievers-and-a-list-of-postprocessors.md): a search is composed of retrievers that wrap retrievers and a list of postprocessors (superseded in part by ADR 0013, ADR 0014, ADR 0016, ADR 0017, ADR 0019, ADR 0020, ADR 0021 and ADR 0023).
 - [ADR 0009](./docs/adr/0009-a-filter-has-the-shape-of-haystacks-filters.md): a filter has the shape of Haystack's filters (superseded in part by ADR 0015).
 - [ADR 0010](./docs/adr/0010-an-embedding-retriever-refuses-a-query-model-whose-identity-differs-from-the-stored-vectors.md): an embedding retriever refuses a query model whose identity differs from the stored vectors.
 - [ADR 0011](./docs/adr/0011-the-package-is-in-the-base-layer.md): the package is in the base layer (superseded in part by ADR 0020).
@@ -1469,5 +1542,6 @@ class SqlServerKeywordRetriever<
 - [ADR 0018](./docs/adr/0018-each-keyword-retriever-matches-in-the-strongest-form-of-its-engine.md): each keyword retriever matches in the strongest form of its engine.
 - [ADR 0019](./docs/adr/0019-a-score-threshold-belongs-to-the-embedding-retriever-or-to-rerank-where-the-scale-of-the-score-is-known.md): a score threshold belongs to the embedding retriever or to Rerank, where the scale of the score is known (superseded in part by ADR 0021 and ADR 0022).
 - [ADR 0020](./docs/adr/0020-a-fusion-is-a-rank-fusion-or-a-score-fusion-over-ids-with-a-normalizer-for-each-list-and-a-combination.md): a fusion is a rank fusion or a score fusion over ids, with a normalizer for each list and a combination.
-- [ADR 0021](./docs/adr/0021-a-retriever-says-whether-it-gives-scores-a-ranked-passage-has-none-and-a-scored-passage-always-has-one.md): a retriever says whether it gives scores: a ranked passage has none, and a scored passage always has one.
-- [ADR 0022](./docs/adr/0022-a-reranker-may-embed-the-text-of-the-candidates-when-the-query-runs.md): a reranker may embed the text of the candidates when the query runs.
+- [ADR 0021](./docs/adr/0021-a-retriever-says-whether-it-gives-scores-a-ranked-passage-has-none-and-a-scored-passage-always-has-one.md): a retriever says whether it gives scores: a ranked passage has none, and a scored passage always has one (superseded in part by ADR 0023).
+- [ADR 0022](./docs/adr/0022-a-reranker-may-embed-the-text-of-the-candidates-when-the-query-runs.md): a reranker may embed the text of the candidates when the query runs (superseded in part by ADR 0023).
+- [ADR 0023](./docs/adr/0023-a-composite-that-fuses-reranks-or-diversifies-asks-its-retriever-for-a-rank-window-and-gives-the-topk-of-the-call.md): a composite that fuses, reranks or diversifies asks its retriever for a rank window and gives the topK of the call.

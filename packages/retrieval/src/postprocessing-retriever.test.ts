@@ -16,6 +16,7 @@ import {
   type Postprocessor,
   type QueryType,
   RerankRetriever,
+  type RetrieveOptions,
   RetrieverUnavailableError,
   type ScoredPassage,
   type StoredPassage,
@@ -261,6 +262,71 @@ test('MaximalMarginalRelevance diversifies with the stored vectors when the call
     passageId: 'alpha',
   });
   assert.equal(diversified.length, 1);
+});
+
+test('with a rankWindowSize, MaximalMarginalRelevance picks from the whole window, which the retriever gives with the other options of the call unchanged, and the call gives the topK first picks, one of which sits past that topK in the order of the search', async () => {
+  // Arrange: a host wrapper of the search that records its options and
+  // names one failure.
+  using database = knowledge();
+  const engine = search(database);
+  const seen: RetrieveOptions<StoredPassage>[] = [];
+  const unavailable = new RetrieverUnavailableError('HTTP 503');
+  const retriever = new PostprocessingRetriever({
+    retriever: {
+      retrieve: async (
+        query: string,
+        options: RetrieveOptions<StoredPassage> = {},
+      ) => {
+        seen.push(options);
+        const { passages } = await engine.retrieve(query, options);
+        return { passages, failures: new Map([['news', unavailable]]) };
+      },
+    },
+    rankWindowSize: 4,
+    postprocessors: [
+      new MaximalMarginalRelevance({ model: embeddings([]), topK: 3 }),
+    ],
+  });
+  const options: RetrieveOptions<StoredPassage> = {
+    topK: 2,
+    includeVectors: true,
+    filter: { field: 'source', operator: '==', value: 'kb' },
+    signal: new AbortController().signal,
+  };
+
+  // Act
+  const result = await retriever.retrieve('rotate a key', options);
+
+  // Assert: the search ranks alpha, delta, beta, gamma; MMR picks alpha,
+  // then beta 0.3 over gamma 0 and delta -0.08, then gamma; the call gives
+  // the first 2. From the first 2 of the search, MMR would pick alpha, delta.
+  assert.deepEqual(seen, [{ ...options, topK: 4 }]);
+  assert.deepEqual(
+    result.passages.map(({ passage }) => passage.id),
+    ['alpha', 'beta'],
+  );
+  assert.deepEqual([...result.failures], [['news', unavailable]]);
+});
+
+test('a host postprocessor that gives more passages than it got still leaves the call with at most the topK of the call (ADR 0006)', async () => {
+  // Arrange
+  const doubling: Postprocessor = {
+    postprocess: async (passages) => [...passages, ...passages],
+  };
+  const retriever = new PostprocessingRetriever({
+    retriever: new LiveRetriever(['alpha', 'beta', 'gamma']),
+    postprocessors: [doubling],
+  });
+
+  // Act
+  const results = (await retriever.retrieve('rotate a key', { topK: 2 }))
+    .passages;
+
+  // Assert
+  assert.deepEqual(
+    results.map(({ passage }) => passage.id),
+    ['alpha', 'beta'],
+  );
 });
 
 test('a Collapse after MaximalMarginalRelevance keeps the order of its picks, not the order of the scores', async () => {

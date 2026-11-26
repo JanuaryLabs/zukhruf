@@ -199,6 +199,25 @@ void test.each(
 );
 
 void test.each(
+  [[0], [-1], [1.5], [Number.NaN], [Number.POSITIVE_INFINITY]] as const,
+  ([topN]) =>
+    test(`a topN of ${topN} is a RangeError when the RerankRetriever is made, where it reached the AI SDK`, () => {
+      assert.throws(
+        () =>
+          new RerankRetriever({
+            retriever: search,
+            model: reranker(relevance),
+            topN,
+          }),
+        {
+          name: 'RangeError',
+          message: `The topN is a positive integer, not ${topN}`,
+        },
+      );
+    }),
+);
+
+void test.each(
   [
     [Number.NaN],
     [Number.POSITIVE_INFINITY],

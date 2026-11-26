@@ -1,5 +1,7 @@
 # A retriever says whether it gives scores: a ranked passage has none, and a scored passage always has one
 
+Superseded in part on 2026-11-26 (#5728) for what `RerankRetriever` passes to its retriever and gives back. It takes `rankWindowSize`: its retriever gets the options of the call with the window as their `topK`, the `topK` of the call when absent, and the call gives the best `topK` of the reranked list. A `topN` that is not a positive integer is a `RangeError` ([ADR 0023](./0023-a-composite-that-fuses-reranks-or-diversifies-asks-its-retriever-for-a-rank-window-and-gives-the-topk-of-the-call.md)).
+
 Status: Accepted 2026-11-26 (backlog #5400).
 
 Decision-makers: Ezz, who set the direction on 2026-11-25 ("All of it, port split included"), against the leaders' optional score, and approved the paper of #5400 on 2026-11-26. On its split for the place of the reranker he chose `RerankRetriever`, a retriever around a retriever (option B), and he signed off the changed assertions of `Collapse`. The leader tables and the type probes of the paper (`~/.claude/plans/retrieval-fusion-families-5400.md`, probes in `retrieval-fusion-families-5400-probes/`) decided the rest.

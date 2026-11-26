@@ -4,6 +4,7 @@ import { untilAborted } from '@zukhruf/async';
 
 import type { Passage } from './passage.ts';
 import { type QueryType, needOf } from './query-bundle.ts';
+import { RankWindow } from './rank-window.ts';
 import type { RetrievalResult } from './retrieval-result.ts';
 import type { RetrieveOptions } from './retrieve-options.ts';
 import type { Retriever } from './retriever.ts';
@@ -15,14 +16,18 @@ import type { ScoredPassage } from './scored-passage.ts';
  * AI SDK's `rerank`, as Elasticsearch's `text_similarity_reranker` retriever
  * reranks a child retriever and LangChain's `ContextualCompressionRetriever`
  * runs a reranker over its base retriever (ADR 0008, #5400). Its retriever
- * gets the query and the options of the call unchanged, and may give an
- * order only; the model gets the text of each passage, the information need
- * (`query` of the bundle, ADR 0013) and `topN`, and without `topN` it ranks
- * every passage. Each passage that the model ranks gets the relevance that
- * the model gives it as its score, higher is better, best first, so it gives
- * scored passages over any retriever. A passage that the model leaves out is
- * dropped, and so is one whose relevance is under the `scoreThreshold` (ADR
- * 0019). A relevance that is not finite is a `TypeError`: the AI SDK passes
+ * gets the query and the options of the call with the rank window as their
+ * `topK`, as `text_similarity_reranker` asks its child for
+ * `rank_window_size` documents (ADR 0023), and may give an order only; the
+ * model gets the text of each passage, the information need (`query` of the
+ * bundle, ADR 0013) and `topN`, and without `topN` it ranks every passage.
+ * Each passage that the model ranks gets the relevance that the model gives
+ * it as its score, higher is better, best first, so it gives scored passages
+ * over any retriever. A passage that the model leaves out is dropped, and so
+ * is one whose relevance is under the `scoreThreshold` (ADR 0019); the call
+ * gives the best `topK` of the rest (ADR 0006). A window smaller than the
+ * `topK` of the call is a `RangeError` before the retriever or the model is
+ * called. A relevance that is not finite is a `TypeError`: the AI SDK passes
  * the model's `relevanceScore` on unchecked (#5700). An empty list makes no
  * model call, as the AI SDK's `rerank` sends none. The failures of the
  * retriever pass up unchanged (ADR 0014). The retriever and the model get the
@@ -40,33 +45,51 @@ export class RerankRetriever<
   readonly #model: RerankingModel;
   readonly #topN: number | undefined;
   readonly #threshold: ScoreThreshold;
+  readonly #window: RankWindow;
 
   constructor(options: {
     readonly retriever: Retriever<Q, P>;
     readonly model: RerankingModel;
-    /** How many passages the model keeps: every passage when absent. */
+    /**
+     * How many passages the retriever gives to the model: the `topK` of the
+     * call when absent. A positive integer, at least that `topK`, as
+     * Elasticsearch's `rank_window_size` is at least `size` (ADR 0023).
+     */
+    readonly rankWindowSize?: number;
+    /** How many passages the model keeps: every passage when absent. A positive integer. */
     readonly topN?: number;
     /** The least score from the reranking model that a passage keeps: every passage when absent (ADR 0019). */
     readonly scoreThreshold?: number;
   }) {
+    const { topN } = options;
+    // The AI SDK passes topN to the provider unchecked.
+    if (topN !== undefined && !(Number.isInteger(topN) && topN >= 1)) {
+      throw new RangeError(`The topN is a positive integer, not ${topN}`);
+    }
     this.#threshold = ScoreThreshold.of(options.scoreThreshold);
+    this.#window = RankWindow.of(options.rankWindowSize);
     this.#retriever = options.retriever;
     this.#model = options.model;
-    this.#topN = options.topN;
+    this.#topN = topN;
   }
 
   async retrieve(
     query: Q,
     options: RetrieveOptions<P> = {},
   ): Promise<RetrievalResult<P, ScoredPassage<P>>> {
+    const { topK, window } = this.#window.forCall(options.topK);
     const { signal } = options;
     signal?.throwIfAborted();
-    return untilAborted(this.#rerank(query, options), signal);
+    return untilAborted(
+      this.#rerank(query, { ...options, topK: window }, topK),
+      signal,
+    );
   }
 
   async #rerank(
     query: Q,
     options: RetrieveOptions<P>,
+    topK: number,
   ): Promise<RetrievalResult<P, ScoredPassage<P>>> {
     const { passages, failures } = await this.#retriever.retrieve(
       query,
@@ -100,7 +123,8 @@ export class RerankRetriever<
     });
     const reranked = this.#threshold
       .keep(scored)
-      .toSorted((a, b) => b.score - a.score);
+      .toSorted((a, b) => b.score - a.score)
+      .slice(0, topK);
     return { passages: reranked, failures };
   }
 }

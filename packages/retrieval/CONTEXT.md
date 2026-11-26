@@ -145,7 +145,7 @@ The rank fusion that gives each passage the sum of `weight / (k + rank)` over th
 _Avoid_: RRF score (for the fused score), reciprocal rerank (LlamaIndex's name)
 
 **Rank window**:
-How many passages a fusion asks of each of its retrievers before it fuses. Elasticsearch calls it `rank_window_size`.
+How many passages a composite that fuses, reranks or diversifies asks of its retriever before it does so: `rankWindowSize` of `FusionRetriever`, `RerankRetriever`, `EmbeddingRerankRetriever` and `PostprocessingRetriever`. The retriever gets it as its `topK`, the call gives the best `topK` of the result, and the window is at least that `topK`, the `topK` itself when absent. Elasticsearch calls it `rank_window_size`, Vespa `rerank-count` ([ADR 0023](./docs/adr/0023-a-composite-that-fuses-reranks-or-diversifies-asks-its-retriever-for-a-rank-window-and-gives-the-topk-of-the-call.md)).
 _Avoid_: Prefetch, candidate count, fetch-k
 
 **Postprocessor**:
