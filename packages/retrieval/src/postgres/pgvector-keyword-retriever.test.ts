@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import { addAbortListener } from 'node:events';
-import { test } from 'node:test';
 
 import type pg from 'pg';
 
 import { waitFor } from '@zukhruf/testing/async';
+import { test } from '@zukhruf/testing/node';
 import { Postgres } from '@zukhruf/testing/postgres';
 
 import {
@@ -1291,4 +1291,56 @@ test('by default, a question whose AND matches exactly 10 passages keeps every w
       (_, n) => `both${String(n + 1).padStart(2, '0')}`,
     ),
   );
+});
+
+void test.each([-1, 2.5, Number.NaN, Number.POSITIVE_INFINITY], (topK) =>
+  test(`a topK of ${topK} in the call is a RangeError before any statement reaches the session, as Elasticsearch refuses a bad size`, async () => {
+    // Arrange: a session that records each statement.
+    const statements: string[] = [];
+    const retriever = new PgvectorKeywordRetriever({
+      store: new PostgresPassageStore({
+        session: {
+          query: async (sql) => {
+            statements.push(sql);
+            return [];
+          },
+        },
+        passages: 'docs_passages',
+        metadata: (columns) => columns,
+      }),
+      index: { column: 'keywords' },
+    });
+
+    // Act
+    const call = retriever.retrieve('rotate key', { topK });
+
+    // Assert
+    await assert.rejects(call, {
+      name: 'RangeError',
+      message: `The topK is a whole number of 0 or more, not ${topK}`,
+    });
+    // A length, not deepEqual: deepEqual would narrow statements to never[].
+    assert.equal(statements.length, 0);
+  }),
+);
+
+test("a topK of 0 in the call gives no passages, as Elasticsearch's size 0", async () => {
+  // Arrange
+  await using database = await server().database();
+  const pool = database.pool();
+  await contract(pool, [{ id: 'k', text: 'rotate the signing key' }]);
+  const retriever = new PgvectorKeywordRetriever({
+    store: new PostgresPassageStore({
+      session: session(pool),
+      passages: 'docs_passages',
+      metadata: (columns) => columns,
+    }),
+    index: { column: 'keywords' },
+  });
+
+  // Act
+  const result = await retriever.retrieve('rotate key', { topK: 0 });
+
+  // Assert
+  assert.deepEqual(result.passages, []);
 });

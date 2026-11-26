@@ -1,7 +1,7 @@
+import type { CheckedRetrieveOptions } from '../count.ts';
 import type { Metadata, StoredPassage } from '../passage.ts';
 import type { KeywordQuery } from '../query-bundle.ts';
 import type { RetrievalResult } from '../retrieval-result.ts';
-import type { RetrieveOptions } from '../retrieve-options.ts';
 import type { ScoredPassage } from '../scored-passage.ts';
 import { where } from '../sql/where.ts';
 import { bind } from './bind.ts';
@@ -29,7 +29,7 @@ export interface TsvectorIndex<M extends Metadata> {
 export interface PostgresMatch<M extends Metadata> {
   retrieve(
     query: KeywordQuery,
-    options: RetrieveOptions<StoredPassage<M>>,
+    options: CheckedRetrieveOptions<StoredPassage<M>>,
   ): Promise<
     RetrievalResult<StoredPassage<M>, ScoredPassage<StoredPassage<M>>>
   >;
@@ -45,7 +45,7 @@ export class AllWords<M extends Metadata> implements PostgresMatch<M> {
 
   retrieve(
     query: KeywordQuery,
-    options: RetrieveOptions<StoredPassage<M>>,
+    options: CheckedRetrieveOptions<StoredPassage<M>>,
   ): Promise<
     RetrievalResult<StoredPassage<M>, ScoredPassage<StoredPassage<M>>>
   > {
@@ -78,7 +78,7 @@ export class DropMostFrequent<M extends Metadata> implements PostgresMatch<M> {
 
   async retrieve(
     query: KeywordQuery,
-    options: RetrieveOptions<StoredPassage<M>>,
+    options: CheckedRetrieveOptions<StoredPassage<M>>,
   ): Promise<
     RetrievalResult<StoredPassage<M>, ScoredPassage<StoredPassage<M>>>
   > {
@@ -230,7 +230,7 @@ export class DropMostFrequent<M extends Metadata> implements PostgresMatch<M> {
    */
   async #matched(
     terms: readonly string[],
-    options: RetrieveOptions<StoredPassage<M>>,
+    options: CheckedRetrieveOptions<StoredPassage<M>>,
   ): Promise<number> {
     const { session, passages, column } = this.#index;
     const parameters: unknown[] = [];
@@ -253,7 +253,7 @@ export class DropMostFrequent<M extends Metadata> implements PostgresMatch<M> {
   async #ranked(
     kept: readonly string[],
     terms: readonly string[],
-    options: RetrieveOptions<StoredPassage<M>>,
+    options: CheckedRetrieveOptions<StoredPassage<M>>,
   ): Promise<
     RetrievalResult<StoredPassage<M>, ScoredPassage<StoredPassage<M>>>
   > {
@@ -264,7 +264,7 @@ export class DropMostFrequent<M extends Metadata> implements PostgresMatch<M> {
     const row = passageJson(parameters, passages);
     const tsquery = bind(parameters, allOf(kept));
     const filter = where(dialect, options.filter, parameters);
-    const topK = bind(parameters, options.topK ?? 10);
+    const topK = bind(parameters, options.topK);
     options.signal?.throwIfAborted();
     const rows = await session.query(
       `
@@ -312,7 +312,7 @@ const allOf = (terms: readonly string[]): string =>
 async function tsRankCd<M extends Metadata>(
   { session, passages, metadata, column, configuration }: TsvectorIndex<M>,
   query: KeywordQuery,
-  options: RetrieveOptions<StoredPassage<M>>,
+  options: CheckedRetrieveOptions<StoredPassage<M>>,
 ): Promise<RetrievalResult<StoredPassage<M>, ScoredPassage<StoredPassage<M>>>> {
   if (query.kind === 'text' && query.text.trim() === '') {
     return { passages: [], failures: new Map() };
@@ -335,7 +335,7 @@ async function tsRankCd<M extends Metadata>(
       : `plainto_tsquery(${regconfig}, ${bind(parameters, query.text)})`;
   const row = passageJson(parameters, passages);
   const filter = where(dialect, options.filter, parameters);
-  const topK = bind(parameters, options.topK ?? 10);
+  const topK = bind(parameters, options.topK);
   const rows = await session.query(
     `
       SELECT ts_rank_cd(p.${column}, q."query") AS "score", ${row} AS "passage"

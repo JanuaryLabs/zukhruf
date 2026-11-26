@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import type { DatabaseSync } from 'node:sqlite';
+import { type DatabaseSync, constants } from 'node:sqlite';
 
 import { wrapEmbeddingModel } from 'ai';
 import { MockEmbeddingModelV4 } from 'ai/test';
@@ -1201,4 +1201,90 @@ test('retrieveMany with a scoreThreshold cuts the list of each query by the thre
       ],
     ],
   );
+});
+
+void test.each(
+  [-1, 2.5, Number.NaN, Number.POSITIVE_INFINITY].flatMap((topK) =>
+    (['retrieve', 'retrieveMany'] as const).map(
+      (method) => [method, topK] as const,
+    ),
+  ),
+  ([method, topK]) =>
+    test(`${method} with a topK of ${topK} in the call is a RangeError before any statement runs or the model is called, as Elasticsearch refuses a bad size`, async () => {
+      // Arrange: the authorizer sees each statement that SQLite compiles.
+      using database = contract([{ id: 'a', vector: [1, 0, 0, 0] }]);
+      const statements: number[] = [];
+      database.setAuthorizer((action) => {
+        statements.push(action);
+        return constants.SQLITE_OK;
+      });
+      const model = embeddingModel({ 'rotate a key': [1, 0, 0, 0] });
+      const retriever = new SqliteEmbeddingRetriever({
+        store: new SqlitePassageStore({
+          database,
+          passages: 'docs_passages',
+          metadata: (columns) => columns,
+        }),
+        vectors: 'docs_passage_vectors',
+        model,
+      });
+
+      // Act
+      const call =
+        method === 'retrieve'
+          ? retriever.retrieve('rotate a key', { topK })
+          : retriever.retrieveMany(['rotate a key'], { topK });
+
+      // Assert
+      await assert.rejects(call, {
+        name: 'RangeError',
+        message: `The topK is a whole number of 0 or more, not ${topK}`,
+      });
+      // A length, not deepEqual: deepEqual would narrow statements to never[].
+      assert.equal(statements.length, 0);
+      assert.equal(model.doEmbedCalls.length, 0);
+    }),
+);
+
+test('retrieveMany of no queries with a topK of -1 in the call is a RangeError, not an empty list', async () => {
+  // Arrange
+  using database = contract([{ id: 'a', vector: [1, 0, 0, 0] }]);
+  const retriever = new SqliteEmbeddingRetriever({
+    store: new SqlitePassageStore({
+      database,
+      passages: 'docs_passages',
+      metadata: (columns) => columns,
+    }),
+    vectors: 'docs_passage_vectors',
+    model: embeddingModel({}),
+  });
+
+  // Act
+  const call = retriever.retrieveMany([], { topK: -1 });
+
+  // Assert
+  await assert.rejects(call, {
+    name: 'RangeError',
+    message: 'The topK is a whole number of 0 or more, not -1',
+  });
+});
+
+test("a topK of 0 in the call gives no passages, as Elasticsearch's size 0", async () => {
+  // Arrange
+  using database = contract([{ id: 'a', vector: [1, 0, 0, 0] }]);
+  const retriever = new SqliteEmbeddingRetriever({
+    store: new SqlitePassageStore({
+      database,
+      passages: 'docs_passages',
+      metadata: (columns) => columns,
+    }),
+    vectors: 'docs_passage_vectors',
+    model: embeddingModel({ 'rotate a key': [1, 0, 0, 0] }),
+  });
+
+  // Act
+  const result = await retriever.retrieve('rotate a key', { topK: 0 });
+
+  // Assert
+  assert.deepEqual(result.passages, []);
 });

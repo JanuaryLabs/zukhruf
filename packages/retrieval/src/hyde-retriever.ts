@@ -2,6 +2,7 @@ import { type LanguageModel, generateText } from 'ai';
 
 import { untilAborted } from '@zukhruf/async';
 
+import { callTopK } from './count.ts';
 import type { Passage } from './passage.ts';
 import { type QueryBundle, type QueryType, bundleOf } from './query-bundle.ts';
 import type { RankedPassage } from './ranked-passage.ts';
@@ -48,6 +49,7 @@ export class HydeRetriever<
     query: QueryType,
     options: RetrieveOptions<P> = {},
   ): Promise<RetrievalResult<P, I>> {
+    callTopK(options.topK);
     const { signal } = options;
     // Not redundant: generateText calls the model with an aborted signal.
     signal?.throwIfAborted();

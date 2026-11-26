@@ -2,6 +2,7 @@ import type { EmbeddingModel } from 'ai';
 import { fromSql, toSql } from 'pgvector';
 
 import type { BatchRetriever } from '../batch-retriever.ts';
+import type { CheckedRetrieveOptions } from '../count.ts';
 import { IdentityCheckedSearch } from '../identity-checked-search.ts';
 import {
   type ModelIdentity,
@@ -113,7 +114,7 @@ export class PgvectorEmbeddingRetriever<
   async #search(
     vectors: readonly (readonly number[])[],
     identity: ModelIdentity,
-    options: RetrieveOptions<StoredPassage<M>>,
+    options: CheckedRetrieveOptions<StoredPassage<M>>,
   ): Promise<ScoredPassage<StoredPassage<M>>[][]> {
     const parameters: unknown[] = [];
     const queries = vectors
@@ -125,7 +126,7 @@ export class PgvectorEmbeddingRetriever<
     const model = bind(parameters, describe(identity));
     const row = passageJson(parameters, this.#passages);
     const filter = where(dialect, options.filter, parameters);
-    const topK = bind(parameters, options.topK ?? 10);
+    const topK = bind(parameters, options.topK);
     const rows = await this.#session.query(
       `
       WITH "queries" AS MATERIALIZED (

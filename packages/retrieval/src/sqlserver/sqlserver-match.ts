@@ -1,7 +1,7 @@
+import type { CheckedRetrieveOptions } from '../count.ts';
 import type { Metadata, StoredPassage } from '../passage.ts';
 import type { KeywordQuery } from '../query-bundle.ts';
 import type { RetrievalResult } from '../retrieval-result.ts';
-import type { RetrieveOptions } from '../retrieve-options.ts';
 import type { ScoredPassage } from '../scored-passage.ts';
 import { where } from '../sql/where.ts';
 import { binary } from './binary.ts';
@@ -26,7 +26,7 @@ export interface FullTextIndex<M extends Metadata> {
 export interface SqlServerMatch<M extends Metadata> {
   retrieve(
     query: KeywordQuery,
-    options: RetrieveOptions<StoredPassage<M>>,
+    options: CheckedRetrieveOptions<StoredPassage<M>>,
   ): Promise<
     RetrievalResult<StoredPassage<M>, ScoredPassage<StoredPassage<M>>>
   >;
@@ -42,7 +42,7 @@ export class ContainsAll<M extends Metadata> implements SqlServerMatch<M> {
 
   retrieve(
     query: KeywordQuery,
-    options: RetrieveOptions<StoredPassage<M>>,
+    options: CheckedRetrieveOptions<StoredPassage<M>>,
   ): Promise<
     RetrievalResult<StoredPassage<M>, ScoredPassage<StoredPassage<M>>>
   > {
@@ -60,7 +60,7 @@ export class ContainsAny<M extends Metadata> implements SqlServerMatch<M> {
 
   retrieve(
     query: KeywordQuery,
-    options: RetrieveOptions<StoredPassage<M>>,
+    options: CheckedRetrieveOptions<StoredPassage<M>>,
   ): Promise<
     RetrievalResult<StoredPassage<M>, ScoredPassage<StoredPassage<M>>>
   > {
@@ -89,7 +89,7 @@ export class FreeText<M extends Metadata> implements SqlServerMatch<M> {
 
   retrieve(
     query: KeywordQuery,
-    options: RetrieveOptions<StoredPassage<M>>,
+    options: CheckedRetrieveOptions<StoredPassage<M>>,
   ): Promise<
     RetrievalResult<StoredPassage<M>, ScoredPassage<StoredPassage<M>>>
   > {
@@ -122,7 +122,7 @@ function containsTable<M extends Metadata>(
   index: FullTextIndex<M>,
   query: KeywordQuery,
   operator: 'AND' | 'OR',
-  options: RetrieveOptions<StoredPassage<M>>,
+  options: CheckedRetrieveOptions<StoredPassage<M>>,
 ): Promise<RetrievalResult<StoredPassage<M>, ScoredPassage<StoredPassage<M>>>> {
   const terms = phrases(termsOf(query));
   if (terms.length === 0) return nothing();
@@ -148,7 +148,7 @@ async function ranked<M extends Metadata>(
   from: 'CONTAINSTABLE' | 'FREETEXTTABLE',
   search: string,
   cut: boolean,
-  options: RetrieveOptions<StoredPassage<M>>,
+  options: CheckedRetrieveOptions<StoredPassage<M>>,
 ): Promise<RetrievalResult<StoredPassage<M>, ScoredPassage<StoredPassage<M>>>> {
   const { session, passages, metadata, table } = index;
   const parameters: Record<string, unknown> = {};
@@ -157,7 +157,7 @@ async function ranked<M extends Metadata>(
   // CONTAINSTABLE and FREETEXTTABLE refuse.
   const condition = bind(parameters, search);
   const filter = where(dialect, options.filter, parameters);
-  const topK = bind(parameters, options.topK ?? 10);
+  const topK = bind(parameters, options.topK);
   const matches = (top: string) =>
     `SELECT [KEY], [RANK] FROM ${from}(${table}, [text], ${condition}${top})`;
   // `top_n_by_rank` takes a literal or a variable, never an expression, so

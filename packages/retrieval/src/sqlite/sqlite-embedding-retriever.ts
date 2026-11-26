@@ -6,6 +6,7 @@ import { Vector } from '@zukhruf/vectors';
 import { fromSql, toSql } from '@zukhruf/vectors/sqlite';
 
 import type { BatchRetriever } from '../batch-retriever.ts';
+import type { CheckedRetrieveOptions } from '../count.ts';
 import { IdentityCheckedSearch } from '../identity-checked-search.ts';
 import {
   type ModelIdentity,
@@ -102,7 +103,7 @@ export class SqliteEmbeddingRetriever<
   #search(
     vectors: readonly (readonly number[])[],
     identity: ModelIdentity,
-    options: RetrieveOptions<StoredPassage<M>>,
+    options: CheckedRetrieveOptions<StoredPassage<M>>,
   ): ScoredPassage<StoredPassage<M>>[][] {
     const parameters: SQLInputValue[] = [
       ...vectors.flatMap((vector, index) => [
@@ -112,7 +113,7 @@ export class SqliteEmbeddingRetriever<
       describe(identity),
     ];
     const filter = where(dialect, options.filter, parameters);
-    parameters.push(options.topK ?? 10);
+    parameters.push(options.topK);
     const statement = this.#database.prepare(`
       WITH "queries" ("query", "vector") AS (VALUES ${vectors.map(() => '(?, ?)').join(', ')}),
       "scored" AS (

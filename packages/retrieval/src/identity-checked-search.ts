@@ -3,6 +3,7 @@ import { type EmbeddingModel, embed, embedMany } from 'ai';
 import { mean } from '@zukhruf/statistics';
 import { DimensionMismatchError } from '@zukhruf/vectors';
 
+import { type CheckedRetrieveOptions, callTopK } from './count.ts';
 import { type ModelIdentity, modelName } from './model-identity.ts';
 import { ModelMismatchError } from './model-mismatch-error.ts';
 import type { StoredPassage } from './passage.ts';
@@ -22,7 +23,7 @@ type Engine<P extends StoredPassage> = {
   readonly search: (
     vectors: readonly (readonly number[])[],
     identity: ModelIdentity,
-    options: RetrieveOptions<P>,
+    options: CheckedRetrieveOptions<P>,
   ) => ScoredPassage<P>[][] | Promise<ScoredPassage<P>[][]>;
   /** The least score that a passage of a list keeps: every passage when undefined (ADR 0019). */
   readonly scoreThreshold: number | undefined;
@@ -55,8 +56,9 @@ export class IdentityCheckedSearch<P extends StoredPassage> {
     query: QueryType,
     options: RetrieveOptions<P>,
   ): Promise<ScoredPassage<P>[]> {
+    const checked = { ...options, topK: callTopK(options.topK) };
     const [text, ...more] = embeddingsOf(query);
-    const [passages] = await this.#retrieve(1, options, async (signal) => {
+    const [passages] = await this.#retrieve(1, checked, async (signal) => {
       if (more.length === 0) {
         const { embedding } = await embed({
           model: this.#engine.model,
@@ -79,9 +81,10 @@ export class IdentityCheckedSearch<P extends StoredPassage> {
     queries: readonly QueryType[],
     options: RetrieveOptions<P>,
   ): Promise<ScoredPassage<P>[][]> {
+    const checked = { ...options, topK: callTopK(options.topK) };
     if (queries.length === 0) return [];
     const texts = queries.map(embeddingsOf);
-    return this.#retrieve(queries.length, options, async (signal) => {
+    return this.#retrieve(queries.length, checked, async (signal) => {
       const { embeddings } = await embedMany({
         model: this.#engine.model,
         values: texts.flat(),
@@ -96,7 +99,7 @@ export class IdentityCheckedSearch<P extends StoredPassage> {
 
   async #retrieve(
     count: number,
-    options: RetrieveOptions<P>,
+    options: CheckedRetrieveOptions<P>,
     embedQueries: (
       signal: AbortSignal | undefined,
     ) => Promise<readonly number[][]>,

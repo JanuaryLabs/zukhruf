@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import type { DatabaseSync } from 'node:sqlite';
-import { test } from 'node:test';
 import { setImmediate as nextTurn } from 'node:timers/promises';
 
 import { MockLanguageModelV4, MockRerankingModelV4 } from 'ai/test';
 
 import { open } from '@zukhruf/sqlite-open';
+import { test } from '@zukhruf/testing/node';
 import { Vector } from '@zukhruf/vectors';
 import { install, toSql } from '@zukhruf/vectors/sqlite';
 
@@ -383,3 +383,28 @@ test("the caller's abort rejects the call at once with the signal's reason, whil
   // Assert
   assert.equal(outcome, reason);
 });
+
+void test.each([-1, 2.5, Number.NaN, Number.POSITIVE_INFINITY], (topK) =>
+  test(`a topK of ${topK} in the call is a RangeError before the model or the retriever is called, as Elasticsearch refuses a bad size`, async () => {
+    // Arrange: the retriever below checks no topK of its own.
+    const calls: Call[] = [];
+    const source = new RecordingRetriever<QueryBundle>(['kw-1']);
+    const retriever = new HydeRetriever({
+      retriever: source,
+      model: languageModel(calls),
+    });
+
+    // Act
+    const call = retriever.retrieve('how do I change my signing key?', {
+      topK,
+    });
+
+    // Assert
+    await assert.rejects(call, {
+      name: 'RangeError',
+      message: `The topK is a whole number of 0 or more, not ${topK}`,
+    });
+    assert.deepEqual(calls, []);
+    assert.deepEqual(source.queries, []);
+  }),
+);

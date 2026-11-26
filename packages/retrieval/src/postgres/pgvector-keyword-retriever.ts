@@ -1,3 +1,4 @@
+import { callTopK } from '../count.ts';
 import type { Metadata, StoredPassage } from '../passage.ts';
 import { type QueryType, keywordQueryOf } from '../query-bundle.ts';
 import type { RetrievalResult } from '../retrieval-result.ts';
@@ -104,8 +105,9 @@ export class PgvectorKeywordRetriever<
   ): Promise<
     RetrievalResult<StoredPassage<M>, ScoredPassage<StoredPassage<M>>>
   > {
+    const checked = { ...options, topK: callTopK(options.topK) };
     options.signal?.throwIfAborted();
-    return this.#match.retrieve(keywordQueryOf(query), options);
+    return this.#match.retrieve(keywordQueryOf(query), checked);
   }
 }
 

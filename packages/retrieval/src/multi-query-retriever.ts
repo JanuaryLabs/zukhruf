@@ -2,6 +2,7 @@ import { type LanguageModel, Output, generateText, jsonSchema } from 'ai';
 
 import { untilAborted } from '@zukhruf/async';
 
+import { callTopK, positiveInteger } from './count.ts';
 import { fusePassages } from './fuse-passages.ts';
 import type { Fusion, RankedDoc } from './fusion.ts';
 import type { Passage } from './passage.ts';
@@ -66,19 +67,15 @@ export class MultiQueryRetriever<
   }) {
     this.#retriever = options.retriever;
     this.#model = options.model;
-    this.#queryCount = options.queryCount ?? 4;
+    this.#queryCount = positiveInteger('queryCount', options.queryCount ?? 4);
     this.#fusion = options.fusion ?? new RankFusion();
-    if (!Number.isInteger(this.#queryCount) || this.#queryCount < 1) {
-      throw new RangeError(
-        `The queryCount is a positive integer, not ${this.#queryCount}`,
-      );
-    }
   }
 
   async retrieve(
     query: QueryType,
     options: RetrieveOptions<P> = {},
   ): Promise<RetrievalResult<P, ScoredPassage<P>>> {
+    const topK = callTopK(options.topK);
     const need = needOf(query);
     const caller = options.signal;
     caller?.throwIfAborted();
@@ -133,7 +130,7 @@ export class MultiQueryRetriever<
           weight: 1,
           passages,
         })),
-      ).slice(0, options.topK ?? 10),
+      ).slice(0, topK),
       failures: firstByName(results.map(({ failures }) => failures)),
     };
   }

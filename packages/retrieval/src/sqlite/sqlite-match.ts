@@ -1,9 +1,9 @@
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 
+import type { CheckedRetrieveOptions } from '../count.ts';
 import type { Metadata, StoredPassage } from '../passage.ts';
 import type { KeywordQuery } from '../query-bundle.ts';
 import type { RetrievalResult } from '../retrieval-result.ts';
-import type { RetrieveOptions } from '../retrieve-options.ts';
 import type { ScoredPassage } from '../scored-passage.ts';
 import { where } from '../sql/where.ts';
 import { dialect } from './dialect.ts';
@@ -24,7 +24,7 @@ export interface Fts5Index<M extends Metadata> {
 export interface SqliteMatch<M extends Metadata> {
   retrieve(
     query: KeywordQuery,
-    options: RetrieveOptions<StoredPassage<M>>,
+    options: CheckedRetrieveOptions<StoredPassage<M>>,
   ): RetrievalResult<StoredPassage<M>, ScoredPassage<StoredPassage<M>>>;
 }
 
@@ -38,7 +38,7 @@ export class AndMatch<M extends Metadata> implements SqliteMatch<M> {
 
   retrieve(
     query: KeywordQuery,
-    options: RetrieveOptions<StoredPassage<M>>,
+    options: CheckedRetrieveOptions<StoredPassage<M>>,
   ): RetrievalResult<StoredPassage<M>, ScoredPassage<StoredPassage<M>>> {
     return bm25(this.#index, ftsPhrases(termsOf(query)).join(' AND '), options);
   }
@@ -54,7 +54,7 @@ export class OrMatch<M extends Metadata> implements SqliteMatch<M> {
 
   retrieve(
     query: KeywordQuery,
-    options: RetrieveOptions<StoredPassage<M>>,
+    options: CheckedRetrieveOptions<StoredPassage<M>>,
   ): RetrievalResult<StoredPassage<M>, ScoredPassage<StoredPassage<M>>> {
     return bm25(this.#index, ftsPhrases(termsOf(query)).join(' OR '), options);
   }
@@ -81,7 +81,7 @@ export class CommonTermsMatch<M extends Metadata> implements SqliteMatch<M> {
 
   retrieve(
     query: KeywordQuery,
-    options: RetrieveOptions<StoredPassage<M>>,
+    options: CheckedRetrieveOptions<StoredPassage<M>>,
   ): RetrievalResult<StoredPassage<M>, ScoredPassage<StoredPassage<M>>> {
     const { database, index } = this.#index;
     const cutoff =
@@ -132,12 +132,12 @@ const passageCount = ({ database, index }: Fts5Index<Metadata>): number =>
 function bm25<M extends Metadata>(
   { database, passages, index, metadata }: Fts5Index<M>,
   match: string,
-  options: RetrieveOptions<StoredPassage<M>>,
+  options: CheckedRetrieveOptions<StoredPassage<M>>,
 ): RetrievalResult<StoredPassage<M>, ScoredPassage<StoredPassage<M>>> {
   if (match === '') return { passages: [], failures: new Map() };
   const parameters: SQLInputValue[] = [match];
   const filter = where(dialect, options.filter, parameters);
-  parameters.push(options.topK ?? 10);
+  parameters.push(options.topK);
   const statement = database.prepare(`
       SELECT -bm25(${index}) AS "score", p.*
       FROM ${index} JOIN ${passages} p ON p.rowid = ${index}.rowid

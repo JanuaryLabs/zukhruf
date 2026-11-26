@@ -8,7 +8,7 @@ The leaders name and set the number of results in many ways: LlamaIndex `similar
 
 ## Decision
 
-- `RetrieveOptions.topK` is the most passages that a call gives. Its default is 10.
+- `RetrieveOptions.topK` is the most passages that a call gives. Its default is 10. Every retriever refuses a call topK that is not a whole number of 0 or more with a `RangeError`, through `callTopK` of `src/count.ts`, before any statement or model call, and the default 10 is written only there; each engine's own search takes the topK that `callTopK` gives (#5769, #5772; the composites in [ADR 0023](./0023-a-composite-that-fuses-reranks-or-diversifies-asks-its-retriever-for-a-rank-window-and-gives-the-topk-of-the-call.md)).
 - The name is `topK`, as Mastra writes it in TypeScript and Haystack writes `top_k`.
 - `includeVectors` (default `false`) adds the stored vector to each `ScoredPassage`, as .NET's `IncludeVectors` and Haystack's `return_embedding` do ([VectorSearchOptions](https://learn.microsoft.com/en-us/dotnet/api/microsoft.extensions.vectordata.vectorsearchoptions-1)).
 - `abortSignal` stops the call, as the AI SDK names it.

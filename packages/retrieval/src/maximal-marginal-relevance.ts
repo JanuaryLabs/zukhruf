@@ -2,6 +2,7 @@ import { type EmbeddingModel, embed } from 'ai';
 
 import { Vector, cosineSimilarity } from '@zukhruf/vectors';
 
+import { positiveInteger } from './count.ts';
 import type { Passage } from './passage.ts';
 import type { Postprocessor } from './postprocessor.ts';
 import type { RankedPassage } from './ranked-passage.ts';
@@ -36,13 +37,10 @@ export class MaximalMarginalRelevance implements Postprocessor<Passage> {
   }) {
     this.#model = options.model;
     this.#lambda = options.lambda ?? 0.5;
-    this.#topK = options.topK;
     if (!(this.#lambda >= 0 && this.#lambda <= 1)) {
       throw new RangeError(`The lambda is from 0 to 1, not ${this.#lambda}`);
     }
-    if (!Number.isInteger(this.#topK) || this.#topK < 1) {
-      throw new RangeError(`The topK is a positive integer, not ${this.#topK}`);
-    }
+    this.#topK = positiveInteger('topK', options.topK);
   }
 
   async postprocess<I extends RankedPassage>(

@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import type { DatabaseSync } from 'node:sqlite';
-import { test } from 'node:test';
 
 import { MockLanguageModelV4 } from 'ai/test';
 
 import { open } from '@zukhruf/sqlite-open';
+import { test } from '@zukhruf/testing/node';
 import { Vector } from '@zukhruf/vectors';
 import { install, toSql } from '@zukhruf/vectors/sqlite';
 
@@ -674,4 +674,41 @@ test('under ScoreFusion(none, max), a passage that two searches find keeps its g
       vector: [1, 0],
     },
   ]);
+});
+
+void test.each([-1, 2.5, Number.NaN, Number.POSITIVE_INFINITY], (topK) =>
+  test(`a topK of ${topK} in the call is a RangeError before the model or the retriever is called, as Elasticsearch refuses a bad size`, async () => {
+    // Arrange
+    const calls: Call[] = [];
+    const source = new RecordingRetriever(['kw-1']);
+    const retriever = new MultiQueryRetriever({
+      retriever: source,
+      model: languageModel(queries('change a key'), calls),
+    });
+
+    // Act
+    const call = retriever.retrieve('rotate a key', { topK });
+
+    // Assert
+    await assert.rejects(call, {
+      name: 'RangeError',
+      message: `The topK is a whole number of 0 or more, not ${topK}`,
+    });
+    assert.deepEqual(calls, []);
+    assert.deepEqual(source.queries, []);
+  }),
+);
+
+test("a topK of 0 in the call gives no passages, as Elasticsearch's size 0", async () => {
+  // Arrange
+  const retriever = new MultiQueryRetriever({
+    retriever: new RecordingRetriever(['kw-1']),
+    model: languageModel(queries('change a key')),
+  });
+
+  // Act
+  const result = await retriever.retrieve('rotate a key', { topK: 0 });
+
+  // Assert
+  assert.deepEqual(result.passages, []);
 });

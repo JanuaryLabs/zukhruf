@@ -1,3 +1,4 @@
+import { positiveInteger } from './count.ts';
 import { PassageGapError } from './passage-gap-error.ts';
 import type { PassageStore } from './passage-store.ts';
 import type { Metadata, StoredPassage } from './passage.ts';
@@ -35,12 +36,7 @@ export class ContextWindow<
     readonly windowSize?: number;
   }) {
     this.#store = options.store;
-    this.#windowSize = options.windowSize ?? 3;
-    if (!Number.isInteger(this.#windowSize) || this.#windowSize < 1) {
-      throw new RangeError(
-        `The windowSize is a positive integer, not ${this.#windowSize}`,
-      );
-    }
+    this.#windowSize = positiveInteger('windowSize', options.windowSize ?? 3);
   }
 
   async postprocess<I extends RankedPassage<StoredPassage<M>>>(

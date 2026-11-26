@@ -4,6 +4,7 @@ import { Vector } from '@zukhruf/vectors';
 import { fromSql, sqlType, toSql } from '@zukhruf/vectors/sqlserver';
 
 import type { BatchRetriever } from '../batch-retriever.ts';
+import type { CheckedRetrieveOptions } from '../count.ts';
 import { IdentityCheckedSearch } from '../identity-checked-search.ts';
 import {
   type ModelIdentity,
@@ -111,7 +112,7 @@ export class SqlServerEmbeddingRetriever<
   async #search(
     vectors: readonly (readonly number[])[],
     identity: ModelIdentity,
-    options: RetrieveOptions<StoredPassage<M>>,
+    options: CheckedRetrieveOptions<StoredPassage<M>>,
   ): Promise<ScoredPassage<StoredPassage<M>>[][]> {
     const parameters: Record<string, unknown> = {};
     const queries = bind(
@@ -120,7 +121,7 @@ export class SqlServerEmbeddingRetriever<
     );
     const model = bind(parameters, describe(identity));
     const filter = where(dialect, options.filter, parameters);
-    const topK = bind(parameters, options.topK ?? 10);
+    const topK = bind(parameters, options.topK);
     // A CAST target cannot be a parameter; sqlType checks the dimensions.
     const type = sqlType(Vector, identity.dimensions);
     const rows = await this.#session.query(

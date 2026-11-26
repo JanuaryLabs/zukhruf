@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
-import type { DatabaseSync } from 'node:sqlite';
-import { test } from 'node:test';
+import { type DatabaseSync, constants } from 'node:sqlite';
 
 import { open } from '@zukhruf/sqlite-open';
+import { test } from '@zukhruf/testing/node';
 
 import {
   SqliteBM25Retriever,
@@ -732,4 +732,54 @@ test('a cutoffFrequency that is not a positive finite number is refused with a R
       ),
     );
   }
+});
+
+void test.each([-1, 2.5, Number.NaN, Number.POSITIVE_INFINITY], (topK) =>
+  test(`a topK of ${topK} in the call is a RangeError before any statement runs, as Elasticsearch refuses a bad size`, async () => {
+    // Arrange: the authorizer sees each statement that SQLite compiles.
+    using database = contract([{ id: 'k', text: 'rotate the signing key' }]);
+    const statements: number[] = [];
+    database.setAuthorizer((action) => {
+      statements.push(action);
+      return constants.SQLITE_OK;
+    });
+    const retriever = new SqliteBM25Retriever({
+      store: new SqlitePassageStore({
+        database,
+        passages: 'docs_passages',
+        metadata: (columns) => columns,
+      }),
+      index: 'docs_passages_fts',
+    });
+
+    // Act
+    const call = retriever.retrieve('rotate key', { topK });
+
+    // Assert
+    await assert.rejects(call, {
+      name: 'RangeError',
+      message: `The topK is a whole number of 0 or more, not ${topK}`,
+    });
+    // A length, not deepEqual: deepEqual would narrow statements to never[].
+    assert.equal(statements.length, 0);
+  }),
+);
+
+test("a topK of 0 in the call gives no passages, as Elasticsearch's size 0", async () => {
+  // Arrange
+  using database = contract([{ id: 'k', text: 'rotate the signing key' }]);
+  const retriever = new SqliteBM25Retriever({
+    store: new SqlitePassageStore({
+      database,
+      passages: 'docs_passages',
+      metadata: (columns) => columns,
+    }),
+    index: 'docs_passages_fts',
+  });
+
+  // Act
+  const result = await retriever.retrieve('rotate key', { topK: 0 });
+
+  // Assert
+  assert.deepEqual(result.passages, []);
 });

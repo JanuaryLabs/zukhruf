@@ -3,6 +3,7 @@ import { type EmbeddingModel, embed, embedMany } from 'ai';
 import { untilAborted } from '@zukhruf/async';
 import { Vector, cosineSimilarity } from '@zukhruf/vectors';
 
+import { positiveInteger } from './count.ts';
 import type { Passage } from './passage.ts';
 import { type QueryType, needOf } from './query-bundle.ts';
 import { RankWindow } from './rank-window.ts';
@@ -64,9 +65,7 @@ export class EmbeddingRerankRetriever<
     readonly scoreThreshold?: number;
   }) {
     const { topN } = options;
-    if (topN !== undefined && !(Number.isInteger(topN) && topN >= 1)) {
-      throw new RangeError(`The topN is a positive integer, not ${topN}`);
-    }
+    if (topN !== undefined) positiveInteger('topN', topN);
     this.#threshold = ScoreThreshold.of(options.scoreThreshold);
     this.#window = RankWindow.of(options.rankWindowSize);
     this.#retriever = options.retriever;

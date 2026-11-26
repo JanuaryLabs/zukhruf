@@ -1373,3 +1373,68 @@ test('without a scoreThreshold, a passage whose stored vector is zero reaches th
     ],
   );
 });
+
+void test.each(
+  [-1, 2.5, Number.NaN, Number.POSITIVE_INFINITY].flatMap((topK) =>
+    (['retrieve', 'retrieveMany'] as const).map(
+      (method) => [method, topK] as const,
+    ),
+  ),
+  ([method, topK]) =>
+    test(`${method} with a topK of ${topK} in the call is a RangeError before any statement reaches the session or the model is called, as Elasticsearch refuses a bad size`, async () => {
+      // Arrange: a session that records each statement.
+      const statements: string[] = [];
+      const model = embeddingModel({ 'rotate a key': [1, 0, 0, 0] });
+      const retriever = new PgvectorEmbeddingRetriever({
+        store: new PostgresPassageStore({
+          session: {
+            query: async (sql) => {
+              statements.push(sql);
+              return [];
+            },
+          },
+          passages: 'docs_passages',
+          metadata: (columns) => columns,
+        }),
+        vectors: 'docs_passage_vectors',
+        model,
+      });
+
+      // Act
+      const call =
+        method === 'retrieve'
+          ? retriever.retrieve('rotate a key', { topK })
+          : retriever.retrieveMany(['rotate a key'], { topK });
+
+      // Assert
+      await assert.rejects(call, {
+        name: 'RangeError',
+        message: `The topK is a whole number of 0 or more, not ${topK}`,
+      });
+      // A length, not deepEqual: deepEqual would narrow statements to never[].
+      assert.equal(statements.length, 0);
+      assert.equal(model.doEmbedCalls.length, 0);
+    }),
+);
+
+test("a topK of 0 in the call gives no passages, as Elasticsearch's size 0", async () => {
+  // Arrange
+  await using database = await server().database();
+  const pool = database.pool();
+  await contract(pool, [{ id: 'a', vector: [1, 0, 0, 0] }]);
+  const retriever = new PgvectorEmbeddingRetriever({
+    store: new PostgresPassageStore({
+      session: session(pool),
+      passages: 'docs_passages',
+      metadata: (columns) => columns,
+    }),
+    vectors: 'docs_passage_vectors',
+    model: embeddingModel({ 'rotate a key': [1, 0, 0, 0] }),
+  });
+
+  // Act
+  const result = await retriever.retrieve('rotate a key', { topK: 0 });
+
+  // Assert
+  assert.deepEqual(result.passages, []);
+});

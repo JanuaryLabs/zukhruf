@@ -1,3 +1,5 @@
+import { callTopK, positiveInteger } from './count.ts';
+
 /**
  * How many passages a composite asks of its retriever before it fuses,
  * reranks or diversifies them and cuts the list to the topK of the call, as
@@ -16,15 +18,11 @@ export class RankWindow {
 
   /** The window of a `rankWindowSize` option: the topK of each call when absent. */
   static of(rankWindowSize: number | undefined): RankWindow {
-    if (
-      rankWindowSize !== undefined &&
-      !(Number.isInteger(rankWindowSize) && rankWindowSize >= 1)
-    ) {
-      throw new RangeError(
-        `The rankWindowSize is a positive integer, not ${rankWindowSize}`,
-      );
-    }
-    return new RankWindow(rankWindowSize);
+    return new RankWindow(
+      rankWindowSize === undefined
+        ? undefined
+        : positiveInteger('rankWindowSize', rankWindowSize),
+    );
   }
 
   /**
@@ -34,18 +32,17 @@ export class RankWindow {
    * `size` 0 does. A window smaller than that topK is a `RangeError`, as
    * Elasticsearch refuses a `rank_window_size` smaller than `size`.
    */
-  forCall(topK = 10): { readonly topK: number; readonly window: number } {
-    if (!(Number.isInteger(topK) && topK >= 0)) {
+  forCall(topK: number | undefined): {
+    readonly topK: number;
+    readonly window: number;
+  } {
+    const checked = callTopK(topK);
+    const window = this.#size ?? checked;
+    if (window < checked) {
       throw new RangeError(
-        `The topK is a whole number of 0 or more, not ${topK}`,
+        `The rankWindowSize ${window} is smaller than the topK ${checked} of the call`,
       );
     }
-    const window = this.#size ?? topK;
-    if (window < topK) {
-      throw new RangeError(
-        `The rankWindowSize ${window} is smaller than the topK ${topK} of the call`,
-      );
-    }
-    return { topK, window };
+    return { topK: checked, window };
   }
 }

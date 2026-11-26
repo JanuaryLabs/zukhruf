@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
 
 import type mssql from 'mssql';
 
 import { waitFor } from '@zukhruf/testing/async';
+import { test } from '@zukhruf/testing/node';
 import { SqlServer } from '@zukhruf/testing/sqlserver';
 
 import {
@@ -1619,5 +1619,67 @@ test(
       results,
     );
     assert.equal(results.three.length, 3);
+  },
+);
+
+// No engine runs: the check comes before any statement, so these cases run
+// where the engine is emulated too.
+void test.each([-1, 2.5, Number.NaN, Number.POSITIVE_INFINITY], (topK) =>
+  test(`a topK of ${topK} in the call is a RangeError before any statement reaches the session, as Elasticsearch refuses a bad size`, async () => {
+    // Arrange: a session that records each statement.
+    const statements: string[] = [];
+    const retriever = new SqlServerKeywordRetriever({
+      store: new SqlServerPassageStore({
+        session: {
+          query: async (sql) => {
+            statements.push(sql);
+            return [];
+          },
+        },
+        passages: 'docs_passages',
+        metadata: (columns) => columns,
+      }),
+      index: { table: 'docs_passages' },
+    });
+
+    // Act
+    const call = retriever.retrieve('rotate key', { topK });
+
+    // Assert
+    await assert.rejects(call, {
+      name: 'RangeError',
+      message: `The topK is a whole number of 0 or more, not ${topK}`,
+    });
+    // A length, not deepEqual: deepEqual would narrow statements to never[].
+    assert.equal(statements.length, 0);
+  }),
+);
+
+test(
+  "a topK of 0 in the call gives no passages, as Elasticsearch's size 0, though FREETEXTTABLE's top_n_by_rank gets 0",
+  { skip: emulation },
+  async (t) => {
+    // Arrange
+    await using database = await server().database();
+    const pool = await database.pool();
+    await contract(
+      pool,
+      [{ id: 'k', text: 'rotate the signing key' }],
+      t.signal,
+    );
+    const retriever = new SqlServerKeywordRetriever({
+      store: new SqlServerPassageStore({
+        session: session(pool),
+        passages: 'docs_passages',
+        metadata: (columns) => columns,
+      }),
+      index: { table: 'docs_passages' },
+    });
+
+    // Act
+    const result = await retriever.retrieve('rotate key', { topK: 0 });
+
+    // Assert
+    assert.deepEqual(result.passages, []);
   },
 );
