@@ -1,8 +1,6 @@
 # The caller calls test() and each only collects the native promise
 
-> **Design for review.**
-
-Status: Proposed 2026-11-26 (backlog #5729).
+Status: accepted by Ezz on 2026-11-26 ("Approve as written", backlog #5729).
 
 Decision-makers: the session that fixed #2561 on 2026-10-11 (9832e1ec), and Ezz, who kept the form on 2026-11-26 with the move of the code to this package.
 

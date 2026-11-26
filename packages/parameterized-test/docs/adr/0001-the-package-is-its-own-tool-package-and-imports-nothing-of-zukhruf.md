@@ -1,8 +1,6 @@
 # The package is its own tool package and imports nothing of zukhruf
 
-> **Design for review.**
-
-Status: Proposed 2026-11-26 (backlog #5729).
+Status: accepted by Ezz on 2026-11-26 ("Approve as written", backlog #5729).
 
 Decision-makers: Ezz, on 2026-11-26, who chose to move `test.each` and `suite.each` into a new package with no zukhruf dependency ("fix 1"), in place of a home in an existing package.
 

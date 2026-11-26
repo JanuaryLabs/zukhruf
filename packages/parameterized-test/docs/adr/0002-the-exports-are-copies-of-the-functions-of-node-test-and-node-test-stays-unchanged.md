@@ -1,8 +1,6 @@
 # The exports are copies of the functions of node:test, and node:test stays unchanged
 
-> **Design for review.**
-
-Status: Proposed 2026-11-26 (backlog #5729).
+Status: accepted by Ezz on 2026-11-26 ("Approve as written", backlog #5729).
 
 Decision-makers: Ezz, on 2026-11-26, who chose a separate copy of the functions of `node:test` over a change to them, with the condition "you need to make sure it works with node".
 

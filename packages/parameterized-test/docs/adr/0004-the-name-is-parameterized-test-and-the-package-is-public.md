@@ -1,8 +1,6 @@
 # The name is parameterized-test and the package is public
 
-> **Design for review.**
-
-Status: Proposed 2026-11-26 (backlog #5729).
+Status: accepted by Ezz on 2026-11-26 ("Approve as written", backlog #5729).
 
 Decision-makers: Ezz, on 2026-11-26, who chose the name `@zukhruf/parameterized-test` over `@zukhruf/table-test`, and ruled the package public on npm.
 

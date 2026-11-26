@@ -1,7 +1,5 @@
 # @zukhruf/parameterized-test
 
-> **Design for review: no code yet.** The README, the glossary and the ADRs are the API on paper. Nothing is built before the maintainer approves them (backlog #5729).
-
 `test.each` and `suite.each` for `node:test`. Each row of a table becomes one test with its own name and its own result. One failed row does not hide the other rows.
 
 The package imports nothing of zukhruf. It imports only `node:test` and `node:util/types`. Thus the tests of each package can use it, also the tests of the packages that `@zukhruf/testing` depends on ([ADR 0001](./docs/adr/0001-the-package-is-its-own-tool-package-and-imports-nothing-of-zukhruf.md)). The code moved here from `@zukhruf/testing/node`, which is gone, with no alias.
@@ -167,9 +165,14 @@ Probed on 2026-11-26.
 | zukhruf test files        | Every test file that repeats a test over a table: 136 loops that declared tests became `test.each` (cbf95ce6), the tests of `testing` too, and 82 loops over a table inside one test (26b9b614) | #5729  |
 | `zukhruf/prefer-each`     | An error on a loop that declares tests; its message names this package                                                                                                                          | #5729  |
 | `zukhruf/no-tabular-test` | An error on a loop inside one test over a table of independent cases; its message names this package                                                                                            | #5729  |
-| sdk-it                    | 69 files moved here (2ea8d2a7)                                                                                                                                                                  | #5729  |
-| deepagents                | 6 files moved here (b136e29d)                                                                                                                                                                   | #5729  |
-| context-compiler          | 2 files, as above                                                                                                                                                                               | #5729  |
+| sdk-it                    | 87 test files: 69 moved here from `@zukhruf/testing/node` (2ea8d2a7), and 47 loops became `test.each` (d1b56bc3)                                                                                | #5729  |
+| deepagents                | 59 test files: 6 moved here from `@zukhruf/testing/node` (b136e29d), and 53 whose loops became `.each` of `test`, `it`, `suite` and `describe` (c5c83582)                                       | #5729  |
+| elt                       | 52 test files: 110 loops became `test.each` (b7249047)                                                                                                                                          | #5729  |
+| context-compiler          | 4 test files: 2 moved here from `@zukhruf/testing/node`, and 2 loops became `test.each` (11ce41c)                                                                                               | #5729  |
+| mac-cleanup               | 3 test files: 11 `test.each` tables (bad1624)                                                                                                                                                   | #5729  |
+| finetuning                | 3 test files: 4 loops became `test.each` (2ca9f07)                                                                                                                                              | #5729  |
+| offers-evals              | 3 test files: 8 `test.each` tables (3ade878)                                                                                                                                                    | #5729  |
+| factory                   | 1 test file: 2 loops became `test.each` (0ca7602)                                                                                                                                               | #5729  |
 
 ## The same concepts in other systems
 
