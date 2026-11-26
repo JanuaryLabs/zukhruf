@@ -3,7 +3,11 @@ import { type EmbeddingModel, embed, embedMany } from 'ai';
 import { mean } from '@zukhruf/statistics';
 import { DimensionMismatchError } from '@zukhruf/vectors';
 
-import { type CheckedRetrieveOptions, callTopK } from './count.ts';
+import {
+  type CheckedRetrieveOptions,
+  asksForNoPassages,
+  callTopK,
+} from './count.ts';
 import { type ModelIdentity, modelName } from './model-identity.ts';
 import { ModelMismatchError } from './model-mismatch-error.ts';
 import type { StoredPassage } from './passage.ts';
@@ -33,15 +37,18 @@ type Engine<P extends StoredPassage> = {
  * The steps that an embedding retriever of each engine takes around its own
  * search (ADR 0010): no stored vectors give one empty list for each query and
  * no model call; a query model of another provider or model id fails with
- * ModelMismatchError before the model call; a query vector whose dimensions
- * no stored identity of that model has fails with DimensionMismatchError
- * after it, and so do texts of one query whose vectors have different
- * dimensions. The engine reads the stored identities and runs the search;
- * with a `scoreThreshold`, each list then keeps the passages whose score is
- * at least it, the score that the caller gets (ADR 0019).
- * Each query is embedded as its `customEmbeddings`, or as its `query` when
- * it has none, and several texts search with the mean of their vectors, as
- * LlamaIndex's vector retriever does (ADR 0013).
+ * ModelMismatchError before the model call; a topK of 0 gives one empty
+ * list for each query after that check, with no model call and no search;
+ * a query vector whose dimensions no stored identity of that model has fails
+ * with DimensionMismatchError after it, and so do texts of one query whose
+ * vectors have different dimensions. The engine reads the stored identities
+ * and runs the search; with a `scoreThreshold`, each list then keeps the
+ * passages whose score is at least it, the score that the caller gets (ADR
+ * 0019). Each query is embedded as its `customEmbeddings`, or as its `query`
+ * when it has none, and several texts search with the mean of their vectors,
+ * as LlamaIndex's vector retriever does (ADR 0013). A text of no word to
+ * embed is a `RangeError` (`embeddingsOf`) before the stored identities are
+ * read or the model is called.
  */
 export class IdentityCheckedSearch<P extends StoredPassage> {
   readonly #engine: Engine<P>;
@@ -121,6 +128,11 @@ export class IdentityCheckedSearch<P extends StoredPassage> {
         query,
       );
     }
+    // A topK of 0 gives no passages, so the paid model call and the search
+    // would reach no caller; the cheap read of the stored identities still
+    // refuses a model of the wrong provider (ADR 0023).
+    if (asksForNoPassages(options.topK))
+      return Array.from({ length: count }, () => []);
 
     const vectors = await embedQueries(signal);
     signal?.throwIfAborted();

@@ -476,3 +476,33 @@ void test.each(
       );
     }),
 );
+
+void test.each(
+  [
+    ['an empty string', ''],
+    ['a string of white space', ' \t\n'],
+    [
+      'a query bundle whose query is white space',
+      { query: '  ', keywords: ['rotate'] },
+    ],
+  ] as const,
+  ([name, query]) =>
+    test(`${name} as the information need is a RangeError before the retriever or the reranking model is called, as EmbeddingRerankRetriever refuses it`, async () => {
+      // Arrange
+      const calls: Call[] = [];
+      const source = new RecordingRetriever(['alpha']);
+      const rerank = new RerankRetriever({
+        retriever: source,
+        model: reranker({ alpha: 0.5 }, calls),
+      });
+      const need = typeof query === 'string' ? query : query.query;
+
+      // Act and Assert
+      await assert.rejects(rerank.retrieve(query), {
+        name: 'RangeError',
+        message: `The query of a query bundle holds no word: got ${JSON.stringify(need)}`,
+      });
+      assert.deepEqual(calls, []);
+      assert.deepEqual(source.queries, []);
+    }),
+);

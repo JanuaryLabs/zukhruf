@@ -9,7 +9,7 @@ import { test } from '@zukhruf/testing/node';
 import { DimensionMismatchError, Vector } from '@zukhruf/vectors';
 import { install, toSql } from '@zukhruf/vectors/sqlite';
 
-import { type Metadata, ModelMismatchError } from '../index.ts';
+import { type Metadata, ModelMismatchError, type QueryType } from '../index.ts';
 import { SqliteEmbeddingRetriever, SqlitePassageStore } from '../sqlite.ts';
 import { embeddingModel } from '../testing/embedding-model.ts';
 import { RecordingMetadata } from '../testing/recording-metadata.ts';
@@ -1246,6 +1246,55 @@ void test.each(
     }),
 );
 
+const blankQueries: readonly (readonly [QueryType, string])[] = [
+  ['', 'The query of a query bundle holds no word: got ""'],
+  [' \n\t', 'The query of a query bundle holds no word: got " \\n\\t"'],
+  [{ query: '   ' }, 'The query of a query bundle holds no word: got "   "'],
+  [
+    { query: 'rotate a key', customEmbeddings: ['rotate a key', '  '] },
+    'The customEmbeddings of a query bundle hold a text of no word: got ["rotate a key","  "]',
+  ],
+];
+
+void test.each(
+  blankQueries.flatMap(([query, message]) =>
+    (['retrieve', 'retrieveMany'] as const).map(
+      (method) => [method, query, message] as const,
+    ),
+  ),
+  ([method, query, message]) =>
+    test(`${method} of ${JSON.stringify(query)}, a text of no word to embed, is a RangeError before any statement runs or the model is called`, async () => {
+      // Arrange: the authorizer sees each statement that SQLite compiles.
+      using database = contract([{ id: 'a', vector: [1, 0, 0, 0] }]);
+      const statements: number[] = [];
+      database.setAuthorizer((action) => {
+        statements.push(action);
+        return constants.SQLITE_OK;
+      });
+      const model = embeddingModel({ 'rotate a key': [1, 0, 0, 0] });
+      const retriever = new SqliteEmbeddingRetriever({
+        store: new SqlitePassageStore({
+          database,
+          passages: 'docs_passages',
+          metadata: (columns) => columns,
+        }),
+        vectors: 'docs_passage_vectors',
+        model,
+      });
+      // Act: retrieveMany checks each query, not only the first.
+      const call =
+        method === 'retrieve'
+          ? retriever.retrieve(query, { topK: 3 })
+          : retriever.retrieveMany(['rotate a key', query], { topK: 3 });
+
+      // Assert
+      await assert.rejects(call, { name: 'RangeError', message });
+      // A length, not deepEqual: deepEqual would narrow statements to never[].
+      assert.equal(statements.length, 0);
+      assert.equal(model.doEmbedCalls.length, 0);
+    }),
+);
+
 test('retrieveMany of no queries with a topK of -1 in the call is a RangeError, not an empty list', async () => {
   // Arrange
   using database = contract([{ id: 'a', vector: [1, 0, 0, 0] }]);
@@ -1269,8 +1318,12 @@ test('retrieveMany of no queries with a topK of -1 in the call is a RangeError, 
   });
 });
 
-test("a topK of 0 in the call gives no passages, as Elasticsearch's size 0", async () => {
+test('a topK of 0 in the call gives no passages and makes no call to the embedding model, since no work can reach the call', async () => {
   // Arrange
+  const model = embeddingModel({
+    'rotate a key': [1, 0, 0, 0],
+    b: [0, 1, 0, 0],
+  });
   using database = contract([{ id: 'a', vector: [1, 0, 0, 0] }]);
   const retriever = new SqliteEmbeddingRetriever({
     store: new SqlitePassageStore({
@@ -1279,12 +1332,20 @@ test("a topK of 0 in the call gives no passages, as Elasticsearch's size 0", asy
       metadata: (columns) => columns,
     }),
     vectors: 'docs_passage_vectors',
-    model: embeddingModel({ 'rotate a key': [1, 0, 0, 0] }),
+    model,
   });
 
   // Act
   const result = await retriever.retrieve('rotate a key', { topK: 0 });
+  const many = await retriever.retrieveMany(['rotate a key', 'b'], {
+    topK: 0,
+  });
 
   // Assert
   assert.deepEqual(result.passages, []);
+  assert.deepEqual(
+    many.map(({ passages }) => passages),
+    [[], []],
+  );
+  assert.equal(model.doEmbedCalls.length, 0);
 });

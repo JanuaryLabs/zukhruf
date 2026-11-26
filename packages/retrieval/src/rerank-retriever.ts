@@ -4,7 +4,7 @@ import { untilAborted } from '@zukhruf/async';
 
 import { positiveInteger } from './count.ts';
 import type { Passage } from './passage.ts';
-import { type QueryType, needOf } from './query-bundle.ts';
+import { type QueryType, needOf, wordedNeed } from './query-bundle.ts';
 import { RankWindow } from './rank-window.ts';
 import type { RetrievalResult } from './retrieval-result.ts';
 import type { RetrieveOptions } from './retrieve-options.ts';
@@ -28,7 +28,9 @@ import type { ScoredPassage } from './scored-passage.ts';
  * is one whose relevance is under the `scoreThreshold` (ADR 0019); the call
  * gives the best `topK` of the rest (ADR 0006). A window smaller than the
  * `topK` of the call is a `RangeError` before the retriever or the model is
- * called. A relevance that is not finite is a `TypeError`: the AI SDK passes
+ * called, and so is an information need that is empty or white space only;
+ * a `topK` of 0 gives no passages and calls neither (ADR 0023).
+ * A relevance that is not finite is a `TypeError`: the AI SDK passes
  * the model's `relevanceScore` on unchecked (#5700). An empty list makes no
  * model call, as the AI SDK's `rerank` sends none. The failures of the
  * retriever pass up unchanged (ADR 0014). The retriever and the model get the
@@ -76,17 +78,20 @@ export class RerankRetriever<
     query: Q,
     options: RetrieveOptions<P> = {},
   ): Promise<RetrievalResult<P, ScoredPassage<P>>> {
-    const { topK, window } = this.#window.forCall(options.topK);
+    const call = this.#window.forCall(options.topK);
+    const need = wordedNeed(needOf(query));
     const { signal } = options;
     signal?.throwIfAborted();
+    if (call === undefined) return { passages: [], failures: new Map() };
     return untilAborted(
-      this.#rerank(query, { ...options, topK: window }, topK),
+      this.#rerank(query, need, { ...options, topK: call.window }, call.topK),
       signal,
     );
   }
 
   async #rerank(
     query: Q,
+    need: string,
     options: RetrieveOptions<P>,
     topK: number,
   ): Promise<RetrievalResult<P, ScoredPassage<P>>> {
@@ -100,7 +105,7 @@ export class RerankRetriever<
     const { ranking } = await rerank({
       model: this.#model,
       documents: passages.map(({ passage }) => passage.text),
-      query: needOf(query),
+      query: need,
       ...(this.#topN === undefined ? {} : { topN: this.#topN }),
       // The AI SDK names the signal `abortSignal`.
       ...(options.signal === undefined ? {} : { abortSignal: options.signal }),

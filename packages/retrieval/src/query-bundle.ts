@@ -34,6 +34,26 @@ export const needOf = (query: QueryType): string =>
   typeof query === 'string' ? query : query.query;
 
 /**
+ * An information need that a model reads: one that is empty or white space
+ * only has no meaning to rank, embed or expand, so it is a caller bug and a
+ * `RangeError`, by the rule of a blank keyword (ADR 0013). Each object that
+ * gives the need to a model checks it at its entry, before any retriever or
+ * model call: RerankRetriever, EmbeddingRerankRetriever, HydeRetriever,
+ * MultiQueryRetriever, MaximalMarginalRelevance, and the SQLite, Postgres and
+ * SQL Server embedding retrievers through `embeddingsOf`, before they read
+ * the stored identities. `needOf` alone does not, since `ContextWindow` reads
+ * no need.
+ */
+export const wordedNeed = (need: string): string => {
+  if (!/\S/.test(need)) {
+    throw new RangeError(
+      `The query of a query bundle holds no word: got ${JSON.stringify(need)}`,
+    );
+  }
+  return need;
+};
+
+/**
  * What a keyword retriever matches: the whole keywords of the bundle, or the
  * text of `query` when it has none (ADR 0013). How a keyword or a text
  * becomes a match is each engine's.
@@ -67,10 +87,22 @@ export const keywordQueryOf = (query: QueryType): KeywordQuery => {
   return { kind: 'keywords', keywords: [first, ...rest] };
 };
 
-/** The texts that an embedding retriever embeds: `customEmbeddings`, or `[query]`. */
+/**
+ * The texts that an embedding retriever embeds: `customEmbeddings`, or
+ * `[query]`. A text of no word has no meaning to embed, so a blank `query`
+ * is `wordedNeed`'s `RangeError`, and a blank text of `customEmbeddings` is
+ * one in the same words, before the engine reads anything or calls its model.
+ */
 export const embeddingsOf = (
   query: QueryType,
 ): readonly [string, ...string[]] => {
   const bundle = bundleOf(query);
-  return bundle.customEmbeddings ?? [bundle.query];
+  const texts = bundle.customEmbeddings;
+  if (texts === undefined) return [wordedNeed(bundle.query)];
+  if (!texts.every((text) => /\S/.test(text))) {
+    throw new RangeError(
+      `The customEmbeddings of a query bundle hold a text of no word: got ${JSON.stringify(texts)}`,
+    );
+  }
+  return texts;
 };

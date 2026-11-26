@@ -81,7 +81,8 @@ type Answered<P extends Passage, F> = {
  * by path, `name:inner`. When no retriever answered, the call throws
  * `NoRetrieverAnsweredError`. Any other error aborts the signal of every
  * other retriever, with the error as the reason, and the call rejects with
- * it. A caller that aborted before the call starts no retriever. When the
+ * it. A caller that aborted before the call starts no retriever, and a
+ * `topK` of 0 gives no passages and starts none (ADR 0023). When the
  * caller aborts, the call rejects at once with the signal's reason, whatever
  * the retrievers do.
  */
@@ -155,9 +156,11 @@ export class FusionRetriever<
     query: Q,
     options: RetrieveOptions<P> = {},
   ): Promise<RetrievalResult<P, ScoredPassage<P>>> {
-    const { topK, window } = this.#window.forCall(options.topK);
+    const call = this.#window.forCall(options.topK);
     const caller = options.signal;
     caller?.throwIfAborted();
+    if (call === undefined) return { passages: [], failures: new Map() };
+    const { topK, window } = call;
     // A bug aborts the siblings with the bug as the reason, as Go's
     // errgroup.WithContext cancels with its cause.
     const siblings = new AbortController();

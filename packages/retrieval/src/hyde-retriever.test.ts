@@ -408,3 +408,54 @@ void test.each([-1, 2.5, Number.NaN, Number.POSITIVE_INFINITY], (topK) =>
     assert.deepEqual(source.queries, []);
   }),
 );
+
+void test.each(
+  [
+    ['an empty string', ''],
+    ['a string of white space', ' \t\n'],
+    [
+      'a query bundle whose query is white space',
+      { query: '  ', keywords: ['rotate'] },
+    ],
+  ] as const,
+  ([name, query]) =>
+    test(`${name} as the information need is a RangeError before the language model or the retriever is called, as EmbeddingRerankRetriever refuses it`, async () => {
+      // Arrange
+      const calls: Call[] = [];
+      const source = new RecordingRetriever<QueryBundle>(['kw-1']);
+      const retriever = new HydeRetriever({
+        retriever: source,
+        model: languageModel(calls),
+      });
+      const need = typeof query === 'string' ? query : query.query;
+
+      // Act and Assert
+      await assert.rejects(retriever.retrieve(query), {
+        name: 'RangeError',
+        message: `The query of a query bundle holds no word: got ${JSON.stringify(need)}`,
+      });
+      assert.deepEqual(calls, []);
+      assert.deepEqual(source.queries, []);
+    }),
+);
+
+test('a topK of 0 in the call gives no passages and no failures, and calls neither the language model nor the retriever, since no work can reach the call', async () => {
+  // Arrange
+  const calls: Call[] = [];
+  const source = new RecordingRetriever<QueryBundle>(['kw-1']);
+  const retriever = new HydeRetriever({
+    retriever: source,
+    model: languageModel(calls),
+  });
+
+  // Act
+  const result = await retriever.retrieve('how do I change my signing key?', {
+    topK: 0,
+  });
+
+  // Assert
+  assert.deepEqual(result.passages, []);
+  assert.deepEqual([...result.failures], []);
+  assert.deepEqual(calls, []);
+  assert.deepEqual(source.queries, []);
+});

@@ -34,6 +34,13 @@ export function callTopK(topK: number | undefined): number {
 }
 
 /**
+ * Whether a checked topK of a call asks for no passages: a topK of 0 gives
+ * none, so a retriever that knows it calls no model and no retriever whose
+ * work could not reach the call (ADR 0023).
+ */
+export const asksForNoPassages = (topK: number): boolean => topK === 0;
+
+/**
  * The options of a call whose topK `callTopK` gave: what each engine's own
  * search takes, so a search cannot run on a topK no entry checked.
  */

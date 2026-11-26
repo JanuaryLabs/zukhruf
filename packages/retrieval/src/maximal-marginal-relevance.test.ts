@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+
+import { test } from '@zukhruf/testing/node';
 
 import { MaximalMarginalRelevance, VectorMissingError } from './index.ts';
 import { embeddingModel } from './testing/embedding-model.ts';
@@ -232,3 +233,23 @@ test('an aborted signal rejects with its reason and makes no call to the embeddi
   assert.equal(outcome, reason);
   assert.deepEqual(signals, []);
 });
+
+void test.each(
+  [
+    ['an empty string', ''],
+    ['a string of white space', ' \t\n'],
+  ] as const,
+  ([name, query]) =>
+    test(`${name} as the information need is a RangeError before the embedding model is called, as EmbeddingRerankRetriever refuses it`, async () => {
+      // Arrange
+      const embedding = model();
+      const mmr = new MaximalMarginalRelevance({ model: embedding, topK: 2 });
+
+      // Act and Assert
+      await assert.rejects(mmr.postprocess(list, query), {
+        name: 'RangeError',
+        message: `The query of a query bundle holds no word: got ${JSON.stringify(query)}`,
+      });
+      assert.deepEqual(embedding.doEmbedCalls, []);
+    }),
+);

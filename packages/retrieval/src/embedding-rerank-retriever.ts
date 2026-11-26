@@ -5,7 +5,7 @@ import { Vector, cosineSimilarity } from '@zukhruf/vectors';
 
 import { positiveInteger } from './count.ts';
 import type { Passage } from './passage.ts';
-import { type QueryType, needOf } from './query-bundle.ts';
+import { type QueryType, needOf, wordedNeed } from './query-bundle.ts';
 import { RankWindow } from './rank-window.ts';
 import type { RetrievalResult } from './retrieval-result.ts';
 import type { RetrieveOptions } from './retrieve-options.ts';
@@ -19,19 +19,25 @@ import type { ScoredPassage } from './scored-passage.ts';
  * `ContextualCompressionRetriever` (ADR 0022, #5586). It is the reranker for
  * a host with an embedding model and no reranking model, and for a live
  * source, which has no stored vectors. Its retriever gets the query and the
- * options of the call with the rank window as their `topK` (ADR 0023), and
- * may give an order only. The model embeds the information need (`query` of
+ * options of the call with the rank window as their `topK` and without
+ * `includeVectors`, since it embeds the passages itself (ADR 0023), and may
+ * give an order only. The model embeds the information need (`query` of
  * the bundle, ADR 0013) and the text of each passage, in two calls that run
  * at once. Each passage gets the cosine similarity of its vector to the
  * query's as its score, from -1 to 1, best first, a tie in the order of the
- * retriever, and the vector the model made, never one its retriever gave
- * (ADR 0010), so `MaximalMarginalRelevance` with the same model can follow
- * it. It keeps the passages whose score is at least the `scoreThreshold`
- * (ADR 0019), then the best `topN`, and the call gives the best `topK` of
- * them (ADR 0006). A window smaller than the `topK` of the call is a
- * `RangeError` before the retriever or the model is called. A cosine that is
- * not finite, as from a zero vector, is a `TypeError` that names the query
- * or the passage. An empty list makes no model call. The failures of the
+ * retriever. A call with `includeVectors: true` also gets the vector the
+ * model made with each passage, never one its retriever gave (ADR 0010), and
+ * a call without it gets no vector, as every retriever gives one only when
+ * asked. So `MaximalMarginalRelevance` with the same model follows it in a
+ * `PostprocessingRetriever` called with `includeVectors: true`, which passes
+ * the option down, as over an engine. It keeps the passages whose score is
+ * at least the `scoreThreshold` (ADR 0019), then the best `topN`, and the
+ * call gives the best `topK` of them (ADR 0006). A window smaller than the
+ * `topK` of the call is a `RangeError`, and so is an information need that
+ * is empty or white space only, before the retriever or the model is called;
+ * a `topK` of 0 gives no passages and calls neither (ADR 0023). A cosine that
+ * is not finite, as from a zero vector, is a `TypeError` that names the
+ * query or the passage. An empty list makes no model call. The failures of the
  * retriever pass up unchanged (ADR 0014). The retriever and the model get
  * the signal of the call; when it aborts, the call rejects at once with its
  * reason, whatever they do (ADR 0017).
@@ -77,19 +83,32 @@ export class EmbeddingRerankRetriever<
     query: Q,
     options: RetrieveOptions<P> = {},
   ): Promise<RetrievalResult<P, ScoredPassage<P>>> {
-    const { topK, window } = this.#window.forCall(options.topK);
+    const call = this.#window.forCall(options.topK);
+    const need = wordedNeed(needOf(query));
     const { signal } = options;
     signal?.throwIfAborted();
+    if (call === undefined) return { passages: [], failures: new Map() };
+    // It embeds the passages with its own model, so it never asks its
+    // retriever for vectors; filter and signal pass down unchanged.
+    const { includeVectors = false, ...asked } = options;
     return untilAborted(
-      this.#rerank(query, { ...options, topK: window }, topK),
+      this.#rerank(
+        query,
+        need,
+        { ...asked, topK: call.window },
+        call.topK,
+        includeVectors,
+      ),
       signal,
     );
   }
 
   async #rerank(
     query: Q,
+    need: string,
     options: RetrieveOptions<P>,
     topK: number,
+    includeVectors: boolean,
   ): Promise<RetrievalResult<P, ScoredPassage<P>>> {
     const { passages, failures } = await this.#retriever.retrieve(
       query,
@@ -103,7 +122,7 @@ export class EmbeddingRerankRetriever<
     const abortSignal =
       options.signal === undefined ? {} : { abortSignal: options.signal };
     const [{ embedding }, { embeddings }] = await Promise.all([
-      embed({ model: this.#model, value: needOf(query), ...abortSignal }),
+      embed({ model: this.#model, value: need, ...abortSignal }),
       embedMany({
         model: this.#model,
         values: passages.map(({ passage }) => passage.text),
@@ -128,7 +147,9 @@ export class EmbeddingRerankRetriever<
           `EmbeddingRerankRetriever scores by cosine similarity, and the passage ${passage.id} has the score ${score}: a score is a finite number`,
         );
       }
-      return { passage, score, vector };
+      // A vector only for a call that asks for one (RetrieveOptions), as
+      // MaximalMarginalRelevance after it does.
+      return includeVectors ? { passage, score, vector } : { passage, score };
     });
     const reranked = this.#threshold
       .keep(scored)

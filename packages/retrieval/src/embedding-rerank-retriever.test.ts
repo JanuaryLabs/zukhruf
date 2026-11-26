@@ -43,13 +43,42 @@ const scores = (
   }[],
 ) => results.map(({ passage, score }) => [passage.id, score]);
 
-test('a list of order only comes back in the order of the cosine similarity of each text to the query, with that similarity as the score and the vector the model made', async () => {
+test('a list of order only comes back in the order of the cosine similarity of each text to the query, with that similarity as the score and no vector, since the call did not ask for vectors', async () => {
   // Arrange
   const model = embeddingModel(vectors);
   const rerank = new EmbeddingRerankRetriever({ retriever: live(), model });
 
   // Act
   const results = (await rerank.retrieve('rotate a key')).passages;
+
+  // Assert: deepEqual of the whole items, so a vector key fails it.
+  assert.deepEqual(
+    results.map(({ passage, score, ...rest }) => [passage.id, score, rest]),
+    [
+      ['delta', 0.96, {}],
+      ['alpha', 0.8, {}],
+      ['beta', 0.6, {}],
+      ['gamma', 0, {}],
+    ],
+  );
+  // One call embeds the query, one the texts.
+  assert.deepEqual(
+    model.doEmbedCalls.map(({ values }) => values).toSorted(),
+    [['alpha', 'beta', 'gamma', 'delta'], ['rotate a key']].toSorted(),
+  );
+});
+
+test('a call with includeVectors: true gets the vector the model made with each passage', async () => {
+  // Arrange
+  const rerank = new EmbeddingRerankRetriever({
+    retriever: live(),
+    model: embeddingModel(vectors),
+  });
+
+  // Act
+  const results = (
+    await rerank.retrieve('rotate a key', { includeVectors: true })
+  ).passages;
 
   // Assert
   assert.deepEqual(
@@ -60,11 +89,6 @@ test('a list of order only comes back in the order of the cosine similarity of e
       ['beta', 0.6, [0, 5, 0]],
       ['gamma', 0, [0, 0, 5]],
     ],
-  );
-  // One call embeds the query, one the texts.
-  assert.deepEqual(
-    model.doEmbedCalls.map(({ values }) => values).toSorted(),
-    [['alpha', 'beta', 'gamma', 'delta'], ['rotate a key']].toSorted(),
   );
 });
 
@@ -87,12 +111,19 @@ test('a vector that the retriever gives is replaced with the one the model made,
   });
 
   // Act
-  const results = (await rerank.retrieve('rotate a key')).passages;
+  const asked = (
+    await rerank.retrieve('rotate a key', { includeVectors: true })
+  ).passages;
+  const unasked = (await rerank.retrieve('rotate a key')).passages;
 
-  // Assert
+  // Assert: the stored vector reaches the caller in neither call.
   assert.deepEqual(
-    results.map(({ passage, score, vector }) => [passage.id, score, vector]),
+    asked.map(({ passage, score, vector }) => [passage.id, score, vector]),
     [['alpha', 0.8, [5, 0, 0]]],
+  );
+  assert.deepEqual(
+    unasked.map(({ passage, score, ...rest }) => [passage.id, score, rest]),
+    [['alpha', 0.8, {}]],
   );
 });
 
@@ -221,7 +252,7 @@ void test.each(
     }),
 );
 
-test('over a live source with no stored vectors, MaximalMarginalRelevance after it diversifies with the vectors it made, where MaximalMarginalRelevance alone fails with VectorMissingError', async () => {
+test('over a live source with no stored vectors, MaximalMarginalRelevance after it diversifies with the vectors it made when the call asks for vectors, where MaximalMarginalRelevance alone fails with VectorMissingError, and so does a call that does not ask', async () => {
   // Arrange
   const model = embeddingModel(vectors);
   const mmr = new MaximalMarginalRelevance({ model, lambda: 0.5, topK: 2 });
@@ -235,7 +266,9 @@ test('over a live source with no stored vectors, MaximalMarginalRelevance after 
   });
 
   // Act
-  const results = (await reranked.retrieve('rotate a key')).passages;
+  const results = (
+    await reranked.retrieve('rotate a key', { includeVectors: true })
+  ).passages;
 
   // Assert: pick 1 is delta (0.96); pick 2: alpha 0.5 * 0.8 - 0.5 * 0.6 =
   // 0.1, beta 0.5 * 0.6 - 0.5 * 0.8 = -0.1, gamma 0 -> alpha.
@@ -243,10 +276,41 @@ test('over a live source with no stored vectors, MaximalMarginalRelevance after 
     ['delta', 0.96],
     ['alpha', 0.8],
   ]);
-  await assert.rejects(alone.retrieve('rotate a key'), {
+  await assert.rejects(
+    alone.retrieve('rotate a key', { includeVectors: true }),
+    { name: 'VectorMissingError' },
+  );
+  await assert.rejects(reranked.retrieve('rotate a key'), {
     name: 'VectorMissingError',
   });
 });
+
+void test.each(
+  [
+    ['an empty string', ''],
+    ['a string of white space', ' \t\n'],
+    [
+      'a query bundle whose query is white space',
+      { query: '  ', keywords: ['rotate'] },
+    ],
+  ] as const,
+  ([name, query]) =>
+    test(`${name} as the information need is a RangeError before any call of its retriever or of the embedding model, as a keyword retriever refuses keywords of no word`, async () => {
+      // Arrange
+      const model = embeddingModel(vectors);
+      const source = live();
+      const rerank = new EmbeddingRerankRetriever({ retriever: source, model });
+      const need = typeof query === 'string' ? query : query.query;
+
+      // Act and Assert
+      await assert.rejects(rerank.retrieve(query), {
+        name: 'RangeError',
+        message: `The query of a query bundle holds no word: got ${JSON.stringify(need)}`,
+      });
+      assert.deepEqual(source.queries, []);
+      assert.deepEqual(model.doEmbedCalls, []);
+    }),
+);
 
 test('an empty list gives no passages and makes no call to the embedding model', async () => {
   // Arrange
@@ -334,7 +398,7 @@ test('an abort while its retriever runs makes no call to the embedding model, ev
   assert.deepEqual(model.doEmbedCalls, []);
 });
 
-test('the options of the call reach its retriever unchanged, its abort signal reaches both calls of the embedding model, and the failures of its retriever pass up unchanged', async () => {
+test('the options of the call reach its retriever unchanged but for includeVectors, which it never asks of its retriever since it attaches only the vectors its model made, its abort signal reaches both calls of the embedding model, and the failures of its retriever pass up unchanged', async () => {
   // Arrange
   const seen: RetrieveOptions<Passage>[] = [];
   const signals: (AbortSignal | undefined)[] = [];
@@ -367,7 +431,8 @@ test('the options of the call reach its retriever unchanged, its abort signal re
   const result = await rerank.retrieve('rotate a key', options);
 
   // Assert: the query and the two texts each saw the signal.
-  assert.deepEqual(seen, [options]);
+  const { includeVectors: _asked, ...passedDown } = options;
+  assert.deepEqual(seen, [passedDown]);
   assert.deepEqual(signals, [
     controller.signal,
     controller.signal,

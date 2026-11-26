@@ -8,7 +8,7 @@ import { test } from '@zukhruf/testing/node';
 import { Postgres } from '@zukhruf/testing/postgres';
 import { DimensionMismatchError } from '@zukhruf/vectors';
 
-import { type Metadata, ModelMismatchError } from '../index.ts';
+import { type Metadata, ModelMismatchError, type QueryType } from '../index.ts';
 import {
   PgvectorEmbeddingRetriever,
   PostgresPassageStore,
@@ -1417,8 +1417,61 @@ void test.each(
     }),
 );
 
-test("a topK of 0 in the call gives no passages, as Elasticsearch's size 0", async () => {
+const blankQueries: readonly (readonly [QueryType, string])[] = [
+  ['', 'The query of a query bundle holds no word: got ""'],
+  [' \n\t', 'The query of a query bundle holds no word: got " \\n\\t"'],
+  [{ query: '   ' }, 'The query of a query bundle holds no word: got "   "'],
+  [
+    { query: 'rotate a key', customEmbeddings: ['rotate a key', '  '] },
+    'The customEmbeddings of a query bundle hold a text of no word: got ["rotate a key","  "]',
+  ],
+];
+
+void test.each(
+  blankQueries.flatMap(([query, message]) =>
+    (['retrieve', 'retrieveMany'] as const).map(
+      (method) => [method, query, message] as const,
+    ),
+  ),
+  ([method, query, message]) =>
+    test(`${method} of ${JSON.stringify(query)}, a text of no word to embed, is a RangeError before any statement reaches the session or the model is called`, async () => {
+      // Arrange: a session that records each statement.
+      const statements: string[] = [];
+      const model = embeddingModel({ 'rotate a key': [1, 0, 0, 0] });
+      const retriever = new PgvectorEmbeddingRetriever({
+        store: new PostgresPassageStore({
+          session: {
+            query: async (sql) => {
+              statements.push(sql);
+              return [];
+            },
+          },
+          passages: 'docs_passages',
+          metadata: (columns) => columns,
+        }),
+        vectors: 'docs_passage_vectors',
+        model,
+      });
+      // Act: retrieveMany checks each query, not only the first.
+      const call =
+        method === 'retrieve'
+          ? retriever.retrieve(query, { topK: 3 })
+          : retriever.retrieveMany(['rotate a key', query], { topK: 3 });
+
+      // Assert
+      await assert.rejects(call, { name: 'RangeError', message });
+      // A length, not deepEqual: deepEqual would narrow statements to never[].
+      assert.equal(statements.length, 0);
+      assert.equal(model.doEmbedCalls.length, 0);
+    }),
+);
+
+test('a topK of 0 in the call gives no passages and makes no call to the embedding model, since no work can reach the call', async () => {
   // Arrange
+  const model = embeddingModel({
+    'rotate a key': [1, 0, 0, 0],
+    b: [0, 1, 0, 0],
+  });
   await using database = await server().database();
   const pool = database.pool();
   await contract(pool, [{ id: 'a', vector: [1, 0, 0, 0] }]);
@@ -1429,12 +1482,20 @@ test("a topK of 0 in the call gives no passages, as Elasticsearch's size 0", asy
       metadata: (columns) => columns,
     }),
     vectors: 'docs_passage_vectors',
-    model: embeddingModel({ 'rotate a key': [1, 0, 0, 0] }),
+    model,
   });
 
   // Act
   const result = await retriever.retrieve('rotate a key', { topK: 0 });
+  const many = await retriever.retrieveMany(['rotate a key', 'b'], {
+    topK: 0,
+  });
 
   // Assert
   assert.deepEqual(result.passages, []);
+  assert.deepEqual(
+    many.map(({ passages }) => passages),
+    [[], []],
+  );
+  assert.equal(model.doEmbedCalls.length, 0);
 });

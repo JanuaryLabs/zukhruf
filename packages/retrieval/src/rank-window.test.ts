@@ -74,8 +74,16 @@ type Made = {
   readonly ranked: () => readonly (readonly string[])[];
 };
 
+/** The options of a call that a composite passes to its retriever, but the topK. */
+type PassedDown = (
+  options: RetrieveOptions<Passage>,
+) => RetrieveOptions<Passage>;
+
+const unchanged: PassedDown = (options) => options;
+
 type Composite = {
   readonly name: string;
+  readonly passedDown: PassedDown;
   readonly make: (
     retriever: Retriever<string, Passage>,
     options: Window,
@@ -84,6 +92,7 @@ type Composite = {
 
 type Reranker = {
   readonly name: string;
+  readonly passedDown: PassedDown;
   readonly make: (
     retriever: Retriever<string, Passage>,
     options: Window & {
@@ -96,6 +105,7 @@ type Reranker = {
 const rerankers: readonly Reranker[] = [
   {
     name: 'RerankRetriever',
+    passedDown: unchanged,
     make: (retriever, options) => {
       const ranked: string[][] = [];
       // A reranking model cannot run in CI: this one gives each text its
@@ -126,6 +136,9 @@ const rerankers: readonly Reranker[] = [
   },
   {
     name: 'EmbeddingRerankRetriever',
+    // It embeds with its own model, so it never asks its retriever for
+    // vectors.
+    passedDown: ({ includeVectors: _asked, ...options }) => options,
     make: (retriever, options) => {
       const model = embeddingModel(vectors);
       return {
@@ -148,6 +161,7 @@ const composites: readonly Composite[] = [
   ...rerankers,
   {
     name: 'PostprocessingRetriever',
+    passedDown: unchanged,
     make: (retriever, { rankWindowSize }) => {
       const ranked: string[][] = [];
       // A host postprocessor that reranks by relevance.
@@ -176,7 +190,7 @@ const ids = (passages: readonly { readonly passage: Passage }[]) =>
 
 void test.each(
   composites.map((composite) => [composite] as const),
-  ([{ name, make }]) =>
+  ([{ name, passedDown, make }]) =>
     test(`${name} with a rankWindowSize of 50 asks its retriever for 50 with the other options of the call unchanged, ranks the whole window and gives the best topK of it, though the best sits at position 40 of the retriever's order, and the failures of its retriever pass up unchanged`, async () => {
       // Arrange
       const { retriever, seen } = source();
@@ -192,7 +206,7 @@ void test.each(
       const result = await composite.retrieve(query, options);
 
       // Assert
-      assert.deepEqual(seen, [{ ...options, topK: 50 }]);
+      assert.deepEqual(seen, [{ ...passedDown(options), topK: 50 }]);
       assert.deepEqual(ranked(), [candidates.slice(0, 50)]);
       assert.deepEqual(ids(result.passages), ['c40', 'c0', 'c1']);
       assert.deepEqual([...result.failures], [['news', unavailable]]);
@@ -298,6 +312,7 @@ const windowed: readonly Composite[] = [
   ...composites,
   {
     name: 'FusionRetriever',
+    passedDown: unchanged,
     make: (retriever, options) => ({
       composite: new FusionRetriever({
         retrievers: { live: { retriever } },
@@ -334,16 +349,28 @@ void test.each(
 void test.each(
   windowed.map((composite) => [composite] as const),
   ([{ name, make }]) =>
-    test(`${name} with a rankWindowSize of 50 gives no passages for a topK of 0, as Elasticsearch's size 0`, async () => {
-      // Arrange
-      const { retriever } = source();
-      const { composite } = make(retriever, { rankWindowSize: 50 });
+    test(`${name} gives no passages for a topK of 0, with or without a rankWindowSize, and calls no retriever, model or postprocessor, since no work can reach the call`, async () => {
+      // Arrange: a retriever that gives every candidate whatever topK it
+      // gets, so a model or a postprocessor after it would run.
+      const { retriever, seen } = source(candidates, true);
+      const windowed = make(retriever, { rankWindowSize: 50 });
+      const plain = make(retriever, {});
 
       // Act
-      const result = await composite.retrieve(query, { topK: 0 });
+      const results = [
+        await windowed.composite.retrieve(query, { topK: 0 }),
+        await plain.composite.retrieve(query, { topK: 0 }),
+      ];
 
       // Assert
-      assert.deepEqual(result.passages, []);
+      for (const result of results) {
+        assert.deepEqual(result.passages, []);
+        assert.deepEqual([...result.failures], []);
+      }
+      // A length, not deepEqual: deepEqual would narrow seen to never[].
+      assert.equal(seen.length, 0);
+      assert.deepEqual(windowed.ranked(), []);
+      assert.deepEqual(plain.ranked(), []);
     }),
 );
 

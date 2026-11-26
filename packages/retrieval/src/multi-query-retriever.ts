@@ -2,11 +2,11 @@ import { type LanguageModel, Output, generateText, jsonSchema } from 'ai';
 
 import { untilAborted } from '@zukhruf/async';
 
-import { callTopK, positiveInteger } from './count.ts';
+import { asksForNoPassages, callTopK, positiveInteger } from './count.ts';
 import { fusePassages } from './fuse-passages.ts';
 import type { Fusion, RankedDoc } from './fusion.ts';
 import type { Passage } from './passage.ts';
-import { type QueryType, needOf } from './query-bundle.ts';
+import { type QueryType, needOf, wordedNeed } from './query-bundle.ts';
 import { RankFusion } from './rank-fusion.ts';
 import type { RankedPassage } from './ranked-passage.ts';
 import type { RetrievalResult } from './retrieval-result.ts';
@@ -41,7 +41,10 @@ import type { ScoredPassage } from './scored-passage.ts';
  * once with the signal's reason, while the model writes the versions too
  * (ADR 0017). It catches nothing, a
  * `RetrieverUnavailableError` too: every search reads one retriever, so an
- * unavailable retriever leaves nothing to answer (ADR 0014).
+ * unavailable retriever leaves nothing to answer (ADR 0014). An information
+ * need that is empty or white space only is a `RangeError`, and a `topK` of
+ * 0 gives no passages, both before the model or the retriever is called
+ * (ADR 0023).
  */
 export class MultiQueryRetriever<
   // `in out P`: a filter puts P in a parameter as well, so TypeScript cannot
@@ -76,9 +79,12 @@ export class MultiQueryRetriever<
     options: RetrieveOptions<P> = {},
   ): Promise<RetrievalResult<P, ScoredPassage<P>>> {
     const topK = callTopK(options.topK);
-    const need = needOf(query);
+    const need = wordedNeed(needOf(query));
     const caller = options.signal;
     caller?.throwIfAborted();
+    // A topK of 0 gives no passages, so the model call and the searches would
+    // reach no caller (ADR 0023).
+    if (asksForNoPassages(topK)) return { passages: [], failures: new Map() };
     // The model may ignore its signal: the caller's abort rejects at once.
     const { output } = await untilAborted(
       generateText({

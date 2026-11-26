@@ -5,6 +5,7 @@ import { Vector, cosineSimilarity } from '@zukhruf/vectors';
 import { positiveInteger } from './count.ts';
 import type { Passage } from './passage.ts';
 import type { Postprocessor } from './postprocessor.ts';
+import { wordedNeed } from './query-bundle.ts';
 import type { RankedPassage } from './ranked-passage.ts';
 import { VectorMissingError } from './vector-missing-error.ts';
 
@@ -22,6 +23,8 @@ import { VectorMissingError } from './vector-missing-error.ts';
  *
  * The passages come back in the order of the picks, with the scores they had.
  * They need their vectors: a retriever gives them with `includeVectors: true`.
+ * A query that is empty or white space only is a `RangeError` before the
+ * model is called.
  */
 export class MaximalMarginalRelevance implements Postprocessor<Passage> {
   readonly #model: EmbeddingModel;
@@ -48,6 +51,7 @@ export class MaximalMarginalRelevance implements Postprocessor<Passage> {
     query: string,
     options: { readonly signal?: AbortSignal } = {},
   ): Promise<I[]> {
+    wordedNeed(query);
     options.signal?.throwIfAborted();
     const candidates = passages.map((scored) => {
       if (scored.vector === undefined) {

@@ -1,4 +1,4 @@
-import { callTopK, positiveInteger } from './count.ts';
+import { asksForNoPassages, callTopK, positiveInteger } from './count.ts';
 
 /**
  * How many passages a composite asks of its retriever before it fuses,
@@ -28,14 +28,15 @@ export class RankWindow {
   /**
    * The topK of a call, 10 when absent (ADR 0006), and the window for it. A
    * topK that is not a whole number of 0 or more is a `RangeError`, as
-   * Elasticsearch refuses a bad `size`, and a topK of 0 gives no passages, as
-   * `size` 0 does. A window smaller than that topK is a `RangeError`, as
-   * Elasticsearch refuses a `rank_window_size` smaller than `size`.
+   * Elasticsearch refuses a bad `size`. A topK of 0 gives `undefined`: the
+   * call gives no passages and calls no retriever, model or postprocessor,
+   * since no work of theirs can reach the call (ADR 0023). A window smaller than
+   * that topK is a `RangeError`, as Elasticsearch refuses a
+   * `rank_window_size` smaller than `size`.
    */
-  forCall(topK: number | undefined): {
-    readonly topK: number;
-    readonly window: number;
-  } {
+  forCall(
+    topK: number | undefined,
+  ): { readonly topK: number; readonly window: number } | undefined {
     const checked = callTopK(topK);
     const window = this.#size ?? checked;
     if (window < checked) {
@@ -43,6 +44,6 @@ export class RankWindow {
         `The rankWindowSize ${window} is smaller than the topK ${checked} of the call`,
       );
     }
-    return { topK: checked, window };
+    return asksForNoPassages(checked) ? undefined : { topK: checked, window };
   }
 }
