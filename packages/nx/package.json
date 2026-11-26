@@ -108,6 +108,7 @@
       "@zukhruf/sqlite-transaction",
       "@zukhruf/ssh",
       "@zukhruf/statistics",
+      "@zukhruf/tcc",
       "@zukhruf/testing",
       "@zukhruf/ui",
       "@zukhruf/vectors"
