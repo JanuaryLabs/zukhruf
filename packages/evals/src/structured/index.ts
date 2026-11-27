@@ -35,6 +35,7 @@ export { Case } from './scoring/case.ts';
 export { ConfigCase } from './scoring/config-case.ts';
 export { TextVarsCase } from './scoring/text-vars-case.ts';
 export { PerField } from './scoring/per-field.ts';
+export { FieldDiff } from './report/field-diff.ts';
 export { FieldErrors } from './report/field-errors.ts';
 export {
   type Draft,

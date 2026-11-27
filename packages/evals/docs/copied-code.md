@@ -1,6 +1,6 @@
 # Copied code
 
-This package keeps copies of the knowledge of `@zukhruf/mteb`: three of its paired bootstrap, and the shell of its report page (the last section, which has its own end). Each copy of the paired bootstrap is in its second place, so it stays a copy (Rule of Three, [ADR 0004](adr/0004-two-runs-are-compared-by-a-paired-bootstrap-over-their-tests.md)). A third place starts the extraction (backlog #4009). The three working copies then give the boundary of the shared code. Until then, make each fix in both copies, and name both files in the commit.
+This package keeps copies of the knowledge of `@zukhruf/mteb`: three of its paired bootstrap, and the shell of its report page (a section that has its own end). It also keeps one copy of its own: the leaf classes of `FieldErrors` in `FieldDiff` (the last section, which has its own backlog item). Each copy of the paired bootstrap is in its second place, so it stays a copy (Rule of Three, [ADR 0004](adr/0004-two-runs-are-compared-by-a-paired-bootstrap-over-their-tests.md)). A third place starts the extraction (backlog #4009). The three working copies then give the boundary of the shared code. Until then, make each fix in both copies, and name both files in the commit.
 
 ## From the paired bootstrap test of mteb
 
@@ -41,3 +41,15 @@ Changes: `percent` also clamps the position to 0–100%, since a primitive can h
 **The page shell: the end of `page` in `packages/mteb/src/report/page.ts` → `HtmlRenderer.render`.**
 Both give a page with no `<html>`, `<head>` or `<body>`: the charset, the title, the viewport meta of claude.ai, the IBM Plex fonts of Google Fonts, the styles, a `main`, the tooltip element and the script.
 Changes: the page heading is the title of the `Page`, and each section is a claim and its primitives; no footer.
+
+## The leaf classes of FieldErrors
+
+`FieldDiff` of `./structured` (`src/structured/report/field-diff.ts`) marks each leaf by the class that `FieldErrors` (`src/structured/report/field-errors.ts`) counts ([structured ADR 0014](adr/structured/0014-field-errors-have-five-classes-and-the-field-diff-pairs-items-as-the-scorer-pairs-them.md), points 2 and 5). The rule is in its second place, so it stays a copy (Rule of Three). A third place starts the extraction (backlog #6277); the three working copies then give its boundary. Until then, make each fix in both copies, and name both files in the commit.
+
+**The leaf class: `FieldErrors.#leafClass` → `FieldDiff.#pair` and `FieldDiff.#leafClass`.**
+Both class a leaf the same way: spurious when only the answer has it, missed when only the expected side has it, correct when the comparator of its field agrees, partial when the two sides disagree and share a word (`BagOfWords.of(...).shared(...).hits > 0`), and incorrect when they share none.
+Changes: `FieldDiff.#pair` sorts out the leaves of one side, since their marks (`only-expected`, `only-actual`) hold the side, not a class, and `FieldDiff.#leafClass` takes a leaf with both sides (`BothSides`) and gives correct, partial or incorrect, the classes that have a mark of both sides (`agree`, `near`, `disagree`). So a pair of one side cannot have the mark of two sides.
+
+### Not copied
+
+The item classes of `FieldErrors` (`#itemClass`, `#isUnder`) are not copied: `FieldDiff` shows leaves, and a leaf of an unpaired item is on its own side by its own class. The leaf options (`nullIsMissing`) and the comparison (`Comparer#compare`, `Comparison#leaves`) are the parts both call, so neither copies them.

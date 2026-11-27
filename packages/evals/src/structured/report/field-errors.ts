@@ -123,7 +123,8 @@ export class FieldErrors<C extends Case> implements Section {
 
   // Correct when the comparator of the field agrees; partial when the two
   // sides disagree and share a word as TokenF1 reads words (BagOfWords, SQuAD's
-  // normalize_answer); incorrect when they share none.
+  // normalize_answer); incorrect when they share none. FieldDiff has a copy
+  // (docs/copied-code.md).
   static #leafClass(pair: LeafPair): ErrorClass {
     if (pair.expected === undefined) return 'spurious';
     if (pair.stated === undefined) return 'missed';
