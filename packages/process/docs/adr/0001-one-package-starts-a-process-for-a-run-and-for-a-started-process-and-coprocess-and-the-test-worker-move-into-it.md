@@ -1,8 +1,6 @@
 # One package starts a process, for a run and for a started process, and the coprocess and the test worker move into it
 
-> **Design for review.**
-
-Status: Proposed 2026-11-27 (backlog #6077).
+Status: Accepted 2026-11-27 (backlog #6077).
 
 Decision-makers: Ezz, on 2026-11-27. Asked where the process primitive lives, he chose "Converge": a new package of the base layer, into which `@zukhruf/coprocess` and the worker of `@zukhruf/testing/process` move. Asked whether a run to completion moves in too, he chose "Yes, move it".
 
@@ -31,7 +29,7 @@ Readiness is not in any of them. Testcontainers has it, one layer up, as wait st
 ## Decision
 
 1. `@zukhruf/process` is a package of the base layer (`std:base`, `layer:island`). It imports execa and `@zukhruf/async` ([ADR 0008](./0008-execa-starts-the-process-and-keeps-its-output-and-the-package-stops-it-and-reads-its-lines-and-messages.md)), and no other zukhruf package. Thus shipped code can use it, and the tests of `docker`, `fs` and `ssh` can use it too. The tests of `async` cannot, because the package imports `async`.
-2. `Process.run` runs a process to its end, and `Process.start` gives a started process. `Coprocess` and `NodeProcess` are views of a started process ([ADR 0007](./0007-json-lines-and-messages-are-views-of-a-started-process-and-only-a-node-process-has-messages.md)).
+2. `Command#run` runs a process to its end, and `Command#start` gives a started process. `Coprocess` and `NodeProcess` are views of a started process ([ADR 0007](./0007-json-lines-and-messages-are-views-of-a-started-process-and-only-a-node-process-has-messages.md)).
 3. `@zukhruf/coprocess` moves into this package and goes away with no alias. Its decisions stay: the exit is an event, SIGTERM and then SIGKILL, the error names the process and holds the end of stderr but not the command line.
 4. `@zukhruf/testing/process` moves into this package as `NodeProcess`, and the area goes away with no alias.
 5. Each place that calls `node:child_process` for one of these jobs moves to this package, in shipped code and in tests.

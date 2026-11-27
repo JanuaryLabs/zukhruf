@@ -1,8 +1,6 @@
 # JSON lines and messages are views of a started process, and only a Node process has messages
 
-> **Design for review.**
-
-Status: Proposed 2026-11-27 (backlog #6077).
+Status: Accepted 2026-11-27 (backlog #6077).
 
 Decision-makers: the zukhruf session of backlog #6077 proposes this from the leaders and ADR 0001. Ezz rules on it in the review of the paper.
 
@@ -12,8 +10,8 @@ No leader has a separate type for a process that the parent talks to: it is the 
 
 ## Decision
 
-- `Coprocess` is the JSON-lines view of a started process. `Coprocess.start(file, args, options)` starts the process with `Process.start` and keeps it as `coprocess.process`. `send`, `receive` and `request` keep the behavior of `@zukhruf/coprocess` today, with its errors.
-- `NodeProcess` is a started process that runs JavaScript source as a module in its own Node.js, with an IPC channel. `NodeProcess.start(source, options)` gives it. It has `send(message)`, the `messages` so far, and `next(match, { signal })`, which resolves with the first selected message, sent before or after the call. `NodeProcess.run(source, options)` runs the source to its end, as `Process.run` does.
+- `Coprocess` is the JSON-lines view of a started process. `new Coprocess(process)` takes a started process whose stdin and stdout are piped (a `PipedProcess`, which `start()` of a command gives by default) and keeps it as `coprocess.process`. `send`, `receive` and `request` keep the behavior of `@zukhruf/coprocess` today, with its errors.
+- `NodeProcess` is a started process that runs JavaScript source as a module in its own Node.js, with an IPC channel. `start()` of a `NodeCommand` gives it ([ADR 0010](./0010-a-command-says-what-to-run-and-run-and-start-are-its-methods.md)). It has `send(message)`, the `messages` so far, and `next(match, { signal })`, which resolves with the first selected message, sent before or after the call. `run()` of a `NodeCommand` runs the source to its end, as `run()` of a `Command` does.
 - Only `NodeProcess` has messages, and only its `ready` takes `{ message }`. A started process of another command has no such member, so a caller cannot wait for a message that can never come.
 
 ## Considered Options

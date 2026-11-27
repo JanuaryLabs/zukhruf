@@ -1,8 +1,6 @@
 # The environment is a required input, and the process gets only what the caller names
 
-> **Design for review.**
-
-Status: Proposed 2026-11-27 (backlog #6077).
+Status: Accepted 2026-11-27 (backlog #6077).
 
 Decision-makers: the zukhruf session of backlog #6077 proposes this. It differs from every leader, so Ezz rules on it in the review of the paper.
 
@@ -22,9 +20,10 @@ Each leader gives the parent's environment by default. Two of them add the calle
 
 ## Decision
 
-- `env` is a required option of `Process.run`, `Process.start`, `NodeProcess` and `Coprocess`. It is the whole environment of the process.
+- `env` is a required option of `Command` and of `NodeCommand` ([ADR 0010](./0010-a-command-says-what-to-run-and-run-and-start-are-its-methods.md)). It is the whole environment of the process.
 - The package adds nothing to it and reads nothing of `process.env`. A caller that wants its own environment writes `env: process.env`. A caller that adds a value writes `env: { ...process.env, LOG_LEVEL: 'error' }`.
 - A value of `undefined` is left out, as `node:child_process` does.
+- The `sh` of the keeper ([ADR 0004](./0004-a-started-process-ends-with-its-parent-also-when-the-parent-is-killed.md)) adds variables to the environment of its children: `PWD` in bash and dash, and `SHLVL` in bash (probed 2026-11-27, macOS `/bin/sh` and dash). The last exec of the keeper is `/usr/bin/env`, with `-u NAME` for each such variable that the caller did not give and `NAME=value` for each that the caller gave. The shell cannot fix them itself: the `exec` of bash rewrites `SHLVL`, so an unset one arrives as 0 and a given 7 as 6 (probed 2026-11-27). The process gets the caller's environment and nothing else. A Node.js process on macOS adds `__CF_USER_TEXT_ENCODING` to its own environment as it starts, which `/usr/bin/env` as the target does not show (probed 2026-11-27); that variable is the target's own, not this package's.
 
 ## Considered Options
 

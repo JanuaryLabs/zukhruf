@@ -1,8 +1,6 @@
 # A started process ends with its parent, also when the parent is killed
 
-> **Design for review.**
-
-Status: Proposed 2026-11-27 (backlog #6077).
+Status: Accepted 2026-11-27 (backlog #6077).
 
 Decision-makers: the zukhruf session of backlog #6077 proposes this from two probes of 2026-11-27. Ezz rules on it in the review of the paper.
 
@@ -35,7 +33,7 @@ A keeper is a small process between the parent and the target. The parent gives 
 
 ## Decision
 
-- On macOS and Linux, each process of `Process.run`, `Process.start`, `Coprocess` and `NodeProcess` starts under a keeper in POSIX `sh`, a file of this package. The parent starts the keeper detached, so the keeper leads its own process group, and gives it the lifeline at fd 3. The target runs in the foreground of that group, with fd 3 closed, so it keeps its stdin and its signals.
+- On macOS and Linux, each process of `Command#run`, `Command#start`, `Coprocess` and `NodeProcess` starts under a keeper in POSIX `sh`, a file of this package. The parent starts the keeper detached, so the keeper leads its own process group, and gives it the lifeline at fd 3. The target runs in the foreground of that group, with fd 3 closed, so it keeps its stdin and its signals.
 - A watcher in the keeper reads fd 3. At its end, it sends SIGTERM to the group, and SIGKILL to the group after the grace of [ADR 0005](./0005-a-stop-sends-sigterm-to-the-process-group-and-sigkill-after-a-grace-of-5-seconds.md).
 - The keeper ends as the target ended: the same exit code, or the same signal.
 - The keeper refuses to start (exit code 126) when it does not lead its group, so that a signal to its group never reaches the group of the parent.
@@ -57,6 +55,8 @@ A keeper is a small process between the parent and the target. The parent gives 
 - Each start costs about 5 ms more and 2 to 4 MB while the process runs.
 - `sh` cannot tell an exit code above 128 from a signal: a target that exits with 130 reaches the parent as SIGINT. A command that uses such exit codes on purpose is rare; the README names it.
 - A child of the target that leaves the group (`setsid`, `detached: true`) does not end with it.
+- The keeper runs `/bin/sh` by its absolute path, never `$SHELL`. zsh reads `~/.zshenv` also for `zsh -c`: a probe of 2026-11-27 saw `zsh -c` give its child the user's `HOME`, `PATH` and an API key from that file, which [ADR 0003](./0003-the-environment-is-a-required-input-and-the-process-gets-only-what-the-caller-names.md) forbids.
+- Through the keeper, a file that cannot start ends with 126 or 127, as a process can end by itself. Thus the package finds the file before the start ([ADR 0002](./0002-a-run-gives-its-end-as-a-value-an-exit-code-or-a-signal-and-rejects-only-when-the-process-cannot-start-or-its-signal-aborts.md)).
 - A keeper that something outside kills with SIGKILL leaves its target running, as the target would without a keeper.
 - The traps of the probe are in the source as tests: `kill -SIG -N` is the only form of a group signal that bash, dash, zsh and busybox read the same way; the shell's own notices ("Killed: 9") go to `/dev/null`, not to the target's stderr; Node.js removes `NODE_CHANNEL_FD` from the environment of its process at its start.
 

@@ -1,8 +1,8 @@
 # @zukhruf/process
 
-> **Design for review: no code yet.** The README, the glossary and the ADRs are the API on paper. Nothing is built before the maintainer approves them (backlog #6077).
+> **In build (backlog #6077).** `Command#run` is built. `Command#start`, `NodeCommand` and `Coprocess` follow, in that order; until then, this README describes them as decided in the ADRs.
 
-Start a process of this machine and know how it ends. `Process.run` runs a command to its end and gives its exit code or signal and its output, with no throw at a non-zero exit. `Process.start` gives a started process: it resolves when the process is ready, it stops the process group with SIGTERM and then SIGKILL, and the process ends with its parent, also when the parent is killed. `Coprocess` talks to a started process in JSON lines, and `NodeProcess` runs JavaScript source in its own Node.js with messages.
+Start a process of this machine and know how it ends. A `Command` says what to run: the file, its arguments, the environment, the folder. `command.run()` runs it to its end and gives its exit code or signal and its output, with no throw at a non-zero exit. `command.start()` gives a started process: it resolves when the process is ready, it stops the process group with SIGTERM and then SIGKILL, and the process ends with its parent, also when the parent is killed. A `Coprocess` talks to a started process in JSON lines, and a `NodeCommand` runs JavaScript source in its own Node.js with messages.
 
 The package replaces `@zukhruf/coprocess` and the `process` area of `@zukhruf/testing`, which move here ([ADR 0001](./docs/adr/0001-one-package-starts-a-process-for-a-run-and-for-a-started-process-and-coprocess-and-the-test-worker-move-into-it.md)).
 
@@ -15,21 +15,29 @@ npm install @zukhruf/process
 ```
 
 ```ts
-import { Process } from '@zukhruf/process';
+import { Command } from '@zukhruf/process';
 
-const lint = await Process.run('npx', ['eslint', 'src'], { env: process.env });
+const lint = await new Command('npx', ['eslint', 'src'], {
+  env: process.env,
+  clock: globalThis,
+}).run();
 if (lint.exitCode !== 0) console.error(lint.output);
 ```
 
+## Say what to run
+
+`new Command(file, args, options)` holds what to run, and starts nothing. `options` are `env` and `clock` (both required), `cwd`, `grace` and `name`. The clock runs the grace, as [root ADR 0004](../../docs/adr/0004-a-library-that-waits-takes-the-clock-as-an-input.md) asks of each library that waits: an app gives `globalThis`, and a test can give the clock of `@sinonjs/fake-timers`. A command can run or start more than once, as a pool does when it replaces a worker. What belongs to one call, the `signal`, the `input` and the ready line, goes to `run()` or `start()` ([ADR 0010](./docs/adr/0010-a-command-says-what-to-run-and-run-and-start-are-its-methods.md)).
+
 ## Run a command to its end
 
-`Process.run(file, args, options)` resolves when the process has ended and its streams have closed. It gives the end and the output ([ADR 0002](./docs/adr/0002-a-run-gives-its-end-as-a-value-an-exit-code-or-a-signal-and-rejects-only-when-the-process-cannot-start-or-its-signal-aborts.md)).
+`command.run({ input, signal })` resolves when the process has ended and its streams have closed. It gives the end and the output ([ADR 0002](./docs/adr/0002-a-run-gives-its-end-as-a-value-an-exit-code-or-a-signal-and-rejects-only-when-the-process-cannot-start-or-its-signal-aborts.md)).
 
 ```ts
-const run = await Process.run('git', ['status', '--porcelain'], {
+const status = new Command('git', ['status', '--porcelain'], {
   env: process.env,
   cwd: repository,
 });
+const run = await status.run();
 // run.exitCode is 0, or run.signal names the signal that ended it.
 // run.stdout, run.stderr, and run.output with both in the order written.
 ```
@@ -42,12 +50,14 @@ const run = await Process.run('git', ['status', '--porcelain'], {
 
 ## Start a process and wait until it is ready
 
-`Process.start(file, args, options)` starts the process and resolves when it is ready: at the first line of stdout that `ready.line` names ([ADR 0006](./docs/adr/0006-a-started-process-is-ready-at-a-line-or-a-message-that-the-caller-names-and-an-end-before-it-rejects.md)). Without `ready`, it resolves after the start.
+`command.start({ ready, signal, stdin, stdout, stderr })` starts the process and resolves when it is ready: at the first line of stdout that `ready.line` names ([ADR 0006](./docs/adr/0006-a-started-process-is-ready-at-a-line-or-a-message-that-the-caller-names-and-an-end-before-it-rejects.md)). Without `ready`, it resolves after the start.
 
 ```ts
-await using owner = await Process.start(process.execPath, ['owner.js', path], {
+const owner = new Command(process.execPath, ['owner.js', path], {
   name: 'owner',
   env: process.env,
+});
+await using holding = await owner.start({
   ready: { line: 'holding' },
   signal: t.signal,
 });
@@ -75,13 +85,14 @@ A started process ends when this program ends, also when this program is killed 
 
 ## Talk to a coprocess in JSON lines
 
-`Coprocess.start(file, args, options)` starts a process that reads one JSON value on each line of stdin and writes one on each line of stdout. `request(value)` sends a value and receives the next one. `send` and `receive` do each half. `close()` ends stdin and waits for the end ([ADR 0007](./docs/adr/0007-json-lines-and-messages-are-views-of-a-started-process-and-only-a-node-process-has-messages.md)).
+`new Coprocess(process)` talks to a started process that reads one JSON value on each line of stdin and writes one on each line of stdout. `request(value)` sends a value and receives the next one. `send` and `receive` do each half. `close()` ends stdin and waits for the end ([ADR 0007](./docs/adr/0007-json-lines-and-messages-are-views-of-a-started-process-and-only-a-node-process-has-messages.md)). The process must have its stdin and stdout piped, the default of `start()`, and the type allows only such a process.
 
 ```ts
-await using ocr = await Coprocess.start('/path/to/vision-worker', [], {
+const worker = new Command('/path/to/vision-worker', [], {
   name: 'Vision worker',
   env: process.env,
 });
+await using ocr = new Coprocess(await worker.start());
 const answer = await ocr.request({ path: '/tmp/receipt.png' });
 ```
 
@@ -89,22 +100,21 @@ const answer = await ocr.request({ path: '/tmp/receipt.png' });
 
 ## Run JavaScript source in its own Node.js
 
-`NodeProcess.start(source, options)` runs `source` as an ES module in a new Node.js, with an IPC channel back to this process. `next(match, { signal })` resolves with the first message that `match` selects, sent before or after the call: a `type`, or a function of the message. `send(message)` sends one. `ready` also takes `{ message }`. `NodeProcess.run(source, options)` runs the source to its end and gives what `Process.run` gives.
+`new NodeCommand(source, options)` says to run `source` as an ES module in a new Node.js, with an IPC channel back to this process. `options` are those of `Command` and `nodeOptions`, the Node.js flags before the source. `start()` gives a `NodeProcess`: `next(match, { signal })` resolves with the first message that `match` selects, sent before or after the call, a `type` or a function of the message, and `send(message)` sends one. Its `ready` also takes `{ message }`, and `admit` gets the child before it can send. `run()` runs the source to its end and gives what `Command#run` gives.
 
 ```ts
-await using holder = await NodeProcess.start(
+const holder = new NodeCommand(
   `
   import { connect } from 'node:net';
   // ... take the lock, then:
   process.send({ type: 'held' });
   `,
-  {
-    name: 'holder',
-    env: process.env,
-    ready: { message: 'held' },
-    signal: t.signal,
-  },
+  { name: 'holder', env: process.env },
 );
+await using held = await holder.start({
+  ready: { message: 'held' },
+  signal: t.signal,
+});
 ```
 
 Only a `NodeProcess` has messages, because only a Node.js child can use the channel.
@@ -113,7 +123,7 @@ Only a `NodeProcess` has messages, because only a Node.js child can use the chan
 
 | Error                                             | When                                                                                                                                                                                                        |
 | ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `StartError`                                      | The process could not start, for example because the file does not exist. Its `cause` is the error of the start (`ENOENT`, `EACCES`). `Process.run`, `Process.start` and the views reject with it.          |
+| `StartError`                                      | The process could not start, for example because the file does not exist. Its `cause` is the error of the start (`ENOENT`, `EACCES`). `run()` and `start()` reject with it.                                 |
 | `EndedBeforeReadyError`                           | A started process ended before it was ready. It has `end` and `stderr` (the stderr tail). Its message names the process and the end, never the command line, because arguments can hold prompts or secrets. |
 | the reason of `signal`                            | The signal aborted. The process is stopped first.                                                                                                                                                           |
 | `<name> exited (<exit code or signal>): <stderr>` | A coprocess ended. `exited()` settles with it, and each `receive` rejects with it (from `@zukhruf/coprocess`).                                                                                              |
@@ -126,7 +136,7 @@ A non-zero exit code of a run is not an error.
 - **A shell.** It starts a file with arguments, never a command line through a shell, so no argument is read by a shell. zx's `$` is a shell language; this is not.
 - **A process that outlives this program.** Start it detached with `node:child_process` and unref it.
 - **A pool of processes.** That is `@zukhruf/pool`, which keeps started processes.
-- **Retries.** A caller that retries a run calls `Process.run` again.
+- **Retries.** A caller that retries a run calls `run()` of its command again.
 - **Later, on the map:** a ready wait for a listening port and for HTTP; the end with the parent through job objects on Windows; a pseudo-terminal; the resource usage of a run; a first stop signal other than SIGTERM.
 
 ## Who uses it
@@ -134,10 +144,10 @@ A non-zero exit code of a run is not an error.
 | Consumer                                                                                                                       | How                                                               | Record             |
 | ------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------- | ------------------ |
 | `@zukhruf/pool` workers, elt `VisionWorker` and `TranscriptionWorker`                                                          | `Coprocess`, today from `@zukhruf/coprocess`                      | coprocess ADR 0001 |
-| the tests of mutex, single-flight and election                                                                                 | `NodeProcess`, today `startWorker` of `@zukhruf/testing/process`  | testing ADR 0021   |
-| shipped code of git-hooks, nx, ssh, tcc, mteb, sqlite-open, the tools                                                          | `Process.run` and `Process.start`, today `node:child_process`     | backlog #6077      |
-| the `sshd.ts` copies of docker, ssh and testing                                                                                | `Process.start` with a socket as stdio, and the stop of the group | backlog #6077      |
-| `runNode` of sdk-it, `cli` and `started` of context-compiler, `run` of text2sql, `collectOutput` of deepagents, `shell` of elt | `Process.run`, `Process.start`, `NodeProcess.run`                 | backlog #6077      |
+| the tests of mutex, single-flight and election                                                                                 | `NodeCommand`, today `startWorker` of `@zukhruf/testing/process`  | testing ADR 0021   |
+| shipped code of git-hooks, nx, ssh, tcc, mteb, sqlite-open, the tools                                                          | `Command#run` and `Command#start`, today `node:child_process`     | backlog #6077      |
+| the `sshd.ts` copies of docker, ssh and testing                                                                                | `Command#start` with a socket as stdio, and the stop of the group | backlog #6077      |
+| `runNode` of sdk-it, `cli` and `started` of context-compiler, `run` of text2sql, `collectOutput` of deepagents, `shell` of elt | `Command#run`, `Command#start`, `NodeCommand#run`                 | backlog #6077      |
 
 ## The same concepts in other systems
 
@@ -162,6 +172,8 @@ import type { ChildProcess } from 'node:child_process';
 import type { Socket } from 'node:net';
 import type { Writable } from 'node:stream';
 
+import type { Clock } from '@zukhruf/async';
+
 /** The whole environment of the process. A value of undefined is left out. */
 export type Environment = Readonly<Record<string, string | undefined>>;
 
@@ -179,48 +191,62 @@ export interface Output {
 
 export type Completed = End & Output;
 
-export interface RunOptions {
+export interface CommandOptions {
+  /** The whole environment of the process. */
   readonly env: Environment;
+  /** Runs the grace (root ADR 0004). An app gives globalThis. */
+  readonly clock: Clock;
   readonly cwd?: string;
+  /** Milliseconds from SIGTERM to SIGKILL. Default 5000. */
+  readonly grace?: number;
+  /** Names the process in each error. Default: the file. */
+  readonly name?: string;
+}
+
+export interface RunOptions {
   /** Written to stdin, and then stdin ends. */
   readonly input?: string | Uint8Array;
   /** An abort stops the process and rejects with the reason. */
   readonly signal?: AbortSignal;
-  /** Milliseconds from SIGTERM to SIGKILL. Default 5000. */
-  readonly grace?: number;
 }
 
 interface Starting {
-  /** Names the process in each error. */
-  readonly name: string;
-  readonly env: Environment;
-  readonly cwd?: string;
   readonly signal?: AbortSignal;
-  readonly grace?: number;
-  readonly stdin?: 'pipe' | 'ignore' | Socket;
   readonly stderr?: 'pipe' | 'ignore';
 }
 
-export type StartOptions = Starting &
-  (
-    | {
-        readonly stdout?: 'pipe';
-        readonly ready?: { readonly line: string | RegExp };
-      }
-    | { readonly stdout: 'ignore' | Socket; readonly ready?: never }
-  );
+/** The default: stdin and stdout piped. Only this start gives a piped process. */
+export type PipedStartOptions = Starting & {
+  readonly stdin?: 'pipe';
+  readonly stdout?: 'pipe';
+  readonly ready?: { readonly line: string | RegExp };
+};
 
-export class Process implements AsyncDisposable {
-  static run(
-    file: string,
-    args: readonly string[],
-    options: RunOptions,
-  ): Promise<Completed>;
-  static start(
-    file: string,
-    args: readonly string[],
-    options: StartOptions,
-  ): Promise<Process>;
+export type StartOptions =
+  | PipedStartOptions
+  | (Starting & {
+      readonly stdin: 'ignore' | Socket;
+      readonly stdout?: 'pipe';
+      readonly ready?: { readonly line: string | RegExp };
+    })
+  | (Starting & {
+      readonly stdin?: 'pipe' | 'ignore' | Socket;
+      readonly stdout: 'ignore' | Socket;
+      readonly ready?: never;
+    });
+
+/** What to run. It starts nothing until run() or start(). */
+export class Command {
+  constructor(file: string, args: readonly string[], options: CommandOptions);
+  readonly file: string;
+  readonly args: readonly string[];
+  run(options?: RunOptions): Promise<Completed>;
+  start(options?: PipedStartOptions): Promise<PipedProcess>;
+  start(options: StartOptions): Promise<Process>;
+}
+
+/** A started process. Only start() of a command gives one. */
+export interface Process extends AsyncDisposable {
   readonly name: string;
   readonly pid: number;
   /** null when stdin is 'ignore' or a socket. */
@@ -233,7 +259,11 @@ export class Process implements AsyncDisposable {
   stderrTail(): string;
   /** SIGTERM to the group, SIGKILL to the group after the grace. */
   stop(): Promise<End>;
-  [Symbol.asyncDispose](): Promise<void>;
+}
+
+/** A started process with its stdin and stdout piped. */
+export interface PipedProcess extends Process {
+  readonly stdin: Writable;
 }
 
 export interface Message {
@@ -244,22 +274,27 @@ export interface Message {
 /** A type, or a function that selects a message. */
 export type MessageMatch = string | ((message: Message) => boolean);
 
-export type NodeStartOptions = Omit<Starting, 'stdin'> & {
+export interface NodeCommandOptions extends CommandOptions {
   /** Node.js flags before the source. */
   readonly nodeOptions?: readonly string[];
+}
+
+export interface NodeStartOptions extends Starting {
   /** Gets the child before it can send, for example to join it to a coordinator. */
   readonly admit?: (child: ChildProcess) => void;
   readonly ready?:
     { readonly line: string | RegExp } | { readonly message: MessageMatch };
-};
+}
 
-export class NodeProcess implements AsyncDisposable {
-  static run(
-    source: string,
-    options: RunOptions & { readonly nodeOptions?: readonly string[] },
-  ): Promise<Completed>;
-  static start(source: string, options: NodeStartOptions): Promise<NodeProcess>;
-  readonly process: Process;
+/** JavaScript source to run as a module in its own Node.js, with an IPC channel. */
+export class NodeCommand {
+  constructor(source: string, options: NodeCommandOptions);
+  run(options?: RunOptions): Promise<Completed>;
+  start(options?: NodeStartOptions): Promise<NodeProcess>;
+}
+
+export interface NodeProcess extends AsyncDisposable {
+  readonly process: PipedProcess;
   /** Each message so far, in order. */
   readonly messages: readonly Message[];
   send(message: Message): void;
@@ -270,13 +305,10 @@ export class NodeProcess implements AsyncDisposable {
   [Symbol.asyncDispose](): Promise<void>;
 }
 
+/** The JSON-lines view of a started process. */
 export class Coprocess implements AsyncDisposable {
-  static start(
-    file: string,
-    args: readonly string[],
-    options: Omit<Starting, 'stdin'>,
-  ): Promise<Coprocess>;
-  readonly process: Process;
+  constructor(process: PipedProcess);
+  readonly process: PipedProcess;
   send(value: unknown): void;
   receive(): Promise<unknown>;
   request(value: unknown): Promise<unknown>;

@@ -1,8 +1,6 @@
 # execa starts the process and keeps its output, and the package stops it and reads its lines and messages
 
-> **Design for review.**
-
-Status: Proposed 2026-11-27 (backlog #6077).
+Status: Accepted 2026-11-27 (backlog #6077).
 
 Decision-makers: the zukhruf session of backlog #6077 proposes this from the probes of 2026-11-27. Ezz rules on it in the review of the paper.
 

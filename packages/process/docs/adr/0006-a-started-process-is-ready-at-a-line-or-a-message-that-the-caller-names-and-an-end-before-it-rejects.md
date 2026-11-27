@@ -1,8 +1,6 @@
 # A started process is ready at a line or a message that the caller names, and an end before it rejects
 
-> **Design for review.**
-
-Status: Proposed 2026-11-27 (backlog #6077).
+Status: Accepted 2026-11-27 (backlog #6077).
 
 Decision-makers: the zukhruf session of backlog #6077 proposes this from the leaders. Ezz rules on it in the review of the paper.
 
@@ -23,10 +21,10 @@ No standard library of a language has a ready wait. Testcontainers has it for a 
 
 ## Decision
 
-- `Process.start` takes `ready`. `{ line }` is a string that a whole line of stdout equals, or a regular expression that a line matches. A `NodeProcess` also takes `{ message }`, a type or a function of the message ([ADR 0007](./0007-json-lines-and-messages-are-views-of-a-started-process-and-only-a-node-process-has-messages.md)).
-- `Process.start` resolves when the process is ready, or at once after the start when the caller gives no `ready`.
-- When the process ends before it is ready, `Process.start` rejects with `EndedBeforeReadyError`. It holds the end and the stderr tail, and its message names the process and the end, not the command line.
-- When the `signal` aborts before ready, the process is stopped, and `Process.start` rejects with the reason of the signal. The wait has no time limit of its own: the caller's signal is its limit, as `zukhruf/no-own-wait-limit` asks of tests.
+- `Command#start` takes `ready`. `{ line }` is a string that a whole line of stdout equals, or a regular expression that a line matches. A `NodeProcess` also takes `{ message }`, a type or a function of the message ([ADR 0007](./0007-json-lines-and-messages-are-views-of-a-started-process-and-only-a-node-process-has-messages.md)).
+- `Command#start` resolves when the process is ready, or at once after the start when the caller gives no `ready`.
+- When the process ends before it is ready, `Command#start` rejects with `EndedBeforeReadyError`. It holds the end and the stderr tail, and its message names the process and the end, not the command line.
+- When the `signal` aborts before ready, the process is stopped, and `Command#start` rejects with the reason of the signal. The wait has no time limit of its own: the caller's signal is its limit, as `zukhruf/no-own-wait-limit` asks of tests.
 - The lines of stdout before and at the ready line stay readable on the started process, so a line that came before a later wait is not lost.
 
 ## Considered Options

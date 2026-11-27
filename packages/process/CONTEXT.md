@@ -4,12 +4,16 @@ A process that this program starts, from its start to its end: a run that waits 
 
 ## Language
 
+**Command**:
+What to run: a file, its arguments, its environment, its folder, its grace and its name. A command starts nothing until `run()` or `start()`, and it can run or start more than once.
+_Avoid_: Cmd, job, spec
+
 **Run**:
-One process that this program starts and waits for until it ends. It gives the end and the output. `Process.run` makes a run.
+One process that this program starts and waits for until it ends. It gives the end and the output. `run()` of a command makes a run.
 _Avoid_: Exec, call
 
 **Started process**:
-A process that this program starts and keeps until it ends or until this program stops it. `Process.start` gives one.
+A process that this program starts and keeps until it ends or until this program stops it. `start()` of a command gives one.
 _Avoid_: Child, subprocess, worker (for the process itself)
 
 **End**:
@@ -30,7 +34,7 @@ The time from SIGTERM to SIGKILL in a stop. 5 seconds unless the caller gives on
 The program that started the process. A started process ends when its parent ends, also when the parent is killed.
 
 **Ready**:
-The moment that a started process says it can work: a line on its stdout, or a message on its IPC channel. `Process.start` resolves at that moment.
+The moment that a started process says it can work: a line on its stdout, or a message on its IPC channel. `start()` of a command resolves at that moment.
 _Avoid_: Healthy, up, listening (for the moment itself)
 
 **Node process**:

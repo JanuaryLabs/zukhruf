@@ -75,6 +75,9 @@
       "path": "./packages/coprocess"
     },
     {
+      "path": "./packages/process"
+    },
+    {
       "path": "./packages/pool"
     },
     {

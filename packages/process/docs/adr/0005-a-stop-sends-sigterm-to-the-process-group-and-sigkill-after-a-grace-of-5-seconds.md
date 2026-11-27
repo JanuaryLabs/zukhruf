@@ -1,8 +1,6 @@
 # A stop sends SIGTERM to the process group, and SIGKILL after a grace of 5 seconds
 
-> **Design for review.**
-
-Status: Proposed 2026-11-27 (backlog #6077).
+Status: Accepted 2026-11-27 (backlog #6077).
 
 Decision-makers: the zukhruf session of backlog #6077 proposes this from the leaders and from [coprocess ADR 0001](../../../coprocess/docs/adr/0001-the-exit-is-an-event-and-the-package-uses-execa.md). Ezz rules on it in the review of the paper.
 
@@ -22,6 +20,7 @@ A process can need time to stop. On 2026-10-26 a probe of coprocess ADR 0001 sen
 ## Decision
 
 - `stop()` of a started process sends SIGTERM to its process group. When the group is still alive after the grace, it sends SIGKILL to the group. It resolves with the end of the process.
+- The grace waits on the `clock` of the command, a required input with no default, as [root ADR 0004](../../../../docs/adr/0004-a-library-that-waits-takes-the-clock-as-an-input.md) asks of a library that waits. Thus a test proves a grace on a fake clock: a process that ignores SIGTERM still runs 1 ms before the grace and is gone at it, with no wait of seconds and no bound on the wall clock. The keeper's own wait after the end of its parent (ADR 0004) is `sleep` in `sh`, on the time of the machine, because no clock of the parent is left then.
 - The grace is 5000 ms unless the caller gives `grace`. That is the default of execa, which coprocess uses today.
 - An abort of the `signal` of a run or of a started process is a stop.
 - The disposal of a started process (`await using`) is a stop that also waits for the streams to close.

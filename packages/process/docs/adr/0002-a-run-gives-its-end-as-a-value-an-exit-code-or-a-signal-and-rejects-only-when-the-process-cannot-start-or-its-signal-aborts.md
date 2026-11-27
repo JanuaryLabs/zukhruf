@@ -1,8 +1,6 @@
 # A run gives its end as a value, an exit code or a signal, and rejects only when the process cannot start or its signal aborts
 
-> **Design for review.**
-
-Status: Proposed 2026-11-27 (backlog #6077).
+Status: Accepted 2026-11-27 (backlog #6077).
 
 Decision-makers: the zukhruf session of backlog #6077 proposes this from the leaders. Ezz rules on it in the review of the paper.
 
@@ -27,10 +25,11 @@ Six of the eight give the end as a value. The two that throw are libraries, and 
 
 ## Decision
 
-- `Process.run(file, args, options)` resolves when the process has ended and its streams have closed. It gives `Completed`: the end and the output.
+- `command.run({ input, signal })` of a `Command` ([ADR 0010](./0010-a-command-says-what-to-run-and-run-and-start-are-its-methods.md)) resolves when the process has ended and its streams have closed. It gives `Completed`: the end and the output.
 - The end is `{ exitCode }` or `{ signal }`, never both and never neither. The type says so: `exitCode` is a number where `signal` is absent, and `signal` is a signal name where `exitCode` is absent.
 - The output is `stdout`, `stderr`, and `output`, which holds both in the order that the process wrote them. The text is not trimmed, as in `ExecResult` of `@zukhruf/docker`.
 - A run rejects in two cases only. When the process cannot start, for example because the file does not exist, it rejects with `StartError`, whose `cause` is the error of the start (`ENOENT`, `EACCES`). When its `signal` aborts, it stops the process ([ADR 0005](./0005-a-stop-sends-sigterm-to-the-process-group-and-sigkill-after-a-grace-of-5-seconds.md)) and rejects with the reason of the signal.
+- The package finds the file before the start: on the `PATH` of the given environment when the name has no slash, else at its path, and it must be executable. When it is not there, the run rejects with `StartError` whose `cause` has the code `ENOENT`, and when it is not executable, `EACCES`; nothing starts. This is a check that predicts, not a trial, because the trial cannot tell: under the keeper of [ADR 0004](./0004-a-started-process-ends-with-its-parent-also-when-the-parent-is-killed.md), `sh` always starts, and a failed `exec` ends with 126 or 127, the same codes that a process can give itself (probed 2026-11-27: a missing file gives 126 in bash and 127 in dash). A file that goes away between the check and the start ends with 127.
 - `input` is written to stdin, and then stdin ends. Without `input`, stdin ends at once, so a process that reads stdin does not wait.
 
 ## Considered Options
@@ -42,6 +41,6 @@ Six of the eight give the end as a value. The two that throw are libraries, and 
 
 ## Consequences
 
-- A test writes `assert.equal((await Process.run(...)).exitCode, 2)`, with no catch.
+- A test writes `assert.equal((await command.run()).exitCode, 2)`, with no catch.
 - A caller that wants a throw at a non-zero exit checks the end itself. The package has no `check` option, because one line does it and the line says what the caller expects.
 - The shape matches `ExecResult` of `@zukhruf/docker` in `exitCode`, `stdout`, `stderr` and `output`. A container has no `signal`, because the engine gives an exit code for each end.
