@@ -26,7 +26,12 @@ export interface SqlServerSession {
 }
 
 export interface SqlServerStoreOptions {
-  /** Gives a session. The store runs one batch on it, and then closes it. */
+  /**
+   * Gives a session that is connected. The store runs one batch on it, and
+   * then closes it. A holder's lease counts from the moment the store has the
+   * session, so a session that connects in its first query spends that
+   * connect from the lease (#5973).
+   */
   connect(): Promise<SqlServerSession>;
   /** The name of an existing table for the leases. The store runs no DDL. */
   table: string;
@@ -113,9 +118,11 @@ const heldStatement = `SELECT CASE WHEN EXISTS (
     AND DATEADD(millisecond, duration, renewed) > SYSUTCDATETIME()
 ) THEN 1 ELSE 0 END AS held;`;
 
+/** Runs one statement; `sent` runs once the session is there, right before the statement goes to the server. */
 type Run = (
   statement: string,
   parameters: Record<string, string>,
+  sent?: () => void,
 ) => Promise<Record<string, unknown>[]>;
 
 /**
@@ -175,7 +182,6 @@ export class SqlServerStore implements LockStore {
   ): Promise<LockHandle | undefined> {
     signal?.throwIfAborted();
     const lease = new KeyLease(key, this.#run, this.#options);
-    const started = this.#options.clock.performance.now();
     const granting = lease.grant(this.#leaseDuration);
     let token: FencingToken | undefined;
     try {
@@ -189,15 +195,16 @@ export class SqlServerStore implements LockStore {
       }
       throw error;
     }
-    return token && lease.hold(token, started);
+    return token && lease.hold(token);
   }
 
   /** Runs one statement on a session of its own. */
-  readonly #run: Run = async (statement, parameters) => {
+  readonly #run: Run = async (statement, parameters, sent) => {
     const session = await this.#options.connect();
     // A driver can emit `error` after the close, and an `error` with no listener stops the process.
     session.on('error', () => {});
     try {
+      sent?.();
       return await session.query(onObjects(Object.keys(parameters)), {
         ...parameters,
         statement,
@@ -227,6 +234,8 @@ class KeyLease {
   readonly #clock: Clock;
   readonly #row: { name: string; holder: string };
   readonly #lease: LeaseController;
+  /** When the grant statement went to the server, on the clock. */
+  #granted = 0;
   /** Aborts when the store stops holding: a release, or a lost lease. */
   readonly #done = new AbortController();
 
@@ -245,10 +254,11 @@ class KeyLease {
 
   /** The token of a grant, or `undefined` when another holder has the key. */
   async grant(leaseDuration: number): Promise<FencingToken | undefined> {
-    const [row] = await this.#run(grantStatement, {
-      ...this.#row,
-      duration: String(leaseDuration),
-    });
+    const [row] = await this.#run(
+      grantStatement,
+      { ...this.#row, duration: String(leaseDuration) },
+      () => (this.#granted = this.#clock.performance.now()),
+    );
     if (row === undefined) return undefined;
     if (typeof row.token !== 'string') {
       throw new Error(
@@ -258,9 +268,15 @@ class KeyLease {
     return new FencingToken(BigInt(row.token));
   }
 
-  /** Starts the heartbeat of a grant whose statement started at `started` on the clock. */
-  hold(token: FencingToken, started: number): LockHandle {
-    void this.#beat(started);
+  /**
+   * Starts the heartbeat, counted from when the grant statement went to the
+   * server: the server starts the lease when it runs the statement, which is
+   * later, so the holder still stops before the lease can end. A count from
+   * before the session came lost the lease at the first renewal when the
+   * connect took longer than two intervals (#5973).
+   */
+  hold(token: FencingToken): LockHandle {
+    void this.#beat(this.#granted);
     return {
       token,
       signal: this.#lease.signal,
@@ -271,9 +287,9 @@ class KeyLease {
   /**
    * Renews the row each interval. A renewal that touches no row means that
    * another store took the key. The holder also stops when no renewal
-   * succeeded for two intervals, counted from the start of the last renewal
-   * that succeeded: the server counts the lease from a time after that
-   * start, so the holder stops before the lease can end.
+   * succeeded for two intervals, counted from when the statement of the last
+   * renewal that succeeded went to the server: the server counts the lease
+   * from a time after that, so the holder stops before the lease can end.
    */
   async #beat(started: number): Promise<void> {
     const interval = this.#heartbeatInterval;
@@ -288,8 +304,11 @@ class KeyLease {
         });
         const start = clock.performance.now();
         using limit = timeout(renewed + 2 * interval - start, { clock });
+        let sent = start;
         const [row] = await untilAborted(
-          this.#run(renewStatement, this.#row),
+          this.#run(renewStatement, this.#row, () => {
+            sent = clock.performance.now();
+          }),
           AbortSignal.any([done, limit.signal]),
         );
         if (row?.count !== 1) {
@@ -297,7 +316,7 @@ class KeyLease {
             `Another store took the key ${JSON.stringify(this.#key)}.`,
           );
         }
-        renewed = start;
+        renewed = sent;
       }
     } catch (cause) {
       if (!done.aborted) this.#lose(cause);

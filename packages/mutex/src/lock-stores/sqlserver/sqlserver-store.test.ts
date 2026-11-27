@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { setTimeout as delay } from 'node:timers/promises';
 
 import { createClock } from '@sinonjs/fake-timers';
 
@@ -14,7 +15,11 @@ import {
   sqlServerSession,
   sqlServerStoreOn,
 } from '../../testing/subjects/sqlserver.ts';
-import { SqlServerStore, leaseName } from './sqlserver-store.ts';
+import {
+  type SqlServerSession,
+  SqlServerStore,
+  leaseName,
+} from './sqlserver-store.ts';
 
 /**
  * The first tests are the contract of a lock store. Each test after them is a
@@ -293,3 +298,40 @@ void test.each(isolations, ({ snapshot, isolation }) =>
     );
   }),
 );
+
+test('a holder whose first session comes later than two heartbeat intervals keeps its lease, as the server starts the lease when the grant runs', async (t) => {
+  // Arrange: one warm session that close() gives back, as a pool's, and only
+  // the first connect waits three intervals, as a cold pool over a slow link
+  // (#5973).
+  await using fixture = await sqlServerFixture(process.env);
+  const session = await sqlServerSession(serverAt(fixture.location));
+  try {
+    const pooled: SqlServerSession = {
+      query: (text, parameters) => session.query(text, parameters),
+      on: () => undefined,
+      close: () => {},
+    };
+    const interval = 500;
+    let connects = 0;
+    const store = sqlServerStoreOn(
+      async () => {
+        if (connects++ === 0) await delay(3 * interval);
+        return pooled;
+      },
+      {
+        heartbeatInterval: interval,
+        leaseDuration: 4 * interval,
+        clock: globalThis,
+      },
+    );
+
+    // Act: the holder renews three times.
+    await using held = await store.acquire(uniqueKey(), { signal: t.signal });
+    await delay(3 * interval);
+
+    // Assert
+    assert.equal(held.signal.aborted, false, String(held.signal.reason));
+  } finally {
+    session.close();
+  }
+});
