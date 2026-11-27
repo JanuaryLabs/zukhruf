@@ -6,14 +6,17 @@ The answers of evals have different shapes: a structured record, a label, a rank
 
 ## The parts
 
-| Import path                         | Job                                                                                                                    |
-| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `@zukhruf/evals`                    | The core: scorers, ratios, gates, scorer sets, scorecards, totals, bootstrap intervals, runs and paired bootstraps.    |
-| `@zukhruf/evals/promptfoo`          | The adapter that makes a scorer or a scorer set a promptfoo assertion.                                                 |
-| `@zukhruf/evals/structured`         | Compares a structured value with the value that a person labelled.                                                     |
-| `@zukhruf/evals/classification`     | Compares the stated labels of an answer with its expected labels, as scikit-learn's `sklearn.metrics` does (ADR 0003). |
-| `@zukhruf/evals/ranking` (later)    | Compares a ranked list with judged items, as trec_eval does.                                                           |
-| `@zukhruf/evals/clustering` (later) | Compares a partition with a labelled partition, as the CoNLL reference scorer does.                                    |
+| Import path                         | Job                                                                                                                                  |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `@zukhruf/evals`                    | The core: scorers, ratios, gates, scorer sets, scorecards, totals, bootstrap intervals, runs and paired bootstraps.                  |
+| `@zukhruf/evals/promptfoo`          | The adapter that makes a scorer or a scorer set a promptfoo assertion.                                                               |
+| `@zukhruf/evals/structured`         | Compares a structured value with the value that a person labelled.                                                                   |
+| `@zukhruf/evals/classification`     | Compares the stated labels of an answer with its expected labels, as scikit-learn's `sklearn.metrics` does (ADR 0003).               |
+| `@zukhruf/evals/ranking` (later)    | Compares a ranked list with judged items, as trec_eval does.                                                                         |
+| `@zukhruf/evals/clustering` (later) | Compares a partition with a labelled partition, as the CoNLL reference scorer does.                                                  |
+| `@zukhruf/evals/report` (design)    | Design for review (#6108): the report of one run, of two runs on the same tests, or of many runs ([docs/report.md](docs/report.md)). |
+
+> **Design for review (#6108).** [docs/report.md](docs/report.md) adds `./report`, a run log, sections and blocks to the core, a reader of promptfoo runs to `./promptfoo`, and field sections to `./structured`. With it, the package also shows the results that the runner stores. No code exists yet.
 
 A subpath imports only the core. It never imports another subpath.
 
@@ -436,7 +439,7 @@ The package throws the built-in error classes. A `RangeError` is a value outside
 
 ## What the package does not do
 
-- It does not run a harness, load a dataset, store results or show them. promptfoo does that.
+- It does not run a harness, load a dataset, store results or show them. promptfoo does that. (Design for review, #6108: `./report` would show them; see [docs/report.md](docs/report.md).)
 - It has no benchmark. A benchmark, such as SOB, is a composition of scorers that its caller keeps.
 - It has no LLM judge.
 - A subpath never imports another subpath.

@@ -10,7 +10,7 @@ An eval sends inputs to a harness and scores each answer against its label. This
 The program that sends the input of one test to a model and gives the answer, such as the own promptfoo provider of an app (ADR 0005). A caller can run one harness two times on the same tests, with two models (ADR 0004). The package does not run a harness.
 
 **Runner**:
-The program that runs the tests through a harness, loads the dataset, stores the results, shows them and adds the ratios of many answers. promptfoo is the runner today (ADR 0001). The package has no runner: `./promptfoo` is an adapter for one, and the core does not know any runner (ADR 0004 of `./structured`).
+The program that runs the tests through a harness, loads the dataset, stores the results, shows them and adds the ratios of many answers. promptfoo is the runner today (ADR 0001). Design for review (#6108): the runner runs and stores, and `./report` shows (see Reports). The package has no runner: `./promptfoo` is an adapter for one, and the core does not know any runner (ADR 0004 of `./structured`).
 
 **Answer**:
 What the harness gave for one test, such as a record, a label or a ranked list.
@@ -310,3 +310,47 @@ The stated record is parsed and agrees with a valid JSON Schema. A scorer that i
 
 **All matched**:
 Every leaf pair of a comparison agrees, and every item has a pair. When it reads null as no value, as `nullIsMissing` says, a null leaf does not count on either side.
+
+### Reports
+
+> **Design for review (#6108).** The words of [docs/report.md](docs/report.md). With them, the **Runner** above runs the tests and stores the results; it no longer shows them.
+
+**Run log**:
+The record of one run: each answer with its test, epoch, case, scorecard, metadata, latency and usage, and the id, label and time of the run (core ADR 0007). A report reads a run log. Inspect AI calls it the eval log.
+_Avoid_: results, run (a `Run` holds only the scorecards of ADR 0004)
+
+**Sample**:
+One answer of a run log, to one test, in one epoch. It is answered, with its answer, or failed, with the answer null and its error.
+_Avoid_: row, result (runner words)
+
+**Replayed**:
+A sample whose answer came from a cache of the runner or the harness, with no new call. Not the provider's prompt cache, which only lowers the price of the input of a new call.
+
+**Report**:
+One page about one input: one run (`RunReport`), two runs on the same tests (`PairReport`), or many runs (`TrendReport`). The input sets when the report can be written (report ADR 0001).
+_Avoid_: reporter, dashboard, viewer
+
+**Section**:
+A claim and the blocks that show its numbers. A family gives its own sections (core ADR 0008).
+
+**Claim**:
+The title of a section, computed from its numbers, such as "No difference beyond chance on values_recall (+4.6 [−0.6, +12.7])" (report ADR 0002).
+
+**Block**:
+One drawn part of a section, of a closed set of kinds: a table, bars, a scatter, a line, a heatmap, value pairs or a note. `./report` draws every kind.
+
+**Bar**:
+A value that a score must reach, on all tests or on a slice. It is met when the interval of the score is above it, missed when the interval is below it, and open when the interval holds it.
+
+**Slice**:
+The samples that share one value of a key that the host gives, such as the version of the labels, or a page with no offer.
+_Avoid_: subset (a subset has its own scorers), split
+
+**Spread**:
+The range of a score over the epochs of one test. A test is stable on a score when its spread is 0 (report ADR 0005).
+
+**Field error**:
+The class of one leaf or one item of an answer against its case: correct, incorrect, missed or spurious, the words of SemEval 2013 task 9.1 as nervaluate gives them (structured ADR 0014).
+
+**Field diff**:
+An answer beside its case, with the items paired as the scorer pairs them and each leaf marked by its field error.
