@@ -2,8 +2,10 @@ import type { Socket } from 'node:net';
 
 import { Cond, Future, WaitGroup, type WallClock, delay } from '@zukhruf/async';
 import { SqliteElection, type Term } from '@zukhruf/election';
+import { isErrno } from '@zukhruf/fs';
 import { NoServerError, PipeAddress } from '@zukhruf/pipes';
 
+import { CallerPresence } from './caller-presence.ts';
 import type { Eviction } from './eviction.ts';
 import type { PoolStats } from './pool-stats.ts';
 import { PoolWarning } from './pool-warning.ts';
@@ -346,21 +348,32 @@ export class PoolWorkers<Input, Output> implements AsyncDisposable {
           connection = await new PipeAddress(caller).connect();
         } catch (error) {
           if (!(error instanceof NoServerError)) throw error;
-          // The caller is gone before its job starts: the job never runs.
-          await this.#store.queue.cancel(this.#kind.queue, job.id);
-          return;
+          if (!this.#mayLive(caller, error)) {
+            // The caller is gone before its job starts: the job never runs.
+            await this.#forget(caller);
+            await this.#store.queue.cancel(this.#kind.queue, job.id);
+            return;
+          }
         }
+      }
+      const callerEnds: Promise<Outcome<Output>>[] = [];
+      if (caller !== undefined) {
+        callerEnds.push(
+          connection === undefined
+            ? this.#presenceEnds(caller, ended.signal)
+            : left(connection, this.#kind.queue),
+        );
       }
       const outcome = await Promise.race([
         this.#work(slots, slot, job.data, backlog, ended.signal),
         this.#watch(attempt, ended.signal),
-        ...(connection === undefined
-          ? []
-          : [left(connection, this.#kind.queue)]),
+        ...callerEnds,
       ]);
       ended.abort();
-      if ('left' in outcome)
+      if ('left' in outcome) {
+        await this.#forget(caller!);
         await this.#store.queue.cancel(this.#kind.queue, job.id);
+      }
       // A settle that affects no row finds the job under another claim: the
       // store fenced it, and the output is dropped (ADR 0017).
       if ('output' in outcome)
@@ -392,6 +405,46 @@ export class PoolWorkers<Input, Output> implements AsyncDisposable {
       ended.abort();
       connection?.destroy();
       slots.release(slot);
+    }
+  }
+
+  // Linux refuses a connect only when no server listens, and a full listen
+  // queue gives EAGAIN. On macOS a live caller whose queue is full refuses
+  // too (kern.ipc.somaxconn, #5424), so its presence tells. The other codes
+  // find no caller at the address. A recorded copy of the #mayLive of
+  // @zukhruf/sqlite-notify's wakes.ts (docs/copied-code.md).
+  #mayLive(caller: string, error: NoServerError): boolean {
+    if (process.platform === 'linux' || !isErrno(error.cause, 'ECONNREFUSED'))
+      return false;
+    return CallerPresence.lives(this.#store.path, caller);
+  }
+
+  // A caller that lives but refused the connect has no connection whose
+  // close tells of its end, so its presence is read at each touch instead.
+  async #presenceEnds(
+    caller: string,
+    ended: AbortSignal,
+  ): Promise<Outcome<Output>> {
+    for (;;) {
+      await delay(TOUCH_INTERVAL, { clock: this.#clock, signal: ended });
+      if (!CallerPresence.lives(this.#store.path, caller))
+        return { left: true };
+    }
+  }
+
+  // Deletes the presence file of a caller that is gone. A caller that lives
+  // keeps it, and a removal that fails leaves it for the next owner that
+  // finds the caller gone.
+  async #forget(caller: string): Promise<void> {
+    try {
+      await CallerPresence.removeIfEnded(this.#store.path, caller, this.#clock);
+    } catch (error) {
+      process.emitWarning(
+        new PoolWarning(error, {
+          code: 'ZUKHRUF_POOL_CALLER_PRESENCE_REMOVE_FAILED',
+          queue: this.#kind.queue,
+        }),
+      );
     }
   }
 

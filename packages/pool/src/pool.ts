@@ -4,6 +4,7 @@ import type { Socket } from 'node:net';
 import { Cond, Future, type WallClock, delay } from '@zukhruf/async';
 import { PipeEndpoint, type PipeServer } from '@zukhruf/pipes';
 
+import { CallerPresence } from './caller-presence.ts';
 import {
   DisposedError,
   type Failure,
@@ -75,7 +76,10 @@ export class Pool<Input, Output> implements AsyncDisposable {
   // tells the owner that the caller is gone (ADR 0021). A job of an exclusive
   // kind may be shared, and a caller of a shared job that is gone only leaves
   // it, so a Pool of an exclusive kind serves no pipe.
-  readonly #callerPipe: Future<PipeServer> | null;
+  readonly #callerPipe: Future<{
+    server: PipeServer;
+    presence: CallerPresence;
+  }> | null;
   readonly #owners = new Set<Socket>();
 
   constructor(options: {
@@ -118,22 +122,36 @@ export class Pool<Input, Output> implements AsyncDisposable {
     this.#callerPipe =
       options.kind.policy === 'standard'
         ? Future.run(async () => {
-            const server = await new PipeEndpoint(randomUUID(), {
+            const endpoint = new PipeEndpoint(randomUUID(), {
               prefix: 'zukhruf-pool',
-            }).listen((socket) => {
-              socket.unref();
-              this.#owners.add(socket);
-              socket.on('error', (error) =>
-                process.emitWarning(
-                  new PoolWarning(error, {
-                    code: 'ZUKHRUF_POOL_OWNER_CONNECTION_ERROR',
-                    queue,
-                  }),
-                ),
-              );
-              socket.once('close', () => this.#owners.delete(socket));
             });
-            return server.unref();
+            // The presence comes before the address goes into any job, so an
+            // owner whose connect is refused can tell a busy caller from a
+            // gone one (#5424).
+            const presence = await CallerPresence.take(
+              options.store,
+              endpoint.address.path,
+              options.clock,
+            );
+            const server = await endpoint
+              .listen((socket) => {
+                socket.unref();
+                this.#owners.add(socket);
+                socket.on('error', (error) =>
+                  process.emitWarning(
+                    new PoolWarning(error, {
+                      code: 'ZUKHRUF_POOL_OWNER_CONNECTION_ERROR',
+                      queue,
+                    }),
+                  ),
+                );
+                socket.once('close', () => this.#owners.delete(socket));
+              })
+              .catch(async (error: unknown) => {
+                await presence.end();
+                throw error;
+              });
+            return { server: server.unref(), presence };
           })
         : null;
   }
@@ -189,7 +207,7 @@ export class Pool<Input, Output> implements AsyncDisposable {
     const handle = await this.#send(
       pipe === null
         ? { input }
-        : { input, caller: (await pipe.wait()).endpoint.address.path },
+        : { input, caller: (await pipe.wait()).server.endpoint.address.path },
     );
     this.#runs.add(handle.id);
     try {
@@ -340,7 +358,10 @@ export class Pool<Input, Output> implements AsyncDisposable {
       // The owner hears each closed connection as a caller that is gone.
       for (const socket of this.#owners) socket.destroy();
       const [pipe] = await Promise.allSettled([this.#callerPipe?.wait()]);
-      if (pipe.status === 'fulfilled') await pipe.value?.close();
+      if (pipe.status === 'fulfilled' && pipe.value !== undefined) {
+        await pipe.value.server.close();
+        await pipe.value.presence.end();
+      }
       await this.#store[Symbol.asyncDispose]();
     }
   }

@@ -2,6 +2,8 @@
 
 Status: Accepted 2026-11-20 (backlog #3527). Built (2026-11-20), on one computer: each `Pool` of a standard kind serves its pipe from its construction to its disposal, rather than only while a `run` waits, so the pipe needs no state that a lazy start would add; a pipe across computers waits for ADR 0025.
 
+Amended 2026-11-27 (#5424): a refused connect cancels the job only when the caller is gone. macOS refuses a connect to a live server whose listen queue is full (`kern.ipc.somaxconn`) with the `ECONNREFUSED` of a dead one, so each `Pool` of a standard kind holds a presence file beside the store while it serves its pipe, as the listeners of `@zukhruf/sqlite-notify` do ([its ADR 0011](../../../sqlite/notify/docs/adr/0011-a-refused-connect-removes-a-listener-only-when-its-presence-is-free.md)). On a refused connect off Linux the owner reads that presence: a caller that lives keeps its job, which runs with its presence read at each touch in place of the connection's close, and the owner removes the presence file of a gone caller.
+
 A caller's abort cancels its job ([ADR 0020](./0020-a-cancel-of-a-shared-job-is-a-leave-and-of-any-other-job-a-drop-or-a-kill.md)). A host can also end with no abort: a crash, a `SIGKILL`, or a chat server that ends when its chat closes. Its jobs stay in the store, the owner runs them, and nobody reads the output (map ticket 15):
 
 - For OCR, the run is wasted work.

@@ -13,6 +13,7 @@ export type PoolWarningSubject =
         | 'ZUKHRUF_POOL_OWNER_CONNECTION_ERROR'
         | 'ZUKHRUF_POOL_FETCH_FAILED'
         | 'ZUKHRUF_POOL_REVISIONS_READ_FAILED'
+        | 'ZUKHRUF_POOL_CALLER_PRESENCE_REMOVE_FAILED'
         | 'ZUKHRUF_POOL_CALLER_CONNECTION_ERROR';
       readonly queue: string;
     };
@@ -27,6 +28,8 @@ const MESSAGES: Readonly<Record<PoolWarningSubject['code'], string>> = {
     'A notify failed, and the backstop finds the lost wake',
   ZUKHRUF_POOL_OWNER_CONNECTION_ERROR:
     'The connection of an owner broke, and the pool drops it',
+  ZUKHRUF_POOL_CALLER_PRESENCE_REMOVE_FAILED:
+    'The removal of the presence file of a gone caller failed, and the file stays for the next owner that finds the caller gone',
   ZUKHRUF_POOL_REVISIONS_READ_FAILED:
     'A read of the revisions in the store failed, and the next turn reads again',
   ZUKHRUF_POOL_FETCH_FAILED:

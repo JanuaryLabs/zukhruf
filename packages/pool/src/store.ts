@@ -34,6 +34,8 @@ type BossClock = NonNullable<SqliteJobQueueOptions['clock']>;
  * heartbeat ended goes back about a second later (ADR 0017).
  */
 export class Store implements AsyncDisposable {
+  /** The path of the SQLite file of the store. */
+  readonly path: string;
   readonly folder: string;
   readonly queue: SqliteJobQueue;
   readonly notifications: Notifications;
@@ -44,6 +46,7 @@ export class Store implements AsyncDisposable {
       throw new TypeError(
         'A postgres:// store is not built yet: the store of one computer is the path of a SQLite file (ADR 0025).',
       );
+    this.path = address;
     this.folder = dirname(address);
     mkdirSync(this.folder, { recursive: true });
     // The journal of @zukhruf/sqlite-queue's own file (its ADR 0005).

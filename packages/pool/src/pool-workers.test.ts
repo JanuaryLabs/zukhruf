@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { type ChildProcess, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { readdir } from 'node:fs/promises';
+import type { Socket } from 'node:net';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import type { TestContext } from 'node:test';
@@ -13,6 +14,7 @@ import PQueue from 'p-queue';
 import { Latch, type WallClock, delay, untilAborted } from '@zukhruf/async';
 import { TemporaryFiles } from '@zukhruf/fs';
 import { describe, test } from '@zukhruf/parameterized-test';
+import { NoServerError, PipeAddress } from '@zukhruf/pipes';
 import { open } from '@zukhruf/sqlite-open';
 import {
   SqliteJobQueue,
@@ -50,6 +52,9 @@ import {
 // The queue of the kind that each host builds: "echo", revision 1.
 const queue = 'echo.r1';
 
+// The owner touches each running job every 5 s (src/store.ts TOUCH_INTERVAL).
+const TOUCH_INTERVAL_MS = 5_000;
+
 // A host: a program that builds PoolWorkers of the "echo" kind on the store
 // of argv[1], with the settings of argv[2], and reports to the test over IPC.
 // Its workers live in the host: run reports the job and answers with the
@@ -76,6 +81,14 @@ if (settings.call) {
   else void pool.run(settings.call).catch(() => {});
   process.send({ called: true });
   setInterval(() => {}, 60_000);
+  // "block" stops the event loop, as a busy program does: no JS runs, so no
+  // SQLite transaction is open, and the kernel queues the connects.
+  process.on('message', (message) => {
+    if (message === 'block')
+      process.send({ blocking: true }, () =>
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 600_000),
+      );
+  });
 } else {
 
 class HostWorker {
@@ -128,7 +141,8 @@ type Report =
   | { started: string }
   | { refused: string }
   | { disposed: true }
-  | { called: true };
+  | { called: true }
+  | { blocking: true };
 
 /** A host process; its disposal kills it when it still runs. */
 class Host implements AsyncDisposable {
@@ -4288,6 +4302,231 @@ describe(
         await owner[Symbol.asyncDispose]();
       }
     });
+
+    test(
+      'a standard run whose caller program lives with a full listen queue is not cancelled: its job runs, and its output reaches the store',
+      {
+        skip:
+          process.platform !== 'darwin' &&
+          'only macOS refuses a connect to a live server whose listen queue is full, with the ECONNREFUSED of a dead server; Linux gives EAGAIN',
+      },
+      async (t) => {
+        await using folder = await new TemporaryFiles().directory('pool-');
+        const store = join(folder.path, 'store.sqlite');
+        await using caller = new Host(store, {
+          workers: 0,
+          retryLimit: 0,
+          call: { id: 'busy' },
+        });
+        await caller.report((report) => 'called' in report, {
+          signal: t.signal,
+        });
+        await using sending = await sender(store);
+        // The caller reports before its run has sent the job.
+        const sent = await waitFor(
+          async () => {
+            const [job] = await sending.jobs.findJobs(queue);
+            assert.ok(job);
+            return job;
+          },
+          { signal: t.signal, interval: 10 },
+        );
+        const { data } = sent;
+        assert.ok(
+          typeof data === 'object' &&
+            data !== null &&
+            'caller' in data &&
+            typeof data.caller === 'string',
+        );
+        const address = data.caller;
+        caller.send('block');
+        await caller.report((report) => 'blocking' in report, {
+          signal: t.signal,
+        });
+        // The connects that fill the listen queue of the busy caller, as a
+        // flood of owners' connects does: platform setup that no operation
+        // exposes.
+        const queued: Socket[] = [];
+        const workers = new HeldWorkers();
+        const owner = heldOwner(store, workers, 'standard');
+        try {
+          for (;;) {
+            try {
+              queued.push(await new PipeAddress(address).connect());
+            } catch (error) {
+              if (error instanceof NoServerError) break;
+              throw error;
+            }
+          }
+          await owner.ready();
+
+          const state = await waitFor(
+            async () => {
+              const [job] = await sending.jobs.findJobs(queue);
+              assert.ok(workers.running('busy') || job?.state === 'cancelled');
+              return job?.state;
+            },
+            { signal: t.signal, interval: 10 },
+          );
+          assert.equal(state, 'active');
+          // The owner reads the presence at each touch, every 5 s: the caller
+          // still lives, busy, so the job keeps its worker.
+          await setTimeout(TOUCH_INTERVAL_MS + 500);
+          const [held] = await sending.jobs.findJobs(queue);
+          assert.equal(held?.state, 'active');
+          assert.equal(workers.killed('busy'), false);
+          workers.answer('busy');
+          await using pool = new Pool({
+            kind: echoOf(1),
+            store,
+            clock: globalThis,
+          });
+          assert.deepEqual(
+            await untilAborted(pool.handle(sent.id).result(), t.signal),
+            { id: 'busy' },
+          );
+        } finally {
+          for (const socket of queued) socket.destroy();
+          workers.answerAll();
+          await owner[Symbol.asyncDispose]();
+        }
+      },
+    );
+
+    test(
+      'a standard run whose caller program refused the connect with a full listen queue and then dies loses its worker at the next touch, and the store cancels it',
+      {
+        skip:
+          process.platform !== 'darwin' &&
+          'only macOS refuses a connect to a live server whose listen queue is full, with the ECONNREFUSED of a dead server; Linux gives EAGAIN',
+      },
+      async (t) => {
+        await using folder = await new TemporaryFiles().directory('pool-');
+        const store = join(folder.path, 'store.sqlite');
+        await using caller = new Host(store, {
+          workers: 0,
+          retryLimit: 0,
+          call: { id: 'stopped' },
+        });
+        await using sending = await sender(store);
+        // The caller reports before its run has sent the job.
+        const sent = await waitFor(
+          async () => {
+            const [job] = await sending.jobs.findJobs(queue);
+            assert.ok(job);
+            return job;
+          },
+          { signal: t.signal, interval: 10 },
+        );
+        const { data } = sent;
+        assert.ok(
+          typeof data === 'object' &&
+            data !== null &&
+            'caller' in data &&
+            typeof data.caller === 'string',
+        );
+        const address = data.caller;
+        caller.send('block');
+        await caller.report((report) => 'blocking' in report, {
+          signal: t.signal,
+        });
+        // The connects that fill the listen queue of the busy caller:
+        // platform setup that no operation exposes.
+        const queued: Socket[] = [];
+        const workers = new HeldWorkers();
+        const owner = heldOwner(store, workers, 'standard');
+        try {
+          for (;;) {
+            try {
+              queued.push(await new PipeAddress(address).connect());
+            } catch (error) {
+              if (error instanceof NoServerError) break;
+              throw error;
+            }
+          }
+          await owner.ready();
+          await untilRunning(t, workers, 'stopped');
+
+          caller.kill();
+          await caller.closed();
+
+          // The owner reads the presence at its next touch, 5 s on.
+          await waitFor(
+            async () => {
+              assert.equal(workers.killed('stopped'), true);
+              const [job] = await sending.jobs.findJobs(queue);
+              assert.equal(job?.state, 'cancelled');
+            },
+            { signal: t.signal, interval: 20 },
+          );
+          assert.deepEqual(await callerPresencesOf(store), []);
+        } finally {
+          for (const socket of queued) socket.destroy();
+          workers.answerAll();
+          await owner[Symbol.asyncDispose]();
+        }
+      },
+    );
+
+    test('a Pool of a standard kind holds a presence file beside the store while it lives, and its disposal removes it; a Pool of an exclusive kind holds none', async () => {
+      await using folder = await new TemporaryFiles().directory('pool-');
+      const store = join(folder.path, 'store.sqlite');
+      {
+        await using exclusive = new Pool({
+          kind: echoOf(1, { policy: 'exclusive' }),
+          store,
+          clock: globalThis,
+        });
+        await exclusive.start({ id: 'b' });
+        assert.deepEqual(await callerPresencesOf(store), []);
+      }
+      {
+        await using standard = new Pool({
+          kind: echoOf(1),
+          store,
+          clock: globalThis,
+        });
+        // A start waits for the Pool's pipe and its presence.
+        await standard.start({ id: 'a' });
+        assert.equal((await callerPresencesOf(store)).length, 1);
+      }
+
+      assert.deepEqual(await callerPresencesOf(store), []);
+    });
+
+    test('an owner removes the presence file of a caller program that was killed before its job started, and the job never runs', async (t) => {
+      await using folder = await new TemporaryFiles().directory('pool-');
+      const store = join(folder.path, 'store.sqlite');
+      await using sending = await sender(store);
+      {
+        // The disposal of a Host kills its program.
+        await using _caller = new Host(store, {
+          workers: 0,
+          retryLimit: 0,
+          call: { id: 'killed' },
+        });
+        await waitFor(
+          async () =>
+            assert.equal((await sending.jobs.findJobs(queue)).length, 1),
+          { signal: t.signal, interval: 10 },
+        );
+      }
+      assert.equal((await callerPresencesOf(store)).length, 1);
+      const workers = new HeldWorkers();
+      await using owner = heldOwner(store, workers, 'standard');
+
+      await owner.ready();
+
+      await waitFor(
+        async () => {
+          const [job] = await sending.jobs.findJobs(queue);
+          assert.equal(job?.state, 'cancelled');
+        },
+        { signal: t.signal, interval: 10 },
+      );
+      assert.equal(workers.running('killed'), false);
+      assert.deepEqual(await callerPresencesOf(store), []);
+    });
   },
 );
 
@@ -5353,4 +5592,17 @@ function settledFlag(promise: Promise<unknown>): { readonly settled: boolean } {
     flag.settled = true;
   });
   return flag;
+}
+
+/**
+ * The presence files of the callers on the store at `store` (#5424): the
+ * folder beside the store, which no public operation lists.
+ */
+async function callerPresencesOf(store: string): Promise<string[]> {
+  try {
+    return await readdir(`${store}.callers`);
+  } catch (error) {
+    if (Reflect.get(Object(error), 'code') === 'ENOENT') return [];
+    throw error;
+  }
 }

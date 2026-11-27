@@ -9,3 +9,5 @@ This package keeps a few test steps in more than one test file. Each one is list
 ## Moved to `@zukhruf/fs`
 
 The listener presence is no longer a copy. `ListenerPresence` (`src/listener-presence.ts`) uses `Presence` of `@zukhruf/fs` ([its ADR 0007](../../../fs/docs/adr/0007-a-presence-is-a-file-lock-that-its-owner-holds-while-it-lives.md), #5463), the class that the four places of the knowledge moved to. `deleteWhileHolding` and `unlinkRefused` are gone. `ListenerPresence` keeps the path `<database>.listeners/<id>.presence`, the listener row as its record, and the rule that a missing presence file is a listener of an older release, which counts as dead ([ADR 0011](./adr/0011-a-refused-connect-removes-a-listener-only-when-its-presence-is-free.md)).
+
+`ListenerPresence` and `#mayLive` of `src/wakes.ts` have a recorded copy in `@zukhruf/pool`: `CallerPresence` and the `#mayLive` of `PoolWorkers` ([its ledger](../../../pool/docs/copied-code.md), #6125). Mirror every fix in both, and name both files in the commit.

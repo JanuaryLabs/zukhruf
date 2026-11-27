@@ -43,6 +43,7 @@
   "dependencies": {
     "@zukhruf/async": "^0.8.70",
     "@zukhruf/election": "^0.8.70",
+    "@zukhruf/fs": "^0.8.70",
     "@zukhruf/pipes": "^0.8.70",
     "@zukhruf/sqlite-notify": "^0.8.70",
     "@zukhruf/sqlite-open": "^0.8.70",
@@ -50,7 +51,6 @@
   },
   "devDependencies": {
     "@sinonjs/fake-timers": "15.5.0",
-    "@zukhruf/fs": "^0.8.70",
     "@zukhruf/parameterized-test": "^0.8.70",
     "@zukhruf/testing": "^0.8.70",
     "p-queue": "10.0.0"
