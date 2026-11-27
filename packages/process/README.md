@@ -35,6 +35,7 @@ if (lint.exitCode !== 0) console.error(lint.output);
 ```ts
 const status = new Command('git', ['status', '--porcelain'], {
   env: process.env,
+  clock: globalThis,
   cwd: repository,
 });
 const run = await status.run();
@@ -56,6 +57,7 @@ const run = await status.run();
 const owner = new Command(process.execPath, ['owner.js', path], {
   name: 'owner',
   env: process.env,
+  clock: globalThis,
 });
 await using holding = await owner.start({
   ready: { line: 'holding' },
@@ -91,6 +93,7 @@ A started process ends when this program ends, also when this program is killed 
 const worker = new Command('/path/to/vision-worker', [], {
   name: 'Vision worker',
   env: process.env,
+  clock: globalThis,
 });
 await using ocr = new Coprocess(await worker.start());
 const answer = await ocr.request({ path: '/tmp/receipt.png' });
@@ -109,7 +112,7 @@ const holder = new NodeCommand(
   // ... take the lock, then:
   process.send({ type: 'held' });
   `,
-  { name: 'holder', env: process.env },
+  { name: 'holder', env: process.env, clock: globalThis },
 );
 await using held = await holder.start({
   ready: { message: 'held' },
@@ -255,7 +258,7 @@ export interface Process extends AsyncDisposable {
   readonly ended: Promise<End>;
   /** The lines of stdout from the first one, also those before the call. */
   lines(): AsyncIterable<string>;
-  /** The last 16 KiB of stderr. */
+  /** The last 16 384 characters of stderr. */
   stderrTail(): string;
   /** SIGTERM to the group, SIGKILL to the group after the grace. */
   stop(): Promise<End>;

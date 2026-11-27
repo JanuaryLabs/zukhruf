@@ -1,7 +1,7 @@
 import { createInterface } from 'node:readline';
 import type { Readable, Writable } from 'node:stream';
 
-import { Latch } from '@zukhruf/async';
+import { Latch, Lock } from '@zukhruf/async';
 
 import type { End } from './end.ts';
 import { EndedBeforeReadyError } from './ended-before-ready-error.ts';
@@ -16,7 +16,7 @@ export interface Process extends AsyncDisposable {
   readonly ended: Promise<End>;
   /** The lines of stdout from the first one, also those before the call. */
   lines(): AsyncIterable<string>;
-  /** The last 16 KiB of stderr. */
+  /** The last 16 384 characters of stderr. */
   stderrTail(): string;
   /** SIGTERM to the group, SIGKILL to the group after the grace. */
   stop(): Promise<End>;
@@ -50,6 +50,7 @@ export class StartedProcess implements Process {
   readonly #stop: () => Promise<void>;
   readonly #lines: AsyncIterator<string> | undefined;
   readonly #seen: string[] = [];
+  readonly #reading = new Lock();
   #stderr = '';
 
   constructor(
@@ -79,7 +80,7 @@ export class StartedProcess implements Process {
 
   async *lines(): AsyncGenerator<string> {
     for (let next = 0; ; next++) {
-      const line = this.#seen[next] ?? (await this.#read());
+      const line = this.#seen[next] ?? (await this.#readTo(next));
       if (line === undefined) return;
       yield line;
     }
@@ -108,10 +109,22 @@ export class StartedProcess implements Process {
     await this.stop();
   }
 
-  async #read(): Promise<string | undefined> {
-    const next = await this.#lines?.next();
-    if (next === undefined || next.done === true) return undefined;
-    this.#seen.push(next.value);
-    return next.value;
+  /**
+   * The line at `index`, undefined at the end of stdout. One reader at a time
+   * reads stdout, and a reader that waited finds the line that the reader
+   * before it read, so each line is read once and every reader gets it.
+   */
+  #readTo(index: number): Promise<string | undefined> {
+    return this.#reading.run(
+      async () => {
+        while (this.#seen.length <= index) {
+          const next = await this.#lines?.next();
+          if (next === undefined || next.done === true) return undefined;
+          this.#seen.push(next.value);
+        }
+        return this.#seen[index];
+      },
+      { signal: undefined },
+    );
   }
 }
