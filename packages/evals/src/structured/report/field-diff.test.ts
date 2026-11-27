@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 
 import { test } from '@zukhruf/parameterized-test';
 
-import { Note, RunLog, type Sample, ValuePairs } from '../../index.ts';
+import { Note, RunLog, RunPair, type Sample, ValuePairs } from '../../index.ts';
 import { HtmlRenderer, MarkdownRenderer, Page } from '../../report/index.ts';
 import {
   ByBestMatch,
@@ -341,6 +341,299 @@ test('a FieldDiff section renders as HTML and Markdown with its claim and with n
     },
     {
       claim: '1 of 1 answer has a field wrong; a has the most, 2 of 2 leaves',
+      html: { claim: true, nan: false },
+      markdown: { claim: true, nan: false },
+    },
+  );
+});
+
+// A run pair of two logs of the same tests, Haiku the baseline and DeepSeek
+// the change.
+const pairDiff = (
+  baseline: readonly Sample<unknown, Case>[],
+  change: readonly Sample<unknown, Case>[],
+  { worst = 20, nullIsMissing = false } = {},
+) =>
+  new FieldDiff(
+    new RunPair(
+      new RunLog({ ...info, id: 'haiku', label: 'Haiku' }, baseline),
+      new RunLog({ ...info, id: 'deepseek', label: 'DeepSeek' }, change),
+    ),
+    { comparer: new TreeWalk(), nullIsMissing, worst },
+  );
+
+test('of a run pair, the two answers of a test and epoch that both runs answered stand beside the case, the baseline first, each titled with its run and epoch', () => {
+  const section = pairDiff(
+    [
+      answered('a', { a: 'x', b: 'y' }, { a: 'x', b: 'y' }, { epoch: 0 }),
+      answered('a', { a: 'x', b: 'y' }, { a: 'x', b: 'y' }, { epoch: 1 }),
+    ],
+    [
+      answered('a', { a: 'x', b: 'y' }, { a: 'x', b: 'z' }, { epoch: 1 }),
+      answered('a', { a: 'x', b: 'y' }, { a: 'x', b: 'y' }, { epoch: 0 }),
+      answered('a', { a: 'x', b: 'y' }, { a: 'q', b: 'z' }, { epoch: 2 }),
+    ],
+  );
+
+  assert.deepEqual(shown(section), [
+    {
+      title: 'a · Haiku · epoch 1',
+      pairs: [
+        { path: '$.a', mark: 'agree', expected: 'x', actual: 'x' },
+        { path: '$.b', mark: 'agree', expected: 'y', actual: 'y' },
+      ],
+    },
+    {
+      title: 'a · DeepSeek · epoch 1',
+      pairs: [
+        { path: '$.a', mark: 'agree', expected: 'x', actual: 'x' },
+        { path: '$.b', mark: 'disagree', expected: 'y', actual: 'z' },
+      ],
+    },
+  ]);
+});
+
+test('of a run pair with one epoch of each test, a title is the test and its run', () => {
+  const section = pairDiff(
+    [answered('a', { a: 'x' }, { a: 'x' })],
+    [answered('a', { a: 'x' }, { a: 'y' })],
+  );
+
+  assert.deepEqual(
+    shown(section).map(({ title }) => title),
+    ['a · Haiku', 'a · DeepSeek'],
+  );
+});
+
+test('of a run pair, an answer is shown when the marks of its leaves changed, even with as many errors, and not when they stayed, even with errors', () => {
+  const section = pairDiff(
+    [
+      answered('same-wrong', { a: 'x' }, { a: 'y' }),
+      answered('moved', { a: 'x', b: 'y' }, { a: 'q', b: 'y' }),
+      answered('same-right', { a: 'x' }, { a: 'x' }),
+    ],
+    [
+      answered('same-wrong', { a: 'x' }, { a: 'z' }),
+      answered('moved', { a: 'x', b: 'y' }, { a: 'x', b: 'q' }),
+      answered('same-right', { a: 'x' }, { a: 'x' }),
+    ],
+  );
+
+  assert.deepEqual(
+    shown(section).map(({ title }) => title),
+    ['moved · Haiku', 'moved · DeepSeek'],
+  );
+});
+
+test('of a run pair, the answers come most gained errors first, then most errors of the change, ties in the order of the baseline, and at most `worst` of them', () => {
+  const baseline = [
+    answered('fewer', { a: 'x', b: 'y' }, { a: 'q', b: 'z' }),
+    answered('one-more', { a: 'x', b: 'y' }, { a: 'x', b: 'y' }),
+    answered('one-more-of-two', { a: 'x', b: 'y' }, { a: 'q', b: 'y' }),
+    answered('two-more', { a: 'x', b: 'y' }, { a: 'x', b: 'y' }),
+    answered('one-more-too', { a: 'x', b: 'y' }, { a: 'x', b: 'y' }),
+  ];
+  const change = [
+    answered('fewer', { a: 'x', b: 'y' }, { a: 'x', b: 'y' }),
+    answered('one-more', { a: 'x', b: 'y' }, { a: 'q', b: 'y' }),
+    answered('one-more-of-two', { a: 'x', b: 'y' }, { a: 'q', b: 'z' }),
+    answered('two-more', { a: 'x', b: 'y' }, { a: 'q', b: 'z' }),
+    answered('one-more-too', { a: 'x', b: 'y' }, { a: 'x', b: 'z' }),
+  ];
+
+  const tests = (worst: number) =>
+    shown(pairDiff(baseline, change, { worst }))
+      .map(({ title }) => title)
+      .filter((title) => title.endsWith(' · Haiku'))
+      .map((title) => title.replace(' · Haiku', ''));
+
+  assert.deepEqual(
+    { all: tests(20), two: tests(2) },
+    {
+      all: ['two-more', 'one-more-of-two', 'one-more', 'one-more-too', 'fewer'],
+      two: ['two-more', 'one-more-of-two'],
+    },
+  );
+});
+
+test("of a run pair, the scorers' nullIsMissing reaches both sides", () => {
+  const baseline = [answered('a', { name: 'Acme' }, { name: null })];
+  const change = [answered('a', { name: 'Acme' }, {})];
+
+  const asValue = pairDiff(baseline, change);
+  const asMissing = pairDiff(baseline, change, { nullIsMissing: true });
+
+  assert.deepEqual(
+    { asValue: shown(asValue), asMissing: asMissing.primitives },
+    {
+      asValue: [
+        {
+          title: 'a · Haiku',
+          pairs: [
+            {
+              path: '$.name',
+              mark: 'disagree',
+              expected: 'Acme',
+              actual: 'null',
+            },
+          ],
+        },
+        {
+          title: 'a · DeepSeek',
+          pairs: [{ path: '$.name', mark: 'only-expected', expected: 'Acme' }],
+        },
+      ],
+      asMissing: [new Note('No answer changed between the runs')],
+    },
+  );
+});
+
+void test.each(
+  [
+    {
+      name: 'counts the changed answers, those with more and fewer wrong fields, and names the one that gained the most',
+      baseline: [
+        answered('a', { a: 'x', b: 'y' }, { a: 'x', b: 'y' }),
+        answered('b', { a: 'x', b: 'y' }, { a: 'q', b: 'y' }),
+        answered('c', { a: 'x', b: 'y' }, { a: 'q', b: 'z' }),
+        answered('d', { a: 'x' }, { a: 'x' }),
+      ],
+      change: [
+        answered('a', { a: 'x', b: 'y' }, { a: 'q', b: 'z' }),
+        answered('b', { a: 'x', b: 'y' }, { a: 'q', b: 'z' }),
+        answered('c', { a: 'x', b: 'y' }, { a: 'x', b: 'y' }),
+        answered('d', { a: 'x' }, { a: 'x' }),
+      ],
+      worst: 20,
+      claim:
+        '3 of 4 answers changed between the runs, 2 with more wrong fields and 1 with fewer; a gained the most, 2 more wrong fields',
+    },
+    {
+      name: 'counts the changed answers before the cap of `worst`',
+      baseline: [
+        answered('a', { a: 'x' }, { a: 'x' }),
+        answered('b', { a: 'x' }, { a: 'x' }),
+      ],
+      change: [
+        answered('a', { a: 'x' }, { a: 'y' }),
+        answered('b', { a: 'x' }, { a: 'y' }),
+      ],
+      worst: 1,
+      claim:
+        '2 of 2 answers changed between the runs, 2 with more wrong fields and 0 with fewer; a gained the most, 1 more wrong field',
+    },
+    {
+      name: 'says answer for a pair of one answer',
+      baseline: [answered('a', { a: 'x' }, { a: 'x' })],
+      change: [answered('a', { a: 'x' }, { a: 'y' })],
+      worst: 20,
+      claim:
+        '1 of 1 answer changed between the runs, 1 with more wrong fields and 0 with fewer; a gained the most, 1 more wrong field',
+    },
+    {
+      name: 'names the shown answer with its epoch',
+      baseline: [
+        answered('a', { a: 'x' }, { a: 'x' }, { epoch: 0 }),
+        answered('a', { a: 'x' }, { a: 'x' }, { epoch: 1 }),
+      ],
+      change: [
+        answered('a', { a: 'x' }, { a: 'x' }, { epoch: 0 }),
+        answered('a', { a: 'x' }, { a: 'y' }, { epoch: 1 }),
+      ],
+      worst: 20,
+      claim:
+        '1 of 2 answers changed between the runs, 1 with more wrong fields and 0 with fewer; a · epoch 1 gained the most, 1 more wrong field',
+    },
+    {
+      name: 'says none gained when no changed answer has more wrong fields',
+      baseline: [
+        answered('a', { a: 'x', b: 'y' }, { a: 'q', b: 'y' }),
+        answered('b', { a: 'x' }, { a: 'y' }),
+      ],
+      change: [
+        answered('a', { a: 'x', b: 'y' }, { a: 'x', b: 'q' }),
+        answered('b', { a: 'x' }, { a: 'x' }),
+      ],
+      worst: 20,
+      claim:
+        '2 of 2 answers changed between the runs, 0 with more wrong fields and 1 with fewer; none gained a wrong field',
+    },
+    {
+      name: 'says so when no answer changed',
+      baseline: [answered('a', { a: 'x' }, { a: 'y' })],
+      change: [answered('a', { a: 'x' }, { a: 'z' })],
+      worst: 20,
+      claim: 'Every answer has the same fields right and wrong in both runs',
+    },
+  ],
+  ({ name, baseline, change, worst, claim }) =>
+    test(`of a run pair, the claim ${name}`, () => {
+      const section = pairDiff(baseline, change, { worst });
+
+      assert.equal(section.claim, claim);
+    }),
+);
+
+test('of a run pair with no changed answer, the one primitive is a note', () => {
+  const section = pairDiff(
+    [answered('a', { a: 'x' }, { a: 'x' })],
+    [answered('a', { a: 'x' }, { a: 'x' })],
+  );
+
+  assert.deepEqual(section.primitives, [
+    new Note('No answer changed between the runs'),
+  ]);
+});
+
+test('a FieldDiff section of a run pair with no test and epoch that both runs answered is a RangeError', () => {
+  assert.throws(
+    () =>
+      pairDiff(
+        [answered('a', { a: 'x' }, { a: 'x' }, { epoch: 0 })],
+        [answered('a', { a: 'x' }, { a: 'y' }, { epoch: 1 })],
+      ),
+    {
+      name: 'RangeError',
+      message:
+        'A FieldDiff section of a run pair needs a test and epoch that both runs answered',
+    },
+  );
+});
+
+test('a FieldDiff section of a run pair renders as HTML and Markdown with its claim and with no NaN', () => {
+  const section = pairDiff(
+    [
+      answered(
+        'a',
+        { name: 'Acme Corp', offers: [{ kind: 'credit' }] },
+        { name: 'Acme Corp', offers: [{ kind: 'credit' }] },
+      ),
+    ],
+    [
+      answered(
+        'a',
+        { name: 'Acme Corp', offers: [{ kind: 'credit' }] },
+        { name: 'Acme Inc', offers: [] },
+      ),
+    ],
+  );
+  const report = new Page('offers', [section]);
+
+  const html = new HtmlRenderer().render(report);
+  const markdown = new MarkdownRenderer().render(report);
+
+  assert.deepEqual(
+    {
+      claim: section.claim,
+      html: { claim: html.includes(section.claim), nan: html.includes('NaN') },
+      markdown: {
+        claim: markdown.includes(`## ${section.claim}`),
+        nan: markdown.includes('NaN'),
+      },
+    },
+    {
+      claim:
+        '1 of 1 answer changed between the runs, 1 with more wrong fields and 0 with fewer; a gained the most, 2 more wrong fields',
       html: { claim: true, nan: false },
       markdown: { claim: true, nan: false },
     },
