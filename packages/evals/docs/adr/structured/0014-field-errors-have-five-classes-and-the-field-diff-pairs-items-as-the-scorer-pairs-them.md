@@ -2,6 +2,8 @@
 
 Status: accepted in part (Ezz, 2026-11-27, #6108: "Add partial now"). The test of a partial leaf waits for review with the code.
 
+`FieldErrors` is built (`src/structured/report/field-errors.ts`, #6108). It compares each answer with the comparer of the eval through `Comparer#compare`, as `ScorerSet` does, and reads the leaf pairs and the item pairs of the `Comparison`, with the leaf options of the eval's scorers (`nullIsMissing`, as offers' scores set it), so that a leaf is classed as the scores count it. A leaf is partial when `BagOfWords.of` of each side, the words that `TokenF1` reads, share a word (`shared(...).hits > 0`). A row is a field, such as `$.offers[*].kind`, or the items of an array, such as `$.offers items`, in the order the walks first reach them. The class of a paired item reads the leaves under the item on either side, and a paired item with no leaf is correct. The claim names the row with the most errors. `FieldDiff` is not built yet.
+
 ## Context
 
 A page of structured answers shows which fields fail (Kleister's table of fields, DocILE's field types, nervaluate's report of each entity type) and the answer beside its case (SOB Table 10, by hand). promptfoo stores the ratios of each answer but not the pairs that gave them. The surveyed tools diff the text of two values (Braintrust, LangSmith, Phoenix, promptfoo); none knows the fields.
