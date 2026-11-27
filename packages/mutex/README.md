@@ -17,7 +17,7 @@ import { Mutex } from '@zukhruf/mutex';
 import { SqliteStore } from '@zukhruf/mutex/sqlite';
 ```
 
-The root `@zukhruf/mutex` gives the core, with `LeaderSelector`. Each family of lock stores has its own import path: `@zukhruf/mutex/memory`, `/thread`, `/ipc`, `/file-system`, `/sqlite`, `/socket`, `/postgres`, `/sqlserver`, `/mysql`, `/mariadb` and `/docker`. The table in [Select a lock store](#select-a-lock-store) gives the path of each lock store.
+The root `@zukhruf/mutex` gives the core, with `MutexElection`. Each family of lock stores has its own import path: `@zukhruf/mutex/memory`, `/thread`, `/ipc`, `/file-system`, `/sqlite`, `/socket`, `/postgres`, `/sqlserver`, `/mysql`, `/mariadb` and `/docker`. The table in [Select a lock store](#select-a-lock-store) gives the path of each lock store.
 
 ## Let one holder at a time run code for a key
 
@@ -141,23 +141,21 @@ The lease is a `FencedLease` of [`@zukhruf/fencing`](../fencing/README.md). Impo
 
 See [Fencing tokens](./docs/concepts/fencing-tokens.md) and the recipe [Protect a database from stale holders](./docs/recipes/fence-a-database.md).
 
-## Run a task each time this process leads
+## Elect a leader with a key
 
-Some work must run in only one process of a group, for the whole life of each process: a writer of a warehouse, a cleanup, a poll of a queue. `LeaderSelector.start(key, listener, options)` waits for the key, runs `listener.takeLeadership(lease, signal)` while it holds the key, and gives the key up when the task ends. With `autoRequeue`, it waits for the key again, until its dispose. It is a copy of Apache Curator's `LeaderSelector` ([ADR 0034](./docs/adr/0034-a-leader-selector-of-the-mutex-runs-a-task-each-time-it-leads-and-requeues-as-apache-curator-does.md)).
+`MutexElection` makes a key a backend of `LeaderElection` of [`@zukhruf/election`](../election/README.md): the holder of the key leads. To run a task each time this process leads, and to wait for the key again after each term, start a `LeaderSelector` of `@zukhruf/election` over it. A Spring `LockRegistryLeaderInitiator` leads over a lock of a `LockRegistry` in the same way ([ADR 0036](./docs/adr/0036-a-key-is-a-backend-of-leader-election.md)).
 
 ```ts title="leader.ts"
 import { setTimeout as delay } from 'node:timers/promises';
 
 import { Backoff } from '@zukhruf/async';
-import type { FencedLease } from '@zukhruf/fencing';
-import {
-  LeaderSelector,
-  type LeaderSelectorListener,
-  Mutex,
-} from '@zukhruf/mutex';
+import { LeaderSelector, type LeaderSelectorListener } from '@zukhruf/election';
+import { Mutex, MutexElection } from '@zukhruf/mutex';
 import { MemoryStore } from '@zukhruf/mutex/memory';
 
 const mutex = new Mutex(new MemoryStore());
+const election = () =>
+  new MutexElection({ key: mutex.key('warehouse-writer'), clock: globalThis });
 const autoRequeue = {
   backoff: new Backoff({
     initial: 1_000,
@@ -167,25 +165,21 @@ const autoRequeue = {
   }),
   clock: globalThis,
 };
-const writer = (name: string): LeaderSelectorListener<FencedLease> => ({
-  takeLeadership: async (lease, signal) => {
-    console.log(`${name} leads with token ${lease.token}`);
+const writer = (name: string): LeaderSelectorListener => ({
+  takeLeadership: async (term, signal) => {
+    console.log(`${name} leads at epoch ${term.epoch}`);
     // Write until the selector stops the task: a dispose, an interrupt or a loss.
     while (!signal.aborted) await delay(100);
     console.log(`${name} gives the key up`);
   },
 });
 
-const first = LeaderSelector.start(
-  mutex.key('warehouse-writer'),
-  writer('first'),
-  { autoRequeue },
-);
-const second = LeaderSelector.start(
-  mutex.key('warehouse-writer'),
-  writer('second'),
-  { autoRequeue },
-);
+const first = LeaderSelector.start(election(), writer('first'), {
+  autoRequeue,
+});
+const second = LeaderSelector.start(election(), writer('second'), {
+  autoRequeue,
+});
 await delay(150);
 await first[Symbol.asyncDispose](); // The standby leads at once.
 await delay(150);
@@ -195,50 +189,39 @@ await second[Symbol.asyncDispose]();
 Output:
 
 ```
-first leads with token 1
+first leads at epoch 1
 first gives the key up
-second leads with token 2
+second leads at epoch 2
 second gives the key up
 ```
 
-The signal of the task aborts at the dispose, at `interruptLeadership()`, and when the lease is lost ([ADR 0013](./docs/adr/0013-a-lost-lease-aborts-the-signal-of-the-lease.md)). Return, or reject with `signal.reason`, to give the leadership up. After each round:
+What the selector does after each round, and its errors, are in the README of `@zukhruf/election` ([Run a task each time this process leads](../election/README.md#run-a-task-each-time-this-process-leads)). The election over a key:
 
-| The round ends because                                          | With `autoRequeue`                                                                                                                                                                        | Without `autoRequeue`                                               |
-| --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| The dispose aborted the selector, in the wait or in the task    | The selector ends, after it gave the key up. `ended` resolves.                                                                                                                            | The same.                                                           |
-| The lease was lost, or `interruptLeadership()` aborted the task | The next round starts at once, with no back-off.                                                                                                                                          | The selector waits for `requeue()`.                                 |
-| The task resolved                                               | The next round starts at once.                                                                                                                                                            | The selector waits for `requeue()`.                                 |
-| The task rejected                                               | The selector ends, after it gave the key up. `ended` and the dispose reject with the failure.                                                                                             | The same.                                                           |
-| Giving the key up failed after the task resolved                | The selector ends with that failure. `ended` and the dispose reject with it.                                                                                                              | The same.                                                           |
-| The acquire failed                                              | A `LeaderSelectorWarning` (see [Errors](#errors)), then a wait of `backoff.duration(retries)` on `clock`, then the next round. `retries` counts the failed acquires since the last grant. | The selector ends. `ended` and the dispose reject with the failure. |
-
-- **The key must always acquire.** `start` takes a `Key<'always'>`: a key whose acquire mode may give up does not type-check, because a round has no task without a grant.
-- **Over an election.** `LeaderSelector.start(election, listener, options)` takes a `LeaderElection` of [`@zukhruf/election`](../election/README.md), for example `SqliteElection`. A round campaigns with no time limit, gives the task the `Term`, and resigns the term after the task. See the recipe [Run a job in only one process](../election/docs/recipes/run-a-job-in-only-one-process.md) of `@zukhruf/election`.
-- **The dispose waits.** It aborts the selector, and waits until the task ended and the key was given up, so a standby takes over before this process exits. A second dispose waits for the first. Keep the selector in the `AsyncDisposableStack` of the program. It runs its rounds in a `BackgroundService` of [`@zukhruf/async`](../async/README.md#own-work-that-runs-until-you-stop-it-with-a-background-service).
-- **A failure ends the selector.** The selector does not run a failed task again. The owner decides what comes next, for example `process.exit(1)`, so that the platform restarts the process.
-- **`requeue()`** queues one more round of a selector without `autoRequeue`. It returns `false` while a round is queued or runs, and throws after the dispose and after a failure ended the selector. `hasLeadership` is true while `takeLeadership` runs.
-- **With `autoRequeue`, the selector tries again after each failed acquire**, also after a fault that stays: no lock store tells a passing failure from a lasting one yet (#5438).
+- **The election picks the acquire mode of each step.** A campaign tries the key once, as `Modes.skipIfBusy()` does, and then waits in the line of the key, as `Modes.wait()` does, until its time is up. The mode of the key itself does not count, so `campaign({ timeout: 0 })` never waits.
+- **The epoch of a term is the fencing token of its grant** ([ADR 0003](./docs/adr/0003-a-fencing-token-on-every-lease.md)). It is higher than each token that the lock store gave before, also to a holder that is not a candidate. On a `SocketStore`, a token is `epoch << 32 | sequence`, so it can be 2^32 or more: give it to a resource as a fence, not to `EpochTokenSource`.
+- **`afterCleanShutdown` is always false.** A key keeps no state but its lock, so `resign({ clean: true })` records nothing, and each next leader recovers.
+- **A lost lease ends the term.** The signal of the term aborts with a `LeaseLostError` whose `cause` is the loss of the lease ([ADR 0013](./docs/adr/0013-a-lost-lease-aborts-the-signal-of-the-lease.md)), for example when a `SqlServerStore` cannot renew its key ([ADR 0035](./docs/adr/0035-a-sql-server-key-is-a-lease-that-ends-unless-its-holder-renews-it.md)).
+- **The name of the election is the name of the key.** A `LeaderSelectorWarning` of a failed campaign has the detail `election: <key>`. Two keys with one name on two lock stores are two elections.
+- **A release that fails rejects the resign.** A loss that comes while the term resigns is no failure. After a loss, a release that fails is a `TermWarning` of `@zukhruf/election`.
 
 ## Errors
 
-| Error                          | When                                                                                                                                                                                                                                                                                                                                                                                   |
-| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `LeaseLostError`               | Another holder may have the key now. The signal of the lease aborts with it while the task runs, and the call rejects with it when the task ends. Its `subject` is the key. It is the class of `@zukhruf/lease`, and `@zukhruf/mutex` exports it too ([ADR 0013](./docs/adr/0013-a-lost-lease-aborts-the-signal-of-the-lease.md)).                                                     |
-| `CoordinatorUnavailableError`  | No coordinator is left that can grant the key, for example after the parent of an `IpcStore` stops. The request did not run. Its `key` is the key. `@zukhruf/mutex/thread`, `/ipc` and `/socket` export it ([ADR 0004](./docs/adr/0004-parent-stops-held-keys-stay.md)).                                                                                                               |
-| `GrantFailedError`             | The coordinator could not mint a fencing token for the key. The request did not run, and the key is not held. Its `key` is the key. `@zukhruf/mutex/thread`, `/ipc` and `/socket` export it ([ADR 0019](./docs/adr/0019-a-failed-token-mint-answers-the-request-and-an-exhausted-epoch-ends-the-term.md)).                                                                             |
-| `ProtocolVersionError`         | The leader of a `SocketStore` speaks another protocol version. The request did not run. `ours` is the protocol version of this process, and `theirs` is the protocol version of the leader. `@zukhruf/mutex/socket` exports it ([ADR 0014](./docs/adr/0014-a-process-says-its-protocol-version-before-its-first-request.md)).                                                          |
-| `NetworkDirectoryError`        | The lock directory of a `TicketQueueFileStore`, `LockFileStore`, `SqliteStore` or `SocketStore` is on a network file system. `directory` and `fileSystem` name it. It is the class of `@zukhruf/fs`, and `@zukhruf/mutex/file-system`, `/sqlite` and `/socket` export it (`src/lock-stores/network-directory.test.ts`).                                                                |
-| `signal.reason`                | A call rejects with it when its signal aborts while it waits for the key. The task does not run ([ADR 0008](./docs/adr/0008-a-caller-cancels-an-acquire-mode-gives-up.md)).                                                                                                                                                                                                            |
-| The failure of a leader's task | `ended` and the dispose of a `LeaderSelector` reject with the error of a task that failed, and, without `autoRequeue`, with the error of a failed acquire. `requeue()` throws an `Error` after the dispose, and after a failure ended the selector ([ADR 0034](./docs/adr/0034-a-leader-selector-of-the-mutex-runs-a-task-each-time-it-leads-and-requeues-as-apache-curator-does.md)). |
+| Error                         | When                                                                                                                                                                                                                                                                                                                               |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `LeaseLostError`              | Another holder may have the key now. The signal of the lease aborts with it while the task runs, and the call rejects with it when the task ends. Its `subject` is the key. It is the class of `@zukhruf/lease`, and `@zukhruf/mutex` exports it too ([ADR 0013](./docs/adr/0013-a-lost-lease-aborts-the-signal-of-the-lease.md)). |
+| `CoordinatorUnavailableError` | No coordinator is left that can grant the key, for example after the parent of an `IpcStore` stops. The request did not run. Its `key` is the key. `@zukhruf/mutex/thread`, `/ipc` and `/socket` export it ([ADR 0004](./docs/adr/0004-parent-stops-held-keys-stay.md)).                                                           |
+| `GrantFailedError`            | The coordinator could not mint a fencing token for the key. The request did not run, and the key is not held. Its `key` is the key. `@zukhruf/mutex/thread`, `/ipc` and `/socket` export it ([ADR 0019](./docs/adr/0019-a-failed-token-mint-answers-the-request-and-an-exhausted-epoch-ends-the-term.md)).                         |
+| `ProtocolVersionError`        | The leader of a `SocketStore` speaks another protocol version. The request did not run. `ours` is the protocol version of this process, and `theirs` is the protocol version of the leader. `@zukhruf/mutex/socket` exports it ([ADR 0014](./docs/adr/0014-a-process-says-its-protocol-version-before-its-first-request.md)).      |
+| `NetworkDirectoryError`       | The lock directory of a `TicketQueueFileStore`, `LockFileStore`, `SqliteStore` or `SocketStore` is on a network file system. `directory` and `fileSystem` name it. It is the class of `@zukhruf/fs`, and `@zukhruf/mutex/file-system`, `/sqlite` and `/socket` export it (`src/lock-stores/network-directory.test.ts`).            |
+| `signal.reason`               | A call rejects with it when its signal aborts while it waits for the key. The task does not run ([ADR 0008](./docs/adr/0008-a-caller-cancels-an-acquire-mode-gives-up.md)).                                                                                                                                                        |
 
-A failure that no caller waits for is a process warning, in the shape of [root ADR 0010](../../docs/adr/0010-a-package-warning-names-its-type-code-and-subject-and-keeps-the-failure-as-its-cause.md). A `'warning'` listener reads its type as `name`, its `code`, and its subject in `detail`, one `<term>: <value>` line each. Its `cause` is the failure, and its message ends with the failure's message. `--disable-warning=<code or type>` stops the print. Each type is a class that the package exports: `LeaderSelectorWarning` and `MutexWarning` from `@zukhruf/mutex`, `DockerEngineStoreWarning` from `@zukhruf/mutex/docker`, and `LockServerWarning` from `@zukhruf/mutex/socket`, so a listener can test `warning instanceof` the class ([root ADR 0011](../../docs/adr/0011-a-package-warning-is-an-instance-of-its-own-class-which-the-package-exports.md)). With two installed copies of the package, `instanceof` fails across the copies, so compare `code`.
+A failure that no caller waits for is a process warning, in the shape of [root ADR 0010](../../docs/adr/0010-a-package-warning-names-its-type-code-and-subject-and-keeps-the-failure-as-its-cause.md). A `'warning'` listener reads its type as `name`, its `code`, and its subject in `detail`, one `<term>: <value>` line each. Its `cause` is the failure, and its message ends with the failure's message. `--disable-warning=<code or type>` stops the print. Each type is a class that the package exports: `MutexWarning` from `@zukhruf/mutex`, `DockerEngineStoreWarning` from `@zukhruf/mutex/docker`, and `LockServerWarning` from `@zukhruf/mutex/socket`, so a listener can test `warning instanceof` the class ([root ADR 0011](../../docs/adr/0011-a-package-warning-is-an-instance-of-its-own-class-which-the-package-exports.md)). With two installed copies of the package, `instanceof` fails across the copies, so compare `code`.
 
-| Warning                    | Code                                              | Detail                                                       | When                                                                                                                                                |
-| -------------------------- | ------------------------------------------------- | ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `LeaderSelectorWarning`    | `ZUKHRUF_MUTEX_LEADER_SELECTOR_ACQUIRE_FAILED`    | `key: <name>`, or `election: <name>` over a `LeaderElection` | An acquire of a `LeaderSelector` with `autoRequeue` fails. The selector waits its back-off and tries again.                                         |
-| `MutexWarning`             | `ZUKHRUF_MUTEX_GIVE_BACK_FAILED`                  | `key: <key>`                                                 | A caller cancelled, the acquire then got a lease, and its give-back fails.                                                                          |
-| `DockerEngineStoreWarning` | `ZUKHRUF_MUTEX_DOCKER_CLAIM_REMOVE_FAILED`        | `key: <key>` and `container: <id>`                           | The removal of a lost claim fails for a reason other than an engine out of reach. The claim ends with its attach.                                   |
-| `LockServerWarning`        | `ZUKHRUF_MUTEX_LOCK_SERVER_RECOVERY_CHECK_FAILED` | `session: <id>`                                              | The leader of a socket store fails to check the presence of a recovering session. It ends its term, and the next leader recovers the same sessions. |
+| Warning                    | Code                                              | Detail                             | When                                                                                                                                                |
+| -------------------------- | ------------------------------------------------- | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `MutexWarning`             | `ZUKHRUF_MUTEX_GIVE_BACK_FAILED`                  | `key: <key>`                       | A caller cancelled, the acquire then got a lease, and its give-back fails.                                                                          |
+| `DockerEngineStoreWarning` | `ZUKHRUF_MUTEX_DOCKER_CLAIM_REMOVE_FAILED`        | `key: <key>` and `container: <id>` | The removal of a lost claim fails for a reason other than an engine out of reach. The claim ends with its attach.                                   |
+| `LockServerWarning`        | `ZUKHRUF_MUTEX_LOCK_SERVER_RECOVERY_CHECK_FAILED` | `session: <id>`                    | The leader of a socket store fails to check the presence of a recovering session. It ends its term, and the next leader recovers the same sessions. |
 
 ## Who uses it
 
@@ -253,7 +236,7 @@ A failure that no caller waits for is a process warning, in the shape of [root A
 
 ## API
 
-The root `@zukhruf/mutex`. `FencedLease` and `TokenSource` are types of `@zukhruf/fencing`, `Backoff` and `Clock` are of `@zukhruf/async`, and `LeaderElection` and `Term` are of `@zukhruf/election`.
+The root `@zukhruf/mutex`. `FencedLease` and `TokenSource` are types of `@zukhruf/fencing`, `Clock` is of `@zukhruf/async`, and `LeaderElection` is of `@zukhruf/election`.
 
 ```ts
 class Mutex {
@@ -332,29 +315,13 @@ interface SkipIfBusyOptions {
   clock: Clock;
 }
 
-// Leader selector
-interface LeaderSelectorListener<L> {
-  takeLeadership(lease: L, signal: AbortSignal): Promise<void>; // return, or reject with signal.reason, to give the leadership up
+// Leader election over a key
+interface MutexElectionOptions {
+  key: Key<Outcome>; // its holder leads; the election picks the acquire mode of each step
+  clock: Clock; // times the deadline of a campaign
 }
-interface LeaderSelectorOptions {
-  autoRequeue?: { backoff: Backoff; clock: Clock } | undefined; // without it: lead once, then wait for requeue()
-}
-class LeaderSelector implements AsyncDisposable {
-  static start(
-    key: Key<'always'>,
-    listener: LeaderSelectorListener<FencedLease>,
-    options?: LeaderSelectorOptions,
-  ): LeaderSelector;
-  static start(
-    election: LeaderElection<unknown>,
-    listener: LeaderSelectorListener<Term>,
-    options?: LeaderSelectorOptions,
-  ): LeaderSelector;
-  get hasLeadership(): boolean; // true while takeLeadership runs
-  get ended(): Promise<void>; // rejects with the failure that ended the selector
-  requeue(): boolean; // false while a round is queued or runs; throws after the dispose
-  interruptLeadership(): void; // aborts the signal of the running task
-  [Symbol.asyncDispose](): Promise<void>; // aborts, waits for the task and the give-up
+class MutexElection extends LeaderElection<KeyAttempt> {
+  constructor(options: MutexElectionOptions); // name: key.name; epoch: the fencing token of the grant
 }
 
 // A lock store of your own
@@ -374,15 +341,6 @@ function leaseFor(
 class LeaseLostError extends Error {
   readonly subject: string; // the key
   constructor(subject: string, options?: ErrorOptions);
-}
-
-class LeaderSelectorWarning extends Error {
-  readonly code: 'ZUKHRUF_MUTEX_LEADER_SELECTOR_ACQUIRE_FAILED';
-  readonly detail: string; // key: <name>, or election: <name>
-  constructor(
-    failure: unknown,
-    source: { readonly key: string } | { readonly election: string },
-  );
 }
 
 class MutexWarning extends Error {
@@ -435,7 +393,7 @@ class LockServerWarning extends Error {
 **Decisions**: the [architecture decision records](./docs/adr) tell why the design is as it is.
 
 - [ADR 0001](./docs/adr/0001-every-process-is-a-candidate.md): every process is a candidate.
-- [ADR 0002](./docs/adr/0002-election-is-not-part-of-the-mutex.md): leader election is not part of the mutex (superseded by `@zukhruf/election` ADR 0001, and in part by ADR 0034).
+- [ADR 0002](./docs/adr/0002-election-is-not-part-of-the-mutex.md): leader election is not part of the mutex (superseded by `@zukhruf/election` ADR 0001).
 - [ADR 0003](./docs/adr/0003-a-fencing-token-on-every-lease.md): a fencing token on every lease.
 - [ADR 0004](./docs/adr/0004-parent-stops-held-keys-stay.md): when the parent stops, held keys stay held.
 - [ADR 0005](./docs/adr/0005-threads-use-a-coordinator-not-web-locks.md): threads use a coordinator, not Web Locks.
@@ -467,8 +425,9 @@ class LockServerWarning extends Error {
 - [ADR 0031](./docs/adr/0031-a-follower-observes-the-leader-so-a-frozen-leader-is-ended.md): a follower observes the leader, so a frozen leader is ended (superseded in part by ADR 0033).
 - [ADR 0032](./docs/adr/0032-a-cancelled-waiter-of-the-memory-store-leaves-the-line.md): a cancelled waiter of the memory store leaves the line.
 - [ADR 0033](./docs/adr/0033-a-new-leader-grants-nothing-until-each-recorded-session-reasserted-its-keys-stopped-or-missed-its-lease.md): a new leader grants nothing until each recorded session reasserted its keys, stopped, or missed its lease.
-- [ADR 0034](./docs/adr/0034-a-leader-selector-of-the-mutex-runs-a-task-each-time-it-leads-and-requeues-as-apache-curator-does.md): a leader selector of the mutex runs a task each time it leads, and requeues as Apache Curator does.
+- [ADR 0034](./docs/adr/0034-a-leader-selector-of-the-mutex-runs-a-task-each-time-it-leads-and-requeues-as-apache-curator-does.md): a leader selector of the mutex runs a task each time it leads, and requeues as Apache Curator does (superseded by `@zukhruf/election` ADR 0011).
 - [ADR 0035](./docs/adr/0035-a-sql-server-key-is-a-lease-that-ends-unless-its-holder-renews-it.md): a SQL Server key is a lease that ends unless its holder renews it.
+- [ADR 0036](./docs/adr/0036-a-key-is-a-backend-of-leader-election.md): a key is a backend of leader election.
 
 **Copied code**: [Code that is in two places](./docs/copied-code.md) records each copy of code in this package, as the Rule of Three asks.
 
@@ -488,6 +447,7 @@ The tests run from `src/`, not from `dist/`: they start workers and child proces
 ```
 src/
   mutex/             Mutex, Key, acquire modes, LockHandle, LockStore
+  mutex-election/    MutexElection: a key as a backend of LeaderElection
   lock-stores/       one folder for each lock store
     remote/          the coordinator and client that ThreadStore, IpcStore and SocketStore share
   shared/            a record check (key file names, file writes and file locks are in @zukhruf/fs)

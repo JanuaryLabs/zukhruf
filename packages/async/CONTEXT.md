@@ -149,7 +149,7 @@ An `abort` event on which a listener called `event.stopImmediatePropagation()`. 
 _Avoid_: Swallowed event, cancelled event
 
 **Background service**:
-`BackgroundService`. It owns work that runs until its owner stops it: `start` runs the work with a signal, and a dispose aborts the signal and waits for the end. An end by the stop is no failure. The name is the one of .NET `BackgroundService` ([ADR 0018](./docs/adr/0018-work-that-a-caller-owns-runs-as-a-background-service-that-a-dispose-stops-and-waits-for.md)). `LeaderSelector` of `@zukhruf/mutex` runs its rounds in one ([mutex ADR 0034](../mutex/docs/adr/0034-a-leader-selector-of-the-mutex-runs-a-task-each-time-it-leads-and-requeues-as-apache-curator-does.md)).
+`BackgroundService`. It owns work that runs until its owner stops it: `start` runs the work with a signal, and a dispose aborts the signal and waits for the end. An end by the stop is no failure. The name is the one of .NET `BackgroundService` ([ADR 0018](./docs/adr/0018-work-that-a-caller-owns-runs-as-a-background-service-that-a-dispose-stops-and-waits-for.md)). `LeaderSelector` of `@zukhruf/election` runs its rounds in one ([election ADR 0011](../election/docs/adr/0011-a-leader-selector-runs-a-task-each-time-it-wins-a-term-of-a-leader-election.md)).
 _Avoid_: Background (an adjective), background task (this package avoids "task"), daemon (a process), worker (`@zukhruf/pool` lends workers)
 
 **Stop**:

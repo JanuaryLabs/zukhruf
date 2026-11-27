@@ -218,16 +218,8 @@ _Avoid_: Reclaim (a waiter of a file lock store removes a holder that stopped), 
 The number of the message format between the processes of a socket lock store and their leader. Each process sends it in its `hello` before its first request. A leader refuses a process with another protocol version, and the acquire fails with `ProtocolVersionError`. See [ADR 0014](docs/adr/0014-a-process-says-its-protocol-version-before-its-first-request.md).
 _Avoid_: Package version (each new package version would then refuse all earlier ones)
 
-### Leading for the life of a process
+### Leading with a key
 
-**Leader selector**:
-`LeaderSelector`. It runs a task each time this process leads, over a key of the mutex or over a `LeaderElection` of `@zukhruf/election`. A round is one wait for the leadership, one call of take leadership, and one give-up of the leadership. With `autoRequeue`, a new round starts after each round, until the dispose. The name is the one of Apache Curator's `LeaderSelector`. See [ADR 0034](docs/adr/0034-a-leader-selector-of-the-mutex-runs-a-task-each-time-it-leads-and-requeues-as-apache-curator-does.md).
-_Avoid_: Hold for life, lease scope (coined names that ADR 0034 rejected), leader initiator (Spring's name for the same loop), singleton
-
-**Take leadership**:
-The task of a leader selector, `listener.takeLeadership(lease, signal)`. It runs while the process leads, and gives the leadership up when it returns or rejects with `signal.reason`. Its signal aborts at the dispose, at `interruptLeadership()`, and when the lease or the term is lost. A rejection with another error ends the selector.
-_Avoid_: On granted, on revoked (Spring's two callbacks split one task), job
-
-**Requeue**:
-To queue one more round of a leader selector. `requeue()` queues one, and returns false while a round is queued or runs. With `autoRequeue`, the selector requeues after each round by itself: at once after a task that ended or a loss, and after a back-off on its clock after a failed acquire.
-_Avoid_: Retry (a requeue also follows a task that ended well), restart, re-elect
+**Mutex election**:
+`MutexElection`. A backend of `LeaderElection` of `@zukhruf/election` over a key: the holder of the key leads, and the epoch of a term is the fencing token of its grant. The election picks the acquire mode of each step of a campaign, and records no clean shutdown. A `LeaderSelector` of `@zukhruf/election` runs a task each time this process leads over it. The name follows Spring's `LockRegistryLeaderInitiator`, which names its initiator after the lock abstraction. See [ADR 0036](docs/adr/0036-a-key-is-a-backend-of-leader-election.md).
+_Avoid_: Key election (a key is a handle, not a family of lock stores), leader selector of the mutex (ADR 0034, superseded)

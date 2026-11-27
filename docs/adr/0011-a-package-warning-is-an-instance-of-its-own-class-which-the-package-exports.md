@@ -27,7 +27,7 @@ Each type of warning of root ADR 0010 is its own class.
 | `CreateExclusiveWarning`   | `packages/fs/src/create-exclusive-warning.ts`                          | `@zukhruf/fs`           | `ZUKHRUF_FS_DRAFT_REMOVE_FAILED`                                   |
 | `PeriodicSchedulerWarning` | `packages/mteb/src/dependencies/periodic-scheduler-warning.ts`         | `@zukhruf/mteb`         | `ZUKHRUF_MTEB_PERIODIC_CALL_FAILED`                                |
 | `LockWarning`              | `packages/mteb/src/dependencies/lock-warning.ts`                       | `@zukhruf/mteb`         | `ZUKHRUF_MTEB_LOCK_RELEASE_FAILED`                                 |
-| `LeaderSelectorWarning`    | `packages/mutex/src/leader-selector/leader-selector-warning.ts`        | `@zukhruf/mutex`        | `ZUKHRUF_MUTEX_LEADER_SELECTOR_ACQUIRE_FAILED`                     |
+| `LeaderSelectorWarning`    | `packages/election/src/leader-selector-warning.ts`                     | `@zukhruf/election`     | `ZUKHRUF_ELECTION_LEADER_SELECTOR_CAMPAIGN_FAILED`                 |
 | `MutexWarning`             | `packages/mutex/src/mutex/mutex-warning.ts`                            | `@zukhruf/mutex`        | `ZUKHRUF_MUTEX_GIVE_BACK_FAILED`                                   |
 | `DockerEngineStoreWarning` | `packages/mutex/src/lock-stores/docker/docker-engine-store-warning.ts` | `@zukhruf/mutex/docker` | `ZUKHRUF_MUTEX_DOCKER_CLAIM_REMOVE_FAILED`                         |
 | `LockServerWarning`        | `packages/mutex/src/lock-stores/socket/lock-server-warning.ts`         | `@zukhruf/mutex/socket` | `ZUKHRUF_MUTEX_LOCK_SERVER_RECOVERY_CHECK_FAILED`                  |

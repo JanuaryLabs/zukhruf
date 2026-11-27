@@ -543,7 +543,7 @@ watching.ended.catch((error: unknown) => {
 | The work fails before the stop         | `ended` rejects. The service does not start the work again: the owner decides what comes next, for example `process.exit(1)`, as `StopHost`, the default of .NET.                       |
 | The work ignores the signal            | The dispose waits until the work ends. The limit of a shutdown belongs to the owner, for example `Shutdown` of [`@zukhruf/shutdown`](../shutdown/README.md) or the timeout of terminus. |
 
-The service does not acquire anything again. To run work while this process holds a key of [`@zukhruf/mutex`](../mutex/README.md) or leads an election of [`@zukhruf/election`](../election/README.md), and to wait for it again after a loss, use `LeaderSelector` of `@zukhruf/mutex`. It runs its rounds in a background service ([mutex ADR 0034](../mutex/docs/adr/0034-a-leader-selector-of-the-mutex-runs-a-task-each-time-it-leads-and-requeues-as-apache-curator-does.md)).
+The service does not acquire anything again. To run work while this process holds a key of [`@zukhruf/mutex`](../mutex/README.md) or leads an election of [`@zukhruf/election`](../election/README.md), and to wait for it again after a loss, use `LeaderSelector` of `@zukhruf/election`, over a `MutexElection` of `@zukhruf/mutex` for a key. It runs its rounds in a background service ([election ADR 0011](../election/docs/adr/0011-a-leader-selector-runs-a-task-each-time-it-wins-a-term-of-a-leader-election.md)).
 
 ## Errors
 

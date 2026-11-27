@@ -84,11 +84,10 @@ void test.each(
 test('the root import path has only the core and no lock store', async () => {
   assert.deepEqual(await exportsOf('@zukhruf/mutex'), [
     'Key',
-    'LeaderSelector',
-    'LeaderSelectorWarning',
     'LeaseLostError',
     'Modes',
     'Mutex',
+    'MutexElection',
     'MutexWarning',
     'SkipIfBusyMode',
     'WaitMode',

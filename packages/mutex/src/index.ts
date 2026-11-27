@@ -1,11 +1,9 @@
 export { Mutex } from './mutex/mutex.ts';
 export { Key } from './mutex/key.ts';
 export {
-  LeaderSelector,
-  type LeaderSelectorListener,
-  type LeaderSelectorOptions,
-} from './leader-selector/leader-selector.ts';
-export { LeaderSelectorWarning } from './leader-selector/leader-selector-warning.ts';
+  MutexElection,
+  type MutexElectionOptions,
+} from './mutex-election/mutex-election.ts';
 export { MutexWarning } from './mutex/mutex-warning.ts';
 export { leaseFor, type LockHandle } from './mutex/lease.ts';
 export type { AcquireOptions, LockStore } from './mutex/lock-store.ts';

@@ -1,5 +1,7 @@
 # A leader selector of the mutex runs a task each time it leads, and requeues as Apache Curator does
 
+Superseded on 2026-11-27 (#5427) by [election ADR 0011](../../../election/docs/adr/0011-a-leader-selector-runs-a-task-each-time-it-wins-a-term-of-a-leader-election.md): `LeaderSelector` is in `@zukhruf/election` and leads over a `LeaderElection` only, and a key of the mutex leads through `MutexElection` ([ADR 0036](./0036-a-key-is-a-backend-of-leader-election.md)).
+
 Status: Accepted 2026-11-23 (#5408). The owner ruled on an earlier draft, which named the loop `holdForLife` over a coined `LeaseScope`: "we should not be doing a divergence from the leading tools. Step back and think properly." On the count of places, the owner said: "It counts: extract the loop now". To the question "Where should LeaderSelector live?", the owner chose "@zukhruf/mutex (Recommended)".
 
 Some work must run in only one process of a group, for the whole life of each process. The process waits for exclusivity, runs the work until a loss or a stop, gives the exclusivity up, and waits again. Three places write this loop by hand (#5408):
