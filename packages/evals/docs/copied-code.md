@@ -53,3 +53,17 @@ Changes: `FieldDiff.#pair` sorts out the leaves of one side, since their marks (
 ### Not copied
 
 The item classes of `FieldErrors` (`#itemClass`, `#isUnder`) are not copied: `FieldDiff` shows leaves, and a leaf of an unpaired item is on its own side by its own class. The leaf options (`nullIsMissing`) and the comparison (`Comparer#compare`, `Comparison#leaves`) are the parts both call, so neither copies them.
+
+## Copies in test files
+
+**A sample of a structured answer against its case (test data).**
+
+- Places: `src/structured/report/field-diff.test.ts` and `src/structured/report/field-errors.test.ts`.
+- Same: the `answered` sample of a real `Case` with an answer, and the run info.
+- A third place moves it into a test fixture of `./structured`.
+
+**The render test of a building block.**
+
+- Places: `src/structured/report/field-diff.test.ts`, `src/structured/report/field-errors.test.ts` and `src/report/repeat-spread.test.ts`, as copy-check finds them; each block's test file has one (backlog item of this copy).
+- Same: the section on a `Page` through `HtmlRenderer` and `MarkdownRenderer`, its claim in each, and no `NaN`.
+- Differs: the section and its claim.
