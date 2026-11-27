@@ -1,22 +1,10 @@
 import type { Socket } from 'node:net';
-import { Readable, Writable } from 'node:stream';
 
-import { execa } from 'execa';
+import type { Clock } from '@zukhruf/async';
 
-import { type Clock, untilAborted } from '@zukhruf/async';
-
-import type { Completed, End, Environment } from './end.ts';
-import { errorCode } from './error-code.ts';
-import { findFile } from './file.ts';
-import { KEEPER, REPORTING_KEEPER, environmentFixes } from './keeper.ts';
-import { StartError } from './start-error.ts';
-import {
-  Output,
-  type PipedProcess,
-  type Process,
-  StartedProcess,
-} from './started-process.ts';
-import { stopGroup } from './stop.ts';
+import type { Completed, Environment } from './end.ts';
+import { type Target, runUnderKeeper, startUnderKeeper } from './launch.ts';
+import type { PipedProcess, Process } from './started-process.ts';
 
 export interface CommandOptions {
   /** The whole environment of the process (ADR 0003). */
@@ -37,7 +25,7 @@ export interface RunOptions {
   readonly signal?: AbortSignal;
 }
 
-interface Starting {
+export interface Starting {
   /** An abort stops the process; before ready, the start rejects with the reason. */
   readonly signal?: AbortSignal;
   readonly stderr?: 'pipe' | 'ignore';
@@ -68,276 +56,51 @@ export type StartOptions =
 export class Command {
   readonly file: string;
   readonly args: readonly string[];
-  readonly #options: CommandOptions;
-  /** Milliseconds from SIGTERM to SIGKILL: of the keeper and of a stop. */
-  readonly #grace: number;
-  /** Names the process in each error: the name, or the file. */
-  readonly #name: string;
+  readonly #target: Target;
 
   constructor(file: string, args: readonly string[], options: CommandOptions) {
     this.file = file;
     this.args = args;
-    this.#options = options;
-    this.#grace = options.grace ?? 5000;
-    this.#name = options.name ?? file;
+    this.#target = targetOf(file, args, options);
   }
 
   /** Runs the command to its end, and gives its end and its output. */
-  async run(options: RunOptions = {}): Promise<Completed> {
-    const { input, signal } = options;
-    signal?.throwIfAborted();
-    const env = Object.fromEntries(
-      Object.entries(this.#options.env).filter(
-        (entry): entry is [string, string] => entry[1] !== undefined,
-      ),
-    );
-    const cwd = this.#options.cwd ?? process.cwd();
-    if (process.platform === 'win32')
-      return this.#runOnWindows(env, cwd, options);
-    let path: string;
-    try {
-      path = await findFile(this.file, env, cwd);
-    } catch (cause) {
-      throw new StartError(`${this.#name} could not start`, { cause });
-    }
-    const fixes = environmentFixes(env);
-    const subprocess = execa(
-      '/bin/sh',
-      [
-        '-c',
-        KEEPER,
-        'keeper',
-        String(this.#grace / 1000),
-        '/usr/bin/env',
-        ...fixes,
-        path,
-        ...this.args,
-      ],
-      {
-        env,
-        extendEnv: false,
-        cwd,
-        detached: true,
-        cleanup: false,
-        stdio: [
-          input === undefined ? 'ignore' : 'pipe',
-          'pipe',
-          'pipe',
-          'pipe',
-        ],
-        ...(input === undefined ? {} : { input }),
-        reject: false,
-        all: true,
-        stripFinalNewline: false,
-      },
-    );
-    const stopped =
-      signal === undefined || subprocess.pid === undefined
-        ? undefined
-        : this.#stopOnAbort(subprocess.pid, subprocess, signal);
-    const result = await subprocess;
-    if (signal?.aborted) {
-      await stopped?.promise;
-      throw signal.reason;
-    }
-    stopped?.[Symbol.dispose]();
-    return completedFrom(result);
+  run({ input, signal }: RunOptions = {}): Promise<Completed> {
+    return runUnderKeeper(this.#target, { input, signal, ipc: false });
   }
 
   /** Starts the command, and resolves when it is ready (ADR 0006). */
   start(options?: PipedStartOptions): Promise<PipedProcess>;
   start(options: StartOptions): Promise<Process>;
-  async start(options: StartOptions = {}): Promise<Process> {
-    const { signal } = options;
-    signal?.throwIfAborted();
-    // Copied from run(): the start under the keeper (docs/copied-code.md).
-    const env = Object.fromEntries(
-      Object.entries(this.#options.env).filter(
-        (entry): entry is [string, string] => entry[1] !== undefined,
-      ),
-    );
-    const cwd = this.#options.cwd ?? process.cwd();
-    let path: string;
-    try {
-      path = await findFile(this.file, env, cwd);
-    } catch (cause) {
-      throw new StartError(`${this.#name} could not start`, { cause });
-    }
-    const subprocess = execa(
-      '/bin/sh',
-      [
-        '-c',
-        REPORTING_KEEPER,
-        'keeper',
-        String(this.#grace / 1000),
-        '/usr/bin/env',
-        ...environmentFixes(env),
-        path,
-        ...this.args,
-      ],
-      {
-        env,
-        extendEnv: false,
-        cwd,
-        detached: true,
-        cleanup: false,
-        stdio: [
-          options.stdin ?? 'pipe',
-          options.stdout ?? 'pipe',
-          options.stderr ?? 'pipe',
-          'pipe',
-          'pipe',
-        ],
-        buffer: false,
-        reject: false,
-      },
-    );
-    const output = new Output(
-      subprocess.stdout instanceof Readable ? subprocess.stdout : null,
-      subprocess.stderr instanceof Readable ? subprocess.stderr : null,
-    );
-    const pgid = subprocess.pid;
-    const report = subprocess.stdio[4];
-    const pid =
-      pgid === undefined || !(report instanceof Readable)
-        ? undefined
-        : await this.#programPid(report);
-    if (pgid === undefined || pid === undefined)
-      throw new StartError(`${this.#name} could not start`, {
-        cause: (await subprocess).cause,
-      });
-    const started = new StartedProcess(
-      {
-        pid,
-        stdin: subprocess.stdin instanceof Writable ? subprocess.stdin : null,
-        output,
-      },
-      subprocess.then(endFrom),
-      {
-        name: this.#name,
-        stop: () =>
-          stopGroup(pgid, subprocess, {
-            grace: this.#grace,
-            clock: this.#options.clock,
-          }),
-      },
-    );
-    if (signal !== undefined) {
-      const stop = () => void started.stop();
-      signal.addEventListener('abort', stop, { once: true });
-      void started.ended.then(() => signal.removeEventListener('abort', stop));
-    }
-    if (options.ready === undefined) {
-      // The read of the pid awaited, so the signal can have aborted before its listener.
-      if (signal?.aborted === true) {
-        await started.stop();
-        throw signal.reason;
-      }
-      return started;
-    }
-    try {
-      await untilAborted(started.ready(options.ready.line), signal);
-    } catch (error) {
-      if (signal?.aborted !== true) throw error;
-      await started.stop();
-      throw signal.reason;
-    }
-    return started;
-  }
-
-  /**
-   * The pid that the reporting keeper writes on fd 4, or undefined when the
-   * pipe closes first. The pipe stays flowing, so it ends with the keeper.
-   */
-  #programPid(report: Readable): Promise<number | undefined> {
-    const { promise, resolve } = Promise.withResolvers<number | undefined>();
-    let text = '';
-    report.setEncoding('utf8');
-    report.on('data', (chunk: string) => {
-      text += chunk;
-      const end = text.indexOf('\n');
-      if (end !== -1) resolve(Number(text.slice(0, end)));
+  start(options: StartOptions = {}): Promise<Process> {
+    const { ready } = options;
+    return startUnderKeeper(this.#target, {
+      stdin: options.stdin ?? 'pipe',
+      stdout: options.stdout ?? 'pipe',
+      stderr: options.stderr ?? 'pipe',
+      signal: options.signal,
+      ready:
+        ready === undefined
+          ? undefined
+          : (started) => started.ready(ready.line),
+      channel: undefined,
     });
-    report.once('close', () => resolve(undefined));
-    return promise;
-  }
-
-  /**
-   * Windows has no POSIX sh and no process groups, so no keeper: execa starts
-   * the file itself (it finds .cmd files and PATHEXT), and stops the process
-   * tree with forceKillAfterDelay and killDescendants on its own timers. A
-   * start that fails is a spawn error here, so the trial tells it apart
-   * (ADR 0002). The process does not end yet with a parent that is killed.
-   * Not proven on Windows: backlog #6161.
-   */
-  async #runOnWindows(
-    env: Readonly<Record<string, string>>,
-    cwd: string,
-    { input, signal }: RunOptions,
-  ): Promise<Completed> {
-    const result = await execa(this.file, this.args, {
-      env,
-      extendEnv: false,
-      cwd,
-      stdio: [input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'],
-      ...(input === undefined ? {} : { input }),
-      ...(signal === undefined ? {} : { cancelSignal: signal }),
-      forceKillAfterDelay: this.#grace,
-      killDescendants: true,
-      reject: false,
-      all: true,
-      stripFinalNewline: false,
-    });
-    if (signal?.aborted) throw signal.reason;
-    const code = errorCode(result.cause);
-    if (result.failed && (code === 'ENOENT' || code === 'EACCES'))
-      throw new StartError(`${this.#name} could not start`, {
-        cause: result.cause,
-      });
-    return completedFrom(result);
-  }
-
-  /** Stops the group of the keeper at an abort of `signal`. */
-  #stopOnAbort(
-    pgid: number,
-    keeperEnded: Promise<unknown>,
-    signal: AbortSignal,
-  ): { promise: Promise<void> } & Disposable {
-    const stop = Promise.withResolvers<void>();
-    const listener = () => {
-      stopGroup(pgid, keeperEnded, {
-        grace: this.#grace,
-        clock: this.#options.clock,
-      }).then(stop.resolve, stop.reject);
-    };
-    signal.addEventListener('abort', listener, { once: true });
-    return {
-      promise: stop.promise,
-      [Symbol.dispose]: () => signal.removeEventListener('abort', listener),
-    };
   }
 }
 
-function completedFrom(result: {
-  readonly stdout: string;
-  readonly stderr: string;
-  readonly all: string;
-  readonly exitCode?: number | undefined;
-  readonly signal?: NodeJS.Signals | undefined;
-}): Completed {
+/** The command with its defaults: a grace of 5 seconds, and the file as its name. */
+export function targetOf(
+  file: string,
+  args: readonly string[],
+  options: CommandOptions,
+): Target {
   return {
-    ...endFrom(result),
-    stdout: result.stdout,
-    stderr: result.stderr,
-    output: result.all,
+    file,
+    args,
+    env: options.env,
+    clock: options.clock,
+    cwd: options.cwd,
+    grace: options.grace ?? 5000,
+    name: options.name ?? file,
   };
-}
-
-function endFrom(result: {
-  readonly exitCode?: number | undefined;
-  readonly signal?: NodeJS.Signals | undefined;
-}): End {
-  return result.signal === undefined
-    ? { exitCode: result.exitCode ?? 0 }
-    : { signal: result.signal };
 }

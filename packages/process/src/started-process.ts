@@ -88,23 +88,25 @@ export class Output {
   }
 }
 
-interface Child {
+interface Child<Stdin> {
   readonly pid: number;
-  readonly stdin: Writable | null;
+  readonly stdin: Stdin;
   readonly output: Output;
 }
 
-/** The process behind `Process`. */
-export class StartedProcess implements Process {
+/** The process behind `Process`; with a `Writable` stdin, it is a `PipedProcess`. */
+export class StartedProcess<
+  Stdin extends Writable | null = Writable | null,
+> implements Process {
   readonly name: string;
   readonly pid: number;
-  readonly stdin: Writable | null;
+  readonly stdin: Stdin;
   readonly #end = new Latch<End>();
   readonly #stop: () => Promise<void>;
   readonly #output: Output;
 
   constructor(
-    child: Child,
+    child: Child<Stdin>,
     ended: Promise<End>,
     { name, stop }: { name: string; stop: () => Promise<void> },
   ) {

@@ -4,15 +4,13 @@ The Rule of Three counts places, not packages. Code that a second place needs is
 
 ## In two places
 
-**The start of a process under the keeper.**
+**The guard of a message (an object with a string `type`).**
 
-- Places: `run` and `start` of `Command` (`src/command.ts`).
-- Same: the environment without its `undefined` values, the folder, the file found before the start or a `StartError` that names the command, and the arguments to the keeper of [ADR 0004](./adr/0004-a-started-process-ends-with-its-parent-also-when-the-parent-is-killed.md) with the fixes of the environment, started detached.
-- Differs: `run` keeps the output (the buffer of execa, `all`, `input`) and runs `KEEPER`; `start` streams it (`buffer: false`, and the stdio that the caller gives) and runs `REPORTING_KEEPER`, with one more pipe at fd 4 for the pid of the program.
-- The third place is `NodeCommand` (unit 3 of backlog #6077). Then the start moves into one private method of the class.
+- Places: `isMessage` of `src/node-process.ts` and `isWorkerMessage` of `packages/testing/src/process/worker-process.ts`.
+- Same: an object, not null, whose `type` is a string.
+- The copy ends without a third place: the move of the `startWorker` users onto `NodeCommand` (backlog #6155) deletes `worker-process.ts`.
 
-**The helpers that read processes and process groups (tests).**
+## Extracted
 
-- Places: `src/abort.test.ts` and `src/start.test.ts`.
-- Same: `running`, `groupExists` (EPERM is a group of zombies, which still exists), `killGroup`, `groupOf`, `pidsOf`, `pidIn` and `pidsIn`.
-- The third place moves them into `src/testing` of this package, not into `@zukhruf/testing`, which will depend on this package.
+- **The start of a process under the keeper** (backlog #6166). Its third place was `NodeCommand`. `spawnUnderKeeper` of `src/launch.ts` holds what the copies shared: the environment without its `undefined` values, the folder, the file found before the start or a `StartError` that names the command, and the arguments to the keeper of [ADR 0004](./adr/0004-a-started-process-ends-with-its-parent-also-when-the-parent-is-killed.md) with the fixes of the environment, started detached. Its parameters are the differences: the keeper (`KEEPER` for a run, `REPORTING_KEEPER` for a start) and the execa options (the stdio from fd 3 on, the buffer, `input`, `ipc`). `runUnderKeeper` and `startUnderKeeper` call it, and `Command` and `NodeCommand` call them.
+- **The helpers that read processes and process groups (tests).** Their third place was `src/node-command.test.ts`. They are in `src/testing/processes.ts`, which `abort.test.ts`, `start.test.ts` and `node-command.test.ts` import.

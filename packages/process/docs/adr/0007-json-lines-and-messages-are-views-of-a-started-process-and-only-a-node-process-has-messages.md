@@ -2,6 +2,8 @@
 
 Status: Accepted 2026-11-27 (backlog #6077).
 
+Changed in part on 2026-11-27 (backlog #6077, unit 3, built): `next()` rejects with `ProcessEndedError` when the process ends before a selected message, `<name> ended (<end>) before it sent '<type>'` for a type and `... before it sent a selected message` for a function (ADR 0006). A message that came before the end still resolves a `next()` called after it, because execa settles the end only after the channel closed, and every message is in `messages` by then. The IPC channel is fd 5 of a start (fd 4 carries the pid report, ADR 0004) and fd 4 of a run, which has no pid report. `send(message)` throws `ERR_IPC_CHANNEL_CLOSED` at the call once the channel has closed: Node.js reports a closed channel only later, as an `'error'` event of the child that would crash a parent that does not listen to it.
+
 Decision-makers: the zukhruf session of backlog #6077 proposes this from the leaders and ADR 0001. Ezz rules on it in the review of the paper.
 
 Two ways to talk to a started process exist in zukhruf. `Coprocess` sends one JSON value on each line of stdin and reads one from each line of stdout. `startWorker` sends and receives messages over the IPC channel of Node.js. An IPC channel exists only when the parent opens it at the start, and only a Node.js child can use it: a test of the probes of 2026-11-27 showed that a child started through a shell has no `process.send`.

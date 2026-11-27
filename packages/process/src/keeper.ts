@@ -14,8 +14,8 @@
  * (ADR 0003). The shell cannot do it itself: the `exec` of bash rewrites
  * SHLVL (an unset SHLVL arrives as 0, a given 7 as 6; probed 2026-11-27). A
  * file whose path holds `=` would be read by env as an assignment. The
- * watcher closes fd 4 and fd 5, the pid report and the IPC channel of a
- * Node.js target.
+ * watcher closes fd 4 and fd 5: the IPC channel of a Node.js target is fd 4
+ * in a run, and fd 5 in a start, whose fd 4 is the pid report.
  *
  * Each line was probed on bash 3.2 as /bin/sh, dash, zsh and busybox ash
  * (2026-11-27): only `kill -SIG -N` reads the same in all four, and the
@@ -54,8 +54,13 @@ exit "$st"
 `;
 }
 
-/** The variables that `sh` adds to the environment of its children. */
-const SHELL_VARIABLES = ['PWD', 'SHLVL'] as const;
+/**
+ * The variables that `sh` adds to the environment of its children, rewrites
+ * or drops: bash as /bin/sh drops an OLDPWD that is not a folder and loses
+ * `_` on the way to the target (a NodeCommand with `env: process.env` lacked
+ * both, 2026-11-27).
+ */
+const SHELL_VARIABLES = ['PWD', 'SHLVL', 'OLDPWD', '_'] as const;
 
 /** The operands of `/usr/bin/env` that undo what `sh` adds to `env`. */
 export function environmentFixes(

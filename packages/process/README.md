@@ -1,6 +1,6 @@
 # @zukhruf/process
 
-> **In build (backlog #6077).** `Command#run` and `Command#start` are built. `NodeCommand` and `Coprocess` follow, in that order; until then, this README describes them as decided in the ADRs.
+> **In build (backlog #6077).** `Command#run`, `Command#start` and `NodeCommand` are built. `Coprocess` follows; until then, this README describes it as decided in the ADRs.
 
 Start a process of this machine and know how it ends. A `Command` says what to run: the file, its arguments, the environment, the folder. `command.run()` runs it to its end and gives its exit code or signal and its output, with no throw at a non-zero exit. `command.start()` gives a started process: it resolves when the process is ready, it stops the process group with SIGTERM and then SIGKILL, and the process ends with its parent, also when the parent is killed. A `Coprocess` talks to a started process in JSON lines, and a `NodeCommand` runs JavaScript source in its own Node.js with messages.
 
@@ -103,7 +103,7 @@ const answer = await ocr.request({ path: '/tmp/receipt.png' });
 
 ## Run JavaScript source in its own Node.js
 
-`new NodeCommand(source, options)` says to run `source` as an ES module in a new Node.js, with an IPC channel back to this process. `options` are those of `Command` and `nodeOptions`, the Node.js flags before the source. `start()` gives a `NodeProcess`: `next(match, { signal })` resolves with the first message that `match` selects, sent before or after the call, a `type` or a function of the message, and `send(message)` sends one. Its `ready` also takes `{ message }`, and `admit` gets the child before it can send. `run()` runs the source to its end and gives what `Command#run` gives.
+`new NodeCommand(source, options)` says to run `source` as an ES module in a new Node.js, with an IPC channel back to this process. `options` are those of `Command` and `nodeOptions`, the Node.js flags before the source. `start()` gives a `NodeProcess`: `next(match, { signal })` resolves with the first message that `match` selects, sent before or after the call, a `type` or a function of the message, and `send(message)` sends one. Its `ready` also takes `{ message }`, and `admit` gets the child before it can send. `run()` runs the source to its end, with the channel, and gives what `Command#run` gives. The name of the command is `argv[1]` of the source; without a `name`, it is the file of Node.js. When the process ends first, `next()` rejects with `ProcessEndedError`, and `send` throws `ERR_IPC_CHANNEL_CLOSED`.
 
 ```ts
 const holder = new NodeCommand(

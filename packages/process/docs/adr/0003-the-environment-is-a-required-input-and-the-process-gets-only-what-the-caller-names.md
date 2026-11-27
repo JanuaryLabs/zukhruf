@@ -2,6 +2,8 @@
 
 Status: Accepted 2026-11-27 (backlog #6077).
 
+Changed in part on 2026-11-27 (backlog #6077, unit 3): the keeper also gives `OLDPWD` and `_` from the caller's environment, or unsets them, as it does `PWD` and `SHLVL`. bash as `/bin/sh` drops an `OLDPWD` that is not a folder and loses `_` on the way to the target, so a `NodeCommand` with `env: process.env` lacked both (seen in its test).
+
 Decision-makers: the zukhruf session of backlog #6077 proposes this. It differs from every leader, so Ezz rules on it in the review of the paper.
 
 `node:child_process` gives a child the environment of its parent when the caller gives no `env`. Thus a library that starts a process reads `process.env` without a line that says so. Root ADR 0001 gives each package the tag `layer:island`: the package does not read the environment. [Testing ADR 0009](../../../testing/docs/adr/0009-a-test-never-changes-the-environment-of-its-process.md) says that a test never changes the environment of its process, so a test gives the environment of a child as a value. Of the wrappers of ADR 0001, three build an environment for each child (context-compiler `cli` with its own `HOME`, text2sql `agentBacklog` with a clean environment and its own `HOME`, nx `workspace()` with only `PATH`, `HOME`, `NX_DAEMON` and `NX_NO_CLOUD`).
