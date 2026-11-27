@@ -226,7 +226,8 @@ Ezz, 2026-11-27: the gaps of the statistics come first, so no page ever shows a 
 | No run record in the core                                                                                 | #6109                      |
 | `./promptfoo` cannot read a run                                                                           | #6110                      |
 | No multiple-comparison correction in `@zukhruf/statistics`                                                | #6111                      |
-| A replayed answer of offers-evals' provider keeps one cached token total, so its cost has no price        | offers-evals #6114         |
+
+A replayed answer cost nothing, so `CostAndLatency` shows what a run spent on its new calls, the cost of one new call, and the number of replayed answers apart, as Braintrust and promptfoo show cached work apart from spend. No harness has to keep the usage of a first call (offers-evals #6114, closed 2026-11-27).
 
 ## Who uses each part
 
