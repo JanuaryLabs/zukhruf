@@ -105,7 +105,7 @@ The JSON data that a job takes and gives. A file goes by reference, never as byt
 _Avoid_: Payload, arguments, result
 
 **Caller**:
-A host whose `run` waits for a job. The owner cancels a caller's job of a standard kind when the caller's program is gone, which it learns from a closed connection to the caller's pipe (ADR 0021). A host that only holds a job handle is not a caller.
+A host whose `run` waits for a job. The owner cancels a caller's job of a standard kind when the caller's program is gone, which it learns from a closed connection to the caller's pipe (ADR 0021). Off Linux, a refused connect is not proof: the owner then reads the caller's presence (`<store>.callers/<id>.presence`), and a caller that lives keeps its job (ADR 0021, amended for #5424). A host that only holds a job handle is not a caller.
 _Avoid_: Client, sender, requester
 
 **Job handle**:

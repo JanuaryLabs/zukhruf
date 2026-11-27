@@ -1,5 +1,7 @@
 # start accepts a job now, and a JobHandle reads its output later from any host
 
+Superseded in part on 2026-11-27 (#3527) for the job of an older revision. No owner refuses it: each owner fetches only its own revision's queue, and the store holds the deprecation, so a waiting job of an older revision rejects its `run` and the `result()` of each handle with `DeprecatedRevisionError` ([ADR 0022](./0022-the-newest-revision-takes-over-and-the-store-deprecates-every-older-revision.md)).
+
 Status: Accepted 2026-11-20 (backlog #3527). Built (2026-11-20).
 
 `run` waits for the output ([ADR 0019](./0019-run-waits-and-a-failed-job-rejects-with-the-pools-error.md)). A host that answers `202 Accepted` must give a job id at once. Later it reads the state and the output of the job, also from another host or after a restart. With `run` only, the pool cannot do this (map, "Not yet specified").
