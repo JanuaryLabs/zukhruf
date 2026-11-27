@@ -33,7 +33,13 @@
     "test": {
       "dependsOn": ["...", "build"],
       "cache": true,
-      "inputs": ["default", "^default", { "runtime": "node --version" }]
+      "inputs": [
+        "default",
+        "^default",
+        { "runtime": "node --version" },
+        { "env": "DOCKER_CONTEXT" },
+        { "env": "DOCKER_HOST" }
+      ]
     }
   },
   "sync": {
