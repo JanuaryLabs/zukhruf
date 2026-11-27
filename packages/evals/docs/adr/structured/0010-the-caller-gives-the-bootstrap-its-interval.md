@@ -9,3 +9,7 @@
 - Scorecards with no rows throw a `RangeError`. SOB's `[0, 0]` for them was a choice that no caller reached.
 - `RandomIndex` is gone. The generator is a function, as `@zukhruf/statistics` takes it.
 - This amends line 24 of ADR 0005: a generator works through its `randrange`, given as a function.
+
+## Status, 2026-11-27
+
+The code drifted from this decision: `Bootstrap` forced each scorecard to `Ratio(value, 1)` times its weight, a samples average, where this ADR keeps the ratio of sums of the scored ratios (#4234). Core [ADR 0010](../0010-a-bootstrap-resamples-the-tests-of-a-run-and-recomputes-the-statistic-of-totals.md) restores the ratio of sums and makes the input a `Run`, whose tests are the units of a resample. The rest of this ADR stands: the caller gives the generator and the interval method, and no rows throw a `RangeError`.

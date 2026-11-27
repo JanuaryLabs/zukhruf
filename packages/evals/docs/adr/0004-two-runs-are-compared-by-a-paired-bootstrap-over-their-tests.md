@@ -65,3 +65,7 @@ The ledger [docs/copied-code.md](../copied-code.md) records each strike-2 copy (
 - startup-credits' page kinds add each of the three runs of one model as an epoch of one `Run`. The difference of a test is then a mean of 0/1 values (#3882, slice 2).
 - offers-evals and startup-credits offers compare a run with the baseline run of its harness (#3870, #3882).
 - `Bootstrap` and `Totals` can give two different numbers for one name. `Bootstrap` resamples the value of each scorecard over 1 (`src/scoring/bootstrap.ts`, `#mean`): that is the samples average. For a plain scorer, `Totals` gives the micro average. So for a plain scorer, the interval of `Bootstrap` is not the interval of the number of `Totals`. `PairedBootstrap` uses the statistic of `Totals`, so its interval and its observed difference agree. One place shows the two numbers side by side: the SOB golden test (`src/structured/scoring/sob.golden.test.ts:315-329`) shows the mean of `Totals` with the interval of `Bootstrap`. Each SOB scorer is `SampleAveraged`, so there the two numbers agree. No other report shows them together (search of 2026-11-07 in mutex, offers-evals and context-compiler). So no defect is filed.
+
+## Status, 2026-11-27
+
+The third consequence above no longer holds. A consumer now shows the interval of `Bootstrap` beside the number of `Totals`, the summary of a page (#6108), and `Bootstrap` takes a `Run` and the statistic of `Totals` (ADR 0010, #4234). The rest of this ADR stands.

@@ -93,7 +93,31 @@ const pageKinds = new ScorerSet(
 
 `RatioOfSums.of(ratios)` adds a list of ratios in one call.
 
-`Bootstrap` gives the interval of one name over the scorecards, with `@zukhruf/statistics`. You give it the number of resamples, the random index and the method of the interval.
+`Bootstrap` gives the interval of one name over a `Run`, with `@zukhruf/statistics` (ADR 0010). Each resample draws as many tests as the run has, with replacement. A test is the mean of its epochs times the weight of its case, and the statistic is the ratio of sums, the statistic of `Totals`: the scorer decides the average, and the bootstrap keeps it. You give it the number of resamples, the random index and the method of the interval.
+
+```ts
+const run = new Run();
+for (const answer of answers)
+  run.add(
+    answer.testId,
+    scorer.score(answer.stated, answer.case),
+    answer.case.weight,
+  );
+
+const generator = defaultRng(31957);
+const bootstrap = new Bootstrap({
+  nResamples: 2000,
+  randomIndex: (n) => generator.integers(0, n, 1)[0] ?? Number.NaN,
+  interval: new PercentileInterval({
+    low: 0.025,
+    high: 0.975,
+    method: new Linear(),
+  }),
+});
+bootstrap.interval(run, 'values_recall'); // { low, high }
+```
+
+A test with 3 epochs is one unit of a resample, so its answers are not counted as independent (Inspect AI reduces the epochs of a sample before its metrics). A name that no test gives throws an `Error`, and a run with no tests throws a `RangeError`.
 
 ## Compare two runs
 
@@ -206,7 +230,7 @@ export class PairedBootstrap {
 | p                                           | Two times the smaller share of the resample differences that are at or below 0 and at or above 0, at most 1, as mteb's `pairedBootstrapTest` gives it. The caller applies a correction, such as Holm.                                  |
 | counts                                      | Counts the tests by the sign of (change value − baseline value), with the direction: improvements, regressions and ties.                                                                                                               |
 
-`Bootstrap` and `PairedBootstrap` use different statistics. `Bootstrap` takes the mean of the values of the scorecards: the samples average. For a plain scorer, `Totals` gives the micro average, so the interval of `Bootstrap` is not the interval of the number of `Totals`. `PairedBootstrap` uses the statistic of `Totals`, so its interval is the interval of its observed difference (ADR 0004, "Consequences").
+`Bootstrap` and `PairedBootstrap` use one statistic, the statistic of `Totals`, over the tests of their runs: `Bootstrap` for one run, `PairedBootstrap` for the difference of two (ADR 0004, ADR 0010). So the interval of `Bootstrap` is the interval of the number of `Totals` when each test has the same number of epochs, and the interval of `PairedBootstrap` is the interval of its observed difference.
 
 The design does not resample clustered tests, such as many questions about one page, and it reduces the epochs only by the mean.
 
@@ -604,22 +628,14 @@ export class Totals {
   get(name: string): RatioOfSums;
   names(): IterableIterator<string>;
 }
-/** One scorecard and its weight: a row of a Bootstrap. */
-export type WeightedScorecard = {
-  readonly scorecard: Scorecard;
-  readonly weight: number;
-};
-/** The interval of one name over weighted scorecards (@zukhruf/statistics). */
+/** The interval of one name over the tests of a run, with the statistic of Totals (@zukhruf/statistics, ADR 0010). */
 export class Bootstrap {
   constructor(options: {
     nResamples: number;
     randomIndex: (n: number) => number;
     interval: ConfidenceIntervalMethod;
   });
-  interval(
-    rows: readonly { scorecard: Scorecard; weight: number }[],
-    name: string,
-  ): ConfidenceInterval;
+  interval(run: Run, name: string): ConfidenceInterval;
 }
 
 // @zukhruf/evals/promptfoo

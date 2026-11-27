@@ -586,17 +586,16 @@ Each test gets the assertions of its subset in its own `assert` list. promptfoo 
 
 ## Means and intervals
 
-`Totals` gives the ratio of sums of each name over many scorecards, without weights (each weight 1) or with them. `Bootstrap` gives its percentile interval with `@zukhruf/statistics`: each resample draws as many scorecards as there are, with replacement, from the random generator that you give it. You also give the number of resamples and the method of the interval: a `PercentileInterval`, or a `ConfidenceIntervalMethod` of your own, such as SOB's in the golden test (ADR 0010).
+`Totals` gives the ratio of sums of each name over many scorecards, without weights (each weight 1) or with them. `Bootstrap` gives its percentile interval over a `Run` with `@zukhruf/statistics`: each resample draws as many tests as the run has, with replacement, from the random generator that you give it, and recomputes the ratio of sums (core ADR 0010). SOB has one answer for each record, so each record is a test with one epoch. You also give the number of resamples and the method of the interval: a `PercentileInterval`, or a `ConfidenceIntervalMethod` of your own, such as SOB's in the golden test (ADR 0010 of this folder).
 
 ```ts
 import { Random } from 'python-random';
 
 import { Linear, PercentileInterval } from '@zukhruf/statistics';
 
-const rows = scorecards.map((scorecard, index) => ({
-  scorecard,
-  weight: weights[index],
-}));
+const run = new Run();
+for (const [index, scorecard] of scorecards.entries())
+  run.add(String(index), scorecard, weights[index]);
 const random = new Random(42);
 const bootstrap = new Bootstrap({
   nResamples: 1000,
@@ -607,7 +606,7 @@ const bootstrap = new Bootstrap({
     method: new Linear(),
   }),
 });
-bootstrap.interval(rows, 'truth'); // { low, high }
+bootstrap.interval(run, 'truth'); // { low, high }
 ```
 
 ## Documentation

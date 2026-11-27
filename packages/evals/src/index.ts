@@ -13,7 +13,7 @@ export type {
   Weighted,
 } from './scoring/scorecard-scorer.ts';
 export { Totals } from './scoring/totals.ts';
-export { Bootstrap, type WeightedScorecard } from './scoring/bootstrap.ts';
+export { Bootstrap } from './scoring/bootstrap.ts';
 export { Run } from './scoring/run.ts';
 export { PairedBootstrap, type Verdict } from './scoring/paired-bootstrap.ts';
 export type { Scorer } from './scorers/scorer.ts';

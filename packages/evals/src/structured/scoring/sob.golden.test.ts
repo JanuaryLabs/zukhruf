@@ -22,12 +22,12 @@ import {
   type Penalty,
   PrecisionRecallForm,
   Recall,
+  Run,
   SampleAveraged,
   type Scorer,
   ScorerSet,
   ShortfallPenalty,
   Totals,
-  type WeightedScorecard,
 } from '../../index.ts';
 import {
   Case,
@@ -309,12 +309,14 @@ void test.each(modalities, ({ modality, oracle, scorers, categories }) =>
     };
     // summarize_rows: one Random(seed) without weights, Random(seed + 1) with.
     const summary = (weighted: boolean, seed: number) => {
-      const rows: WeightedScorecard[] = scored.map(({ scorecard, weight }) => ({
-        scorecard,
-        weight: weighted ? weight : 1,
-      }));
+      // Each record of SOB is one test with one epoch, in the order of the
+      // records, which is the order of the draws.
+      const run = new Run();
       const totals = new Totals();
-      for (const { scorecard, weight } of rows) totals.add(scorecard, weight);
+      for (const [index, { scorecard, weight }] of scored.entries()) {
+        run.add(String(index), scorecard, weighted ? weight : 1);
+        totals.add(scorecard, weighted ? weight : 1);
+      }
       const random = new Random(seed);
       const bootstrap = new Bootstrap({
         nResamples: 1000,
@@ -323,7 +325,7 @@ void test.each(modalities, ({ modality, oracle, scorers, categories }) =>
       });
       return Object.fromEntries(
         [...metrics, ...Object.keys(categories)].map((name) => {
-          const { low, high } = bootstrap.interval(rows, name);
+          const { low, high } = bootstrap.interval(run, name);
           return [
             name,
             { mean: totals.get(name).value, ci95_low: low, ci95_high: high },
