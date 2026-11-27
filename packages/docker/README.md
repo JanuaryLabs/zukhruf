@@ -92,7 +92,6 @@ An error has its own class when a caller does something different after it: star
 | `ReadOnlyPathError`        | The engine refuses an extraction, and an inspect shows that the directory is on a read-only root filesystem or in a read-only mount                 | Write under a writable mount, or use `exec()`      |
 | `ClientDisposedError`      | The client was disposed, so it closed the connection of a request in flight, of a request after the disposal started, or of an open stream          | Ignore it in a shutdown that disposed the client   |
 | `IncompleteOutputError`    | A stdin write of an exec or an attach fails before the output ends, and no output came or the caller did not take it                                | Go on, or run it again if that is safe             |
-| `EventsEndedError`         | The engine ends the events before an event meets the condition of `first()` (design for review, #6085)                                              | Open the events again, and check the state again   |
 
 Each class extends a base class, so a broad catch still works. `DockerError` is the base of every error of the package. `DockerEngineError` is the base of every answer of the engine that is an error. It has `status` and `request` (the `method` and `path` of the request), and its `message` is the message of the engine. The base keeps the request apart in `request`, so `path` on `PathNotFoundError`, `NotAFileError` and `ReadOnlyPathError` is the path in the container. An error with no class of its own, such as an error in the progress of a pull, is a `DockerEngineError`.
 
@@ -562,36 +561,42 @@ An error in the progress rejects with `BuildFailedError`, a `DockerEngineError` 
 
 ## Wait for an event of the engine
 
-> **Design for review (#6085).** This section, `Events` and `EventsEndedError` in [API](#api), and [ADR 0017](./docs/adr/0017-events-opens-its-stream-at-the-engine-clock-before-the-request-so-it-loses-no-event-after-it-resolves.md) describe the next `events()`. Until the build, the code has the old `events()`: an async generator that sends its request at the first `next()`.
+> **Design for review (#6085).** `docker.watch()` in this section and in [API](#api), and [ADR 0017](./docs/adr/0017-watch-opens-a-node-stream-of-events-at-the-engine-clock-before-its-request-so-it-loses-no-event-after-it-resolves.md), describe a method that the code does not have yet.
 
-`docker.events()` opens a stream of the events of the engine, and resolves when the engine answers. Without `since`, the stream starts at the time of the engine clock before the request, so each event after `events()` resolved comes, also when the engine clock and the clock of this process differ ([ADR 0017](./docs/adr/0017-events-opens-its-stream-at-the-engine-clock-before-the-request-so-it-loses-no-event-after-it-resolves.md)). It takes the `since` and `filters` of the Engine API.
+`docker.watch()` opens a stream of the events of the engine, and resolves when the engine answers. Without `since`, the stream starts at the time of the engine clock before the request, so each event after `watch()` resolved comes, also when the engine clock and the clock of this process differ ([ADR 0017](./docs/adr/0017-watch-opens-a-node-stream-of-events-at-the-engine-clock-before-its-request-so-it-loses-no-event-after-it-resolves.md)). The stream is a `Readable` of Node in object mode, and each chunk is one `EngineApi.EventMessage`. Wait with the operators of Node, such as `find()`, `filter()`, `take()` and `toArray()`.
 
-Open the events first. Then act, or check the state once. Then wait for the event:
+Open the stream first. Then act, or check the state once. Then wait on the stream:
 
 ```ts
-await using events = await docker.events({
+await using events = await docker.watch({
   filters: { container: [postgres.id], event: ['health_status'] },
   signal: AbortSignal.timeout(60_000),
 });
 if ((await postgres.inspect()).State?.Health?.Status !== 'healthy') {
-  await events.first((event) => event.Action === 'health_status: healthy');
+  await events.find(
+    (event: EngineApi.EventMessage) =>
+      event.Action === 'health_status: healthy',
+  );
 }
 ```
 
-The check sees a fact that came before the open, and the stream gives each fact after it. `first()` resolves with the first event for which the condition gives `true`, and the stream stays open, so the next `first()` reads on from that event:
+The check sees a fact that came before the open, and the stream gives each fact after it. `find()` gives `undefined` when the engine ends the stream first: open the stream again, and check the state again.
+
+Give the signal to `watch()`. It destroys the stream with the reason of the signal, also while no event comes. The `signal` of an operator, as in `find(fn, { signal })`, does not end a stream that gives no event (Node 26.13.1). When the connection is lost, the stream is destroyed with the error of Node.
+
+`find()` destroys the stream after its match. To wait for events in order, take them together, or iterate with `iterator({ destroyOnReturn: false })`:
 
 ```ts
-await using events = await docker.events({
+await using events = await docker.watch({
   filters: { container: [reaper.id], event: ['start', 'die'] },
 });
 await reaper.restart();
-await events.first((event) => event.Action === 'start');
-const died = await events.first((event) => event.Action === 'die');
+const [started, died] = await events.take(2).toArray();
 ```
 
-`first()` rejects with `EventsEndedError` when the engine ends the stream before an event meets the condition: open the events again, and check the state again. An abort of the signal rejects it with the reason of the signal. When the connection is lost, it rejects with the error of Node. An error that the condition throws rejects it with that error. To read each event, iterate: `for await (const event of events)`.
+With `since`, the stream starts at that instant of the engine clock, such as the `Created` of a container, and `watch()` reads no clock. The engine keeps only its last 256 events, so an older event does not come.
 
-With `since`, the stream starts at that instant of the engine clock, such as the `Created` of a container, and `events()` reads no clock. The engine keeps only its last 256 events, so an older event does not come. With `ref: false`, the stream does not keep the process running, as for `attach()`; `container.wait()` takes `ref` too.
+`docker.events()` gives the events as an async iterable. It sends its request at the first `next()`, and without `since` it gives only the events after the engine adds the subscription, which comes after the headers. An event right after the call can be lost. Use `watch()` to wait for an event.
 
 ## Send the Docker CLI to the same engine
 
@@ -781,29 +786,18 @@ export class Docker implements AsyncDisposable {
   readonly images: Images;
 
   info(options?: CancelOptions): Promise<EngineApi.SystemInfo>;
-  /** Design for review (#6085). Opens the events of the engine, and resolves when the engine answers. Without `since`, the stream starts at the time of the engine clock before the request (`SystemTime` of GET /info). `ref: false`: the stream does not keep the process running. */
+  /** The events of the engine as they happen. An abort of the signal rejects the iteration with its reason. A lost connection rejects it with the error of Node. */
   events(
+    options?: CancelOptions & { since?: number; filters?: Filters },
+  ): AsyncIterable<EngineApi.EventMessage>;
+  /** Design for review (#6085). Opens a stream of the events of the engine, and resolves when the engine answers: a Readable in object mode, one EngineApi.EventMessage for each chunk. Without `since`, the stream starts at the time of the engine clock before the request (`SystemTime` of GET /info). The signal destroys the stream with its reason. */
+  watch(
     options?: CancelOptions & {
       /** An instant of the engine clock, in seconds since the Unix epoch. */
       since?: number;
       filters?: Filters;
-      ref?: boolean;
     },
-  ): Promise<Events>;
-  [Symbol.asyncDispose](): Promise<void>;
-}
-
-/** Design for review (#6085). An open stream of the events of the engine. Dispose it to close its connection. An abort of the signal rejects the iteration with its reason. A lost connection rejects it with the error of Node. */
-export class Events
-  implements AsyncIterable<EngineApi.EventMessage>, AsyncDisposable
-{
-  /** The instant of the engine clock from which the events come, in seconds since the Unix epoch. */
-  readonly since: number;
-  /** The first event for which `condition` gives true. The stream stays open. Rejects with EventsEndedError when the engine ends the stream first. */
-  first(
-    condition: (event: EngineApi.EventMessage) => boolean,
-  ): Promise<EngineApi.EventMessage>;
-  [Symbol.asyncIterator](): AsyncIterator<EngineApi.EventMessage>;
+  ): Promise<Readable>;
   [Symbol.asyncDispose](): Promise<void>;
 }
 
@@ -884,11 +878,9 @@ export class Container {
   ): Promise<void>;
   pause(options?: CancelOptions): Promise<void>;
   unpause(options?: CancelOptions): Promise<void>;
-  /** `ref: false` (design for review, #6085): the wait does not keep the process running. */
   wait(
     options?: CancelOptions & {
       condition?: 'not-running' | 'next-exit' | 'removed';
-      ref?: boolean;
     },
   ): Promise<EngineApi.ContainerWaitResponse>;
   /** Resolves for 404. */
@@ -1162,9 +1154,6 @@ export class ConnectionFailedError extends DockerError {
 /** The client was disposed, so it closed this connection to the engine. */
 export class ClientDisposedError extends DockerError {}
 
-/** Design for review (#6085). The engine ended the events before an event met the condition of first(). */
-export class EventsEndedError extends DockerError {}
-
 export class UnsupportedHostError extends DockerError {
   readonly host: string;
 }
@@ -1270,7 +1259,8 @@ Each call sends these requests of the Engine API:
 | -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `Docker.connect()`                                                                     | `GET /_ping`                                                                                                                                                                                                                      |
 | `docker.info()`                                                                        | `GET /info`                                                                                                                                                                                                                       |
-| `docker.events()`                                                                      | `GET /info` when no `since` is given (design for review, #6085), then `GET /events`                                                                                                                                               |
+| `docker.events()`                                                                      | `GET /events`                                                                                                                                                                                                                     |
+| `docker.watch()` (design for review, #6085)                                            | `GET /info` when no `since` is given, then `GET /events`                                                                                                                                                                          |
 | `containers.create()`, `createOrGet()`                                                 | `POST /containers/create`, and `GET /containers/{id}/json` after a 409                                                                                                                                                            |
 | `containers.run()`                                                                     | `create`, `attach`, `start`, `wait`, `DELETE /containers/{id}`                                                                                                                                                                    |
 | `containers.find()`, `containers.inspect()`, `container.inspect()`, `container.port()` | `GET /containers/{id}/json`                                                                                                                                                                                                       |
@@ -1306,7 +1296,7 @@ Each call sends these requests of the Engine API:
 - [ADR 0014](./docs/adr/0014-output-framing-follows-the-tty-setting-as-the-docker-cli-chooses-it.md): output framing follows the TTY setting, as the Docker CLI chooses it.
 - [ADR 0015](./docs/adr/0015-an-ssh-engine-is-reached-through-zukhruf-ssh-in-the-node-process.md): an SSH engine is reached through @zukhruf/ssh in the Node process.
 - [ADR 0016](./docs/adr/0016-an-image-build-sends-a-tar-context-to-buildkit-through-the-engine-api-and-the-caller-pulls-each-base-image-first.md): an image build sends a tar context to BuildKit through the Engine API, and the caller pulls each base image first.
-- [ADR 0017](./docs/adr/0017-events-opens-its-stream-at-the-engine-clock-before-the-request-so-it-loses-no-event-after-it-resolves.md): events() opens its stream at the engine clock before the request, so it loses no event after it resolves (proposed).
+- [ADR 0017](./docs/adr/0017-watch-opens-a-node-stream-of-events-at-the-engine-clock-before-its-request-so-it-loses-no-event-after-it-resolves.md): watch() opens a Node stream of events at the engine clock before its request, so it loses no event after it resolves (proposed).
 
 **Copied code**
 
@@ -1316,16 +1306,16 @@ Each call sends these requests of the Engine API:
 
 The package leads. Each repository below changes to fit it, with no adapter. Each change is a backlog item in that repository.
 
-| Repository                               | Change                                                                                                                                                                                      | Backlog      |
-| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
-| `@zukhruf/testing/docker`                | Done: rebuilt on the package. `reuse()` uses `createOrGet()` and compares its fingerprint label. Handles are owned or found.                                                                | #2752        |
-| text2sql finders                         | Done: `Docker.contexts()`, `containers.list()` and `find()`, `ConnectionFailedError` in place of the fixed sockets                                                                          | #2754        |
-| text2sql daemon tests                    | Done: `@zukhruf/testing/docker` in place of the CLI by hand                                                                                                                                 | #2755        |
-| text2sql desktop tests                   | Done: `images.inspect()`, `pull()`, `save()`                                                                                                                                                | #2756        |
-| text2sql artifacts volume adapter        | `writeFiles()`, `readFile()` and `stat()` in place of base64 through exec                                                                                                                   | #2757        |
-| `@deepagents/context` sandbox            | Done: `createOrGet()` for named sandboxes, the files API in place of base64 in arguments, container processes in place of two streams, status codes in place of stderr checks               | #2760        |
-| `@deepagents/toolbox`, `convert-to-gguf` | Done: `find()` and `exec()`, `containers.run()`                                                                                                                                             | #2761        |
-| sdk-it `e2e/docker.ts`                   | Done: removal                                                                                                                                                                               | #2764        |
-| finetuning                               | Done: `create()`, `port()`, `logs()`; test cleanup through `@zukhruf/testing`. `docker image prune` stays on the CLI until #4056                                                            | #2765        |
-| april                                    | Done: `createOrGet()`, and `inspect()` in a poll for the health of the container, because an event stream misses a change that already happened. Next: `events.first()` (design for review) | #2766, #6085 |
-| serverize                                | Networks, `images.load()`, `pull()` and `push()` with `auth`, `writeFiles()`, `followLogs()`                                                                                                | #2769        |
+| Repository                               | Change                                                                                                                                                                               | Backlog      |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------ |
+| `@zukhruf/testing/docker`                | Done: rebuilt on the package. `reuse()` uses `createOrGet()` and compares its fingerprint label. Handles are owned or found.                                                         | #2752        |
+| text2sql finders                         | Done: `Docker.contexts()`, `containers.list()` and `find()`, `ConnectionFailedError` in place of the fixed sockets                                                                   | #2754        |
+| text2sql daemon tests                    | Done: `@zukhruf/testing/docker` in place of the CLI by hand                                                                                                                          | #2755        |
+| text2sql desktop tests                   | Done: `images.inspect()`, `pull()`, `save()`                                                                                                                                         | #2756        |
+| text2sql artifacts volume adapter        | `writeFiles()`, `readFile()` and `stat()` in place of base64 through exec                                                                                                            | #2757        |
+| `@deepagents/context` sandbox            | Done: `createOrGet()` for named sandboxes, the files API in place of base64 in arguments, container processes in place of two streams, status codes in place of stderr checks        | #2760        |
+| `@deepagents/toolbox`, `convert-to-gguf` | Done: `find()` and `exec()`, `containers.run()`                                                                                                                                      | #2761        |
+| sdk-it `e2e/docker.ts`                   | Done: removal                                                                                                                                                                        | #2764        |
+| finetuning                               | Done: `create()`, `port()`, `logs()`; test cleanup through `@zukhruf/testing`. `docker image prune` stays on the CLI until #4056                                                     | #2765        |
+| april                                    | Done: `createOrGet()`, and `inspect()` in a poll for the health of the container, because an event stream misses a change that already happened. Next: `watch()` (design for review) | #2766, #6085 |
+| serverize                                | Networks, `images.load()`, `pull()` and `push()` with `auth`, `writeFiles()`, `followLogs()`                                                                                         | #2769        |
