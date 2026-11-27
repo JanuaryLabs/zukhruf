@@ -18,7 +18,7 @@ _Avoid_: Outer call, root, parent
 
 **Savepoint**:
 The part of a transaction that a call works in when the connection already has a transaction. A failure undoes only the changes of the savepoint.
-_Avoid_: Nested transaction (SQLite has no nested transactions), sub-transaction, checkpoint (a checkpoint moves the WAL into the database)
+_Avoid_: Nested transaction (SQLite has no nested transactions), sub-transaction, checkpoint (a WAL checkpoint moves the WAL into the database)
 
 **Mode**:
 When the owner takes the write lock: `deferred` at the first write, `immediate` at `BEGIN`, `exclusive` at `BEGIN`, and then no other connection can read.

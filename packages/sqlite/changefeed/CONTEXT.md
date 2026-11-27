@@ -66,7 +66,7 @@ _Avoid_: Diff, delta, before
 
 **WAL progress**:
 How far a pass read the owner's WAL: the salt of its header and the number of frames up to its last commit. A reset of the WAL changes the salt.
-_Avoid_: Offset, checkpoint (a checkpoint copies the WAL into the file of the owner), cursor
+_Avoid_: Offset, checkpoint (a WAL checkpoint copies the WAL into the file of the owner), cursor
 
 **Change event**:
 What a pass gives for one row: `{ table, op, key, after? }`. `op` is `read`, `insert`, `update` or `delete`. `after` is the full row, except for a `delete`. A truncate event is a change event too, but it is for a table, not for a row.
@@ -82,7 +82,7 @@ _Avoid_: Reset, clear, drop
 
 **Position**:
 What the feed saw at its last saved batch: the key columns and the columns of each table, one hash for each column of each row, and the WAL progress (`Position`). The host gives it to the feed, and the feed owns it. A `PositionFile` keeps it in its own SQLite file, at the path that the host gives. A `PositionInMemory` keeps it in memory. It does not keep the rows. A position that no pass saved is not started.
-_Avoid_: State, offset, checkpoint (a checkpoint copies the WAL of the owner into its file), cursor, snapshot (a snapshot holds one moment of the database)
+_Avoid_: State, offset, checkpoint (a WAL checkpoint copies the WAL of the owner into its file), cursor, snapshot (a snapshot holds one moment of the database)
 
 **Save**:
 The write of the position of a batch, in one transaction. It occurs when the host asks for the next batch. The first save starts the position.

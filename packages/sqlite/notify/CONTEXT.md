@@ -66,7 +66,7 @@ _Avoid_: Max id (`max(id)` falls when the trim removes the last rows), tail, hea
 
 **Position**:
 The highest id that a listener has read, as the listener row keeps it. The listener writes it at most once a backstop interval, so it can be behind the listener's last id. Postgres's word (`QueuePosition`).
-_Avoid_: Cursor, offset, checkpoint (a checkpoint moves the WAL into the database)
+_Avoid_: Cursor, offset, checkpoint (a WAL checkpoint moves the WAL into the database)
 
 **Last id**:
 The highest id that a listener has read, in its memory. It is never behind the position.

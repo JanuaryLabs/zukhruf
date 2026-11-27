@@ -22,7 +22,7 @@ _Avoid_: Hash (a hash can be of anything), version
 
 **Snapshot**:
 The keys that the last committed scan saw, each with the fingerprint of its record. The keys that the policy judged unknown stay in it too. The caller saves the snapshot as the state of the diff.
-_Avoid_: Cache (a cache is one kind of upstream), checkpoint (an ELT pipeline's word for all saved state)
+_Avoid_: Cache (a cache is one kind of upstream), checkpoint (a checkpoint of `@zukhruf/checkpoint` holds the position and the map states of a reader, and a snapshot is one value of a map state)
 
 **Grouped snapshot**:
 The snapshot of a grouped scan, as three keyed collections: `groups`, each group's key with its fingerprint and the snapshot of its records; `unknown`, each key that belongs to no group; and `listed`, the listed groups. `SnapshotDifferential.noGroups` is the grouped snapshot before the first scan.
