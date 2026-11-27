@@ -2,7 +2,7 @@ import { Duplex } from 'node:stream';
 
 // The channel of the protocol library, by the members that the stream uses,
 // so that no declaration file names a type of that library.
-type Channel = Duplex & { close(): void };
+type Channel = Duplex & { close(): void; incoming: unknown };
 
 type Callback = (error?: Error | null) => void;
 
@@ -31,7 +31,21 @@ function openPhase(channel: Channel, waiting: Set<Callback>): ChannelPhase {
       });
     },
     end: () => channel.end(),
-    close: () => channel.close(),
+    // ssh2 1.17.0 sends CHANNEL_WINDOW_ADJUST for data that comes after its
+    // CHANNEL_CLOSE: windowAdjust (Channel.js:280) skips only the state
+    // closed, not closing. A server on golang.org/x/crypto/ssh, such as
+    // Tailscale SSH, removes the channel when the CHANNEL_CLOSE comes, so it
+    // reads the adjust as one for an unknown channel and ends the connection,
+    // with every channel on it ("ssh: invalid channel", mux.go
+    // handleUnknownChannelPacket). A window of 0 makes ssh2 drop the late
+    // data (client.js:580), and so send no adjust for it.
+    close() {
+      channel.close();
+      const { incoming } = channel;
+      if (typeof incoming === 'object' && incoming !== null) {
+        Object.assign(incoming, { window: 0 });
+      }
+    },
   };
 }
 
