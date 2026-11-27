@@ -214,7 +214,7 @@ Ezz, 2026-11-27: the gaps of the statistics come first, so no page ever shows a 
 2. Done: Holm in `@zukhruf/statistics`, and mteb imports it (#6111, f1ba7079).
 3. Done: `RunLog`, `Sample`, `RunPair` in the core (#6109).
 4. Done: `PromptfooSamples` in `./promptfoo` (#6110).
-5. The primitives in the core, then `./report`: `Page`, the renderers, the building blocks (#6108).
+5. The primitives in the core (done: 036f7232, its message fixed forward by d570241a), then `./report`: `Page`, the renderers, the building blocks (#6108).
 6. `FieldErrors` and `FieldDiff` in `./structured` (#6108).
 7. offers-evals moves onto them: offers' pages, and SOB's reader (#4593, #6115).
 
