@@ -23,7 +23,9 @@ export interface Wait<Target> {
  * before the call counts; a line of an earlier run of a restarted container
  * does not. Each stream is split into lines on its own: the engine sends a line
  * of more than 16 KiB as more than one frame, and a frame of the other stream
- * can come between them. When the logs end before the line, the container
+ * can come between them. Under the json-file log driver, a character that
+ * such a split cuts is U+FFFD before any client reads it; the local driver
+ * keeps its bytes. When the logs end before the line, the container
  * stopped, and the wait rejects.
  */
 export function forLogMessage(

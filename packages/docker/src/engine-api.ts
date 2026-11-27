@@ -162,6 +162,8 @@ export interface HostConfig {
   SecurityOpt?: string[];
   UsernsMode?: string;
   PidsLimit?: number;
+  /** The log driver of the container, such as `json-file` or `local`, and its options. */
+  LogConfig?: { Type?: string; Config?: Record<string, string> };
 }
 
 /** The settings of a container on one network. */

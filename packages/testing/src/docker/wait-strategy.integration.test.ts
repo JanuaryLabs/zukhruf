@@ -42,9 +42,13 @@ test('a line of more than 16 KiB that the engine sends as two frames, with a lin
 test('a character of UTF-8 that two frames split, with a line of stderr between them, matches', async (t) => {
   // Arrange: 16 383 bytes and the first byte of "é" fill the 16 KiB of the
   // first frame, and its second byte starts the frame after the line of stderr.
+  // The local log driver keeps the bytes; json-file writes each partial
+  // message as a JSON string, which makes the lone byte U+FFFD (probe on
+  // Docker Desktop, 2026-11-27).
   const testbed = new DockerTestbed({ environment: process.env });
   await using container = await testbed.start({
     Image: image,
+    HostConfig: { LogConfig: { Type: 'local', Config: {} } },
     Cmd: [
       'sh',
       '-c',
