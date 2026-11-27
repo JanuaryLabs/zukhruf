@@ -78,6 +78,25 @@ const quick: ReaperSettings = {
   retries: 2,
 };
 
+/**
+ * The groups of this file, which run at the same time: each test scopes its
+ * objects by its own run id, and each second engine and each SSH server is its
+ * own (3aa1fb2c). Node runs the suites at the top level of a file one after
+ * another, so `group` keeps each one for the suite at the end of this file,
+ * which runs them all at once. The tests at the top level run alone, before
+ * it.
+ */
+const groups: (() => void)[] = [];
+const group = (
+  name: string,
+  options: { concurrency: number },
+  suite: () => void,
+): void => {
+  groups.push(() => {
+    describe(name, options, suite);
+  });
+};
+
 /** A Node process that runs `source`, with `Docker`, `ReaperHold` and `DockerTestbed` in scope, and the lines it prints. */
 interface Program {
   child: ChildProcess;
@@ -813,7 +832,7 @@ async function databasesOf(handle: Database, run: string): Promise<string[]> {
 }
 
 // Each test scopes its objects by its own run id, so these run four at a time.
-describe('the reaper of a run', { concurrency: 4 }, () => {
+group('the reaper of a run', { concurrency: 4 }, () => {
   test('one reaper of a run keeps the run’s objects while one of its holders lives, and removes them, with their anonymous volumes, after the last one ended', async (t) => {
     const run = randomUUID();
     await present('alpine:latest');
@@ -2484,7 +2503,7 @@ exec sleep 3600`,
 });
 
 // Each test starts a privileged docker:dind engine of its own; two at a time bound the load on the engine host.
-describe('the reaper on a second engine of its own', { concurrency: 2 }, () => {
+group('the reaper on a second engine of its own', { concurrency: 2 }, () => {
   test('a hold whose /var/run/docker.sock reaches another engine removes that reaper, holds one on the socket of its client, and that reaper removes the run’s objects on its engine once the holder is killed', async (t) => {
     await using directory = await new TemporaryFiles().directory(
       'zukhruf-testing-reaper-',
@@ -2738,7 +2757,7 @@ describe('the reaper on a second engine of its own', { concurrency: 2 }, () => {
   });
 });
 
-// Each test below waits on a short window of real time, so they run alone, one after another.
+// Each test below waits on a short window of real time, so they run alone, one after another, before the groups.
 
 test('a container that the engine creates after the first pass of the reaper is removed by a re-check pass', async (t) => {
   const run = randomUUID();
@@ -3034,7 +3053,7 @@ function sshHolder(
   );
 }
 
-describe('the reaper over SSH', { concurrency: 3 }, () => {
+group('the reaper over SSH', { concurrency: 3 }, () => {
   // The wait ends at the time limit of the test target, 300 s, with the start
   // of the SSH server and the hold. With a keep-alive byte each 15 s, about 12.6 s of
   // retransmissions, the grace and the passes, it ends in about 35 s; with no
@@ -3125,23 +3144,29 @@ function sshLeaseHolder(
   );
 }
 
-// The wait ends at the time limit of the test target, 300 s, with the start of
-// the SSH server and the lease. With a keep-alive byte each 15 s and about
-// 12.6 s of retransmissions, it ends in about 30 s; with no keep-alive byte,
-// TCP keep-alive of the engine's host waits 2 h.
-test('an engine lease whose holder reaches the engine over SSH outside a run, and whose network and then holder go away with no close, ends within the keep-alive interval and the retransmission limit of the engine’s host', async (t) => {
-  const run = randomUUID();
-  const name = `zukhruf-testing-lease-${run}`;
-  await present(LEASE_IMAGE);
-  await using sshd = await droppableSshEngine();
-  await using cleanup = new AsyncDisposableStack();
-  cleanup.defer(() => removeRun(run));
-  const held = sshLeaseHolder(run, name, sshd);
-  cleanup.defer(() => killed(held.child));
-  assert.equal(await held.line(), 'held');
+group('an engine lease over SSH', { concurrency: 1 }, () => {
+  // The wait ends at the time limit of the test target, 300 s, with the start
+  // of the SSH server and the lease. With a keep-alive byte each 15 s and about
+  // 12.6 s of retransmissions, it ends in about 30 s; with no keep-alive byte,
+  // TCP keep-alive of the engine's host waits 2 h.
+  test('an engine lease whose holder reaches the engine over SSH outside a run, and whose network and then holder go away with no close, ends within the keep-alive interval and the retransmission limit of the engine’s host', async (t) => {
+    const run = randomUUID();
+    const name = `zukhruf-testing-lease-${run}`;
+    await present(LEASE_IMAGE);
+    await using sshd = await droppableSshEngine();
+    await using cleanup = new AsyncDisposableStack();
+    cleanup.defer(() => removeRun(run));
+    const held = sshLeaseHolder(run, name, sshd);
+    cleanup.defer(() => killed(held.child));
+    assert.equal(await held.line(), 'held');
 
-  await sshd.drop(t.signal);
-  await killed(held.child);
+    await sshd.drop(t.signal);
+    await killed(held.child);
 
-  await gone(t, async () => assert.equal(await exists(name), false));
+    await gone(t, async () => assert.equal(await exists(name), false));
+  });
+});
+
+describe('the groups', { concurrency: true }, () => {
+  for (const register of groups) register();
 });
