@@ -96,6 +96,10 @@ _Avoid_: Context (that is a name for a host)
 A message of `GET /events`: an action of the engine on a container, image, volume or network, such as `start` or `health_status: healthy`.
 _Avoid_: Notification
 
+**Engine clock**:
+The clock of the machine that runs the engine. `SystemTime` of `GET /info`, the `since` of `GET /events` and the `time` of an event are on it. It can differ from the clock of the process that sends the requests ([ADR 0017](./docs/adr/0017-events-opens-its-stream-at-the-engine-clock-before-the-request-so-it-loses-no-event-after-it-resolves.md), proposed).
+_Avoid_: Server time, daemon time
+
 **Platform**:
 The operating system and the CPU architecture that an image is for, as the OCI image index names them: `os`, `architecture` and `variant`, such as `linux`, `arm64` and `v8`. A multi-platform image has one manifest for each platform.
 _Avoid_: Arch (one part of a platform)
