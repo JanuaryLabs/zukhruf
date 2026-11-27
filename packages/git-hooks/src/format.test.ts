@@ -232,18 +232,16 @@ test('files that .prettierignore names and files that Prettier has no parser for
 });
 
 test('a staged file larger than 1 MiB is read and checked', async () => {
-  // Arrange
+  // Arrange: each file is over 1 MiB, the size at which the check that came
+  // before this hook crashed (67eac27b), in one comment line, which Prettier
+  // parses fast; the size is what matters. A read cut at 1 MiB would also
+  // make formatted.ts look unformatted.
   await using folder = await new TemporaryFiles().directory('git-hooks-');
   const repo = await formatRepository(folder.path, formatOnly);
-  await repo.write(
-    'large.md',
-    `# Notes\n\n${'A formatted line.\n\n'.repeat(70_000)}`.trimEnd() + '\n',
-  );
-  await repo.write(
-    'large.ts',
-    `${'const value = 1;\n'.repeat(80_000)}const a=1\n`,
-  );
-  await repo.git('add', 'large.md', 'large.ts');
+  const comment = `// ${'x'.repeat(1_100_000)}\n`;
+  await repo.write('formatted.ts', `${comment}const a = 1;\n`);
+  await repo.write('large.ts', `${comment}const a=1\n`);
+  await repo.git('add', 'formatted.ts', 'large.ts');
 
   // Act
   const result = await repo.commit('large');
@@ -255,7 +253,11 @@ test('a staged file larger than 1 MiB is read and checked', async () => {
     /\blarge\.ts\b/,
     'The hook must read and check large.ts',
   );
-  assert.doesNotMatch(result.stderr, /large\.md/, 'large.md is formatted');
+  assert.doesNotMatch(
+    result.stderr,
+    /\bformatted\.ts\b/,
+    'formatted.ts is formatted',
+  );
 });
 
 test("the repo's own .prettierrc decides: a file formatted only under Prettier's defaults stops the commit, and a file formatted under the repo's config passes", async () => {
