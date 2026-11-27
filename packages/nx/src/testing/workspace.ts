@@ -137,7 +137,17 @@ export async function workspace<Target>({
     // (2026-11-27, #6126). Ezz chose it for every test.
     NX_ISOLATE_PLUGINS: 'false',
   };
-  const nx = async (...args: string[]) => {
+  // One nx process at a time in the workspace: without a daemon, nx 24.0.6
+  // lets the second of two processes wait on the graph lock and then only read
+  // the cached graph, so a first process that wrote no graph fails it with
+  // "No cached ProjectGraph is available" (#6138).
+  let previous: Promise<unknown> = Promise.resolve();
+  const nx = (...args: string[]) => {
+    const run = previous.then(() => spawnNx(args));
+    previous = run.catch(() => undefined);
+    return run;
+  };
+  const spawnNx = async (args: string[]) => {
     const child = spawn(process.execPath, [nxBin, ...args], {
       cwd: root,
       env: environment,
