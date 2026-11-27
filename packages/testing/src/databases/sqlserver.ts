@@ -3,17 +3,16 @@ import { once } from 'node:events';
 import { readFile } from 'node:fs/promises';
 
 import sql from 'mssql';
-import { AbortError } from 'p-retry';
 
 import { Docker, ImageNotFoundError } from '@zukhruf/docker';
 
-import { retryUntilReady } from '../async/retry-until-ready.ts';
 import { readRun } from '../docker/run-records.ts';
 import type { ServiceContainer } from '../docker/service-container.ts';
 import { DockerTestbed, type DockerTestbedOptions } from '../docker/testbed.ts';
 import { KIND_LABEL } from './collector.ts';
 import { createSharedDatabase } from './database-record.ts';
 import type { Database, DatabaseOptions } from './database.ts';
+import { waitForLogMessage } from './log-message.ts';
 import { type OwnedPool, OwnedPools } from './owned-pools.ts';
 import {
   type SqlServerServer,
@@ -303,13 +302,12 @@ export class SqlServer {
   }
 
   /**
-   * Answers once the server runs a statement. With Full-Text Search, a server
-   * that has no full-text component fails at once: its image lacks it, and
-   * a wait cannot add it.
+   * Answers when the server runs a statement. With Full-Text Search, a server
+   * that has no full-text component fails: its image lacks it.
    */
   async #ping(container: ServiceContainer, image: string): Promise<void> {
     const pool = new sql.ConnectionPool(
-      `${this.#connectionString(container, 'master')}connectionTimeout=1000;requestTimeout=1000;`,
+      this.#connectionString(container, 'master'),
     );
     try {
       await pool.connect();
@@ -321,7 +319,7 @@ export class SqlServer {
           "SELECT FULLTEXTSERVICEPROPERTY('IsFullTextInstalled') AS installed",
         );
       if (recordset[0]?.installed !== 1)
-        throw new AbortError(
+        throw new Error(
           `The server of the image ${image} has no Full-Text Search: FULLTEXTSERVICEPROPERTY('IsFullTextInstalled') is ${String(recordset[0]?.installed)}`,
         );
     } finally {
@@ -368,11 +366,16 @@ export class SqlServer {
       },
       {
         internalPort: 1433,
-        healthy: (container, signal) =>
-          retryUntilReady(() => this.#ping(container, image), {
-            maxRetryTime: 180_000,
+        // SQL Server prints `SQL Server is now ready for client connections`
+        // first, and `Recovery is complete` when its databases are up.
+        healthy: async (container, signal) => {
+          await waitForLogMessage(container.container, 'Recovery is complete', {
+            timeout: 180_000,
+            clock: globalThis,
             signal,
-          }),
+          });
+          await this.#ping(container, image);
+        },
       },
     );
   }

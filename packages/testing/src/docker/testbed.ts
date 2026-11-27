@@ -38,8 +38,10 @@ export interface ServiceOptions {
   /** Without it, the engine names a dedicated server; a shared server's name comes from its request. */
   name?: string;
   /**
-   * Runs on every acquisition. Throw until ready, using retryUntilReady for polling.
-   * `signal` aborts when the container exits first: pass it to the polling.
+   * Runs on every acquisition, and resolves when the server is ready. Wait for
+   * the server's ready line in `followLogs()` and then send one query
+   * (ADR 0035); poll with retryUntilReady only for a server that writes no
+   * ready line. `signal` aborts when the container exits first: pass it on.
    */
   healthy?: (service: ServiceContainer, signal: AbortSignal) => unknown;
 }

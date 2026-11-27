@@ -1,6 +1,5 @@
 import pg from 'pg';
 
-import { retryUntilReady } from '../async/retry-until-ready.ts';
 import { readRun } from '../docker/run-records.ts';
 import type { ServiceContainer } from '../docker/service-container.ts';
 import { DockerTestbed } from '../docker/testbed.ts';
@@ -10,6 +9,7 @@ import {
   createSharedDatabase,
 } from './database-record.ts';
 import type { Database, DatabaseOptions } from './database.ts';
+import { waitForLogMessage } from './log-message.ts';
 import { type OwnedPool, OwnedPools, disposablePool } from './owned-pools.ts';
 import { postgres } from './postgres-collector.ts';
 import { succeeded } from './succeeded.ts';
@@ -213,35 +213,26 @@ export class Postgres {
     );
   }
 
-  #ready(
+  /**
+   * The entrypoint's temporary initialization server prints the first ready
+   * line and listens on its socket only, so the final server prints the
+   * second. Then one query over TCP.
+   */
+  async #ready(
     container: ServiceContainer,
     database: string,
     signal: AbortSignal,
   ): Promise<void> {
     const { user } = this.#options;
-    // TCP excludes PostgreSQL's temporary, socket-only initialization server.
-    return retryUntilReady(
-      async () => {
-        await succeeded(container.container, [
-          'pg_isready',
-          '-h',
-          '127.0.0.1',
-          '-U',
-          user,
-        ]);
-        await succeeded(container.container, [
-          'psql',
-          '-h',
-          '127.0.0.1',
-          '-U',
-          user,
-          '-d',
-          database,
-          '-c',
-          'SELECT 1',
-        ]);
-      },
-      { maxRetryTime: 60_000, signal },
+    await waitForLogMessage(
+      container.container,
+      'database system is ready to accept connections',
+      { times: 2, timeout: 60_000, clock: globalThis, signal },
+    );
+    await succeeded(
+      container.container,
+      ['psql', '-h', '127.0.0.1', '-U', user, '-d', database, '-c', 'SELECT 1'],
+      { signal },
     );
   }
 

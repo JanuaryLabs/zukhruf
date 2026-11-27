@@ -1,4 +1,3 @@
-import { retryUntilReady } from '../async/retry-until-ready.ts';
 import { readRun } from '../docker/run-records.ts';
 import type { ServiceContainer } from '../docker/service-container.ts';
 import { DockerTestbed } from '../docker/testbed.ts';
@@ -8,6 +7,7 @@ import {
   createSharedDatabase,
 } from './database-record.ts';
 import type { Database, DatabaseOptions } from './database.ts';
+import { waitForLogMessage } from './log-message.ts';
 import { type MysqlFamilyCollector, user } from './mysql-family-collector.ts';
 import { type OwnedPool, OwnedPools } from './owned-pools.ts';
 import { succeeded } from './succeeded.ts';
@@ -175,21 +175,32 @@ export abstract class MysqlFamilyServer<Pool, PoolOptions> {
     );
   }
 
-  #ready(container: ServiceContainer, signal: AbortSignal) {
+  /**
+   * The final server prints its port on its ready line, MySQL on the line
+   * `ready for connections` and MariaDB on the `Version:` line after it.
+   * The entrypoint's temporary initialization server prints `port: 0`, and
+   * MySQL's X Plugin `port: 33060`: the two spaces after 3306 tell them
+   * apart. Then one query over TCP.
+   */
+  async #ready(container: ServiceContainer, signal: AbortSignal) {
     const { password } = this.#options;
-    // TCP excludes the entrypoint's temporary, socket-only initialization server.
-    return retryUntilReady(
-      () =>
-        succeeded(container.container, [
-          this.collector.client,
-          '-h',
-          '127.0.0.1',
-          `-u${user}`,
-          `-p${password}`,
-          '--execute',
-          'SELECT 1',
-        ]),
-      { maxRetryTime: 90_000, signal },
+    await waitForLogMessage(container.container, 'port: 3306  ', {
+      timeout: 90_000,
+      clock: globalThis,
+      signal,
+    });
+    await succeeded(
+      container.container,
+      [
+        this.collector.client,
+        '-h',
+        '127.0.0.1',
+        `-u${user}`,
+        `-p${password}`,
+        '--execute',
+        'SELECT 1',
+      ],
+      { signal },
     );
   }
 
