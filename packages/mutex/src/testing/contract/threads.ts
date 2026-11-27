@@ -10,7 +10,6 @@ import { Mutex } from '../../mutex/mutex.ts';
 import { startThread, threadSource } from './peers.ts';
 import type { Host, SharedByThreads, Subject } from './subject.ts';
 
-/** Four threads add 1 to a shared counter 20 times each, reading and writing around an `await`. */
 /**
  * The rounds of each thread: 20, or as many as about 2 s of grants at the
  * store's usual grant time and never fewer than 6, so a store whose grant is
@@ -21,8 +20,9 @@ const roundsOf = (store: Pick<Subject, 'grantLatency'>): number =>
   Math.min(20, Math.max(6, Math.round(2_000 / store.grantLatency)));
 
 /**
- * Four threads, this one and three workers, each take the key `roundsOf`
- * times. Each first takes another key once, so its store is connected, and
+ * Four threads, this one and three workers, each add 1 to a shared counter
+ * `roundsOf` times, reading and writing around an `await`, under the key.
+ * Each first takes another key once, so its store is connected, and
  * they start their rounds together: with no exclusion, their first rounds
  * overlap, however few rounds there are.
  */
