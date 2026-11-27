@@ -62,7 +62,7 @@ true
 
 - `new Snapshot(path)` opens the database read-only. It runs `BEGIN` and a first read at once, so the snapshot holds the moment when it opens, not the moment of the first query of the caller.
 - The snapshot never opens the file with `immutable`. The owner keeps a persistent WAL, and the newest rows are in it. [ADR 0001](./docs/adr/0001-never-immutable-and-held-only-while-reading.md) tells why.
-- Hold a snapshot only while you read. An open read transaction stops the checkpoint of the owner, and then the WAL of the owner grows. Dispose the snapshot with `using`, or call `[Symbol.dispose]()`.
+- Hold a snapshot only while you read. An open read transaction stops the WAL checkpoint of the owner, and then the WAL of the owner grows. Dispose the snapshot with `using`, or call `[Symbol.dispose]()`.
 - `all(sql, ...parameters)` gives all rows. `iterate(sql, ...parameters)` gives the rows one at a time, for a table that is too large to hold in memory. `prepare(sql, options)` gives a statement of the snapshot with the options of `node:sqlite`. For example, `{ readBigInts: true }` gives each integer as a `bigint`: `all` and `iterate` throw for an integer above 2^53.
 - `requireColumns(columns)` checks the columns that the reader needs, as `{ table: [column, ...] }`. When one is missing, it disposes the snapshot and throws `MissingColumnsError`.
 - `missingColumns(columns)` gives the missing columns as `table.column`, and keeps the snapshot open. A reader whose queries use different tables checks each query with it.
@@ -107,13 +107,13 @@ try {
 
 ## The same concepts in other systems
 
-| System                       | What it does                                                                                                                                                                                             |
-| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| SQLite WAL readers           | A read transaction sees the database as it was at its first read, also while a writer commits. An open read stops the checkpoint at its end mark. See "Write-Ahead Logging" in the SQLite documentation. |
-| Datasette `immutable` mode   | It opens a file with `immutable=1`, for a file that nobody writes. SQLite then skips the locks and the WAL. This package is the opposite case: the owner writes the file.                                |
-| `sqlite3 -readonly`          | It opens a database read-only. Each statement outside a transaction can see a different moment.                                                                                                          |
-| Chromium `sql::Database`     | It opens each database with the exclusive locking mode, as `exclusive_locking_ = true` in `sql/database.h`. No other process can read the database while the browser runs.                               |
-| yt-dlp `_open_database_copy` | It copies the cookie database of a running Chromium and reads the copy. It copies the database file only, with no check.                                                                                 |
+| System                       | What it does                                                                                                                                                                                                 |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| SQLite WAL readers           | A read transaction sees the database as it was at its first read, also while a writer commits. An open read stops the WAL checkpoint at its end mark. See "Write-Ahead Logging" in the SQLite documentation. |
+| Datasette `immutable` mode   | It opens a file with `immutable=1`, for a file that nobody writes. SQLite then skips the locks and the WAL. This package is the opposite case: the owner writes the file.                                    |
+| `sqlite3 -readonly`          | It opens a database read-only. Each statement outside a transaction can see a different moment.                                                                                                              |
+| Chromium `sql::Database`     | It opens each database with the exclusive locking mode, as `exclusive_locking_ = true` in `sql/database.h`. No other process can read the database while the browser runs.                                   |
+| yt-dlp `_open_database_copy` | It copies the cookie database of a running Chromium and reads the copy. It copies the database file only, with no check.                                                                                     |
 
 ## API
 

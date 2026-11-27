@@ -21,7 +21,7 @@ A journal where SQLite adds each commit to the `-wal` file, and keeps an index o
 _Avoid_: WAL mode, log
 
 **Synchronous**:
-When SQLite syncs the `-wal` file of a write-ahead log to the disk. `'normal'`, the default, syncs before each checkpoint: a power loss can roll back the commits after the last checkpoint. `'full'` syncs at each commit: a commit survives a power loss. The `synchronous` option of `WriteAheadLog` and `PersistentWriteAheadLog` sets it. SQLite uses the same word ("PRAGMA synchronous").
+When SQLite syncs the `-wal` file of a write-ahead log to the disk. `'normal'`, the default, syncs before each WAL checkpoint: a power loss can roll back the commits after the last WAL checkpoint. `'full'` syncs at each commit: a commit survives a power loss. The `synchronous` option of `WriteAheadLog` and `PersistentWriteAheadLog` sets it. SQLite uses the same word ("PRAGMA synchronous").
 _Avoid_: Durability mode, fsync mode, sync level
 
 **Page size**:

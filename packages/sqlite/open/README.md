@@ -91,7 +91,7 @@ The size limit keeps a write-ahead log small after a large commit. Without it, t
 
 `WriteAheadLog` and `PersistentWriteAheadLog` take an optional page size, for example `new WriteAheadLog({ pageSize: 32768 })`. SQLite sets the page size of a file only before its first write, and never in a write-ahead log. The write-ahead log step is that first write, so the journal sets the page size just before it. An existing file keeps its own page size.
 
-A write-ahead log syncs the `-wal` file to the disk before each checkpoint, not at each commit (ADR 0007). A crash of the program loses no commit. A power loss or a crash of the operating system can roll back the commits after the last checkpoint. The database file stays consistent. An owner whose commits must survive a power loss gives `synchronous: 'full'`, for example `new WriteAheadLog({ synchronous: 'full' })`. SQLite then syncs at each commit. On Linux, a commit of one row is about 12 times slower with `'full'`.
+A write-ahead log syncs the `-wal` file to the disk before each WAL checkpoint, not at each commit (ADR 0007). A crash of the program loses no commit. A power loss or a crash of the operating system can roll back the commits after the last WAL checkpoint. The database file stays consistent. An owner whose commits must survive a power loss gives `synchronous: 'full'`, for example `new WriteAheadLog({ synchronous: 'full' })`. SQLite then syncs at each commit. On Linux, a commit of one row is about 12 times slower with `'full'`.
 
 ## Errors
 

@@ -13,12 +13,12 @@ A read-only connection that holds one moment of the database with a read transac
 _Avoid_: Copy, backup, app database
 
 **Read transaction**:
-The transaction that the snapshot starts with `BEGIN` and a first read. It holds the moment, and it stops the checkpoint of the owner until the snapshot is disposed.
+The transaction that the snapshot starts with `BEGIN` and a first read. It holds the moment, and it stops the WAL checkpoint of the owner until the snapshot is disposed.
 _Avoid_: Lock, session
 
-**Checkpoint**:
-The step in which SQLite moves the pages of the WAL back into the database, as "Write-Ahead Logging" in the SQLite documentation (https://www.sqlite.org/wal.html) defines it. A checkpoint stops at the end mark of each open read transaction, so the WAL of the owner grows while a snapshot is open.
-_Avoid_: Flush, sync, commit (a commit writes to the WAL, a checkpoint writes from it)
+**WAL checkpoint**:
+The step in which SQLite moves the pages of the WAL back into the database, as "Write-Ahead Logging" in the SQLite documentation (https://www.sqlite.org/wal.html) defines it. A WAL checkpoint stops at the end mark of each open read transaction, so the WAL of the owner grows while a snapshot is open.
+_Avoid_: Checkpoint alone (the saved progress of a reader, in @zukhruf/checkpoint), flush, sync, commit (a commit writes to the WAL, a WAL checkpoint writes from it)
 
 **Layout**:
 The tables of the database of the owner and the columns of each table, as `pragma_table_info` gives them. The owner can change its layout from one version to the next.
