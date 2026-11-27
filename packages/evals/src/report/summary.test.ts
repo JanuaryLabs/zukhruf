@@ -367,7 +367,7 @@ test('a slice with no samples has no value and no interval, and its bar is untes
       bar: bars.bars[1],
     },
     {
-      claim: 'values_f1 · page = empty has no tests for its bar of 0.95',
+      claim: 'values_f1 · page = empty has no value for its bar of 0.95',
       row: [
         { text: 'values_f1 · page = empty', tone: 'neutral' },
         { text: '—', tone: 'neutral' },
@@ -468,6 +468,65 @@ test('a score past 1, such as a mean count, widens the scale of the bars to hold
   );
 
   assert.deepEqual(bars.scale, { low: 0, high: 3 });
+});
+
+test('a score with no whole, such as recall on pages with no expected value, has no value, and its bar is untested', () => {
+  const log = new RunLog(info, [
+    sample('a', { values_recall: new Ratio(0, 0) }, { page: 'empty' }),
+    sample('b', { values_recall: new Ratio(0, 0) }, { page: 'empty' }),
+  ]);
+
+  const summary = new Summary(log, {
+    scores: [
+      { name: 'values_recall', higherIsBetter: true, bar: { atLeast: 0.88 } },
+    ],
+    slices: pages,
+    bootstrap: scripted(1, [0]),
+  });
+
+  assert.equal(summary.claim, 'values_recall has no value for its bar of 0.88');
+  assert.deepEqual(
+    parts(summary).table.rows.map((cells) => cells.map(({ text }) => text)),
+    [['values_recall', '—', '[—, —]', '≥ 0.88', 'untested']],
+  );
+});
+
+test('a bar on a slice where no sample gives the score is untested, not an error', () => {
+  const log = new RunLog(info, [
+    sample('a', { values_precision: new Ratio(9, 10) }, { page: 'offers' }),
+    sample('b', { values_f1: new Ratio(1, 1) }, { page: 'empty' }),
+  ]);
+
+  const summary = new Summary(log, {
+    scores: [
+      {
+        name: 'values_precision',
+        higherIsBetter: true,
+        bar: { atLeast: 0.88, slice: ['page', 'empty'] },
+      },
+    ],
+    slices: pages,
+    bootstrap: scripted(1, [0]),
+  });
+
+  assert.equal(
+    summary.claim,
+    'values_precision · page = empty has no value for its bar of 0.88',
+  );
+});
+
+test('a summary of one test with no bars says one test', () => {
+  const log = new RunLog(info, [
+    sample('a', { values_recall: new Ratio(9, 10) }),
+  ]);
+
+  const summary = new Summary(log, {
+    scores: [{ name: 'values_recall', higherIsBetter: true }],
+    slices: [],
+    bootstrap: scripted(1, [0]),
+  });
+
+  assert.match(summary.claim, / over 1 test$/);
 });
 
 test('a summary with an untested slice renders as HTML and Markdown with its claim and with no NaN', () => {

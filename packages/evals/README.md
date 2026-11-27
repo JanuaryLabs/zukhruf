@@ -6,17 +6,17 @@ The answers of evals have different shapes: a structured record, a label, a rank
 
 ## The parts
 
-| Import path                         | Job                                                                                                                                                                                                                                                         |
-| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@zukhruf/evals`                    | The core: scorers, ratios, gates, scorer sets, scorecards, totals, bootstrap intervals, runs and paired bootstraps.                                                                                                                                         |
-| `@zukhruf/evals/promptfoo`          | The adapter that makes a scorer or a scorer set a promptfoo assertion, and reads the rows of a promptfoo run as the samples of a run log.                                                                                                                   |
-| `@zukhruf/evals/structured`         | Compares a structured value with the value that a person labelled.                                                                                                                                                                                          |
-| `@zukhruf/evals/classification`     | Compares the stated labels of an answer with its expected labels, as scikit-learn's `sklearn.metrics` does (ADR 0003).                                                                                                                                      |
-| `@zukhruf/evals/ranking` (later)    | Compares a ranked list with judged items, as trec_eval does.                                                                                                                                                                                                |
-| `@zukhruf/evals/clustering` (later) | Compares a partition with a labelled partition, as the CoNLL reference scorer does.                                                                                                                                                                         |
-| `@zukhruf/evals/report`             | Pages that a host composes from building blocks over one run, a run pair or many runs, and their renderers: `Page`, `HtmlRenderer`, `MarkdownRenderer` and `Summary` are built; the other building blocks follow ([docs/report.md](docs/report.md), #6108). |
+| Import path                         | Job                                                                                                                                                                                                                                                                   |
+| ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@zukhruf/evals`                    | The core: scorers, ratios, gates, scorer sets, scorecards, totals, bootstrap intervals, runs and paired bootstraps.                                                                                                                                                   |
+| `@zukhruf/evals/promptfoo`          | The adapter that makes a scorer or a scorer set a promptfoo assertion, and reads the rows of a promptfoo run as the samples of a run log.                                                                                                                             |
+| `@zukhruf/evals/structured`         | Compares a structured value with the value that a person labelled.                                                                                                                                                                                                    |
+| `@zukhruf/evals/classification`     | Compares the stated labels of an answer with its expected labels, as scikit-learn's `sklearn.metrics` does (ADR 0003).                                                                                                                                                |
+| `@zukhruf/evals/ranking` (later)    | Compares a ranked list with judged items, as trec_eval does.                                                                                                                                                                                                          |
+| `@zukhruf/evals/clustering` (later) | Compares a partition with a labelled partition, as the CoNLL reference scorer does.                                                                                                                                                                                   |
+| `@zukhruf/evals/report`             | Pages that a host composes from building blocks over one run, a run pair or many runs, and their renderers: `Page`, `HtmlRenderer`, `MarkdownRenderer`, `Summary` and `Slices` are built; the other building blocks follow ([docs/report.md](docs/report.md), #6108). |
 
-> **Design for review (#6108).** [docs/report.md](docs/report.md) adds a run log, a run pair, sections and primitives to the core, an adapter of promptfoo runs to `./promptfoo`, `./report` (a page, its renderers and the building blocks of every family), and the building blocks of structured answers to `./structured`. With it, the package also shows the results that the runner stores. Built so far: the run log and run pair of the core, `PromptfooSamples`, the primitives of the core, `Page`, `HtmlRenderer` and `MarkdownRenderer` of `./report`, and its first building block, `Summary`; the other building blocks come next (docs/report.md, "The order of the work").
+> **Design for review (#6108).** [docs/report.md](docs/report.md) adds a run log, a run pair, sections and primitives to the core, an adapter of promptfoo runs to `./promptfoo`, `./report` (a page, its renderers and the building blocks of every family), and the building blocks of structured answers to `./structured`. With it, the package also shows the results that the runner stores. Built so far: the run log and run pair of the core, `PromptfooSamples`, the primitives of the core, `Page`, `HtmlRenderer` and `MarkdownRenderer` of `./report`, and its first building blocks, `Summary` and `Slices`; the other building blocks come next (docs/report.md, "The order of the work").
 
 A subpath imports only the core. It never imports another subpath.
 
@@ -93,7 +93,7 @@ const pageKinds = new ScorerSet(
 
 `RatioOfSums.of(ratios)` adds a list of ratios in one call.
 
-`Bootstrap` gives the interval of one name over a `Run`, with `@zukhruf/statistics` (ADR 0010). Each resample draws as many tests as the run has, with replacement. A test is the mean of its epochs times the weight of its case, and the statistic is the ratio of sums, the statistic of `Totals`: the scorer decides the average, and the bootstrap keeps it. You give it the number of resamples, the random index and the method of the interval.
+`Bootstrap` gives the interval of one name over a `Run`, with `@zukhruf/statistics` (ADR 0010). Each resample draws as many tests as the run has, with replacement. A test is the mean of its epochs times the weight of its case, and the statistic is the ratio of sums of those units, `Run#total(name)`, the value to show beside the interval (it equals `Totals` of the scorecards only when every test has the same number of epochs): the scorer decides the average, and the bootstrap keeps it. You give it the number of resamples, the random index and the method of the interval.
 
 ```ts
 const run = new Run();
@@ -230,7 +230,7 @@ export class PairedBootstrap {
 | p                                           | Two times the smaller share of the resample differences that are at or below 0 and at or above 0, at most 1, as mteb's `pairedBootstrapTest` gives it. The caller applies a correction, such as Holm.                                  |
 | counts                                      | Counts the tests by the sign of (change value − baseline value), with the direction: improvements, regressions and ties.                                                                                                               |
 
-`Bootstrap` and `PairedBootstrap` use one statistic, the statistic of `Totals`, over the tests of their runs: `Bootstrap` for one run, `PairedBootstrap` for the difference of two (ADR 0004, ADR 0010). So the interval of `Bootstrap` is the interval of the number of `Totals` when each test has the same number of epochs, and the interval of `PairedBootstrap` is the interval of its observed difference.
+`Bootstrap` and `PairedBootstrap` use one statistic, the ratio of sums of `Run#total` over the units of the tests of their runs: `Bootstrap` for one run, `PairedBootstrap` for the difference of two (ADR 0004, ADR 0010). So the interval of `Bootstrap` is the interval of `Run#total`, which equals the number of `Totals` when each test has the same number of epochs, and the interval of `PairedBootstrap` is the interval of its observed difference.
 
 The design does not resample clustered tests, such as many questions about one page, and it reduces the epochs only by the mean.
 
@@ -463,7 +463,7 @@ The package throws the built-in error classes. A `RangeError` is a value outside
 
 ## What the package does not do
 
-- It does not run a harness, load a dataset, store results or show them. promptfoo does that. (Design for review, #6108: `./report` would show them; see [docs/report.md](docs/report.md).)
+- It does not run a harness, load a dataset or store results. promptfoo does that. It shows them: `./report` draws a page of a run ([docs/report.md](docs/report.md), #6108).
 - It has no benchmark. A benchmark, such as SOB, is a composition of scorers that its caller keeps.
 - It has no LLM judge.
 - A subpath never imports another subpath.
@@ -676,7 +676,7 @@ export class RunPair<Answer, C> {
   readonly baseline: RunLog<Answer, C>;
   readonly change: RunLog<Answer, C>;
 }
-/** The interval of one name over the tests of a run, with the statistic of Totals (@zukhruf/statistics, ADR 0010). */
+/** The interval of one name over the tests of a run, with the statistic of Run#total (@zukhruf/statistics, ADR 0010). */
 export class Bootstrap {
   constructor(options: {
     nResamples: number;

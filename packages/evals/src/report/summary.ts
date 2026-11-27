@@ -85,12 +85,26 @@ const tones: Readonly<Record<Verdict, Tone>> = {
 
 const list = new Intl.ListFormat('en', { type: 'conjunction' });
 
+// The value and the interval of one score on some samples; a score with no
+// value there has no interval.
+type Numbers = {
+  readonly value: number;
+  readonly ends: Ends;
+  readonly interval: ConfidenceInterval | undefined;
+};
+
+const none: Numbers = {
+  value: Number.NaN,
+  ends: { low: Number.NaN, high: Number.NaN },
+  interval: undefined,
+};
+
 // Each score of a run with its value and its interval, and, for a score with
 // a bar, whether the interval meets it (report ADR 0004). The value is
 // Run#total and the interval Bootstrap's, so the interval belongs to the
 // number beside it. A bar with a slice is read on a row of that slice only.
 // The claim says what the rows give and never more (report ADR 0002): the
-// bars missed, else the bars within chance, else the bars with no tests,
+// bars missed, else the bars within chance, else the bars with no value,
 // else that every bar is met; with no bars, the value of each score.
 export class Summary<Answer, C> implements Section {
   readonly id = 'summary';
@@ -116,12 +130,14 @@ export class Summary<Answer, C> implements Section {
       const limit = Summary.#limit(score);
       if (limit === undefined) return [plain];
       const { at, sign } = limit;
+      const verdict = ({ interval }: Numbers): Verdict =>
+        interval === undefined ? 'untested' : limit.verdict(interval);
       if (limit.slice === undefined)
         return [
           {
             ...plain,
             kind: 'barred',
-            bar: { at, sign, verdict: limit.verdict(whole.interval) },
+            bar: { at, sign, verdict: verdict(whole) },
           },
         ];
       const [sliceName, key] = limit.slice;
@@ -131,30 +147,25 @@ export class Summary<Answer, C> implements Section {
           `The bar of ${score.name} reads the slice "${sliceName}", and the slices are: ${slices.map(({ name }) => name).join(', ')}`,
         );
       const samples = log.samples.filter((sample) => slice.key(sample) === key);
-      const label = `${score.name} · ${sliceName} = ${key}`;
-      if (samples.length === 0)
-        return [
-          plain,
-          {
-            kind: 'barred',
-            label,
-            value: Number.NaN,
-            ends: { low: Number.NaN, high: Number.NaN },
-            bar: { at, sign, verdict: 'untested' },
-          },
-        ];
-      const part = Summary.#numbers(
-        new RunLog(log.info, samples).run(),
-        score.name,
-        bootstrap,
-      );
+      // A slice where no sample gives the score, or where it has no samples,
+      // has no value for the bar (Run#total throws for a score that no
+      // sample gives, with no code to catch).
+      const part = samples.some(({ scorecard }) =>
+        scorecard.ratios.has(score.name),
+      )
+        ? Summary.#numbers(
+            new RunLog(log.info, samples).run(),
+            score.name,
+            bootstrap,
+          )
+        : none;
       return [
         plain,
         {
           kind: 'barred',
-          label,
+          label: `${score.name} · ${sliceName} = ${key}`,
           ...part,
-          bar: { at, sign, verdict: limit.verdict(part.interval) },
+          bar: { at, sign, verdict: verdict(part) },
         },
       ];
     });
@@ -165,10 +176,15 @@ export class Summary<Answer, C> implements Section {
     this.primitives = [Summary.#table(rows), Summary.#bars(rows)];
   }
 
-  static #numbers(run: Run, name: string, bootstrap: Bootstrap) {
+  // A ratio of no whole, such as the recall of pages with no expected value,
+  // has no value: Ratio.value gives 0 there, as SOB's ratio() does, and a
+  // page would read that 0 as a score (report ADR 0002).
+  static #numbers(run: Run, name: string, bootstrap: Bootstrap): Numbers {
+    const total = run.total(name);
+    if (total.ratio.whole === 0) return none;
     const interval = bootstrap.interval(run, name);
     return {
-      value: run.total(name).value,
+      value: total.value,
       ends: { low: interval.low, high: interval.high },
       interval,
     };
@@ -205,7 +221,7 @@ export class Summary<Answer, C> implements Section {
   static #claim(rows: readonly Row[], tests: number): string {
     const barred = rows.flatMap((row) => (row.kind === 'barred' ? [row] : []));
     if (barred.length === 0)
-      return `${rows.map((row) => `${row.label} ${withEnds(row.value, row.ends)}`).join('; ')} over ${tests} tests`;
+      return `${rows.map((row) => `${row.label} ${withEnds(row.value, row.ends)}`).join('; ')} over ${tests} ${tests === 1 ? 'test' : 'tests'}`;
     const having = (verdict: Verdict) =>
       barred.filter((row) => row.bar.verdict === verdict);
     const missed = having('missed');
@@ -227,7 +243,7 @@ export class Summary<Answer, C> implements Section {
     const untested = having('untested');
     if (untested.length > 0)
       return untested
-        .map((row) => `${row.label} has no tests for its bar of ${row.bar.at}`)
+        .map((row) => `${row.label} has no value for its bar of ${row.bar.at}`)
         .join('; ');
     return barred.length === 1
       ? `${list.format(barred.map(({ label }) => label))} meets its bar`

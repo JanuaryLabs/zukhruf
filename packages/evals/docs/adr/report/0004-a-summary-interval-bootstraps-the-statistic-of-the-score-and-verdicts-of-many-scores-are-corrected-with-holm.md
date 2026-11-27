@@ -2,7 +2,7 @@
 
 Status: accepted (Ezz, 2026-11-27, #6108: "Fill both gaps first"). #4234 and #6111 are built before any page, so no page ever shows a wrong interval.
 
-Status, 2026-11-27 (#6108): `Summary` is built. Its value is `Run#total` and its interval `Bootstrap.interval` on the same run, or on the run of a slice's samples for a bar with a slice. A bar is met, missed or open as point 2 says, and a slice with no samples reads untested. Holm (point 3) belongs to `Verdicts`, which is not built yet.
+Status, 2026-11-27 (#6108): `Summary` is built. Its value is `Run#total` and its interval `Bootstrap.interval` on the same run, or on the run of a slice's samples for a bar with a slice. A bar is met, missed or open as point 2 says, and a row with no value reads untested: a slice with no samples or with no sample that gives the score, or a score with no whole, such as recall on pages with no expected value (`Ratio.value` gives 0 there for SOB's scores, and a page would read that 0 as a score). Holm (point 3) belongs to `Verdicts`, which is not built yet.
 
 ## Context
 
