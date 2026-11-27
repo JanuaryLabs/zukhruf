@@ -12,6 +12,9 @@
       "path": "../async/tsconfig.lib.json"
     },
     {
+      "path": "../parameterized-test/tsconfig.lib.json"
+    },
+    {
       "path": "../fs/tsconfig.lib.json"
     }
   ]

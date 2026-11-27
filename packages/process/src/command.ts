@@ -1,12 +1,20 @@
+import type { Socket } from 'node:net';
+import { Readable, Writable } from 'node:stream';
+
 import { execa } from 'execa';
 
-import type { Clock } from '@zukhruf/async';
+import { type Clock, untilAborted } from '@zukhruf/async';
 
-import type { Completed, Environment } from './end.ts';
+import type { Completed, End, Environment } from './end.ts';
 import { errorCode } from './error-code.ts';
 import { findFile } from './file.ts';
 import { KEEPER, environmentFixes } from './keeper.ts';
 import { StartError } from './start-error.ts';
+import {
+  type PipedProcess,
+  type Process,
+  StartedProcess,
+} from './started-process.ts';
 import { stopGroup } from './stop.ts';
 
 export interface CommandOptions {
@@ -27,6 +35,33 @@ export interface RunOptions {
   /** An abort stops the process and rejects with the reason. */
   readonly signal?: AbortSignal;
 }
+
+interface Starting {
+  /** An abort stops the process; before ready, the start rejects with the reason. */
+  readonly signal?: AbortSignal;
+  readonly stderr?: 'pipe' | 'ignore';
+}
+
+/** The default: stdin and stdout piped. Only this start gives a piped process. */
+export type PipedStartOptions = Starting & {
+  readonly stdin?: 'pipe';
+  readonly stdout?: 'pipe';
+  /** The first line of stdout that equals the string or matches the expression. */
+  readonly ready?: { readonly line: string | RegExp };
+};
+
+export type StartOptions =
+  | PipedStartOptions
+  | (Starting & {
+      readonly stdin: 'ignore' | Socket;
+      readonly stdout?: 'pipe';
+      readonly ready?: { readonly line: string | RegExp };
+    })
+  | (Starting & {
+      readonly stdin?: 'pipe' | 'ignore' | Socket;
+      readonly stdout: 'ignore' | Socket;
+      readonly ready?: never;
+    });
 
 /** What to run. It starts nothing until `run()` or `start()` (ADR 0010). */
 export class Command {
@@ -108,6 +143,93 @@ export class Command {
     return completedFrom(result);
   }
 
+  /** Starts the command, and resolves when it is ready (ADR 0006). */
+  start(options?: PipedStartOptions): Promise<PipedProcess>;
+  start(options: StartOptions): Promise<Process>;
+  async start(options: StartOptions = {}): Promise<Process> {
+    const { signal } = options;
+    signal?.throwIfAborted();
+    // Copied from run(): the start under the keeper (docs/copied-code.md).
+    const env = Object.fromEntries(
+      Object.entries(this.#options.env).filter(
+        (entry): entry is [string, string] => entry[1] !== undefined,
+      ),
+    );
+    const cwd = this.#options.cwd ?? process.cwd();
+    let path: string;
+    try {
+      path = await findFile(this.file, env, cwd);
+    } catch (cause) {
+      throw new StartError(`${this.#name} could not start`, { cause });
+    }
+    const subprocess = execa(
+      '/bin/sh',
+      [
+        '-c',
+        KEEPER,
+        'keeper',
+        String(this.#grace / 1000),
+        '/usr/bin/env',
+        ...environmentFixes(env),
+        path,
+        ...this.args,
+      ],
+      {
+        env,
+        extendEnv: false,
+        cwd,
+        detached: true,
+        cleanup: false,
+        stdio: [
+          options.stdin ?? 'pipe',
+          options.stdout ?? 'pipe',
+          options.stderr ?? 'pipe',
+          'pipe',
+        ],
+        buffer: false,
+        reject: false,
+      },
+    );
+    const pgid = subprocess.pid;
+    if (pgid === undefined)
+      throw new StartError(`${this.#name} could not start`, {
+        cause: (await subprocess).cause,
+      });
+    const started = new StartedProcess(
+      {
+        pid: pgid,
+        stdin: subprocess.stdin instanceof Writable ? subprocess.stdin : null,
+        stdout:
+          subprocess.stdout instanceof Readable ? subprocess.stdout : null,
+        stderr:
+          subprocess.stderr instanceof Readable ? subprocess.stderr : null,
+      },
+      subprocess.then(endFrom),
+      {
+        name: this.#name,
+        stop: () =>
+          stopGroup(pgid, subprocess, {
+            grace: this.#grace,
+            clock: this.#options.clock,
+          }),
+      },
+    );
+    if (signal !== undefined) {
+      const stop = () => void started.stop();
+      signal.addEventListener('abort', stop, { once: true });
+      void started.ended.then(() => signal.removeEventListener('abort', stop));
+    }
+    if (options.ready === undefined) return started;
+    try {
+      await untilAborted(started.ready(options.ready.line), signal);
+    } catch (error) {
+      if (signal?.aborted !== true) throw error;
+      await started.stop();
+      throw signal.reason;
+    }
+    return started;
+  }
+
   /**
    * Windows has no POSIX sh and no process groups, so no keeper: execa starts
    * the file itself (it finds .cmd files and PATHEXT), and stops the process
@@ -171,12 +293,19 @@ function completedFrom(result: {
   readonly exitCode?: number | undefined;
   readonly signal?: NodeJS.Signals | undefined;
 }): Completed {
-  const output = {
+  return {
+    ...endFrom(result),
     stdout: result.stdout,
     stderr: result.stderr,
     output: result.all,
   };
+}
+
+function endFrom(result: {
+  readonly exitCode?: number | undefined;
+  readonly signal?: NodeJS.Signals | undefined;
+}): End {
   return result.signal === undefined
-    ? { exitCode: result.exitCode ?? 0, ...output }
-    : { signal: result.signal, ...output };
+    ? { exitCode: result.exitCode ?? 0 }
+    : { signal: result.signal };
 }

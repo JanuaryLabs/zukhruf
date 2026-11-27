@@ -1,6 +1,6 @@
 # @zukhruf/process
 
-> **In build (backlog #6077).** `Command#run` is built. `Command#start`, `NodeCommand` and `Coprocess` follow, in that order; until then, this README describes them as decided in the ADRs.
+> **In build (backlog #6077).** `Command#run` is built, and so is the lifecycle of `Command#start`: the ready line, `stop()`, the abort and `ended`. The rest of `start` (`lines()` for each reader, stdin and stdout as `'ignore'` or a socket, the stderr tail), `NodeCommand` and `Coprocess` follow, in that order; until then, this README describes them as decided in the ADRs.
 
 Start a process of this machine and know how it ends. A `Command` says what to run: the file, its arguments, the environment, the folder. `command.run()` runs it to its end and gives its exit code or signal and its output, with no throw at a non-zero exit. `command.start()` gives a started process: it resolves when the process is ready, it stops the process group with SIGTERM and then SIGKILL, and the process ends with its parent, also when the parent is killed. A `Coprocess` talks to a started process in JSON lines, and a `NodeCommand` runs JavaScript source in its own Node.js with messages.
 
@@ -81,7 +81,7 @@ A started process ends when this program ends, also when this program is killed 
 
 ## Stop a started process
 
-`stop()` sends SIGTERM to the process group. When the group is still alive after the grace, 5 seconds unless the caller gives `grace`, it sends SIGKILL to the group. It resolves with the end ([ADR 0005](./docs/adr/0005-a-stop-sends-sigterm-to-the-process-group-and-sigkill-after-a-grace-of-5-seconds.md)). An abort of `signal` is a stop. The disposal (`await using`) is a stop that also waits until the streams have closed.
+`stop()` sends SIGTERM to the process group. When the group is still alive after the grace, 5 seconds unless the caller gives `grace`, it sends SIGKILL to the group. It resolves with the end when no member of the group is left ([ADR 0005](./docs/adr/0005-a-stop-sends-sigterm-to-the-process-group-and-sigkill-after-a-grace-of-5-seconds.md)). A member that has ended but that its parent has not reaped yet (a zombie) is still in the group, so a zombie that no parent reaps holds the stop until the grace. An abort of `signal` is a stop. The disposal (`await using`) is a stop that also waits until the streams have closed.
 
 ## Talk to a coprocess in JSON lines
 

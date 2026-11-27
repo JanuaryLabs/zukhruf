@@ -44,11 +44,18 @@ export async function stopGroup(
   }
 }
 
+/**
+ * macOS answers EPERM, not ESRCH, for a group whose members are all zombies
+ * that wait for their parent to reap them: the keeper between the end of its
+ * stdout and its reaping (probed 2026-11-27). Nothing in such a group runs, so
+ * neither answer leaves anything to signal.
+ */
 function signalGroup(pgid: number, signal: NodeJS.Signals): void {
   try {
     process.kill(-pgid, signal);
   } catch (error) {
-    if (errorCode(error) !== 'ESRCH') throw error;
+    const code = errorCode(error);
+    if (code !== 'ESRCH' && code !== 'EPERM') throw error;
   }
 }
 
@@ -57,7 +64,10 @@ function groupIsEmpty(pgid: number): boolean {
     process.kill(-pgid, 0);
     return false;
   } catch (error) {
-    if (errorCode(error) === 'ESRCH') return true;
+    const code = errorCode(error);
+    // EPERM: only zombies are left, not reaped yet (see signalGroup).
+    if (code === 'EPERM') return false;
+    if (code === 'ESRCH') return true;
     throw error;
   }
 }

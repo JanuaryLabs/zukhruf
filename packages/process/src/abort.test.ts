@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
+import { subscribe, unsubscribe } from 'node:diagnostics_channel';
 import { once } from 'node:events';
-import { access, readFile } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
@@ -28,14 +29,29 @@ function running(pid: number): boolean {
   }
 }
 
-/** Whether the process group `pgid` has a member, a zombie too. */
+/**
+ * Whether the process group `pgid` has a member, a zombie too: macOS answers
+ * EPERM for a group of zombies that are not reaped yet.
+ */
 function groupExists(pgid: number): boolean {
   try {
     process.kill(-pgid, 0);
     return true;
   } catch (error) {
-    if (Reflect.get(Object(error), 'code') === 'ESRCH') return false;
+    const code = Reflect.get(Object(error), 'code');
+    if (code === 'EPERM') return true;
+    if (code === 'ESRCH') return false;
     throw error;
+  }
+}
+
+/** SIGKILL to the group; ESRCH and EPERM say that no member of it runs. */
+function killGroup(pgid: number): void {
+  try {
+    process.kill(-pgid, 'SIGKILL');
+  } catch (error) {
+    const code = Reflect.get(Object(error), 'code');
+    if (code !== 'ESRCH' && code !== 'EPERM') throw error;
   }
 }
 
@@ -86,22 +102,26 @@ function pidsIn(
 const ignoresTerm = (pids: string) =>
   `process.on('SIGTERM', () => {}); require('node:fs').writeFileSync(${JSON.stringify(pids)}, process.pid + '\\n'); setInterval(() => {}, 1000);`;
 
-test('a run given an aborted signal rejects with its reason, and the command runs nothing', async () => {
+test('a run given an aborted signal rejects with its reason, and spawns no process', async () => {
   // Arrange
-  await using folder = await new TemporaryFiles().directory('process-');
-  const marker = join(folder.path, 'ran');
   const reason = new Error('the caller gave up');
-  const command = new Command('/usr/bin/touch', [marker], {
+  const command = new Command('/usr/bin/true', [], {
     clock: globalThis,
     env: {},
   });
+  const spawned: unknown[] = [];
+  const onSpawn = (message: unknown) => spawned.push(message);
+  subscribe('child_process', onSpawn);
+  try {
+    // Act
+    const run = command.run({ signal: AbortSignal.abort(reason) });
 
-  // Act
-  const run = command.run({ signal: AbortSignal.abort(reason) });
-
-  // Assert
-  await assert.rejects(run, (error) => error === reason);
-  await assert.rejects(access(marker), { code: 'ENOENT' });
+    // Assert
+    await assert.rejects(run, (error) => error === reason);
+    assert.deepEqual(spawned, []);
+  } finally {
+    unsubscribe('child_process', onSpawn);
+  }
 });
 
 test('an abort during a run rejects with its reason only when no member of the process group is left, also a child that takes its time to end after SIGTERM', async (t) => {
@@ -127,7 +147,7 @@ test('an abort during a run rejects with its reason only when no member of the p
     // Assert
     assert.equal(groupExists(pgid), false);
   } finally {
-    if (groupExists(pgid)) process.kill(-pgid, 'SIGKILL');
+    killGroup(pgid);
   }
 });
 
