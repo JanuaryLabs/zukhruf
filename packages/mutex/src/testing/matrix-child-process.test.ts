@@ -7,7 +7,7 @@ import { type TestContext, test } from 'node:test';
 
 import { Docker } from '@zukhruf/docker';
 import { TemporaryFiles } from '@zukhruf/fs';
-import { retryUntilReady, waitFor } from '@zukhruf/testing/async';
+import { waitFor } from '@zukhruf/testing/async';
 import { DockerTestbed } from '@zukhruf/testing/docker';
 import { startWorker } from '@zukhruf/testing/process';
 
@@ -150,14 +150,22 @@ async function secondEngine(relay: string): Promise<SecondEngine> {
       },
       {
         internalPort: 2375,
-        healthy: ({ port }) =>
-          retryUntilReady(
-            async () => {
-              const ping = await fetch(`http://127.0.0.1:${port}/_ping`);
-              if (!ping.ok) throw new Error(`The ping answered ${ping.status}`);
-            },
-            { maxRetryTime: 60_000 },
-          ),
+        // dockerd logs `API listen on <address>` right before it serves the
+        // listener, after the daemon and its routes are ready (moby
+        // v28.5.2 cmd/dockerd/daemon.go).
+        healthy: async ({ container, port }, exited) => {
+          const decoder = new TextDecoder();
+          let log = '';
+          for await (const { data } of container.followLogs({
+            signal: exited,
+          })) {
+            log += decoder.decode(data, { stream: true });
+            if (/API listen on \S*:2375/.test(log)) break;
+          }
+          assert.match(log, /API listen on \S*:2375/);
+          const ping = await fetch(`http://127.0.0.1:${port}/_ping`);
+          if (!ping.ok) throw new Error(`The ping answered ${ping.status}`);
+        },
       },
     ),
   );
@@ -249,14 +257,8 @@ async function onSecondEngine(
   });
 
   await using child = startWorker(source(fixture.location), 'child');
-  await waitFor(
-    () =>
-      assert.ok(
-        child.has('acquired'),
-        `The matrix child must acquire a key.\n${child.stderr}`,
-      ),
-    { interval: 5, signal: t.signal },
-  );
+  // The matrix child must acquire a key.
+  await child.next('acquired', { signal: t.signal });
 
   const claims = `dev.zukhruf.testing.run=${run}`;
   const reapers = `dev.zukhruf.testing.reaper=${run}`;

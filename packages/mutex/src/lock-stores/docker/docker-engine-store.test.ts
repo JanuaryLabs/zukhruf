@@ -1,17 +1,20 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { subscribe, unsubscribe } from 'node:diagnostics_channel';
 import { once } from 'node:events';
 import { readFile, writeFile } from 'node:fs/promises';
+import { ClientRequest } from 'node:http';
 import { connect } from 'node:net';
 import { join } from 'node:path';
+import type { Readable } from 'node:stream';
 import { test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
 import { untilAborted } from '@zukhruf/async';
-import { Docker } from '@zukhruf/docker';
+import { Docker, type EngineApi } from '@zukhruf/docker';
 import { TemporaryFiles } from '@zukhruf/fs';
 import { waitFor } from '@zukhruf/testing/async';
 import { DockerTestbed } from '@zukhruf/testing/docker';
@@ -202,11 +205,18 @@ async function droppableSshEngine() {
       },
       {
         internalPort: 22,
-        healthy: ({ port }, exited) =>
-          waitFor(async () => assert.match(await banner(port), /^SSH-2\.0-/), {
+        healthy: async ({ container, port }, exited) => {
+          const decoder = new TextDecoder();
+          let log = '';
+          for await (const { data } of container.followLogs({
             signal: exited,
-            interval: 200,
-          }),
+          })) {
+            log += decoder.decode(data, { stream: true });
+            if (log.includes('Server listening on ')) break;
+          }
+          assert.match(log, /Server listening on /);
+          assert.match(await banner(port), /^SSH-2\.0-/);
+        },
       },
     ),
   );
@@ -421,10 +431,16 @@ test('a caller whose claim a waiter removed before the start tries again', async
   await beforeStart.reached;
   const waiter = await hold(new Mutex(fixture.store()), 'report:daily');
 
-  // Act: the start of the slow caller arrives after the removal of its claim.
+  // Act: the start of the slow caller arrives after the removal of its claim,
+  // and the waiter releases once the slow caller's next create met its claim.
   beforeStart.release();
-  await delay(heartbeatInterval);
+  const afterConflict = proxy.holdAfterNameConflict();
+  await untilAborted(
+    Promise.race([afterConflict.reached, slow.catch(() => {})]),
+    t.signal,
+  );
   await waiter.release();
+  afterConflict.release();
   const token = await untilAborted(slow, t.signal);
 
   // Assert: the start that lost to a removal sent the caller back to the create.
@@ -549,11 +565,17 @@ test('a holder that lost its claim during the mint gets no token', async (t) => 
   const next = await hold(new Mutex(fixture.store()), 'report:daily');
   ran.push(`next ${next.token}`);
 
-  // Act: the stale holder creates its rung while the next holder holds.
+  // Act: the stale holder creates its rung while the next holder holds, and
+  // its next create meets the claim of the next holder, or its task runs.
   beforeRung.release();
-  await delay(2 * heartbeatInterval);
+  const afterConflict = proxy.holdAfterNameConflict();
+  await untilAborted(
+    Promise.race([afterConflict.reached, stale.catch(() => {})]),
+    t.signal,
+  );
   const whileNextHolds = [...ran];
   await next.release();
+  afterConflict.release();
   const token = await untilAborted(stale, t.signal);
 
   // Assert
@@ -780,11 +802,20 @@ test("a holder whose list missed a stale minter's new rung still gets a token ab
   await nextRung.reached;
 
   // Act: the stale minter creates the rung above the previous token and removes the rung of the previous holder, and then the next holder creates its rung.
-  staleRung.release();
-  await waitFor(async () => assert.ok(!(await ladder()).includes(previous)), {
-    interval: 5,
+  const previousRung = rung.Name.replace(/\d+$/, String(previous));
+  const removals = await fixture.docker.watch({
+    filters: { type: ['volume'], event: ['destroy'], volume: [previousRung] },
     signal: t.signal,
   });
+  try {
+    staleRung.release();
+    await removals.find(
+      (event: EngineApi.EventMessage) => event.Actor?.ID === previousRung,
+    );
+  } finally {
+    removals.destroy();
+  }
+  assert.ok(!(await ladder()).includes(previous));
   nextRung.release();
   const token = await untilAborted(next, t.signal);
 
@@ -953,24 +984,42 @@ test('a cancelled acquire rejects with the reason of its signal and leaves no cl
   const holder = await hold(new Mutex(fixture.store()), 'report:daily');
   const cancel = new AbortController();
   const reason = new Error('cancelled');
-  const waiting = new Mutex(fixture.store(other)).acquire(
-    'report:daily',
-    async () => 'ran',
-    { signal: cancel.signal },
-  );
-  await delay(300);
+  const waitSent = Promise.withResolvers<void>();
+  const onRequest = (message: unknown) => {
+    if (
+      typeof message === 'object' &&
+      message !== null &&
+      'request' in message &&
+      message.request instanceof ClientRequest &&
+      message.request.method === 'POST' &&
+      /\/containers\/[^/?]+\/wait(?:\?|$)/.test(message.request.path)
+    ) {
+      waitSent.resolve();
+    }
+  };
+  subscribe('http.client.request.created', onRequest);
+  try {
+    const waiting = new Mutex(fixture.store(other)).acquire(
+      'report:daily',
+      async () => 'ran',
+      { signal: cancel.signal },
+    );
+    await untilAborted(waitSent.promise, t.signal);
 
-  // Act
-  cancel.abort(reason);
-  const failure = await untilAborted(waiting, t.signal).then(
-    () => undefined,
-    (error: unknown) => error,
-  );
-  await holder.release();
+    // Act
+    cancel.abort(reason);
+    const failure = await untilAborted(waiting, t.signal).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    await holder.release();
 
-  // Assert
-  assert.equal(failure, reason);
-  assert.equal(await fixture.store().isHeld('report:daily'), false);
+    // Assert
+    assert.equal(failure, reason);
+    assert.equal(await fixture.store().isHeld('report:daily'), false);
+  } finally {
+    unsubscribe('http.client.request.created', onRequest);
+  }
 });
 
 test('two namespaces do not share a key or its tokens', async (t) => {
@@ -1095,28 +1144,21 @@ const killedHolderSource = (statePath: string) => `
 `;
 
 /**
- * Resolves when each of `containers` and `volumes` has its destroy event
- * since `since`, in seconds. `since` replays the events that came before the
- * call, so an object that went first is not missed. The wait ends when
- * `signal` aborts.
+ * Resolves when each of `containers` and `volumes` has its destroy event on
+ * `destroys`, a `watch()` of the destroy events opened before the act, so an
+ * object that went first is not missed.
  */
 async function destroyed(
-  docker: Docker,
-  since: number,
+  destroys: Readable,
   containers: string[],
   volumes: string[],
-  signal: AbortSignal,
 ): Promise<void> {
   const left = new Set([...containers, ...volumes]);
   if (left.size === 0) return;
-  for await (const { Actor } of docker.events({
-    since,
-    filters: { type: ['container', 'volume'], event: ['destroy'] },
-    signal,
-  })) {
-    if (Actor?.ID !== undefined) left.delete(Actor.ID);
-    if (left.size === 0) return;
-  }
+  await destroys.find((event: EngineApi.EventMessage) => {
+    if (event.Actor?.ID !== undefined) left.delete(event.Actor.ID);
+    return left.size === 0;
+  });
 }
 
 test('a rung left by a killed test process is removed by the run’s reaper after the run ends', async (t) => {
@@ -1135,10 +1177,13 @@ test('a rung left by a killed test process is removed by the run’s reaper afte
   const statePath = join(directory.path, 'state.json');
   const file = join(directory.path, 'killed-holder.test.mjs');
   await writeFile(file, killedHolderSource(statePath));
+  const destroys = await docker.watch({
+    filters: { type: ['container', 'volume'], event: ['destroy'] },
+    signal: t.signal,
+  });
   let namespace: string | undefined;
   try {
     // Act: the test process dies while it holds the key, and the run ends.
-    const since = Math.floor(Date.now() / 1000) - 1;
     const run = await promisify(execFile)(
       process.execPath,
       [
@@ -1170,13 +1215,11 @@ test('a rung left by a killed test process is removed by the run’s reaper afte
     // Assert
     const filters = { label: [`${namespaceLabel}=${namespace}`] };
     await destroyed(
-      docker,
-      since,
+      destroys,
       (await docker.containers.list({ all: true, filters })).map(
         ({ Id }) => Id,
       ),
       (await docker.volumes.list({ filters })).map(({ Name }) => Name),
-      t.signal,
     );
     const containers = await docker.containers.list({ all: true, filters });
     const volumes = await docker.volumes.list({ filters });
@@ -1186,6 +1229,7 @@ test('a rung left by a killed test process is removed by the run’s reaper afte
       'The reaper of the run must remove the claims and rungs of a killed test process after the run ends',
     );
   } finally {
+    destroys.destroy();
     if (namespace !== undefined) {
       const filters = { label: [`${namespaceLabel}=${namespace}`] };
       for (const { Id } of await docker.containers.list({
@@ -1223,8 +1267,11 @@ test('a lost claim whose removal the engine refuses is a DockerEngineStoreWarnin
     `HTTP/1.1 500 Internal Server Error\r\nContent-Type: application/json\r\nContent-Length: ${Buffer.byteLength(refusal)}\r\n\r\n${refusal}`,
   );
   const warnings: Error[] = [];
+  const warned = Promise.withResolvers<void>();
   const onWarning = (warning: Error) => {
-    if (warning.name === 'DockerEngineStoreWarning') warnings.push(warning);
+    if (warning.name !== 'DockerEngineStoreWarning') return;
+    warnings.push(warning);
+    warned.resolve();
   };
   process.on('warning', onWarning);
   try {
@@ -1234,9 +1281,8 @@ test('a lost claim whose removal the engine refuses is a DockerEngineStoreWarnin
     )?.remove({ force: true });
 
     // Assert
-    await waitFor(() => assert.equal(warnings.length, 1), {
-      signal: t.signal,
-    });
+    await untilAborted(warned.promise, t.signal);
+    assert.equal(warnings.length, 1);
     const [warning] = warnings;
     assert.ok(warning instanceof DockerEngineStoreWarning);
     assert.deepEqual(

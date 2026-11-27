@@ -4,7 +4,6 @@ import { type TestContext, test } from 'node:test';
 import { build } from 'esbuild';
 
 import { describe } from '@zukhruf/parameterized-test';
-import { waitFor } from '@zukhruf/testing/async';
 import { DockerTestbed } from '@zukhruf/testing/docker';
 
 /**
@@ -96,20 +95,26 @@ const startContainer = (options: ContainerOptions, ...command: string[]) =>
   docker.start({ ...placement(options), Cmd: command });
 
 /** Waits until the holder in `container` prints that it holds the key. */
-function holdingIn(
+async function holdingIn(
   t: TestContext,
   container: Container,
 ): Promise<{ pid: number; token: string }> {
-  return waitFor(
-    async () => {
-      const line = (await container.logs()).stdout
-        .split('\n')
-        .find((candidate) => candidate.includes('"holding"'));
-      assert.ok(line, `The holder in ${container.id} must take the key`);
-      return JSON.parse(line);
-    },
-    { interval: 100, signal: t.signal },
-  );
+  const decoder = new TextDecoder();
+  let stdout = '';
+  let line: string | undefined;
+  for await (const { stream, data } of container.followLogs({
+    signal: t.signal,
+  })) {
+    if (stream !== 'stdout') continue;
+    stdout += decoder.decode(data, { stream: true });
+    line = stdout
+      .split('\n')
+      .slice(0, -1)
+      .find((candidate) => candidate.includes('"holding"'));
+    if (line !== undefined) break;
+  }
+  assert.ok(line, `The holder in ${container.id} must take the key`);
+  return JSON.parse(line);
 }
 
 type Grant = { acquired: false } | { acquired: true; value: string };
