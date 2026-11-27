@@ -47,4 +47,4 @@ A value that a Node process sends to its parent over the IPC channel, or that th
 A started process that its parent talks to over its stdin and stdout, one JSON value on each line, as with `coproc` in bash. `Coprocess` is the JSON-lines view of a started process.
 
 **Stderr tail**:
-The last 16 KiB of the stderr of a started process. The errors of a started process carry it. A run keeps all of its stderr.
+The last 16 384 characters of the stderr of a started process. The errors of a started process carry it. A run keeps all of its stderr.

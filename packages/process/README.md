@@ -1,6 +1,6 @@
 # @zukhruf/process
 
-> **In build (backlog #6077).** `Command#run` is built, and so is the lifecycle of `Command#start`: the ready line, `stop()`, the abort and `ended`. The rest of `start` (`lines()` for each reader, stdin and stdout as `'ignore'` or a socket, the stderr tail), `NodeCommand` and `Coprocess` follow, in that order; until then, this README describes them as decided in the ADRs.
+> **In build (backlog #6077).** `Command#run` and `Command#start` are built. `NodeCommand` and `Coprocess` follow, in that order; until then, this README describes them as decided in the ADRs.
 
 Start a process of this machine and know how it ends. A `Command` says what to run: the file, its arguments, the environment, the folder. `command.run()` runs it to its end and gives its exit code or signal and its output, with no throw at a non-zero exit. `command.start()` gives a started process: it resolves when the process is ready, it stops the process group with SIGTERM and then SIGKILL, and the process ends with its parent, also when the parent is killed. A `Coprocess` talks to a started process in JSON lines, and a `NodeCommand` runs JavaScript source in its own Node.js with messages.
 
