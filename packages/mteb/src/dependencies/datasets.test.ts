@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { test } from 'node:test';
 import { gzipSync } from 'node:zlib';
 
@@ -113,8 +113,9 @@ test('select gives the rows at the indices in their order, and an index out of r
 });
 
 test('a dataset of CSV files throws, because this port reads JSON and parquet files only', async () => {
-  await using folder = await new TemporaryFiles().directory('mteb-csv-');
-  await writeFile(join(folder.path, 'train.csv'), 'a,b\n1,2\n');
+  await using folder = await new TemporaryFiles().directory('mteb-csv-', {
+    files: { 'train.csv': 'a,b\n1,2\n' },
+  });
 
   await assert.rejects(
     loadDataset({ path: folder.path, revision: 'unused' }),
@@ -269,9 +270,9 @@ class SubsetTask extends AbsTask<Dataset> {
 }
 
 test('loadData of a multilingual task loads the config of each subset with all its splits, then runs datasetTransform on them', async () => {
-  await using folder = await new TemporaryFiles().directory('mteb-subsets-');
-  const files: Record<string, string> = {
-    'README.md': `---
+  await using folder = await new TemporaryFiles().directory('mteb-subsets-', {
+    files: {
+      'README.md': `---
 configs:
 - config_name: en
   data_files:
@@ -285,18 +286,15 @@ configs:
     path: de/*.jsonl
 ---
 `,
-    'en/train.jsonl': jsonl([{ sentence1: 'a', score: 1 }]),
-    'en/test.jsonl': jsonl([
-      { sentence1: 'b', score: 2 },
-      { sentence1: 'c', score: 3 },
-    ]),
-    'de/b.jsonl': jsonl([{ sentence1: 'e', score: 5 }]),
-    'de/a.jsonl': jsonl([{ sentence1: 'd', score: 4 }]),
-  };
-  for (const [path, text] of Object.entries(files)) {
-    await mkdir(dirname(join(folder.path, path)), { recursive: true });
-    await writeFile(join(folder.path, path), text);
-  }
+      'en/train.jsonl': jsonl([{ sentence1: 'a', score: 1 }]),
+      'en/test.jsonl': jsonl([
+        { sentence1: 'b', score: 2 },
+        { sentence1: 'c', score: 3 },
+      ]),
+      'de/b.jsonl': jsonl([{ sentence1: 'e', score: 5 }]),
+      'de/a.jsonl': jsonl([{ sentence1: 'd', score: 4 }]),
+    },
+  });
   const task = new SubsetTask(folder.path);
 
   await task.loadData();

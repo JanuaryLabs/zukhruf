@@ -1,14 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import {
-  copyFileSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs';
-import { dirname, join } from 'node:path';
+import { copyFileSync, existsSync, readFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
 import { test } from 'node:test';
 import { promisify } from 'node:util';
 
@@ -412,20 +405,10 @@ test('a main score without a value for each query, such as MRR@10, gives way to 
   );
 });
 
-// Writes the files of a folder dataset: its card and its JSON Lines files.
-function writeDataset(root: string, files: Readonly<Record<string, string>>) {
-  for (const [path, content] of Object.entries(files)) {
-    mkdirSync(dirname(join(root, path)), { recursive: true });
-    writeFileSync(join(root, path), content);
-  }
-}
-
 const lines = (rows: readonly object[]) =>
   rows.map((row) => JSON.stringify(row)).join('\n');
 
 test('a task with two subsets has a split and subset in its switch, its tables and its verdicts, each with the numbers of that subset', async () => {
-  await using folder = await new TemporaryFiles().directory('mteb-report-');
-  const data = join(folder.path, 'data');
   const corpus = (texts: readonly string[]) =>
     lines(
       texts.map((text, index) => ({ _id: `d${index + 1}`, title: '', text })),
@@ -451,33 +434,40 @@ test('a task with two subsets has a split and subset in its switch, its tables a
       `  - config_name: ${subset}-qrels\n    data_files:\n      - split: test\n        path: ${subset}/qrels.jsonl`,
     ])
     .join('\n');
-  writeDataset(data, {
-    'README.md': `---\nconfigs:\n${card}\n---\n`,
-    'first/corpus.jsonl': corpus([
-      'apple pie recipe with cinnamon',
-      'banana bread for breakfast',
-      'car engine repair at home',
-      'electric car battery charging',
-      'football match on sunday',
-      'tennis racket strings',
-    ]),
-    'first/queries.jsonl': queries(['apple recipe', 'car battery', 'tennis']),
-    'first/qrels.jsonl': qrels,
-    'second/corpus.jsonl': corpus([
-      'plum cake with almonds',
-      'porridge for breakfast',
-      'bicycle chain repair',
-      'electric bicycle battery range',
-      'rugby match on saturday',
-      'badminton racket grip',
-    ]),
-    'second/queries.jsonl': queries([
-      'plum cake',
-      'bicycle battery',
-      'badminton racket',
-    ]),
-    'second/qrels.jsonl': qrels,
+  await using folder = await new TemporaryFiles().directory('mteb-report-', {
+    files: {
+      'data/README.md': `---\nconfigs:\n${card}\n---\n`,
+      'data/first/corpus.jsonl': corpus([
+        'apple pie recipe with cinnamon',
+        'banana bread for breakfast',
+        'car engine repair at home',
+        'electric car battery charging',
+        'football match on sunday',
+        'tennis racket strings',
+      ]),
+      'data/first/queries.jsonl': queries([
+        'apple recipe',
+        'car battery',
+        'tennis',
+      ]),
+      'data/first/qrels.jsonl': qrels,
+      'data/second/corpus.jsonl': corpus([
+        'plum cake with almonds',
+        'porridge for breakfast',
+        'bicycle chain repair',
+        'electric bicycle battery range',
+        'rugby match on saturday',
+        'badminton racket grip',
+      ]),
+      'data/second/queries.jsonl': queries([
+        'plum cake',
+        'bicycle battery',
+        'badminton racket',
+      ]),
+      'data/second/qrels.jsonl': qrels,
+    },
   });
+  const data = join(folder.path, 'data');
   class TwoSubsets extends AbsTaskRetrieval {
     constructor() {
       super({
@@ -590,27 +580,28 @@ class InOrder implements SearchProtocol {
 }
 
 test('a query that is a conversation shows by its id only', async () => {
-  await using folder = await new TemporaryFiles().directory('mteb-report-');
-  const data = join(folder.path, 'data');
-  writeDataset(data, {
-    'README.md':
-      '---\nconfigs:\n  - config_name: default\n    data_files:\n      - split: test\n        path: qrels/test.jsonl\n  - config_name: corpus\n    data_files:\n      - split: corpus\n        path: corpus.jsonl\n  - config_name: queries\n    data_files:\n      - split: queries\n        path: queries.jsonl\n---\n',
-    'corpus.jsonl': lines(
-      ['apple pie', 'car battery', 'tennis racket'].map((text, index) => ({
-        _id: `d${index + 1}`,
-        title: '',
-        text,
-      })),
-    ),
-    'queries.jsonl': lines([
-      { _id: 'q1', text: [{ role: 'user', content: 'a pie with apples' }] },
-      { _id: 'q2', text: 'a battery for a car' },
-    ]),
-    'qrels/test.jsonl': lines([
-      { 'query-id': 'q1', 'corpus-id': 'd1', score: 1 },
-      { 'query-id': 'q2', 'corpus-id': 'd2', score: 1 },
-    ]),
+  await using folder = await new TemporaryFiles().directory('mteb-report-', {
+    files: {
+      'data/README.md':
+        '---\nconfigs:\n  - config_name: default\n    data_files:\n      - split: test\n        path: qrels/test.jsonl\n  - config_name: corpus\n    data_files:\n      - split: corpus\n        path: corpus.jsonl\n  - config_name: queries\n    data_files:\n      - split: queries\n        path: queries.jsonl\n---\n',
+      'data/corpus.jsonl': lines(
+        ['apple pie', 'car battery', 'tennis racket'].map((text, index) => ({
+          _id: `d${index + 1}`,
+          title: '',
+          text,
+        })),
+      ),
+      'data/queries.jsonl': lines([
+        { _id: 'q1', text: [{ role: 'user', content: 'a pie with apples' }] },
+        { _id: 'q2', text: 'a battery for a car' },
+      ]),
+      'data/qrels/test.jsonl': lines([
+        { 'query-id': 'q1', 'corpus-id': 'd1', score: 1 },
+        { 'query-id': 'q2', 'corpus-id': 'd2', score: 1 },
+      ]),
+    },
   });
+  const data = join(folder.path, 'data');
   class Conversations extends AbsTaskRetrieval {
     constructor() {
       super({

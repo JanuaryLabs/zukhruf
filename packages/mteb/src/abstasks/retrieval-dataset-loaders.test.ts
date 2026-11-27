@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
-import { mkdir, readdir, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { readdir, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { test } from 'node:test';
 
 import { TemporaryFiles } from '@zukhruf/fs';
@@ -38,16 +38,6 @@ class FolderTask extends AbsTaskRetrieval {
 const jsonl = (rows: readonly object[]) =>
   rows.map((row) => JSON.stringify(row)).join('\n');
 
-async function write(
-  folder: string,
-  files: Readonly<Record<string, string>>,
-): Promise<void> {
-  for (const [path, text] of Object.entries(files)) {
-    await mkdir(dirname(join(folder, path)), { recursive: true });
-    await writeFile(join(folder, path), text);
-  }
-}
-
 // The HuggingFace Hub cannot be reached in CI. This server stands in for it
 // and answers nothing but 404, so a test can count what a load asks for.
 async function hub(): Promise<{
@@ -71,9 +61,9 @@ async function hub(): Promise<{
 test('a dataset in a folder is read from its files at each load, so an edited label counts, and nothing goes into the dataset cache', async () => {
   await using server = await hub();
   await using cache = await new TemporaryFiles().directory('mteb-datasets-');
-  await using folder = await new TemporaryFiles().directory('mteb-folder-');
-  await write(folder.path, {
-    'README.md': `---
+  await using folder = await new TemporaryFiles().directory('mteb-folder-', {
+    files: {
+      'README.md': `---
 configs:
   - config_name: default
     data_files:
@@ -89,14 +79,15 @@ configs:
         path: queries.jsonl
 ---
 `,
-    'corpus.jsonl': jsonl([
-      { _id: 'p1', title: 'Ada', text: 'Led a health system reform.' },
-      { _id: 'p2', title: 'Ben', text: 'Taught teachers.' },
-    ]),
-    'queries.jsonl': jsonl([{ _id: 'q1', text: 'Who reformed health?' }]),
-    'qrels/dev.jsonl': jsonl([
-      { 'query-id': 'q1', 'corpus-id': 'p1', score: 2 },
-    ]),
+      'corpus.jsonl': jsonl([
+        { _id: 'p1', title: 'Ada', text: 'Led a health system reform.' },
+        { _id: 'p2', title: 'Ben', text: 'Taught teachers.' },
+      ]),
+      'queries.jsonl': jsonl([{ _id: 'q1', text: 'Who reformed health?' }]),
+      'qrels/dev.jsonl': jsonl([
+        { 'query-id': 'q1', 'corpus-id': 'p1', score: 2 },
+      ]),
+    },
   });
   const options = {
     path: folder.path,
@@ -104,12 +95,13 @@ configs:
     hub: { endpoint: server.origin, cacheFolder: cache.path },
   };
   await new FolderTask(options).loadData();
-  await write(folder.path, {
-    'qrels/dev.jsonl': jsonl([
+  await writeFile(
+    join(folder.path, 'qrels/dev.jsonl'),
+    jsonl([
       { 'query-id': 'q1', 'corpus-id': 'p1', score: 2 },
       { 'query-id': 'q1', 'corpus-id': 'p2', score: 1 },
     ]),
-  });
+  );
 
   const task = new FolderTask(options);
   await task.loadData();
@@ -132,9 +124,9 @@ configs:
 test('a dataset in a folder loads the files that its card names, at any revision, and asks the Hub nothing', async () => {
   await using server = await hub();
   await using cache = await new TemporaryFiles().directory('mteb-datasets-');
-  await using folder = await new TemporaryFiles().directory('mteb-folder-');
-  await write(folder.path, {
-    'README.md': `---
+  await using folder = await new TemporaryFiles().directory('mteb-folder-', {
+    files: {
+      'README.md': `---
 configs:
   - config_name: default
     data_files:
@@ -152,27 +144,30 @@ configs:
         path: data/asks.jsonl
 ---
 `,
-    'data/people.jsonl': jsonl([
-      { _id: 'p1', title: 'Ada', text: 'Led a health system reform.' },
-      { _id: 7, title: 'Ben', text: 'Taught teachers.' },
-    ]),
-    'data/asks.jsonl': jsonl([
-      { _id: 'q1', text: 'Who reformed health?' },
-      { _id: 'q2', text: 'Who trained teachers?' },
-    ]),
-    'labels/dev.jsonl': jsonl([
-      { 'query-id': 'q1', 'corpus-id': 'p1', score: 2 },
-      { 'query-id': 'q1', 'corpus-id': 7, score: 0 },
-    ]),
-    'labels/test.jsonl': jsonl([
-      { 'query-id': 'q2', 'corpus-id': 7, score: 2 },
-    ]),
-    // Files at the names a loader could guess; the card names none of them.
-    'corpus.jsonl': jsonl([{ _id: 'x', title: 'X', text: 'Not the corpus.' }]),
-    'queries.jsonl': jsonl([{ _id: 'q1', text: 'Not the query.' }]),
-    'qrels/dev.jsonl': jsonl([
-      { 'query-id': 'q1', 'corpus-id': 'x', score: 1 },
-    ]),
+      'data/people.jsonl': jsonl([
+        { _id: 'p1', title: 'Ada', text: 'Led a health system reform.' },
+        { _id: 7, title: 'Ben', text: 'Taught teachers.' },
+      ]),
+      'data/asks.jsonl': jsonl([
+        { _id: 'q1', text: 'Who reformed health?' },
+        { _id: 'q2', text: 'Who trained teachers?' },
+      ]),
+      'labels/dev.jsonl': jsonl([
+        { 'query-id': 'q1', 'corpus-id': 'p1', score: 2 },
+        { 'query-id': 'q1', 'corpus-id': 7, score: 0 },
+      ]),
+      'labels/test.jsonl': jsonl([
+        { 'query-id': 'q2', 'corpus-id': 7, score: 2 },
+      ]),
+      // Files at the names a loader could guess; the card names none of them.
+      'corpus.jsonl': jsonl([
+        { _id: 'x', title: 'X', text: 'Not the corpus.' },
+      ]),
+      'queries.jsonl': jsonl([{ _id: 'q1', text: 'Not the query.' }]),
+      'qrels/dev.jsonl': jsonl([
+        { 'query-id': 'q1', 'corpus-id': 'x', score: 1 },
+      ]),
+    },
   });
   const task = new FolderTask({
     path: folder.path,
