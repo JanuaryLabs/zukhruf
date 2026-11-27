@@ -9,7 +9,7 @@ The answers of evals have different shapes: a structured record, a label, a rank
 | Import path                         | Job                                                                                                                                                |
 | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `@zukhruf/evals`                    | The core: scorers, ratios, gates, scorer sets, scorecards, totals, bootstrap intervals, runs and paired bootstraps.                                |
-| `@zukhruf/evals/promptfoo`          | The adapter that makes a scorer or a scorer set a promptfoo assertion.                                                                             |
+| `@zukhruf/evals/promptfoo`          | The adapter that makes a scorer or a scorer set a promptfoo assertion, and reads the rows of a promptfoo run as the samples of a run log.          |
 | `@zukhruf/evals/structured`         | Compares a structured value with the value that a person labelled.                                                                                 |
 | `@zukhruf/evals/classification`     | Compares the stated labels of an answer with its expected labels, as scikit-learn's `sklearn.metrics` does (ADR 0003).                             |
 | `@zukhruf/evals/ranking` (later)    | Compares a ranked list with judged items, as trec_eval does.                                                                                       |
@@ -687,6 +687,20 @@ export class Bootstrap {
 }
 
 // @zukhruf/evals/promptfoo
+
+/** The rows of one promptfoo run (afterAll context.results, or results.results of an export) as the samples of a RunLog (ADR 0009). */
+export class PromptfooSamples<Answer, C extends Weighted> implements Iterable<
+  Sample<Answer, C>
+> {
+  constructor(
+    results: readonly PromptfooResult[],
+    readers: {
+      readonly test: (result: PromptfooResult) => string; // promptfoo has no stable test id
+      readonly cases: CaseReader<C>; // reads the case from the vars
+      readonly answer: (output: unknown) => Answer;
+    },
+  ); // RangeError: rows of more than one prompt, two rows of one test and epoch that promptfoo cannot order, or an error row that was not retried
+}
 
 /** The part of promptfoo's GradingResult that the assertion gives. */
 export type GradingResult = {

@@ -11,3 +11,8 @@ export {
 } from './promptfoo-assertion.ts';
 export { ScorerAssertion } from './scorer-assertion.ts';
 export { FailedCall, type FailedCallResponse } from './failed-call.ts';
+export {
+  type PromptfooReaders,
+  type PromptfooResult,
+  PromptfooSamples,
+} from './promptfoo-samples.ts';

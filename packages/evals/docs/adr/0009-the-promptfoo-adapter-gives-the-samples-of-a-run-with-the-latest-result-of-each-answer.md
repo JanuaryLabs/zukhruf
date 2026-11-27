@@ -1,6 +1,6 @@
 # The promptfoo adapter gives the samples of a run, with the latest result of each answer
 
-Status: accepted (Ezz, 2026-11-27, #6108, #6110: "Adapter + Iterator"). The names wait for the code.
+Status: accepted and built (2026-11-27, #6110): `src/promptfoo/promptfoo-samples.ts`. Ezz ruled the shape ("Adapter + Iterator"). The build adds three rules that the real rows asked for: the rows are of one prompt (a run of two providers is two logs), a row that is still a promptfoo error after the newest-row rule was never retried and refuses the run (ADR 0005 keeps such failures for `--retry-errors`), and a failed call is the graded row of `FailedCall` with its `failed` reason. The tests run the real promptfoo CLI, a retry with `--retry-errors` included. Two facts of the real rows shaped the code: promptfoo 0.126 gives each execution of a test, each repeat too, its own `testIdx`, in the order of the tests and then of their repeats, so `testIdx` alone is the key and the order of an answer (a key with the epoch added nothing that a mutation could show), and it writes the weight of every named score, 1 when its assertion sets none, so a score with no weight refuses the run instead of reading as weight 1. A row with no tokens and no cost has no usage, a new call too, since promptfoo fills the tokens with 0 when a provider measured none.
 
 ## Context
 
