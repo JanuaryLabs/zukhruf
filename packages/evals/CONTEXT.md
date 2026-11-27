@@ -150,7 +150,7 @@ The answer of a failed call: the text `null`. Each family reads it as no answer:
 A failure that each call would have, such as a 401. It is not a failed call. The provider throws it, so the result stays an error result, and `promptfoo retry` runs it again. HELM calls it a fatal error.
 
 **Error result**:
-A promptfoo result whose `failureReason` is `ResultFailureReason.ERROR`. promptfoo does not grade it, so its case adds nothing to the wholes. The word is promptfoo's.
+A promptfoo result whose `failureReason` is `ResultFailureReason.ERROR`. promptfoo does not grade it, so its case adds nothing to the wholes. The word is promptfoo's. An error result that an `afterEach` hook graded on the answer null is a failed call, and `PromptfooSamples` reads it as one; an error result with no named scores was neither retried nor graded, and refuses the run (ADR 0009).
 
 ### Classification
 

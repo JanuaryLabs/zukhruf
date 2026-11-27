@@ -435,7 +435,7 @@ export async function afterEach({
 }
 ```
 
-A hook cannot write `namedScoreWeights`, so promptfoo gives each score of the hook the weight 1. Use the hook only with scorer assertions whose metrics weigh 1, as in SOB. A `PromptfooAssertion` gives each ratio its whole as the weight, so it needs the first form.
+A hook cannot write `namedScoreWeights`, so promptfoo gives each score of the hook the weight 1. Use the hook only with scorer assertions whose metrics weigh 1, as in SOB. A `PromptfooAssertion` gives each ratio its whole as the weight, so it needs the first form. `PromptfooSamples` reads such a result as a failed sample, the answer null with the error of the result, and weighs each of its scores 1, as promptfoo does; after `--retry-errors`, the row of the retried call takes its place.
 
 A failure of the run, such as a 401, is not a failed call: each call would fail. Throw it. The result then stays an error result, and `promptfoo retry <evalId>` runs it again.
 
@@ -747,7 +747,7 @@ export class PromptfooSamples<Answer, C extends Weighted> implements Iterable<
       readonly cases: CaseReader<C>; // reads the case from the vars
       readonly answer: (output: unknown) => Answer;
     },
-  ); // RangeError: rows of more than one prompt, two rows of one test and epoch that promptfoo cannot order, or an error row that was not retried
+  ); // RangeError: rows of more than one prompt, two rows of one test and epoch that promptfoo cannot order, or an error row that was neither retried nor graded by a hook
 }
 
 /** The part of promptfoo's GradingResult that the assertion gives. */

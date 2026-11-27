@@ -6,6 +6,12 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { promisify } from 'node:util';
 
+import {
+  type AfterAllExtensionHookContext,
+  type EvaluateResult,
+  ResultFailureReason,
+} from 'promptfoo';
+
 import { TemporaryFiles } from '@zukhruf/fs';
 import { Linear, PercentileInterval } from '@zukhruf/statistics';
 
@@ -368,7 +374,7 @@ test('the rows of two prompts are refused, since a run of two providers is two l
   });
 });
 
-test('a run whose error rows were not retried is refused, and the error names each of their tests', async () => {
+test('a run whose error rows were neither retried nor graded is refused, and the error names each of their tests', async () => {
   await using folder = await new TemporaryFiles().directory('samples-');
   const exported = await evaluate(folder.path, {
     callApi: `if (prompt !== 'a') throw new Error('401 Unauthorized');
@@ -385,7 +391,7 @@ test('a run whose error rows were not retried is refused, and the error names ea
     (error: unknown) =>
       error instanceof RangeError &&
       error.message.startsWith(
-        'A run with an error row was not retried; run promptfoo eval with --retry-errors. Errors: b (epoch 0): ',
+        'A run with an error row that no hook graded was not retried; run promptfoo eval with --retry-errors. Errors: b (epoch 0): ',
       ) &&
       error.message.includes(', c (epoch 0): ') &&
       error.message.includes('401 Unauthorized'),
@@ -440,6 +446,215 @@ export async function afterAll(context: { results: unknown[] }) {
   );
 });
 
+// The second form of a failed call (ADR 0005): an afterEach hook grades each
+// error row on the answer null and copies its named scores, as SOB's
+// failed-answer.ts of offers-evals does. A test adds its afterAll.
+const gradingHook = `import { writeFileSync } from 'node:fs';
+import { ResultFailureReason, assertions } from '${import.meta.resolve('promptfoo')}';
+import { FailedCall } from '${new URL('./index.ts', import.meta.url).href}';
+
+export async function afterEach({ test, result }) {
+  if (result.failureReason !== ResultFailureReason.ERROR) return;
+  const graded = await assertions.runAssertions({
+    test,
+    providerResponse: { output: FailedCall.answer },
+    vars: test.vars,
+  });
+  Object.assign(result.namedScores, graded.namedScores);
+}
+`;
+
+test('an error row that an afterEach hook graded is a failed sample with its error and its scores, each of the weight 1 that promptfoo gives it', async () => {
+  await using folder = await new TemporaryFiles().directory('samples-');
+  await writeFile(join(folder.path, 'extension.ts'), gradingHook);
+  const exported = await evaluate(folder.path, {
+    callApi: `if (prompt === 'b') return { error: '503 Service Unavailable' };
+    return { output: '{"a": 1}' };`,
+    tests: [
+      { q: 'a', expected: { a: 1 } },
+      { q: 'b', expected: { a: 1, b: 2 } },
+    ],
+    extensions: ['file://extension.ts:afterEach'],
+  });
+
+  const samples = [...new PromptfooSamples(exported.results.results, readers)];
+
+  assert.deepEqual(
+    samples.map((sample) => ({
+      test: sample.test,
+      outcome: sample.outcome,
+      answer: sample.answer,
+      error: sample.outcome === 'failed' ? sample.error : undefined,
+      ratios: sample.scorecard.ratios,
+    })),
+    [
+      {
+        test: 'a',
+        outcome: 'answered',
+        answer: '{"a": 1}',
+        error: undefined,
+        ratios: new Map([['recall', new Ratio(1, 1)]]),
+      },
+      {
+        test: 'b',
+        outcome: 'failed',
+        answer: null,
+        error: '503 Service Unavailable',
+        // The answer null states none of the two values, and promptfoo
+        // weighs the score of the hook 1, not 2.
+        ratios: new Map([['recall', new Ratio(0, 1)]]),
+      },
+    ],
+  );
+  const [prompt] = exported.results.prompts;
+  assert.ok(prompt);
+  assert.equal(
+    (prompt.metrics.namedScores['recall'] ?? Number.NaN) /
+      (prompt.metrics.namedScoreWeights['recall'] ?? Number.NaN),
+    1 / 2,
+  );
+});
+
+test('after --retry-errors, the graded error row of a failed call gives way to the row of the call that answered', async () => {
+  await using folder = await new TemporaryFiles().directory('samples-');
+  await writeFile(
+    join(folder.path, 'extension.ts'),
+    `${gradingHook}
+export async function afterAll(context) {
+  writeFileSync('after-all.json', JSON.stringify(context.results));
+}
+`,
+  );
+  // The call of b fails while the file "fail" exists, as a 503 would.
+  await writeFile(join(folder.path, 'fail'), '');
+  const run = {
+    callApi: `const { existsSync } = await import('node:fs');
+    if (prompt === 'b' && existsSync('fail')) return { error: '503 Service Unavailable' };
+    return { output: '{"a": 1}' };`,
+    tests: [
+      { q: 'a', expected: { a: 1 } },
+      { q: 'b', expected: { a: 1 } },
+    ],
+    extensions: [
+      'file://extension.ts:afterEach',
+      'file://extension.ts:afterAll',
+    ],
+  };
+  await evaluate(folder.path, run);
+  await rm(join(folder.path, 'fail'));
+  await evaluate(folder.path, { ...run, args: ['--retry-errors'] });
+  const rows: PromptfooResult[] = JSON.parse(
+    await readFile(join(folder.path, 'after-all.json'), 'utf8'),
+  );
+
+  const samples = [...new PromptfooSamples(rows, readers)];
+
+  assert.ok(
+    rows.some(
+      (row) =>
+        row.vars['q'] === 'b' &&
+        row.failureReason === ResultFailureReason.ERROR &&
+        row.namedScores['recall'] === 0,
+    ),
+    'afterAll of the retry got the graded error row of b beside its retried row',
+  );
+  assert.deepEqual(
+    samples.map(({ test, outcome, scorecard }) => [
+      test,
+      outcome,
+      scorecard.ratios,
+    ]),
+    [
+      ['a', 'answered', new Map([['recall', new Ratio(1, 1)]])],
+      ['b', 'answered', new Map([['recall', new Ratio(1, 1)]])],
+    ],
+  );
+});
+
+test('the rows that promptfoo hands an afterAll extension, an answered row and a graded error row, are its samples as they are', async () => {
+  await using folder = await new TemporaryFiles().directory('samples-');
+  // afterAll reads context.results as promptfoo holds them, before JSON
+  // drops a key whose value is undefined.
+  await writeFile(
+    join(folder.path, 'extension.ts'),
+    `${gradingHook}
+import { PromptfooSamples } from '${new URL('./index.ts', import.meta.url).href}';
+
+export async function afterAll(context) {
+  const samples = new PromptfooSamples(context.results, {
+    test: (result) => String(result.vars.q),
+    cases: { from: (vars) => ({ expected: vars.expected, weight: 1 }) },
+    answer: (output) => output,
+  });
+  writeFileSync(
+    'samples.json',
+    JSON.stringify({
+      undefinedErrors: context.results.filter(
+        (result) => Object.hasOwn(result, 'error') && result.error === undefined,
+      ).length,
+      samples: [...samples].map((sample) => ({
+        test: sample.test,
+        outcome: sample.outcome,
+        answer: sample.answer,
+        error: sample.outcome === 'failed' ? sample.error : null,
+        ratios: [...sample.scorecard.ratios].map(([name, { part, whole }]) => [name, part, whole]),
+      })),
+    }),
+  );
+}
+`,
+  );
+  await evaluate(folder.path, {
+    callApi: `if (prompt === 'b') return { error: '503 Service Unavailable' };
+    return { output: '{"a": 1}' };`,
+    tests: [
+      { q: 'a', expected: { a: 1 } },
+      { q: 'b', expected: { a: 1, b: 2 } },
+    ],
+    extensions: [
+      'file://extension.ts:afterEach',
+      'file://extension.ts:afterAll',
+    ],
+  });
+
+  const written: unknown = JSON.parse(
+    await readFile(join(folder.path, 'samples.json'), 'utf8'),
+  );
+
+  assert.deepEqual(written, {
+    // The answered row of a holds the key error with the value undefined.
+    undefinedErrors: 1,
+    samples: [
+      {
+        test: 'a',
+        outcome: 'answered',
+        answer: '{"a": 1}',
+        error: null,
+        ratios: [['recall', 1, 1]],
+      },
+      {
+        test: 'b',
+        outcome: 'failed',
+        answer: null,
+        error: '503 Service Unavailable',
+        ratios: [['recall', 0, 1]],
+      },
+    ],
+  });
+});
+
+test("promptfoo's own rows, of evaluate and of an afterAll extension, are the input of the samples", () => {
+  // typecheck proves this test: promptfoo's types, under
+  // exactOptionalPropertyTypes, must be assignable with no cast.
+  const inputs = [
+    (results: EvaluateResult[]) => new PromptfooSamples(results, readers),
+    (context: AfterAllExtensionHookContext) =>
+      new PromptfooSamples(context.results, readers),
+  ];
+
+  assert.equal(inputs.length, 2);
+});
+
 // The guards below read rows that promptfoo does not write for one run, so
 // each test builds them from a row that promptfoo wrote.
 
@@ -479,6 +694,23 @@ test('two error rows of one test with other scores are refused, since promptfoo 
       message:
         'Test 0 (epoch 0) has 2 rows, and promptfoo does not tell which is the newest',
     },
+  );
+});
+
+test('a graded error row with no error is refused, since promptfoo writes the error of each error row', async () => {
+  await using folder = await new TemporaryFiles().directory('samples-');
+  await writeFile(join(folder.path, 'extension.ts'), gradingHook);
+  const exported = await evaluate(folder.path, {
+    callApi: `return { error: '503 Service Unavailable' };`,
+    tests: [{ q: 'a', expected: { a: 1 } }],
+    extensions: ['file://extension.ts:afterEach'],
+  });
+  const [row] = exported.results.results;
+  assert.ok(row);
+
+  assert.throws(
+    () => new PromptfooSamples([{ ...row, error: null }], readers),
+    { name: 'RangeError', message: 'The error row of test a has no error' },
   );
 });
 

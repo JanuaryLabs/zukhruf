@@ -13,25 +13,28 @@ export type PromptfooResult = {
   readonly promptIdx: number;
   readonly repeatIndex?: number;
   readonly vars: Readonly<Record<string, unknown>>;
-  readonly testCase: { readonly metadata?: Readonly<Record<string, unknown>> };
+  readonly testCase: {
+    readonly metadata?: Readonly<Record<string, unknown>> | undefined;
+  };
   readonly response?: {
     readonly output?: unknown;
     readonly cached?: boolean;
     readonly metadata?: Readonly<Record<string, unknown>>;
   };
-  readonly error?: string | null;
+  readonly error?: string | null | undefined;
   // promptfoo's ResultFailureReason: 0 none, 1 an assertion failed, 2 an error.
   readonly failureReason: number;
   readonly latencyMs: number;
   readonly namedScores: Readonly<Record<string, number>>;
   readonly gradingResult?: {
-    readonly namedScoreWeights?: Readonly<Record<string, number>>;
+    readonly namedScoreWeights?: Readonly<Record<string, number>> | null;
   } | null;
   readonly cost?: number;
   readonly tokenUsage?: {
-    readonly prompt?: number;
-    readonly completion?: number;
-    readonly completionDetails?: { readonly cacheReadInputTokens?: number };
+    readonly prompt?: number | undefined;
+    readonly completion?: number | undefined;
+    readonly completionDetails?:
+      { readonly cacheReadInputTokens?: number | undefined } | undefined;
   };
 };
 
@@ -53,9 +56,10 @@ export type PromptfooReaders<Answer, C extends Weighted> = {
 // one testIdx, which a retry with --retry-errors gives twice, the newest wins:
 // a row that is not an error, else the error rows, which must have the same
 // scores (latestResults of offers-evals' SOB summary, from promptfoo's
-// source). A run that still has an error row was not retried, and is a
-// RangeError. A row whose response holds FailedCall's `failed` reason is a
-// failed call (ADR 0005).
+// source). A failed call is a failed sample (ADR 0005): a row whose response
+// holds FailedCall's `failed` reason, or an error row that an afterEach hook
+// graded on the answer null, with the error of the row. An error row with no
+// named scores was neither retried nor graded, and is a RangeError.
 export class PromptfooSamples<Answer, C extends Weighted> implements Iterable<
   Sample<Answer, C>
 > {
@@ -74,11 +78,13 @@ export class PromptfooSamples<Answer, C extends Weighted> implements Iterable<
       ...Map.groupBy(results, ({ testIdx }) => testIdx).values(),
     ].map((rows) => PromptfooSamples.#latest(rows));
     const errors = latest.filter(
-      ({ failureReason }) => failureReason === errorFailureReason,
+      ({ failureReason, namedScores }) =>
+        failureReason === errorFailureReason &&
+        Object.keys(namedScores).length === 0,
     );
     if (errors.length > 0)
       throw new RangeError(
-        `A run with an error row was not retried; run promptfoo eval with --retry-errors. Errors: ${errors
+        `A run with an error row that no hook graded was not retried; run promptfoo eval with --retry-errors. Errors: ${errors
           .map(
             (result) =>
               `${readers.test(result)} (epoch ${result.repeatIndex ?? 0})${typeof result.error === 'string' ? `: ${result.error}` : ''}`,
@@ -116,8 +122,12 @@ export class PromptfooSamples<Answer, C extends Weighted> implements Iterable<
     readers: PromptfooReaders<Answer, C>,
   ): Sample<Answer, C> {
     const testCase = readers.cases.from(result.vars);
-    // promptfoo writes the weight of each named score, 1 when its assertion
-    // has none (probe of 2026-11-27, promptfoo 0.126.0).
+    const graded = result.failureReason !== errorFailureReason;
+    // promptfoo writes the weight of each named score of a graded row, 1 when
+    // its assertion has none (probe of 2026-11-27, promptfoo 0.126.0). An
+    // afterEach hook cannot write the weights of an error row, and promptfoo
+    // counts each of its scores with the weight 1 (getNamedMetricContribution,
+    // dist/src/evaluator-5tUcjTs8.js:6622-6632 of promptfoo 0.126.0).
     const weights = result.gradingResult?.namedScoreWeights ?? {};
     const facts = {
       test: readers.test(result),
@@ -127,7 +137,7 @@ export class PromptfooSamples<Answer, C extends Weighted> implements Iterable<
       scorecard: {
         ratios: new Map(
           Object.entries(result.namedScores).map(([name, score]) => {
-            const whole = weights[name];
+            const whole = graded ? weights[name] : (weights[name] ?? 1);
             if (whole === undefined)
               throw new RangeError(
                 `Score ${name} of test ${readers.test(result)} has no weight in namedScoreWeights`,
@@ -148,6 +158,13 @@ export class PromptfooSamples<Answer, C extends Weighted> implements Iterable<
         usage: PromptfooSamples.#usage(result),
       },
     };
+    if (!graded) {
+      if (typeof result.error !== 'string')
+        throw new RangeError(
+          `The error row of test ${readers.test(result)} has no error`,
+        );
+      return { ...facts, outcome: 'failed', answer: null, error: result.error };
+    }
     const failed = result.response?.metadata?.['failed'];
     return typeof failed === 'string'
       ? { ...facts, outcome: 'failed', answer: null, error: failed }
