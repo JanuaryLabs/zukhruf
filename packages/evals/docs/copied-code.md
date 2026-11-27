@@ -77,9 +77,3 @@ The item classes of `FieldErrors` (`#itemClass`, `#isUnder`) are not copied: `Fi
 - Places: `src/structured/report/field-diff.test.ts` and `src/structured/report/field-errors.test.ts`.
 - Same: the `answered` sample of a real `Case` with an answer, and the run info.
 - A third place moves it into a test fixture of `./structured`.
-
-**The render test of a building block.**
-
-- Places: `src/structured/report/field-diff.test.ts`, `src/structured/report/field-errors.test.ts` and `src/report/repeat-spread.test.ts`, as copy-check finds them; each block's test file has one (backlog item of this copy).
-- Same: the section on a `Page` through `HtmlRenderer` and `MarkdownRenderer`, its claim in each, and no `NaN`.
-- Differs: the section and its claim.

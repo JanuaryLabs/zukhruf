@@ -4,13 +4,8 @@ import { test } from '@zukhruf/parameterized-test';
 import { Linear, PercentileInterval } from '@zukhruf/statistics';
 
 import { Bootstrap, Ratio, RunLog, type Sample, Table } from '../index.ts';
-import {
-  HtmlRenderer,
-  MarkdownRenderer,
-  Page,
-  type Score,
-  ValidityGap,
-} from './index.ts';
+import { render } from '../testing/render.ts';
+import { type Score, ValidityGap } from './index.ts';
 
 const info = { id: 'eval-1', label: 'model', createdAt: new Date(0) };
 
@@ -260,23 +255,17 @@ test('a ValidityGap section with no valid answer renders as HTML and Markdown wi
   const section = gap([
     sample('a', { compliance: failed, accuracy: new Ratio(1, 2) }),
   ]);
-  const report = new Page('offers', [section]);
-
-  const html = new HtmlRenderer().render(report);
-  const markdown = new MarkdownRenderer().render(report);
+  const { html, markdown, heading } = render(section);
 
   assert.deepEqual(
     {
       html: { claim: html.includes(section.claim), nan: html.includes('NaN') },
-      markdown: {
-        claim: markdown.includes(`## ${section.claim}`),
-        nan: markdown.includes('NaN'),
-      },
+      markdown: { heading, nan: markdown.includes('NaN') },
       row: texts(section).rows[1],
     },
     {
       html: { claim: true, nan: false },
-      markdown: { claim: true, nan: false },
+      markdown: { heading: section.claim, nan: false },
       row: ['accuracy', '0.500 [0.500, 0.500]', '—', '0 of 0'],
     },
   );

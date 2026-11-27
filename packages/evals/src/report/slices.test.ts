@@ -5,14 +5,8 @@ import { defaultRng } from '@zukhruf/random';
 import { Linear, PercentileInterval } from '@zukhruf/statistics';
 
 import { Bootstrap, Ratio, RunLog, type Sample, Table } from '../index.ts';
-import {
-  HtmlRenderer,
-  MarkdownRenderer,
-  Page,
-  type Score,
-  type Slice,
-  Slices,
-} from './index.ts';
+import { render } from '../testing/render.ts';
+import { type Score, type Slice, Slices } from './index.ts';
 
 const info = { id: 'eval-1', label: 'model', createdAt: new Date(0) };
 
@@ -400,29 +394,20 @@ test('a Slices section with a key where no sample gives the score renders as HTM
       bootstrap: firstTest(),
     },
   );
-  const report = new Page('offers', [slices]);
+  const { html, markdown, heading } = render(slices);
 
-  const html = new HtmlRenderer().render(report);
-  const markdown = new MarkdownRenderer().render(report);
-
-  // remark escapes the bracket that could start a link.
   assert.deepEqual(
     {
       claim: slices.claim,
       html: { claim: html.includes(slices.claim), nan: html.includes('NaN') },
-      markdown: {
-        claim: markdown.includes(
-          '## recall has a value only on page = offers: 0.900 \\[0.900, 0.900] over 1 test',
-        ),
-        nan: markdown.includes('NaN'),
-      },
+      markdown: { heading, nan: markdown.includes('NaN') },
       empty: tables(slices)[0]?.rows[0],
     },
     {
       claim:
         'recall has a value only on page = offers: 0.900 [0.900, 0.900] over 1 test',
       html: { claim: true, nan: false },
-      markdown: { claim: true, nan: false },
+      markdown: { heading: slices.claim, nan: false },
       empty: ['empty', '1', '—'],
     },
   );

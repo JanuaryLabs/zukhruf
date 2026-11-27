@@ -12,14 +12,8 @@ import {
   type Sample,
   Table,
 } from '../index.ts';
-import {
-  HtmlRenderer,
-  MarkdownRenderer,
-  Page,
-  type Score,
-  type Slice,
-  Summary,
-} from './index.ts';
+import { render } from '../testing/render.ts';
+import { type Score, type Slice, Summary } from './index.ts';
 
 const info = { id: 'eval-1', label: 'model', createdAt: new Date(0) };
 
@@ -582,22 +576,16 @@ test('a summary with an untested slice renders as HTML and Markdown with its cla
     slices: pages,
     bootstrap: scripted(2, [0, 0, 1, 1]),
   });
-  const page = new Page('offers', [summary]);
-
-  const html = new HtmlRenderer().render(page);
-  const markdown = new MarkdownRenderer().render(page);
+  const { html, markdown, heading } = render(summary);
 
   assert.deepEqual(
     {
       html: { claim: html.includes(summary.claim), nan: html.includes('NaN') },
-      markdown: {
-        claim: markdown.includes(summary.claim),
-        nan: markdown.includes('NaN'),
-      },
+      markdown: { heading, nan: markdown.includes('NaN') },
     },
     {
       html: { claim: true, nan: false },
-      markdown: { claim: true, nan: false },
+      markdown: { heading: summary.claim, nan: false },
     },
   );
 });

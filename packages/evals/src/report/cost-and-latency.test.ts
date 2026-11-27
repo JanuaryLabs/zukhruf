@@ -3,12 +3,8 @@ import assert from 'node:assert/strict';
 import { test } from '@zukhruf/parameterized-test';
 
 import { RunLog, type Sample, Table, type Usage } from '../index.ts';
-import {
-  CostAndLatency,
-  HtmlRenderer,
-  MarkdownRenderer,
-  Page,
-} from './index.ts';
+import { render } from '../testing/render.ts';
+import { CostAndLatency } from './index.ts';
 
 const info = { id: 'eval-1', label: 'model', createdAt: new Date(0) };
 
@@ -304,10 +300,7 @@ void test.each(
   ({ name, samples }) =>
     test(`a CostAndLatency section ${name} renders as HTML and Markdown with its claim and with no NaN`, () => {
       const built = section(samples);
-      const report = new Page('offers', [built]);
-
-      const html = new HtmlRenderer().render(report);
-      const markdown = new MarkdownRenderer().render(report);
+      const { html, markdown, heading } = render(built);
 
       assert.deepEqual(
         {
@@ -315,14 +308,11 @@ void test.each(
             claim: html.includes(built.claim),
             nan: html.includes('NaN'),
           },
-          markdown: {
-            claim: markdown.includes(`## ${built.claim}`),
-            nan: markdown.includes('NaN'),
-          },
+          markdown: { heading, nan: markdown.includes('NaN') },
         },
         {
           html: { claim: true, nan: false },
-          markdown: { claim: true, nan: false },
+          markdown: { heading: built.claim, nan: false },
         },
       );
     }),

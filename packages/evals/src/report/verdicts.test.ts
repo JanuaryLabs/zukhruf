@@ -12,13 +12,8 @@ import {
   type Sample,
   Table,
 } from '../index.ts';
-import {
-  HtmlRenderer,
-  MarkdownRenderer,
-  Page,
-  type Score,
-  Verdicts,
-} from './index.ts';
+import { render } from '../testing/render.ts';
+import { type Score, Verdicts } from './index.ts';
 
 // One answered sample of a test, with a ratio for each name.
 const sample = (
@@ -389,25 +384,20 @@ test('verdicts render as HTML and Markdown with their claim and with no NaN', ()
       bootstrap: scripted(0, 50),
     },
   );
-  const page = new Page('Haiku and DeepSeek', [section]);
-
-  const html = new HtmlRenderer().render(page);
-  const markdown = new MarkdownRenderer().render(page);
+  const { html, markdown, heading } = render(section);
 
   assert.deepEqual(
     {
       html: { claim: html.includes(section.claim), nan: html.includes('NaN') },
-      markdown: {
-        // remark escapes the bracket that would start a link.
-        claim: markdown.includes(
-          '## values_f1 is better beyond chance: +0.500 \\[+0.500, +0.500]; of the other 1 score, after Holm, 0 better and 0 worse',
-        ),
-        nan: markdown.includes('NaN'),
-      },
+      markdown: { heading, nan: markdown.includes('NaN') },
     },
     {
       html: { claim: true, nan: false },
-      markdown: { claim: true, nan: false },
+      markdown: {
+        heading:
+          'values_f1 is better beyond chance: +0.500 [+0.500, +0.500]; of the other 1 score, after Holm, 0 better and 0 worse',
+        nan: false,
+      },
     },
   );
 });

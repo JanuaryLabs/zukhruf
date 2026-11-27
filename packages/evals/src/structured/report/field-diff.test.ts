@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { test } from '@zukhruf/parameterized-test';
 
 import { Note, RunLog, RunPair, type Sample, ValuePairs } from '../../index.ts';
-import { HtmlRenderer, MarkdownRenderer, Page } from '../../report/index.ts';
+import { render } from '../../testing/render.ts';
 import {
   ByBestMatch,
   Case,
@@ -325,24 +325,18 @@ test('a FieldDiff section renders as HTML and Markdown with its claim and with n
       { name: 'Acme Inc', offers: [] },
     ),
   ]);
-  const report = new Page('offers', [section]);
-
-  const html = new HtmlRenderer().render(report);
-  const markdown = new MarkdownRenderer().render(report);
+  const { html, markdown, heading } = render(section);
 
   assert.deepEqual(
     {
       claim: section.claim,
       html: { claim: html.includes(section.claim), nan: html.includes('NaN') },
-      markdown: {
-        claim: markdown.includes(`## ${section.claim}`),
-        nan: markdown.includes('NaN'),
-      },
+      markdown: { heading, nan: markdown.includes('NaN') },
     },
     {
       claim: '1 of 1 answer has a field wrong; a has the most, 2 of 2 leaves',
       html: { claim: true, nan: false },
-      markdown: { claim: true, nan: false },
+      markdown: { heading: section.claim, nan: false },
     },
   );
 });
@@ -617,25 +611,19 @@ test('a FieldDiff section of a run pair renders as HTML and Markdown with its cl
       ),
     ],
   );
-  const report = new Page('offers', [section]);
-
-  const html = new HtmlRenderer().render(report);
-  const markdown = new MarkdownRenderer().render(report);
+  const { html, markdown, heading } = render(section);
 
   assert.deepEqual(
     {
       claim: section.claim,
       html: { claim: html.includes(section.claim), nan: html.includes('NaN') },
-      markdown: {
-        claim: markdown.includes(`## ${section.claim}`),
-        nan: markdown.includes('NaN'),
-      },
+      markdown: { heading, nan: markdown.includes('NaN') },
     },
     {
       claim:
         '1 of 1 answer changed between the runs, 1 with more wrong fields and 0 with fewer; a gained the most, 2 more wrong fields',
       html: { claim: true, nan: false },
-      markdown: { claim: true, nan: false },
+      markdown: { heading: section.claim, nan: false },
     },
   );
 });

@@ -3,13 +3,8 @@ import assert from 'node:assert/strict';
 import { test } from '@zukhruf/parameterized-test';
 
 import { Note, Ratio, RunLog, type Sample, Table } from '../index.ts';
-import {
-  HtmlRenderer,
-  MarkdownRenderer,
-  Page,
-  RepeatSpread,
-  type Score,
-} from './index.ts';
+import { render } from '../testing/render.ts';
+import { RepeatSpread, type Score } from './index.ts';
 
 const info = { id: 'eval-1', label: 'model', createdAt: new Date(0) };
 
@@ -363,25 +358,19 @@ test('a RepeatSpread section with an epoch with no value renders as HTML and Mar
     ]),
     { scores: f1, widest: 20 },
   );
-  const report = new Page('offers', [section]);
-
-  const html = new HtmlRenderer().render(report);
-  const markdown = new MarkdownRenderer().render(report);
+  const { html, markdown, heading } = render(section);
 
   assert.deepEqual(
     {
       claim: section.claim,
       html: { claim: html.includes(section.claim), nan: html.includes('NaN') },
-      markdown: {
-        claim: markdown.includes(`## ${section.claim}`),
-        nan: markdown.includes('NaN'),
-      },
+      markdown: { heading, nan: markdown.includes('NaN') },
     },
     {
       claim:
         '1 of 1 test gives another f1 in another epoch; a spreads widest, from 0.000 to 1.000',
       html: { claim: true, nan: false },
-      markdown: { claim: true, nan: false },
+      markdown: { heading: section.claim, nan: false },
     },
   );
 });

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { test } from '@zukhruf/parameterized-test';
 
 import { RunLog, type Sample, Table } from '../../index.ts';
-import { HtmlRenderer, MarkdownRenderer, Page } from '../../report/index.ts';
+import { render } from '../../testing/render.ts';
 import { Case, FieldErrors, JsonValue, TreeWalk } from '../index.ts';
 
 const info = { id: 'eval-1', label: 'model', createdAt: new Date(0) };
@@ -274,24 +274,18 @@ test('a FieldErrors section renders as HTML and Markdown with its claim and with
       { name: 'Acme Inc', offers: [] },
     ),
   ]);
-  const report = new Page('offers', [section]);
-
-  const html = new HtmlRenderer().render(report);
-  const markdown = new MarkdownRenderer().render(report);
+  const { html, markdown, heading } = render(section);
 
   assert.deepEqual(
     {
       claim: section.claim,
       html: { claim: html.includes(section.claim), nan: html.includes('NaN') },
-      markdown: {
-        claim: markdown.includes(`## ${section.claim}`),
-        nan: markdown.includes('NaN'),
-      },
+      markdown: { heading, nan: markdown.includes('NaN') },
     },
     {
       claim: '$.name is wrong most often: 1 of 1 (1 partial)',
       html: { claim: true, nan: false },
-      markdown: { claim: true, nan: false },
+      markdown: { heading: section.claim, nan: false },
     },
   );
 });

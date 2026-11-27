@@ -11,13 +11,8 @@ import {
   Scatter,
   Table,
 } from '../index.ts';
-import {
-  HtmlRenderer,
-  MarkdownRenderer,
-  Page,
-  type Score,
-  TestsMoved,
-} from './index.ts';
+import { render } from '../testing/render.ts';
+import { type Score, TestsMoved } from './index.ts';
 
 // The epochs of each test, in epoch order, each with a ratio for each name.
 type Epochs = Record<string, readonly Record<string, Ratio>[]>;
@@ -375,24 +370,20 @@ test('tests moved render as HTML and Markdown with their claim and with no NaN',
     ),
     { scores: [higher('recall')], widest: 10 },
   );
-  const page = new Page('Haiku and DeepSeek', [section]);
-
-  const html = new HtmlRenderer().render(page);
-  const markdown = new MarkdownRenderer().render(page);
+  const { html, markdown, heading } = render(section);
 
   assert.deepEqual(
     {
       html: { claim: html.includes(section.claim), nan: html.includes('NaN') },
-      markdown: {
-        claim: markdown.includes(
-          '## 1 of 2 tests moved on recall, 1 better and 0 worse; b moved most, from 0.250 to 0.375',
-        ),
-        nan: markdown.includes('NaN'),
-      },
+      markdown: { heading, nan: markdown.includes('NaN') },
     },
     {
       html: { claim: true, nan: false },
-      markdown: { claim: true, nan: false },
+      markdown: {
+        heading:
+          '1 of 2 tests moved on recall, 1 better and 0 worse; b moved most, from 0.250 to 0.375',
+        nan: false,
+      },
     },
   );
 });

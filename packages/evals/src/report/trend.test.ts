@@ -12,13 +12,8 @@ import {
   type Sample,
   Table,
 } from '../index.ts';
-import {
-  HtmlRenderer,
-  MarkdownRenderer,
-  Page,
-  type Score,
-  Trend,
-} from './index.ts';
+import { render } from '../testing/render.ts';
+import { type Score, Trend } from './index.ts';
 import { measure } from './part.ts';
 
 // One answered sample of a test, with a ratio for each name.
@@ -357,25 +352,20 @@ test('a Trend section with a gap renders as HTML and Markdown with its claim and
     ],
     { scores: [higher('f1')], bootstrap: first() },
   );
-  const page = new Page('offers over the climb', [section]);
-
-  const html = new HtmlRenderer().render(page);
-  const markdown = new MarkdownRenderer().render(page);
+  const { html, markdown, heading } = render(section);
 
   assert.deepEqual(
     {
       html: { claim: html.includes(section.claim), nan: html.includes('NaN') },
-      markdown: {
-        // remark escapes the bracket that would start a link.
-        claim: markdown.includes(
-          '## f1 went from 0.250 \\[0.250, 0.250] on eval-1 to 0.750 \\[0.750, 0.750] on eval-3 over 3 runs',
-        ),
-        nan: markdown.includes('NaN'),
-      },
+      markdown: { heading, nan: markdown.includes('NaN') },
     },
     {
       html: { claim: true, nan: false },
-      markdown: { claim: true, nan: false },
+      markdown: {
+        heading:
+          'f1 went from 0.250 [0.250, 0.250] on eval-1 to 0.750 [0.750, 0.750] on eval-3 over 3 runs',
+        nan: false,
+      },
     },
   );
 });
