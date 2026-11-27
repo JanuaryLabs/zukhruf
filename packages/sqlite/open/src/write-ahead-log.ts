@@ -9,7 +9,7 @@ const sizeLimit = 64 * 1024 * 1024;
 export type PageSize = 512 | 1024 | 2048 | 4096 | 8192 | 16384 | 32768 | 65536;
 
 /**
- * When SQLite syncs the -wal file to the disk: `'normal'` before each
+ * When SQLite syncs the -wal file to the disk: `'normal'` before each WAL
  * checkpoint, `'full'` at each commit (ADR 0007).
  */
 export type Synchronous = 'normal' | 'full';

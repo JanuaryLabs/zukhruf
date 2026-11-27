@@ -815,7 +815,7 @@ const synchronousJournals = [
 ] as const;
 
 void test.each(synchronousJournals, ([name, journal]) =>
-  test(`${name} syncs at checkpoints by default, so a commit does not wait for the disk`, async () => {
+  test(`${name} syncs at WAL checkpoints by default, so a commit does not wait for the disk`, async () => {
     await using dir = await scratchDirectory();
 
     using owner = open(join(dir.path, 'notes.sqlite'), { journal: journal() });
