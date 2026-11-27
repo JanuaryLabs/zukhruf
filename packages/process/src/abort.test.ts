@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { execFileSync, spawn } from 'node:child_process';
+import { ChildProcess, execFileSync, spawn } from 'node:child_process';
 import { subscribe, unsubscribe } from 'node:diagnostics_channel';
 import { once } from 'node:events';
 import { readFile } from 'node:fs/promises';
@@ -46,6 +46,72 @@ test('a run given an aborted signal rejects with its reason, and spawns no proce
     assert.deepEqual(spawned, []);
   } finally {
     unsubscribe('child_process', onSpawn);
+  }
+});
+
+test('a run whose signal aborts while the run looks up its file rejects with its reason, and spawns no process', async () => {
+  // Arrange
+  const reason = new Error('the caller gave up');
+  const controller = new AbortController();
+  const command = new Command('/bin/sleep', ['30'], {
+    clock: globalThis,
+    env: {},
+  });
+  const spawned: unknown[] = [];
+  const onSpawn = (message: unknown) => spawned.push(message);
+  subscribe('child_process', onSpawn);
+  try {
+    // Act: the lookup of the file awaits, so the abort lands in it.
+    const run = command.run({ signal: controller.signal });
+    controller.abort(reason);
+
+    // Assert
+    await assert.rejects(run, (error) => error === reason);
+    assert.deepEqual(spawned, []);
+  } finally {
+    unsubscribe('child_process', onSpawn);
+  }
+});
+
+test('a run whose signal aborts while the run spawns its process rejects with its reason, and the process is gone', async () => {
+  // Arrange
+  const reason = new Error('the caller gave up');
+  const controller = new AbortController();
+  const spawned: ChildProcess[] = [];
+  const onSpawn = (message: unknown) => {
+    if (
+      typeof message === 'object' &&
+      message !== null &&
+      'process' in message &&
+      message.process instanceof ChildProcess
+    ) {
+      spawned.push(message.process);
+      // Act: the abort comes in the spawn, after the run found its file.
+      controller.abort(reason);
+    }
+  };
+  subscribe('child_process', onSpawn);
+  // The channel speaks before the pid exists, so the pids are read at the end.
+  const groups = () =>
+    spawned
+      .map((child) => child.pid)
+      .filter((pid): pid is number => pid !== undefined);
+  try {
+    const run = new Command(
+      process.execPath,
+      ['-e', 'setInterval(() => {}, 1000);'],
+      {
+        clock: globalThis,
+        env: {},
+      },
+    ).run({ signal: controller.signal });
+
+    // Assert
+    await assert.rejects(run, (error) => error === reason);
+    assert.deepEqual(groups().map(groupExists), [false]);
+  } finally {
+    unsubscribe('child_process', onSpawn);
+    for (const pgid of groups()) killGroup(pgid);
   }
 });
 

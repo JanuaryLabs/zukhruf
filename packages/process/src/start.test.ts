@@ -178,8 +178,11 @@ test('an abort that comes while the start is under way rejects it with its reaso
       message !== null &&
       'process' in message &&
       message.process instanceof ChildProcess
-    )
+    ) {
       spawned.push(message.process);
+      // Act: the abort comes in the spawn, after the start found its file.
+      controller.abort(reason);
+    }
   };
   subscribe('child_process', onSpawn);
   // The channel speaks before the pid exists, so the pids are read at the end.
@@ -188,11 +191,9 @@ test('an abort that comes while the start is under way rejects it with its reaso
       .map((child) => child.pid)
       .filter((pid): pid is number => pid !== undefined);
   try {
-    // Act
     const started = node('setInterval(() => {}, 1000);').start({
       signal: controller.signal,
     });
-    controller.abort(reason);
 
     // Assert
     await assert.rejects(started, (error) => error === reason);
@@ -200,6 +201,28 @@ test('an abort that comes while the start is under way rejects it with its reaso
   } finally {
     unsubscribe('child_process', onSpawn);
     for (const pgid of groups()) killGroup(pgid);
+  }
+});
+
+test('a start whose signal aborts while the start looks up its file rejects with its reason, and spawns no process', async () => {
+  // Arrange
+  const reason = new Error('the caller gave up');
+  const controller = new AbortController();
+  const spawned: unknown[] = [];
+  const onSpawn = (message: unknown) => spawned.push(message);
+  subscribe('child_process', onSpawn);
+  try {
+    // Act: the lookup of the file awaits, so the abort lands in it.
+    const started = node('setInterval(() => {}, 1000);').start({
+      signal: controller.signal,
+    });
+    controller.abort(reason);
+
+    // Assert
+    await assert.rejects(started, (error) => error === reason);
+    assert.deepEqual(spawned, []);
+  } finally {
+    unsubscribe('child_process', onSpawn);
   }
 });
 

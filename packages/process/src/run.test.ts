@@ -180,6 +180,19 @@ test('a run that a SIGINT ends resolves with the signal and no exit code', async
   );
 });
 
+test('a run keeps the whole output when it is more than 100 MB, as Go cmd.Output does', async () => {
+  // Act
+  const run = await node(
+    "process.stdout.write('a'.repeat(100_000_001));",
+  ).run();
+
+  // Assert
+  assert.deepEqual(
+    { exitCode: run.exitCode, signal: run.signal, length: run.stdout.length },
+    { exitCode: 0, signal: undefined, length: 100_000_001 },
+  );
+});
+
 test('output holds stdout and stderr in the order that the process wrote them, and the text keeps its last newline', async () => {
   // Act
   const run = await node(

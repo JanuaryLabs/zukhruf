@@ -45,6 +45,7 @@ const run = await status.run();
 
 - The end is `{ exitCode }` or `{ signal }`. A non-zero exit code is a value, not a rejection.
 - The text is not trimmed. `stdout` keeps its last newline.
+- The output has no size limit: a run keeps all of it, as Go's `cmd.Output()` does.
 - `input` goes to stdin, and then stdin ends. Without `input`, stdin ends at once.
 - `env` is required, and it is the whole environment of the process. Write `env: process.env` to pass your own ([ADR 0003](./docs/adr/0003-the-environment-is-a-required-input-and-the-process-gets-only-what-the-caller-names.md)).
 - An abort of `signal` stops the process and rejects with the reason of the signal.

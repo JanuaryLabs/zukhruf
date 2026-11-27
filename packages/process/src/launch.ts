@@ -1,4 +1,5 @@
 import type { ChildProcess } from 'node:child_process';
+import { addAbortListener } from 'node:events';
 import type { Socket } from 'node:net';
 import { Readable, Writable } from 'node:stream';
 
@@ -56,12 +57,13 @@ export async function runUnderKeeper(
   signal?.throwIfAborted();
   if (process.platform === 'win32')
     return runOnWindows(target, { input, signal, ipc });
-  const { subprocess } = await spawnUnderKeeper(target, {
+  const { subprocess } = await spawnUnderKeeper(target, signal, {
     stdio: [input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe', 'pipe'],
     ...(input === undefined ? {} : { input }),
     ipc,
     all: true,
     stripFinalNewline: false,
+    maxBuffer: Infinity,
   });
   const stopped =
     signal === undefined || subprocess.pid === undefined
@@ -90,7 +92,7 @@ export async function startUnderKeeper(
   { stdin, stdout, stderr, signal, ready, channel }: Launch,
 ): Promise<StartedProcess> {
   signal?.throwIfAborted();
-  const { subprocess } = await spawnUnderKeeper(target, {
+  const { subprocess } = await spawnUnderKeeper(target, signal, {
     stdio: [stdin, stdout, stderr, 'pipe'],
     ipc: channel !== undefined,
     buffer: false,
@@ -127,7 +129,7 @@ export async function startUnderKeeper(
     void started.ended.then(() => signal.removeEventListener('abort', onAbort));
   }
   if (ready === undefined) {
-    // The search for the file awaited, so the signal can have aborted before its listener.
+    // The spawn awaited, so the signal can have aborted before its listener.
     if (signal?.aborted === true) {
       await started.stop();
       throw signal.reason;
@@ -148,12 +150,14 @@ export async function startUnderKeeper(
  * environment of the target and nothing else (ADR 0003), detached, so the
  * keeper, and the program that it becomes, leads its own process group. The
  * file is found first, or the start rejects with a `StartError` that names
- * the target. `options` give the stdio up to fd 3, the lifeline, and how
- * execa keeps the output. The parent closes its end of the lifeline when the
- * program exits, so the watcher of the keeper sees its end and exits.
+ * the target. An abort of `signal` during that search starts nothing.
+ * `options` give the stdio up to fd 3, the lifeline, and how execa keeps the
+ * output. The parent closes its end of the lifeline when the program exits,
+ * so the watcher of the keeper sees its end and exits.
  */
 async function spawnUnderKeeper<const O extends Options>(
   target: Target,
+  signal: AbortSignal | undefined,
   options: O,
 ) {
   const env = definedEnvironment(target.env);
@@ -164,6 +168,7 @@ async function spawnUnderKeeper<const O extends Options>(
   } catch (cause) {
     throw new StartError(`${target.name} could not start`, { cause });
   }
+  signal?.throwIfAborted();
   // In an object: a ResultPromise is a thenable, which an async function would await.
   const subprocess = execa(
     '/bin/sh',
@@ -227,6 +232,7 @@ async function runOnWindows(
     reject: false,
     all: true,
     stripFinalNewline: false,
+    maxBuffer: Infinity,
   });
   if (signal?.aborted) throw signal.reason;
   const code = errorCode(result.cause);
@@ -245,16 +251,16 @@ function stopOnAbort(
   signal: AbortSignal,
 ): { promise: Promise<void> } & Disposable {
   const stop = Promise.withResolvers<void>();
-  const listener = () => {
+  // Also calls the listener when the signal aborted during the spawn.
+  const listening = addAbortListener(signal, () => {
     stopGroup(pgid, programEnded, {
       grace: target.grace,
       clock: target.clock,
     }).then(stop.resolve, stop.reject);
-  };
-  signal.addEventListener('abort', listener, { once: true });
+  });
   return {
     promise: stop.promise,
-    [Symbol.dispose]: () => signal.removeEventListener('abort', listener),
+    [Symbol.dispose]: () => listening[Symbol.dispose](),
   };
 }
 
