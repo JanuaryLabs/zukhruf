@@ -43,6 +43,7 @@
   },
   "devDependencies": {
     "@zukhruf/docker": "^0.8.70",
-    "@zukhruf/parameterized-test": "^0.8.70"
+    "@zukhruf/parameterized-test": "^0.8.70",
+    "esbuild": "0.28.2"
   }
 }

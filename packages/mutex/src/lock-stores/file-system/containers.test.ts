@@ -1,13 +1,11 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import { type TestContext, test } from 'node:test';
-import { fileURLToPath } from 'node:url';
+
+import { build } from 'esbuild';
 
 import { describe } from '@zukhruf/parameterized-test';
 import { waitFor } from '@zukhruf/testing/async';
 import { DockerTestbed } from '@zukhruf/testing/docker';
-
-import { isRecord } from '../../shared/is-record.ts';
 
 /**
  * Containers are platform setup that no operation of the stores exposes. Two
@@ -19,69 +17,52 @@ const docker = new DockerTestbed({ environment: process.env });
 type Container = Awaited<ReturnType<DockerTestbed['start']>>;
 type OwnedVolume = Awaited<ReturnType<DockerTestbed['volume']>>;
 
-const packageRoot = fileURLToPath(new URL('../../../', import.meta.url));
-const mutexInContainer = 'file:///pkg/src/index.ts';
-const fileStoresInContainer =
-  'file:///pkg/src/lock-stores/file-system/index.ts';
-
-const manifestOf = (name: string) =>
-  new URL(import.meta.resolve(`${name}/package.json`));
-
-/** The names in the `dependencies` of the package.json at `url`. */
-function runtimeDependencies(url: URL): string[] {
-  const manifest: unknown = JSON.parse(readFileSync(url, 'utf8'));
-  assert.ok(isRecord(manifest), `${url.href} must hold an object`);
-  return isRecord(manifest.dependencies)
-    ? Object.keys(manifest.dependencies)
-    : [];
-}
-
 /**
- * Each runtime dependency of the package and of its dependencies, where
- * Node.js finds it from /pkg, as an install puts it.
+ * `source` with each module that it imports inlined: one script that a
+ * container runs with Node.js alone. The image installs nothing, and a remote
+ * engine has none of this machine's files, so the script carries its code.
  */
-const pending = runtimeDependencies(
-  new URL('../../../package.json', import.meta.url),
-);
-assert.ok(
-  pending.length > 0,
-  'The package.json of the package must list its dependencies',
-);
-const installed = new Set<string>();
-for (let name = pending.pop(); name !== undefined; name = pending.pop()) {
-  if (installed.has(name)) continue;
-  installed.add(name);
-  pending.push(...runtimeDependencies(manifestOf(name)));
+async function bundled(source: string): Promise<string> {
+  const { outputFiles } = await build({
+    stdin: { contents: source, resolveDir: import.meta.dirname, loader: 'ts' },
+    bundle: true,
+    format: 'esm',
+    platform: 'node',
+    conditions: ['@zukhruf/source'],
+    write: false,
+    logLevel: 'silent',
+  });
+  const [script] = outputFiles;
+  assert.ok(script, 'esbuild must give one script');
+  return script.text;
 }
-const dependencyBinds = [...installed].map(
-  (name) =>
-    `${fileURLToPath(new URL('.', manifestOf(name)))}:/node_modules/${name}:ro`,
-);
 
 const stores = ['LockFileStore', 'TicketQueueFileStore'] as const;
 
 /** Takes the key and keeps it until its container stops. */
-const holderSource = (storeName: string) => `
-	import { Mutex } from ${JSON.stringify(mutexInContainer)};
-	import { ${storeName} } from ${JSON.stringify(fileStoresInContainer)};
+const holderSource = (storeName: string) =>
+  bundled(`
+	import { Mutex } from '../../index.ts';
+	import { ${storeName} } from './index.ts';
 	setInterval(() => {}, 1000);
 	await new Mutex(new ${storeName}('/locks', { clock: globalThis, pollInterval: 10 })).acquire('product:42', async (lease) => {
 		console.log(JSON.stringify({ type: 'holding', pid: process.pid, token: String(lease.token) }));
 		await new Promise(() => {});
 	});
-`;
+`);
 
-/** Asks for the key once, gives up after a second, and prints what it got. */
-const waiterSource = (storeName: string) => `
-	import { Modes, Mutex } from ${JSON.stringify(mutexInContainer)};
-	import { ${storeName} } from ${JSON.stringify(fileStoresInContainer)};
+/** Asks for the key once, gives up after 10 s (the wait of a fact on real I/O), and prints what it got. */
+const waiterSource = (storeName: string) =>
+  bundled(`
+	import { Modes, Mutex } from '../../index.ts';
+	import { ${storeName} } from './index.ts';
 	const result = await new Mutex(new ${storeName}('/locks', { clock: globalThis, pollInterval: 10 })).acquire(
 		'product:42',
 		async (lease) => String(lease.token),
 		{ mode: Modes.skipIfBusy({ waitAtMost: 10000, clock: globalThis }) },
 	);
 	console.log(JSON.stringify(result));
-`;
+`);
 
 interface ContainerOptions {
   /** The lock directory that the containers of one test share. */
@@ -91,17 +72,13 @@ interface ContainerOptions {
   source?: string;
 }
 
-/** The image, the shared lock directory, the package and its dependencies, for one container. */
+/** The image and the shared lock directory, for one container. */
 const placement = ({ volume, hostname, source }: ContainerOptions) => ({
   Image: image,
   ...(hostname ? { Hostname: hostname } : {}),
   ...(source ? { Env: [`SOURCE=${source}`] } : {}),
   HostConfig: {
-    Binds: [
-      `${volume.name}:/locks`,
-      `${packageRoot}:/pkg:ro`,
-      ...dependencyBinds,
-    ],
+    Binds: [`${volume.name}:/locks`],
   },
 });
 
@@ -134,7 +111,12 @@ async function waiterIn(
 ): Promise<Grant> {
   const { stdout } = await docker.run({
     ...placement(options),
-    Cmd: ['node', '--input-type=module', '--eval', waiterSource(storeName)],
+    Cmd: [
+      'node',
+      '--input-type=module',
+      '--eval',
+      await waiterSource(storeName),
+    ],
   });
   return JSON.parse(stdout.trimEnd().split('\n').at(-1)!);
 }
@@ -173,7 +155,7 @@ void describe.each(stores, (storeName) =>
       // number does not exist in a fresh container, where the waiter runs.
       await using volume = await docker.volume();
       await using holder = await startContainer(
-        { volume, hostname: 'app', source: holderSource(storeName) },
+        { volume, hostname: 'app', source: await holderSource(storeName) },
         'sh',
         '-c',
         'i=0; while [ $i -lt 300 ]; do /bin/true; i=$((i+1)); done; node --input-type=module --eval "$SOURCE"; true',
@@ -200,7 +182,7 @@ void describe.each(stores, (storeName) =>
         'node',
         '--input-type=module',
         '--eval',
-        holderSource(storeName),
+        await holderSource(storeName),
       );
       const held = await holdingIn(t, holder);
       await holder.kill();
@@ -225,7 +207,7 @@ void describe.each(stores, (storeName) =>
         'node',
         '--input-type=module',
         '--eval',
-        holderSource(storeName),
+        await holderSource(storeName),
       );
       const held = await holdingIn(t, holder);
       await holder.kill();
@@ -247,7 +229,7 @@ void describe.each(stores, (storeName) =>
       // dies, so a dead holder leaves no zombie that still answers kill(pid, 0).
       await using volume = await docker.volume();
       await using box = await startContainer(
-        { volume, hostname: 'app', source: holderSource(storeName) },
+        { volume, hostname: 'app', source: await holderSource(storeName) },
         'sh',
         '-c',
         'node --input-type=module --eval "$SOURCE" & wait; sleep infinity',
@@ -257,7 +239,12 @@ void describe.each(stores, (storeName) =>
 
       // Act: the waiter runs in the same container, so it sees the holder's PID namespace.
       const { stdout: output } = await box.exec({
-        Cmd: ['node', '--input-type=module', '--eval', waiterSource(storeName)],
+        Cmd: [
+          'node',
+          '--input-type=module',
+          '--eval',
+          await waiterSource(storeName),
+        ],
       });
 
       // Assert: one PID namespace is the case the stores are built for.

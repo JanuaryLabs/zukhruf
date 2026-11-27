@@ -3,7 +3,8 @@ import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { createInterface } from 'node:readline';
 import { describe } from 'node:test';
-import { fileURLToPath } from 'node:url';
+
+import { build } from 'esbuild';
 
 import { ConnectionFailedError, Docker } from '@zukhruf/docker';
 import { test } from '@zukhruf/parameterized-test';
@@ -14,7 +15,10 @@ import { test } from '@zukhruf/parameterized-test';
 const nodeImage = 'node:26-alpine';
 const noEngine = await (async () => {
   try {
-    const docker = await Docker.connect({ clock: globalThis });
+    const docker = await Docker.connect({
+      clock: globalThis,
+      environment: process.env,
+    });
     await docker[Symbol.asyncDispose]();
     return false;
   } catch (error) {
@@ -24,6 +28,26 @@ const noEngine = await (async () => {
     throw error;
   }
 })();
+
+/**
+ * `source` with each module that it imports inlined: one script that a
+ * container runs with Node.js alone. The image installs nothing, and a remote
+ * engine has none of this machine's files, so the script carries its code.
+ */
+async function bundled(source: string): Promise<string> {
+  const { outputFiles } = await build({
+    stdin: { contents: source, resolveDir: import.meta.dirname, loader: 'ts' },
+    bundle: true,
+    format: 'esm',
+    platform: 'node',
+    conditions: ['@zukhruf/source'],
+    write: false,
+    logLevel: 'silent',
+  });
+  const [script] = outputFiles;
+  assert.ok(script, 'esbuild must give one script');
+  return script.text;
+}
 
 // The package acts on the whole process: its termination signals, its crash
 // events and the way it ends. Thus each test runs a real program in its own
@@ -579,7 +603,10 @@ describe('Shutdown', () => {
       { skip: noEngine },
       async (t) => {
         // Arrange
-        await using docker = await Docker.connect({ clock: globalThis });
+        await using docker = await Docker.connect({
+          clock: globalThis,
+          environment: process.env,
+        });
         if ((await docker.images.inspect(nodeImage)) === undefined) {
           await docker.images.pull(nodeImage);
         }
@@ -598,7 +625,7 @@ describe('Shutdown', () => {
             'node',
             '--input-type=module',
             '--eval',
-            `
+            await bundled(`
               import { aborted } from 'node:util';
               import { Shutdown } from '@zukhruf/shutdown';
 
@@ -613,14 +640,8 @@ describe('Shutdown', () => {
               console.log('ready');
               await aborted(shutdown.signal, work);
               clearInterval(work);
-            `,
+            `),
           ],
-          WorkingDir: '/package',
-          HostConfig: {
-            Binds: [
-              `${fileURLToPath(new URL('..', import.meta.url))}:/package:ro`,
-            ],
-          },
         });
         // A program that does not end must not keep its container: the
         // cancel rejects the reads, and the disposal removes the container.

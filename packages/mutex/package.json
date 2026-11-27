@@ -68,6 +68,7 @@
     "@zukhruf/docker": "^0.8.70",
     "@zukhruf/parameterized-test": "^0.8.70",
     "@zukhruf/testing": "^0.8.70",
+    "esbuild": "0.28.2",
     "hono": "^4.13.20",
     "mariadb": "^3.5.5",
     "mysql2": "^3.24.6",
