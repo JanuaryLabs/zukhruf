@@ -76,6 +76,7 @@ test('IidBootstrap.interval gives its method the statistic of every resample, in
     [3, 7],
     (resample) => resample[0]! * 10 + resample[1]!,
     {
+      level: 1,
       of: (distribution) => {
         distributions.push([...distribution]);
         return marker;

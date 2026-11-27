@@ -84,6 +84,11 @@ const tones: Readonly<Record<Verdict, Tone>> = {
 };
 
 const list = new Intl.ListFormat('en', { type: 'conjunction' });
+// A level of 0.95 - 0.05, which is 0.8999999999999999, reads 90%.
+const { format: percent } = new Intl.NumberFormat('en', {
+  style: 'percent',
+  maximumFractionDigits: 1,
+});
 
 // The value and the interval of one score on some samples; a score with no
 // value there has no interval.
@@ -173,7 +178,10 @@ export class Summary<Answer, C> implements Section {
       rows,
       new Set(log.samples.map(({ test }) => test)).size,
     );
-    this.primitives = [Summary.#table(rows), Summary.#bars(rows)];
+    this.primitives = [
+      Summary.#table(rows, bootstrap.level),
+      Summary.#bars(rows),
+    ];
   }
 
   // A ratio of no whole, such as the recall of pages with no expected value,
@@ -250,12 +258,10 @@ export class Summary<Answer, C> implements Section {
       : `${list.format(barred.map(({ label }) => label))} meet their bars`;
   }
 
-  static #table(rows: readonly Row[]): Table {
+  static #table(rows: readonly Row[], level: number): Table {
     const plain = (text: string): Cell => ({ text, tone: 'neutral' });
     return new Table(
-      // The interval method of the caller's Bootstrap does not say its
-      // confidence level, so the header names none (report ADR 0002).
-      ['score', 'value', 'interval', 'bar', 'verdict'],
+      ['score', 'value', `${percent(level)} interval`, 'bar', 'verdict'],
       rows.map((row) => [
         plain(row.label),
         plain(fixed(row.value)),

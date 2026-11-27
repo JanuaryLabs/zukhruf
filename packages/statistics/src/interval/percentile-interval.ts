@@ -25,6 +25,11 @@ export class PercentileInterval implements ConfidenceIntervalMethod {
     this.#method = method;
   }
 
+  // A percentile interval covers what lies between its two quantiles.
+  get level(): number {
+    return this.#high - this.#low;
+  }
+
   of(distribution: readonly number[]): ConfidenceInterval {
     const sorted = distribution.toSorted((a, b) => a - b);
     return new ConfidenceInterval(

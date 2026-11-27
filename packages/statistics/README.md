@@ -51,8 +51,8 @@ nanmean([1, NaN, 3]); // 2, as numpy.nanmean(a)
 | `InvertedCdf`              | `method='inverted_cdf'`                                                            | The nearest rank: the value at the index `ceil(nq) − 1`, and the first value when `q` is 0.                                                                                                                                                                                                                                                                                            |
 | `ConfidenceInterval`       | the `ConfidenceInterval` of `scipy.stats.bootstrap`                                | `low` and `high`. `isAbove(value)` is true when `low > value`, and `isBelow(value)` is true when `high < value`: the whole interval lies on one side of the value.                                                                                                                                                                                                                     |
 | `DifferenceInterval`       | the `ConfidenceInterval` of `scipy.stats.bootstrap`, with the observed statistic   | A `ConfidenceInterval` of (change − baseline) with `observed`: the difference that the data gives. `new DifferenceInterval(low, high, observed)` makes one. It is data only: it has no verdict. mteb's `ChangeVerdict`, the `Interval` of relevance-filtering and the `Interval` of event-detection hold the same three values. `@zukhruf/evals` gives it in each verdict of two runs. |
-| `ConfidenceIntervalMethod` | the `method` of `scipy.stats.bootstrap`                                            | A rule that gives the confidence interval of a bootstrap distribution: `of(distribution)`. `PercentileInterval` is one. A caller with a rule of its own writes another.                                                                                                                                                                                                                |
-| `PercentileInterval`       | `method='percentile'` of `scipy.stats.bootstrap`                                   | The `low` and the `high` quantile of a bootstrap distribution, both read with one quantile method, as `numpy.percentile` reads them. It sorts a copy, so the distribution does not change.                                                                                                                                                                                             |
+| `ConfidenceIntervalMethod` | the `method` of `scipy.stats.bootstrap`                                            | A rule that gives the confidence interval of a bootstrap distribution: `of(distribution)`, and states its `level`, the share of the distribution that the interval covers, such as 0.95 (`confidence_level` of SciPy). `PercentileInterval` is one. A caller with a rule of its own writes another.                                                                                    |
+| `PercentileInterval`       | `method='percentile'` of `scipy.stats.bootstrap`                                   | The `low` and the `high` quantile of a bootstrap distribution, both read with one quantile method, as `numpy.percentile` reads them. It sorts a copy, so the distribution does not change. Its `level` is `high` minus `low`.                                                                                                                                                          |
 | `IidBootstrap`             | `arch.bootstrap.IIDBootstrap`; `n_resamples` and `bootstrap_distribution` of SciPy | Draws `nResamples` resamples of the data, with replacement. `distribution(data, statistic)` gives the statistic of each resample. `interval(data, statistic, method)` gives the interval that a `ConfidenceIntervalMethod` reads from that distribution. Data with no items throws a `RangeError`.                                                                                     |
 
 The random generator is an input. `randomIndex(n)` gives an index from 0 to n − 1. Each item of a resample takes one call, in order, resample by resample, as a Python loop over the same generator does. So `(n) => random.randrange(n)` of python-random draws as CPython's `random.Random`, and a port of NumPy's `default_rng` draws as `integers(0, n, n)` when it draws one index for each call. An index out of range throws a `RangeError`.
@@ -136,6 +136,7 @@ class DifferenceInterval extends ConfidenceInterval {
 
 // The method of scipy.stats.bootstrap. Exported as a type only.
 interface ConfidenceIntervalMethod {
+  readonly level: number;
   of(distribution: readonly number[]): ConfidenceInterval;
 }
 
@@ -145,6 +146,7 @@ class PercentileInterval implements ConfidenceIntervalMethod {
     readonly high: number;
     readonly method: QuantileMethod;
   });
+  get level(): number;
   of(distribution: readonly number[]): ConfidenceInterval;
 }
 

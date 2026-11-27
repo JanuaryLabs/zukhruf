@@ -34,6 +34,11 @@ export class Bootstrap {
     this.#interval = interval;
   }
 
+  // The confidence level of its interval method, such as 0.95.
+  get level(): number {
+    return this.#interval.level;
+  }
+
   interval(run: Run, name: string): ConfidenceInterval {
     return this.#bootstrap.interval(
       runUnits(run, name),

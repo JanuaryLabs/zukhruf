@@ -2,6 +2,8 @@
 
 Status: the private exception of this ADR ended on 2026-11-07. The package is public, because `@zukhruf/evals` is public and depends on it (workspace ADR 0001, rule 7: a zukhruf package is a dependency, not a peer; backlog #3888, Ezz: "Public").
 
+Status, 2026-11-27 (#6243): `ConfidenceIntervalMethod` states its `level`, the share of the distribution that its interval covers, as `confidence_level` of `scipy.stats.bootstrap` and `conf` of R's `boot.ci`; `PercentileInterval`'s is `high` minus `low`. A report names the level of the interval it shows from it.
+
 An eval gives a mean, and the reader must know how sure it is. Six places in two repositories compute the same answer, a 95% percentile interval: they draw resamples of the data with replacement, compute a statistic of each, sort the results and read two quantiles (backlog #3819, 2026-11-06):
 
 | Place                                                | Statistic                                 | Random generator               | Quantile method               |

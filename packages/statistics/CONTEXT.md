@@ -43,10 +43,10 @@ A low and a high value, such as the 2.5% and the 97.5% quantile of a bootstrap d
 _Avoid_: CI
 
 **Confidence interval method**:
-The rule that gives a confidence interval from a bootstrap distribution, such as the percentile interval. SciPy calls it the `method` of `scipy.stats.bootstrap`.
+The rule that gives a confidence interval from a bootstrap distribution, such as the percentile interval. SciPy calls it the `method` of `scipy.stats.bootstrap`. It states its confidence level: the share of the distribution that its interval covers, such as 0.95 (SciPy's `confidence_level`).
 
 **Percentile interval**:
-The confidence interval that two quantiles of the bootstrap distribution give, both read with one quantile method.
+The confidence interval that two quantiles of the bootstrap distribution give, both read with one quantile method. Its level is the high quantile minus the low one.
 
 **Difference interval**:
 The confidence interval of (change − baseline). It lies above 0 when the change is better on every likely resample, and below 0 when it is worse. `DifferenceInterval` also holds the observed difference: the difference that the data gives. The verdict that a caller reads from it stays with the caller.

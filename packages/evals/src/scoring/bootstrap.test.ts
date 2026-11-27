@@ -157,6 +157,7 @@ test('the interval method of the caller reads the statistics in the order of the
     randomIndex: () => draws.shift() ?? Number.NaN,
     // An interval of the first and the second statistic, in that order.
     interval: {
+      level: 1,
       of: ([first = Number.NaN, second = Number.NaN]) =>
         new ConfidenceInterval(first, second),
     },
@@ -170,4 +171,17 @@ test('the interval method of the caller reads the statistics in the order of the
     { low: interval.low, high: interval.high },
     { low: 120 / 130, high: 60 / 66 },
   );
+});
+
+test('the level of a bootstrap is the level of its interval method', () => {
+  const bootstrap = new Bootstrap({
+    nResamples: 1,
+    randomIndex: () => 0,
+    interval: {
+      level: 0.8,
+      of: () => new ConfidenceInterval(0, 1),
+    },
+  });
+
+  assert.equal(bootstrap.level, 0.8);
 });

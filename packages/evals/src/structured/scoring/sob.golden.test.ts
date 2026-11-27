@@ -299,6 +299,7 @@ void test.each(modalities, ({ modality, oracle, scorers, categories }) =>
     // end. A percentile interval reads both ends with one method, so SOB's
     // interval is SOB's own method.
     const percentileBounds: ConfidenceIntervalMethod = {
+      level: 0.95,
       of: (distribution) => {
         const sorted = distribution.toSorted((a, b) => a - b);
         return new ConfidenceInterval(

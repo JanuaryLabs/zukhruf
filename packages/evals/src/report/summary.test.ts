@@ -136,6 +136,32 @@ test('the value and the interval of each score are Run#total and Bootstrap.inter
   );
 });
 
+test('the interval column names the level of the interval method of the bootstrap', () => {
+  const { table } = parts(
+    new Summary(twoTests('recall'), {
+      scores: [{ name: 'recall', higherIsBetter: true }],
+      slices: [],
+      bootstrap: new Bootstrap({
+        nResamples: 2,
+        randomIndex: () => 0,
+        interval: new PercentileInterval({
+          low: 0.025,
+          high: 0.975,
+          method: new Linear(),
+        }),
+      }),
+    }),
+  );
+
+  assert.deepEqual(table.columns, [
+    'score',
+    'value',
+    '95% interval',
+    'bar',
+    'verdict',
+  ]);
+});
+
 void test.each(
   [
     {
@@ -220,7 +246,7 @@ void test.each(
         },
         {
           claim,
-          columns: ['score', 'value', 'interval', 'bar', 'verdict'],
+          columns: ['score', 'value', '100% interval', 'bar', 'verdict'],
           rows: [row],
           verdict: tone,
           bar: tone,

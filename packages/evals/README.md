@@ -683,6 +683,8 @@ export class Bootstrap {
     randomIndex: (n: number) => number;
     interval: ConfidenceIntervalMethod;
   });
+  /** The level of its interval method, such as 0.95. */
+  get level(): number;
   interval(run: Run, name: string): ConfidenceInterval;
 }
 
