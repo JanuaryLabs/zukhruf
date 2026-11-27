@@ -145,7 +145,14 @@ export interface LogQuery {
   timestamps?: boolean;
 }
 
-/** The time between two inspects of an exec whose output ended while the engine still reports it running. */
+/**
+ * The time between two inspects of an exec whose output ended while the
+ * engine still reports it running. An inspect, not an exec_die event: a
+ * watch() for each exec costs more than the inspect that it saves. The
+ * medians of 70 runs (2026-11-27, Docker Desktop 29.9.3 and an ssh:// engine
+ * 29.9.3, at a load average of 77-115): exec('true') 36.5 ms and 82.0 ms,
+ * the open of a watch() 13.5 ms and 51.5 ms.
+ */
 const EXEC_EXIT_DELAY_MS = 10;
 
 /** The result of createOrGet(): an owned handle when this call created the resource. */
@@ -153,7 +160,13 @@ export type Created<Key extends string, Owned, Found> =
   | ({ created: true } & Record<Key, Owned>)
   | ({ created: false } & Record<Key, Found>);
 
-/** The time between two inspects of a container whose removal is in progress. */
+/**
+ * The time between two inspects of a container whose removal is in progress.
+ * The inspects stay also with a destroy event: a removal that fails at its
+ * kill or stop sends no event, and the open of a watch() (13.5 ms on Docker
+ * Desktop, 51.5 ms over ssh, see EXEC_EXIT_DELAY_MS) costs about the mean
+ * wait of one interval.
+ */
 const REMOVAL_POLL_MS = 50;
 
 /** The time between two tries of createOrGet() while the name is taken but an inspect does not find it. */
