@@ -29,7 +29,7 @@ The time that one leader holds the claim. A term is a lease on leadership: its s
 _Avoid_: Session, tenure
 
 **Epoch**:
-The number of a term. Each term has a higher epoch than all the terms before it, and the epoch is below 2^31. A fencing token can carry it: `EpochTokenSource` of `@zukhruf/fencing` makes tokens from it, so a newer leader always outranks an older one.
+The number of a term. Each term has a higher epoch than all the terms before it. A fencing token can carry it: `EpochTokenSource` of `@zukhruf/fencing` makes tokens from an epoch below 2^31, so a newer leader always outranks an older one. Each epoch of `SqliteElection` is below 2^31 (ADR 0011).
 _Avoid_: Generation, version, revision
 
 **Resign**:
@@ -51,6 +51,26 @@ _Avoid_: Driver, adapter, provider
 **Name**:
 The identity of an election in its backend: `LeaderElection#name`. Two elections with the same name are the same election. The backend derives it from its claim. The name of a `SqliteElection` is the path of its claim file. Hazelcast's `DistributedObject.getName()`, Redisson's `RObject.getName()` (ADR 0010).
 _Avoid_: Key (etcd's `Election.Key()` is the key of one candidate), ID, identity (client-go's `Identity()` is the holder)
+
+## Language of a leader selector
+
+These words tell how a process runs a task each time it leads (ADR 0011).
+
+**Leader selector**:
+`LeaderSelector`. It runs a task each time this process wins a term of a `LeaderElection`, and resigns the term when the task ends. With `autoRequeue`, a new round starts after each round, until the dispose. The name is the one of Apache Curator's `LeaderSelector`. See [ADR 0011](docs/adr/0011-a-leader-selector-runs-a-task-each-time-it-wins-a-term-of-a-leader-election.md).
+_Avoid_: Hold for life, lease scope (coined names that mutex ADR 0034 rejected), leader initiator (Spring's name for the same loop), elector (client-go's name), singleton
+
+**Round**:
+One campaign with no time limit, one call of take leadership with the term, and one resign of the term.
+_Avoid_: Cycle, iteration, attempt (an attempt is the resources of one campaign)
+
+**Take leadership**:
+The task of a leader selector, `listener.takeLeadership(term, signal)`. It runs while the term lasts, and gives the leadership up when it returns or rejects with `signal.reason`. Its signal aborts at the dispose, at `interruptLeadership()`, and when the term is lost. A rejection with another error ends the selector, unless the term was lost.
+_Avoid_: On granted, on revoked (Spring's two callbacks split one task), on started leading (client-go's callback), job
+
+**Requeue**:
+To queue one more round of a leader selector. `requeue()` queues one, and returns false while a round is queued or runs. With `autoRequeue`, the selector requeues after each round by itself: at once after a task that ended or a lost term, and after the wait of its `backoff` on its clock after a failed campaign.
+_Avoid_: Retry (a requeue also follows a task that ended well), restart, re-elect
 
 ## Language of a hung leader
 

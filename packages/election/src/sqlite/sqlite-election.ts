@@ -59,6 +59,13 @@ const backoff = new Backoff({
 });
 
 /**
+ * The bound of the epoch of a term: `EpochTokenSource` of `@zukhruf/fencing`
+ * puts it above 32 bits of sequence in a signed 64-bit token, so it takes an
+ * epoch below 2^31 (ADR 0011).
+ */
+const EPOCH_LIMIT = 1n << 31n;
+
+/**
  * Elects one leader among the processes of one host that share `directory`.
  * The claim is the file lock of `claimFile`, held for the whole term. The
  * kernel keeps that lock until the leader's process dies, so a dead leader
@@ -137,6 +144,10 @@ export class SqliteElection extends LeaderElection<SqliteAttempt> {
       (await readCleanShutdown(this.#cleanShutdownPath)) ===
       previous.toString();
     const epoch = previous + 1n;
+    if (epoch >= EPOCH_LIMIT)
+      throw new RangeError(
+        `The epoch file ${this.#epochPath} holds ${previous}, so the next epoch would be ${epoch}, and an epoch must be below 2^31.`,
+      );
     await durableWrite(this.#epochPath, epoch.toString(), {
       clock: this.clock,
     });

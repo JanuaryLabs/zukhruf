@@ -22,7 +22,7 @@ export interface CampaignOptions {
  *
  * A backend keeps six rules:
  * - `tryClaim` returns the epoch of the term it won, in the same step, and
- *   each epoch is higher than every earlier one and below 2^31.
+ *   each epoch is higher than every earlier one.
  * - `tryClaim` reports `afterCleanShutdown` only when the term just before
  *   it recorded a clean shutdown with `recordCleanShutdown`, and it reports
  *   each record once.

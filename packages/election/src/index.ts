@@ -1,4 +1,10 @@
 export { type CampaignOptions, LeaderElection } from './leader-election.ts';
+export {
+  LeaderSelector,
+  type LeaderSelectorListener,
+  type LeaderSelectorOptions,
+} from './leader-selector.ts';
+export { LeaderSelectorWarning } from './leader-selector-warning.ts';
 export { type ResignOptions, Term, type TermSteps } from './term.ts';
 export { TermWarning } from './term-warning.ts';
 export { type LeaderObserver } from './sqlite/leader-observer.ts';

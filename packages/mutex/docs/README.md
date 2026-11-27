@@ -28,7 +28,7 @@ Start with the [project README](../README.md). The glossary is in [CONTEXT.md](.
 4. [Worker threads that share a lock](./recipes/worker-threads.md)
 5. [Protect a database from stale holders](./recipes/fence-a-database.md)
 6. [Survive a crashed holder](./recipes/survive-a-crashed-holder.md)
-7. [Run a job in only one process](./recipes/run-a-job-in-only-one-process.md), with `LeaderSelector` and `@zukhruf/election`
+7. [Run a job in only one process](../../election/docs/recipes/run-a-job-in-only-one-process.md), a recipe of `@zukhruf/election`
 8. [Write your own lock store](./recipes/write-your-own-lock-store.md)
 9. [Skip a job that is already running](./recipes/skip-a-job-that-is-already-running.md)
 10. [Compute a value once and share it](./recipes/compute-once-and-share-it.md)

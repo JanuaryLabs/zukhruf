@@ -2,7 +2,7 @@
 
 **Use case.** Three copies of your app run on one host. A background job, for example a cleanup, must run in only one copy. When that copy stops or crashes, another copy must start the job.
 
-**What you need.** `LeaderSelector` of this package, over a `SqliteElection` of [`@zukhruf/election`](../../../election/README.md) ([how it elects a leader](../../../election/docs/concepts/leader-election.md)). The selector campaigns, runs the job while its copy leads, resigns the term when the job ends, and campaigns again ([ADR 0034](../adr/0034-a-leader-selector-of-the-mutex-runs-a-task-each-time-it-leads-and-requeues-as-apache-curator-does.md)).
+**What you need.** `LeaderSelector` of this package, over a `SqliteElection` ([how it elects a leader](../concepts/leader-election.md)). The selector campaigns, runs the job while its copy leads, resigns the term when the job ends, and campaigns again ([ADR 0011](../adr/0011-a-leader-selector-runs-a-task-each-time-it-wins-a-term-of-a-leader-election.md)).
 
 ## The steps
 
@@ -24,8 +24,7 @@ import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 
 import { Backoff } from '@zukhruf/async';
-import { SqliteElection } from '@zukhruf/election';
-import { LeaderSelector } from '@zukhruf/mutex';
+import { LeaderSelector, SqliteElection } from '@zukhruf/election';
 
 const [role, shared] = process.argv.slice(2);
 
@@ -115,10 +114,10 @@ The leader holds an exclusive SQLite transaction for its full term, and serves a
 
 - **A job that fails ends the selector.** When `takeLeadership` rejects with an error other than `signal.reason`, the selector resigns the term, and `ended` and the dispose reject with that error. The selector does not run the job again: the owner decides, for example with `process.exit(1)`, so that the platform restarts the process. The program above ends with that error through `Promise.race`.
 - **End the job with `signal.reason`, or return.** A rejection with `signal.reason` after the signal aborted is a clean end. `setTimeout` of `node:timers/promises` rejects with its own `AbortError`, whose `cause` is the reason (Node.js 26), so the selector would read it as a failure of the job. Loop on `signal.aborted`, as the program does, or wait with `delay` of `@zukhruf/async`, which rejects with `signal.reason`.
-- **A failed campaign tries again.** With `autoRequeue`, the selector emits a `LeaderSelectorWarning` with the code `ZUKHRUF_MUTEX_LEADER_SELECTOR_ACQUIRE_FAILED`, the selector's key or election in `detail` and the failure as `cause`, waits `backoff.duration(retries)` on `clock`, and campaigns again. `retries` counts the failed campaigns since the last term. Without `autoRequeue`, a failed campaign ends the selector with its error.
+- **A failed campaign tries again.** With `autoRequeue`, the selector emits a `LeaderSelectorWarning` with the code `ZUKHRUF_ELECTION_LEADER_SELECTOR_CAMPAIGN_FAILED`, `election: <name>` in `detail` and the failure as `cause`, waits `backoff.duration(retries)` on `clock`, and campaigns again. `retries` counts the failed campaigns since the last term. Without `autoRequeue`, a failed campaign ends the selector with its error. A `NetworkDirectoryError` does not go away, so check the directory with `assertLocalDirectory` of [`@zukhruf/fs`](../../../fs/README.md) before you start the selector. Then the selector does not warn without end.
 - **Do not delete the election directory** while copies run. A new claim file lets a second leader win.
 - **Do not use the file names of `SocketStore`.** `SocketStore` claims `leader.lock` and counts terms in `leader.epoch`. If the job uses these names in a directory of a `SocketStore`, it joins the election of the lock store. The job then wins terms that the lock store needs, or waits while the lock store leads.
 - **The signal also aborts at a loss.** `SqliteElection` never loses a living term, but another backend can take the claim away. Then the signal of `takeLeadership` aborts, the selector gives the term up, and with `autoRequeue` it campaigns again at once.
-- **Use the epoch to fence the job's writes.** With `SqliteElection`, a hung leader never runs again after a takeover: a candidate that hears no heartbeat for the `leaseDuration` sends `SIGKILL` to the leader's process, and a new term starts only after that process ended. With another backend, a hung old leader can run again after a new leader won. Make fencing tokens from `term.epoch` with `EpochTokenSource` of `@zukhruf/fencing`, and give them to the resource. See [the term](../../../election/README.md#the-term).
-- **Across machines, give the selector a key.** `LeaderSelector.start(mutex.key('cleanup'), listener, options)` leads while this process holds the key of a lock store, for example `SqlServerStore` or `PostgresStore` for every machine that reaches one database. The job then gets the `FencedLease` of each grant. See [Run a task each time this process leads](../../README.md#run-a-task-each-time-this-process-leads).
+- **Use the epoch to fence the job's writes.** With `SqliteElection`, a hung leader never runs again after a takeover: a candidate that hears no heartbeat for the `leaseDuration` sends `SIGKILL` to the leader's process, and a new term starts only after that process ended. With another backend, a hung old leader can run again after a new leader won. Make fencing tokens from `term.epoch` with `EpochTokenSource` of `@zukhruf/fencing`, and give them to the resource. The epoch of a `SqliteElection` is below 2^31, so `EpochTokenSource` takes it. See [the term](../../README.md#the-term).
+- **Across machines, give the selector another backend.** The selector takes each `LeaderElection`. A backend whose claim is in a database that each machine reaches leads across machines ([Write a backend](../../README.md#write-a-backend)).
 - **A campaign does not block** the event loop. The copy continues other work while it waits.

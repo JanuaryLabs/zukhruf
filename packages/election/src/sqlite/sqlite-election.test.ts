@@ -430,6 +430,56 @@ describe('The files of a SQLite election', () => {
         );
       }),
   );
+
+  // EpochTokenSource of @zukhruf/fencing takes an epoch below 2^31 (ADR 0011).
+  test('an epoch file whose next epoch is 2^31 fails the campaign with a RangeError that names the file, stays as it was, and lets the claim go', async () => {
+    // Arrange: no operation counts 2^31 terms, so the test writes the file.
+    await using directory = await new TemporaryFiles().directory(
+      'election-test-',
+    );
+    const epochFile = join(directory.path, 'term.epoch');
+    const last = String(2 ** 31 - 1);
+    await fsPromises.writeFile(epochFile, last);
+    const failsOnTheBound = (error: unknown) =>
+      error instanceof RangeError && error.message.includes(epochFile);
+
+    // Act
+    const campaigning = electionIn(directory.path).campaign();
+
+    // Assert
+    await assert.rejects(
+      campaigning,
+      failsOnTheBound,
+      'The campaign must fail with a RangeError that names the epoch file',
+    );
+    await assert.rejects(
+      electionIn(directory.path).campaign({ timeout: 1_000 }),
+      failsOnTheBound,
+      'The next campaign must take the claim that the failed campaign let go, and fail on the same bound',
+    );
+    assert.equal(
+      await fsPromises.readFile(epochFile, 'utf8'),
+      last,
+      'The epoch file must stay as it was',
+    );
+  });
+
+  test('the last epoch below 2^31 still wins its term', async () => {
+    // Arrange: no operation counts 2^31 - 2 terms, so the test writes the file.
+    await using directory = await new TemporaryFiles().directory(
+      'election-test-',
+    );
+    await fsPromises.writeFile(
+      join(directory.path, 'term.epoch'),
+      String(2 ** 31 - 2),
+    );
+
+    // Act
+    await using term = await electionIn(directory.path).campaign();
+
+    // Assert
+    assert.equal(term?.epoch, 2n ** 31n - 1n);
+  });
 });
 
 describe('The last epoch of a SQLite election', () => {

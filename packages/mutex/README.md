@@ -213,7 +213,7 @@ The signal of the task aborts at the dispose, at `interruptLeadership()`, and wh
 | The acquire failed                                              | A `LeaderSelectorWarning` (see [Errors](#errors)), then a wait of `backoff.duration(retries)` on `clock`, then the next round. `retries` counts the failed acquires since the last grant. | The selector ends. `ended` and the dispose reject with the failure. |
 
 - **The key must always acquire.** `start` takes a `Key<'always'>`: a key whose acquire mode may give up does not type-check, because a round has no task without a grant.
-- **Over an election.** `LeaderSelector.start(election, listener, options)` takes a `LeaderElection` of [`@zukhruf/election`](../election/README.md), for example `SqliteElection`. A round campaigns with no time limit, gives the task the `Term`, and resigns the term after the task. See the recipe [Run a job in only one process](./docs/recipes/run-a-job-in-only-one-process.md).
+- **Over an election.** `LeaderSelector.start(election, listener, options)` takes a `LeaderElection` of [`@zukhruf/election`](../election/README.md), for example `SqliteElection`. A round campaigns with no time limit, gives the task the `Term`, and resigns the term after the task. See the recipe [Run a job in only one process](../election/docs/recipes/run-a-job-in-only-one-process.md) of `@zukhruf/election`.
 - **The dispose waits.** It aborts the selector, and waits until the task ended and the key was given up, so a standby takes over before this process exits. A second dispose waits for the first. Keep the selector in the `AsyncDisposableStack` of the program. It runs its rounds in a `BackgroundService` of [`@zukhruf/async`](../async/README.md#own-work-that-runs-until-you-stop-it-with-a-background-service).
 - **A failure ends the selector.** The selector does not run a failed task again. The owner decides what comes next, for example `process.exit(1)`, so that the platform restarts the process.
 - **`requeue()`** queues one more round of a selector without `autoRequeue`. It returns `false` while a round is queued or runs, and throws after the dispose and after a failure ended the selector. `hasLeadership` is true while `takeLeadership` runs.
@@ -426,7 +426,7 @@ class LockServerWarning extends Error {
 4. [Worker threads that share a lock](./docs/recipes/worker-threads.md)
 5. [Protect a database from stale holders](./docs/recipes/fence-a-database.md)
 6. [Survive a crashed holder](./docs/recipes/survive-a-crashed-holder.md)
-7. [Run a job in only one process](./docs/recipes/run-a-job-in-only-one-process.md), with `LeaderSelector` and `@zukhruf/election`
+7. [Run a job in only one process](../election/docs/recipes/run-a-job-in-only-one-process.md), a recipe of `@zukhruf/election`
 8. [Write your own lock store](./docs/recipes/write-your-own-lock-store.md)
 9. [Skip a job that is already running](./docs/recipes/skip-a-job-that-is-already-running.md)
 10. [Compute a value once and share it](./docs/recipes/compute-once-and-share-it.md)

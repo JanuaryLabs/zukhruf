@@ -52,13 +52,14 @@ next term: 2n
 - `campaign({ timeout, signal })` resolves with a `Term`, or with `undefined` when another candidate still leads after `timeout` milliseconds. Without a `timeout`, it tries once. With `timeout: Infinity`, it waits until it wins or `signal` aborts. When `signal` aborts, it rejects with `signal.reason`, and a claim that it won meanwhile is given up.
 - `claimFile` and `epochFile` are files in `directory`. Candidates with the same directory and the same file names are one group. Never delete `claimFile` while candidates run: a new file lets a second leader win.
 - `election.name` is the path of `claimFile`: `join(directory, claimFile)`. Two elections with the same name are one election. A warning names the election by its name ([ADR 0010](./docs/adr/0010-an-election-has-a-name-and-the-name-of-a-sqlite-election-is-the-path-of-its-claim-file.md)).
+- Each epoch of a `SqliteElection` is below 2^31, so `EpochTokenSource` of `@zukhruf/fencing` takes it. When `epochFile` holds 2^31 - 1, the next epoch would be 2^31: then `campaign` rejects with a `RangeError` that names the file, gives the claim up, and does not change the file ([ADR 0011](./docs/adr/0011-a-leader-selector-runs-a-task-each-time-it-wins-a-term-of-a-leader-election.md)).
 - `epochFile` holds the epoch of the last term as decimal digits. When it holds other text, `campaign` rejects with a `SyntaxError` that names the file, gives the claim up, and does not change the file. An example is the empty file that `@zukhruf/mutex` 0.2.0 or earlier can leave after a power loss, because those versions did not sync the file to the disk. Thus the epochs never start again at 1, and each new term has a higher epoch than each earlier term.
 - `lastEpoch()` resolves with the epoch of the last term in `epochFile`, or with `0n` when no term was won yet. It only reads the file. It does not campaign, it does not take the claim, and it does not create a file or the directory. Use it to find out if a value from an earlier term is stale, for example a fencing token that an old leader made with `EpochTokenSource`. A new term can start immediately after the read, so the answer can be old when you get it. When `epochFile` holds text that is not decimal digits, `lastEpoch()` rejects with the same `SyntaxError` as `campaign`. When it cannot read the file for another reason, it rejects with that error. It never answers `0n` for a file that it cannot read.
 - A term that resigns clean writes a third file, `<claimFile>.clean`, beside `claimFile`. It holds the epoch of that term. The next term reads it and removes it.
 - The directory must be on a local file system. On a network file system, `campaign` rejects with `NetworkDirectoryError`.
 - A try never blocks the process. Between two tries, a candidate waits on pushes from the leader, not on a period ([A leader that hangs](#a-leader-that-hangs)).
 - `clock` is the clock that the campaign waits on, and that measures its `timeout`, the heartbeats of a leader and the deadline of a reader. It is required. Give `globalThis` in production. A test gives a fake clock, for example `createClock()` of `@sinonjs/fake-timers`, and moves the time of the campaign without a real wait ([`@zukhruf/async`](../async/README.md#run-a-wait-on-a-clock)).
-- To run a job each time this process leads, and to campaign again after each term, use `LeaderSelector` of `@zukhruf/mutex`. It resigns the term when the job ends, and its dispose waits for the job ([Run a job in only one process](../mutex/docs/recipes/run-a-job-in-only-one-process.md)).
+- To run a job each time this process leads, and to campaign again after each term, use a `LeaderSelector`. It resigns the term when the job ends, and its dispose waits for the job ([Run a task each time this process leads](#run-a-task-each-time-this-process-leads)).
 
 ## A leader that hangs
 
@@ -94,7 +95,7 @@ await using term = await election.campaign({ timeout: Infinity, signal });
 
 A term is a lease on leadership. `Term` implements the `Lease` interface of [`@zukhruf/lease`](../lease/README.md), so a function that takes a `Lease` also takes a term. See the glossary of [leases](../lease/CONTEXT.md).
 
-- `term.epoch` is the number of the term. Each epoch is below 2^31.
+- `term.epoch` is the number of the term. It is higher than the epoch of each earlier term of the election. The epoch of a `SqliteElection` is below 2^31.
 - `term.resign()` ends the term and gives the claim up. A second call waits for the first, and its options do nothing. `await using` resigns at the end of its scope. When the release fails, the claim is still freed, and `resign` rejects with the release's error. When the release or the record of `clean` fails and freeing the claim fails too, `resign` rejects with a `SuppressedError`: its `suppressed` is that step's error, and its `error` is the failure to free. After a loss, `resign` never rejects, and the term still ends: a failure to stop watching the claim or to free it has no caller to go to, so it is a `TermWarning` (see [Errors](#errors)). When both fail, the warning's `cause` is a `SuppressedError`: its `suppressed` is the failure to stop watching, and its `error` is the failure to free.
 - `term.resign({ clean: true })` records a clean shutdown for the next term, and then ends the term. Use it only when the leader leaves nothing for the next term to recover, for example no work in progress. A lost term records nothing, also with `clean`. When the record fails, the claim is freed, and `resign` rejects with that error. The socket lock store of `@zukhruf/mutex` resigns clean when no process holds a key ([its ADR 0018](../mutex/docs/adr/0018-the-next-leader-skips-the-grace-window-after-a-clean-shutdown.md)). `@zukhruf/single-flight` no longer records a clean shutdown, because its coordinator has no grace window to skip ([its ADR 0010](../single-flight/docs/adr/0010-a-leader-holds-a-kernel-lock-on-its-key-until-its-outcome-is-handed-over.md)).
 - `term.afterCleanShutdown` is `true` only when the term just before this one resigned clean. Then the new leader knows that it has nothing to recover. It is `false` after a crash, after a lost term, after a resign without `clean`, and for the first term.
@@ -102,7 +103,7 @@ A term is a lease on leadership. `Term` implements the `Lease` interface of [`@z
 
 A leader that acts for the group must stop when `term.signal` aborts, because another candidate can lead then. `SqliteElection` never loses a living term, so its signal never aborts. A backend that can take the claim away can lose one.
 
-A term has no fencing token. The signal warns the leader, but it does not protect a resource: a leader can write after another candidate won. To protect a resource, make fencing tokens from the epoch with `EpochTokenSource` of [`@zukhruf/fencing`](../fencing/README.md). Then a resource can refuse the writes of an older leader:
+A term has no fencing token. The signal warns the leader, but it does not protect a resource: a leader can write after another candidate won. To protect a resource, make fencing tokens from the epoch with `EpochTokenSource` of [`@zukhruf/fencing`](../fencing/README.md). It takes an epoch below 2^31, as each epoch of `SqliteElection` is, and throws a `RangeError` for a higher one. Then a resource can refuse the writes of an older leader:
 
 ```ts
 import { EpochTokenSource } from '@zukhruf/fencing';
@@ -112,6 +113,92 @@ const token = await tokens.next('orders');
 ```
 
 [ADR 0002](./docs/adr/0002-a-term-is-a-lease-on-leadership-with-no-fencing.md) tells why.
+
+## Run a task each time this process leads
+
+Some work must run in only one process of a group, for the whole life of each process: a writer of a warehouse, a cleanup, a poll of a queue. `LeaderSelector.start(election, listener, options)` campaigns with no time limit, runs `listener.takeLeadership(term, signal)` while the term lasts, and resigns the term when the task ends. With `autoRequeue`, it campaigns again, until its dispose. It is Apache Curator's `LeaderSelector`, over a `LeaderElection` as client-go's `LeaderElector` is over a `resourcelock.Interface` ([ADR 0011](./docs/adr/0011-a-leader-selector-runs-a-task-each-time-it-wins-a-term-of-a-leader-election.md)).
+
+```ts title="leader.ts"
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
+
+import { Backoff } from '@zukhruf/async';
+import {
+  LeaderSelector,
+  type LeaderSelectorListener,
+  SqliteElection,
+} from '@zukhruf/election';
+
+const directory = await mkdtemp(join(tmpdir(), 'writer-'));
+const election = () =>
+  new SqliteElection({
+    clock: globalThis,
+    directory,
+    claimFile: 'writer.lock',
+    epochFile: 'writer.epoch',
+  });
+const autoRequeue = {
+  backoff: new Backoff({
+    initial: 1_000,
+    multiplier: 2,
+    max: 60_000,
+    jitter: { kind: 'full' },
+  }),
+  clock: globalThis,
+};
+const writer = (name: string): LeaderSelectorListener => ({
+  takeLeadership: async (term, signal) => {
+    console.log(`${name} leads in term ${term.epoch}`);
+    // Write until the selector stops the task: a dispose, an interrupt or a loss.
+    while (!signal.aborted) await delay(100);
+    console.log(`${name} resigns`);
+  },
+});
+
+const first = LeaderSelector.start(election(), writer('first'), {
+  autoRequeue,
+});
+await delay(150);
+const second = LeaderSelector.start(election(), writer('second'), {
+  autoRequeue,
+});
+await delay(150);
+await first[Symbol.asyncDispose](); // The standby leads at once.
+await delay(150);
+await second[Symbol.asyncDispose]();
+await rm(directory, { recursive: true, force: true });
+```
+
+Output:
+
+```
+first leads in term 1
+first resigns
+second leads in term 2
+second resigns
+```
+
+The signal of the task aborts at the dispose, at `interruptLeadership()`, and when the term is lost. Return, or reject with `signal.reason`, to give the leadership up. After each round:
+
+| The round ends because                                           | With `autoRequeue`                                                                                                                                                                           | Without `autoRequeue`                                               |
+| ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| The dispose aborted the selector, in the campaign or in the task | The selector ends, after it resigned the term. `ended` resolves.                                                                                                                             | The same.                                                           |
+| The term was lost, or `interruptLeadership()` aborted the task   | The next round starts at once, with no wait.                                                                                                                                                 | The selector waits for `requeue()`.                                 |
+| The task resolved                                                | The next round starts at once.                                                                                                                                                               | The selector waits for `requeue()`.                                 |
+| The task rejected                                                | The selector ends, after it resigned the term. `ended` and the dispose reject with the failure.                                                                                              | The same.                                                           |
+| The resign failed after the task resolved                        | The selector ends with that failure. `ended` and the dispose reject with it.                                                                                                                 | The same.                                                           |
+| The campaign failed                                              | A `LeaderSelectorWarning` (see [Errors](#errors)), then a wait of `backoff.duration(retries)` on `clock`, then the next campaign. `retries` counts the failed campaigns since the last term. | The selector ends. `ended` and the dispose reject with the failure. |
+
+- **Each backend.** `start` takes a `LeaderElection`, so the selector leads over each backend: `SqliteElection` among the processes of one host, or a backend of your own ([Write a backend](#write-a-backend)). The task gets the `Term`, with its epoch.
+- **A task that ends after a loss has a loss.** When the term is lost, a task that resolves or rejects after it ends the round as a loss, not as a failure.
+- **The dispose waits.** It aborts the selector, and waits until the task ended and the term was resigned, so a standby takes over before this process exits. A second dispose waits for the first. Keep the selector in the `AsyncDisposableStack` of the program. It runs its rounds in a `BackgroundService` of [`@zukhruf/async`](../async/README.md#own-work-that-runs-until-you-stop-it-with-a-background-service).
+- **A failure ends the selector.** The selector does not run a failed task again. The owner decides what comes next, for example `process.exit(1)`, so that the platform restarts the process.
+- **`requeue()`** queues one more round of a selector without `autoRequeue`. It returns `false` while a round is queued or runs, and throws after the dispose and after a failure ended the selector. `hasLeadership` is true while `takeLeadership` runs.
+- **With `autoRequeue`, the selector campaigns again after each failed campaign**, also after a fault that stays, as client-go tries again each `RetryPeriod` and Curator's `autoRequeue` "should ignore connection loss or session expired and just keep trying". A `NetworkDirectoryError` of `SqliteElection` stays, so check the directory with `assertLocalDirectory` of [`@zukhruf/fs`](../fs/README.md) before the start.
+
+See the recipe [Run a job in only one process](./docs/recipes/run-a-job-in-only-one-process.md).
 
 ## Write a backend
 
@@ -129,7 +216,7 @@ const token = await tokens.next('orders');
 
 A backend must keep six rules:
 
-1. `tryClaim` gives the epoch in the same step that wins the claim. Each epoch is higher than each earlier one, and below 2^31.
+1. `tryClaim` gives the epoch in the same step that wins the claim. Each epoch is higher than each earlier one. A backend whose epoch feeds `EpochTokenSource` keeps it below 2^31, as `SqliteElection` does ([ADR 0011](./docs/adr/0011-a-leader-selector-runs-a-task-each-time-it-wins-a-term-of-a-leader-election.md)).
 2. `tryClaim` gives `afterCleanShutdown: true` only when the term just before this one recorded a clean shutdown. It reads each record one time only. Thus a crash after a clean term never reads as clean.
 3. `watch` calls `lose` before the backend can give the claim to another candidate. For a claim that the backend keeps only for a time, renew it well before that time ends, and count the time on a monotonic clock. Then an old leader stops before a new one starts.
 4. The campaign never calls `recordCleanShutdown` or `release` after a loss, because the claim can be another candidate's then.
@@ -211,18 +298,21 @@ The socket lock store of `@zukhruf/mutex` uses `SqliteElection`, with the claim 
 
 ## Errors
 
-| Error                   | When                                                                                                                                                                                                              |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `NetworkDirectoryError` | The directory of a `SqliteElection` is on a network file system. It is the class of `@zukhruf/fs`.                                                                                                                |
-| `LeaseLostError`        | The reason of `term.signal` when the backend took the claim away. Its `subject` is `'leadership'`, and its `cause` is the backend's reason. It is the class of `@zukhruf/lease`, and this package exports it too. |
-| `signal.reason`         | A campaign rejects with it when its signal aborts.                                                                                                                                                                |
-| `SuppressedError`       | A campaign or a resign rejects with it when a step failed and giving the claim up or freeing it failed too. Its `suppressed` is the step's error, and its `error` is the failure to free.                         |
+| Error                          | When                                                                                                                                                                                                                                                           |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `NetworkDirectoryError`        | The directory of a `SqliteElection` is on a network file system. It is the class of `@zukhruf/fs`.                                                                                                                                                             |
+| `LeaseLostError`               | The reason of `term.signal` when the backend took the claim away. Its `subject` is `'leadership'`, and its `cause` is the backend's reason. It is the class of `@zukhruf/lease`, and this package exports it too.                                              |
+| `signal.reason`                | A campaign rejects with it when its signal aborts.                                                                                                                                                                                                             |
+| `SuppressedError`              | A campaign or a resign rejects with it when a step failed and giving the claim up or freeing it failed too. Its `suppressed` is the step's error, and its `error` is the failure to free.                                                                      |
+| `RangeError`                   | A campaign of a `SqliteElection` rejects with it when the next epoch would be 2^31 or more. The message names `epochFile`.                                                                                                                                     |
+| The failure of a leader's task | `ended` and the dispose of a `LeaderSelector` reject with the error of a task that failed, of a resign that failed, and, without `autoRequeue`, of a failed campaign. `requeue()` throws an `Error` after the dispose, and after a failure ended the selector. |
 
-A failure that no caller waits for is a process warning, in the shape of [root ADR 0010](../../docs/adr/0010-a-package-warning-names-its-type-code-and-subject-and-keeps-the-failure-as-its-cause.md). A `'warning'` listener reads its type as `name`, its `code`, and its subject in `detail`, one `<term>: <value>` line each. Its `cause` is the failure, and its message ends with the failure's message. `--disable-warning=<code or type>` stops the print. `TermWarning` is a class that the package exports, so a listener can test `warning instanceof` the class ([root ADR 0011](../../docs/adr/0011-a-package-warning-is-an-instance-of-its-own-class-which-the-package-exports.md)). With two installed copies of the package, `instanceof` fails across the copies, so compare `code`.
+A failure that no caller waits for is a process warning, in the shape of [root ADR 0010](../../docs/adr/0010-a-package-warning-names-its-type-code-and-subject-and-keeps-the-failure-as-its-cause.md). A `'warning'` listener reads its type as `name`, its `code`, and its subject in `detail`, one `<term>: <value>` line each. Its `cause` is the failure, and its message ends with the failure's message. `--disable-warning=<code or type>` stops the print. `TermWarning` and `LeaderSelectorWarning` are classes that the package exports, so a listener can test `warning instanceof` the class ([root ADR 0011](../../docs/adr/0011-a-package-warning-is-an-instance-of-its-own-class-which-the-package-exports.md)). With two installed copies of the package, `instanceof` fails across the copies, so compare `code`.
 
-| Warning       | Code                                | Detail                                  | When                                                                                                                                                                                                                           |
-| ------------- | ----------------------------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `TermWarning` | `ZUKHRUF_ELECTION_TERM_FREE_FAILED` | `election: <name>` and `epoch: <epoch>` | A lost term fails to stop watching its claim or to free it. The term still ends. When both fail, the `cause` is a `SuppressedError`: its `suppressed` is the failure to stop watching, and its `error` is the failure to free. |
+| Warning                 | Code                                               | Detail                                  | When                                                                                                                                                                                                                           |
+| ----------------------- | -------------------------------------------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `TermWarning`           | `ZUKHRUF_ELECTION_TERM_FREE_FAILED`                | `election: <name>` and `epoch: <epoch>` | A lost term fails to stop watching its claim or to free it. The term still ends. When both fail, the `cause` is a `SuppressedError`: its `suppressed` is the failure to stop watching, and its `error` is the failure to free. |
+| `LeaderSelectorWarning` | `ZUKHRUF_ELECTION_LEADER_SELECTOR_CAMPAIGN_FAILED` | `election: <name>`                      | A campaign of a `LeaderSelector` with `autoRequeue` fails. The selector waits `backoff.duration(retries)`, and campaigns again.                                                                                                |
 
 ## API
 
@@ -286,6 +376,33 @@ class Term implements Lease, AsyncDisposable {
   [Symbol.asyncDispose](): Promise<void>; // resign()
 }
 
+interface LeaderSelectorListener {
+  takeLeadership(term: Term, signal: AbortSignal): Promise<void>; // return, or reject with signal.reason
+}
+
+interface LeaderSelectorOptions {
+  autoRequeue?: { backoff: Backoff; clock: Clock } | undefined; // without it: lead once, then wait for requeue()
+}
+
+class LeaderSelector implements AsyncDisposable {
+  static start(
+    election: LeaderElection<unknown>,
+    listener: LeaderSelectorListener,
+    options?: LeaderSelectorOptions,
+  ): LeaderSelector;
+  get hasLeadership(): boolean; // true while takeLeadership runs
+  get ended(): Promise<void>; // rejects with the failure that ended the selector
+  requeue(): boolean; // false while a round is queued or runs
+  interruptLeadership(): void;
+  [Symbol.asyncDispose](): Promise<void>; // waits for the task and the resign
+}
+
+class LeaderSelectorWarning extends Error {
+  readonly code: 'ZUKHRUF_ELECTION_LEADER_SELECTOR_CAMPAIGN_FAILED';
+  readonly detail: string; // election: <name>
+  constructor(failure: unknown, subject: { election: string });
+}
+
 class TermWarning extends Error {
   readonly code: 'ZUKHRUF_ELECTION_TERM_FREE_FAILED';
   readonly detail: string; // election: <name>, then epoch: <epoch>
@@ -322,7 +439,7 @@ export { LeaseLostError } from '@zukhruf/lease';
 ## Documentation
 
 - [How SqliteElection elects a leader](./docs/concepts/leader-election.md)
-- [Recipe: Run a job in only one process](../mutex/docs/recipes/run-a-job-in-only-one-process.md), with `LeaderSelector` of `@zukhruf/mutex`
+- [Recipe: Run a job in only one process](./docs/recipes/run-a-job-in-only-one-process.md), with `LeaderSelector`
 - [Own one item at a time, and skip an item that another process owns](./docs/recipes/skip-work-that-another-process-owns.md)
 - [ADR 0001: Leader election is a package, and each backend is a subclass of one campaign](./docs/adr/0001-leader-election-is-a-package-and-each-backend-is-a-subclass.md)
 - [ADR 0002: A term is a lease on leadership, with no fencing](./docs/adr/0002-a-term-is-a-lease-on-leadership-with-no-fencing.md)
@@ -334,6 +451,7 @@ export { LeaseLostError } from '@zukhruf/lease';
 - [ADR 0008: The backend owns the wait between two tries, and poll leaves the campaign](./docs/adr/0008-the-backend-owns-the-wait-between-two-tries-and-poll-leaves-the-campaign.md) (proposed)
 - [ADR 0009: A process that does not campaign observes the leader](./docs/adr/0009-a-process-that-does-not-campaign-observes-the-leader.md) (proposed)
 - [ADR 0010: An election has a name, and the name of a SQLite election is the path of its claim file](./docs/adr/0010-an-election-has-a-name-and-the-name-of-a-sqlite-election-is-the-path-of-its-claim-file.md)
+- [ADR 0011: A leader selector runs a task each time it wins a term of a leader election, over a `LeaderElection` only](./docs/adr/0011-a-leader-selector-runs-a-task-each-time-it-wins-a-term-of-a-leader-election.md)
 - [Code copied into this package](./docs/copied-code.md)
 
 ## Development
@@ -351,6 +469,7 @@ npx nx run election:build       # compiles src/ to dist/
 src/
   leader-election.ts     LeaderElection: the campaign, and the steps of a backend
   term.ts                Term: the epoch, the lease on leadership, and resign
+  leader-selector.ts     LeaderSelector: a task each time this process wins a term
   sqlite/                SqliteElection: the backend of one host, its leader pipe,
                          its leader record, and the readers of the pipe
 ```
