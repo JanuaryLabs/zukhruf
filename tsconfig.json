@@ -114,6 +114,9 @@
       "path": "./packages/pipes"
     },
     {
+      "path": "./packages/rpc"
+    },
+    {
       "path": "./packages/ssh"
     },
     {

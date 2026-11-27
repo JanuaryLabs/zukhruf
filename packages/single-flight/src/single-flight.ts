@@ -4,10 +4,10 @@ import { type Clock, untilAborted } from '@zukhruf/async';
 import type { FencedLease } from '@zukhruf/fencing';
 import { LeaseLostError } from '@zukhruf/lease';
 import { PipeEndpoint } from '@zukhruf/pipes';
+import { ConnectionSupervisor } from '@zukhruf/rpc';
 
 import { FlightClient, type Lead } from './client/flight-client.ts';
 import type { Codec } from './codec.ts';
-import { ConnectionSupervisor } from './connection/connection-supervisor.ts';
 import { ElectingConnector } from './connection/electing-connector.ts';
 import { flightElection } from './connection/flight-election.ts';
 import { LocalDirectoryConnector } from './connection/local-directory-connector.ts';

@@ -3,8 +3,12 @@ import { randomUUID } from 'node:crypto';
 import { RefCount, untilAborted } from '@zukhruf/async';
 import { FencingToken } from '@zukhruf/fencing';
 import { LeaseController } from '@zukhruf/lease';
+import {
+  type ConnectionSupervisor,
+  PendingCalls,
+  type TakenCall,
+} from '@zukhruf/rpc';
 
-import type { ConnectionSupervisor } from '../connection/connection-supervisor.ts';
 import { KeyHold } from '../key-lock/key-hold.ts';
 import type { KeyLocks } from '../key-lock/key-locks.ts';
 import {
@@ -42,29 +46,18 @@ export interface RunRequest {
   onJoin?: (() => void) | undefined;
 }
 
-/** Keeps only what settles the caller's promise; the caller keeps the promise. */
-interface Pending extends Pick<
-  PromiseWithResolvers<Answer>,
-  'resolve' | 'reject'
-> {
-  key: string;
-  onJoin: (() => void) | undefined;
-  delivery: Delivery;
-  /** The flight that the coordinator said this run joined, so after a lost connection it rejoins that flight only. */
-  flight: string | undefined;
-  /** Keeps the process alive while the run waits for its answer. */
-  keepAlive: Disposable;
-}
+type RunMessage = Extract<FlightRequest, { op: 'run' }>;
 
-/**
- * `queued` waits for a connection, and `sent` went out on the open one.
- * `locking` was told to lead, and waits for its key's lock: it leads only once
- * it holds the lock, so until then it is still a run that waits.
- */
-type Delivery =
-  | { kind: 'queued' }
-  | { kind: 'sent' }
-  | { kind: 'locking'; stop: AbortController };
+/** What a run that waits for its answer keeps beside its call. */
+interface Run {
+  onJoin: (() => void) | undefined;
+  /**
+   * Set once the run was told to lead, while it waits for its key's lock: it
+   * leads only once it holds the lock, so until then it is still a run that
+   * waits.
+   */
+  locking: AbortController | undefined;
+}
 
 interface Held {
   key: string;
@@ -86,7 +79,10 @@ export class FlightClient {
   readonly #link: ConnectionSupervisor<FlightRequest>;
   readonly #locks: KeyLocks;
   readonly #isCurrentTerm: (token: FencingToken) => Promise<boolean>;
-  readonly #pending = new Map<string, Pending>();
+  /** The runs that wait for their answer. A run that a lost connection cut off goes again: it leads or joins at the next coordinator. */
+  readonly #calls: PendingCalls<RunMessage, Answer>;
+  /** By id, each run of `#calls`. */
+  readonly #runs = new Map<string, Run>();
   readonly #held = new Map<string, Held>();
   /** By key, the hold of the latest flight this process landed, until it lets its key's lock go. */
   readonly #landed = new Map<string, KeyHold>();
@@ -103,6 +99,7 @@ export class FlightClient {
     this.#locks = locks;
     this.#isCurrentTerm = isCurrentTerm;
     this.#refs = new RefCount(link);
+    this.#calls = new PendingCalls<RunMessage, Answer>(link, this.#refs);
     link.on('connected', () => this.#resume());
     // A message this client cannot read answers nothing it waits for.
     link.on('message', (message) => {
@@ -123,21 +120,10 @@ export class FlightClient {
       throw new Error('This single flight is closed.');
     }
     const id = randomUUID();
-    const { promise, resolve, reject } = Promise.withResolvers<Answer>();
-    const pending: Pending = {
-      key,
-      onJoin,
-      delivery: { kind: 'queued' },
-      flight: undefined,
-      resolve,
-      reject,
-      keepAlive: this.#refs.hold(),
-    };
-    this.#pending.set(id, pending);
-    this.#link.open();
-    this.#dispatch(id, pending);
+    this.#runs.set(id, { onJoin, locking: undefined });
+    const answer = this.#calls.add(id, { op: 'run', id, key }, 'resend');
     try {
-      return await untilAborted(promise, signal);
+      return await untilAborted(answer, signal);
     } catch (error) {
       if (signal?.aborted) {
         this.#withdraw(id);
@@ -157,21 +143,12 @@ export class FlightClient {
       await new Promise<void>((resolve) => this.#released.add(resolve));
     }
     const closing = this.#link.close();
-    for (const id of [...this.#pending.keys()]) {
+    for (const id of [...this.#runs.keys()]) {
       this.#take(id)?.reject(new Error('This single flight is closed.'));
     }
     // The coordinator interrupts the flights of a closed connection, so they need nothing more from this process.
     for (const id of [...this.#held.keys()]) this.#release(id);
     await closing;
-  }
-
-  #dispatch(id: string, pending: Pending) {
-    const { key, flight } = pending;
-    const request: FlightRequest =
-      flight === undefined
-        ? { op: 'run', id, key }
-        : { op: 'run', id, key, flight };
-    if (this.#link.send(request)) pending.delivery = { kind: 'sent' };
   }
 
   /**
@@ -180,11 +157,10 @@ export class FlightClient {
    * A run that waits for its key's lock leads at the coordinator, so the
    * cancel interrupts that flight: its work never started.
    */
-  #withdraw(id: string) {
-    const pending = this.#take(id);
-    if (pending && pending.delivery.kind !== 'queued') {
-      this.#link.send({ op: 'cancel', id });
-    }
+  #withdraw(id: string): TakenCall<RunMessage, Answer> | undefined {
+    const call = this.#take(id);
+    if (call?.sent) this.#link.send({ op: 'cancel', id });
+    return call;
   }
 
   /**
@@ -208,25 +184,25 @@ export class FlightClient {
    */
   async #lock(
     id: string,
-    pending: Pending,
+    run: Run,
+    key: string,
     token: FencingToken,
     stop: AbortSignal,
   ) {
     try {
       using locked = new DisposableStack();
-      locked.use(await this.#locks.acquire(pending.key, stop));
+      locked.use(await this.#locks.acquire(key, stop));
       const current = await this.#isCurrentTerm(token);
       if (stop.aborted) return;
       if (!current) {
         locked.dispose();
-        pending.delivery = { kind: 'queued' };
-        this.#dispatch(id, pending);
+        run.locking = undefined;
+        this.#calls.send(id);
         return;
       }
-      this.#take(id);
-      pending.resolve({
+      this.#take(id)?.resolve({
         kind: 'lead',
-        lead: this.#hold(id, pending.key, token, new KeyHold(locked.move())),
+        lead: this.#hold(id, key, token, new KeyHold(locked.move())),
       });
     } catch (error) {
       // An abort is the run's own end: it was answered, withdrawn or sent again.
@@ -285,25 +261,30 @@ export class FlightClient {
     switch (response.op) {
       case 'lead': {
         // A run withdrawn meanwhile sent `cancel`, which interrupts the flight at the coordinator.
-        const pending = this.#pending.get(response.id);
-        if (!pending) return;
+        const request = this.#calls.get(response.id);
+        const run = this.#runs.get(response.id);
+        if (!request || !run) return;
         const stop = new AbortController();
-        pending.delivery = { kind: 'locking', stop };
+        run.locking = stop;
         // The first try of the lock is synchronous, here: only microtasks separate it from the work.
         void this.#lock(
           response.id,
-          pending,
+          run,
+          request.key,
           FencingToken.parse(response.token)!,
           stop.signal,
         );
         return;
       }
       case 'joined': {
-        const pending = this.#pending.get(response.id);
-        if (!pending) return;
-        const first = pending.flight === undefined;
-        pending.flight = response.flight;
-        if (first) this.#tellJoined(response.id, pending);
+        const request = this.#calls.get(response.id);
+        const run = this.#runs.get(response.id);
+        if (!request || !run) return;
+        this.#calls.update(response.id, {
+          ...request,
+          flight: response.flight,
+        });
+        if (request.flight === undefined) this.#tellJoined(response.id, run);
         return;
       }
       case 'landed':
@@ -330,12 +311,11 @@ export class FlightClient {
   }
 
   /** The caller's `onJoin` runs once per run; a throw from it fails that run only. */
-  #tellJoined(id: string, pending: Pending) {
+  #tellJoined(id: string, run: Run) {
     try {
-      pending.onJoin?.();
+      run.onJoin?.();
     } catch (error) {
-      this.#withdraw(id);
-      pending.reject(error);
+      this.#withdraw(id)?.reject(error);
     }
   }
 
@@ -347,9 +327,7 @@ export class FlightClient {
         this.#link.send({ op: 'land', id, outcome: landing.outcome });
       }
     }
-    for (const [id, pending] of this.#pending) {
-      if (pending.delivery.kind === 'queued') this.#dispatch(id, pending);
-    }
+    this.#calls.resume();
   }
 
   /**
@@ -358,25 +336,23 @@ export class FlightClient {
    * yet: the next coordinator may not know its flight, so it goes again too.
    */
   #interrupt() {
-    for (const pending of this.#pending.values()) {
-      if (pending.delivery.kind === 'locking') pending.delivery.stop.abort();
-      pending.delivery = { kind: 'queued' };
+    for (const run of this.#runs.values()) {
+      run.locking?.abort();
+      run.locking = undefined;
     }
+    this.#calls.interrupt();
   }
 
   /** No coordinator heard the reassertions, so the flights this process leads may be interrupted already. */
   #fail(error: unknown) {
     for (const id of [...this.#held.keys()]) this.#lose(id);
-    for (const id of [...this.#pending.keys()]) this.#take(id)?.reject(error);
+    for (const id of [...this.#runs.keys()]) this.#take(id)?.reject(error);
   }
 
   /** Removes a run that is about to be answered, so a late answer for it is ignored. */
-  #take(id: string): Pending | undefined {
-    const pending = this.#pending.get(id);
-    if (!pending) return undefined;
-    if (pending.delivery.kind === 'locking') pending.delivery.stop.abort();
-    this.#pending.delete(id);
-    pending.keepAlive[Symbol.dispose]();
-    return pending;
+  #take(id: string): TakenCall<RunMessage, Answer> | undefined {
+    this.#runs.get(id)?.locking?.abort();
+    this.#runs.delete(id);
+    return this.#calls.take(id);
   }
 }

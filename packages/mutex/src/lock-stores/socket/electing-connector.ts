@@ -5,8 +5,11 @@ import type { LeaderObserver, SqliteElection, Term } from '@zukhruf/election';
 import { isErrno } from '@zukhruf/fs';
 import { NoServerError, type PipeAddress } from '@zukhruf/pipes';
 
-import type { ClientConnection, ClientConnector } from '../remote/connector.ts';
-import type { LockRequest } from '../remote/protocol.ts';
+import type {
+  ClientConnection,
+  ClientConnector,
+  LockRequest,
+} from '../remote/protocol.ts';
 import { backoff } from './backoff.ts';
 import { type Greeting, PROTOCOL_VERSION, greet } from './handshake.ts';
 import { OwnServerConnection } from './own-server-connection.ts';

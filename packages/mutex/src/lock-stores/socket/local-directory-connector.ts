@@ -1,6 +1,6 @@
 import { assertLocalDirectory } from '@zukhruf/fs';
 
-import type { ClientConnection, ClientConnector } from '../remote/connector.ts';
+import type { ClientConnection, ClientConnector } from '../remote/protocol.ts';
 
 /**
  * Refuses a lock directory on a network file system before the first

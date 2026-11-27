@@ -36,6 +36,9 @@
       "path": "../pipes/tsconfig.lib.json"
     },
     {
+      "path": "../rpc/tsconfig.lib.json"
+    },
+    {
       "path": "../parameterized-test/tsconfig.lib.json"
     }
   ]

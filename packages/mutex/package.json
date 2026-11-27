@@ -52,6 +52,7 @@
     "@zukhruf/fs": "^0.8.70",
     "@zukhruf/lease": "^0.8.70",
     "@zukhruf/pipes": "^0.8.70",
+    "@zukhruf/rpc": "^0.8.70",
     "@zukhruf/sqlite-open": "^0.8.70"
   },
   "peerDependencies": {

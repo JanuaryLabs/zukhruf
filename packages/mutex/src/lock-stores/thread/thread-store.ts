@@ -1,17 +1,24 @@
 import { type MessagePort, parentPort } from 'node:worker_threads';
 
-import { ConnectionSupervisor } from '../remote/connection-supervisor.ts';
-import type { ClientConnection, ClientConnector } from '../remote/connector.ts';
+import { ConnectionSupervisor, ParentPortConnection } from '@zukhruf/rpc';
+
 import { DelegatingLockStore } from '../remote/delegating-lock-store.ts';
+import {
+  type ClientConnection,
+  type ClientConnector,
+  type LockRequest,
+  lockChannel,
+} from '../remote/protocol.ts';
 import { RemoteLockClient } from '../remote/remote-lock-client.ts';
-import { ParentPortConnection } from './parent-port-connection.ts';
 
 /** A worker has one port to its parent thread for its whole life. */
 class ParentPortConnector implements ClientConnector {
-  readonly #connection: Iterator<ParentPortConnection, undefined>;
+  readonly #connection: Iterator<ClientConnection, undefined>;
 
   constructor(port: MessagePort) {
-    this.#connection = [new ParentPortConnection(port)].values();
+    this.#connection = [
+      new ParentPortConnection<LockRequest>(port, lockChannel),
+    ].values();
   }
 
   async connect(): Promise<ClientConnection | undefined> {

@@ -14,6 +14,10 @@ On 2026-11-09, this package copied the mutex commits `39f1cb3` and `d9a7c36` (ba
 
 On 2026-11-16, this package copied the mutex commit `cc26618` (backlog #4371, step 3c). A follower observes the coordinator with the `LeaderObserver` of `@zukhruf/election`, so a frozen coordinator is ended ([ADR 0011](./adr/0011-a-follower-observes-the-coordinator-so-a-frozen-coordinator-is-ended.md)). The 10 ms waits of the electing connector are gone. `SingleFlightOptions` has `leaseDuration`, as `SocketStoreOptions` has.
 
+## Moved to `@zukhruf/rpc`
+
+The transport is no longer a copy (#4984). `connection/connection.ts`, `connection/connector.ts`, `connection/connection-supervisor.ts` and `connection/connection-closed-error.ts` are deleted: `Connection`, `Connector`, `ConnectionSupervisor` and `ConnectionClosedError` come from `@zukhruf/rpc`, as in the mutex. `Connection.close()` returns a promise here too, so the supervisor waits for it as the mutex's did. `FlightConnection` and `FlightConnector` are in `protocol/flight-protocol.ts`. The map of the runs that wait for an answer is `PendingCalls` of `@zukhruf/rpc`: `FlightClient` keeps only the `onJoin` of each run and its wait for the key's lock beside it. Each run goes again after a loss. The supervisor's `Unavailable` state still cannot occur in this package: `ElectingConnector.connect` never gives `undefined` (backlog #2520).
+
 ## Moved to `@zukhruf/fs`
 
 The file helpers and the check that refuses a network directory are no longer copies. Both packages use `@zukhruf/fs` (its ADR 0001): `durableWrite`, `isErrno`, `patiently`, `assertLocalDirectory`, and one `NetworkDirectoryError` class that this package gives from its entry point.
@@ -24,14 +28,11 @@ The election is no longer a copy. `@zukhruf/election` holds it, made into one ca
 
 ## Copied without a change
 
-| Mutex                                           | Single flight                           |
-| ----------------------------------------------- | --------------------------------------- |
-| `shared/is-record.ts`                           | `shared/is-record.ts`                   |
-| `lock-stores/socket/leave-errors-to-close.ts`   | `connection/leave-errors-to-close.ts`   |
-| `lock-stores/socket/json-line.ts`               | `connection/json-line.ts`               |
-| `lock-stores/remote/connection-closed-error.ts` | `connection/connection-closed-error.ts` |
-
-The supervisor's `Unavailable` state cannot occur in this package: `ElectingConnector.connect` never gives `undefined`, and `FlightClient` has no `unavailable` listener. In the mutex, the IPC and thread connectors use it. The state stays, so the two copies stay the same until the extraction (backlog #2520).
+| Mutex                                         | Single flight                         |
+| --------------------------------------------- | ------------------------------------- |
+| `shared/is-record.ts`                         | `shared/is-record.ts`                 |
+| `lock-stores/socket/leave-errors-to-close.ts` | `connection/leave-errors-to-close.ts` |
+| `lock-stores/socket/json-line.ts`             | `connection/json-line.ts`             |
 
 ## Copied with changes
 
@@ -39,23 +40,11 @@ The supervisor's `Unavailable` state cannot occur in this package: `ElectingConn
 The claim file is `flight.lock`, not `leader.lock`. The epoch file is `flight.epoch`, not `leader.epoch`. The function is `flightElection`, not `socketElection`. Both take `leaseDuration` as the third argument and give it to `SqliteElection`.
 Why: a single flight and a socket lock store can use one directory. With the same file names, they would share one election. The winner would serve only one of them, and the other one would never find a server.
 
-**`lock-stores/remote/connector.ts` → `connection/connector.ts`.**
-The lock aliases `ClientConnection` and `ClientConnector` become `FlightConnection` and `FlightConnector`. The comment on `connect` does not name keys.
-
 **`lock-stores/socket/socket-connection.ts` → `connection/socket-connection.ts`.**
 
-- The path of its import of `connection.ts` differs.
-- In the mutex, `close()` is `async`, and an `end()` method half-closes the socket and waits until the peer closes its side too. A line that is not JSON destroys the socket directly, so a subclass that changes `close()` does not change this.
+- In the mutex, an `end()` method half-closes the socket and waits until the peer closes its side too.
 
 Why: the mutex's `OwnServerConnection` (`lock-stores/socket/own-server-connection.ts`) closes with `end()` ([mutex ADR 0018](../../mutex/docs/adr/0018-the-next-leader-skips-the-grace-window-after-a-clean-shutdown.md)). The single flight has no such connection.
-
-**`lock-stores/remote/connection.ts` → `connection/connection.ts`.**
-In the mutex, `close()` returns a promise that resolves once this end let the connection go. Here, `close()` returns nothing.
-Why: the leader of the mutex waits until its own lock server read its last release before the server judges a clean shutdown ([mutex ADR 0018](../../mutex/docs/adr/0018-the-next-leader-skips-the-grace-window-after-a-clean-shutdown.md)). The single flight has no grace window to skip, so it needs no wait.
-
-**`lock-stores/remote/connection-supervisor.ts` → `connection/connection-supervisor.ts`.**
-In the mutex, `close` of the `Connected` state waits for the `close()` of its connection. The other calls of `close()` mark the promise with `void`. Here, `close` does not wait.
-Why: the same as for `connection.ts`.
 
 **`lock-stores/socket/local-directory-connector.ts` → `connection/local-directory-connector.ts`.**
 Only its types and comments change.
@@ -105,9 +94,10 @@ The test of an exhausted epoch in `coordinator/flight-coordinator.test.ts` is a 
 
 **`lock-stores/socket/socket-connection.test.ts` → `connection/socket-connection.test.ts`.**
 Only the import paths and the prefix of the Windows pipe differ.
+The test "a line that is not JSON closes the connection, and a send after it fails with ConnectionClosedError" is a copy too (backlog #4984). Only the prefix of the temporary folder and the prefix of the Windows pipe differ.
 
-**`lock-stores/remote/connection-supervisor.test.ts` → `connection/connection-supervisor.test.ts`, four tests.**
-The three tests in the group "A process whose supervisor connects over a socket" and the test "a replacement keeps the last ref()" are here (backlog #4668). Only the import paths, the prefix of the temporary folder and the prefix of the Windows pipe differ in the three tests of the group. The fourth test makes its connections inline, because the mutex's `scriptedPeer` is in the mutex's own test folder. The other tests of the mutex file are not copied. They test the supervisor with stand-ins, and the copy of the supervisor is the same code. The test in the group "A process whose supervisor connects over its IPC channel" is not copied either: this package has no IPC connection.
+**`lock-stores/socket/socket-supervision.test.ts` → `connection/socket-supervision.test.ts`, three tests.**
+The group "A process whose supervisor connects over a socket" runs the supervisor of `@zukhruf/rpc` over each package's own `SocketConnection` (backlog #4668). Only the prefix of the temporary folder and the prefix of the Windows pipe differ. The stand-in tests of the supervisor, and the test "a replacement keeps the last ref()" that this package had, are in `@zukhruf/rpc` now, with the supervisor (backlog #2520).
 
 **`lock-stores/socket/electing-connector.test.ts` → `connection/electing-connector.test.ts`.**
 The tests use `flightElection` and `flight.sock`, and give no `connected` callback. The names say coordinator, not leader. Each `readline` interface on a peer of a stand-in server has an `error` listener, as the other tests of this package have. One test is only here: "a connect outlasts a coordinator that keeps its term and hangs up on each hello, for as long as that lasts".
@@ -136,7 +126,6 @@ These helpers do not belong in `@zukhruf/coordinator`. They stay copies. Only a 
 ## Not copied
 
 - `lock-stores/remote/protocol.ts`: it is the lock protocol, and this package has its own in `protocol/flight-protocol.ts`. `isFlightRequest` and `isFlightResponse` have the shape of the mutex's `isLockRequest` and `isLockResponse`.
-- `lock-stores/remote/envelope.ts` and `queries.ts`: this package uses no IPC channel and no look requests.
 - `lock-stores/file-system/file-lock-store.ts`. The mutex holds a `FileLock` for each key too, but the key locks are this package's own code (see the next paragraph). Both take `FileLock` from `@zukhruf/fs`. The single flight names each file by the SHA-256 of the key, so two keys that differ only in case never share a file on APFS or NTFS. The mutex names it with `safeFileName`, which encodes each uppercase letter for the same reason. The names differ in kind, so they are not one piece of knowledge.
 - `lock-stores/remote/lock-coordinator.ts` and `remote-lock-client.ts`. `FlightCoordinator`, its sessions and `FlightClient` are this package's own code: one request leads or joins, and an outcome goes to every joiner. But they repeat rules of the mutex code. The next section lists them.
 
@@ -190,12 +179,7 @@ The rules below are not file copies. Each package writes them in its own code, s
   - Differs: the mutex's `#resume` sends the end-of-reasserts marker `{"op":"reasserted"}` after its reasserts and before the requests that wait, also when it holds no key (mutex ADR 0033). The single flight sends no marker: its coordinator waits for no session.
   - `#interrupt`: a request that went out on the lost connection goes again on the next one.
   - A message that is not an answer of the protocol answers nothing that the client waits for, so the client ignores it. Before `a12029c`, the single flight closed the connection for such a message, and the client connected again.
-- Differs: the single flight sends each landing again after its reassertion. A run that joined a flight goes again as a rejoin of that flight. A try of the mutex is one attempt, so it has a `stranded` state. The single flight has no `unavailable` listener. Its `#lose` also wakes `close`. Since [ADR 0010](./adr/0010-a-leader-holds-a-kernel-lock-on-its-key-until-its-outcome-is-handed-over.md), a run that the single flight's coordinator tells to lead first takes the key lock and reads the epoch, and `#interrupt` also stops that wait and sends the run again. `ack`, `#lose` and `close` tell the key hold that the flight needs nothing more from this process.
-
-**The map of the requests that wait for an answer.**
-
-- Places: `#take` of `FlightClient` (`client/flight-client.ts`), and `#take` of `RemoteLockClient` and of `Queries` in the mutex. This is three places. The [mutex note](../../mutex/docs/copied-code.md) records it.
-- The maintainer chose to keep the three places (backlog #2538). A fix to one goes into each, and the commit names each file.
+- Differs: the single flight sends each landing again after its reassertion. A run that joined a flight goes again as a rejoin of that flight. A try of the mutex is one attempt, so its policy in `PendingCalls` answers it busy when the next connection opens (rpc ADR 0001). The single flight has no `unavailable` listener. Its `#lose` also wakes `close`. Since [ADR 0010](./adr/0010-a-leader-holds-a-kernel-lock-on-its-key-until-its-outcome-is-handed-over.md), a run that the single flight's coordinator tells to lead first takes the key lock and reads the epoch, and `#interrupt` also stops that wait and sends the run again. `ack`, `#lose` and `close` tell the key hold that the flight needs nothing more from this process.
 
 **A token on the wire.**
 
@@ -249,7 +233,7 @@ A third place is the time to move it into `src/testing` (backlog #4087).
 
 ## What the extraction can share
 
-- **As is:** the connection, the connection supervisor, and the socket connection.
+- **As is:** the socket connection. The connection and the connection supervisor are in `@zukhruf/rpc` now.
 - **With parameters:**
   - the election: done in `@zukhruf/election`, where the names of its two files are options. The mutex and this package use it;
   - the socket path: done in `@zukhruf/pipes`, where the file name and the pipe prefix are what `PipeEndpoint` takes. The mutex and this package use it;

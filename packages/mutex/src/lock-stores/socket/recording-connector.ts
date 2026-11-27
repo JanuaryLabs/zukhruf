@@ -1,4 +1,4 @@
-import type { ClientConnection, ClientConnector } from '../remote/connector.ts';
+import type { ClientConnection, ClientConnector } from '../remote/protocol.ts';
 import type { SessionDirectory, SessionRecord } from './session-directory.ts';
 
 /**

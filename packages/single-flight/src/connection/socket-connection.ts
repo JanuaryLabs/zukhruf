@@ -4,9 +4,12 @@ import { createInterface } from 'node:readline';
 import { promisify } from 'node:util';
 
 import { isErrno } from '@zukhruf/fs';
+import {
+  type Connection,
+  ConnectionClosedError,
+  type ConnectionEvents,
+} from '@zukhruf/rpc';
 
-import { ConnectionClosedError } from './connection-closed-error.ts';
-import type { Connection, ConnectionEvents } from './connection.ts';
 import { jsonLine } from './json-line.ts';
 import { leaveErrorsToClose } from './leave-errors-to-close.ts';
 
@@ -37,7 +40,7 @@ export class SocketConnection<Outgoing>
       try {
         this.emit('message', JSON.parse(line));
       } catch {
-        this.close();
+        this.#socket.destroy();
       }
     });
     // readline re-emits the socket's errors (e.g. EPIPE when the peer died).
@@ -65,7 +68,7 @@ export class SocketConnection<Outgoing>
     this.#socket.unref();
   }
 
-  close() {
+  async close() {
     this.#socket.destroy();
   }
 }

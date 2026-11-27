@@ -5,8 +5,11 @@ import type { LeaderObserver, SqliteElection, Term } from '@zukhruf/election';
 import { isErrno } from '@zukhruf/fs';
 import { NoServerError, type PipeAddress } from '@zukhruf/pipes';
 
-import type { FlightRequest } from '../protocol/flight-protocol.ts';
-import type { FlightConnection, FlightConnector } from './connector.ts';
+import type {
+  FlightConnection,
+  FlightConnector,
+  FlightRequest,
+} from '../protocol/flight-protocol.ts';
 import { type Greeting, PROTOCOL_VERSION, greet } from './handshake.ts';
 import { ProtocolVersionError } from './protocol-version-error.ts';
 import { SocketConnection } from './socket-connection.ts';

@@ -5,8 +5,8 @@ import { setTimeout as delay } from 'node:timers/promises';
 
 import { EpochExhaustedError, type TokenSource } from '@zukhruf/fencing';
 import { TemporaryFiles } from '@zukhruf/fs';
+import type { Connection, ConnectionEvents } from '@zukhruf/rpc';
 
-import type { Connection, ConnectionEvents } from '../connection/connection.ts';
 import { KeyLocks } from '../key-lock/key-locks.ts';
 import type { FlightResponse } from '../protocol/flight-protocol.ts';
 import { FlightCoordinator } from './flight-coordinator.ts';
@@ -37,7 +37,7 @@ describe('A run whose epoch has no tokens left', () => {
         },
         ref() {},
         unref() {},
-        close() {
+        async close() {
           closes++;
         },
       },
@@ -84,7 +84,7 @@ describe('A run whose token source fails for another reason', () => {
         },
         ref() {},
         unref() {},
-        close() {
+        async close() {
           closes++;
         },
       },

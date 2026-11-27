@@ -8,7 +8,7 @@ import { type TestContext, describe, test } from 'node:test';
 
 import { NetworkDirectoryError, TemporaryFiles } from '@zukhruf/fs';
 
-import type { ClientConnector } from '../remote/connector.ts';
+import type { ClientConnector } from '../remote/protocol.ts';
 import { LocalDirectoryConnector } from './local-directory-connector.ts';
 
 const onLinux = {

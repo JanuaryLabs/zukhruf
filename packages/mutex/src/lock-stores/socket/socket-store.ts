@@ -4,10 +4,10 @@ import { resolve } from 'node:path';
 
 import type { Clock } from '@zukhruf/async';
 import { PipeEndpoint } from '@zukhruf/pipes';
+import { ConnectionSupervisor } from '@zukhruf/rpc';
 
 import type { LockHandle } from '../../mutex/lease.ts';
 import type { AcquireOptions, LockStore } from '../../mutex/lock-store.ts';
-import { ConnectionSupervisor } from '../remote/connection-supervisor.ts';
 import { RemoteLockClient } from '../remote/remote-lock-client.ts';
 import { ElectingConnector } from './electing-connector.ts';
 import { LocalDirectoryConnector } from './local-directory-connector.ts';

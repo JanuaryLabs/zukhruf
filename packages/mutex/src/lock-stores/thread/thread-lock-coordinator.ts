@@ -1,10 +1,11 @@
 import type { Worker } from 'node:worker_threads';
 
 import { CounterTokenSource, type TokenSource } from '@zukhruf/fencing';
+import { WorkerConnection } from '@zukhruf/rpc';
 
 import { DelegatingLockStore } from '../remote/delegating-lock-store.ts';
 import { LockCoordinator } from '../remote/lock-coordinator.ts';
-import { WorkerConnection } from './worker-connection.ts';
+import { type LockResponse, lockChannel } from '../remote/protocol.ts';
 
 export interface ThreadLockCoordinatorOptions {
   /** Defaults to an in-memory counter, which lives as long as this process. */
@@ -29,6 +30,8 @@ export class ThreadLockCoordinator extends DelegatingLockStore {
 
   /** Serves `worker`. When the thread stops, everything it held or waited for is released. */
   adopt(worker: Worker) {
-    this.#coordinator.serve(new WorkerConnection(worker));
+    this.#coordinator.serve(
+      new WorkerConnection<LockResponse>(worker, lockChannel),
+    );
   }
 }

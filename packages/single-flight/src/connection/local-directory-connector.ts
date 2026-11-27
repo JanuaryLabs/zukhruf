@@ -1,6 +1,9 @@
 import { assertLocalDirectory } from '@zukhruf/fs';
 
-import type { FlightConnection, FlightConnector } from './connector.ts';
+import type {
+  FlightConnection,
+  FlightConnector,
+} from '../protocol/flight-protocol.ts';
 
 /**
  * Refuses a flight directory on a network file system before the first

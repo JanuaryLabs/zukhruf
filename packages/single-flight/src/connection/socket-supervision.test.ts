@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { EventEmitter, once } from 'node:events';
 import type { Socket } from 'node:net';
 import { join } from 'node:path';
 import { describe, test } from 'node:test';
@@ -10,54 +9,9 @@ import { TemporaryFiles } from '@zukhruf/fs';
 import { startWorker } from '@zukhruf/testing/process';
 
 import { standInServer } from '../testing/stand-in-server.ts';
-import { ConnectionSupervisor } from './connection-supervisor.ts';
-import type { Connection, ConnectionEvents } from './connection.ts';
 
-const supervisorUrl = new URL('./connection-supervisor.ts', import.meta.url);
+const supervisorUrl = import.meta.resolve('@zukhruf/rpc');
 const socketConnectionUrl = new URL('./socket-connection.ts', import.meta.url);
-
-describe('Connection supervisor', () => {
-  // Kept as a double: this package's only adapter, a socket, starts ref'd, so only a stand-in shows a replacement that must be ref'd.
-  test('a replacement keeps the last ref()', async (t) => {
-    // Arrange: two connections that record each ref and unref; the first is open, and was unref'd and then ref'd.
-    const asked: ('ref' | 'unref')[][] = [[], []];
-    const [first, second] = asked.map((calls): Connection<unknown> =>
-      Object.assign(new EventEmitter<ConnectionEvents>(), {
-        send: async () => {},
-        ref: () => calls.push('ref'),
-        unref: () => calls.push('unref'),
-        close: () => {},
-      }),
-    );
-    const waiting = [first, second];
-    const supervisor = new ConnectionSupervisor<unknown>({
-      connect: async () => waiting.shift(),
-    });
-    const connected = once(supervisor, 'connected');
-    supervisor.open();
-    // The connection must be reported.
-    await untilAborted(connected, t.signal);
-    supervisor.unref();
-    supervisor.ref();
-
-    try {
-      // Act: the connection is lost and replaced.
-      const replaced = once(supervisor, 'connected');
-      first!.emit('close');
-      // The replacement must be reported.
-      await untilAborted(replaced, t.signal);
-
-      // Assert
-      assert.equal(
-        asked[1]!.at(-1),
-        'ref',
-        'The replacement must keep the process alive, as the last ask said',
-      );
-    } finally {
-      await supervisor.close();
-    }
-  });
-});
 
 /** Where a server of the test listens: a socket file in `directory`, or a named pipe on Windows. */
 function socketPathIn(directory: string) {
@@ -75,7 +29,7 @@ describe('A process whose supervisor connects over a socket', () => {
     await using idle = startWorker(
       `
 				import { connect } from 'node:net';
-				import { ConnectionSupervisor } from ${JSON.stringify(supervisorUrl.href)};
+				import { ConnectionSupervisor } from ${JSON.stringify(supervisorUrl)};
 				import { SocketConnection } from ${JSON.stringify(socketConnectionUrl.href)};
 				process.once('message', () => {});
 				const supervisor = new ConnectionSupervisor({
@@ -113,7 +67,7 @@ describe('A process whose supervisor connects over a socket', () => {
     await using idle = startWorker(
       `
 				import { connect } from 'node:net';
-				import { ConnectionSupervisor } from ${JSON.stringify(supervisorUrl.href)};
+				import { ConnectionSupervisor } from ${JSON.stringify(supervisorUrl)};
 				import { SocketConnection } from ${JSON.stringify(socketConnectionUrl.href)};
 				process.once('message', () => {});
 				const supervisor = new ConnectionSupervisor({
@@ -156,7 +110,7 @@ describe('A process whose supervisor connects over a socket', () => {
     await using idle = startWorker(
       `
 				import { connect } from 'node:net';
-				import { ConnectionSupervisor } from ${JSON.stringify(supervisorUrl.href)};
+				import { ConnectionSupervisor } from ${JSON.stringify(supervisorUrl)};
 				import { SocketConnection } from ${JSON.stringify(socketConnectionUrl.href)};
 				process.once('message', () => {});
 				const supervisor = new ConnectionSupervisor({

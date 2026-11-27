@@ -1,4 +1,5 @@
 import { FencingToken } from '@zukhruf/fencing';
+import type { Connection, Connector } from '@zukhruf/rpc';
 
 import { isRecord } from '../shared/is-record.ts';
 
@@ -46,6 +47,10 @@ export type FlightResponse =
 
 const isToken = (value: unknown): value is string =>
   typeof value === 'string' && FencingToken.parse(value) !== null;
+
+export type FlightConnection = Connection<FlightRequest>;
+
+export type FlightConnector = Connector<FlightRequest>;
 
 /** Messages arrive from another process, so their shape is checked before use. */
 export function isFlightRequest(message: unknown): message is FlightRequest {

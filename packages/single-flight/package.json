@@ -45,7 +45,8 @@
     "@zukhruf/fencing": "^0.8.70",
     "@zukhruf/fs": "^0.8.70",
     "@zukhruf/lease": "^0.8.70",
-    "@zukhruf/pipes": "^0.8.70"
+    "@zukhruf/pipes": "^0.8.70",
+    "@zukhruf/rpc": "^0.8.70"
   },
   "devDependencies": {
     "@sinonjs/fake-timers": "15.5.0",

@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 
-import type { Connection, ConnectionEvents } from './connection.ts';
-import { unwrap } from './envelope.ts';
+import type { Connection, ConnectionEvents } from '../connection/connection.ts';
+import { type ChannelOptions, Envelope } from './envelope.ts';
 
 /** The end of a message channel in Node: a worker, a child process, the process itself, or a worker port. */
 interface ChannelEnd {
@@ -12,21 +12,22 @@ interface ChannelEnd {
 
 /**
  * A connection over a message channel that the application uses too: an IPC
- * channel or a worker port. Lock messages travel in an envelope, so the
- * application's own messages, which have none, are dropped (ADR 0017). Each
- * subclass decides when it listens, because the listeners can keep the
- * process alive.
+ * channel or a worker port. The messages of the connection travel in the
+ * envelope of its tag, so the application's own messages, which have none,
+ * are dropped (mutex ADR 0017). Each subclass decides when it listens,
+ * because the listeners can keep the process alive.
  */
 export abstract class SharedChannelConnection<Outgoing>
   extends EventEmitter<ConnectionEvents>
   implements Connection<Outgoing>
 {
+  protected readonly envelope: Envelope;
   readonly #channel: ChannelEnd;
   /** The events of the channel that tell that the peer is gone. */
   readonly #goneEvents: readonly string[];
 
   readonly #onMessage = (envelope: unknown) => {
-    const message = unwrap(envelope);
+    const message = this.envelope.unwrap(envelope);
     if (message !== undefined) this.emit('message', message);
   };
 
@@ -35,10 +36,15 @@ export abstract class SharedChannelConnection<Outgoing>
     this.emit('close');
   };
 
-  protected constructor(channel: ChannelEnd, goneEvents: readonly string[]) {
+  protected constructor(
+    channel: ChannelEnd,
+    goneEvents: readonly string[],
+    { tag }: ChannelOptions,
+  ) {
     super();
     this.#channel = channel;
     this.#goneEvents = goneEvents;
+    this.envelope = new Envelope(tag);
   }
 
   abstract send(message: Outgoing): Promise<void>;

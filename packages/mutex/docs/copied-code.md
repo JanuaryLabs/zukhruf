@@ -14,20 +14,6 @@ The paths are in `packages/mutex/src/lock-stores`. The code that the single flig
 - Same: each connector keeps its one connection in an iterator. The first `connect` gives the connection. Each later `connect` gives `undefined`: the coordinator is gone, and nothing can replace it.
 - Differs: the IPC connector first checks `process.connected`. When the channel to the parent closed, it gives `undefined` at once. A worker's port lasts as long as the worker, so the thread connector has no such check.
 
-**Listeners only while the connection is referenced.**
-
-- Places: `ref`, `unref` and `close` of `ParentPortConnection` (`thread/parent-port-connection.ts`) and of `ProcessChannelConnection` (`ipc/process-channel-connection.ts`).
-- Same: `ref` calls `stopListening` and then `listen`, so a second `ref` does not listen twice. `unref` calls `stopListening`. `close` calls `unref`.
-- Differs: only the events that tell that the peer is gone. The process channel gives `disconnect` to `SharedChannelConnection` (`remote/shared-channel-connection.ts`). The port gives no event, because the coordinator cannot stop while its workers run.
-
-**Listeners from the start until `close`.**
-
-- Places: the constructor, `ref`, `unref` and `close` of `WorkerConnection` (`thread/worker-connection.ts`) and of `ChildProcessConnection` (`ipc/child-process-connection.ts`).
-- Same: the constructor calls `listen`. `ref` and `unref` do nothing, because the peer keeps this process alive while it runs. `close` calls `stopListening`.
-- Differs: the event that tells that the peer is gone: `exit` of the worker, or `disconnect` of the child.
-
-Backlog #2544 is about this code: `close` stops the listeners, but it does not emit `close`. A fix for it goes into both places.
-
 **The message of a closed client.**
 
 - Places: `close` and `#assertUsable` of `RemoteLockClient` (`remote/remote-lock-client.ts`).
@@ -150,20 +136,17 @@ The Rule of Three asks to extract the code below. It is not extracted yet. Until
 
 **The keep-alive byte of a holder on a Docker engine.** Three places in two packages, as copies by the owner's choice ("All three, as copies", root ADR 0012, #5543); the extraction waits for his go (#5575). The note of `@zukhruf/testing` records them ([copied-code.md](../../testing/docs/copied-code.md)). The place in this package is `claimCommand` and `drained` in `docker/docker-engine-store.ts`.
 
-**The class of a warning of a failure that no caller hears.** Twelve places, one class for each type, by the maintainer's choice (#3619, backlog #4938; the shape of root ADR 0010, #5472; a class for each type, root ADR 0011, #5474).
+**The class of a warning of a failure that no caller hears.** Thirteen places, one class for each type, by the maintainer's choice (#3619, backlog #4938; the shape of root ADR 0010, #5472; a class for each type, root ADR 0011, #5474).
 
-- Places: `TermWarning` (`packages/election/src/term-warning.ts`), `CreateExclusiveWarning` (`packages/fs/src/create-exclusive-warning.ts`), `PeriodicSchedulerWarning` (`packages/mteb/src/dependencies/periodic-scheduler-warning.ts`), `LockWarning` (`packages/mteb/src/dependencies/lock-warning.ts`), `LeaderSelectorWarning` (`packages/election/src/leader-selector-warning.ts`), `MutexWarning` (`packages/mutex/src/mutex/mutex-warning.ts`), `DockerEngineStoreWarning` (`docker/docker-engine-store-warning.ts`), `LockServerWarning` (`socket/lock-server-warning.ts`), `PoolWarning` (`packages/pool/src/pool-warning.ts`), `SqliteJobQueueWarning` (`packages/sqlite/queue/src/sqlite-job-queue-warning.ts`), `TimekeeperWarning` (`packages/sqlite/queue/src/timekeeper-warning.ts`) and `SharedConnectionWarning` (`packages/ssh/src/control/shared-connection-warning.ts`).
+- Places: `TermWarning` (`packages/election/src/term-warning.ts`), `CreateExclusiveWarning` (`packages/fs/src/create-exclusive-warning.ts`), `PeriodicSchedulerWarning` (`packages/mteb/src/dependencies/periodic-scheduler-warning.ts`), `LockWarning` (`packages/mteb/src/dependencies/lock-warning.ts`), `LeaderSelectorWarning` (`packages/election/src/leader-selector-warning.ts`), `MutexWarning` (`packages/mutex/src/mutex/mutex-warning.ts`), `DockerEngineStoreWarning` (`docker/docker-engine-store-warning.ts`), `LockServerWarning` (`socket/lock-server-warning.ts`), `PoolWarning` (`packages/pool/src/pool-warning.ts`), `SqliteJobQueueWarning` (`packages/sqlite/queue/src/sqlite-job-queue-warning.ts`), `TimekeeperWarning` (`packages/sqlite/queue/src/timekeeper-warning.ts`) `SharedConnectionWarning` (`packages/ssh/src/control/shared-connection-warning.ts`) and `ServerWarning` (`packages/rpc/src/error/server-warning.ts`).
 - Same: a class that `extends Error`, with a literal `code`, a `detail` from its subject, and ``super(`<what failed>, and <what next>: ${Error.isError(failure) ? failure.message : String(failure)}`, { cause: failure })``: the failure goes to the process, which keeps running, as the `cause` of a warning with its own type, code and subject. Each site emits `process.emitWarning(new <Type>Warning(error, subject))`. `zukhruf/require-warning-code` of `@zukhruf/eslint` holds each `emitWarning` place to a code, and refuses the `Object.assign(…)` form.
 - Differs: the message, the name, the code and the subject of each class; `PoolWarning` and `SqliteJobQueueWarning` take the code in their subject, and the code sets the message; the exit handler of the CO₂ tracker emits its `LockWarning` with `process.emit('warning', …)`, because the next tick of `emitWarning` never runs at exit, so the lint rule does not see it.
 
 The maintainer chose the copies over a shared helper on 2026-11-20, and again on 2026-11-24 ("Inline now, file the helper"). On 2026-11-24 he chose a class for each type over a helper: "I don't like the warning abstraction. instead of we should have own class that each place does like process.emitWarning(new class)". A fix to the shape goes into each class.
 
-**The map of the requests that wait for an answer.** Three places.
+## Moved to `@zukhruf/rpc`
 
-- Places: `#take` and `#rejectAll` of `RemoteLockClient` (`remote/remote-lock-client.ts`), `#take` and `rejectAll` of `Queries` (`remote/queries.ts`), and `#take` of `FlightClient` (`packages/single-flight/src/client/flight-client.ts`).
-- Same: a map of requests by id. An entry keeps only what settles the caller's promise. `#take` gets an entry, deletes it, and tells its owner that the map changed, so the owner can `ref` or `unref` its connection. A reject-all takes each entry and rejects it.
-
-The maintainer chose to keep the three places (backlog #2538). The parts that are the same are short, and the parts that differ (the delivery states, what a new connection sends again, what keeps the process alive) stay with each owner. A fourth place, or the coordinator package of backlog #2496, is the time to extract it.
+**The transport and the map of the requests that wait for an answer.** This code is no longer in this package (#4984). `Connection`, `Connector`, `ConnectionSupervisor`, `ConnectionClosedError`, the envelope and the four channel adapters (`WorkerConnection`, `ParentPortConnection`, `ChildProcessConnection`, `ProcessChannelConnection`) moved to `@zukhruf/rpc`, which carries this package's messages in the envelope of the tag `'@lock'` (`lockChannel` in `remote/protocol.ts`), byte for byte as before. The map of the requests (#2538) was in three places: `RemoteLockClient`, `Queries` and the single flight's `FlightClient`. It is `PendingCalls` of `@zukhruf/rpc` now: `RemoteLockClient` keeps its acquires and tries in one table and its looks in another, on one `RefCount`; an acquire and a look go again after a loss, and a try is answered busy when the next connection opens (rpc ADR 0001). The rows of the two kinds of adapter moved to [the note of `@zukhruf/rpc`](../../rpc/docs/copied-code.md). The single flight's copy of `remote/` is gone too ([its note](../../single-flight/docs/copied-from-mutex.md)).
 
 ## Moved to `@zukhruf/fs`
 

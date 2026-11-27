@@ -1,6 +1,10 @@
 import { FencingToken } from '@zukhruf/fencing';
+import type { ChannelOptions, Connection, Connector } from '@zukhruf/rpc';
 
 import { isRecord } from '../../shared/is-record.ts';
+
+/** Lock messages travel in this envelope on an IPC channel or a worker port, so they share it with the application's own messages (ADR 0017). */
+export const lockChannel = { tag: '@lock' } satisfies ChannelOptions;
 
 /** Tokens travel as decimal strings because JSON has no bigint. */
 export type LockRequest =
@@ -23,6 +27,10 @@ export type LockResponse =
 
 const isToken = (value: unknown): boolean =>
   typeof value === 'string' && FencingToken.parse(value) !== null;
+
+export type ClientConnection = Connection<LockRequest>;
+
+export type ClientConnector = Connector<LockRequest>;
 
 /** Messages arrive from another thread or process, so their shape is checked before use. */
 export function isLockRequest(message: unknown): message is LockRequest {

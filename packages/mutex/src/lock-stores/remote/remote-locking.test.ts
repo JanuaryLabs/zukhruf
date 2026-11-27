@@ -12,6 +12,7 @@ import {
   EpochTokenSource,
   type TokenSource,
 } from '@zukhruf/fencing';
+import { ConnectionSupervisor } from '@zukhruf/rpc';
 import { waitFor } from '@zukhruf/testing/async';
 
 import { grantedWithin } from '../../testing/granted-within.ts';
@@ -21,10 +22,8 @@ import {
 } from '../../testing/scripted-peer.ts';
 import { settle } from '../../testing/timing.ts';
 import { tokensThatFailOnce } from '../../testing/tokens-that-fail-once.ts';
-import { ConnectionSupervisor } from './connection-supervisor.ts';
-import type { ClientConnector } from './connector.ts';
 import { LockCoordinator } from './lock-coordinator.ts';
-import type { LockRequest, LockResponse } from './protocol.ts';
+import type { ClientConnector, LockRequest, LockResponse } from './protocol.ts';
 import { RemoteLockClient } from './remote-lock-client.ts';
 
 function clientOver(connector: ClientConnector) {

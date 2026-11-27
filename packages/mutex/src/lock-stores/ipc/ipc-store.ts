@@ -1,16 +1,21 @@
 import { promisify } from 'node:util';
 
-import { ConnectionSupervisor } from '../remote/connection-supervisor.ts';
-import type { ClientConnection, ClientConnector } from '../remote/connector.ts';
+import { ConnectionSupervisor, ProcessChannelConnection } from '@zukhruf/rpc';
+
 import { DelegatingLockStore } from '../remote/delegating-lock-store.ts';
+import {
+  type ClientConnection,
+  type ClientConnector,
+  type LockRequest,
+  lockChannel,
+} from '../remote/protocol.ts';
 import { RemoteLockClient } from '../remote/remote-lock-client.ts';
-import { ProcessChannelConnection } from './process-channel-connection.ts';
 
 /** The channel to the parent cannot be re-established, so it is handed out once. */
 class ProcessChannelConnector implements ClientConnector {
-  readonly #channel: Iterator<ProcessChannelConnection, undefined>;
+  readonly #channel: Iterator<ClientConnection, undefined>;
 
-  constructor(channel: ProcessChannelConnection) {
+  constructor(channel: ClientConnection) {
     this.#channel = [channel].values();
   }
 
@@ -33,8 +38,9 @@ export class IpcStore extends DelegatingLockStore {
         'IpcStore needs an IPC channel to its parent; start this process with fork() or an "ipc" stdio entry.',
       );
     }
-    const channel = new ProcessChannelConnection(
+    const channel = new ProcessChannelConnection<LockRequest>(
       promisify<unknown, void>(process.send).bind(process),
+      lockChannel,
     );
     super(
       new RemoteLockClient(

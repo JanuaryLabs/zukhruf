@@ -147,7 +147,7 @@ describe('Electing connector', () => {
           'After the welcome, only the close of the coordinator may end the connection of a follower',
         );
       } finally {
-        connection.close();
+        await connection.close();
       }
     } finally {
       unsubscribe('net.client.socket', onSocket);
@@ -490,7 +490,7 @@ describe('Electing connector', () => {
     try {
       // Act
       const connection = await connector.connect(t.signal);
-      connection.close();
+      await connection.close();
 
       // Assert
       assert.ok(hangUps > 1, `The coordinator hung up ${hangUps} times`);

@@ -1,9 +1,6 @@
 import { EventEmitter, addAbortListener } from 'node:events';
 
-import type {
-  Connection,
-  ConnectionEvents,
-} from '../lock-stores/remote/connection.ts';
+import type { Connection, ConnectionEvents } from '@zukhruf/rpc';
 
 /** One end of a connection whose peer is driven by the test. */
 export function scriptedPeer<Outgoing, Incoming>(

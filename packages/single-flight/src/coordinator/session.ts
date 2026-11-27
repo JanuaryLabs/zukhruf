@@ -1,7 +1,6 @@
 import { EpochExhaustedError, FencingToken } from '@zukhruf/fencing';
+import { type Connection, ConnectionClosedError } from '@zukhruf/rpc';
 
-import { ConnectionClosedError } from '../connection/connection-closed-error.ts';
-import type { Connection } from '../connection/connection.ts';
 import {
   type FlightRequest,
   type FlightResponse,
@@ -137,7 +136,7 @@ class Serving implements SessionPhase {
   }
 
   close() {
-    this.#connection.close();
+    void this.#connection.close();
   }
 }
 

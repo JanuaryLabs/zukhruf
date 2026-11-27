@@ -1,6 +1,6 @@
 import type { FencingToken, TokenSource } from '@zukhruf/fencing';
+import type { Connection } from '@zukhruf/rpc';
 
-import type { Connection } from '../connection/connection.ts';
 import type { KeyLocks } from '../key-lock/key-locks.ts';
 import type { FlightResponse, Outcome } from '../protocol/flight-protocol.ts';
 import { Flight } from './flight.ts';

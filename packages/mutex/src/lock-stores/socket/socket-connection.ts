@@ -4,9 +4,12 @@ import { createInterface } from 'node:readline';
 import { promisify } from 'node:util';
 
 import { isErrno } from '@zukhruf/fs';
+import {
+  type Connection,
+  ConnectionClosedError,
+  type ConnectionEvents,
+} from '@zukhruf/rpc';
 
-import { ConnectionClosedError } from '../remote/connection-closed-error.ts';
-import type { Connection, ConnectionEvents } from '../remote/connection.ts';
 import { jsonLine } from './json-line.ts';
 import { leaveErrorsToClose } from './leave-errors-to-close.ts';
 

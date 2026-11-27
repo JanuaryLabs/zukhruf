@@ -3,10 +3,14 @@ import { randomUUID } from 'node:crypto';
 import { RefCount, untilAborted } from '@zukhruf/async';
 import { FencingToken } from '@zukhruf/fencing';
 import { LeaseController } from '@zukhruf/lease';
+import {
+  type ConnectionSupervisor,
+  type LostCallPolicy,
+  PendingCalls,
+} from '@zukhruf/rpc';
 
 import type { LockHandle } from '../../mutex/lease.ts';
 import type { AcquireOptions, LockStore } from '../../mutex/lock-store.ts';
-import type { ConnectionSupervisor } from './connection-supervisor.ts';
 import { CoordinatorUnavailableError } from './coordinator-unavailable-error.ts';
 import { GrantFailedError } from './grant-failed-error.ts';
 import {
@@ -14,24 +18,22 @@ import {
   type LockResponse,
   isLockResponse,
 } from './protocol.ts';
-import { Queries } from './queries.ts';
 
-/** Keeps only what settles the caller's promise; the caller keeps the promise. */
-interface Pending extends Pick<
-  PromiseWithResolvers<FencingToken | undefined>,
-  'resolve' | 'reject'
-> {
-  key: string;
-  /** A wait is sent again after a reconnect; a try gives up instead. */
-  attempt: 'acquire' | 'try';
-  /**
-   * `queued` waits for a connection, `sent` went out on the open one, and
-   * `stranded` went out on a connection that was lost before it was answered.
-   */
-  delivery: 'queued' | 'sent' | 'stranded';
-  /** Keeps the process alive while the request waits for its answer. */
-  held: Disposable;
-}
+type Grant = FencingToken | undefined;
+
+/** An acquire or a try: a request that waits for a grant. */
+type KeyRequest = Extract<LockRequest, { op: 'acquire' | 'try' }>;
+
+type LookRequest = Extract<LockRequest, { op: 'isHeld' }>;
+
+/**
+ * A try is one attempt, and the coordinator that would have answered it is
+ * gone: it is answered busy once the next coordinator is there, and rejects as
+ * each waiting request does when no coordinator comes.
+ */
+const tryIsBusy: LostCallPolicy<Grant> = {
+  atReconnect: (call) => call.resolve(undefined),
+};
 
 interface Held {
   key: string;
@@ -46,22 +48,27 @@ interface Held {
  */
 export class RemoteLockClient implements LockStore {
   readonly #link: ConnectionSupervisor<LockRequest>;
-  readonly #pending = new Map<string, Pending>();
+  /** The acquires and tries that wait for their answer. An acquire that a lost connection cut off is sent again. */
+  readonly #requests: PendingCalls<KeyRequest, Grant>;
+  /** The looks at keys. A look holds nothing, so asking it twice does no harm: one that a lost connection cut off is asked again. */
+  readonly #looks: PendingCalls<LookRequest, boolean>;
   readonly #held = new Map<string, Held>();
-  readonly #queries: Queries;
-  /** Keeps the connection ref'd while a request or a look waits for its answer. */
-  readonly #refs: RefCount;
 
   constructor(link: ConnectionSupervisor<LockRequest>) {
     this.#link = link;
-    this.#refs = new RefCount(link);
-    this.#queries = new Queries(link, this.#refs);
+    // One count for both tables: the connection stays ref'd while a request or a look waits.
+    const refs = new RefCount(link);
+    this.#requests = new PendingCalls<KeyRequest, Grant>(link, refs);
+    this.#looks = new PendingCalls<LookRequest, boolean>(link, refs);
     link.on('connected', () => this.#resume());
     // A message this client cannot read answers nothing it waits for.
     link.on('message', (message) => {
       if (isLockResponse(message)) this.#receive(message);
     });
-    link.on('disconnected', () => this.#interrupt());
+    link.on('disconnected', () => {
+      this.#requests.interrupt();
+      this.#looks.interrupt();
+    });
     // Held keys stay exclusive: no coordinator is left to grant them to anyone else.
     link.on('unavailable', () =>
       this.#rejectAll((key) => new CoordinatorUnavailableError(key)),
@@ -74,8 +81,9 @@ export class RemoteLockClient implements LockStore {
     { signal }: AcquireOptions = {},
   ): Promise<LockHandle> {
     signal?.throwIfAborted();
+    this.#assertUsable(key);
     const id = randomUUID();
-    const answer = this.#request(id, key, 'acquire');
+    const answer = this.#requests.add(id, { op: 'acquire', id, key }, 'resend');
     try {
       const token = await untilAborted(answer, signal);
       // The coordinator answers 'busy' only to a try; an acquire waits for its grant.
@@ -92,14 +100,20 @@ export class RemoteLockClient implements LockStore {
   }
 
   async tryAcquire(key: string): Promise<LockHandle | undefined> {
+    this.#assertUsable(key);
     const id = randomUUID();
-    const token = await this.#request(id, key, 'try');
+    const token = await this.#requests.add(
+      id,
+      { op: 'try', id, key },
+      tryIsBusy,
+    );
     return token && this.#hold(id, key, token);
   }
 
   async isHeld(key: string): Promise<boolean> {
     this.#assertUsable(key);
-    return this.#queries.ask(key);
+    const id = randomUUID();
+    return this.#looks.add(id, { op: 'isHeld', id, key }, 'resend');
   }
 
   /** Disconnects for good. Over a socket, the coordinator then releases whatever this client still holds. */
@@ -118,38 +132,10 @@ export class RemoteLockClient implements LockStore {
     }
   }
 
-  #request(
-    id: string,
-    key: string,
-    attempt: Pending['attempt'],
-  ): Promise<FencingToken | undefined> {
-    this.#assertUsable(key);
-    const { promise, resolve, reject } = Promise.withResolvers<
-      FencingToken | undefined
-    >();
-    const pending: Pending = {
-      key,
-      attempt,
-      delivery: 'queued',
-      resolve,
-      reject,
-      held: this.#refs.hold(),
-    };
-    this.#pending.set(id, pending);
-    this.#link.open();
-    this.#dispatch(id, pending);
-    return promise;
-  }
-
-  #dispatch(id: string, pending: Pending) {
-    const { key, attempt } = pending;
-    if (this.#link.send({ op: attempt, id, key })) pending.delivery = 'sent';
-  }
-
   /** The caller gave up. A grant already on its way is given back by the coordinator on `cancel`. */
   #withdraw(id: string) {
-    const pending = this.#take(id);
-    if (!pending || pending.delivery === 'sent') {
+    const request = this.#requests.take(id);
+    if (!request || request.sent) {
       this.#link.send({ op: 'cancel', id });
     }
   }
@@ -182,10 +168,10 @@ export class RemoteLockClient implements LockStore {
   #receive(response: LockResponse) {
     switch (response.op) {
       case 'granted': {
-        const pending = this.#take(response.id);
-        if (pending) {
+        const request = this.#requests.take(response.id);
+        if (request) {
           // isLockResponse admits only a token that parses.
-          pending.resolve(FencingToken.parse(response.token)!);
+          request.resolve(FencingToken.parse(response.token)!);
         } else {
           // Nobody waits for this grant any more (the request was cancelled), so give the key back.
           this.#link.send({ op: 'release', id: response.id });
@@ -193,18 +179,20 @@ export class RemoteLockClient implements LockStore {
         return;
       }
       case 'busy':
-        this.#take(response.id)?.resolve(undefined);
+        this.#requests.take(response.id)?.resolve(undefined);
         return;
       case 'failed': {
-        const pending = this.#take(response.id);
-        pending?.reject(new GrantFailedError(pending.key, response.message));
+        const request = this.#requests.take(response.id);
+        request?.reject(
+          new GrantFailedError(request.request.key, response.message),
+        );
         return;
       }
       case 'rejected':
         this.#lose(response.id);
         return;
       case 'held':
-        this.#queries.answer(response.id, response.held);
+        this.#looks.take(response.id)?.resolve(response.held);
         return;
     }
   }
@@ -220,19 +208,8 @@ export class RemoteLockClient implements LockStore {
       this.#link.send({ op: 'reassert', id, key, token: token.toString() });
     }
     this.#link.send({ op: 'reasserted' });
-    for (const [id, pending] of this.#pending) {
-      // A try is one attempt; the coordinator that would have answered it is gone.
-      if (pending.delivery === 'stranded') this.#take(id)?.resolve(undefined);
-      else if (pending.delivery === 'queued') this.#dispatch(id, pending);
-    }
-    this.#queries.askAgain();
-  }
-
-  #interrupt() {
-    for (const pending of this.#pending.values()) {
-      if (pending.delivery !== 'sent') continue;
-      pending.delivery = pending.attempt === 'try' ? 'stranded' : 'queued';
-    }
+    this.#requests.resume();
+    this.#looks.resume();
   }
 
   /** No coordinator heard the reassertions, so another holder may be granted the held keys. */
@@ -242,18 +219,7 @@ export class RemoteLockClient implements LockStore {
   }
 
   #rejectAll(reason: (key: string) => unknown) {
-    for (const [id, { key }] of this.#pending) {
-      this.#take(id)?.reject(reason(key));
-    }
-    this.#queries.rejectAll(reason);
-  }
-
-  /** Removes a request that is about to be answered, so a late grant for it is given back. */
-  #take(id: string): Pending | undefined {
-    const pending = this.#pending.get(id);
-    if (!pending) return undefined;
-    this.#pending.delete(id);
-    pending.held[Symbol.dispose]();
-    return pending;
+    this.#requests.rejectAll(({ key }) => reason(key));
+    this.#looks.rejectAll(({ key }) => reason(key));
   }
 }

@@ -4,12 +4,11 @@ import {
   FencingToken,
   type TokenSource,
 } from '@zukhruf/fencing';
+import { type Connection, ConnectionClosedError } from '@zukhruf/rpc';
 
 import type { LockHandle } from '../../mutex/lease.ts';
 import type { AcquireOptions, LockStore } from '../../mutex/lock-store.ts';
 import { MemoryStore } from '../memory/memory-store.ts';
-import { ConnectionClosedError } from './connection-closed-error.ts';
-import type { Connection } from './connection.ts';
 import {
   type LockRequest,
   type LockResponse,
