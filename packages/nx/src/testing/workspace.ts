@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { mkdir, readFile, symlink, writeFile } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
@@ -9,6 +9,24 @@ export const zukhrufModules = fileURLToPath(
   new URL('../../../../node_modules', import.meta.url),
 );
 const nxBin = join(zukhrufModules, 'nx/dist/bin/nx.js');
+
+/**
+ * The folders of the POSIX tools that the fixtures' scripts and the targets
+ * call, where this machine keeps them: /usr/bin and /bin on macOS and Ubuntu,
+ * /run/current-system/sw/bin on NixOS, whose /usr/bin and /bin hold only env
+ * and sh (#6131).
+ */
+const toolFolders = [
+  ...new Set(
+    ['basename', 'mkdir', 'rm'].map((tool) =>
+      dirname(
+        execFileSync('sh', ['-c', `command -v ${tool}`], {
+          encoding: 'utf8',
+        }).trim(),
+      ),
+    ),
+  ),
+];
 
 interface Manifest {
   name: string;
@@ -97,7 +115,14 @@ export async function workspace<Target>({
     );
   await lockfile(packages);
   const environment = {
-    PATH: `${dirname(process.execPath)}:/usr/bin:/bin`,
+    PATH: [
+      ...new Set([
+        dirname(process.execPath),
+        ...toolFolders,
+        '/usr/bin',
+        '/bin',
+      ]),
+    ].join(':'),
     HOME: join(root, 'home'),
     NX_DAEMON: 'false',
     NX_NO_CLOUD: 'true',
