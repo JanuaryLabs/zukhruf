@@ -267,7 +267,7 @@ export function processes<H extends Host>(
       }),
     );
 
-    test('four processes incrementing a shared counter never lose an update', async () => {
+    test('four processes incrementing a shared counter never lose an update', async (t) => {
       // Arrange: each increment reads, yields, then writes, so any overlap loses an update.
       await using fixture = await store.fixture(process.env);
       await using host = store.open(fixture.location);
@@ -277,13 +277,25 @@ export function processes<H extends Host>(
       const counter = join(journals.path, 'counter');
       const tokenJournal = join(journals.path, 'tokens.log');
       await writeFile(counter, '0');
-      const increments = 25;
+      // 25 rounds for each process, or as many as about 2 s of grants at the
+      // store's usual grant time and never fewer than 6, so a store whose
+      // grant is slow (a container for each claim) still hands the key over 24
+      // times. The processes start their rounds together, after each took a
+      // grant: with no exclusion, their first rounds overlap, however few
+      // rounds there are.
+      const increments = Math.min(
+        25,
+        Math.max(6, Math.round(2_000 / store.grantLatency)),
+      );
       const source = `
 					import { appendFile, readFile, writeFile } from 'node:fs/promises';
 					import { setImmediate as nextTurn } from 'node:timers/promises';
 					${workerPrelude(fixture.location)}
 					const counter = ${JSON.stringify(counter)};
 
+					await mutex.acquire('warm-up', async () => {});
+					process.send({ type: 'ready' });
+					await new Promise((go) => process.once('message', go));
 					for (let i = 0; i < ${increments}; i++) {
 						await mutex.acquire('product:42', async (lease) => {
 							await appendFile(${JSON.stringify(tokenJournal)}, lease.token + '\\n');
@@ -304,6 +316,10 @@ export function processes<H extends Host>(
           }),
         ),
       );
+      await Promise.all(
+        processes.map((worker) => worker.next('ready', { signal: t.signal })),
+      );
+      for (const worker of processes) worker.child.send({ type: 'go' });
       await Promise.all(processes.map((worker) => worker.closed));
 
       // Assert: every increment ran exclusively, so none was overwritten.

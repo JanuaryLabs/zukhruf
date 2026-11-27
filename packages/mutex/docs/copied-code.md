@@ -8,6 +8,13 @@ The paths are in `packages/mutex/src/lock-stores`. The code that the single flig
 
 ## In two places
 
+**The rounds of a contention test, by the store's grant time.**
+
+- Places: `increments` of 'four processes incrementing a shared counter never lose an update' (`testing/contract/processes.ts`), and `roundsOf` of `incrementFromFourThreads` (`testing/contract/threads.ts`).
+- Same: as many rounds as about 2 s of grants at `grantLatency`, at least 6 and at most the old count; each contender first takes a warm-up key, and all start their rounds together.
+- Differs: the processes test allows at most 25 rounds and starts the processes with an IPC ready/go; the threads test allows at most 20 and starts the threads with `Atomics.waitAsync` on shared memory.
+- Until a third place needs it, a fix in one goes into the other, and the commit names both files.
+
 **A connector that gives its one connection once.**
 
 - Places: `ParentPortConnector` in `thread/thread-store.ts`, and `ProcessChannelConnector` in `ipc/ipc-store.ts`.

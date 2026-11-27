@@ -11,6 +11,21 @@ import { startThread, threadSource } from './peers.ts';
 import type { Host, SharedByThreads, Subject } from './subject.ts';
 
 /** Four threads add 1 to a shared counter 20 times each, reading and writing around an `await`. */
+/**
+ * The rounds of each thread: 20, or as many as about 2 s of grants at the
+ * store's usual grant time and never fewer than 6, so a store whose grant is
+ * slow still hands the key over 24 times. A copy of the rounds of the
+ * processes contract (docs/copied-code.md).
+ */
+const roundsOf = (store: Pick<Subject, 'grantLatency'>): number =>
+  Math.min(20, Math.max(6, Math.round(2_000 / store.grantLatency)));
+
+/**
+ * Four threads, this one and three workers, each take the key `roundsOf`
+ * times. Each first takes another key once, so its store is connected, and
+ * they start their rounds together: with no exclusion, their first rounds
+ * overlap, however few rounds there are.
+ */
 async function incrementFromFourThreads<H extends Host>(
   store: Subject<H>,
   sharing: SharedByThreads<H>,
@@ -18,8 +33,9 @@ async function incrementFromFourThreads<H extends Host>(
 ) {
   await using host = store.open(location);
   const mutex = new Mutex(host.store);
-  // [counter, holders inside the critical section, overlaps seen]
-  const shared = new Int32Array(new SharedArrayBuffer(12));
+  const rounds = roundsOf(store);
+  // [counter, holders inside the critical section, overlaps seen, threads ready, go]
+  const shared = new Int32Array(new SharedArrayBuffer(20));
   const increment = async () => {
     if (Atomics.add(shared, 1, 1) !== 0) Atomics.add(shared, 2, 1);
     const value = shared[0]!;
@@ -29,7 +45,15 @@ async function incrementFromFourThreads<H extends Host>(
   };
   const body = `
 		const shared = workerData;
-		for (let i = 0; i < 20; i++) {
+		await mutex.acquire('warm-up', async () => {});
+		Atomics.add(shared, 3, 1);
+		Atomics.notify(shared, 3);
+		// Atomics.waitAsync holds no ref on the event loop, so a timer keeps the
+		// thread alive while it waits for the go.
+		const keep = setInterval(() => {}, 1_000);
+		await Atomics.waitAsync(shared, 4, 0).value;
+		clearInterval(keep);
+		for (let i = 0; i < ${rounds}; i++) {
 			await mutex.acquire('counter', async () => {
 				if (Atomics.add(shared, 1, 1) !== 0) Atomics.add(shared, 2, 1);
 				const value = shared[0];
@@ -50,9 +74,23 @@ async function incrementFromFourThreads<H extends Host>(
       'exit',
     ),
   );
-  for (let i = 0; i < 20; i++) await mutex.acquire('counter', increment);
-  await Promise.all(exits);
-  return { counter: shared[0], overlaps: shared[2] };
+  await mutex.acquire('warm-up', async () => {});
+  for (
+    let ready = Atomics.load(shared, 3);
+    ready < 3;
+    ready = Atomics.load(shared, 3)
+  )
+    await Atomics.waitAsync(shared, 3, ready).value;
+  Atomics.store(shared, 4, 1);
+  Atomics.notify(shared, 4);
+  for (let i = 0; i < rounds; i++) await mutex.acquire('counter', increment);
+  const codes = (await Promise.all(exits)).map(([code]: unknown[]) => code);
+  return {
+    counter: shared[0],
+    overlaps: shared[2],
+    expected: 4 * rounds,
+    codes,
+  };
 }
 
 /** A store whose worker threads share its locks. */
@@ -141,7 +179,12 @@ export function threads<H extends Host>(
       // Assert
       assert.deepEqual(
         result,
-        { counter: 80, overlaps: 0 },
+        {
+          counter: result.expected,
+          overlaps: 0,
+          expected: result.expected,
+          codes: [0, 0, 0],
+        },
         'Two threads held the key at the same time',
       );
     });
