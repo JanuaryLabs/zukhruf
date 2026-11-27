@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { hash } from 'node:crypto';
-import { mkdir, symlink, writeFile } from 'node:fs/promises';
+import { symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
@@ -20,15 +20,16 @@ function manifest(digests: Readonly<Record<string, string>>): string {
 test('a file whose bytes differ from its digest is refused', async () => {
   await using directory = await new TemporaryFiles().directory(
     'vector-decisions-',
-  );
-  await writeFile(join(directory.path, 'config.json'), '{}');
-  await writeFile(join(directory.path, 'universal.safetensors'), 'changed');
-  await writeFile(
-    join(directory.path, 'manifest.json'),
-    manifest({
-      'config.json': sha256('{}'),
-      'universal.safetensors': sha256('original'),
-    }),
+    {
+      files: {
+        'config.json': '{}',
+        'universal.safetensors': 'changed',
+        'manifest.json': manifest({
+          'config.json': sha256('{}'),
+          'universal.safetensors': sha256('original'),
+        }),
+      },
+    },
   );
 
   await assert.rejects(modelDirectory(directory.path), {
@@ -39,12 +40,14 @@ test('a file whose bytes differ from its digest is refused', async () => {
 });
 
 test('a name that leads out of the folder is refused, though its digest matches', async () => {
-  await using root = await new TemporaryFiles().directory('vector-decisions-');
+  await using root = await new TemporaryFiles().directory('vector-decisions-', {
+    files: {
+      'outside.json': 'outside',
+      'head/sub/inner.json': 'inner',
+      'head/config.json': '{}',
+    },
+  });
   const head = join(root.path, 'head');
-  await mkdir(join(head, 'sub'), { recursive: true });
-  await writeFile(join(root.path, 'outside.json'), 'outside');
-  await writeFile(join(head, 'sub', 'inner.json'), 'inner');
-  await writeFile(join(head, 'config.json'), '{}');
   const names = {
     '../outside.json': sha256('outside'),
     'sub/inner.json': sha256('inner'),
@@ -71,8 +74,8 @@ test('a name that leads out of the folder is refused, though its digest matches'
 test('a folder with no manifest.json is refused', async () => {
   await using directory = await new TemporaryFiles().directory(
     'vector-decisions-',
+    { files: { 'config.json': '{}' } },
   );
-  await writeFile(join(directory.path, 'config.json'), '{}');
 
   await assert.rejects(modelDirectory(directory.path), { code: 'ENOENT' });
 });
@@ -80,14 +83,15 @@ test('a folder with no manifest.json is refused', async () => {
 test('a file that the manifest lists and the folder lacks is refused', async () => {
   await using directory = await new TemporaryFiles().directory(
     'vector-decisions-',
-  );
-  await writeFile(join(directory.path, 'config.json'), '{}');
-  await writeFile(
-    join(directory.path, 'manifest.json'),
-    manifest({
-      'config.json': sha256('{}'),
-      'universal.safetensors': sha256('weights'),
-    }),
+    {
+      files: {
+        'config.json': '{}',
+        'manifest.json': manifest({
+          'config.json': sha256('{}'),
+          'universal.safetensors': sha256('weights'),
+        }),
+      },
+    },
   );
 
   await assert.rejects(modelDirectory(directory.path), { code: 'ENOENT' });
@@ -96,10 +100,10 @@ test('a file that the manifest lists and the folder lacks is refused', async () 
 test('a manifest that is not JSON or has no SHA-256 map is refused', async () => {
   await using directory = await new TemporaryFiles().directory(
     'vector-decisions-',
+    { files: { 'config.json': '{}' } },
   );
   // A flat map of file names to digests, with no sha256 key, is not a
   // manifest, though its file matches.
-  await writeFile(join(directory.path, 'config.json'), '{}');
   const broken = [
     JSON.stringify({ 'config.json': sha256('{}') }),
     '{"sha256": {"config.json": ',
@@ -126,22 +130,21 @@ test('a manifest that is not JSON or has no SHA-256 map is refused', async () =>
 test('a folder whose files match gives the folder, links into blobs too', async () => {
   await using directory = await new TemporaryFiles().directory(
     'vector-decisions-',
+    {
+      files: {
+        'blobs/abc123': 'weights',
+        'snapshot/config.json': '{}',
+        'snapshot/manifest.json': manifest({
+          'config.json': sha256('{}'),
+          'universal.safetensors': sha256('weights'),
+        }),
+      },
+    },
   );
   const head = join(directory.path, 'snapshot');
-  const blobs = join(directory.path, 'blobs');
-  await mkdir(head);
-  await mkdir(blobs);
-  await writeFile(join(blobs, 'abc123'), 'weights');
-  // The Hub cache links a file to its blob by a relative path.
+  // The Hub cache links a file to its blob by a relative path; the files of
+  // a temporary directory hold no symbolic link.
   await symlink('../blobs/abc123', join(head, 'universal.safetensors'));
-  await writeFile(join(head, 'config.json'), '{}');
-  await writeFile(
-    join(head, 'manifest.json'),
-    manifest({
-      'config.json': sha256('{}'),
-      'universal.safetensors': sha256('weights'),
-    }),
-  );
 
   assert.equal(await modelDirectory(head), head);
 });
