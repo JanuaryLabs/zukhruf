@@ -1,6 +1,6 @@
 # The newest revision takes over, and the store deprecates every older revision
 
-Status: Accepted 2026-11-20 (backlog #3527). Revised 2026-11-27: the store holds the deprecation, and no owner refuses another revision's jobs. Built 2026-11-27, on `getQueues` of `@zukhruf/sqlite-queue`.
+Status: Accepted 2026-11-20 (backlog #3527). Revised 2026-11-27: the store holds the deprecation, and no owner refuses another revision's jobs. Built 2026-11-27, on `getQueues` of `@zukhruf/sqlite-queue`. Since 2026-11-27 (backlog #5427) the host leads through a `LeaderSelector` of `@zukhruf/election`, and the deprecation disposes it, so no round starts after the deprecation; the read before the campaign, the tell at the start and the read after a won term stay the pool's.
 
 Old plugin servers run on after an update (#2127). Hosts of two revisions of one worker kind then share one pool. `@zukhruf/election` never moves ownership while the owner lives, so an old owner keeps the workers until it ends (map ticket 08).
 

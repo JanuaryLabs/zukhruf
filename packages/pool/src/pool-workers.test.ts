@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { type ChildProcess, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { readdir } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import fsPromises, { mkdir, readdir, rm } from 'node:fs/promises';
+import { syncBuiltinESMExports } from 'node:module';
 import type { Socket } from 'node:net';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
@@ -34,6 +36,8 @@ import {
   JobFailedError,
   JobNotFoundError,
   LeaderFirst,
+  LeaderSelectorWarning,
+  NetworkDirectoryError,
   NoEviction,
   OnDemand,
   OrderedReady,
@@ -3404,6 +3408,237 @@ describe('PoolWorkers when its store fails', () => {
       process.off('warning', onWarning);
     }
   });
+});
+
+// A wait in real time for the I/O of a campaign that the clock started.
+const CAMPAIGN_IO_MS = 100;
+
+describe('PoolWorkers when its campaign fails', () => {
+  test('a host whose campaign fails warns with a LeaderSelectorWarning, stays unready, campaigns again 2 s to 4.4 s after each failure on its clock, and owns once the fault is gone', async (t) => {
+    // Arrange: a folder at the path of the claim file, so the election cannot
+    // open its claim: a fault of the file system that no operation exposes.
+    await using folder = await new TemporaryFiles().directory('pool-');
+    const claim = join(folder.path, 'echo.claim');
+    await mkdir(claim);
+    const clock = createClock(Date.now());
+    const failures: { warning: unknown; at: number }[] = [];
+    t.mock.method(process, 'emitWarning', (warning: unknown) => {
+      if (
+        warning instanceof LeaderSelectorWarning &&
+        warning.detail === `election: ${claim}`
+      )
+        failures.push({ warning, at: clock.now });
+    });
+    await using host = hostOf(
+      clock,
+      join(folder.path, 'store.sqlite'),
+      echoOf(1),
+      new HeldWorkers(),
+    );
+    const ready = host.offered.ready();
+    const readied = settledFlag(ready);
+    // client-go's RetryPeriod of 2 s with its JitterFactor of 1.2: the next
+    // campaign starts 2 s to 4.4 s after `from`. The clock stands still while
+    // the campaign's real I/O runs.
+    const campaignsAgain = async (from: number, campaigned: () => boolean) => {
+      await clock.tickAsync(from + 1_999 - clock.now);
+      await setTimeout(CAMPAIGN_IO_MS);
+      assert.ok(!campaigned(), 'No campaign before 2 s');
+      await clock.tickAsync(from + 4_400 - clock.now);
+      await waitFor(() => assert.ok(campaigned(), 'A campaign by 4.4 s'), {
+        signal: t.signal,
+      });
+    };
+
+    // Act: two campaigns fail, and then the fault is gone: the next campaign
+    // creates the claim file.
+    await drive(clock, [], () => failures.length === 1, 10_000);
+    await campaignsAgain(failures[0]!.at, () => failures.length === 2);
+    const stillUnready = !readied.settled;
+    await rm(claim, { recursive: true });
+    await campaignsAgain(failures[1]!.at, () => existsSync(claim));
+    await driveUntil(clock, ready, 10_000);
+
+    // Assert
+    assert.ok(stillUnready, 'A failed campaign must not end the host');
+    const { warning } = failures[0]!;
+    assert.ok(warning instanceof LeaderSelectorWarning);
+    assert.deepEqual(
+      { ...warning },
+      {
+        name: 'LeaderSelectorWarning',
+        code: 'ZUKHRUF_ELECTION_LEADER_SELECTOR_CAMPAIGN_FAILED',
+        detail: `election: ${claim}`,
+      },
+    );
+    assert.ok(Error.isError(warning.cause));
+    assert.equal(host.created(), 2);
+  });
+
+  test('the wait after each failed campaign varies at random, and each lies 2 s to 4.4 s after the failure on its clock', async (t) => {
+    // Arrange: the claim cannot open, as above.
+    await using folder = await new TemporaryFiles().directory('pool-');
+    const claim = join(folder.path, 'echo.claim');
+    await mkdir(claim);
+    const clock = createClock(Date.now());
+    const failures: number[] = [];
+    t.mock.method(process, 'emitWarning', (warning: unknown) => {
+      if (
+        warning instanceof LeaderSelectorWarning &&
+        warning.detail === `election: ${claim}`
+      )
+        failures.push(clock.now);
+    });
+    await using host = hostOf(
+      clock,
+      join(folder.path, 'store.sqlite'),
+      echoOf(1),
+      new HeldWorkers(),
+    );
+
+    // Act: after the first failure the clock runs one timer at a time and
+    // stands still while the campaign that a timer started runs its real
+    // I/O, so each failure is at the time of the timer that started its
+    // campaign, and a gap between two failures is the wait between them.
+    await drive(clock, [], () => failures.length === 1, 10_000);
+    await waitFor(
+      async () => {
+        const failed = failures.length >= 7;
+        if (!failed) await clock.nextAsync();
+        assert.ok(failed, `${failures.length} failed campaigns`);
+      },
+      { signal: t.signal, interval: CAMPAIGN_IO_MS },
+    );
+    const gaps = failures.slice(1, 7).map((at, i) => at - failures[i]!);
+
+    // Assert: 6 waits, each uniform in 2 s to 4.4 s. A fixed wait, or one
+    // with a jitter of a few ms, spreads by 10 ms at most; 6 random waits
+    // spread by less than 100 ms with odds of about 6 * (100 / 2400)^5,
+    // below 1 in a million.
+    assert.equal(gaps.length, 6);
+    for (const gap of gaps)
+      assert.ok(gap >= 2_000 && gap <= 4_400, `A wait of ${gap} ms`);
+    assert.ok(
+      Math.max(...gaps) - Math.min(...gaps) > 100,
+      `Waits that do not vary: ${gaps.join(', ')}`,
+    );
+  });
+
+  void test.each(
+    [
+      {
+        stop: 'its disposal',
+        act: (host: ReturnType<typeof hostOf>) =>
+          host.offered[Symbol.asyncDispose](),
+        ends: { name: 'AbortError' },
+      },
+      {
+        stop: 'a newer revision',
+        act: async (_host: ReturnType<typeof hostOf>, store: string) => {
+          await using newer = new Pool({
+            kind: echoOf(2),
+            store,
+            clock: globalThis,
+          });
+          await newer.start({ id: 'a' });
+        },
+        ends: deprecatedFrom(1, 2),
+      },
+    ],
+    ({ stop, act, ends }) =>
+      test(`${stop} during the back-off after a failed campaign ends the host with no move of its clock, rejects its ready(), and leaves no timer on its clock`, async (t) => {
+        // Arrange: the claim cannot open, as above.
+        await using folder = await new TemporaryFiles().directory('pool-');
+        const store = join(folder.path, 'store.sqlite');
+        const claim = join(folder.path, 'echo.claim');
+        await mkdir(claim);
+        const clock = createClock(Date.now());
+        // Its timers before the warning of the failed campaign: the store's
+        // own timers run on the clock too, so only a rise past them is the
+        // back-off, which the selector arms right after it warns.
+        let before: number | undefined;
+        t.mock.method(process, 'emitWarning', (warning: unknown) => {
+          if (
+            warning instanceof LeaderSelectorWarning &&
+            warning.detail === `election: ${claim}`
+          )
+            before ??= clock.countTimers();
+        });
+        await using host = hostOf(clock, store, echoOf(1), new HeldWorkers());
+        const ready = assert.rejects(host.offered.ready(), ends);
+        const backingOff = () =>
+          before !== undefined && clock.countTimers() > before;
+        await drive(clock, [], backingOff, 10_000);
+        assert.ok(backingOff(), 'The host backs off after a failed campaign');
+
+        // Act
+        await act(host, store);
+
+        // Assert
+        await untilAborted(ready, t.signal);
+        assert.equal(clock.countTimers(), 0);
+      }),
+  );
+});
+
+describe('PoolWorkers in a folder on a network file system', () => {
+  test(
+    'a host whose store is in a folder on a network file system ends with NetworkDirectoryError, and never campaigns',
+    {
+      skip:
+        process.platform === 'linux'
+          ? false
+          : 'Only Linux statfs reports a stable file system type',
+    },
+    async (t) => {
+      // Arrange: statfs reports NFS for the folder, as the kernel does for a mount.
+      await using folder = await new TemporaryFiles().directory('pool-');
+      const realStatfs = fsPromises.statfs;
+      t.mock.method(
+        fsPromises,
+        'statfs',
+        async (path: string, options: { bigint: true }) => {
+          const stats = await realStatfs(path, options);
+          return path.startsWith(folder.path)
+            ? { ...stats, type: 0x6969n }
+            : stats;
+        },
+      );
+      syncBuiltinESMExports();
+      try {
+        const host = hostOf(
+          createClock(Date.now()),
+          join(folder.path, 'store.sqlite'),
+          echoOf(1),
+          new HeldWorkers(),
+        );
+        const onNetwork = (error: unknown): true => {
+          assert.ok(error instanceof NetworkDirectoryError, String(error));
+          assert.equal(error.fileSystem, 'NFS');
+          return true;
+        };
+
+        // Act: nothing but the start.
+
+        // Assert: the host ends by itself, and its disposal waits for that end.
+        try {
+          await assert.rejects(
+            untilAborted(host.offered.ready(), t.signal),
+            onNetwork,
+          );
+        } finally {
+          await assert.rejects(host[Symbol.asyncDispose](), onNetwork);
+        }
+        assert.ok(
+          !(await readdir(folder.path)).includes('echo.claim'),
+          'A host on a network file system must not campaign',
+        );
+      } finally {
+        t.mock.restoreAll();
+        syncBuiltinESMExports();
+      }
+    },
+  );
 });
 
 // The Pool that sends the jobs, beside the PoolWorkers that run them.

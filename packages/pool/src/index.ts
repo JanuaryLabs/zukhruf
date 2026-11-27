@@ -17,6 +17,8 @@ export {
   JobNotFoundError,
 } from './errors.ts';
 export { type JobCounts, type JobHandle, Pool } from './pool.ts';
+export { LeaderSelectorWarning } from '@zukhruf/election';
+export { NetworkDirectoryError } from '@zukhruf/fs';
 export { PoolWorkers } from './pool-workers.ts';
 export { PoolWarning, type PoolWarningSubject } from './pool-warning.ts';
 export type { PoolStats } from './pool-stats.ts';

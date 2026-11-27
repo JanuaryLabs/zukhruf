@@ -3,6 +3,7 @@ import { dirname } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 
 import type { WallClock } from '@zukhruf/async';
+import { assertLocalDirectory } from '@zukhruf/fs';
 import { Notifications } from '@zukhruf/sqlite-notify';
 import { WriteAheadLog, open } from '@zukhruf/sqlite-open';
 import {
@@ -66,8 +67,14 @@ export class Store implements AsyncDisposable {
     });
   }
 
-  /** Starts the queue, and creates the queue of the kind's revision with the kind's rules. */
+  /**
+   * Starts the queue, and creates the queue of the kind's revision with the
+   * kind's rules. It first rejects with `NetworkDirectoryError` when the
+   * folder is on a network file system: the locks of the SQLite file and of
+   * the election's claim files do not hold there, and no retry changes that.
+   */
   async start<Input, Output>(kind: WorkerKind<Input, Output>): Promise<void> {
+    await assertLocalDirectory(this.folder);
     await this.queue.start();
     await this.queue.createQueue(kind.queue, {
       policy: kind.policy,
