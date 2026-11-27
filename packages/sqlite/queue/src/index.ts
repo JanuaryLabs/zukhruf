@@ -13,6 +13,7 @@ import {
   type Job,
   type JobAttempt,
   type JobWithMetadata,
+  type ListOptions,
   type MaintenanceOptions,
   type OffWorkOptions,
   type PgBossEventMap,
@@ -47,7 +48,12 @@ import { DatabaseError } from './database-error.ts';
 import { Database } from './database.ts';
 import { CurrentOperation } from './in-flight.ts';
 import { JobFetcher } from './job-fetcher.ts';
-import type { FoundJob, JobQueue, StartOptions } from './job-queue.ts';
+import type {
+  FoundJob,
+  JobQueue,
+  ListedQueue,
+  StartOptions,
+} from './job-queue.ts';
 import { JobRows } from './job-rows.ts';
 import type { JobRow } from './job-rows.ts';
 import { JobSettler } from './job-settler.ts';
@@ -81,7 +87,12 @@ export { UnsupportedStartAfterError } from './start-after.ts';
 export { SqliteJobQueueWarning } from './sqlite-job-queue-warning.ts';
 export { TimekeeperWarning } from './timekeeper-warning.ts';
 
-export type { FoundJob, JobQueue, StartOptions } from './job-queue.ts';
+export type {
+  FoundJob,
+  JobQueue,
+  ListedQueue,
+  StartOptions,
+} from './job-queue.ts';
 
 function toError(value: unknown): Error {
   return Error.isError(value) ? value : new Error(String(value));
@@ -760,8 +771,8 @@ export class SqliteJobQueue
     options: Omit<Queue, 'name'> = {},
   ): Promise<void> {
     // node_modules/pg-boss/dist/manager.js:2625-2633. `partition` is a pg-boss
-    // storage layout (a table per queue) with no observable effect, so it is
-    // accepted and has nothing to store here.
+    // storage layout (a table per queue): the jobs stay in pgboss_job, and the
+    // queue keeps only the flag that getQueues gives.
     Attorney.assertQueueName(name);
     const policy = options.policy || policies.standard;
     assert(policy in policies, `${policy} is not a valid queue policy`);
@@ -776,6 +787,7 @@ export class SqliteJobQueue
       this.getQueueOrThrow(options.deadLetter);
     }
 
+    const createdOn = SqlValues.asIso(this.#now());
     this.db
       .prepare(
         `INSERT OR IGNORE INTO pgboss_queue (
@@ -791,8 +803,11 @@ export class SqliteJobQueue
           heartbeat_seconds,
           dead_letter,
           warning_queue_size,
-          notify
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          notify,
+          partition,
+          created_on,
+          updated_on
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         name,
@@ -808,6 +823,10 @@ export class SqliteJobQueue
         options.deadLetter ?? null,
         options.warningQueueSize ?? 0,
         SqlValues.toSqlBool(options.notify) ?? 0,
+        SqlValues.toSqlBool(options.partition) ?? 0,
+        // One job_now() for both (plans.js:1088-1089).
+        createdOn,
+        createdOn,
       );
     this.#reloadQueueCache(name);
   }
@@ -966,6 +985,47 @@ export class SqliteJobQueue
     return QueueStatsCache.refresh(this.db, [name], this.#now()).map((row) =>
       SqliteJobQueue.#toQueueStats(name, row, percentiles),
     );
+  }
+
+  // index.js:488-492 checks the page before manager.js:2653-2677 reads the
+  // names: an array, one name, or anything else for every queue.
+  async getQueues(
+    names?: string[],
+    options?: ListOptions,
+  ): Promise<ListedQueue[]> {
+    const limit = Attorney.assertListLimit('getQueues', options?.limit);
+    const after: unknown = options?.after;
+    Attorney.assertListAfter('getQueues', after);
+    const given: unknown = names;
+    const wanted = Array.isArray(given)
+      ? given
+      : typeof given === 'string'
+        ? [given]
+        : [];
+    for (const name of wanted) {
+      Attorney.assertQueueName(name);
+    }
+    // plans.js:1615-1668. SQLite compares text by its bytes, as the C
+    // collation of pg-boss's database does.
+    const where: string[] = [];
+    const values: SQLInputValue[] = [];
+    if (wanted.length > 0) {
+      where.push('name IN (SELECT value FROM json_each(?))');
+      values.push(JSON.stringify(wanted));
+    }
+    if (typeof after === 'string') {
+      where.push('name > ?');
+      values.push(after);
+    }
+    return this.db
+      .prepare(
+        `SELECT * FROM pgboss_queue
+        ${where.length > 0 ? `WHERE ${where.join(' AND ')}` : ''}
+        ORDER BY name
+        LIMIT ?`,
+      )
+      .all(...values, limit)
+      .map(QueueRows.list);
   }
 
   // toSnapshot (manager.js:2824-2870) of the cache, which holds gauges only:

@@ -1,6 +1,6 @@
 # @zukhruf/sqlite-queue
 
-A program sends jobs to a queue, and workers do the jobs later, also after the program restarts. [pg-boss](https://github.com/timgit/pg-boss) is a job queue that keeps its jobs in Postgres. A program that has no Postgres server, for example a desktop app or a CLI, cannot use it. This package keeps the jobs in one SQLite file through `node:sqlite`, and gives the API of pg-boss: the same method names, the same options, the same results and the same errors. The API is a declared subset of pg-boss: 18 methods of `PgBoss`.
+A program sends jobs to a queue, and workers do the jobs later, also after the program restarts. [pg-boss](https://github.com/timgit/pg-boss) is a job queue that keeps its jobs in Postgres. A program that has no Postgres server, for example a desktop app or a CLI, cannot use it. This package keeps the jobs in one SQLite file through `node:sqlite`, and gives the API of pg-boss: the same method names, the same options, the same results and the same errors. The API is a declared subset of pg-boss: 19 methods of `PgBoss`.
 
 Zero divergence is the contract. A parity suite runs each scenario on real pg-boss 12.39.0 over PGlite, and on this package. Then it compares what each engine returned, stored and emitted. A test passes only when the two are equal. Thus a program can change from one engine to the other and keep its code.
 
@@ -116,6 +116,7 @@ A schedule sends a job to its queue at each time that its cron or rrule rule giv
 | `complete(name, id, data, options)`                                             | Complete jobs by id or by attempt. With `includeQueued`, also jobs that are not yet active.                                                                        |
 | `touch(name, id)`                                                               | Keep the heartbeat of active jobs by id or by attempt.                                                                                                             |
 | `getQueueStats(name, options)`                                                  | Give the counts of a queue by state, from the cache that the monitor keeps. A read counts again when the cache is older than one hour, or one minute with `force`. |
+| `getQueues(names, options)`                                                     | Give the queues by name, or every queue, in name order, each with its options and the counts that the monitor keeps. `limit` and `after` page the list.            |
 | `cancel(name, id)`, `fail(name, id, data)`                                      | Cancel or fail jobs by id or by attempt.                                                                                                                           |
 | `schedule(name, cron, data, options)`, `unschedule(name, key)`                  | Send a job on a cron or rrule schedule, and remove the schedule.                                                                                                   |
 
@@ -168,6 +169,8 @@ interface JobQueue {
     name: string,
     options?: QueueStatsOptions,
   ): Promise<QueueStats[]>;
+  // The throughput fields need persistQueueStats: zeros and nulls here.
+  getQueues(names?: string[], options?: ListOptions): Promise<ListedQueue[]>;
   send(request: Request): Promise<string | null>;
   send(
     name: string,
@@ -227,6 +230,17 @@ type FoundJob<T> = Omit<
   deadLetter: string | null;
   retryDelayMax?: number | null;
   output: object | null;
+};
+
+// QueueResult of pg-boss, with the fields that getQueues gives as null.
+type ListedQueue = Omit<
+  QueueResult,
+  'deadLetter' | 'retryDelayMax' | 'heartbeatSeconds' | 'singletonsActive'
+> & {
+  deadLetter?: string | null;
+  retryDelayMax?: number | null;
+  heartbeatSeconds?: number | null;
+  singletonsActive: (string | null)[] | null; // null for a job with no key
 };
 
 interface SqliteJobQueueOptions
@@ -351,7 +365,7 @@ The test target sets `TZ=Asia/Kolkata`. The parity suite needs a zone that is no
 ```
 src/
   index.ts           SqliteJobQueue and the exports
-  job-queue.ts       JobQueue, the subset, and FoundJob
+  job-queue.ts       JobQueue, the subset, FoundJob and ListedQueue
   *.ts               the parts of the port, each one cites the pg-boss code that it copies
   *.test.ts          the unit tests, for behavior that only SQLite has
   parity/            the parity suite: each scenario on pg-boss over PGlite and on SQLite

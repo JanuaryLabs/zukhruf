@@ -6,10 +6,12 @@ import type {
   Job,
   JobAttempt,
   JobWithMetadata,
+  ListOptions,
   OffWorkOptions,
   PgBoss,
   Queue,
   QueuePolicy,
+  QueueResult,
   QueueStats,
   QueueStatsOptions,
   Request,
@@ -40,6 +42,21 @@ export type FoundJob<T> = Omit<
   output: object | null;
 };
 
+// pg-boss's QueueResult with the fields that its runtime gives as null:
+// getQueues reads nullable columns (node_modules/pg-boss/dist/plans.js:
+// 346-386) as stored, so a queue with no dead letter has `deadLetter: null`,
+// and singletons_active holds a null for an active job with no singletonKey.
+// The optional fields stay optional so a PgBoss still satisfies the type.
+export type ListedQueue = Omit<
+  QueueResult,
+  'deadLetter' | 'retryDelayMax' | 'heartbeatSeconds' | 'singletonsActive'
+> & {
+  deadLetter?: string | null;
+  retryDelayMax?: number | null;
+  heartbeatSeconds?: number | null;
+  singletonsActive: (string | null)[] | null;
+};
+
 // The subset of pg-boss's PgBoss API (node_modules/pg-boss/dist/index.d.ts)
 // that SqliteJobQueue implements, in pg-boss's own types. A PgBoss instance
 // satisfies it as is. Job data is unknown: a caller validates what it reads.
@@ -66,6 +83,10 @@ export interface JobQueue {
     name: string,
     options?: QueueStatsOptions,
   ): Promise<QueueStats[]>;
+  // Each queue's options and the counts that the monitor keeps, in name
+  // order. The throughput fields need persistQueueStats, so they keep their
+  // zeros and nulls.
+  getQueues(names?: string[], options?: ListOptions): Promise<ListedQueue[]>;
   send(request: Request): Promise<string | null>;
   send(
     name: string,

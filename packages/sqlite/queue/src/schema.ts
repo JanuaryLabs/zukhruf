@@ -20,6 +20,9 @@ export const queueSchema = new Declaration(
     dead_letter TEXT REFERENCES pgboss_queue(name),
     warning_queue_size INTEGER NOT NULL DEFAULT 0 CHECK (warning_queue_size >= 0),
     notify INTEGER NOT NULL DEFAULT 0 CHECK (notify IN (0, 1)),
+    -- pg-boss's own table for the queue's jobs (node_modules/pg-boss/dist/
+    -- plans.js:357-358), which getQueues gives; the jobs stay in pgboss_job.
+    partition INTEGER NOT NULL DEFAULT 0 CHECK (partition IN (0, 1)),
     -- The monitor's counts and claim stamps (node_modules/pg-boss/dist/
     -- plans.js:359-383); singletons_active is a JSON array of keys, nulls
     -- included, or NULL when no singleton or stately job is active.

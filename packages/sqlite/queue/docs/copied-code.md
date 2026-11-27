@@ -20,6 +20,11 @@ The Rule of Three counts places, not packages. Code that a second place needs is
 - Same: a fetch, then a fail, a cancel or a complete, makes a created, retry, active, completed, cancelled and failed job, each at attempt 0.
 - Differs: the queue in `touch.test.ts` has `heartbeatSeconds`, and its fetch checks the ids that it gives.
 
+**`fetchJob` that fetches one job and requires it to be the job `n`.**
+
+- Places: `src/parity/queue-stats.test.ts` and `src/parity/get-queues.test.ts`.
+- Same: the code. `fetchJobs` of `src/parity/touch.test.ts` checks a batch of ids and gives their attempts.
+
 ## Same name, other knowledge
 
 `src/testing/outcome.ts` gives `resolved`, or the class and the message of the error. These `outcome` functions compare a different result, so each stays in its test file:

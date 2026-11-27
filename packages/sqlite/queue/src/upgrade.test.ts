@@ -282,4 +282,36 @@ describe('a queue file an earlier release made', () => {
       await queue.stop({ graceful: false, close: true });
     }
   });
+
+  it('lists a queue that an earlier release made with the UTC times that SQLite stamped on it', async () => {
+    await using scratch = await new TemporaryFiles().directory('queue-');
+    const path = join(scratch.path, 'queue.sqlite');
+    const clock = new TestClock('2026-11-27T00:00:00.000Z');
+    const queue = new SqliteJobQueue({ path, clock, supervise: false });
+    try {
+      await queue.start();
+      {
+        // A createQueue() before getQueues left created_on and updated_on at
+        // their default, CURRENT_TIMESTAMP, which SQLite writes as UTC text
+        // with no zone. No public operation writes that text now, so the row
+        // is written in that release's SQL, with times known to the test.
+        using database = open(path);
+        database.exec(
+          "INSERT INTO pgboss_queue (name, created_on, updated_on) VALUES ('old', '2026-11-20 08:30:00', '2026-11-21 09:45:00')",
+        );
+      }
+
+      const [old] = await queue.getQueues(['old']);
+
+      assert.deepEqual(
+        { createdOn: old?.createdOn, updatedOn: old?.updatedOn },
+        {
+          createdOn: new Date('2026-11-20T08:30:00.000Z'),
+          updatedOn: new Date('2026-11-21T09:45:00.000Z'),
+        },
+      );
+    } finally {
+      await queue.stop({ graceful: false, close: true });
+    }
+  });
 });
