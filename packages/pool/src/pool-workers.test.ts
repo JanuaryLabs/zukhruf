@@ -767,15 +767,20 @@ describe('PoolWorkers lends its workers', { concurrency: true }, () => {
     await using folder = await new TemporaryFiles().directory('pool-');
     const store = join(folder.path, 'store.sqlite');
     const sizing = new Steered();
+    const slowStarted = new Latch();
     const resized = new Latch();
-    // The job "resize" resizes once its line comes back, while the job "slow"
-    // runs, and "slow" answers only after that: the order is a fact, not two
-    // sleeps that a loaded machine can swap (#5845).
+    // "slow" starts before "resize" resizes, and answers only after it. Both
+    // orders are facts: the two workers warm up at their own pace, and a loaded
+    // machine can swap two sleeps (#5845).
     class Resizing extends EchoWorker {
       override async run(text: string): Promise<string> {
-        if (text === 'slow') await resized.wait();
+        if (text === 'slow') {
+          slowStarted.open();
+          await resized.wait();
+        }
         const echoed = await super.run(text);
         if (text === 'resize') {
+          await slowStarted.wait();
           sizing.current = 1;
           resized.open();
         }
@@ -804,8 +809,8 @@ describe('PoolWorkers lends its workers', { concurrency: true }, () => {
       (text) => pool.start(text),
     );
     // The owner fetched "slow" and "resize" for its two workers, which warm up
-    // until the test releases them, so both jobs start together. Waiting jobs
-    // make the times measurable once "slow" ends.
+    // until the test releases them. Waiting jobs make the times measurable once
+    // "slow" ends.
     await waitFor(() => assert.equal(workers.stats.waiting, 2), {
       signal: t.signal,
       interval: 10,
