@@ -1,6 +1,6 @@
 # @zukhruf/checkpoint
 
-> **Design for review: no code yet.** The README, the glossary and the ADRs are the API on paper. Nothing is built before the maintainer approves them (backlog #6201).
+> **Being built (backlog #6201).** The maintainer approved this API on 2026-11-27. `ConsumerGroup`, `PartitionContext`, the map states, the errors and `MemoryCheckpointStore` exist. The trackers and the SQLite, Postgres and SQL Server stores come next.
 
 Keep how far a reader of a stream got, so that it can resume after a stop or a crash. A **checkpoint** belongs to one consumer group, one stream and one partition of that stream. It holds a position, which names the next record to read, and the keyed state of the reader, which a commit saves as changes. A commit saves the position, the state changes and the next checkpoint id together, and it can write the output of the reader in the same transaction. A newer claim of a partition fences the older one, so a reader that a restart replaced cannot commit.
 
@@ -58,7 +58,7 @@ for await (const page of readMessages(from)) {
 
 `group.claim(partition, format)` takes the partition for this reader and reads its checkpoint ([ADR 0005](./docs/adr/0005-a-claim-gives-the-saved-checkpoint-or-none-and-the-reader-picks-its-start-when-it-has-none.md)).
 
-- `context.checkpoint` is the saved checkpoint: its `position` and its `checkpointId`. It is `undefined` when the partition has no checkpoint. Then the reader picks its own start, for example the first record or the newest one.
+- `context.checkpoint` is the checkpoint that the claim read: its `position` and its `checkpointId`. It is `undefined` when the partition had no checkpoint. Then the reader picks its own start, for example the first record or the newest one. It does not change after a commit, as Flink gives the restored checkpoint only once; each commit resolves with the new checkpoint.
 - The position names the next record to read. Each record before it is done ([ADR 0004](./docs/adr/0004-a-position-is-an-opaque-json-value-with-a-format-version-and-it-names-the-next-record-to-read.md)).
 - The package never reads the position. The `format` writes it as JSON with a version, and reads it back.
 
@@ -252,12 +252,12 @@ export interface MapState<V> {
   clear(): void;
 }
 
-export interface PartitionContext<P, W> {
+export class PartitionContext<P, W> {
   readonly consumerGroup: string;
   readonly stream: string;
   readonly partition: string;
   readonly epoch: FencingToken;
-  /** undefined when the partition has no checkpoint. */
+  /** The checkpoint that the claim read; undefined when there was none. */
   readonly checkpoint: Checkpoint<P> | undefined;
   state<V>(name: string, format: Format<V>): MapState<V>;
   commit(

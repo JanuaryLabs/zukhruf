@@ -1,0 +1,50 @@
+{
+  "name": "@zukhruf/checkpoint",
+  "version": "0.8.70",
+  "description": "Keep how far a reader of a stream got: a checkpoint for each consumer group, stream and partition, with an opaque versioned position and map states that commit all or nothing, fenced against older claims, in memory, SQLite, Postgres or SQL Server.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JanuaryLabs/zukhruf",
+    "directory": "packages/checkpoint"
+  },
+  "bugs": {
+    "url": "https://github.com/JanuaryLabs/zukhruf/issues"
+  },
+  "homepage": "https://github.com/JanuaryLabs/zukhruf/tree/main/packages/checkpoint#readme",
+  "keywords": [
+    "checkpoint",
+    "stream",
+    "offset",
+    "consumer-group",
+    "partition",
+    "resume",
+    "fencing",
+    "state"
+  ],
+  "type": "module",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "@zukhruf/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "!dist/spec/**",
+    "!**/*.tsbuildinfo",
+    "!**/*.test.*"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@zukhruf/fencing": "^0.8.70"
+  },
+  "devDependencies": {
+    "@zukhruf/parameterized-test": "^0.8.70"
+  }
+}
