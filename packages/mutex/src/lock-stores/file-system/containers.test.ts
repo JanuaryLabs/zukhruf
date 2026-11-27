@@ -39,6 +39,16 @@ async function bundled(source: string): Promise<string> {
 
 const stores = ['LockFileStore', 'TicketQueueFileStore'] as const;
 
+/** A fact on real I/O gets 10 s (c0682da4, #3476): the key of a killed holder reaches the waiter within it. */
+const factTimeout = 10_000;
+
+/**
+ * How long a waiter asks while the holder is alive. It decides at its first
+ * look, 10 ms in, so 2 s shows that it stays out without a fact's 10 s: a
+ * waiter that gives up sooner still gets nothing.
+ */
+const busyWindow = 2_000;
+
 /** Takes the key and keeps it until its container stops. */
 const holderSource = (storeName: string) =>
   bundled(`
@@ -51,15 +61,15 @@ const holderSource = (storeName: string) =>
 	});
 `);
 
-/** Asks for the key once, gives up after 10 s (the wait of a fact on real I/O), and prints what it got. */
-const waiterSource = (storeName: string) =>
+/** Asks for the key once, gives up after `waitAtMost` ms, and prints what it got. */
+const waiterSource = (storeName: string, waitAtMost: number) =>
   bundled(`
 	import { Modes, Mutex } from '../../index.ts';
 	import { ${storeName} } from './index.ts';
 	const result = await new Mutex(new ${storeName}('/locks', { clock: globalThis, pollInterval: 10 })).acquire(
 		'product:42',
 		async (lease) => String(lease.token),
-		{ mode: Modes.skipIfBusy({ waitAtMost: 10000, clock: globalThis }) },
+		{ mode: Modes.skipIfBusy({ waitAtMost: ${waitAtMost}, clock: globalThis }) },
 	);
 	console.log(JSON.stringify(result));
 `);
@@ -108,6 +118,7 @@ type Grant = { acquired: false } | { acquired: true; value: string };
 async function waiterIn(
   options: ContainerOptions,
   storeName: string,
+  waitAtMost: number,
 ): Promise<Grant> {
   const { stdout } = await docker.run({
     ...placement(options),
@@ -115,7 +126,7 @@ async function waiterIn(
       'node',
       '--input-type=module',
       '--eval',
-      await waiterSource(storeName),
+      await waiterSource(storeName, waitAtMost),
     ],
   });
   return JSON.parse(stdout.trimEnd().split('\n').at(-1)!);
@@ -164,7 +175,11 @@ void describe.each(stores, (storeName) =>
       const record = await lockFiles(volume);
 
       // Act: a second container with the same hostname asks for the key.
-      const waiter = await waiterIn({ volume, hostname: 'app' }, storeName);
+      const waiter = await waiterIn(
+        { volume, hostname: 'app' },
+        storeName,
+        busyWindow,
+      );
 
       // Assert: the holder is still inside its task, so the key is busy.
       assert.deepEqual(
@@ -189,7 +204,7 @@ void describe.each(stores, (storeName) =>
       const record = await lockFiles(volume);
 
       // Act
-      const waiter = await waiterIn({ volume }, storeName);
+      const waiter = await waiterIn({ volume }, storeName, factTimeout);
 
       // Assert: nothing is left that could still use the key.
       assertTakenOver(
@@ -214,7 +229,11 @@ void describe.each(stores, (storeName) =>
       const record = await lockFiles(volume);
 
       // Act
-      const waiter = await waiterIn({ volume, hostname: 'app' }, storeName);
+      const waiter = await waiterIn(
+        { volume, hostname: 'app' },
+        storeName,
+        factTimeout,
+      );
 
       // Assert
       assertTakenOver(
@@ -243,7 +262,7 @@ void describe.each(stores, (storeName) =>
           'node',
           '--input-type=module',
           '--eval',
-          await waiterSource(storeName),
+          await waiterSource(storeName, factTimeout),
         ],
       });
 
