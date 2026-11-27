@@ -1,7 +1,5 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdir, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { TemporaryFiles } from '@zukhruf/fs';
@@ -36,19 +34,13 @@ function check(workspace: string) {
   });
 }
 
-async function write(workspace: string, files: Record<string, string>) {
-  for (const [path, content] of Object.entries(files)) {
-    await mkdir(dirname(join(workspace, path)), { recursive: true });
-    await writeFile(join(workspace, path), content);
-  }
-}
-
 test('a helper copied between two test files with no ledger line fails, and names both files', async () => {
   // Arrange
-  await using workspace = await new TemporaryFiles().directory('copy-check-');
-  await write(workspace.path, {
-    'packages/a/src/a.test.ts': helper,
-    'packages/b/src/b.test.ts': helper,
+  await using workspace = await new TemporaryFiles().directory('copy-check-', {
+    files: {
+      'packages/a/src/a.test.ts': helper,
+      'packages/b/src/b.test.ts': helper,
+    },
   });
 
   // Act
@@ -62,10 +54,11 @@ test('a helper copied between two test files with no ledger line fails, and name
 
 test('a helper copied from a test file into src/testing with no ledger line fails', async () => {
   // Arrange
-  await using workspace = await new TemporaryFiles().directory('copy-check-');
-  await write(workspace.path, {
-    'packages/a/src/a.test.ts': helper,
-    'packages/b/src/testing/totals.ts': helper,
+  await using workspace = await new TemporaryFiles().directory('copy-check-', {
+    files: {
+      'packages/a/src/a.test.ts': helper,
+      'packages/b/src/testing/totals.ts': helper,
+    },
   });
 
   // Act
@@ -79,13 +72,17 @@ test('a helper copied from a test file into src/testing with no ledger line fail
 void test.each(['docs/copied-code.md', 'docs/copied-from-a.md'], (ledger) =>
   test(`one line of ${ledger} that names both files records the copy`, async () => {
     // Arrange
-    await using workspace = await new TemporaryFiles().directory('copy-check-');
-    await write(workspace.path, {
-      'packages/a/src/a.test.ts': helper,
-      'packages/b/src/b.test.ts': helper,
-      [`packages/b/${ledger}`]:
-        '- Places: `totals` in `src/b.test.ts` and in `packages/a/src/a.test.ts`.\n',
-    });
+    await using workspace = await new TemporaryFiles().directory(
+      'copy-check-',
+      {
+        files: {
+          'packages/a/src/a.test.ts': helper,
+          'packages/b/src/b.test.ts': helper,
+          [`packages/b/${ledger}`]:
+            '- Places: `totals` in `src/b.test.ts` and in `packages/a/src/a.test.ts`.\n',
+        },
+      },
+    );
 
     // Act
     const { status, stderr } = check(workspace.path);
@@ -98,12 +95,13 @@ void test.each(['docs/copied-code.md', 'docs/copied-from-a.md'], (ledger) =>
 
 test('a ledger that names the two files on two lines records nothing', async () => {
   // Arrange
-  await using workspace = await new TemporaryFiles().directory('copy-check-');
-  await write(workspace.path, {
-    'packages/a/src/a.test.ts': helper,
-    'packages/b/src/b.test.ts': helper,
-    'packages/b/docs/copied-code.md':
-      '- Places: `one` in `src/b.test.ts` and in `src/c.test.ts`.\n- Places: `two` in `packages/a/src/a.test.ts` and in `src/d.test.ts`.\n',
+  await using workspace = await new TemporaryFiles().directory('copy-check-', {
+    files: {
+      'packages/a/src/a.test.ts': helper,
+      'packages/b/src/b.test.ts': helper,
+      'packages/b/docs/copied-code.md':
+        '- Places: `one` in `src/b.test.ts` and in `src/c.test.ts`.\n- Places: `two` in `packages/a/src/a.test.ts` and in `src/d.test.ts`.\n',
+    },
   });
 
   // Act
@@ -115,12 +113,13 @@ test('a ledger that names the two files on two lines records nothing', async () 
 
 test('a ledger line records a file by a whole path segment, so the end of another name does not count', async () => {
   // Arrange
-  await using workspace = await new TemporaryFiles().directory('copy-check-');
-  await write(workspace.path, {
-    'packages/a/src/data-a.test.ts': helper,
-    'packages/b/src/data-b.test.ts': helper,
-    'packages/b/docs/copied-code.md':
-      '- Places: `totals` in `a.test.ts` and in `b.test.ts`.\n',
+  await using workspace = await new TemporaryFiles().directory('copy-check-', {
+    files: {
+      'packages/a/src/data-a.test.ts': helper,
+      'packages/b/src/data-b.test.ts': helper,
+      'packages/b/docs/copied-code.md':
+        '- Places: `totals` in `a.test.ts` and in `b.test.ts`.\n',
+    },
   });
 
   // Act
@@ -132,9 +131,10 @@ test('a ledger line records a file by a whole path segment, so the end of anothe
 
 test('a block that repeats inside one test file is not a copy', async () => {
   // Arrange
-  await using workspace = await new TemporaryFiles().directory('copy-check-');
-  await write(workspace.path, {
-    'packages/a/src/a.test.ts': `${helper}\nexport const gap = 1;\n${helper}`,
+  await using workspace = await new TemporaryFiles().directory('copy-check-', {
+    files: {
+      'packages/a/src/a.test.ts': `${helper}\nexport const gap = 1;\n${helper}`,
+    },
   });
 
   // Act
@@ -147,16 +147,17 @@ test('a block that repeats inside one test file is not a copy', async () => {
 
 test('a block smaller than a helper, such as the imports of each test file, is not a copy', async () => {
   // Arrange
-  await using workspace = await new TemporaryFiles().directory('copy-check-');
   const imports = `import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 `;
-  await write(workspace.path, {
-    'packages/a/src/a.test.ts': `${imports}\nexport const a = 1;\n`,
-    'packages/b/src/b.test.ts': `${imports}${helper}`,
+  await using workspace = await new TemporaryFiles().directory('copy-check-', {
+    files: {
+      'packages/a/src/a.test.ts': `${imports}\nexport const a = 1;\n`,
+      'packages/b/src/b.test.ts': `${imports}${helper}`,
+    },
   });
 
   // Act
@@ -169,11 +170,12 @@ import { fileURLToPath } from 'node:url';
 
 test('a copy between two shipped files is not reported', async () => {
   // Arrange
-  await using workspace = await new TemporaryFiles().directory('copy-check-');
-  await write(workspace.path, {
-    'packages/a/src/a.test.ts': helper,
-    'packages/a/src/a.ts': helper,
-    'packages/b/src/b.ts': helper,
+  await using workspace = await new TemporaryFiles().directory('copy-check-', {
+    files: {
+      'packages/a/src/a.test.ts': helper,
+      'packages/a/src/a.ts': helper,
+      'packages/b/src/b.ts': helper,
+    },
   });
 
   // Act
@@ -186,8 +188,9 @@ test('a copy between two shipped files is not reported', async () => {
 
 test('a workspace with no test file fails, because a wrong glob would otherwise read as no copies', async () => {
   // Arrange
-  await using workspace = await new TemporaryFiles().directory('copy-check-');
-  await write(workspace.path, { 'packages/a/src/a.ts': helper });
+  await using workspace = await new TemporaryFiles().directory('copy-check-', {
+    files: { 'packages/a/src/a.ts': helper },
+  });
 
   // Act
   const { status } = check(workspace.path);
