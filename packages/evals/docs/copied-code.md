@@ -41,11 +41,3 @@ Changes: `percent` also clamps the position to 0–100%, since a primitive can h
 **The page shell: the end of `page` in `packages/mteb/src/report/page.ts` → `HtmlRenderer.render`.**
 Both give a page with no `<html>`, `<head>` or `<body>`: the charset, the title, the viewport meta of claude.ai, the IBM Plex fonts of Google Fonts, the styles, a `main`, the tooltip element and the script.
 Changes: the page heading is the title of the `Page`, and each section is a claim and its primitives; no footer.
-
-## A score on a part of a run, inside `./report`
-
-A score on a part of a run is `Run#total` and `Bootstrap.interval` on a `RunLog` of those samples, so that the interval belongs to the value beside it ([report ADR 0004](adr/report/0004-a-summary-interval-bootstraps-the-statistic-of-the-score-and-verdicts-of-many-scores-are-corrected-with-holm.md)). Two places do it, so it stays a copy (Rule of Three, strike 2; backlog #6245). A third place starts the extraction, and the three copies then give its boundary. Until then, make each fix in both copies, and name both files in the commit.
-
-**The numbers of a score on a part: `Summary.#numbers` and the `RunLog` of the samples of a key in `src/report/summary.ts` → `Slices.#numbers` and the `RunLog` of each key in `src/report/slices.ts`.**
-Both build a `RunLog` of the samples of one key with the facts of the whole log, and read the value with `Run#total` and the ends with `Bootstrap.interval` on its run. Both give no value and no interval (a dash) to a key where no sample gives the score (`Run#total` throws for it) and to a score with no whole (`Ratio.value` gives 0 there, which a page would read as a score).
-Changes: `Slices` keeps no `ConfidenceInterval`, since it reads no bar, and Summary's bar of a row with no value reads untested. Summary reads one key of a bar; `Slices` reads every key of each slice.

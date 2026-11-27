@@ -6,14 +6,14 @@ import {
   type Cell,
   type Ends,
   type Primitive,
-  type Run,
-  RunLog,
+  type RunLog,
   type Sample,
   type Section,
   Table,
   type Tone,
 } from '../index.ts';
 import { fixed, withEnds } from './data-tables.ts';
+import { type Numbers, measure } from './part.ts';
 
 // A bar names a slice and one of its keys when it holds on those samples
 // only, such as values_precision on the pages with offers.
@@ -90,24 +90,11 @@ const { format: percent } = new Intl.NumberFormat('en', {
   maximumFractionDigits: 1,
 });
 
-// The value and the interval of one score on some samples; a score with no
-// value there has no interval.
-type Numbers = {
-  readonly value: number;
-  readonly ends: Ends;
-  readonly interval: ConfidenceInterval | undefined;
-};
-
-const none: Numbers = {
-  value: Number.NaN,
-  ends: { low: Number.NaN, high: Number.NaN },
-  interval: undefined,
-};
-
 // Each score of a run with its value and its interval, and, for a score with
 // a bar, whether the interval meets it (report ADR 0004). The value is
 // Run#total and the interval Bootstrap's, so the interval belongs to the
-// number beside it. A bar with a slice is read on a row of that slice only.
+// number beside it (measure). A bar with a slice is read on a row of that
+// slice only.
 // The claim says what the rows give and never more (report ADR 0002): the
 // bars missed, else the bars within chance, else the bars with no value,
 // else that every bar is met; with no bars, the value of each score.
@@ -128,9 +115,12 @@ export class Summary<Answer, C> implements Section {
       readonly bootstrap: Bootstrap;
     },
   ) {
+    // Run#total throws for a score that no sample of the run gives, so a
+    // misspelt score is an error, not a row of dashes.
     const run = log.run();
+    for (const { name } of scores) run.total(name);
     const rows = scores.flatMap((score): Row[] => {
-      const whole = Summary.#numbers(run, score.name, bootstrap);
+      const whole = measure(log, log.samples, score.name, bootstrap);
       const plain: Row = { kind: 'plain', label: score.name, ...whole };
       const limit = Summary.#limit(score);
       if (limit === undefined) return [plain];
@@ -151,19 +141,14 @@ export class Summary<Answer, C> implements Section {
         throw new RangeError(
           `The bar of ${score.name} reads the slice "${sliceName}", and the slices are: ${slices.map(({ name }) => name).join(', ')}`,
         );
-      const samples = log.samples.filter((sample) => slice.key(sample) === key);
       // A slice where no sample gives the score, or where it has no samples,
-      // has no value for the bar (Run#total throws for a score that no
-      // sample gives, with no code to catch).
-      const part = samples.some(({ scorecard }) =>
-        scorecard.ratios.has(score.name),
-      )
-        ? Summary.#numbers(
-            new RunLog(log.info, samples).run(),
-            score.name,
-            bootstrap,
-          )
-        : none;
+      // has no value for the bar.
+      const part = measure(
+        log,
+        log.samples.filter((sample) => slice.key(sample) === key),
+        score.name,
+        bootstrap,
+      );
       return [
         plain,
         {
@@ -182,20 +167,6 @@ export class Summary<Answer, C> implements Section {
       Summary.#table(rows, bootstrap.level),
       Summary.#bars(rows),
     ];
-  }
-
-  // A ratio of no whole, such as the recall of pages with no expected value,
-  // has no value: Ratio.value gives 0 there, as SOB's ratio() does, and a
-  // page would read that 0 as a score (report ADR 0002).
-  static #numbers(run: Run, name: string, bootstrap: Bootstrap): Numbers {
-    const total = run.total(name);
-    if (total.ratio.whole === 0) return none;
-    const interval = bootstrap.interval(run, name);
-    return {
-      value: total.value,
-      ends: { low: interval.low, high: interval.high },
-      interval,
-    };
   }
 
   static #limit(score: Score): Limit | undefined {

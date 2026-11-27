@@ -541,6 +541,21 @@ test('a bar on a slice where no sample gives the score is untested, not an error
   );
 });
 
+test('a score that no sample of the run gives is an error, not a row of dashes', () => {
+  assert.throws(
+    () =>
+      new Summary(twoTests('values_recall'), {
+        scores: [{ name: 'values_recal', higherIsBetter: true }],
+        slices: [],
+        bootstrap: scripted(1, [0]),
+      }),
+    {
+      name: 'Error',
+      message: 'No scorecard of the run gave a ratio named "values_recal"',
+    },
+  );
+});
+
 test('a summary of one test with no bars says one test', () => {
   const log = new RunLog(info, [
     sample('a', { values_recall: new Ratio(9, 10) }),
