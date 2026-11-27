@@ -1,5 +1,7 @@
 # Primitives are data in the core, and the renderers of `./report` visit them
 
+Superseded in part on 2026-11-28 (#6244) for the charts. Each chart, `Bars`, `Scatter`, `Line` and `Heatmap`, carries a required `Table`: `MarkdownRenderer` draws the chart as that table only, and `HtmlRenderer` draws the chart, then the table, in one figure ([ADR 0011](./0011-a-chart-carries-the-table-that-a-reader-reads-in-its-place.md)).
+
 Status: accepted (Ezz, 2026-11-27, #6108: "It should be primitives and building blocks"; "Renderers visit"); the primitives and `Section` are built in `src/presentation/primitives.ts`, `HtmlRenderer` and `MarkdownRenderer` of `./report` are built in `src/report/` (7043d988). Building them added three rules: a `Line` refuses a series with another number of values than its steps, a `Heatmap` refuses values of another shape, and a `ValuePairs` pair is a union by its mark, so a part that only one side has cannot hold the other side's value. The marks are the core's words, `agree`, `near`, `disagree`, `only-expected` and `only-actual`, which `./structured` names correct, partial, incorrect, missed and spurious.
 
 ## Context

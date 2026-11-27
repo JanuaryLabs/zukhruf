@@ -145,6 +145,24 @@ test("each score has a scatter of the tests in both runs, its axes named by the 
   );
 });
 
+test('each scatter carries a table of its tests with the value in each run, which the markdown draws in its place', () => {
+  const section = new TestsMoved(
+    pairOf(
+      { a: [{ recall: new Ratio(1, 4) }], b: [{ recall: new Ratio(3, 4) }] },
+      { a: [{ recall: new Ratio(2, 4) }], b: [{ recall: new Ratio(3, 4) }] },
+    ),
+    { scores: [higher('recall')], widest: 10 },
+  );
+
+  const [scatter] = render(section).blocks;
+
+  assert.deepEqual(scatter, [
+    ['test', 'recall · Haiku', 'recall · DeepSeek'],
+    ['a', '0.250', '0.500'],
+    ['b', '0.750', '0.750'],
+  ]);
+});
+
 void test.each(
   [
     {

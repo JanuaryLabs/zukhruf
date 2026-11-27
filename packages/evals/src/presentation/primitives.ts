@@ -2,7 +2,9 @@
 // building block of any family builds them, and a renderer of ./report draws
 // each one in its format. Each primitive has accept(visitor), and
 // PrimitiveVisitor has one method for each primitive, so a new primitive does
-// not compile until each renderer draws it (Visitor).
+// not compile until each renderer draws it (Visitor). Each chart (Bars,
+// Scatter, Line, Heatmap) carries the table that a reader reads in its place,
+// so a chart with no table cannot be built (ADR 0011).
 
 // How a value reads beside its neighbours: good, bad, or neither.
 export type Tone = 'good' | 'bad' | 'neutral';
@@ -56,19 +58,23 @@ export class Bars {
   }[];
   readonly scale: Ends;
   readonly marks: readonly { readonly label: string; readonly at: number }[];
+  readonly table: Table;
 
   constructor({
     bars,
     scale,
     marks,
+    table,
   }: {
     readonly bars: Bars['bars'];
     readonly scale: Ends;
     readonly marks: Bars['marks'];
+    readonly table: Table;
   }) {
     this.bars = bars;
     this.scale = scale;
     this.marks = marks;
+    this.table = table;
   }
 
   accept<R>(visitor: PrimitiveVisitor<R>): R {
@@ -85,19 +91,23 @@ export class Scatter {
     readonly x: number;
     readonly y: number;
   }[];
+  readonly table: Table;
 
   constructor({
     x,
     y,
     points,
+    table,
   }: {
     readonly x: string;
     readonly y: string;
     readonly points: Scatter['points'];
+    readonly table: Table;
   }) {
     this.x = x;
     this.y = y;
     this.points = points;
+    this.table = table;
   }
 
   accept<R>(visitor: PrimitiveVisitor<R>): R {
@@ -116,13 +126,16 @@ export class Line {
       readonly ends: Ends | undefined;
     }[];
   }[];
+  readonly table: Table;
 
   constructor({
     steps,
     series,
+    table,
   }: {
     readonly steps: readonly string[];
     readonly series: Line['series'];
+    readonly table: Table;
   }) {
     for (const { label, values } of series)
       if (values.length !== steps.length)
@@ -131,6 +144,7 @@ export class Line {
         );
     this.steps = steps;
     this.series = series;
+    this.table = table;
   }
 
   accept<R>(visitor: PrimitiveVisitor<R>): R {
@@ -144,15 +158,18 @@ export class Heatmap {
   readonly rows: readonly string[];
   readonly columns: readonly string[];
   readonly values: readonly (readonly number[])[];
+  readonly table: Table;
 
   constructor({
     rows,
     columns,
     values,
+    table,
   }: {
     readonly rows: readonly string[];
     readonly columns: readonly string[];
     readonly values: readonly (readonly number[])[];
+    readonly table: Table;
   }) {
     if (
       values.length !== rows.length ||
@@ -164,6 +181,7 @@ export class Heatmap {
     this.rows = rows;
     this.columns = columns;
     this.values = values;
+    this.table = table;
   }
 
   accept<R>(visitor: PrimitiveVisitor<R>): R {

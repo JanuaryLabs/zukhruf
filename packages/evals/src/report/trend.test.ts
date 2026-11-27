@@ -4,14 +4,7 @@ import { test } from '@zukhruf/parameterized-test';
 import { defaultRng } from '@zukhruf/random';
 import { Linear, PercentileInterval } from '@zukhruf/statistics';
 
-import {
-  Bootstrap,
-  Line,
-  Ratio,
-  RunLog,
-  type Sample,
-  Table,
-} from '../index.ts';
+import { Bootstrap, Line, Ratio, RunLog, type Sample } from '../index.ts';
 import { render } from '../testing/render.ts';
 import { type Score, Trend } from './index.ts';
 import { measure } from './part.ts';
@@ -68,12 +61,12 @@ const first = () =>
 const higher = (name: string): Score => ({ name, higherIsBetter: true });
 
 const parts = (trend: Trend<string, null>) => {
-  const [line, table] = trend.primitives;
-  assert.ok(line instanceof Line && table instanceof Table);
+  const [line, ...rest] = trend.primitives;
+  assert.ok(line instanceof Line && rest.length === 0);
   return {
     line,
-    rows: table.rows.map((cells) => cells.map(({ text }) => text)),
-    columns: table.columns,
+    rows: line.table.rows.map((cells) => cells.map(({ text }) => text)),
+    columns: line.table.columns,
   };
 };
 
@@ -216,6 +209,25 @@ test('the table gives each run its id, the day it was created and each score wit
       ],
     },
   );
+});
+
+test('the markdown of a trend holds one table, a row for each run, so each value and interval prints once', () => {
+  const runs = [
+    single('eval-1', '2026-11-01', { recall: new Ratio(1, 2) }),
+    single('eval-2', '2026-11-27', { recall: new Ratio(3, 4) }),
+  ] as const;
+
+  const { blocks } = render(
+    new Trend(runs, { scores: [higher('recall')], bootstrap: first() }),
+  );
+
+  assert.deepEqual(blocks, [
+    [
+      ['run', 'created', 'tests', 'recall'],
+      ['eval-1', '2026-11-01', '1', '0.500 [0.500, 0.500]'],
+      ['eval-2', '2026-11-27', '1', '0.750 [0.750, 0.750]'],
+    ],
+  ]);
 });
 
 test('a run where a score has no whole is a gap in its line and a dash in the table', () => {

@@ -164,8 +164,7 @@ export class Summary<Answer, C> implements Section {
       new Set(log.samples.map(({ test }) => test)).size,
     );
     this.primitives = [
-      Summary.#table(rows, bootstrap.level),
-      Summary.#bars(rows),
+      Summary.#bars(rows, Summary.#table(rows, bootstrap.level)),
     ];
   }
 
@@ -247,11 +246,13 @@ export class Summary<Answer, C> implements Section {
     );
   }
 
-  // A mark is a rule across every bar, so the scores with the same bar share
-  // one mark; the table names the bar of each score, so the mark says only
-  // that it is a bar. The scale holds 0 to 1, where a share lies, and widens to hold
-  // a score past it, such as a mean count, so that no bar is clipped.
-  static #bars(rows: readonly Row[]): Bars {
+  // The bars carry the table, so a reader of Markdown reads each number once
+  // (ADR 0011). A mark is a rule across every bar, so the scores with the
+  // same bar share one mark; the table names the bar of each score, so the
+  // mark says only that it is a bar. The scale holds 0 to 1, where a share
+  // lies, and widens to hold a score past it, such as a mean count, so that no
+  // bar is clipped.
+  static #bars(rows: readonly Row[], table: Table): Bars {
     const known = rows
       .flatMap(({ value, ends }) => [value, ends.low, ends.high])
       .filter((value) => !Number.isNaN(value));
@@ -267,6 +268,7 @@ export class Summary<Answer, C> implements Section {
       })),
       scale: { low: Math.min(0, ...known), high: Math.max(1, ...known) },
       marks: [...marks].map((at) => ({ label: 'bar', at })),
+      table,
     });
   }
 }

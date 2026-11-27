@@ -1,6 +1,6 @@
 # Evals
 
-An eval sends inputs to a harness and scores each answer against its label. This context scores the answers. The answers have different shapes, so each shape has its own family, and all families share one core. The words of each family are under its heading.
+An eval sends inputs to a harness and scores each answer against its label. This context scores the answers and shows them on pages. The answers have different shapes, so each shape has its own family, and all families share one core. The words of each family are under its heading, and the words of the pages are under "Reports".
 
 ## Language
 
@@ -345,6 +345,10 @@ The title of a section, computed from its numbers, such as "No difference beyond
 **Primitive**:
 One part of a section to draw, as data with no HTML: a table, bars, a scatter, a line, a heatmap, value pairs or a note. The set is closed (core ADR 0008).
 _Avoid_: block, widget, component
+
+**Chart**:
+A primitive that draws numbers on a scale: bars, a scatter, a line or a heatmap. Each chart carries the table that a reader reads in its place, so a chart with no table cannot be built; the Markdown draws a chart as that table only (core ADR 0011).
+_Avoid_: table view (the folded table that the HTML page drew from the chart's own numbers before ADR 0011)
 
 **Renderer**:
 What draws every primitive of a page in one format, such as HTML or Markdown. It visits each primitive (core ADR 0008).

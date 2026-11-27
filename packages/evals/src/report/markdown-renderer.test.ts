@@ -113,7 +113,7 @@ void test.each(
       ],
     },
     {
-      name: 'the bars, and the marks of the bars as a table of their own',
+      name: 'the bars as the table that they carry, and nothing of their own',
       primitive: new Bars({
         bars: [
           {
@@ -122,39 +122,52 @@ void test.each(
             ends: { low: 0.8, high: 0.93 },
             tone: 'bad',
           },
-          { label: 'empty pages', value: 0.95, ends: undefined, tone: 'good' },
         ],
         scale: { low: 0, high: 1 },
         marks: [{ label: 'bar', at: 0.88 }],
+        table: new Table(
+          ['score', 'value', 'verdict'],
+          [
+            [
+              { text: 'values_recall', tone: 'neutral' },
+              { text: '0.868', tone: 'neutral' },
+              { text: 'missed', tone: 'bad' },
+            ],
+          ],
+        ),
       }),
       blocks: [
         [
-          ['Bar', 'Value', 'Low', 'High'],
-          ['values_recall', '0.868', '0.800', '0.930'],
-          ['empty pages', '0.950', '', ''],
-        ],
-        [
-          ['Mark', 'At'],
-          ['bar', '0.880'],
+          ['score', 'value', 'verdict'],
+          ['values_recall', '0.868', '✗ missed'],
         ],
       ],
     },
     {
-      name: 'the points of a scatter',
+      name: 'a scatter as the table that it carries, and nothing of its own',
       primitive: new Scatter({
         x: 'Haiku',
         y: 'DeepSeek',
         points: [{ label: 'clerky.com', x: 0.5, y: 1 }],
+        table: new Table(
+          ['test', 'moved'],
+          [
+            [
+              { text: 'clerky.com', tone: 'neutral' },
+              { text: '+0.500', tone: 'good' },
+            ],
+          ],
+        ),
       }),
       blocks: [
         [
-          ['Test', 'Haiku', 'DeepSeek'],
-          ['clerky.com', '0.500', '1.000'],
+          ['test', 'moved'],
+          ['clerky.com', '✓ +0.500'],
         ],
       ],
     },
     {
-      name: 'the steps of a line, a column for each series',
+      name: 'a line as the table that it carries, and nothing of its own',
       primitive: new Line({
         steps: ['run 1', 'run 2'],
         series: [
@@ -165,38 +178,51 @@ void test.each(
               { value: 0.9, ends: undefined },
             ],
           },
-          {
-            label: 'Haiku',
-            values: [
-              { value: 0.82, ends: undefined },
-              { value: 0.868, ends: undefined },
-            ],
-          },
         ],
+        table: new Table(
+          ['run', 'tests', 'DeepSeek'],
+          [
+            [
+              { text: 'run 1', tone: 'neutral' },
+              { text: '60', tone: 'neutral' },
+              { text: '0.850 [0.800, 0.900]', tone: 'neutral' },
+            ],
+            [
+              { text: 'run 2', tone: 'neutral' },
+              { text: '60', tone: 'neutral' },
+              { text: '0.900', tone: 'neutral' },
+            ],
+          ],
+        ),
       }),
       blocks: [
         [
-          ['Step', 'DeepSeek', 'Haiku'],
-          ['run 1', '0.850 [0.800, 0.900]', '0.820'],
-          ['run 2', '0.900', '0.868'],
+          ['run', 'tests', 'DeepSeek'],
+          ['run 1', '60', '0.850 [0.800, 0.900]'],
+          ['run 2', '60', '0.900'],
         ],
       ],
     },
     {
-      name: 'the cells of a heatmap',
+      name: 'a heatmap as the table that it carries, and nothing of its own',
       primitive: new Heatmap({
-        rows: ['clerky.com', 'stripe.com'],
+        rows: ['clerky.com'],
         columns: ['run 1', 'run 2'],
-        values: [
-          [1, 0.5],
-          [0, 0.25],
-        ],
+        values: [[1, 0.5]],
+        table: new Table(
+          ['test', 'mean'],
+          [
+            [
+              { text: 'clerky.com', tone: 'neutral' },
+              { text: '0.750', tone: 'neutral' },
+            ],
+          ],
+        ),
       }),
       blocks: [
         [
-          ['', 'run 1', 'run 2'],
-          ['clerky.com', '1.000', '0.500'],
-          ['stripe.com', '0.000', '0.250'],
+          ['test', 'mean'],
+          ['clerky.com', '0.750'],
         ],
       ],
     },

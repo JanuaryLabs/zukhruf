@@ -127,8 +127,6 @@ h2 { font-size: clamp(1.25rem, 2.6vw, 1.625rem); line-height: 1.25; font-weight:
 .scale { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; font: 0.75rem var(--mono); color: var(--muted); }
 .scale-bar { width: 8rem; height: 0.5rem; border-radius: 2px; background: linear-gradient(in oklab to right, var(--heat-lo), var(--heat-hi)); outline: 1px solid var(--ring); outline-offset: -1px; }
 
-.table-view summary { cursor: pointer; font-size: 0.8125rem; color: var(--ink-2); width: fit-content; }
-.table-view[open] summary { margin-bottom: 0.75rem; }
 table { width: 100%; font-size: 0.8125rem; }
 th, td { text-align: right; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--grid); white-space: nowrap; font-variant-numeric: tabular-nums; }
 th:first-child, td:first-child { text-align: left; white-space: normal; min-width: 10rem; }

@@ -4,14 +4,7 @@ import { test } from '@zukhruf/parameterized-test';
 import { defaultRng } from '@zukhruf/random';
 import { Linear, PercentileInterval } from '@zukhruf/statistics';
 
-import {
-  Bars,
-  Bootstrap,
-  Ratio,
-  RunLog,
-  type Sample,
-  Table,
-} from '../index.ts';
+import { Bars, Bootstrap, Ratio, RunLog, type Sample } from '../index.ts';
 import { render } from '../testing/render.ts';
 import { type Score, type Slice, Summary } from './index.ts';
 
@@ -66,9 +59,9 @@ const twoTests = (...names: string[]) =>
   ]);
 
 const parts = (summary: Summary<string, null>) => {
-  const [table, bars] = summary.primitives;
-  assert.ok(table instanceof Table && bars instanceof Bars);
-  return { table, bars };
+  const [bars, ...rest] = summary.primitives;
+  assert.ok(bars instanceof Bars && rest.length === 0);
+  return { table: bars.table, bars };
 };
 
 test('the value and the interval of each score are Run#total and Bootstrap.interval on the same run', () => {
@@ -548,6 +541,27 @@ test('a score that no sample of the run gives is an error, not a row of dashes',
       message: 'No scorecard of the run gave a ratio named "values_recal"',
     },
   );
+});
+
+test('the markdown of a summary holds one table, a row for each score, so each value and interval prints once', () => {
+  const summary = new Summary(twoTests('values_recall', 'values_precision'), {
+    scores: [
+      { name: 'values_recall', higherIsBetter: true, bar: { atLeast: 0.95 } },
+      { name: 'values_precision', higherIsBetter: true },
+    ],
+    slices: [],
+    bootstrap: scripted(2, [0, 0, 1, 1]),
+  });
+
+  const { blocks } = render(summary);
+
+  assert.deepEqual(blocks, [
+    [
+      ['score', 'value', '100% interval', 'bar', 'verdict'],
+      ['values_recall', '0.800', '[0.700, 0.900]', '≥ 0.95', '✗ missed'],
+      ['values_precision', '0.800', '[0.700, 0.900]', '', ''],
+    ],
+  ]);
 });
 
 test('a summary of one test with no bars says one test', () => {

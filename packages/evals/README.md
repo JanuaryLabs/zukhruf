@@ -687,6 +687,52 @@ export class Bootstrap {
   get level(): number;
   interval(run: Run, name: string): ConfidenceInterval;
 }
+/** Columns and rows of cells, each a text with its tone (ADR 0008). */
+export class Table {
+  constructor(columns: readonly string[], rows: readonly (readonly Cell[])[]);
+}
+/** The charts (ADR 0008). Each one carries the table that a reader reads in its place: the Markdown draws only the table, the HTML the chart and then the table (ADR 0011). */
+export class Bars {
+  constructor(options: {
+    bars: readonly {
+      label: string;
+      value: number;
+      ends: Ends | undefined;
+      tone: Tone;
+    }[];
+    scale: Ends;
+    marks: readonly { label: string; at: number }[];
+    table: Table;
+  });
+}
+export class Scatter {
+  constructor(options: {
+    x: string;
+    y: string;
+    points: readonly { label: string; x: number; y: number }[];
+    table: Table;
+  });
+}
+/** A RangeError for a series with another number of values than its steps. */
+export class Line {
+  constructor(options: {
+    steps: readonly string[];
+    series: readonly {
+      label: string;
+      values: readonly { value: number; ends: Ends | undefined }[];
+    }[];
+    table: Table;
+  });
+}
+/** A RangeError for values of another shape than its rows and columns. */
+export class Heatmap {
+  constructor(options: {
+    rows: readonly string[];
+    columns: readonly string[];
+    values: readonly (readonly number[])[];
+    table: Table;
+  });
+}
 
 // @zukhruf/evals/promptfoo
 
@@ -944,3 +990,8 @@ The package was built in two items: mutex #3888 (the core, `./promptfoo` and the
 - [ADR 0004: two runs are compared by a paired bootstrap over their tests](docs/adr/0004-two-runs-are-compared-by-a-paired-bootstrap-over-their-tests.md)
 - [ADR 0005: a failed call is the answer null](docs/adr/0005-a-failed-call-is-the-answer-null.md)
 - [ADR 0006: classification counts only the classes that the caller gives](docs/adr/0006-classification-counts-only-the-classes-that-the-caller-gives.md)
+- [ADR 0007: a run log keeps each answer of a run with its case, scorecard, metadata, usage and latency](docs/adr/0007-a-run-log-keeps-each-answer-of-a-run-with-its-case-scorecard-metadata-usage-and-latency.md)
+- [ADR 0008: primitives are data in the core, and the renderers of `./report` visit them](docs/adr/0008-primitives-are-data-in-the-core-and-the-renderers-of-report-visit-them.md) (superseded in part by ADR 0011)
+- [ADR 0009: the promptfoo adapter gives the samples of a run with the latest result of each answer](docs/adr/0009-the-promptfoo-adapter-gives-the-samples-of-a-run-with-the-latest-result-of-each-answer.md)
+- [ADR 0010: a bootstrap resamples the tests of a run and recomputes the statistic of `Totals`](docs/adr/0010-a-bootstrap-resamples-the-tests-of-a-run-and-recomputes-the-statistic-of-totals.md)
+- [ADR 0011: a chart carries the table that a reader reads in its place](docs/adr/0011-a-chart-carries-the-table-that-a-reader-reads-in-its-place.md)

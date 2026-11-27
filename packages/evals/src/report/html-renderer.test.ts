@@ -124,6 +124,7 @@ test('a bar shows its value with its interval ends, draws them as a whisker, and
       ],
       scale: { low: 0, high: 1 },
       marks: [{ label: 'bar', at: 0.88 }],
+      table: new Table(['test'], []),
     }),
   );
 
@@ -153,6 +154,7 @@ test('the label of each mark of bars has a row of its own, so that the labels of
         { label: 'bar', at: 0.88 },
         { label: 'bar', at: 0.95 },
       ],
+      table: new Table(['test'], []),
     }),
   );
 
@@ -173,6 +175,7 @@ test('a scatter draws the diagonal y = x and gives each point a tooltip with its
         { label: 'clerky.com', x: 0.5, y: 1 },
         { label: 'stripe.com', x: 0.75, y: 0.25 },
       ],
+      table: new Table(['test'], []),
     }),
   );
 
@@ -218,6 +221,7 @@ test('a line of two series has a legend, an interval band for the series with en
           ],
         },
       ],
+      table: new Table(['test'], []),
     }),
   );
 
@@ -250,6 +254,7 @@ test('a line of one series has no legend', () => {
     new Line({
       steps: ['run 1'],
       series: [{ label: 'recall', values: [{ value: 0.9, ends: undefined }] }],
+      table: new Table(['test'], []),
     }),
   );
 
@@ -272,6 +277,7 @@ test('a missing value of a line leaves a gap: the line and its band stop before 
           ],
         },
       ],
+      table: new Table(['test'], []),
     }),
   );
 
@@ -301,6 +307,7 @@ test('a heatmap draws a cell for each value, darker for a higher one, with a too
         [1, 0.5],
         [0, 0.25],
       ],
+      table: new Table(['test'], []),
     }),
   );
 
@@ -324,6 +331,7 @@ test('a missing value of a heatmap is an empty cell marked missing, with no shad
       rows: ['clerky.com'],
       columns: ['run 1', 'run 2'],
       values: [[0.5, Number.NaN]],
+      table: new Table(['test'], []),
     }),
   );
 
@@ -399,6 +407,95 @@ void test.each(
     }),
 );
 
+// The table that a chart carries, with a toned cell.
+const carried = new Table(
+  ['score', 'verdict'],
+  [
+    [
+      { text: 'values_recall', tone: 'neutral' },
+      { text: 'missed', tone: 'bad' },
+    ],
+  ],
+);
+
+void test.each(
+  [
+    {
+      name: 'bars',
+      chart: 'class="bars"',
+      primitive: new Bars({
+        bars: [
+          { label: 'recall', value: 0.9, ends: undefined, tone: 'neutral' },
+        ],
+        scale: { low: 0, high: 1 },
+        marks: [{ label: 'bar', at: 0.88 }],
+        table: carried,
+      }),
+    },
+    {
+      name: 'a scatter',
+      chart: 'class="point"',
+      primitive: new Scatter({
+        x: 'Haiku',
+        y: 'DeepSeek',
+        points: [{ label: 'clerky.com', x: 0.5, y: 1 }],
+        table: carried,
+      }),
+    },
+    {
+      name: 'a line',
+      chart: 'class="line"',
+      primitive: new Line({
+        steps: ['run 1'],
+        series: [
+          { label: 'recall', values: [{ value: 0.9, ends: undefined }] },
+        ],
+        table: carried,
+      }),
+    },
+    {
+      name: 'a heatmap',
+      chart: 'class="heat-cell"',
+      primitive: new Heatmap({
+        rows: ['clerky.com'],
+        columns: ['run 1'],
+        values: [[0.5]],
+        table: carried,
+      }),
+    },
+  ] satisfies readonly { name: string; chart: string; primitive: Primitive }[],
+  ({ name, chart, primitive }) =>
+    test(`${name} is one figure: the chart, then the table it carries as a table is drawn, with no folded table view`, () => {
+      const html = render(primitive);
+      const figures = [
+        ...html.matchAll(/<figure class="chart">([\s\S]*?)<\/figure>/g),
+      ].map((match) => match[1] ?? '');
+      const [figure = ''] = figures;
+      const table = render(carried).match(
+        /<div class="table-scroll">[\s\S]*?<\/table><\/div>/,
+      )?.[0];
+
+      assert.deepEqual(
+        {
+          figures: figures.length,
+          table: table !== undefined && figure.includes(table),
+          tables: figure.match(/<table/g)?.length,
+          chartFirst:
+            figure.includes(chart) &&
+            figure.indexOf(chart) < figure.indexOf('<table'),
+          tableView: html.includes('table-view'),
+        },
+        {
+          figures: 1,
+          table: true,
+          tables: 1,
+          chartFirst: true,
+          tableView: false,
+        },
+      );
+    }),
+);
+
 test('a note is a paragraph', () => {
   assert.match(
     render(new Note('711 answers were replayed')),
@@ -420,6 +517,7 @@ void test.each(
         bars: [{ label: attack, value: 0.5, ends: undefined, tone: 'neutral' }],
         scale: { low: 0, high: 1 },
         marks: [{ label: attack, at: 0.5 }],
+        table: new Table([attack], [[{ text: attack, tone: 'neutral' }]]),
       }),
     },
     {
@@ -428,6 +526,7 @@ void test.each(
         x: attack,
         y: attack,
         points: [{ label: attack, x: 0, y: 1 }],
+        table: new Table([attack], [[{ text: attack, tone: 'neutral' }]]),
       }),
     },
     {
@@ -438,6 +537,7 @@ void test.each(
           { label: attack, values: [{ value: 1, ends: undefined }] },
           { label: 'b', values: [{ value: 0, ends: undefined }] },
         ],
+        table: new Table([attack], [[{ text: attack, tone: 'neutral' }]]),
       }),
     },
     {
@@ -446,6 +546,7 @@ void test.each(
         rows: [attack],
         columns: [attack],
         values: [[0.5]],
+        table: new Table([attack], [[{ text: attack, tone: 'neutral' }]]),
       }),
     },
     {

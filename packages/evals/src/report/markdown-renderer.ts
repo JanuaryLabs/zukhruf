@@ -12,21 +12,18 @@ import type {
   Table,
   ValuePairs,
 } from '../index.ts';
-import {
-  type DataTable,
-  barsTable,
-  heatmapTable,
-  lineTable,
-  marks,
-  marksTable,
-  scatterTable,
-  tones,
-} from './data-tables.ts';
+import { marks, tones } from './data-tables.ts';
 import type { Page } from './page.ts';
 
 const text = (value: string): Mdast.Text => ({ type: 'text', value });
 
-const table = ({ columns, rows }: DataTable): Mdast.Table => ({
+const table = ({
+  columns,
+  rows,
+}: {
+  readonly columns: readonly string[];
+  readonly rows: readonly (readonly string[])[];
+}): Mdast.Table => ({
   type: 'table',
   children: [columns, ...rows].map((cells) => ({
     type: 'tableRow',
@@ -46,8 +43,9 @@ const write = (...nodes: Mdast.RootContent[]) =>
     { extensions: [gfmTableToMarkdown()] },
   ).trimEnd();
 
-// Draws each primitive as Markdown: a GFM table for the data of each chart,
-// and a paragraph for a note. A page is a heading for its title and one for
+// Draws each primitive as Markdown: a GFM table for a table, a chart as the
+// table that it carries, so that each number prints once (ADR 0011), and a
+// paragraph for a note. A page is a heading for its title and one for
 // the claim of each section.
 export class MarkdownRenderer implements PrimitiveVisitor<string> {
   render(page: Page): string {
@@ -76,21 +74,19 @@ export class MarkdownRenderer implements PrimitiveVisitor<string> {
   }
 
   bars(bars: Bars): string {
-    return bars.marks.length === 0
-      ? write(table(barsTable(bars)))
-      : write(table(barsTable(bars)), table(marksTable(bars)));
+    return this.table(bars.table);
   }
 
   scatter(scatter: Scatter): string {
-    return write(table(scatterTable(scatter)));
+    return this.table(scatter.table);
   }
 
   line(line: Line): string {
-    return write(table(lineTable(line)));
+    return this.table(line.table);
   }
 
   heatmap(heatmap: Heatmap): string {
-    return write(table(heatmapTable(heatmap)));
+    return this.table(heatmap.table);
   }
 
   valuePairs(pairs: ValuePairs): string {

@@ -38,6 +38,7 @@ void test.each(
         bars: [{ label: 'recall', value: 0.9, ends: undefined, tone: 'good' }],
         scale: { low: 0, high: 1 },
         marks: [{ label: 'bar', at: 0.88 }],
+        table: new Table(['score'], [[{ text: 'recall', tone: 'good' }]]),
       }),
     },
     {
@@ -46,6 +47,7 @@ void test.each(
         x: 'Haiku',
         y: 'DeepSeek',
         points: [{ label: 'a', x: 0.5, y: 1 }],
+        table: new Table(['test'], [[{ text: 'a', tone: 'neutral' }]]),
       }),
     },
     {
@@ -55,6 +57,7 @@ void test.each(
         series: [
           { label: 'recall', values: [{ value: 0.9, ends: undefined }] },
         ],
+        table: new Table(['run'], [[{ text: 'eval-1', tone: 'neutral' }]]),
       }),
     },
     {
@@ -63,6 +66,7 @@ void test.each(
         rows: ['a'],
         columns: ['eval-1'],
         values: [[0.5]],
+        table: new Table(['test'], [[{ text: 'a', tone: 'neutral' }]]),
       }),
     },
     {
@@ -92,6 +96,7 @@ test('a line refuses a series with another number of values than its steps', () 
         series: [
           { label: 'recall', values: [{ value: 0.9, ends: undefined }] },
         ],
+        table: new Table(['run'], []),
       }),
     { name: 'RangeError', message: 'Series recall has 1 values for 2 steps' },
   );
@@ -100,12 +105,33 @@ test('a line refuses a series with another number of values than its steps', () 
 test('a heatmap refuses values of another shape than its rows and columns', () => {
   assert.throws(
     () =>
-      new Heatmap({ rows: ['a', 'b'], columns: ['eval-1'], values: [[0.5]] }),
+      new Heatmap({
+        rows: ['a', 'b'],
+        columns: ['eval-1'],
+        values: [[0.5]],
+        table: new Table(['test'], []),
+      }),
     {
       name: 'RangeError',
       message: 'A heatmap of 2 rows and 1 columns has values of another shape',
     },
   );
+});
+
+test('the type of each chart refuses a chart with no table', () => {
+  const charts = [
+    // @ts-expect-error Bars carry the table that a reader reads in their place.
+    new Bars({ bars: [], scale: { low: 0, high: 1 }, marks: [] }),
+    // @ts-expect-error A scatter carries the table of its points.
+    new Scatter({ x: 'Haiku', y: 'DeepSeek', points: [] }),
+    // @ts-expect-error A line carries the table of its steps.
+    new Line({ steps: [], series: [] }),
+    // @ts-expect-error A heatmap carries the table of its cells.
+    new Heatmap({ rows: [], columns: [], values: [] }),
+  ];
+
+  // The charts still build at run time; the claims are the four type errors.
+  assert.equal(charts.length, 4);
 });
 
 test('the type of a pair refuses a part that only one side has with the other side', () => {

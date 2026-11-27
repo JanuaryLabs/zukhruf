@@ -108,18 +108,29 @@ export class TestsMoved<Answer, C> implements Section {
       moved.filter(({ score }) => score.name === head.score.name),
     );
     this.primitives = [
-      ...rows.map(
-        ({ score, pointed }) =>
-          new Scatter({
-            x: `${score.name} · ${pair.baseline.info.label}`,
-            y: `${score.name} · ${pair.change.info.label}`,
-            points: pointed.map(({ test, baseline: x, change: y }) => ({
-              label: test,
-              x,
-              y,
-            })),
-          }),
-      ),
+      // Each scatter carries the table of its points, which a reader of
+      // Markdown reads in its place (ADR 0011).
+      ...rows.map(({ score, pointed }) => {
+        const x = `${score.name} · ${pair.baseline.info.label}`;
+        const y = `${score.name} · ${pair.change.info.label}`;
+        return new Scatter({
+          x,
+          y,
+          points: pointed.map(({ test, baseline, change }) => ({
+            label: test,
+            x: baseline,
+            y: change,
+          })),
+          table: new Table(
+            ['test', x, y],
+            pointed.map(({ test, baseline, change }) => [
+              plain(test),
+              plain(fixed(baseline)),
+              plain(fixed(change)),
+            ]),
+          ),
+        });
+      }),
       moved.length === 0
         ? new Note('No test moved')
         : new Table(

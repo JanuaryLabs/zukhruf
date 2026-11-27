@@ -10,18 +10,7 @@ import type {
   Table,
   ValuePairs,
 } from '../index.ts';
-import {
-  type DataTable,
-  barsTable,
-  fixed,
-  heatmapTable,
-  lineTable,
-  marks,
-  marksTable,
-  scatterTable,
-  tones,
-  withEnds,
-} from './data-tables.ts';
+import { fixed, marks, tones, withEnds } from './data-tables.ts';
 import type { Page } from './page.ts';
 import { script } from './script.ts';
 import { styles } from './styles.ts';
@@ -75,35 +64,15 @@ const ticks = ({ low, high }: Ends) =>
 const share = ({ low, high }: Ends, value: number) =>
   (value - low) / (high - low);
 
-const tableHtml = ({
-  columns,
-  rows,
-}: DataTable): string => `<div class="table-scroll"><table class="data">
-<thead><tr>${columns.map((column) => `<th scope="col">${esc(column)}</th>`).join('')}</tr></thead>
-<tbody>${rows
-  .map(
-    (row) =>
-      `<tr>${row
-        .map((text, index) =>
-          index === 0
-            ? `<th scope="row">${esc(text)}</th>`
-            : `<td>${esc(text)}</td>`,
-        )
-        .join('')}</tr>`,
-  )
-  .join('')}</tbody>
-</table></div>`;
-// The numbers of a chart, folded below it, so that no value needs a hover.
-const tableView = (table: DataTable) =>
-  `<details class="table-view"><summary>Table</summary>${tableHtml(table)}</details>`;
-
 const cell = ({ text, tone }: Cell) =>
   tone === 'neutral'
     ? esc(text)
     : `<span class="icon" aria-hidden="true">${tones[tone]}</span>${esc(text)}<span class="sr"> (${tone})</span>`;
 
 // Draws each primitive as plain HTML and inline SVG, and a page as one
-// self-contained text with no <html>, <head> or <body> (report ADR 0003).
+// self-contained text with no <html>, <head> or <body> (report ADR 0003). A
+// chart is one figure: the chart, then the table that it carries, drawn as a
+// table is (ADR 0011).
 export class HtmlRenderer implements PrimitiveVisitor<string> {
   render(page: Page): string {
     const sections = page.sections
@@ -201,11 +170,9 @@ ${sections}
         (value) => `<span style="--x:${at(value)}">${short(value)}</span>`,
       ),
     );
-    const markTable =
-      bars.marks.length === 0 ? '' : tableHtml(marksTable(bars));
     return `<figure class="chart">
 <div class="bars">${markLabels}${rows}${tickLabels}</div>
-<details class="table-view"><summary>Table</summary>${tableHtml(barsTable(bars))}${markTable}</details>
+${this.table(bars.table)}
 </figure>`;
   }
 
@@ -245,7 +212,7 @@ ${sections}
     .join('')}</div>
   <p class="axis-title x">${esc(scatter.x)} →</p>
 </div>
-${tableView(scatterTable(scatter))}
+${this.table(scatter.table)}
 </figure>`;
   }
 
@@ -370,7 +337,7 @@ ${legend}
     )
     .join('')}</div>
 </div>
-${tableView(lineTable(line))}
+${this.table(line.table)}
 </figure>`;
   }
 
@@ -400,7 +367,7 @@ ${tableView(lineTable(line))}
     return `<figure class="chart">
 <div class="heat-scroll"><div class="heat" style="--cols:${heatmap.columns.length}">${head}${rows}</div></div>
 <div class="scale" aria-hidden="true"><span>0</span><span class="scale-bar"></span><span>1</span></div>
-${tableView(heatmapTable(heatmap))}
+${this.table(heatmap.table)}
 </figure>`;
   }
 

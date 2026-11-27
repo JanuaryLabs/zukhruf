@@ -15,10 +15,10 @@ const plain = (text: string): Cell => ({ text, tone: 'neutral' });
 
 // Where do the scores go over the runs? One line for each score over the
 // runs, in the order the caller gives, with its value and its interval in
-// each run, as Phoenix's chart strip, LangSmith and HELM; then a table of
-// the same numbers with the tests of each run. The value is Run#total and the
-// interval Bootstrap's (measure), drawn run by run and score by score, so the
-// bootstrap keeps its state across the calls. A run where a score has no value
+// each run, as Phoenix's chart strip, LangSmith and HELM, carrying a table of
+// the same numbers with the tests of each run (ADR 0011). The value is
+// Run#total and the interval Bootstrap's (measure), drawn run by run and score
+// by score, so the bootstrap keeps its state across the calls. A run where a score has no value
 // is a gap in its line. The claim reads the first score and says no more than
 // its numbers (report ADR 0002).
 // Bars are not read: a bar holds for a score over one run.
@@ -78,16 +78,16 @@ export class Trend<Answer, C> implements Section {
               .map(({ value, ends }) => ({ value, ends })),
           ),
         })),
+        table: new Table(
+          ['run', 'created', 'tests', ...scores.map(({ name }) => name)],
+          runs.map(({ id, createdAt, tests, numbers }) => [
+            plain(id),
+            plain(createdAt.toISOString().slice(0, 10)),
+            plain(String(tests)),
+            ...numbers.map(({ value, ends }) => plain(withEnds(value, ends))),
+          ]),
+        ),
       }),
-      new Table(
-        ['run', 'created', 'tests', ...scores.map(({ name }) => name)],
-        runs.map(({ id, createdAt, tests, numbers }) => [
-          plain(id),
-          plain(createdAt.toISOString().slice(0, 10)),
-          plain(String(tests)),
-          ...numbers.map(({ value, ends }) => plain(withEnds(value, ends))),
-        ]),
-      ),
     ];
   }
 
