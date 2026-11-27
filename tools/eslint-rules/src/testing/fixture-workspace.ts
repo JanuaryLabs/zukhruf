@@ -1,5 +1,4 @@
-import { mkdir, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 
 import { TemporaryFiles } from '@zukhruf/fs';
 
@@ -18,13 +17,10 @@ export interface FixtureWorkspace extends AsyncDisposable {
 export async function fixtureWorkspace(
   files: Record<string, string>,
 ): Promise<FixtureWorkspace> {
-  const folder = await new TemporaryFiles().directory('zukhruf-eslint-');
+  const folder = await new TemporaryFiles().directory('zukhruf-eslint-', {
+    files,
+  });
   const root = folder.path;
-  for (const [relativePath, content] of Object.entries(files)) {
-    const file = join(root, relativePath);
-    await mkdir(dirname(file), { recursive: true });
-    await writeFile(file, content);
-  }
   return {
     root,
     path: (relativePath) => join(root, relativePath),
