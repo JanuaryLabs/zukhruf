@@ -551,7 +551,10 @@ done
  * that a relay reaches does not: the run's engine objects do not wait for its
  * directories (ADR 0023). It has no restart policy and no AutoRemove: the
  * reaper sets its policy once it verified its socket, and removes itself at
- * its end, or keeps its container (ADR 0031).
+ * its end, or keeps its container (ADR 0031). Its stop signal is SIGKILL. Its
+ * `sh` is PID 1 with no trap for SIGTERM, so SIGTERM does not end it, and the
+ * engine sent SIGKILL after the 10 s of the stop timeout. A start after a kill
+ * is safe at each point (ADR 0022, ADR 0034).
  */
 export function reaperRequest(
   runId: string,
@@ -565,6 +568,7 @@ export function reaperRequest(
     Image: REAPER_IMAGE,
     Entrypoint: ['sh', '-c', script()],
     Cmd: [],
+    StopSignal: 'SIGKILL',
     Env: [
       `REAPER_RUN=${runId}`,
       `REAPER_SELF=${self}`,

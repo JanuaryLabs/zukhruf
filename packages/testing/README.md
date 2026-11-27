@@ -871,6 +871,7 @@ function globalTeardown(): void;
 - [ADR 0031](./docs/adr/0031-a-reaper-writes-a-line-for-each-call-that-hits-its-request-time-limit-and-then-keeps-its-stopped-container.md): a reaper writes a line for each call that hits its request time limit, and then keeps its stopped container.
 - [ADR 0032](./docs/adr/0032-a-database-records-itself-before-it-is-created-and-the-reaper-drops-only-the-databases-that-its-run-recorded.md): a database records itself before it is created, and the reaper drops only the databases that its run recorded.
 - [ADR 0033](./docs/adr/0033-a-process-that-creates-its-runs-reaper-takes-a-creator-lease-first-and-a-new-reaper-waits-for-its-first-hold-until-that-lease-is-gone.md): a process that creates its run's reaper takes a creator lease first, and a new reaper waits for its first hold until that lease is gone.
+- [ADR 0034](./docs/adr/0034-a-reaper-stops-with-sigkill-the-signal-that-already-ended-it-at-each-stop.md): a reaper stops with SIGKILL, the signal that already ended it at each stop.
 
 **Copied code**: [Code copied into this package](./docs/copied-code.md) records each copy of code in this package, as the Rule of Three asks.
 

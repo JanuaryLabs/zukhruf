@@ -705,6 +705,9 @@ async function objectOn(client: Docker, run: string): Promise<string> {
   const container = await client.containers.create({
     Image: 'alpine:latest',
     Cmd: ['sleep', '3600'],
+    // Its sleep is PID 1 and ignores SIGTERM: a restart of the engine would
+    // wait 10 s for it.
+    StopSignal: 'SIGKILL',
     Labels: { [RUN_LABEL]: run },
   });
   await container.start();
