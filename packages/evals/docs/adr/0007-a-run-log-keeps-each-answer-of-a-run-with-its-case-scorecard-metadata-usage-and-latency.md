@@ -34,3 +34,7 @@ Inspect AI's `analysis` builds its data frames from `inspect_ai.log` alone, and 
 - `RunLog`, `Sample` and `RunPair` are value objects: built with `new`, never changed. Ezz ruled for "Adapter + Iterator" over a static reader (2026-11-27).
 - The zero-consumer test: a runner of any kind gives one record for each answer, so the record is a fact of the eval, not of one host.
 - The words: a run log and a sample. "Log" is Inspect AI's word for the record of a run; "sample" is its word for one answer and is the word of `Bootstrap` for one resampled unit.
+
+## Status, 2026-11-27, later
+
+Point 5 changed after the code of 2f246383. A replayed sample keeps the usage of the call that first gave its answer, and `Call` is `{ replayed, usage }` for both kinds. A replay spent nothing, so what a run spent is the usage of its samples that were not replayed. promptfoo, the runner, does the same: for a cached answer it keeps the tokens of the answer and counts the tokens and the cost that the run incurred apart (`incurredTokenUsage`, `incurredCost`), and its summary prints the two. A replay with no usage dropped what the answer cost, which a page needs to say what a run of new calls would cost. offers-evals #6114 is open again for its provider to report a replay's stored usage.

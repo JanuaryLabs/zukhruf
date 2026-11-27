@@ -11,12 +11,16 @@ export type Usage = {
   readonly cost: number | undefined;
 };
 
-// How the answer of a sample came: a new call, with its usage when the runner
-// measured it, or a replay from a cache of the runner or the harness, which
-// spent nothing and so has no usage (ADR 0007, point 5).
-export type Call =
-  | { readonly replayed: false; readonly usage: Usage | undefined }
-  | { readonly replayed: true };
+// How the answer of a sample came: from a new call, or replayed from a cache
+// of the runner or the harness, with the usage of the call that gave the
+// answer (for a replay, the first call's) when the runner knows it. A replay
+// spent nothing, so what a run spent is the usage of its calls that were not
+// replayed, as promptfoo keeps a cached answer's tokens and counts its
+// incurred tokens apart (ADR 0007, point 5).
+export type Call = {
+  readonly replayed: boolean;
+  readonly usage: Usage | undefined;
+};
 
 type Facts<C> = {
   readonly test: string;

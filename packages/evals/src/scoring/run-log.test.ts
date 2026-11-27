@@ -3,14 +3,7 @@ import { test } from 'node:test';
 
 import { Linear, PercentileInterval } from '@zukhruf/statistics';
 
-import {
-  Bootstrap,
-  type Call,
-  Ratio,
-  RunLog,
-  RunPair,
-  type Sample,
-} from '../index.ts';
+import { Bootstrap, Ratio, RunLog, RunPair, type Sample } from '../index.ts';
 
 const info = { id: 'eval-1', label: 'model', createdAt: new Date(0) };
 
@@ -69,7 +62,7 @@ test('the run of a log holds the ratio, the epoch and the weight of each sample,
   );
 });
 
-test('a run log keeps its facts and each sample as given, in order, from an iterable that it reads once', () => {
+test('a run log keeps its facts and each sample as given, a replay with the usage of its first call, in order, from an iterable that it reads once', () => {
   const samples: Sample<string, { readonly expected: string }>[] = [
     {
       test: 'a',
@@ -94,7 +87,11 @@ test('a run log keeps its facts and each sample as given, in order, from an iter
       scorecard: { ratios: new Map([['recall', new Ratio(0, 0)]]) },
       metadata: { labels: 3, split: 'tuning' },
       latencyMs: 12,
-      call: { replayed: true },
+      // A replay keeps the usage of the call that first gave its answer.
+      call: {
+        replayed: true,
+        usage: { input: 4021, output: 312, cachedInput: 0, cost: 0.001 },
+      },
       outcome: 'answered',
       answer: 'none',
     },
@@ -141,7 +138,7 @@ test('two samples of one test and epoch are a RangeError that names them', () =>
     scorecard: { ratios: new Map([['recall', new Ratio(1, 1)]]) },
     metadata: {},
     latencyMs: 0,
-    call: { replayed: true },
+    call: { replayed: true, usage: undefined },
     outcome: 'answered',
     answer: 'an answer',
   };
@@ -228,7 +225,7 @@ test('a run pair keeps its baseline and its change, in that order', () => {
   assert.equal(pair.change, change);
 });
 
-test('the types refuse a failed sample with an answer or with no error, an answered sample with no answer, and a replay with a usage', () => {
+test('the types refuse a failed sample with an answer or with no error, and an answered sample with no answer', () => {
   const facts = {
     test: 'a',
     epoch: 0,
@@ -237,7 +234,7 @@ test('the types refuse a failed sample with an answer or with no error, an answe
     scorecard: { ratios: new Map([['recall', new Ratio(1, 1)]]) },
     metadata: {},
     latencyMs: 0,
-    call: { replayed: true },
+    call: { replayed: true, usage: undefined },
   } as const;
   // @ts-expect-error A failed call has no answer: its answer is null.
   const failed: Sample<string, null> = {
@@ -254,13 +251,8 @@ test('the types refuse a failed sample with an answer or with no error, an answe
   };
   // @ts-expect-error An answered sample holds its answer.
   const answered: Sample<string, null> = { ...facts, outcome: 'answered' };
-  const replay: Call = {
-    replayed: true,
-    // @ts-expect-error A replay spent nothing, so it holds no usage.
-    usage: { input: 1, output: 1, cachedInput: 0, cost: 0.01 },
-  };
 
   // The values that the types refuse still build at run time; the claims of
-  // this test are the four errors that the type checker must give.
-  assert.equal([failed, silent, answered, replay].length, 4);
+  // this test are the three errors that the type checker must give.
+  assert.equal([failed, silent, answered].length, 3);
 });

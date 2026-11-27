@@ -227,7 +227,7 @@ Ezz, 2026-11-27: the gaps of the statistics come first, so no page ever shows a 
 | `./promptfoo` cannot read a run                                                                           | #6110                            |
 | No multiple-comparison correction in `@zukhruf/statistics`                                                | done: #6111                      |
 
-A replayed answer cost nothing, so `CostAndLatency` shows what a run spent on its new calls, the cost of one new call, and the number of replayed answers apart, as Braintrust and promptfoo show cached work apart from spend. No harness has to keep the usage of a first call (offers-evals #6114, closed 2026-11-27).
+A replayed answer cost nothing this time, but its answer had a cost. So `CostAndLatency` shows both, as promptfoo keeps a cached answer's tokens and counts its incurred tokens and cost apart (`incurredTokenUsage`, `incurredCost`): what the run spent (its samples that were not replayed), what its answers cost (each sample with the usage of the call that gave it), and how many answers were replayed (offers-evals #6114: offers' provider reports the stored usage of a replay).
 
 ## Who uses each part
 

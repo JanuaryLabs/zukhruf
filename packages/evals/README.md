@@ -635,10 +635,11 @@ export type Usage = {
   readonly cachedInput: number; // read from the provider's prompt cache
   readonly cost: number | undefined;
 };
-/** A new call, with its usage when measured, or a replay, which spent nothing. */
-export type Call =
-  | { readonly replayed: false; readonly usage: Usage | undefined }
-  | { readonly replayed: true };
+/** A new call or a replay, with the usage of the call that gave the answer (a replay's first call). A replay spent nothing. */
+export type Call = {
+  readonly replayed: boolean;
+  readonly usage: Usage | undefined;
+};
 /** One answer of a run, to one test, in one epoch: answered or failed (ADR 0005, ADR 0007). */
 export type Sample<Answer, C> = {
   readonly test: string;

@@ -324,7 +324,7 @@ One answer of a run log, to one test, in one epoch. It is answered, with its ans
 _Avoid_: row, result (runner words)
 
 **Replayed**:
-A sample whose answer came from a cache of the runner or the harness, with no new call. Not the provider's prompt cache, which only lowers the price of the input of a new call.
+A sample whose answer came from a cache of the runner or the harness, with no new call. It keeps the usage of the call that first gave the answer, and it spent nothing: what a run spent is the usage of its samples that were not replayed. Not the provider's prompt cache, which only lowers the price of the input of a new call.
 
 **Run pair**:
 Two run logs on the same tests: a baseline and a change. A pair of logs with other tests cannot be built (core ADR 0007).
