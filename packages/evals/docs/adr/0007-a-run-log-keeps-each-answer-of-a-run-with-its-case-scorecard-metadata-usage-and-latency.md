@@ -1,6 +1,6 @@
 # A run log keeps each answer of a run with its case, scorecard, metadata, usage and latency
 
-Status: proposed (2026-11-27, #6108, #6109). Design for review: no code yet.
+Status: accepted and built (2026-11-27, #6109): `src/scoring/run-log.ts`. Ezz ruled the shape (value objects built with `new`; "Adapter + Iterator" for the reader). The log also refuses epochs of one test with other weights when it is built, since `Run.add` refuses them (ADR 0004, point 2).
 
 ## Context
 

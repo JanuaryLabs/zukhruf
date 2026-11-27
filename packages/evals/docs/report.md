@@ -1,6 +1,6 @@
 # Reports: `@zukhruf/evals/report`
 
-> **Design for review (#6108).** No code of this page exists yet: not `RunLog`, `RunPair`, `Section` and the primitives of the core, not `PromptfooSamples` of `./promptfoo`, not `./report`, and not the sections of `./structured`. Ezz ruled on the shape on 2026-11-27 (by input; a page that the host composes; primitives drawn by renderers; an adapter that gives samples; the gaps of the statistics first; five classes of field error). The ADRs: [core 0007](adr/0007-a-run-log-keeps-each-answer-of-a-run-with-its-case-scorecard-metadata-usage-and-latency.md), [core 0008](adr/0008-primitives-are-data-in-the-core-and-the-renderers-of-report-visit-them.md), [core 0009](adr/0009-the-promptfoo-adapter-gives-the-samples-of-a-run-with-the-latest-result-of-each-answer.md), [report 0001](adr/report/0001-a-host-composes-a-page-of-sections-and-each-section-is-built-from-its-input.md) to [report 0005](adr/report/0005-repeat-spread-reads-the-scores-of-the-epochs-not-the-pass-flags-of-promptfoo.md), and [structured 0014](adr/structured/0014-field-errors-have-five-classes-and-the-field-diff-pairs-items-as-the-scorer-pairs-them.md).
+> **Design for review (#6108), built in parts.** Built: `Bootstrap` over a run (ADR 0010), `Holm` of `@zukhruf/statistics`, and `RunLog`, `Sample`, `Usage`, `Call` and `RunPair` of the core (ADR 0007). Not built yet: `Section` and the primitives of the core, `PromptfooSamples` of `./promptfoo`, `./report`, and the building blocks of `./structured`; "The order of the work" below is the order they come in. Ezz ruled on the shape on 2026-11-27 (by input; a page that the host composes; primitives drawn by renderers; an adapter that gives samples; the gaps of the statistics first; five classes of field error). The ADRs: [core 0007](adr/0007-a-run-log-keeps-each-answer-of-a-run-with-its-case-scorecard-metadata-usage-and-latency.md), [core 0008](adr/0008-primitives-are-data-in-the-core-and-the-renderers-of-report-visit-them.md), [core 0009](adr/0009-the-promptfoo-adapter-gives-the-samples-of-a-run-with-the-latest-result-of-each-answer.md), [report 0001](adr/report/0001-a-host-composes-a-page-of-sections-and-each-section-is-built-from-its-input.md) to [report 0005](adr/report/0005-repeat-spread-reads-the-scores-of-the-epochs-not-the-pass-flags-of-promptfoo.md), and [structured 0014](adr/structured/0014-field-errors-have-five-classes-and-the-field-diff-pairs-items-as-the-scorer-pairs-them.md).
 
 A runner runs the tests and stores what each answer scored. A report reads one stored run, two runs on the same tests, or many runs, and shows on one page what the numbers say. promptfoo is the runner of every eval (Ezz, 2026-11-27), and its web viewer is not the report (Ezz, 2026-11-24). This page replaces the line "It does not … show them" of the README.
 
@@ -210,9 +210,9 @@ In each library, the report imports the result types of the scorers or the run f
 
 Ezz, 2026-11-27: the gaps of the statistics come first, so no page ever shows a wrong interval.
 
-1. `Bootstrap` takes the statistic of `Totals` (#4234).
-2. Holm in `@zukhruf/statistics`, and mteb imports it (#6111).
-3. `RunLog`, `Sample`, `RunPair` in the core (#6109).
+1. Done: `Bootstrap` takes the statistic of `Totals` (#4234, 0b542c02).
+2. Done: Holm in `@zukhruf/statistics`, and mteb imports it (#6111, f1ba7079).
+3. Done: `RunLog`, `Sample`, `RunPair` in the core (#6109).
 4. `PromptfooSamples` in `./promptfoo` (#6110).
 5. The primitives in the core, then `./report`: `Page`, the renderers, the building blocks (#6108).
 6. `FieldErrors` and `FieldDiff` in `./structured` (#6108).
@@ -220,12 +220,12 @@ Ezz, 2026-11-27: the gaps of the statistics come first, so no page ever shows a 
 
 ## The gaps this design depends on
 
-| Gap                                                                                                       | Item                       |
-| --------------------------------------------------------------------------------------------------------- | -------------------------- |
-| `Bootstrap` averages the value of each scorecard, so the interval of a score per item is not its interval | #4234 (offers-evals #4286) |
-| No run record in the core                                                                                 | #6109                      |
-| `./promptfoo` cannot read a run                                                                           | #6110                      |
-| No multiple-comparison correction in `@zukhruf/statistics`                                                | #6111                      |
+| Gap                                                                                                       | Item                             |
+| --------------------------------------------------------------------------------------------------------- | -------------------------------- |
+| `Bootstrap` averages the value of each scorecard, so the interval of a score per item is not its interval | done: #4234 (offers-evals #4286) |
+| No run record in the core                                                                                 | done: #6109                      |
+| `./promptfoo` cannot read a run                                                                           | #6110                            |
+| No multiple-comparison correction in `@zukhruf/statistics`                                                | done: #6111                      |
 
 A replayed answer cost nothing, so `CostAndLatency` shows what a run spent on its new calls, the cost of one new call, and the number of replayed answers apart, as Braintrust and promptfoo show cached work apart from spend. No harness has to keep the usage of a first call (offers-evals #6114, closed 2026-11-27).
 

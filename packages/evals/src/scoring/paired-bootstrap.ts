@@ -6,7 +6,7 @@ import {
 
 import { RatioOfSums } from '../aggregation/ratio-of-sums.ts';
 import type { Ratio } from '../aggregation/ratio.ts';
-import { type Run, runTests } from './run.ts';
+import { type Run, pairTests, runTests } from './run.ts';
 
 export type Verdict = {
   readonly name: string;
@@ -124,37 +124,11 @@ export class PairedBootstrap {
   }
 
   // The tests of the two runs, paired by test id in the order of the
-  // baseline's first adds. The pairing refuses a test id that one run does
-  // not have, as mteb's pairedBootstrapTest refuses (strike 2,
-  // docs/copied-code.md).
+  // baseline's first adds (pairTests), with the mean of the epochs of each.
   static #pairs(baseline: Run, change: Run, name: string): Pair[] {
+    const joined = pairTests(baseline, change, 'A paired bootstrap');
     const baselineTests = runTests(baseline);
     const changeTests = runTests(change);
-    const unpaired = [...baselineTests.keys(), ...changeTests.keys()].filter(
-      (id) => !(baselineTests.has(id) && changeTests.has(id)),
-    );
-    if (unpaired.length > 0)
-      throw new RangeError(
-        `A paired bootstrap needs the same test ids in the baseline and the change. Not in both: ${unpaired.join(', ')}`,
-      );
-    const joined = [...baselineTests].flatMap(([id, test]) => {
-      const changeTest = changeTests.get(id);
-      return changeTest === undefined
-        ? []
-        : [{ id, baseline: test, change: changeTest }];
-    });
-    const reweighted = joined.filter(
-      (test) => test.baseline.weight !== test.change.weight,
-    );
-    if (reweighted.length > 0)
-      throw new RangeError(
-        `A test has the same weight in the baseline and the change. Other weights: ${reweighted
-          .map(
-            (test) =>
-              `${test.id} (${test.baseline.weight} and ${test.change.weight})`,
-          )
-          .join(', ')}`,
-      );
     for (const [run, tests] of [
       ['baseline', baselineTests],
       ['change', changeTests],

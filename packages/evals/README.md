@@ -20,7 +20,7 @@ The answers of evals have different shapes: a structured record, a label, a rank
 
 A subpath imports only the core. It never imports another subpath.
 
-The core holds the parts that all families share: the ratios, the scorers, the penalties, `Comparer`, `Grouped`, `ScorerSet`, `Totals`, `Bootstrap`, `Run` and `PairedBootstrap`. A part that reads an input has a type parameter for that input. So a scorer of one family cannot read the input of another family (ADR 0002). `./promptfoo` holds `ScorerAssertion`. The families are `./structured` and `./classification`.
+The core holds the parts that all families share: the ratios, the scorers, the penalties, `Comparer`, `Grouped`, `ScorerSet`, `Totals`, `Bootstrap`, `Run`, `RunLog`, `RunPair` and `PairedBootstrap`. A part that reads an input has a type parameter for that input. So a scorer of one family cannot read the input of another family (ADR 0002). `./promptfoo` holds `ScorerAssertion`. The families are `./structured` and `./classification`.
 
 ## Score one answer
 
@@ -627,6 +627,53 @@ export class Totals {
   add(scorecard: Scorecard, weight: number): void;
   get(name: string): RatioOfSums;
   names(): IterableIterator<string>;
+}
+/** The tokens and the cost of one call (ADR 0007). */
+export type Usage = {
+  readonly input: number;
+  readonly output: number;
+  readonly cachedInput: number; // read from the provider's prompt cache
+  readonly cost: number | undefined;
+};
+/** A new call, with its usage when measured, or a replay, which spent nothing. */
+export type Call =
+  | { readonly replayed: false; readonly usage: Usage | undefined }
+  | { readonly replayed: true };
+/** One answer of a run, to one test, in one epoch: answered or failed (ADR 0005, ADR 0007). */
+export type Sample<Answer, C> = {
+  readonly test: string;
+  readonly epoch: number;
+  readonly weight: number;
+  readonly case: C;
+  readonly scorecard: Pick<Scorecard, 'ratios'>;
+  readonly metadata: Readonly<Record<string, string | number | boolean>>;
+  readonly latencyMs: number;
+  readonly call: Call;
+} & (
+  | { readonly outcome: 'answered'; readonly answer: Answer }
+  | {
+      readonly outcome: 'failed';
+      readonly answer: null;
+      readonly error: string;
+    }
+);
+export type RunInfo = {
+  readonly id: string;
+  readonly label: string;
+  readonly createdAt: Date;
+};
+/** The record of one run. A RangeError for two samples of one test and epoch, or epochs of one test with other weights. */
+export class RunLog<Answer, C> {
+  constructor(info: RunInfo, samples: Iterable<Sample<Answer, C>>);
+  readonly info: RunInfo;
+  readonly samples: readonly Sample<Answer, C>[];
+  run(): Run;
+}
+/** Two run logs on the same tests. A RangeError for a test of one log only, or a test with another weight. */
+export class RunPair<Answer, C> {
+  constructor(baseline: RunLog<Answer, C>, change: RunLog<Answer, C>);
+  readonly baseline: RunLog<Answer, C>;
+  readonly change: RunLog<Answer, C>;
 }
 /** The interval of one name over the tests of a run, with the statistic of Totals (@zukhruf/statistics, ADR 0010). */
 export class Bootstrap {

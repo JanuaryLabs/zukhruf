@@ -98,7 +98,7 @@ The mean of the values of the answers, as scikit-learn's `average='samples'` tak
 _Avoid_: macro average (that is the mean over the classes)
 
 **Bootstrap interval**:
-The interval of a mean: many resamples draw the scorecards again, with replacement, and two quantiles of their means are its ends.
+The interval of a score of one run: many resamples draw the tests of the run again, with replacement (each test the mean of its epochs times its weight), the statistic of `Totals` gives each resample a value, and two quantiles of those values are its ends (ADR 0010).
 
 **Run**:
 The scorecards that one model gives on many tests of one harness, each with its test id and its weight. A paired bootstrap reads two runs (ADR 0004).
