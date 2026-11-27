@@ -2,6 +2,8 @@
 
 Status: Accepted 2026-11-25 by Ezz (datahub #5617), for option (a) with the clock of the server: "just go, man, do it". His defaults answer the open questions of the draft: see [Answers to the open questions](#answers-to-the-open-questions). The reproduction is `src/lock-stores/sqlserver/sqlserver-store.vanished-holder.test.ts`. It failed with the session lock, and it passes with the lease.
 
+Changed in part on 2026-11-28 (#5973) for the count of a renewal. The holder's two intervals count from the moment its statement goes to the server, after its session is there, for the grant and for each renewal; before, they counted from the start of the grant or of the renewal, which includes the connect. Over a link of about 80 ms a new session took 0.6 to 1.3 s, so the first renewal began more than two intervals after the count started and the lease was lost at once. The rule stays safe: the server writes `renewed` when it runs the statement, which is later than the send.
+
 Before this decision, `SqlServerStore` held a key with a session-owned application lock: `sp_getapplock` with `@LockOwner = 'Session'` and no time limit. The README said: "The server releases the lock when the session ends, so a holder that stops never leaves a key locked". This is true only when the server learns that the session ended. A holder that vanishes tells the server nothing. The store page already said it: "A holder machine stops with no reset: the server sees the end of the session only through its own TCP keep-alive. Until then, the key stays held, and waiters wait."
 
 ## The problem
