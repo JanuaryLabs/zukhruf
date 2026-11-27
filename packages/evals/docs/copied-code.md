@@ -1,6 +1,6 @@
 # Copied code
 
-This package keeps copies of the knowledge of `@zukhruf/mteb`: three of its paired bootstrap, and the shell of its report page (a section that has its own end). It also keeps one copy of its own: the leaf classes of `FieldErrors` in `FieldDiff` (the last section, which has its own backlog item). Each copy of the paired bootstrap is in its second place, so it stays a copy (Rule of Three, [ADR 0004](adr/0004-two-runs-are-compared-by-a-paired-bootstrap-over-their-tests.md)). A third place starts the extraction (backlog #4009). The three working copies then give the boundary of the shared code. Until then, make each fix in both copies, and name both files in the commit.
+This package keeps copies of the knowledge of `@zukhruf/mteb`: three of its paired bootstrap, the shell of its report page (a section that has its own end), and the verdicts of its report (a section that has its own backlog item). It also keeps one copy of its own: the leaf classes of `FieldErrors` in `FieldDiff` (the last section, which has its own backlog item). Each copy of the paired bootstrap is in its second place, so it stays a copy (Rule of Three, [ADR 0004](adr/0004-two-runs-are-compared-by-a-paired-bootstrap-over-their-tests.md)). A third place starts the extraction (backlog #4009). The three working copies then give the boundary of the shared code. Until then, make each fix in both copies, and name both files in the commit.
 
 ## From the paired bootstrap test of mteb
 
@@ -41,6 +41,22 @@ Changes: `percent` also clamps the position to 0–100%, since a primitive can h
 **The page shell: the end of `page` in `packages/mteb/src/report/page.ts` → `HtmlRenderer.render`.**
 Both give a page with no `<html>`, `<head>` or `<body>`: the charset, the title, the viewport meta of claude.ai, the IBM Plex fonts of Google Fonts, the styles, a `main`, the tooltip element and the script.
 Changes: the page heading is the title of the `Page`, and each section is a claim and its primitives; no footer.
+
+## The verdicts of mteb's report
+
+`Verdicts` of `./report` (`src/report/verdicts.ts`) decides the verdicts of many scores of a run pair as mteb's `verdicts` (`packages/mteb/src/report/verdicts.ts`) decides those of many comparisons ([report ADR 0004](adr/report/0004-a-summary-interval-bootstraps-the-statistic-of-the-score-and-verdicts-of-many-scores-are-corrected-with-holm.md), point 3). The rule is in its second place, so it stays a copy (Rule of Three); `./report` does not depend on `@zukhruf/mteb`. A third place starts the extraction (backlog #6288); the three working copies then give its boundary. Until then, make each fix in both copies, and name both files in the commit.
+
+**The family: the primary comparison alone, Holm over the others → the primary score alone, Holm over the other scores.**
+Both test the one that was chosen before the runs alone, adjust the p-values of all the others together with `Holm` of `@zukhruf/statistics`, and decide each one by its deciding p-value: p for the primary one, the Holm-adjusted p for the others.
+Changes: the family is the scores of one pair, not each pair of models on each score, so the primary is a score's name and must be one of the scores (a `RangeError` otherwise); mteb's primary is optional. The primary row comes first.
+
+**The decision: `ALPHA = 0.05` and `decide` → `ALPHA` and `decide`.**
+Both count a deciding p-value below 0.05, and read better or worse from the sign of the observed difference.
+Changes: the sign is read in the direction of the score (`higherIsBetter`), since a score of this package can be better lower; mteb always reads a higher score as better. The result that is not beyond chance reads "no difference", not "inconclusive", the word of report ADR 0002's claims.
+
+### Not copied
+
+The verdict of each score is `PairedBootstrap.verdict` (its own copy of mteb's `pairedBootstrapTest`, above), and `Holm` is of `@zukhruf/statistics`, so neither is copied here. The per-query scores of mteb's predictions are mteb's own.
 
 ## The leaf classes of FieldErrors
 

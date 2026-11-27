@@ -6,3 +6,4 @@ export { Slices } from './slices.ts';
 export { RepeatSpread } from './repeat-spread.ts';
 export { ValidityGap } from './validity-gap.ts';
 export { CostAndLatency } from './cost-and-latency.ts';
+export { Verdicts } from './verdicts.ts';
