@@ -261,7 +261,6 @@ export class Pool<Input, Output> implements AsyncDisposable {
     return wake;
   }
 
-  // Waits for a wake of the job, or the backstop.
   async #next(wake: Wake, stop: AbortSignal): Promise<void> {
     const done = new AbortController();
     const signal = AbortSignal.any([stop, done.signal]);

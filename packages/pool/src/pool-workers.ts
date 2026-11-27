@@ -173,7 +173,7 @@ export class PoolWorkers<Input, Output> implements AsyncDisposable {
         await this.#own(term!, stop);
       }
     } catch (error) {
-      if (error !== this.#disposed.signal.reason) throw error;
+      if (error !== stop.reason) throw error;
     } finally {
       await this.#store[Symbol.asyncDispose]();
     }
@@ -389,9 +389,9 @@ export class PoolWorkers<Input, Output> implements AsyncDisposable {
     const deadline =
       this.#clock.performance.now() + this.#kind.expireInSeconds * 1_000;
     for (;;) {
-      const left = deadline - this.#clock.performance.now();
-      if (left <= 0) return { expired: true };
-      await delay(Math.min(TOUCH_INTERVAL, left), {
+      const remaining = deadline - this.#clock.performance.now();
+      if (remaining <= 0) return { expired: true };
+      await delay(Math.min(TOUCH_INTERVAL, remaining), {
         clock: this.#clock,
         signal: ended,
       });
