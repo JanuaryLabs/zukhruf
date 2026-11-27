@@ -2100,7 +2100,7 @@ test('a scan that lists a key or a group twice, holds a record JSON cannot hold,
     await assert.rejects(Array.fromAsync(diff), message);
 });
 
-test('a grouped scan reads its saved snapshot where it lies, so a large snapshot diffs in a heap a few times its size', async () => {
+test('a grouped scan reads its saved snapshot where it lies, so a large snapshot diffs in a heap a few times its size', async (t) => {
   // A mailbox of 50,000 messages with 10 headers each saves about 41 MB of
   // state, one JSON row for each group. The second scan lists every message
   // but the first unchanged and one new message, as a mailbox does between
@@ -2156,7 +2156,9 @@ test('a grouped scan reads its saved snapshot where it lies, so a large snapshot
   const { stdout } = await execFileAsync(
     process.execPath,
     ['--max-old-space-size=176', '--input-type=module', '--eval', program],
-    { timeout: 50_000 },
+    // The test bounds memory, not time: the test's own limit ends the child,
+    // so a loaded machine is slower but not wrong (#3476).
+    { signal: t.signal },
   );
 
   assert.deepEqual(JSON.parse(stdout), {
