@@ -14,7 +14,7 @@ import { test } from '@zukhruf/parameterized-test';
 import {
   Command,
   type CommandOptions,
-  EndedBeforeReadyError,
+  ProcessEndedError,
   StartError,
 } from './index.ts';
 
@@ -152,7 +152,7 @@ test('a start of a file that does not exist rejects with StartError, whose cause
   });
 });
 
-test('a process that ends before its ready line rejects the start with EndedBeforeReadyError, with the end and the stderr tail, naming the process but not its arguments', async () => {
+test('a process that ends before its ready line rejects the start with ProcessEndedError, with the end and the stderr tail, naming the process but not its arguments', async () => {
   // Act
   const started = new Command(
     process.execPath,
@@ -167,9 +167,10 @@ test('a process that ends before its ready line rejects the start with EndedBefo
 
   // Assert
   await assert.rejects(started, (error) => {
-    assert.ok(error instanceof EndedBeforeReadyError);
+    assert.ok(error instanceof ProcessEndedError);
     assert.deepEqual(error.end, { exitCode: 4 });
     assert.equal(error.stderr, 'config missing');
+    assert.match(error.message, /ended \(exit code 4\) before it was ready/);
     assert.ok(error.message.includes('the helper'));
     assert.ok(!error.message.includes('secret'));
     return true;
@@ -340,7 +341,7 @@ void test.each(
     ],
   ] as const,
   ([name, line, printed]) =>
-    test(`with the ready line ${name}, a process that prints ${JSON.stringify(printed)} and ends rejects the start with EndedBeforeReadyError`, async () => {
+    test(`with the ready line ${name}, a process that prints ${JSON.stringify(printed)} and ends rejects the start with ProcessEndedError`, async () => {
       // Act
       const started = node(
         printed.map((one) => `console.log(${JSON.stringify(one)});`).join(' '),
@@ -348,7 +349,7 @@ void test.each(
 
       // Assert
       await assert.rejects(started, (error) => {
-        assert.ok(error instanceof EndedBeforeReadyError);
+        assert.ok(error instanceof ProcessEndedError);
         assert.deepEqual(error.end, { exitCode: 0 });
         return true;
       });

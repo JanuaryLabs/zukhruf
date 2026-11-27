@@ -8,7 +8,7 @@ import { poll } from '@zukhruf/async';
 import { TemporaryFiles } from '@zukhruf/fs';
 import { test } from '@zukhruf/parameterized-test';
 
-import { Command, EndedBeforeReadyError, type PipedProcess } from './index.ts';
+import { Command, type PipedProcess, ProcessEndedError } from './index.ts';
 
 const node = (source: string) =>
   new Command(process.execPath, ['-e', source], { clock: globalThis, env: {} });
@@ -343,8 +343,8 @@ test('a start with stdin ignored or a socket gives no PipedProcess, and a ready 
 
   // Assert
   await Promise.all([
-    assert.rejects(notPiped, EndedBeforeReadyError),
-    assert.rejects(toSocket, EndedBeforeReadyError),
+    assert.rejects(notPiped, ProcessEndedError),
+    assert.rejects(toSocket, ProcessEndedError),
   ]);
   assert.deepEqual([ignored.stdin, socketed.stdin], [null, null]);
 });

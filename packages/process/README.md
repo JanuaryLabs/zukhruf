@@ -66,7 +66,7 @@ await using holding = await owner.start({
 ```
 
 - `line` is a string that a whole line equals, or a regular expression that a line matches.
-- When the process ends before it is ready, the start rejects with `EndedBeforeReadyError`, which holds the end and the stderr tail.
+- When the process ends before it is ready, the start rejects with `ProcessEndedError`, which holds the end and the stderr tail.
 - The wait has no time limit of its own. The `signal` is its limit; in a test, give `t.signal`.
 - `lines()` of the started process gives the lines of stdout from the first one, also those that came before the call. After the ready line, the package reads stdout only while a caller iterates `lines()`. A process that writes much to stdout that nobody reads waits at its write, as with a pipe in a shell; give `stdout: 'ignore'` for such a process.
 - `stdin` and `stdout` can also be a `net.Socket` that the process gets as its own, as `sshd -i` needs for each connection. A ready line needs `stdout: 'pipe'`, the default, and the type allows `ready` only then.
@@ -124,13 +124,13 @@ Only a `NodeProcess` has messages, because only a Node.js child can use the chan
 
 ## Errors
 
-| Error                                             | When                                                                                                                                                                                                        |
-| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `StartError`                                      | The process could not start, for example because the file does not exist. Its `cause` is the error of the start (`ENOENT`, `EACCES`). `run()` and `start()` reject with it.                                 |
-| `EndedBeforeReadyError`                           | A started process ended before it was ready. It has `end` and `stderr` (the stderr tail). Its message names the process and the end, never the command line, because arguments can hold prompts or secrets. |
-| the reason of `signal`                            | The signal aborted. The process is stopped first.                                                                                                                                                           |
-| `<name> exited (<exit code or signal>): <stderr>` | A coprocess ended. `exited()` settles with it, and each `receive` rejects with it (from `@zukhruf/coprocess`).                                                                                              |
-| `<name> gave a line that is not JSON`             | A coprocess wrote a line that `JSON.parse` refuses. Only the `receive` of that line fails (from `@zukhruf/coprocess`).                                                                                      |
+| Error                                             | When                                                                                                                                                                                                                                                                                                                                                                |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `StartError`                                      | The process could not start, for example because the file does not exist. Its `cause` is the error of the start (`ENOENT`, `EACCES`). `run()` and `start()` reject with it.                                                                                                                                                                                         |
+| `ProcessEndedError`                               | A started process ended before what its caller waited for: the ready line or message of a start (`before it was ready`), or the message that `next()` waits for (`before it sent 'held'`). It has `end` and `stderr` (the stderr tail). Its message names the process, the end and the wait, never the command line, because arguments can hold prompts or secrets. |
+| the reason of `signal`                            | The signal aborted. The process is stopped first.                                                                                                                                                                                                                                                                                                                   |
+| `<name> exited (<exit code or signal>): <stderr>` | A coprocess ended. `exited()` settles with it, and each `receive` rejects with it (from `@zukhruf/coprocess`).                                                                                                                                                                                                                                                      |
+| `<name> gave a line that is not JSON`             | A coprocess wrote a line that `JSON.parse` refuses. Only the `receive` of that line fails (from `@zukhruf/coprocess`).                                                                                                                                                                                                                                              |
 
 A non-zero exit code of a run is not an error.
 
@@ -325,7 +325,7 @@ export class Coprocess implements AsyncDisposable {
 
 export class StartError extends Error {}
 
-export class EndedBeforeReadyError extends Error {
+export class ProcessEndedError extends Error {
   readonly end: End;
   /** The stderr tail. */
   readonly stderr: string;

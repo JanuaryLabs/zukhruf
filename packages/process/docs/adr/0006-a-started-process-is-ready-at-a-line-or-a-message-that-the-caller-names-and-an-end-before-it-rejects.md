@@ -2,6 +2,8 @@
 
 Status: Accepted 2026-11-27 (backlog #6077).
 
+Changed in part on 2026-11-27 (backlog #6077, Ezz): the error is `ProcessEndedError`, one class for each wait that the end of the process cuts, as the `TargetClosedError` of Playwright is. A start rejects with `<name> ended (<end>) before it was ready`, and `next()` of a `NodeProcess` with `<name> ended (<end>) before it sent '<type>'` (or `a selected message`). The call site already says which wait it was, so a second class would tell the caller nothing more. No consumer used `EndedBeforeReadyError`.
+
 Decision-makers: the zukhruf session of backlog #6077 proposes this from the leaders. Ezz rules on it in the review of the paper.
 
 A test that starts a server, an owner of a lock or a helper must wait until the process can work. The hand-written waits read stdout until a line such as `holding` or `listening` (`startOwner` of sqlite-snapshot and sqlite-data-version, `connection.test.ts` of docker), or wait for an IPC message (`startWorker`, `startOwner` of ssh). The copies differ in what they do when the process ends first: `startOwner` of sqlite-snapshot throws "The owner ended before it held the database" with no stderr, because its stderr is inherited. A wait with no limit of its own ends only at the time limit of the test.

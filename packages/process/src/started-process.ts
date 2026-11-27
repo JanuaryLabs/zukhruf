@@ -4,7 +4,7 @@ import type { Readable, Writable } from 'node:stream';
 import { Latch, Lock } from '@zukhruf/async';
 
 import type { End } from './end.ts';
-import { EndedBeforeReadyError } from './ended-before-ready-error.ts';
+import { ProcessEndedError } from './process-ended-error.ts';
 
 /** A started process. Only `start()` of a command gives one (ADR 0010). */
 export interface Process extends AsyncDisposable {
@@ -131,10 +131,11 @@ export class StartedProcess implements Process {
         ? (seen: string) => seen === line
         : (seen: string) => line.test(seen);
     for await (const seen of this.lines()) if (matches(seen)) return;
-    throw new EndedBeforeReadyError(
+    throw new ProcessEndedError(
       this.name,
       await this.ended,
       this.stderrTail(),
+      'it was ready',
     );
   }
 
