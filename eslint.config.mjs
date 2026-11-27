@@ -434,21 +434,27 @@ export default defineConfig(
           zones: [
             {
               target: './structured',
-              from: ['./classification', './promptfoo'],
+              from: ['./classification', './promptfoo', './report'],
               message:
                 'A family of @zukhruf/evals imports only the core (ADR 0001, rule 1).',
             },
             {
               target: './classification',
-              from: ['./structured', './promptfoo'],
+              from: ['./structured', './promptfoo', './report'],
               message:
                 'A family of @zukhruf/evals imports only the core (ADR 0001, rule 1).',
             },
             {
               target: './promptfoo',
-              from: ['./structured', './classification'],
+              from: ['./structured', './classification', './report'],
               message:
                 'The promptfoo adapter imports only the core (ADR 0001, rule 1).',
+            },
+            {
+              target: './report',
+              from: ['./structured', './classification', './promptfoo'],
+              message:
+                'The renderers of @zukhruf/evals draw the primitives of the core and import no family or adapter (ADR 0008).',
             },
             {
               target: [
@@ -458,7 +464,12 @@ export default defineConfig(
                 './scoring',
                 './scorers',
               ],
-              from: ['./structured', './classification', './promptfoo'],
+              from: [
+                './structured',
+                './classification',
+                './promptfoo',
+                './report',
+              ],
               message:
                 'The core of @zukhruf/evals imports no subpath (ADR 0001, rule 1).',
             },

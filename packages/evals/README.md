@@ -16,7 +16,7 @@ The answers of evals have different shapes: a structured record, a label, a rank
 | `@zukhruf/evals/clustering` (later) | Compares a partition with a labelled partition, as the CoNLL reference scorer does.                                                                |
 | `@zukhruf/evals/report` (design)    | Design for review (#6108): pages of building blocks over one run, a run pair or many runs, and their renderers ([docs/report.md](docs/report.md)). |
 
-> **Design for review (#6108).** [docs/report.md](docs/report.md) adds a run log, a run pair, sections and primitives to the core, an adapter of promptfoo runs to `./promptfoo`, `./report` (a page, its renderers and the building blocks of every family), and the building blocks of structured answers to `./structured`. With it, the package also shows the results that the runner stores. Built so far: the run log and run pair of the core, `PromptfooSamples`, and the primitives of the core; `./report` and the building blocks come next (docs/report.md, "The order of the work").
+> **Design for review (#6108).** [docs/report.md](docs/report.md) adds a run log, a run pair, sections and primitives to the core, an adapter of promptfoo runs to `./promptfoo`, `./report` (a page, its renderers and the building blocks of every family), and the building blocks of structured answers to `./structured`. With it, the package also shows the results that the runner stores. Built so far: the run log and run pair of the core, `PromptfooSamples`, the primitives of the core, and `Page`, `HtmlRenderer` and `MarkdownRenderer` of `./report`; the building blocks come next (docs/report.md, "The order of the work").
 
 A subpath imports only the core. It never imports another subpath.
 

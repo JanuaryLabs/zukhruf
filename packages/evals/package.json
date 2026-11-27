@@ -45,6 +45,12 @@
       "import": "./dist/promptfoo/index.js",
       "default": "./dist/promptfoo/index.js"
     },
+    "./report": {
+      "@zukhruf/source": "./src/report/index.ts",
+      "types": "./dist/report/index.d.ts",
+      "import": "./dist/report/index.js",
+      "default": "./dist/report/index.js"
+    },
     "./structured": {
       "@zukhruf/source": "./src/structured/index.ts",
       "types": "./dist/structured/index.d.ts",
@@ -68,10 +74,22 @@
   },
   "peerDependencies": {
     "@cfworker/json-schema": "4.1.6",
+    "@types/mdast": "^4.0.4",
+    "mdast-util-gfm-table": "^2.0.1",
+    "mdast-util-to-markdown": "^2.2.5",
     "munkres": "^2.1.1"
   },
   "peerDependenciesMeta": {
     "@cfworker/json-schema": {
+      "optional": true
+    },
+    "@types/mdast": {
+      "optional": true
+    },
+    "mdast-util-gfm-table": {
+      "optional": true
+    },
+    "mdast-util-to-markdown": {
       "optional": true
     },
     "munkres": {
@@ -80,10 +98,16 @@
   },
   "devDependencies": {
     "@cfworker/json-schema": "4.1.6",
+    "@types/mdast": "^4.0.4",
     "@zukhruf/fs": "^0.8.70",
     "@zukhruf/parameterized-test": "^0.8.70",
     "@zukhruf/random": "*",
     "@zukhruf/testing": "^0.8.70",
+    "mdast-util-from-markdown": "^2.1.0",
+    "mdast-util-gfm-table": "^2.0.1",
+    "mdast-util-to-markdown": "^2.2.5",
+    "mdast-util-to-string": "^4.0.0",
+    "micromark-extension-gfm-table": "^2.1.2",
     "munkres": "^2.1.1",
     "promptfoo": "0.126.0",
     "python-random": "1.0.0"

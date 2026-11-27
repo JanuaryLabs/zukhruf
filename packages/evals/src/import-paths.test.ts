@@ -22,6 +22,7 @@ const importPath = (path: string, hidden: readonly string[]) =>
 const peers: Readonly<Record<string, readonly string[]>> = {
   '@zukhruf/evals/structured': ['@cfworker/json-schema', 'munkres'],
   '@zukhruf/evals/classification': [],
+  '@zukhruf/evals/report': ['mdast-util-gfm-table', 'mdast-util-to-markdown'],
 };
 const allPeers = Object.values(peers).flat();
 
