@@ -317,7 +317,7 @@ src/
   coordinator/          the coordinator of one term: flights, sessions, parked runs, its server
   key-lock/             the key locks: the kernel lock on each key that a leader holds
   protocol/             the messages between a process and its coordinator
-  connection/           the socket, the handshake and the supervisor (a copy); the election of the directory (@zukhruf/election)
+  connection/           the socket and the handshake (copies of the mutex's), over the supervisor of @zukhruf/rpc; the election of the directory (@zukhruf/election)
   shared/               the record check (a copy); file writes and the network directory check are in @zukhruf/fs
   testing/              the caller process that the tests start
 ```
