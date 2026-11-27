@@ -1,6 +1,6 @@
 # A host composes a page of sections, and each section is built from its input
 
-Status: accepted (Ezz, 2026-11-27, #6108: "By input", then "Compose a Page"). The names wait for the code.
+Status: accepted (Ezz, 2026-11-27, #6108: "By input", then "Compose a Page"). `Page` is built in `src/report/page.ts` (7043d988); the names of the building blocks wait for their code.
 
 ## Context
 
