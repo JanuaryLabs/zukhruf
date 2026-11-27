@@ -1,6 +1,6 @@
 # @zukhruf/ui
 
-React components that an app builds from the components of [`@zukhruf/shadcn`](../shadcn). This package is a UI extension: it does not ship its own copy of `@zukhruf/shadcn`. The app installs `@zukhruf/shadcn`, sets its theme, and imports its stylesheet. The components of this package then use the same copy and the same theme.
+React components for apps that use [`@zukhruf/shadcn`](../shadcn). This package is a UI extension: it does not ship its own copy of `@zukhruf/shadcn`. The app installs `@zukhruf/shadcn`, sets its theme, and imports its stylesheet. A component of this package that builds on `@zukhruf/shadcn` (`TheButton`) then uses the same copy and the same theme; `Editable` uses none of its components.
 
 The words in these documents have one meaning each. See the glossary in [CONTEXT.md](./CONTEXT.md).
 
@@ -75,6 +75,157 @@ export function Toolbar({
 With `size="icon"` (or another `icon-*` size), the button shows only the icon, and the spinner takes its place while loading. Give a `tooltip` to an icon button, so the user can know what it does.
 
 While loading, the name of the button stays its label, for example "Save", and a screen reader reads the button as disabled. The spinner is hidden from screen readers (`aria-hidden`), also when you give your own `spinner`, so its label does not join the name of the button. MUI, Mantine and Radix Themes name a disabled loading button the same way.
+
+## Editable
+
+`Editable` edits a saved text value in place, for example the title of a chat or a report. It has two parts: `Editable.Preview`, a button that shows the value, and `Editable.Input`, a bare input that edits a draft. The root renders no element of its own. Each part shows and hides itself: the Preview while not editing, the Input while editing. It needs no `ClockProvider`: it waits only on `requestAnimationFrame`, which is not a timer of `UiClock`.
+
+```ts
+type Label = { 'aria-label': string } | { 'aria-labelledby': string };
+
+/** Owner mode: the owner opens and closes the edit (a React Router fetcher, a state machine). */
+interface OwnerSave {
+  editing: boolean;
+  /** true when the Preview is clicked; false on cancel. Never false on commit: the owner closes. */
+  onEditingChange: (editing: boolean) => void;
+  /** A save is in flight: the input is disabled and a commit is ignored. */
+  saving: boolean;
+  /** Called with a trimmed, changed, non-empty value. The owner closes by editing={false}. */
+  onValueCommit: (next: string) => void;
+  defaultEditing?: never;
+}
+
+/** Promise mode: the package awaits the save, derives saving from it, and closes when it resolves. */
+type PromiseSave = {
+  saving?: never;
+  onValueCommit: (next: string) => PromiseLike<unknown>;
+} & (
+  | {
+      editing: boolean;
+      onEditingChange: (editing: boolean) => void;
+      defaultEditing?: never;
+    }
+  | {
+      editing?: never;
+      defaultEditing?: boolean;
+      onEditingChange?: (editing: boolean) => void;
+    }
+);
+
+type EditableProps = (OwnerSave | PromiseSave) & {
+  /** The saved value. Each edit starts from it. */
+  value: string;
+  /** Gets focus when the edit ends. Default: the Preview. */
+  finalFocus?: RefObject<HTMLElement | null>;
+  disabled?: boolean;
+  placeholder?: string;
+  maxLength?: number;
+  children: ReactNode;
+};
+
+export function Editable(props: EditableProps): ReactNode;
+export namespace Editable {
+  function Preview(
+    props: Label & { className?: string; children?: ReactNode },
+  ): ReactNode;
+  function Input(
+    props: Label & {
+      className?: string;
+      'aria-invalid'?: boolean;
+      'aria-describedby'?: string;
+    },
+  ): ReactNode;
+}
+```
+
+### Two ways to save
+
+The `saving` prop picks the mode. The types refuse each mix: owner mode with `defaultEditing`, promise mode with both `editing` and `defaultEditing`, a controlled promise mode with no `onEditingChange`, and a promise-mode save that returns nothing (write `async`).
+
+| Mode    | Who knows the save                                       | Who closes the edit                                                       | A failed save                                                                         |
+| ------- | -------------------------------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| Owner   | The owner: it gives `saving`, for example from a fetcher | The owner, with `editing={false}`                                         | The owner keeps `editing` true and shows the error                                    |
+| Promise | The package: `onValueCommit` returns a promise it awaits | The package, when the promise resolves; it calls `onEditingChange(false)` | The promise rejects; the edit stays open with the draft, and the error is the owner's |
+
+Owner mode, a sidebar row whose save is a React Router fetcher. The owner has its own trigger (a double-click on the row), so it places the parts itself:
+
+```tsx
+<Editable
+  value={title}
+  editing={editing}
+  onEditingChange={setRenaming}
+  saving={fetcher.state !== 'idle'}
+  onValueCommit={(next) =>
+    void fetcher.submit({ intent: 'rename', title: next }, { method: 'post' })
+  }
+  finalFocus={rowRef}
+>
+  {editing ? (
+    <Editable.Input
+      aria-label={t('questionTitle')}
+      aria-invalid={refused || undefined}
+      aria-describedby={refused ? refusalId : undefined}
+    />
+  ) : (
+    <NavLink ref={rowRef} to={to} onDoubleClick={() => setRenaming(true)}>
+      {title}
+    </NavLink>
+  )}
+</Editable>
+```
+
+Promise mode, uncontrolled. A click on the Preview opens the edit, and the Preview gets focus back when it ends:
+
+```tsx
+<Editable
+  value={title}
+  onValueCommit={(next) => rename.mutateAsync({ id, title: next })}
+  placeholder={t('reportTitle')}
+  maxLength={140}
+>
+  <Editable.Preview
+    aria-label={t('renameReport')}
+    className="truncate font-semibold"
+  />
+  <Editable.Input aria-label={t('reportTitle')} className="font-semibold" />
+</Editable>
+```
+
+### What each event does
+
+| Event                                  | What happens                                                                                                                                        |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Click on the Preview                   | `onEditingChange(true)`; an uncontrolled root opens itself. Nothing when `disabled`.                                                                |
+| The Input appears                      | It takes focus with its whole text selected, and again one frame later, so a closing menu can not move focus away.                                  |
+| Enter                                  | Commit. `preventDefault`.                                                                                                                           |
+| Blur                                   | Commit, but only once the Input has held focus for one frame.                                                                                       |
+| Escape                                 | Cancel. `preventDefault` and `stopPropagation`, so a sheet or a dialog around the Input stays open.                                                 |
+| A key while an input method composes   | Nothing. A key whose event is already `defaultPrevented` does nothing too.                                                                          |
+| Commit                                 | The draft is trimmed. Empty or equal to `value`: cancel. Else `onValueCommit(trimmed)`. Ignored while saving.                                       |
+| Cancel                                 | `onEditingChange(false)`; an uncontrolled root closes itself.                                                                                       |
+| Saving                                 | The Input is disabled.                                                                                                                              |
+| Saving ends and the edit is still open | The Input takes focus with its text selected again, so the user can fix the value.                                                                  |
+| The edit ends                          | One frame later, `finalFocus` (default: the Preview) gets focus, but only when focus is on `body`. A user who moved focus elsewhere keeps it there. |
+
+Each part throws `<Editable.Preview> must be rendered inside <Editable>` (or `<Editable.Input>`) outside a root.
+
+### Words and direction
+
+The package has no English string. Each part needs `aria-label` or `aria-labelledby`, and the type refuses a part with neither. The Input and the Preview have `dir="auto"`, so a title in Arabic or in English reads in its own direction. The owner gives the error text and links it with `aria-invalid` and `aria-describedby`.
+
+The Input is a bare `<input>`, not the `Input` of `@zukhruf/shadcn`. Its fixed height, border, full width and `md:text-sm` fight inline text. The bare input takes the text style around it and hugs its content (`field-sizing-content`).
+
+### The same concepts in other systems
+
+| Concept             | Other systems                                                                                                    |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Editable            | Ark UI and Chakra UI v3 `Editable`, Dice UI `Editable`, Atlassian `InlineEdit`, React Spectrum S2 `EditableCell` |
+| Editing, controlled | Ark `edit` / `defaultEdit` / `onEditChange`, Dice `editing` / `defaultEditing` / `onEditingChange`               |
+| Commit              | Ark `onValueCommit`, Atlassian `onConfirm`, Dice `onSubmit`                                                      |
+| Saving              | React Spectrum S2 `isSaving`                                                                                     |
+| Final focus         | Base UI Dialog `finalFocus`, Ark `finalFocusEl`                                                                  |
+
+`@ark-ui/react` is the only maintained package with an editable part. It is not used: it brings a second component system (zag state machines) beside Base UI under `@zukhruf/shadcn`. Dice UI's `Editable` is a registry file to copy, not a package. Atlassian's needs `@atlaskit/*` and Compiled CSS.
 
 ## The clock
 

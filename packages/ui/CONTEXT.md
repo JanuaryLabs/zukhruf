@@ -51,3 +51,35 @@ _Avoid_: Title (the `title` attribute is a different thing), hint, label (an `ar
 **Stylesheet**:
 `styles.css`, the one CSS file that an app imports after `@zukhruf/shadcn/styles.css`. It registers the `dist` folder with `@source`, so Tailwind CSS makes the classes of the components.
 _Avoid_: Theme (the theme comes from `@zukhruf/shadcn` and the app), CSS bundle
+
+**Editable**:
+`Editable`, the component that edits a saved text value in place. Its parts are the preview and the input. The root renders no element of its own. The name is the majority of the leaders: Ark UI, Chakra UI and Dice UI.
+_Avoid_: Inline edit (Atlassian only), rename field, editable text
+
+**Preview**:
+`Editable.Preview`, the button that shows the saved value while not editing. A click on it opens the edit.
+_Avoid_: Display, read view, trigger (an owner can have its own trigger)
+
+**Draft**:
+The text in the input while editing. Each edit starts it from the saved value. It is private to the component.
+_Avoid_: Value (the value is the saved one), buffer
+
+**Commit**:
+Enter, or a blur after the first frame. The draft is trimmed; an empty or unchanged draft cancels, any other calls `onValueCommit`.
+_Avoid_: Submit (no form is submitted), confirm, save (the save is the owner's call)
+
+**Owner mode**:
+The mode of `Editable` with a `saving` prop. The owner gives `editing` and `saving`, for example from a React Router fetcher, and closes the edit itself.
+_Avoid_: Controlled mode (a promise mode can be controlled too), manual mode
+
+**Promise mode**:
+The mode of `Editable` with no `saving` prop. `onValueCommit` returns a promise; the component is saving until it settles, closes when it resolves and stays open when it rejects.
+_Avoid_: Async mode, auto mode
+
+**Saving**:
+The state of `Editable` while a save is in flight: the owner's `saving` prop, or a promise of promise mode that has not settled. The input is disabled and a commit is ignored.
+_Avoid_: Pending (a pending promise is a different thing), loading (the loading of `TheButton`), busy
+
+**Final focus**:
+The element that gets focus one frame after an edit ends: the `finalFocus` ref, or by default the preview. It gets focus only when focus is on `body`, so a user who moved focus keeps it. The name is Base UI's.
+_Avoid_: Restore focus, return focus target

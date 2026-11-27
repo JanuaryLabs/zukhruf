@@ -1,7 +1,7 @@
 {
   "name": "@zukhruf/ui",
   "version": "0.8.70",
-  "description": "React components that an app builds from the components of `@zukhruf/shadcn`. One is `TheButton`: a button that shows a loading spinner after a delay, an icon, and a tooltip. `@zukhruf/shadcn` is a peer dependency.",
+  "description": "React components for apps that use `@zukhruf/shadcn`: `TheButton`, a button that shows a loading spinner after a delay, an icon and a tooltip, and `Editable`, a saved text value edited in place. `@zukhruf/shadcn` is a peer dependency.",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -16,6 +16,8 @@
     "shadcn",
     "shadcn-ui",
     "button",
+    "editable",
+    "inline-edit",
     "react",
     "components",
     "tailwindcss",
