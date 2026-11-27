@@ -9,6 +9,7 @@ export { OnDemand } from './on-demand.ts';
 export { OrderedReady } from './ordered-ready.ts';
 export { Parallel } from './parallel.ts';
 export {
+  DeprecatedRevisionError,
   DisposedError,
   type Failure,
   JobCancelledError,

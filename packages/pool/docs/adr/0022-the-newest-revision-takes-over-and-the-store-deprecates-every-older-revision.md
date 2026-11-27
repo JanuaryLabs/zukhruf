@@ -1,0 +1,42 @@
+# The newest revision takes over, and the store deprecates every older revision
+
+Status: Accepted 2026-11-20 (backlog #3527). Revised 2026-11-27: the store holds the deprecation, and no owner refuses another revision's jobs. Built 2026-11-27, on `getQueues` of `@zukhruf/sqlite-queue`.
+
+Old plugin servers run on after an update (#2127). Hosts of two revisions of one worker kind then share one pool. `@zukhruf/election` never moves ownership while the owner lives, so an old owner keeps the workers until it ends (map ticket 08).
+
+Two known ways handle a job of another version (research 16, corrected by research 20g):
+
+- **Route or branch by version.** Temporal routes a task to a worker by its build id. GitLab on Sidekiq writes a version on the job, and the worker branches on it.
+- **Refuse.** Azure Durable Task: a client states the version of an orchestration, and a worker with the `Strict` match does not run another version; with `Reject` (the default) "The orchestration is rejected and returned to the work queue. Another worker can attempt it later". Amazon SWF: an activity type is a name and a version that the sender names, and the service refuses a version that is deprecated (`ACTIVITY_TYPE_DEPRECATED`).
+
+In both systems that refuse, the sender states the version.
+
+Both leaders keep the version state in the service, not in the workers. SWF: "After an activity type has been deprecated, you cannot create new tasks of that activity type. Tasks of this type that were scheduled before the type was deprecated continue to run" ([DeprecateActivityType](https://docs.aws.amazon.com/amazonswf/latest/apireference/API_DeprecateActivityType.html)), and a second deprecation fails with `TypeDeprecatedFault`, so the service remembers it. Temporal: "Each Worker Deployment has a single Current Version which is where Workflows are routed to", held by the server, and "Other versions can continue polling to allow pinned Workflows to finish executing" ([Worker Versioning](https://docs.temporal.io/worker-versioning)).
+
+## Decision
+
+From map ticket 08 (Ezz: "Newest takes over", "ruthless", "Yes, reject old jobs", "A revision number") and map ticket 16. The queue for each revision was decided on 2026-11-16 by the leaders (Ezz: "I trust your recommendation ... follow the top performers"). The deprecation in the store was decided on 2026-11-27 from the probes below (Ezz: "you need to probe and challange me"):
+
+- **The revision** is an integer of the worker kind ([ADR 0014](./0014-pool-and-pool-workers-take-one-worker-kind.md)). The author raises it only when `run` changes in a way that matters. "Newer" means a higher integer.
+- **A queue for each revision.** The queue of a kind in the store is `<name>.r<revision>`, for example `vision.r1`. A `Pool` sends to the queue of its revision, and an owner fetches only from the queue of its own revision. So an older owner never fetches a job of a newer revision. Temporal worker versioning routes each task by its build id, and Amazon SWF routes by the version of the activity type, in the same way: at the poll, not after it.
+- **The store holds the deprecation.** Each host's start creates the queue of its revision, and the pool deletes no queue, so the queues of a kind name each revision that ran on the store. A revision is deprecated once the store holds the queue of a higher one, read with `getQueues` of the store (pg-boss's own list of queues). This is SWF's deprecation of a type in the service, and Temporal's Current Version in the server.
+- **The wake carries the revision.** The payload of "a new job" is the revision of the job ([ADR 0018](./0018-news-travels-by-push-through-the-notify-of-the-store-with-a-backstop.md)). The channel stays one for each kind, so every host hears the jobs of every revision. A host also tells its revision on this channel at its start, so a newer host takes over with no job sent. A wake with a newer revision makes a host read the store; the store decides. A `Pool` whose job waits sends this wake again at each backstop, so a wake that was lost cannot hide a revision.
+- **A deprecated `Pool` sends nothing.** Its `start` and `run` reject at once with `DeprecatedRevisionError`, which names the kind, its revision and the newest, and tells the host to update, as SWF refuses a task of a deprecated type. Each `result` of a job that still waits (`created` or `retry`) rejects with it at its next read. A running job keeps its wait: its owner finishes it, as SWF lets a task scheduled before the deprecation run. No compatibility is promised between revisions.
+- **A deprecated owner steps down.** It reads the store at a wake of a newer revision (the start of a newer host, or a waiting job of that revision, which sends it again at each backstop), stops fetching, finishes its running jobs within the kind's time limit, and resigns, so a host of the newer revision wins the election. This is the clean hand-over of [ADR 0023](./0023-ownership-moves-only-by-the-owners-own-act-or-its-end-and-a-standby-stays-cold.md).
+- **A deprecated host never owns.** It reads the store before it campaigns, and a standby that hears of a newer revision ends its campaign. It reads the store again after it wins a term, before it starts a worker, for a wake that came after the owner resigned or was lost. Its `ready()` rejects with `DeprecatedRevisionError` when it never owned, as a host that stops offering its workers before it owns rejects its `ready()`. The store keeps the fact, so a host cannot win, see the newer revision and resign again without end.
+- **Many computers**: the same name in the shared store is the same pool on every computer. The hand-over runs on each computer, and the deprecation holds wherever a host reads the store.
+
+## Considered Options
+
+- **The owner refuses, and each host keeps the deprecation in its memory** (this ADR's decision of 2026-11-20). An owner of the newest revision fetched each job of an older revision at its wake and completed it with a refusal, and a host that resigned for a newer revision did not campaign again while it lived. Rejected on 2026-11-27: once the newest host ends, an older revision has no owner and no refuser, so the jobs of an old host wait with no error. Probe on main (`dba1d531`): a job whose revision has no owner waited until its own signal (3001 ms, `stats()` waiting 1); a living owner of revision 1 left a job of revision 2 waiting while a host of revision 2 stood by. Context Compiler runs `sync watch` under launchd `KeepAlive` for hours (`apps/cli/src/background-watch.ts`): after one short command of a newer revision, the old watch would resign for good, and its OCR reads (`image-format.ts:63`) would wait once the command exits. The old hosts would not "end at the next start of their programs", because nothing tells them to.
+
+## Consequences
+
+- During an update, an old host's `start` and `run` fail with `DeprecatedRevisionError` as soon as a host of the newer revision started on the store, even when no newer host runs any more. A program that exits on it comes back on the new code at its next start, for example under launchd `KeepAlive`.
+- A downgrade stays deprecated until the queue of the newer revision is deleted from the store.
+- Each revision creates its own queue with its own rules, so a new revision may change every rule, the policy too ([ADR 0014](./0014-pool-and-pool-workers-take-one-worker-kind.md)). Identical inputs of two revisions are two jobs.
+- A job of a newer revision never uses a retry in an older owner. No owner touches a job of another revision: pg-boss has no call that puts an active job back with no cost, as Durable Task's `Reject` does, and the pool needs none.
+- A job of a deprecated revision that no `result` reads stays in its queue until the queue's retention deletes it.
+- An owner that fetched a job of its revision before it heard of the newer one runs that job to its end, as SWF lets a task scheduled before the deprecation run. The owner does not read the store at each turn: one read costs about 0.1 ms (10 000 reads, load average about 30), and an owner under steady work turns once for each job.
+- The queues of older revisions stay in the store as rows. `pool.stats()` counts the queue of its own revision.
+- The suffix `.r<revision>` is a name of this package. pg-boss allows a period in a queue name (`attorney.js`, `assertObjectName`).

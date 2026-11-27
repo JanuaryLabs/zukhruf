@@ -1,12 +1,12 @@
 # Ownership moves only by the owner's own act or its end, and a standby stays cold
 
-Status: Accepted 2026-11-20 (backlog #3527). Partly built in `PoolWorkers` (2026-11-16): the cold standby, the return of a dead owner's jobs by their heartbeat, and the disposal that stops fetching, finishes the running jobs, resigns and then closes the workers. A running job ends at the latest at the kind's time limit, so the disposal ends too. `ready()` is built (2026-11-20): it never resolves on a standby.
+Status: Accepted 2026-11-20 (backlog #3527). Partly built in `PoolWorkers` (2026-11-16): the cold standby, the return of a dead owner's jobs by their heartbeat, and the disposal that stops fetching, finishes the running jobs, resigns and then closes the workers. A running job ends at the latest at the kind's time limit, so the disposal ends too. `ready()` is built (2026-11-20): it never resolves on a standby. The hand-over to a host of a newer revision is built with [ADR 0022](./0022-the-newest-revision-takes-over-and-the-store-deprecates-every-older-revision.md) (2026-11-27).
 
 Ownership moves in four ways (map ticket 12):
 
 - The owner's host exits.
 - The owner's host disposes its `PoolWorkers`.
-- The owner resigns for a host of a newer revision ([ADR 0022](./0022-the-newest-revision-takes-over-and-an-owner-refuses-a-job-of-an-older-revision.md)).
+- The owner resigns for a host of a newer revision ([ADR 0022](./0022-the-newest-revision-takes-over-and-the-store-deprecates-every-older-revision.md)).
 - The owner's host dies or hangs, and a standby takes over ([ADR 0024](./0024-a-hung-owner-is-ended-by-the-election-and-its-late-acts-are-fenced.md)).
 
 A Vision worker takes 2 GiB and compiles through the one `ANECompilerService` of the computer (#3868). Its warm start takes about 1.2 s with a compile cache, and 60 to 120 s after a helper rebuild.

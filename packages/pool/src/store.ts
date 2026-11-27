@@ -10,12 +10,16 @@ import {
   type SqliteJobQueueOptions,
 } from '@zukhruf/sqlite-queue';
 
+import { DeprecatedRevisionError } from './errors.ts';
 import { PoolWarning } from './pool-warning.ts';
-import type { WorkerKind } from './worker-kind.ts';
+import { type WorkerKind, revisionOf, revisionsPrefix } from './worker-kind.ts';
 
 // The least heartbeat that pg-boss accepts (attorney.js:578). A job of a dead
 // owner goes back to the store about 11 s after its last touch (ADR 0017).
 const HEARTBEAT_SECONDS = 10;
+
+// The queues that one read of the store's list gives.
+const QUEUES_PAGE = 100;
 
 /** The owner touches each running job at half its heartbeat, as pg-boss's work does (manager.js:538). */
 export const TOUCH_INTERVAL = (HEARTBEAT_SECONDS * 1_000) / 2;
@@ -68,6 +72,37 @@ export class Store implements AsyncDisposable {
       expireInSeconds: kind.expireInSeconds,
       heartbeatSeconds: HEARTBEAT_SECONDS,
     });
+  }
+
+  /**
+   * The error of a deprecated revision when the store holds the queue of a
+   * newer revision of the kind, which a host of that revision created at its
+   * start (ADR 0022). The queues of the kind sort together, after the prefix.
+   */
+  async deprecation<Input, Output>(
+    kind: WorkerKind<Input, Output>,
+  ): Promise<DeprecatedRevisionError | undefined> {
+    const prefix = revisionsPrefix(kind.name);
+    let newest = kind.revision;
+    let after = prefix;
+    for (;;) {
+      const page = await this.queue.getQueues(undefined, {
+        after,
+        limit: QUEUES_PAGE,
+      });
+      const ofKind = page.filter(({ name }) => name.startsWith(prefix));
+      for (const { name } of ofKind)
+        newest = Math.max(newest, revisionOf(kind.name, name) ?? newest);
+      if (ofKind.length < QUEUES_PAGE) break;
+      after = page.at(-1)!.name;
+    }
+    return newest > kind.revision
+      ? new DeprecatedRevisionError({
+          kind: kind.name,
+          revision: kind.revision,
+          newest,
+        })
+      : undefined;
   }
 
   /**

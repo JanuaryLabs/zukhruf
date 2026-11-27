@@ -42,6 +42,30 @@ export class JobNotFoundError extends Error {
   }
 }
 
+/**
+ * The store holds a newer revision of the kind, so this host's revision is
+ * deprecated: it sends no job and owns no workers (ADR 0022). Amazon SWF's
+ * ACTIVITY_TYPE_DEPRECATED.
+ */
+export class DeprecatedRevisionError extends Error {
+  /** The name of the kind. */
+  readonly kind: string;
+  /** The revision of this host. */
+  readonly revision: number;
+  /** The newest revision of the kind in the store. */
+  readonly newest: number;
+
+  constructor(options: { kind: string; revision: number; newest: number }) {
+    super(
+      `Revision ${options.revision} of the kind ${options.kind} is deprecated: the store holds revision ${options.newest}. Update the host.`,
+    );
+    this.name = 'DeprecatedRevisionError';
+    this.kind = options.kind;
+    this.revision = options.revision;
+    this.newest = options.newest;
+  }
+}
+
 /** A wait or a call of a Pool after its disposal. .NET's ObjectDisposedException. */
 export class DisposedError extends Error {
   constructor() {

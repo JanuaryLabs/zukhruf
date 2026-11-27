@@ -150,6 +150,9 @@ export class Pool<Input, Output> implements AsyncDisposable {
     const { input } = envelope;
     this.#disposed.signal.throwIfAborted();
     await this.#started.wait();
+    // A deprecated revision sends nothing, as SWF refuses a task of a
+    // deprecated type (ADR 0022).
+    await this.#refuseDeprecated();
     // Callers that give identical inputs of an exclusive kind share one job
     // (ADR 0014).
     const key = this.#kind.policy === 'exclusive' ? sha256(input) : null;
@@ -235,18 +238,26 @@ export class Pool<Input, Output> implements AsyncDisposable {
         if (job.state === 'failed')
           throw new JobFailedError(id, failureOf(job.output));
         if (job.state === 'cancelled') throw new JobCancelledError(id);
-        // A job that still waits tells the owners again, so an owner learns
+        // A job that still waits never runs once its revision is deprecated
+        // (ADR 0022). Otherwise it tells the owners again, so an owner learns
         // of it after a lost wake.
-        if (job.state !== 'active')
+        if (job.state !== 'active') {
+          await this.#refuseDeprecated();
           this.#store.tell(
             newJobChannel(this.#kind),
             String(this.#kind.revision),
           );
+        }
         if (wake.heard === heard) await this.#next(wake, stop);
       }
     } finally {
       if (--wake.waits === 0) this.#wakes.delete(id);
     }
+  }
+
+  async #refuseDeprecated(): Promise<void> {
+    const deprecated = await this.#store.deprecation(this.#kind);
+    if (deprecated !== undefined) throw deprecated;
   }
 
   // The wake of the job, with one more wait on it.

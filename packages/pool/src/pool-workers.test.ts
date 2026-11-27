@@ -21,6 +21,7 @@ import {
 import { waitFor } from '@zukhruf/testing/async';
 
 import {
+  DeprecatedRevisionError,
   DisposedError,
   type Eviction,
   Fixed,
@@ -4481,6 +4482,273 @@ describe('PoolWorkers on a fake clock', { concurrency: true }, () => {
   });
 });
 
+describe('Pool and PoolWorkers across revisions', { concurrency: true }, () => {
+  test('once the store holds a newer revision, start and run of an older one reject at once with DeprecatedRevisionError, with no owner anywhere', async (t) => {
+    await using folder = await new TemporaryFiles().directory('pool-');
+    const store = join(folder.path, 'store.sqlite');
+    const clock = createClock(Date.now());
+    await using newer = new Pool({ kind: echoOf(2), store, clock });
+    // A read waits for the Pool's start, which creates the queue of its
+    // revision.
+    await newer.stats();
+    await using older = new Pool({ kind: echoOf(1), store, clock });
+
+    // The clock stands still, and no owner runs anywhere: only the store can
+    // end these waits.
+    await assert.rejects(older.start({ id: 'a' }), deprecatedFrom(1, 2));
+    await assert.rejects(
+      older.run({ id: 'b' }, { signal: t.signal }),
+      deprecatedFrom(1, 2),
+    );
+  });
+
+  test('each job of an older revision that still waits when a newer revision comes rejects its run and the result of each handle with DeprecatedRevisionError', async (t) => {
+    await using folder = await new TemporaryFiles().directory('pool-');
+    const store = join(folder.path, 'store.sqlite');
+    const clock = createClock(Date.now());
+    await using older = new Pool({ kind: echoOf(1), store, clock });
+    await using other = new Pool({ kind: echoOf(1), store, clock });
+    const a = await older.start({ id: 'a' });
+    const b = await older.start({ id: 'b' });
+    const waits = Promise.allSettled([
+      older.run({ id: 'c' }),
+      a.result(),
+      other.handle(a.id).result(),
+      b.result(),
+    ]);
+
+    await using newer = new Pool({ kind: echoOf(2), store, clock });
+    await newer.stats();
+    // Each wait reads the store again at its backstop.
+    await runFor(clock, 1_000);
+
+    const outcomes = await untilAborted(waits, t.signal);
+    for (const outcome of outcomes) {
+      assert.equal(outcome.status, 'rejected');
+      deprecatedFrom(1, 2)(outcome.reason);
+    }
+  });
+
+  test('an older owner that hears of a newer revision finishes each running job with its output and steps down, so the newer host owns and runs the newer jobs, an identical input as its own job', async (t) => {
+    await using folder = await new TemporaryFiles().directory('pool-');
+    const store = join(folder.path, 'store.sqlite');
+    const clock = createClock(Date.now());
+    const olderWorkers = new HeldWorkers();
+    const newerWorkers = new HeldWorkers();
+    const olderKind = echoOf(1, { policy: 'exclusive' });
+    const newerKind = echoOf(2, { policy: 'exclusive' });
+    await using older = hostOf(clock, store, olderKind, olderWorkers);
+    await older.offered.ready();
+    await using olderPool = new Pool({ kind: olderKind, store, clock });
+    const a = await olderPool.start({ id: 'a' });
+    const b = await olderPool.start({ id: 'b' });
+    await untilRunning(t, olderWorkers, 'a', 'b');
+
+    await using newer = hostOf(clock, store, newerKind, newerWorkers);
+    await using newerPool = new Pool({ kind: newerKind, store, clock });
+    const same = await newerPool.start({ id: 'a' });
+    const d = await newerPool.start({ id: 'd' });
+    // A wait for a newer job tells of it again at each backstop, so the older
+    // owner hears of revision 2 while a and b still run.
+    const newerOutputs = Promise.all([same.result(), d.result()]);
+    const newerOwns = settledFlag(newer.offered.ready());
+    await runFor(clock, 3_000);
+
+    assert.equal(newerOwns.settled, false);
+    assert.equal(olderWorkers.killed('a'), false);
+    assert.equal(olderWorkers.killed('b'), false);
+    olderWorkers.answer('a');
+    olderWorkers.answer('b');
+    assert.deepEqual(await untilAborted(a.result(), t.signal), { id: 'a' });
+    assert.deepEqual(await untilAborted(b.result(), t.signal), { id: 'b' });
+    await driveUntil(clock, newer.offered.ready(), 10_000);
+    await untilRunning(t, newerWorkers, 'a', 'd');
+    assert.notEqual(same.id, a.id);
+    newerWorkers.answerAll();
+    assert.deepEqual(await untilAborted(newerOutputs, t.signal), [
+      { id: 'a' },
+      { id: 'd' },
+    ]);
+    assert.deepEqual(older.offered.stats, {
+      starting: 0,
+      idle: 0,
+      lent: 0,
+      waiting: 0,
+    });
+  });
+
+  test("an older owner whose running job hangs steps down at the kind's expireInSeconds and fails the job, and the newer host then owns", async (t) => {
+    await using folder = await new TemporaryFiles().directory('pool-');
+    const store = join(folder.path, 'store.sqlite');
+    const clock = createClock(Date.now());
+    const olderWorkers = new HeldWorkers();
+    const newerWorkers = new HeldWorkers();
+    const olderKind = echoOf(1, { expireInSeconds: 7 });
+    await using older = hostOf(clock, store, olderKind, olderWorkers);
+    await older.offered.ready();
+    await using olderPool = new Pool({ kind: olderKind, store, clock });
+    const hung = await olderPool.start({ id: 'hung' });
+    await untilRunning(t, olderWorkers, 'hung');
+    // The owner fetched the job at once, with the clock still, so its time
+    // limit counts from now.
+    const limit = clock.now + 7_000;
+
+    await using newer = hostOf(clock, store, echoOf(2), newerWorkers);
+    await using newerPool = new Pool({ kind: echoOf(2), store, clock });
+    const d = await newerPool.start({ id: 'd' });
+    await runFor(clock, limit - 10 - clock.now);
+    assert.equal(newerWorkers.running('d'), false);
+    await runFor(clock, 20);
+
+    await driveUntil(clock, newer.offered.ready(), 10_000);
+    await untilRunning(t, newerWorkers, 'd');
+    assert.equal(olderWorkers.killed('hung'), true);
+    await assert.rejects(untilAborted(hung.result(), t.signal), (error) => {
+      assert.ok(error instanceof JobFailedError);
+      assert.deepEqual(error.failure, {
+        name: 'Error',
+        message: 'handler execution exceeded 7s',
+      });
+      return true;
+    });
+    newerWorkers.answer('d');
+    assert.deepEqual(await untilAborted(d.result(), t.signal), { id: 'd' });
+  });
+
+  test('an older owner that stepped down for a newer revision never owns again: with the newer owner gone and a newer job waiting for 5 s, it starts no worker', async (t) => {
+    await using folder = await new TemporaryFiles().directory('pool-');
+    const store = join(folder.path, 'store.sqlite');
+    const clock = createClock(Date.now());
+    const olderWorkers = new HeldWorkers();
+    const newerWorkers = new HeldWorkers();
+    await using older = hostOf(clock, store, echoOf(1), olderWorkers);
+    await older.offered.ready();
+    assert.equal(older.created(), 2);
+    await using newerPool = new Pool({ kind: echoOf(2), store, clock });
+    {
+      await using newer = hostOf(clock, store, echoOf(2), newerWorkers);
+      const d = await newerPool.start({ id: 'd' });
+      await driveUntil(clock, newer.offered.ready(), 10_000);
+      await untilRunning(t, newerWorkers, 'd');
+      newerWorkers.answer('d');
+      await untilAborted(d.result(), t.signal);
+    }
+    const created = older.created();
+
+    // The job waits with no owner, and its Pool tells of it again at each
+    // backstop.
+    await newerPool.start({ id: 'e' });
+    await runFor(clock, 5_000);
+
+    assert.equal(older.created(), created);
+    assert.deepEqual(older.offered.stats, {
+      starting: 0,
+      idle: 0,
+      lent: 0,
+      waiting: 0,
+    });
+  });
+
+  test('an older standby that hears of a newer revision never owns, and its ready() rejects with DeprecatedRevisionError', async (t) => {
+    await using folder = await new TemporaryFiles().directory('pool-');
+    const store = join(folder.path, 'store.sqlite');
+    const clock = createClock(Date.now());
+    const newerWorkers = new HeldWorkers();
+    await using owner = hostOf(clock, store, echoOf(1), new HeldWorkers());
+    await owner.offered.ready();
+    await using standby = hostOf(clock, store, echoOf(1), new HeldWorkers());
+    const ready = Promise.allSettled([standby.offered.ready()]);
+    await using newer = hostOf(clock, store, echoOf(2), newerWorkers);
+    await using newerPool = new Pool({ kind: echoOf(2), store, clock });
+
+    const d = await newerPool.start({ id: 'd' });
+
+    await driveUntil(clock, newer.offered.ready(), 10_000);
+    await untilRunning(t, newerWorkers, 'd');
+    const [outcome] = await untilAborted(ready, t.signal);
+    assert.equal(outcome!.status, 'rejected');
+    deprecatedFrom(1, 2)(outcome!.reason);
+    assert.equal(standby.created(), 0);
+    newerWorkers.answer('d');
+    assert.deepEqual(await untilAborted(d.result(), t.signal), { id: 'd' });
+  });
+
+  test('an older host that starts while a newer host owns never campaigns, and its ready() rejects with DeprecatedRevisionError at once', async (t) => {
+    await using folder = await new TemporaryFiles().directory('pool-');
+    const store = join(folder.path, 'store.sqlite');
+    const clock = createClock(Date.now());
+    await using newer = hostOf(clock, store, echoOf(2), new HeldWorkers());
+    await newer.offered.ready();
+
+    await using older = hostOf(clock, store, echoOf(1), new HeldWorkers());
+
+    // The newer host owns for as long as it lives, so only the store can end
+    // this wait.
+    await assert.rejects(
+      driveUntil(clock, older.offered.ready(), 5_000),
+      deprecatedFrom(1, 2),
+    );
+    assert.equal(older.created(), 0);
+  });
+
+  test('a newer host that starts takes over with no job sent: an older owner with no running job steps down, and an older standby never owns', async (t) => {
+    await using folder = await new TemporaryFiles().directory('pool-');
+    const store = join(folder.path, 'store.sqlite');
+    const clock = createClock(Date.now());
+    await using owner = hostOf(clock, store, echoOf(1), new HeldWorkers());
+    await owner.offered.ready();
+    await using standby = hostOf(clock, store, echoOf(1), new HeldWorkers());
+    const standbyReady = Promise.allSettled([standby.offered.ready()]);
+
+    await using newer = hostOf(clock, store, echoOf(2), new HeldWorkers());
+
+    await driveUntil(clock, newer.offered.ready(), 10_000);
+    assert.deepEqual(owner.offered.stats, {
+      starting: 0,
+      idle: 0,
+      lent: 0,
+      waiting: 0,
+    });
+    assert.equal(standby.created(), 0);
+    const [outcome] = await untilAborted(standbyReady, t.signal);
+    assert.equal(outcome!.status, 'rejected');
+    deprecatedFrom(1, 2)(outcome!.reason);
+  });
+
+  test('a host learns of the newest revision when the store holds more queues of the kind than one read gives', async () => {
+    await using folder = await new TemporaryFiles().directory('pool-');
+    const store = join(folder.path, 'store.sqlite');
+    const clock = createClock(Date.now());
+    await using older = new Pool({ kind: echoOf(1), store, clock });
+    await older.stats();
+    // Hosts of revisions 2 to 100 and 999 started on the store. By the bytes
+    // of their names, echo.r999 comes after echo.r99, on the second read.
+    await using sending = await sender(store, clock);
+    for (let revision = 2; revision <= 100; revision++)
+      await sending.jobs.createQueue(`echo.r${revision}`);
+    await sending.jobs.createQueue('echo.r999');
+
+    await assert.rejects(older.start({ id: 'a' }), deprecatedFrom(1, 999));
+  });
+
+  test('the stats of a Pool count the jobs of its own revision only', async () => {
+    await using folder = await new TemporaryFiles().directory('pool-');
+    const store = join(folder.path, 'store.sqlite');
+    const clock = createClock(Date.now());
+    await using older = new Pool({ kind: echoOf(1), store, clock });
+    await older.start({ id: 'a' });
+    await older.start({ id: 'b' });
+    await using newer = new Pool({ kind: echoOf(2), store, clock });
+    await newer.start({ id: 'c' });
+
+    // The counts come from the store's monitor, which counts each second.
+    await runFor(clock, 2_000);
+
+    assert.deepEqual(await older.stats(), { waiting: 2, running: 0 });
+    assert.deepEqual(await newer.stats(), { waiting: 1, running: 0 });
+  });
+});
+
 type FakeClock = ReturnType<typeof createClock>;
 type BossClock = NonNullable<SqliteJobQueueOptions['clock']>;
 
@@ -4992,4 +5260,97 @@ function succeedLastOwner(store: string): AsyncDisposable {
       await successor.ready();
     },
   };
+}
+
+/** The "echo" kind of `revision`, whose input and output are an id, run once. */
+function echoOf(
+  revision: number,
+  settings: {
+    policy?: 'standard' | 'exclusive';
+    expireInSeconds?: number;
+  } = {},
+): WorkerKind<{ id: string }, { id: string }> {
+  return new WorkerKind({
+    name: 'echo',
+    revision,
+    policy: settings.policy ?? 'standard',
+    retryLimit: 0,
+    expireInSeconds: settings.expireInSeconds ?? 60,
+  });
+}
+
+/**
+ * PoolWorkers of `kind` in the test process on `clock`, with two workers of
+ * `workers`, which owns or stands by; `created()` counts the workers it
+ * started.
+ */
+function hostOf(
+  clock: FakeClock,
+  store: string,
+  kind: WorkerKind<{ id: string }, { id: string }>,
+  workers: HeldWorkers,
+) {
+  let created = 0;
+  const offered = new PoolWorkers({
+    kind,
+    store,
+    clock,
+    create: () => {
+      created++;
+      return workers.create();
+    },
+    size: new Fixed(2),
+    startup: new Parallel(),
+    eviction: new NoEviction(),
+  });
+  return {
+    offered,
+    created: () => created,
+    /** Answers every held job first, so a failed test does not wait for a time limit on a clock that stands still. */
+    [Symbol.asyncDispose]: () => {
+      workers.answerAll();
+      return offered[Symbol.asyncDispose]();
+    },
+  };
+}
+
+/** Checks a DeprecatedRevisionError of the "echo" kind, as assert.rejects takes a check. */
+function deprecatedFrom(revision: number, newest: number) {
+  return (error: unknown): true => {
+    assert.ok(error instanceof DeprecatedRevisionError, String(error));
+    assert.deepEqual(
+      { kind: error.kind, revision: error.revision, newest: error.newest },
+      { kind: 'echo', revision, newest },
+    );
+    assert.match(error.message, /Update the host\.$/);
+    return true;
+  };
+}
+
+/**
+ * Moves the fake clock, as drive does, until `promise` settles, and gives its
+ * value. A candidate whose try met an owner that resigned waits a back-off on
+ * the clock (election ADR 0007), so a hand-over needs the clock to move.
+ */
+async function driveUntil<T>(
+  clock: FakeClock,
+  promise: Promise<T>,
+  limit: number,
+): Promise<T> {
+  let outcome: PromiseSettledResult<T> | undefined;
+  void Promise.allSettled([promise]).then(([settled]) => {
+    outcome = settled;
+  });
+  await drive(clock, [], () => outcome !== undefined, limit);
+  if (outcome!.status === 'rejected') throw outcome!.reason;
+  return outcome!.value;
+}
+
+/** Tells whether `promise` settled, without a wait on it. */
+function settledFlag(promise: Promise<unknown>): { readonly settled: boolean } {
+  const flag = { settled: false };
+  void Promise.allSettled([promise]).then(() => {
+    flag.settled = true;
+  });
+  return flag;
 }

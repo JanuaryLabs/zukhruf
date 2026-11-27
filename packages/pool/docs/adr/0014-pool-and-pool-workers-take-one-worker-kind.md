@@ -5,7 +5,7 @@ Status: Accepted 2026-11-20 (backlog #3527). `WorkerKind` is built (2026-11-16):
 A host that only sends must know four things about the jobs (map ticket 16):
 
 - **The name.** Hosts that give the same name build the same pool. Different names never mix (map ticket 08, Ezz: "Yes, a required name"). A name typed twice can differ, and then the jobs wait with no owner.
-- **The revision.** An owner refuses a job of an older revision ([ADR 0022](./0022-the-newest-revision-takes-over-and-an-owner-refuses-a-job-of-an-older-revision.md)). Only the sender can write the revision on the job.
+- **The revision.** A revision is deprecated once the store holds a newer one, and its hosts send no job and own no workers ([ADR 0022](./0022-the-newest-revision-takes-over-and-the-store-deprecates-every-older-revision.md)). Only the sender can write the revision on the job.
 - **The job rules.** pg-boss keeps them on the queue row: `retryLimit`, `expireInSeconds`, `heartbeatSeconds` and `policy`. The first `createQueue` wins, and a second one does nothing (`pg-boss/dist/plans.js:708,765`). A `send` to a queue that does not exist throws (`manager.js:857`). A host that only sends must send while no owner exists anywhere (the job waits, [ADR 0019](./0019-run-waits-and-a-failed-job-rejects-with-the-pools-error.md)), so it creates the queue, so it must create it with the same rules.
 - **The types** of the input and the output.
 
@@ -38,7 +38,7 @@ export const vision = new WorkerKind<{ path: string }, { text: string }>({
 ```
 
 - The rule names are pg-boss's queue options, with pg-boss's meaning, because the pool writes them to the queue row as they are. Each one is required: the repository has no defaults ([ADR 0006](./0006-the-pool-evicts-an-idle-worker-that-its-eviction-lets-go-and-lends-an-idle-worker-first.md)).
-- Each `Pool` and `PoolWorkers` creates the queue of its revision, `<name>.r<revision>` ([ADR 0022](./0022-the-newest-revision-takes-over-and-an-owner-refuses-a-job-of-an-older-revision.md)), with these rules, and with `heartbeatSeconds: 10` ([ADR 0017](./0017-the-owner-asks-then-takes-as-many-jobs-as-it-has-free-workers.md)).
+- Each `Pool` and `PoolWorkers` creates the queue of its revision, `<name>.r<revision>` ([ADR 0022](./0022-the-newest-revision-takes-over-and-the-store-deprecates-every-older-revision.md)), with these rules, and with `heartbeatSeconds: 10` ([ADR 0017](./0017-the-owner-asks-then-takes-as-many-jobs-as-it-has-free-workers.md)).
 - **Identical inputs.** The sender always gives `singletonKey`: the SHA-256 of the input. The policy decides what the key does. On an `exclusive` queue, the store keeps one job for each key in the states `created`, `retry` and `active` (`plans.js:921-922`). A second `send` of the same key then resolves `null`, and the sender waits on the job of that key (`findJobs(name, { key })`). This is a shared job. On a `standard` queue the key joins nothing (`plans.js:883-922`). So the sender needs no flag of its own.
 - **A new revision** has a new queue, so it may change every rule. pg-boss forbids only a change of the policy of one queue: "queue policy cannot be changed after creation" (`manager.js:2048-2068`). The pool never calls `updateQueue`.
 - **Per user.** Each user of a computer has their own pools, because the store of the computer is in that user's folder ([ADR 0015](./0015-the-store-is-a-required-input-and-computer-store-gives-the-store-of-the-computer.md); map ticket 08).
@@ -47,5 +47,5 @@ export const vision = new WorkerKind<{ path: string }, { text: string }>({
 
 ## Consequences
 
-- The pool does not check the input or the output at run time. A sender and an owner of the same revision run the same code, and an owner refuses another revision. BullMQ and Temporal check only types too.
+- The pool does not check the input or the output at run time. A sender and an owner of the same revision run the same code, and a deprecated revision sends and runs no job. BullMQ and Temporal check only types too.
 - The name of a kind is short. Its two channels must be shorter than 64 bytes, and its queue name adds `.r<revision>`, which Postgres and `@zukhruf/sqlite-notify` require ([ADR 0018](./0018-news-travels-by-push-through-the-notify-of-the-store-with-a-backstop.md)). The constructor throws a `RangeError` for a longer name. The channels are `<name>.new-job` and `<name>.output`, so a name has at most 55 bytes.

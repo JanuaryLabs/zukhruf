@@ -36,8 +36,21 @@ export class WorkerKind<Input, Output> {
     this.policy = options.policy;
     this.retryLimit = options.retryLimit;
     this.expireInSeconds = options.expireInSeconds;
-    this.queue = `${options.name}.r${options.revision}`;
+    this.queue = `${revisionsPrefix(options.name)}${options.revision}`;
   }
+}
+
+/** The start of the queue of each revision of the kind `name`, `<name>.r` (ADR 0022). */
+export function revisionsPrefix(name: string): string {
+  return `${name}.r`;
+}
+
+/** The revision of a queue of the kind `name`, or undefined for a queue of another kind. */
+export function revisionOf(name: string, queue: string): number | undefined {
+  const prefix = revisionsPrefix(name);
+  if (!queue.startsWith(prefix)) return undefined;
+  const digits = queue.slice(prefix.length);
+  return /^\d+$/.test(digits) ? Number(digits) : undefined;
 }
 
 /** The channel on which the owner hears of a new job of the kind, with its revision (ADR 0018). */

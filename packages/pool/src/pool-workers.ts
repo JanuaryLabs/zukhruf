@@ -1,6 +1,6 @@
 import type { Socket } from 'node:net';
 
-import { Cond, Future, type WallClock, delay } from '@zukhruf/async';
+import { Cond, Future, WaitGroup, type WallClock, delay } from '@zukhruf/async';
 import { SqliteElection, type Term } from '@zukhruf/election';
 import { NoServerError, PipeAddress } from '@zukhruf/pipes';
 
@@ -76,6 +76,16 @@ export class PoolWorkers<Input, Output> implements AsyncDisposable {
   readonly #store: Store;
   readonly #election: SqliteElection;
   readonly #disposed = new AbortController();
+  // Aborts, with a DeprecatedRevisionError, once the store holds a newer
+  // revision of the kind: the host then offers its workers no more (ADR 0022).
+  readonly #deprecated = new AbortController();
+  readonly #offering = AbortSignal.any([
+    this.#disposed.signal,
+    this.#deprecated.signal,
+  ]);
+  // The reads of the revisions that a wake started, which end before the
+  // store closes.
+  readonly #reads = new WaitGroup();
   // Broadcasts when a run ends, the sizing changes, the backstop ends, or a
   // host tells of a new job of the kind (ADR 0018).
   readonly #changed = new Cond();
@@ -124,8 +134,14 @@ export class PoolWorkers<Input, Output> implements AsyncDisposable {
       ),
     );
     const newJob = newJobChannel(options.kind);
-    this.#store.notifications.on('notification', ({ channel }) => {
+    this.#store.notifications.on('notification', ({ channel, payload }) => {
       if (channel !== newJob) return;
+      // A wake only says "read the store", and the store decides whether a
+      // newer revision took over (ADR 0022).
+      if (Number(payload) > options.kind.revision) {
+        const read = this.#reads.add();
+        void this.#learn().finally(() => read[Symbol.dispose]());
+      }
       this.#heard++;
       this.#changed.broadcast();
     });
@@ -137,7 +153,7 @@ export class PoolWorkers<Input, Output> implements AsyncDisposable {
     });
     this.#ended = Future.run(() => this.#live());
     this.#ended.wait().then(
-      () => this.#ready.reject(this.#disposed.signal.reason),
+      () => this.#ready.reject(this.#offering.reason),
       (error: unknown) => this.#ready.reject(error),
     );
   }
@@ -155,32 +171,62 @@ export class PoolWorkers<Input, Output> implements AsyncDisposable {
     return this.#ready.wait();
   }
 
-  // Offers the workers until the disposal, and then closes the store, so
-  // every disposal waits for the one end. A store that fails to start ends
-  // the host with its failure.
+  // Offers the workers until the disposal or the deprecation of its revision,
+  // and then closes the store, so every disposal waits for the one end. A
+  // store that fails to start ends the host with its failure.
   async #live(): Promise<void> {
-    const stop = this.#disposed.signal;
+    const offering = this.#offering;
     try {
       await this.#store.start(this.#kind);
       // Listens before its first fetch, so a job sent in between is not lost.
       await this.#store.notifications.listen(newJobChannel(this.#kind));
-      while (!stop.aborted) {
+      // A host of a deprecated revision never campaigns (ADR 0022).
+      await this.#learn();
+      // It tells of its revision, so an older owner steps down and an older
+      // standby ends its campaign with no job of this revision sent.
+      this.#store.tell(newJobChannel(this.#kind), String(this.#kind.revision));
+      while (!offering.aborted) {
         const term = await this.#election.campaign({
           timeout: Infinity,
-          signal: stop,
+          signal: offering,
         });
         // A campaign with no time limit resolves only with a term.
-        await this.#own(term!, stop);
+        await this.#own(term!, offering);
       }
     } catch (error) {
-      if (error !== stop.reason) throw error;
+      if (error !== offering.reason) throw error;
     } finally {
+      await this.#reads.wait({ signal: undefined });
       await this.#store[Symbol.asyncDispose]();
+    }
+  }
+
+  // Deprecates this host for good once the store holds a newer revision of
+  // the kind (ADR 0022). A read that fails is a warning, and the next turn or
+  // wake reads again.
+  async #learn(): Promise<void> {
+    try {
+      const deprecated = await this.#store.deprecation(this.#kind);
+      if (deprecated !== undefined) this.#deprecated.abort(deprecated);
+    } catch (error) {
+      process.emitWarning(
+        new PoolWarning(error, {
+          code: 'ZUKHRUF_POOL_REVISIONS_READ_FAILED',
+          queue: this.#kind.queue,
+        }),
+      );
     }
   }
 
   // Owns until the stop, or until the term is lost: then it campaigns again.
   async #own(term: Term, stop: AbortSignal): Promise<void> {
+    // A standby whose wake of a newer revision came after the owner resigned,
+    // or was lost, learns of it before it starts a worker.
+    await this.#learn();
+    if (stop.aborted) {
+      await term.resign();
+      return;
+    }
     const owning = AbortSignal.any([stop, term.signal]);
     const running = new Set<Promise<void>>();
     const slots = new Slots<Worker<Input, Output>>({

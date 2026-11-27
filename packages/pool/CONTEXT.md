@@ -97,7 +97,7 @@ The name, the revision and the job rules of a pool, with the types of its input 
 _Avoid_: Worker class (the class that `create` builds), job type, task
 
 **Revision**:
-The integer of a worker kind that its author raises when `run` changes in a way that matters. Each revision has its own queue in the store. An owner refuses a job of an older revision (not built yet, ADR 0022).
+The integer of a worker kind that its author raises when `run` changes in a way that matters. Each revision has its own queue in the store. Once the store holds the queue of a higher revision, an older revision is deprecated: its hosts send no job and own no workers (ADR 0022).
 _Avoid_: Version (a release of a package)
 
 **Input**, **Output**:

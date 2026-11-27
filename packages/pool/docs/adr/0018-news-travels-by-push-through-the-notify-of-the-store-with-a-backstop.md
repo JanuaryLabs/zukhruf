@@ -19,7 +19,7 @@ From map ticket 11, resolved 2026-11-14 from ticket 20 and the measures of resea
 
 - **Push on both scopes**, through the notify of the store: `@zukhruf/sqlite-notify` on the store file of one computer, and Postgres `LISTEN` / `NOTIFY` on the store that a `postgres://` address names. The pool uses one interface for both, so the code of a host does not change with the scope.
 - **Two channels for each pool**:
-  - "A new job". The owner listens. The payload is the revision of the job, because each revision has its own queue ([ADR 0022](./0022-the-newest-revision-takes-over-and-an-owner-refuses-a-job-of-an-older-revision.md)).
+  - "A new job". The owner listens. The payload is the revision of the job, because each revision has its own queue ([ADR 0022](./0022-the-newest-revision-takes-over-and-the-store-deprecates-every-older-revision.md)).
   - "An output". Each `Pool` that has a waiting `run` or `result` listens. The payload is the job id, so a host reads only its own jobs. In research 20f the id cut the reads of a caller from 6.5 to 1.05 a job, and its CPU by 35 to 40 %.
 - **The store is the truth, and the wake is a hint**, as in sqlite-notify ADR 0002. The pool notifies after the write of the store committed: after `send` on "a new job", after `complete` or `fail` on "an output". A host that reads its news reads the state of the job in the store (`findJobs(name, { id })`), never the wake.
 - **Listen first, then read once.** A `Pool` listens on "an output" before it sends, then reads the state of its job once, then reads again at each wake with the id of that job. An output that came early is not lost. Every push design that research 10 read does this, and it is the start rule of Postgres and of sqlite-notify.
