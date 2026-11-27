@@ -33,7 +33,7 @@ _Avoid_: Timer (a timer is one wait on the clock), time provider, scheduler
 _Avoid_: Clock context (the context is private to this package), wrapper
 
 **Spinner**:
-The `Loader2` icon of Lucide that turns while the delay has passed and the button is still loading. It takes the place of the icon.
+The indicator that turns while the delay has passed and the button is still loading. It takes the place of the icon. By default it is the `Spinner` of `@zukhruf/shadcn`, a status named "Loading"; the `spinner` prop replaces it.
 _Avoid_: Loader (Lucide names its icons loaders), progress (a progress bar shows an amount)
 
 **Icon**:

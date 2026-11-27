@@ -1,9 +1,10 @@
 import { cn } from 'cn';
-import { Loader2, type LucideIcon } from 'lucide-react';
+import { type LucideIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import {
   Button,
+  Spinner,
   Tooltip,
   TooltipContent,
   TooltipTrigger,
@@ -32,6 +33,13 @@ interface TheButtonProps extends React.ComponentProps<typeof Button> {
    * creates an icon-only button with tooltip.
    */
   tooltip?: string;
+  /**
+   * The indicator shown in place of the icon while loading. It replaces the
+   * default `Spinner` of `@zukhruf/shadcn`, which is announced as "Loading".
+   * Give a labelled one to localize it, e.g. `<Spinner aria-label="Saving" />`.
+   * @default <Spinner />
+   */
+  spinner?: React.ReactNode;
 }
 
 // --- Internal Components ---
@@ -84,21 +92,19 @@ function IconRenderer({ icon }: { icon: React.ReactNode | LucideIcon }) {
   return <>{icon}</>;
 }
 
-function LoadingSpinner() {
-  return <Loader2 className="size-4 animate-spin" />;
-}
-
 function IconButtonContent({
   icon,
+  spinner,
   showSpinner,
 }: {
   icon?: React.ReactNode | LucideIcon;
+  spinner: React.ReactNode;
   showSpinner: boolean;
 }) {
   return (
-    <div className="relative size-4 overflow-hidden">
+    <span className="relative size-4 overflow-hidden">
       {icon && (
-        <div
+        <span
           className={cn(
             'absolute inset-0 flex items-center justify-center transition-all duration-300 ease-in-out',
             showSpinner
@@ -107,9 +113,10 @@ function IconButtonContent({
           )}
         >
           <IconRenderer icon={icon} />
-        </div>
+        </span>
       )}
-      <div
+      <span
+        aria-hidden={!showSpinner}
         className={cn(
           'absolute inset-0 transition-all duration-300 ease-in-out',
           showSpinner
@@ -117,42 +124,45 @@ function IconButtonContent({
             : 'translate-x-full opacity-0',
         )}
       >
-        <LoadingSpinner />
-      </div>
-    </div>
+        {spinner}
+      </span>
+    </span>
   );
 }
 
 function TextButtonContent({
   icon,
+  spinner,
   showSpinner,
   children,
 }: {
   icon?: React.ReactNode | LucideIcon;
+  spinner: React.ReactNode;
   showSpinner: boolean;
   children: React.ReactNode;
 }) {
   return (
     <span className="inline-flex items-center gap-2">
       {icon && (
-        <div
+        <span
           className={cn(
             'overflow-hidden transition-all duration-300 ease-in-out',
             showSpinner ? 'w-0 opacity-0' : 'w-4 opacity-100',
           )}
         >
           <IconRenderer icon={icon} />
-        </div>
+        </span>
       )}
-      <div
+      <span
+        aria-hidden={!showSpinner}
         className={cn(
           'overflow-hidden transition-all duration-300 ease-in-out',
           showSpinner ? 'w-4 opacity-100' : '-ms-2 w-0 opacity-0',
           icon ? '-ms-2' : '',
         )}
       >
-        <LoadingSpinner />
-      </div>
+        {spinner}
+      </span>
       {children}
     </span>
   );
@@ -191,6 +201,12 @@ function WithTooltip({
  * // Primary button with loading state
  * <TheButton loading={isSubmitting}>
  *   Submit
+ * </TheButton>
+ *
+ * @example
+ * // Loading with a localized spinner (the default one is announced as "Loading")
+ * <TheButton loading={isSaving} spinner={<Spinner aria-label={t('saving')} />}>
+ *   Save
  * </TheButton>
  *
  * @example
@@ -263,6 +279,7 @@ export function TheButton({
   delay = 300,
   icon,
   tooltip,
+  spinner = <Spinner />,
   size,
   ...props
 }: TheButtonProps) {
@@ -278,9 +295,17 @@ export function TheButton({
         className={cn('cursor-pointer', props.className)}
       >
         {isIconButton ? (
-          <IconButtonContent icon={icon} showSpinner={showSpinner} />
+          <IconButtonContent
+            icon={icon}
+            spinner={spinner}
+            showSpinner={showSpinner}
+          />
         ) : (
-          <TextButtonContent icon={icon} showSpinner={showSpinner}>
+          <TextButtonContent
+            icon={icon}
+            spinner={spinner}
+            showSpinner={showSpinner}
+          >
             {children}
           </TextButtonContent>
         )}

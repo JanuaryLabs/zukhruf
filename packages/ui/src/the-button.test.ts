@@ -265,3 +265,152 @@ test('a Lucide icon component given as the icon draws its svg', async () => {
     await GlobalRegistrator.unregister();
   }
 });
+
+test('a loading button, after the delay, exposes a status named Loading', async () => {
+  // Arrange
+  GlobalRegistrator.register();
+  try {
+    Reflect.set(globalThis, 'IS_REACT_ACT_ENVIRONMENT', true);
+    const { act, createElement } = await import('react');
+    const { createRoot } = await import('react-dom/client');
+    const { ClockProvider, TheButton } = await import('@zukhruf/ui');
+    const clock = createClock();
+    const root = createRoot(
+      document.body.appendChild(document.createElement('div')),
+    );
+    // Happy DOM has no accessibility tree, so a status counts when no
+    // aria-hidden element holds it, and its name is its aria-label.
+    const statusNames = () =>
+      [...document.querySelectorAll('[role="status"]')]
+        .filter((status) => !status.closest('[aria-hidden="true"]'))
+        .map((status) => status.getAttribute('aria-label'));
+    try {
+      await act(async () => {
+        root.render(
+          createElement(ClockProvider, {
+            clock,
+            children: createElement(TheButton, { loading: true }, 'Save'),
+          }),
+        );
+      });
+
+      // Act
+      await act(() => clock.tickAsync(300));
+
+      // Assert
+      assert.deepEqual(statusNames(), ['Loading']);
+    } finally {
+      await act(async () => root.unmount());
+    }
+  } finally {
+    Reflect.deleteProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT');
+    await GlobalRegistrator.unregister();
+  }
+});
+
+test('a loading button given a spinner exposes the status of that spinner in place of the default one', async () => {
+  // Arrange
+  GlobalRegistrator.register();
+  try {
+    Reflect.set(globalThis, 'IS_REACT_ACT_ENVIRONMENT', true);
+    const { act, createElement } = await import('react');
+    const { createRoot } = await import('react-dom/client');
+    const { ClockProvider, TheButton } = await import('@zukhruf/ui');
+    const clock = createClock();
+    const root = createRoot(
+      document.body.appendChild(document.createElement('div')),
+    );
+    const statusNames = () =>
+      [...document.querySelectorAll('[role="status"]')]
+        .filter((status) => !status.closest('[aria-hidden="true"]'))
+        .map((status) => status.getAttribute('aria-label'));
+    try {
+      await act(async () => {
+        root.render(
+          createElement(ClockProvider, {
+            clock,
+            children: createElement(
+              TheButton,
+              {
+                loading: true,
+                spinner: createElement('span', {
+                  role: 'status',
+                  'aria-label': 'Saving',
+                }),
+              },
+              'Save',
+            ),
+          }),
+        );
+      });
+
+      // Act
+      await act(() => clock.tickAsync(300));
+
+      // Assert
+      assert.deepEqual(statusNames(), ['Saving']);
+    } finally {
+      await act(async () => root.unmount());
+    }
+  } finally {
+    Reflect.deleteProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT');
+    await GlobalRegistrator.unregister();
+  }
+});
+
+test('a loading button exposes no status before the delay, also as an icon button', async () => {
+  // Arrange
+  GlobalRegistrator.register();
+  try {
+    Reflect.set(globalThis, 'IS_REACT_ACT_ENVIRONMENT', true);
+    const { act, createElement, Fragment } = await import('react');
+    const { createRoot } = await import('react-dom/client');
+    const { Settings } = await import('lucide-react');
+    const { ClockProvider, TheButton } = await import('@zukhruf/ui');
+    const clock = createClock();
+    const root = createRoot(
+      document.body.appendChild(document.createElement('div')),
+    );
+    const statusNames = () =>
+      [...document.querySelectorAll('[role="status"]')]
+        .filter((status) => !status.closest('[aria-hidden="true"]'))
+        .map((status) => status.getAttribute('aria-label'));
+    try {
+      await act(async () => {
+        root.render(
+          createElement(ClockProvider, {
+            clock,
+            children: createElement(
+              Fragment,
+              null,
+              createElement(TheButton, { loading: true }, 'Save'),
+              createElement(TheButton, {
+                loading: true,
+                size: 'icon',
+                icon: Settings,
+                tooltip: 'Open settings',
+              }),
+            ),
+          }),
+        );
+      });
+
+      // Act
+      await act(() => clock.tickAsync(299));
+      const beforeDelay = statusNames();
+      await act(() => clock.tickAsync(1));
+      const afterDelay = statusNames();
+
+      // Assert
+      assert.deepEqual(
+        { beforeDelay, afterDelay },
+        { beforeDelay: [], afterDelay: ['Loading', 'Loading'] },
+      );
+    } finally {
+      await act(async () => root.unmount());
+    }
+  } finally {
+    Reflect.deleteProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT');
+    await GlobalRegistrator.unregister();
+  }
+});
