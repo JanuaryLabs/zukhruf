@@ -86,20 +86,23 @@ describe('container.followLogs()', () => {
     await using docker = await connect(IMAGE, t.signal);
     const run = randomUUID();
     try {
+      // The container writes second only after the test read first.
       const container = await startScript(
         docker,
         run,
-        'echo first; sleep 1; echo second >&2',
+        'mkfifo /tmp/go; echo first; cat /tmp/go >/dev/null; echo second >&2',
       );
 
       // Act
-      const chunks = await Array.fromAsync(
-        container.followLogs({ signal: t.signal }),
-        ({ stream, data }) => ({
-          stream,
-          text: new TextDecoder().decode(data),
-        }),
-      );
+      const chunks: { stream: string; text: string }[] = [];
+      for await (const { stream, data } of container.followLogs({
+        signal: t.signal,
+      })) {
+        chunks.push({ stream, text: new TextDecoder().decode(data) });
+        if (chunks.length === 1) {
+          await container.exec({ Cmd: ['sh', '-c', 'echo > /tmp/go'] });
+        }
+      }
 
       // Assert
       assert.deepEqual(chunks, [

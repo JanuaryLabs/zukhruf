@@ -5,13 +5,13 @@ import { once } from 'node:events';
 import { describe, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 
-import { poll } from '@zukhruf/async';
 import { TemporaryFiles } from '@zukhruf/fs';
 
 import {
   ContainerNotFoundError,
   ContainerNotRunningError,
   Docker,
+  type EngineApi,
   NetworkNotFoundError,
 } from './index.ts';
 import {
@@ -239,13 +239,13 @@ import { Docker } from ${JSON.stringify(ENTRY)};
 const docker = await Docker.connect({ ...${connect}, environment: process.env, clock: globalThis });
 const container = await docker.containers.create({
   Image: ${JSON.stringify(IMAGE)},
-  Entrypoint: ['sh', '-c', 'until [ -e /tmp/held ]; do sleep 0.05; done; while pgrep -x cat; do sleep 0.05; done'],
+  Entrypoint: ['sh', '-c', 'mkfifo /tmp/held 2>/dev/null; while read -r _; do :; done < /tmp/held'],
   Cmd: [],
   Labels: { ${JSON.stringify(TEST_LABEL)}: ${JSON.stringify(run)} },
   HostConfig: { AutoRemove: true },
 });
 await container.start();
-await container.spawn({ Cmd: ['sh', '-c', 'touch /tmp/held && exec cat'] }, { stdin: true, ref: false });
+await container.spawn({ Cmd: ['sh', '-c', 'mkfifo /tmp/held 2>/dev/null; exec cat > /tmp/held'] }, { stdin: true, ref: false });
 await new Promise((resolve) => setTimeout(resolve, 1000));
 const { stdout } = await container.exec({ Cmd: ['pgrep', '-x', 'cat'] });
 console.log(JSON.stringify({ id: container.id, held: stdout.trim() !== '' }));
@@ -324,18 +324,18 @@ describe('container.attach({ ref: false })', () => {
       const closed = once(scenario, 'close');
       let stdout = '';
       let stderr = '';
+      const holds = Promise.withResolvers<void>();
       scenario.stdout.setEncoding('utf8');
-      scenario.stdout.on('data', (chunk: string) => (stdout += chunk));
+      scenario.stdout.on('data', (chunk: string) => {
+        stdout += chunk;
+        if (stdout.includes('"id"')) holds.resolve();
+      });
       scenario.stderr.setEncoding('utf8');
       scenario.stderr.on('data', (chunk: string) => (stderr += chunk));
       try {
         // Act: the scenario reaches its hold. With ref: false it exits about 1 s
         // later, and load only makes this window longer.
-        await poll(async () => (stdout.includes('"id"') ? true : undefined), {
-          signal: t.signal,
-          clock: globalThis,
-          interval: 5,
-        });
+        await Promise.race([holds.promise, closed]);
         assert.match(stdout, /"id"/, `No hold line. stderr: ${stderr}`);
         await delay(3000);
         const exitWhileHeld = scenario.exitCode;
@@ -467,7 +467,10 @@ describe('containers.run()', () => {
     // Arrange
     await using docker = await connect(IMAGE, t.signal);
     const run = randomUUID();
-    const since = Math.floor(Date.now() / 1000) - 1;
+    const events = await docker.watch({
+      filters: { type: ['container'], label: [`${TEST_LABEL}=${run}`] },
+      signal: t.signal,
+    });
     try {
       // Act
       const result = await docker.containers.run({
@@ -484,19 +487,16 @@ describe('containers.run()', () => {
         output: 'out\nerr\n',
       });
       const actions: string[] = [];
-      for await (const event of docker.events({
-        since,
-        filters: { type: ['container'], label: [`${TEST_LABEL}=${run}`] },
-        signal: t.signal,
-      })) {
+      await events.find((event: EngineApi.EventMessage) => {
         actions.push(event.Action ?? '');
-        if (event.Action === 'destroy') break;
-      }
+        return event.Action === 'destroy';
+      });
       assert.ok(actions.includes('create'), actions.join());
       assert.ok(actions.includes('start'), actions.join());
       assert.equal(actions.at(-1), 'destroy');
       assert.deepEqual(await labeledIds(docker, run), []);
     } finally {
+      events.destroy();
       await removeLabeled(docker, run);
     }
   });
@@ -529,7 +529,10 @@ describe('containers.run()', () => {
     const run = randomUUID();
     const controller = new AbortController();
     const reason = new Error('the caller stopped waiting');
-    const since = Math.floor(Date.now() / 1000) - 1;
+    const events = await docker.watch({
+      filters: { label: [`${TEST_LABEL}=${run}`], event: ['start'] },
+      signal: t.signal,
+    });
     try {
       const running = docker.containers.run(
         {
@@ -540,13 +543,7 @@ describe('containers.run()', () => {
         { signal: controller.signal },
       );
       running.catch(() => undefined);
-      for await (const _started of docker.events({
-        since,
-        filters: { label: [`${TEST_LABEL}=${run}`], event: ['start'] },
-        signal: t.signal,
-      })) {
-        break;
-      }
+      await events.find(() => true);
 
       // Act
       controller.abort(reason);
@@ -555,6 +552,7 @@ describe('containers.run()', () => {
       await assert.rejects(running, (error: unknown) => error === reason);
       assert.deepEqual(await labeledIds(docker, run), []);
     } finally {
+      events.destroy();
       await removeLabeled(docker, run);
     }
   });

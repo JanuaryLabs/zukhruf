@@ -9,6 +9,7 @@ import {
   ContainerNotFoundError,
   ContainerNotRunningError,
   Docker,
+  type EngineApi,
   type ExecResult,
   IncompleteOutputError,
 } from './index.ts';
@@ -225,20 +226,51 @@ describe('container.exec()', () => {
       const container = await startSleeper(docker, run);
       const controller = new AbortController();
       const reason = new Error('the caller stopped waiting');
+      const events = await docker.watch({
+        filters: {
+          container: [container.id],
+          event: ['exec_create', 'exec_die'],
+        },
+        signal: t.signal,
+      });
+      try {
+        // A write to a FIFO waits for a reader: the cat ends when the command runs.
+        await container.exec({ Cmd: ['mkfifo', '/tmp/started'] });
 
-      // Act
-      const executing = container.exec(
-        { Cmd: ['sh', '-c', 'echo started; sleep 2; touch /tmp/done'] },
-        { signal: controller.signal },
-      );
-      await setTimeout(500);
-      controller.abort(reason);
+        // Act
+        const executing = container.exec(
+          {
+            Cmd: [
+              'sh',
+              '-c',
+              'echo started > /tmp/started; sleep 2; touch /tmp/done',
+            ],
+          },
+          { signal: controller.signal },
+        );
+        const started = await container.exec({ Cmd: ['cat', '/tmp/started'] });
+        assert.equal(started.stdout, 'started\n');
+        controller.abort(reason);
 
-      // Assert
-      await assert.rejects(executing, (error: unknown) => error === reason);
-      await setTimeout(3000);
-      const done = await container.exec({ Cmd: ['test', '-f', '/tmp/done'] });
-      assert.equal(done.exitCode, 0);
+        // Assert
+        await assert.rejects(executing, (error: unknown) => error === reason);
+        // The Action of exec_create carries the command; exec_die only the execID.
+        let execID: string | undefined;
+        await events.find((event: EngineApi.EventMessage) => {
+          const id = event.Actor?.Attributes?.execID;
+          if (event.Action?.startsWith('exec_create') === true) {
+            if (event.Action.includes('touch /tmp/done')) execID = id;
+            return false;
+          }
+          return execID !== undefined && id === execID;
+        });
+        const done = await container.exec({
+          Cmd: ['test', '-f', '/tmp/done'],
+        });
+        assert.equal(done.exitCode, 0);
+      } finally {
+        events.destroy();
+      }
     } finally {
       await removeLabeled(docker, run);
     }
@@ -377,7 +409,6 @@ describe('container.spawn()', () => {
 
       // Act
       await input.write(new Uint8Array(0));
-      await setTimeout(300);
       const afterEmptyWrite = await Promise.race([
         collecting.then(() => 'ended'),
         setTimeout(0, 'running'),

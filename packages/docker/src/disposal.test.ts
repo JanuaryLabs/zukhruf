@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { describe, test } from 'node:test';
 
-import { poll } from '@zukhruf/async';
 import { TemporaryFiles } from '@zukhruf/fs';
 
 import { ConnectionFailedError, Docker, DockerError } from './index.ts';
@@ -183,13 +182,16 @@ describe('disposal of a client with open streams', () => {
 });
 
 describe('requests during and after disposal', () => {
-  test('through a Unix socket, a request in flight and a request after disposal started reject with the DockerError of disposal, and the second one reaches no engine', async (t) => {
+  test('through a Unix socket, a request in flight and a request after disposal started reject with the DockerError of disposal, and the second one reaches no engine', async () => {
     // Arrange: the engine never answers /info.
     await using scratch = await new TemporaryFiles().directory('docker-test-');
+    const reached = Promise.withResolvers<void>();
     await using engine = await fakeEngine({
       directory: scratch.path,
       apiVersion: '1.51',
-      answer: () => undefined,
+      answer: (request) => {
+        if (request.url === '/v1.51/info') reached.resolve();
+      },
     });
     const docker = await Docker.connect({
       clock: globalThis,
@@ -197,10 +199,7 @@ describe('requests during and after disposal', () => {
     });
     const inFlight = docker.info();
     inFlight.catch(() => undefined);
-    await poll(
-      async () => (engine.paths.includes('/v1.51/info') ? true : undefined),
-      { signal: t.signal, clock: globalThis, interval: 10 },
-    );
+    await reached.promise;
 
     // Act
     const disposing = docker[Symbol.asyncDispose]();

@@ -198,8 +198,13 @@ describe('a removal that is already in progress', () => {
   });
 
   test('an abort of the signal ends the wait for a removal in progress with its reason', async () => {
-    // Arrange: the removal in progress never ends.
+    // Arrange: the removal in progress never ends. After the answer 409, the
+    // first inspect tells that the removal is in progress, and each later one
+    // is the wait: the signal aborts at the first of those.
     await using scratch = await new TemporaryFiles().directory('docker-test-');
+    const controller = new AbortController();
+    const reason = new Error('the caller stopped waiting');
+    let inspectsAfterConflict: number | undefined;
     await using engine = await fakeEngine({
       directory: scratch.path,
       apiVersion: '1.51',
@@ -209,11 +214,15 @@ describe('a removal that is already in progress', () => {
           response.end(JSON.stringify(body));
         };
         if (request.method === 'DELETE') {
+          inspectsAfterConflict = 0;
           json(409, {
             message: 'removal of container c1 is already in progress',
           });
         } else if (request.method === 'GET') {
           json(200, { Id: 'c1', State: { Status: 'removing' } });
+          if (inspectsAfterConflict === undefined) return;
+          inspectsAfterConflict += 1;
+          if (inspectsAfterConflict === 2) controller.abort(reason);
         }
       },
     });
@@ -223,12 +232,9 @@ describe('a removal that is already in progress', () => {
     });
     const container = await docker.containers.find('c1');
     assert.ok(container);
-    const controller = new AbortController();
-    const reason = new Error('the caller stopped waiting');
 
     // Act
     const removing = container.remove({ signal: controller.signal });
-    setTimeout(() => controller.abort(reason), 300);
 
     // Assert
     await assert.rejects(removing, (error: unknown) => error === reason);

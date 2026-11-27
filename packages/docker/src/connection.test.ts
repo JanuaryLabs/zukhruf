@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import { subscribe, unsubscribe } from 'node:diagnostics_channel';
 import { chmod, mkdir } from 'node:fs/promises';
+import { IncomingMessage, Server } from 'node:http';
 import { join } from 'node:path';
 import { describe, test } from 'node:test';
 
-import { poll } from '@zukhruf/async';
 import { TemporaryFiles } from '@zukhruf/fs';
 
 import {
@@ -145,8 +146,8 @@ createServer().listen(${JSON.stringify(socketPath)}, () => console.log('listenin
     });
   });
 
-  test('a signal aborts a ping that the engine never answers, with the reason of the signal', async (t) => {
-    // Arrange
+  test('a signal aborts a ping that the engine never answers, with the reason of the signal', async () => {
+    // Arrange: Node publishes each request that a server of node:http gets.
     await using scratch = await new TemporaryFiles().directory('docker-test-');
     await using engine = await fakeEngine({
       directory: scratch.path,
@@ -155,21 +156,37 @@ createServer().listen(${JSON.stringify(socketPath)}, () => console.log('listenin
     });
     const controller = new AbortController();
     const reason = new Error('the caller gave up');
+    const pinged = Promise.withResolvers<void>();
+    const onRequest = (message: unknown) => {
+      if (
+        typeof message === 'object' &&
+        message !== null &&
+        'server' in message &&
+        message.server instanceof Server &&
+        message.server.address() === engine.socketPath &&
+        'request' in message &&
+        message.request instanceof IncomingMessage &&
+        message.request.url === '/_ping'
+      ) {
+        pinged.resolve();
+      }
+    };
+    subscribe('http.server.request.start', onRequest);
+    try {
+      // Act
+      const connecting = Docker.connect({
+        clock: globalThis,
+        host: engine.host,
+        signal: controller.signal,
+      });
+      await pinged.promise;
+      controller.abort(reason);
 
-    // Act
-    const connecting = Docker.connect({
-      clock: globalThis,
-      host: engine.host,
-      signal: controller.signal,
-    });
-    await poll(
-      async () => (engine.paths.includes('/_ping') ? true : undefined),
-      { signal: t.signal, clock: globalThis, interval: 5 },
-    );
-    controller.abort(reason);
-
-    // Assert
-    await assert.rejects(connecting, (error: unknown) => error === reason);
+      // Assert
+      await assert.rejects(connecting, (error: unknown) => error === reason);
+    } finally {
+      unsubscribe('http.server.request.start', onRequest);
+    }
   });
 });
 
