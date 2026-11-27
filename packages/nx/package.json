@@ -96,6 +96,7 @@
       "@zukhruf/python",
       "@zukhruf/relevance-filtering",
       "@zukhruf/retrieval",
+      "@zukhruf/rpc",
       "@zukhruf/shadcn",
       "@zukhruf/shutdown",
       "@zukhruf/single-flight",
