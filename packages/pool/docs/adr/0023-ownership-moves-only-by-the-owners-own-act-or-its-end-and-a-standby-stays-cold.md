@@ -1,6 +1,6 @@
 # Ownership moves only by the owner's own act or its end, and a standby stays cold
 
-Status: Accepted 2026-11-20 (backlog #3527). Partly built in `PoolWorkers` (2026-11-16): the cold standby, the return of a dead owner's jobs by their heartbeat, and the disposal that stops fetching, finishes the running jobs, resigns and then closes the workers. A running job ends at the latest at the kind's time limit, so the disposal ends too. `ready()` is built (2026-11-20): it never resolves on a standby. The hand-over to a host of a newer revision is built with [ADR 0022](./0022-the-newest-revision-takes-over-and-the-store-deprecates-every-older-revision.md) (2026-11-27).
+Status: Accepted 2026-11-20 (backlog #3527). Built in `PoolWorkers` (2026-11-16 to 2026-11-27): the cold standby, the return of a dead owner's jobs by their heartbeat, and the disposal that stops fetching, finishes the running jobs, resigns and then closes the workers. A running job ends at the latest at the kind's time limit, so the disposal ends too. `ready()` is built (2026-11-20): it never resolves on a standby. The hand-over to a host of a newer revision is built with [ADR 0022](./0022-the-newest-revision-takes-over-and-the-store-deprecates-every-older-revision.md) (2026-11-27).
 
 Ownership moves in four ways (map ticket 12):
 
