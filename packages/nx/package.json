@@ -91,6 +91,7 @@
       "@zukhruf/parameterized-test",
       "@zukhruf/pipes",
       "@zukhruf/pool",
+      "@zukhruf/process",
       "@zukhruf/python",
       "@zukhruf/relevance-filtering",
       "@zukhruf/retrieval",
