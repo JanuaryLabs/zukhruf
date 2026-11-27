@@ -24,6 +24,23 @@ export {
   type Usage,
 } from './scoring/run-log.ts';
 export { PairedBootstrap, type Verdict } from './scoring/paired-bootstrap.ts';
+export {
+  Bars,
+  type Cell,
+  type Ends,
+  Heatmap,
+  Line,
+  type Mark,
+  Note,
+  type Pair,
+  type Primitive,
+  type PrimitiveVisitor,
+  Scatter,
+  type Section,
+  Table,
+  type Tone,
+  ValuePairs,
+} from './presentation/primitives.ts';
 export type { Scorer } from './scorers/scorer.ts';
 export type { Matches } from './scorers/matches.ts';
 export { Precision } from './scorers/precision.ts';

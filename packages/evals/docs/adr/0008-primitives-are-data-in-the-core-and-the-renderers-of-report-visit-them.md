@@ -1,6 +1,6 @@
 # Primitives are data in the core, and the renderers of `./report` visit them
 
-Status: accepted (Ezz, 2026-11-27, #6108: "It should be primitives and building blocks"; "Renderers visit"). The names wait for the code.
+Status: accepted (Ezz, 2026-11-27, #6108: "It should be primitives and building blocks"; "Renderers visit"); the primitives and `Section` are built in `src/presentation/primitives.ts`, the renderers come with `./report`. Building them added three rules: a `Line` refuses a series with another number of values than its steps, a `Heatmap` refuses values of another shape, and a `ValuePairs` pair is a union by its mark, so a part that only one side has cannot hold the other side's value. The marks are the core's words, `agree`, `near`, `disagree`, `only-expected` and `only-actual`, which `./structured` names correct, partial, incorrect, missed and spurious.
 
 ## Context
 
