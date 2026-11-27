@@ -3,6 +3,7 @@ import { execa } from 'execa';
 import type { Clock } from '@zukhruf/async';
 
 import type { Completed, Environment } from './end.ts';
+import { errorCode } from './error-code.ts';
 import { findFile } from './file.ts';
 import { KEEPER, environmentFixes } from './keeper.ts';
 import { StartError } from './start-error.ts';
@@ -34,16 +35,20 @@ export class Command {
   readonly #options: CommandOptions;
   /** Milliseconds from SIGTERM to SIGKILL: of the keeper and of a stop. */
   readonly #grace: number;
+  /** Names the process in each error: the name, or the file. */
+  readonly #name: string;
 
   constructor(file: string, args: readonly string[], options: CommandOptions) {
     this.file = file;
     this.args = args;
     this.#options = options;
     this.#grace = options.grace ?? 5000;
+    this.#name = options.name ?? file;
   }
 
   /** Runs the command to its end, and gives its end and its output. */
-  async run({ input, signal }: RunOptions = {}): Promise<Completed> {
+  async run(options: RunOptions = {}): Promise<Completed> {
+    const { input, signal } = options;
     signal?.throwIfAborted();
     const env = Object.fromEntries(
       Object.entries(this.#options.env).filter(
@@ -51,14 +56,13 @@ export class Command {
       ),
     );
     const cwd = this.#options.cwd ?? process.cwd();
+    if (process.platform === 'win32')
+      return this.#runOnWindows(env, cwd, options);
     let path: string;
     try {
       path = await findFile(this.file, env, cwd);
     } catch (cause) {
-      throw new StartError(
-        `${this.#options.name ?? this.file} could not start`,
-        { cause },
-      );
+      throw new StartError(`${this.#name} could not start`, { cause });
     }
     const fixes = environmentFixes(env);
     const subprocess = execa(
@@ -101,14 +105,42 @@ export class Command {
       throw signal.reason;
     }
     stopped?.[Symbol.dispose]();
-    const output = {
-      stdout: result.stdout,
-      stderr: result.stderr,
-      output: result.all,
-    };
-    return result.signal === undefined
-      ? { exitCode: result.exitCode ?? 0, ...output }
-      : { signal: result.signal, ...output };
+    return completedFrom(result);
+  }
+
+  /**
+   * Windows has no POSIX sh and no process groups, so no keeper: execa starts
+   * the file itself (it finds .cmd files and PATHEXT), and stops the process
+   * tree with forceKillAfterDelay and killDescendants on its own timers. A
+   * start that fails is a spawn error here, so the trial tells it apart
+   * (ADR 0002). The process does not end yet with a parent that is killed.
+   * Not proven on Windows: backlog #6161.
+   */
+  async #runOnWindows(
+    env: Readonly<Record<string, string>>,
+    cwd: string,
+    { input, signal }: RunOptions,
+  ): Promise<Completed> {
+    const result = await execa(this.file, this.args, {
+      env,
+      extendEnv: false,
+      cwd,
+      stdio: [input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'],
+      ...(input === undefined ? {} : { input }),
+      ...(signal === undefined ? {} : { cancelSignal: signal }),
+      forceKillAfterDelay: this.#grace,
+      killDescendants: true,
+      reject: false,
+      all: true,
+      stripFinalNewline: false,
+    });
+    if (signal?.aborted) throw signal.reason;
+    const code = errorCode(result.cause);
+    if (result.failed && (code === 'ENOENT' || code === 'EACCES'))
+      throw new StartError(`${this.#name} could not start`, {
+        cause: result.cause,
+      });
+    return completedFrom(result);
   }
 
   /** Stops the group of the keeper at an abort of `signal`. */
@@ -130,4 +162,21 @@ export class Command {
       [Symbol.dispose]: () => signal.removeEventListener('abort', listener),
     };
   }
+}
+
+function completedFrom(result: {
+  readonly stdout: string;
+  readonly stderr: string;
+  readonly all: string;
+  readonly exitCode?: number | undefined;
+  readonly signal?: NodeJS.Signals | undefined;
+}): Completed {
+  const output = {
+    stdout: result.stdout,
+    stderr: result.stderr,
+    output: result.all,
+  };
+  return result.signal === undefined
+    ? { exitCode: result.exitCode ?? 0, ...output }
+    : { signal: result.signal, ...output };
 }

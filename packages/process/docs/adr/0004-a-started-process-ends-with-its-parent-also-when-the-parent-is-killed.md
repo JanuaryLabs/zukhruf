@@ -2,6 +2,8 @@
 
 Status: Accepted 2026-11-27 (backlog #6077).
 
+Changed in part on 2026-11-27 (backlog #6161): the job object for Windows is deferred work with its proof, as #2753 is for `@zukhruf/docker`.
+
 Decision-makers: the zukhruf session of backlog #6077 proposes this from two probes of 2026-11-27. Ezz rules on it in the review of the paper.
 
 A test process that its runner kills (a timeout with `--test-force-exit`, Ctrl-C, an out-of-memory kill) runs no cleanup. A process that it started keeps running: an owner keeps its exclusive lock on a database, an `sshd` keeps its port, a helper keeps its model in memory. Backlog #4503 saw the same in shipped code: an `ssh … docker system dial-stdio` stayed under launchd after its owner died. `startWorker` solves it for Node.js source only: the child reads its stdin and exits at its end, because the OS closes the pipe when the parent dies. A command that is not Node.js source, or that needs its stdin, has no such way.

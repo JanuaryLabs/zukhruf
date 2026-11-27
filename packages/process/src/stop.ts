@@ -1,5 +1,7 @@
 import { type Clock, poll } from '@zukhruf/async';
 
+import { errorCode } from './error-code.ts';
+
 /**
  * Stops the process group of a keeper (ADR 0005): SIGTERM to the group, and
  * SIGKILL to the group when it still runs after `grace` on `clock`. Resolves
@@ -46,7 +48,7 @@ function signalGroup(pgid: number, signal: NodeJS.Signals): void {
   try {
     process.kill(-pgid, signal);
   } catch (error) {
-    if (Reflect.get(Object(error), 'code') !== 'ESRCH') throw error;
+    if (errorCode(error) !== 'ESRCH') throw error;
   }
 }
 
@@ -55,7 +57,7 @@ function groupIsEmpty(pgid: number): boolean {
     process.kill(-pgid, 0);
     return false;
   } catch (error) {
-    if (Reflect.get(Object(error), 'code') === 'ESRCH') return true;
+    if (errorCode(error) === 'ESRCH') return true;
     throw error;
   }
 }

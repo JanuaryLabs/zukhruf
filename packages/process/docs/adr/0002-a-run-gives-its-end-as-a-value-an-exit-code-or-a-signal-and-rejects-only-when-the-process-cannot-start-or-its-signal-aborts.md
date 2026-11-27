@@ -2,6 +2,8 @@
 
 Status: Accepted 2026-11-27 (backlog #6077).
 
+Changed in part on 2026-11-27 (backlog #6161): on Windows there is no keeper, so a start that fails is a spawn error of execa, which the trial tells apart, and execa finds the file (`.cmd`, `PATHEXT`). The check that predicts runs only on macOS and Linux. The Windows path is not proven yet; CI has no Windows runner, and by the ruling of 2026-10-20 no step waits for a Windows run.
+
 Decision-makers: the zukhruf session of backlog #6077 proposes this from the leaders. Ezz rules on it in the review of the paper.
 
 A test that runs a command usually reads the exit code: it checks that a bad input exits with 2, or that a lint finds nothing. `promisify(execFile)` rejects at each non-zero exit, so each such test catches the rejection and reads `code` from it. In the five wrappers of other repositories (ADR 0001), four give the exit code as a value. `@zukhruf/docker` does the same for a container: `DockerTestbed.run` gives an `ExecResult` with `exitCode`, `stdout`, `stderr` and `output`, and does not throw for a non-zero exit code.

@@ -3,6 +3,7 @@ import { access, stat } from 'node:fs/promises';
 import { delimiter, join, resolve } from 'node:path';
 
 import type { Environment } from './end.ts';
+import { errorCode } from './error-code.ts';
 
 /**
  * The path that the process starts from: a name without a slash on the `PATH`
@@ -32,9 +33,9 @@ export async function findFile(
       await executable(path);
       return path;
     } catch (error) {
-      if (code(error) === 'EACCES' && Error.isError(error)) refused ??= error;
-      else if (code(error) !== 'ENOENT' && code(error) !== 'ENOTDIR')
-        throw error;
+      const failure = errorCode(error);
+      if (failure === 'EACCES' && Error.isError(error)) refused ??= error;
+      else if (failure !== 'ENOENT' && failure !== 'ENOTDIR') throw error;
     }
   }
   throw (
@@ -51,8 +52,4 @@ async function executable(path: string): Promise<void> {
     throw Object.assign(new Error(`${path} is not a file`), {
       code: 'EACCES',
     });
-}
-
-function code(error: unknown): unknown {
-  return Reflect.get(Object(error), 'code');
 }

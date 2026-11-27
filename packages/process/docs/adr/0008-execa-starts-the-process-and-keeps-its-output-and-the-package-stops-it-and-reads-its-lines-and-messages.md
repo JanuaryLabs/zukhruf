@@ -2,6 +2,8 @@
 
 Status: Accepted 2026-11-27 (backlog #6077).
 
+Changed in part on 2026-11-27 (backlog #6161): the Windows probe of `killDescendants` and `forceKillAfterDelay` is deferred to backlog #6161, because CI has no Windows runner.
+
 Decision-makers: the zukhruf session of backlog #6077 proposes this from the probes of 2026-11-27. Ezz rules on it in the review of the paper.
 
 Node.js 26 has `spawn`, `execFile` and `spawnSync`. Its `ChildProcess` has `Symbol.dispose`, which sends SIGTERM and does not wait (probed on v26.13.1). It has no step from SIGTERM to SIGKILL, no stop of the process group, no end of the child with its parent, no `Symbol.asyncDispose` and no ready wait. Its IPC channel keeps a message that the child sent before the parent listened, and `events.once(child, 'message', { signal })` rejects with the reason of the signal (probed 2026-11-27).
