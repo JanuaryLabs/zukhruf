@@ -136,7 +136,7 @@ if (position) await context.commit(position);
 ```
 
 - `track(position, size)` records a batch in the order that the reader read it, and gives the function that marks it done.
-- The function gives the highest position below which each batch is done, or `undefined` when an earlier batch is still open.
+- The function marks the batch done and gives the highest position below which each batch is done, or `undefined` while no batch is done from the first one on. A batch that ends while an earlier one is open does not move it, as `Highest` of `Jeffail/checkpoint` does not.
 - `CappedTracker` waits in `track` while more than its capacity is open. `UncappedTracker` never waits.
 
 ## Write your own store

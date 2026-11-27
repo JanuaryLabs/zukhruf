@@ -20,3 +20,4 @@ export {
 export type { MapState } from './map-state.ts';
 export { MemoryCheckpointStore } from './memory-checkpoint-store.ts';
 export { PartitionContext } from './partition-context.ts';
+export { CappedTracker, UncappedTracker } from './tracker.ts';
