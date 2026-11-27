@@ -632,7 +632,7 @@ An attach, an exec, followed logs and events each use their own channel. The cli
 
 An `ssh://` engine needs the `environment` option, such as `process.env`: `ssh -G` runs with it, and the client reads `SSH_AUTH_SOCK` and `HOME` from it. Without it, `Docker.connect` rejects at once with a `ConnectionFailedError` that says so.
 
-A server can refuse the channel to the engine socket. Tailscale SSH allows a socket only under the home, `/tmp` and `/run/user/<uid>`, so it refuses a rootful `/run/docker.sock`. `Docker.connect` then rejects with a `ConnectionFailedError` that names the socket, the refusal of the server and the fixes: rootless Docker, whose socket is under `/run/user/<uid>`, or an OpenSSH server. The client does not fall back to `docker system dial-stdio`.
+A server can refuse the channel to the engine socket. Tailscale SSH allows a socket only under the home, `/tmp` and `/run/user/<uid>`, so it refuses a rootful `/run/docker.sock`. `Docker.connect` then rejects with a `ConnectionFailedError` that names the socket, the refusal of the server and the fixes: rootless Docker, whose socket is under `/run/user/<uid>`, or an OpenSSH server. A third fix lives on the engine host: a symlink in the user's home to the socket, with `DOCKER_HOST` naming the link in that user's shells, so the socket path that `docker context inspect` reports is one Tailscale SSH allows (a NixOS host does this with a tmpfiles rule and `environment.extraInit`). The client does not fall back to `docker system dial-stdio`.
 
 With npm's `strict-allow-scripts`, add `"ssh2": false` and `"cpu-features": false` to `allowScripts`.
 
