@@ -3,18 +3,19 @@ import { type Clock, poll } from '@zukhruf/async';
 import { errorCode } from './error-code.ts';
 
 /**
- * Stops the process group of a keeper (ADR 0005): SIGTERM to the group, and
- * SIGKILL to the group when it still runs after `grace` on `clock`. Resolves
- * when the keeper has ended and no member of the group is left.
+ * Stops the process group of a program under the keeper (ADR 0005): SIGTERM
+ * to the group, and SIGKILL to the group when it still runs after `grace` on
+ * `clock`. Resolves when the program has ended and no member of the group is
+ * left.
  *
- * After the keeper ends, a member that SIGTERM ended can still be in the group
- * for a moment, until its new parent reaps it, so the group is polled until it
- * is empty. After the SIGKILL nothing in the group can run, so nothing is
- * polled then.
+ * After the program ends, a member that SIGTERM ended, or the watcher of the
+ * keeper, can still be in the group for a moment, until it exits and its new
+ * parent reaps it, so the group is polled until it is empty. After the SIGKILL
+ * nothing in the group can run, so nothing is polled then.
  */
 export async function stopGroup(
   pgid: number,
-  keeperEnded: Promise<unknown>,
+  programEnded: Promise<unknown>,
   { grace, clock }: { grace: number; clock: Clock },
 ): Promise<void> {
   signalGroup(pgid, 'SIGTERM');
@@ -26,7 +27,7 @@ export async function stopGroup(
   const settled = new AbortController();
   try {
     const killedFirst = await Promise.race([
-      keeperEnded.then(() => false),
+      programEnded.then(() => false),
       killed.promise.then(() => true),
     ]);
     if (killedFirst) return;
@@ -46,7 +47,7 @@ export async function stopGroup(
 
 /**
  * macOS answers EPERM, not ESRCH, for a group whose members are all zombies
- * that wait for their parent to reap them: the keeper between the end of its
+ * that wait for their parent to reap them: the program between the end of its
  * stdout and its reaping (probed 2026-11-27). Nothing in such a group runs, so
  * neither answer leaves anything to signal.
  */

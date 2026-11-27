@@ -46,6 +46,10 @@ const ignoresTermWithChild = (pids: string) =>
    require('node:fs').writeFileSync(${JSON.stringify(pids)}, process.pid + '\\n' + child.pid + '\\n');
    setInterval(() => {}, 1000);`;
 
+/** A Perl program that forks a child that exits at once, then waits for its children until it has none. */
+const REAPS_ALL_ITS_CHILDREN =
+  'if (!(fork // die)) { exit 0 } 1 while wait() != -1; exit 0';
+
 /**
  * A Perl process that forks X. X forks Y, leaves the group and never reaps Y,
  * so a SIGTERM to the group leaves only the zombie Y in it. X writes its pid
@@ -250,6 +254,104 @@ test('a started process whose parent is killed with SIGKILL ends, and so does it
     for (const pid of [target, child])
       if (running(pid)) process.kill(pid, 'SIGKILL');
   }
+});
+
+test('a process that ignores SIGTERM ends at the grace when its parent is killed with SIGKILL during a stop', async (t) => {
+  // Arrange
+  await using folder = await new TemporaryFiles().directory('process-');
+  const pids = join(folder.path, 'pids');
+  const signals = join(folder.path, 'signals');
+  const program = `const fs = require('node:fs'); process.on('SIGTERM', () => fs.appendFileSync(${JSON.stringify(signals)}, 'SIGTERM\\n')); fs.writeFileSync(${JSON.stringify(pids)}, process.pid + '\\n'); console.log('ready'); setInterval(() => {}, 1000);`;
+  const parent = spawn(
+    process.execPath,
+    [
+      '--input-type=module',
+      '-e',
+      `import { Command } from ${JSON.stringify(index)};
+       const started = await new Command(process.execPath, ['-e', ${JSON.stringify(program)}], { clock: globalThis, env: {}, grace: 2000 }).start({ ready: { line: 'ready' } });
+       void started.stop();
+       console.log('stopping');
+       setInterval(() => {}, 1000);`,
+    ],
+    { stdio: ['ignore', 'pipe', 'ignore'] },
+  );
+  const exited = once(parent, 'exit');
+  const [stopping] = await once(parent.stdout, 'data', { signal: t.signal });
+  const pid = await pidIn(pids, t.signal);
+  const termed = await poll(
+    async () => {
+      const text = await readFile(signals, 'utf8').catch((error: unknown) => {
+        // The process has not got the SIGTERM of the stop yet.
+        if (Reflect.get(Object(error), 'code') === 'ENOENT') return '';
+        throw error;
+      });
+      return text.startsWith('SIGTERM\n') ? true : undefined;
+    },
+    { interval: 20, clock: globalThis, signal: t.signal },
+  );
+  try {
+    // Act
+    parent.kill('SIGKILL');
+    const killedAt = performance.now();
+    await exited;
+    const afterTheKill = running(pid);
+    await poll(async () => (running(pid) ? undefined : true), {
+      interval: 20,
+      clock: globalThis,
+      signal: t.signal,
+    });
+    const lived = performance.now() - killedAt;
+
+    // Assert
+    assert.equal(String(stopping), 'stopping\n');
+    assert.equal(termed, true);
+    assert.equal(afterTheKill, true);
+    assert.ok(lived >= 1800, `it ended ${lived} ms after the kill`);
+  } finally {
+    if (running(pid)) process.kill(pid, 'SIGKILL');
+  }
+});
+
+test('a started program that waits for all its children, after it forked a short one, ends by itself with exit code 0', async (t) => {
+  // Arrange
+  await using started = await new Command(
+    '/usr/bin/perl',
+    ['-e', REAPS_ALL_ITS_CHILDREN],
+    {
+      clock: globalThis,
+      env: {},
+    },
+  ).start({ signal: t.signal });
+
+  // Act
+  const end = await started.ended;
+
+  // Assert
+  assert.deepEqual(end, { exitCode: 0 });
+});
+
+test('the group of a started process that ends by itself empties after ended settles, while this program runs on', async (t) => {
+  // Arrange
+  await using started = await node(
+    "process.stdin.once('data', () => process.exit(0));",
+  ).start();
+  const leads = groupOf(started.pid) === started.pid;
+
+  // Act
+  started.stdin?.end('end\n');
+  await started.ended;
+
+  // Assert
+  assert.equal(leads, true);
+  const empty = await poll(
+    async () => (groupExists(started.pid) ? undefined : true),
+    {
+      interval: 5,
+      clock: globalThis,
+      signal: t.signal,
+    },
+  );
+  assert.equal(empty, true);
 });
 
 void test.each(

@@ -9,7 +9,7 @@ import { ProcessEndedError } from './process-ended-error.ts';
 /** A started process. Only `start()` of a command gives one (ADR 0010). */
 export interface Process extends AsyncDisposable {
   readonly name: string;
-  /** The pid of the program, not of its keeper. */
+  /** The pid of the program, which leads its process group. */
   readonly pid: number;
   /** null when stdin is 'ignore' or a socket. */
   readonly stdin: Writable | null;

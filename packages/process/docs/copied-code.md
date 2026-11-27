@@ -10,7 +10,13 @@ The Rule of Three counts places, not packages. Code that a second place needs is
 - Same: an object, not null, whose `type` is a string.
 - The copy ends without a third place: the move of the `startWorker` users onto `NodeCommand` (backlog #6155) deletes `worker-process.ts`.
 
+**A Perl program that reaps all its children (tests).**
+
+- Places: `REAPS_ALL_ITS_CHILDREN` of `src/run.test.ts` and of `src/start.test.ts`.
+- Same: the program forks a child that exits at once, then calls `wait()` until it finds no child, and exits with 0.
+- A third place moves it into `src/testing/`.
+
 ## Extracted
 
-- **The start of a process under the keeper** (backlog #6166). Its third place was `NodeCommand`. `spawnUnderKeeper` of `src/launch.ts` holds what the copies shared: the environment without its `undefined` values, the folder, the file found before the start or a `StartError` that names the command, and the arguments to the keeper of [ADR 0004](./adr/0004-a-started-process-ends-with-its-parent-also-when-the-parent-is-killed.md) with the fixes of the environment, started detached. Its parameters are the differences: the keeper (`KEEPER` for a run, `REPORTING_KEEPER` for a start) and the execa options (the stdio from fd 3 on, the buffer, `input`, `ipc`). `runUnderKeeper` and `startUnderKeeper` call it, and `Command` and `NodeCommand` call them.
+- **The start of a process under the keeper** (backlog #6166). Its third place was `NodeCommand`. `spawnUnderKeeper` of `src/launch.ts` holds what the copies shared: the environment without its `undefined` values, the folder, the file found before the start or a `StartError` that names the command, and the arguments to the keeper of [ADR 0004](./adr/0004-a-started-process-ends-with-its-parent-also-when-the-parent-is-killed.md) with the fixes of the environment, started detached, and the close of the lifeline at the exit of the program. Since the keeper of 2026-11-27 (one `KEEPER` for a run and a start), the execa options are the only difference and its only parameter: the stdio up to fd 3, the buffer, `input`, `ipc`. `runUnderKeeper` and `startUnderKeeper` call it, and `Command` and `NodeCommand` call them.
 - **The helpers that read processes and process groups (tests).** Their third place was `src/node-command.test.ts`. They are in `src/testing/processes.ts`, which `abort.test.ts`, `start.test.ts` and `node-command.test.ts` import.

@@ -177,6 +177,35 @@ test('an abort during next rejects with its reason', async (t) => {
   assert.deepEqual(settled, ['reason']);
 });
 
+test('a next that waits on the end of a live process that closed its channel rejects with the reason of an abort', async (t) => {
+  // Arrange
+  await using started = await node(
+    "process.send({ type: 'other' }); process.disconnect(); setInterval(() => {}, 1000);",
+  ).start({ ready: { message: 'other' } });
+  const controller = new AbortController();
+  const reason = new Error('gave up');
+  const next = started.next('held', { signal: controller.signal });
+  await poll(
+    async () => {
+      try {
+        started.send({ type: 'probe' });
+        return undefined;
+      } catch (error) {
+        if (Reflect.get(Object(error), 'code') !== 'ERR_IPC_CHANNEL_CLOSED')
+          throw error;
+        return true;
+      }
+    },
+    { interval: 10, clock: globalThis, signal: t.signal },
+  );
+
+  // Act
+  controller.abort(reason);
+
+  // Assert
+  await assert.rejects(next, (error) => error === reason);
+});
+
 test('next resolves with a message sent before the call and with one sent after it', async (t) => {
   // Arrange
   await using started = await node(

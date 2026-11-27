@@ -9,7 +9,7 @@ import { type Clock, untilAborted } from '@zukhruf/async';
 import type { Completed, End, Environment } from './end.ts';
 import { errorCode } from './error-code.ts';
 import { findFile } from './file.ts';
-import { KEEPER, REPORTING_KEEPER, environmentFixes } from './keeper.ts';
+import { KEEPER, environmentFixes } from './keeper.ts';
 import { StartError } from './start-error.ts';
 import { Output, StartedProcess } from './started-process.ts';
 import { stopGroup } from './stop.ts';
@@ -56,7 +56,7 @@ export async function runUnderKeeper(
   signal?.throwIfAborted();
   if (process.platform === 'win32')
     return runOnWindows(target, { input, signal, ipc });
-  const { subprocess } = await spawnUnderKeeper(target, KEEPER, {
+  const { subprocess } = await spawnUnderKeeper(target, {
     stdio: [input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe', 'pipe'],
     ...(input === undefined ? {} : { input }),
     ipc,
@@ -90,14 +90,18 @@ export async function startUnderKeeper(
   { stdin, stdout, stderr, signal, ready, channel }: Launch,
 ): Promise<StartedProcess> {
   signal?.throwIfAborted();
-  const { subprocess } = await spawnUnderKeeper(target, REPORTING_KEEPER, {
-    stdio: [stdin, stdout, stderr, 'pipe', 'pipe'],
+  const { subprocess } = await spawnUnderKeeper(target, {
+    stdio: [stdin, stdout, stderr, 'pipe'],
     ipc: channel !== undefined,
     buffer: false,
   });
-  const pgid = subprocess.pid;
-  const stop = (group: number) =>
-    stopGroup(group, subprocess, { grace: target.grace, clock: target.clock });
+  const pid = subprocess.pid;
+  if (pid === undefined)
+    throw new StartError(`${target.name} could not start`, {
+      cause: (await subprocess).cause,
+    });
+  const stop = () =>
+    stopGroup(pid, subprocess, { grace: target.grace, clock: target.clock });
   const output = new Output(
     subprocess.stdout instanceof Readable ? subprocess.stdout : null,
     subprocess.stderr instanceof Readable ? subprocess.stderr : null,
@@ -105,18 +109,9 @@ export async function startUnderKeeper(
   try {
     channel?.(subprocess.nodeChildProcess);
   } catch (error) {
-    if (pgid !== undefined) await stop(pgid);
+    await stop();
     throw error;
   }
-  const report = subprocess.stdio[4];
-  const pid =
-    pgid === undefined || !(report instanceof Readable)
-      ? undefined
-      : await programPid(report);
-  if (pgid === undefined || pid === undefined)
-    throw new StartError(`${target.name} could not start`, {
-      cause: (await subprocess).cause,
-    });
   const started = new StartedProcess(
     {
       pid,
@@ -124,17 +119,15 @@ export async function startUnderKeeper(
       output,
     },
     subprocess.then(endFrom),
-    { name: target.name, stop: () => stop(pgid) },
+    { name: target.name, stop },
   );
   if (signal !== undefined) {
-    const stopOnAbort = () => void started.stop();
-    signal.addEventListener('abort', stopOnAbort, { once: true });
-    void started.ended.then(() =>
-      signal.removeEventListener('abort', stopOnAbort),
-    );
+    const onAbort = () => void started.stop();
+    signal.addEventListener('abort', onAbort, { once: true });
+    void started.ended.then(() => signal.removeEventListener('abort', onAbort));
   }
   if (ready === undefined) {
-    // The read of the pid awaited, so the signal can have aborted before its listener.
+    // The search for the file awaited, so the signal can have aborted before its listener.
     if (signal?.aborted === true) {
       await started.stop();
       throw signal.reason;
@@ -151,15 +144,16 @@ export async function startUnderKeeper(
 }
 
 /**
- * Starts the file of the target under `keeper` (ADR 0004): with the
+ * Starts the file of the target under the keeper (ADR 0004): with the
  * environment of the target and nothing else (ADR 0003), detached, so the
- * keeper leads its own process group. The file is found first, or the start
- * rejects with a `StartError` that names the target. `options` give the
- * stdio from fd 3, the lifeline, on, and how execa keeps the output.
+ * keeper, and the program that it becomes, leads its own process group. The
+ * file is found first, or the start rejects with a `StartError` that names
+ * the target. `options` give the stdio up to fd 3, the lifeline, and how
+ * execa keeps the output. The parent closes its end of the lifeline when the
+ * program exits, so the watcher of the keeper sees its end and exits.
  */
 async function spawnUnderKeeper<const O extends Options>(
   target: Target,
-  keeper: string,
   options: O,
 ) {
   const env = definedEnvironment(target.env);
@@ -175,7 +169,7 @@ async function spawnUnderKeeper<const O extends Options>(
     '/bin/sh',
     [
       '-c',
-      keeper,
+      KEEPER,
       'keeper',
       String(target.grace / 1000),
       '/usr/bin/env',
@@ -193,6 +187,9 @@ async function spawnUnderKeeper<const O extends Options>(
       reject: false,
     },
   );
+  subprocess.nodeChildProcess.once('exit', () => {
+    subprocess.stdio[3]?.destroy();
+  });
   return { subprocess };
 }
 
@@ -203,23 +200,6 @@ function definedEnvironment(env: Environment): Record<string, string> {
       (entry): entry is [string, string] => entry[1] !== undefined,
     ),
   );
-}
-
-/**
- * The pid that the reporting keeper writes on fd 4, or undefined when the
- * pipe closes first. The pipe stays flowing, so it ends with the keeper.
- */
-function programPid(report: Readable): Promise<number | undefined> {
-  const { promise, resolve } = Promise.withResolvers<number | undefined>();
-  let text = '';
-  report.setEncoding('utf8');
-  report.on('data', (chunk: string) => {
-    text += chunk;
-    const end = text.indexOf('\n');
-    if (end !== -1) resolve(Number(text.slice(0, end)));
-  });
-  report.once('close', () => resolve(undefined));
-  return promise;
 }
 
 /**
@@ -257,16 +237,16 @@ async function runOnWindows(
   return completedFrom(result);
 }
 
-/** Stops the group of the keeper at an abort of `signal`. */
+/** Stops the group of the program at an abort of `signal`. */
 function stopOnAbort(
   target: Target,
   pgid: number,
-  keeperEnded: Promise<unknown>,
+  programEnded: Promise<unknown>,
   signal: AbortSignal,
 ): { promise: Promise<void> } & Disposable {
   const stop = Promise.withResolvers<void>();
   const listener = () => {
-    stopGroup(pgid, keeperEnded, {
+    stopGroup(pgid, programEnded, {
       grace: target.grace,
       clock: target.clock,
     }).then(stop.resolve, stop.reject);

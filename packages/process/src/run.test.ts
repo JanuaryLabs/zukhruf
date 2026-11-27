@@ -1,14 +1,21 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { chmod, realpath, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
+import { poll } from '@zukhruf/async';
 import { TemporaryFiles } from '@zukhruf/fs';
 
 import { Command, StartError } from './index.ts';
+import { groupExists, killGroup, running } from './testing/processes.ts';
 
 const node = (source: string) =>
   new Command(process.execPath, ['-e', source], { clock: globalThis, env: {} });
+
+/** A Perl program that forks a child that exits at once, then waits for its children until it has none. */
+const REAPS_ALL_ITS_CHILDREN =
+  'if (!(fork // die)) { exit 0 } 1 while wait() != -1; exit 0';
 
 test('a run of a file that is not executable rejects with StartError, whose cause is EACCES', async () => {
   // Arrange
@@ -81,9 +88,90 @@ test('a run that a SIGTERM ends resolves with the signal and no exit code', asyn
   );
 });
 
-test('a run that exits with 130 ends as SIGINT, because sh cannot tell the two apart', async () => {
+test('a run that exits with 130 ends with exit code 130', async () => {
   // Act
   const run = await node('process.exit(130);').run();
+
+  // Assert
+  assert.deepEqual(
+    { exitCode: run.exitCode, signal: run.signal },
+    { exitCode: 130, signal: undefined },
+  );
+});
+
+test('a run of a program that waits for all its children, after it forked a short one, resolves with exit code 0', async (t) => {
+  // Act
+  const run = await new Command(
+    '/usr/bin/perl',
+    ['-e', REAPS_ALL_ITS_CHILDREN],
+    {
+      clock: globalThis,
+      env: {},
+    },
+  ).run({ signal: t.signal });
+
+  // Assert
+  assert.deepEqual(
+    { exitCode: run.exitCode, signal: run.signal },
+    { exitCode: 0, signal: undefined },
+  );
+});
+
+test('the group of a run empties after the run resolves, while this program runs on', async (t) => {
+  // Act
+  const run = await node(
+    "console.log(process.pid, require('node:child_process').execFileSync('/bin/ps', ['-o', 'pgid=', '-p', String(process.pid)], { encoding: 'utf8' }).trim());",
+  ).run();
+
+  // Assert
+  const [pid = 0, pgid = -1] = run.stdout.trim().split(' ').map(Number);
+  assert.equal(pgid, pid);
+  const empty = await poll(async () => (groupExists(pgid) ? undefined : true), {
+    interval: 5,
+    clock: globalThis,
+    signal: t.signal,
+  });
+  assert.equal(empty, true);
+});
+
+test('a child that a run leaves in its group when the program exits by itself keeps running, alone in the group', async (t) => {
+  // Arrange: the program starts a sleep in its own group, with no stream of the run, and exits.
+  const run = await new Command(
+    '/bin/sh',
+    ['-c', 'sleep 30 </dev/null >/dev/null 2>&1 & echo $! $$'],
+    { clock: globalThis, env: {}, grace: 100 },
+  ).run();
+  const [child = 0, pgid = 0] = run.stdout.trim().split(' ').map(Number);
+  try {
+    // Act: wait until no member but the child is left: the watcher exits
+    // either way, at once or after it signalled the group.
+    const members = await poll(
+      async () => {
+        const inGroup = execFileSync('/bin/ps', ['-A', '-o', 'pid=,pgid='], {
+          encoding: 'utf8',
+        })
+          .split('\n')
+          .map((line) => line.trim().split(/\s+/).map(Number))
+          .filter(([, group]) => group === pgid)
+          .map(([pid]) => pid);
+        return inGroup.every((pid) => pid === child) ? inGroup : undefined;
+      },
+      { interval: 5, clock: globalThis, signal: t.signal },
+    );
+
+    // Assert
+    assert.deepEqual(
+      { members, running: running(child) },
+      { members: [child], running: true },
+    );
+  } finally {
+    killGroup(pgid);
+  }
+});
+
+test('a run that a SIGINT ends resolves with the signal and no exit code', async () => {
+  // Act
+  const run = await node("process.kill(process.pid, 'SIGINT');").run();
 
   // Assert
   assert.deepEqual(
