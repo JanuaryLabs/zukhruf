@@ -376,8 +376,10 @@ export class Container {
         { cause: error },
       );
     }
-    // A wait for 'removed' never returns when the other removal fails and
-    // leaves the container dead, so inspects tell when the container is gone.
+    // A wait for 'removed' never returns when the other removal fails at its
+    // kill or its stop: Moby then wakes no wait and sends no event
+    // (cleanupContainer in daemon/delete.go). Thus inspects tell when the
+    // container is gone.
     await poll(
       async () => {
         const current = await this.#client.exchange('GET', `${path}/json`, {

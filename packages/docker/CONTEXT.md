@@ -97,7 +97,7 @@ A message of `GET /events`: an action of the engine on a container, image, volum
 _Avoid_: Notification
 
 **Engine clock**:
-The clock of the machine that runs the engine. `SystemTime` of `GET /info`, the `since` of `GET /events` and the `time` of an event are on it. It can differ from the clock of the process that sends the requests ([ADR 0017](./docs/adr/0017-watch-opens-a-node-stream-of-events-at-the-engine-clock-before-its-request-so-it-loses-no-event-after-it-resolves.md), proposed).
+The clock of the machine that runs the engine. `SystemTime` of `GET /info`, the `since` of `GET /events` and the `time` of an event are on it. It can differ from the clock of the process that sends the requests ([ADR 0017](./docs/adr/0017-watch-opens-a-node-stream-of-events-at-the-engine-clock-before-its-request-so-it-loses-no-event-after-it-resolves.md)).
 _Avoid_: Server time, daemon time
 
 **Platform**:

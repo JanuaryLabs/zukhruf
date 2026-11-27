@@ -1,3 +1,5 @@
+import { type Readable, pipeline } from 'node:stream';
+
 import type { WallClock } from '@zukhruf/async';
 
 import { negotiateApiVersion } from './api-version.ts';
@@ -12,7 +14,7 @@ import type * as EngineApi from './engine-api.ts';
 import { EngineClient } from './engine-client.ts';
 import { parseHost } from './host.ts';
 import { Images } from './images.ts';
-import { ndjson } from './ndjson.ts';
+import { NdjsonDecoder, ndjson } from './ndjson.ts';
 import { Networks } from './networks.ts';
 import type { CancelOptions, Filters } from './options.ts';
 import { SshDialer } from './ssh-engine.ts';
@@ -129,6 +131,34 @@ export class Docker implements AsyncDisposable {
     for await (const event of ndjson(response)) {
       if (isEventMessage(event)) yield event;
     }
+  }
+
+  /**
+   * A stream of the events of the engine, open when it resolves: a Readable
+   * in object mode, one EventMessage for each chunk. Without `since`, it
+   * starts at the time of the engine clock before its request, so no event
+   * after it resolves is lost (ADR 0017). The signal destroys the stream
+   * with its reason.
+   */
+  async watch(
+    options: CancelOptions & { since?: number; filters?: Filters } = {},
+  ): Promise<Readable> {
+    const { filters, signal } = options;
+    const since = options.since ?? (await this.#engineTime(options));
+    const response = await this.#client.stream('GET', '/events', {
+      query: { since, filters },
+      signal,
+    });
+    const events = new NdjsonDecoder();
+    // A destroy of either stream destroys the other, and the response's error goes to the events.
+    pipeline(response, events, () => {});
+    return events;
+  }
+
+  /** The time of the engine clock, in seconds since the Unix epoch. */
+  async #engineTime(options: CancelOptions): Promise<number> {
+    const { SystemTime } = await this.info(options);
+    return Date.parse(SystemTime ?? '') / 1000;
   }
 
   /**

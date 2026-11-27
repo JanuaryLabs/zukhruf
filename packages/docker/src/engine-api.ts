@@ -20,6 +20,8 @@ export interface SystemInfo {
   Driver?: string;
   DockerRootDir?: string;
   Labels?: string[];
+  /** The time of the engine clock, in RFC 3339 with nanoseconds. */
+  SystemTime?: string;
 }
 
 /** One published binding of a port, as the reference names it. */

@@ -1,6 +1,6 @@
 # watch() opens a Node stream of events at the engine clock before its request, so it loses no event after it resolves
 
-Status: Proposed 2026-11-27 (backlog #6085).
+Status: Accepted 2026-11-27 (backlog #6085).
 
 Decision-makers: the zukhruf session of the Docker events survey (2026-11-27), from the Moby source, the probes and the top performers in Confirmation. Ezz decided three splits on the first paper (2026-11-27):
 
@@ -45,7 +45,9 @@ The order for a caller is: open the stream, then act or check the state once, th
 ## Consequences
 
 - An open without `since` sends one more request. On Docker Desktop 29.9.3 at a load average of 26, `GET /info` took 11.5 ms on average and `GET /_ping` 2.6 ms (6 alternating runs, 2026-11-27).
-- `find()` destroys the stream after its match. A wait for two events in order reads them with `take(2).toArray()` or with `iterator({ destroyOnReturn: false })`.
+- After its match, `find()` stops reading, but it destroys the stream only when the next event comes, and that event is lost to a second `find()`. Thus the caller destroys the stream when its wait ends, and a wait for two events in order reads them with `take(2).toArray()` or with `iterator({ destroyOnReturn: false })`.
+- `Symbol.asyncDispose` of a `Readable` rejects with the error of a stream that the signal or a lost connection destroyed, so a failed wait under `await using` throws a `SuppressedError`. The README shows `destroy()` in `finally`, which keeps the error of the wait.
+- The stream is a `Transform` (`NdjsonDecoder`) that `pipeline()` joins to the response, so a destroy of either one destroys the other at once. `Readable.from()` of the async generator `ndjson()` did not: its destroy waits for the generator, and the generator waits for the next chunk of a quiet stream. `ndjson()` now reads through the same `NdjsonDecoder`, so the package decodes NDJSON in one place.
 - The `signal` of an operator, such as `find(fn, { signal })`, does not end a stream that gives no event: in Node 26.13.1 the operator stayed pending after the abort. Thus the signal goes to `watch()`, which destroys the stream.
 - The operators of `@types/node` 26.6.6 type each chunk as `any`, so a caller names the type of the parameter: `(event: EngineApi.EventMessage) => …`.
 - The 9 callers that take `since` from the clock of this process, and the 8 hand-written waits, move to `watch()`. april moves from its `inspect()` poll to `watch()` (#2766).
@@ -54,7 +56,7 @@ The order for a caller is: open the stream, then act or check the state once, th
 
 ## Confirmation
 
-The red and green tests and their commit come with the build. The evidence so far:
+The tests are in [watch.test.ts](../../src/watch.test.ts): 13 on a fake engine (an abort while no event comes, a lost connection, the end of the answer, the disposal of the client, a destroy after a match and while quiet, the `since` from `SystemTime` with a fraction and an offset, a `since` of the caller, a 500 of each request, an abort before and during the open, events split and joined across writes) and 2 on the engine of the environment (a removal right after the open, a `since` of `Created`). The other evidence:
 
 - Moby master: `getEvents` flushes the headers before `SubscribeToEvents`. `SubscribeTopic` and `PublishMessage` take `e.mu`. `eventsLimit = 256`. A subscriber whose buffer of 1024 stays full for 100 ms loses events (`pubsub.NewPublisher(100*time.Millisecond, bufferSize)`). `postContainersWait` calls `ContainerWait` before it flushes the headers.
 - Probes on Docker Desktop 29.9.3, API 1.56 (2026-11-27):
@@ -63,7 +65,7 @@ The red and green tests and their commit come with the build. The evidence so fa
   - A `label` filter matches the `exec_*` events of a container.
   - The engine joins two `container=` values with OR, and a name filter matches the `create` and `start` of a container that is created later.
   - A volume `destroy` has the name in `Actor.ID` and no labels.
-- Probes on Node 26.13.1 (2026-11-27): `Readable` has `find`, `filter`, `map`, `take`, `drop`, `toArray`, `some`, `every`, `forEach`, `reduce`, `flatMap`, `compose` and `Symbol.asyncDispose`. `find()` destroys the stream after a match, and a second `find()` rejects with `ABORT_ERR`. `find()` gives `undefined` at the end of the stream. `iterator({ destroyOnReturn: false })` reads on after a match. `find(fn, { signal })` stays pending after the abort on a stream that gives nothing; `addAbortSignal()` rejects it with `AbortError`.
+- Probes on Node 26.13.1 (2026-11-27): `Readable` has `find`, `filter`, `map`, `take`, `drop`, `toArray`, `some`, `every`, `forEach`, `reduce`, `flatMap`, `compose` and `Symbol.asyncDispose`. A `find()` that matched leaves the source to its pump, which destroys it only at the next chunk, so a second `find()` on a stream that had more data rejects with `ABORT_ERR`. `find()` gives `undefined` at the end of the stream. `iterator({ destroyOnReturn: false })` reads on after a match. `find(fn, { signal })` stays pending after the abort on a stream that gives nothing; `addAbortSignal()` rejects it with `AbortError`.
 - Top performers:
   - [Kubernetes client-go](https://github.com/kubernetes/client-go/blob/master/tools/watch/until.go): `Until(ctx, initialResourceVersion, …)` (:107) waits from a cursor of the server. A watch of Kubernetes starts at a `resourceVersion` of the server, never at the clock of the client.
   - The [Go client of Moby](https://github.com/moby/moby/blob/master/client/system_events.go): `Events` (:32-84) returns after the headers come.
