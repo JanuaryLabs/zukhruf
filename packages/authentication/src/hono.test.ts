@@ -69,7 +69,7 @@ function answer(app: Hono) {
   return app;
 }
 
-test('a request without a session is refused with 401 and auth/unauthenticated, and the handler never runs', async () => {
+test('a request without a session is refused with 401, a Session challenge and auth/unauthenticated, and the handler never runs', async () => {
   // Arrange
   const auth = authWithoutTwoFactor();
   let ran = false;
@@ -84,6 +84,7 @@ test('a request without a session is refused with 401 and auth/unauthenticated, 
 
   // Assert
   assert.equal(response.status, 401);
+  assert.equal(response.headers.get('www-authenticate'), 'Session');
   assert.deepEqual(await response.json(), {
     error: 'Authentication required',
     cause: {
@@ -96,7 +97,21 @@ test('a request without a session is refused with 401 and auth/unauthenticated, 
   assert.equal(ran, false);
 });
 
-test('a cookie that names no session is refused with 401', async () => {
+test('an app without onError still sends the Session challenge with the 401, through Hono’s own error handler', async () => {
+  // Arrange
+  const auth = authWithoutTwoFactor();
+  const app = new Hono();
+  app.get('/api/me', requireSession(auth), (c) => c.json(c.var.session.user));
+
+  // Act
+  const response = await app.request('/api/me');
+
+  // Assert
+  assert.equal(response.status, 401);
+  assert.equal(response.headers.get('www-authenticate'), 'Session');
+});
+
+test('a cookie that names no session is refused with 401 and a Session challenge', async () => {
   // Arrange
   const auth = authWithoutTwoFactor();
   const app = answer(new Hono());
@@ -109,6 +124,7 @@ test('a cookie that names no session is refused with 401', async () => {
 
   // Assert
   assert.equal(response.status, 401);
+  assert.equal(response.headers.get('www-authenticate'), 'Session');
 });
 
 test('a signed-in request reaches the handler, which reads the user and the session row from c.var.session', async () => {
@@ -160,7 +176,7 @@ test('app.use guards every route under its path, and the chained route sees the 
   assert.deepEqual(await member.json(), { id: user.id });
 });
 
-test('twoFactor refuses a signed-in user who never turned two-factor on with 403 and auth/two-factor-required', async () => {
+test('twoFactor refuses a signed-in user who never turned two-factor on with 403, no challenge and auth/two-factor-required', async () => {
   // Arrange
   const auth = authWithTwoFactor();
   const { test: helpers } = await auth.$context;
@@ -183,6 +199,7 @@ test('twoFactor refuses a signed-in user who never turned two-factor on with 403
 
   // Assert
   assert.equal(response.status, 403);
+  assert.equal(response.headers.get('www-authenticate'), null);
   assert.deepEqual(await response.json(), {
     error: 'Two-factor authentication required',
     cause: {

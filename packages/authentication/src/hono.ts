@@ -60,7 +60,8 @@ export class TwoFactorRequiredError extends HTTPException {
 }
 
 /**
- * Refuses a request without a session, and, with `twoFactor: true`, a session
+ * Refuses a request without a session with a `WWW-Authenticate: Session`
+ * challenge, and, with `twoFactor: true`, a session
  * whose user has not turned two-factor on. A request that passes has the
  * session on `c.var.session`. An error of `getSession` (the database is down)
  * reaches the app as it is.
@@ -71,7 +72,13 @@ export function requireSession<S extends { user: object }>(
 ): MiddlewareHandler<{ Variables: { session: S } }> {
   return createMiddleware<{ Variables: { session: S } }>(async (c, next) => {
     const session = await auth.api.getSession({ headers: c.req.raw.headers });
-    if (session === null) throw new UnauthenticatedError();
+    if (session === null) {
+      // RFC 9110 §15.5.2: a 401 MUST carry a challenge. No registered scheme
+      // names a session, so the challenge does (ADR 0007). A header set on the
+      // context stays on the response that the app's onError builds with c.
+      c.header('WWW-Authenticate', 'Session');
+      throw new UnauthenticatedError();
+    }
     // better-auth gives no session to a user who turned two-factor on and has
     // not entered the code yet, so only a user who never turned it on is left.
     if (options?.twoFactor === true && !hasTwoFactor(session.user))

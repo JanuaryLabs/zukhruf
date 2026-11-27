@@ -1,5 +1,7 @@
 # A refusal is an HTTPException: 401 without a session, 403 without two-factor
 
+Superseded in part on 2026-11-27 (#5957) for the challenge. A 401 of `requireSession` now carries `WWW-Authenticate: Session`, because RFC 9110 §15.5.2 requires a challenge on each 401 ([ADR 0007](./0007-a-401-without-a-session-carries-a-www-authenticate-session-challenge.md)). The sentence "A cookie session sends no `WWW-Authenticate` header" no longer holds. The rest of the decision stays true.
+
 Status: accepted by Ezz on 2026-11-19.
 
 The copies throw `new HTTPException(401, { message: 'Authentication required', cause: { code: 'api/unauthenticated', detail } })` (thing, pm, iworked, text2sql v1). An `@zukhruf/nx:node-app` backend answers every `HTTPException` in its `onError` with `{ error: message, cause }` and its status. `@hono/auth-js`, `hono/jwt`, `hono/basic-auth` and `hono/bearer-auth` also throw `HTTPException(401)`. A cookie session sends no `WWW-Authenticate` header, as in `@hono/auth-js`.
