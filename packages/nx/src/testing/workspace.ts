@@ -101,6 +101,11 @@ export async function workspace<Target>({
     HOME: join(root, 'home'),
     NX_DAEMON: 'false',
     NX_NO_CLOUD: 'true',
+    // Each plugin loads in the nx process instead of a worker process of its
+    // own: the graphs that the tests check are the same, and a run of the
+    // slowest generator test takes 4.1 s instead of 6.5 s and 42% less CPU
+    // (2026-11-27, #6126). Ezz chose it for every test.
+    NX_ISOLATE_PLUGINS: 'false',
   };
   const nx = async (...args: string[]) => {
     const child = spawn(process.execPath, [nxBin, ...args], {
