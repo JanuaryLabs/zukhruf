@@ -9,7 +9,16 @@
   "exclude": ["src/**/*.test.ts", "src/testing/**"],
   "references": [
     {
+      "path": "../sqlite/transaction/tsconfig.lib.json"
+    },
+    {
+      "path": "../sqlite/drift/tsconfig.lib.json"
+    },
+    {
       "path": "../fencing/tsconfig.lib.json"
+    },
+    {
+      "path": "../sqlite/open/tsconfig.lib.json"
     },
     {
       "path": "../parameterized-test/tsconfig.lib.json"

@@ -20,7 +20,8 @@
     "partition",
     "resume",
     "fencing",
-    "state"
+    "state",
+    "sqlite"
   ],
   "type": "module",
   "exports": {
@@ -30,6 +31,12 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./sqlite": {
+      "@zukhruf/source": "./src/sqlite.ts",
+      "types": "./dist/sqlite.d.ts",
+      "import": "./dist/sqlite.js",
+      "default": "./dist/sqlite.js"
     }
   },
   "files": [
@@ -42,9 +49,12 @@
     "access": "public"
   },
   "dependencies": {
-    "@zukhruf/fencing": "^0.8.70"
+    "@zukhruf/fencing": "^0.8.70",
+    "@zukhruf/sqlite-drift": "^0.8.70",
+    "@zukhruf/sqlite-transaction": "^0.8.70"
   },
   "devDependencies": {
-    "@zukhruf/parameterized-test": "^0.8.70"
+    "@zukhruf/parameterized-test": "^0.8.70",
+    "@zukhruf/sqlite-open": "^0.8.70"
   }
 }

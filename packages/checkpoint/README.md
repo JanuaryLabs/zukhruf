@@ -1,6 +1,6 @@
 # @zukhruf/checkpoint
 
-> **Being built (backlog #6201).** The maintainer approved this API on 2026-11-27. `ConsumerGroup`, `PartitionContext`, the map states, the errors and `MemoryCheckpointStore` exist. The trackers and the SQLite, Postgres and SQL Server stores come next.
+> **Being built (backlog #6201).** The maintainer approved this API on 2026-11-27. `ConsumerGroup`, `PartitionContext`, the map states, the errors, the trackers, `MemoryCheckpointStore` and `SqliteCheckpointStore` exist. The Postgres and SQL Server stores come next.
 
 Keep how far a reader of a stream got, so that it can resume after a stop or a crash. A **checkpoint** belongs to one consumer group, one stream and one partition of that stream. It holds a position, which names the next record to read, and the keyed state of the reader, which a commit saves as changes. A commit saves the position, the state changes and the next checkpoint id together, and it can write the output of the reader in the same transaction. A newer claim of a partition fences the older one, so a reader that a restart replaced cannot commit.
 
@@ -375,9 +375,9 @@ export class CorruptCheckpointError extends Error {
   readonly key: CheckpointKey;
 }
 
-export class SqliteCheckpointStore implements CheckpointStore<
-  (database: DatabaseSync) => void
-> {
+/** Returns undefined: an async write does not compile, and is refused at run time. */
+export type SqliteWrite = (database: DatabaseSync) => undefined;
+export class SqliteCheckpointStore implements CheckpointStore<SqliteWrite> {
   constructor(options: { readonly database: DatabaseSync });
 }
 

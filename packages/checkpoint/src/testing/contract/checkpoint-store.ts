@@ -8,6 +8,7 @@ import {
   ConsumerGroup,
   type Format,
 } from '../../index.ts';
+import { position, text } from '../formats.ts';
 
 /**
  * A store under test: `open` gives a new, empty store, and its disposal frees
@@ -16,26 +17,6 @@ import {
 export type StoreSubject<W> = {
   readonly name: string;
   open(): Promise<AsyncDisposable & { readonly store: CheckpointStore<W> }>;
-};
-
-const position: Format<number> = {
-  version: 1,
-  encode: (value) => value,
-  decode: (version, json) => {
-    if (version !== 1 || typeof json !== 'number')
-      throw new TypeError(`Not a position of version 1: ${version}`);
-    return json;
-  },
-};
-
-const text: Format<string> = {
-  version: 1,
-  encode: (value) => value,
-  decode: (version, json) => {
-    if (version !== 1 || typeof json !== 'string')
-      throw new TypeError(`Not a text of version 1: ${version}`);
-    return json;
-  },
 };
 
 const inbox = { stream: 'messages', partition: 'inbox' };

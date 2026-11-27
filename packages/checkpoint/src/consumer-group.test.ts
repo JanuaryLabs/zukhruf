@@ -17,26 +17,7 @@ import {
   type StoredCheckpoint,
   type StoredValue,
 } from './index.ts';
-
-const position: Format<number> = {
-  version: 1,
-  encode: (value) => value,
-  decode: (version, json) => {
-    if (version !== 1 || typeof json !== 'number')
-      throw new TypeError(`Not a position of version 1: ${version}`);
-    return json;
-  },
-};
-
-const text: Format<string> = {
-  version: 1,
-  encode: (value) => value,
-  decode: (version, json) => {
-    if (version !== 1 || typeof json !== 'string')
-      throw new TypeError(`Not a text of version 1: ${version}`);
-    return json;
-  },
-};
+import { position, text } from './testing/formats.ts';
 
 const inbox = { stream: 'messages', partition: 'inbox' };
 
