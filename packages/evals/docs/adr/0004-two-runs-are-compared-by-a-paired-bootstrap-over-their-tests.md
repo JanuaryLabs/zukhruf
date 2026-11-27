@@ -68,4 +68,4 @@ The ledger [docs/copied-code.md](../copied-code.md) records each strike-2 copy (
 
 ## Status, 2026-11-27
 
-The third consequence above no longer holds. A consumer now shows the interval of `Bootstrap` beside the number of `Totals`, the summary of a page (#6108), and `Bootstrap` takes a `Run` and the statistic of `Totals` (ADR 0010, #4234). The rest of this ADR stands.
+The third consequence above no longer holds. A consumer now shows the interval of `Bootstrap` beside `Run#total`, the summary of a page (#6108, e249d9bb), and `Bootstrap` takes a `Run` and recomputes the statistic of `Run#total` (ADR 0010, #4234). The rest of this ADR stands.
