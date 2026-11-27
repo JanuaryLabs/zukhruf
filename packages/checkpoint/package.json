@@ -21,7 +21,8 @@
     "resume",
     "fencing",
     "state",
-    "sqlite"
+    "sqlite",
+    "postgres"
   ],
   "type": "module",
   "exports": {
@@ -37,6 +38,12 @@
       "types": "./dist/sqlite.d.ts",
       "import": "./dist/sqlite.js",
       "default": "./dist/sqlite.js"
+    },
+    "./postgres": {
+      "@zukhruf/source": "./src/postgres.ts",
+      "types": "./dist/postgres.d.ts",
+      "import": "./dist/postgres.js",
+      "default": "./dist/postgres.js"
     }
   },
   "files": [
@@ -54,7 +61,10 @@
     "@zukhruf/sqlite-transaction": "^0.8.70"
   },
   "devDependencies": {
+    "@types/pg": "^8.23.1",
     "@zukhruf/parameterized-test": "^0.8.70",
-    "@zukhruf/sqlite-open": "^0.8.70"
+    "@zukhruf/sqlite-open": "^0.8.70",
+    "@zukhruf/testing": "^0.8.70",
+    "pg": "^8.23.1"
   }
 }

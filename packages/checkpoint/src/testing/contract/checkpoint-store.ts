@@ -321,5 +321,38 @@ export function checkpointStoreContract<W>(subject: StoreSubject<W>): void {
         ['archive', 'inbox'],
       );
     });
+
+    test('entries gives each key once, also past a thousand keys', async () => {
+      await using opened = await subject.open();
+      const group = new ConsumerGroup('copy', opened.store);
+      const writer = await group.claim(inbox, position);
+      const keys = Array.from({ length: 2001 }, (_, index) => `key ${index}`);
+      for (const key of keys) writer.state('seen', text).set(key, key);
+      await writer.commit(1);
+
+      const reader = await group.claim(inbox, position);
+      const read = await Array.fromAsync(reader.state('seen', text).entries());
+
+      assert.deepEqual(read.map(([key]) => key).toSorted(), keys.toSorted());
+    });
+
+    test('a position and a map state value keep a NUL character and a lone surrogate', async () => {
+      await using opened = await subject.open();
+      const group = new ConsumerGroup('copy', opened.store);
+      const odd = 'a\u0000b\ud800c';
+      const textPosition: Format<string> = {
+        version: 1,
+        encode: (value) => value,
+        decode: (_, json) => String(json),
+      };
+      const writer = await group.claim(inbox, textPosition);
+      writer.state('seen', text).set(odd, odd);
+      await writer.commit(odd);
+
+      const reader = await group.claim(inbox, textPosition);
+
+      assert.equal(reader.checkpoint?.position, odd);
+      assert.equal(await reader.state('seen', text).get(odd), odd);
+    });
   });
 }
