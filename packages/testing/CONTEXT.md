@@ -19,6 +19,14 @@ _Avoid_: Setup
 What an acquisition returns. Disposing it cleans up the fixture.
 _Avoid_: Instance, connection
 
+**Wait strategy**:
+A function that resolves when the service of a container is ready, such as `forLogMessage`. The testbed runs it under the startup time limit (proposed, ADR 0036).
+_Avoid_: Healthy (Docker's word for the status of a HEALTHCHECK), readiness check
+
+**Startup time limit**:
+The time that an acquisition gives its wait strategy, the readiness bound of a fixture: Postgres 60 s, MySQL and MariaDB 90 s, SQL Server 180 s.
+_Avoid_: Timebox
+
 **Engine**:
 The Docker daemon that the environment selects as the Docker CLI selects it, local or over SSH. `@zukhruf/docker` does the selection and sends the requests; the package uses no Docker CLI. A handle keeps the engine it was created on.
 _Avoid_: Host, daemon (for the selection)

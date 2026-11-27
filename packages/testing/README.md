@@ -81,6 +81,36 @@ A `ServiceContainer` has `container`, `host` and `port`. On an SSH engine, the p
 
 A server is not ready when `healthy` throws, or when its container exits first. An exit ends the wait at once: the readiness error is "Container … exited with code … before it was ready", with the output of the container. The acquisition attaches to the container before it starts it, so it has this exit code and output also for a container that exits at once. Then `serve` reads the output of the container, removes the container, and rejects. The message of the error has that output. Its `cause` is the readiness error. `reuse` rejects with the readiness error.
 
+### Wait strategies (proposed)
+
+This section is on paper for review ([ADR 0036](./docs/adr/0036-a-service-waits-until-it-is-ready-with-a-wait-strategy-that-the-testbed-runs-under-a-startup-time-limit-and-a-container-that-stops-fails-with-its-exit.md), Proposed, backlog #6219). The package does not do it yet.
+
+A service says how to wait until it is ready with `wait: { until, timeout }`. `until` is a wait strategy: `(target, signal) => Promise<void>`. `timeout` is the startup time limit in milliseconds. `serve()`, `reuse()` and `start()` take it, and `healthy` goes:
+
+```ts
+await testbed.reuse(body, {
+  internalPort: 5432,
+  wait: {
+    until: forLogMessage('database system is ready to accept connections', {
+      times: 2,
+    }),
+    timeout: 60_000,
+  },
+});
+```
+
+`forLogMessage(message, { times })` resolves at the `times`-th line, since the container started, that contains `message` or matches it as a `RegExp`. It splits stdout and stderr into lines each on its own, and it rejects when the logs end before the line. The signal of a strategy aborts at the time limit and when the container stops. When a strategy rejects and the container is not running, the acquisition rejects with the exit of the container ("exited with code … before it was ready", with its output), not with the error of the strategy. A check that only a few places need, such as the SSH banner after `Server listening on`, is a strategy function at its place:
+
+```ts
+wait: {
+  until: async (service, signal) => {
+    await forLogMessage('Server listening on ')(service, signal);
+    assert.match(await banner(service.port), /^SSH-2\.0-/);
+  },
+  timeout: 60_000,
+},
+```
+
 ### Shared servers
 
 `reuse(body, options)` finds the server for this request, or creates it. The request is the body after the testbed adds its defaults and the published port, and the `internalPort`. The order of the keys and the order of the `Env` entries do not select a different server. Docker reserves the name atomically, so concurrent processes attach to the same container. Different images, passwords, environments or labels select separate servers. The version of `@zukhruf/testing` does not: projects on different versions that send the same request share one server. A readiness failure leaves the shared server running for diagnosis. Dispose a reused server only after all its users finish: disposal stops it for every caller.
@@ -882,6 +912,7 @@ function globalTeardown(): void;
 - [ADR 0033](./docs/adr/0033-a-process-that-creates-its-runs-reaper-takes-a-creator-lease-first-and-a-new-reaper-waits-for-its-first-hold-until-that-lease-is-gone.md): a process that creates its run's reaper takes a creator lease first, and a new reaper waits for its first hold until that lease is gone.
 - [ADR 0034](./docs/adr/0034-a-reaper-stops-with-sigkill-the-signal-that-already-ended-it-at-each-stop.md): a reaper stops with SIGKILL, the signal that already ended it at each stop.
 - [ADR 0035](./docs/adr/0035-a-database-fixture-waits-for-the-ready-line-of-its-server-in-the-logs-of-its-container-and-then-sends-one-query.md): a database fixture waits for the ready line of its server in the logs of its container, and then sends one query.
+- [ADR 0036](./docs/adr/0036-a-service-waits-until-it-is-ready-with-a-wait-strategy-that-the-testbed-runs-under-a-startup-time-limit-and-a-container-that-stops-fails-with-its-exit.md) (proposed): a service waits until it is ready with a wait strategy that the testbed runs under a startup time limit, and a container that stops fails with its exit.
 
 **Copied code**: [Code copied into this package](./docs/copied-code.md) records each copy of code in this package, as the Rule of Three asks.
 
