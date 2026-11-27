@@ -6,7 +6,7 @@ import {
 
 import { RatioOfSums } from '../aggregation/ratio-of-sums.ts';
 import type { Ratio } from '../aggregation/ratio.ts';
-import { type Run, pairTests, runTests } from './run.ts';
+import { type Run, pairTests, runTests, testUnit } from './run.ts';
 
 export type Verdict = {
   readonly name: string;
@@ -21,12 +21,11 @@ export type Verdict = {
   readonly tests: number;
 };
 
-// One test in the two runs: the mean of its epochs in each run, and the weight
-// of its case.
+// One test in the two runs: its unit in each run, the mean of its epochs
+// times the weight of its case (testUnit).
 type Pair = {
   readonly baseline: Ratio;
   readonly change: Ratio;
-  readonly weight: number;
 };
 
 // The paired bootstrap of two runs on the same tests (Koehn 2004): each
@@ -60,7 +59,11 @@ export class PairedBootstrap {
     name: string,
     { higherIsBetter }: { readonly higherIsBetter: boolean },
   ): Verdict {
-    const pairs = PairedBootstrap.#pairs(baseline, change, name);
+    const joined = PairedBootstrap.#joined(baseline, change, name);
+    const pairs = joined.map((test): Pair => ({
+      baseline: testUnit(test.baseline, name),
+      change: testUnit(test.change, name),
+    }));
     const distribution = this.#bootstrap.distribution(
       pairs,
       PairedBootstrap.#difference,
@@ -72,8 +75,11 @@ export class PairedBootstrap {
       PairedBootstrap.#difference(pairs),
     );
     const direction = higherIsBetter ? 1 : -1;
-    const signs = pairs.map((pair) =>
-      Math.sign((pair.change.value - pair.baseline.value) * direction),
+    const signs = joined.map((test) =>
+      Math.sign(
+        (test.change.mean(name).value - test.baseline.mean(name).value) *
+          direction,
+      ),
     );
     return {
       name,
@@ -116,16 +122,18 @@ export class PairedBootstrap {
 
   static #difference(pairs: readonly Pair[]): number {
     return (
-      RatioOfSums.of(pairs.map((pair) => pair.change.times(pair.weight)))
-        .value -
-      RatioOfSums.of(pairs.map((pair) => pair.baseline.times(pair.weight)))
-        .value
+      RatioOfSums.of(pairs.map((pair) => pair.change)).value -
+      RatioOfSums.of(pairs.map((pair) => pair.baseline)).value
     );
   }
 
   // The tests of the two runs, paired by test id in the order of the
-  // baseline's first adds (pairTests), with the mean of the epochs of each.
-  static #pairs(baseline: Run, change: Run, name: string): Pair[] {
+  // baseline's first adds (pairTests).
+  static #joined(
+    baseline: Run,
+    change: Run,
+    name: string,
+  ): ReturnType<typeof pairTests> {
     const joined = pairTests(baseline, change, 'A paired bootstrap');
     const baselineTests = runTests(baseline);
     const changeTests = runTests(change);
@@ -137,10 +145,6 @@ export class PairedBootstrap {
         throw new Error(
           `No scorecard of the ${run} run gave a ratio named "${name}"`,
         );
-    return joined.map((test) => ({
-      baseline: test.baseline.mean(name),
-      change: test.change.mean(name),
-      weight: test.baseline.weight,
-    }));
+    return joined;
   }
 }

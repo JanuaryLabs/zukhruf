@@ -186,16 +186,15 @@ ${sections}
       .join('');
     const axis = (className: string, items: readonly string[]) =>
       `<div class="bar-axis" aria-hidden="true"><span></span><span class="${className}">${items.join('')}</span><span></span></div>`;
-    const markLabels =
-      bars.marks.length === 0
-        ? ''
-        : axis(
-            'ref-labels',
-            bars.marks.map(
-              ({ label, at: value }) =>
-                `<span style="--x:${at(value)}">${esc(label)} ${short(value)}</span>`,
-            ),
-          );
+    // One row for the label of each mark, so that the labels of two near
+    // marks never overlap.
+    const markLabels = bars.marks
+      .map(({ label, at: value }) =>
+        axis('ref-labels', [
+          `<span style="--x:${at(value)}">${esc(label)} ${short(value)}</span>`,
+        ]),
+      )
+      .join('');
     const tickLabels = axis(
       'bar-ticks',
       ticks(bars.scale).map(

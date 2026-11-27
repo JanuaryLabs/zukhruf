@@ -126,3 +126,21 @@ test('a paired bootstrap names the run that gives no ratio of the name', () => {
     },
   );
 });
+
+test('the difference of a paired bootstrap weighs each test by the weight of its case', () => {
+  const recall = (ratio: Ratio) => ({ ratios: new Map([['recall', ratio]]) });
+  const baseline = new Run();
+  const change = new Run();
+  baseline.add('t1', recall(new Ratio(1, 2)), 3);
+  change.add('t1', recall(new Ratio(2, 2)), 3);
+  baseline.add('t2', recall(new Ratio(2, 2)), 1);
+  change.add('t2', recall(new Ratio(0, 2)), 1);
+
+  const verdict = paired.verdict(baseline, change, 'recall', {
+    higherIsBetter: true,
+  });
+
+  // Weighted: the change is (6 + 0) / (6 + 2) = 0.75 and the baseline
+  // (3 + 2) / (6 + 2) = 0.625; with no weights it would be 0.5 − 0.75.
+  assert.equal(verdict.difference.observed, 0.125);
+});

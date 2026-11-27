@@ -2,6 +2,8 @@
 
 Status: accepted (Ezz, 2026-11-27, #6108: "Fill both gaps first"). #4234 and #6111 are built before any page, so no page ever shows a wrong interval.
 
+Status, 2026-11-27 (#6108): `Summary` is built. Its value is `Run#total` and its interval `Bootstrap.interval` on the same run, or on the run of a slice's samples for a bar with a slice. A bar is met, missed or open as point 2 says, and a slice with no samples reads untested. Holm (point 3) belongs to `Verdicts`, which is not built yet.
+
 ## Context
 
 A score of a run is a ratio of sums over its answers: `Totals`. For a score per item (offers' `values_recall` and `values_precision`), each expected value counts once, so a page with 65 offers weighs 65 times a page with one. For a score per row (`values_f1`), each answer counts once. `Bootstrap` resamples the value of each scorecard, the samples average, so its interval is the interval of a score per item only when each whole is 1 (#4234; found on ipay: 44/45 exact precision gave [12.3%, 21.1%]).

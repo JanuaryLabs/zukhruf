@@ -1,3 +1,5 @@
+import { RatioOfSums } from '../aggregation/ratio-of-sums.ts';
+import type { Ratio } from '../aggregation/ratio.ts';
 import type { Scorecard } from './scorecard.ts';
 import { TestEpochs } from './test-epochs.ts';
 
@@ -25,10 +27,38 @@ export class Run {
       );
     test.add(scorecard);
   }
+
+  // The value of one name over the run: the ratio of sums of each test's
+  // unit (testUnit), the statistic that Bootstrap resamples (ADR 0010), so
+  // an interval of the name belongs to this number. It equals Totals of all
+  // the scorecards only when each test has the same number of epochs.
+  total(name: string): RatioOfSums {
+    return RatioOfSums.of(runUnits(this, name));
+  }
 }
 
 export function runTests(run: Run): ReadonlyMap<string, TestEpochs> {
   return testsOf(run);
+}
+
+// The unit of one test for a name (ADR 0010): the mean of its epochs times
+// the weight of its case. Run#total, Bootstrap and PairedBootstrap of this
+// package add these units; the package does not export it.
+export function testUnit(test: TestEpochs, name: string): Ratio {
+  return test.mean(name).times(test.weight);
+}
+
+// The unit of each test of a run for a name, in the order of their first add.
+// A name that no test of a run with tests gives throws, as Totals.get does.
+// Run#total and Bootstrap read them; the package does not export it.
+export function runUnits(run: Run, name: string): Ratio[] {
+  const tests = testsOf(run);
+  if (tests.size > 0 && !tests.values().some((test) => test.gives(name)))
+    throw new Error(`No scorecard of the run gave a ratio named "${name}"`);
+  return tests
+    .values()
+    .map((test) => testUnit(test, name))
+    .toArray();
 }
 
 // The tests of two runs, paired by test id in the order of the baseline's

@@ -144,6 +144,26 @@ test('a bar shows its value with its interval ends, draws them as a whisker, and
   ]);
 });
 
+test('the label of each mark of bars has a row of its own, so that the labels of two near marks do not overlap', () => {
+  const html = render(
+    new Bars({
+      bars: [{ label: 'recall', value: 0.9, ends: undefined, tone: 'neutral' }],
+      scale: { low: 0, high: 1 },
+      marks: [
+        { label: 'bar', at: 0.88 },
+        { label: 'bar', at: 0.95 },
+      ],
+    }),
+  );
+
+  assert.deepEqual(
+    [
+      ...html.matchAll(/<span class="ref-labels">(.*?)<\/span><span><\/span>/g),
+    ].map((match) => (match[1] ?? '').match(/>([^<]*)</g)),
+    [['>bar 0.88<'], ['>bar 0.95<']],
+  );
+});
+
 test('a scatter draws the diagonal y = x and gives each point a tooltip with its test and both values', () => {
   const html = render(
     new Scatter({

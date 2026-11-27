@@ -87,7 +87,7 @@ h2 { font-size: clamp(1.25rem, 2.6vw, 1.625rem); line-height: 1.25; font-weight:
 .bar-value small { font-size: 0.75rem; color: var(--muted); font-weight: 400; }
 .bar-ticks, .x-ticks, .ref-labels { position: relative; height: 1.5rem; font: 0.75rem var(--mono); color: var(--muted); }
 .bar-ticks span, .x-ticks span, .ref-labels span { position: absolute; left: var(--x); translate: -50% 0; top: 0.25rem; white-space: nowrap; }
-.ref-labels span { color: var(--ink-2); font-weight: 500; }
+.ref-labels span { color: var(--ink-2); font-weight: 500; translate: calc(var(--x) * -1) 0; }
 .x-ticks span:first-child { translate: 0 0; }
 .x-ticks span:last-child:not(:first-child) { translate: -100% 0; }
 
@@ -116,6 +116,7 @@ h2 { font-size: clamp(1.25rem, 2.6vw, 1.625rem); line-height: 1.25; font-weight:
 .x-ticks { margin-inline: 0.75rem; }
 
 .heat-scroll, .table-scroll { overflow-x: auto; }
+.heat-scroll, .table-scroll { position: relative; }
 .heat { display: grid; grid-template-columns: minmax(10rem, 2fr) repeat(var(--cols), minmax(3rem, 1fr)); gap: 2px; min-width: calc(10rem + var(--cols) * 3.25rem); }
 .heat-row { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; }
 .heat-col { font-size: 0.75rem; line-height: 1.2; color: var(--ink-2); text-align: center; align-self: end; padding-bottom: 0.375rem; }

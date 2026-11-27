@@ -2,6 +2,8 @@
 
 Status: accepted (2026-11-27, #4234). Ezz first picked a statistic Strategy ("Statistic Strategy"), then asked why the two statistics clashed with a name of `./classification`, and left the call to me ("I trust your recommendation … follow the top performers"). The answer below removes the clash at its root, so this ADR has no Strategy.
 
+Status, 2026-11-27 (#6108): `Run#total(name)` gives the number that this interval belongs to: the ratio of sums of the units of the tests, each the mean of its epochs times its weight. `Run#total`, `Bootstrap` and `PairedBootstrap` compute the unit through one function of `run.ts`. `Totals` of all the scorecards equals `Run#total` only when each test has the same number of epochs.
+
 ## Context
 
 `Bootstrap` gives the interval of one name. Its statistic forced each scorecard to `Ratio(value, 1)` times its weight: the mean of the values, the samples average. `Totals` and `PairedBootstrap` add the ratios as the scorers gave them. So for a name per item, such as offers' `values_recall`, where a page with 65 expected values weighs 65 times a page with one, the interval of `Bootstrap` was not the interval of the number of `Totals` (#4234; found on ipay on 2026-11-10: 44/45 exact precision gave [12.3%, 21.1%]).
