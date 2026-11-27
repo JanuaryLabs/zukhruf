@@ -47,11 +47,11 @@ const rule = ESLintUtils.RuleCreator.withoutDocs({
     schema: [],
     messages: {
       missingCode:
-        "This warning has no code, so a 'warning' listener and `--disable-warning` cannot tell it from a warning of Node or of another package. Emit an instance of a warning class that sets its `name`, `code` and `detail`, as `process.emitWarning(new LeaderSelectorWarning(failure, { key }))`, or give a string warning `{ type, code, detail }`.",
+        "This warning has no code, so a 'warning' listener and `--disable-warning` cannot tell it from a warning of Node or of another package. Emit an instance of a warning class that sets its `name`, `code` and `detail`, as `process.emitWarning(new LeaderSelectorWarning(failure, { election }))`, or give a string warning `{ type, code, detail }`.",
       optionsIgnored:
-        'Node ignores the type, the code and the options of an Error warning, so this call reads as typed and is not. Set `name`, `code` and `detail` in a warning class, and pass its instance alone, as `process.emitWarning(new LeaderSelectorWarning(failure, { key }))`.',
+        'Node ignores the type, the code and the options of an Error warning, so this call reads as typed and is not. Set `name`, `code` and `detail` in a warning class, and pass its instance alone, as `process.emitWarning(new LeaderSelectorWarning(failure, { election }))`.',
       inlineWarning:
-        'This warning is an Error with `name`, `code` and `detail` set in place, so a host cannot test it with `instanceof`. Declare a warning class that `extends Error` and sets its `name`, `code` and `detail`, export it, and emit its instance, as `process.emitWarning(new LeaderSelectorWarning(failure, { key }))`.',
+        'This warning is an Error with `name`, `code` and `detail` set in place, so a host cannot test it with `instanceof`. Declare a warning class that `extends Error` and sets its `name`, `code` and `detail`, export it, and emit its instance, as `process.emitWarning(new LeaderSelectorWarning(failure, { election }))`.',
     },
   },
   create(context) {
