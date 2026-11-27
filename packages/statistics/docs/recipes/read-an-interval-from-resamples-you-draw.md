@@ -97,5 +97,5 @@ iid:        [0, 1.4166666666666667], above 0: false
 
 - **`PercentileInterval.of` sorts a copy.** The bootstrap distribution that you give does not change ([percentile-interval.test.ts](../../src/interval/percentile-interval.test.ts)).
 - **Choose the quantile method of the program that you compare with.** The relevance-filtering eval uses `Linear`, the default of `numpy.percentile`. The event-detection eval uses `InvertedCdf`, the nearest rank. See [Give the interval that a Python program gives](./give-the-interval-that-a-python-program-gives.md).
-- **A rule of its own at each end is a `ConfidenceIntervalMethod`.** Write a class with `of(distribution)` that gives a `ConfidenceInterval` ([README](../../README.md)).
+- **A rule of its own at each end is a `ConfidenceIntervalMethod`.** Write a class with `of(distribution)` that gives a `ConfidenceInterval`, and `level`, the share of the distribution that the interval covers, such as 0.95 for SOB's ends at 0.025 and 0.975 ([README](../../README.md)).
 - **The verdict stays with you.** `DifferenceInterval` is data only. Read your verdict from `isAbove` and `isBelow` ([ADR 0001](../adr/0001-one-home-for-the-percentile-bootstrap-that-six-places-copied.md), #3819).
