@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -69,22 +68,17 @@ function event(
   };
 }
 
-// Writes `<run>/<artifact>/.nx/nx-profile.json`, as gh run download lays out
-// the artifacts of each run.
-async function profiles(
-  folder: string,
-  runs: Record<string, Record<string, readonly unknown[]>>,
-) {
-  for (const [run, artifacts] of Object.entries(runs)) {
-    for (const [artifact, events] of Object.entries(artifacts)) {
-      const directory = join(folder, run, artifact, '.nx');
-      await mkdir(directory, { recursive: true });
-      await writeFile(
-        join(directory, 'nx-profile.json'),
+// The files `<run>/<artifact>/.nx/nx-profile.json`, as gh run download lays
+// out the artifacts of each run.
+function profiles(runs: Record<string, Record<string, readonly unknown[]>>) {
+  return Object.fromEntries(
+    Object.entries(runs).flatMap(([run, artifacts]) =>
+      Object.entries(artifacts).map(([artifact, events]) => [
+        `${run}/${artifact}/.nx/nx-profile.json`,
         JSON.stringify(events),
-      );
-    }
-  }
+      ]),
+    ),
+  );
 }
 
 function split(
@@ -126,9 +120,10 @@ function split(
 
 test('a node --test task longer than the target is split with --test-shard, one shard on each machine', async () => {
   // Arrange
-  await using folder = await new TemporaryFiles().directory('test-split-');
-  await profiles(folder.path, {
-    '101': { 'test-1': [event('nx', 8), event('async', 1)] },
+  await using folder = await new TemporaryFiles().directory('test-split-', {
+    files: profiles({
+      '101': { 'test-1': [event('nx', 8), event('async', 1)] },
+    }),
   });
 
   // Act
@@ -150,8 +145,9 @@ test('a node --test task longer than the target is split with --test-shard, one 
 
 test('a long task whose target is not node --test stays whole', async () => {
   // Arrange
-  await using folder = await new TemporaryFiles().directory('test-split-');
-  await profiles(folder.path, { '101': { 'test-1': [event('ui', 8)] } });
+  await using folder = await new TemporaryFiles().directory('test-split-', {
+    files: profiles({ '101': { 'test-1': [event('ui', 8)] } }),
+  });
 
   // Act
   const plan = split(
@@ -167,11 +163,12 @@ test('a long task whose target is not node --test stays whole', async () => {
 
 test('the plan takes the fewest machines that keep each within the target, and runs every task once', async () => {
   // Arrange
-  await using folder = await new TemporaryFiles().directory('test-split-');
-  await profiles(folder.path, {
-    '101': {
-      'test-1': [event('a', 4), event('b', 3), event('c', 2), event('d', 1)],
-    },
+  await using folder = await new TemporaryFiles().directory('test-split-', {
+    files: profiles({
+      '101': {
+        'test-1': [event('a', 4), event('b', 3), event('c', 2), event('d', 1)],
+      },
+    }),
   });
 
   // Act
@@ -192,17 +189,18 @@ test('the plan takes the fewest machines that keep each within the target, and r
 
 test('a task that Nx runs alone adds its whole time to its machine', async () => {
   // Arrange: 4 + max(1, 4 / 3) is over 5 minutes; beside the others it would fit.
-  await using folder = await new TemporaryFiles().directory('test-split-');
-  await profiles(folder.path, {
-    '101': {
-      'test-1': [
-        event('testing', 4),
-        event('a', 1),
-        event('b', 1),
-        event('c', 1),
-        event('d', 1),
-      ],
-    },
+  await using folder = await new TemporaryFiles().directory('test-split-', {
+    files: profiles({
+      '101': {
+        'test-1': [
+          event('testing', 4),
+          event('a', 1),
+          event('b', 1),
+          event('c', 1),
+          event('d', 1),
+        ],
+      },
+    }),
   });
 
   // Act
@@ -228,16 +226,17 @@ test('a task that Nx runs alone adds its whole time to its machine', async () =>
 test('the newest run that executed a task gives its time, a result from the cache is no measurement, and shards add up', async () => {
   // Arrange: in the newest run nx came from the cache. Before it, nx ran in
   // two shards of 4 minutes, and before that whole in 2 minutes.
-  await using folder = await new TemporaryFiles().directory('test-split-');
-  await profiles(folder.path, {
-    '103': {
-      'test-1': [event('nx', 0, { at: 3, status: 'local-cache' })],
-    },
-    '102': {
-      'test-1': [event('nx', 4, { at: 2 })],
-      'test-2': [event('nx', 4, { at: 2 })],
-    },
-    '101': { 'test-1': [event('nx', 2, { at: 1 })] },
+  await using folder = await new TemporaryFiles().directory('test-split-', {
+    files: profiles({
+      '103': {
+        'test-1': [event('nx', 0, { at: 3, status: 'local-cache' })],
+      },
+      '102': {
+        'test-1': [event('nx', 4, { at: 2 })],
+        'test-2': [event('nx', 4, { at: 2 })],
+      },
+      '101': { 'test-1': [event('nx', 2, { at: 1 })] },
+    }),
   });
 
   // Act
@@ -254,9 +253,10 @@ test('a task with no measurement counts as the average of the measured ones', as
   // Arrange: new counts as 4 minutes, the average of 6 and 2, so it comes
   // before b; as 0 it would come after b, and as 6 or 7 it would need a third
   // machine.
-  await using folder = await new TemporaryFiles().directory('test-split-');
-  await profiles(folder.path, {
-    '101': { 'test-1': [event('a', 6), event('b', 2)] },
+  await using folder = await new TemporaryFiles().directory('test-split-', {
+    files: profiles({
+      '101': { 'test-1': [event('a', 6), event('b', 2)] },
+    }),
   });
 
   // Act
@@ -294,9 +294,10 @@ test('with no earlier run, each task counts as the target and the plan takes eve
 test('when the shards would need more machines than allowed, each shard is larger', async () => {
   // Arrange: at 5 minutes nx needs four shards; with three machines and one
   // for async, it gets two.
-  await using folder = await new TemporaryFiles().directory('test-split-');
-  await profiles(folder.path, {
-    '101': { 'test-1': [event('nx', 20), event('async', 1)] },
+  await using folder = await new TemporaryFiles().directory('test-split-', {
+    files: profiles({
+      '101': { 'test-1': [event('nx', 20), event('async', 1)] },
+    }),
   });
 
   // Act
@@ -348,11 +349,12 @@ test('when no plan within the cap meets the target, the plan whose longest machi
       (_, index) => [`small-${index + 1}`, 0.2] as const,
     ),
   ]);
-  await using folder = await new TemporaryFiles().directory('test-split-');
-  await profiles(folder.path, {
-    '101': {
-      'test-1': [...minutes].map(([project, time]) => event(project, time)),
-    },
+  await using folder = await new TemporaryFiles().directory('test-split-', {
+    files: profiles({
+      '101': {
+        'test-1': [...minutes].map(([project, time]) => event(project, time)),
+      },
+    }),
   });
 
   // Act
