@@ -1,35 +1,30 @@
 import { hash } from 'node:crypto';
-import { mkdir, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
 
 /**
- * Writes a Docker configuration directory as the Docker CLI writes it:
- * config.json with currentContext, and contexts/meta/<sha256 of the name>/meta.json
- * for each context.
+ * The files of a home directory whose `.docker` configuration directory is as
+ * the Docker CLI writes it: config.json with currentContext, and
+ * contexts/meta/<sha256 of the name>/meta.json for each context. The record is
+ * the `files` of `TemporaryFiles` of `@zukhruf/fs`.
  */
-export async function writeContextStore(
-  directory: string,
-  store: { currentContext?: string; contexts: Record<string, string> },
-): Promise<void> {
-  await mkdir(directory, { recursive: true });
-  await writeFile(
-    join(directory, 'config.json'),
-    JSON.stringify(
+export function contextStoreFiles(store: {
+  currentContext?: string;
+  contexts: Record<string, string>;
+}): Record<string, string> {
+  return {
+    '.docker/config.json': JSON.stringify(
       store.currentContext === undefined
         ? {}
         : { currentContext: store.currentContext },
     ),
-  );
-  for (const [name, host] of Object.entries(store.contexts)) {
-    const meta = join(directory, 'contexts', 'meta', hash('sha256', name));
-    await mkdir(meta, { recursive: true });
-    await writeFile(
-      join(meta, 'meta.json'),
-      JSON.stringify({
-        Name: name,
-        Metadata: {},
-        Endpoints: { docker: { Host: host, SkipTLSVerify: false } },
-      }),
-    );
-  }
+    ...Object.fromEntries(
+      Object.entries(store.contexts).map(([name, host]) => [
+        `.docker/contexts/meta/${hash('sha256', name)}/meta.json`,
+        JSON.stringify({
+          Name: name,
+          Metadata: {},
+          Endpoints: { docker: { Host: host, SkipTLSVerify: false } },
+        }),
+      ]),
+    ),
+  };
 }

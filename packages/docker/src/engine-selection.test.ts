@@ -6,7 +6,7 @@ import { describe, test } from 'node:test';
 import { TemporaryFiles } from '@zukhruf/fs';
 
 import { type ConnectOptions, Docker } from './index.ts';
-import { writeContextStore } from './testing/context-store-files.ts';
+import { contextStoreFiles } from './testing/context-store-files.ts';
 import { fakeEngine } from './testing/fake-engine.ts';
 import { ENTRY, lastJson, runScenario } from './testing/scenario.ts';
 
@@ -52,14 +52,16 @@ describe('Docker.connect() selects the engine in the order of the Docker CLI', (
       directory: await mkdirIn(scratch.path, 'config'),
       apiVersion: '1.51',
     });
-    const config = join(scratch.path, 'docker-config');
-    await writeContextStore(config, {
-      currentContext: 'from-config',
-      contexts: {
-        'from-variable': fromVariable.host,
-        'from-config': fromConfig.host,
-      },
+    await using home = await new TemporaryFiles().directory('docker-home-', {
+      files: contextStoreFiles({
+        currentContext: 'from-config',
+        contexts: {
+          'from-variable': fromVariable.host,
+          'from-config': fromConfig.host,
+        },
+      }),
     });
+    const config = join(home.path, '.docker');
 
     // Act
     const result = await selected({
@@ -87,14 +89,16 @@ describe('Docker.connect() selects the engine in the order of the Docker CLI', (
       directory: await mkdirIn(scratch.path, 'config'),
       apiVersion: '1.51',
     });
-    const config = join(scratch.path, 'docker-config');
-    await writeContextStore(config, {
-      currentContext: 'from-config',
-      contexts: {
-        'from-variable': fromVariable.host,
-        'from-config': fromConfig.host,
-      },
+    await using home = await new TemporaryFiles().directory('docker-home-', {
+      files: contextStoreFiles({
+        currentContext: 'from-config',
+        contexts: {
+          'from-variable': fromVariable.host,
+          'from-config': fromConfig.host,
+        },
+      }),
     });
+    const config = join(home.path, '.docker');
 
     // Act
     const result = await selected({
@@ -116,11 +120,13 @@ describe('Docker.connect() selects the engine in the order of the Docker CLI', (
       directory: await mkdirIn(scratch.path, 'config'),
       apiVersion: '1.51',
     });
-    const config = join(scratch.path, 'docker-config');
-    await writeContextStore(config, {
-      currentContext: 'from-config',
-      contexts: { 'from-config': fromConfig.host },
+    await using home = await new TemporaryFiles().directory('docker-home-', {
+      files: contextStoreFiles({
+        currentContext: 'from-config',
+        contexts: { 'from-config': fromConfig.host },
+      }),
     });
+    const config = join(home.path, '.docker');
 
     // Act
     const result = await selected({
@@ -139,15 +145,17 @@ describe('Docker.connect() selects the engine in the order of the Docker CLI', (
       directory: await mkdirIn(scratch.path, 'config'),
       apiVersion: '1.51',
     });
-    await writeContextStore(join(scratch.path, '.docker'), {
-      currentContext: 'from-home',
-      contexts: { 'from-home': fromConfig.host },
+    await using home = await new TemporaryFiles().directory('docker-home-', {
+      files: contextStoreFiles({
+        currentContext: 'from-home',
+        contexts: { 'from-home': fromConfig.host },
+      }),
     });
 
     // Act
     const result = await runScenario(
       connectScenario('{ environment: process.env }'),
-      { HOME: scratch.path },
+      { HOME: home.path },
       t.signal,
     );
 
@@ -169,16 +177,18 @@ describe('Docker.connect() selects the engine in the order of the Docker CLI', (
       directory: await mkdirIn(scratch.path, 'host'),
       apiVersion: '1.51',
     });
-    await writeContextStore(join(scratch.path, '.docker'), {
-      currentContext: 'from-home',
-      contexts: { 'from-home': fromConfig.host, other: fromHost.host },
+    await using home = await new TemporaryFiles().directory('docker-home-', {
+      files: contextStoreFiles({
+        currentContext: 'from-home',
+        contexts: { 'from-home': fromConfig.host, other: fromHost.host },
+      }),
     });
 
     // Act
     const result = await runScenario(
       connectScenario('{}'),
       {
-        HOME: scratch.path,
+        HOME: home.path,
         DOCKER_HOST: fromHost.host,
         DOCKER_CONTEXT: 'other',
         DOCKER_CONFIG: join(scratch.path, 'absent'),
@@ -228,10 +238,12 @@ describe('Docker.connect() selects the engine in the order of the Docker CLI', (
       directory: await mkdirIn(scratch.path, 'host'),
       apiVersion: '1.51',
     });
-    const config = join(scratch.path, 'docker-config');
-    await writeContextStore(config, {
-      contexts: { named: named.host, other: fromHost.host },
+    await using home = await new TemporaryFiles().directory('docker-home-', {
+      files: contextStoreFiles({
+        contexts: { named: named.host, other: fromHost.host },
+      }),
     });
+    const config = join(home.path, '.docker');
 
     // Act
     const result = await selected({
@@ -283,8 +295,10 @@ describe('Docker.connect() selects the engine in the order of the Docker CLI', (
       directory: await mkdirIn(scratch.path, 'host'),
       apiVersion: '1.51',
     });
-    const config = join(scratch.path, 'docker-config');
-    await writeContextStore(config, { contexts: { other: fromHost.host } });
+    await using home = await new TemporaryFiles().directory('docker-home-', {
+      files: contextStoreFiles({ contexts: { other: fromHost.host } }),
+    });
+    const config = join(home.path, '.docker');
 
     // Act
     const result = await selected({
@@ -304,9 +318,10 @@ describe('Docker.connect() selects the engine in the order of the Docker CLI', (
 
   test('a context that the context store does not have is a ContextNotFoundError, from the option or from DOCKER_CONTEXT', async () => {
     // Arrange
-    await using scratch = await new TemporaryFiles().directory('docker-test-');
-    const config = join(scratch.path, 'docker-config');
-    await writeContextStore(config, { contexts: {} });
+    await using home = await new TemporaryFiles().directory('docker-home-', {
+      files: contextStoreFiles({ contexts: {} }),
+    });
+    const config = join(home.path, '.docker');
 
     // Act
     const fromOption = await selected({
@@ -331,15 +346,16 @@ describe('Docker.connect() selects the engine in the order of the Docker CLI', (
 
   test('a tcp:// host is an UnsupportedHostError, from the option, from DOCKER_HOST or from a context', async () => {
     // Arrange
-    await using scratch = await new TemporaryFiles().directory('docker-test-');
-    const config = join(scratch.path, 'docker-config');
     const fromOption = 'tcp://127.0.0.1:2375';
     const fromVariable = 'tcp://127.0.0.1:2376';
     const fromContext = 'tcp://127.0.0.1:2377';
-    await writeContextStore(config, {
-      currentContext: 'remote',
-      contexts: { remote: fromContext },
+    await using home = await new TemporaryFiles().directory('docker-home-', {
+      files: contextStoreFiles({
+        currentContext: 'remote',
+        contexts: { remote: fromContext },
+      }),
     });
+    const config = join(home.path, '.docker');
     const environment = { DOCKER_CONFIG: config };
 
     // Act
@@ -370,11 +386,13 @@ describe('Docker.connect() selects the engine in the order of the Docker CLI', (
       directory: await mkdirIn(scratch.path, 'config'),
       apiVersion: '1.51',
     });
-    const config = join(scratch.path, 'docker-config');
-    await writeContextStore(config, {
-      currentContext: 'from-config',
-      contexts: { 'from-config': fromConfig.host },
+    await using home = await new TemporaryFiles().directory('docker-home-', {
+      files: contextStoreFiles({
+        currentContext: 'from-config',
+        contexts: { 'from-config': fromConfig.host },
+      }),
     });
+    const config = join(home.path, '.docker');
 
     // Act
     const result = await selected({
@@ -394,15 +412,16 @@ describe('Docker.connect() selects the engine in the order of the Docker CLI', (
 describe('Docker.contexts()', () => {
   test('lists the default context and each stored context, and marks the current one', async () => {
     // Arrange
-    await using scratch = await new TemporaryFiles().directory('docker-test-');
-    const config = join(scratch.path, 'docker-config');
-    await writeContextStore(config, {
-      currentContext: 'desktop-linux',
-      contexts: {
-        'desktop-linux': 'unix:///Users/me/.docker/run/docker.sock',
-        'remote-box': 'ssh://root@remote.example',
-      },
+    await using home = await new TemporaryFiles().directory('docker-home-', {
+      files: contextStoreFiles({
+        currentContext: 'desktop-linux',
+        contexts: {
+          'desktop-linux': 'unix:///Users/me/.docker/run/docker.sock',
+          'remote-box': 'ssh://root@remote.example',
+        },
+      }),
     });
+    const config = join(home.path, '.docker');
 
     // Act
     const fromConfig = await Docker.contexts({
