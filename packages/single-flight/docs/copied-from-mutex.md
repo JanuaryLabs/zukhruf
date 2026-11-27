@@ -97,7 +97,7 @@ Only the import paths and the prefix of the Windows pipe differ.
 The test "a line that is not JSON closes the connection, and a send after it fails with ConnectionClosedError" is a copy too (backlog #4984). Only the prefix of the temporary folder and the prefix of the Windows pipe differ.
 
 **`lock-stores/socket/socket-supervision.test.ts` → `connection/socket-supervision.test.ts`, three tests.**
-The group "A process whose supervisor connects over a socket" runs the supervisor of `@zukhruf/rpc` over each package's own `SocketConnection` (backlog #4668). Only the prefix of the temporary folder and the prefix of the Windows pipe differ. The stand-in tests of the supervisor, and the test "a replacement keeps the last ref()" that this package had, are in `@zukhruf/rpc` now, with the supervisor (backlog #2520).
+The group "A process whose supervisor connects over a socket" runs the supervisor of `@zukhruf/rpc` over each package's own `SocketConnection` (backlog #4668). Only the prefix of the temporary folder and the prefix of the Windows pipe differ. The stand-in tests of the supervisor, and the test of a replacement connection that this package had (now "a replacement is ref'd while a hold is out"), are in `@zukhruf/rpc` now, with the supervisor (backlog #2520).
 
 **`lock-stores/socket/electing-connector.test.ts` → `connection/electing-connector.test.ts`.**
 The tests use `flightElection` and `flight.sock`, and give no `connected` callback. The names say coordinator, not leader. Each `readline` interface on a peer of a stand-in server has an `error` listener, as the other tests of this package have. One test is only here: "a connect outlasts a coordinator that keeps its term and hangs up on each hello, for as long as that lasts".
