@@ -3007,8 +3007,11 @@ async function droppableSshEngine() {
 /**
  * A process that holds the reaper of `run` with `settings` through its own
  * SSH connection to `host`, prints `held`, and lives until it is killed. At
- * the line `block`, it blocks its event loop for 60 s, as a busy test process
- * can, and then prints `unblocked`.
+ * the line `block`, it blocks its event loop for 20 s, as a busy test process
+ * can, and prints `unblocked` from a timer of 0 ms, so each timer that the
+ * block held back has run first. 20 s is longer than the 15 s between two
+ * keep-alive bytes of the hold (root ADR 0012), so at least one byte comes
+ * while the loop cannot read it.
  */
 function sshHolder(
   run: string,
@@ -3023,8 +3026,8 @@ function sshHolder(
       console.log('held');
       for await (const command of createInterface({ input: process.stdin })) {
         if (command !== 'block') continue;
-        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 60_000);
-        console.log('unblocked');
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 20_000);
+        setTimeout(() => console.log('unblocked'), 0);
       }
     `,
     { ...process.env, DOCKER_HOST: host },
@@ -3073,7 +3076,7 @@ describe('the reaper over SSH', { concurrency: 3 }, () => {
     );
   });
 
-  test('a holder whose event loop is blocked for 60 s keeps its hold, and the reaper removes nothing', async () => {
+  test('a holder whose event loop is blocked for 20 s, past a keep-alive byte, keeps its hold, and the reaper removes nothing', async () => {
     const run = randomUUID();
     await present('alpine:latest');
     await using sshd = await droppableSshEngine();
@@ -3087,7 +3090,11 @@ describe('the reaper over SSH', { concurrency: 3 }, () => {
 
     held.send('block');
     assert.equal(await held.line(), 'unblocked');
+    // A fixed window, longer than the grace and the passes of the reaper: a
+    // hold that a timer ended after the block is gone, and its reaper acted.
+    await delay(quick.grace + quick.passes * quick.interval + 1_000);
 
+    assert.equal(await heldOn(docker, run), 1);
     assert.equal(await exists(id), true);
     assert.deepEqual(await reapers(run), reaper);
     assert.equal(reaper.length, 1);
