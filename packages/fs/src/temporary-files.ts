@@ -43,7 +43,10 @@ const removal = {
   retryDelay: 50,
 } as const;
 
-/** Each acquisition owns an empty directory, removed with all that it holds. */
+/**
+ * Each acquisition owns a directory, empty or with the files of a record,
+ * removed with all that it holds.
+ */
 export class TemporaryFiles {
   async directory(
     prefix: string,
