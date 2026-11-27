@@ -202,18 +202,37 @@ async function secondEngine(relay: string): Promise<SecondEngine> {
   // and meets the rate limit of Docker Hub. The engine of this process has
   // each image that the store and the run's reaper use there, or pulls it
   // once, and loads it into the second engine. docker:28.5.2-cli is the
-  // REAPER_IMAGE of @zukhruf/testing, which does not export it.
+  // REAPER_IMAGE of @zukhruf/testing and busybox:1.37.0 the LEASE_IMAGE of the
+  // creator lease of its reaper (ADR 0033); the package exports neither. The
+  // docker CLI copies the images on the engine's host, in a container in the
+  // network of the second engine, so the images do not go to this machine and
+  // back: from a remote engine, that took about 24 s of each test over the
+  // link.
   await using ambient = await Docker.connect({
     clock: globalThis,
     environment: process.env,
   });
-  const images = ['docker:28.5.2-cli', dockerImage];
+  const images = ['docker:28.5.2-cli', 'busybox:1.37.0', dockerImage];
   for (const image of images) {
     if ((await ambient.images.inspect(image)) === undefined) {
       await ambient.images.pull(image);
     }
   }
-  await client.images.load(await ambient.images.save(images));
+  const copied = await ambient.containers.run({
+    Image: 'docker:28.5.2-cli',
+    Entrypoint: [
+      'sh',
+      '-c',
+      'docker save "$@" | docker --host tcp://127.0.0.1:2375 load',
+      'sh',
+    ],
+    Cmd: images,
+    HostConfig: {
+      Binds: ['/var/run/docker.sock:/var/run/docker.sock'],
+      NetworkMode: `container:${service.container.id}`,
+    },
+  });
+  assert.equal(copied.exitCode, 0, copied.stderr);
   const owned = stack.move();
   return {
     client,

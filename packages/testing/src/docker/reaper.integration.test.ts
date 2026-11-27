@@ -640,11 +640,29 @@ async function secondEngine({
   // Platform setup that no product operation exposes: the second engine starts
   // with no image, and a pull from Docker Hub inside it in each test is slow
   // and meets the rate limit of Docker Hub. The engine of this process has
-  // each image that the tests and the reaper use there, or pulls it once, and
-  // loads it into the second engine.
-  const images = [REAPER_IMAGE, 'alpine:latest'];
+  // each image that the tests, the reaper and its creator lease (ADR 0033)
+  // use there, or pulls it once, and loads it into the second engine. The
+  // docker CLI copies them on the engine's host, in a container in the
+  // network of the second engine, so the images do not go to this machine and
+  // back: from a remote engine, the 80 MB took 24 s of each test over the
+  // link.
+  const images = [REAPER_IMAGE, LEASE_IMAGE, 'alpine:latest'];
   for (const image of images) await present(image);
-  await client.images.load(await docker.images.save(images));
+  const copied = await docker.containers.run({
+    Image: REAPER_IMAGE,
+    Entrypoint: [
+      'sh',
+      '-c',
+      'docker save "$@" | docker --host tcp://127.0.0.1:2375 load',
+      'sh',
+    ],
+    Cmd: images,
+    HostConfig: {
+      Binds: ['/var/run/docker.sock:/var/run/docker.sock'],
+      NetworkMode: `container:${service.container.id}`,
+    },
+  });
+  assert.equal(copied.exitCode, 0, copied.stderr);
   const owned = stack.move();
   return {
     container: service.container,
