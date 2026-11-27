@@ -1,6 +1,6 @@
 # @zukhruf/evals
 
-An eval sends inputs to a harness and scores each answer against its label. This package scores the answers. It does not run the harness, load the dataset, store the results or show them. A runner does that work, and the package has an adapter for promptfoo.
+An eval sends inputs to a harness and scores each answer against its label. This package scores the answers and shows them: `./report` draws a page of one run, a run pair or many runs. It does not run the harness, load the dataset or store the results. A runner does that work, and the package has an adapter for promptfoo.
 
 The answers of evals have different shapes: a structured record, a label, a ranked list, a partition. Each shape has its own rules, so each shape has its own subpath. All subpaths share one core: a scorer gives a ratio for one answer, and a runner adds the ratios of many answers. The words are defined in [CONTEXT.md](CONTEXT.md).
 
