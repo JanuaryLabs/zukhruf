@@ -19,16 +19,18 @@ Inspect AI's `analysis` builds its data frames from `inspect_ai.log` alone, and 
 
 ## Decision
 
-1. **The core has `RunLog`: the samples of one run, with the facts of the run.** `RunLog<Answer, C>` is generic over the answer and the case, as the core is (ADR 0002). Its facts are an id, a label (the model or the provider, as the runner names it) and a time.
+1. **The core has `RunLog`: the samples of one run, with the facts of the run.** `new RunLog(info, samples)` takes the facts and any iterable of samples, such as the adapter of a runner (ADR 0009). `RunLog<Answer, C>` is generic over the answer and the case, as the core is (ADR 0002). Its facts are an id, a label (the model or the provider, as the runner names it) and a time.
 2. **A sample is one answer to one test.** It holds the test id, the epoch (promptfoo's `repeatIndex`, Inspect AI's word), the weight of the test, the case, the scorecard, the metadata of the test, the latency, and the usage when the runner measured it.
 3. **A sample is answered or failed, and the type says which.** An answered sample has its answer. A failed sample has the answer null and the error (ADR 0005). There is no field that is filler for the other kind.
 4. **`Usage` holds the tokens and the cost of one call.** Input tokens, output tokens, the input tokens that the provider read from its prompt cache, and the cost when the runner knows its price.
 5. **A sample says whether its answer was replayed.** A replayed answer came from a cache of the runner or the harness, with no new call (promptfoo's `response.cached`). It is not the provider's prompt cache of point 4. The usage of a replayed sample is the usage of the call that first gave the answer, when the harness kept it; else it has no usage. offers-evals' provider keeps only one token total for a replay today (offers-evals #6114), so its replayed samples have no cost.
 6. **A run log gives the `Run` of ADR 0004.** `log.run()` adds the scorecard of each sample, so `PairedBootstrap` and `Totals` read a log without a second reader.
 7. **Two samples of one test and epoch are a `RangeError`.** The reader of a runner keeps one result for each (ADR 0009).
+8. **`new RunPair(baseline, change)` holds two logs on the same tests, and refuses others.** A test that only one log has, or a test with another weight, is a `RangeError` that names each such test, the rule of ADR 0004, point 4, moved to the moment the pair is built. A building block of two runs takes a `RunPair`, so it never meets two logs with different tests.
 
 ## Consequences
 
 - `Run` stays as it is. A caller that has only scorecards still builds a `Run`.
+- `RunLog`, `Sample` and `RunPair` are value objects: built with `new`, never changed. Ezz ruled for "Adapter + Iterator" over a static reader (2026-11-27).
 - The zero-consumer test: a runner of any kind gives one record for each answer, so the record is a fact of the eval, not of one host.
 - The words: a run log and a sample. "Log" is Inspect AI's word for the record of a run; "sample" is its word for one answer and is the word of `Bootstrap` for one resampled unit.

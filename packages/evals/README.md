@@ -6,17 +6,17 @@ The answers of evals have different shapes: a structured record, a label, a rank
 
 ## The parts
 
-| Import path                         | Job                                                                                                                                  |
-| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `@zukhruf/evals`                    | The core: scorers, ratios, gates, scorer sets, scorecards, totals, bootstrap intervals, runs and paired bootstraps.                  |
-| `@zukhruf/evals/promptfoo`          | The adapter that makes a scorer or a scorer set a promptfoo assertion.                                                               |
-| `@zukhruf/evals/structured`         | Compares a structured value with the value that a person labelled.                                                                   |
-| `@zukhruf/evals/classification`     | Compares the stated labels of an answer with its expected labels, as scikit-learn's `sklearn.metrics` does (ADR 0003).               |
-| `@zukhruf/evals/ranking` (later)    | Compares a ranked list with judged items, as trec_eval does.                                                                         |
-| `@zukhruf/evals/clustering` (later) | Compares a partition with a labelled partition, as the CoNLL reference scorer does.                                                  |
-| `@zukhruf/evals/report` (design)    | Design for review (#6108): the report of one run, of two runs on the same tests, or of many runs ([docs/report.md](docs/report.md)). |
+| Import path                         | Job                                                                                                                                                |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@zukhruf/evals`                    | The core: scorers, ratios, gates, scorer sets, scorecards, totals, bootstrap intervals, runs and paired bootstraps.                                |
+| `@zukhruf/evals/promptfoo`          | The adapter that makes a scorer or a scorer set a promptfoo assertion.                                                                             |
+| `@zukhruf/evals/structured`         | Compares a structured value with the value that a person labelled.                                                                                 |
+| `@zukhruf/evals/classification`     | Compares the stated labels of an answer with its expected labels, as scikit-learn's `sklearn.metrics` does (ADR 0003).                             |
+| `@zukhruf/evals/ranking` (later)    | Compares a ranked list with judged items, as trec_eval does.                                                                                       |
+| `@zukhruf/evals/clustering` (later) | Compares a partition with a labelled partition, as the CoNLL reference scorer does.                                                                |
+| `@zukhruf/evals/report` (design)    | Design for review (#6108): pages of building blocks over one run, a run pair or many runs, and their renderers ([docs/report.md](docs/report.md)). |
 
-> **Design for review (#6108).** [docs/report.md](docs/report.md) adds `./report`, a run log, sections and blocks to the core, a reader of promptfoo runs to `./promptfoo`, and field sections to `./structured`. With it, the package also shows the results that the runner stores. No code exists yet.
+> **Design for review (#6108).** [docs/report.md](docs/report.md) adds a run log, a run pair, sections and primitives to the core, an adapter of promptfoo runs to `./promptfoo`, `./report` (a page, its renderers and the building blocks of every family), and the building blocks of structured answers to `./structured`. With it, the package also shows the results that the runner stores. No code exists yet.
 
 A subpath imports only the core. It never imports another subpath.
 

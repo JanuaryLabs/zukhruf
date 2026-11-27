@@ -316,7 +316,7 @@ Every leaf pair of a comparison agrees, and every item has a pair. When it reads
 > **Design for review (#6108).** The words of [docs/report.md](docs/report.md). With them, the **Runner** above runs the tests and stores the results; it no longer shows them.
 
 **Run log**:
-The record of one run: each answer with its test, epoch, case, scorecard, metadata, latency and usage, and the id, label and time of the run (core ADR 0007). A report reads a run log. Inspect AI calls it the eval log.
+The record of one run: each answer with its test, epoch, case, scorecard, metadata, latency and usage, and the id, label and time of the run (core ADR 0007). A building block reads a run log. Inspect AI calls it the eval log.
 _Avoid_: results, run (a `Run` holds only the scorecards of ADR 0004)
 
 **Sample**:
@@ -326,18 +326,28 @@ _Avoid_: row, result (runner words)
 **Replayed**:
 A sample whose answer came from a cache of the runner or the harness, with no new call. Not the provider's prompt cache, which only lowers the price of the input of a new call.
 
-**Report**:
-One page about one input: one run (`RunReport`), two runs on the same tests (`PairReport`), or many runs (`TrendReport`). The input sets when the report can be written (report ADR 0001).
-_Avoid_: reporter, dashboard, viewer
+**Run pair**:
+Two run logs on the same tests: a baseline and a change. A pair of logs with other tests cannot be built (core ADR 0007).
+
+**Page**:
+The sections that a host puts together, about one run, a run pair, or many runs. The inputs of its sections set when it can be written (report ADR 0001).
+_Avoid_: report (the name of the subpath), reporter, dashboard, viewer
+
+**Building block**:
+A class that builds one section from its input, such as `Summary` of a run log or `Verdicts` of a run pair. A family has its own building blocks.
 
 **Section**:
-A claim and the blocks that show its numbers. A family gives its own sections (core ADR 0008).
+A claim and the primitives that show its numbers. What a building block gives (core ADR 0008).
 
 **Claim**:
 The title of a section, computed from its numbers, such as "No difference beyond chance on values_recall (+4.6 [−0.6, +12.7])" (report ADR 0002).
 
-**Block**:
-One drawn part of a section, of a closed set of kinds: a table, bars, a scatter, a line, a heatmap, value pairs or a note. `./report` draws every kind.
+**Primitive**:
+One part of a section to draw, as data with no HTML: a table, bars, a scatter, a line, a heatmap, value pairs or a note. The set is closed (core ADR 0008).
+_Avoid_: block, widget, component
+
+**Renderer**:
+What draws every primitive of a page in one format, such as HTML or Markdown. It visits each primitive (core ADR 0008).
 
 **Bar**:
 A value that a score must reach, on all tests or on a slice. It is met when the interval of the score is above it, missed when the interval is below it, and open when the interval holds it.
@@ -350,7 +360,7 @@ _Avoid_: subset (a subset has its own scorers), split
 The range of a score over the epochs of one test. A test is stable on a score when its spread is 0 (report ADR 0005).
 
 **Field error**:
-The class of one leaf or one item of an answer against its case: correct, incorrect, missed or spurious, the words of SemEval 2013 task 9.1 as nervaluate gives them (structured ADR 0014).
+The class of one leaf or one item of an answer against its case: correct, partial, incorrect, missed or spurious, the words of SemEval 2013 task 9.1 as nervaluate gives them (structured ADR 0014). A partial leaf disagrees with its case but shares a word with it; it is still wrong for every score.
 
 **Field diff**:
 An answer beside its case, with the items paired as the scorer pairs them and each leaf marked by its field error.

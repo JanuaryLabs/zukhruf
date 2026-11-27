@@ -8,9 +8,9 @@ Status: proposed (2026-11-27, #6108). Design for review: no code yet.
 
 ## Decision
 
-1. **`toHtml()` gives one self-contained page as text**: no `<html>`, `<head>` or `<body>`, its styles and script inline, its fonts from Google Fonts, as mteb's page.
-2. **`toMarkdown()` gives the same sections as Markdown**, for a commit message, a doc or a terminal.
-3. **The page shell starts as a copy of mteb's** (`styles.ts`, `script.ts`, the formatting of numbers in `page.ts`), recorded in `docs/copied-code.md`. The copy ends when mteb's report becomes `./ranking` sections on `./report` (#6112).
+1. **`new HtmlRenderer().render(page)` gives one self-contained page as text**: no `<html>`, `<head>` or `<body>`, its styles and script inline, its fonts from Google Fonts, as mteb's page. The renderer visits each primitive (core ADR 0008).
+2. **`new MarkdownRenderer().render(page)` gives the same sections as Markdown**, for a commit message, a doc or a terminal.
+3. **The page shell starts as a copy of mteb's** (`styles.ts`, `script.ts`, the formatting of numbers in `page.ts`), recorded in `docs/copied-code.md`. The copy ends when mteb's report becomes `./ranking` building blocks on a `Page` (#6112).
 
 ## Consequences
 

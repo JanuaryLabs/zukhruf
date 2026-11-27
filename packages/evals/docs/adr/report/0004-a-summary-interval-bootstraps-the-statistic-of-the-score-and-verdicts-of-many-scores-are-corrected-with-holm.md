@@ -1,6 +1,6 @@
 # A summary interval bootstraps the statistic of the score, and the verdicts of many scores are corrected with Holm
 
-Status: proposed (2026-11-27, #6108). Design for review: no code yet. Waits on #4234 and #6111.
+Status: accepted (Ezz, 2026-11-27, #6108: "Fill both gaps first"). #4234 and #6111 are built before any page, so no page ever shows a wrong interval.
 
 ## Context
 
