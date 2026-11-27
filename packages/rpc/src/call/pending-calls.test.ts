@@ -3,7 +3,7 @@ import { once } from 'node:events';
 import { describe, test } from 'node:test';
 import { isDeepStrictEqual } from 'node:util';
 
-import { RefCount, untilAborted } from '@zukhruf/async';
+import { untilAborted } from '@zukhruf/async';
 import { waitFor } from '@zukhruf/testing/async';
 
 import { ConnectionSupervisor, PendingCalls, type Settler } from '../index.ts';
@@ -25,7 +25,7 @@ const recorder = `
 /** The calls of a supervisor over threads that record, wired as an owner wires them. */
 function pendingOver(threads: ReturnType<typeof threadConnector<Request>>) {
   const link = new ConnectionSupervisor(threads.connector);
-  const calls = new PendingCalls<Request, string>(link, new RefCount(link));
+  const calls = new PendingCalls<Request, string>(link);
   link.on('connected', () => calls.resume());
   link.on('disconnected', () => calls.interrupt());
   return { link, calls };

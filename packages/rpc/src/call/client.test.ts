@@ -14,6 +14,7 @@ import {
   Server,
 } from '../index.ts';
 import {
+  linkTo,
   report,
   serving,
   startAsker,
@@ -127,7 +128,7 @@ describe('A call that waits', () => {
     new Server(
       { ping: () => (++pings === 1 ? 'first' : second.promise) },
       { methods: { ping: noParams }, errors: new ErrorCodec([]) },
-    ).serve(new ChildProcessConnection(asker.child, { tag }));
+    ).serve(linkTo(new ChildProcessConnection(asker.child, { tag })));
     const reported = await asker.next('waiting', { signal: t.signal });
 
     // Act
@@ -159,7 +160,7 @@ describe('A call that waits', () => {
     new Server(
       { hang: () => new Promise<void>(() => {}) },
       { methods: { hang: noParams }, errors: new ErrorCodec([]) },
-    ).serve(new ChildProcessConnection(asker.child, { tag }));
+    ).serve(linkTo(new ChildProcessConnection(asker.child, { tag })));
 
     // Act
     const reported = await asker.next('reason', { signal: t.signal });
@@ -266,7 +267,7 @@ describe('A notification', () => {
         },
         errors: new ErrorCodec([]),
       },
-    ).serve(new ChildProcessConnection(asker.child, { tag }));
+    ).serve(linkTo(new ChildProcessConnection(asker.child, { tag })));
 
     // Act
     const word = await untilAborted(recorded.promise, t.signal);

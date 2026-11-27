@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import { RefCount, untilAborted } from '@zukhruf/async';
+import { untilAborted } from '@zukhruf/async';
 import { FencingToken } from '@zukhruf/fencing';
 import { LeaseController } from '@zukhruf/lease';
 import {
@@ -88,8 +88,6 @@ export class FlightClient {
   readonly #landed = new Map<string, KeyHold>();
   /** Wakes `close` each time a flight this process leads is acknowledged or lost. */
   readonly #released = new Set<() => void>();
-  /** Keeps the connection ref'd while a run waits for its answer or a landing waits for its acknowledgement. */
-  readonly #refs: RefCount;
 
   constructor(
     link: ConnectionSupervisor<FlightRequest>,
@@ -98,8 +96,7 @@ export class FlightClient {
     this.#link = link;
     this.#locks = locks;
     this.#isCurrentTerm = isCurrentTerm;
-    this.#refs = new RefCount(link);
-    this.#calls = new PendingCalls<RunMessage, Answer>(link, this.#refs);
+    this.#calls = new PendingCalls<RunMessage, Answer>(link);
     link.on('connected', () => this.#resume());
     // A message this client cannot read answers nothing it waits for.
     link.on('message', (message) => {
@@ -227,7 +224,7 @@ export class FlightClient {
       land: (outcome) => {
         // A lost flight is no longer this leader's to land.
         if (this.#held.get(id) !== held || held.landing) return;
-        held.landing = { outcome, keepAlive: this.#refs.hold() };
+        held.landing = { outcome, keepAlive: this.#link.hold() };
         this.#landed.set(key, hold);
         void hold.released().then(() => {
           if (this.#landed.get(key) === hold) this.#landed.delete(key);

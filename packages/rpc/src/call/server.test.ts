@@ -3,16 +3,28 @@ import { once } from 'node:events';
 import { describe, test } from 'node:test';
 
 import { untilAborted } from '@zukhruf/async';
+import { startWorker } from '@zukhruf/testing/process';
 
 import {
   ChildProcessConnection,
+  Client,
   ErrorCodec,
   Server,
   ServerWarning,
   WorkerConnection,
 } from '../index.ts';
-import { report, startAsker, startThread, tag } from '../testing/threads.ts';
+import {
+  linkTo,
+  report,
+  startAsker,
+  startThread,
+  tag,
+} from '../testing/threads.ts';
 
+const rpcUrl = new URL('../index.ts', import.meta.url);
+const isString = (answer: unknown): answer is string =>
+  typeof answer === 'string';
+const isVoid = (answer: unknown): answer is void => answer === undefined;
 const noParams = (params: readonly unknown[]): params is [] =>
   params.length === 0;
 
@@ -35,7 +47,7 @@ describe('A server', () => {
         ping: () => 'pong',
       },
       { methods: { ping: noParams }, errors: new ErrorCodec([]) },
-    ).serve(new ChildProcessConnection(asker.child, { tag }));
+    ).serve(linkTo(new ChildProcessConnection(asker.child, { tag })));
 
     // Act
     const reported = await asker.next('secret', { signal: t.signal });
@@ -74,7 +86,7 @@ describe('A server', () => {
         },
         errors: new ErrorCodec([]),
       },
-    ).serve(new ChildProcessConnection(asker.child, { tag }));
+    ).serve(linkTo(new ChildProcessConnection(asker.child, { tag })));
 
     // Act
     const reported = await asker.next('sum', { signal: t.signal });
@@ -114,7 +126,7 @@ describe('A server', () => {
           methods: { fail: noParams, ping: noParams },
           errors: new ErrorCodec([]),
         },
-      ).serve(new WorkerConnection(thread, { tag }));
+      ).serve(linkTo(new WorkerConnection(thread, { tag })));
 
       // Act
       const reported = await report(thread, t.signal);
@@ -152,7 +164,7 @@ describe('A server', () => {
     new Server(
       { ping: () => ++pings },
       { methods: { ping: noParams }, errors: new ErrorCodec([]) },
-    ).serve(new WorkerConnection(thread, { tag }));
+    ).serve(linkTo(new WorkerConnection(thread, { tag })));
 
     // Act
     const reported = await (async () => {
@@ -164,5 +176,234 @@ describe('A server', () => {
 
     // Assert
     assert.deepEqual(reported, { pings: 1 });
+  });
+});
+
+describe('A thread that serves', () => {
+  test("answers its parent's next call after the last call of a client on the same link", async (t) => {
+    // Arrange: the thread serves `ping` and asks `add` through one link; this process does both on its end.
+    await using thread = startThread(`
+			const connection = new rpc.ParentPortConnection(parentPort, { tag: ${JSON.stringify(tag)} });
+			const link = new rpc.ConnectionSupervisor({ connect: async () => connection });
+			new rpc.Server({ ping: () => 'pong' }, { methods: { ping: (p) => p.length === 0 }, errors: new rpc.ErrorCodec([]) }).serve(link);
+			const client = new rpc.Client(link, {
+				errors: new rpc.ErrorCodec([]),
+				answers: { add: (answer) => typeof answer === 'number' },
+			});
+			parentPort.postMessage({ sum: await client.call('add', [1, 2]) });
+		`);
+    const link = linkTo(new WorkerConnection(thread, { tag }));
+    new Server(
+      { add: (a: number, b: number) => a + b },
+      {
+        methods: {
+          add: (params): params is [number, number] =>
+            params.length === 2 &&
+            params.every((param) => typeof param === 'number'),
+        },
+        errors: new ErrorCodec([]),
+      },
+    ).serve(link);
+    await using client = new Client<{ ping(): string }>(link, {
+      errors: new ErrorCodec([]),
+      answers: { ping: isString },
+    });
+    // The thread's client got its answer, so it holds the link no longer.
+    assert.deepEqual(await report(thread, t.signal), { sum: 3 });
+
+    // Act
+    const answer = await untilAborted(client.call('ping', []), t.signal);
+
+    // Assert: a thread that stopped listening would have exited, and the call would have been lost with it.
+    assert.equal(answer, 'pong');
+  });
+
+  test('stays alive to answer while it serves, and exits by itself once it closes its link', async (t) => {
+    // Arrange: the thread only serves; its `close` closes its link after the answer goes, and reports what still listens on its port.
+    await using thread = startThread(`
+			const connection = new rpc.ParentPortConnection(parentPort, { tag: ${JSON.stringify(tag)} });
+			const link = new rpc.ConnectionSupervisor({ connect: async () => connection });
+			const close = () => {
+				setImmediate(async () => {
+					await link.close();
+					parentPort.postMessage({ listeners: parentPort.listenerCount('message') });
+				});
+			};
+			new rpc.Server(
+				{ ping: () => 'pong', close },
+				{ methods: { ping: (p) => p.length === 0, close: (p) => p.length === 0 }, errors: new rpc.ErrorCodec([]) },
+			).serve(link);
+		`);
+    const exited = once(thread, 'exit');
+    await using client = new Client<{ ping(): string; close(): void }>(
+      linkTo(new WorkerConnection(thread, { tag })),
+      {
+        errors: new ErrorCodec([]),
+        answers: { ping: isString, close: isVoid },
+      },
+    );
+    // A thread that does not hold its link exits before the call comes, and the call is lost with it.
+    assert.equal(await untilAborted(client.call('ping', []), t.signal), 'pong');
+
+    // Act
+    await untilAborted(client.call('close', []), t.signal);
+
+    // Assert: nothing listens on the port any more, so the thread ends by itself.
+    assert.deepEqual(await report(thread, t.signal), { listeners: 0 });
+    assert.deepEqual(await untilAborted(exited, t.signal), [0]);
+  });
+});
+
+describe('A process that serves over its IPC channel', () => {
+  test("answers its parent's next call after the last call of a client on the same link", async (t) => {
+    // Arrange: the process serves `ping` and asks `add` through one link; this process does both on its end.
+    await using peer = startWorker(
+      `
+				import { promisify } from 'node:util';
+				import * as rpc from ${JSON.stringify(rpcUrl.href)};
+				const channel = new rpc.ProcessChannelConnection(promisify(process.send).bind(process), { tag: ${JSON.stringify(tag)} });
+				const link = new rpc.ConnectionSupervisor({ connect: async () => channel });
+				new rpc.Server({ ping: () => 'pong' }, { methods: { ping: (p) => p.length === 0 }, errors: new rpc.ErrorCodec([]) }).serve(link);
+				const client = new rpc.Client(link, {
+					errors: new rpc.ErrorCodec([]),
+					answers: { add: (answer) => typeof answer === 'number' },
+				});
+				process.send({ type: 'sum', sum: await client.call('add', [1, 2]) });
+			`,
+      'peer',
+    );
+    const link = linkTo(new ChildProcessConnection(peer.child, { tag }));
+    new Server(
+      { add: (a: number, b: number) => a + b },
+      {
+        methods: {
+          add: (params): params is [number, number] =>
+            params.length === 2 &&
+            params.every((param) => typeof param === 'number'),
+        },
+        errors: new ErrorCodec([]),
+      },
+    ).serve(link);
+    await using client = new Client<{ ping(): string }>(link, {
+      errors: new ErrorCodec([]),
+      answers: { ping: isString },
+    });
+    // The process's client got its answer, so it holds the link no longer.
+    assert.equal((await peer.next('sum', { signal: t.signal })).sum, 3);
+
+    // Act
+    const answer = await untilAborted(client.call('ping', []), t.signal);
+
+    // Assert: a process that stopped listening would have exited, and the call would have been lost with it.
+    assert.equal(answer, 'pong');
+  });
+
+  test('stays alive to answer while it serves, and exits by itself once it closes its link', async (t) => {
+    // Arrange: the process only serves; its `close` closes its link after the answer goes, and reports what still listens on its channel.
+    await using peer = startWorker(
+      `
+				import { promisify } from 'node:util';
+				import * as rpc from ${JSON.stringify(rpcUrl.href)};
+				const channel = new rpc.ProcessChannelConnection(promisify(process.send).bind(process), { tag: ${JSON.stringify(tag)} });
+				const link = new rpc.ConnectionSupervisor({ connect: async () => channel });
+				const close = () => {
+					setImmediate(async () => {
+						await link.close();
+						process.send({ type: 'closed', listeners: process.listenerCount('message') });
+					});
+				};
+				new rpc.Server(
+					{ ping: () => 'pong', close },
+					{ methods: { ping: (p) => p.length === 0, close: (p) => p.length === 0 }, errors: new rpc.ErrorCodec([]) },
+				).serve(link);
+			`,
+      'peer',
+    );
+    await using client = new Client<{ ping(): string; close(): void }>(
+      linkTo(new ChildProcessConnection(peer.child, { tag })),
+      {
+        errors: new ErrorCodec([]),
+        answers: { ping: isString, close: isVoid },
+      },
+    );
+    // A process that does not hold its link exits before the call comes, and the call is lost with it.
+    assert.equal(await untilAborted(client.call('ping', []), t.signal), 'pong');
+
+    // Act
+    await untilAborted(client.call('close', []), t.signal);
+
+    // Assert: nothing listens on the channel any more, so the process ends by itself.
+    assert.equal(
+      (await peer.next('closed', { signal: t.signal })).listeners,
+      0,
+    );
+    await untilAborted(peer.closed, t.signal);
+    assert.deepEqual(peer.exit, { code: 0, signal: null }, peer.stderr);
+  });
+
+  test("drops an answer whose caller's link is gone, and answers a call on a new link", async (t) => {
+    // Arrange: `late` answers only once the process's channel to this process is gone; then the process calls `ping` of the same server over a port of its own.
+    const peer = startWorker(
+      `
+				import { once } from 'node:events';
+				import { promisify } from 'node:util';
+				import { MessageChannel } from 'node:worker_threads';
+				import * as rpc from ${JSON.stringify(rpcUrl.href)};
+				const tag = ${JSON.stringify(tag)};
+				const channel = new rpc.ProcessChannelConnection(promisify(process.send).bind(process), { tag });
+				let given = false;
+				const link = new rpc.ConnectionSupervisor({ connect: async () => (given ? undefined : ((given = true), channel)) });
+				const gone = once(process, 'disconnect');
+				const server = new rpc.Server(
+					{
+						late: async () => {
+							process.send({ type: 'called' });
+							await gone;
+							return 'late';
+						},
+						ping: () => 'pong',
+					},
+					{ methods: { late: (p) => p.length === 0, ping: (p) => p.length === 0 }, errors: new rpc.ErrorCodec([]) },
+				);
+				server.serve(link);
+				await gone;
+				const { port1, port2 } = new MessageChannel();
+				const served = new rpc.ConnectionSupervisor({ connect: async () => new rpc.ParentPortConnection(port1, { tag }) });
+				server.serve(served);
+				const client = new rpc.Client(new rpc.ConnectionSupervisor({ connect: async () => new rpc.ParentPortConnection(port2, { tag }) }), {
+					errors: new rpc.ErrorCodec([]),
+					answers: { ping: (answer) => answer === 'pong' },
+				});
+				console.error('answer: ' + (await client.call('ping', [])));
+				await client[Symbol.asyncDispose]();
+				await served.close();
+				port1.close();
+			`,
+      'peer',
+    );
+    // Node emits no `close` for a child whose channel its parent disconnected, so `peer.closed` never settles and the test waits for `exit`.
+    const exited = once(peer.child, 'exit');
+    try {
+      await using client = new Client<{ late(): string }>(
+        linkTo(new ChildProcessConnection(peer.child, { tag })),
+        { errors: new ErrorCodec([]), answers: { late: isString } },
+      );
+      const late = client.call('late', []).catch((error: unknown) => error);
+      await peer.next('called', { signal: t.signal });
+
+      // Act: the link goes before `late` answers.
+      peer.child.disconnect();
+
+      // Assert: the process ends with 0 only after `ping` answered; a send to the lost link that threw would end it with an unhandled rejection first.
+      assert.ok(Error.isError(await untilAborted(late, t.signal)));
+      assert.deepEqual(
+        await untilAborted(exited, t.signal),
+        [0, null],
+        peer.stderr,
+      );
+    } finally {
+      if (peer.child.exitCode === null && peer.child.signalCode === null)
+        peer.child.kill('SIGKILL');
+    }
   });
 });

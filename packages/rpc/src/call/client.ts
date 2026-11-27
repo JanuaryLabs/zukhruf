@@ -1,4 +1,4 @@
-import { RefCount, untilAborted } from '@zukhruf/async';
+import { untilAborted } from '@zukhruf/async';
 
 import type { ConnectionSupervisor } from '../connection/connection-supervisor.ts';
 import { ConnectionLostError } from '../error/connection-lost-error.ts';
@@ -33,13 +33,12 @@ const rejectLost: LostCallPolicy<unknown> = {
  * Calls the methods of a peer's `Server` over a supervised connection. A
  * call waits for its answer, or rejects with `ConnectionLostError` as soon as
  * the connection it went out on is lost. A call made while no connection is
- * open goes on the next one. The connection keeps the process alive only
- * while a call or a notification waits.
+ * open goes on the next one. The client holds the connection only while a
+ * call or a notification waits, so it keeps the process alive no longer.
  */
 export class Client<Remote extends Methods<Remote>> implements AsyncDisposable {
   readonly #link: ConnectionSupervisor<RpcMessage>;
   readonly #errors: ErrorCodec;
-  readonly #refs: RefCount;
   readonly #answers: AnswerChecks<Remote>;
   readonly #calls: PendingCalls<RpcMessage, unknown>;
   /** The notifications made while no connection was open, each with the hold that keeps the process alive until it goes. */
@@ -53,8 +52,7 @@ export class Client<Remote extends Methods<Remote>> implements AsyncDisposable {
     this.#link = link;
     this.#errors = errors;
     this.#answers = answers;
-    this.#refs = new RefCount(link);
-    this.#calls = new PendingCalls(link, this.#refs);
+    this.#calls = new PendingCalls(link);
     link.on('connected', () => {
       this.#flush();
       this.#calls.resume();
@@ -105,7 +103,7 @@ export class Client<Remote extends Methods<Remote>> implements AsyncDisposable {
     const notification: RpcNotification = { method, params };
     this.#link.open();
     if (this.#outbox.length === 0 && this.#link.send(notification)) return;
-    this.#outbox.push({ notification, held: this.#refs.hold() });
+    this.#outbox.push({ notification, held: this.#link.hold() });
   }
 
   /** Closes the connection. Each call that waits rejects with `ConnectionLostError`. */

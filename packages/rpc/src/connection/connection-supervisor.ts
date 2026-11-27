@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events';
 
-import { Latch, type Referable } from '@zukhruf/async';
+import { Latch, RefCount, type Referable } from '@zukhruf/async';
 
 import type { Connection } from './connection.ts';
 import type { Connector } from './connector.ts';
@@ -51,17 +51,14 @@ export class ConnectionSupervisor<
   }
 
   /**
-   * Keeps the process alive through the open connection and each one that
-   * replaces it, until `unref`. A new supervisor keeps the process alive, as a
-   * new socket does.
+   * Keeps the process alive through the open connection, and each one that
+   * replaces it, until the token is disposed. The link is ref'd while any
+   * token is out, so one holder's release does not unref another's work. A
+   * supervisor that nobody holds lets the process exit, as an unref'd socket
+   * does.
    */
-  ref() {
-    this.#supervision.refer(keepAlive);
-  }
-
-  /** Lets the process exit while the open connection, or one that replaces it, waits. */
-  unref() {
-    this.#supervision.refer(letExit);
+  hold(): Disposable {
+    return this.#supervision.holds.hold();
   }
 
   /** Closes for good, after any connect still on its way has stopped. */
@@ -88,13 +85,18 @@ interface State<Outgoing> {
   close(): Promise<void>;
 }
 
-/** What the states share: the current state, the last reference asked, and how to move to the next state. */
+/** What the states share: the current state, the holds on the link, and how to move to the next state. */
 class Supervision<Outgoing> {
   readonly connector: Connector<Outgoing>;
   readonly events: EventEmitter<SupervisorEvents>;
   state: State<Outgoing>;
-  /** The last `ref` or `unref` asked. Each new connection takes it on, whatever its adapter starts with. */
-  reference: Reference = keepAlive;
+  /** Whether a hold is out. Each new connection takes it on, whatever its adapter starts with. */
+  reference: Reference = letExit;
+  /** The one count of the link: its first hold refs the link, and the release of its last unrefs it. */
+  readonly holds = new RefCount({
+    ref: () => this.refer(keepAlive),
+    unref: () => this.refer(letExit),
+  });
 
   constructor(
     connector: Connector<Outgoing>,

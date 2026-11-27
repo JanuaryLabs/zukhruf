@@ -16,6 +16,10 @@ _Avoid_: Dialer, factory
 A `ConnectionSupervisor`: it keeps one connection open at a time and replaces a lost one.
 _Avoid_: Reconnector, link (the field name that holds it)
 
+**Hold**:
+A token of `link.hold()`: while one is out, the supervisor keeps the process alive through its connection. A server holds its link while it serves, and a call while it waits (ADR 0004).
+_Avoid_: Ref (the switch of one connection), keep-alive, lease
+
 **Tag**:
 The key of the envelope that each message of a shared channel travels in: `{ [tag]: message }`. The mutex's tag is `'@lock'`.
 _Avoid_: Namespace, prefix, channel name

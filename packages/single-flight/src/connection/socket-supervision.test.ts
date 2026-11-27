@@ -21,8 +21,8 @@ function socketPathIn(directory: string) {
 }
 
 describe('A process whose supervisor connects over a socket', () => {
-  test('an unref() asked before open reaches the first connection, so the process exits by itself', async (t) => {
-    // Arrange: a process unrefs its supervisor before it opens it, and stays alive only until the test says so.
+  test('a supervisor that nobody holds lets the process exit by itself once its first connection is open', async (t) => {
+    // Arrange: a process opens its supervisor without a hold, and stays alive only until the test says so.
     await using directory = await new TemporaryFiles().directory('flights-');
     const socketPath = socketPathIn(directory.path);
     await using _server = await standInServer(socketPath, () => {});
@@ -40,7 +40,6 @@ describe('A process whose supervisor connects over a socket', () => {
 					}),
 				});
 				supervisor.on('connected', () => process.send({ type: 'connected' }));
-				supervisor.unref();
 				supervisor.open();
 			`,
       'idle',
@@ -51,13 +50,13 @@ describe('A process whose supervisor connects over a socket', () => {
     // A process that exited first gets no message.
     idle.child.send('done', () => undefined);
 
-    // Assert: the first connection keeps the unref() asked before it opened.
+    // Assert: the first connection is not ref'd, because nobody holds the supervisor.
     await untilAborted(idle.closed, t.signal);
     assert.deepEqual(idle.exit, { code: 0, signal: null }, idle.stderr);
   });
 
-  test('after unref(), the process exits by itself once its lost socket connection was replaced', async (t) => {
-    // Arrange: a process unrefs its supervisor on the first connection, and stays alive only until the test says so.
+  test('after its last hold is released, the process exits by itself once its lost socket connection was replaced', async (t) => {
+    // Arrange: a process holds its supervisor until the first connection, and stays alive only until the test says so.
     await using directory = await new TemporaryFiles().directory('flights-');
     const socketPath = socketPathIn(directory.path);
     const firstPeer = Promise.withResolvers<Socket>();
@@ -77,16 +76,17 @@ describe('A process whose supervisor connects over a socket', () => {
 						socket.once('error', reject);
 					}),
 				});
+				const held = supervisor.hold();
 				supervisor.once('connected', () => {
-					supervisor.unref();
+					held[Symbol.dispose]();
 					supervisor.on('connected', () => process.send({ type: 'replaced' }));
-					process.send({ type: 'unrefed' });
+					process.send({ type: 'released' });
 				});
 				supervisor.open();
 			`,
       'idle',
     );
-    await idle.next('unrefed', { signal: t.signal });
+    await idle.next('released', { signal: t.signal });
 
     // Act: the server drops the connection, the supervisor replaces it, and the process has nothing else to do.
     (await untilAborted(firstPeer.promise, t.signal)).destroy();
@@ -94,13 +94,13 @@ describe('A process whose supervisor connects over a socket', () => {
     // A process that exited first gets no message.
     idle.child.send('done', () => undefined);
 
-    // Assert: the replacement keeps the last unref(), so it does not keep the process alive.
+    // Assert: nobody holds the supervisor, so the replacement does not keep the process alive.
     await untilAborted(idle.closed, t.signal);
     assert.deepEqual(idle.exit, { code: 0, signal: null }, idle.stderr);
   });
 
-  test('an unref() asked while the supervisor reconnects reaches the replacement, so the process exits by itself', async (t) => {
-    // Arrange: a process unrefs its supervisor when it hears of the loss, and stays alive only until the test says so.
+  test('a hold released while the supervisor reconnects reaches the replacement, so the process exits by itself', async (t) => {
+    // Arrange: a process holds its supervisor until it hears of the loss, and stays alive only until the test says so.
     await using directory = await new TemporaryFiles().directory('flights-');
     const socketPath = socketPathIn(directory.path);
     const firstPeer = Promise.withResolvers<Socket>();
@@ -124,8 +124,9 @@ describe('A process whose supervisor connects over a socket', () => {
 					supervisor.on('connected', () => process.send({ type: 'replaced' }));
 					process.send({ type: 'connected' });
 				});
+				const held = supervisor.hold();
 				// The supervisor reports the loss once it is connecting again.
-				supervisor.once('disconnected', () => supervisor.unref());
+				supervisor.once('disconnected', () => held[Symbol.dispose]());
 				supervisor.open();
 			`,
       'idle',
@@ -138,7 +139,7 @@ describe('A process whose supervisor connects over a socket', () => {
     // A process that exited first gets no message.
     idle.child.send('done', () => undefined);
 
-    // Assert: the replacement keeps the unref() asked while there was no connection.
+    // Assert: the replacement keeps the release made while there was no connection.
     await untilAborted(idle.closed, t.signal);
     assert.deepEqual(idle.exit, { code: 0, signal: null }, idle.stderr);
   });

@@ -20,6 +20,11 @@ The paths are in `packages/rpc/src`.
 
 Backlog #2544 is about this code: `close` stops the listeners, but it does not emit `close`. A fix for it goes into both places.
 
+**`pipes` of a test.** Counts the `PipeWrap` entries of a list of `process.getActiveResourcesInfo()`, which tells whether an IPC channel is ref'd (#4984 step 1b).
+
+- Places: `call/client.test.ts` and `connection/connection-supervisor.test.ts`.
+- Same: the whole function. Differs: nothing.
+
 ## In more than two places
 
 **`isRecord`.** `shared/is-record.ts` is the third copy of `packages/mutex/src/shared/is-record.ts` and `packages/single-flight/src/shared/is-record.ts`. It stays a copy: one home would give this package a dependency that it does not have (root ADR 0001, rule 4).

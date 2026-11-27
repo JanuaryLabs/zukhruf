@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import { RefCount, untilAborted } from '@zukhruf/async';
+import { untilAborted } from '@zukhruf/async';
 import { FencingToken } from '@zukhruf/fencing';
 import { LeaseController } from '@zukhruf/lease';
 import {
@@ -56,10 +56,9 @@ export class RemoteLockClient implements LockStore {
 
   constructor(link: ConnectionSupervisor<LockRequest>) {
     this.#link = link;
-    // One count for both tables: the connection stays ref'd while a request or a look waits.
-    const refs = new RefCount(link);
-    this.#requests = new PendingCalls<KeyRequest, Grant>(link, refs);
-    this.#looks = new PendingCalls<LookRequest, boolean>(link, refs);
+    // Both tables hold the link's one count: the connection stays ref'd while a request or a look waits.
+    this.#requests = new PendingCalls<KeyRequest, Grant>(link);
+    this.#looks = new PendingCalls<LookRequest, boolean>(link);
     link.on('connected', () => this.#resume());
     // A message this client cannot read answers nothing it waits for.
     link.on('message', (message) => {

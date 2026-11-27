@@ -14,7 +14,7 @@ Three places kept a table of the requests that wait for an answer: `RemoteLockCl
 
 `PendingCalls.add(id, request, onLost)` takes one of three policies: `'resend'`, `{ atLoss }` or `{ atReconnect }`. The owner reports each loss with `interrupt()` and each new connection with `resume()`, so it sends its own messages first: the mutex sends its reassertions and its end-of-reasserts marker before the requests that wait (mutex ADR 0033). The table does not listen to the supervisor itself, because the order of two listeners is not a contract.
 
-A call holds a token of a `RefCount` that the owner gives, so two tables on one connection (the mutex's requests and looks) unref it only when neither has a call.
+A call holds the link from its add until it is taken. The count of holds belongs to the supervisor since ADR 0004, so two tables on one link (the mutex's requests and looks), and a server beside them, unref it only when none of them holds it.
 
 ## Considered Options
 

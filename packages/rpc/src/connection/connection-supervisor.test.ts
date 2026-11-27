@@ -13,6 +13,11 @@ import { watch } from '../testing/watch.ts';
 import { ConnectionSupervisor } from './connection-supervisor.ts';
 
 const supervisorUrl = new URL('./connection-supervisor.ts', import.meta.url);
+/** How many pipes keep a process alive, in a list of `process.getActiveResourcesInfo()`. */
+const pipes = (resources: unknown) =>
+  Array.isArray(resources)
+    ? resources.filter((resource) => resource === 'PipeWrap').length
+    : Number.NaN;
 const processChannelConnectionUrl = new URL(
   '../channel/process-channel-connection.ts',
   import.meta.url,
@@ -163,8 +168,8 @@ describe('Connection supervisor', () => {
   });
 
   // Kept as a double: an adapter that starts unref'd (an IPC channel, a worker port) is handed out once and never replaced.
-  test('a replacement keeps the last ref()', async (t) => {
-    // Arrange: the open connection was unref'd and then ref'd.
+  test("a replacement is ref'd while a hold is out", async (t) => {
+    // Arrange: the open connection is held.
     const { supervisor, calls } = supervised();
     const first = scriptedPeer<Message, Message>();
     const second = scriptedPeer<Message, Message>();
@@ -172,8 +177,7 @@ describe('Connection supervisor', () => {
     calls[0]!.resolve(first.connection);
     // The connection must be reported.
     await untilAborted(once(supervisor, 'connected'), t.signal);
-    supervisor.unref();
-    supervisor.ref();
+    using _held = supervisor.hold();
 
     try {
       // Act: the connection is lost and replaced.
@@ -186,7 +190,7 @@ describe('Connection supervisor', () => {
       assert.equal(
         second.refs.at(-1),
         'ref',
-        'The replacement must keep the process alive, as the last ask said',
+        'The replacement must keep the process alive while the hold is out',
       );
     } finally {
       await supervisor.close();
@@ -263,8 +267,8 @@ describe('Connection supervisor', () => {
 });
 
 describe('A process whose supervisor connects over its IPC channel', () => {
-  test('a ref() asked after an unref() and before open reaches the first connection, so the process stays alive to hear its parent', async (t) => {
-    // Arrange: a process unrefs and then refs its supervisor before it opens it; an IPC connection starts without listening.
+  test('a hold taken before open reaches the first connection, so the process stays alive to hear its parent', async (t) => {
+    // Arrange: a process holds its supervisor before it opens it, and lets go once it hears its parent; an IPC connection starts without listening.
     await using waiter = startWorker(
       `
 				import { promisify } from 'node:util';
@@ -272,13 +276,12 @@ describe('A process whose supervisor connects over its IPC channel', () => {
 				import { ProcessChannelConnection } from ${JSON.stringify(processChannelConnectionUrl.href)};
 				const channel = new ProcessChannelConnection(promisify(process.send).bind(process), { tag: '@test' });
 				const supervisor = new ConnectionSupervisor({ connect: async () => channel });
+				const held = supervisor.hold();
 				supervisor.on('connected', () => process.send({ type: 'connected' }));
 				supervisor.on('message', (message) => {
 					process.send({ type: 'heard', message });
-					supervisor.unref();
+					held[Symbol.dispose]();
 				});
-				supervisor.unref();
-				supervisor.ref();
 				supervisor.open();
 			`,
       'waiter',
@@ -289,10 +292,52 @@ describe('A process whose supervisor connects over its IPC channel', () => {
     // A process that exited first gets no message.
     waiter.child.send({ '@test': { n: 1 } }, () => undefined);
 
-    // Assert: the process heard its parent, and exited by itself after its unref().
+    // Assert: the process heard its parent, and exited by itself once nobody held its supervisor.
     const heard = await waiter.next('heard', { signal: t.signal });
     assert.deepEqual(heard.message, { n: 1 });
     await untilAborted(waiter.closed, t.signal);
     assert.deepEqual(waiter.exit, { code: 0, signal: null }, waiter.stderr);
+  });
+
+  test("stays ref'd while one of two holds is out, and lets the process exit once nobody holds it", async (t) => {
+    // Arrange: a process holds its supervisor twice, lets go of one hold and then of the other, and reports what keeps it alive at each step.
+    // Its IPC channel is listed as one more `PipeWrap`, beside its stderr pipe, only while the channel is ref'd; a small `process.send` of its own adds none.
+    await using holder = startWorker(
+      `
+				import { once } from 'node:events';
+				import { promisify } from 'node:util';
+				import { ConnectionSupervisor } from ${JSON.stringify(supervisorUrl.href)};
+				import { ProcessChannelConnection } from ${JSON.stringify(processChannelConnectionUrl.href)};
+				const channel = new ProcessChannelConnection(promisify(process.send).bind(process), { tag: '@test' });
+				const supervisor = new ConnectionSupervisor({ connect: async () => channel });
+				const first = supervisor.hold();
+				const second = supervisor.hold();
+				supervisor.open();
+				await once(supervisor, 'connected');
+				const both = process.getActiveResourcesInfo();
+				first[Symbol.dispose]();
+				const one = process.getActiveResourcesInfo();
+				second[Symbol.dispose]();
+				process.send({ type: 'resources', both, one, none: process.getActiveResourcesInfo() });
+			`,
+      'holder',
+    );
+
+    // Act
+    const reported = await holder.next('resources', { signal: t.signal });
+
+    // Assert
+    assert.equal(
+      pipes(reported.one) - pipes(reported.none),
+      1,
+      'The hold that is still out must keep the process alive through its channel',
+    );
+    assert.equal(
+      pipes(reported.both),
+      pipes(reported.one),
+      'A second hold refs nothing more',
+    );
+    await untilAborted(holder.closed, t.signal);
+    assert.deepEqual(holder.exit, { code: 0, signal: null }, holder.stderr);
   });
 });

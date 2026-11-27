@@ -1,5 +1,4 @@
-import { ConnectionClosedError } from '../connection/connection-closed-error.ts';
-import type { Connection } from '../connection/connection.ts';
+import type { ConnectionSupervisor } from '../connection/connection-supervisor.ts';
 import type { ErrorCodec } from '../error/error-codec.ts';
 import { ServerWarning } from '../error/server-warning.ts';
 import type { Methods, ParamChecks } from './methods.ts';
@@ -21,8 +20,8 @@ export interface ServerOptions<Local extends Methods<Local>> {
  * Answers the calls that peers make of `target`. It answers each request with
  * the method's value or the error it threw, and runs each notification
  * without an answer. A message that is not a call is not the server's, so it
- * is ignored. Serving does not keep the process alive: the owner of the
- * connection refs it.
+ * is ignored. Serving holds the connection, so the process stays alive to
+ * hear the next call, as a listening `net.Server` does.
  */
 export class Server<Local extends Methods<Local>> {
   readonly #target: Local;
@@ -38,28 +37,32 @@ export class Server<Local extends Methods<Local>> {
     this.#errors = errors;
   }
 
-  /** Answers the calls that arrive on `connection` until it closes. */
-  serve(connection: Connection<RpcMessage>) {
-    const onMessage = (message: unknown) => {
+  /**
+   * Opens `link` and answers the calls that arrive on it, on the open
+   * connection and each one that replaces it. It holds `link` for good, as a
+   * listening `net.Server` holds its handle: the hold ends with the link, since
+   * a link that is closed or unavailable has no connection left to ref.
+   */
+  serve(link: ConnectionSupervisor<RpcMessage>) {
+    // Never released: a closed or unavailable link refs nothing.
+    link.hold();
+    link.on('message', (message) => {
       if (!isRpcCall(message)) return;
       if (message.id === undefined) void this.#run(message);
-      else void this.#answer(connection, message);
-    };
-    connection.on('message', onMessage);
-    connection.once('close', () => connection.off('message', onMessage));
+      else void this.#answer(link, message);
+    });
+    link.open();
   }
 
-  async #answer(connection: Connection<RpcMessage>, request: RpcRequest) {
+  /** A send that does not reach the link drops the answer: the caller is gone, and nobody waits for it. */
+  async #answer(link: ConnectionSupervisor<RpcMessage>, request: RpcRequest) {
     let response: RpcMessage;
     try {
       response = { id: request.id, result: await this.#invoke(request) };
     } catch (error) {
       response = { id: request.id, error: this.#errors.encode(error) };
     }
-    await connection.send(response).catch((error: unknown) => {
-      // The caller is gone; nobody waits for the answer.
-      if (!(error instanceof ConnectionClosedError)) throw error;
-    });
+    link.send(response);
   }
 
   async #run(notification: RpcNotification) {

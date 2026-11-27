@@ -1,5 +1,3 @@
-import type { RefCount } from '@zukhruf/async';
-
 import type { ConnectionSupervisor } from '../connection/connection-supervisor.ts';
 
 /** What settles the promise of one call; the caller keeps the promise. */
@@ -58,19 +56,17 @@ interface Pending<Request, Answer> {
  * The calls that wait for an answer over a supervised connection, by id. A
  * call goes out when it is added, or on the next connection when none is
  * open. The owner reports each loss and each new connection, so it can send
- * its own messages first (a reassertion, a marker). A call keeps the
- * connection ref'd from its add until it is taken, so the process exits only
- * when no call waits.
+ * its own messages first (a reassertion, a marker). A call holds the
+ * connection from its add until it is taken, so the process exits only when
+ * no call, and no other holder of the connection, waits.
  */
 export class PendingCalls<Request, Answer> {
   readonly #link: ConnectionSupervisor<Request>;
-  readonly #refs: RefCount;
   readonly #calls = new Map<string, Pending<Request, Answer>>();
 
-  /** `refs` counts on `link` for every owner of work on it, so one owner's last call does not unref another's. */
-  constructor(link: ConnectionSupervisor<Request>, refs: RefCount) {
+  /** Each call holds `link`, so one owner's last call does not unref the work of another owner of the link. */
+  constructor(link: ConnectionSupervisor<Request>) {
     this.#link = link;
-    this.#refs = refs;
   }
 
   /** Opens the connection and sends `request`, or keeps it for the next connection. One id is one call. */
@@ -88,7 +84,7 @@ export class PendingCalls<Request, Answer> {
       onLost,
       delivery: queued,
       settler: { resolve, reject },
-      held: this.#refs.hold(),
+      held: this.#link.hold(),
     };
     this.#calls.set(id, call);
     this.#link.open();

@@ -5,6 +5,7 @@ import { untilAborted } from '@zukhruf/async';
 import { startWorker } from '@zukhruf/testing/process';
 
 import { WorkerConnection } from '../channel/worker-connection.ts';
+import { ConnectionSupervisor } from '../connection/connection-supervisor.ts';
 import type { Connection } from '../connection/connection.ts';
 
 const rpcUrl = new URL('../index.ts', import.meta.url);
@@ -27,13 +28,31 @@ function threadSource(body: string) {
 `;
 }
 
-/** Source, for a thread, that serves `target` on the port to its parent with the checks `methods` and the error classes `classes`. */
+/**
+ * Source, for a thread, that serves `target` on the port to its parent with
+ * the checks `methods` and the error classes `classes`. The supervisor of the
+ * port is `link`, for the source that follows.
+ */
 export function serving(target: string, methods: string, classes = '[]') {
   return `
 		const connection = new rpc.ParentPortConnection(parentPort, { tag: ${JSON.stringify(tag)} });
-		connection.ref();
-		new rpc.Server(${target}, { methods: ${methods}, errors: new rpc.ErrorCodec(${classes}) }).serve(connection);
+		const link = new rpc.ConnectionSupervisor({ connect: async () => connection });
+		new rpc.Server(${target}, { methods: ${methods}, errors: new rpc.ErrorCodec(${classes}) }).serve(link);
 	`;
+}
+
+/** A supervisor of `connection` alone: once it is lost, the supervisor is unavailable. */
+export function linkTo<Outgoing>(
+  connection: Connection<Outgoing>,
+): ConnectionSupervisor<Outgoing> {
+  let given = false;
+  return new ConnectionSupervisor({
+    connect: async () => {
+      if (given) return undefined;
+      given = true;
+      return connection;
+    },
+  });
 }
 
 /** A thread of `body`, terminated at the dispose if it still runs. */

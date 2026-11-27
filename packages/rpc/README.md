@@ -10,7 +10,7 @@ The words in these documents have one meaning each. See the glossary in [CONTEXT
 npm install @zukhruf/rpc
 ```
 
-The host starts a worker thread and calls its `greet` method. The thread serves the method on its port.
+The host starts a worker thread and calls its `greet` method. The thread serves the method on its port, and calls the host's `log` on the same link.
 
 ```ts title="host.ts"
 import { Worker } from 'node:worker_threads';
@@ -20,6 +20,7 @@ import {
   ConnectionSupervisor,
   ErrorCodec,
   type RpcMessage,
+  Server,
   WorkerConnection,
 } from '@zukhruf/rpc';
 
@@ -33,6 +34,16 @@ const link = new ConnectionSupervisor<RpcMessage>({
       tag: '@greeter',
     }),
 });
+new Server(
+  { log: (line: string) => console.log(line) },
+  {
+    methods: {
+      log: (params): params is [string] =>
+        params.length === 1 && typeof params[0] === 'string',
+    },
+    errors: new ErrorCodec([]),
+  },
+).serve(link);
 await using client = new Client<Greeter>(link, {
   errors: new ErrorCodec([]),
   answers: { greet: (answer): answer is string => typeof answer === 'string' },
@@ -43,10 +54,21 @@ console.log(await client.call('greet', ['Ada']));
 ```ts title="greeter.ts"
 import { parentPort } from 'node:worker_threads';
 
-import { ErrorCodec, ParentPortConnection, Server } from '@zukhruf/rpc';
+import {
+  Client,
+  ConnectionSupervisor,
+  ErrorCodec,
+  ParentPortConnection,
+  type RpcMessage,
+  Server,
+} from '@zukhruf/rpc';
 
-const connection = new ParentPortConnection(parentPort!, { tag: '@greeter' });
-connection.ref();
+const connection = new ParentPortConnection<RpcMessage>(parentPort!, {
+  tag: '@greeter',
+});
+const link = new ConnectionSupervisor<RpcMessage>({
+  connect: async () => connection,
+});
 new Server(
   { greet: (name: string) => `Hello, ${name}` },
   {
@@ -56,8 +78,17 @@ new Server(
     },
     errors: new ErrorCodec([]),
   },
-).serve(connection);
+).serve(link);
+const host = new Client<{ log(line: string): void }>(link, {
+  errors: new ErrorCodec([]),
+  answers: { log: (answer): answer is void => answer === undefined },
+});
+await host.call('log', ['The greeter is ready']);
 ```
+
+The thread stays alive after its call to `log`: the server holds the link while it serves, and the client holds it only while a call waits (ADR 0004).
+
+````
 
 ## Call a method of the other end
 
@@ -67,13 +98,15 @@ new Server(
 
 ## Serve the methods of an object
 
-`server.serve(connection)` answers each request on `connection` with the value of the method, or with the error that it threw. It serves only the methods that `methods` names, each with the check of its parameters: a method of the target with no check is refused, as is a request whose parameters fail the check. Serving does not keep the process alive; the owner of the connection refs it. A notification's method that throws emits a `ServerWarning` (`ZUKHRUF_RPC_NOTIFICATION_FAILED`), because nothing answers a notification.
+`server.serve(link)` opens the supervisor `link` and answers each request on it with the value of the method, or with the error that it threw. It serves only the methods that `methods` names, each with the check of its parameters: a method of the target with no check is refused, as is a request whose parameters fail the check. The server holds the link while it serves, as a listening `net.Server` keeps the process alive: until the link is closed or unavailable. An answer that does not reach the link is dropped, because its caller is gone. A notification's method that throws emits a `ServerWarning` (`ZUKHRUF_RPC_NOTIFICATION_FAILED`), because nothing answers a notification.
 
-Each end can run a `Client` and a `Server` on one connection, as StreamJsonRpc's `JsonRpc` does: the client reads the responses and the server reads the requests.
+Each end can run a `Client` and a `Server` on one link, as StreamJsonRpc's `JsonRpc` does: the client reads the responses and the server reads the requests.
 
 ## Keep a connection across a loss
 
-`ConnectionSupervisor` keeps one connection open at a time. It connects on `open`, replaces a connection that is lost, and stops for good when its `Connector` gives `undefined`. It emits `connected`, `message`, `disconnected`, `unavailable` and `failed`. It keeps the last `ref()` or `unref()` for each connection that replaces a lost one.
+`ConnectionSupervisor` keeps one connection open at a time. It connects on `open`, replaces a connection that is lost, and stops for good when its `Connector` gives `undefined`. It emits `connected`, `message`, `disconnected`, `unavailable` and `failed`.
+
+`link.hold()` keeps the process alive through the open connection, and each one that replaces it, until the token it gives is disposed. The supervisor counts the holds of everyone who works on the link, so the release of one does not unref the work of another. A supervisor that nobody holds lets the process exit, as an unref'd socket does (ADR 0004).
 
 ## Decide what happens to a call that was in flight
 
@@ -85,7 +118,7 @@ Each end can run a `Client` and a `Server` on one connection, as StreamJsonRpc's
 | `{ atLoss }`      | The call leaves the table at the loss, and `atLoss` settles it.                                                                                             | `Client`: `ConnectionLostError`                       |
 | `{ atReconnect }` | The call waits, unsent, and `atReconnect` settles it when the next connection opens. A reconnect that fails or cannot come rejects it with the other calls. | The mutex's try: busy                                 |
 
-A call keeps the connection ref'd from its add until it is taken, so the process exits only when no call waits. Give every table on one connection the same `RefCount`.
+A call holds the link from its add until it is taken, so the process exits only when no call, and no other holder of the link, waits.
 
 ## Carry errors across
 
@@ -147,12 +180,11 @@ export class ConnectionSupervisor<
   readonly status: SupervisorStatus;
   open(): void;
   send(message: Outgoing): boolean;
-  ref(): void;
-  unref(): void;
+  hold(): Disposable;
   close(): Promise<void>;
 }
 export class PendingCalls<Request, Answer> {
-  constructor(link: ConnectionSupervisor<Request>, refs: RefCount);
+  constructor(link: ConnectionSupervisor<Request>);
   add(
     id: string,
     request: Request,
@@ -186,18 +218,19 @@ export class Server<Local extends Methods<Local>> {
     target: Local,
     options: { methods: ParamChecks<Local>; errors: ErrorCodec },
   );
-  serve(connection: Connection<RpcMessage>): void;
+  serve(link: ConnectionSupervisor<RpcMessage>): void;
 }
 export class ErrorCodec {
   constructor(classes: readonly ErrorClass[]);
   encode(reason: unknown): EncodedReason;
   decode(encoded: EncodedReason): unknown;
 }
-```
+````
 
 ## Documentation
 
 - [ADR 0001](./docs/adr/0001-a-lost-call-follows-the-policy-that-its-caller-gives.md): a lost call follows the policy that its caller gives.
 - [ADR 0002](./docs/adr/0002-an-error-crosses-as-data-and-is-rebuilt-from-a-list-of-classes-without-its-constructor.md): an error crosses as data and is rebuilt from a list of classes, without its constructor.
 - [ADR 0003](./docs/adr/0003-each-end-checks-what-it-receives.md): each end checks what it receives.
+- [ADR 0004](./docs/adr/0004-a-link-has-one-count-of-holds.md): a link has one count of holds.
 - [Copied code](./docs/copied-code.md)
