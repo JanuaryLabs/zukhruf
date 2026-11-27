@@ -1,6 +1,6 @@
 # A host composes a page of sections, and each section is built from its input
 
-Status: accepted (Ezz, 2026-11-27, #6108: "By input", then "Compose a Page"). `Page` is built in `src/report/page.ts` (7043d988); the names of the building blocks wait for their code.
+Status: accepted (Ezz, 2026-11-27, #6108: "By input", then "Compose a Page"). `Page` is built in `src/report/page.ts` (7043d988), and these building blocks with it: `Summary`, `Slices`, `RepeatSpread`, `ValidityGap`, `CostAndLatency`, `Verdicts` and `TestsMoved` of `./report`, and `FieldErrors` and `FieldDiff` (of one run) of `./structured`; `Trend` and the run-pair form of `FieldDiff` wait for their code.
 
 ## Context
 
