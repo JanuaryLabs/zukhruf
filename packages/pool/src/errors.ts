@@ -5,6 +5,30 @@ export interface Failure {
 }
 
 /**
+ * Makes `instanceof` of a pool error class recognize an error that another
+ * copy of the package built (ADR 0027): the class's prototype carries the
+ * brand `Symbol.for('@zukhruf/pool/<name>')`, which every copy shares, and the
+ * class checks for it. A subclass that declares no `Symbol.hasInstance` of
+ * its own inherits this one, so for it the check falls back to the prototype
+ * chain; else every instance of the class would be an instance of the
+ * subclass. Temporal's SymbolBasedInstanceOfError.
+ */
+export function brand(
+  errorClass: abstract new (...args: never[]) => Error,
+  name: string,
+): void {
+  const marker = Symbol.for(`@zukhruf/pool/${name}`);
+  Object.defineProperty(errorClass.prototype, marker, { value: true });
+  Object.defineProperty(errorClass, Symbol.hasInstance, {
+    value(this: typeof errorClass, value: unknown): boolean {
+      if (typeof value !== 'object' || value === null) return false;
+      if (this === errorClass) return Reflect.get(value, marker) === true;
+      return Object.prototype.isPrototypeOf.call(this.prototype, value);
+    },
+  });
+}
+
+/**
  * The job failed its last run: the worker failed or exited, the kind's time
  * limit ended, or its heartbeat lapsed. Temporal's ApplicationFailure.
  */
@@ -19,6 +43,7 @@ export class JobFailedError extends Error {
     this.failure = failure;
   }
 }
+brand(JobFailedError, 'JobFailedError');
 
 /** The job was cancelled, by cancel() of a handle or by the abort of a run. Temporal's CancelledFailure. */
 export class JobCancelledError extends Error {
@@ -27,6 +52,7 @@ export class JobCancelledError extends Error {
     this.name = 'JobCancelledError';
   }
 }
+brand(JobCancelledError, 'JobCancelledError');
 
 /**
  * The store has no job with the id of a handle: the store deleted it after
@@ -41,6 +67,7 @@ export class JobNotFoundError extends Error {
     this.name = 'JobNotFoundError';
   }
 }
+brand(JobNotFoundError, 'JobNotFoundError');
 
 /**
  * The store holds a newer revision of the kind, so this host's revision is
@@ -65,6 +92,7 @@ export class DeprecatedRevisionError extends Error {
     this.newest = options.newest;
   }
 }
+brand(DeprecatedRevisionError, 'DeprecatedRevisionError');
 
 /** A wait or a call of a Pool after its disposal. .NET's ObjectDisposedException. */
 export class DisposedError extends Error {
@@ -73,3 +101,4 @@ export class DisposedError extends Error {
     this.name = 'DisposedError';
   }
 }
+brand(DisposedError, 'DisposedError');

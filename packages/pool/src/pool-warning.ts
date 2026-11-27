@@ -1,3 +1,5 @@
+import { brand } from './errors.ts';
+
 /** The subject of a `PoolWarning`, by its code: the channel of a notify, the queue, and the job of a settle or a touch. */
 export type PoolWarningSubject =
   | { readonly code: 'ZUKHRUF_POOL_NOTIFY_FAILED'; readonly channel: string }
@@ -66,3 +68,4 @@ export class PoolWarning extends Error {
     }
   }
 }
+brand(PoolWarning, 'PoolWarning');
