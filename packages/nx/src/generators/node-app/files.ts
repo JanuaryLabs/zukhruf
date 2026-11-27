@@ -406,12 +406,17 @@ export interface DockerfileOptions {
   projectRoot: string;
   projectName: string;
   port: number;
+  /** The `workspaces` of the root package.json: npm ci reads the manifest of each. */
+  workspaces: string[];
   /** The paired web app, whose build the image serves. */
   spa?: { projectName: string; projectRoot: string };
 }
 
 export function dockerfile(options: DockerfileOptions): string {
-  const { projectRoot, projectName, port, spa } = options;
+  const { projectRoot, projectName, port, workspaces, spa } = options;
+  const manifests = workspaces
+    .map((workspace) => `${workspace.replace(/\/+$/, '')}/package.json`)
+    .join(' ');
   const buildProjects = spa ? `${projectName},${spa.projectName}` : projectName;
   const spaCopy = spa
     ? `COPY --from=build /workspace/${spa.projectRoot}/dist ./${spa.projectRoot}/dist\n`
@@ -428,11 +433,16 @@ ENV NX_DAEMON=false
 # resolve peer ranges differently, so it must not decide the tree.
 RUN npm install -g npm@latest
 WORKDIR /workspace
-# .dockerignore keeps node_modules, dist, .nx, .git, .env* and generated
-# sdk-it output out of the context; the committed .sdk-it/package.json stubs
-# stay in so \`npm ci\` links every client package.
-COPY . .
+# npm ci reads only the lockfile, the root manifest, its .npmrc and the
+# manifest of each workspace, so a change to any other file reuses the
+# installed layer. The manifests are the \`workspaces\` of package.json when
+# the generator ran: a new workspace needs its manifest here.
+COPY package-lock.json package.json .npmrc ./
+COPY --parents ${manifests} ./
 RUN npm ci --ignore-scripts
+# .dockerignore keeps node_modules, dist, .nx, .git, .env* and generated
+# sdk-it output out of the context.
+COPY . .
 RUN NODE_ENV=production npx nx run-many --targets build --configuration production --projects ${buildProjects} \\
  && npx nx run ${projectName}:prune-lockfile
 

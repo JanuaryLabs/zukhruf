@@ -71,6 +71,11 @@ tfplan
 ${infraRoot}/src/terraform.tfstate
 `;
 
+// The provider caches that tofu init writes stay out of the image's build
+// context, which is the workspace root.
+export const dockerignore = `**/.terraform
+`;
+
 // tofu-apply.yml commits the reconciled state after the deploy run that
 // applied it, and affected-range bases the next run on that run's commit, so
 // Nx must not see the state, or every deploy would ship the infra project

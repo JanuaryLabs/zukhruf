@@ -113,6 +113,9 @@ export default async function pairGenerator(
       projectRoot: apiRoot,
       projectName: apiName,
       port: portOf(tree, apiRoot),
+      workspaces:
+        readJson<{ workspaces?: string[] }>(tree, 'package.json').workspaces ??
+        [],
       spa: { projectName: webName, projectRoot: webRoot },
     }),
   );

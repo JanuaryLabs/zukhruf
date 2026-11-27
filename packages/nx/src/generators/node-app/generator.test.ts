@@ -406,6 +406,27 @@ test('the Dockerfile builds on the LTS image with the latest npm', async () => {
   );
 });
 
+test('the build stage installs from the lockfile and the manifest of each workspace before it copies the tree', async () => {
+  const tree = generatorTree();
+  writeJson(tree, 'package.json', {
+    ...readJson(tree, 'package.json'),
+    workspaces: ['apps/*', 'libs/*/'],
+  });
+
+  await nodeAppGenerator(tree, { directory: 'apps/backend' });
+
+  const dockerfile = tree.read('apps/backend/Dockerfile', 'utf-8') ?? '';
+  const build = dockerfile.slice(0, dockerfile.indexOf(' AS runtime'));
+  assert.match(build, /^# syntax=docker\/dockerfile:1\n/);
+  const steps = build.split('\n').filter((line) => /^(COPY|RUN) /.test(line));
+  assert.deepEqual(steps.slice(1, 5), [
+    'COPY package-lock.json package.json .npmrc ./',
+    'COPY --parents apps/*/package.json libs/*/package.json apps/backend/.sdk-it/package.json ./',
+    'RUN npm ci --ignore-scripts',
+    'COPY . .',
+  ]);
+});
+
 test('a .dockerignore that is there stays', async () => {
   const tree = generatorTree();
   tree.write('.dockerignore', 'custom\n');

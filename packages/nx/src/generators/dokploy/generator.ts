@@ -17,6 +17,7 @@ import {
   composeYml,
   deployYml,
   dnsTf,
+  dockerignore,
   encryptionTf,
   envExample,
   gitignore,
@@ -266,6 +267,7 @@ export default async function dokployGenerator(
   }
   addLines(tree, '.prettierignore', prettierignore);
   addLines(tree, '.nxignore', nxignore);
+  addLines(tree, '.dockerignore', dockerignore);
   addOpentofuPlugin(tree);
 
   await formatFiles(tree);

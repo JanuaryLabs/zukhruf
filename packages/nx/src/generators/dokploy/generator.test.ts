@@ -454,6 +454,16 @@ test('Nx ignores the state that the apply workflow commits, so the commit does n
   assert.equal(read(tree, '.nxignore'), 'infra/src/terraform.tfstate\n');
 });
 
+test('the build context leaves out the provider caches of tofu init, and the .dockerignore of node-app keeps its lines', async () => {
+  const tree = await workspace();
+  const before = read(tree, '.dockerignore');
+
+  await dokployGenerator(tree, { api: 'apps/backend', owner: 'acme' });
+
+  assert.ok(before.length > 0, 'node-app writes a .dockerignore');
+  assert.equal(read(tree, '.dockerignore'), `${before}**/.terraform\n`);
+});
+
 test('an existing .nxignore keeps its lines, and a second run adds the state once', async () => {
   const tree = await workspace();
   tree.write('.nxignore', '# vendored\nvendor/**');

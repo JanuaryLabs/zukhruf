@@ -40,6 +40,10 @@ test('the web gets the client of the api, and the api serves the web build', asy
     /^COPY --from=build \/workspace\/apps\/web\/dist \.\/apps\/web\/dist$/m,
   );
   assert.match(dockerfile, /^ARG BUILD_SHA$/m);
+  assert.match(
+    dockerfile,
+    /^COPY --parents apps\/\*\/package\.json packages\/\*\/package\.json tools\/\*\/package\.json apps\/backend\/\.sdk-it\/package\.json \.\/\nRUN npm ci --ignore-scripts\n/m,
+  );
 });
 
 test('the SPA route comment is whole and names no other repo', async () => {

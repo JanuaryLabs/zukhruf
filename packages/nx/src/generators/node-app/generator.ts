@@ -148,7 +148,14 @@ export default async function nodeAppGenerator(
   wireSdk(tree, { projectRoot, name, projectName, rootOffset, scope });
   tree.write(
     `${projectRoot}/Dockerfile`,
-    dockerfile({ projectRoot, projectName, port }),
+    dockerfile({
+      projectRoot,
+      projectName,
+      port,
+      workspaces:
+        readJson<{ workspaces?: string[] }>(tree, 'package.json').workspaces ??
+        [],
+    }),
   );
   if (!tree.exists('.dockerignore')) {
     tree.write('.dockerignore', dockerignore);
