@@ -28,8 +28,8 @@ const READINESS_DEFAULTS = {
  * retry a non-network `TypeError`, so a bug in the probe aborts immediately
  * instead of looping out the budget.
  *
- * It is for readiness where no test context exists, such as the `healthy`
- * check of a container. A test that polls an assertion uses
+ * It is for readiness where no test context exists, such as the wait
+ * strategy of a server that writes no ready line. A test that polls an assertion uses
  * `waitFor(check, { signal: t.signal })`, which ends at the test's limit.
  *
  * Override any p-retry option to reshape the budget:

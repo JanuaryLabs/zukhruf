@@ -122,7 +122,7 @@ function shouldRetryOf(options: unknown): AstNode | undefined {
 
 /**
  * `retryUntilReady` of `@zukhruf/testing/async` waits for a service to come
- * up where no test context exists, such as the `healthy` check of a container:
+ * up where no test context exists, such as the wait strategy of a container:
  * it retries until the probe stops throwing, for at most 30 seconds by default.
  * A test that polls an assertion with it waits on a limit of its own, which a
  * loaded runner breaks. `waitFor(check, { signal: t.signal })` of the same
