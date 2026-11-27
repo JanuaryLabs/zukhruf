@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { inspect, promisify } from 'node:util';
+import { aborted, inspect, promisify } from 'node:util';
 
+import type { EngineApi } from '@zukhruf/docker';
 import { test } from '@zukhruf/parameterized-test';
 
-import { waitFor } from '../async/wait-for.ts';
-import { DockerTestbed } from '../docker/index.ts';
+import { DockerTestbed, type ServiceContainer } from '../docker/index.ts';
 import { Postgres } from './postgres.ts';
 import { SqlServer } from './sqlserver.ts';
 
@@ -76,7 +76,7 @@ test('one instance acquires concurrent databases with independent scope cleanup'
   }
 });
 
-test('explicit SQL Server startup creates the requested database and owns cleanup', async (t) => {
+test('explicit SQL Server startup creates the requested database and owns cleanup', async () => {
   const database = `owned_${randomUUID().replaceAll('-', '')}`;
   const server = await new SqlServer({
     environment: process.env,
@@ -95,20 +95,17 @@ test('explicit SQL Server startup creates the requested database and owns cleanu
       await pool.close();
     }
   }
-  await waitFor(
-    async () => {
-      const client = await docker.client();
-      assert.equal(await client.containers.find(id), undefined);
-    },
-    { signal: t.signal },
-  );
+  // The disposal awaits the forced removal of the container.
+  const client = await docker.client();
+  assert.equal(await client.containers.find(id), undefined);
 });
 
 // A server whose container exits before it answers, as SQL Server 2022 aborts
 // with exit code 134 on an engine whose emulation fails it (#4579). The probe
 // never passes, so only the exit of the container can end the acquisition.
 // A container that exits at once can stop before or after its port is read,
-// so its probe may not run.
+// so its probe may not run. The other container waits on a FIFO until its
+// probe writes it, so it exits after its port is read.
 void test.each(
   [
     ['shared', 'at once'],
@@ -119,7 +116,8 @@ void test.each(
   ([acquisition, exit]) =>
     test(`a ${acquisition} server whose container exits ${exit} rejects with the exit code and output of its container`, async (t) => {
       const scope = randomUUID();
-      const startup = exit === 'at once' ? '' : 'sleep 2; ';
+      const startup =
+        exit === 'at once' ? '' : 'mkfifo /tmp/exit; read -r _ < /tmp/exit; ';
       const body = {
         Image: 'alpine:latest',
         Entrypoint: [
@@ -132,14 +130,14 @@ void test.each(
       const probes: AbortSignal[] = [];
       const options = {
         internalPort: 1433,
-        healthy: (_service: unknown, signal: AbortSignal) => {
+        healthy: async (service: ServiceContainer, signal: AbortSignal) => {
           probes.push(signal);
-          return waitFor(
-            () => {
-              throw new Error('the server does not answer');
-            },
-            { signal: AbortSignal.any([t.signal, signal]) },
-          );
+          if (exit !== 'at once')
+            await service.container.exec({
+              Cmd: ['sh', '-c', 'echo > /tmp/exit'],
+            });
+          // The server never answers: only the exit ends the acquisition.
+          await aborted(AbortSignal.any([t.signal, signal]), service);
         },
       };
       try {
@@ -341,14 +339,22 @@ void test.each(
           const client = await docker.client();
           const shared = await client.containers.find(server.containerId);
           assert.equal((await shared?.inspect())?.State?.Running, true);
-          await shared?.stop();
-          await waitFor(
-            async () =>
-              assert.equal(
-                await client.containers.find(server.containerId),
-                undefined,
-              ),
-            { signal: t.signal },
+          // The engine removes a shared server when it stops.
+          const destroyed = await client.watch({
+            filters: { container: [server.containerId], event: ['destroy'] },
+            signal: t.signal,
+          });
+          try {
+            await shared?.stop();
+            await destroyed.find(
+              (event: EngineApi.EventMessage) => event.Action === 'destroy',
+            );
+          } finally {
+            destroyed.destroy();
+          }
+          assert.equal(
+            await client.containers.find(server.containerId),
+            undefined,
           );
           const replacement = await run(false);
           assert.notEqual(replacement.containerId, server.containerId);

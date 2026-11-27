@@ -5,7 +5,6 @@ import { test } from 'node:test';
 import type { Docker } from '@zukhruf/docker';
 
 import { retryUntilReady } from '../async/index.ts';
-import { waitFor } from '../async/wait-for.ts';
 import { DockerTestbed } from './index.ts';
 
 /**
@@ -51,7 +50,7 @@ test('disposing an owned server removes its anonymous volumes', async () => {
     );
 });
 
-test('Docker identity preserves configuration, ownership, and unfinished creation', async (t) => {
+test('Docker identity preserves configuration, ownership, and unfinished creation', async () => {
   // Arrange
   const testbed = new DockerTestbed({ environment: process.env });
   const client = await testbed.client();
@@ -146,24 +145,14 @@ test('Docker identity preserves configuration, ownership, and unfinished creatio
       }),
       { cause: new Error('owned startup failed') },
     );
-    await waitFor(
-      async () =>
-        assert.equal(await client.containers.find(failedName), undefined),
-      { signal: t.signal },
-    );
+    // serve() awaits the forced removal before it rejects.
+    assert.equal(await client.containers.find(failedName), undefined);
 
     // Arrange: a creator that died between create and start. The inspected
     // labels keep the identity, so the test does not repeat the fingerprint.
     const inspection = await first.container.inspect();
     await first.container.remove({ force: true, v: true });
-    await waitFor(
-      async () =>
-        assert.equal(
-          await client.containers.find(first.container.id),
-          undefined,
-        ),
-      { signal: t.signal },
-    );
+    assert.equal(await client.containers.find(first.container.id), undefined);
     await client.containers.create(
       {
         Image: body.Image,

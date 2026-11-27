@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { waitFor } from '../async/wait-for.ts';
 import { DockerTestbed } from './index.ts';
 
 const image = 'alpine:latest';
@@ -47,17 +46,19 @@ test('a container runs its command with the hostname, environment, labels and vo
     Cmd: [
       'sh',
       '-c',
-      'echo "$GREETING from $(hostname)" > /data/greeting; exec sleep 600',
+      'echo "$GREETING from $(hostname)" > /data/greeting; echo written; exec sleep 600',
     ],
   });
-  await waitFor(
-    async () => {
-      assert.equal(
-        (await container.exec({ Cmd: ['cat', '/data/greeting'] })).stdout,
-        'hello from holder\n',
-      );
-    },
-    { signal: t.signal },
+  const decoder = new TextDecoder();
+  let log = '';
+  for await (const { data } of container.followLogs({ signal: t.signal })) {
+    log += decoder.decode(data, { stream: true });
+    if (log.includes('written\n')) break;
+  }
+  assert.match(log, /written\n/);
+  assert.equal(
+    (await container.exec({ Cmd: ['cat', '/data/greeting'] })).stdout,
+    'hello from holder\n',
   );
   const name = `zukhruf-testing-reader-${scope}`;
 

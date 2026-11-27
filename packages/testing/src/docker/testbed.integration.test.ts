@@ -5,7 +5,7 @@ import { once } from 'node:events';
 import { readdir } from 'node:fs/promises';
 import { createInterface } from 'node:readline';
 import { test } from 'node:test';
-import { promisify } from 'node:util';
+import { aborted, promisify } from 'node:util';
 
 import pg from 'pg';
 
@@ -13,7 +13,6 @@ import { ConnectionFailedError, Docker } from '@zukhruf/docker';
 import { TemporaryFiles } from '@zukhruf/fs';
 
 import { retryUntilReady } from '../async/index.ts';
-import { waitFor } from '../async/wait-for.ts';
 import { engine, proxyless } from '../testing/current-engine.ts';
 import { EngineProxy } from '../testing/engine-proxy.ts';
 import { library } from '../testing/global-setup-run.ts';
@@ -187,7 +186,7 @@ test('run gives the output and a non-zero exit code of a container, and removes 
   assert.equal(await client.containers.find(id), undefined);
 });
 
-test('a served server whose readiness fails is removed, and the failure has the readiness error as its cause', async (t) => {
+test('a served server whose readiness fails is removed, and the failure has the readiness error as its cause', async () => {
   // Arrange
   const testbed = new DockerTestbed({ environment: process.env });
   const client = await testbed.client();
@@ -219,15 +218,13 @@ test('a served server whose readiness fails is removed, and the failure has the 
   assert.ok(Error.isError(failure));
   assert.deepEqual(failure.cause, new Error('not ready'));
   assert.equal(served.length, 1);
-  await waitFor(
-    async () =>
-      assert.equal(await client.containers.find(served[0] ?? ''), undefined),
-    { signal: t.signal },
-  );
+  // serve() awaits the forced removal before it rejects.
+  assert.equal(await client.containers.find(served[0] ?? ''), undefined);
 });
 
-test('a served server whose container exits before it is ready is removed, and the failure has its output and its exit code as its cause', async (t) => {
-  // Arrange: the container lives long enough to publish its port, then exits.
+test('a served server whose container exits before it is ready is removed, and the failure has its output and its exit code as its cause', async () => {
+  // Arrange: the container waits on a FIFO, so it publishes its port, and
+  // exits when the readiness check writes the FIFO.
   const testbed = new DockerTestbed({ environment: process.env });
   const client = await testbed.client();
   const scope = randomUUID();
@@ -238,17 +235,20 @@ test('a served server whose container exits before it is ready is removed, and t
     .serve(
       {
         Image: image,
-        Cmd: ['sh', '-c', `echo printed-${scope}; sleep 1; exit 3`],
+        Cmd: [
+          'sh',
+          '-c',
+          `mkfifo /tmp/exit; echo printed-${scope}; read -r _ < /tmp/exit; exit 3`,
+        ],
         Labels: { 'dev.zukhruf.testing.verification': scope },
       },
       {
         internalPort: 8080,
-        healthy: async ({ container }) => {
+        healthy: async ({ container }, exited) => {
           served.push(container.id);
-          await retryUntilReady(async () => {
-            const { State } = await container.inspect();
-            if (State?.Running) throw new Error('still running');
-          });
+          await container.exec({ Cmd: ['sh', '-c', 'echo > /tmp/exit'] });
+          // The signal aborts after the exit has failed the acquisition.
+          await aborted(exited, container);
           throw new Error('the server stopped');
         },
       },
@@ -267,11 +267,8 @@ test('a served server whose container exits before it is ready is removed, and t
     /exited with code 3 before it was ready:\n/,
   );
   assert.equal(served.length, 1);
-  await waitFor(
-    async () =>
-      assert.equal(await client.containers.find(served[0] ?? ''), undefined),
-    { signal: t.signal },
-  );
+  // serve() awaits the forced removal before it rejects.
+  assert.equal(await client.containers.find(served[0] ?? ''), undefined);
 });
 
 test('handles keep the engine of the first acquisition when the environment changes', async () => {

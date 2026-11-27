@@ -5,7 +5,7 @@ import { readFile } from 'node:fs/promises';
 
 import type sql from 'mssql';
 
-import { BuildFailedError, Docker } from '@zukhruf/docker';
+import { BuildFailedError, Docker, type EngineApi } from '@zukhruf/docker';
 import { test } from '@zukhruf/parameterized-test';
 
 import { waitFor } from '../async/wait-for.ts';
@@ -200,58 +200,45 @@ test('a second start with fullTextSearch runs the image that the first one built
   await docker.images.pull('busybox:1.37.0');
   await (await new SqlServer(options).start()).cleanup();
   // A build tags its image, also when it gives the same image ID again. The
-  // engine keeps only its last 256 events, and the clock of `since` is the
-  // engine's, so the record replays the whole buffer (`since` 1 s after the
-  // epoch) and starts at the tag of a first sentinel, and the stream is live
-  // up to the tag of a second one.
-  const sentinel = () => `zukhruf-testing-fts-sentinel:${randomUUID()}`;
-  const tag = async (name: string) => {
-    await docker.images.tag('busybox:1.37.0', name);
-    await docker.images.remove(name);
-  };
-  const first = sentinel();
-  await tag(first);
-  const tagEvents = docker.events({
-    since: 1,
+  // record starts when watch() resolves, and ends at the tag of a sentinel.
+  const tagEvents = await docker.watch({
     filters: { type: ['image'], event: ['tag'] },
     signal: t.signal,
   });
-  const events = tagEvents[Symbol.asyncIterator]();
-  const namesUntil = async (end: string) => {
-    const names: string[] = [];
-    for (;;) {
-      const { done, value } = await events.next();
-      const name = done ? end : value.Actor?.Attributes?.name;
-      if (name === end) return names;
-      if (name !== undefined) names.push(name);
-    }
-  };
-  await namesUntil(first);
-
-  // Act
   let image: string;
-  {
-    await using second = await new SqlServer(options).start();
-    image = second.image;
-  }
-
-  // Assert: a build in the record window shows in the record.
-  const control = `zukhruf-testing-fts-control:${randomUUID()}`;
   try {
-    await docker.images.build(
-      { files: [{ path: 'Dockerfile', data: 'FROM busybox:1.37.0\n' }] },
-      { t: control },
-    );
-    const last = sentinel();
-    await tag(last);
-    assert.deepEqual(
-      (await namesUntil(last)).filter(
-        (name) => name === image || name === control,
-      ),
-      [control],
-    );
+    // Act
+    {
+      await using second = await new SqlServer(options).start();
+      image = second.image;
+    }
+
+    // Assert: a build in the record window shows in the record.
+    const control = `zukhruf-testing-fts-control:${randomUUID()}`;
+    try {
+      await docker.images.build(
+        { files: [{ path: 'Dockerfile', data: 'FROM busybox:1.37.0\n' }] },
+        { t: control },
+      );
+      const sentinel = `zukhruf-testing-fts-sentinel:${randomUUID()}`;
+      await docker.images.tag('busybox:1.37.0', sentinel);
+      await docker.images.remove(sentinel);
+      const names: string[] = [];
+      await tagEvents.find((event: EngineApi.EventMessage) => {
+        const name = event.Actor?.Attributes?.name;
+        if (name === sentinel) return true;
+        if (name !== undefined) names.push(name);
+        return false;
+      });
+      assert.deepEqual(
+        names.filter((name) => name === image || name === control),
+        [control],
+      );
+    } finally {
+      await docker.images.remove(control);
+    }
   } finally {
-    await docker.images.remove(control);
+    tagEvents.destroy();
   }
   const dockerfile = await readFile(
     new URL('sqlserver-full-text-search.Dockerfile', import.meta.url),
@@ -319,11 +306,21 @@ test('a base whose tag moved in its registry since the engine pulled it gives th
     // the Mac, not where the engine runs. 127.0.0.1 is an insecure registry
     // by default, so it needs no TLS.
     const port = 49152 + randomInt(16384);
-    await using _registry = await testbed.start({
+    await using registry = await testbed.start({
       Image: 'registry:2',
       Env: [`REGISTRY_HTTP_ADDR=127.0.0.1:${port}`],
       HostConfig: { NetworkMode: 'host' },
     });
+    // The registry logs `listening on <address>` after it binds its listener
+    // (distribution release/2.8 registry/registry.go, ListenAndServe).
+    const listening = `listening on 127.0.0.1:${port}`;
+    const decoder = new TextDecoder();
+    let log = '';
+    for await (const { data } of registry.followLogs({ signal: t.signal })) {
+      log += decoder.decode(data, { stream: true });
+      if (log.includes(listening)) break;
+    }
+    assert.ok(log.includes(listening), log);
     const base = `127.0.0.1:${port}/zukhruf-testing-fts-base:moving`;
     const labelled = (version: string, tag: string) =>
       docker.images.build(
@@ -343,10 +340,7 @@ test('a base whose tag moved in its registry since the engine pulled it gives th
     await labelled('16.0.4305.5', base);
     // The registry runs with no authentication and ignores the credentials.
     const auth = { username: 'zukhruf', password: 'zukhruf' };
-    await waitFor(() => docker.images.push(base, { auth }), {
-      signal: t.signal,
-      interval: 250,
-    });
+    await docker.images.push(base, { auth, signal: t.signal });
     await labelled('16.0.4295.3', base);
 
     // Act

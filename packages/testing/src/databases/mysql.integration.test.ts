@@ -11,7 +11,7 @@ import { slowProxy } from '../testing/slow-proxy.ts';
 import { Mysql, type MysqlDatabase, mysqlPool } from './mysql.ts';
 
 const docker = new DockerTestbed({ environment: process.env });
-test('a dedicated MySQL server gives a driver its requested database and leaves with its container', async (t) => {
+test('a dedicated MySQL server gives a driver its requested database and leaves with its container', async () => {
   const database = `owned_${randomUUID().replaceAll('-', '')}`;
   const server = await new Mysql({
     environment: process.env,
@@ -40,13 +40,9 @@ test('a dedicated MySQL server gives a driver its requested database and leaves 
       { value: '42', missing: null },
     ]);
   }
-  await waitFor(
-    async () => {
-      const client = await docker.client();
-      assert.equal(await client.containers.find(id), undefined);
-    },
-    { signal: t.signal },
-  );
+  // The disposal awaits the forced removal of the container.
+  const client = await docker.client();
+  assert.equal(await client.containers.find(id), undefined);
 });
 
 const mysqlServer = new Mysql({ environment: process.env });

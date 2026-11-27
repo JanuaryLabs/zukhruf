@@ -10,7 +10,7 @@ import { slowProxy } from '../testing/slow-proxy.ts';
 import { Mariadb, type MariadbDatabase, mariadbPool } from './mariadb.ts';
 
 const docker = new DockerTestbed({ environment: process.env });
-test('a dedicated MariaDB server gives the official driver its requested database and leaves with its container', async (t) => {
+test('a dedicated MariaDB server gives the official driver its requested database and leaves with its container', async () => {
   const database = `owned_${randomUUID().replaceAll('-', '')}`;
   const server = await new Mariadb({
     environment: process.env,
@@ -39,13 +39,9 @@ test('a dedicated MariaDB server gives the official driver its requested databas
       { value: '42', missing: null },
     ]);
   }
-  await waitFor(
-    async () => {
-      const client = await docker.client();
-      assert.equal(await client.containers.find(id), undefined);
-    },
-    { signal: t.signal },
-  );
+  // The disposal awaits the forced removal of the container.
+  const client = await docker.client();
+  assert.equal(await client.containers.find(id), undefined);
 });
 
 const mariadbServer = new Mariadb({ environment: process.env });
