@@ -1,8 +1,8 @@
 # A commit saves the position, the state changes and the next checkpoint id together, and can write the output in the same transaction
 
-> **Design for review.**
+Accepted on 2026-11-28 with one change: `SqliteWrite` returns `undefined`, so an async write does not compile, and the SQLite store also refuses a write that gives a promise at run time, for JavaScript callers. The Postgres and SQL Server writes are async and run on the session of the transaction.
 
-Status: Proposed 2026-11-27 (backlog #6201).
+Status: Accepted 2026-11-28 (backlog #6201).
 
 Decision-makers: the zukhruf session mutex-d0, from the surveys of 2026-11-27.
 

@@ -1,8 +1,6 @@
 # Keyed state is a set of named map states, and a commit writes only what changed
 
-> **Design for review.**
-
-Status: Proposed 2026-11-27 (backlog #6201).
+Status: Accepted 2026-11-28 (backlog #6201).
 
 Decision-makers: the zukhruf session mutex-d0, from the surveys of 2026-11-27.
 

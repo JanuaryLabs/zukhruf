@@ -1,8 +1,6 @@
 # The package owns three error classes, one for each next step
 
-> **Design for review.**
-
-Status: Proposed 2026-11-27 (backlog #6201).
+Status: Accepted 2026-11-28 (backlog #6201).
 
 Decision-makers: the zukhruf session mutex-d0, from the surveys of 2026-11-27.
 

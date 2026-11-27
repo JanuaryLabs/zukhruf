@@ -1,8 +1,8 @@
 # The package has a memory store and stores for SQLite, Postgres and SQL Server, and a host can write its own
 
-> **Design for review.**
+Accepted on 2026-11-28 with three changes. The Postgres and SQL Server stores start with `await Store.open({ session, schema })`, which creates the tables when they are missing, under an advisory or application lock (Ezz's ruling of 2026-11-27: "Async open() creates them"). The session's `transaction(work)` gives nothing back (`island/no-generic-port`). Map state keys are JSON text in every SQL store, because Postgres text refuses a NUL byte and UTF-8 turns a lone surrogate into U+FFFD, so two keys could share one row; the SQL Server store keys each row by the SHA-256 of the JSON names, because an index key holds at most 900 bytes, and filters by those hashes, because its default collation ignores case and trailing spaces.
 
-Status: Proposed 2026-11-27 (backlog #6201).
+Status: Accepted 2026-11-28 (backlog #6201).
 
 Decision-makers: the zukhruf session mutex-d0, from the surveys of 2026-11-27.
 

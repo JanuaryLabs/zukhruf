@@ -354,5 +354,106 @@ export function checkpointStoreContract<W>(subject: StoreSubject<W>): void {
       assert.equal(reader.checkpoint?.position, odd);
       assert.equal(await reader.state('seen', text).get(odd), odd);
     });
+
+    test('a key with a lone surrogate and a key with the replacement character keep their own values', async () => {
+      await using opened = await subject.open();
+      const group = new ConsumerGroup('copy', opened.store);
+      const writer = await group.claim(inbox, position);
+      writer.state('seen', text).set('a\ud800b', 'surrogate');
+      writer.state('seen', text).set('a\ufffdb', 'replacement');
+      await writer.commit(1);
+
+      const seen = (await group.claim(inbox, position)).state('seen', text);
+
+      assert.equal(await seen.get('a\ud800b'), 'surrogate');
+      assert.equal(await seen.get('a\ufffdb'), 'replacement');
+      assert.equal((await Array.fromAsync(seen.entries())).length, 2);
+    });
+
+    test('list and reset tell apart names that differ only in case or a trailing space', async () => {
+      await using opened = await subject.open();
+      for (const [name, stream] of [
+        ['copy', 'messages'],
+        ['Copy', 'messages'],
+        ['copy ', 'messages'],
+        ['copy', 'Messages'],
+        ['copy', 'messages '],
+      ] as const) {
+        const context = await new ConsumerGroup(name, opened.store).claim(
+          { ...inbox, stream },
+          position,
+        );
+        await context.commit(1);
+      }
+      const streams = async (name: string, stream?: string) =>
+        (
+          await Array.fromAsync(
+            new ConsumerGroup(name, opened.store).list(
+              stream === undefined ? {} : { stream },
+            ),
+          )
+        )
+          .map((checkpoint) => checkpoint.stream)
+          .toSorted();
+
+      const inGroup = await streams('copy');
+      const inStream = await streams('copy', 'messages');
+      await new ConsumerGroup('copy', opened.store).reset({
+        stream: 'messages',
+      });
+
+      assert.deepEqual(inGroup, ['Messages', 'messages', 'messages ']);
+      assert.deepEqual(inStream, ['messages']);
+      assert.deepEqual(await streams('copy'), ['Messages', 'messages ']);
+      assert.deepEqual(await streams('Copy'), ['messages']);
+      assert.deepEqual(await streams('copy '), ['messages']);
+    });
+
+    test('a reset of one partition keeps the partitions whose names differ only in case or a trailing space', async () => {
+      await using opened = await subject.open();
+      const group = new ConsumerGroup('copy', opened.store);
+      for (const partition of ['inbox', 'Inbox', 'inbox ']) {
+        const context = await group.claim({ ...inbox, partition }, position);
+        context.state('seen', text).set('row', partition);
+        await context.commit(1);
+      }
+
+      await group.reset(inbox);
+
+      const listed = await Array.fromAsync(group.list());
+      const kept = await Promise.all(
+        ['Inbox', 'inbox '].map(async (partition) =>
+          (await group.claim({ ...inbox, partition }, position))
+            .state('seen', text)
+            .get('row'),
+        ),
+      );
+      assert.deepEqual(
+        listed.map((checkpoint) => checkpoint.partition).toSorted(),
+        ['Inbox', 'inbox '],
+      );
+      assert.deepEqual(kept, ['Inbox', 'inbox ']);
+    });
+
+    test('eight claims of a fresh partition at once each get their own epoch', async () => {
+      await using opened = await subject.open();
+      const group = new ConsumerGroup('copy', opened.store);
+
+      // A pooled store opens its connections in the first round, one after
+      // another; the claims of the later rounds reach the database together.
+      const epochs: number[] = [];
+      for (let round = 0; round < 8; round += 1) {
+        const partition = { ...inbox, partition: `inbox-${round}` };
+        const contexts = await Promise.all(
+          Array.from({ length: 8 }, () => group.claim(partition, position)),
+        );
+        epochs.push(new Set(contexts.map(({ epoch }) => epoch.value)).size);
+      }
+
+      assert.deepEqual(
+        epochs,
+        Array.from({ length: 8 }, () => 8),
+      );
+    });
   });
 }

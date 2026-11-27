@@ -1,7 +1,5 @@
 # @zukhruf/checkpoint
 
-> **Being built (backlog #6201).** The maintainer approved this API on 2026-11-27. `ConsumerGroup`, `PartitionContext`, the map states, the errors, the trackers, `MemoryCheckpointStore` and `SqliteCheckpointStore` exist. The Postgres and SQL Server stores come next.
-
 Keep how far a reader of a stream got, so that it can resume after a stop or a crash. A **checkpoint** belongs to one consumer group, one stream and one partition of that stream. It holds a position, which names the next record to read, and the keyed state of the reader, which a commit saves as changes. A commit saves the position, the state changes and the next checkpoint id together, and it can write the output of the reader in the same transaction. A newer claim of a partition fences the older one, so a reader that a restart replaced cannot commit.
 
 The package replaces the checkpoint stores of elt and the position of `@zukhruf/sqlite-changefeed`, which move here ([ADR 0001](./docs/adr/0001-the-package-keeps-the-progress-of-a-reader-of-a-stream-and-the-checkpoint-stores-of-elt-and-the-position-of-sqlite-changefeed-move-into-it.md)).
@@ -167,13 +165,13 @@ A store is an implementation of `CheckpointStore` ([ADR 0011](./docs/adr/0011-th
 
 ## Who uses it
 
-No code yet. Each consumer moves after the release, with a migration item in its repository ([ADR 0001](./docs/adr/0001-the-package-keeps-the-progress-of-a-reader-of-a-stream-and-the-checkpoint-stores-of-elt-and-the-position-of-sqlite-changefeed-move-into-it.md)).
+No consumer uses it yet. Each consumer moves after the release, with a migration item in its repository ([ADR 0001](./docs/adr/0001-the-package-keeps-the-progress-of-a-reader-of-a-stream-and-the-checkpoint-stores-of-elt-and-the-position-of-sqlite-changefeed-move-into-it.md)).
 
 | Consumer                     | How                                                                                                                                                                                            | Record |
 | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
-| elt                          | `CheckpointStore`, its SQLite, Postgres and SQL Server stores, the binding and the keyed entries of a `STATE` message go away. A copy claims its partition and commits its stage in `write`.   | #6201  |
-| `@zukhruf/sqlite-changefeed` | `Position`, `PositionFile` and `PositionInMemory` go away. The WAL progress is the position, the fingerprints of each table are a map state, and the sequence of a batch is the checkpoint id. | #6201  |
-| eca and its proactive host   | The cursor of each automation is the position of a checkpoint.                                                                                                                                 | #6201  |
+| elt                          | `CheckpointStore`, its SQLite, Postgres and SQL Server stores, the binding and the keyed entries of a `STATE` message go away. A copy claims its partition and commits its stage in `write`.   | #6281  |
+| `@zukhruf/sqlite-changefeed` | `Position`, `PositionFile` and `PositionInMemory` go away. The WAL progress is the position, the fingerprints of each table are a map state, and the sequence of a batch is the checkpoint id. | #6280  |
+| eca and its proactive host   | The cursor of each automation is the position of a checkpoint.                                                                                                                                 | #6282  |
 
 ## The same concepts in other systems
 
@@ -388,15 +386,16 @@ export type PostgresSession = {
     parameters: readonly unknown[],
     options?: { readonly signal?: AbortSignal },
   ): Promise<readonly Record<string, unknown>[]>;
-  transaction<T>(work: (session: PostgresSession) => Promise<T>): Promise<T>;
+  transaction(work: (session: PostgresSession) => Promise<void>): Promise<void>;
 };
-export class PostgresCheckpointStore implements CheckpointStore<
-  (session: PostgresSession) => Promise<void>
-> {
-  constructor(options: {
+export type PostgresWrite = (session: PostgresSession) => Promise<void>;
+export class PostgresCheckpointStore implements CheckpointStore<PostgresWrite> {
+  /** Creates the tables when they are missing, and gives the store. */
+  static open(options: {
     readonly session: PostgresSession;
     readonly schema?: string;
-  });
+    readonly signal?: AbortSignal;
+  }): Promise<PostgresCheckpointStore>;
 }
 
 // @zukhruf/checkpoint/sqlserver
@@ -406,15 +405,18 @@ export type SqlServerSession = {
     parameters: Readonly<Record<string, unknown>>,
     options?: { readonly signal?: AbortSignal },
   ): Promise<readonly Record<string, unknown>[]>;
-  transaction<T>(work: (session: SqlServerSession) => Promise<T>): Promise<T>;
+  transaction(
+    work: (session: SqlServerSession) => Promise<void>,
+  ): Promise<void>;
 };
-export class SqlServerCheckpointStore implements CheckpointStore<
-  (session: SqlServerSession) => Promise<void>
-> {
-  constructor(options: {
+export type SqlServerWrite = (session: SqlServerSession) => Promise<void>;
+export class SqlServerCheckpointStore implements CheckpointStore<SqlServerWrite> {
+  /** Creates the tables when they are missing, and gives the store. */
+  static open(options: {
     readonly session: SqlServerSession;
     readonly schema?: string;
-  });
+    readonly signal?: AbortSignal;
+  }): Promise<SqlServerCheckpointStore>;
 }
 ```
 

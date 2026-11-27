@@ -1,8 +1,6 @@
 # The package keeps the progress of a reader of a stream, and the checkpoint stores of elt and the position of sqlite-changefeed move into it
 
-> **Design for review.**
-
-Status: Proposed 2026-11-27 (backlog #6201).
+Status: Accepted 2026-11-28 (backlog #6201).
 
 Decision-makers: Ezz, on 2026-11-20 and 2026-11-27, and the zukhruf session mutex-d0 from the surveys of 2026-11-27. Ezz asked for "a stdlib checkpointing package". After a lesson on the two meanings of "checkpoint" in the field, he chose two packages and this one first ("Bookmark first"), public on npm. He also ruled that the package takes its words and its API from the leaders and that the hosts follow it: "Don't be biased to the current implementation in the repositories. You should force those repositories into your proper terminologies and proper API design."
 

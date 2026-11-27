@@ -1,8 +1,8 @@
 # A claim gives the saved checkpoint or none, and the reader picks its start when it has none
 
-> **Design for review.**
+Accepted on 2026-11-28 with one change (Ezz's ruling of 2026-11-27): `context.checkpoint` is the checkpoint that the claim read, as Flink gives the restored checkpoint once, and it does not change after a commit; each commit resolves with the new checkpoint. A field that changes after the constructor would be a phase flag, which `zukhruf/no-phase-flag` refuses.
 
-Status: Proposed 2026-11-27 (backlog #6201).
+Status: Accepted 2026-11-28 (backlog #6201).
 
 Decision-makers: the zukhruf session mutex-d0, from the surveys of 2026-11-27.
 

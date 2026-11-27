@@ -1,8 +1,6 @@
 # A checkpoint belongs to a consumer group, a stream and a partition, and an input with a new identity has a new checkpoint
 
-> **Design for review.**
-
-Status: Proposed 2026-11-27 (backlog #6201).
+Status: Accepted 2026-11-28 (backlog #6201).
 
 Decision-makers: the zukhruf session mutex-d0, from the surveys of 2026-11-27.
 

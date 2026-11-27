@@ -1,8 +1,6 @@
 # The package is @zukhruf/checkpoint, and the SQLite sense of the word is a WAL checkpoint
 
-> **Design for review.**
-
-Status: Proposed 2026-11-27 (backlog #6201).
+Status: Accepted 2026-11-28 (backlog #6201). The search below read only the `_Avoid_` lines. The glossary of sqlite-snapshot defined "Checkpoint" in the SQLite sense, and sqlite-snapshot and sqlite-open used the bare word in their READMEs; they say "WAL checkpoint" since 2026-11-28.
 
 Decision-makers: Ezz, on 2026-11-27. Asked for the name, he chose "@zukhruf/checkpoint", with the SQLite sense of the word renamed "WAL checkpoint" in four glossaries.
 

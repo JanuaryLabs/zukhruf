@@ -1,8 +1,8 @@
 # A tracker gives the highest position below which every record is done
 
-> **Design for review.**
+Accepted on 2026-11-28 with two changes, after `Jeffail/checkpoint`: the function of a batch gives the highest position so far, so a batch that ends while an earlier one is open gives back the earlier highest position (or `undefined` while none is done); and a batch larger than the capacity waits until no batch is open.
 
-Status: Proposed 2026-11-27 (backlog #6201).
+Status: Accepted 2026-11-28 (backlog #6201).
 
 Decision-makers: the zukhruf session mutex-d0, from the surveys of 2026-11-27.
 

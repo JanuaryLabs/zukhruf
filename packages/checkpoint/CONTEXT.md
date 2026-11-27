@@ -1,7 +1,5 @@
 # Checkpoint
 
-> **Design for review.** The words of the API on paper (backlog #6201).
-
 How far a reader of a stream got, kept so that the reader can resume after a stop or a crash. The package owns where a checkpoint is kept, how it commits, and who may commit it. The meaning of a position and of each value of the state comes from the reader.
 
 ## Language

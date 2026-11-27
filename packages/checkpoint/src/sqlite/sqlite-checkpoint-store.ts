@@ -98,7 +98,7 @@ export class SqliteCheckpointStore implements CheckpointStore<SqliteWrite> {
         key.stream,
         key.partition,
         state,
-        name,
+        stored(name),
       );
       if (row !== undefined) found.set(name, value(key, row));
     }
@@ -117,7 +117,7 @@ export class SqliteCheckpointStore implements CheckpointStore<SqliteWrite> {
          WHERE consumer_group = ? AND stream = ? AND partition = ? AND state = ? ORDER BY key`,
       )
       .iterate(key.consumerGroup, key.stream, key.partition, state);
-    for (const row of rows) yield [text(key, row, 'key'), value(key, row)];
+    for (const row of rows) yield [named(key, row), value(key, row)];
   }
 
   async commit(
@@ -153,19 +153,20 @@ export class SqliteCheckpointStore implements CheckpointStore<SqliteWrite> {
           `DELETE FROM zukhruf_checkpoint_states WHERE consumer_group = ? AND stream = ? AND partition = ? AND state = ? AND key = ?`,
         );
         for (const [state, keys] of changes.deleted)
-          for (const removed of keys) remove.run(...where, state, removed);
+          for (const removed of keys)
+            remove.run(...where, state, stored(removed));
         const put = database.prepare(
           `INSERT INTO zukhruf_checkpoint_states (consumer_group, stream, partition, state, key, version, value) VALUES (?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT DO UPDATE SET version = excluded.version, value = excluded.value`,
         );
         for (const [state, values] of changes.set)
-          for (const [name, stored] of values)
+          for (const [name, entry] of values)
             put.run(
               ...where,
               state,
-              name,
-              stored.version,
-              JSON.stringify(stored.json),
+              stored(name),
+              entry.version,
+              JSON.stringify(entry.json),
             );
         database
           .prepare(
@@ -289,4 +290,18 @@ function toJson(parsed: unknown): Json {
       Object.entries(parsed).map(([name, item]) => [name, toJson(item)]),
     );
   throw new TypeError(`JSON.parse gave ${typeof parsed}`);
+}
+
+/**
+ * A map state key as the key column keeps it: JSON text. A lone surrogate
+ * would reach SQLite as U+FFFD, so two keys could share one row.
+ */
+function stored(name: string): string {
+  return JSON.stringify(name);
+}
+
+function named(key: CheckpointKey, row: Row): string {
+  const name = json(key, row, 'key');
+  if (typeof name === 'string') return name;
+  throw new CorruptCheckpointError(key, 'key is not a JSON string');
 }
