@@ -562,11 +562,11 @@ console.log(verdict);
 
 `p` is the two-sided p-value of the same 2000 means (Efron and Tibshirani 1993). It is two times the smaller share of the means that are at or below 0, or at or above 0, and it is at most 1. Thus `p` is below 0.05 when the interval does not contain 0, but for the interpolation of the interval bounds.
 
-When you compare more than one change, some changes are `better` or `worse` by chance. `holm` corrects the p-values of all the comparisons together (Holm 1979). A comparison is significant at the 5% level when its corrected p-value is 0.05 or less. `holm` gives the values of `multipletests(pvals, method="holm")` of statsmodels 0.15.0, in the order of the p-values that you give it:
+When you compare more than one change, some changes are `better` or `worse` by chance. `Holm` of `@zukhruf/statistics` corrects the p-values of all the comparisons together (Holm 1979). A comparison is significant at the 5% level when its corrected p-value is 0.05 or less. `Holm` gives the values of `multipletests(pvals, method="holm")` of statsmodels 0.15.0, in the order of the p-values that you give it:
 
 ```ts
 const verdicts = changes.map((change) => pairedBootstrapTest(baseline, change));
-const corrected = holm(verdicts.map((verdict) => verdict.p));
+const corrected = new Holm().adjust(verdicts.map((verdict) => verdict.p));
 ```
 
 The seed is fixed, so the same scores give the same verdict. `replicates` and `seed` are options. `perQueryScores` takes `split`, `subset` and `score` options; a score must have a value for each query, such as `ndcg_at_10` or `recall_at_100`. The test refuses a baseline and a change with different queries.
@@ -614,7 +614,7 @@ writeFileSync('verdicts.tex', report.verdicts.toLatex({ escape: true }));
 
 `toHtml` gives one page. A switch at the top selects the split. For each split, the page shows the models ranked by the main score, the verdict of each comparison, the recall at each cut-off next to the recall of a perfect ranking, the main score of each query, a table of the scores, and how the models were tested. Each section title is a claim that comes from the numbers.
 
-By default, the report compares each model with the baseline on the main score of the task. When the main score has no value for each query (MRR, for example), the queries and the verdicts use nDCG@10. `comparisons` gives other pairs, as `[baseline, change]`, and `tested` gives other scores. `holm` corrects the p-values of all the comparisons together. `primary` names one comparison and one score that you chose before you saw the scores: the report tests it alone and corrects the others. A difference counts when its deciding p-value (the corrected p-value, or the p-value of the primary comparison) is below 0.05.
+By default, the report compares each model with the baseline on the main score of the task. When the main score has no value for each query (MRR, for example), the queries and the verdicts use nDCG@10. `comparisons` gives other pairs, as `[baseline, change]`, and `tested` gives other scores. `Holm` of `@zukhruf/statistics` corrects the p-values of all the comparisons together. `primary` names one comparison and one score that you chose before you saw the scores: the report tests it alone and corrects the others. A difference counts when its deciding p-value (the corrected p-value, or the p-value of the primary comparison) is below 0.05.
 
 `scores` and `verdicts` are tables (`DataFrame`), so `toCsv`, `toMarkdown` and `toLatex` write them. A model without predictions gives an error that names its folder: `evaluate` writes no predictions when it reads a result from the cache. Predictions of another run give an error too: the main score of their queries must average to the score in the result, as the evaluation calculates it.
 
@@ -737,8 +737,6 @@ function pairedBootstrapTest(
   change: ReadonlyMap<string, number>,
   options?: { readonly replicates?: number; readonly seed?: number }, // default: 2000, 31957
 ): ChangeVerdict;
-
-function holm(pValues: readonly number[]): number[];
 
 // The other exports of @zukhruf/mteb.
 export {

@@ -1,6 +1,6 @@
 # @zukhruf/statistics
 
-The percentile bootstrap, the quantile methods of NumPy, and `numpy.sum`, `numpy.mean`, `numpy.nanmean` and `numpy.std` in JavaScript, to the last bit. Use it when a TypeScript eval must give the same interval as a Python program, such as the summary of a benchmark or the comparison of two models.
+The percentile bootstrap, the quantile methods of NumPy, the Holm correction of statsmodels, and `numpy.sum`, `numpy.mean`, `numpy.nanmean` and `numpy.std` in JavaScript, to the last bit. Use it when a TypeScript eval must give the same interval as a Python program, such as the summary of a benchmark or the comparison of two models.
 
 The package is public on npm. Until 2026-11-07 it was private and reached through a workspace path (ADR 0001); it became public with `@zukhruf/evals`, which depends on it (backlog #3888).
 
@@ -75,6 +75,18 @@ std([1, 2, 3, 4]); // 1.118033988749895, as numpy.std(a)
 std([1, 2, 3, 4], { ddof: 1 }); // 1.2909944487358056, as numpy.std(a, ddof=1)
 ```
 
+## Adjust the p-values of many tests
+
+When one run tests many hypotheses, such as each score of a comparison of two models, some test passes a level by chance alone. A `MultipleTestCorrection` adjusts the p-values of the family, so that each test can read its adjusted p-value against the level (Strategy, ADR 0003). `Holm` gives the values of `multipletests(p, method="holm")[1]` of statsmodels 0.15.0, to the last bit, in the order of the p-values that you give it:
+
+```ts
+import { Holm } from '@zukhruf/statistics';
+
+new Holm().adjust([0.04, 0.001, 0.03, 0.2, 0.01]); // [0.09, 0.005, 0.09, 0.2, 0.04]
+```
+
+Holm's step-down correction multiplies the k-th smallest of n p-values by n − k + 1, keeps a running maximum in that order, and caps each value at 1 (Holm 1979). A test is significant at a level when its adjusted p-value is at most that level. R names the same rule `p.adjust(p, method = "holm")`.
+
 ## Errors
 
 Each error is a `RangeError`. Its message says which input is out of range.
@@ -134,6 +146,15 @@ class PercentileInterval implements ConfidenceIntervalMethod {
     readonly method: QuantileMethod;
   });
   of(distribution: readonly number[]): ConfidenceInterval;
+}
+
+// The method of statsmodels' multipletests and R's p.adjust. Exported as a type only.
+interface MultipleTestCorrection {
+  adjust(pValues: readonly number[]): number[];
+}
+
+class Holm implements MultipleTestCorrection {
+  adjust(pValues: readonly number[]): number[];
 }
 
 class IidBootstrap {

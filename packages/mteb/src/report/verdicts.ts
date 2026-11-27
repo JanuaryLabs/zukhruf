@@ -1,6 +1,7 @@
+import { Holm } from '@zukhruf/statistics';
+
 import type { MTEBModels } from '../abstasks/abstask.ts';
 import type { AbsTaskRetrieval } from '../abstasks/retrieval.ts';
-import { holm } from '../significance/holm.ts';
 import {
   type ChangeVerdict,
   pairedBootstrapTest,
@@ -81,10 +82,9 @@ export async function verdicts(options: {
       });
   const family = tested.filter((test) => !test.primary);
   const adjusted = new Map(
-    holm(family.map(({ verdict }) => verdict.p)).map((p, index) => [
-      family[index],
-      p,
-    ]),
+    new Holm()
+      .adjust(family.map(({ verdict }) => verdict.p))
+      .map((p, index) => [family[index], p]),
   );
   return tested.map((test) => {
     const decidingP = adjusted.get(test) ?? test.verdict.p;

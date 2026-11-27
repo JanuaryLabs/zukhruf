@@ -3,6 +3,8 @@ export { ConfidenceInterval } from './interval/confidence-interval.ts';
 export type { ConfidenceIntervalMethod } from './interval/confidence-interval-method.ts';
 export { DifferenceInterval } from './interval/difference-interval.ts';
 export { PercentileInterval } from './interval/percentile-interval.ts';
+export { Holm } from './multiple-testing/holm.ts';
+export type { MultipleTestCorrection } from './multiple-testing/multiple-test-correction.ts';
 export { Higher } from './quantile/higher.ts';
 export { InvertedCdf } from './quantile/inverted-cdf.ts';
 export { Linear } from './quantile/linear.ts';

@@ -13,6 +13,7 @@ import { test } from 'node:test';
 import { promisify } from 'node:util';
 
 import { TemporaryFiles } from '@zukhruf/fs';
+import { Holm } from '@zukhruf/statistics';
 
 import type { MTEBModels } from '../abstasks/abstask.ts';
 import { AbsTaskRetrieval } from '../abstasks/retrieval.ts';
@@ -22,7 +23,6 @@ import { evaluate } from '../evaluate.ts';
 import { bm25S } from '../models/model-implementations/bm25.ts';
 import { ModelMeta } from '../models/model-meta.ts';
 import type { SearchProtocol } from '../models/models-protocols.ts';
-import { holm } from '../significance/holm.ts';
 import { pairedBootstrapTest } from '../significance/paired-bootstrap.ts';
 import { perQueryScores } from '../significance/per-query-scores.ts';
 import { Report } from './report.ts';
@@ -135,7 +135,7 @@ test('the verdicts of a report are the paired bootstrap of the per-query scores,
       await test(split, 'recall_at_10'),
       await test(split, 'map_at_10'),
     ];
-    const [recallP, mapP] = holm([recall.p, map.p]);
+    const [recallP, mapP] = new Holm().adjust([recall.p, map.p]);
     expected.push(
       [split, 'ndcg_at_10', true, ndcg.observed, ndcg.p, ndcg.p],
       [split, 'recall_at_10', false, recall.observed, recall.p, recallP],

@@ -12,7 +12,6 @@ import { TaskMetadata } from '../abstasks/task-metadata.ts';
 import { pythonRound } from '../dependencies/python.ts';
 import { evaluate } from '../evaluate.ts';
 import { bm25S } from '../models/model-implementations/bm25.ts';
-import { holm } from './holm.ts';
 import { type ChangeVerdict, pairedBootstrapTest } from './paired-bootstrap.ts';
 import { perQueryScores } from './per-query-scores.ts';
 
@@ -20,8 +19,8 @@ import { perQueryScores } from './per-query-scores.ts';
 // for the folder task of the BM25 fixture with mteb/baseline-bm25s (the
 // default settings and k1=1.2, b=0.5): the main score and the ndcg_cut_10 of
 // each query, and the paired bootstrap of the two in NumPy. It also holds
-// the bootstrap of synthetic pairs, np.percentile of a few arrays, and the
-// Holm adjusted p-values of statsmodels 0.15.0 for a few p vectors.
+// the bootstrap of synthetic pairs and np.percentile of a few arrays. The
+// Holm cases moved to @zukhruf/statistics with Holm (#6111).
 // fixtures/generate.py makes it. A float that JSON cannot hold is a string.
 type JsonNumber = number | string;
 
@@ -57,11 +56,6 @@ type Expected = {
     readonly sorted: number[];
     readonly q: number[];
     readonly values: number[];
-  }[];
-  readonly holm: readonly {
-    readonly case: string;
-    readonly p: number[];
-    readonly adjusted: number[];
   }[];
 };
 
@@ -190,14 +184,6 @@ test('np.percentile is the linear quantile of q / 100 of @zukhruf/statistics, to
     expected.percentiles.map(({ values }) => values),
   );
 });
-
-void test.each(expected.holm, ({ case: name, p, adjusted }) =>
-  test(`holm adjusts the p-values of "${name}" as multipletests of statsmodels with method holm, to the last bit`, () => {
-    const actual = holm(p);
-
-    assert.deepEqual(actual, adjusted);
-  }),
-);
 
 test('a paired bootstrap test refuses a baseline and a change with different queries', () => {
   const baseline = new Map([
