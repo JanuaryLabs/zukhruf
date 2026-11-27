@@ -2,7 +2,7 @@
 
 Status: proposed (2026-11-27, #6108). Design for review: no code yet.
 
-Status, 2026-11-27 (#6108): `RepeatSpread` is built in `src/report/repeat-spread.ts`. Its first table gives, for each score, the tests with two epochs or more with a value, those whose spread is not 0, and their share; its second lists the unstable tests widest first, at most `widest` rows, a limit that the host sets (report ADR 0003), and is a note when no test is unstable. An epoch whose sample does not give the score, or gives it a ratio of no whole, has no value and is left out of the spread (`Ratio.value` gives 0 there for SOB's scores, and a page would read that 0 as a score); a test with fewer than two epochs with a value has no spread. The claim reads the first score. Bars are not read.
+Status, 2026-11-27 (#6108): `RepeatSpread` is built in `src/report/repeat-spread.ts`. Its first table gives, for each score, the tests with two epochs or more with a value, those whose spread is not 0, and their share; its second lists the unstable tests widest first, at most `widest` rows, a limit that the host sets (report ADR 0003), and is a note when no test is unstable. An epoch whose sample does not give the score, or gives it a ratio of no whole, has no value and is left out of the spread (`Ratio.value` gives 0 there for SOB's scores, and a page would read that 0 as a score); a test with fewer than two epochs with a value has no spread. The claim reads the first score. Bars are not read. Unlike the last consequence below, a run with one epoch per test still gives the section: a building block built with `new` always gives a `Section` (report ADR 0001), and its claim says that the spread of the first score cannot be read.
 
 ## Context
 
