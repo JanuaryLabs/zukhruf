@@ -57,7 +57,7 @@ What the file system says about the file at a path: its device, its inode, its s
 _Avoid_: Fingerprint (a hash of the content), version (`@zukhruf/sqlite-data-version` gives a different number), checksum, mtime (one part of the stamp)
 
 **Temporary directory**:
-An empty directory that one acquisition owns, at its real path. Its disposal removes it with all that it holds, and retries while Windows refuses a file for a moment.
+A directory that one acquisition owns, at its real path: empty, or with the files of a record that it writes before it gives the path. Its disposal removes it with all that it holds, and retries while Windows refuses a file for a moment.
 _Avoid_: Scratch directory, temp dir
 
 **Missing file**:

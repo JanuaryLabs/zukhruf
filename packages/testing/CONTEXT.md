@@ -122,7 +122,7 @@ A part of the package with its own import path, such as `docker` or `postgres`.
 _Avoid_: Module, entry
 
 **Temporary directory**:
-An empty directory that `TemporaryFiles` creates for one test, below a parent directory. Its handle gives the real path. Disposal removes it, and retries the removal for at most 1.8 s.
+A directory that `TemporaryFiles` creates for one test, below a parent directory: empty, or with the files of a record. Its handle gives the real path. Disposal removes it, and retries the removal for at most 1.8 s.
 _Avoid_: Scratch directory, tmpdir
 
 **Interception**:
