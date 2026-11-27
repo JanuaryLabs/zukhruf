@@ -1,0 +1,44 @@
+# Close ends each accepted socket and waits for its close, and shutdown waits for the sockets until its signal aborts
+
+Status: Proposed 2026-11-28 (backlog #6078).
+
+Decision-makers: the zukhruf session of backlog #6078 (2026-11-28), from the leaders. The record says: "Decided by the session from the leaders (not questions): shutdown(signal) waits for the connections and closes them at the abort (Go Shutdown(ctx), Kestrel)". Ezz ruled the methods: "close(): ends each tracked socket and awaits its close, shutdown(signal), asyncDispose". What `shutdown` gives after an abort is in the "Open for the review" list of the README.
+
+A test ends at the disposal of its server. Each copy of the skeleton destroys each socket and waits for the server's `close` ([ADR 0001](./0001-a-base-package-above-pipes-owns-the-connections-that-a-server-accepts-and-testings-httpserver-converges-into-it.md)). Some copies do not wait (mutex `proxyTo`, the `vanishingHop` draft), so their sockets close after the test. A shipped server needs a softer end: single-flight ends each connection after what it wrote is sent (`destroySoon`), and ssh's `MasterConnection` drains.
+
+## The leaders
+
+| Leader             | The forced end                                                                                                                                                                                            | The graceful end                                                                                                                                                                                                                 | At the end of the wait                                                                                                                                                                                                                           |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Go `http.Server`   | `Close`: "immediately closes all active net.Listeners and any connections in state StateNew, StateActive, or StateIdle"                                                                                   | `Shutdown(ctx)`: "first closing all open listeners, then closing all idle connections, and then waiting indefinitely for connections to return to idle and then shut down" ([docs](https://pkg.go.dev/net/http#Server.Shutdown)) | "If the provided context expires before the shutdown is complete, Shutdown returns the context's error". It closes nothing more; the caller calls `Close`.                                                                                       |
+| .NET Kestrel 9.0.0 | `AbortAllConnectionsAsync()`                                                                                                                                                                              | `CloseAllConnectionsAsync(cancellationToken)`                                                                                                                                                                                    | when the close did not end all connections, `AbortAllConnectionsAsync()` ([TransportManager.cs, about lines 138-142](https://github.com/dotnet/aspnetcore/blob/v9.0.0/src/Servers/Kestrel/Core/src/Internal/Infrastructure/TransportManager.cs)) |
+| Go httptest        | `Close` closes the idle and new connections, and waits for the requests; it logs after 5 s ([server.go, about lines 204-237](https://github.com/golang/go/blob/go1.24.0/src/net/http/httptest/server.go)) | none                                                                                                                                                                                                                             | none                                                                                                                                                                                                                                             |
+| Node.js 26         | `http.Server.closeAllConnections()`; `net.Server` has none                                                                                                                                                | `net.Server.close()` waits until every connection has ended                                                                                                                                                                      | none: the caller ends the connections                                                                                                                                                                                                            |
+
+The record of 2026-11-28 gives "closes them at the abort" to Go's `Shutdown(ctx)`. Go's `Shutdown` does not close them: it returns the error of the context. The abort at the end of the wait is Kestrel's. The decision is the same; only the source of each half is corrected.
+
+## Decision
+
+1. `serving.close()` stops the listener from accepting, destroys each socket that the serving accepted, and resolves when the listener has closed and each socket has emitted `close`. It is Go's `Close` and Kestrel's abort, and it waits for the close as httptest's `Close` does.
+2. The order is: start the close of the listener, destroy the sockets, then wait for both. The listener's close of Node.js waits until each connection has ended, so a close that waits for it first, before it destroys the sockets, never settles.
+3. `serving.shutdown(signal)` stops the listener from accepting, and waits until each accepted socket has closed by itself: the handler or the peer ends it. When `signal` aborts first, it destroys each socket that is still open, as Kestrel aborts, and waits for its `close`. The signal is required: a shutdown with no limit is a wait for each peer.
+4. `[Symbol.asyncDispose]()` is `close()`. A test writes `await using serving = await server.serve(endpoint)`.
+5. Only the first `close()` or `shutdown()` ends the serving. A later call waits for the same end and resolves, as `PipeServer.close()` does ([pipes ADR 0007](../../../pipes/docs/adr/0007-the-endpoint-listens-the-address-connects-and-the-server-owns-its-file.md)) and as .NET's `Dispose` must. A `close()` during a `shutdown()` is the abort of that shutdown.
+
+## Considered Options
+
+- **`destroySoon()` in `close()`, as single-flight's flight server.** A socket whose peer reads nothing never closes, and a test then waits until its time limit.
+- **`close()` that does not wait for the `close` of each socket**, as `proxyTo` and `vanishingHop` do. The sockets close after the test, in the next test.
+- **`net.Server[Symbol.asyncDispose]()` of Node.js.** It calls `server.close()` and waits until each accepted connection has ended. A probe of 2026-11-28 (Node 26.13.1) with one idle accepted connection: it was still pending after 300 ms. It ends nothing.
+- **Go's `Shutdown`, which returns at the end of the context and closes nothing more.** Each caller then writes the abort, `shutdown` and then `close`. Kestrel does it in the server, and so does this package.
+- **Close and shutdown as Go and Kestrel, with the waits for the close.** This option was selected.
+
+## Consequences
+
+- A socket that the serving accepted is closed when `close()` resolves. A socket of a client in this process can still be open: its `close` comes a few turns later. The HTTP view waits for those too ([ADR 0006](./0006-the-http-view-is-a-server-whose-handler-gives-each-socket-to-an-http-server.md)); the raw server does not, because no copy of it needs that wait.
+- A raw handler is not told that a shutdown began. Kestrel tells a connection through `ConnectionContext.ConnectionClosedRequested`. No consumer needs it now; it is on the map as later.
+
+## Confirmation
+
+- Probe of 2026-11-28 on Node.js 26.13.1: `net.Server.prototype.closeAllConnections` is `undefined`; `http.Server.prototype.closeAllConnections` and `closeIdleConnections` are functions; `net.Server[Symbol.asyncDispose]()` with one accepted idle connection is pending after 300 ms.
+- The build gives each point of the decision a black-box test, and each test a mutation (the coding:write-test skill).
