@@ -5,6 +5,7 @@ export {
   type RunOptions,
   type StartOptions,
 } from './command.ts';
+export { Coprocess } from './coprocess.ts';
 export type { Completed, End, Environment, Output } from './end.ts';
 export {
   NodeCommand,

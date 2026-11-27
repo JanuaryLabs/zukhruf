@@ -1,6 +1,6 @@
 # @zukhruf/process
 
-> **In build (backlog #6077).** `Command#run`, `Command#start` and `NodeCommand` are built. `Coprocess` follows; until then, this README describes it as decided in the ADRs.
+> **In build (backlog #6077).** `Command#run`, `Command#start`, `NodeCommand` and `Coprocess` are built. The consumers move from `@zukhruf/coprocess` and `@zukhruf/testing` next.
 
 Start a process of this machine and know how it ends. A `Command` says what to run: the file, its arguments, the environment, the folder. `command.run()` runs it to its end and gives its exit code or signal and its output, with no throw at a non-zero exit. `command.start()` gives a started process: it resolves when the process is ready, it stops the process group with SIGTERM and then SIGKILL, and the process ends with its parent, also when the parent is killed. A `Coprocess` talks to a started process in JSON lines, and a `NodeCommand` runs JavaScript source in its own Node.js with messages.
 
@@ -99,7 +99,7 @@ await using ocr = new Coprocess(await worker.start());
 const answer = await ocr.request({ path: '/tmp/receipt.png' });
 ```
 
-`exited()` settles once, with the error that each later `receive` gets, as in `@zukhruf/coprocess` today, and `coprocess.process` is the started process.
+When the process ends, `exited()` resolves with a `ProcessEndedError` that holds the end and the stderr tail, and each later `receive` rejects with that same error. Each line comes before the end, so a value that the process wrote just before its end still reaches `receive`. The coprocess reads `process.lines()`, so another reader of the lines gets every line too. To stop the process, call `coprocess.process.stop()` or dispose of the coprocess: a `receive` that waits then rejects with the end of the stop. `coprocess.process` is the started process.
 
 ## Run JavaScript source in its own Node.js
 
@@ -124,13 +124,12 @@ Only a `NodeProcess` has messages, because only a Node.js child can use the chan
 
 ## Errors
 
-| Error                                             | When                                                                                                                                                                                                                                                                                                                                                                |
-| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `StartError`                                      | The process could not start, for example because the file does not exist. Its `cause` is the error of the start (`ENOENT`, `EACCES`). `run()` and `start()` reject with it.                                                                                                                                                                                         |
-| `ProcessEndedError`                               | A started process ended before what its caller waited for: the ready line or message of a start (`before it was ready`), or the message that `next()` waits for (`before it sent 'held'`). It has `end` and `stderr` (the stderr tail). Its message names the process, the end and the wait, never the command line, because arguments can hold prompts or secrets. |
-| the reason of `signal`                            | The signal aborted. The process is stopped first.                                                                                                                                                                                                                                                                                                                   |
-| `<name> exited (<exit code or signal>): <stderr>` | A coprocess ended. `exited()` settles with it, and each `receive` rejects with it (from `@zukhruf/coprocess`).                                                                                                                                                                                                                                                      |
-| `<name> gave a line that is not JSON`             | A coprocess wrote a line that `JSON.parse` refuses. Only the `receive` of that line fails (from `@zukhruf/coprocess`).                                                                                                                                                                                                                                              |
+| Error                                 | When                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `StartError`                          | The process could not start, for example because the file does not exist. Its `cause` is the error of the start (`ENOENT`, `EACCES`). `run()` and `start()` reject with it.                                                                                                                                                                                                                                                                                                  |
+| `ProcessEndedError`                   | A started process ended before what its caller waited for: the ready line or message of a start (`before it was ready`), the message that `next()` waits for (`before it sent 'held'`), or the next line of a coprocess (`before it sent a line`), which `exited()` of the coprocess resolves with. It has `end` and `stderr` (the stderr tail). Its message names the process, the end and the wait, never the command line, because arguments can hold prompts or secrets. |
+| the reason of `signal`                | The signal aborted. The process is stopped first.                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `<name> gave a line that is not JSON` | A coprocess wrote a line that `JSON.parse` refuses. Only the `receive` of that line fails, and its `cause` is the error of `JSON.parse`.                                                                                                                                                                                                                                                                                                                                     |
 
 A non-zero exit code of a run is not an error.
 
@@ -316,9 +315,9 @@ export class Coprocess implements AsyncDisposable {
   send(value: unknown): void;
   receive(): Promise<unknown>;
   request(value: unknown): Promise<unknown>;
-  /** Settles once, with the error that each later receive gets. */
-  exited(): Promise<Error>;
-  /** Ends stdin and waits for the end. */
+  /** Resolves once the process has ended, with the error that each later receive rejects with. */
+  exited(): Promise<ProcessEndedError>;
+  /** Ends stdin and resolves with the end. */
   close(): Promise<End>;
   [Symbol.asyncDispose](): Promise<void>;
 }
