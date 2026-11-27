@@ -1,3 +1,5 @@
+import { describe } from '@zukhruf/parameterized-test';
+
 import { durableTokens } from '../../testing/contract/durable-tokens.ts';
 import { lockStore } from '../../testing/contract/lock-store.ts';
 import { processes } from '../../testing/contract/processes.ts';
@@ -10,9 +12,14 @@ import {
   threadSharing,
 } from '../../testing/subjects/docker-engine.ts';
 
-lockStore(subject);
-durableTokens(subject);
-processes(subject, sharing);
-threads(subject, threadSharing);
-leaseLoss(subject, partitionable);
+// Each test of the contract opens its own fixture, so the suites run at the
+// same time: node:test runs the suites at the top level of a file one after
+// another.
+describe(subject.name, { concurrency: true }, () => {
+  lockStore(subject);
+  durableTokens(subject);
+  processes(subject, sharing);
+  threads(subject, threadSharing);
+  leaseLoss(subject, partitionable);
+});
 // No looksTakeNoToken: its tokens follow the clock of the engine, so the next token is not the last + 1; its rule 'isHeld tells a held key from a free one and creates nothing' proves that a look mints no rung.
