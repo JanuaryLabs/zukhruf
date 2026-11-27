@@ -4,6 +4,13 @@ The Rule of Three counts places, not packages. Code that a second place needs is
 
 ## In two places
 
+**The PATH of a hermetic test environment (test helper).**
+
+- Places: `toolFolders` and `isolatedEnvironment` in `src/testing/hooked-repository.ts`, and `toolFolders` and the `PATH` of `workspace` in `packages/nx/src/testing/workspace.ts` (the source, zukhruf 0668519a, #6131).
+- Same: the folder of each named program, found with `command -v`, after the folder of node and before /usr/bin and /bin, so NixOS finds programs that are not in /usr/bin.
+- Differs: the programs. This copy names git, npm and tar, which the hook and its tests start; nx names basename, mkdir and rm, which its fixtures' scripts run.
+- Until a third place needs it, a fix in one copy goes into the other, and the commit names both files.
+
 **The packages of a probe workspace (test helper).**
 
 - Places: `src/build.test.ts` and `src/push.test.ts`.

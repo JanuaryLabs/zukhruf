@@ -1,10 +1,28 @@
-import { execFile } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 import { chmod, mkdir, symlink, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
 const packageEntry = import.meta.resolve('../index.ts');
+
+/**
+ * The folders of the programs that the hook and its tests start, where this
+ * machine keeps them: /usr/bin on macOS and Ubuntu, a folder in /nix/store on
+ * NixOS, whose /usr/bin and /bin hold only env and sh. A copy of the
+ * toolFolders of packages/nx/src/testing/workspace.ts (docs/copied-code.md).
+ */
+const toolFolders = [
+  ...new Set(
+    ['git', 'npm', 'tar'].map((tool) =>
+      dirname(
+        execFileSync('sh', ['-c', `command -v ${tool}`], {
+          encoding: 'utf8',
+        }).trim(),
+      ),
+    ),
+  ),
+];
 
 // git and the hook see none of the user's git config and no environment of the
 // Nx task that runs this test, except NODE_OPTIONS.
@@ -15,7 +33,14 @@ export function isolatedEnvironment(home: string) {
     ...(process.env.NODE_OPTIONS === undefined
       ? {}
       : { NODE_OPTIONS: process.env.NODE_OPTIONS }),
-    PATH: `${dirname(process.execPath)}:/usr/bin:/bin`,
+    PATH: [
+      ...new Set([
+        dirname(process.execPath),
+        ...toolFolders,
+        '/usr/bin',
+        '/bin',
+      ]),
+    ].join(':'),
     HOME: home,
     GIT_CONFIG_GLOBAL: '/dev/null',
     GIT_CONFIG_NOSYSTEM: '1',
