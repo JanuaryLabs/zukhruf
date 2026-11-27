@@ -8,9 +8,10 @@ import { type Clock, untilAborted } from '@zukhruf/async';
 import type { Completed, End, Environment } from './end.ts';
 import { errorCode } from './error-code.ts';
 import { findFile } from './file.ts';
-import { KEEPER, environmentFixes } from './keeper.ts';
+import { KEEPER, REPORTING_KEEPER, environmentFixes } from './keeper.ts';
 import { StartError } from './start-error.ts';
 import {
+  Output,
   type PipedProcess,
   type Process,
   StartedProcess,
@@ -166,7 +167,7 @@ export class Command {
       '/bin/sh',
       [
         '-c',
-        KEEPER,
+        REPORTING_KEEPER,
         'keeper',
         String(this.#grace / 1000),
         '/usr/bin/env',
@@ -185,24 +186,31 @@ export class Command {
           options.stdout ?? 'pipe',
           options.stderr ?? 'pipe',
           'pipe',
+          'pipe',
         ],
         buffer: false,
         reject: false,
       },
     );
+    const output = new Output(
+      subprocess.stdout instanceof Readable ? subprocess.stdout : null,
+      subprocess.stderr instanceof Readable ? subprocess.stderr : null,
+    );
     const pgid = subprocess.pid;
-    if (pgid === undefined)
+    const report = subprocess.stdio[4];
+    const pid =
+      pgid === undefined || !(report instanceof Readable)
+        ? undefined
+        : await this.#programPid(report);
+    if (pgid === undefined || pid === undefined)
       throw new StartError(`${this.#name} could not start`, {
         cause: (await subprocess).cause,
       });
     const started = new StartedProcess(
       {
-        pid: pgid,
+        pid,
         stdin: subprocess.stdin instanceof Writable ? subprocess.stdin : null,
-        stdout:
-          subprocess.stdout instanceof Readable ? subprocess.stdout : null,
-        stderr:
-          subprocess.stderr instanceof Readable ? subprocess.stderr : null,
+        output,
       },
       subprocess.then(endFrom),
       {
@@ -219,7 +227,14 @@ export class Command {
       signal.addEventListener('abort', stop, { once: true });
       void started.ended.then(() => signal.removeEventListener('abort', stop));
     }
-    if (options.ready === undefined) return started;
+    if (options.ready === undefined) {
+      // The read of the pid awaited, so the signal can have aborted before its listener.
+      if (signal?.aborted === true) {
+        await started.stop();
+        throw signal.reason;
+      }
+      return started;
+    }
     try {
       await untilAborted(started.ready(options.ready.line), signal);
     } catch (error) {
@@ -228,6 +243,23 @@ export class Command {
       throw signal.reason;
     }
     return started;
+  }
+
+  /**
+   * The pid that the reporting keeper writes on fd 4, or undefined when the
+   * pipe closes first. The pipe stays flowing, so it ends with the keeper.
+   */
+  #programPid(report: Readable): Promise<number | undefined> {
+    const { promise, resolve } = Promise.withResolvers<number | undefined>();
+    let text = '';
+    report.setEncoding('utf8');
+    report.on('data', (chunk: string) => {
+      text += chunk;
+      const end = text.indexOf('\n');
+      if (end !== -1) resolve(Number(text.slice(0, end)));
+    });
+    report.once('close', () => resolve(undefined));
+    return promise;
   }
 
   /**

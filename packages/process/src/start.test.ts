@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { execFileSync, spawn } from 'node:child_process';
+import { ChildProcess, execFileSync, spawn } from 'node:child_process';
 import { subscribe, unsubscribe } from 'node:diagnostics_channel';
 import { once } from 'node:events';
 import { readFile } from 'node:fs/promises';
@@ -235,6 +235,61 @@ test('a start given an aborted signal rejects with its reason, and spawns no pro
   } finally {
     unsubscribe('child_process', onSpawn);
   }
+});
+
+test('an abort that comes while the start is under way rejects it with its reason, and the process that it spawned is gone', async () => {
+  // Arrange
+  const reason = new Error('the caller gave up');
+  const controller = new AbortController();
+  const spawned: ChildProcess[] = [];
+  const onSpawn = (message: unknown) => {
+    if (
+      typeof message === 'object' &&
+      message !== null &&
+      'process' in message &&
+      message.process instanceof ChildProcess
+    )
+      spawned.push(message.process);
+  };
+  subscribe('child_process', onSpawn);
+  // The channel speaks before the pid exists, so the pids are read at the end.
+  const groups = () =>
+    spawned
+      .map((child) => child.pid)
+      .filter((pid): pid is number => pid !== undefined);
+  try {
+    // Act
+    const started = node('setInterval(() => {}, 1000);').start({
+      signal: controller.signal,
+    });
+    controller.abort(reason);
+
+    // Assert
+    await assert.rejects(started, (error) => error === reason);
+    assert.deepEqual(groups().map(groupExists), [false]);
+  } finally {
+    unsubscribe('child_process', onSpawn);
+    for (const pgid of groups()) killGroup(pgid);
+  }
+});
+
+test('the pid of a started process is the pid of the program that it started, so a signal to it reaches the program', async () => {
+  // Arrange
+  await using started = await node(
+    "console.log(process.pid); process.stdin.once('data', () => {});",
+  ).start();
+  const own = Number(
+    (await started.lines()[Symbol.asyncIterator]().next()).value,
+  );
+
+  assert.equal(started.pid, own);
+
+  // Act
+  process.kill(started.pid, 'SIGSTOP');
+  process.kill(started.pid, 'SIGKILL');
+
+  // Assert
+  assert.deepEqual(await started.ended, { signal: 'SIGKILL' });
 });
 
 test('a started process whose parent is killed with SIGKILL ends, and so does its child', async (t) => {

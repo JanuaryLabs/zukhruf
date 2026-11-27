@@ -75,7 +75,7 @@ await using holding = await owner.start({
 
 `ended` settles once, with the end, when the process has ended. A pool or a supervisor awaits it; there is no property to read, because a read and an end can race ([coprocess ADR 0001](../coprocess/docs/adr/0001-the-exit-is-an-event-and-the-package-uses-execa.md)).
 
-A started process ends when this program ends, also when this program is killed with SIGKILL ([ADR 0004](./docs/adr/0004-a-started-process-ends-with-its-parent-also-when-the-parent-is-killed.md)). On macOS and Linux, each process starts under a keeper in POSIX `sh`: it leads the process group, and it stops the group when the pipe from this program closes. It costs about 5 ms at the start and 2 to 4 MB while the process runs. A process that must outlive this program is not a started process of this package.
+A started process ends when this program ends, also when this program is killed with SIGKILL ([ADR 0004](./docs/adr/0004-a-started-process-ends-with-its-parent-also-when-the-parent-is-killed.md)). On macOS and Linux, each process starts under a keeper in POSIX `sh`: it leads the process group, and it stops the group when the pipe from this program closes. It costs about 5 ms at the start and 2 to 4 MB while the process runs. `pid` is the pid of the program, which the keeper of a start reports, so `process.kill(started.pid, 'SIGSTOP')` reaches the program; `stop()` signals the whole group. A process that must outlive this program is not a started process of this package.
 
 - On Windows there is no keeper: execa starts the file, and a process does not end yet with a parent that is killed. A job object, as .NET 11 uses, is on the map as later, with the proof of the Windows path (backlog #6161).
 - `sh` cannot tell an exit code above 128 from a signal, so a process that exits with 130 ends as `{ signal: 'SIGINT' }`.
@@ -251,6 +251,7 @@ export class Command {
 /** A started process. Only start() of a command gives one. */
 export interface Process extends AsyncDisposable {
   readonly name: string;
+  /** The pid of the program, not of its keeper. */
   readonly pid: number;
   /** null when stdin is 'ignore' or a socket. */
   readonly stdin: Writable | null;

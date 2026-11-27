@@ -9,6 +9,7 @@ import { EndedBeforeReadyError } from './ended-before-ready-error.ts';
 /** A started process. Only `start()` of a command gives one (ADR 0010). */
 export interface Process extends AsyncDisposable {
   readonly name: string;
+  /** The pid of the program, not of its keeper. */
   readonly pid: number;
   /** null when stdin is 'ignore' or a socket. */
   readonly stdin: Writable | null;
@@ -30,52 +31,29 @@ export interface PipedProcess extends Process {
 /** The size of the stderr tail (ADR 0006). */
 const TAIL = 16 * 1024;
 
-interface Child {
-  readonly pid: number;
-  readonly stdin: Writable | null;
-  readonly stdout: Readable | null;
-  readonly stderr: Readable | null;
-}
-
 /**
- * The process behind `Process`. It reads stdout only while someone waits for
- * a line, the ready wait or a reader of `lines()`, and keeps each line it read,
- * so a later reader gets them too.
+ * The stdout lines and the stderr tail of a child. Build it in the tick of the
+ * spawn: when the child exits, Node.js resumes each stdio stream that has no
+ * reader yet and drops its data (probed 2026-11-27). It reads stdout only
+ * while someone waits for a line, and keeps each line it read, so a later
+ * reader gets them too.
  */
-export class StartedProcess implements Process {
-  readonly name: string;
-  readonly pid: number;
-  readonly stdin: Writable | null;
-  readonly #end = new Latch<End>();
-  readonly #stop: () => Promise<void>;
+export class Output {
   readonly #lines: AsyncIterator<string> | undefined;
   readonly #seen: string[] = [];
   readonly #reading = new Lock();
   #stderr = '';
 
-  constructor(
-    child: Child,
-    ended: Promise<End>,
-    { name, stop }: { name: string; stop: () => Promise<void> },
-  ) {
-    this.name = name;
-    this.pid = child.pid;
-    this.stdin = child.stdin;
-    void ended.then((end) => this.#end.open(end));
-    this.#stop = stop;
-    this.#lines = child.stdout
-      ? createInterface({ input: child.stdout, crlfDelay: Infinity })[
+  constructor(stdout: Readable | null, stderr: Readable | null) {
+    this.#lines = stdout
+      ? createInterface({ input: stdout, crlfDelay: Infinity })[
           Symbol.asyncIterator
         ]()
       : undefined;
-    child.stderr?.setEncoding('utf8');
-    child.stderr?.on('data', (chunk: string) => {
+    stderr?.setEncoding('utf8');
+    stderr?.on('data', (chunk: string) => {
       this.#stderr = (this.#stderr + chunk).slice(-TAIL);
     });
-  }
-
-  get ended(): Promise<End> {
-    return this.#end.wait();
   }
 
   async *lines(): AsyncGenerator<string> {
@@ -86,27 +64,8 @@ export class StartedProcess implements Process {
     }
   }
 
-  /** Resolves at the first line that `line` names; rejects when the process ends first. */
-  async ready(line: string | RegExp): Promise<void> {
-    const matches =
-      typeof line === 'string'
-        ? (seen: string) => seen === line
-        : (seen: string) => line.test(seen);
-    for await (const seen of this.lines()) if (matches(seen)) return;
-    throw new EndedBeforeReadyError(this.name, await this.ended, this.#stderr);
-  }
-
   stderrTail(): string {
     return this.#stderr;
-  }
-
-  async stop(): Promise<End> {
-    await this.#stop();
-    return this.ended;
-  }
-
-  async [Symbol.asyncDispose](): Promise<void> {
-    await this.stop();
   }
 
   /**
@@ -126,5 +85,69 @@ export class StartedProcess implements Process {
       },
       { signal: undefined },
     );
+  }
+}
+
+interface Child {
+  readonly pid: number;
+  readonly stdin: Writable | null;
+  readonly output: Output;
+}
+
+/** The process behind `Process`. */
+export class StartedProcess implements Process {
+  readonly name: string;
+  readonly pid: number;
+  readonly stdin: Writable | null;
+  readonly #end = new Latch<End>();
+  readonly #stop: () => Promise<void>;
+  readonly #output: Output;
+
+  constructor(
+    child: Child,
+    ended: Promise<End>,
+    { name, stop }: { name: string; stop: () => Promise<void> },
+  ) {
+    this.name = name;
+    this.pid = child.pid;
+    this.stdin = child.stdin;
+    this.#output = child.output;
+    void ended.then((end) => this.#end.open(end));
+    this.#stop = stop;
+  }
+
+  get ended(): Promise<End> {
+    return this.#end.wait();
+  }
+
+  lines(): AsyncGenerator<string> {
+    return this.#output.lines();
+  }
+
+  /** Resolves at the first line that `line` names; rejects when the process ends first. */
+  async ready(line: string | RegExp): Promise<void> {
+    const matches =
+      typeof line === 'string'
+        ? (seen: string) => seen === line
+        : (seen: string) => line.test(seen);
+    for await (const seen of this.lines()) if (matches(seen)) return;
+    throw new EndedBeforeReadyError(
+      this.name,
+      await this.ended,
+      this.stderrTail(),
+    );
+  }
+
+  stderrTail(): string {
+    return this.#output.stderrTail();
+  }
+
+  async stop(): Promise<End> {
+    await this.#stop();
+    return this.ended;
+  }
+
+  async [Symbol.asyncDispose](): Promise<void> {
+    await this.stop();
   }
 }
