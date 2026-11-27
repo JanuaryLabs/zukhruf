@@ -266,7 +266,7 @@ test('a Lucide icon component given as the icon draws its svg', async () => {
   }
 });
 
-test('a loading button, after the delay, exposes a status named Loading', async () => {
+test('a loading button keeps its label as its name before and after the delay, and exposes no status', async () => {
   // Arrange
   GlobalRegistrator.register();
   try {
@@ -278,8 +278,20 @@ test('a loading button, after the delay, exposes a status named Loading', async 
     const root = createRoot(
       document.body.appendChild(document.createElement('div')),
     );
-    // Happy DOM has no accessibility tree, so a status counts when no
-    // aria-hidden element holds it, and its name is its aria-label.
+    // Happy DOM has no accessibility tree, so the name of the button is its
+    // text with each aria-hidden element left out and each labelled element
+    // read as its aria-label.
+    const buttonName = () => {
+      const button = document.querySelector('button')?.cloneNode(true);
+      if (!(button instanceof HTMLElement)) return undefined;
+      for (const hidden of button.querySelectorAll('[aria-hidden="true"]')) {
+        hidden.remove();
+      }
+      for (const labelled of button.querySelectorAll('[aria-label]')) {
+        labelled.replaceWith(` ${labelled.getAttribute('aria-label')} `);
+      }
+      return button.textContent?.replace(/\s+/g, ' ').trim();
+    };
     const statusNames = () =>
       [...document.querySelectorAll('[role="status"]')]
         .filter((status) => !status.closest('[aria-hidden="true"]'))
@@ -295,10 +307,16 @@ test('a loading button, after the delay, exposes a status named Loading', async 
       });
 
       // Act
+      const beforeDelay = buttonName();
       await act(() => clock.tickAsync(300));
+      const afterDelay = buttonName();
 
       // Assert
-      assert.deepEqual(statusNames(), ['Loading']);
+      assert.deepEqual(
+        { beforeDelay, afterDelay, statuses: statusNames() },
+        { beforeDelay: 'Save', afterDelay: 'Save', statuses: [] },
+      );
+      assert.ok(document.querySelector('button [data-slot="spinner"]'));
     } finally {
       await act(async () => root.unmount());
     }
@@ -308,7 +326,7 @@ test('a loading button, after the delay, exposes a status named Loading', async 
   }
 });
 
-test('a loading button given a spinner exposes the status of that spinner in place of the default one', async () => {
+test('a loading button given a spinner draws that spinner in place of the default one, and its label does not join the name of the button', async () => {
   // Arrange
   GlobalRegistrator.register();
   try {
@@ -320,6 +338,17 @@ test('a loading button given a spinner exposes the status of that spinner in pla
     const root = createRoot(
       document.body.appendChild(document.createElement('div')),
     );
+    const buttonName = () => {
+      const button = document.querySelector('button')?.cloneNode(true);
+      if (!(button instanceof HTMLElement)) return undefined;
+      for (const hidden of button.querySelectorAll('[aria-hidden="true"]')) {
+        hidden.remove();
+      }
+      for (const labelled of button.querySelectorAll('[aria-label]')) {
+        labelled.replaceWith(` ${labelled.getAttribute('aria-label')} `);
+      }
+      return button.textContent?.replace(/\s+/g, ' ').trim();
+    };
     const statusNames = () =>
       [...document.querySelectorAll('[role="status"]')]
         .filter((status) => !status.closest('[aria-hidden="true"]'))
@@ -348,7 +377,12 @@ test('a loading button given a spinner exposes the status of that spinner in pla
       await act(() => clock.tickAsync(300));
 
       // Assert
-      assert.deepEqual(statusNames(), ['Saving']);
+      assert.ok(document.querySelector('button [aria-label="Saving"]'));
+      assert.equal(document.querySelector('[data-slot="spinner"]'), null);
+      assert.deepEqual(
+        { name: buttonName(), statuses: statusNames() },
+        { name: 'Save', statuses: [] },
+      );
     } finally {
       await act(async () => root.unmount());
     }
@@ -358,12 +392,12 @@ test('a loading button given a spinner exposes the status of that spinner in pla
   }
 });
 
-test('a loading button exposes no status before the delay, also as an icon button', async () => {
+test('a loading icon button exposes no status, before or after the delay', async () => {
   // Arrange
   GlobalRegistrator.register();
   try {
     Reflect.set(globalThis, 'IS_REACT_ACT_ENVIRONMENT', true);
-    const { act, createElement, Fragment } = await import('react');
+    const { act, createElement } = await import('react');
     const { createRoot } = await import('react-dom/client');
     const { Settings } = await import('lucide-react');
     const { ClockProvider, TheButton } = await import('@zukhruf/ui');
@@ -380,17 +414,12 @@ test('a loading button exposes no status before the delay, also as an icon butto
         root.render(
           createElement(ClockProvider, {
             clock,
-            children: createElement(
-              Fragment,
-              null,
-              createElement(TheButton, { loading: true }, 'Save'),
-              createElement(TheButton, {
-                loading: true,
-                size: 'icon',
-                icon: Settings,
-                tooltip: 'Open settings',
-              }),
-            ),
+            children: createElement(TheButton, {
+              loading: true,
+              size: 'icon',
+              icon: Settings,
+              tooltip: 'Open settings',
+            }),
           }),
         );
       });
@@ -404,8 +433,9 @@ test('a loading button exposes no status before the delay, also as an icon butto
       // Assert
       assert.deepEqual(
         { beforeDelay, afterDelay },
-        { beforeDelay: [], afterDelay: ['Loading', 'Loading'] },
+        { beforeDelay: [], afterDelay: [] },
       );
+      assert.ok(document.querySelector('button [data-slot="spinner"]'));
     } finally {
       await act(async () => root.unmount());
     }

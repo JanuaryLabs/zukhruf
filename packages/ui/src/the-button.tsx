@@ -35,8 +35,8 @@ interface TheButtonProps extends React.ComponentProps<typeof Button> {
   tooltip?: string;
   /**
    * The indicator shown in place of the icon while loading. It replaces the
-   * default `Spinner` of `@zukhruf/shadcn`, which is announced as "Loading".
-   * Give a labelled one to localize it, e.g. `<Spinner aria-label="Saving" />`.
+   * default `Spinner` of `@zukhruf/shadcn`. It is hidden from assistive
+   * technology, so the button keeps its label as its name while loading.
    * @default <Spinner />
    */
   spinner?: React.ReactNode;
@@ -116,7 +116,7 @@ function IconButtonContent({
         </span>
       )}
       <span
-        aria-hidden={!showSpinner}
+        aria-hidden
         className={cn(
           'absolute inset-0 transition-all duration-300 ease-in-out',
           showSpinner
@@ -154,7 +154,7 @@ function TextButtonContent({
         </span>
       )}
       <span
-        aria-hidden={!showSpinner}
+        aria-hidden
         className={cn(
           'overflow-hidden transition-all duration-300 ease-in-out',
           showSpinner ? 'w-4 opacity-100' : '-ms-2 w-0 opacity-0',
@@ -204,8 +204,8 @@ function WithTooltip({
  * </TheButton>
  *
  * @example
- * // Loading with a localized spinner (the default one is announced as "Loading")
- * <TheButton loading={isSaving} spinner={<Spinner aria-label={t('saving')} />}>
+ * // Loading with a smaller spinner in place of the default one
+ * <TheButton loading={isSaving} spinner={<Spinner className="size-3" />}>
  *   Save
  * </TheButton>
  *

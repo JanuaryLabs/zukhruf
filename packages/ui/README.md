@@ -31,13 +31,13 @@ Obey two rules:
 
 `TheButton` is a `Button` of `@zukhruf/shadcn` with a loading state, an icon and a tooltip. It needs a `ClockProvider` above it, see [The clock](#the-clock). It takes each prop of `Button`, for example `variant`, `size` and `onClick`, and these props:
 
-| Prop      | Type                         | Default       | What it does                                                                                                                             |
-| --------- | ---------------------------- | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `loading` | `boolean`                    |               | Disables the button. After `delay`, it shows a spinner in place of the icon.                                                             |
-| `delay`   | `number`                     | `300`         | The time in milliseconds from the start of `loading` to the spinner. A short load ends before the spinner shows, so it does not flash.   |
-| `icon`    | `ReactNode` or a Lucide icon |               | The icon before the text. Give an element, for example `<Save />`, or a Lucide component, for example `Save`.                            |
-| `tooltip` | `string`                     |               | The text of a tooltip that shows when the user hovers over or focuses the button.                                                        |
-| `spinner` | `ReactNode`                  | `<Spinner />` | The indicator that shows while loading. The default is the `Spinner` of `@zukhruf/shadcn`, which a screen reader announces as "Loading". |
+| Prop      | Type                         | Default       | What it does                                                                                                                           |
+| --------- | ---------------------------- | ------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `loading` | `boolean`                    |               | Disables the button. After `delay`, it shows a spinner in place of the icon.                                                           |
+| `delay`   | `number`                     | `300`         | The time in milliseconds from the start of `loading` to the spinner. A short load ends before the spinner shows, so it does not flash. |
+| `icon`    | `ReactNode` or a Lucide icon |               | The icon before the text. Give an element, for example `<Save />`, or a Lucide component, for example `Save`.                          |
+| `tooltip` | `string`                     |               | The text of a tooltip that shows when the user hovers over or focuses the button.                                                      |
+| `spinner` | `ReactNode`                  | `<Spinner />` | The indicator that shows while loading. The default is the `Spinner` of `@zukhruf/shadcn`.                                             |
 
 ```tsx
 import { Settings, Trash } from 'lucide-react';
@@ -74,15 +74,7 @@ export function Toolbar({
 
 With `size="icon"` (or another `icon-*` size), the button shows only the icon, and the spinner takes its place while loading. Give a `tooltip` to an icon button, so the user can know what it does.
 
-The spinner has `role="status"`, so a screen reader tells the user that the disabled button works. Before the delay, the spinner is hidden from screen readers too. To say a different word, or to say it in the language of the app, give your own `spinner`:
-
-```tsx
-import { Spinner } from '@zukhruf/shadcn';
-
-<TheButton loading={saving} spinner={<Spinner aria-label={t('saving')} />}>
-  {t('save')}
-</TheButton>;
-```
+While loading, the name of the button stays its label, for example "Save", and a screen reader reads the button as disabled. The spinner is hidden from screen readers (`aria-hidden`), also when you give your own `spinner`, so its label does not join the name of the button. MUI, Mantine and Radix Themes name a disabled loading button the same way.
 
 ## The clock
 
